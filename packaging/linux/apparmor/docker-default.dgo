@@ -1,0 +1,132 @@
+# docker-default, plus the STACKED peer — the office's copy of Docker's own container profile.
+#
+# WHY THIS FILE EXISTS (DGO-1604, measured on the Dell 2026-11-09, kernel 7.0.0-42):
+# Ubuntu's `kernel.apparmor_restrict_unprivileged_unconfined=1` (the default) makes the kernel turn
+# runc's profile change into a STACK, so a container's processes carry the label
+#     docker-default//&unconfined (enforce)
+# instead of `docker-default`. Docker's profile allows signals and ptrace only to the literal peer
+# `docker-default`, so on such a kernel a container's processes can no longer reach each other:
+#
+#   apparmor="DENIED" operation="signal" profile="docker-default" comm="gosu"
+#     requested_mask="send" denied_mask="send" signal=rtmin+1 peer="docker-default//&unconfined"
+#
+# What that breaks, measured on the Dell with `postgres:17` started directly as `postgres` so that
+# gosu is not involved at all (so this is NOT a gosu bug):
+#   - `pg_ctl` cannot stop the entrypoint's temporary server  ("could not send stop signal: Permission denied");
+#   - autovacuum is dead: "autovacuum worker took too long to start; canceled", every naptime;
+#   - `pg_reload_conf()` → "failed to send signal to postmaster: Permission denied";
+#   - `pg_cancel_backend()` → "could not send signal to process N: Permission denied";
+#   - `docker stop` → tini: "Unexpected error when forwarding signal: 'Permission denied'" — so the
+#     database is killed, and the next start runs crash recovery and can stall or corrupt.
+# Denied signals across the probe run (gosu excluded): int ×249, urg ×30, usr1 ×16, pwr ×15,
+# quit ×4, kill ×4, term ×3 — plus ptrace ×46.
+#
+# The fix is the one containerd#14487 proposes and the one containerd#14485 documents as tested:
+# let the SAME profile reach its own stacked form, and nothing wider for the signals (the profile's
+# one other widening, two dbus rules, is named below under «THE ONE WIDENING»). Not
+# `kernel.apparmor_restrict_unprivileged_unconfined=0` and not `apparmor=unconfined`: the host keeps
+# its hardening, and the container keeps a real profile.
+#
+# PROVENANCE: rendered from github.com/moby/profiles `apparmor/template.go` (main, read
+# 2026-11-09), with Name=PeerName="docker-default", DaemonProfile="docker", Abi=3.0 — what dockerd
+# generates for `docker-default` — plus the two `//&unconfined` peers marked ADDED below, and two
+# `dbus send` rules marked ADDED (DGO-1797).
+#
+# THE ONE WIDENING, named here because the owner's install is given on these words. Docker's profile
+# has no dbus rule, so on a host whose bus mediates AppArmor (Ubuntu 26.04's dbus-daemon does) no
+# container may send anything on any bus. DGO-1797 needs one question answered: is somebody at this
+# computer (the office's `machine`, desk.py). So the profile allows, on a SESSION bus only: the bus's
+# Hello (which must come first) and `org.gnome.Mutter.IdleMonitor.GetIdletime`. Not RequestName (no
+# name can be taken), not AddMatch or BecomeMonitor (nothing can be watched); the answers to these two
+# calls come back without a receive rule (dbus-daemon passes a reply the bus expects). What any
+# container gains, on a host that has the profile: if it can reach a session bus socket and log in as
+# that bus's owner (a root container can, by Docker's default capabilities), it can read how long the
+# desktop has been idle — and, polling fast, the timing of each input event, which is enough to guess
+# at typing. That was weighed against a separate profile for `machine` alone, which would make
+# `machine` fail to start on every AppArmor host where the profile is not loaded (the Mac's Lima guest
+# too); the exposure is one number, so the office's shared profile carries it, and says so.
+#
+# WHAT WAS COMPARED, not assumed (Dell, engine 29.1.3, 2026-11-09). The daemon's own embedded
+# template was read out of the binary (`grep -a` over /usr/local/bin/dockerd): it carries
+# `signal (send,receive) peer={{.Name}},` and `attach_disconnected,mediate_deleted`, and it does NOT
+# carry `abi <…>`, `deny network alg` or `deny network vsock` — that build ships an OLDER template
+# than main. So this file is the SAME OR STRICTER than what the host runs today in every rule but the
+# two dbus lines named above: it adds the AF_ALG / AF_VSOCK / obsolete-socket-family denies a newer
+# engine applies anyway, and names ABI 3.0 (which keeps `network unix`, as Docker documents). A
+# container that needs AF_ALG or AF_VSOCK is a finding to name, not a rule to widen.
+#
+# Loading it is a HOST policy change and the owner's act: `sudo ./bbox apparmor install`.
+# Checking it needs no privilege at all: `./bbox apparmor validate`.
+
+abi <abi/3.0>,
+
+#include <tunables/global>
+
+profile "docker-default" flags=(attach_disconnected,mediate_deleted) {
+  network,
+  # Disallow obsolete socket families removed from the Linux kernel.
+  # AF_DECnet has no AppArmor family name, so it cannot be denied here.
+  deny network ax25,
+  deny network ipx,
+  deny network appletalk,
+  deny network netrom,
+  deny network rose,
+  deny network econet,
+  deny network atmsvc,
+  deny network irda,
+  deny network wanpipe,
+  deny network isdn,
+  deny network caif,
+  # Disallow AF_ALG (Linux kernel crypto API); see https://copy.fail/
+  deny network alg,
+  # Disallow AF_VSOCK to prevent host/guest communication.
+  deny network vsock,
+  capability,
+  file,
+  umount,
+  # Host (privileged) processes may send signals to container processes.
+  signal (receive) peer=unconfined,
+  # runc may send signals to container processes (for "docker stop").
+  signal (receive) peer=runc,
+  # crun may send signals to container processes (for "docker stop" when used with crun OCI runtime).
+  signal (receive) peer=crun,
+  # dockerd may send signals to container processes (for "docker kill").
+  signal (receive) peer="docker",
+  # Container processes may send signals amongst themselves.
+  signal (send,receive) peer="docker-default",
+  # ADDED (DGO-1604): the same profile, as the kernel stacks it on Ubuntu 26.04 / 7.0.0-42+.
+  # `docker-default//&unconfined` is the label of every process of every container on such a host,
+  # so without these two lines a container's processes cannot signal or trace each other at all.
+  signal (send,receive) peer="docker-default//&unconfined",
+  ptrace (trace,tracedby,read,readby) peer="docker-default//&unconfined",
+
+  # ADDED (DGO-1797): the desk's own idle monitor, asked by the office's `machine` (desk.py) — is somebody at
+  # this computer, so heavy work waits for them (measured on the Dell 2026-11-10: AccessDenied on Hello
+  # without these). The bus's Hello and ONE method on a session bus; nothing else, on any bus. What it gives
+  # a container is in the header («THE ONE WIDENING»).
+  dbus send bus=session path=/org/freedesktop/DBus interface=org.freedesktop.DBus member=Hello peer=(name=org.freedesktop.DBus),
+  dbus send bus=session path=/org/gnome/Mutter/IdleMonitor/Core interface=org.gnome.Mutter.IdleMonitor member=GetIdletime peer=(name=org.gnome.Mutter.IdleMonitor),
+
+  deny @{PROC}/* w,   # deny write for all files directly in /proc (not in a subdir)
+  # deny write to files not in /proc/<number>/** or /proc/sys/**
+  deny @{PROC}/{[^1-9/],[^1-9/][^0-9/],[^1-9s/][^0-9y/][^0-9s/],[^1-9/][^0-9/][^0-9/][^0-9/]*}/** w,
+  deny @{PROC}/sys/[^k]** w,  # deny /proc/sys except /proc/sys/k* (effectively /proc/sys/kernel)
+  deny @{PROC}/sys/kernel/{?,??,[^s][^h][^m]**} w,  # deny everything except shm* in /proc/sys/kernel/
+  deny @{PROC}/sysrq-trigger rwklx,
+  deny @{PROC}/kcore rwklx,
+
+  deny mount,
+
+  deny /sys/[^f]*/** wklx,
+  deny /sys/f[^s]*/** wklx,
+  deny /sys/fs/[^c]*/** wklx,
+  deny /sys/fs/c[^g]*/** wklx,
+  deny /sys/fs/cg[^r]*/** wklx,
+  deny /sys/firmware/** rwklx,
+  deny /sys/devices/virtual/powercap/** rwklx,
+  deny /sys/kernel/security/** rwklx,
+
+  # allow processes within the container to trace each other,
+  # provided all other LSM and yama setting allow it.
+  ptrace (trace,tracedby,read,readby) peer="docker-default",
+}

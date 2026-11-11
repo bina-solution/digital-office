@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
-"""verify_call.py — `./bbox meet verify --call`: one synthetic meeting on THIS office, checked end to end (FPG-87).
+"""verify_call.py — `./bbox meet verify --call`: one synthetic meeting on THIS office, checked end to end (EXF-87).
 
 `./bbox meet verify` asks each service whether it answers. This one holds a meeting: a synthetic host joins a new
 room with a known recording as its microphone (Hebrew read by people, English by a speech synthesiser), a guest with
 no microphone joins beside it, and then every link the office promises is checked against what really happened:
 
-  recording   it started by itself, N seconds after the host joined (FPG-84), lasts > 40 s, its sound is not silent
+  recording   it started by itself, N seconds after the host joined (EXF-84), lasts > 40 s, its sound is not silent
   transcripts the speech service's two passes (ivrit/he and whisper/auto) hold the known words, and neither translated
   MEET        the recordings' workflow opened the meeting's item in Plane project MEET, with both transcripts and models
   meet-flow   the room was told its meet-flow link; «פגישות» lists the meeting; its page has the first processing
@@ -14,7 +14,7 @@ no microphone joins beside it, and then every link the office promises is checke
               every page request and ICE server the office's own, no connection from the recorder, meet-start or
               the transcriber to anywhere outside, the captions path internal
   captions    the recorder's live captions came, as server captions (seconds behind, not instant), with the office's
-              words spelt its way («DGO fee», FPG-471)
+              words spelt its way («DGO fee», EXF-471)
   silent mic  the guest with no microphone is told (a pop-up) and so is the host; the speaking host is never warned;
               when the host's microphone goes silent the notice is quiet and theirs alone
 
@@ -274,7 +274,7 @@ def remote_inodes(pid):
 
 
 # WHAT A RUN LEAVES BEHIND DIES WITH IT (DGO-1231). A run cut short — its ssh session dropped, a `timeout`
-# — never reached `docker rm -f` or the tcpdumps' terminate: on FPG's server a box (`sleep infinity`) and
+# — never reached `docker rm -f` or the tcpdumps' terminate: on EXF's server a box (`sleep infinity`) and
 # three tcpdumps from 2026-10-30 were still there 93 hours later. Everything a run starts is listed here
 # and removed on any exit, SIGTERM and SIGHUP included; a tcpdump also gets the kernel's parent-death
 # signal, for the SIGKILL no handler sees, and the box carries a binaos.max-age autoheal enforces.
@@ -345,7 +345,7 @@ def main():
     ap.add_argument("--keep", action="store_true", help="keep the test container (and its Chrome logs)")
     ap.add_argument("--silent", action="store_true",
                     help="the host's microphone is open and gives digital silence: the recording must be filed «אין דיבור» "
-                         "in MEET (FPG-86) and the guard must tell the host it was never heard")
+                         "in MEET (EXF-86) and the guard must tell the host it was never heard")
     args = ap.parse_args()
 
     name = read_env("DEPLOYMENT_NAME", "bina-deployment") or "bina-deployment"
@@ -533,7 +533,7 @@ def main():
         rep.facts["recording_delay_s"] = delay
         if delay is not None:
             rep.add("recording.delay", "warn" if delay > 5 else True, f"the recording began {delay} s after the host joined",
-                    "the meeting's first seconds are not in the recording (FPG-84)" if delay > 5 else "")
+                    "the meeting's first seconds are not in the recording (EXF-84)" if delay > 5 else "")
     media = {}
     if mp4 and rec_volume:
         script = (f"cd /r/recordings/{rec['session']} && ffprobe -v error -show_entries format=duration -of csv=p=0 '{mp4}' && "
@@ -684,7 +684,7 @@ def main():
                 continue
             wrong = [w for w in spec.get("wrong") or [] if re.search(r"(?<![\w])" + re.escape(w) + r"(?![\w])", caps_text)]
             right = term in caps_text
-            rep.add("captions.term", right and not wrong, f"the live captions write «{term}» the office's way (FPG-471)",
+            rep.add("captions.term", right and not wrong, f"the live captions write «{term}» the office's way (EXF-471)",
                     ("wrong: " + ", ".join(wrong)) if wrong else ("found" if right else "the term was not heard in the captions"))
 
     # ── 7. the transcripts, the MEET item, meet-flow, Drive — they take minutes ───────────────────────────────
@@ -773,7 +773,7 @@ def main():
         rep.add("meet.item", bool(item), "the workflow opened the meeting's item in Plane project MEET",
                 f"{item['ref']}: {item.get('name', '')}" if item else f"none named «· {room} ·» in {args.wait / 60:.0f} min")
         rep.add("meet.silent", bool(item) and "אין דיבור" in labels and "תומלל" not in labels,
-                "a silent recording is filed «אין דיבור», not «תומלל» (FPG-86)", "labels: " + (", ".join(labels) or "none"))
+                "a silent recording is filed «אין דיבור», not «תומלל» (EXF-86)", "labels: " + (", ".join(labels) or "none"))
         said_ = " ".join(x for x in (ivr.get("text"), wsp.get("text")) if x)
         rep.add("transcript.silent", None, "what the two passes wrote for the silence", said_[:200] or "nothing")
         rep.facts.update(jobs=jobs, item=item, flow_row=flow_row, drive=drive_names)

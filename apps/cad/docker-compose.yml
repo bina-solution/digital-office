@@ -43,6 +43,9 @@ services:
       start_period: 120s
     logging:
       driver: ${LOGGING_DRIVER:-json-file}
+      options:
+        max-size: 5m
+        max-file: '3'
 
 networks:
   traefik-network:

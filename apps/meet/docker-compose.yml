@@ -117,7 +117,7 @@ services:
       # (HTTP on 5280, meet-net only, a bearer secret): «⚠️ ההקלטה מאבדת קול/תמונה», the captions.
       - ./prosody/mod_meet_recorder_watch.lua:/prosody-plugins-custom/mod_meet_recorder_watch.lua:ro
       # …and the live captions every browser sends (web/plugin.head.html) are written down as they are
-      # said, one file per meeting, read by meet-start through a door here (fireplace, 2026-10-27).
+      # said, one file per meeting, read by meet-start through a door here (examplef, 2026-10-27).
       - ./prosody/mod_meet_captions.lua:/prosody-plugins-custom/mod_meet_captions.lua:ro
     environment:
       TZ: Asia/Jerusalem
@@ -135,7 +135,7 @@ services:
       # before its owner is told (0 = off), and where the bridge's debug REST answers.
       MEET_SILENT_MIC_SECONDS: ${MEET_SILENT_MIC_SECONDS:-20}
       # …and how long after joining a person with no microphone track (no browser permission, no
-      # device) or an unmuted one the bridge never hears is told (fireplace, 2026-10-26).
+      # device) or an unmuted one the bridge never hears is told (examplef, 2026-10-26).
       MEET_NO_MIC_SECONDS: ${MEET_NO_MIC_SECONDS:-10}
       # M5-4.1-13 (the «barking» of call 5): 0 = a voice that stops (and comes back) is told to that person
       # only, quietly (kept in the chat, no pop-up, no sound); 1 = pop-up + sound to everyone, as before.
@@ -260,7 +260,7 @@ services:
       start_period: 60s
     # The media path is held at its whole cap and weighed above everything but the recorder (see
     # meet-jibri): the bridge forwards every participant's sound to the recorder, and a bridge the
-    # budget had scaled to 0.32 vCPU (fireplace, 2026-10-26) is the second place a recording breaks.
+    # budget had scaled to 0.32 vCPU (examplef, 2026-10-26) is the second place a recording breaks.
     cpu_shares: 8192
     deploy:
       resources:
@@ -340,7 +340,7 @@ services:
       # The recorder's own watchdog and the live captions (jibri/watch.py), an s6 longrun beside Jibri
       # (s6-overlay v3 compiles /etc/s6-overlay/s6-rc.d at boot; the marker in user/contents.d starts
       # it). It reads Jibri's logs, its REST and this cgroup — no docker socket — and speaks through
-      # prosody's door and meet-start's (fireplace, 2026-10-26: a starved recorder told nobody).
+      # prosody's door and meet-start's (examplef, 2026-10-26: a starved recorder told nobody).
       - ./jibri/watch.py:/usr/local/bin/meet-watch.py:ro
       - ./jibri/s6/60-meet-watch:/etc/s6-overlay/s6-rc.d/60-meet-watch:ro
       - ./jibri/s6/contents.d/60-meet-watch:/etc/s6-overlay/s6-rc.d/user/contents.d/60-meet-watch:ro
@@ -402,10 +402,10 @@ services:
       timeout: ${HEALTHCHECK_TIMEOUT:-10s}
       retries: 5
       start_period: 60s
-    # THE RECORDER IS NEVER THROTTLED (fireplace, 2026-10-26, rooms fpg103 and fpg104): the CPU budget
+    # THE RECORDER IS NEVER THROTTLED (examplef, 2026-10-26, rooms exf103 and exf104): the CPU budget
     # (gate G65) had scaled this cap to 0.48 on the 2-vCPU box, the kernel then held the container
     # back in 41% of its scheduling periods, ffmpeg ran at 0.97x of real time, and 2.6% of the call
-    # (23 s of fpg103's 14 minutes) never reached the file: sound in pieces, a picture that runs
+    # (23 s of exf103's 14 minutes) never reached the file: sound in pieces, a picture that runs
     # fast. A floor equal to the cap keeps the cap whole (the budget holds a declared floor AT its
     # value and scales the rest), and the weight (cpu_shares, 16x a container that declares none)
     # wins the scheduler against everything but the bridge when the machine is full. Chrome and
@@ -416,7 +416,7 @@ services:
         limits: { cpus: "2.0", memory: 1792M }
         # memory: the kernel's `memory.low` (docker maps the reservation to it on cgroup v2) — while
         # the box is short of memory, the recorder's pages are reclaimed LAST. Measured 2026-10-26
-        # on fireplace (8 GiB, swap 4041/4095 MiB full): the idle recorder had 199 MiB swapped out,
+        # on examplef (8 GiB, swap 4041/4095 MiB full): the idle recorder had 199 MiB swapped out,
         # and a recording (Chrome + ffmpeg + a 512m JVM, ~1.3 GiB) would have paged in against the
         # transcriber (1.5 GiB) and 50 idle services. A quota keeps the CPU; this keeps the RAM.
         reservations: { cpus: "2.0", memory: 1280M }
@@ -435,7 +435,11 @@ services:
     volumes:
       - ./start:/app:ro
       - meet_recordings:/recordings:ro
+      # the office's ONE flow.v1 publisher (DGO-1402) — the platform's file, never a copy of it here
+      - ../../platform-base/redis/flowpub.py:/opt/dgo/flowpub.py:ro
     environment:
+      # the event stream (flow.v1, DGO-1402) rides the office redis: `dgo:flow:meet`
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-}
       MEET_JWT_SECRET: ${MEET_JWT_SECRET:-}
       MEET_HOST: ${MEET_BASE_URL:-meet.${DEPLOYMENT_DOMAIN:-localhost}}
       MEET_RECORDINGS: /recordings/recordings
@@ -459,6 +463,9 @@ services:
       # Where the office's Plane answers (hooks/prepare derives it from the link registry).
       MEET_PLANE_API_URL: ${MEET_PLANE_API_URL:-}
       MEET_PLANE_API_KEY: ${MEET_PLANE_API_KEY:-}
+      # A client's office that runs its own Plane (DGO-1649): the vault instance holding the office's own key —
+      # a NAME, never the key; meet-start reads the key from the vault when a call needs it (start/server.py).
+      MEET_PLANE_KEY_VAULT: ${MEET_PLANE_KEY_VAULT:-}
       # The recordings' workflow, called the moment a recording ends (DGO-907): n8n's webhook
       # service, as INDOX calls it. Empty: the workflow's own five-minute clock alone.
       MEET_WORKFLOW_HOOK: ${MEET_WORKFLOW_HOOK-http://n8n-webhook:5678/webhook/meet-recordings}
@@ -469,25 +476,41 @@ services:
       MEET_RECORDER_PEERS: meet-jibri-${DEPLOYMENT_NAME:-bina-deployment}
       MEET_RECORDER_WATCH_SECRET: ${MEET_RECORDER_WATCH_SECRET:-}
       MEET_NOTIFY_URL: ${MEET_NOTIFY_URL:-http://notifications:8977}
-      # The meetings' watch and the live transcripts (start/server.py, fireplace 2026-10-27): whether a
+      # The meetings' watch and the live transcripts (start/server.py, examplef 2026-10-27): whether a
       # meeting should be recording (as prosody does), and how long a recorded meeting's live transcript
       # waits for the workflow's item before it becomes an item of its own.
       MEET_AUTO_RECORD: ${MEET_AUTO_RECORD:-1}
       MEET_LIVE_WAIT_HOURS: ${MEET_LIVE_WAIT_HOURS:-6}
       MEET_SPEECH_URL: ${MEET_SPEECH_URL:-http://apitools-asr:8987}
+      # The recorder's live-captions switch, as meet-jibri's watchdog reads it: with it the meeting page says why a
+      # recording had no live captions when the watchdog wrote no reason of its own into capture.json (DGO-1325).
+      MEET_LIVE_CAPTIONS: ${MEET_LIVE_CAPTIONS:-auto}
+      MEET_LIVE_CAPTIONS_MIN_CORES: ${MEET_LIVE_CAPTIONS_MIN_CORES:-4}
       TZ: Asia/Jerusalem
     networks:
       - traefik-network
       - meet-net
+    # The probe is busybox's wget (4 kB resident), NOT a second Python: `python -c "import urllib.request…"` is
+    # 24.7 MB, started every 30 s inside this cap beside a server that peaks at 43 MB — and when the two passed
+    # the old 48M the kernel killed the bigger one, the server (EXU-20: Exampleu, 5 kills on 2026-11-09, restarted 6
+    # times). 127.0.0.1, not localhost: the server listens on IPv4 only, and wget may ask ::1 first. A 503
+    # (no signing secret yet) is a failure, as before.
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8080/healthz', timeout=5)"]
+      test: ["CMD", "wget", "-q", "-T", "5", "-O", "/dev/null", "http://127.0.0.1:8080/healthz"]
       interval: ${HEALTHCHECK_INTERVAL:-30s}
       timeout: ${HEALTHCHECK_TIMEOUT:-10s}
       retries: 3
       start_period: 10s
     deploy:
       resources:
-        limits: { cpus: "0.1", memory: 48M }
+        # memory, measured (EXU-20, 2026-11-09, VmHWM): the server's highest peak 43 MB (vps1; Exampleu 38.7)
+        # + one helper that runs IN here by design — hooks/meetings|new|recordings (cli.py), «קדימה»'s
+        # link_tasks.py / close_items.py — each `import server`, 28.8 MB + the cgroup's page cache and kernel
+        # ~10.5 MB (Exampleu's memory.stat) = ~83 MB. 96M keeps ~13 MB over that; 48M could not hold the server
+        # and one helper. Two helpers at once would pass it — and then the kernel takes a helper, not the server:
+        # whatever imports server.py without being it sets its oom_score_adj to 1000 (start/server.py).
+        # apps/meet/test_start_memory.py holds these numbers.
+        limits: { cpus: "0.1", memory: 96M }
     logging:
       driver: json-file
       options: { max-size: "10m", max-file: "3" }

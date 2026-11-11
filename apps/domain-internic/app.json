@@ -1,0 +1,147 @@
+{
+  "id": "domain-internic",
+  "title": {
+    "he": "אינטרניק",
+    "en": "InterNIC"
+  },
+  "layer": 3,
+  "people": "admins",
+  "kind": "service",
+  "page": "services",
+  "version": "0.1.0",
+  "summary": {
+    "he": "ספק הדומיינים אינטרניק — הכניסה לפורטל, אימות במייל, קריאת הדומיינים ואזורי ה-DNS וכתיבת רשומות, דרך הדפדפן של הלשכה",
+    "en": "The InterNIC domain provider — the portal sign-in, mail verification, reading domains and DNS zones and writing records, through the office browser"
+  },
+  "capabilities": [
+    {
+      "name": "domain-internic",
+      "type": "service",
+      "interface": "domain-provider.v1",
+      "endpoint": "http://domain-internic:8981",
+      "contract": "platform-service.v1",
+      "required_ops": [
+        "state",
+        "login",
+        "listDomains",
+        "readZone",
+        "writeState",
+        "writeRecord"
+      ],
+      "optional_ops": [
+        "run",
+        "selftest"
+      ]
+    }
+  ],
+  "use": [
+    {
+      "capability": "browser",
+      "strength": "requires",
+      "after": false
+    },
+    {
+      "capability": "secrets",
+      "strength": "requires",
+      "after": true
+    },
+    {
+      "capability": "mail",
+      "strength": "wants",
+      "after": false,
+      "dependency": "weak",
+      "ops": [
+        "search",
+        "get"
+      ]
+    },
+    {
+      "capability": "kv",
+      "strength": "wants",
+      "after": false,
+      "dependency": "weak"
+    }
+  ],
+  "connections": [
+    {
+      "id": "browser42-mcp-token",
+      "required": false
+    }
+  ],
+  "compose": "docker-compose.yml",
+  "routing": [
+    {
+      "host": "domain-internic",
+      "port": 8981,
+      "auth": "sso",
+      "module": {
+        "group": "עסק",
+        "icon": "link",
+        "embed": true,
+        "alias": "domain-internic",
+        "id": "domain-internic",
+        "name": "אינטרניק",
+        "desc": "ספק הדומיינים: הפורטל, אזורי ה-DNS והרשומות",
+        "order": 7,
+        "service": "domain-internic",
+        "url_env": "DOMAIN_INTERNIC_URL",
+        "url": "http://domain-internic:8981"
+      },
+      "sso": {
+        "slug": "domain-internic",
+        "display_name": "InterNIC",
+        "default_host": "domain-internic.localhost",
+        "base_url_env": "DOMAIN_INTERNIC_BASE_URL",
+        "local_twin": true
+      }
+    }
+  ],
+  "health": {
+    "structural": "auto",
+    "probe": {
+      "http": "http://domain-internic:8981/healthz",
+      "interval": "30s"
+    }
+  },
+  "data": {
+    "volumes": [
+      "domain_internic_state"
+    ],
+    "on_uninstall": "keep"
+  },
+  "resources": {
+    "cpus": "0.2",
+    "memory": "160M"
+  },
+  "observability": {
+    "sentry_platform": "python"
+  },
+  "agent": {
+    "context": "AGENT.md",
+    "order": 27
+  },
+  "contributes": {
+    "connection_providers": [
+      {
+        "id": "domain-internic-login",
+        "title": "InterNIC portal login — the office signs in to portal.internic.co.il with this",
+        "title_he": "כניסה לפורטל אינטרניק — הלשכה מתחברת עם זה ל-portal.internic.co.il",
+        "kind": "password",
+        "env": "DOMAIN_INTERNIC_PASSWORD",
+        "envs_extra": [
+          "DOMAIN_INTERNIC_USER"
+        ],
+        "app": {
+          "name": "InterNIC portal",
+          "url": "https://portal.internic.co.il"
+        },
+        "probe": {
+          "type": "present"
+        },
+        "group": "דומיינים",
+        "now": "Type the InterNIC account ONCE, here: DOMAIN_INTERNIC_USER (the portal's user name or e-mail) and the password. The row declares the portal's address (app.url), so the office browser mirrors it into its own password store at every start and on `bbox b42 logins sync` (apps/browser42/logins.py); `bbox domain-internic login` then clicks the portal's user-name field and picks that saved login — the app itself never holds, prints or returns the password. When the portal asks for a code it sent by e-mail, the app reads that mail through the office's mail (DOMAIN_INTERNIC_MAIL_CONNECTION names the mailbox) and types the code. One attempt per call, never a retry: a registrar locks an account that guesses.",
+        "wizard": "fill שם משתמש + סיסמה of the InterNIC portal once; then: bbox domain-internic login"
+      }
+    ]
+  }
+}

@@ -1,0 +1,83 @@
+#!/usr/bin/env bash
+# `bbox test terminal` — this app's own check.
+#
+# The terminal owns no key and no state: everything it does is a call to `computers`, so the only
+# thing worth testing here is that the CHAIN works — the screen's fleet, and one real session through
+# the door and back. That is a live check by nature (there is no logic here to test offline), and it
+# says so instead of pretending: with no office up it exits 2, not 0.
+#
+#   bbox test terminal                the live check
+#   bbox test terminal --machine <id> open a session on a specific machine (default: the first one the
+#                                     fleet says can take a terminal)
+set -uo pipefail
+export PYTHONIOENCODING=utf-8
+BASE="${TERMINAL_URL:-http://terminal:8080}"
+WANT=""
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --machine) WANT="${2:-}"; shift 2 ;;
+    *) shift ;;
+  esac
+done
+
+fails=0
+say() { echo "$@"; }
+bad() { echo "   FAILED — $*"; fails=$((fails + 1)); }
+
+if ! curl -fsS -m 15 "${BASE}/manifest" >/dev/null 2>&1; then
+  say "terminal is not answering at ${BASE} — start the office first (bbox run / bbox status)."
+  exit 2
+fi
+say "── manifest"
+curl -fsS -m 15 "${BASE}/manifest" | grep -q '"transport": *"http"' \
+  && say "   http transport" || bad "the manifest does not declare the http transport"
+
+say "── the fleet"
+fleet="$(curl -fsS -m 25 "${BASE}/api/machines" 2>/dev/null)"
+if [ -z "${fleet}" ]; then bad "no fleet"; else
+  n="$(printf '%s' "${fleet}" | grep -o '"id"' | wc -l | tr -d ' ')"
+  say "   ${n} machine(s)"
+  [ "${n}" -gt 0 ] || bad "the fleet is empty"
+fi
+
+# The machine to try: the one asked for, else the first the fleet says has SSH (and is not a machine
+# of a linked office running an older app — that one answers 501 by design and would be a false red).
+if [ -z "${WANT}" ]; then
+  # A machine this office can actually open a shell on: its OWN, reachable, and not one of a linked
+  # office's (those answer 501 by design while that office is older, and that is not a failure of
+  # THIS app). Parsed, not grepped — the old grep picked whichever row happened to contain the word
+  # first, and started the test against a machine with no SSH server.
+  WANT="$(printf '%s' "${fleet}" | python3 -c "
+import json,sys
+for m in (json.load(sys.stdin).get('machines') or []):
+    if m.get('ok') and m.get('ssh') and m.get('shell') is not False and '.' not in (m.get('id') or ''):
+        print(m['id']); break
+")"
+fi
+if [ -z "${WANT}" ]; then
+  say "── session: no machine to open (nothing in the fleet has an SSH server) — not a failure of this app"
+else
+  say "── session on ${WANT}"
+  open="$(curl -s -m 40 -X POST "${BASE}/api/shell" -H 'content-type: application/json' \
+            -d "{\"machine\":\"${WANT}\",\"cols\":100,\"rows\":30}" 2>/dev/null)"
+  sid="$(printf '%s' "${open}" | sed -n 's/.*"session": *"\([^"]*\)".*/\1/p')"
+  if [ -z "${sid}" ]; then
+    bad "no session was opened: $(printf '%s' "${open}" | head -c 200)"
+  else
+    say "   session ${sid}"
+    sleep 3
+    curl -s -m 25 -X POST "${BASE}/api/shell/input" -H 'content-type: application/json' \
+      -d "{\"machine\":\"${WANT}\",\"session\":\"${sid}\",\"data\":\"echo TERM-$((6*7))\\n\",\"cursor\":0}" \
+      >/dev/null 2>&1
+    sleep 3
+    out="$(curl -s -m 25 "${BASE}/api/shell/poll?machine=${WANT}&session=${sid}&cursor=0" 2>/dev/null)"
+    printf '%s' "${out}" | grep -q 'TERM-42' \
+      && say "   a keystroke reached the far side and came back (TERM-42)" \
+      || bad "the shell did not echo the command"
+    curl -s -m 20 -X DELETE "${BASE}/api/shell/${WANT}/${sid}" >/dev/null 2>&1
+  fi
+fi
+
+echo
+if [ "${fails}" -gt 0 ]; then echo "terminal test — ${fails} failing"; exit 1; fi
+echo "terminal test — all good"

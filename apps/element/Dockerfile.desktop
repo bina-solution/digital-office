@@ -1,0 +1,85 @@
+# element-desktop — Element Desktop for Linux, streamed into the console with Selkies (DGO-1264). Built from
+# apps/_template-wrapped (ai/context/wrapped-official-app.md); the worked example is apps/bina-claude.
+#
+# The base is linuxserver's Selkies image, PINNED BY DIGEST, the same pin as bina-claude's (one base for the
+# wraps). No gate checks a FROM line's pin; a bump is a deliberate edit of this line.
+FROM ghcr.io/linuxserver/baseimage-selkies:debiantrixie@sha256:51461db2f6c9ff821ba58773e989b8f83ce0a4fcaac7497649dd76c4e819e327
+
+# The keyring and the session bus keep the client's sign-in (Element keeps its Matrix session encrypted with
+# the desktop's secret store). Fonts that render Hebrew and emoji. node runs the front door (desktop/gate.mjs).
+RUN apt-get update && apt-get install -y --no-install-recommends \
+      ca-certificates curl gnupg dbus-x11 gnome-keyring libsecret-1-0 libsecret-tools \
+      fonts-noto-core fonts-noto-color-emoji culmus nodejs \
+ && rm -rf /var/lib/apt/lists/*
+
+# Element's OWN repository, exactly as element.io/download says (packages.element.io, suite `default`,
+# amd64 and arm64). Element publishes no fingerprint for its key: the one checked here is the key as
+# packages.element.io served it over HTTPS on 2026-11-10 (uid «riot.im packages <person35@example.com>»,
+# computed from the key file, sha256 c2cb0c6b…c1955). A changed key fails the build; a person checks it
+# with Element before this line changes. The Release file apt reads is signed with it.
+RUN curl -fsSLo /usr/share/keyrings/element-io-archive-keyring.gpg https://packages.element.io/debian/element-io-archive-keyring.gpg \
+ && gpg --show-keys --with-colons /usr/share/keyrings/element-io-archive-keyring.gpg \
+      | grep -q '^fpr:::::::::12D4CD600C2240A9F4A82071D7B0B66941D01538:$' \
+ && [ "$(gpg --show-keys --with-colons /usr/share/keyrings/element-io-archive-keyring.gpg | grep -c '^pub:')" = 1 ] \
+ && echo "deb [signed-by=/usr/share/keyrings/element-io-archive-keyring.gpg] https://packages.element.io/debian/ default main" \
+      > /etc/apt/sources.list.d/element-io.list \
+ && apt-get update && apt-get install -y --no-install-recommends element-desktop \
+ && rm -rf /var/lib/apt/lists/* \
+ && command -v element-desktop
+
+# THE DESKTOP'S OWN BROWSER, FOR THE SIGN-IN ONLY (bina-claude's DGO-1506 pattern). A homeserver that signs in
+# through a browser (SSO, or the account service matrix.org uses) is a round trip: Element opens the sign-in as a
+# system URL and waits for an element:// / io.element.desktop: link. Both ends would be broken here: no browser
+# (the click does nothing), and the package's link handler starts Element without --no-sandbox, which dies in a
+# container. So:
+#   element-signin-browser  Chromium on the streamed screen, for Element's sign-in addresses only, in a
+#                           throwaway profile, 15 minutes at most (desktop/signin-browser says how it knows one)
+#   element-open-link       the handler the package's .desktop file now runs: the link, with this container's
+#                           flags, to the RUNNING Element
+# The policy keeps the browser plain: no downloads, no sign-in to Chromium, no sync, no saved passwords. Which
+# handler opens http/https is written into the desktop user's own mimeapps.list at session start (autostart).
+# The checks: the binary the handler runs is the package's, the package's .desktop file declares Element's
+# schemes and now points at the handler, and the tools the scripts lean on are here.
+RUN apt-get update && apt-get install -y --no-install-recommends \
+      chromium procps xdg-utils libglib2.0-bin coreutils jq \
+ && rm -rf /var/lib/apt/lists/* \
+ && dpkg-query -W chromium
+COPY desktop/signin-browser /usr/local/bin/element-signin-browser
+COPY desktop/open-link /usr/local/bin/element-open-link
+COPY desktop/browser-policy.json /etc/chromium/policies/managed/element.json
+RUN chmod 755 /usr/local/bin/element-signin-browser /usr/local/bin/element-open-link \
+ && printf '%s\n' '[Desktop Entry]' 'Type=Application' 'Name=Browser' \
+      'Exec=/usr/local/bin/element-signin-browser %u' 'NoDisplay=true' 'Terminal=false' \
+      'MimeType=x-scheme-handler/http;x-scheme-handler/https;' \
+      > /usr/share/applications/element-web.desktop \
+ && test -x /opt/Element/element-desktop \
+ && d=/usr/share/applications/element-desktop.desktop && test -f "$d" \
+ && grep -q 'x-scheme-handler/element' "$d" \
+ && sed -i 's|^Exec=[^ ]*|Exec=/usr/local/bin/element-open-link|' "$d" \
+ && ! grep '^Exec=' "$d" | grep -vq '^Exec=/usr/local/bin/element-open-link' \
+ && command -v ps && command -v pkill && command -v xdg-mime && command -v gio && command -v timeout \
+ && jq -e '.DownloadRestrictions == 3 and .BrowserSignin == 0' /etc/chromium/policies/managed/element.json
+
+# What the session runs. openbox runs ~/.config/openbox/autostart, which linuxserver copies from
+# /defaults/autostart on the FIRST start only, and that copy stays in the volume. So the autostart only names
+# the launcher, and the launcher lives in the image: a new image changes what runs.
+COPY desktop/autostart /usr/local/bin/element-desktop-session
+RUN chmod 755 /usr/local/bin/element-desktop-session \
+ && printf '/usr/local/bin/element-desktop-session\n' > /defaults/autostart
+
+# THE FRONT DOOR (wrapped-official-app.md «A front door»). nginx moves to the container's loopback
+# (CUSTOM_PORT=3100 in docker-compose.yml), and gate.mjs takes :3000 and admits the edge, the console and the
+# link proxy only. The checks fail the build if linuxserver changes the lines the sed edits.
+RUN sed -i -e 's/^\(\s*\)listen 3000 default_server;/\1listen 127.0.0.1:3000 default_server;/' \
+           -e 's/^\(\s*\)listen 3001 ssl;/\1listen 127.0.0.1:3001 ssl;/' \
+           -e '/listen \[::\]/d' /defaults/default.conf \
+ && grep -q 'listen 127.0.0.1:3000 default_server;' /defaults/default.conf \
+ && grep -q 'listen 127.0.0.1:3001 ssl;' /defaults/default.conf \
+ && ! grep -qE 'listen (\[::\]:)?300[01]' /defaults/default.conf
+COPY desktop/gate.mjs /opt/element/gate.mjs
+COPY desktop/svc-gate /etc/s6-overlay/s6-rc.d/svc-element-gate
+RUN echo longrun > /etc/s6-overlay/s6-rc.d/svc-element-gate/type \
+ && mkdir -p /etc/s6-overlay/s6-rc.d/svc-element-gate/dependencies.d \
+ && touch /etc/s6-overlay/s6-rc.d/svc-element-gate/dependencies.d/init-services \
+ && touch /etc/s6-overlay/s6-rc.d/user/contents.d/svc-element-gate \
+ && chmod 755 /etc/s6-overlay/s6-rc.d/svc-element-gate/run

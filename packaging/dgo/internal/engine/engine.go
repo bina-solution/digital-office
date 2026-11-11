@@ -22,6 +22,8 @@ package engine
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"io"
@@ -175,6 +177,9 @@ type machine struct {
 	provisions bool              // need_docker's ensure_project_engine runs (it is not a socket, dockerd is there)
 	dropInSame bool              // with systemd: the drop-in bbox would write is already the one on disk
 	envFile    bool              // the checkout has a .env
+	project    string            // with no .env: the compose project bbox asks about (lib.sh office_project)
+	holds      int               // with no .env: office_holds_data's answer (holdsData …), or holdsUnasked
+	unnamed    bool              // with a .env: it names no office (lib.sh office_unnamed) — bbox run refuses
 	prof       profile
 }
 
@@ -331,6 +336,7 @@ func (m *machine) lima(s System) (host, bool) {
 		}
 	}
 	m.add(note, "macsock", m.limaHome+"/"+m.inst+"/sock/docker.sock — the engine's docker socket on this Mac (bbox itself runs in the guest)", "")
+	m.provision(s)
 	m.forwards(s, lima)
 	if !under || m.state != "Running" {
 		return host{}, false
@@ -383,6 +389,189 @@ func (m *machine) forwards(s System, lima []string) {
 	}
 }
 
+// provision is engine.sh's provision_report in the doctor (DGO-1620): the provision blocks of
+// engine.yaml that this engine lacks, has applied live, or has in another version. An engine keeps the
+// config it was made with; `./bbox engine start` runs a missing `# bbox: live-apply` block in the running
+// guest and stamps it in bbox-provision-applied. Read exactly as engine.sh reads it
+// (TestProvisionDriftMatchesEngineSh), so both doctors tell the same thing.
+func (m *machine) provision(s System) {
+	dir := m.limaHome + "/" + m.inst
+	inst, err := s.Read(dir + "/lima.yaml")
+	tmpl, _ := s.Read(m.root + "/packaging/macos/engine.yaml")
+	stamps, _ := s.Read(dir + "/bbox-provision-applied")
+	said, lines := provisionSaid(inst, err, tmpl, stamps)
+	m.add(note, "provision", said, "")
+	m.facts[len(m.facts)-1].also = strings.Join(lines, "\n")
+}
+
+// provisionSaid is the whole of provision_report: no engine yet, or the drift of the one there is.
+func provisionSaid(inst []byte, instErr error, tmpl, stamps []byte) (string, []string) {
+	if instErr != nil {
+		return "no engine yet — the first `start` makes it from this engine.yaml", nil
+	}
+	return provisionReport(provisionDrift(tmpl, inst, stamps))
+}
+
+// provBlock is one provision block of a Lima config as engine.sh's provision_yaml lists it.
+type provBlock struct {
+	ident, sha string
+	live       bool
+}
+
+var (
+	provModeRE   = regexp.MustCompile(`^\s*-\s+mode:\s*`)
+	provScriptRE = regexp.MustCompile(`^\s+script:\s*\|[-+]?\s*$`)
+)
+
+// provisionBlocks is engine.sh's provision_yaml `list`, line for line: the blocks of the top-level
+// `provision:` section, each named by its first comment line (or its first line, or its hash), hashed
+// over its script, and live when it is a system block that says `# bbox: live-apply` and is not a
+// template (no `{{`). Narrow on purpose, like udpForwards: it reads the flat file Lima writes.
+func provisionBlocks(b []byte) []provBlock {
+	type block struct {
+		mode  string
+		lines []string
+	}
+	var blocks []*block
+	var cur *block
+	inside, body, ind := false, false, -1
+	for _, line := range strings.Split(string(b), "\n") {
+		// python's text mode reads a CRLF file as LF
+		line = strings.TrimSuffix(line, "\r")
+		if topKeyRE.MatchString(line) { // a top-level key opens or closes the section
+			if inside {
+				break
+			}
+			inside = strings.HasPrefix(line, "provision:")
+			continue
+		}
+		if !inside {
+			continue
+		}
+		if provModeRE.MatchString(line) { // a new block
+			cur = &block{mode: strings.TrimSpace(strings.SplitN(line, ":", 2)[1])}
+			blocks = append(blocks, cur)
+			body, ind = false, -1
+			continue
+		}
+		if cur == nil {
+			continue
+		}
+		if provScriptRE.MatchString(line) { // the script's literal block begins
+			body = true
+			continue
+		}
+		if body {
+			if strings.TrimSpace(line) == "" {
+				cur.lines = append(cur.lines, "")
+				continue
+			}
+			n := len(line) - len(strings.TrimLeft(line, " "))
+			if ind < 0 {
+				ind = n
+			}
+			if n < ind { // back out of the literal block
+				body = false
+				continue
+			}
+			cur.lines = append(cur.lines, line[ind:])
+		}
+	}
+	var out []provBlock
+	for _, bl := range blocks {
+		text := strings.TrimRight(strings.Join(bl.lines, "\n"), "\n") + "\n"
+		sum := sha256.Sum256([]byte(text))
+		sha := hex.EncodeToString(sum[:])[:12]
+		var rest, comments []string
+		for _, l := range bl.lines {
+			if s := strings.TrimSpace(l); s != "" && !strings.HasPrefix(l, "#!") {
+				rest = append(rest, s)
+				if strings.HasPrefix(s, "#") && !strings.HasPrefix(s, "# bbox:") {
+					comments = append(comments, s)
+				}
+			}
+		}
+		ident := sha
+		switch {
+		case len(comments) > 0:
+			ident = comments[0]
+		case len(rest) > 0:
+			ident = rest[0]
+		}
+		if r := []rune(ident); len(r) > 100 {
+			ident = string(r[:100])
+		}
+		ident = strings.ReplaceAll(ident, "\t", " ")
+		live := bl.mode == "system" && strings.Contains(text, "# bbox: live-apply") && !strings.Contains(text, "{{")
+		out = append(out, provBlock{ident: ident, sha: sha, live: live})
+	}
+	return out
+}
+
+// provDrift is one line of engine.sh's provision_drift: what a template block is to this engine.
+type provDrift struct {
+	kind, ident, when string // kind: missing | applied | changed
+	live              bool
+}
+
+// provisionDrift is engine.sh's provision_drift: every template block the instance lacks (applied live
+// when the stamp file names its id AND hash — the last such line's time), or has under another hash.
+func provisionDrift(tmpl, inst, stamps []byte) []provDrift {
+	have := provisionBlocks(inst)
+	var out []provDrift
+	for _, b := range provisionBlocks(tmpl) {
+		named, same := false, false
+		for _, h := range have {
+			if h.ident == b.ident {
+				named = true
+				same = same || h.sha == b.sha
+			}
+		}
+		switch {
+		case !named:
+			when := ""
+			for _, l := range strings.Split(string(stamps), "\n") {
+				if f := strings.Split(l, "\t"); len(f) >= 2 && f[0] == b.ident && f[1] == b.sha {
+					when = ""
+					if len(f) >= 3 {
+						when = f[2]
+					}
+				}
+			}
+			if when != "" {
+				out = append(out, provDrift{kind: "applied", ident: b.ident, when: when, live: b.live})
+			} else {
+				out = append(out, provDrift{kind: "missing", ident: b.ident, live: b.live})
+			}
+		case !same:
+			out = append(out, provDrift{kind: "changed", ident: b.ident, live: b.live})
+		}
+	}
+	return out
+}
+
+// provisionReport is engine.sh's provision_report once an engine exists: the summary, and one line
+// a block.
+func provisionReport(drift []provDrift) (string, []string) {
+	if len(drift) == 0 {
+		return "every block of engine.yaml is in this engine", nil
+	}
+	var lines []string
+	for _, d := range drift {
+		switch {
+		case d.kind == "applied":
+			lines = append(lines, "applied live "+d.when+" (not in lima.yaml; its effect is on the guest's disk): "+d.ident)
+		case d.kind == "missing" && d.live:
+			lines = append(lines, "missing, applied live by the next `start` or `provision --apply`: "+d.ident)
+		case d.kind == "missing":
+			lines = append(lines, "missing, lands only with the engine's next edit (owner, at the machine): "+d.ident)
+		case d.kind == "changed":
+			lines = append(lines, "changed since this engine was made (its old version runs at boot): "+d.ident)
+		}
+	}
+	return "this engine was made from an older engine.yaml", lines
+}
+
 // lanAddr is engine.sh's lan_addr: the IPv4 of the interface this Mac's default route uses, never a
 // guess — "" when there is no default route.
 func lanAddr(s System) string {
@@ -406,7 +595,13 @@ var (
 	topKeyRE  = regexp.MustCompile(`^[A-Za-z_]`)
 	ruleRE    = regexp.MustCompile(`^\s*-\s*([\w-]+):\s*(.*)$`)
 	ruleKeyRE = regexp.MustCompile(`^\s+([\w-]+):\s*(.*)$`)
+	// a YAML comment — `#` at the start of the value or after a space or a tab — is not part of it (DGO-614)
+	commentRE = regexp.MustCompile(`(?:^|[ \t]+)#.*$`)
 )
+
+// bareValue is ports_yaml's bare(): the value without its trailing comment. Without it
+// `hostIP: "127.0.0.1"  # loopback` read as a wildcard address, and a commented port as no port.
+func bareValue(v string) string { return strings.TrimSpace(commentRE.ReplaceAllString(v, "")) }
 
 // udpForwards is engine.sh's ports_yaml, line for line: the guest ports of a Lima config's UDP rules
 // bound to a wildcard host address — the only ones a peer on the network can reach (Lima's default
@@ -431,9 +626,9 @@ func udpForwards(b []byte, err error) []string {
 			continue
 		}
 		if r := ruleRE.FindStringSubmatch(line); r != nil {
-			rules = append(rules, map[string]string{r[1]: strings.TrimSpace(r[2])})
+			rules = append(rules, map[string]string{r[1]: bareValue(r[2])})
 		} else if k := ruleKeyRE.FindStringSubmatch(line); k != nil && len(rules) > 0 {
-			rules[len(rules)-1][k[1]] = strings.TrimSpace(k[2])
+			rules[len(rules)-1][k[1]] = bareValue(k[2])
 		}
 	}
 	var ports []string
@@ -804,10 +999,80 @@ func (m *machine) socket() {
 	}
 }
 
-// generatesEnv is bbox run's first branch: with no .env, on the cloud sandbox or in the macOS
-// guest, scripts/ci-env.sh writes one and bbox run starts over on it.
+// generatesEnv is bbox run's first branch: with no .env, on ANY machine since DGO-1782 (a local office;
+// the cloud sandbox's secretless one; the macOS guest's on :8080), scripts/ci-env.sh writes one and bbox
+// run starts over on it — unless this checkout's office already holds data, or the engine did not say. An
+// engine not answering yet that need_docker will start (the sandbox before bbox starts dockerd) is asked by bbox
+// run once it does: the usual first run, so the look predicts the generated one — and says it is asked then.
 func (m *machine) generatesEnv() bool {
-	return !m.envFile && (m.sandbox || m.goos == "darwin" || m.inGuest)
+	return !m.envFile && (m.holds == holdsNothing || m.holds == holdsUnasked)
+}
+
+// engineComes is whether need_docker ends with an engine bbox run can ask: one answering now, or one it starts
+// (a docker CLI, and a dockerd for ensure_project_engine) — else bbox run stops there, before the .env step.
+func (m *machine) engineComes() bool {
+	return m.dockerHost != "" || (m.have["docker"] != "" && m.provisions)
+}
+
+// generated is what bbox run's no-.env branch writes here, in its words.
+func (m *machine) generated() string {
+	switch {
+	case m.goos == "darwin" || m.inGuest:
+		return "a local one for the macOS engine (DEPLOYMENT_NAME=local, edge on :8080)"
+	case m.sandbox:
+		return "a secretless cloud .env"
+	}
+	return "a LOCAL office (DEPLOYMENT_NAME=local, every app at <name>.localhost)"
+}
+
+// The refusals of bbox run's .env step, as bbox says them (TestPlanQuotesBbox holds the copies).
+const (
+	unnamedSaid = "BUSINESS_NAME is empty in .env — write your business's name there (one line; every address of the office derives from it), then run again. No domain? Move .env aside and run: a local office makes itself."
+	heldFix     = "Restore it (a backup's .env, or the office's vault); a new one would not open the data that is there."
+	unsaidTail  = "already has data — nothing is generated until it can (a lost .env must never get new secrets over old volumes)."
+)
+
+// office is bbox run's .env step as a look: with a .env, whether it names an office; without one, which
+// compose project bbox asks about and what the engine says it holds.
+func (m *machine) office(s System, h host, env []byte) {
+	m.holds = holdsUnasked
+	if m.envFile {
+		if m.unnamed = officeUnnamed(env); m.unnamed {
+			m.add(fail, "office", ".env names no office: BUSINESS_NAME is empty and every address derives from it (DEPLOYMENT_DOMAIN reads "+
+				readEnv(env, "DEPLOYMENT_DOMAIN")+")", unnamedSaid)
+		}
+		return
+	}
+	// the checkout's physical path, as office_project's `pwd -P` — only from an engine host that answered (a
+	// guest not there yet cannot say; its path is then the checkout's as given)
+	root := h.root
+	if m.asked {
+		// "$(…)": only the trailing newlines go (a folder named with a space keeps it)
+		if out, err := h.run(s, "sh", "-c", `cd "$1" && pwd -P`, "sh", h.root); err == nil && strings.TrimRight(out, "\n") != "" {
+			root = strings.TrimRight(out, "\n")
+		}
+	}
+	m.project = officeProject(h.env("COMPOSE_PROJECT_NAME"), root)
+	switch {
+	case m.dockerHost != "":
+		m.holds = []int{holdsData, holdsNothing, holdsUnsaid}[officeHoldsData(s, h, m.dockerHost, m.project)]
+	case !m.engineComes():
+		m.holds = holdsUnreached
+	}
+	what := "this checkout's office (" + m.project + ")"
+	switch m.holds {
+	case holdsUnreached:
+		m.add(note, "office", "no .env: not reached — bbox run stops at need_docker first (no engine it can ask or start)", "")
+	case holdsData:
+		m.add(fail, "office", "no .env, but "+what+" already has containers or volumes — its .env is missing, not new", heldFix)
+	case holdsUnsaid:
+		m.add(fail, "office", "no .env, and the engine did not say whether "+what+" "+unsaidTail, "")
+	case holdsNothing:
+		m.add(note, "office", "no .env: bbox run generates "+m.generated()+" — "+what+" holds no containers or volumes", "")
+	default:
+		m.add(note, "office", "no .env: bbox run asks its engine, once it answers, whether "+what+" holds containers or volumes — none: it generates "+
+			m.generated()+"; some: it refuses", "")
+	}
 }
 
 // ciEnvRE finds the profile line scripts/ci-env.sh writes into a .env it generates (unless
@@ -820,6 +1085,7 @@ var ciEnvRE = regexp.MustCompile(`\|\| echo "(PERFORMANCE_PROFILE=[^"]+)"`)
 func (m *machine) profile(s System, h host) {
 	env, err := s.Read(join(m.goos, m.root, ".env"))
 	m.envFile = err == nil
+	m.office(s, h, env)
 	generated := m.generatesEnv()
 	if generated {
 		env = nil
@@ -842,10 +1108,6 @@ func (m *machine) profile(s System, h host) {
 	m.prof.generated = generated && m.prof.set
 	where := fmt.Sprintf("%d cores, %.1f GiB in %s", cores, gib, h.name)
 	switch p := m.prof; {
-	case p.stop != nil:
-		m.add(fail, "profile", "no answer ("+p.stop.Error()+") and .env names no PERFORMANCE_PROFILE — bbox run stops in ensure_perf_profile: "+
-			"under set -e the failed `prof=$(…)` exits before its floor fallback", "PERFORMANCE_PROFILE="+floor+" in .env — the floor bbox means to fall back to "+
-			"(\"profile selector unavailable — falling back to the floor profile ("+floor+").\")")
 	case p.generated:
 		m.add(note, "profile", strings.Join(append([]string{p.name + " (written to .env by scripts/ci-env.sh, which bbox run runs first here) · " + where}, p.said...), " · "), "")
 	case p.set:

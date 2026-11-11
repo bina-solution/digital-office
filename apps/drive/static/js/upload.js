@@ -9,7 +9,7 @@
   const CHUNK = 8 * 1024 * 1024, PARALLEL = 2, RETRIES = 8;
   let seq = 0, active = 0;
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-  const fp = (f, dest) => [f.name, f.size, f.lastModified, dest.folder || "", dest.path || ""].join("|");
+  const fp = (f, dest) => [f.name, f.size, f.lastModified, dest.folder || "", dest.path || "", dest.drive || ""].join("|");
   const sessions = () => localGet("up", {});
   const remember = (k, sid) => { const s = sessions(); s[k] = sid; localSet("up", s); };
   const forget = (k) => { const s = sessions(); delete s[k]; localSet("up", s); };
@@ -24,6 +24,8 @@
   }
   function enqueue(files, dest) {
     dest = dest || here();
+    // an upload stays with the drive it was started in, whatever the window shows while it runs
+    if (dest.drive === undefined) dest = { ...dest, drive: state.route.drive || "" };
     const list = [...files].filter((f) => f && f.size >= 0);
     if (!list.length) return;
     const rows = list.map((f) => ({ key: ++seq, file: f, name: f.name, rel: f._rel || "", size: f.size, sent: 0,
@@ -37,7 +39,7 @@
     const dir = rel.split("/").slice(0, -1).join("/");
     if (!dir) return dest;
     const base = dest.folder ? F.data.folderPath(dest.folder).map((f) => f.name).join("/") : "";
-    return { path: "/" + [base, dir].filter(Boolean).join("/") };
+    return { path: "/" + [base, dir].filter(Boolean).join("/"), drive: dest.drive };
   }
   function pump() {
     while (active < PARALLEL) {
@@ -50,15 +52,15 @@
   }
 
   async function send(key) {
-    const u = row(key), k = fp(u.file, u.dest);
+    const u = row(key), k = fp(u.file, u.dest), drive = u.dest.drive;
     try {
       let sid = sessions()[k], offset = 0;
       if (sid) {
-        try { const s = await api("api/uploads/" + sid); offset = s.offset || 0; if (s.state === "done") return finished(key, k, s.file); }
+        try { const s = await api("api/uploads/" + sid, { drive }); offset = s.offset || 0; if (s.state === "done") return finished(key, k, s.file); }
         catch (e) { sid = null; }
       }
       if (!sid) {
-        const s = await api("api/uploads", { body: { size: u.size, name: u.file.name, mime: u.file.type || "",
+        const s = await api("api/uploads", { drive, body: { size: u.size, name: u.file.name, mime: u.file.type || "",
           folder: u.dest.folder || "", path: u.dest.path || "", mode: u.dest.path ? "new" : "",
           system: u.dest.system || "", remux: u.dest.remux || "" } });
         sid = s.id; remember(k, sid);
@@ -70,13 +72,13 @@
         const end = Math.min(offset + CHUNK, u.size);
         let r;
         try {
-          r = await fetch(BASE + "api/uploads/" + sid, { method: "PATCH", body: u.file.slice(offset, end),
+          r = await fetch(BASE + F.scoped("api/uploads/" + sid, drive), { method: "PATCH", body: u.file.slice(offset, end),
             headers: { "Upload-Offset": String(offset), "Content-Type": "application/offset+octet-stream", "Tus-Resumable": "1.0.0" } });
         } catch (e) {                                   // the network dropped: wait, ask where we are, go on
           if (++tries > RETRIES) throw new Error(L("החיבור לשרת נקטע — לחצו «נסה שוב» כדי להמשיך מאותה נקודה", "The connection dropped — press Retry to continue where it stopped"));
           patch(key, { error: L("החיבור נקטע — מנסה שוב…", "Connection lost — retrying…") });
           await sleep(Math.min(30000, 1000 * 2 ** tries));
-          try { offset = (await api("api/uploads/" + sid)).offset || offset; } catch (e2) { /* still offline */ }
+          try { offset = (await api("api/uploads/" + sid, { drive })).offset || offset; } catch (e2) { /* still offline */ }
           continue;
         }
         if (r.status === 409) { offset = Number(r.headers.get("Upload-Offset")) || offset; continue; }
@@ -92,7 +94,7 @@
       }
       patch(key, { state: "finishing", sent: u.size, error: "" });
       for (let i = 0; ; i++) {
-        const s = await api("api/uploads/" + sid);
+        const s = await api("api/uploads/" + sid, { drive });
         if (s.state === "done") return finished(key, k, s.file);
         if (s.state === "failed") throw new Error(s.error || L("השמירה נכשלה", "Saving failed"));
         await sleep(i < 10 ? 600 : 1500);
@@ -110,7 +112,7 @@
   async function cancel(key) {
     const u = row(key);
     patch(key, { state: "canceled" });
-    if (u.sid) { try { await api("api/uploads/" + u.sid, { method: "DELETE" }); } catch (e) { /* gone already */ } forget(fp(u.file, u.dest)); }
+    if (u.sid) { try { await api("api/uploads/" + u.sid, { method: "DELETE", drive: u.dest.drive }); } catch (e) { /* gone already */ } forget(fp(u.file, u.dest)); }
   }
   function retry(key) { patch(key, { state: "queued", error: "" }); pump(); }
   function clearDone() { set({ uploads: state.uploads.filter((u) => !["done", "canceled"].includes(u.state)) }); }

@@ -96,8 +96,8 @@ export class IndoxAppSchedulerAllAutomationAllInstancesWorkflow {
   -- Every scheduler setting in one prefix read, so adding a job's cadence needs no SQL change.
   -- [global settings 2026-08-28] public.app_settings, NOT public.settings. This scheduler is the
   -- single entry point for EVERY instance, so its switches are global by definition. public.settings
-  -- is a compatibility view onto ONE instance (indox_hacohen), so reading indox.auto.* from there
-  -- meant hacohen's rows silently gated the whole estate — and it breaks outright when that view is
+  -- is a compatibility view onto ONE instance (indox_example), so reading indox.auto.* from there
+  -- meant example's rows silently gated the whole estate — and it breaks outright when that view is
   -- dropped at the cutover. app_settings sits beside the other two global tables this same query
   -- already reads, public.indox_instances and public.app_schedule_state; none is instance data.
   SELECT key, value FROM public.app_settings WHERE app = 'indox' AND key LIKE 'indox.auto.%'

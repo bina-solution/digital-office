@@ -29,7 +29,8 @@
   kind: password
   env: REDIS_PASSWORD
   # consumers: DERIVED from each app\'s connections[] (see catalog()) — do not author
-  now: "plain env -> redis --requirepass; ALSO reseeded into n8n cred 'Redis Local Account'
+  now: "plain env -> redis (written into a config file only redis reads at start, never on a command
+        line: DGO-1654); ALSO reseeded into n8n cred 'Redis Local Account'
         (BoJE1odVZ6MBcpax) by blueprint credential_overrides on bbox n8n push; authentik and
         any-concurrency read it from env directly."
   probe: {type: redis, host: redis, port: 6379}
@@ -40,7 +41,7 @@
   kind: config
   env: DBS_ALLOWED_IPS
   # consumers: DERIVED from each app\'s connections[] (see catalog()) — do not author
-  now: "literal operator IPs in .env -> traefik ipallowlist middleware on :5432/:6379 (Hacohen-locked)"
+  now: "literal operator IPs in .env -> traefik ipallowlist middleware on :5432/:6379 (Example-locked)"
   probe: {type: present}
   wizard: "text field (advanced)"
 

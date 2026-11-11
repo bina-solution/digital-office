@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+#: sync [local|indox] [--accept-shrink] — read the providers now; reads only, it writes into no other app. A provider
+#:   that lists half the documents or fewer is refused and its rows kept, unless --accept-shrink:  ./bbox documents sync
+# Pipes the app's own CLI (apps/documents/cli.py) into its container: no address, no key, no rebuild.
+set -uo pipefail
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
+. "${REPO_ROOT}/scripts/lib.sh"
+case "${1:-}" in -h|--help) sed -n 's/^#: //p' "${BASH_SOURCE[0]}"; exit 0 ;; esac
+dcx exec -T documents python - sync "$@" < "$(npath "${REPO_ROOT}")/apps/documents/cli.py"

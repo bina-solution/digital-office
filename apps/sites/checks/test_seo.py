@@ -61,7 +61,7 @@ def _locs(paths) -> str:
 def _site() -> dict[str, str]:
     """Paths → bodies: a sitemap INDEX over two files (and one that points into the office), 40
     pages and the home page, with the external links the tests care about spread over them."""
-    links = {1: [GONE, FINE, MOVED, NOHEAD, "mailto:person91@example.com", "#top", "javascript:void(0)", "/p2.html"],
+    links = {1: [GONE, FINE, MOVED, NOHEAD, "mailto:person97@example.com", "#top", "javascript:void(0)", "/p2.html"],
              2: [GONE], 3: [GONE, HICCUP], 4: [GUARDED, DOWN], 5: [DEAD, *FLAKY, *RATE],
              6: [*BUSY, *PRIVATE, REBIND]}
     site = {f"/p{n}.html": _html(n, links.get(n, [])) for n in range(1, 41)}
@@ -146,9 +146,9 @@ def _fetcher(site: dict[str, str]):
     return fetch
 
 
-def _run(web: Web, crash_ok: bool = False, **kw) -> dict:
+def _run(web: Web, crash_ok: bool = False, site: dict | None = None, **kw) -> dict:
     with ExitStack() as stack:
-        for target, name, value in ((H, "fetch", _fetcher(_site())), (H, "session", web.session),
+        for target, name, value in ((H, "fetch", _fetcher(site or _site())), (H, "session", web.session),
                                     (seo, "_clock", web.clock), (seo, "_sleep", web.sleep),
                                     (socket, "getaddrinfo", web.getaddrinfo)):
             stack.enter_context(mock.patch.object(target, name, value))
@@ -175,6 +175,38 @@ def test_the_whole_sitemap_is_read() -> None:
     assert result["summary"]["pages_crawled"] == 41, result["summary"]["pages_crawled"]
     assert sm["urls"] == 41 and sm["files"] == 3 and sm["crawled"] == 41, sm   # index + 2, not the evil one
     assert not _codes(result, "crawl_truncated")
+
+
+def test_the_sitemap_is_found_where_the_site_keeps_it() -> None:
+    """Astro writes sitemap-index.xml and no sitemap.xml (the docs site, DGO-1788); a WordPress copy names
+    wp-sitemap.xml in its robots.txt, ahead of a stale sitemap.xml and of a sitemap on another host. Neither is
+    «no sitemap»; a site with none still is."""
+    astro = _site()
+    astro["/sitemap-index.xml"] = astro.pop("/sitemap.xml")
+    astro["/robots.txt"] = "User-agent: *\nAllow: /\n"
+    astro["/sitemap.xml"] = _html(99, [])                   # a catch-all server's page is not a sitemap
+    wp = _site()
+    wp["/wp-sitemap.xml"] = wp.pop("/sitemap.xml")
+    wp["/sitemap.xml"] = f"<urlset>{_locs(['/p2.html'])}</urlset>"
+    wp["/other.xml"] = f"<urlset>{_locs(['/p1.html'])}</urlset>"
+    wp["/robots.txt"] = ("User-agent: *\r\nSitemap: https://elsewhere.example.org/other.xml\r\n"
+                         f"Sitemap: https://WWW.{HOST}/wp-sitemap.xml\r\n")    # its own host, the www twin, any case
+    for name, site in (("astro", astro), ("wp", wp)):
+        result = _run(_fresh(), max_pages=5, site=site)
+        assert result["summary"]["sitemap"]["urls"] == 41 and not _codes(result, "no_sitemap"), (name, result["summary"])
+    bare = _site()
+    del bare["/sitemap.xml"]
+    assert _codes(_run(_fresh(), max_pages=5, site=bare), "no_sitemap")
+
+
+def test_an_empty_alt_is_decoration_not_a_missing_alt() -> None:
+    """`alt=""` (and a bare `alt`) marks a decorative image — the icon inside a link that has its own name; only an
+    `<img>` with no alt attribute at all is missing one. bina-solutions.co.il drew 98 false warnings from its social
+    icons and its language-switch icon."""
+    page = seo.Page()
+    page.feed('<a href="/f" aria-label="Facebook"><img src="f.svg" alt=""></a><img src="lang.svg" alt>'
+              '<img src="logo.png" alt="בינה סלושנס"><img src="photo.jpg">')
+    assert page.imgs == 4 and page.imgs_no_alt == 1, (page.imgs, page.imgs_no_alt)
 
 
 def test_a_sitemap_over_the_ceiling_is_cut_and_says_so() -> None:

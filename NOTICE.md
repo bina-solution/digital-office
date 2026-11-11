@@ -14,7 +14,7 @@ These parts are not Bina Solutions' work. Each keeps its own license, and its no
 | Component | Where | License | Copyright |
 |---|---|---|---|
 | qr-scanner | `apps/dgo-extend/static/vendor/qr-scanner/` | MIT (its `LICENSE` is kept beside it) | © 2017 Nimiq, danimoh |
-| qrcode | `apps/dgo-extend/static/vendor/qrcode/` | MIT (see the note kept beside it) | © its authors |
+| qrcode | `platform-base/bina-ui/qrcode/`, stamped into `apps/dgo-extend/static/vendor/qrcode/` and `apps/dashboard/static/vendor/qrcode/` | MIT (see the note kept beside each) | © 2009 Kazuhiko Arase |
 | RevoGrid | `apps/my-docs/static/vendor/revo-grid/` | MIT (text below) | © Revolist OU |
 | any-concurrency | `apps/any-concurrency/` | MIT (its `LICENSE` is kept beside it) | © 2024 any-concurrency contributors |
 | Agent presets derived from `@deepseek-ai/dsh-agent-presets` | `apps/bina-ds/harness/profile/agent-presets/` | MIT (text below) | © 2026 DeepSeek |

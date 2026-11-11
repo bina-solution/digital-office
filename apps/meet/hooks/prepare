@@ -24,6 +24,7 @@
 #       address; with no such office it is emptied, and the workflow says it has nowhere to write.
 #       This office's own project-pln is not used: it asks for its API key, which n8n does not hold.
 set -euo pipefail
+export PYTHONIOENCODING=utf-8   # its python prints Hebrew; Windows' default io would crash on it (G10)
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
 ENV_FILE="${REPO_ROOT}/.env"
 [ -f "$ENV_FILE" ] || { echo "[meet] no .env yet — nothing to prepare"; exit 0; }
@@ -121,10 +122,11 @@ if ours and want and (raw("MEET_JVB_ADVERTISE_IPS") != want or raw("MEET_JVB_ADV
 
 # Where the recordings' work items go: the office's Plane, as apps/project-pln/where.sh finds it — the
 # copy the herd names (scripts/herd_home.py), never the first linked office that publishes one, which
-# sorts the client's office (fireplace) before ours. Measured on vps1 (2026-10-21):
+# sorts the client's office (examplef) before ours. Measured on vps1 (2026-10-21):
 # remote.hp-laptop.plane.json → http://plane.hp-laptop:9003 answers n8n with no key (the door signs it in).
 import importlib.util, json
 root = os.path.dirname(path)
+ours = False
 try:
     _spec = importlib.util.spec_from_file_location("herd_home", os.path.join(root, "scripts", "herd_home.py"))
     herd_home = importlib.util.module_from_spec(_spec)
@@ -137,9 +139,27 @@ try:
 except Exception as e:                       # a bring-up step never dies on this read: the secrets above still land
     plane, why, wait = "", f"which office's Plane to use could not be read ({e}); MEET_PLANE_API_URL is left as it is", True
 plane = plane or None
+# A CLIENT's office that runs its own Plane (DGO-1649: Exampleu keeps EXU, MEET, ASSETS… there): its recordings become
+# items in THAT Plane — never in a herd office's that a link happens to publish — asked with the office's own key,
+# which project-pln's bootstrap keeps in the vault (`plane_local_api_token-local`); meet-start reads it from there
+# (MEET_PLANE_KEY_VAULT), so no key is written into this file. The herd's own offices keep the herd's rule above.
+LOCAL_PLANE, LOCAL_KEY = "http://project-pln:80", "plane_local_api_token-local"
+try:
+    with open(os.path.join(root, ".generated", "registry", "office.apps.json"), encoding="utf-8") as fh:
+        runs_here = any(isinstance(a, dict) and a.get("app") == "project-pln" for a in (json.load(fh).get("apps") or []))
+except (OSError, ValueError, AttributeError):
+    runs_here = False
+local = bool(runs_here and not ours)
+if local:
+    plane, why, wait = LOCAL_PLANE, "", False
 if why:
     print(f"[meet] {why}")
 plane_ours = not raw("MEET_PLANE_API_URL") or raw("MEET_PLANE_API_AUTO") == "1"
+# the vault instance goes with the address this hook chose: written with the office's own Plane, taken away with it
+if plane_ours and (raw("MEET_PLANE_KEY_VAULT") or "") != (LOCAL_KEY if local else ""):
+    new = put(new, "MEET_PLANE_KEY_VAULT", LOCAL_KEY if local else "")
+    if local:
+        said.append("recordings are filed with this office's own Plane key, read from the vault")
 if plane_ours and plane and (raw("MEET_PLANE_API_URL") != plane or raw("MEET_PLANE_API_AUTO") != "1"):
     new = put(put(new, "MEET_PLANE_API_URL", plane), "MEET_PLANE_API_AUTO", "1")
     said.append(f"recordings become work items in the Plane at {plane}")

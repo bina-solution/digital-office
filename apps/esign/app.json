@@ -1,0 +1,116 @@
+{
+  "id": "esign",
+  "title": {
+    "he": "חתימות",
+    "en": "Signatures"
+  },
+  "layer": 3,
+  "kind": "service",
+  "page": "documents",
+  "version": "0.1.0",
+  "summary": {
+    "he": "מסמך יוצא לחתימה בקישור אחד (עם סיסמה למסמך כאופציה), החותם חותם, והעותק החתום נשמר ב«קבצים» — והקישור לא פותח שום דבר אחר בלשכה",
+    "en": "A document goes out for signature as one link (with a per-document password if wanted), the signer signs, and the signed copy lands in «קבצים» — and the link opens nothing else in the office"
+  },
+  "capabilities": [
+    {
+      "name": "esign",
+      "type": "service",
+      "interface": "esign.v1",
+      "endpoint": "http://esign:8080",
+      "contract": "platform-service.v1",
+      "required_ops": [
+        "create",
+        "send",
+        "list",
+        "get",
+        "cancel",
+        "download",
+        "retry"
+      ]
+    }
+  ],
+  "use": [
+    {
+      "capability": "kv",
+      "strength": "requires",
+      "after": true
+    },
+    {
+      "capability": "drive",
+      "strength": "requires",
+      "after": true,
+      "ops": [
+        "upload",
+        "list"
+      ],
+      "engine": "drive_local",
+      "profile": "admin",
+      "upload_folder": "חתימות",
+      "note": "The signed PDF and its audit PDF are written into «קבצים» by the drive app's own contract (PUT /api/fs/content), under /חתימות/<date>/ — never the drive root, and never overwriting an earlier copy."
+    },
+    {
+      "capability": "notify",
+      "strength": "wants",
+      "after": false,
+      "dependency": "weak"
+    }
+  ],
+  "connections": [],
+  "compose": "docker-compose.yml",
+  "routing": [
+    {
+      "host": "esign",
+      "port": 8080,
+      "auth": "sso",
+      "emit_labels": false,
+      "auth_exclude": [
+        "/s/"
+      ],
+      "module": {
+        "group": "עסק",
+        "icon": "clipboard",
+        "embed": true,
+        "alias": "esign",
+        "id": "esign",
+        "name": "חתימות",
+        "desc": "מסמך לחתימה בקישור, והעותק החתום ב«קבצים»",
+        "order": 6,
+        "service": "esign",
+        "url_env": "ESIGN_URL",
+        "url": "http://esign:8080"
+      },
+      "sso": {
+        "slug": "esign",
+        "display_name": "Signatures",
+        "default_host": "esign.localhost",
+        "base_url_env": "ESIGN_BASE_URL",
+        "local_twin": true
+      }
+    }
+  ],
+  "health": {
+    "structural": "auto",
+    "probe": {
+      "http": "http://esign:8080/healthz",
+      "interval": "30s"
+    }
+  },
+  "data": {
+    "volumes": [
+      "esign_data"
+    ],
+    "on_uninstall": "keep"
+  },
+  "resources": {
+    "cpus": "0.25",
+    "memory": "384M"
+  },
+  "observability": {
+    "sentry_platform": "python"
+  },
+  "agent": {
+    "context": "AGENT.md",
+    "order": 33
+  }
+}

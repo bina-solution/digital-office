@@ -14,7 +14,7 @@ Uses the shared Redis service (DB index 1) for caching and sessions.
 
 ## URL
 
-- **Production**: `https://auth.hacohen.bina-solutions.co.il`
+- **Production**: `https://auth.example.bina-solutions.co.il`
 - **Local**: `http://auth.localhost`
 
 ## Setup
@@ -39,14 +39,14 @@ docker compose up -d authentik-server authentik-worker authentik-postgres
 
 ### 3. Initial login
 
-Navigate to `https://auth.hacohen.bina-solutions.co.il/if/flow/initial-setup/`
+Navigate to `https://auth.example.bina-solutions.co.il/if/flow/initial-setup/`
 - If `AUTHENTIK_BOOTSTRAP_PASSWORD` was set: login with `$AUTHENTIK_BOOTSTRAP_USER` (default: `akadmin`) / your bootstrap password
 - If not: follow the initial setup wizard
 
 ### 4. Configure Google OAuth
 
 1. Create OAuth credentials at https://console.cloud.google.com/apis/credentials
-2. Set authorized redirect URI: `https://auth.hacohen.bina-solutions.co.il/source/oauth/callback/google/`
+2. Set authorized redirect URI: `https://auth.example.bina-solutions.co.il/source/oauth/callback/google/`
 3. In Authentik admin → Directory → Federation & Social login → Create → Google OAuth Source
 4. Enter Client ID and Client Secret
 
@@ -99,7 +99,7 @@ blueprint cases in `platform/manager/test_resolve.py`.
 | Traefik Dashboard | ✅ Yes | No built-in auth |
 | n8n | ❌ No | Has own user management |
 | LibreChat | ❌ No | Has own user management |
-| Portainer | ❌ No | Has own password auth |
+| Portainer | ✅ Yes | The office's sign-in, then its own admin login (DGO-1762) |
 | GlitchTip | ❌ No | Has own user management |
 | Authentik | ❌ No | Must be public for login |
 

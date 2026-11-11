@@ -52,6 +52,7 @@ by then unrecoverable and gets rotated. Nothing here raises into a request, and 
 import json
 import logging
 import os
+import re as _re
 import secrets
 import threading
 import time
@@ -78,6 +79,25 @@ DECLARED_ENV = "MAIL_ENGINE_PROFILES"
 # while the backend logged in as indox@local.test — both halves correct in isolation.
 MAIL_DOMAIN = (os.environ.get("MAIL_DOMAIN") or "local.test").strip().lower() or "local.test"
 
+
+def served_domains():
+    """Every domain this deployment SERVES: MAIL_DOMAIN, plus whatever `MAIL_DOMAINS` adds.
+
+    A company address on the company's OWN domain (person3@example.com, whose MX is this same
+    machine) is a profile at a domain that is not MAIL_DOMAIN. The old rule — "the address is
+    DERIVED, never declared, because a profile at another domain would be a black hole" — was right
+    about the danger and wrong about the fact: it is a hole only when nothing points its MX here.
+    So the danger is still refused, and what a profile may be declared at is now DECLARED too:
+    MAIL_DOMAIN is always served, MAIL_DOMAINS names the rest, and a profile whose domain is served
+    nowhere is skipped rather than created (see declared()).
+    """
+    out = [MAIL_DOMAIN]
+    for d in _re.split(r"[,;\s]+", (os.environ.get("MAIL_DOMAINS") or "")):
+        d = d.strip().lower()
+        if d and d not in out:
+            out.append(d)
+    return out
+
 _lock = threading.Lock()
 _state = {"runs": 0, "last_run": 0, "ok": False, "error": "", "actions": []}
 
@@ -94,7 +114,7 @@ def _fallback_declared():
 
 
 def declared():
-    """[{id, display_name, admin}] — the profiles app.json declares, normalised.
+    """[{id, display_name, admin, domain?}] — the profiles app.json declares, normalised.
 
     Malformed entries are DROPPED with a log line rather than failing the boot: this value arrives on
     an env var, and a service that will not start because a display name was mistyped is a worse
@@ -111,6 +131,7 @@ def declared():
     if not isinstance(items, list):
         log.warning("profiles: %s is not a list — falling back to the primary mailbox", DECLARED_ENV)
         return _fallback_declared()
+    served = served_domains()
     out, seen = [], set()
     for it in items:
         if not isinstance(it, dict):
@@ -118,10 +139,24 @@ def declared():
         pid = str(it.get("id") or "").strip().lower()
         if not pid or pid in seen:
             continue
+        # A profile may name the domain it lives at. It is honoured only when THIS deployment serves
+        # that domain, because the declaration is the catalogue plane — shared by every office of the
+        # platform — while "which domains has this machine got an MX for" is a property of the
+        # deployment. So the same app.json declares the company's hello@ address everywhere, and only
+        # the office that declares the domain in MAIL_DOMAINS brings the account up. Skipping is
+        # logged, never silent: a profile that exists nowhere must be findable in a log line.
+        dom = str(it.get("domain") or "").strip().lower()
+        if dom and dom not in served:
+            log.info("profiles: %r is declared at %s, which this deployment does not serve "
+                     "(MAIL_DOMAINS=%s) — skipped", pid, dom, ",".join(served))
+            continue
         seen.add(pid)
-        out.append({"id": pid,
-                    "display_name": str(it.get("display_name") or pid),
-                    "admin": bool(it.get("admin"))})
+        rec = {"id": pid,
+               "display_name": str(it.get("display_name") or pid),
+               "admin": bool(it.get("admin"))}
+        if dom:
+            rec["domain"] = dom
+        out.append(rec)
     if not out:
         return _fallback_declared()
     # "The first declared profile with admin:true is the one a fresh deployment comes up with." If
@@ -132,11 +167,19 @@ def declared():
     return out
 
 
-def address_of(pid):
-    """<id>@<MAIL_DOMAIN>. The address is DERIVED, never declared — a profile declared with a domain
-    of its own would be an address the MX does not point here for, i.e. live on screen and a black
-    hole in the world."""
-    return "%s@%s" % (str(pid).strip().lower(), MAIL_DOMAIN)
+def address_of(pid, domain=None):
+    """<id>@<domain>, and <domain> defaults to MAIL_DOMAIN.
+
+    The address is DERIVED from the declaration, never invented: a profile declared with a domain of
+    its own is honoured ONLY when this deployment serves that domain (served_domains()), because an
+    address at a domain whose MX points elsewhere is a black hole that looks live on the screen. A
+    domain this deployment does not serve therefore falls back to MAIL_DOMAIN rather than being
+    trusted — refused at the point of creation by mailboxd, and never a silent black hole here.
+    """
+    dom = (domain or "").strip().lower()
+    if dom and dom not in served_domains():
+        dom = ""
+    return "%s@%s" % (str(pid).strip().lower().split("@")[0], dom or MAIL_DOMAIN)
 
 
 # ── the ledger ─────────────────────────────────────────────────────────────────
@@ -334,7 +377,7 @@ def reconcile():
         return True if vault is None else iid in vault
 
     for p in want:
-        pid, addr = p["id"], address_of(p["id"])
+        pid, addr = p["id"], address_of(p["id"], p.get("domain"))
         rec = profs.get(pid)
         # An entry whose recorded address no longer matches the deployment's domain is a PREVIOUS
         # tenant's, not ours: the volume outlives .env. Drop the pointer and re-provision at the
@@ -369,7 +412,7 @@ def reconcile():
 
         if not box_ok and not inst_ok:
             pw = mint_password()
-            payload, code = mailboxes.create({"local": pid, "password": pw})
+            payload, code = mailboxes.create({"address": addr, "password": pw})
             if code == 409:
                 # Raced with something else creating it. Fall through to the "mailbox exists,
                 # instance missing" branch on the NEXT pass rather than guessing a password.
@@ -439,7 +482,7 @@ def reconcile():
         # instance live, mailbox gone — somebody removed the account under us. Recreate it and write
         # the new password into the SAME instance, so the id the operator selected still works.
         pw = mint_password()
-        payload, code = mailboxes.create({"local": pid, "password": pw})
+        payload, code = mailboxes.create({"address": addr, "password": pw})
         if code not in (200, 201):
             acts.append("profile %s: instance %s exists but mailbox %s is gone and could not be "
                         "recreated: %s" % (pid, rec.get("instance_id"), addr,
@@ -559,7 +602,7 @@ def _assert_not_last_admin(pid, demoting=False):
             % (pid, "הורדתו" if demoting else "מחיקתו"), 409)
 
 
-def create_profile(local, password, display_name=None, admin=False, source="ui"):
+def create_profile(local, password, display_name=None, admin=False, source="ui", domain=None):
     """Create the mailbox AND its connection in ONE operation (§7).
 
     Create-then-separately-connect is a step with no decision in it, and it is exactly what made
@@ -568,9 +611,9 @@ def create_profile(local, password, display_name=None, admin=False, source="ui")
     pid = (local or "").strip().lower().split("@")[0]
     if not pid:
         raise ProfileError("שם תיבה נדרש", 400)
-    addr = address_of(pid)
+    addr = address_of(pid, domain)
     pw = password or mint_password()
-    payload, code = mailboxes.create({"local": pid, "password": pw})
+    payload, code = mailboxes.create({"address": addr, "password": pw})
     if code not in (200, 201):
         # mailboxd's own refusals are answers, not failures (409: the address exists) — forward verbatim.
         return payload, code
@@ -628,6 +671,21 @@ def delete_profile(address):
     return payload, code
 
 
+def address(pid):
+    """The address a profile actually lives at: what the ledger recorded, or the declaration.
+
+    Never re-derived from scratch when the ledger has an answer — the recorded address is the one its
+    mailbox and its vault instance were made for, and re-deriving it is how a profile gets pointed at
+    a mailbox somebody else owns."""
+    rec = ledger()["profiles"].get(pid) or {}
+    if rec.get("address"):
+        return rec["address"]
+    for p in declared():
+        if p["id"] == pid:
+            return address_of(pid, p.get("domain"))
+    return address_of(pid)
+
+
 def rotate_password(pid, new_password=None):
     """Rotate one profile's credential: the mailbox hash and the vault instance move together, or
     neither does. The backend cache is keyed on the credential's fingerprint, so the new password is
@@ -636,7 +694,7 @@ def rotate_password(pid, new_password=None):
     rec = led["profiles"].get(pid)
     if not rec:
         raise ProfileError("no such profile %r" % pid, 404)
-    addr = rec.get("address") or address_of(pid)
+    addr = address(pid)
     pw = new_password or mint_password()
     payload, code = mailboxes.set_password(addr, pw)
     if code != 200:

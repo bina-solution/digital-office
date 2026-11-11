@@ -137,8 +137,11 @@ def _require_repo() -> None:
 
 # ── the engine ──────────────────────────────────────────────────────────────────
 def _docker(args: list, timeout: float = 60.0, input_text: str = None) -> subprocess.CompletedProcess:
-    return subprocess.run(agentcli._engine_cmd(["docker", *args]), capture_output=True, text=True,
-                          timeout=timeout, input=input_text)
+    # the time limit is kept inside the engine's guest on a Mac, so a call that runs out frees its ssh session there
+    # (bbox_agent._engine_cmd, DGO-1783); this side waits a little longer. `bbox remote` itself already runs inside
+    # the guest (bbox hands itself across), where _engine_cmd adds nothing.
+    return subprocess.run(agentcli._engine_cmd(["docker", *args], guest_timeout=timeout), capture_output=True,
+                          text=True, timeout=timeout + agentcli.GUEST_GRACE, input=input_text)
 
 
 def _runner() -> str:
@@ -490,6 +493,84 @@ def resolve(office: str, alias: str, use_api: bool) -> dict:
             "auth": auth, "instances": instances, "source": doors["source"]}
 
 
+# The office that names THIS office: `bbox remote . <app> <path>` (DGO-1245). A dot, because no office id can be one
+# (an id starts with a letter or a digit) — `local` can: an office with no identity is called that by default.
+LOCAL = "."
+VAULT_CAPABILITY = "secrets"   # connections' vault: read by NAME through the vault reader, never by a generic call
+
+
+def local_manifest(alias: str) -> dict:
+    """This office's app named `alias` (its id or its cli.alias), as its app.json says, with `_root`."""
+    for root in ("apps", "platform-base"):
+        for p in sorted((REPO / root).glob("*/app.json")):
+            try:
+                m = json.loads(p.read_text(encoding="utf-8"))
+            except (OSError, ValueError):
+                continue
+            if not isinstance(m, dict):
+                continue
+            cli = m.get("cli") if isinstance(m.get("cli"), dict) else {}
+            if alias in (m.get("id"), cli.get("alias")):
+                return m | {"_root": root}
+    raise RemoteError(f"no app of this office is called {alias!r} (an id, or a cli.alias)", EXIT_USAGE)
+
+
+def local_doors(m: dict) -> list:
+    """[(name, url)]: where this office's app answers inside the office network — its capabilities with an http(s)
+    endpoint (one door per address: two capabilities served at one URL are one door, the first name kept), or,
+    for an app that declares none, its routed service and port. In the manifest's order. An endpoint whose scheme
+    is not http(s) — a database's, a cache's, a unix socket — is no door of an HTTP call."""
+    caps = []
+    for c in (m.get("capabilities") or []):
+        if not (isinstance(c, dict) and isinstance(c.get("name"), str) and isinstance(c.get("endpoint"), str)):
+            continue
+        url = c["endpoint"].rstrip("/")
+        if url.startswith(("http://", "https://")) and url not in (u for _, u in caps):
+            caps.append((c["name"], url))
+    if caps:
+        return caps
+    out = []
+    for r in (m.get("routing") or []):
+        if isinstance(r, dict) and isinstance(r.get("port"), int):
+            name = str(r.get("host") or r.get("service") or m.get("id"))
+            url = f"http://{r.get('service') or m.get('id')}:{r['port']}"
+            if url not in (u for _, u in out):
+                out.append((name, url))
+    return out
+
+
+def resolve_local(alias: str, capability: str = None) -> dict:
+    """A call to an app of THIS office (DGO-1245): the URL is the app's own declaration (local_doors). It needs
+    no link and no token: the request is made inside the office network, as the app's neighbours make it; an app
+    that wants a credential answers 401 with its own sentence."""
+    m = local_manifest(alias)
+    doors = local_doors(m)
+    if capability:
+        # any name served at a door's address: two capabilities at one URL are one door, called by either name
+        named = {c["name"]: c["endpoint"].rstrip("/") for c in (m.get("capabilities") or [])
+                 if isinstance(c, dict) and isinstance(c.get("name"), str) and isinstance(c.get("endpoint"), str)}
+        picked = [d for d in doors if d[0] == capability or named.get(capability) == d[1]]
+        if not picked:
+            raise RemoteError(f"{m['id']} has no door {capability!r} — its doors: "
+                              f"{', '.join(n for n, _ in doors) or 'none'}", EXIT_USAGE)
+    elif len(doors) == 1:
+        picked = doors
+    else:
+        raise RemoteError(f"{m['id']} answers at {len(doors)} doors"
+                          + (f" ({', '.join(n for n, _ in doors)}) — name one with --capability" if doors
+                             else " — it declares no capability endpoint and no routed port"), EXIT_USAGE)
+    name, url = picked[0]
+    vault = [c for c in (m.get("capabilities") or []) if isinstance(c, dict) and c.get("name") == VAULT_CAPABILITY
+             and isinstance(c.get("endpoint"), str) and c["endpoint"].rstrip("/") == url]
+    if vault:
+        # the vault trusts a caller inside the network, and this call is one: it would print a secret in the clear.
+        # Credentials are read by name through the vault reader (bbox_agent.client), which keeps them out of output
+        raise RemoteError(f"{m['id']}'s door {name!r} is the vault ({VAULT_CAPABILITY}): a generic call would print "
+                          f"a secret. Its own verbs read it (bbox {m['id']} …), by name", EXIT_USAGE)
+    return {"office": LOCAL, "alias": m["id"], "app": m["id"], "url": url, "door": name, "api": False,
+            "auth": "", "instances": [], "source": "manifest"}
+
+
 def _auth_instances(auth: str, office: str, app: str) -> list:
     """The vault instances to try for one app's API, in order.
 
@@ -563,6 +644,30 @@ def cmd_office(args) -> int:
     return 0
 
 
+def cmd_local_app(args) -> int:
+    """`bbox remote . <app>` (`bbox <app> api`): where this office's app answers, and the ops it declares (DGO-1244)."""
+    m = local_manifest(args.alias)
+    doors = local_doors(m)
+    ops = [o for o in (m.get("ops") if isinstance(m.get("ops"), list) else []) if isinstance(o, dict)]
+    if args.json:
+        print(json.dumps({"app": m["id"], "doors": [{"name": n, "url": u} for n, u in doors], "ops": ops},
+                         ensure_ascii=False, indent=2))
+        return 0
+    print(f"{m['id']}  (this office)")
+    for n, u in doors:
+        print(f"  door        {n:<24} {u}")
+    if not doors:
+        print("  door        none — the app declares no capability endpoint and no routed port")
+    for o in ops:
+        s = o.get("summary") if isinstance(o.get("summary"), dict) else {}
+        print(f"  op          {str(o.get('id')):<16} {o.get('method', '')} {o.get('path', '')}  "
+              f"({o.get('access', '')}{', bbox ' + m['id'] + ' ' + o['verb'] if o.get('verb') else ''})"
+              f"  {s.get('en') or ''}")
+    print(f"\n  call it:    bbox {m['id']} api <METHOD> <path>"
+          + ("   (several doors: --capability <name>)" if len(doors) > 1 else ""))
+    return 0
+
+
 def cmd_app(args) -> int:
     data = link_state(args)
     item = find_office(data, args.office)
@@ -603,12 +708,16 @@ def cmd_call(args) -> int:
                           "and the port the serving office published", EXIT_USAGE)
     resolved = json.loads(os.environ.get(ENV_RESOLVED) or "{}") or None
     if not resolved:
-        resolved = resolve(args.office, args.alias, args.api)
+        resolved = (resolve_local(args.alias, args.capability) if args.office == LOCAL
+                    else resolve(args.office, args.alias, args.api))
     # A path is sent as written, except that what HTTP cannot carry raw is percent-encoded: a Hebrew word
     # in a query (`/api/messages?q=<a Hebrew word>`) ended the call in a UnicodeEncodeError. `%` stays, so
     # a path that is already encoded is not encoded twice; `+`, `&`, `=` and `?` keep their meaning.
     url = resolved["url"] + urllib.parse.quote(path, safe="/?&=+:@%,;!$'()*~-._")
-    if not _in_network() and not _resolves(_host_of(resolved["url"])):
+    # …and a call to THIS office's app is ALWAYS made inside the network: a short name (`dashboard`, `cad`) can
+    # resolve on the host too (a search domain, a router that answers every lookup), and the request — its body
+    # with it — would go to that machine instead (DGO-1245's reader)
+    if not _in_network() and (resolved.get("office") == LOCAL or not _resolves(_host_of(resolved["url"]))):
         # The alias is a docker network alias: on the office's own machine it means nothing, and the
         # request has to be made from a container that is attached to the office network.
         return _delegate(_argv_for(args), resolved, args.timeout + 60)
@@ -722,6 +831,8 @@ def build_parser() -> argparse.ArgumentParser:
     ap.add_argument("-H", "--header", action="append", metavar="K: V", help="extra header (repeatable)")
     ap.add_argument("--api", action="store_true",
                     help="call the app's API door (agent_api_port) instead of its UI door")
+    ap.add_argument("--capability", metavar="NAME",
+                    help="office `.` (this office) only: the door to call, when the app answers at several (DGO-1245)")
     ap.add_argument("-i", "--include", action="store_true", help="print response headers")
     ap.add_argument("--timeout", type=float, default=DEFAULT_TIMEOUT, metavar="SEC")
     ap.add_argument("--json", action="store_true", help="machine-readable output")
@@ -763,7 +874,7 @@ def main(argv: list = None) -> int:
         if not args.alias:
             return cmd_office(args)
         if not args.path:
-            return cmd_app(args)
+            return cmd_local_app(args) if args.office == LOCAL else cmd_app(args)
         return cmd_call(args)
     except _Delegated as d:
         return d.rc

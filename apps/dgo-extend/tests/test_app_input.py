@@ -132,7 +132,7 @@ def test_an_apps_key_that_is_an_app_id_is_kept():
 
 
 def test_a_domain_change_keeps_the_domain_before_it():
-    # FPG-33: the env step moves an installed office's .env from the previous domain, and from no other
+    # EXF-33: the env step moves an installed office's .env from the previous domain, and from no other
     a = load()
     d, err = a.validate(GOOD, None)
     assert err is None and "renamed_from" not in d, (d, err)
@@ -154,7 +154,7 @@ def test_a_domain_change_keeps_the_domain_before_it():
 
 
 def test_a_rename_the_machine_finished_is_forgotten_and_an_edit_meanwhile_starts_where_the_machine_is():
-    # FPG-33, the third reader: the env step's _forget_rename, against the record on disk
+    # EXF-33, the third reader: the env step's _forget_rename, against the record on disk
     a = load()
     sys.modules.setdefault("app", a)                     # what converge's `import app` reaches
     import converge
@@ -177,7 +177,7 @@ def test_a_rename_the_machine_finished_is_forgotten_and_an_edit_meanwhile_starts
 
 
 def test_the_accounts_step_moves_the_addresses_once_then_forgets_and_refreshes_the_login():
-    # FPG-34: the env step leaves `addresses_from`; `accounts` runs the office's own verb, after `run`
+    # EXF-34: the env step leaves `addresses_from`; `accounts` runs the office's own verb, after `run`
     a = load()
     sys.modules.setdefault("app", a)
     import converge
@@ -224,7 +224,7 @@ def test_the_accounts_step_moves_the_addresses_once_then_forgets_and_refreshes_t
             assert len(logins) == 3, f"…and the login is still read again ({len(logins)} reads: two runs, this one)"
         converge.exec_on = lambda m, cmd, t=0: {"code": 1, "stdout": ""}          # code without the verb
         res = converge.step_accounts(a.load("mover"), {}, said.append)
-        assert "FPG-34" in res["warnings"][0] and a.load("mover").get("addresses_from"), \
+        assert "EXF-34" in res["warnings"][0] and a.load("mover").get("addresses_from"), \
             "code without the verb is a warning that keeps the domain, never a stopped converge"
         converge.exec_on = lambda m, cmd, t=0: {"code": 255, "stdout": ""}        # the machine did not answer
         try:

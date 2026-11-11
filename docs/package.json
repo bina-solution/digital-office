@@ -1,0 +1,15 @@
+{
+  "name": "dgo-docs",
+  "private": true,
+  "type": "module",
+  "description": "docs.digital-office.co.il — the DGO documentation (DGO-1788). Built on a server office, never on the Mac (README.md).",
+  "scripts": {
+    "build": "astro build"
+  },
+  "dependencies": {
+    "@astrojs/markdown-remark": "7.3.4",
+    "@astrojs/starlight": "0.42.7",
+    "astro": "7.4.2",
+    "starlight-llms-txt": "0.12.0"
+  }
+}

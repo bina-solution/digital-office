@@ -421,8 +421,15 @@
   overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
   direction:ltr;unicode-bidi:plaintext;
 }
-/* trailing slot: a badge, a dot, a chevron. `nowrap` so it can never wrap into a second line. */
-.bnv-tail{flex:none;display:inline-flex;align-items:center;gap:6px;white-space:nowrap;color:var(--bnv-ink-2);font-size:12px}
+/* trailing slot: a badge, a dot, a chevron. `nowrap` so it can never wrap into a second line.
+   In a RAIL it is the one thing a row still says beside its icon (a count, a dot), so it stays — pinned to
+   the icon's corner and small (`--bnv-tail-pos`, set by the two rail states in §3/§4). As a second column it
+   overflowed a 36px row: social-list's count, domains' (DGO-1591); connections had pinned its own, in every
+   state, so its drawer drew the count on the row's corner. The whole menu and the drawer keep it in line. */
+.bnv-item{position:relative}
+.bnv-tail{flex:none;display:inline-flex;align-items:center;gap:6px;white-space:nowrap;color:var(--bnv-ink-2);
+  font-size:var(--bnv-tail-fs,12px);line-height:var(--bnv-tail-lh,normal);
+  position:var(--bnv-tail-pos,static);inset-block-start:2px;inset-inline-end:2px}
 .bnv-item:hover .bnv-tail,.bnv-item.is-active .bnv-tail{color:inherit}
 .bnv-badge{
   flex:none;min-width:18px;height:18px;padding:0 5px;border-radius:999px;
@@ -485,6 +492,9 @@
   --bnv-rest:flex;
   --bnv-head-dir:column;
   --bnv-turn:rotate(180deg);
+  --bnv-tail-pos:absolute;
+  --bnv-tail-fs:10px;
+  --bnv-tail-lh:1;
 }
 /* An OPENED rail: the whole menu, standing over the page until a row is picked or it is shut — the
    way to a rail's search, and to the names of its rows. (The rail by width says the same in §4.) */
@@ -581,6 +591,9 @@
     --bnv-rest:flex;
     --bnv-head-dir:column;
     --bnv-turn:rotate(180deg);
+    --bnv-tail-pos:absolute;
+    --bnv-tail-fs:10px;
+    --bnv-tail-lh:1;
   }
   .bnv.is-open{position:fixed;inset-block:0;inset-inline-start:0;z-index:60;width:min(84vw,320px);box-shadow:var(--shadow-lg)}
 }
@@ -623,6 +636,9 @@
     --bnv-rest:none;
     --bnv-head-dir:row;
     --bnv-turn:none;
+    --bnv-tail-pos:static;
+    --bnv-tail-fs:12px;
+    --bnv-tail-lh:normal;
   }
   /* The shadow is the OPEN drawer's. On the parked one it still painted: a 40px grey band down the
      screen edge, over the page, in every app that carries this menu (seen in five, 2026-10-06). */
@@ -735,9 +751,9 @@ body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--font);font
 /* A2 — the icons that were characters. They inherit the button's colour and size like every other
    one, instead of arriving at whatever weight the reader's font stack picked. */
 #railToggle .ic-svg{width:18px;height:18px}
-.modal-h .ghost .ic-svg,.cw-h .ghost .ic-svg{width:16px;height:16px}
-.modal-h .ghost,.cw-h .ghost{display:grid;place-items:center;background:transparent;border:1px solid var(--line);border-radius:8px;width:30px;height:30px;cursor:pointer;color:var(--muted);padding:0}
-.modal-h .ghost:hover,.cw-h .ghost:hover{border-color:var(--accent);color:var(--accent-d)}
+.modal-h .ghost .ic-svg{width:16px;height:16px}
+.modal-h .ghost{display:grid;place-items:center;background:transparent;border:1px solid var(--line);border-radius:8px;width:30px;height:30px;cursor:pointer;color:var(--muted);padding:0}
+.modal-h .ghost:hover{border-color:var(--accent);color:var(--accent-d)}
 /* apps catalog: external-tool indicator on a launch card */
 .card .ext{display:inline-flex;align-items:center;color:var(--muted);margin-inline-start:5px;vertical-align:middle}
 .card .ext .ic-svg{width:13px;height:13px}
@@ -796,150 +812,25 @@ body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--font);font
 .embed iframe{width:100%;height:100%;border:0}
 .embedwrap{position:relative;flex:1;min-height:0}
 
-/* ── C3/C15 · the account switcher: one chip, in the top bar ──────────────────────
-   What this replaces: a full-width band (#acctBar) pinned above every embedded app. Its entire job
-   was to hold one control, and it charged ~56px of vertical height in every app, forever, to do it.
-   The top bar already had the room. Everything the band spelled out inline — connect, last-checked,
-   refresh, the service's reason — now lives in the menu, where it can be a sentence instead of an
-   abbreviation squeezed into a row. */
-.tb-acct{display:flex;align-items:center;flex:none}
-/* The chip is the tallest thing in the top bar. It used to decide where the band ends — pinned
-   here at 42px, so the band was 70px while a chip was shown and 62px on every other screen, and
-   the content began in two places. The band has ONE height now (.topbar), which the chip fits
-   inside; its own box stays pinned so one line or two, avatar or not, never moves anything. */
-.tb-acct{display:flex;align-items:center;min-height:42px}
-.acct-switch{position:relative;min-width:0}
-.acct-btn{display:flex;align-items:center;gap:7px;background:var(--bg);border:1px solid var(--line);border-radius:var(--radius-pill);padding:5px 10px;cursor:pointer;font-family:inherit;font-size:13px;color:var(--ink);max-width:240px}
-.acct-btn:hover{border-color:var(--accent)}
-.acct-btn[disabled]{cursor:default;opacity:.75}
-.acct-btn.bad{border-color:var(--danger);color:var(--danger)}
-.acct-btn .dot{width:8px;height:8px}
-.acct-tx{min-width:0;display:flex;flex-direction:column;line-height:1.25;text-align:start}
-.acct-lbl{font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:12.5px}
-.acct-lbl.muted{font-weight:600;color:var(--muted)}
-.acct-hint{color:var(--muted);font-size:10.5px;line-height:1.2;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.acct-chev{display:inline-flex;color:var(--muted);flex:none}
-.acct-chev .ic-svg{width:14px;height:14px}
-/* opens from the END of the bar (screen-left in RTL), where the chip sits */
-.acct-menu{position:absolute;inset-inline-end:0;inset-inline-start:auto;top:calc(100% + 8px);min-width:290px;max-width:min(340px,calc(100vw - 28px));background:var(--surface);border:1px solid var(--line);border-radius:var(--radius-md);box-shadow:var(--elev-3);padding:6px;z-index:40}
-.acct-sep{height:1px;background:var(--line);margin:6px 4px}
-.acct-act{display:flex;align-items:center;gap:9px;width:100%;padding:9px 10px;border:none;border-radius:var(--radius-sm);background:transparent;cursor:pointer;font-family:inherit;font-size:13px;font-weight:600;color:var(--ink);text-align:start}
-.acct-act:hover{background:var(--surface-2)}
-.acct-act.add{color:var(--accent-d)}
-.acct-act.add:hover{background:var(--accent-soft)}
-.acct-plus{flex:none;width:24px;height:24px;border-radius:50%;border:1.5px dashed var(--accent);display:inline-grid;place-items:center;color:var(--accent-d)}
-.acct-plus .ic-svg{width:12px;height:12px}
-.acct-badge{margin-inline-start:auto;min-width:18px;height:18px;border-radius:9px;display:inline-grid;place-items:center;font-size:11px;font-weight:800;color:var(--surface)}
-.acct-badge.needs_action{background:var(--warn)}.acct-badge.degraded{background:var(--danger)}
-.acct-badge .ic-svg{width:11px;height:11px;stroke-width:3}   /* the «!» is drawn (mIcon("bang")), in the badge's own ink */
-.acct-foot{display:flex;align-items:center;gap:8px;padding:8px 10px 4px;border-top:1px solid var(--line);margin-top:4px}
-.acct-recheck{margin-inline-start:auto;background:transparent;border:1px solid var(--line);border-radius:7px;padding:3px 10px;font-family:inherit;font-size:11.5px;cursor:pointer;color:var(--accent-d)}
-.acct-recheck:hover{border-color:var(--accent)}
+/* the account switcher, its health panel and the connect wizard left the shell with the chip: an app's accounts
+   are in the app's own screen (DGO-1621, DGO-1624, DGO-1641) */
 
 /* ── B6 · the theme switcher's own rules are gone with the control ──
    The palette button and its menu were removed from the top bar on the owner's request
    (2026-09-25; see index.html + app.js). The theme PALETTES stay — they are the generated token
    block at the top of this file, and app.js still applies a saved `do-theme` on boot. */
 
-/* ── C4 · connection-health panel ── */
-.hlist{display:flex;flex-direction:column;gap:10px;max-height:52vh;overflow:auto;margin-bottom:12px}
-.hc{border:1px solid var(--line);border-radius:var(--radius-md);padding:12px 14px}
-.hc.on{border-color:var(--accent);background:var(--surface-2)}
-.hc-h{display:flex;align-items:center;gap:10px}
-.hc-tx{flex:1;min-width:0}
-.hc-tx b{display:block;font-size:14px}
-.hc-tx small{display:block;color:var(--muted);font-size:11.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.hc-proto{color:var(--muted);font-size:11.5px;margin-top:6px}
-.hc-reason{font-size:12.5px;line-height:1.5;margin-top:8px}
-.hc-reason.bad{color:var(--warn);font-weight:600}
-.hc-meta{display:flex;align-items:center;gap:5px;margin-top:9px;color:var(--muted);font-size:11px}
-.hc-meta .ic-svg{width:12px;height:12px;flex:none}
-.acct-item{display:flex;align-items:center;gap:4px;border-radius:8px}
-.acct-item:hover{background:var(--accent-soft)}
-.acct-pick{width:100%;flex:1;min-width:0;display:flex;align-items:center;gap:8px;background:transparent;border:none;border-radius:8px;cursor:pointer;font-family:inherit;font-size:13px;color:inherit;padding:8px 10px;text-align:start}
-.acct-pick:hover{background:var(--accent-soft)}
-/* the three facts, stacked — see the note at the call site */
-.acct-tx2{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
-.acct-l1{display:flex;align-items:center;gap:8px;min-width:0}
-.acct-l1 b{font-size:13px;font-weight:700;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.acct-proto{color:var(--muted);font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.acct-rm{width:28px;height:28px;flex:none;color:var(--muted);border-color:transparent}
-.acct-rm:hover{color:var(--danger);border-color:var(--danger);background:var(--danger-soft)}
-.acct-rm .ic-svg{width:14px;height:14px}
-.acct-empty{padding:10px 12px;color:var(--muted);font-size:12.5px}
-/* The service's own reason. In the band this had to be one ellipsized line or it widened the row;
-   in the menu it has a column to itself, so it WRAPS and is read in full — which is the point of a
-   diagnostic, and was the band's real cost: the sentence that explains the failure was the first
-   thing truncated. */
-.acct-warn{color:var(--warn);font-size:12px;font-weight:600;line-height:1.5;padding:8px 10px 4px}
-.acct-when{display:inline-flex;align-items:center;gap:4px;color:var(--muted);font-size:11.5px;white-space:nowrap}
-.acct-when .ic-svg{width:12px;height:12px}
-
 /* ── live state chip (§4b): one vocabulary wherever a connection's state is shown ── */
 .chip{display:inline-flex;align-items:center;gap:5px;flex:none;padding:3px 9px;border-radius:999px;font-size:11.5px;font-weight:700;white-space:nowrap}
 .chip.healthy{background:var(--accent-soft);color:var(--accent-d)}
 .chip.checking{background:var(--info-soft);color:var(--info)}
-.chip.needs_action{background:var(--warn-soft);color:var(--warn)}
+.chip.needs_action{background:var(--violet-soft);color:var(--violet)}   /* a person is needed = violet, as its dot and badge (DGO-1593) */
 .chip.degraded{background:var(--danger-soft);color:var(--danger)}
 /* not a state of health: the thing is not there to have one (the same grey a `.dot.unset` is) */
 .chip.unset{background:var(--surface-2);color:var(--muted);box-shadow:inset 0 0 0 1px var(--line)}
 .dot.checking{background:var(--blue);animation:dotpulse 1.1s ease-in-out infinite}
 @keyframes dotpulse{50%{opacity:.2}}
 @media (prefers-reduced-motion:reduce){.dot.checking{animation:none}}
-
-/* ── guided connect wizard (§4b): provider → method → provide → verify → done ── */
-/* width only — the bound and the scrolling body come from the shared dialog block */
-.modal.wide{width:min(600px,94vw)}
-.cw-steps{display:flex;flex-wrap:wrap;gap:5px;margin:2px 0 14px}
-.cw-step{padding:3px 9px;border-radius:999px;background:var(--bg);border:1px solid var(--line);color:var(--muted);font-size:11px;white-space:nowrap}
-.cw-step.cur{background:var(--accent-soft);border-color:var(--accent);color:var(--accent-d);font-weight:700}
-.cw-step.done{color:var(--accent-d);border-color:var(--accent-soft)}
-.cw-body .sub{color:var(--muted);font-size:12.5px;margin-bottom:12px}
-.cw-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:10px}
-.cw-card{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:14px;box-shadow:var(--shadow);cursor:pointer;text-align:start;font-family:inherit;color:inherit;transition:transform .08s,box-shadow .12s,border-color .12s}
-.cw-card:hover{transform:translateY(-2px);border-color:var(--accent);box-shadow:var(--elev-2)}
-.cw-ic{color:var(--accent-d)}
-.cw-ic .ic-svg{width:24px;height:24px}
-.cw-t{font-weight:700;font-size:14.5px;margin-top:8px}
-.cw-d{color:var(--muted);font-size:12px;margin-top:4px;line-height:1.45}
-.cw-ways{display:inline-block;margin-top:8px;color:var(--blue);font-size:11px;font-weight:700}
-.cw-card .pill{margin-top:8px}
-.cw-m{display:block;width:100%;text-align:start;background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:12px 14px;margin-bottom:8px;cursor:pointer;font-family:inherit;color:inherit}
-.cw-m:hover{border-color:var(--accent);background:var(--accent-soft)}
-.cw-m-h{display:flex;align-items:center;gap:8px;font-size:14px}
-.cw-m-ic{display:inline-flex;color:var(--accent-d)}
-.cw-m-ic .ic-svg{width:17px;height:17px}
-.cw-m-d{color:var(--muted);font-size:12px;line-height:1.5;margin-top:5px}
-.cw-m-d b{color:var(--ink);font-weight:700}
-.cw-m-need{display:flex;flex-wrap:wrap;gap:5px;margin-top:8px}
-.cw-m-need span{background:var(--bg);border:1px solid var(--line);border-radius:6px;padding:2px 7px;font-size:11px;color:var(--muted)}
-.cw-msg{background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:11px 13px;font-size:12.5px;line-height:1.6;margin-bottom:10px}
-.cw-msg .ic-svg{width:14px;height:14px;display:inline-block;vertical-align:-3px;margin-inline-end:4px}
-.cw-msg.soft{background:transparent;color:var(--muted)}
-.cw-msg.ok{background:var(--ok-soft);border-color:var(--accent);color:var(--accent-d)}
-.cw-msg.err{background:var(--danger-soft);border-color:var(--danger);color:var(--danger)}
-.cw-msg.wait{background:var(--info-soft);border-color:var(--info);color:var(--info)}
-.cw-msg a{color:var(--accent-d)}
-.cw-ol,.cw-ul{margin:6px 0 0;padding-inline-start:18px}
-.cw-ol li,.cw-ul li{margin-bottom:3px}
-.cw-form{display:grid;gap:12px;margin-bottom:12px}
-.cw-field{display:flex;flex-direction:column;gap:4px}
-.cw-f-l{font-size:12.5px;font-weight:700}
-.cw-f-h{font-size:11.5px;color:var(--muted);line-height:1.45}
-.cw-field input{background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:9px 11px;font-family:inherit;font-size:13px;color:var(--ink);margin-top:2px}
-.cw-field input:focus{outline:2px solid var(--accent);border-color:transparent}
-.cw-field input:disabled{background:var(--bg);color:var(--muted)}
-.cw-check{display:flex;align-items:flex-start;gap:9px;background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:11px 13px;cursor:pointer;margin-bottom:10px}
-.cw-check input{margin-top:3px;flex:none}
-.cw-check b{font-size:13px}
-.cw-check small{display:block;color:var(--muted);font-size:11.5px;line-height:1.5;margin-top:2px}
-.cw-foot{display:flex;align-items:center;flex-wrap:wrap;gap:8px;margin-top:16px;padding-top:14px;border-top:1px solid var(--line)}
-.cw-foot .grow{margin-inline-start:auto}
-.cw-note{color:var(--muted);font-size:11.5px}
-.cw-foot .btn .ic-svg{width:13px;height:13px;vertical-align:-2px;margin-inline-end:3px}
-.cw-danger:hover{border-color:var(--danger);color:var(--danger);background:var(--danger-soft)}
-.cw-file-load{align-self:flex-start;margin-top:6px}
-.cw-file-input{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
 
 /* the launch-card block (.launch/.launch-card/.launch-ic/.launch-note/.btn.lg) went with
    launchCard() — every compiled module embeds, so the external-tab card was unreachable */
@@ -950,7 +841,7 @@ body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--font);font
 .wcard h3{margin:0 0 4px;font-size:16px}
 .wcard .sub{color:var(--muted);font-size:12.5px;margin-bottom:12px}
 .dot{width:9px;height:9px;border-radius:50%;flex:none}
-.dot.healthy{background:var(--ok)}.dot.needs_action{background:var(--warn)}.dot.missing,.dot.degraded{background:var(--danger)}.dot.unset{background:var(--muted)}
+.dot.healthy{background:var(--ok)}.dot.needs_action{background:var(--violet)}.dot.missing,.dot.degraded{background:var(--danger)}.dot.unset{background:var(--muted)}
 .btn{background:var(--accent);color:var(--accent-ink);font-weight:700;border:none;border-radius:8px;padding:8px 14px;cursor:pointer;font-family:inherit;font-size:13px;text-decoration:none}
 .btn:hover{background:var(--accent-d)}
 .btn.ghost{background:transparent;border:1px solid var(--line);color:var(--ink)}
@@ -978,10 +869,28 @@ body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--font);font
 /* @bina-modal:end */
 /* the shared block carries no width on purpose: this surface sizes its own dialogs */
 .modal{width:min(360px,92vw)}
-/* the page's own sign-in ran out (app.js signedOut): over everything, the desktop's layers included */
-.modal-ov.signed-out{z-index:10000}
-.signed-out .modal{display:grid;gap:12px}
-.signed-out .modal-h{margin:0}
+/* EVERY dialog of this page opens over the desktop (desktop.css `.dk`: fixed, z-index 100), its layers included.
+   At the shared block's 50 it opened UNDER it, so on a computer «חיבור חשבון חדש» and «מצב החיבורים» did
+   nothing that could be seen while the phone, which has no desktop, opened them (DGO-1634, Exampleu 2026-11-09).
+   DGO-1434 had lifted two of them, the page's own sign-in running out (app.js signedOut) and a hand-off's
+   «לא הושלם» (handoffs.js say), whose button also ran on after the sentence without the grid below.
+   test_modal_over_desktop.py holds the order. While one is open, the desktop's keys and the palette wait for it
+   (desktop.js onKey/globalKeys, app.js Ctrl-K). The page's own sign-in running out stays over every other one. */
+.modal-ov{z-index:10000}
+.modal-ov.signed-out{z-index:10001}
+:is(.signed-out,.handoff-said) .modal{display:grid;gap:12px}
+:is(.signed-out,.handoff-said) .modal-h{margin:0}
+/* a hand-off's way back (handoffs.js syncBar, DGO-1434): while the office browser serves another app, a
+   fixed band over its screen takes the person back to that app in one touch — iOS's «◀ app» breadcrumb.
+   The arrow points to the start (right, in RTL): back. The frame starts under it, never beneath it */
+.handoff-back{position:absolute;inset-block-start:0;inset-inline:0;height:44px;box-sizing:border-box;z-index:2;
+  display:flex;align-items:center;gap:8px;padding:0 10px;background:var(--surface);border-bottom:1px solid var(--line)}
+.embedwrap.has-handoff .embed{inset-block-start:44px}
+.handoff-back-btn{display:inline-flex;align-items:center;gap:6px;min-height:36px;padding:0 8px;border:0;border-radius:8px;
+  background:none;color:var(--sky-d);font:inherit;font-size:14px;cursor:pointer;flex:none}
+.handoff-back-btn:hover{background:var(--sky-soft)}
+.handoff-back-btn .ic-svg{width:17px;height:17px}
+.handoff-back .pill{margin-inline-start:auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .hidden{display:none!important}
 .spin{color:var(--muted);padding:30px;text-align:center}
 
@@ -990,7 +899,7 @@ body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--font);font
 .tb-right{display:flex;align-items:center;gap:14px}
 .icon-btn{background:transparent;border:1px solid var(--line);border-radius:9px;width:34px;height:34px;cursor:pointer;font-size:15px;color:var(--ink);display:grid;place-items:center;flex:none}
 .icon-btn:hover{background:var(--accent-soft);border-color:var(--accent);color:var(--accent-d)}
-.search-btn{display:flex;align-items:center;gap:8px;background:var(--bg);border:1px solid var(--line);border-radius:9px;padding:7px 12px;cursor:pointer;color:var(--muted);font-family:inherit;font-size:13px}
+.search-btn{display:flex;align-items:center;gap:8px;background:var(--bg);border:1px solid var(--line);border-radius:9px;padding:7px 12px;cursor:pointer;color:var(--muted);font-family:inherit;font-size:13px;white-space:nowrap}   /* «חיפוש בדואר» when an app lends its search (DGO-1507): one line, never two */
 .search-btn:hover{border-color:var(--accent);color:var(--accent-d)}
 .search-btn .kbd{font-size:11px;background:var(--surface);border:1px solid var(--line);border-radius:5px;padding:1px 6px}
 
@@ -1103,7 +1012,10 @@ body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--font);font
    the middle of where the app would be. ONE card: the shell draws it in its own content
    (app.js: externalNotice), and the console answers with it INSIDE the frame when an app or a
    linked office has no page to give (app.py: _card, which inlines this block and the palette —
-   it had rules of its own, and the two stood side by side in one menu as two designs). */
+   it had rules of its own, and the two stood side by side in one menu as two designs). The sign-in
+   app's pages (forward-auth) and the link's door are the same card: this block is stamped into each of
+   them from platform-base/bina-ui/bina-card.css by gate G27, and the console's copy is the one app.py
+   reads by name. */
 .xn{display:grid;place-items:center;min-height:100%;padding:24px 0}
 .xn,.xn-card,.xn-ic{box-sizing:border-box}      /* the shell's reset, said here: the frame's page has none */
 .xn-card{width:min(460px,100%);background:var(--surface);border:1px solid var(--line);border-radius:16px;
@@ -1111,10 +1023,11 @@ body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--font);font
 .xn-ic{display:inline-grid;place-items:center;width:44px;height:44px;border-radius:12px;background:var(--surface-2);
   border:1px solid var(--line);color:var(--muted)}
 .xn-ic .ic-svg{width:22px;height:22px}
-.xn-card h2{margin:12px 0 2px;font-size:16px;font-weight:800}
+.xn-card :is(h1,h2){margin:12px 0 2px;font-size:16px;font-weight:800}
 .xn-sub{color:var(--muted);font-size:12.5px;font-weight:600}
 .xn-card p{margin:12px 0 0;font-size:13px;line-height:1.65;color:var(--ink)}
-.xn-card .btn{margin-top:16px}
+.xn-card .btn{display:inline-block;margin-top:16px}   /* a box, not a run of text: the shell's .btn says no display, and an
+   inline <a class="btn"> took no margin and laid its padding over the line above — the address on the owner's phone (DGO-1593) */
 .xn-acts{display:flex;flex-wrap:wrap;gap:8px}
 /* what was actually answered, as it was, one click away */
 .xn-card details{margin-top:12px;color:var(--muted);font-size:12.5px}
@@ -1125,9 +1038,49 @@ body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--font);font
 html[data-card],html[data-card] body{height:100%}
 html[data-card] body{margin:0;padding:0 16px;box-sizing:border-box;background:var(--bg);color:var(--ink);
   font-family:var(--font);font-size:14px}
+/* THE WALL (DGO-1501 · the owner, 2026-11-09). The logo wall he chose — the hundred versions of the mark
+   drawn on 2026-09-25 at 17:58, before any was scored — stands behind THE card (`.xn`): the sign-in app's
+   pages, and every screen that says an app or a linked office has nothing to show. The file is shapes and
+   nothing else (bina-ui/brand/bina-wall.svg, no colour in it); the screen paints it with the palette through
+   two masks — the tiles, then the wall's ink — so it turns with the theme like every other part. Text never
+   stands on it: text stands on the card, which is solid. Every surface serves the file at one absolute
+   path, `/bina-wall.svg`, so a page under an app's prefix (the console sets its base there) finds it. */
+.xn{position:relative;isolation:isolate;
+  --wall-cell:44px;                               /* one tile and its gap: the file is 10 × 10 of them. Whole */
+  --wall-tile:var(--surface);                     /* pixels at every width, so the two masks repeat in step */
+  --wall-ink:var(--olive-line)}                   /* the dark half of every version */
+@media (min-width:960px){.xn{--wall-cell:56px}}
+@media (min-width:1280px){.xn{--wall-cell:64px}}
+.xn::before,.xn::after{content:"";position:absolute;inset:0;z-index:-1;pointer-events:none;
+  -webkit-mask-repeat:repeat;mask-repeat:repeat;-webkit-mask-position:center;mask-position:center}
+/* the tiles: two by two, so their edges fall where the wall's own do (both are centred) */
+.xn::before{background:var(--wall-tile);
+  -webkit-mask-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 260 260'%3E%3Cpath d='M5 5h120v120H5zM135 5h120v120H135zM5 135h120v120H5zM135 135h120v120H135z'/%3E%3C/svg%3E");
+  mask-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 260 260'%3E%3Cpath d='M5 5h120v120H5zM135 5h120v120H135zM5 135h120v120H5zM135 135h120v120H135z'/%3E%3C/svg%3E");
+  -webkit-mask-size:calc(var(--wall-cell) * 2);mask-size:calc(var(--wall-cell) * 2)}
+.xn::after{background:var(--wall-ink);
+  -webkit-mask-image:url("/bina-wall.svg");mask-image:url("/bina-wall.svg");
+  -webkit-mask-size:calc(var(--wall-cell) * 10);mask-size:calc(var(--wall-cell) * 10)}
+/* a page that is the card and nothing else (a frame's card, the sign-in pages): the wall is the window's */
+html[data-card] .xn::before,html[data-card] .xn::after{position:fixed}
 /* @card:end */
 .home{display:flex;flex-direction:column;gap:14px;padding:4px 0 8px}
-.home-head{display:flex;flex-direction:column;gap:2px;padding:6px 2px 2px}
+.home-head{display:flex;flex-direction:column;gap:2px;padding:6px 2px 2px;position:relative}
+/* the account button on the phone's home (DGO-1621): the person's initial, at the start of the clock's row — the
+   clock (LTR digits) holds the row's other end */
+.icon-btn.home-me{position:absolute;top:8px;inset-inline-start:2px;width:36px;height:36px;border-radius:50%;
+  background:var(--surface);font-weight:700}   /* the shell's own icon button, round: its hover and focus are .icon-btn's */
+/* the account menu (DGO-1621): who is signed in, and the way out — one small object beside what opened it */
+.me-menu{position:fixed;z-index:70;min-width:220px;max-width:calc(100vw - 16px);box-sizing:border-box;padding:6px;
+  background:var(--surface);border:1px solid var(--line);border-radius:12px;box-shadow:var(--shadow-lg)}
+.me-who{padding:8px 10px 10px;font-size:12px;color:var(--muted);border-bottom:1px solid var(--line)}
+.me-who b{display:block;margin-top:2px;font-size:14px;font-weight:700;color:var(--ink)}
+.me-out{display:flex;align-items:center;gap:8px;min-height:36px;margin-top:6px;padding:0 10px;border-radius:8px;
+  font-size:13px;font-weight:600;color:var(--ink);text-decoration:none}
+.me-out:hover,.me-out:focus-visible{background:var(--surface-2)}
+.me-out .ic-svg{width:18px;height:18px;flex:none}
+.me-none{padding:10px;font-size:12.5px;color:var(--muted)}
+#userBox[role=button],.brand .logo[role=button]{cursor:pointer}
 .home-clock{font-size:34px;line-height:40px;font-weight:300;letter-spacing:-.02em;color:var(--ink)}
 .home-brand b{display:block;font-size:15px;font-weight:700;color:var(--ink)}
 .home-brand small{color:var(--muted);font-size:12px}
@@ -1156,10 +1109,8 @@ html[data-card] body{margin:0;padding:0 16px;box-sizing:border-box;background:va
      58px and leaves a 60px hole under the app. Measured in the simulation before it was written —
      digital-office/sim/console-fullscreen-mock.src.html, which is what a mock is for. */
   html.bare .embed{inset:0}
-  .cw-grid{grid-template-columns:1fr}
-  /* phone reclaims the band, chip included */
+  /* phone reclaims the band */
   .topbar{height:58px;padding:0 14px}
-  .tb-acct{min-height:0}
   .topbar h1{font-size:16px}
   .search-btn>span:first-child,.search-btn .kbd{display:none}
   .search-btn{padding:7px 10px}
@@ -1207,27 +1158,9 @@ html.focus-armed .focus-exit,.focus-exit:hover,.focus-exit:focus-visible{
 html.focus-armed .focus-exit .txt,.focus-exit:hover .txt,.focus-exit:focus-visible .txt{display:block}
 .focus-exit:hover{border-color:var(--accent);color:var(--accent-d)}
 
-/* ── B4 · the chip narrows before the row does ────────────────────────────────────
-   The top bar carries the app title too, and a chip that keeps its full identity at every width
-   pushes that title off the row. So the chip sheds detail in order of how much it answers: the
-   second line (an address, or a protocol name) goes first — truncated to four characters it answers
-   nothing anyway, and it is kept in the tooltip — then the name, leaving the dot, which is the part
-   you actually glance up for.
-   Every collapse is scoped to the CHIP. The MENU never loses its labels: a list of identical dots is
-   not a compact switcher, it is a guessing game, and the name is the whole point there. */
-@media (max-width:1100px){ .tb-acct .acct-btn .acct-hint{display:none} }
-@media (max-width:760px){
-  .tb-acct .acct-btn .acct-tx{display:none}
-  .tb-acct .acct-btn{max-width:none;padding:6px}
-  .acct-menu{min-width:min(300px,calc(100vw - 24px))}
-}
-
-/* B7 — on a touch screen every control in the switcher and the health panel clears 44px. Keyed on
-   the POINTER, not the width: a small window on a laptop is still a mouse, and inflating its
-   controls only wastes the room it hasn't got. */
+/* B7 — on a touch screen a dialog's buttons clear 44px. Keyed on the POINTER, not the width: a small
+   window on a laptop is still a mouse, and inflating its controls only wastes the room it hasn't got. */
 @media (pointer:coarse){
-  .acct-btn,.acct-pick,.acct-act,.acct-recheck,.acct-rm{min-height:44px}
-  .acct-rm{width:44px}
   .modal .btn,.modal .btn.ghost{min-height:44px}
 }
 

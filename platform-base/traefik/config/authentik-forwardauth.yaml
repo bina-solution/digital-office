@@ -20,9 +20,17 @@
 ## Referenced as `authentik@file` (the provider suffix is required to cross from a docker-provider
 ## router to a file-provider middleware; a bare `authentik` on a docker router resolves to
 ## `authentik@docker` and would silently reintroduce the bug).
+##
+## TWO middlewares, one definition (DGO-1755): `authentik` for an app every signed-in person opens, and
+## `authentik-admins` for an app whose app.json says `people: admins` (the office's root apps). Both compilers pick
+## the name per app; under forward-auth the second asks /auth/traefik/admins, which answers 403 with a card to a
+## signed-in person who is not an admin. With the SSO off (a developer's laptop) and under authentik (an office not
+## yet moved to forward-auth) the two are the same: neither knows the rule, and an office on authentik keeps
+## today's behaviour until it moves.
 http:
   middlewares:
-    authentik:
+{{- range $mw := list "authentik" "authentik-admins" }}
+    {{ $mw }}:
 {{- if eq (env "BBOX_SSO") "off" }}
       headers:
         customRequestHeaders:
@@ -36,7 +44,7 @@ http:
       # middleware name, so no router and no app changes. trustForwardHeader false: traefik writes the
       # X-Forwarded-* it sends from the request it received, never a client's own.
       forwardAuth:
-        address: http://forward-auth:9078/auth/traefik
+        address: http://forward-auth:9078/auth/traefik{{ if eq $mw "authentik-admins" }}/admins{{ end }}
         trustForwardHeader: false
         authResponseHeaders:
           - X-authentik-username
@@ -65,4 +73,5 @@ http:
           - X-authentik-meta-provider
           - X-authentik-meta-app
           - X-authentik-meta-version
+{{- end }}
 {{- end }}

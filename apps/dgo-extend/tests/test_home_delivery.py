@@ -2,8 +2,8 @@
 """test_home_delivery — a far office that only SERVES is not measured on the home's ports.
 
 step_link probed, from the far machine, every port the home serves, whatever the link's direction. On
-fireplace's link (direction `serve`: fireplace serves, the Mac uses) nothing of the Mac's is opened to
-fireplace by design, so the log always read «0/3 open», beside DGO-1018's 502 and after it was fixed
+examplef's link (direction `serve`: examplef serves, the Mac uses) nothing of the Mac's is opened to
+examplef by design, so the log always read «0/3 open», beside DGO-1018's 502 and after it was fixed
 (issues/a-one-way-link-reports-the-home-ports-the-far-office-never-uses-as-0-open.yaml).
 
 Run: python3 apps/dgo-extend/tests/test_home_delivery.py  (inside the app's image, or with its deps)
@@ -26,7 +26,7 @@ def check(cond, what):
 
 
 def main() -> int:
-    office, home = {"id": "fireplace", "machine": "m"}, {"id": "macbook", "serve": {"*": {}}}
+    office, home = {"id": "examplef", "machine": "m"}, {"id": "macbook", "serve": {"*": {}}}
     probed, said = [], []
     real_ports, real_must = converge._served_ports_local, converge.must
     try:

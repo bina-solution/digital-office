@@ -21,7 +21,7 @@ services:
     # fetched only when it is not here already, so a checkout that has built it is untouched;
     # the `build:` below stays as the fallback. Needs the GHCR package readable — a package made
     # from a private repo is private, so `docker login ghcr.io` on a machine that must pull.
-    image: ghcr.io/solomonboltin/digital-office/computers:${IMAGE_TAG:-latest}
+    image: ghcr.io/bina-solution/digital-office/computers:${IMAGE_TAG:-latest}
     pull_policy: missing
     build:
       context: .
@@ -34,6 +34,8 @@ services:
       - DEPLOYMENT_NAME=${DEPLOYMENT_NAME:-bina-deployment}
       # the credential plane: every machine is an instance there, nothing is stored here
       - CONNECTIONS_URL=${CONNECTIONS_URL:-http://connections:8990}
+      # the event stream (flow.v1): every command run on a computer, on `dgo:flow:computers` (DGO-1797)
+      - REDIS_PASSWORD=${REDIS_PASSWORD:-}
       # the machine we run on, as seen from inside this container
       - COMPUTERS_NETWORK=${COMPUTERS_NETWORK:-traefik-network}
       - COMPUTERS_LOCAL_USER=${COMPUTERS_LOCAL_USER:-root}
@@ -50,6 +52,16 @@ services:
       # fallback derives it from when that is empty
       - COMPUTERS_PUBLIC_HOST=${COMPUTERS_BASE_URL:-computers.${DEPLOYMENT_DOMAIN:-localhost}}
       - DEPLOYMENT_DOMAIN=${DEPLOYMENT_DOMAIN:-}
+      # WHO may change something here (DGO-1304, caller.py): the screen, a linked office this office
+      # shares its computer with, a service holding the token, or this container itself.
+      #   COMPUTERS_EXEC_AUTH        warn (count the unknown callers, GET /api/callers) → enforce (refuse them)
+      #   COMPUTERS_ENFORCE_MACHINES machines refused to an unknown caller already in `warn` (the HP: its own host)
+      #   COMPUTERS_SHARE_TO         the linked offices this office gives its computer to (the HP: macbook)
+      #   COMPUTERS_EXEC_TOKEN       the services' token, minted once (connection computers-exec-token)
+      - COMPUTERS_EXEC_AUTH=${COMPUTERS_EXEC_AUTH:-warn}
+      - COMPUTERS_ENFORCE_MACHINES=${COMPUTERS_ENFORCE_MACHINES:-}
+      - COMPUTERS_SHARE_TO=${COMPUTERS_SHARE_TO:-}
+      - COMPUTERS_EXEC_TOKEN=${COMPUTERS_EXEC_TOKEN:-}
     labels:
       # THE SHARE DOOR (/share/<token>) — no authentik, by design: the caller is another office's
       # ssh, which cannot sign in. The token opens the stream and sshd's key check authenticates;
@@ -68,12 +80,15 @@ services:
       - traefik.http.routers.computers-share-https.tls.certresolver=${TRAEFIK_CERTRESOLVER-myresolver}
       - traefik.http.routers.computers-share-https.priority=200
       - traefik.http.routers.computers-share-https.service=computers
+      - traefik.http.routers.computers-share-https.middlewares=hsts@file
     volumes:
       # the office keypair, known_hosts and the probe cache — losing this volume means re-approving
       # the key on every machine, so it is kept (data.on_uninstall: prompt)
       - computers_state:/data
       # which offices are linked and which of their apps they give (the compiled registry), read-only
       - ../../.generated/registry:/registry:ro
+      # the office's ONE flow.v1 publisher (DGO-1402) — the platform's file, never a copy of it here
+      - ../../platform-base/redis/flowpub.py:/opt/dgo/flowpub.py:ro
     networks:
       - traefik-network
     healthcheck:

@@ -91,6 +91,16 @@ provision:
 - mode: system
   script: |
     #!/bin/bash
+    # Keep the guest's SSH host keys across restarts (DGO-1359): Lima boots every start as a new cloud-init
+    # instance, and cloud-init's ssh module (once per instance) deleted and regenerated them, so the office's
+    # Computers app read «the host key does not match» for its own machine after every restart. An engine
+    # made before this block gets it live from `bbox engine start` (engine.sh provision_converge).
+    # bbox: live-apply
+    set -eu
+    printf 'ssh_deletekeys: false\n' > /etc/cloud/cloud.cfg.d/99-dgo-keep-host-keys.cfg
+- mode: system
+  script: |
+    #!/bin/bash
     # Swap for the guest. The stack fills the guest's memory on an 8 GB Mac (measured 2026-09-18:
     # 4.2/4.9 GB at idle, 140 MB free during an image build), and a cloud image ships with NO swap,
     # so the first spike sends the kernel into reclaim thrash: load average 100+ on 4 cores, health
@@ -107,6 +117,7 @@ provision:
     # saturated, and `swapoff` must pull every swapped page back into a RAM that is by definition
     # short - the one operation guaranteed to fail exactly when it is needed. A second file, enabled
     # alongside the first, grows the pool with no moment in which there is no swap at all.
+    # bbox: live-apply
     set -eux -o pipefail
     SWAP_GB="${BBOX_VM_SWAP_GB:-4}"
     if [ ! -f /swapfile ]; then
@@ -133,6 +144,7 @@ provision:
     # `vm.compaction_proactiveness=20` — the kernel compacting memory in the background, endlessly, for
     # a stack that asks for no huge pages at all (AnonHugePages 0, compact_stall 0). The same disease the
     # HP's WSL had (DGO-625: `vm.min_free_kbytes=262144`); here a smaller floor, for a 4.9 GB guest.
+    # bbox: live-apply
     set -eux -o pipefail
     printf 'vm.compaction_proactiveness = 0\nvm.min_free_kbytes = 131072\n' > /etc/sysctl.d/90-bbox-memory.conf
     sysctl -p /etc/sysctl.d/90-bbox-memory.conf

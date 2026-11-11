@@ -1,0 +1,15 @@
+#!/usr/bin/env bash
+#: flow — the office's event stream: the last 10 events, then live:  ./bbox redis flow [app…] [-n N] [--once] [--json]
+# Every app's events are a Redis stream `dgo:flow:<app>` (the flow.v1 contract, ai/context/build-your-first-app.md).
+# An app's own `flow` verb execs this with its id: `./bbox telegram flow` == `./bbox redis flow telegram`.
+# The reader is platform-base/redis/flow.py; this resolves the engine, the container and the password for it.
+set -uo pipefail
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
+. "${REPO_ROOT}/scripts/lib.sh"
+case "${1:-}" in -h|--help) sed -n 's/^#: //p' "${BASH_SOURCE[0]}"; exit 0 ;; esac
+bbox_select_engine || true
+DN="$(read_env_value DEPLOYMENT_NAME)"
+# The password goes to the reader in its ENVIRONMENT, which it drops at once and hands to redis-cli on stdin.
+FLOW_CONTAINER="redis-${DN:-bina-deployment}" FLOW_PW="$(read_env_value REDIS_PASSWORD)" \
+  exec python3 "$(npath "${REPO_ROOT}")/platform-base/redis/flow.py" "$@"

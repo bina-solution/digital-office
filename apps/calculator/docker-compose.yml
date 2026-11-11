@@ -1,0 +1,20 @@
+# calculator — the office's smallest app: one static page, one stdlib server (msg 340's demo app).
+services:
+  calculator:
+    image: calculator:${IMAGE_TAG:-latest}
+    build:
+      context: .
+      dockerfile: Dockerfile
+    pull_policy: missing
+    container_name: calculator-${DEPLOYMENT_NAME:-bina-deployment}
+    hostname: calculator
+    restart: unless-stopped
+    networks: [traefik-network]
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import urllib.request;urllib.request.urlopen('http://127.0.0.1:8997/healthz',timeout=3)"]
+      interval: ${HEALTHCHECK_INTERVAL:-30s}
+      timeout: 5s
+      retries: 3
+networks:
+  traefik-network:
+    external: true

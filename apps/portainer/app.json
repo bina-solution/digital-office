@@ -1,11 +1,15 @@
 {
   "id": "portainer",
   "title": {
-    "he": "מכולות",
+    "he": "Portainer",
     "en": "Portainer"
   },
   "layer": 3,
+  "people": "admins",
   "kind": "tool",
+  "share": {
+    "local": "Docker management is root on this office's engine: it never crosses a link."
+  },
   "version": "1.0.0",
   "summary": {
     "he": "ניהול מכולות Docker",
@@ -28,8 +32,22 @@
     {
       "host": "portainer",
       "port": 9000,
-      "auth": "none",
-      "emit_labels": false
+      "auth": "sso",
+      "sso": {
+        "slug": "portainer",
+        "display_name": "Portainer",
+        "default_host": "portainer.localhost",
+        "base_url_env": "PORTAINER_BASE_URL",
+        "local_twin": true
+      },
+      "module": {
+        "name": "Portainer",
+        "icon": "box",
+        "desc": "ניהול מכולות Docker — root על מנוע הלשכה, מאחורי הכניסה של הלשכה",
+        "group": "תשתית",
+        "order": 260,
+        "embed": false
+      }
     }
   ],
   "health": {

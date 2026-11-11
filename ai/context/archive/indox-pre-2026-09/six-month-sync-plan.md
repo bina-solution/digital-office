@@ -10,8 +10,8 @@ caught up, synced and COMPLETED.
   conn=None, counts 0 — **they have no real connection/folder binding yet.**
 - mailapi connections: only 2 LOCAL imap (admin/user2). **No real Gmail.**
 - drive connections: SA (`drive_google_service_account-ea660043`) + 2 local. **No OAuth.**
-- Legacy sheet `1REDACTEDdrivexxxxxxxxxxxxxxxxxxxxxxxxxx0049` readable in browser42
-  (hacohen@gmail session). Schemas already match (76 identical columns).
+- Legacy sheet `1REDACTEDdrivexxxxxxxxxxxxxxxxxxxxxxxxxx0047` readable in browser42
+  (example@gmail session). Schemas already match (76 identical columns).
 
 ## Workstreams (run in parallel; wall-clock target 2h setup + overnight processing)
 
@@ -24,14 +24,14 @@ caught up, synced and COMPLETED.
 5. Verify: counts by STATUS/TYPE in indox UI + supabase.
 
 ### B. Gmail live connection
-1. Obtain person16@example.com app password (browser42 → myaccount.google.com, or stored).
+1. Obtain person17@example.com app password (browser42 → myaccount.google.com, or stored).
 2. Create mail_imap_gmail connection in mailapi; verify INBOX + labels list.
 3. Bind gmail-doc / gmail-bs / gmail-link / mail-private registry entries to it
    (connection + labels to_sync/synced/failed + drive_profile_id=admin).
 4. Run label engine against real gmail → past-6-months mail gets *_TO_SYNC labels.
 
 ### C. Drive live sync
-1. Verify SA can LIST the hacohen folders (shared with SA) via drive app API.
+1. Verify SA can LIST the example folders (shared with SA) via drive app API.
 2. Create/update drive-gdoc + drive-bs entries: SA connection + pairs from legacy
    settings folder IDs (to_sync/synced/failed per pair).
 3. drive-invoices: push through the 1 remaining item.

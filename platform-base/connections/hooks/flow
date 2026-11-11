@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+#: flow — the connections' events (added, changed, tested, disconnected — never a secret), the last 10 and then live:  ./bbox connections flow [-n N] [--once] [--json]
+# The app's stream on the office's event stream (flow.v1, DGO-1402): the platform's reader, for `dgo:flow:connections`.
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+exec bash "${SCRIPT_DIR}/../../redis/hooks/flow" connections "$@"

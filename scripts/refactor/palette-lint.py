@@ -101,7 +101,6 @@ ALLOWED = [
     (r".", r"<link\b[^>]*\brel=[\"']icon[\"']", "the mark as an inline image: a data URI cannot name a token"),
     (r".", r"\.(qrwrap|cx-qr|qr-box)\b[^{}]*\{[^}]*background:#fff", "a QR code is read black on white, in every theme"),
     (r"^apps/telegram-tv/static/style\.css$", r"--film:#000;", "a film is shown on black, in a light office and in a dark one"),
-    (r"^apps/meet/start/flow/app\.css$", r"--film:#000;", "a recording is shown on black, in a light office and in a dark one"),
     (r"^apps/dgo-extend/static/connect\.js$", r"(fillStyle|style\.background) = \"#(fff|000)\"", "a QR code is drawn black on white, in every theme"),
     (r"^apps/browser42/(browser-clipboard|browser42-keyboard|extension/cursor)\.js$", None,
      "drawn inside the page the office's browser shows — somebody else's page, where no token exists"),
@@ -134,9 +133,9 @@ ALLOWED = [
     (r"^apps/apitools/src/doc_gen/", None,
      "a business document: ink on paper, in a palette of its own until the owner decides otherwise (ui2-039)"),
     # ── THE CAP BUILDER IS THE SHOP'S OWN PRODUCT (2026-10-30) ────────────────────────────────────
-    # The Fireplace Guys' cap builder carries the shop's own ground and ember brand — `color-scheme:dark`,
+    # The Examplef Guys' cap builder carries the shop's own ground and ember brand — `color-scheme:dark`,
     # `#14100d`, `#e8763f` — and its 25 coil finishes are hexes sampled from the SHOP'S PHYSICAL COLOUR
-    # CHIPS, read as swatch backgrounds and 3D material colours. Measured 2026-10-30 on fireplace: 200
+    # CHIPS, read as swatch backgrounds and 3D material colours. Measured 2026-10-30 on examplef: 200
     # literals, 117 distinct values, of which only ~12 exist in the palette at all, and those are its
     # DARK-ground values — so `var(--bg)` there is a repaint in a light office, not an identity.
     # Repainting it is the owner's design decision, not a lint fix; until he makes it, this is a

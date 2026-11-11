@@ -46,6 +46,8 @@ function element(tag) {
       // `render()` looks up the element it may draw into; every other lookup is the wiring pass, which
       // finds nothing and therefore attaches nothing — the card is HTML, and the test reads the HTML.
       if (sel === ".pw-body") { this._body = this._body || element("div"); return this._body; }
+      // …and its subtitle, which a draw says again each time (a server's line, or the computer's own)
+      if (sel === ".sub") { this._sub = this._sub || element("div"); return this._sub; }
       return null;
     },
     querySelectorAll() { return []; },
@@ -83,7 +85,8 @@ async function renderCard(payload, { status = 200 } = {}) {
   const card = host.children[0];
   const body = card && card._body;
   const html = body ? body.innerHTML : "";
-  return { html, cardHtml: card ? card.innerHTML : "", errors, host, card };
+  const sub = card && card._sub ? card._sub.textContent : null;
+  return { html, cardHtml: card ? card.innerHTML : "", errors, host, card, sub };
 }
 
 const now = Math.floor(Date.now() / 1000);
@@ -128,6 +131,41 @@ const run = async () => {
   check("…and nothing logged as a draw fault", win.errors.length === 0,
     win.errors.map((e) => String(e[1] && e[1].message)).join(" | "));
   check("the Windows host is told what is true here", win.html.includes("Windows"), win.html.slice(0, 400));
+
+  // 1b — A SERVER (DGO-1801, vps1 as measured 2026-11-11: no agent, no host OS, an empty power_supply, and none of
+  // an engine VM's marks): one line that says so — never the laptop's sleep matrix under a red «not enforced»
+  const SERVER = { policy: POLICY_RUN, defaults: POLICY_RUN, status: null, agent: "absent", age_s: null,
+                   host_os: "", battery: false, engine_vm: "", generated_at: iso(now) };
+  const server = await renderCard(SERVER);
+  check("a server is told it does not sleep and has nothing to set",
+    server.html.includes("אין כאן שינה") && server.html.includes("שרת"), server.html.slice(0, 200));
+  check("…with no sleep matrix, no red callout and no agent pill",
+    !server.html.includes("לא נאכפות") && !server.html.includes("pw-seg") && !server.html.includes("סוכן החשמל לא רץ")
+      && !server.html.includes("callout bad"), server.html.slice(0, 300));
+  check("…its subtitle says it is a server", server.sub === "הלשכה רצה כאן על שרת.", server.sub);
+  check("…and nothing logged as a draw fault", server.errors.length === 0);
+  // …and NEVER a computer that sleeps. A fresh MacBook: its engine's VM sees no battery, nothing on macOS writes a host
+  // OS, and its agent has not written a status yet — exactly a server's three facts but the VM (the second reader)
+  const freshMac = await renderCard({ ...SERVER, engine_vm: "engine" });
+  check("a MacBook whose power agent never started keeps the card that says it is not enforced, with the command",
+    freshMac.html.includes("לא נאכפות") && freshMac.html.includes("./bbox engine power start")
+      && !freshMac.html.includes("אין כאן שינה"), freshMac.html.slice(0, 200));
+  check("…and the subtitle of a computer that sleeps", freshMac.sub && freshMac.sub.startsWith("כשהמחשב שהלשכה"), freshMac.sub);
+  const quietHp = await renderCard({ ...SERVER, engine_vm: "wsl" });
+  check("the HP whose keepalive went quiet (no host OS for a while) is not called a server",
+    !quietHp.html.includes("אין כאן שינה"), quietHp.html.slice(0, 200));
+  // …nor anything a machine does not say: no `battery`, no `engine_vm`, an unknown one (null)
+  const { battery: _b, ...noBatteryField } = SERVER;
+  const { engine_vm: _e, ...noVmField } = SERVER;
+  for (const [what, p] of [["whether it has a battery", noBatteryField], ["whether it is an engine's VM", noVmField],
+                           ["(the VM unreadable)", { ...SERVER, engine_vm: null }]]) {
+    const r = await renderCard(p);
+    check(`a machine that does not say ${what} is drawn as before`,
+      r.html.includes("לא נאכפות") && !r.html.includes("אין כאן שינה"), r.html.slice(0, 200));
+  }
+  const laptop = await renderCard({ ...SERVER, battery: true });
+  check("a laptop with no power agent is told its settings are not enforced, not that it is a server",
+    laptop.html.includes("לא נאכפות") && !laptop.html.includes("אין כאן שינה"), laptop.html.slice(0, 200));
 
   // 2 — a Mac that REFUSED the permission: the callout is the whole point of the field, and it names
   // the command to run. The fix must not have deleted the feature.

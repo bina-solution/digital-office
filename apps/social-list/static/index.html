@@ -141,21 +141,18 @@ body{background:var(--bg);color:var(--ink);font-family:var(--font);font-size:13p
 a{color:var(--accent-d)}
 
 /* ── the shell: menu column + content column (as in domains) ─────────────────────────────── */
-.shell{display:flex;align-items:stretch;min-height:100dvh;background:var(--bg)}
-.shell .side{flex:none;width:238px;border-inline-end:1px solid var(--line);background:var(--surface-2);position:sticky;top:0;height:100dvh}
-.shell .content{flex:1;min-width:0;display:flex;flex-direction:column}
+/* the side menu's host contract (bina-nav.css: `.bnv-host` › `.appgrid` › menu + page): its column, and its
+   staying in view as the page scrolls, are the component's — a flex row of this app's own with the menu at
+   238px kept the box wide while the component's rail hid the names (DGO-1591) */
+.shell{min-height:100dvh;background:var(--bg)}
+.shell > .appgrid{min-height:100dvh}
+.shell .side{border-inline-end:1px solid var(--line);background:var(--surface-2)}
+.shell .content{min-width:0;display:flex;flex-direction:column}
 .shell .side{--bnv-bg:var(--surface-2);--bnv-ink:var(--ink);--bnv-ink-2:var(--muted);--bnv-line:var(--line)}
 .shell .side .logo{width:28px;height:28px;border-radius:8px;background:var(--accent-soft);color:var(--accent-d);display:grid;place-items:center;font-weight:800;font-size:14px;flex:none}
 .shell .side .n{font-size:11px;font-weight:700;background:var(--surface);color:var(--muted);border:1px solid var(--line);border-radius:999px;padding:0 7px}
 .shell .side .bnv-item.is-active .n{background:var(--accent-soft);color:var(--accent-d);border-color:transparent}
 .shell .side .n.warn{background:var(--violet-soft);color:var(--violet);border-color:transparent}
-@media (max-width:900px){
-  .shell .side{width:64px}
-  .shell .side .bnv-label,.shell .side .bnv-tail{display:none}
-  .shell .side .bnv-item{width:44px;height:44px;min-height:44px;justify-content:center;padding:0;gap:0}
-  .shell .side .bnv-head b{display:none}
-}
-@media (max-width:560px){.shell .side{width:56px}}
 .wrap{width:100%;max-width:1220px;margin:0 auto;padding:22px 26px 60px}
 @media (max-width:700px){.wrap{padding:16px 14px 50px}}
 
@@ -350,7 +347,7 @@ button.pg-live{cursor:pointer}
 @keyframes spin{to{transform:rotate(360deg)}}
 .chip{display:inline-flex;align-items:center;gap:5px;font-size:11.5px;font-weight:700;border-radius:var(--radius-pill);padding:2px 9px;background:var(--info-soft);color:var(--blue);white-space:nowrap}
 .chip.ok{background:var(--ok-soft);color:var(--accent-d)}
-.chip.run{background:var(--warn-soft);color:var(--amber)}
+.chip.run{background:var(--info-soft);color:var(--info)}   /* queued or running is in motion = sky (DGO-1593) */
 .chip.bad{background:var(--danger-soft);color:var(--red)}
 .chip.owner{background:var(--violet-soft);color:var(--violet)}
 .chip.plain{background:var(--surface);color:var(--muted);border:1px solid var(--line)}
@@ -787,8 +784,15 @@ table.matrix thead th{position:sticky;top:0;background:var(--surface);font-size:
   overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
   direction:ltr;unicode-bidi:plaintext;
 }
-/* trailing slot: a badge, a dot, a chevron. `nowrap` so it can never wrap into a second line. */
-.bnv-tail{flex:none;display:inline-flex;align-items:center;gap:6px;white-space:nowrap;color:var(--bnv-ink-2);font-size:12px}
+/* trailing slot: a badge, a dot, a chevron. `nowrap` so it can never wrap into a second line.
+   In a RAIL it is the one thing a row still says beside its icon (a count, a dot), so it stays — pinned to
+   the icon's corner and small (`--bnv-tail-pos`, set by the two rail states in §3/§4). As a second column it
+   overflowed a 36px row: social-list's count, domains' (DGO-1591); connections had pinned its own, in every
+   state, so its drawer drew the count on the row's corner. The whole menu and the drawer keep it in line. */
+.bnv-item{position:relative}
+.bnv-tail{flex:none;display:inline-flex;align-items:center;gap:6px;white-space:nowrap;color:var(--bnv-ink-2);
+  font-size:var(--bnv-tail-fs,12px);line-height:var(--bnv-tail-lh,normal);
+  position:var(--bnv-tail-pos,static);inset-block-start:2px;inset-inline-end:2px}
 .bnv-item:hover .bnv-tail,.bnv-item.is-active .bnv-tail{color:inherit}
 .bnv-badge{
   flex:none;min-width:18px;height:18px;padding:0 5px;border-radius:999px;
@@ -851,6 +855,9 @@ table.matrix thead th{position:sticky;top:0;background:var(--surface);font-size:
   --bnv-rest:flex;
   --bnv-head-dir:column;
   --bnv-turn:rotate(180deg);
+  --bnv-tail-pos:absolute;
+  --bnv-tail-fs:10px;
+  --bnv-tail-lh:1;
 }
 /* An OPENED rail: the whole menu, standing over the page until a row is picked or it is shut — the
    way to a rail's search, and to the names of its rows. (The rail by width says the same in §4.) */
@@ -947,6 +954,9 @@ table.matrix thead th{position:sticky;top:0;background:var(--surface);font-size:
     --bnv-rest:flex;
     --bnv-head-dir:column;
     --bnv-turn:rotate(180deg);
+    --bnv-tail-pos:absolute;
+    --bnv-tail-fs:10px;
+    --bnv-tail-lh:1;
   }
   .bnv.is-open{position:fixed;inset-block:0;inset-inline-start:0;z-index:60;width:min(84vw,320px);box-shadow:var(--shadow-lg)}
 }
@@ -989,6 +999,9 @@ table.matrix thead th{position:sticky;top:0;background:var(--surface);font-size:
     --bnv-rest:none;
     --bnv-head-dir:row;
     --bnv-turn:none;
+    --bnv-tail-pos:static;
+    --bnv-tail-fs:12px;
+    --bnv-tail-lh:normal;
   }
   /* The shadow is the OPEN drawer's. On the parked one it still painted: a 40px grey band down the
      screen edge, over the page, in every app that carries this menu (seen in five, 2026-10-06). */
@@ -1039,9 +1052,9 @@ table.matrix thead th{position:sticky;top:0;background:var(--surface);font-size:
 </style>
 </head>
 <body>
-<div class="shell">
+<div class="shell bnv-host"><div class="appgrid">
   <aside class="side bnv" aria-label="ניווט">
-    <div class="brand bnv-head"><span class="logo">ר</span><b>רשתות חברתיות</b></div>
+    <div class="brand bnv-head"><span class="logo">ר</span><div class="bnv-head-text"><b>רשתות חברתיות</b></div></div>
     <nav class="bnv-scroll" id="menu"></nav>
     <div class="bnv-foot"><div class="note bnv-foot-text" id="foot"></div></div>
   </aside>
@@ -1053,7 +1066,7 @@ table.matrix thead th{position:sticky;top:0;background:var(--surface);font-size:
     </header>
     <div id="view"></div>
   </div></main>
-</div>
+</div></div>
 <div id="drawer-root"></div>
 <script src="static/app.js"></script>
 
@@ -1753,8 +1766,11 @@ var BinaNav = (function () {
   // the same in every app.
   function adoptStatic(doc) {
     var menus = doc.querySelectorAll(".bnv:not([data-bnv-mounted])");
-    for (var i = 0; i < menus.length; i++) {
-      var menu = menus[i];
+    // one call per menu, so each control and each shut holds ITS menu (a loop's `var` would hand every
+    // handler the last one)
+    for (var i = 0; i < menus.length; i++) adoptOne(doc, menus[i]);
+  }
+  function adoptOne(doc, menu) {
       try {
         var parent = menu.parentElement;
         if (parent && parent.classList && typeof parent.closest === "function" && !parent.closest(".bnv-host")) {
@@ -1777,6 +1793,38 @@ var BinaNav = (function () {
         });
         doc.addEventListener("keydown", function (ev) { if (ev.key === "Escape") shut(); });
         menu.setAttribute("data-bnv-mounted", "static");
+        // …and the rail's way in, which a mounted menu has in its brand row (DGO-1591, the owner: «חצי תפריט …
+        // לא נפתח, לא נסגר» — a static menu at a rail's width showed its icons and no way to their names). Its
+        // head gets the same one control, where the menu stands in the component's grid (`.appgrid`: its column
+        // is the grid's, so a rail is a rail's width): open → shut; a chosen rail → the whole menu again; names
+        // hidden (a rail by width) → the whole menu over the page; the whole menu → a chosen rail. The same
+        // steps as the mounted control's (`build()`), and a chosen rail is remembered the same way — per page,
+        // since a static menu has no id of the app's: under the console every app shares one origin.
+        var mhead = menu.querySelector(".bnv-head");
+        if (mhead && !mhead.querySelector(".bnv-collapse") && parent && parent.classList.contains("appgrid")) {
+          var railKey = "bnav:rail:static:" + ((doc.location && doc.location.pathname) || "") + "#" + (menu.id || "");
+          var setRail = function (on) {
+            menu.classList.toggle("is-rail", !!on);
+            try { localStorage.setItem(railKey, on ? "1" : "0"); } catch (e) { /* private mode */ }
+          };
+          try { if (localStorage.getItem(railKey) === "1") menu.classList.add("is-rail"); } catch (e) { /* private mode */ }
+          // the head's own text is THE sign of names on screen: it is there from the first paint (the rows'
+          // labels come when the app renders them, and a missing node reads as "hidden")
+          var nameShown = function () {
+            return shown(mhead.querySelector(".bnv-head-text") || menu.querySelector(".bnv-label"));
+          };
+          var cbtn = el("button", "bnv-collapse", svg("chevron-end"));
+          cbtn.type = "button";
+          cbtn.title = LABELS.rail;
+          cbtn.setAttribute("aria-label", LABELS.rail);
+          cbtn.addEventListener("click", function () {
+            if (menu.classList.contains("is-open")) { shut(); return; }
+            if (nameShown()) { setRail(true); return; }
+            if (menu.classList.contains("is-rail")) setRail(false);
+            if (!nameShown()) { menu.classList.add("is-open"); scrim.classList.add("is-open"); }
+          });
+          mhead.appendChild(cbtn);
+        }
         // …and the way in: the component's own 48px button, exactly as a page that placed none
         if (typeof doc.querySelector === "function" && !doc.querySelector("[data-nav-toggle]")) {
           var b = el("button", "bnv-burger is-float");
@@ -1794,7 +1842,6 @@ var BinaNav = (function () {
           if (doc.documentElement && doc.documentElement.classList) doc.documentElement.classList.add("bnv-float");
         }
       } catch (e) { /* one menu that cannot be adopted is not the other menus' problem */ }
-    }
   }
   if (typeof document !== "undefined" && typeof document.querySelectorAll === "function") {
     if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", function () { adoptStatic(document); });

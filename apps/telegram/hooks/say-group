@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+#: say-group — post ONE message in the office's Telegram group as the BOT, and print its message_id:  ./bbox telegram say-group "<text>"  (`-` reads stdin)
+# The token comes from the office's vault into memory — never printed, never filed, never on a command line — and
+# the code is apps/telegram/relay/say_group.py (its header is the whole argument, DGO-1339).
+set -uo pipefail
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
+. "${REPO_ROOT}/scripts/lib.sh"
+# npath: this path is handed to a NATIVE python3, so a Windows host needs its own form of it (G10)
+exec python3 "$(npath "${SCRIPT_DIR}/../relay/say_group.py")" "$@"

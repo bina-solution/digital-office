@@ -4,6 +4,16 @@ Moved here word for word from the root `CLAUDE.md` on 2026-10-15, when [AGENTS.m
 the one entry file every agent loads (DGO-646; why: [azaria-context-architecture.md](azaria-context-architecture.md)).
 Read it when a task runs, builds or tests the stack; the operating rules are in AGENTS.md.
 
+**In two pictures** (DGO-357):
+- [the OS's layers](diagrams/10-os-layers.svg): what an office declares, the compiler, `.generated/`, and the
+  engine that runs it;
+- [`bbox run` in every case](diagrams/11-bbox-run.svg): three entries (Windows, macOS, and Linux, a VPS or a
+  cloud sandbox), then one path, step by step, as `bbox` runs it.
+
+The sources are Mermaid in [diagrams/src/](diagrams/src/) (`10-os-layers.mmd`, `11-bbox-run.mmd`). A change
+to the steps changes the `.mmd`, which is re-rendered with Mermaid 10.9.1 with HTML labels off (each `.svg` says
+so in its first line); the SVG is never edited by hand.
+
 ## Getting to a healthy running system — `bbox run`
 
 **One command brings the whole stack up on any machine:**
@@ -54,6 +64,28 @@ Then run whatever the task needs against the running stack, e.g.:
 `bbox help` lists the full command tree. First bring-up builds images (~10–15 min on a small host);
 later runs are cached.
 
+## What a host needs — measured, never guessed
+
+Install from a clone of `https://github.com/bina-solution/digital-office`. What two of our own hosts run on,
+each measured on the date given — a number here changes only with a new measurement on a named machine:
+
+| host | measured (2026-11-10) | what it runs |
+|---|---|---|
+| a Debian 12 VPS | 2 CPUs, 7,952 MiB RAM + 4 GiB swap; the office takes **~44 GB** of disk (images 30.1 GB, volumes 11.5 GB, containers 0.5 GB, checkout 1.7 GB) | its office: 60 containers, public sites and meeting recordings |
+| a MacBook, Apple Silicon | 6 cores, 8 GiB RAM, the project's Lima/vz engine | its office |
+
+Measured with `nproc`, `free -m`, `docker ps -q | wc -l`, `docker system df`, `du -sh <checkout>` and
+`df -h /` on Linux, and `sysctl hw.ncpu hw.memsize` on the Mac. So the smallest host measured running an office
+of 60 containers has **2 CPUs and 8 GB of RAM with swap**. For disk, the ~44 GB above plus room for builds and
+recordings — about 60 GB free is a figure DERIVED from it, not one measured. An office with fewer apps switched on
+needs less; nothing smaller has been measured yet.
+
+**Windows, once per machine:** WSL2 with an `Ubuntu` distro is what `bbox.cmd` runs in. From an
+administrator PowerShell: `wsl --install -d Ubuntu`, restart, and open Ubuntu once to create its user;
+`wsl -l -v` must show it with VERSION 2. Then, from the clone: `bbox.cmd install windows` (git and Docker CE
+inside the distro, and the mount option traefik's certificates need — it may ask for one `wsl --shutdown` and a
+second run), then `bbox.cmd run` (see [running-on-wsl.md](running-on-wsl.md)).
+
 ## The three environments — what differs and how `bbox` handles it
 
 Everything below is **autodetected**; each accommodation is a **no-op where it isn't needed**, so the
@@ -65,8 +97,8 @@ duplication.
 |---|---|---|---|
 | Docker engine | the project's own Docker CE inside WSL's `Ubuntu` distro — **never Docker Desktop**, whether or not it's installed (see [running-on-wsl.md](running-on-wsl.md)) | `systemd` service (running) | **none at boot** → `need_docker` starts `dockerd` with `DOCKER_MIN_API_VERSION=1.24` |
 | Docker daemon lifecycle | `systemd` inside the distro; `bbox run` provisions it, never hand-started | `systemd` service (running) | started fresh by `need_docker` |
-| Docker **major version** | **28.x** (see below) | **28.x** | 28.x |
-| Docker API vs Traefik | must be Docker 28.x | must be Docker 28.x | must be Docker 28.x — `baseline` P0 **fails** otherwise |
+| Docker **major version** | **28.x** (the installer pins it; see below) | **28.x** | 28.x |
+| Docker API vs Traefik | the daemon must answer a v1.24 client — `baseline` P0 asks it | the same | the same |
 | Egress TLS | direct (fine) | direct (fine) | **MITM proxy** → `ccr_shadow_bases` re-tags base images with the proxy CA so in-container `pip`/`npm`/`git` verify |
 | `ulimit -Hn` | high | high | **low hard cap** → `ccr_clamp_nofile` caps `PG_NOFILE_HARD` so `n8n-postgres` starts |
 | Build memory | ample | ample | **small** → `ccr_build_serial` builds first-party images one-at-a-time (avoids concurrent-npm OOM) |
@@ -77,19 +109,75 @@ duplication.
 | `.env` | you provide it | you provide it | auto-generated via `scripts/ci-env.sh` if missing |
 | Path handling | none — `bbox.cmd` runs real Linux bash inside WSL, same as the VPS | — | — |
 
-> **Docker 29 does not work, and fails silently.** Traefik v3.3 compiles its docker client against
-> API 1.24. Docker 29 raised the daemon's *hard* minimum to 1.40 and capped `DOCKER_MIN_API_VERSION`
-> there, so the historical workaround is accepted and does nothing. The result is not an error:
-> traefik starts, reports healthy, discovers **zero** routers, and every `*.localhost` host 404s —
-> which then looks like a hundred unrelated test failures. Setting `DOCKER_API_VERSION` on the
-> traefik container does not help either; 3.3 hardcodes the version rather than reading the
-> environment. Run the stack on **Docker 28.x** (what the production VPS runs); `bbox baseline` P0
-> now fails fast and says so. Fixing this properly means moving to a traefik release whose docker
-> provider negotiates the API version — a change that needs its own validation across every route
-> and the authentik forward-auth chain, so it is deliberately not bundled here.
+> **Docker and traefik: ask the daemon, not its version number.** Traefik v3.3 compiles its docker
+> client against API 1.24, so what matters is whether the daemon answers a v1.24 client. If it does
+> not, the failure is SILENT: traefik starts, reports healthy, discovers **zero** routers, and every
+> `*.localhost` host 404s — which then looks like a hundred unrelated test failures. An earlier version
+> of this note said Docker 29 refuses that client whatever is set; it did not hold when measured.
+> **`DOCKER_MIN_API_VERSION=1.24`** lowers a daemon's floor to it: bbox's systemd drop-in for the project
+> engine sets it (`bbox`, ensure_project_engine), and the cloud sandbox's `need_docker` starts dockerd
+> with it. On record: Docker **29.3.1** started with it passed the baseline (`.ci-cd/baseline-summary.md`),
+> and Docker **29.1.3** on the Dell, 2026-08-21, routed end to end (auth.localhost 302,
+> glitchtip.localhost 200, an unknown host 404 — issues/docker29-traefik-warning-does-not-reproduce.yaml)
+> with the variable unrecorded: bbox could not install its drop-in on that run, and the 404s seen there
+> had another cause, a socket mount that had become a directory. `bbox baseline` P0 asks the one question
+> traefik asks — can a v1.24 client list containers on this endpoint (`scripts/baseline.sh`) — and marks
+> P0 red when the answer is no or the daemon cannot be reached; the run goes on and ends RED. The
+> installer (`debian-install.sh`) and dgo's engine check still pin **Docker 28.x** by version, and the
+> offices run 28.x — all but the Dell, which runs 29.
 
 On Windows/VPS none of the cloud helpers fire (no proxy CA, ample limits), so behaviour there is
-unchanged. Details + the Docker-29 caveat: [ai/context/healthy-baseline.md](healthy-baseline.md).
+unchanged. Details: [ai/context/healthy-baseline.md](healthy-baseline.md).
+
+> **A kernel that STACKS the container's AppArmor label stops every postgres (Ubuntu 26.04, kernel
+> 7.0.0-42 and later).** Ubuntu's default `kernel.apparmor_restrict_unprivileged_unconfined=1` makes
+> the kernel turn runc's profile change into a *stack*, so a container's processes are labelled
+> `docker-default//&unconfined` rather than `docker-default`. Docker's profile allows `signal` and
+> `ptrace` only to the literal peer `docker-default`, so **a container's processes can no longer
+> signal each other** — and the failure looks like anything but that. Measured on the Dell
+> 2026-11-09, with `postgres:17` started directly as `postgres` so that gosu is not involved at all:
+> autovacuum is cancelled every naptime (`autovacuum worker took too long to start`),
+> `pg_reload_conf()` and `pg_cancel_backend()` answer `Permission denied`, `docker stop` kills the
+> container because `tini` cannot forward SIGTERM, and the next start runs crash recovery that stalls
+> on `the database system is starting up`. The production symptom is the one you see first: gosu
+> spins at ~80% CPU forever and the container never logs a line
+> (work item **DGO-1604** carries the whole measurement and the Dell's evidence; upstream
+> [moby/moby#54099](https://github.com/moby/moby/issues/54099),
+> [containerd/containerd#14485](https://github.com/containerd/containerd/issues/14485) and
+> [Launchpad #2172422](https://bugs.launchpad.net/ubuntu/+source/linux/+bug/2172422) are all open,
+> with no fix released.)
+>
+> - **Read it:** `./bbox apparmor status` — two facts from one throwaway container (the label, and
+>   whether `kill -TERM` to a sibling gets through). `./bbox baseline` P0 fails on a host with the
+>   condition and names this fix; `./bbox run` prints it before it brings anything up.
+> - **Fix it:** `sudo ./bbox apparmor install` — copies
+>   `packaging/linux/apparmor/docker-default.dgo` to `/etc/apparmor.d/docker-default` and loads it
+>   from there. The file is Docker's own profile plus the SAME profile's stacked form for `signal`
+>   and `ptrace` (containerd#14487's proposal), and one widening: on a session bus a container may say
+>   Hello and ask `org.gnome.Mutter.IdleMonitor.GetIdletime`, so the office's `machine` can tell
+>   whether somebody is at the desk (DGO-1797; what that exposes is in the profile's header). Two
+>   consequences worth knowing:
+>   the copy in `/etc/apparmor.d` is what makes the fix **survive a reboot** (a load alone evaporates
+>   at the next boot, silently), and **containers that are already running keep the rules they
+>   started with** — recreate them (`bbox run`) or the hung ones stay hung. `./bbox apparmor
+>   validate` parses the profile without loading anything, `./bbox apparmor verify` says whether the
+>   signal now gets through. It is upstream's tested shape, not a mechanism this office has proven on
+>   a live host yet: the proof is `verify` on a host where it ran.
+> - **Loading a profile is a host policy change and the owner's act** — `bbox run` and `bbox baseline`
+>   never do it. What is NOT acceptable, on any host: `sysctl
+>   kernel.apparmor_restrict_unprivileged_unconfined=0` and `apparmor=unconfined` on a container. Both
+>   trade the host's hardening for one app's convenience; either is a decision about a specific host,
+>   never a product default.
+> - **Not fixable from the image side.** "Start postgres as its own user" removes the gosu hang and
+>   leaves a database that cannot vacuum, reload, cancel or shut down cleanly — measured, above. Both
+>   postgres images the office runs (`postgres:17`, `supabase/postgres`) also fail INSIDE their own
+>   entrypoint, on the same denial (`pg_ctl: could not send stop signal … Permission denied`), and
+>   that entrypoint needs root for its own chmod/init work — so no compose-level `user:` change can
+>   even reach the second half of the problem.
+> - **Re-render the profile when the engine changes.** It is rendered from moby/profiles' template,
+>   which moby, containerd and libpod keep in sync; a newer engine may deny a socket family this copy
+>   does not. Never widen a rule to make something work.
+
 
 > **Cloud network policy (important):** a Claude-Code-on-the-web environment's egress is set by the
 > **network policy chosen when the environment is created**. `bbox run` builds images from source, so
@@ -113,7 +201,7 @@ input to `sim/flow-qa.py`, `sim/ui-map.py`, `sim/verify-sim.mjs` and `verify/sim
 ported toward**. (2) `platform-mockup.html`, the earlier hand-drawn pixel-fidelity mockup, assembled
 by `node digital-office/tooling/assemble.js` from the 95 fragments in `tooling/frag/` (verified: a
 rebuild reproduces the committed file byte-for-byte, 397 screens) — its comparison harness
-`digital-office/verify/*.py` hardcodes `/home/user/deployment-hacohen` and a `reference/real-screenshots/`
+`digital-office/verify/*.py` hardcodes `/home/user/digital-office` and a `reference/real-screenshots/`
 directory that does not exist here, so that half is unrunnable as committed. **What depends on it:**
 `scripts/ui-coverage/live-ui-map.py` and `scripts/ui-coverage/sim-live-parity.py` hard-require
 `sim/ui-map.py` (parse / import) and would break if it vanished; `scripts/ui-coverage/pixel-diff.py`

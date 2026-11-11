@@ -134,13 +134,26 @@ switch(op){
     const UNL=" unl as (update "+T+" l set status='needs_review', claimed_at=null, last_error='[unlisted] no listing a day after discovery: the source no longer lists this item (moved or deleted)'"+
       " where l.source="+v(p.source)+" and l.status in ('discovered','failed') and l.listing = '{}'::jsonb"+
       " and l.discovered_at < now() - interval '1 day' returning 1),";
-    sql=POL+","+EXP+UNL+" cand as (select l.platform_id from "+T+" l left join pol on pol.src=l.source"+
+    const W=" from "+T+" l left join pol on pol.src=l.source"+
       " where l.source="+v(p.source)+" and l.status in ('discovered','failed')"+
       " and l.listing <> '{}'::jsonb"+   // nothing to deliver FROM yet (a legacy row awaiting re-discovery)
       " and (l.not_before is null or l.not_before<=now())"+
       " and l.attempts < coalesce(pol.max_att,5)"+
-      " and not "+isOld+
-      " order by (l.status='failed') desc, l.discovered_at limit "+n+" for update of l skip locked)"+
+      " and not "+isOld;
+    // NEWEST FIRST, WITH THE BACKLOG'S SHARE (DGO-246, the owner: «תן עדיפות לחדשים: גם הסנכרון וגם המנקז לוקחים
+    // קודם את המסמכים החדשים»). It was failed-first then oldest, so a retry storm or a long backlog held every new
+    // document back. Now most of the pass takes the newest — by discovery, then by the item's own date
+    // (ISO only), because one discovery pass stamps all its rows with one now(). A fifth of it is the backlog's:
+    // failed retries first, then the oldest. Without that share a pipe busier than one pass per tick would never
+    // reach its retries, and OldDocumentMonthsBack would only dead-letter them. A person's «נסה שוב» is new by
+    // definition: RESET stamps discovered_at = now().
+    const nOld=n>=2?Math.max(1,Math.floor(n/5)):0, nNew=n-nOld;
+    const srcTs="(case when "+srcT+" ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}' then ("+srcT+")::timestamptz end)";
+    sql=POL+","+EXP+UNL+
+      " fresh as (select l.platform_id"+W+" order by l.discovered_at desc, "+srcTs+" desc nulls last limit "+nNew+" for update of l skip locked),"+
+      " back as (select l.platform_id"+W+" and l.platform_id not in (select platform_id from fresh)"+
+      " order by (l.status='failed') desc, l.discovered_at limit "+nOld+" for update of l skip locked),"+
+      " cand as (select platform_id from fresh union all select platform_id from back)"+
       " update "+T+" l set status='claimed', claimed_at=now() from cand"+
       " where l.source="+v(p.source)+" and l.platform_id=cand.platform_id"+
       " returning l.platform_id, l.listing, l.attempts, l.discovered_at";
@@ -197,7 +210,8 @@ switch(op){
       // 186 rows red was worse than none). A row with no listing is reported as no_listing: the
       // pass that follows re-lists it if the source still has it (UPSERT refreshes the listing and
       // TAKE delivers), and TAKE retires it with the [unlisted] reason if the source does not.
-      sql="with a as (update "+T+" set status='discovered', attempts=0, not_before=null, claimed_at=null, last_error=null"+
+      // discovered_at = now(): a person's «נסה שוב» is new work, so TAKE's newest-first takes it next (DGO-246)
+      sql="with a as (update "+T+" set status='discovered', discovered_at=now(), attempts=0, not_before=null, claimed_at=null, last_error=null"+
         " where "+unq('source')+pred+stPred+" and status<>'discovered' returning (listing = '{}'::jsonb) as no_listing),"+
         " c as ("+cursorSql+")"+
         " select (select count(*) from a)::int as reset, (select count(*) filter (where no_listing) from a)::int as no_listing,"+

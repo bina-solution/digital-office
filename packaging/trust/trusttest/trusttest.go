@@ -17,7 +17,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/solomonBoltin/deployment-hacohen/packaging/trust"
+	"github.com/bina-solution/digital-office/packaging/trust"
 )
 
 // Now is every test's clock: a run fixes its clock when it begins, so a test does too.

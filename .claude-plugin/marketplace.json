@@ -1,0 +1,13 @@
+{
+  "name": "digital-office",
+  "owner": {
+    "name": "Bina Solutions"
+  },
+  "plugins": [
+    {
+      "name": "digital-office",
+      "source": "./packaging/claude",
+      "description": "הלשכה הדיגיטלית DGO: «תתקין לי לשכה דיגיטלית» — install the open-source business operating system on your own computer."
+    }
+  ]
+}

@@ -36,6 +36,11 @@ EnvironmentFile=-/etc/binaos/engine.env
 # --project-directory is also load-bearing: compose resolves `include:` relative to the first -f
 # file's directory, so .generated/compose.yml including the root compose.yml resolved to ITSELF and
 # aborted with "include cycle detected". scripts/dc passes the same flag for the same reason.
+# An office with no slug has no addresses (`console..digital-office.co.il`): the template's name is empty since
+# DGO-1802 and nothing on this machine derives the slug, so the start is refused and says why (header.sh too).
+# (`[^#[:space:]]?`: one opening quote may come first — written without a quote character, inside systemd's own
+# quoting; `""`, `#x` and ` # note` name nothing)
+ExecStartPre=/bin/sh -c 'grep -Eq "^COMPANY_SLUG=[^#[:space:]]?[A-Za-z0-9]" /etc/binaos/binaos.env || { echo "binaos: write BUSINESS_NAME and COMPANY_SLUG in /etc/binaos/binaos.env first" >&2; exit 1; }'
 ExecStart=/usr/local/bin/docker compose --project-directory /opt/binaos \
   -f /opt/binaos/.generated/compose.runtime.yml up -d --remove-orphans
 ExecStop=/usr/local/bin/docker compose --project-directory /opt/binaos \

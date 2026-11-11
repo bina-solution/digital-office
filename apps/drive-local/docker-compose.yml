@@ -1,0 +1,62 @@
+# drive-local — the office's own storage, an ENGINE of «קבצים» (apps/drive/ENGINES.md, DGO-1500).
+# The index in postgres (supabase-db), the bytes in supabase storage (bucket `drive`), the profiles and
+# their keys, the share links. No screen and no route of its own: the generic `drive` app reaches it at
+# http://drive-local:8988 over drive-engine.v1 and hands it /engine/* and /file/d/* verbatim.
+services:
+  drive-local:
+    image: ghcr.io/bina-solution/digital-office/drive-local:${IMAGE_TAG:-latest}
+    pull_policy: missing
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: drive-local-${DEPLOYMENT_NAME:-bina-deployment}
+    hostname: drive-local
+    restart: unless-stopped
+    environment:
+      - SENTRY_DSN=${DRIVE_SENTRY_DSN:-}
+      - DEPLOYMENT_NAME=${DEPLOYMENT_NAME:-bina-deployment}
+      - SUPABASE_DB_PASSWORD=${SUPABASE_DB_PASSWORD:-}
+      - SUPABASE_SERVICE_KEY=${SUPABASE_SERVICE_KEY:-}
+      - PGHOST=supabase-db
+      - STORAGE_URL=http://storage:5000
+      # a share link is written with the address people open «קבצים» at: the link is served there
+      # (drive hands /file/d/ to this engine), so a link written before the split resolves the same
+      - DRIVE_PUBLIC_HOST=drive.${DEV_DOMAIN:-localhost}
+      - CONNECTIONS_URL=${CONNECTIONS_URL:-http://connections:8990}
+      # «קבצים» itself: which drive it is bound to is ITS word (GET /connections/active), asked for a request
+      # of its screen that presents no profile key — never taken from the request
+      - DRIVE_URL=http://drive:8975
+      # the profile ledger and the pictures/waveforms of this engine's own files (regenerated when absent)
+      - DRIVE_LEDGER_PATH=/data/profile-ledger.json
+      - DRIVE_CACHE_DIR=/data/cache
+    volumes:
+      - drive_local_data:/data
+    networks:
+      - traefik-network
+      - supabase-net
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request,sys;sys.exit(0 if urllib.request.urlopen('http://localhost:8988/healthz',timeout=8).status==200 else 1)"]
+      interval: ${HEALTHCHECK_INTERVAL:-30s}
+      timeout: ${HEALTHCHECK_TIMEOUT:-10s}
+      retries: 3
+      start_period: 15s
+    deploy:
+      resources:
+        limits:
+          # every byte of the office's files streams through here, and the pictures of its photos, PDFs
+          # and videos are drawn here (Pillow, pdfium, ffmpeg — one job at a time): the drive's own 768M
+          # before the split, of which this engine is the heavy half
+          cpus: '1.0'
+          memory: 640M
+    logging:
+      driver: ${LOGGING_DRIVER:-json-file}
+      options:
+        max-size: 5m
+        max-file: '3'
+
+volumes:
+  drive_local_data:
+
+networks:
+  traefik-network:
+    external: true

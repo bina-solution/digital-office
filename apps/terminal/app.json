@@ -1,0 +1,99 @@
+{
+  "id": "terminal",
+  "title": {
+    "he": "טרמינל",
+    "en": "Terminal"
+  },
+  "layer": 3,
+  "kind": "service",
+  "page": "base",
+  "version": "1.0.0",
+  "summary": {
+    "he": "שורת פקודה לכל מחשב בלשכה — מחשב אחד נבחר, ומשם עובדים. נפתחת גם מכל שורה במסך «מחשבים».",
+    "en": "A command line on any machine in the office — pick a machine and work on it. Also opened from any row of the computers screen."
+  },
+  "capabilities": [
+    {
+      "name": "terminal",
+      "type": "service",
+      "interface": "terminal.v1",
+      "endpoint": "http://terminal:8080",
+      "contract": "platform-service.v1",
+      "required_ops": [
+        "machines",
+        "shell"
+      ]
+    }
+  ],
+  "use": [
+    {
+      "capability": "computers",
+      "strength": "requires",
+      "after": true
+    },
+    {
+      "capability": "identity",
+      "strength": "requires",
+      "after": true
+    },
+    {
+      "capability": "ui-kit",
+      "strength": "wants",
+      "after": false,
+      "dependency": "weak"
+    }
+  ],
+  "connections": [],
+  "compose": "docker-compose.yml",
+  "routing": [
+    {
+      "host": "terminal",
+      "port": 8080,
+      "auth": "sso",
+      "module": {
+        "group": "תשתית",
+        "icon": "server",
+        "embed": true,
+        "tile": false,
+        "alias": "terminal",
+        "id": "terminal",
+        "name": "טרמינל",
+        "desc": "שורת פקודה על מחשבי הלשכה",
+        "order": 10,
+        "service": "terminal",
+        "url_env": "TERMINAL_URL",
+        "url": "http://terminal:8080"
+      },
+      "sso": {
+        "slug": "terminal",
+        "display_name": "Terminal",
+        "default_host": "terminal.localhost",
+        "base_url_env": "TERMINAL_BASE_URL",
+        "local_twin": true
+      },
+      "service": "terminal"
+    }
+  ],
+  "health": {
+    "structural": "auto",
+    "probe": {
+      "http": "http://terminal:8080/healthz",
+      "interval": "30s"
+    }
+  },
+  "data": {
+    "volumes": [],
+    "on_uninstall": "keep"
+  },
+  "resources": {
+    "cpus": "0.2",
+    "memory": "128M"
+  },
+  "observability": {
+    "sentry_platform": "python"
+  },
+  "agent": {
+    "context": "AGENT.md",
+    "order": 22
+  }
+}

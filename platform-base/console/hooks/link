@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+#: link — the ONE builder of a link a person is given: resolved and opened past the sign-in on the herd's hub console, or the sentence why:  ./bbox console link <DGO-1433 | meet/<room> | <app>.<office>> [--for <who>]   ·   ./bbox console link check   ·   ./bbox console link list
+# The code is platform-base/console/link_cli.py (its header is the whole argument, DGO-1433).
+set -uo pipefail
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
+. "${REPO_ROOT}/scripts/lib.sh"
+# npath: this path is handed to a NATIVE python3, so a Windows host needs its own form of it (G10)
+exec python3 "$(npath "${SCRIPT_DIR}/../link_cli.py")" "$@"

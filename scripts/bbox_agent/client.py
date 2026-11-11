@@ -158,7 +158,7 @@ def _vault_instances() -> list[dict]:
         f"docker exec \"$c\" python3 -c \"import base64;exec(base64.b64decode('{b64}').decode())\""
     )
     try:
-        out = _run(_engine_cmd(["sh", "-c", script]), timeout=120).splitlines()[-1]
+        out = _engine_run(["sh", "-c", script], timeout=120).splitlines()[-1]
         rows = json.loads(out)
     except (AgentError, ValueError, IndexError):
         return []
@@ -189,7 +189,7 @@ def _vault_secret(instance: str) -> dict:
         f"{instance}"
     )
     try:
-        return json.loads(_run(_engine_cmd(["sh", "-c", script]), timeout=120).splitlines()[-1])
+        return json.loads(_engine_run(["sh", "-c", script], timeout=120).splitlines()[-1])
     except (AgentError, ValueError, IndexError):
         return {}
 
@@ -458,8 +458,11 @@ def _vault_provider(office: str = "") -> Optional[dict]:
     return None
 
 
-def remote_provider(office: str = "") -> Optional[dict]:
+def remote_provider(office: str = "", app: str = "") -> Optional[dict]:
     """The agent of a LINKED office, from this office's own state — and, failing that, its vault.
+
+    `app` names one agent app the far office serves (`--office hp-laptop --app bina-claude`); without
+    it, the office agent.
 
     The office that consumes renders the state block from the serving office's own catalog: the
     address is the peer's end of the pair (this office's view, derived — never something the peer
@@ -473,6 +476,7 @@ def remote_provider(office: str = "") -> Optional[dict]:
     names were looked for.
     """
     want = (office or "").strip().lower()
+    want_app = (app or "").strip()   # the loop below names its rows `app`: the ask is read from here
     for entry in _remote_blocks():
         off = str(entry.get("office") or "").strip()
         label = str(entry.get("label") or "")
@@ -484,7 +488,8 @@ def remote_provider(office: str = "") -> Optional[dict]:
         # THE office's agent first — the app declaring `office-agent` — and another agent.v1 app (bina-claude:
         # `claude-agent`) only where it is the one served. In file order `bina-claude` sorts before `bina`, so the HP's
         # update, which serves both, sent `--office hp-laptop` to bina-claude's door instead of Azaria (2026-11-03).
-        apps = [a for a in (entry.get("apps") or []) if isinstance(a, dict)]
+        apps = [a for a in (entry.get("apps") or []) if isinstance(a, dict)
+                and (not want_app or str(a.get("app") or "").strip() == want_app)]
         apps.sort(key=lambda a: 0 if any(c.get("name") == "office-agent" and c.get("interface") == "agent.v1"
                                          for c in _manifest(str(a.get("app") or "")).get("capabilities") or []) else 1)
         for app in apps:
@@ -510,8 +515,8 @@ def remote_provider(office: str = "") -> Optional[dict]:
                     "served_by": off, "instances": cands, "instance": cands[0], "from": "state",
                     **({"rpc": rpc} if rpc else {})}
     # The state block is the primary answer; the credential plane is the fallback that works on a
-    # machine whose compiler has not caught up (see _vault_provider).
-    return _vault_provider(office)
+    # machine whose compiler has not caught up (see _vault_provider) — for the office agent only.
+    return None if want_app else _vault_provider(office)
 
 
 def _served_provider() -> Optional[dict]:
@@ -568,11 +573,12 @@ def provider(office: str = "", app: str = "") -> dict:
     agent app by id (`--app bina-claude`), whatever its capability is called.
     """
     if app:
-        if office:
-            raise AgentError("--app names an agent app of THIS office; another office's agent is --office alone", 2)
-        found = _app_provider(app)
+        found = remote_provider(office, app) if office else _app_provider(app)
         if found:
             return found
+        if office:
+            raise AgentError(f"the office {office!r} serves no agent app {app!r} to this office "
+                             f"(`remote:` in platform.state.yaml)", 3)
         raise AgentError(f"no app {app!r} here declares a capability with interface agent.v1 "
                          f"(apps/{app}/app.json)", 3)
     if office:
@@ -597,15 +603,42 @@ def provider(office: str = "", app: str = "") -> dict:
                      "entry names an office that serves one to this office", 3)
 
 
-def _engine_cmd(args: list) -> list:
-    """How to reach a docker CLI for the office's engine from THIS host."""
+#: what this side waits beyond a guest time limit: the guest ends the command first, and its session with it
+GUEST_GRACE = 15
+#: GNU timeout's own exit when it ended the command (its -k kill: 137)
+TIMED_OUT = (124, 137)
+
+
+def _engine_cmd(args: list, guest_timeout: Optional[float] = None) -> list:
+    """How to reach a docker CLI for the office's engine from THIS host.
+
+    With `guest_timeout` the time limit is kept INSIDE the guest (`timeout -k 5 T`, DGO-1783): on a Mac a call is
+    `engine.sh exec` → `limactl shell`, and sshd keeps that session's slot for as long as the GUEST command runs —
+    a timeout on this side only abandons it. Measured 2026-11-10 at load 20–30: abandoned calls held the guest's
+    sessions until it refused every new one («Session open refused by peer»), for every lane. The guest's own
+    limit ends the command, the session closes, and limactl and engine.sh end by themselves; nothing here is
+    killed as a group (engine.sh exec starts the office's host daemons inside the caller's group, :560-567).
+    The limit ends the command's CLI: a `docker exec`'s process in its container runs on to its own limits, and a
+    `docker run --rm` whose PID 1 ignores SIGTERM (no --init) would be left running — give such a call --init."""
     if sys.platform == "darwin" and not os.environ.get("BBOX_IN_GUEST"):
-        return ["bash", str(REPO / "packaging/macos/engine.sh"), "exec", "--", *args]
+        limit = ["timeout", "-k", "5", str(max(1, int(guest_timeout)))] if guest_timeout else []
+        return ["bash", str(REPO / "packaging/macos/engine.sh"), "exec", "--", *limit, *args]
     return args
 
 
-def _run(cmd: list, timeout: float = 120) -> str:
-    p = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
+def _engine_run(args: list, timeout: float = 120) -> str:
+    """`args` in the engine, held to `timeout` there (see _engine_cmd), waited for a little longer here."""
+    cmd = _engine_cmd(args, guest_timeout=timeout)
+    said = f"the office engine did not answer in {int(timeout)} s ({' '.join(args[:2])}…)"
+    started = time.monotonic()
+    try:
+        p = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout + GUEST_GRACE)
+    except subprocess.TimeoutExpired:
+        raise AgentError(said, 3) from None
+    # 124/137 is the guest's limit only when the limit has run: a 137 sooner is the command itself killed (an OOM
+    # kill, its container recreated), and its own words are the answer
+    if p.returncode in TIMED_OUT and cmd is not args and time.monotonic() - started >= timeout:
+        raise AgentError(said, 3)
     if p.returncode != 0:
         raise AgentError(f"{' '.join(cmd[:3])}…: {p.stderr.strip()[-300:] or p.stdout.strip()[-300:]}", 3)
     return p.stdout.strip()
@@ -633,7 +666,7 @@ def obtain_token(prov: dict) -> str:
         f"if [ -n \"$f\" ]; then docker exec \"$c\" cat \"$f\" && exit 0; fi; done; "
         f"echo 'no running container of {svc} exposes AGENT_TOKEN_FILE' >&2; exit 1"
     )
-    tok = _run(_engine_cmd(["sh", "-c", script]), timeout=240).splitlines()[-1].strip()
+    tok = _engine_run(["sh", "-c", script], timeout=240).splitlines()[-1].strip()
     if len(tok) < 32:
         raise AgentError("the provider returned no action token (is it running the agent.v1 adapter?)", 3)
     return tok
@@ -674,7 +707,7 @@ def _vault_token(instances, served_by: str = "") -> str:
             f"{name} {who}"
         )
         try:
-            got = _run(_engine_cmd(["sh", "-c", script]), timeout=240).splitlines()[-1].strip()
+            got = _engine_run(["sh", "-c", script], timeout=240).splitlines()[-1].strip()
         except (AgentError, IndexError):
             continue
         if len(got) >= 32:
@@ -731,7 +764,8 @@ def harness_summary(s: dict) -> dict:
         "id": s.get("sessionId"), "title": v.get("title") or None, "running": bool(s.get("running")),
         "blank": bool(s.get("blank")), "cwd": s.get("cwd") or None, "updated_at": _iso(s.get("updatedAt")),
         "preset": v.get("agentPreset") or None, "permissions": (v.get("permissions") or {}).get("currentValue"),
-        "model": (v.get("modelSelection") or {}).get("lastUsed") or (v.get("modelSelection") or {}).get("next"),
+        # the model the NEXT turn runs on, as the adapter's summary says it (DGO-1731)
+        "model": (v.get("modelSelection") or {}).get("next") or (v.get("modelSelection") or {}).get("lastUsed"),
         "goal": {"objective": goal.get("objective"), "phase": goal.get("phase"), "rounds": (v.get("goal") or {}).get("roundsStarted"),
                  "max_rounds": goal.get("maxGoalRounds")} if goal else None,
         "todos": v.get("todos") or None, "turns": len(v.get("turnOutline") or []), "tokens": v.get("tokenUsage") or None,

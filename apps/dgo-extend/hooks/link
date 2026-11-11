@@ -16,7 +16,38 @@ set -uo pipefail
 export PYTHONIOENCODING=utf-8
 VERB="${1:-status}"
 OFFICE="${2:-}"
-CONTAINER="$(docker ps --filter 'name=^dgo-extend-' --format '{{.Names}}' 2>/dev/null | head -1)"
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
+
+# bound <seconds> <cmd…> — the command and everything it started, killed once it has run that long (DGO-1784: on
+# 2026-11-10, at load 21 on the MacBook, `bbox dgo link status` printed nothing for 180 s, three runs in a row —
+# the one command that says whether the herd is connected went silent exactly when the herd was busy).
+# The group is killed HERE, not by `timeout`: Ubuntu 25.10+ ships uutils' `timeout` (0.8.0 on the Dell), which
+# kills only the command it started — measured 2026-11-10 on the Dell, `timeout -s KILL 2` around a grandchild
+# `sleep 20` returned after 20 s — so the grandchild (`docker exec`) kept the reading's pipe open and the check
+# took 121 s on the runner. `set -m` gives the command a process group of its own; KILL goes to all of it at
+# once (a child that ignores TERM would hold the pipe open). bash alone: the same on every office and on a Mac.
+bound() {
+  local s="$1"; shift
+  (
+    set -m
+    "$@" < /dev/null &
+    p=$!
+    { sleep "${s}" && kill -KILL -- "-${p}"; } > /dev/null 2>&1 &
+    w=$!
+    wait "${p}" 2> /dev/null; rc=$?
+    # the command ended first: what it left in its group (a child still holding the pipe) goes too, and the watcher
+    kill -KILL -- "-${p}" "-${w}" 2> /dev/null
+    exit "${rc}"
+  )
+}
+LINK_API_MAX="${DGO_LINK_API_MAX:-30}"   # seconds one call to the app may take
+case "${LINK_API_MAX}" in ''|*[!0-9]*) LINK_API_MAX=30 ;; esac
+LINK_PY_MAX="${DGO_LINK_API_MAX:+${LINK_API_MAX}}"; LINK_PY_MAX="${LINK_PY_MAX:-20}"   # the in-container read: 20 s, as it was
+CONTAINER=""
+container() {             # the app's container, looked up when a call first needs it
+  [ -n "${CONTAINER}" ] || CONTAINER="$(docker ps --filter 'name=^dgo-extend-' --format '{{.Names}}' 2>/dev/null | head -1)"
+  [ -n "${CONTAINER}" ]
+}
 
 api() {                    # api <method> <path> [json-body]
   # The body goes through an ARRAY, never through `${body:+…}`: an expansion like that is word-split
@@ -24,37 +55,101 @@ api() {                    # api <method> <path> [json-body]
   # — and the app, seeing no `steps`, silently ran the DEFAULT converge. Measured 2026-10-01: `link
   # down` ran `machine` and left `unlink` pending, which reads exactly like a step that does nothing.
   local method="$1" path="$2" body="${3:-}"
-  local -a args=(-fsS -m 30 -X "${method}")
+  local -a args=(-fsS -m "${LINK_API_MAX}" -X "${method}")
   if [ -n "${body}" ]; then args+=(-H 'content-type: application/json' -d "${body}"); fi
   if [ -n "${DGO_EXTEND_URL:-}" ]; then
     curl "${args[@]}" "${DGO_EXTEND_URL}${path}" 2>/dev/null && return 0
   fi
   curl "${args[@]}" "http://dgo-extend:8983${path}" 2>/dev/null && return 0
-  [ -n "${CONTAINER}" ] || return 1
+  container || return 1
   # `-i`: the program arrives on stdin. Without it docker attaches no stdin, python ran an empty
   # script, and every verb here read an empty answer as JSON — from a host shell (where the app's
   # name does not resolve, so this is the path taken) `bbox dgo link status` was a traceback.
-  docker exec -i "${CONTAINER}" python3 - "${method}" "${path}" "${body}" <<'PY'
+  docker exec -i "${CONTAINER}" python3 - "${method}" "${path}" "${body}" "${LINK_PY_MAX}" <<'PY'
 import json, sys, urllib.request
 method, path, body = sys.argv[1], sys.argv[2], (sys.argv[3] or "")
 data = body.encode() if body else None
 req = urllib.request.Request("http://127.0.0.1:8983" + path, data=data, method=method,
                              headers={"content-type": "application/json"} if data else {})
 try:
-    print(urllib.request.urlopen(req, timeout=20).read().decode())
+    print(urllib.request.urlopen(req, timeout=float(sys.argv[4])).read().decode())
 except urllib.error.HTTPError as e:
     print(e.read().decode() or json.dumps({"error": f"HTTP {e.code}"}))
 PY
 }
 
 case "${VERB}" in
+  __get)                    # one GET for `status`, in a process of its own so ONE bound covers all it starts
+    api GET "${OFFICE}"
+    ;;
   status|"")
-    out="$(api GET /api/link)" || { echo "dgo-extend is not answering — is the app up?" >&2; exit 1; }
-    printf '%s' "${out}" | python3 -c '
-import json, sys
-d = json.load(sys.stdin)
+    # ANSWERS WITHIN TEN SECONDS (DGO-1784). The live read — finding the app, every way of asking it — is one
+    # process bounded at 7 s; the history (only for «since») is asked only when no more than 6 have gone, bounded
+    # at 2. Every good reading (it parses, and it has `home` and `items`) is kept here, privately, replaced whole;
+    # a read that misses its time shows the last one kept with its age, and exits 3 — never silence, never an old
+    # reading passed off as now. Nothing live and nothing kept: «לא נמדד», exit 1.
+    SECONDS=0
+    cache="${TMPDIR:-/tmp}/bbox-link-status-$(id -u 2>/dev/null)-$(printf '%s' "${REPO_ROOT}" | cksum | cut -d' ' -f1)"
+    good() { python3 -c 'import json, sys
+d = json.loads(sys.stdin.read())
+sys.exit(0 if isinstance(d, dict) and "home" in d and isinstance(d.get("items"), list) else 1)' 2>/dev/null; }
+    measured_at=""
+    out="$(DGO_LINK_API_MAX=5 bound 7 bash "${BASH_SOURCE[0]}" __get /api/link 2>/dev/null)" || out=""
+    printf '%s' "${out}" | good || out=""
+    hist=""
+    if [ -n "${out}" ]; then
+      # the pairs recorded changes, for «since when» (a history that does not answer only leaves it out)
+      [ "${SECONDS}" -le 6 ] && hist="$(DGO_LINK_API_MAX=2 bound 2 bash "${BASH_SOURCE[0]}" __get '/api/link/history?limit=400' 2>/dev/null || true)"
+      ( umask 077
+        printf '%s' "${out}" > "${cache}.link.$$" && mv -f "${cache}.link.$$" "${cache}.link" \
+          && { [ -z "${hist}" ] || { printf '%s' "${hist}" > "${cache}.hist.$$" && mv -f "${cache}.hist.$$" "${cache}.hist"; }; } \
+          && date +%s > "${cache}.at.$$" && mv -f "${cache}.at.$$" "${cache}.at" ) 2>/dev/null \
+        || rm -f "${cache}.link.$$" "${cache}.hist.$$" "${cache}.at.$$" 2>/dev/null
+    elif [ -s "${cache}.link" ] && [ -s "${cache}.at" ] && good < "${cache}.link"; then
+      out="$(cat "${cache}.link")"; hist="$(cat "${cache}.hist" 2>/dev/null || true)"; measured_at="$(cat "${cache}.at")"
+    else
+      echo "לא נמדד: dgo-extend did not answer within ${SECONDS} s, and no earlier reading is kept here (is the app up?)" >&2
+      exit 1
+    fi
+    printf '%s\n%s' "${out}" "${hist}" | MEASURED_AT="${measured_at}" WAITED="${SECONDS}" python3 -c '
+import ipaddress, json, sys, time
+raw = sys.stdin.read()
+d, end = json.JSONDecoder().raw_decode(raw.lstrip())
+try:
+    hist = (json.JSONDecoder().raw_decode(raw.lstrip()[end:].lstrip())[0].get("items") or [])
+except (ValueError, AttributeError):
+    hist = []
+def since(at):
+    if not at:
+        return "since: not recorded"
+    age = max(0, int(time.time() - float(at)))
+    ago = ("%dd%dh" % (age // 86400, age % 86400 // 3600) if age >= 86400 else
+           "%dh%02dm" % (age // 3600, age % 3600 // 60) if age >= 3600 else "%dm" % (age // 60))
+    return "since %s (%s)" % (time.strftime("%m-%d %H:%MZ", time.gmtime(float(at))), ago)
+def private(addr):
+    """True for a private address (the LAN); False for a public one or a name. A port, brackets and an
+    IPv6 zone go first; a bare IPv6 address (the door gives one, with no port) is read whole."""
+    s = str(addr or "").strip()
+    if s.startswith("["):
+        s = s[1:].split("]", 1)[0]
+    else:
+        try:
+            return ipaddress.ip_address(s.split("%", 1)[0]).is_private
+        except ValueError:
+            s = s.rsplit(":", 1)[0]
+    try:
+        return ipaddress.ip_address(s.split("%", 1)[0]).is_private
+    except ValueError:
+        return False
 h = d.get("home") or {}
 print("home: %s  slot=%s  %s  %s" % (h.get("id"), h.get("slot"), h.get("domain"), h.get("fingerprint") or ""))
+import os
+kept = os.environ.get("MEASURED_AT") or ""
+if kept:
+    # the live read missed its time (DGO-1784): what follows is the last reading kept, with its age
+    age = max(0, int(time.time() - float(kept)))
+    print("measured: %ds ago - the live read did not answer within %s s; this is the last reading kept (נמדד לפני %d שניות)" % (
+        age, os.environ.get("WAITED") or "?", age))
 at = h.get("listen") or {}
 if at.get("moved_from"):
     # the address this office declares is no longer where it is reached; the next run re-declares it
@@ -71,7 +166,26 @@ for it in (d.get("items") or []):
         it.get("office"), "link" if it.get("declared") else "-",
         it.get("peer_slot") or "-", it.get("endpoint") or "-",
         it.get("direction") or "-", it.get("peer_fingerprint") or ""))
-    print("  %-10s answers: %-8s handshake: %s" % ("", it.get("state") or "-", shook))
+    # WHAT «answers» MEANS TO THE OWNER (2026-11-10): «down» is an office that is off. A tunnel with a fresh
+    # handshake whose catalog check did not answer in time is CONNECTED - said so, never called down; and
+    # an office not measured yet is «not measured», by name.
+    st = it.get("state") or "-"
+    if st == "down" and (it.get("verdict") or {}).get("hop") == "office":   # the verdict the alarm reads, one word
+        st = "connected - the check did not answer (מחובר, הבדיקה לא ענתה)"
+    elif st == "unknown":
+        st = "not measured (לא נמדד)"
+    print("  %-10s answers: %-8s handshake: %s" % ("", st, shook))
+    if it.get("kind") == "office" and it.get("declared"):
+        # An INSTALLED office: its end of the tunnel is a host-level wg-quick on that machine, shipped
+        # from here over SSH, and nothing on that office measures it. When that office also has its own
+        # DGO Extend, the link has two possible appliers, and its own status read «handshake: never»
+        # while the host tunnel handshook (DGO-1363). Its catalog is the evidence: only a DGO Extend
+        # answers the pull (up, even with nothing given to this office) or ever stored one. Said here
+        # as a STATE, first; the pair moves to a join through the door of the far office. (No
+        # apostrophe in this block: the program is one single-quoted shell word.)
+        own = bool(it.get("apps")) or it.get("state") == "up"
+        print("  %-10s layout: installed (a tunnel on the far host)%s" % ("", (
+            " - it has its own DGO Extend: due to become a join pair (DGO-1363)" if own else "")))
     sp = it.get("source_port") or {}
     if sp.get("port"):
         # the one repair NEITHER end can see: this office moved ITS OWN source port for the pair,
@@ -81,9 +195,64 @@ for it in (d.get("items") or []):
         print("  %-10s source port: %s%s — הוזז פורט מקור (%sx)%s" % (
             "", sp.get("port"), (" (was %s)" % sp["was"]) if sp.get("was") else "",
             sp.get("count") or 1, ("  " + str(sp["why"])) if sp.get("why") else ""))
+    # THE PATH, ONE WORD, AND SINCE WHEN (DGO-1098): direct (ישיר), the home network (LAN), the hub
+    # relay (ממסר) or down (למטה) — or not measured (לא נמדד), which is never called down. A TCP pair says
+    # it from its carrier: `relayed` is the hub joining the
+    # two sides, a private address is the LAN, a name or a public address is the peer itself (its own
+    # HTTPS door included). A UDP pair says it from where WireGuard last heard the peer. A pair is up only
+    # while its TUNNEL answers: a carrier can hold the path for days with no handshake inside it (the Dell,
+    # 2026-11-10). «since» is when the current state began: for a live TCP path the later of the carrier
+    # session start and the start of the run of the tunnel answering in the link history.
+    c = it.get("carry") or {}
+    alive = bool(t and t.get("alive"))
+    tcp = it.get("transport") == "tcp"
+    if tcp and c.get("state") == "up":
+        lan = private(c.get("via"))
+        word = "ממסר" if c.get("relayed") else ("LAN" if lan else "ישיר")
+        if not t:
+            word = "לא נמדד - the carrier is up (%s), the tunnel is not measured" % word
+        elif not alive:
+            word = "למטה - the carrier is up (%s) but the tunnel does not answer" % word
+    elif tcp and not c:
+        word = "לא נמדד - the carrier says nothing (is dgo-carry running?)"
+    elif tcp:
+        word = "למטה"
+    elif not t:
+        word = "לא נמדד - the tunnel is not measured"
+    else:
+        lan = private(t.get("endpoint") or it.get("endpoint"))
+        word = ("LAN" if lan else "ישיר") if alive else "למטה"
+    up = not word.startswith("למטה")
+    # the history: one row per change of a pair (and a beat while nothing changes), oldest first. A row
+    # says the TUNNEL answered when it is ok, or when it failed past the tunnel — at the office or its door
+    # (`_verdict`: `pair` is decided before the tunnel is looked at, `listen` after it was found dead). A
+    # hop that changes inside a run is not a new run; a run that began before the oldest line kept is «or
+    # before» that line; a state the history has not recorded yet began «after» its last line.
+    rows = [r for r in hist if r.get("office") == it.get("office") and r.get("ok") is not None]
+    run = None
+    for row in rows:
+        good = bool(row.get("ok")) or row.get("hop") in ("office", "door")
+        if run is None or run[0] != good:
+            run = (good, row.get("at"))
+    start, note, after = 0, "", False
+    if word.startswith("לא נמדד"):
+        pass                                   # nothing measured: no «since» either
+    elif run and run[0] == up:
+        start = run[1]
+        note = " or before" if rows[0].get("at") == run[1] else ""
+    elif run:
+        start, after = rows[-1].get("at"), True
+    if up and tcp and not word.startswith("לא נמדד") and c.get("since") and float(c["since"]) > float(start or 0):
+        # the path is younger than what the history says: its own start — exact when the history backs the
+        # state, a lower bound when it does not (the tunnel may have answered only later in that session)
+        start, note = c["since"], ""
+        after = not (run and run[0] == up)
+    shown = since(start)
+    if after and start:
+        shown, note = shown.replace("since ", "since after ", 1), " (no earlier: the history does not record when)"
+    print("  %-10s path: %-4s %s  %s%s" % ("", it.get("transport") or "udp", word, shown, note))
     if it.get("transport") == "tcp":
         # the TCP path the pair rides, as its carrier measured it (dgo-carry writes it every 5 s)
-        c = it.get("carry") or {}
         if not c:
             path = "not measured - is dgo-carry running?"
         elif c.get("state") == "up":
@@ -91,8 +260,11 @@ for it in (d.get("items") or []):
                 c.get("via"), "dialed" if c.get("dialed") else "accepted", c.get("rtt_ms") or 0, c.get("heard_s"))
         else:
             path = "%s%s" % (c.get("state"), (" - " + c["error"]) if c.get("error") else "")
-        print("  %-10s path: tcp  %s" % ("", path))
+        print("  %-10s carry: %s" % ("", path))
 '
+    rc=$?
+    [ "${rc}" = 0 ] || exit "${rc}"        # the reading could not be drawn: said by its own code
+    [ -z "${measured_at}" ] || exit 3      # an earlier reading, shown with its age: never read as a live pass
     ;;
   transport)
     MODE="${3:-}"

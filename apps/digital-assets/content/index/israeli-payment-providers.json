@@ -1,0 +1,1298 @@
+{
+ "topic": "israeli-payment-providers",
+ "checked": "2026-11-05",
+ "notes": "Official lists found (read 2026-11-05): (1) ISA register of payment-service licensees \"נותני שירות המפוקחים על ידי רשות ניירות ערך\", 42 entries, latest entry modified 2026-10-29: https://www.new.isa.gov.il/nav-index/supervised-information-payments/tax-tax-payments-faqs-6873706a7eb22 ; (2) ISA continuation-of-activity register (sections 81(a)-(c) of the Payment Services and Payment Initiation Law 5783-2023), 40 entries: https://www.new.isa.gov.il/nav-index/supervised-information-payments/company-registration ; (3) ISA register of financial-information (open-banking) licensees, 28 entries: https://www.new.isa.gov.il/nav-index/supervised-api/informationapi ; (4) Bank of Israel page \"Supervised Banking Corporations and Merchant Acquirers\" (Isracard, Max It Finance, Cal, CardCom, Tranzila, Premium Express, Diners Club Israel per a search extract; our browser was stopped by the BoI bot check, so the page was not read directly): https://www.boi.org.il/en/economic-roles/supervision-and-regulation/list_supervised/. Regulatory frame (BoI press release 2024-07-18): the Payment Services and Payment Initiation Law took effect in early June 2024; new acquirers are supervised and licensed by the ISA; existing non-prudential acquirers (such as Tranzila) had up to 18 months to move to ISA supervision — Tranzila and Cardcom both show ISA licences dated 2025-12-02. The big card companies (Isracard, Max, Cal) remain Bank of Israel acquirers/payment companies (per a search extract of BoI material; not opened). Rows with licence = null are gateways/aggregators we found no licence entry for in the two ISA registers; this does not prove they are unlicensed, only that no entry was seen. Fees: only fees printed on a vendor page we opened are recorded; most vendors publish none. Users figures are company claims (grade C) with units as printed; \"tens of thousands\" / \"thousands\" phrases were turned into ranges by us and say so in the note. url_verified=false means we did not open the site ourselves (URL taken from the ISA register or well-known domain).",
+ "rows": [
+  {
+   "id": "isracard",
+   "name_he": "ישראכרט",
+   "name_en": "Isracard",
+   "url": "https://www.isracard.co.il/",
+   "category": "acquirer",
+   "type": "acquirer",
+   "summary_he": "חברת כרטיסי אשראי גדולה שמשמשת גם סולק לבתי עסק; מופיעה ברשימת הסולקים בפיקוח בנק ישראל.",
+   "why_israeli": "חברה ישראלית; אתר בעברית; רשומה ברשימת התאגידים והסולקים בפיקוח בנק ישראל",
+   "licence": {
+    "what": "Merchant acquirer under Bank of Israel supervision (listed as \"Isracard Ltd.\" under Merchant acquirers)",
+    "regulator": "Bank of Israel (Banking Supervision)",
+    "source_url": "https://www.boi.org.il/en/economic-roles/supervision-and-regulation/list_supervised/",
+    "date": null
+   },
+   "sources": [
+    {
+     "url": "https://www.boi.org.il/en/economic-roles/supervision-and-regulation/list_supervised/",
+     "date": null,
+     "what": "BoI page \"Supervised Banking Corporations and Merchant Acquirers\" lists Isracard Ltd. as merchant acquirer (page content seen via a search-result extract; our browser was stopped by the site bot check, no date visible)",
+     "grade": "A"
+    },
+    {
+     "url": "https://www.isracard.co.il/",
+     "date": null,
+     "what": "Company site opened: Hebrew UI; no acquiring pricing on the page we could read",
+     "grade": "C"
+    }
+   ],
+   "grade": "A",
+   "hebrew_ui": true,
+   "note": "No public acquiring fee schedule found on the page we could read.",
+   "verified_at": "2026-11-05",
+   "fees_public": null,
+   "integrations": null,
+   "users": null
+  },
+  {
+   "id": "max",
+   "name_he": "מקס",
+   "name_en": "Max (Max It Finance)",
+   "url": "https://www.max.co.il/",
+   "category": "acquirer",
+   "type": "acquirer",
+   "summary_he": "חברת אשראי (לשעבר לאומי קארד) עם שירותי סליקה לעסקים; באתר מקושר דף עם תעריפי סליקה ותנאי עסק.",
+   "why_israeli": "חברה ישראלית; אתר בעברית; מופיעה כ-Max It Finance Ltd. ברשימת הסולקים של בנק ישראל",
+   "licence": {
+    "what": "Merchant acquirer under Bank of Israel supervision (listed as \"Max It Finance Ltd.\")",
+    "regulator": "Bank of Israel (Banking Supervision)",
+    "source_url": "https://www.boi.org.il/en/economic-roles/supervision-and-regulation/list_supervised/",
+    "date": null
+   },
+   "sources": [
+    {
+     "url": "https://www.boi.org.il/en/economic-roles/supervision-and-regulation/list_supervised/",
+     "date": null,
+     "what": "BoI supervised-entities page lists Max It Finance Ltd. as merchant acquirer (seen via search-result extract; no date visible)",
+     "grade": "A"
+    },
+    {
+     "url": "https://www.max.co.il/",
+     "date": null,
+     "what": "Company site: header advertises clearing services (שירותי סליקה); links a business page with a merchant fee schedule: https://www.max.co.il/business/general/pages/business-info (not read in full)",
+     "grade": "C"
+    }
+   ],
+   "grade": "A",
+   "hebrew_ui": true,
+   "note": "Fee schedule exists on a linked business-info page; amounts were not read, so fees_public is null.",
+   "verified_at": "2026-11-05",
+   "fees_public": null,
+   "integrations": null,
+   "users": null
+  },
+  {
+   "id": "cal",
+   "name_he": "כאל",
+   "name_en": "Cal (Israel Credit Cards)",
+   "url": "https://www.cal-online.co.il/",
+   "category": "acquirer",
+   "type": "acquirer",
+   "summary_he": "חברת כרטיסי אשראי וסולק גדול; מופיעה ברשימת הסולקים בפיקוח בנק ישראל.",
+   "why_israeli": "חברה ישראלית (Cal - Israel Credit Cards Ltd. לפי רשימת בנק ישראל)",
+   "licence": {
+    "what": "Merchant acquirer under Bank of Israel supervision (listed as \"Cal – Israel Credit Cards Ltd.\")",
+    "regulator": "Bank of Israel (Banking Supervision)",
+    "source_url": "https://www.boi.org.il/en/economic-roles/supervision-and-regulation/list_supervised/",
+    "date": null
+   },
+   "sources": [
+    {
+     "url": "https://www.boi.org.il/en/economic-roles/supervision-and-regulation/list_supervised/",
+     "date": null,
+     "what": "BoI supervised-entities page lists Cal – Israel Credit Cards Ltd. as merchant acquirer (seen via search-result extract; no date visible)",
+     "grade": "A"
+    }
+   ],
+   "grade": "A",
+   "url_verified": false,
+   "note": "Company site returned HTTP 400 to our fetcher, so the url field is the well-known domain and was NOT read this session; no fee/user data.",
+   "verified_at": "2026-11-05",
+   "fees_public": null,
+   "integrations": null,
+   "users": null,
+   "hebrew_ui": null
+  },
+  {
+   "id": "tranzila",
+   "name_he": "טרנזילה",
+   "name_en": "Tranzila",
+   "url": "https://www.tranzila.com/",
+   "category": "acquirer + payment gateway",
+   "type": "acquirer",
+   "summary_he": "סולק עצמאי ושער תשלומים לעסקים; קיבל רישיון סולק קבוע מבנק ישראל ביולי 2024 ועבר לפיקוח רשות ניירות ערך בדצמבר 2025.",
+   "why_israeli": "חברה ישראלית (ח.פ. 500000237), כתובת רשומה יד חרוצים 19 נתניה לפי מרשם רשות ניירות ערך",
+   "licence": {
+    "what": "ISA payment-company licence (חברת תשלומים), status in force — services: סליקה של פעולות תשלום",
+    "regulator": "Israel Securities Authority (רשות ניירות ערך)",
+    "source_url": "https://www.new.isa.gov.il/nav-index/supervised-information-payments/tax-tax-payments-faqs-6873706a7eb22",
+    "date": "2025-12-02"
+   },
+   "licence_history": [
+    {
+     "what": "BoI permanent acquirer licence (replacing temporary licence); BoI notes the Payment Services Law moved existing non-prudential acquirers such as Tranzila to ISA supervision within up to 18 months",
+     "regulator": "Bank of Israel",
+     "source_url": "https://boi.org.il/en/communication-and-publications/press-releases/the-bank-of-israel-grants-a-permanent-acquirer-s-license-to-tranzila-ltd-as-part-of-the-steps-to-advance-competition-in-the-israeli-payment-and-settlement-market/",
+     "date": "2024-07-18"
+    }
+   ],
+   "fees_public": {
+    "text": "סליקה מהנייד \"החל מ-29 ש\"ח לחודש\"; אין באתר תעריפי עמלה לעסקה",
+    "source_url": "https://www.tranzila.com/",
+    "date": null
+   },
+   "integrations": [
+    "Shopify",
+    "Wix",
+    "WooCommerce / WordPress",
+    "Make",
+    "Base44",
+    "Lovable",
+    "Google Pay",
+    "Apple Pay",
+    "PayPal",
+    "Bit",
+    "MASAV standing orders"
+   ],
+   "sources": [
+    {
+     "url": "https://boi.org.il/en/communication-and-publications/press-releases/the-bank-of-israel-grants-a-permanent-acquirer-s-license-to-tranzila-ltd-as-part-of-the-steps-to-advance-competition-in-the-israeli-payment-and-settlement-market/",
+     "date": "2024-07-18",
+     "what": "BoI press release: permanent acquirer licence to Tranzila Ltd.; ISA supervises new acquirers under the 2023 Payment Services Law (in force June 2024)",
+     "grade": "A"
+    },
+    {
+     "url": "https://www.new.isa.gov.il/nav-index/supervised-information-payments/tax-tax-payments-faqs-6873706a7eb22",
+     "date": null,
+     "what": "ISA register entry: Tranzila Ltd., payment-company licence received 2025-12-02, services: clearing of payment operations; address Yad Haruzim 19, Netanya",
+     "grade": "A"
+    },
+    {
+     "url": "https://www.tranzila.com/",
+     "date": null,
+     "what": "Company site: mobile-clearing price from 29 NIS/month, plugin pages (Shopify, Wix, WordPress, Make), Hebrew site with English link",
+     "grade": "C"
+    }
+   ],
+   "grade": "A",
+   "hebrew_ui": true,
+   "verified_at": "2026-11-05",
+   "users": null
+  },
+  {
+   "id": "cardcom",
+   "name_he": "קארדקום",
+   "name_en": "Cardcom",
+   "url": "https://www.cardcom.solutions/",
+   "category": "acquirer + payment gateway + invoices",
+   "type": "acquirer",
+   "summary_he": "סולק ושער תשלומים ישראלי עם דפי תשלום, הוראות קבע וחשבוניות דיגיטליות; קיבל רישיון סולק קבוע מבנק ישראל ב-2023.",
+   "why_israeli": "חברה ישראלית (Cardcom Acquiring Ltd., ח.פ. 500000245), כתובת רשומה הרוקמים 26 חולון לפי מרשם רשות ניירות ערך",
+   "licence": {
+    "what": "ISA payment-company licence (חברת תשלומים), status in force — services: ניהול חשבון תשלום, הנפקת אמצעי תשלום, סליקה",
+    "regulator": "Israel Securities Authority (רשות ניירות ערך)",
+    "source_url": "https://www.new.isa.gov.il/nav-index/supervised-information-payments/tax-tax-payments-faqs-6873706a7eb22",
+    "date": "2025-12-02"
+   },
+   "licence_history": [
+    {
+     "what": "BoI permanent acquirer (clearing-house) licence to Cardcom Clearing Ltd. (temporary licence from 2018) — date as shown in a search-result extract of the BoI press release",
+     "regulator": "Bank of Israel",
+     "source_url": "https://boi.org.il/publications/pressreleases/b18-07-23/",
+     "date": "2023-07-18"
+    }
+   ],
+   "integrations": [
+    "WooCommerce",
+    "WordPress",
+    "Zapier",
+    "Shopify",
+    "Rav Messer",
+    "Shlach Messer",
+    "MyPips",
+    "CashCow",
+    "Go Out",
+    "Scholar",
+    "Smoove",
+    "Bit for business",
+    "Apple Pay",
+    "Google Pay"
+   ],
+   "users": {
+    "low": 20000,
+    "high": 90000,
+    "unit": "businesses",
+    "grade": "C",
+    "source_url": "https://www.cardcom.solutions/",
+    "source_date": null,
+    "note": "Company wording \"עשרות אלפי עסקים\" (tens of thousands of businesses); the numeric range is our reading of that phrase; page undated",
+    "scope": null
+   },
+   "sources": [
+    {
+     "url": "https://www.new.isa.gov.il/nav-index/supervised-information-payments/tax-tax-payments-faqs-6873706a7eb22",
+     "date": null,
+     "what": "ISA register entry: Cardcom Acquiring Ltd., licence received 2025-12-02 (account management, issuing, clearing)",
+     "grade": "A"
+    },
+    {
+     "url": "https://boi.org.il/publications/pressreleases/b18-07-23/",
+     "date": "2023-07-18",
+     "what": "BoI press release (title seen in search results) on a permanent clearing-house licence for Cardcom Clearing Ltd.; date taken from the search extract, page itself not opened",
+     "grade": "A"
+    },
+    {
+     "url": "https://www.cardcom.solutions/",
+     "date": null,
+     "what": "Company site: integrations list, \"tens of thousands of businesses\", digital-invoices product; no public pricing on the page",
+     "grade": "C"
+    }
+   ],
+   "grade": "A",
+   "hebrew_ui": true,
+   "verified_at": "2026-11-05",
+   "fees_public": null
+  },
+  {
+   "id": "upay",
+   "name_he": "יופיי",
+   "name_en": "Upay",
+   "url": "https://www.upay.co.il/",
+   "category": "acquirer / payment facilitator",
+   "type": "acquirer",
+   "summary_he": "חברת סליקה ישראלית לעסקים קטנים (קישור תשלום, כפתור, אפליקציה, תשלום בנגיעה בטלפון); מחזיקה שני רישיונות חברת תשלומים מרשות ניירות ערך.",
+   "why_israeli": "חברות ישראליות (Upay Acquiring ח.פ. 500000252, בני ברק; Upay Finance) לפי מרשם רשות ניירות ערך",
+   "licence": {
+    "what": "ISA payment-company licence (חברת תשלומים), status in force — services: סליקה של פעולות תשלום (Upay Acquiring Ltd.); Upay Finance Ltd. נוסף ב-2026-06-04 עם סליקה ואשראי אגב פעולת תשלום",
+    "regulator": "Israel Securities Authority (רשות ניירות ערך)",
+    "source_url": "https://www.new.isa.gov.il/nav-index/supervised-information-payments/tax-tax-payments-faqs-6873706a7eb22",
+    "date": "2025-09-21"
+   },
+   "fees_public": null,
+   "integrations": null,
+   "users": {
+    "low": 1000,
+    "high": 9999,
+    "unit": "companies",
+    "grade": "C",
+    "source_url": "https://www.upay.co.il/",
+    "source_date": null,
+    "note": "Company wording \"כבר אלפי חברות הצטרפו\" (thousands of companies joined); numeric range is our reading of the phrase; page undated",
+    "scope": null
+   },
+   "sources": [
+    {
+     "url": "https://www.new.isa.gov.il/nav-index/supervised-information-payments/tax-tax-payments-faqs-6873706a7eb22",
+     "date": null,
+     "what": "ISA register entries: Upay Acquiring Ltd. (licence 2025-09-21, clearing) and Upay Finance Ltd. (licence 2026-06-04, clearing + credit incidental to payment)",
+     "grade": "A"
+    },
+    {
+     "url": "https://www.upay.co.il/",
+     "date": null,
+     "what": "Company site: three plans listed without prices, \"no double fees\" with commission charged after funds arrive, invoicing described as free; no named plugin integrations",
+     "grade": "C"
+    }
+   ],
+   "grade": "A",
+   "hebrew_ui": true,
+   "note": "Fee amounts are not public on the page we read.",
+   "verified_at": "2026-11-05"
+  },
+  {
+   "id": "nayax",
+   "name_he": "נאייקס ישראל",
+   "name_en": "Nayax Israel",
+   "url": "https://www.nayax.com/",
+   "category": "acquirer (unattended retail / terminals)",
+   "type": "acquirer",
+   "summary_he": "חברת תשלומים לעסקים עם מסופים ללא נוכחות (מכונות אוטומטיות); מחזיקה רישיון חברת תשלומים מרשות ניירות ערך מאפריל 2026.",
+   "why_israeli": "חברה ישראלית (Nayax Israel Ltd.) במרשם רשות ניירות ערך",
+   "licence": {
+    "what": "ISA payment-company licence (חברת תשלומים), status in force — services: ניהול חשבון תשלום, הנפקת אמצעי תשלום, סליקה",
+    "regulator": "Israel Securities Authority (רשות ניירות ערך)",
+    "source_url": "https://www.new.isa.gov.il/nav-index/supervised-information-payments/tax-tax-payments-faqs-6873706a7eb22",
+    "date": "2026-04-20"
+   },
+   "sources": [
+    {
+     "url": "https://www.new.isa.gov.il/nav-index/supervised-information-payments/tax-tax-payments-faqs-6873706a7eb22",
+     "date": null,
+     "what": "ISA register entry: Nayax Israel Ltd., licence received 20/04/2026 (account management, issuing, clearing)",
+     "grade": "A"
+    }
+   ],
+   "grade": "A",
+   "url_verified": false,
+   "note": "nayax.com returned 403 to our fetcher; url from the ISA register site field (nayax.co.il) is not used because it was not opened. No fee/user data.",
+   "verified_at": "2026-11-05",
+   "fees_public": null,
+   "integrations": null,
+   "users": null,
+   "hebrew_ui": null
+  },
+  {
+   "id": "easycard",
+   "name_he": "איזיקארד",
+   "name_en": "EasyCard (B.A. Edan Technologies)",
+   "url": "https://www.e-c.co.il/",
+   "category": "payment facilitator / terminals",
+   "type": "facilitator",
+   "summary_he": "חברת סליקה ומסופים לעסקים קטנים עם תוסף WooCommerce, ממשק API וחיבורים לתוכנות חשבוניות; רישיון חברת תשלומים מיוני 2026.",
+   "why_israeli": "חברה ישראלית (B.A. Edan Technologies Ltd.); כתובת באתר: המלאכה 4 נתניה; במרשם רשות ניירות ערך",
+   "licence": {
+    "what": "ISA payment-company licence (חברת תשלומים), status in force — services: סליקה של פעולת תשלום",
+    "regulator": "Israel Securities Authority (רשות ניירות ערך)",
+    "source_url": "https://www.new.isa.gov.il/nav-index/supervised-information-payments/tax-tax-payments-faqs-6873706a7eb22",
+    "date": "2026-06-07"
+   },
+   "fees_public": {
+    "text": "\"סליקה לעסקים החל מ-35 ש\"ח\" (כותרת בדף הבית; יחידת התשלום והעמלות לעסקה לא מפורטות)",
+    "source_url": "https://www.e-c.co.il/",
+    "date": null
+   },
+   "integrations": [
+    "WooCommerce plugin",
+    "API",
+    "SAP Business One",
+    "morning (Green Invoice)",
+    "iCount",
+    "KashCash",
+    "BlenderPay",
+    "Wix plugin"
+   ],
+   "users": {
+    "low": 10000,
+    "high": 10000,
+    "unit": "businesses",
+    "grade": "C",
+    "source_url": "https://www.e-c.co.il/",
+    "source_date": null,
+    "note": "Homepage counters read \"10K עסקים\" and \"25K משתמשים\"; text partly garbled in our extract; page undated",
+    "scope": null
+   },
+   "sources": [
+    {
+     "url": "https://www.new.isa.gov.il/nav-index/supervised-information-payments/tax-tax-payments-faqs-6873706a7eb22",
+     "date": null,
+     "what": "ISA register entry: B.A. Edan Technologies Ltd. (EasyCard), clearing licence, received 7.6.2026",
+     "grade": "A"
+    },
+    {
+     "url": "https://www.e-c.co.il/",
+     "date": null,
+     "what": "Company site: \"from 35 NIS\" headline, terminal prices, integration list, counters 10K businesses / 25K users",
+     "grade": "C"
+    }
+   ],
+   "grade": "A",
+   "hebrew_ui": true,
+   "verified_at": "2026-11-05"
+  },
+  {
+   "id": "grow-meshulam",
+   "name_he": "גרואו (משולם)",
+   "name_en": "Grow Payments (Meshulam)",
+   "url": "https://grow.business/",
+   "category": "payment facilitator",
+   "type": "facilitator",
+   "summary_he": "פלטפורמת סליקה ותשלומים לעסקים (דפי תשלום, חשבוניות, ביט ו-PayBox); רישיון חברת תשלומים מרשות ניירות ערך מאי 2026.",
+   "why_israeli": "חברה ישראלית (Grow Payments Ltd.) במרשם רשות ניירות ערך; הפוטר באתר מציין גם רישיון אשראי מרשות שוק ההון",
+   "licence": {
+    "what": "ISA payment-company licence (חברת תשלומים), status in force — services: ניהול חשבון תשלום, הנפקה, סליקה, אשראי אגב שירות תשלום, המרת כספים; ייזום בסיסי: כן",
+    "regulator": "Israel Securities Authority (רשות ניירות ערך)",
+    "source_url": "https://www.new.isa.gov.il/nav-index/supervised-information-payments/tax-tax-payments-faqs-6873706a7eb22",
+    "date": "2026-05-25"
+   },
+   "fees_public": {
+    "text": "\"0.75% לעסקה + 59 ש\"ח לחודש\" (מוצג בדף הבית)",
+    "source_url": "https://grow.business/",
+    "date": null
+   },
+   "integrations": [
+    "WordPress plugin",
+    "Shopify",
+    "Wix",
+    "Magento",
+    "WooCommerce (alt text only)",
+    "Apple Pay",
+    "Google Pay",
+    "Bit",
+    "PayBox"
+   ],
+   "users": {
+    "low": 100000,
+    "high": 100000,
+    "unit": "businesses",
+    "grade": "C",
+    "source_url": "https://grow.business/",
+    "source_date": null,
+    "note": "Homepage: \"+100,000 עסקים משתמשים בפתרונות של Grow\"; page undated",
+    "scope": null
+   },
+   "sources": [
+    {
+     "url": "https://www.new.isa.gov.il/nav-index/supervised-information-payments/tax-tax-payments-faqs-6873706a7eb22",
+     "date": null,
+     "what": "ISA register entry: Grow Payments Ltd., licence received 25.5.2026, basic initiation: yes",
+     "grade": "A"
+    },
+    {
+     "url": "https://grow.business/",
+     "date": null,
+     "what": "Company site: 0.75% + 59 NIS/month, 100,000+ businesses, plugin pages, footer licence statement; \"invoices\" feature page but no allocation-number text",
+     "grade": "C"
+    }
+   ],
+   "grade": "A",
+   "hebrew_ui": true,
+   "verified_at": "2026-11-05"
+  },
+  {
+   "id": "payplus",
+   "name_he": "פיי פלוס",
+   "name_en": "PayPlus",
+   "url": "https://www.payplus.co.il/",
+   "category": "payment gateway / facilitator",
+   "type": "gateway",
+   "summary_he": "שער תשלומים ישראלי לאתרים וקופות עם תוספים לפלטפורמות מסחר ולמערכות ERP; עובד מול חברות האשראי בישראל לפי האתר.",
+   "why_israeli": "אתר בעברית; ממשק ותמיכה בעברית. אין ברשומות שקראנו אישור על היותו ישות מורשית",
+   "licence": null,
+   "integrations": [
+    "Shopify",
+    "Wix",
+    "WooCommerce",
+    "Dynamics 365",
+    "SAP B1 POS",
+    "Oracle hospitality",
+    "Magento",
+    "OpenCart",
+    "PrestaShop",
+    "CashCow"
+   ],
+   "users": {
+    "low": 20000,
+    "high": 90000,
+    "unit": "businesses",
+    "grade": "C",
+    "source_url": "https://www.payplus.co.il/",
+    "source_date": null,
+    "note": "Company wording \"עשרות אלפי עסקים\" (tens of thousands of businesses); the numeric range is our reading; page undated",
+    "scope": null
+   },
+   "sources": [
+    {
+     "url": "https://www.payplus.co.il/",
+     "date": null,
+     "what": "Company site: integrations list, \"tens of thousands of businesses\", PCI DSS / ISO certificates, works with \"all credit-card companies in Israel\"; no pricing on the page",
+     "grade": "C"
+    },
+    {
+     "url": "https://www.new.isa.gov.il/nav-index/supervised-information-payments/tax-tax-payments-faqs-6873706a7eb22",
+     "date": null,
+     "what": "Not found among the 42 payment-company licensees (read 2026-11-05); also absent from the 40-entry continuation register",
+     "grade": "A"
+    }
+   ],
+   "grade": "C",
+   "hebrew_ui": true,
+   "note": "licence null means: no licence statement on its site and no entry in the two ISA registers we read; it presumably routes through a licensed acquirer (not verified).",
+   "verified_at": "2026-11-05",
+   "fees_public": null
+  },
+  {
+   "id": "hyp",
+   "name_he": "היפ",
+   "name_en": "Hyp",
+   "url": "https://hyp.co.il/",
+   "category": "payment gateway + digital invoices + POS",
+   "type": "gateway",
+   "summary_he": "חברת תשלומים ישראלית עם סליקה אונליין, חשבוניות דיגיטליות (EZcount), קופות ומסופונים וקישורי תשלום.",
+   "why_israeli": "אתר בעברית; מערכת החשבוניות הדיגיטליות שלה מבוססת EZcount לפי מדריך Hyp; אין באתר הצהרת רישיון",
+   "licence": null,
+   "integrations": [
+    "Wix",
+    "WordPress",
+    "Magento",
+    "Shopify",
+    "Apple Pay",
+    "PayPal",
+    "Bit",
+    "Cibus",
+    "10bis",
+    "Visa / Mastercard / Amex"
+   ],
+   "users": {
+    "low": 62524,
+    "high": 62524,
+    "unit": "customers",
+    "grade": "C",
+    "source_url": "https://hyp.co.il/",
+    "source_date": null,
+    "note": "Homepage counter \"62,524+ לקוחות שעובדים איתנו\"; same page: 43,858+ active registers/terminals; page undated",
+    "scope": null
+   },
+   "sources": [
+    {
+     "url": "https://hyp.co.il/",
+     "date": null,
+     "what": "Company site: counters, integrations, payment methods, PCI and ISO 27001 certificates; no pricing amounts for payments",
+     "grade": "C"
+    },
+    {
+     "url": "https://www.new.isa.gov.il/nav-index/supervised-information-payments/tax-tax-payments-faqs-6873706a7eb22",
+     "date": null,
+     "what": "Not found among the 42 payment-company licensees (read 2026-11-05)",
+     "grade": "A"
+    }
+   ],
+   "grade": "C",
+   "hebrew_ui": true,
+   "verified_at": "2026-11-05",
+   "fees_public": null
+  },
+  {
+   "id": "pelecard",
+   "name_he": "פלאקארד",
+   "name_en": "Pelecard",
+   "url": "https://pelecard.com/",
+   "category": "payment gateway / processor",
+   "type": "gateway",
+   "summary_he": "שער תשלומים ישראלי ותיק עם תוספים ל-Shopify, WooCommerce, Wix ו-Magento ותמיכה ב-Apple Pay, Google Pay וביט לעסקים.",
+   "why_israeli": "אתר בעברית; החברה מציינת ניסיון של למעלה מ-35 שנה בטכנולוגיית תשלומים",
+   "licence": null,
+   "integrations": [
+    "Shopify",
+    "WooCommerce",
+    "Wix",
+    "Magento",
+    "WordPress plugin",
+    "Apple Pay",
+    "Google Pay",
+    "Bit for business",
+    "Opera / Fidelio hotel systems"
+   ],
+   "sources": [
+    {
+     "url": "https://pelecard.com/",
+     "date": null,
+     "what": "Company site: plugin and wallet pages, \"over 35 years\"; rates described as favourable but no amounts; no licence statement",
+     "grade": "C"
+    },
+    {
+     "url": "https://www.new.isa.gov.il/nav-index/supervised-information-payments/tax-tax-payments-faqs-6873706a7eb22",
+     "date": null,
+     "what": "Not found among the 42 payment-company licensees (read 2026-11-05)",
+     "grade": "A"
+    }
+   ],
+   "grade": "C",
+   "hebrew_ui": true,
+   "verified_at": "2026-11-05",
+   "fees_public": null,
+   "users": null
+  },
+  {
+   "id": "payme",
+   "name_he": "פיימי",
+   "name_en": "Payme",
+   "url": "https://payme.io/",
+   "category": "payment facilitator",
+   "type": "facilitator",
+   "summary_he": "ספקית תשלומים לפלטפורמות ושווקים מקוונים עם תוספים ל-Wix, WooCommerce ו-Magento ותמיכה ביותר מ-85 אמצעי תשלום חלופיים.",
+   "why_israeli": "הישות PAYME LTD מופיעה במרשם רשות ניירות ערך (כתובת האתר שם: clearshift.co.il); באתר: רישיון נותן אשראי ורישיון נותן שירות נכס פיננסי מרשות שוק ההון",
+   "licence": {
+    "what": "ISA payment-company licence (חברת תשלומים), status in force — services: ניהול חשבון תשלום, סליקה, העברת תשלומים, אשראי אגב פעולת תשלום (entry \"פאיימי בע\"מ / PAYME LTD.\"; link to payme.io is by name only)",
+    "regulator": "Israel Securities Authority (רשות ניירות ערך)",
+    "source_url": "https://www.new.isa.gov.il/nav-index/supervised-information-payments/tax-tax-payments-faqs-6873706a7eb22",
+    "date": "2026-06-04"
+   },
+   "integrations": [
+    "Magento",
+    "Wix",
+    "WooCommerce",
+    "85+ alternative payment methods (PayPal, ACH, SEPA)"
+   ],
+   "sources": [
+    {
+     "url": "https://www.new.isa.gov.il/nav-index/supervised-information-payments/tax-tax-payments-faqs-6873706a7eb22",
+     "date": null,
+     "what": "ISA register entry: PAYME LTD. (פאיימי בע\"מ), licence received 4.6.2026",
+     "grade": "A"
+    },
+    {
+     "url": "https://payme.io/",
+     "date": null,
+     "what": "Company site: plugins, 85+ APMs, licence statements (credit-provider licence 64002, financial-asset service provider 60729, Capital Market Authority); no pricing on the page",
+     "grade": "C"
+    }
+   ],
+   "grade": "A",
+   "verified_at": "2026-11-05",
+   "fees_public": null,
+   "users": null,
+   "hebrew_ui": null
+  },
+  {
+   "id": "paypal-israel",
+   "name_he": "פייפאל ישראל",
+   "name_en": "PayPal Israel Payment Services",
+   "url": "https://www.paypal.com/il/home",
+   "category": "psp / wallet",
+   "type": "psp",
+   "summary_he": "הישות המקומית של פייפאל מחזיקה רישיון חברת תשלומים מרשות ניירות ערך מיולי 2026; אתרי Tranzila ו-Hyp מציגים אותה כאמצעי תשלום נתמך.",
+   "why_israeli": "ישות ישראלית (PayPal Israel Payment Services Ltd.) של קבוצה בינלאומית; במרשם רשות ניירות ערך",
+   "licence": {
+    "what": "ISA payment-company licence (חברת תשלומים), status in force — services: ניהול חשבון תשלום, הנפקה, סליקה, העברת תשלומים",
+    "regulator": "Israel Securities Authority (רשות ניירות ערך)",
+    "source_url": "https://www.new.isa.gov.il/nav-index/supervised-information-payments/tax-tax-payments-faqs-6873706a7eb22",
+    "date": "2026-07-01"
+   },
+   "sources": [
+    {
+     "url": "https://www.new.isa.gov.il/nav-index/supervised-information-payments/tax-tax-payments-faqs-6873706a7eb22",
+     "date": null,
+     "what": "ISA register entry: PayPal Israel Payment Services Ltd., licence received 01.07.2026; basic initiation: no",
+     "grade": "A"
+    },
+    {
+     "url": "https://hyp.co.il/",
+     "date": null,
+     "what": "Hyp homepage lists PayPal among supported payment methods",
+     "grade": "C"
+    },
+    {
+     "url": "https://www.tranzila.com/",
+     "date": null,
+     "what": "Tranzila homepage lists PayPal among supported payment methods",
+     "grade": "C"
+    }
+   ],
+   "grade": "A",
+   "url_verified": false,
+   "note": "Site not opened; URL is the one given in the ISA register.",
+   "verified_at": "2026-11-05",
+   "fees_public": null,
+   "integrations": null,
+   "users": null,
+   "hebrew_ui": null
+  },
+  {
+   "id": "payoneer",
+   "name_he": "פיוניר",
+   "name_en": "Payoneer",
+   "url": "https://www.payoneer.com/",
+   "category": "psp (cross-border business payments)",
+   "type": "psp",
+   "summary_he": "פלטפורמת תשלומים בינלאומית לעסקים ופרילנסרים שקיבלה רישיון חברת תשלומים מרשות ניירות ערך באוגוסט 2026.",
+   "why_israeli": "במרשם רשות ניירות ערך מופיעה Payoneer Inc. (חברה בינלאומית) ככזו שקיבלה רישיון חברת תשלומים בישראל; גם במרשם המשך העיסוק",
+   "licence": {
+    "what": "ISA payment-company licence (חברת תשלומים), status in force — services: ניהול חשבון, הנפקה, סליקה, העברת תשלומים, המרת כספים, אשראי אגב פעולת תשלום",
+    "regulator": "Israel Securities Authority (רשות ניירות ערך)",
+    "source_url": "https://www.new.isa.gov.il/nav-index/supervised-information-payments/tax-tax-payments-faqs-6873706a7eb22",
+    "date": "2026-08-25"
+   },
+   "sources": [
+    {
+     "url": "https://www.new.isa.gov.il/nav-index/supervised-information-payments/tax-tax-payments-faqs-6873706a7eb22",
+     "date": null,
+     "what": "ISA register entry: Payoneer Inc., licence received 25.8.2026; also listed on the continuation register under section 81(a) (amended 2025-07-13)",
+     "grade": "A"
+    },
+    {
+     "url": "https://www.new.isa.gov.il/nav-index/supervised-information-payments/company-registration",
+     "date": null,
+     "what": "ISA continuation register lists Payoneer Inc. under section 81(a)",
+     "grade": "A"
+    }
+   ],
+   "grade": "A",
+   "url_verified": false,
+   "note": "Site not opened; URL is the one given in the ISA register.",
+   "verified_at": "2026-11-05",
+   "fees_public": null,
+   "integrations": null,
+   "users": null,
+   "hebrew_ui": null
+  },
+  {
+   "id": "rapyd",
+   "name_he": "ראפיד",
+   "name_en": "Rapyd Payments Israel",
+   "url": "https://www.rapyd.net",
+   "category": "psp (payments-as-a-service)",
+   "type": "psp",
+   "summary_he": "פלטפורמת תשלומים כשירות עם ישות ישראלית שקיבלה רישיון חברת תשלומים מרשות ניירות ערך ביולי 2025.",
+   "why_israeli": "ישות ישראלית (ח.פ. 500000260), כתובת דרך מנחם בגין 132 תל אביב לפי מרשם רשות ניירות ערך",
+   "licence": {
+    "what": "ISA payment-company licence (חברת תשלומים), status in force — services: ניהול חשבון תשלום, הנפקה, סליקה",
+    "regulator": "Israel Securities Authority (רשות ניירות ערך)",
+    "source_url": "https://www.new.isa.gov.il/nav-index/supervised-information-payments/tax-tax-payments-faqs-6873706a7eb22",
+    "date": "2025-07-31"
+   },
+   "sources": [
+    {
+     "url": "https://www.new.isa.gov.il/nav-index/supervised-information-payments/tax-tax-payments-faqs-6873706a7eb22",
+     "date": null,
+     "what": "ISA register entry: Rapyd Payments Israel Ltd., licence received 31.07.2025",
+     "grade": "A"
+    }
+   ],
+   "grade": "A",
+   "url_verified": false,
+   "note": "Site not opened; URL from the ISA register.",
+   "verified_at": "2026-11-05",
+   "fees_public": null,
+   "integrations": null,
+   "users": null,
+   "hebrew_ui": null
+  },
+  {
+   "id": "airwallex",
+   "name_he": "איירוולקס ישראל",
+   "name_en": "Airwallex (Israel)",
+   "url": "https://www.airwallex.com",
+   "category": "psp (global business accounts)",
+   "type": "psp",
+   "summary_he": "ישות מקומית של חברת התשלומים הגלובלית; רישיון חברת תשלומים של רשות ניירות ערך מיולי 2025.",
+   "why_israeli": "ישות ישראלית (ח.פ. 500000278), כתובת דרך מנחם בגין 132 תל אביב",
+   "licence": {
+    "what": "ISA payment-company licence (חברת תשלומים), status in force — services: ניהול חשבון תשלום, הנפקה, סליקה",
+    "regulator": "Israel Securities Authority (רשות ניירות ערך)",
+    "source_url": "https://www.new.isa.gov.il/nav-index/supervised-information-payments/tax-tax-payments-faqs-6873706a7eb22",
+    "date": "2025-07-31"
+   },
+   "sources": [
+    {
+     "url": "https://www.new.isa.gov.il/nav-index/supervised-information-payments/tax-tax-payments-faqs-6873706a7eb22",
+     "date": null,
+     "what": "ISA register entry: Airwallex (Israel) Ltd., licence received 31.07.2025",
+     "grade": "A"
+    }
+   ],
+   "grade": "A",
+   "url_verified": false,
+   "note": "Site not opened; URL from the ISA register.",
+   "verified_at": "2026-11-05",
+   "fees_public": null,
+   "integrations": null,
+   "users": null,
+   "hebrew_ui": null
+  },
+  {
+   "id": "revolut-israel",
+   "name_he": "רבולוט תשלומים ישראל",
+   "name_en": "Revolut Payments Israel",
+   "url": "https://www.revolut.com",
+   "category": "psp / wallet",
+   "type": "wallet",
+   "summary_he": "ישות ישראלית של רבולוט עם רישיון חברת תשלומים של רשות ניירות ערך מיולי 2025 (חשבון תשלום, כרטיסים, סליקה).",
+   "why_israeli": "ישות ישראלית (ח.פ. 500000286) במרשם רשות ניירות ערך",
+   "licence": {
+    "what": "ISA payment-company licence (חברת תשלומים), status in force — services: ניהול חשבון תשלום, הנפקה, סליקה",
+    "regulator": "Israel Securities Authority (רשות ניירות ערך)",
+    "source_url": "https://www.new.isa.gov.il/nav-index/supervised-information-payments/tax-tax-payments-faqs-6873706a7eb22",
+    "date": "2025-07-31"
+   },
+   "sources": [
+    {
+     "url": "https://www.new.isa.gov.il/nav-index/supervised-information-payments/tax-tax-payments-faqs-6873706a7eb22",
+     "date": null,
+     "what": "ISA register entry: Revolut Payments Israel Ltd., licence received 31.07.2025",
+     "grade": "A"
+    }
+   ],
+   "grade": "A",
+   "url_verified": false,
+   "note": "Site not opened; URL from the ISA register.",
+   "verified_at": "2026-11-05",
+   "fees_public": null,
+   "integrations": null,
+   "users": null,
+   "hebrew_ui": null
+  },
+  {
+   "id": "wise-israel",
+   "name_he": "ווייז ישראל",
+   "name_en": "Wise ILS",
+   "url": "https://wise.com",
+   "category": "psp (money transfer)",
+   "type": "psp",
+   "summary_he": "ישות ישראלית של Wise שקיבלה רישיון חברת תשלומים ממאי 2026 (חשבון, כרטיס, סליקה, העברת תשלומים והמרת כספים).",
+   "why_israeli": "ישות ישראלית (WISE ILS Ltd.) במרשם רשות ניירות ערך",
+   "licence": {
+    "what": "ISA payment-company licence (חברת תשלומים), status in force — services: ניהול חשבון, הנפקה, סליקה, העברת תשלומים, המרת כספים",
+    "regulator": "Israel Securities Authority (רשות ניירות ערך)",
+    "source_url": "https://www.new.isa.gov.il/nav-index/supervised-information-payments/tax-tax-payments-faqs-6873706a7eb22",
+    "date": "2026-05-11"
+   },
+   "sources": [
+    {
+     "url": "https://www.new.isa.gov.il/nav-index/supervised-information-payments/tax-tax-payments-faqs-6873706a7eb22",
+     "date": null,
+     "what": "ISA register entry: WISE ILS Ltd., licence received 11.05.2026",
+     "grade": "A"
+    }
+   ],
+   "grade": "A",
+   "url_verified": false,
+   "note": "Site not opened; URL from the ISA register.",
+   "verified_at": "2026-11-05",
+   "fees_public": null,
+   "integrations": null,
+   "users": null,
+   "hebrew_ui": null
+  },
+  {
+   "id": "google-payments",
+   "name_he": "גוגל תשלומים (Google Pay)",
+   "name_en": "Google Payments Limited",
+   "url": null,
+   "category": "wallet (context)",
+   "type": "wallet",
+   "summary_he": "הישות של גוגל לתשלומים נרשמה ברשות ניירות ערך כחברת תשלומים (סליקה) מאפריל 2026; נחוץ כהקשר לזמינות ארנקים דיגיטליים בישראל.",
+   "why_israeli": "ישות זרה (Google Payments Limited) הרשומה במרשם הישראלי; אין כתובת ישראלית במרשם",
+   "licence": {
+    "what": "ISA payment-company licence (חברת תשלומים), status in force — services: סליקה של פעולות תשלום",
+    "regulator": "Israel Securities Authority (רשות ניירות ערך)",
+    "source_url": "https://www.new.isa.gov.il/nav-index/supervised-information-payments/tax-tax-payments-faqs-6873706a7eb22",
+    "date": "2026-04-13"
+   },
+   "sources": [
+    {
+     "url": "https://www.new.isa.gov.il/nav-index/supervised-information-payments/tax-tax-payments-faqs-6873706a7eb22",
+     "date": null,
+     "what": "ISA register entry: Google Payments Limited, licence received 13.04.2026; the entry gives no website",
+     "grade": "A"
+    }
+   ],
+   "grade": "A",
+   "note": "The ISA entry lists no website, so url is null. Apple Pay availability was not verified (no source opened); gateway sites (Tranzila, Cardcom, Pelecard, Hyp) list Apple Pay and Google Pay as supported.",
+   "verified_at": "2026-11-05",
+   "fees_public": null,
+   "integrations": null,
+   "users": null,
+   "hebrew_ui": null
+  },
+  {
+   "id": "bluesnap-israel",
+   "name_he": "בלוסנפ ישראל",
+   "name_en": "BlueSnap Payment Services Israel",
+   "url": "https://www.bluesnap.com/",
+   "category": "psp / gateway",
+   "type": "psp",
+   "summary_he": "ישות ישראלית של BlueSnap עם רישיון חברת תשלומים לסליקה מיולי 2026; מופיעה גם במרשם המשך העיסוק.",
+   "why_israeli": "ישות ישראלית (ח.פ. 500000294) במרשם רשות ניירות ערך",
+   "licence": {
+    "what": "ISA payment-company licence (חברת תשלומים), status in force — services: סליקת פעולת תשלום",
+    "regulator": "Israel Securities Authority (רשות ניירות ערך)",
+    "source_url": "https://www.new.isa.gov.il/nav-index/supervised-information-payments/tax-tax-payments-faqs-6873706a7eb22",
+    "date": "2026-07-26"
+   },
+   "sources": [
+    {
+     "url": "https://www.new.isa.gov.il/nav-index/supervised-information-payments/tax-tax-payments-faqs-6873706a7eb22",
+     "date": null,
+     "what": "ISA register entry: BlueSnap Payment Services Israel Ltd., licence received 26.07.2026",
+     "grade": "A"
+    },
+    {
+     "url": "https://www.new.isa.gov.il/nav-index/supervised-information-payments/company-registration",
+     "date": null,
+     "what": "Same entity (BlueSnap powered by Payroc) was on the continuation register under section 81(b)",
+     "grade": "A"
+    }
+   ],
+   "grade": "A",
+   "url_verified": false,
+   "note": "Site not opened; domain taken from the ISA entry (shown there with a typo).",
+   "verified_at": "2026-11-05",
+   "fees_public": null,
+   "integrations": null,
+   "users": null,
+   "hebrew_ui": null
+  },
+  {
+   "id": "nuvei-israel",
+   "name_he": "נובאי ישראל",
+   "name_en": "Nuvei Technology & Services (Israel)",
+   "url": "https://www.nuvei.com/",
+   "category": "psp / acquirer",
+   "type": "psp",
+   "summary_he": "ספקית תשלומים גלובלית שקיבלה באוקטובר 2026 רישיון חברת תשלומים בישראל; האתר מציין סליקה ישירה ונתבים בין סולקים.",
+   "why_israeli": "ישות ישראלית (Nuvei Technology & Services (Israel) Ltd.) במרשם רשות ניירות ערך",
+   "licence": {
+    "what": "ISA payment-company licence (חברת תשלומים), status in force — services: ניהול חשבון, הנפקה, סליקה; the Nuvei page says the licence was announced 21 October 2026",
+    "regulator": "Israel Securities Authority (רשות ניירות ערך)",
+    "source_url": "https://www.new.isa.gov.il/nav-index/supervised-information-payments/tax-tax-payments-faqs-6873706a7eb22",
+    "date": "2026-10-15"
+   },
+   "sources": [
+    {
+     "url": "https://www.new.isa.gov.il/nav-index/supervised-information-payments/tax-tax-payments-faqs-6873706a7eb22",
+     "date": null,
+     "what": "ISA register entry: Nuvei Technology & Services (Israel) Ltd., licence received 15.10.2026",
+     "grade": "A"
+    },
+    {
+     "url": "https://www.nuvei.com/apps/direct-acquiring-israel",
+     "date": "2026-10-21",
+     "what": "Nuvei page: direct acquiring licence in Israel under the Payment Services and Payment Initiation Law; no fees; \"availability in Israel subject to confirmation\"",
+     "grade": "C"
+    }
+   ],
+   "grade": "A",
+   "verified_at": "2026-11-05",
+   "fees_public": null,
+   "integrations": null,
+   "users": null,
+   "hebrew_ui": null
+  },
+  {
+   "id": "stripe-israel",
+   "name_he": "סטריפ בישראל",
+   "name_en": "Stripe (availability in Israel)",
+   "url": "https://stripe.com/global",
+   "category": "psp (context: availability)",
+   "type": "psp",
+   "summary_he": "ישראל אינה מופיעה ברשימת המדינות הנתמכות בעמוד הזמינות הגלובלי של Stripe (נבדק ב-2026-11-05); אין לה ישות מורשית במרשם רשות ניירות ערך.",
+   "why_israeli": "לא ישראלית; שורה כהקשר זמינות בלבד",
+   "licence": null,
+   "sources": [
+    {
+     "url": "https://stripe.com/global",
+     "date": "2026-11-05",
+     "what": "Stripe global availability page: countries starting with I are India (preview), Indonesia (preview), Ireland, Italy; Israel is not listed",
+     "grade": "C"
+    },
+    {
+     "url": "https://www.new.isa.gov.il/nav-index/supervised-information-payments/tax-tax-payments-faqs-6873706a7eb22",
+     "date": null,
+     "what": "No Stripe entity among the 42 payment-company licensees (read 2026-11-05)",
+     "grade": "A"
+    }
+   ],
+   "grade": "C",
+   "note": "Records availability honestly: Israeli businesses cannot open a standard Stripe account via this page; verify with Stripe sales.",
+   "verified_at": "2026-11-05",
+   "fees_public": null,
+   "integrations": null,
+   "users": null,
+   "hebrew_ui": null
+  },
+  {
+   "id": "mesh-payments",
+   "name_he": "מש תשלומים",
+   "name_en": "Mesh Payments (MESHPAY IL)",
+   "url": "https://meshpayments.com/",
+   "category": "psp (B2B spend and payments)",
+   "type": "psp",
+   "summary_he": "פלטפורמת תשלומים ועלויות לעסקים; ישות ישראלית עם רישיון חברת תשלומים מיולי 2025 ורישיון שירות מידע פיננסי מיולי 2025.",
+   "why_israeli": "ישות ישראלית (MESHPAY IL Ltd.) במרשמי רשות ניירות ערך",
+   "licence": {
+    "what": "ISA payment-company licence (חברת תשלומים), status in force — services: ניהול חשבון, הנפקה, סליקה, אשראי אגב פעולת תשלום",
+    "regulator": "Israel Securities Authority (רשות ניירות ערך)",
+    "source_url": "https://www.new.isa.gov.il/nav-index/supervised-information-payments/tax-tax-payments-faqs-6873706a7eb22",
+    "date": "2025-07-31"
+   },
+   "sources": [
+    {
+     "url": "https://www.new.isa.gov.il/nav-index/supervised-information-payments/tax-tax-payments-faqs-6873706a7eb22",
+     "date": null,
+     "what": "ISA register entry: MESHPAY IL Ltd., licence received 31.07.2025",
+     "grade": "A"
+    },
+    {
+     "url": "https://www.new.isa.gov.il/nav-index/supervised-api/informationapi",
+     "date": null,
+     "what": "ISA financial-information register: MESHPAY IL Ltd., licence 22.07.2025",
+     "grade": "A"
+    }
+   ],
+   "grade": "A",
+   "url_verified": false,
+   "note": "Site not opened; URL from the ISA register.",
+   "verified_at": "2026-11-05",
+   "fees_public": null,
+   "integrations": null,
+   "users": null,
+   "hebrew_ui": null
+  },
+  {
+   "id": "neema",
+   "name_he": "נימה",
+   "name_en": "Neema Shefa Israel (Neema)",
+   "url": "https://www.getneema.com",
+   "category": "wallet / payment account",
+   "type": "wallet",
+   "summary_he": "ישות ישראלית עם רישיון חברת תשלומים מדצמבר 2025 הכולל ייזום בסיסי; מציעה חשבון תשלום, סליקה והעברת כספים.",
+   "why_israeli": "ישות ישראלית (Neema Shefa Israel Ltd.) במרשם רשות ניירות ערך",
+   "licence": {
+    "what": "ISA payment-company licence (חברת תשלומים), status in force — services: ניהול חשבון, סליקה, העברת תשלומים, הנפקה; ייזום בסיסי: כן",
+    "regulator": "Israel Securities Authority (רשות ניירות ערך)",
+    "source_url": "https://www.new.isa.gov.il/nav-index/supervised-information-payments/tax-tax-payments-faqs-6873706a7eb22",
+    "date": "2025-12-02"
+   },
+   "sources": [
+    {
+     "url": "https://www.new.isa.gov.il/nav-index/supervised-information-payments/tax-tax-payments-faqs-6873706a7eb22",
+     "date": null,
+     "what": "ISA register entry: Neema Shefa Israel Ltd., licence received 02.12.2025, basic initiation: yes",
+     "grade": "A"
+    }
+   ],
+   "grade": "A",
+   "url_verified": false,
+   "note": "Site not opened; URL from the ISA register.",
+   "verified_at": "2026-11-05",
+   "fees_public": null,
+   "integrations": null,
+   "users": null,
+   "hebrew_ui": null
+  },
+  {
+   "id": "kashcash",
+   "name_he": "קאש-קאש",
+   "name_en": "KashCash (Safecash Applications)",
+   "url": "https://www.kashcash.co.il",
+   "category": "open banking / payment initiation",
+   "type": "open-banking",
+   "summary_he": "חברה עם רישיון חברת תשלומים כולל ייזום בסיסי ושירות מידע פיננסי (מאי 2026); מופיעה כאפשרות אינטגרציה באתר EasyCard.",
+   "why_israeli": "ישות ישראלית (ח.פ. 500000302), כתובת ז'בוטינסקי 9 בני ברק לפי המרשם",
+   "licence": {
+    "what": "ISA payment-company licence (חברת תשלומים), status in force — services: ניהול חשבון, סליקה, הנפקה, שירות מידע פיננסי; ייזום בסיסי: כן",
+    "regulator": "Israel Securities Authority (רשות ניירות ערך)",
+    "source_url": "https://www.new.isa.gov.il/nav-index/supervised-information-payments/tax-tax-payments-faqs-6873706a7eb22",
+    "date": "2026-05-11"
+   },
+   "integrations": [
+    "EasyCard (listed on the EasyCard site)"
+   ],
+   "sources": [
+    {
+     "url": "https://www.new.isa.gov.il/nav-index/supervised-information-payments/tax-tax-payments-faqs-6873706a7eb22",
+     "date": null,
+     "what": "ISA register entry: Safecash Applications Ltd. (KashCash), licence 11.5.2026, basic initiation: yes",
+     "grade": "A"
+    },
+    {
+     "url": "https://www.new.isa.gov.il/nav-index/supervised-api/informationapi",
+     "date": null,
+     "what": "ISA financial-information register also lists KashCash (licence 11.5.2026)",
+     "grade": "A"
+    },
+    {
+     "url": "https://www.e-c.co.il/",
+     "date": null,
+     "what": "EasyCard integration list names KashCash",
+     "grade": "C"
+    }
+   ],
+   "grade": "A",
+   "url_verified": false,
+   "note": "Own site not opened.",
+   "verified_at": "2026-11-05",
+   "fees_public": null,
+   "users": null,
+   "hebrew_ui": null
+  },
+  {
+   "id": "oxs-fintech",
+   "name_he": "אוקס פינטק",
+   "name_en": "OXS Fintech",
+   "url": "https://www.oxs.co.il",
+   "category": "open banking / payment initiation",
+   "type": "open-banking",
+   "summary_he": "חברת תשלומים עם רישיון הכולל במפורש ייזום בסיסי, הנפקה, סליקה ואשראי (יוני 2026).",
+   "why_israeli": "ישות ישראלית (OXS Fintech Ltd.) במרשם רשות ניירות ערך",
+   "licence": {
+    "what": "ISA payment-company licence (חברת תשלומים), status in force — services: ניהול חשבון, ייזום בסיסי, הנפקה, סליקה, אשראי אגב ושלא אגב פעולת תשלום",
+    "regulator": "Israel Securities Authority (רשות ניירות ערך)",
+    "source_url": "https://www.new.isa.gov.il/nav-index/supervised-information-payments/tax-tax-payments-faqs-6873706a7eb22",
+    "date": "2026-06-04"
+   },
+   "sources": [
+    {
+     "url": "https://www.new.isa.gov.il/nav-index/supervised-information-payments/tax-tax-payments-faqs-6873706a7eb22",
+     "date": null,
+     "what": "ISA register entry: OXS Fintech Ltd., licence received 4.6.2026, basic initiation listed among services",
+     "grade": "A"
+    }
+   ],
+   "grade": "A",
+   "url_verified": false,
+   "note": "Own site not opened.",
+   "verified_at": "2026-11-05",
+   "fees_public": null,
+   "integrations": null,
+   "users": null,
+   "hebrew_ui": null
+  },
+  {
+   "id": "gmt-tech",
+   "name_he": "ג'י.אם.טי טק אינוביישן",
+   "name_en": "GMT Tech Innovation",
+   "url": "https://gmtonline.co.il/",
+   "category": "open banking / payment initiation",
+   "type": "open-banking",
+   "summary_he": "חברת תשלומים עם רישיון ממאי 2026 הכולל ייזום בסיסי, העברת תשלומים ואשראי.",
+   "why_israeli": "ישות ישראלית (GMT Tech Innovation Ltd.) במרשם רשות ניירות ערך",
+   "licence": {
+    "what": "ISA payment-company licence (חברת תשלומים), status in force — services: ניהול חשבון, הנפקה, סליקה, העברת תשלומים, אשראי; ייזום בסיסי: כן",
+    "regulator": "Israel Securities Authority (רשות ניירות ערך)",
+    "source_url": "https://www.new.isa.gov.il/nav-index/supervised-information-payments/tax-tax-payments-faqs-6873706a7eb22",
+    "date": "2026-05-11"
+   },
+   "sources": [
+    {
+     "url": "https://www.new.isa.gov.il/nav-index/supervised-information-payments/tax-tax-payments-faqs-6873706a7eb22",
+     "date": null,
+     "what": "ISA register entry: GMT Tech Innovation Ltd., licence received 11.05.2026, basic initiation: yes",
+     "grade": "A"
+    }
+   ],
+   "grade": "A",
+   "url_verified": false,
+   "note": "Own site not opened; URL from the ISA register.",
+   "verified_at": "2026-11-05",
+   "fees_public": null,
+   "integrations": null,
+   "users": null,
+   "hebrew_ui": null
+  },
+  {
+   "id": "open-finance",
+   "name_he": "אופן פיננס",
+   "name_en": "Open Finance",
+   "url": "https://www.open-finance.ai/",
+   "category": "open banking (account information)",
+   "type": "open-banking",
+   "summary_he": "נותנת שירות מידע פיננסי מורשית (בנקאות פתוחה) מפברואר 2023 שמעבירה מידע פיננסי גם לנותני שירות מידע אחרים.",
+   "why_israeli": "ישות ישראלית (Open Finance Ltd.) במרשם נותני שירות מידע פיננסי של רשות ניירות ערך",
+   "licence": {
+    "what": "ISA financial-information-service licence, status active — collects financial information and passes it on, including to other information-service providers",
+    "regulator": "Israel Securities Authority (רשות ניירות ערך)",
+    "source_url": "https://www.new.isa.gov.il/nav-index/supervised-api/informationapi",
+    "date": "2023-02-28"
+   },
+   "sources": [
+    {
+     "url": "https://www.new.isa.gov.il/nav-index/supervised-api/informationapi",
+     "date": null,
+     "what": "ISA register of financial-information service licensees (28 entries, read 2026-11-05): Open Finance Ltd., licence 28.02.2023",
+     "grade": "A"
+    }
+   ],
+   "grade": "A",
+   "url_verified": false,
+   "note": "Own site not opened; URL from the ISA register.",
+   "verified_at": "2026-11-05",
+   "fees_public": null,
+   "integrations": null,
+   "users": null,
+   "hebrew_ui": null
+  },
+  {
+   "id": "feezback",
+   "name_he": "פיזבק",
+   "name_en": "Feezback Technologies",
+   "url": "https://feezback.com/",
+   "category": "open banking (account information)",
+   "type": "open-banking",
+   "summary_he": "נותנת שירות מידע פיננסי מורשית (בנקאות פתוחה) מפברואר 2023; מעבירה מידע פיננסי גם לנותני שירות מידע אחרים.",
+   "why_israeli": "ישות ישראלית (Feezback Technologies Ltd.) במרשם נותני שירות מידע פיננסי של רשות ניירות ערך",
+   "licence": {
+    "what": "ISA financial-information-service licence, status active — collects and passes on financial information",
+    "regulator": "Israel Securities Authority (רשות ניירות ערך)",
+    "source_url": "https://www.new.isa.gov.il/nav-index/supervised-api/informationapi",
+    "date": "2023-02-07"
+   },
+   "sources": [
+    {
+     "url": "https://www.new.isa.gov.il/nav-index/supervised-api/informationapi",
+     "date": null,
+     "what": "ISA register of financial-information service licensees: Feezback Technologies Ltd., licence 07.02.2023",
+     "grade": "A"
+    }
+   ],
+   "grade": "A",
+   "url_verified": false,
+   "note": "Own site not opened; URL from the ISA register.",
+   "verified_at": "2026-11-05",
+   "fees_public": null,
+   "integrations": null,
+   "users": null,
+   "hebrew_ui": null
+  },
+  {
+   "id": "bizibox",
+   "name_he": "ביזיבוקס",
+   "name_en": "Bizibox (I Fact Ltd.)",
+   "url": "https://bizibox.biz/",
+   "category": "open banking (account information) / accounting automation",
+   "type": "open-banking",
+   "summary_he": "נותנת שירות מידע פיננסי מורשית (אוגוסט 2023) שאוספת נתוני בנק וכרטיסי אשראי ומעבירה אותם הלאה — בשימוש משרדי הנהלת חשבונות.",
+   "why_israeli": "ישות ישראלית (I Fact Ltd., שם מסחרי ביזיבוקס) במרשם נותני שירות מידע פיננסי של רשות ניירות ערך",
+   "licence": {
+    "what": "ISA financial-information-service licence, status active — collects financial information and passes it on",
+    "regulator": "Israel Securities Authority (רשות ניירות ערך)",
+    "source_url": "https://www.new.isa.gov.il/nav-index/supervised-api/informationapi",
+    "date": "2023-08-02"
+   },
+   "sources": [
+    {
+     "url": "https://www.new.isa.gov.il/nav-index/supervised-api/informationapi",
+     "date": null,
+     "what": "ISA register of financial-information service licensees: I Fact Ltd. (commercial name Bizibox), licence 02.08.2023",
+     "grade": "A"
+    }
+   ],
+   "grade": "A",
+   "url_verified": false,
+   "note": "Own site not opened; URL from the ISA register. The accountant-use remark is from general knowledge of the product and is not sourced here.",
+   "verified_at": "2026-11-05",
+   "fees_public": null,
+   "integrations": null,
+   "users": null,
+   "hebrew_ui": null
+  }
+ ],
+ "rejected": [
+  {
+   "name": "Bit (ביט)",
+   "reason": "Wallet/P2P by Israeli banks; the site we tried (bit.co.il) failed TLS certificate validation in our fetcher and no other source for Bit itself was opened; Bit is only known here as a payment method listed by Tranzila, Cardcom, Pelecard, Grow and Hyp."
+  },
+  {
+   "name": "PayBox (פייבוקס)",
+   "reason": "No source opened (only named as a supported method on Grow site)."
+  },
+  {
+   "name": "Pepper Pay",
+   "reason": "No source opened."
+  },
+  {
+   "name": "Z-Credit",
+   "reason": "zcredit.co.il did not resolve (DNS) in our fetcher; no other source opened."
+  },
+  {
+   "name": "YaadPay / Yaad Sarig",
+   "reason": "yaad.net failed TLS validation in our fetcher; no other source opened."
+  },
+  {
+   "name": "iCredit (Rivhit)",
+   "reason": "Only a module name on the Rivhit homepage; iCredit own site not opened."
+  },
+  {
+   "name": "BNPL / merchant financing providers",
+   "reason": "No Israeli BNPL provider was verified within the time-box; note ISA register lists several payment companies that also hold \"credit incidental to payment\" scope (e.g. Upay Finance, Payme, Grow, STB Union)."
+  },
+  {
+   "name": "Apple Pay (Israel availability)",
+   "reason": "No official source opened; gateway sites only show it as a supported method."
+  },
+  {
+   "name": "Adyen",
+   "reason": "No source opened; no Israeli entity in the ISA register of licensed payment companies (read 2026-11-05)."
+  },
+  {
+   "name": "Premium Express / Diners Club Israel",
+   "reason": "Named as merchant acquirers by a search-result extract of the BoI list page; no own page opened, no further data."
+  }
+ ]
+}

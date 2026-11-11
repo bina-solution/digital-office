@@ -14,8 +14,30 @@ services:
           memory: 64M
     container_name: redis-${DEPLOYMENT_NAME:-bina-deployment}
     restart: unless-stopped
+    # THE PASSWORD IS NEVER ON A COMMAND LINE (DGO-1654). Until then it rode `--requirepass` and the
+    # healthcheck's `redis-cli -a`, which left it in three places:
+    #   - the container's Args, Cmd and Healthcheck (the docker API handed those to any app until DGO-1647);
+    #   - every healthcheck's exec event, every 30 s;
+    #   - the process list while the check ran (the hosting provider's hourly telemetry reads every
+    #     command line).
+    # Now it is an environment variable. At start the entrypoint writes it into a config file only redis
+    # can read, and the healthcheck hands it to redis-cli as REDISCLI_AUTH. `$$` keeps compose from
+    # expanding it into either command, and `exec docker-entrypoint.sh` keeps redis as PID 1, dropped to
+    # the redis user as before.
+    # WHERE THE FILE LIVES MATTERS (the second reader). In /tmp, the file belonged to redis after the first
+    # start. On the NEXT start of the same container, root's `>` into a file another user owns in a
+    # sticky directory is refused by the kernel (fs.protected_regular=2, the default on Debian and Ubuntu).
+    # The chain stops, and `unless-stopped` loops the container forever, taking authentik and n8n down
+    # with it. So the file lives in /etc, a directory root owns that is not sticky, and is removed before
+    # it is written again.
+    environment:
+    - REDIS_PASSWORD=${REDIS_PASSWORD}
+    entrypoint:
+    - /bin/sh
+    - -c
+    - umask 077 && rm -f /etc/redis-auth.conf && printf 'requirepass %s\n' "$$REDIS_PASSWORD" > /etc/redis-auth.conf && chown redis:redis /etc/redis-auth.conf && exec docker-entrypoint.sh redis-server /etc/redis-auth.conf "$$@"
+    - redis
     command:
-    - redis-server
     - --appendonly
     - 'no'
     - --save
@@ -32,8 +54,6 @@ services:
     - noeviction
     - --stop-writes-on-bgsave-error
     - 'yes'
-    - --requirepass
-    - ${REDIS_PASSWORD}
     - --protected-mode
     - 'yes'
     volumes:
@@ -58,7 +78,7 @@ services:
     healthcheck:
       test:
       - CMD-SHELL
-      - redis-cli -a ${REDIS_PASSWORD} ping | grep PONG
+      - REDISCLI_AUTH="$$REDIS_PASSWORD" redis-cli ping | grep PONG
       interval: ${HEALTHCHECK_INTERVAL:-30s}
       timeout: ${HEALTHCHECK_TIMEOUT:-5s}
       retries: 5

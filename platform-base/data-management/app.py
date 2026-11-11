@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import math
 import os
 import pathlib
 import subprocess
@@ -40,6 +41,8 @@ from fastapi.staticfiles import StaticFiles
 import inventory as INV
 import plan as PLAN
 import pull as PULL
+import restic_store as REPO_STORE
+import backup_run as BACKUP
 
 REPO = pathlib.Path(os.environ.get("DEPLOYMENT_PATH", "/deployment"))
 ARCHIVE_ROOT = pathlib.Path(os.environ.get("DATA_ARCHIVE_ROOT", "/archives"))
@@ -47,6 +50,25 @@ ARCHIVER = REPO / "scripts" / "deployment-archive.py"
 
 app = FastAPI(title="Data Management", version="0.1.0")
 app.add_middleware(GZipMiddleware, minimum_size=1024)
+
+# The herd store's door (app.json `backup-store`, a door with no tile, DGO-945) is how a LINKED office
+# reaches this service, and through it the herd store and nothing else: /repo/ and /api/repo-runs. The
+# serving office narrows the door's paths only when its `serve.services` declares them, so this service
+# holds the line itself, by the name the request was routed under (the door keeps the asker's Host, and
+# routes by it). Exports, restores, archives and the page are never reached through it.
+STORE_DOOR = "backup-store"
+
+
+@app.middleware("http")
+async def _store_door_only(request, call_next):
+    if (request.headers.get("host") or "").split(":", 1)[0].split(".", 1)[0].lower() == STORE_DOOR:
+        path = request.url.path
+        if not (path.startswith("/repo/") or path == "/api/repo-runs"):
+            return JSONResponse({"detail": "through the herd store's door only the store answers"}, status_code=404)
+    return await call_next(request)
+# restic's REST backend over the generic drive (restic_store.py, DGO-1513). Registered here, before
+# every other route, so the page fallback at the end of this file can never answer a /repo path.
+app.include_router(REPO_STORE.router)
 
 # In-process job table. Deliberately not a database: a backup job is meaningful only while this
 # process lives, and a job row that outlives the process it describes is a lie about what is running.
@@ -465,6 +487,335 @@ async def api_export(mode: str = Query("full", pattern="^(full|config)$"),
     return {"job": job_id, "mode": mode, "quiesce": quiesce, "app": app_id, "out": str(target)}
 
 
+# ── a backup into a restic repository on a declared target (backup_run.py, DGO-1523) ────────────
+STATE_DIR = pathlib.Path(os.environ.get("DATA_STATE_DIR", "/state"))
+
+
+async def _run_backup(job_id: str, target: str):
+    """The run, in a worker thread, its sentences in the job's log. Refused = skipped (nothing started,
+    and why); Failed = failed. Neither is ever reported as done."""
+    job = JOBS[job_id]
+
+    def log(line: str):
+        job["log"].append(line)
+        job["emitted"] += 1
+        del job["log"][:-400]
+
+    job["state"] = "running"
+    try:
+        job["result"] = await asyncio.to_thread(
+            BACKUP.run, target, INV.deployment_name(), ARCHIVE_ROOT, STATE_DIR, BACKUP.archiver_export(REPO), log)
+        job["state"] = "done"
+    except BACKUP.Refused as e:
+        job["state"] = "skipped"
+        log(f"!! skipped: {e}")
+    except BACKUP.Failed as e:
+        job["state"] = "failed"
+        log(f"!! failed: {e}")
+    except Exception as e:                                # noqa: BLE001
+        job["state"] = "failed"
+        log(f"!! failed: {type(e).__name__}: {e}")
+    finally:
+        job["finished"] = datetime.now(timezone.utc).isoformat()
+
+
+def _busy(kinds) -> list[str]:
+    return [j["kind"] for j in JOBS.values() if j.get("kind") in kinds and j.get("state") in ("starting", "running")]
+
+
+def start_backup_job(target: str, by: str = "api") -> str:
+    """A backup job, started now in this event loop; its id. `by`: who asked (the API, the schedule)."""
+    job_id = uuid.uuid4().hex[:12]
+    JOBS[job_id] = {"id": job_id, "kind": "backup", "target": target, "state": "starting", "log": [],
+                    "emitted": 0, "started": datetime.now(timezone.utc).isoformat(), "by": by}
+    asyncio.create_task(_run_backup(job_id, target))
+    return job_id
+
+
+@app.post("/api/backup")
+async def api_backup(target: str = Query(..., pattern=r"^[a-z0-9][a-z0-9-]{0,62}$")):
+    """Start a backup of this office to a declared target. Returns a job id at once (GET /api/jobs/<id>).
+    Not while an export or a restore is going: the run's own export would read a half-restored office,
+    or double the load of one already reading it."""
+    busy = _busy(("export", "import"))
+    if busy:
+        raise HTTPException(status_code=409, detail=f"an {busy[0]} is running; a backup waits for it to end")
+    return {"job": start_backup_job(target), "target": target}
+
+
+# ── the nightly schedule (backup_run.due, DGO-1523 slice 3) ─────────────────────────────────────
+#
+# Every SCHEDULE_TICK the targets file is read again (a target added or a time changed needs no
+# restart), and ONE due target is started — never beside an export, a restore or another backup. A
+# start that did not become a run (refused: the store not reachable, no room) leaves the target due,
+# and it is tried again after SCHEDULE_RETRY, not every tick. Started only when the service starts, so
+# an office whose targets name no `nightly_utc` runs nothing.
+SCHEDULE_TICK = 60.0
+SCHEDULE_RETRY = 3600.0
+SCHEDULE_TRIED: dict[str, float] = {}
+_SCHEDULE_SAID = {"error": ""}
+_SCHEDULE_KEEP_JOBS = 60
+
+
+async def schedule_tick(now: datetime, start=None) -> list[str]:
+    """One pass: the target it started (at most one), for the test."""
+    start = start or (lambda t: start_backup_job(t, by="schedule"))
+    if _busy(("export", "import", "backup")):
+        return []
+    try:
+        targets = REPO_STORE.targets()
+    except ValueError as e:
+        if str(e) != _SCHEDULE_SAID["error"]:                # said once, not every minute
+            print(f"[data-management] schedule: the targets file cannot be read: {e}", flush=True)
+            _SCHEDULE_SAID["error"] = str(e)
+        return []
+    _SCHEDULE_SAID["error"] = ""
+    stamp = now.timestamp()
+    for tid in sorted(targets):
+        slot = targets[tid].get("nightly_utc")
+        if not slot or stamp - SCHEDULE_TRIED.get(tid, float("-inf")) < SCHEDULE_RETRY:
+            continue
+        offset = BACKUP.spread(BACKUP.LINK_OFFICE or INV.deployment_name(), tid)
+        if not BACKUP.due(slot, BACKUP._started(STATE_DIR, tid), now, offset):
+            continue
+        SCHEDULE_TRIED[tid] = stamp
+        start(tid)
+        # the job table is this process's memory: the schedule's own finished jobs beyond the newest few go
+        mine = sorted((j for j in JOBS.values() if j.get("by") == "schedule"
+                       and j.get("state") not in ("starting", "running")), key=lambda j: j.get("started") or "")
+        for j in mine[:-_SCHEDULE_KEEP_JOBS]:
+            JOBS.pop(j["id"], None)
+        return [tid]
+    return []
+
+
+# ── a night that did not happen is SAID (DGO-1517) ──────────────────────────────────────────────
+#
+# A scheduled target with no good run (a snapshot and a passing check) for STALE_AFTER is told to the office once,
+# through its notifications (the bell in the console), and its return is told too: nobody reads a job log to learn
+# that the backups stopped. The clock is kept in STALE_FILE (target → since when it has had no good run, and whether
+# that was told), so a restart neither forgets an outage nor tells it twice. A target never run is measured from
+# when this service first saw it. A notice that was not delivered is tried again after STALE_RETRY.
+STALE_AFTER = float(os.environ.get("DATA_STALE_AFTER") or 26 * 3600)
+STALE_RETRY = 600.0
+STALE_FILE = "stale-alerts.json"
+NOTIFICATIONS_URL = (os.environ.get("NOTIFICATIONS_URL") or "http://notifications:8977").rstrip("/")
+
+
+def _notify(source_id: str, title: str, body: str, level: str) -> bool:
+    """One row in the office's notifications, deduplicated by `source_id` (one per outage)."""
+    import urllib.request
+    req = urllib.request.Request(
+        f"{NOTIFICATIONS_URL}/api/notifications", method="POST", headers={"Content-Type": "application/json"},
+        data=json.dumps({"source": "data-management", "source_id": source_id, "title": title, "body": body,
+                         "level": level, "link": "/#/m/data-management"}, ensure_ascii=False).encode())
+    import urllib.error
+    try:
+        with urllib.request.urlopen(req, timeout=8) as r:
+            return r.status in (200, 201)
+    except urllib.error.HTTPError as e:                       # the board answered no: say what it said (G66)
+        said = e.read(300).decode("utf-8", "replace").strip() if e.fp else ""
+        print(f"[data-management] notice not delivered ({source_id}): HTTP {e.code} {said}", flush=True)
+        return False
+    except Exception as e:                                    # noqa: BLE001 — a bad status line too: not delivered
+        print(f"[data-management] notice not delivered ({source_id}): {type(e).__name__}: {e}", flush=True)
+        return False
+
+
+def _good_at(target: str) -> float | None:
+    """When the last good run to `target` finished (a snapshot and a passing check), or None — also when the
+    record cannot be read (a permission, a disk): no good run that this service can show is no good run."""
+    try:
+        got = BACKUP.last(STATE_DIR, target) or {}
+        return datetime.fromisoformat(str(got["finished"])).timestamp()
+    except (OSError, KeyError, ValueError, TypeError):
+        return None
+
+
+def _num(value) -> float | None:
+    """A finite number, or None: a NaN or an infinity written into the file by hand is no time."""
+    try:
+        n = float(value)
+    except (TypeError, ValueError):
+        return None
+    return n if math.isfinite(n) else None
+
+
+# The key under which STALE_FILE keeps the one notice about the targets file itself: no target id can be it
+# (restic_store's target pattern starts with a letter or a digit).
+_TARGETS_KEY = "~targets"
+_TARGETS_SID = "backup-targets-unreadable"
+
+
+def tell_stale(now: datetime, notify=_notify, running: frozenset = frozenset()) -> list[str]:
+    """Tell the office when a scheduled target has had no good run for STALE_AFTER, and when it has one again. A
+    target whose backup is running now is not judged until it ends (a long Sunday prune is not an outage). Returns
+    the source ids it told, for the test."""
+    path = STATE_DIR / STALE_FILE
+    try:
+        state = json.loads(path.read_text(encoding="utf-8"))
+        state = state if isinstance(state, dict) else {}
+    except (OSError, ValueError):
+        state = {}
+    stamp, told = now.timestamp(), []
+    before = json.dumps(state, sort_keys=True)
+    # A targets file that does not read starts no night at all — the very outage this exists for: told once, at
+    # the level that rings, and its return told on the same row (the notifications app upserts by source id).
+    rec = state.get(_TARGETS_KEY) if isinstance(state.get(_TARGETS_KEY), dict) else {}
+    try:
+        targets = REPO_STORE.targets()
+    except ValueError as e:
+        if not rec.get("told") and stamp - (_num(rec.get("tried")) or 0.0) >= STALE_RETRY:
+            rec["tried"] = stamp
+            if notify(_TARGETS_SID, "קובץ יעדי הגיבוי לא נקרא — שום גיבוי לילה לא מתחיל",
+                      f"ניהול הנתונים לא קורא את קובץ היעדים ({str(e)[:160]}), ולכן אף יעד לא מגובה עד שיתוקן.",
+                      "error"):
+                rec["told"] = True
+                told.append(_TARGETS_SID)
+        state[_TARGETS_KEY] = rec
+        _save_stale(path, state, before)
+        return told
+    if rec.get("told"):
+        if stamp - (_num(rec.get("tried")) or 0.0) >= STALE_RETRY:
+            rec["tried"] = stamp
+            if notify(_TARGETS_SID, "קובץ יעדי הגיבוי נקרא שוב", "גיבויי הלילה מתחילים שוב לפי הקובץ.", "info"):
+                told.append(_TARGETS_SID)
+                state.pop(_TARGETS_KEY, None)
+            else:
+                state[_TARGETS_KEY] = rec                  # told when it is delivered
+    else:
+        state.pop(_TARGETS_KEY, None)
+    for tid in [t for t in state if not t.startswith("~") and (t not in targets or not targets[t].get("nightly_utc"))]:
+        state.pop(tid)                                     # gone or no longer scheduled: nothing to tell
+    try:
+        _tell_prune_late(targets, state, stamp, notify, told)
+    except Exception as e:                                 # noqa: BLE001 — the stale notices below must still go
+        print(f"[data-management] prune notice: {type(e).__name__}: {e}", flush=True)
+    for tid in sorted(targets):
+        if not targets[tid].get("nightly_utc") or tid in running:
+            continue
+        rec = state.get(tid) if isinstance(state.get(tid), dict) else {}
+        since, tried = _num(rec.get("since")), _num(rec.get("tried")) or 0.0
+        if rec and since is None:
+            rec, tried = {}, 0.0                           # a value nobody can read: the clock starts again
+        good = _good_at(tid)
+        if good is not None and stamp - good < STALE_AFTER:
+            if rec.get("told"):
+                if stamp - tried < STALE_RETRY:
+                    continue
+                # the outage's own row, rewritten: one row per outage, unread until it is seen
+                sid = f"backup-stale-{tid}-{int(since or 0)}"
+                rec["tried"] = stamp
+                if not notify(sid, f"הגיבוי ל-{tid} חזר", "גיבוי לילה הסתיים בהצלחה (תמונת מצב ובדיקה תקינה).",
+                              "info"):
+                    state[tid] = rec                       # told when it is delivered
+                    continue
+                told.append(sid)
+            state.pop(tid, None)
+            continue
+        if good is not None and since is not None and good > since:
+            rec, tried = {}, 0.0                           # a good run since: this is another outage
+        since = good if good is not None else (since if since is not None else stamp)
+        rec["since"] = since
+        if not rec.get("told") and stamp - since >= STALE_AFTER and stamp - tried >= STALE_RETRY:
+            hours = int((stamp - since) // 3600)
+            sid = f"backup-stale-{tid}-{int(since)}"
+            rec["tried"] = stamp
+            body = (f"הגיבוי התקין האחרון ל-{tid} הסתיים לפני {hours} שעות" if good is not None
+                    else f"לא נרשם אף גיבוי תקין ל-{tid} מאז שהוגדר, לפני {hours} שעות") + \
+                   ". פרטי הריצה האחרונה בניהול הנתונים."
+            # `error`: a backup that stopped is what rings the phone (notifications/push.py, PUSH_LEVELS)
+            if notify(sid, f"אין גיבוי תקין ל-{tid} כבר {hours} שעות", body, "error"):
+                rec["told"] = True
+                told.append(sid)
+        state[tid] = rec
+    _save_stale(path, state, before)
+    return told
+
+
+def _tell_prune_late(targets: dict, state: dict, stamp: float, notify, told: list) -> None:
+    """A store that may delete and has not been pruned for BACKUP.PRUNE_LATE (every Sunday's prune blocked by a pull,
+    or failing) fills up unseen: told once, and its end on the same row (DGO-1517, the third reader: the result's
+    «NOT PRUNED» line reached nobody). Kept under `~prune-<target>` in STALE_FILE."""
+    deleting = {t for t, s in targets.items() if s.get("nightly_utc") and BACKUP.retention(s, BACKUP.PRUNE_DAY) == "prune"}
+    for key in [k for k in state if k.startswith("~prune-") and k[len("~prune-"):] not in deleting]:
+        state.pop(key)                                     # no longer a store that prunes here: nothing to tell
+    for tid in sorted(deleting):
+        key = f"~prune-{tid}"
+        rec = state.get(key) if isinstance(state.get(key), dict) else {}
+        try:
+            got = BACKUP.last(STATE_DIR, tid)
+        except (OSError, ValueError):
+            got = None
+        pruned = BACKUP._when(got.get("pruned")) if isinstance(got, dict) else None
+        late = pruned is not None and stamp - pruned >= BACKUP.PRUNE_LATE
+        if stamp - (_num(rec.get("tried")) or 0.0) < STALE_RETRY:
+            continue
+        if pruned is None and rec.get("told"):
+            continue        # a record gone or unreadable is no proof of a prune: no all-clear (the fourth reader)
+        if late and not rec.get("told"):
+            sid = f"backup-prune-late-{tid}-{int(pruned)}"
+            rec.update(tried=stamp, sid=sid)
+            days = int((stamp - pruned) // 86400)
+            if notify(sid, f"המאגר {tid} לא נוקה כבר {days} ימים",
+                      "הגיבויים נשמרים, אבל מה שנשכח לא נמחק מהמאגר והוא מתמלא — הניקוי השבועי נחסם (משיכה של לשכה אחרת "
+                      "פתוחה בזמנו) או נכשל. פרטי הריצה האחרונה בניהול הנתונים.", "warning"):
+                rec["told"] = True
+                told.append(sid)
+            state[key] = rec
+        elif not late and rec.get("told"):
+            rec["tried"] = stamp
+            if notify(str(rec.get("sid") or f"backup-prune-late-{tid}"), f"המאגר {tid} נוקה שוב",
+                      "הניקוי של המאגר רץ שוב.", "info"):
+                told.append(str(rec.get("sid")))
+                state.pop(key, None)
+            else:
+                state[key] = rec                           # told when it is delivered
+        elif not late:
+            state.pop(key, None)
+
+
+def _save_stale(path, state: dict, before: str) -> None:
+    """STALE_FILE, whole or not at all, when it changed."""
+    if json.dumps(state, sort_keys=True) != before:
+        STATE_DIR.mkdir(parents=True, exist_ok=True)
+        tmp = path.with_suffix(".tmp")
+        tmp.write_text(json.dumps(state, indent=2), encoding="utf-8")
+        os.replace(tmp, path)
+
+
+async def _schedule_loop() -> None:
+    while True:
+        try:
+            await schedule_tick(datetime.now(timezone.utc))
+        except Exception as e:                                # noqa: BLE001 — the schedule must outlive one bad pass
+            print(f"[data-management] schedule: {type(e).__name__}: {e}", flush=True)
+        try:
+            running = frozenset(j.get("target") for j in JOBS.values()
+                                if j.get("kind") == "backup" and j.get("state") in ("starting", "running"))
+            await asyncio.to_thread(tell_stale, datetime.now(timezone.utc), _notify, running)
+        except Exception as e:                                # noqa: BLE001 — as the schedule
+            print(f"[data-management] stale notice: {type(e).__name__}: {e}", flush=True)
+        await asyncio.sleep(SCHEDULE_TICK)
+
+
+_SCHEDULE_TASK: list = []         # the loop's task, held: the event loop keeps only a weak reference
+
+
+@app.on_event("startup")
+async def _start_schedule() -> None:
+    _SCHEDULE_TASK.append(asyncio.create_task(_schedule_loop()))
+
+
+@app.get("/api/backup/last")
+def api_backup_last(target: str = Query(..., pattern=r"^[a-z0-9][a-z0-9-]{0,62}$")):
+    """The last run that finished with a snapshot and a passing check, or 404."""
+    got = BACKUP.last(STATE_DIR, target)
+    if got is None:
+        raise HTTPException(status_code=404, detail=f"no finished backup to {target} is recorded here")
+    return got
+
+
 @app.post("/api/import")
 async def api_import(path: str = Query(..., description="archive directory to restore"),
                      app_id: str | None = Query(None, alias="app"),
@@ -603,7 +954,7 @@ def index():
 # A path that LOOKS LIKE A FILE — it has an extension — is a request for a file, and a missing file
 # is a real 404. Answering `missing.js` or `logo.png` with the page would hand an <img>/<script> HTML
 # and turn a broken asset into a silent, unparseable success.
-_NO_PAGE_AT = frozenset({"api", "healthz", "static"})
+_NO_PAGE_AT = frozenset({"api", "healthz", "static", "repo"})
 
 
 @app.api_route("/{full_path:path}", methods=["GET", "HEAD"], include_in_schema=False)

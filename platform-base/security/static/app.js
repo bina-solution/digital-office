@@ -46,6 +46,7 @@ var binaAsk, binaTell;
     + "@media (pointer:coarse){.bask-btn{height:44px}.bask-field input{height:44px}}"
     + "@media (max-height:399px){.bask{padding:8px}.bask-card{padding:12px}.bask-acts{margin-top:10px}}"   // the side menu's own short frame
     + "#bina-tell{position:fixed;inset-block-end:16px;inset-inline-start:16px;z-index:2147483001;display:grid;gap:8px;max-width:min(420px,calc(100vw - 32px))}"
+    + "#bina-tell[data-at~=top]{inset-block-start:16px;inset-block-end:auto}#bina-tell[data-at~=end]{inset-inline-start:auto;inset-inline-end:16px}"   // where it covers nothing (place())
     + ".btell{--c:var(--ok);padding:10px 14px;border-radius:12px;background:color-mix(in srgb,var(--c) 14%,var(--surface));color:var(--ink);border:1px solid color-mix(in srgb,var(--c) 38%,var(--surface));border-inline-start:4px solid var(--c);font:13px/1.45 var(--font,system-ui,sans-serif);box-shadow:var(--shadow-lg);cursor:pointer;text-align:start}"
     + ".btell.warn{--c:var(--lime)}.btell.bad{--c:var(--red)}"   // --ok and --red, not the bare hues: they are the steps that are lifted on the dark ground
     + ".btell small{display:block;margin-top:2px;font-size:11.5px;color:var(--muted);overflow-wrap:anywhere;unicode-bidi:plaintext}"
@@ -150,6 +151,47 @@ var binaAsk, binaTell;
     });
   };
 
+  // The notice never sits on a control of the page (DGO-618): it keeps its corner while that covers nothing, and
+  // otherwise takes the first corner that does — at every frame size, a desktop window of 380 x 260 included,
+  // where the bottom corner is where a window keeps its buttons. With no corner free at its full width, the corners
+  // again at two thirds and at half of it (a narrower notice fits over a title, beside a window's ✕); with none
+  // free at all, the place that covers fewest.
+  var CONTROLS = "button,a[href],input:not([type=hidden]),select,textarea,summary,[role=button],[tabindex]:not([tabindex='-1'])";
+  function covered(box) {
+    var b = box.getBoundingClientRect(), n = 0;
+    if (b.width < 2 || b.height < 2) return 0;
+    doc.querySelectorAll(CONTROLS).forEach(function (c) {
+      var r = c.getBoundingClientRect();     // the cheap test first: on a screen of thousands of rows most are far away
+      if (Math.min(b.right, r.right) - Math.max(b.left, r.left) <= 1 || Math.min(b.bottom, r.bottom) - Math.max(b.top, r.top) <= 1) return;
+      // inside the notice, in a part of the page made inert (a window the page put over it), or not drawn: not a control here
+      if (box.contains(c) || c.closest("[inert]") || (c.checkVisibility && !c.checkVisibility({ checkVisibilityCSS: true }))) return;
+      n++;
+    });
+    return n;
+  }
+  function put(box, at, w) {
+    if (at) box.setAttribute("data-at", at); else box.removeAttribute("data-at");
+    box.style.maxWidth = w;
+    // a top spot lets go of the bottom, written on the element: a page's own rule that lifts the notice off its bar
+    // (`body:has(…) #bina-tell{inset-block-end:…}`) out-ranks the attribute, and the box stretched to the full height
+    box.style.insetBlockEnd = at.indexOf("top") < 0 ? "" : "auto";
+  }
+  function place(box) {
+    var best = null;
+    ["", "min(280px,calc((100vw - 32px) * .66))", "min(210px,calc((100vw - 32px) * .5))"].some(function (w) {
+      return ["", "end", "top", "top end"].some(function (at) {
+        put(box, at, w);
+        var n = covered(box);
+        if (!best || n < best.n) best = { at: at, w: w, n: n };
+        return n === 0;
+      });
+    });
+    put(box, best.at, best.w);
+  }
+  var placing = 0;
+  function replace() { var box = doc.getElementById("bina-tell"); if (box && box.firstChild) place(box); }
+  window.addEventListener("resize", function () { clearTimeout(placing); placing = setTimeout(replace, 120); });
+
   // The third word is how long the notice stays (ms) — or what more it carries: { ms, more, act, stay }.
   //   more  the service's own sentence, on a line of its own under the notice's words
   //   act   [label, fn] — one way on from the notice (an undo, a refresh): pressing it runs fn and takes the notice down
@@ -166,12 +208,13 @@ var binaAsk, binaTell;
     if (o.act) {
       var go = el("button", "", o.act[0]);
       go.setAttribute("type", "button");
-      go.addEventListener("click", function (e) { e.stopPropagation(); n.remove(); o.act[1](); });
+      go.addEventListener("click", function (e) { e.stopPropagation(); n.remove(); replace(); o.act[1](); });
       n.appendChild(go);
     }
-    n.addEventListener("click", function () { n.remove(); });
+    n.addEventListener("click", function () { n.remove(); replace(); });
     box.appendChild(n);
-    if (!o.stay) setTimeout(function () { n.remove(); }, o.ms || (kind === "bad" ? 9000 : 5200));
+    place(box);
+    if (!o.stay) setTimeout(function () { n.remove(); replace(); }, o.ms || (kind === "bad" ? 9000 : 5200));
     return n;
   };
 })();
@@ -184,11 +227,12 @@ var binaAsk, binaTell;
 
   // ── words ──────────────────────────────────────────────────────────────────────────────────────
   var KIND = { "public": "ציבורי", "private": "פרטי", "remote": "לשכה מקושרת", "auth": "כניסה", "door": "דלת הקישור",
-               "none": "ללא נתב", "link": "דרך הקישור" };
+               "none": "ללא נתב", "link": "דרך הקישור", "acme": "אימות תעודה" };
   var KIND_HINT = { "public": "אתר או אפליקציה בלי הכניסה של הלשכה", "private": "אפליקציה מאחורי הכניסה של הלשכה",
                     "remote": "אפליקציה של לשכה אחרת שנפתחה כאן דרך הקישור", "auth": "דף הכניסה עצמו",
                     "door": "לשכה אחרת שמחברת את הקישור דרך 443", "none": "בקשה שאף נתב לא קיבל — סריקה של הכתובת או שם שאיש לא הגדיר",
-                    "link": "לשכה אחרת פתחה אפליקציה שלנו" };
+                    "link": "לשכה אחרת פתחה אפליקציה שלנו",
+                    "acme": "בקשת האימות של Let's Encrypt לתעודה של הלשכה — של הקצה, לא של הקורא" };
   var STATE = { banned: ["חסום", "bad"], would: ["היה נחסם", "warn"], trusted: ["מחובר", "ok"], allowed: ["מותר", "ok"],
                 herd: ["העדר", "ok"], own: ["הלשכה", "ok"], seen: ["נראה", "muted"], blocked: ["חסום", "bad"] };
   var JAIL = { scan: "סריקה", auth: "כניסות שנכשלו", sshd: "SSH", manual: "ידני" };
@@ -394,12 +438,17 @@ var binaAsk, binaTell;
 
   // ── views ──────────────────────────────────────────────────────────────────────────────────────
   async function vOverview() {
-    var res = await Promise.all([api("api/summary?hours=" + S.hours), api("api/map?hours=" + S.hours), world()]);
+    var res = await Promise.all([api("api/summary?hours=" + S.hours), api("api/map?hours=" + S.hours), world(),
+      api("api/verdict?hours=" + S.hours)]);
     if (!res[0].ok) return failed("הסיכום לא נקרא", res[0]);
     var s = S.data.summary = res[0].d, k = s.kpi || {}, m = res[1].ok ? res[1].d : { pins: [] };
     S.data.map = m;
+    S.data.verdict = res[3].ok ? res[3].d : null;
     renderNav();
-    var html = modeCallout(s, k);
+    // THE ANSWER BEFORE THE COUNTS (DGO-1646): who the traffic is, whether anything got in, what the internet
+    // tried, who signed in, every door into the machine — then the raw numbers and the map, as before
+    var html = S.data.verdict ? verdictHtml(S.data.verdict, s) + '<h2 class="v-detailhead">המספרים המלאים</h2>' : "";
+    html += modeCallout(s, k);
     var banState = k.bans ? "failed" : (k.would_ban ? "todo" : null);
     html += '<div class="pg-kpis">' +
       kpi("בקשות נכנסות", n(k.requests), k.requests ? null : "zero", kindSub(k.kinds)) +
@@ -428,6 +477,104 @@ var binaAsk, binaTell;
     var attr = state === "zero" ? ' class="pg-kpi is-zero"' : (state ? ' class="pg-kpi" data-state="' + state + '"' : ' class="pg-kpi"');
     return "<div" + attr + '><span class="pg-kpi-k" title="' + esc(label) + '">' + esc(label) + '</span><span class="pg-kpi-v num">' + value + "</span>" +
       (sub ? '<span class="sub">' + esc(sub) + "</span>" : "") + "</div>";
+  }
+  // ── the verdict (DGO-1646) ──────────────────────────────────────────────────────────────────────────
+  // Each row the internet tried, said the way the owner would say it, and its five answers in the drawer:
+  // who, why, what they got, what we did, and whether it needs him. One vocabulary: «סורקים», never «התקפה».
+  var TRIED = {
+    secrets: { t: "חיפשו קבצי סודות", s: "‎/.env, /.git, xmlrpc.php‎ ועוד", who: "ציידי סודות שעוברים על כל שרת באינטרנט",
+      why: "מחפשים שרת ששכח קובץ הגדרות פתוח", did: "נרשמו; במצב אכיפה הם נחסמים לשעה" },
+    signin: { t: "ביקרו באפליקציות ונשלחו לכניסה", s: "כל כתובת של הלשכה שהתפרסמה", who: "סורקי אינטרנט",
+      why: "כל כתובת חדשה מתפרסמת ביומן התעודות הציבורי ונבדקת בתוך דקות", did: "כלום — זה התפקיד של הכניסה" },
+    bare: { t: "פנו לכתובת בלי אפליקציה", s: "סריקה של הכתובת עצמה", who: "סורקי כתובות", why: "סורקים את כל האינטרנט",
+      did: "‏404, בלי שום אפליקציה" },
+    door: { t: "דפקו על דלת הקישור", s: "הדלת שדרכה הלשכות מתחברות", who: "סורקים", why: "הדלת פתוחה ב-443",
+      did: "בלי מפתח של לשכה אין חיבור" },
+    ssh: { t: "ניסו להיכנס ב-SSH", s: "השרת מקבל רק מפתחות", who: "רובוטים שמנחשים סיסמאות", why: "פורט 22 פתוח בכל שרת",
+      did: "נדחו" }
+  };
+  function triedRow(t, s) {
+    var d = TRIED[t.key], app = t.key.indexOf("public:") === 0 ? t.key.slice(7) : "";
+    if (app) {
+      var title = (((s.top || {}).apps || []).filter(function (a) { return a.app === app; })[0] || {}).title || app;
+      d = { t: "פתחו את " + title, s: "דף ציבורי בכוונה", who: "סורקים וזוחלים", why: "הדף פתוח לאינטרנט",
+        did: "כלום — הדף ציבורי" };
+    }
+    d = d || { t: t.key, s: "", who: "", why: "", did: "" };
+    // the pill says what THESE requests got, from the numbers, never a fixed «stopped» (the second reader)
+    var pillHtml = t["in"] ? pill(n(t["in"]) + " קיבלו תשובה פרטית", "bad") :
+      t.key === "ssh" ? pill("נדחו", "ok") : t.key === "bare" ? pill("404", "muted") : app ? pill("ציבורי", "info") :
+      t.key === "secrets" ? (t.ok ? pill(n(t.ok) + " קיבלו דף ציבורי", "warn") : pill("לא קיבלו כלום", "ok")) :
+      t.ok ? pill("קיבלו את דף הכניסה", "ok") : pill("נשלחו לכניסה", "ok");
+    return { html: '<li class="v-row" role="button" tabindex="0" data-tried="' + esc(t.key) + '"><span class="v-what">' + esc(d.t) + "<small>" + esc(d.s) + "</small></span>" +
+      '<span class="v-n num">' + n(t.requests) + "<small>" + n(t.addrs) + " כתובות</small></span>" + pillHtml + "</li>",
+      d: d, pill: pillHtml, needs: !!t["in"] };
+  }
+  var DOOR = {
+    web: ["אתר ואפליקציות", "443 · 80", function (d) { return d.n ? n(d.n) + " תשובות פרטיות יצאו החוצה" : "מאחורי הכניסה"; }],
+    ssh: ["SSH", "22", function (d) { return d["in"] ? n(d["in"]) + " כניסות שאינן שלנו" : d.measured === false ? "המפתחות לא נקראו" : d.unnamed ? n(d.unnamed) + " מפתחות בלי שם" : n(d.n) + " מפתחות, כולם עם שם"; }],
+    media: ["פגישות: וידאו", "UDP 10000", function (d) { return d.open ? "פתוח לפגישות" : "סגור"; }],
+    // a door the sensor does not watch yet says so: never «0» about what was not measured
+    ipv6: ["IPv6", "", function (d) { return d.measured === false ? "לא נמדד עדיין" : d.open ? (d.state === "ok" ? "אותה חומה כמו IPv4" : "פתוח, בלי חומה של השרת") : "לא בשימוש"; }],
+    closed: ["פורטים סגורים", "", function (d) { return d.fence === "error" ? "החומה לא נקראה" : d.measured === false ? "לא נמדד עדיין" : d.fence === "absent" ? "אין חומה של השרת" : n(d.n) + " דפיקות נחסמו מאז ההפעלה"; }],
+    docker: ["Docker בתוך הלשכה", "", function (d) { return d.value === "open" ? "אפליקציה יכולה לקרוא סודות של אחרת" : d.value === "closed" ? "אפליקציה לא קוראת סודות של אחרת" : "לא נבדק"; }],
+    provider: ["הסוכן של ספק השרת", "", function (d) { return d.measured === false ? "לא נמדד עדיין" : d.agent === false ? "אין סוכן כזה בשרת" : d.n || d.files ? n(d.n) + " פקודות כ-root" + (d.files ? " · " + n(d.files) + " קבצים נכתבו" : "") : "לא הריץ כלום"; }],
+    console: ["המסוף של הספק", "VNC · serial", function (d) { return d.measured === false ? "לא נמדד עדיין" : d.n ? n(d.n) + " כניסות במסוף" : "אין כניסות"; }]
+  };
+  function verdictHtml(v, s) {
+    var w = v.who || {}, you = w.you || {}, off = w.office || {}, net = w.internet || {}, si = v.signins || {};
+    var sshIn = ((si.ssh_in || {}).ok) || 0, inside = v.got_in > 0 || sshIn > 0;
+    var say = v.got_in > 0 ? "כתובת מבחוץ קיבלה תשובה מאפליקציה פרטית." : sshIn ? "מישהו שאינו מהמכונות שלנו נכנס ב-SSH." : "אף אחד מבחוץ לא נכנס.";
+    // the proof counts what it checked, in the window it checked — never the day table's total (the second reader)
+    var cover = v.raw_hours < v.hours ? " ב-" + n(Math.round(v.raw_hours)) + " השעות האחרונות (הבקשות עצמן נשמרות שלושה ימים)" : "";
+    var proof = v.got_in > 0 ? "<b>" + n(v.got_in) + " תשובות</b> של אפליקציה פרטית יצאו ל-" + n(v.got_in_addrs) + " כתובות מבחוץ" + cover + ". הכתובות ברשימת «נכנס»."
+      : sshIn ? "<b>" + n(sshIn) + " כניסות SSH</b> מ-" + n((si.ssh_in || {}).addrs) + " כתובות, לא במפתח עם שם ולא מכתובת שלנו. הכתובות ברשימת «כניסות»."
+      : "באפליקציות הפרטיות: <b>0 תשובות</b> לכתובת מבחוץ, מתוך <b>" + n(v.checked) + "</b> בקשות של האינטרנט שנבדקו" + cover + ". כולן נעצרו בכניסה או קיבלו דף ציבורי.";
+    var learn = v.age_days < v.learning_days ? '<div class="v-learn">' + pill("לשכה חדשה · יום " + n(Math.max(1, Math.ceil(v.age_days))), "info") +
+      "<span>בשבועיים הראשונים האינטרנט מגלה כתובות חדשות ביומן הציבורי של התעודות וסורק אותן. זה צפוי, ונרגע.</span></div>" : "";
+    var html = '<section class="pg-card v-verdict" data-state="' + (inside ? "bad" : "ok") + '"><span class="v-mark">' + ICON(inside ? "alert" : "shield") + "</span><div>" +
+      '<p class="v-say">' + say + '</p><p class="v-proof">' + proof + "</p>" + learn + "</div></section>";
+    html += '<div class="pg-kpis v-who">' +
+      kpi("שלך", n(you.requests), "done", "מ-" + n(you.addrs) + " חיבורים שלך · נכנסת " + n((si.people || {}).ok) + " פעמים") +
+      kpi("של הלשכה עצמה", n(off.requests), "running", "ועוד " + n((si.machines || {}).ok) + " בדיקות SSH של המחשבים שלנו. אלה לא כניסות של אנשים.") +
+      kpi("מהאינטרנט", n(net.requests), "todo", n(net.addrs) + " כתובות מ-" + n(net.countries) + " מדינות · " +
+        (v.got_in ? n(v.got_in_addrs) + " קיבלו תשובה פרטית" : "אף אחת לא קיבלה תשובה פרטית")) + "</div>";
+    var rows = (v.tried || []).map(function (t) { return triedRow(t, s); });
+    S.data.tried = rows;
+    html += '<section class="pg-card"><div class="pg-cardhead"><h3>מה האינטרנט ניסה</h3><span class="hint">לחיצה על שורה מסבירה אותה</span></div>' +
+      (rows.length ? '<ul class="v-rows">' + rows.map(function (r) { return r.html; }).join("") + "</ul>" : '<div class="empty">אף כתובת מבחוץ בחלון הזה.</div>') +
+      '<p class="v-how"><b>איך מוצאים לשכה חדשה בתוך דקות:</b> כל אפליקציה מקבלת תעודת אבטחה, וכל תעודה מתפרסמת ביומן ציבורי. סורקים קוראים אותו ומגיעים לכל כתובת חדשה כדקה או שתיים אחרי שהתעודה שלה הונפקה. כך זה בכל שרת חדש.</p></section>';
+    html += '<section class="pg-card"><div class="pg-cardhead"><h3>כניסות</h3><span class="hint">אנשים, מכונות וזרים בנפרד</span></div><div class="v-split">' +
+      '<div><span class="pg-kpi-k">אנשים</span><span class="v-n num">' + n((si.people || {}).ok) + '</span><span class="sub">כניסות ללשכה' + ((si.people || {}).typo ? " · " + n(si.people.typo) + " סיסמאות שגויות שלך" : "") + "</span></div>" +
+      '<div><span class="pg-kpi-k">המחשבים שלנו</span><span class="v-n num">' + n((si.machines || {}).ok) + '</span><span class="sub">בדיקות SSH במפתח עם שם' + ((si.machines || {}).fail ? " · " + n(si.machines.fail) + " נכשלו" : "") + "</span></div>" +
+      (sshIn ? '<div><span class="pg-kpi-k">נכנסו ב-SSH</span><span class="v-n num">' + n(sshIn) + '</span><span class="sub">לא במפתח עם שם ולא מכתובת שלנו</span></div>' : "") +
+      '<div><span class="pg-kpi-k">זרים</span><span class="v-n num">' + n(((si.strangers || {}).attempts || 0) + ((si.strangers || {}).sso_fail || 0)) +
+      '</span><span class="sub">ניסיונות כניסה מ-' + n((si.strangers || {}).addrs) + " כתובות, כולם נדחו</span></div></div></section>";
+    html += '<section class="pg-card"><div class="pg-cardhead"><h3>הדלתות לשרת</h3><span class="hint">כל דרך שבה אפשר לדבר עם המכונה</span></div><ul class="v-rows">' +
+      (v.doors || []).map(function (d) {
+        var meta = DOOR[d.key] || [d.key, "", function () { return ""; }];
+        var kind = { ok: "ok", warn: "warn", bad: "bad", info: "info" }[d.state] || "muted";
+        return '<li class="v-row v-door"><span class="v-what">' + esc(meta[0]) + (meta[1] ? ' <span class="v-ltr">' + esc(meta[1]) + "</span>" : "") +
+          (d.key === "provider" && d.last ? '<small class="v-ltr" title="' + esc(d.last) + '">' + esc(d.last) + "</small>" : "") +
+          "</span><span></span>" + pill(meta[2](d), kind) + "</li>";
+      }).join("") + "</ul></section>";
+    var needs = (v.needs || []).map(function (x) {
+      if (x.key === "enforce") return '<li class="v-row"><span class="v-what">מעבר לאכיפה<small>' + n(x.n) + ' כתובות היו נחסמות עכשיו. במצב צפייה הן נרשמות בלבד.</small></span><span></span><a class="btn" href="#/bans">לאכיפה</a></li>';
+      if (x.key === "ssh-in") return '<li class="v-row"><span class="v-what">כניסות SSH שאינן שלנו<small>' + n(x.n) + " כניסות מ-" + n(x.addrs) + ' כתובות, בלי מפתח עם שם. אם אחת מהן שלך — לתת שם למפתח; אם לא — להחליף מפתחות וסיסמאות.</small></span><span></span><a class="btn danger" href="#/signins">לכניסות</a></li>';
+      if (x.key === "provider") return '<li class="v-row"><span class="v-what">ספק השרת מריץ פקודות כ-root בתוך המכונה<small>' + n(x.n) + ' פקודות בחלון הזה. להשאיר, או להגביל לגיבויים ולכיבוי בלבד — במדיניות השרת.</small></span><span></span>' + pill("החלטה שלך", "need") + "</li>";
+      if (x.key === "keys") return '<li class="v-row"><span class="v-what">מפתח SSH בלי שם<small>' + n(x.n) + ' מפתחות מורשים כ-root שאף רשומה לא מסבירה. לתת שם או להסיר.</small></span><span></span><a class="btn ghost" href="#/net">לרשת</a></li>';
+      if (x.key === "docker") return '<li class="v-row"><span class="v-what">הדלת של Docker פתוחה<small>אפליקציה בלשכה יכולה לקרוא סודות וקבצים של אחרת. הלשכה צריכה את העדכון של DGO-1647.</small></span><span></span>' + pill("דחוף", "bad") + "</li>";
+      return "";
+    }).join("");
+    if (needs) html += '<section class="pg-card"><div class="pg-cardhead"><h3>צריך אותך</h3></div><ul class="v-rows">' + needs + "</ul></section>";
+    return html;
+  }
+  function openTried(key) {
+    var r = (S.data.tried || []).filter(function (x) { return x.html.indexOf('data-tried="' + key + '"') >= 0; })[0];
+    if (!r) return;
+    openDrawer(esc(r.d.t), r.pill, '<div class="facts">' + fact("מי זה", r.d.who) + fact("למה הגיע", r.d.why) +
+      fact("מה עשינו", r.d.did) + fact("צריך אותך?", r.needs ? "כן — כתובות מבחוץ קיבלו תשובה פרטית; הן ברשימת «נכנס»" : "לא") +
+      "</div>", "");
   }
   function mapHint(m) {
     var ins = (m.pins || []).filter(function (p) { return p.dir === "in"; }).length, outs = (m.pins || []).filter(function (p) { return p.dir === "out"; }).length;
@@ -895,7 +1042,13 @@ var binaAsk, binaTell;
   }
 
   // ── wiring ─────────────────────────────────────────────────────────────────────────────────────
+  document.addEventListener("keydown", function (e) {
+    var tr = e.target.closest && e.target.closest("[data-tried]");
+    if (tr && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); openTried(tr.getAttribute("data-tried")); }
+  });
   document.addEventListener("click", async function (e) {
+    var tr = e.target.closest("[data-tried]");
+    if (tr) { openTried(tr.getAttribute("data-tried")); return; }
     var mm = e.target.closest("[data-mm]");
     if (mm) { S.mapMode = mm.getAttribute("data-mm"); var w = await world(); $("map").innerHTML = mapSvg(w, S.data.map || {}); var bs = $("mapMode").querySelectorAll("button"); for (var i = 0; i < bs.length; i++) bs[i].setAttribute("aria-pressed", bs[i] === mm ? "true" : "false"); return; }
     var kb = e.target.closest("[data-kind]");

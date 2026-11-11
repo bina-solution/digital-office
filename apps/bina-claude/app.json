@@ -5,11 +5,18 @@
     "en": "Bina Claude"
   },
   "layer": 3,
+  "people": "admins",
   "kind": "service",
+  "page": "ai",
   "version": "0.1.0",
   "summary": {
-    "he": "Claude Code בתוך הלשכה — כניסה לחשבון Claude מתוך הלשכה, מסוף בקונסול, ו-agent.v1 לסוכנים האחרים",
-    "en": "Claude Code inside the office — sign in to your Claude account from the office, a terminal in the console, and agent.v1 for the other agents"
+    "he": "אפליקציית Claude Desktop הרשמית בתוך הלשכה, בכניסה אחת — מסך בקונסול, ו-CLI, API וזרימה על אותה כניסה",
+    "en": "The official Claude Desktop app inside the office, with ONE sign-in — its screen in the console, and the CLI, the API and the flow on that same sign-in"
+  },
+  "agent_api_service": "bina-claude",
+  "wraps": {
+    "client": "Claude Desktop for Linux (beta), from Anthropic's apt repository (Dockerfile.desktop)",
+    "headless": "Claude Code CLI, behind the agent.v1 adapter"
   },
   "capabilities": [
     {
@@ -35,7 +42,16 @@
     }
   ],
   "connections": [],
+  "contributes": {
+    "env": {
+      "any-concurrency": {
+        "SPAN_SOURCE_BINA_CLAUDE": "http://bina-claude:3091/timeline/spans",
+        "SPAN_BUFFER_BINA_CLAUDE": "20000"
+      }
+    }
+  },
   "compose": "docker-compose.yml",
+  "cli": { "alias": "claude" },
   "agent": {
     "context": "AGENT.md",
     "order": 4
@@ -72,45 +88,6 @@
         "display_name": "Bina Claude",
         "default_host": "claude.localhost",
         "base_url_env": "BINA_CLAUDE_BASE_URL",
-        "local_twin": true
-      }
-    },
-    {
-      "host": "claude-terminal",
-      "name": "claude-terminal",
-      "port": 7681,
-      "auth": "sso",
-      "service": "bina-claude",
-      "emit_labels": true,
-      "module": {
-        "group": "ראשי",
-        "icon": "sparkles",
-        "embed": true,
-        "alias": "claude-terminal",
-        "id": "claude-terminal",
-        "name": "בינה קלוד · מסוף",
-        "desc": "Claude Code במסוף",
-        "order": 3,
-        "url": "http://bina-claude:7681",
-        "url_env": "BINA_CLAUDE_TERMINAL_URL",
-        "passthrough": [
-          {
-            "path": "/ws",
-            "transport": "websocket",
-            "strip_mount_prefix": true
-          },
-          {
-            "path": "/token",
-            "transport": "http",
-            "strip_mount_prefix": true
-          }
-        ]
-      },
-      "sso": {
-        "slug": "bina-claude-terminal",
-        "display_name": "Bina Claude terminal",
-        "default_host": "claude-terminal.localhost",
-        "base_url_env": "BINA_CLAUDE_TERMINAL_BASE_URL",
         "local_twin": true
       }
     }

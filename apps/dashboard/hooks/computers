@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+#: computers — every computer the control centre shows: its state (up · half · down · away · none), since when, why, and the snapshot's age: [--json]
+# Asks the collector's own snapshot through apps/dashboard/computers.py, run inside dashboard-feed (this app's
+# directory is its /app); it probes nothing itself. --json prints the whole snapshot (computers, today's lines,
+# topics, totals, errors) — the file the page fetches at /data/state.json.
+# Exit 0 / 1 the collector has no snapshot yet / 2 usage / 3 the collector is not running on this office.
+set -uo pipefail
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
+. "${REPO_ROOT}/scripts/lib.sh"
+case "${1:-}" in -h|--help) sed -n 's/^#: //p' "${BASH_SOURCE[0]}"; exit 0 ;; esac
+running "dashboard-feed-${DN}" || {
+  echo "the control centre's collector is not running on this office — where another office runs it:" \
+       "./bbox remote <office> dashboard /data/state.json" >&2
+  exit 3; }
+dcx exec -T dashboard-feed python3 /app/computers.py "$@"

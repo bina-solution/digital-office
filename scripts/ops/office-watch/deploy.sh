@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# deploy.sh — AUD-C5-001331: the office watch on fpg-vps (severe events → the office notice centre).
-# Run as root on fpg-vps from the staged directory:
+# deploy.sh — AUD-C5-001331: the office watch on exf-vps (severe events → the office notice centre).
+# Run as root on exf-vps from the staged directory:
 #
 #   DRY=1 bash deploy.sh   # every guard + one read-only look (--check); nothing changed
 #   bash deploy.sh         # guards → back up → install → verify → first run → ONE test row → timer on;
@@ -13,8 +13,8 @@
 set -euo pipefail
 HERE=$(cd "$(dirname "$0")" && pwd)
 DRY=${DRY:-0}
-EXPECT_HOST=${EXPECT_HOST:-srv2085127}
-OFFICE=${OFFICE:-fireplace}
+EXPECT_HOST=${EXPECT_HOST:-srv000003}
+OFFICE=${OFFICE:-examplef}
 STAMP=$(date -u +%Y%m%dT%H%M%SZ)
 BK=/root/office-watch-backup-$STAMP
 BIN=/usr/local/sbin/office-watch

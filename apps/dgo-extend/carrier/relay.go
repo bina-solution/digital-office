@@ -68,7 +68,8 @@ var (
 )
 
 // errNobodyCame is the ordinary end of a wait at the hub: the other side was not there within parkFor.
-var errNobodyCame = errors.New("nobody came")
+// It is also what `link status` prints for a pair that waits there, so it names who did not come.
+var errNobodyCame = errors.New("the other office did not come to the hub")
 
 type parked struct {
 	conn  net.Conn
@@ -403,16 +404,22 @@ func (p *pair) relayLoop() {
 		}()
 		conn, err := p.viaRelay(ctx, base)
 		cancel()
-		if errors.Is(err, errNobodyCame) {
-			backoff = minBackoff
-			continue // the other side was not there: wait for it again at once
-		}
 		if err != nil {
+			// Every try that fails says why, the ordinary end of a wait too: what an EARLIER try failed
+			// with is not the reason any more. Measured 2026-11-05: after a DNS outage the MacBook's pair
+			// with the Dell read «relay: … no such host» for hours, while the hub answered every wait and
+			// the Dell was simply off the network.
 			p.mu.Lock()
 			if p.sess == nil {
 				p.lastErr = "relay: " + err.Error()
 			}
 			p.mu.Unlock()
+		}
+		if errors.Is(err, errNobodyCame) {
+			backoff = minBackoff
+			continue // the other side was not there: wait for it again at once
+		}
+		if err != nil {
 			select {
 			case <-time.After(backoff):
 			case <-p.stop:

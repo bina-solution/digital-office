@@ -14,7 +14,7 @@ name: ci-verify
 
 on:
   push:
-    branches: [main, shlomo-laptop, release-v2-lockin, platform-os-refactor]
+    branches: [main, owner-laptop, release-v2-lockin, platform-os-refactor]
     # The auto-publish step below commits the refreshed scorecard/screenshots back
     # to .ci-cd/ with [skip ci]; ignoring that path is a second guard against loops.
     paths-ignore: ['.ci-cd/**']
@@ -267,6 +267,22 @@ jobs:
       # you find out at restore. Rule: if git tracks it, it is not state.
       - name: G26 — data.volumes matches the state the compose actually creates
         run: python3 scripts/refactor/data-volumes-lint.py
+      # The office's backup, as code, is RUN (DGO-1778): the archiver's carry, writers and shares tests (the REAL
+      # cmd_export / cmd_import, docker faked) and data-management's store, run, mirror and herd suites (a fake files
+      # app, the real REST store; what needs docker and restic skips itself). Nothing ran them: one landed today
+      # with four rounds of readers, and the next change to them would have been checked by nobody.
+      - name: backup — the archiver and data-management's stores hold
+        # the job has none of its own, and a hung store would hold the shared runner for GitHub's six hours
+        timeout-minutes: 20
+        run: |
+          bash scripts/ci/pip-ensure.sh yaml:pyyaml fastapi:fastapi==0.115.6 uvicorn:uvicorn==0.34.0
+          rc=0
+          for t in carry writers shares; do python3 "scripts/test_deployment_archive_$t.py" || rc=1; done
+          python3 scripts/test_data_volumes_kv.py || rc=1
+          for t in test_restic_store test_backup_run test_herd_store test_mirror; do
+            (cd platform-base/data-management && python3 -W ignore "$t.py") || rc=1
+          done
+          exit $rc
       # G30 — the enabled render declares 36.4 GiB of memory limits against hosts of 7-16 GiB.
       # Nobody chose that: every limit is a literal in one app's compose and no view summed them.
       # On one Docker host the caps protect nothing (the host OOM-killer fires first and picks its
@@ -487,6 +503,12 @@ jobs:
       # faked), so it needs no docker socket and no vault — hence it can live in this cheap lane.
       - name: G14 — credential broker refuses what it must
         run: bash scripts/ci/pip-ensure.sh flask && python3 platform-base/connections/test_broker.py
+      # hos-002, the vault's safety net (S26, DGO-1151): a key replacement loses no byte, and a key that
+      # cannot open the vault never wipes it — the vault is read as unreadable, never as empty. Every office's
+      # own-key move rests on this (vps1 and the HP moved off app.py's constant by it on 2026-11-09), and CI
+      # never ran it. Hermetic: its own vault in a temporary directory.
+      - name: connections — the vault's key is replaced without losing a byte, and a wrong key never wipes it
+        run: bash scripts/ci/pip-ensure.sh flask cryptography && python3 platform-base/connections/test_vault_keys.py
       # G16 — the STATUS contract. Every consumer (store UI, bbox, alerting) branches on
       # `conditions[].reason`, so those strings are an API. The cases that matter most are the ones
       # a live stack cannot be made to show on demand — an expired OAuth grant, a vanished docker
@@ -676,6 +698,61 @@ jobs:
       # of a secret over every tracked text file; prints `path:line kind`, never a value.
       - name: G92 — no tracked file carries a private key or a provider's token
         run: python3 scripts/refactor/tracked-secret-lint.py --self-test && python3 scripts/refactor/tracked-secret-lint.py
+      # G93 — the template carries no secret. Every install that copies .env.ex ran on its values, so offices
+      # shared their database passwords and vault key (DGO-1220); scripts/env-secrets.py now makes each one, and
+      # this refuses a value in the template, a key the generator does not know, and a new literal fallback.
+      - name: G93 — the template carries no secret; the generator's lists name every secret key
+        run: python3 scripts/refactor/env-template-secret-lint.py --self-test && python3 scripts/refactor/env-template-secret-lint.py
+      # G94 — what root writes in an office checkout stays its owner's (DGO-1324). CI's checkout has one owner and
+      # passes by construction: the step proves the gate runs and that its self-test can fail.
+      - name: G94 — the checkout's owner can write every path a session writes
+        run: python3 scripts/refactor/checkout-owner-lint.py --self-test && python3 scripts/refactor/checkout-owner-lint.py
+      # G95 — a link a person is given is built by the one builder, never by hand (DGO-1433): eleven forms built by
+      # hand in seven places, none opened past the sign-in. Static and office-free.
+      - name: G95 — a link a person is given is built by the one builder, never by hand
+        run: python3 scripts/refactor/office-link-lint.py --self-test && python3 scripts/refactor/office-link-lint.py
+      # G105 — Bina Claude is ONLY the official Claude Desktop app, with ONE login: no terminal tile, no
+      # terminal in its build, no page that sends anyone to one (DGO-1684, the owner: «Delete the terminal
+      # and make sure nobody gets mixed up again»). Static and office-free.
+      - name: G105 — Bina Claude is only the desktop app, with one login; there is no terminal
+        run: python3 scripts/refactor/one-claude-lint.py --self-test && python3 scripts/refactor/one-claude-lint.py
+      # G106 — a tile opens a screen, never an API (EXU-21: the local models tile showed «Ollama is running»).
+      # It measures a RUNNING office through its console; here no console runs, so the self-test is the proof
+      # that it can fail, and the office baseline (scripts/ci/gates.sh) is where it measures.
+      - name: G106 — a tile opens a screen, never an API
+        run: python3 scripts/refactor/tile-screen-lint.py --self-test && python3 scripts/refactor/tile-screen-lint.py
+      # G107 — the side menu stands in the component's grid (`.appgrid`), sized by it alone (DGO-1591: «חצי תפריט
+      # … לא נפתח, לא נסגר» — six pages kept a flex row of their own with the menu at 238px). Static, office-free.
+      - name: G107 — the side menu's column is the component's, never an app's own
+        run: python3 scripts/refactor/menu-host-lint.py --self-test && python3 scripts/refactor/menu-host-lint.py
+      # G108 — a wrapped official app (app.json `wraps`) keeps the four channels: screen, CLI, API, event stream
+      # (DGO-1266, cli-502: «כל עטיפה חדשה עוברת את ה-gate לפני שהיא נכנסת לקטלוג»). Static, office-free.
+      - name: G108 — a wrapped official app keeps the four channels
+        run: python3 scripts/refactor/wrapped-app-lint.py --self-test && python3 scripts/refactor/wrapped-app-lint.py
+      # G109 — what a migration creates (object or column), INDOX's fixture schema creates too, so a fresh office
+      # gets it (DGO-235: LINK_CONNECTION, then sync_item_reasons, each lived in a migration only). Static.
+      - name: G109 — every object and column a migration creates is in schema.sql
+        run: python3 scripts/refactor/schema-migration-drift-lint.py --self-test && python3 scripts/refactor/schema-migration-drift-lint.py
+      # G110 — a file lifted from another app (a «Lifted from <path>» header: webengine.py, browser_session.py) stays its
+      # original apart from its declared names (DGO-320: nothing kept the copies in step). Static.
+      - name: G110 — every lifted copy is its original
+        run: python3 scripts/refactor/lifted-copy-lint.py --self-test && python3 scripts/refactor/lifted-copy-lint.py
+      # G114 — a cell of the app standard that was met stays met (DGO-1047): measure.py --check from source, with no
+      # .generated/ (the UI map's view counts, which need it, decide no cell).
+      - name: G114 — the app standard's closed cells stay closed
+        run: python3 scripts/refactor/app-standard-lint.py --self-test && python3 scripts/refactor/app-standard-lint.py
+      # G115 — a variable an office's compose may pass EMPTY is read as unset, never as a value (DGO-1797): the
+      # MacBook's link app crash-looped 36 minutes on `float("")` when an older image met a compose of fc2a3c066.
+      - name: G115 — a compose that may pass a variable empty meets code that reads «empty is unset»
+        run: python3 scripts/refactor/empty-env-lint.py --self-test && python3 scripts/refactor/empty-env-lint.py
+      # G116 — an office says which routes it serves with no sign-in (DGO-1177): platform.state.yaml `public:` against
+      # every auth:none route of the apps it runs. Stage 1: undeclared routes are named, not failed.
+      - name: G116 — every route an office serves open is one it says is public
+        run: python3 scripts/refactor/public-route-lint.py --self-test && python3 scripts/refactor/public-route-lint.py
+      # G117 — an app's operations, declared once (DGO-1244), each with its faces (DGO-1246): a verb with its hook
+      # file, a screen action. Stage 1: the missing faces are named with the counts, not failed.
+      - name: G117 — every op an app declares has a verb with its hook, and a screen action
+        run: python3 scripts/refactor/ops-faces-lint.py --self-test && python3 scripts/refactor/ops-faces-lint.py
       # G18 — a healthcheck must probe the APP, not itself. chat probed a
       # node:22-slim image with `curl`, which that image does not have, so every check died with
       # "exec: curl: executable file not found" and the container reported unhealthy forever while
@@ -729,6 +806,51 @@ jobs:
       # bug. hello-bina, the app third-party authors copy, shipped that way.
       - name: G20 — every SSO-gated app has an authentik provider
         run: python3 scripts/refactor/sso-provider-lint.py
+      # G96 — the mirror of G20: an app that is NOT gated must say so honestly. n8n declared
+      # `auth: none` with its routers hand-written in its own compose and no middleware on any of
+      # them, so its editor and /rest/settings answered the internet on every office (measured from
+      # outside 2026-11-09, two scanners loading the editor within two minutes of an edge restart —
+      # DGO-1594). The three exemptions are decisions with their reasons in the gate, and an
+      # exemption that stops matching fails. (G96, not G95: `office-link-lint` above holds G95.)
+      - name: G96 — a host that shows a person a screen is not open to the world
+        run: python3 scripts/refactor/human-ui-auth-lint.py --self-test && python3 scripts/refactor/human-ui-auth-lint.py
+      - name: 'G98: error reporters only where their target is configured (reporter-target-lint)'
+        run: python3 scripts/refactor/reporter-target-lint.py --self-test && python3 scripts/refactor/reporter-target-lint.py
+      # G99 — an office that announces itself to its vendors on every start (DGO-1596): the edge asked
+      # update.traefik.io for a newer build, MinIO asked dl.min.io, both vendor defaults, and neither
+      # answer is used by anything here. Measured from the office's own flow log. (G99 and not G96: on
+      # this branch G96 is human-ui-auth-lint above.)
+      - name: G99 — the edge and every MinIO start without asking a vendor for news
+        run: python3 scripts/refactor/no-phone-home-lint.py --self-test && python3 scripts/refactor/no-phone-home-lint.py
+      # G97 — a webhook the edge publishes is a door with no session: it authenticates or it is closed
+      # (DGO-1603). Red on arrival on the office branches (12 open, 12 paths); green on the sweep this
+      # batch carries — off the runner's KNOWN_RED since 2026-11-11, measured green on mac-dgo with node.
+      - name: G97 — an active webhook authenticates or is closed to the internet
+        run: python3 scripts/refactor/webhook-auth-lint.py --self-test && python3 scripts/refactor/webhook-auth-lint.py
+      # From hp-dgo, taken by the release (DGO-969). G100 and G101 kept hp-dgo's numbers (free here); hp-dgo's
+      # G99 and G102 were spent on this line (no-phone-home-lint, app-coupling-lint), so they are G111 and G112.
+      # G111 — no container's log is unbounded on any office (DGO-1393): 95 of 114 services bound their own
+      # log, 19 did not — and the ones that did not were the ones that write the most (plane-db wrote 1.2 MB a
+      # minute, 815 MB in a day). The compiler now fills the gap; this gate holds both halves.
+      - name: 'G111: every container log is bounded, by its app or by the compiler (log-rotation-lint)'
+        run: python3 scripts/refactor/log-rotation-lint.py --self-test && python3 scripts/refactor/log-rotation-lint.py
+      # G100 — a killed gate run does not leave its extraction dir behind (DGO-1393): 129 `n8n-bp-*` dirs
+      # (171 MB) had piled up from runs cut down by their own timeout, because `atexit` never runs for a
+      # killed process. The module now sweeps stale dirs at import, and this proves it.
+      - name: 'G100: a killed run clears its blueprint extraction dir (blueprint-tmp-test)'
+        run: python3 scripts/refactor/blueprint-tmp-test.py
+      # G101 — the gates' own trigger (DGO-1619): `Gates: run` as a git TRAILER, not a substring.
+      - name: 'G101: the gates ask for it with a trailer, not a substring (gates-marker-lint)'
+        run: python3 scripts/refactor/gates-marker-lint.py
+      # G112 — the office's vault is declared, not remembered (DGO-1642): every ai/context document is
+      # published to the vault or excluded by name, with a reason.
+      - name: 'G112: every ai/context document is published to the vault or excluded by name (vault-sources-lint)'
+        # …and the gate's own cases (test_vault_sources_lint.py): it fails on an undeclared document,
+        # a declaration of a file nobody has, and no manifest; it passes on an excluded or noted one.
+        run: >-
+          python3 scripts/refactor/vault-sources-lint.py
+          && bash scripts/ci/pip-ensure.sh pytest
+          && python3 -m pytest scripts/refactor/test_vault_sources_lint.py -q
       # G27 — apps BUNDLE a copy of the design system rather than link it, because an app has to stay
       # independently installable. The price of that decision is drift, and it was already being paid:
       # bina-ui.css and the mailview copy carried two different dark palettes for the same token, so

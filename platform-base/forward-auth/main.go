@@ -28,12 +28,26 @@ func main() {
 	hashOnly := flag.Bool("hash", false, "read a password on stdin and print the users-file entry, then exit")
 	healthAt := flag.String("health", "", "GET this URL and exit 0 iff it answers 2xx, then exit (for a HEALTHCHECK on a scratch image)")
 	firstRunOnly := flag.Bool("first-run", false, "read a first-run code on stdin; while there is no users file, keep its sha256 as the setup file (setup.go), then exit")
+	inviteOnly := flag.Bool("invite", false, "read «user email [display]» on stdin; keep an invitation's sha256 and print its one-time code (invite.go), then exit")
+	invitesOnly := flag.Bool("invites", false, "print the live invitations — user, email, display, expiry; never a code (invite.go), then exit")
+	revokeOnly := flag.Bool("revoke-invite", false, "read a user name on stdin and drop its invitation (invite.go), then exit")
 	importOnly := flag.Bool("import-users", false, "read a users file on stdin and keep it as the users file where there is none yet (setup.go), then exit")
 	flag.Parse()
 
 	if *firstRunOnly {
 		os.Exit(writeFirstRun(env("FORWARD_AUTH_USERS_FILE", defaultUsersFile), env("FORWARD_AUTH_SETUP_FILE", defaultSetupFile),
 			os.Stdin, os.Stdout))
+	}
+	if *inviteOnly || *invitesOnly || *revokeOnly {
+		iv := &invites{path: env("FORWARD_AUTH_INVITES_FILE", defaultInvitesFile), usersFile: env("FORWARD_AUTH_USERS_FILE", defaultUsersFile)}
+		switch {
+		case *inviteOnly:
+			os.Exit(mintInvite(iv, os.Stdin, os.Stdout, time.Now()))
+		case *invitesOnly:
+			os.Exit(listInvites(iv, os.Stdout, time.Now()))
+		default:
+			os.Exit(revokeInvite(iv, os.Stdin, os.Stdout, time.Now()))
+		}
 	}
 	if *importOnly {
 		os.Exit(importUsers(env("FORWARD_AUTH_USERS_FILE", defaultUsersFile), os.Stdin, os.Stdout))
@@ -92,6 +106,7 @@ func main() {
 		users:        users,
 		live:         live,
 		firstRun:     firstRun,
+		invites:      &invites{path: env("FORWARD_AUTH_INVITES_FILE", defaultInvitesFile), usersFile: cfg.usersFile},
 		handoff:      newHandoff([]byte(cfg.secret)),
 		limit:        newLimiter(),
 		sign:         &signer{key: []byte(cfg.secret), ttl: cfg.sessionTTL},
@@ -118,6 +133,17 @@ func main() {
 		log.Printf("forward-auth: %d of %d user(s) authenticate from an authentik %s hash, verified as-is; "+
 			"the credential plane re-writes them in this service's own family when it next writes the file",
 			users.legacy, len(users.byName), legacyScheme)
+	}
+	// Who opens the office's admins' apps (DGO-1755, users.go: effective). Counts only, no name.
+	if !users.namesAdmin() {
+		bare := 0
+		for _, u := range users.byName {
+			if len(u.Groups) == 0 {
+				bare++
+			}
+		}
+		log.Printf("forward-auth: the users file names no admin (group %s): the %d account(s) whose line has no group "+
+			"count as admins of this office; name the admins in the file to end this", adminGroup, bare)
 	}
 
 	srv := &http.Server{

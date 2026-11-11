@@ -1,12 +1,12 @@
-# Setting up a new company's office — what The Fireplace Guys taught us
+# Setting up a new company's office — what The Examplef Guys taught us
 
-From 2026-10-22 to 2026-10-30 we set up a whole client business on DGO (office `fireplace`, items
-FPG-1…FPG-527). This is the order to follow next time. Each phase says what to do, what went wrong,
+From 2026-10-22 to 2026-10-30 we set up a whole client business on DGO (office `examplef`, items
+EXF-1…EXF-527). This is the order to follow next time. Each phase says what to do, what went wrong,
 and what the product does now. Issue files are under `issues/`. Commits are on the release line.
 
 ## 1. Before the call
 
-**Do.** Research the business before any code (FPG-17). Plan in six modules: accounts and secrets;
+**Do.** Research the business before any code (EXF-17). Plan in six modules: accounts and secrets;
 the office; the client's app; the website; defects found; the first month and handover. Put the
 owner's decisions on one page, each with a recommendation. Send the data list (see the checklist)
 before the call.
@@ -14,7 +14,7 @@ before the call.
 **Went wrong.** The client's items lived in our Plane. Moving them to the client's Plane was manual
 (`no-way-to-carry-plane-items-from-one-office-to-another.yaml`). The client's plan and call notes were
 committed to the product repo and had to be taken out (5b5bbdb6). Another office's machine names had
-leaked into product runbooks (9c3c5f1e, FPG-3).
+leaked into product runbooks (9c3c5f1e, EXF-3).
 
 **Product now.** `bbox project-pln plan` applies a plan file. A processed meeting links its items both
 ways (c6ea7b4b). **Still lacks:** a verb that moves items between offices (issue above, open).
@@ -26,7 +26,7 @@ the decisions in the checklist below, or a date for each. Never let a password b
 call becomes a transcript.
 
 **Went wrong.** A client password was shown in the recorded call and sent in chat. It had to be
-rotated (FPG-56). The first target date passed; the next target became a pilot.
+rotated (EXF-56). The first target date passed; the next target became a pilot.
 
 ## 3. The server and the domain
 
@@ -41,19 +41,19 @@ rotated (FPG-56). The first target date passed; the next target became a pilot.
 **Went wrong.**
 - The fresh office got the template `.env`: another office's domain and placeholder secrets
   (`dgo-extend-installs-a-fresh-office-on-the-template-env.yaml`). It also carried another company's
-  name (FPG-60).
+  name (EXF-60).
 - A declaration with business apps only switched the platform off (3f7fbab6).
 - The profile promised four cores on a two-core box
-  (`fireplace-perf-profile-declares-four-cores-on-a-two-core-box.yaml`).
-- The box ran out of memory (`fireplace-does-not-fit-eight-gigabytes-swap-full-and-browser42-was-on-again.yaml`).
+  (`examplef-perf-profile-declares-four-cores-on-a-two-core-box.yaml`).
+- The box ran out of memory (`examplef-does-not-fit-eight-gigabytes-swap-full-and-browser42-was-on-again.yaml`).
 - Installing an app waited forever for memory, and Debian had no swap
   (`installing-an-app-on-an-8gb-office-waits-forever-for-memory-and-no-swap.yaml`).
 - The office changed its name after the install, so hosts, accounts and mailboxes had to move
-  (FPG-33, FPG-34).
+  (EXF-33, EXF-34).
 - The health step said "healthy" while every compose call failed (c700b01d).
 - An app brief over its size budget blocked every bring-up for 12 hours
   (`meet-agent-md-over-budget-blocked-every-bring-up.yaml`).
-- 33 fixes lived only in the server's checkout (FPG-62).
+- 33 fixes lived only in the server's checkout (EXF-62).
 
 **Product now.** A fresh office gets its own `.env`, vault key and secrets (22538c2e, 3bf7c956). The
 bare domain opens the console (03970a03). The domains app writes DNS records by code (f4659bc4).
@@ -86,12 +86,12 @@ still reads open. **Still lacks:** PTR is a hand step, with no issue file yet.
 - Hosting, registrar, Google, the AI subscription and payments are the client's accounts. The owner
   opens them on the client's card.
 - Passwords reach the office browser from the owner's password manager. An agent never types them.
-- Put a copy of the backup key in the owner's password manager (FPG-58).
+- Put a copy of the backup key in the owner's password manager (EXF-58).
 
 **Went wrong.**
 - The client app's first admin needed a hand on `.env` (fixed in ab0b05c1).
 - `/login` gave a 404 on refresh (`chimney-services-login-is-404-when-opened-directly.yaml`).
-- The Plane tile went dead inside the console when its cookie expired (fixed in 97a65fc9, FPG-111).
+- The Plane tile went dead inside the console when its cookie expired (fixed in 97a65fc9, EXF-111).
 - The office browser came back on the client's server, against the rule. Its task runner answers any
   caller (`browser42-task-runner-answers-any-caller.yaml`).
 
@@ -104,14 +104,14 @@ agent, Obsidian, n8n. Keep the browser off the client's server. Set the office l
 signs in.
 
 **Went wrong.**
-- Console search did not find an app the console does not frame (fixed in 04121c76, FPG-107).
+- Console search did not find an app the console does not frame (fixed in 04121c76, EXF-107).
 - Plane and Obsidian windows gave a 404 on a public domain
   (`framed-hosts-404-on-a-public-domain.yaml`). An edge file written by hand now carries the client's
   domain.
 - An app with no compose file in its manifest broke the whole office (fixed; gate G5, 7ef3c16f).
 - `bbox n8n push` needs node on the host (`bbox-n8n-push-needs-node-on-the-host.yaml`,
   `n8n-push-needs-node-on-the-host.yaml`).
-- The office was in Hebrew for English speakers (FPG-64).
+- The office was in Hebrew for English speakers (EXF-64).
 - A container nobody declared served a public path
   (`drop-tmp-is-a-container-no-compose-file-declares.yaml`).
 
@@ -120,7 +120,7 @@ signs in.
 ## 7. Meetings
 
 **Do.** Run `bbox meet verify --call` after the install and before each important meeting (66c4b223,
-FPG-87). Check that the MEET project exists in the office's own Plane. Give the recorder CPU and memory
+EXF-87). Check that the MEET project exists in the office's own Plane. Give the recorder CPU and memory
 floors. On a small box, hold one meeting at a time.
 
 **Went wrong, now fixed.** The CPU budget throttled the recorder, and recordings lost sound
@@ -133,7 +133,7 @@ Plane; the fix there was made by hand. Installing Meet does not create its Plane
 invents "thank you" on silence. Clipped audio has no detector. The files are listed at the end.
 
 **Product now.** Transcripts and subtitles go to Drive by themselves (856a84df). Live captions carry the
-office's own terms (FPG-471).
+office's own terms (EXF-471).
 
 ## 8. The client's own app
 
@@ -153,7 +153,7 @@ office's own terms (FPG-471).
 - Work was deployed first and committed later as "as deployed" rounds.
 
 **Product now.** The client app has a beauty gate for every role at six widths, and it builds no
-deploy package without a passing scan (FPG-498). **Still lacks:** that gate and the local test office
+deploy package without a passing scan (EXF-498). **Still lacks:** that gate and the local test office
 live in one app's `tools/`, not in the platform. No item yet.
 
 ## 9. Phones and notices
@@ -161,10 +161,10 @@ live in one app's `tools/`, not in the platform. No item yet.
 **Do.** The owner turns notices on from a menu. Send a test, then ask "did it show?". Android has a
 switch for each site. Some phones show no Chrome alerts at all; Firefox works there.
 
-**Went wrong.** The phone confirmed every test alert and showed none (FPG-501).
+**Went wrong.** The phone confirmed every test alert and showed none (EXF-501).
 
 **Product now.** The platform's notifications send office notices by Web Push (6cdaca0b). **Still
-lacks:** delivery receipts and "did it show?" exist only in the client app (FPG-501).
+lacks:** delivery receipts and "did it show?" exist only in the client app (EXF-501).
 
 ## 10. Handover and the first month
 
@@ -172,12 +172,12 @@ lacks:** delivery receipts and "did it show?" exist only in the client app (FPG-
 - For the first month, manage the office from our herd: a daily check, a weekly report in the
   client's language, and a daily encrypted backup off the server with a restore drill.
 - Then disconnect, hand over admin in every app, and rotate every secret that passed through us
-  (FPG-96).
+  (EXF-96).
 - Keep the client's records in the client's herd.
 
 **Went wrong.**
 - Our home office was down for four days, so the backup stopped. Then the SSH key no longer matched,
-  and the copy outgrew the home (`fireplace-offsite-backup-stopped-and-now-outgrows-the-home.yaml`).
+  and the copy outgrew the home (`examplef-offsite-backup-stopped-and-now-outgrows-the-home.yaml`).
 - After a restart, the client office served nothing until the home re-ran its link step
   (`a-converged-far-office-serves-nothing-after-a-restart-until-the-home-reruns-its-link-step.yaml`).
 
@@ -207,16 +207,16 @@ backup (706dd289) exist.
 
 - Moving Plane items: `no-way-to-carry-plane-items-from-one-office-to-another.yaml`
 - Template `.env` (in progress): `dgo-extend-installs-a-fresh-office-on-the-template-env.yaml`
-- Identity not asked at install: FPG-60
+- Identity not asked at install: EXF-60
 - Memory and swap on 8 GB: `installing-an-app-on-an-8gb-office-waits-forever-for-memory-and-no-swap.yaml`
 - CPU floor: `the-cpu-floor-of-a-tenth-core-throttles-the-health-probes.yaml`
 - n8n oversized: `n8n-runs-two-workers-and-a-webhook-process-for-twenty-executions-an-hour.yaml`
 - Named services ignored: `bbox-run-with-named-services-still-starts-the-left-out-recorder.yaml`
-- Private GitHub in a build: FPG-66
+- Private GitHub in a build: EXF-66
 - Framed windows, hand-written edge file: `framed-hosts-404-on-a-public-domain.yaml`
 - n8n push needs node: `bbox-n8n-push-needs-node-on-the-host.yaml`
 - Undeclared container: `drop-tmp-is-a-container-no-compose-file-declares.yaml`
-- Office language: FPG-64
+- Office language: EXF-64
 - Mailbox race (fixed in code, file open): `mailboxes-written-while-the-mail-server-starts-never-reach-dovecot.yaml`
 - PTR by hand: no issue file yet
 - Browser task runner: `browser42-task-runner-answers-any-caller.yaml`
@@ -229,9 +229,9 @@ backup (706dd289) exist.
   - `meet-jicofo-loses-the-recorder-after-prosody-and-jibri-restart-in-a-row.yaml`
   - `meet-plane-item-does-not-carry-capture-json-and-live-captions.yaml`
   - `meet-has-no-self-test-call.yaml` (the verb exists; the file still reads open)
-- Push receipts: FPG-501
+- Push receipts: EXF-501
 - Beauty gate in the platform: no item yet
-- Backup needs the home: `fireplace-offsite-backup-stopped-and-now-outgrows-the-home.yaml`
+- Backup needs the home: `examplef-offsite-backup-stopped-and-now-outgrows-the-home.yaml`
 - Link after restart: `a-converged-far-office-serves-nothing-after-a-restart-until-the-home-reruns-its-link-step.yaml`
 - No agent credential: `a-converged-office-that-serves-hands-no-agent-credential-to-the-home.yaml`
-- Handover: FPG-96
+- Handover: EXF-96

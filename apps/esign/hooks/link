@@ -1,0 +1,15 @@
+#!/usr/bin/env bash
+#: link <id> — mint the signer's link for an envelope (it is not kept in the listing, on purpose)
+set -uo pipefail
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
+. "${REPO_ROOT}/scripts/lib.sh"
+DN="$(read_env_value DEPLOYMENT_NAME)"; DN="${DN:-bina-deployment}"
+docker exec -e ID="${1:?usage: link <id>}" "esign-${DN}" python3 -c '
+import os,urllib.request
+req=urllib.request.Request("http://127.0.0.1:8080/api/envelopes/%s/link" % os.environ["ID"], method="POST")
+print(urllib.request.urlopen(req, timeout=30).read().decode())' | python3 -c '
+import json,sys
+j=json.load(sys.stdin)
+if not j.get("ok"): raise SystemExit("[esign] %s" % j.get("detail"))
+print(j["data"]["link"])'

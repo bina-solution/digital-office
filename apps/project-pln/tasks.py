@@ -9,10 +9,25 @@
 # tasks attach DGO-12 <file> [<file>…]   # the files a request came with, on its work item
 # tasks label MEET-15 נותח[,<label>…]    # add labels by name; one the project lacks is created
 # tasks unlabel DGO-12 בעלים[,<label>…]  # take off exactly the labels named
-# tasks link MEET-15 DGO-1003 FPG-2 …    # related both ways, across projects (Plane's `relates_to`)
+# tasks link MEET-15 DGO-1003 EXF-2 …    # related both ways, across projects (Plane's `relates_to`)
+# tasks new DGO "name" [--comment "description"|@file] [--priority urgent|high|medium|low|none]
+#                                        # a new work item; --comment is its description (the request's words)
+# tasks edit DGO-12 [--name "…"] [--priority p] [--comment "new description"|@file]
+#                                        # the old description is kept first, as a comment on the item
+# tasks rm DGO-12 --comment "why"        # NEVER deletes: the item moves to the project's cancelled state with
+#                                        # the reason as a comment; `tasks start` brings it back
+# …`tasks item new|edit|rm …` is the same (the noun of `dgo <app> <noun> <verb>`, DGO-1252)
 # tasks batch @actions.jsonl             # many of the verbs above in ONE run: one JSON object per line,
 #                                        # {"verb","ref","comment"?,"words"?[]} — the project is paged once
 # …any of the above with `--as <slug>` to act as that office agent (its own vault account + token)
+#
+# A READ THAT IS SLOW SAYS SO, AND GIVES UP. DGO alone is ~1,450 items and the office's Plane answers a
+# page of `issues/?expand=…` in 3–11 s, so `tasks list` could be minutes of silence — indistinguishable
+# from a stuck process. From PLANE_PROGRESS_AFTER seconds (default 3) a read prints one progress line to
+# STDERR every few seconds (page n, items, seconds — never to stdout: `--json` is a contract), and at
+# PLANE_READ_DEADLINE seconds (default 120, 0 = none) it STOPS with a non-zero exit that names the
+# address it was asking, how far it got, and how to ask for less. PLANE_PER_PAGE (default 200) is the
+# page size it asks Plane for — 50 was four times the round trips for the same rows.
 #
 # ON AN OFFICE THAT DOES NOT RUN PLANE, the same verbs reach the one that does — through the link and
 # with NO key at all: `where.sh` points the run at that office's door, and the door signs the request
@@ -30,6 +45,7 @@
 #              "module","url","updated_at"}]}
 # Every mutating verb prints one line unless `--json` is given, in which case it prints
 #   {"ok":true,"ref":"…","state":"…","group":"…","url":"…"}.
+import hashlib
 import html
 import json
 import mimetypes
@@ -57,6 +73,31 @@ WEB = (os.environ.get("WEB_URL") or "http://plane.localhost:8080").rstrip("/")
 # as `app_url`, for anything that must talk to the app itself.
 CONSOLE = (os.environ.get("CONSOLE_URL") or "").rstrip("/")
 CONSOLE_MODULE = os.environ.get("PLANE_CONSOLE_MODULE") or "project-pln"
+#: Where a work item's link opens (DGO-1433): the herd's hub console (hooks/tasks, from apps/computers/herd.yaml
+#: `hub_console:`) — the one the owner reaches from anywhere — else this office's own. On the HP or the MacBook this
+#: office's own console is `console.localhost`: on his phone, his phone.
+LINK_BASE = (os.environ.get("LINK_BASE") or CONSOLE).rstrip("/")
+#: A work item's key, as Plane writes it.
+KEY_RE = re.compile(r"[A-Z][A-Z0-9]{1,9}-[0-9]{1,7}")
+#: `attach`'s exit when Plane (or its store) ANSWERED and refused some of the files for good (their type, their
+#: size) and the rest landed: sending them again cannot change it — outbox.py's flush says so and lets the write
+#: go instead of holding the office's queue behind it. A refusal that may pass (5xx, 429, 401/403, the door's
+#: empty 404, no answer) exits 1 instead, and a replay keeps the write. Same number as outbox.py's ANSWERED_REFUSED.
+ANSWERED_REFUSED = 4
+
+
+def item_link(ref: str) -> str:
+    """A work item opened INSIDE the office, by its KEY — empty when no console is declared or `ref` is no key.
+
+    `#/m/<module>/<the app's inner route>` is the shell's deep link, and Plane's own key route `<ws>/browse/<KEY>/` is
+    the screen — no UUIDs (proven on vps1's console at a phone's size, 2026-11-06: the frame showed the item itself).
+    On the hub's console the module resolves by the name the writing office gives it (`plane.<office>` through a
+    door, `project-pln` at home: static/module-ref.js reads both). The `/go/<KEY>` path the console resolves
+    server-side (DGO-1433) replaces this once the hub answers it; until then a `/go/` link opened the hub's HOME
+    (measured 2026-11-08), so it is not written here."""
+    if not LINK_BASE or not KEY_RE.fullmatch(ref or ""):
+        return ""
+    return f"{LINK_BASE}/#/m/{console_module()}/{WS_SLUG}/browse/{ref}/"
 
 
 def console_module() -> str:
@@ -87,6 +128,91 @@ def log(msg: str) -> None:
     print(f"[project-pln] {msg}", flush=True)
 
 
+def say(msg: str) -> None:
+    """A line of PROGRESS — stderr, always, so a caller piping `--json` into a parser never sees it."""
+    print(f"[project-pln] {msg}", file=sys.stderr, flush=True)
+
+
+# A READ ON A BIG, SLOW PLANE MUST NOT LOOK LIKE A HANG (the owner, 2026-11-06: «נכשל מהר במקום להיתקע»).
+# Measured from vps1 against the HP's Plane: a page of `issues/?expand=labels,assignees` takes 3.3–11.3 s,
+# DGO holds ~1,450 items, and `tasks list --project DGO --mine --json` was **112 s of nothing** — no line,
+# no error, no clue — while `list` with no `--project` walked all five projects. So a read here has three
+# properties it did not have before: it TALKS (stderr, after PROGRESS_AFTER s), it has a CEILING
+# (READ_DEADLINE over the whole walk, not per request), and it asks Plane for BIG PAGES (PER_PAGE), which
+# is the only saving Plane itself offers — see `Plane.page`.
+PROGRESS_AFTER = float(os.environ.get("PLANE_PROGRESS_AFTER") or 3)    # silent this long, then talk
+PROGRESS_EVERY = float(os.environ.get("PLANE_PROGRESS_EVERY") or 5)    # …and no more often than this
+READ_DEADLINE = float(os.environ.get("PLANE_READ_DEADLINE") or 120)    # 0 = no ceiling at all
+#: 50 is the size the API documents; 200 is the size this Plane SERVES. Measured 2026-11-06:
+#: `per_page=200` answers 200 rows and drops DGO's total_pages 29 → 8; 500 answers too, but a page is then
+#: 23 s and one of them would eat the whole deadline. Same rows, a quarter of the round trips.
+PER_PAGE = max(1, int(os.environ.get("PLANE_PER_PAGE") or 200))
+
+
+class Read:
+    """One paging walk over the API: a ceiling over the WHOLE walk, and a line while it runs.
+
+    Armed once per read (`begin`) and stepped by `Plane.page` after every answered request, so the pages
+    and items it reports are what actually arrived, never an estimate. Unarmed is the default and does
+    nothing at all (no ceiling, no line, plain 90 s requests) — every write path stays exactly as it was.
+    """
+
+    def __init__(self) -> None:
+        self.label = ""            # "" = not armed: no progress, no ceiling
+        self.url = ""              # the address being asked, for the message that gives up
+        self.t0 = 0.0
+        self.deadline = 0.0
+        self.pages = 0
+        self.rows = 0
+        self.noted = 0.0
+
+    def begin(self, label: str) -> "Read":
+        self.label = label
+        self.url = ""
+        self.t0 = self.noted = time.monotonic()
+        self.deadline = READ_DEADLINE
+        self.pages = self.rows = 0
+        return self
+
+    def spent(self) -> float:
+        return time.monotonic() - self.t0
+
+    def left(self):
+        """Seconds this read may still spend on one request ('left' capped by the ceiling), or None when
+        it is not armed — a request timeout of None is `http`'s own 90 s."""
+        if not self.deadline:
+            return None
+        return max(1.0, self.deadline - self.spent())
+
+    def give_up(self) -> None:
+        sys.exit(f"[project-pln] gave up after {self.spent():.0f}s (PLANE_READ_DEADLINE="
+                 f"{self.deadline:g}): {self.label or 'read'} — still asking {self.url or '?'} — "
+                 f"{self.pages} pages and {self.rows} items so far. Plane is ANSWERING, only slowly. "
+                 f"Ask for less: `--project <ID>` (one project, not all of them), `--mine` (only my "
+                 f"items), `--state unstarted|started|completed`; or raise the ceiling with "
+                 f"PLANE_READ_DEADLINE=<seconds>.")
+
+    def expired(self) -> None:
+        """A request that went out with the ceiling's own timeout and failed: say THAT, not a raw URLError."""
+        if self.deadline and self.spent() >= self.deadline:
+            self.give_up()
+
+    def step(self, url: str, got: int = 0) -> None:
+        """Count one answered page: give up past the ceiling, and say where we are once it is slow."""
+        self.url = url
+        self.pages += 1
+        self.rows += got
+        now = time.monotonic()
+        if self.deadline and now - self.t0 > self.deadline:
+            self.give_up()
+        if self.label and now - self.t0 >= PROGRESS_AFTER and now - self.noted >= PROGRESS_EVERY:
+            self.noted = now
+            say(f"{self.label}: page {self.pages}, {self.rows} items, {self.spent():.0f}s so far …")
+
+
+READ = Read()
+
+
 # The project list is the slowest read in this API (measured 2026-10-01: ~55 s under load, holding one of
 # the two gunicorn workers), and every verb used to start with it; states/labels/modules change only when
 # someone edits the project. All four come from a small file inside the container for CACHE_TTL seconds,
@@ -95,16 +221,25 @@ CACHE = os.environ.get("TASKS_CACHE") or "/tmp/plane-tasks-cache.json"
 CACHE_TTL = int(os.environ.get("TASKS_CACHE_TTL") or "1800")
 
 
-def cached(key: str, fetch, fresh: bool = False):
+def _cache_read() -> dict:
     try:
         with open(CACHE) as f:
             data = json.load(f)
     except Exception:                                          # noqa: BLE001 — no cache yet / corrupt
         data = {}
-    hit = data.get(key)
-    if not fresh and isinstance(hit, dict) and time.time() - hit.get("t", 0) < CACHE_TTL:
+    return data if isinstance(data, dict) else {}
+
+
+def cache_peek(key: str):
+    """The cached value while it is fresh, else None."""
+    hit = _cache_read().get(key)
+    if isinstance(hit, dict) and time.time() - hit.get("t", 0) < CACHE_TTL:
         return hit["v"]
-    v = fetch()
+    return None
+
+
+def cache_put(key: str, v) -> None:
+    data = _cache_read()
     data[key] = {"t": time.time(), "v": v}
     try:
         with open(CACHE + ".tmp", "w") as f:
@@ -112,6 +247,15 @@ def cached(key: str, fetch, fresh: bool = False):
         os.replace(CACHE + ".tmp", CACHE)
     except Exception:                                          # noqa: BLE001 — a cache is never required
         pass
+
+
+def cached(key: str, fetch, fresh: bool = False):
+    if not fresh:
+        hit = cache_peek(key)
+        if hit is not None:
+            return hit
+    v = fetch()
+    cache_put(key, v)
     return v
 
 
@@ -130,6 +274,72 @@ def project_meta(p, pid: str):
     return states, labels, modules
 
 
+def members_key(pid: str, module_ids) -> str:
+    """The cache key of a project's module membership — the module SET in it, so a module added or removed is a
+    new key, and plan.py drops the project's keys after it places items (forget_module_members)."""
+    return f"{pid}:module-members:" + hashlib.sha1(",".join(sorted(module_ids)).encode()).hexdigest()[:10]
+
+
+def _module_items(p, P: str, mid: str):
+    """One module's item ids, through http(): None when Plane did not answer it — that module's failure, not the
+    verb's (p.page exits on any refusal, and one bad page of ~98 modules ended `tasks show`: the second reader)."""
+    ids, cursor = [], ""
+    while True:
+        out, code = http("GET", f"{p.base}{P}/modules/{mid}/module-issues/?per_page=100"
+                         + (f"&cursor={cursor}" if cursor else ""), None, p.h, tries=2)
+        if code != 200:
+            return None
+        rows = out if isinstance(out, list) else (out or {}).get("results") or []
+        ids += [str((x.get("issue") or x.get("id")) if isinstance(x, dict) else x) for x in rows]
+        if isinstance(out, list) or not (out.get("next_page_results") and out.get("next_cursor")):
+            return ids
+        cursor = out["next_cursor"]
+
+
+def module_members(p, pid: str, modules: dict, want: str = "") -> dict:
+    """item id → the name of the module it is in, read off each module's own list (`module-issues`, the endpoint
+    plan.py fills and reads). The item answers carry no module: the list endpoint has no `module_ids`, so every
+    `tasks show` said `module: —` for an item in «דיווח» (DGO-962).
+
+    A project has ~100 modules, so this is many requests. What was read is kept with WHICH modules were read
+    (`{"read": [...], "map": {...}, "since": t}` under members_key): `want` (one item id, for `show`) answers from it
+    when the item is there, else reads only the modules not read yet and stops at the one that holds it; a module
+    Plane did not answer is skipped and asked again next time — its items say «—» rather than the verb failing.
+    The whole read is as old as its first module: past the TTL it starts again."""
+    P, key = f"/projects/{pid}", members_key(pid, modules)
+    hit = cache_peek(key)
+    if not (isinstance(hit, dict) and isinstance(hit.get("map"), dict)
+            and time.time() - float(hit.get("since") or 0) < CACHE_TTL):
+        hit = {"read": [], "map": {}, "since": time.time()}
+    read, mp = set(hit["read"]), dict(hit["map"])
+    if not (want and want in mp):
+        grew = False
+        for mid in sorted(modules):
+            if mid in read:
+                continue
+            ids = _module_items(p, P, mid)
+            if ids is None:
+                continue
+            read.add(mid)
+            grew = True
+            for iid in ids:
+                mp.setdefault(iid, mid)
+            if want and want in mp:
+                break
+        if grew:
+            cache_put(key, {"read": sorted(read), "map": mp, "since": hit["since"]})
+    return {iid: modules.get(mid, "") for iid, mid in mp.items()}
+
+
+def module_of(it: dict, modules: dict, members=None) -> str:
+    """The item's module: what its own answer names, else the modules' lists."""
+    for m in (it.get("module_ids") or it.get("modules") or []):
+        mid = m if isinstance(m, str) else (m.get("module_id") or m.get("id"))
+        if modules.get(mid):
+            return modules[mid]
+    return (members or {}).get(str(it.get("id") or ""), "")
+
+
 # A Plane that does not answer must not hold a verb for half an hour: six tries × 90 s per request and several
 # requests per verb, with every caller on the Mac's engine queued behind them (measured 2026-11-02 17:40: seven
 # calls stuck 20–35 min while the HP, which runs Plane, did not answer, and the engine at load 140). A request
@@ -137,26 +347,55 @@ def project_meta(p, pid: str):
 # later request fails at once with the reason.
 DOWN = ""
 
+# A 404 with NO body is not Plane's: Plane says what it did not find, in JSON. It is the door of the office that runs
+# Plane (apps/dgo-extend/link-proxy.py, `X-Dgo-Door: no-app`) whose route table did not hold Plane at that moment —
+# measured 2026-11-05 from the Mac to the HP: empty 404s on the project list and on the second and the twenty-second
+# page of one paging, while twenty reads in a row a little later all answered — and one of them ended the whole verb
+# (`tasks show`, `batch`) for every session. The door reads its table every 30 s (DGO_DOOR_ROUTES_TTL), so a table
+# without Plane stands that long at least: a READ is asked again over 75 s (5+10+15+20+25), a write is not (it may
+# have landed). A 502/503/504 is the same moment seen from the other side (the door or Plane restarting; plan.py's
+# GONE) and is asked again the same way. When one read has used up its tries, later ones of this process are
+# answered at once (`NO_APP`), with the reason — the door is still asked. plan.py asks again the same way.
+EMPTY_404_TRIES = 6
+GONE = (502, 503, 504)
+NO_APP = ""
 
-def http(method: str, url: str, body=None, headers=None, tries: int = 6):
-    global DOWN
+
+def http(method: str, url: str, body=None, headers=None, tries: int = 6, timeout=None):
+    global DOWN, NO_APP
     if DOWN:
         return {"error": f"Plane is not answering ({DOWN})"}, -1
     data = json.dumps(body).encode() if body is not None else None
     hdrs = {"Content-Type": "application/json", **(headers or {})}
+    lost = 0                                                   # connection failures, counted apart from the 404s
     for attempt in range(tries):
         req = urllib.request.Request(url, data=data, method=method, headers=hdrs)
         try:
-            with urllib.request.urlopen(req, timeout=90) as r:          # the project list takes ~55 s under load
+            with urllib.request.urlopen(req, timeout=timeout or 90) as r:   # the project list takes ~55 s under load
                 raw = r.read().decode("utf-8", "replace")
             return (json.loads(raw) if raw.strip() else {}), r.status
         except urllib.error.HTTPError as e:
             if e.code == 429 and attempt < tries - 1:          # Plane's own limit is 60/min per key
                 time.sleep(5 * (attempt + 1))
                 continue
-            return {"error": e.read().decode("utf-8", "replace")[:300]}, e.code
+            try:
+                text = e.read().decode("utf-8", "replace")
+            except Exception:                                  # noqa: BLE001 — a body cut short is no body
+                text = ""
+            empty_404 = e.code == 404 and not text.strip()     # not Plane's own 404 (EMPTY_404_TRIES above)
+            if empty_404 or e.code in GONE:
+                if method == "GET" and not NO_APP and attempt < min(tries, EMPTY_404_TRIES) - 1:
+                    time.sleep(5 * (attempt + 1))
+                    continue
+                door = (e.headers.get("X-Dgo-Door") or "") if e.headers else ""
+                if method == "GET":
+                    NO_APP = door or f"HTTP {e.code}"
+                if empty_404:
+                    return {"error": "the door answered 404 with no body" + (f" (X-Dgo-Door: {door})" if door else "")}, e.code
+            return {"error": text[:300]}, e.code
         except (urllib.error.URLError, OSError) as e:          # no connection, or no answer in time
-            if attempt < min(tries, 2) - 1:
+            lost += 1
+            if lost < 2 and attempt < tries - 1:
                 time.sleep(2)
                 continue
             DOWN = f"{type(e).__name__}: {e}"
@@ -222,10 +461,12 @@ def token_for(slug: str) -> tuple[str, str, str]:
 
 
 
-def collect(p, proj, want_mine, assignee, state_filter) -> list:
-    """The shaped, filtered rows of ONE project — the body `list` runs per project."""
+def collect(p, proj, want_mine, assignee, state_filter, with_modules: bool = False) -> list:
+    """The shaped, filtered rows of ONE project — the body `list` runs per project. The modules' lists are read only
+    when the output carries `module` (`--json`): the text list does not print it (DGO-962's second reader)."""
     pid, P = proj["id"], f"/projects/{proj['id']}"
     states, labels, modules = project_meta(p, pid)
+    members = module_members(p, pid, modules) if modules and with_modules else {}
     rows = []
     for it in p.page(f"{P}/issues/?expand=labels,assignees"):
         names = [(a.get("display_name") or a.get("email") or "") if isinstance(a, dict) else ""
@@ -237,12 +478,7 @@ def collect(p, proj, want_mine, assignee, state_filter) -> list:
             continue
         if assignee and assignee.strip().lower() not in [n.lower() for n in names if n]:
             continue
-        mod = ""
-        for m in (it.get("module_ids") or []):
-            mid = m if isinstance(m, str) else (m.get("module_id") or m.get("id"))
-            if modules.get(mid):
-                mod = modules[mid]
-                break
+        mod = module_of(it, modules, members)
         st_id = it.get("state")
         grp = next((s["group"] for s in states.values() if s["id"] == st_id), "")
         if state_filter and grp != state_filter:
@@ -254,7 +490,9 @@ def collect(p, proj, want_mine, assignee, state_filter) -> list:
                      "labels": [labels.get(l if isinstance(l, str) else l.get("id"), "") for l in
                                 (it.get("label_ids") or it.get("labels") or [])],
                      "assignees": [n for n in names if n], "module": mod,
-                     "url": f"{WEB}/{WS_SLUG}/projects/{pid}/issues/{it['id']}",
+                     # the item inside the office, by its key, when a console is declared; the app's own host otherwise
+                     "url": item_link(f"{proj['identifier']}-{it.get('sequence_id')}")
+                            or f"{WEB}/{WS_SLUG}/projects/{pid}/issues/{it['id']}",
                      "updated_at": it.get("updated_at") or ""})
     return rows
 
@@ -275,9 +513,11 @@ class Plane:
         self.me_id = me_id
         self.me_email = me_email
 
-    def call(self, method: str, path: str, body=None):
-        out, code = http(method, f"{self.base}{path}", body, self.h)
+    def call(self, method: str, path: str, body=None, timeout=None):
+        out, code = http(method, f"{self.base}{path}", body, self.h, timeout=timeout)
         if code not in (200, 201, 204):
+            if code == -1 and timeout is not None:
+                READ.expired()          # this request went out on the READ's budget and it ran out
             sys.exit(f"[project-pln] {method} {path} → HTTP {code}: "
                      f"{out.get('error') if isinstance(out, dict) else out}")
         return out
@@ -290,18 +530,31 @@ class Plane:
         them — answer with a plain list, and `(out or {}).get("results")` on a list raised
         `AttributeError: 'list' object has no attribute 'get'`. Measured 2026-10-09: it killed
         `tasks take` (the one verb that asks for a member's name) while list/show/start/done/comment
-        all worked, so nothing pointed at the reader."""
+        all worked, so nothing pointed at the reader.
+
+        Every request here is counted against the armed `READ` (see the class): the page size is
+        PER_PAGE, the per-request timeout is what that read has left, and one answered page is one line
+        of progress once the walk is slow. A walk that is not armed behaves exactly as it always did.
+        """
         sep = "&" if "?" in path else "?"
-        out = self.call("GET", f"{path}{sep}per_page=50")
+        ask = f"{path}{sep}per_page={PER_PAGE}"
+        shown = f"{self.base}{path}"          # what the person can open to see the same answer
+        READ.url = shown                      # …and what the give-up message names, even if page 1 dies
+        out = self.call("GET", ask, timeout=READ.left())
         if isinstance(out, list):
+            READ.step(shown, len(out))
             return out
         rows = list((out or {}).get("results") or [])
+        READ.step(shown, len(rows))
         while isinstance(out, dict) and out.get("next_page_results") and out.get("next_cursor"):
-            out = self.call("GET", f"{path}{sep}per_page=50&cursor={out['next_cursor']}")
+            out = self.call("GET", f"{ask}&cursor={out['next_cursor']}", timeout=READ.left())
             if isinstance(out, list):
                 rows += out
+                READ.step(shown, len(out))
                 break
-            rows += list((out or {}).get("results") or [])
+            got = list((out or {}).get("results") or [])
+            rows += got
+            READ.step(shown, len(got))
         return rows
 
 
@@ -314,7 +567,11 @@ def main(argv: list[str]) -> int:
         print(__doc__.strip() if __doc__ else "")
         return 0
     verb, rest = argv[0], argv[1:]
+    if verb == "item" and rest and rest[0] in ("new", "edit", "rm"):   # `item new|edit|rm`: the noun, then the verb
+        verb, rest = rest[0], rest[1:]
     project = ""
+    new_name = ""
+    priority = ""
     slug = os.environ.get("PLANE_AS") or "local"
     want_mine = False
     assignee = ""
@@ -334,10 +591,14 @@ def main(argv: list[str]) -> int:
             want_body = True
         elif a == "--mine":
             want_mine = True
-        elif a in ("--project", "--assignee", "--state", "--comment", "--as") and i + 1 < len(args):
+        elif a in ("--project", "--assignee", "--state", "--comment", "--as", "--name", "--priority") and i + 1 < len(args):
             val = args[i + 1]
             i += 1
-            if a == "--project":
+            if a == "--name":
+                new_name = val
+            elif a == "--priority":
+                priority = val
+            elif a == "--project":
                 project = val
             elif a == "--assignee":
                 assignee = val
@@ -347,6 +608,16 @@ def main(argv: list[str]) -> int:
                 comment = val
             elif a == "--as":
                 slug = val
+        elif a.startswith("--"):
+            # A flag this command does not know was dropped in silence, and ITS VALUE became the next
+            # word: `tasks comment X --file r.html` posted the text «r.html» (2026-11-10, the drive
+            # split: three reports went in as paths). Every caller in the repo uses the flags above
+            # only (git grep, DGO-1727), so an unknown one is refused by name, before anything is sent.
+            if a in ("--project", "--assignee", "--state", "--comment", "--as", "--name", "--priority"):
+                sys.exit(f"[project-pln] tasks: {a} needs a value")
+            sys.exit(f"[project-pln] tasks: unknown flag {a} — this command takes --project --assignee "
+                     "--state --comment --as --name --priority --json --body --mine; a comment from a file is "
+                     "`--comment @<file>`")
         elif not ref and a:
             ref = a
         elif a and not a.startswith("--"):
@@ -377,7 +648,7 @@ def main(argv: list[str]) -> int:
                 rc = 1
                 continue
             v, r, w = act.get("verb"), str(act.get("ref") or ""), act.get("words") or []
-            if (v not in ("done", "start", "comment", "take", "label", "unlabel", "link")
+            if (v not in ("done", "start", "comment", "take", "label", "unlabel", "link", "rm")
                     or not re.fullmatch(r"[A-Z][A-Z0-9]*-\d+", r) or not isinstance(w, list)):
                 print(f"  #{n}: {v} {r}: not a batch verb, a ref and a list of words — skipped")
                 rc = 1
@@ -393,6 +664,31 @@ def main(argv: list[str]) -> int:
                 rc = 1
         return rc
 
+    # --name and --priority belong to `new` and `edit` alone: taken by another verb they would be dropped in
+    # silence, the very thing DGO-1727 closed for unknown flags
+    if (new_name or priority) and verb not in ("new", "edit"):
+        sys.exit(f"[project-pln] tasks {verb}: --name and --priority are for `new` and `edit` only")
+    # `new` takes a PROJECT where the others take an item: `tasks new DGO "name"`, or `--project DGO "name"`.
+    if verb == "new":
+        pos = [x for x in [ref] + words if x]
+        if pos and project and pos[0] == project:      # `new DGO "name" --project DGO`: the project, said twice
+            pos = pos[1:]
+        elif pos and not project:
+            project, pos = pos[0], pos[1:]
+        if new_name and pos:
+            sys.exit(f"[project-pln] tasks new: the name is given twice (--name and «{' '.join(pos)}») — give it once")
+        new_name = new_name or " ".join(pos)
+        ref, words = "", []
+        if not re.fullmatch(r"[A-Z][A-Z0-9]*", project or "") or not new_name.strip():
+            sys.exit('[project-pln] tasks new <PROJECT> "name" [--comment "description"|@file] [--priority p]')
+    if verb in ("edit", "rm"):
+        if words:
+            sys.exit(f"[project-pln] tasks {verb} {ref}: «{' '.join(words)}» is not a flag's value — the name is "
+                     "--name, the words are --comment")
+        if project and ref and "-" in ref and ref.rsplit("-", 1)[0] != project:
+            sys.exit(f"[project-pln] tasks {verb} {ref}: the ref names {ref.rsplit('-', 1)[0]}, not {project}")
+    if priority and priority not in ("urgent", "high", "medium", "low", "none"):
+        sys.exit(f"[project-pln] tasks: --priority is urgent|high|medium|low|none, not {priority!r}")
     # A ref NAMES its project: `DGO-12` is in DGO. So `--project` is only needed to list, and a verb
     # that takes one item never has to be told twice which project it is in.
     if not project and ref and "-" in ref:
@@ -419,9 +715,12 @@ def main(argv: list[str]) -> int:
             sys.exit(f"[project-pln] no project with identifier {project} (have: "
                      f"{', '.join(sorted(x.get('identifier','?') for x in projects))})")
     if all_projects:
+        # ONE ceiling for the whole sweep: with no `--project` this walks every project in the workspace
+        # (5 here, ~1,400 items), and a ceiling per project would bound nothing.
+        READ.begin(f"items of {len(wanted)} projects")
         cols = []
         for x in wanted:
-            cols += collect(p, x, want_mine, assignee, state_filter)
+            cols += collect(p, x, want_mine, assignee, state_filter, with_modules=as_json)
         rows = sorted(cols, key=lambda r: (r["project"], int(r["ref"].rsplit("-", 1)[-1] or 0)))
         if as_json:
             print(json.dumps({"tasks": rows}, ensure_ascii=False))
@@ -467,25 +766,12 @@ def main(argv: list[str]) -> int:
         """The work item on Plane's own host — the address the app itself answers on."""
         return f"{WEB}/{WS_SLUG}/projects/{pid}/issues/{iid}"
 
-    def console_link(iid: str) -> str:
-        """The same work item, opened INSIDE the office (empty when no console is declared).
-
-        `#/m/<module>/<the app's inner route>` is the shell's deep link: console → module → this
-        screen. The shell opens the app in a window of the desktop, frames it on its own host with
-        that route, and signs that host in through the office SSO when it has not been shown it yet.
-        """
-        if not CONSOLE:
-            return ""
-        return f"{CONSOLE}/#/m/{console_module()}/{WS_SLUG}/projects/{pid}/issues/{iid}"
+    def console_link(ref: str) -> str:
+        """The same work item, opened INSIDE the office, by its key (`item_link`)."""
+        return item_link(ref)
 
     def shape(it: dict) -> dict:
-        mod = ""
-        mids = it.get("module_ids") or it.get("modules") or []
-        for m in mids:
-            mid = m if isinstance(m, str) else (m.get("module_id") or m.get("id"))
-            if modules.get(mid):
-                mod = modules[mid]
-                break
+        mod = module_of(it, modules, None)   # what the answer itself names; `show` asks the modules' lists
         return {"ref": f"{proj['identifier']}-{it.get('sequence_id')}", "id": it["id"],
                 "project": proj["identifier"], "name": it.get("name", ""),
                 "state": (it.get("state") or {}).get("name") if isinstance(it.get("state"), dict)
@@ -497,25 +783,54 @@ def main(argv: list[str]) -> int:
                            (it.get("label_ids") or it.get("labels") or [])],
                 "assignees": names_of(it),
                 "module": mod,
-                "url": console_link(it["id"]) or app_link(it["id"]),
+                # a person's link (DGO-1433): `/go/<KEY>`; the console's own route stays readable as `console_url`
+                "url": console_link(f"{proj['identifier']}-{it.get('sequence_id')}") or app_link(it["id"]),
+                "console_url": console_link(f"{proj['identifier']}-{it.get('sequence_id')}"),
                 "app_url": app_link(it["id"]),
                 "updated_at": it.get("updated_at") or ""}
 
-    def issues() -> list:
+    def issues(query: str = "") -> list:
         """Every item of the project, paged ONCE per run (a `done` used to page them three times) — and
-        once per `batch`, whose actions share this process (`_ISSUES`, keyed by the project)."""
-        if pid not in _ISSUES:
-            _ISSUES[pid] = list(p.page(f"{P}/issues/?expand=labels,assignees"))
-        return _ISSUES[pid]
+        once per `batch`, whose actions share this process (`_ISSUES`, keyed by the project + query).
+
+        This is the read that can be minutes long, so it ARMS the deadline and the progress line: every
+        verb below reaches it first, which is why nothing else has to remember to.
+
+        `query` is left for a SERVER-SIDE filter, and on THIS edition there is none to give it: Plane
+        CE answers `filters=`/`pql` with 400 ("PQL and structured filters are not supported on this
+        Plane edition … filter results client-side"), measured 2026-11-04, so `list` still pages the
+        whole project and filters here. One page is 18-43 s on a loaded host (see the issue), which is
+        why every verb that needs ONE item must not come through here — `find()` does not."""
+        key = pid + ("?" + query if query else "")
+        if key not in _ISSUES:
+            READ.begin(f"{proj['identifier']} items")
+            q = f"{P}/issues/?expand=labels,assignees" + (f"&{query}" if query else "")
+            _ISSUES[key] = list(p.page(q))
+        return _ISSUES[key]
 
     def find(which: str) -> dict:
+        """ONE item, ONE request: `/work-items/<PROJECT>-<n>/`.
+
+        The old way resolved a ref by paging the project's `/issues/` and matching `sequence_id` — and
+        Plane materialises the WHOLE project on every one of those requests (no LIMIT: every item,
+        with its description blobs, paginated in Python), so `show` on DGO (1 340 items, per_page 50)
+        needed 27 full passes. Measured 2026-11-04 on hp-laptop: one page 18-25 s, `show` minutes, and
+        `show`/`done`/`comment` unusable. The identifier route answers the same item directly (3-7 s
+        under the same load) and its payload already carries `state` as an object, which `shape()`
+        reads. The paging path stays as the fallback: an office whose app predates the route, or a ref
+        that is not `<PROJECT>-<n>`.
+        """
         want = which.rsplit("-", 1)[-1]
+        out, code = http("GET", f"{p.base}/work-items/{proj['identifier']}-{want}/", None, p.h)
+        if code == 200 and isinstance(out, dict) and out.get("id"):
+            return out
         for attempt in (0, 1):
             for it in issues():
                 if str(it.get("sequence_id")) == want:
                     return it
-            if attempt == 0 and pid in _ISSUES:
-                del _ISSUES[pid]         # paged earlier in this process: an item made since is not in it yet
+            if attempt == 0 and any(k.split("?")[0] == pid for k in _ISSUES):
+                for k in [k for k in _ISSUES if k.split("?")[0] == pid]:
+                    del _ISSUES[k]       # paged earlier in this process: an item made since is not in it yet
         sys.exit(f"[project-pln] no work item {which} in {proj['identifier']}")
 
     def is_mine(it: dict) -> bool:
@@ -543,6 +858,11 @@ def main(argv: list[str]) -> int:
         if state_filter:
             rows = [r for r in rows if r["group"] == state_filter]
         rows.sort(key=lambda r: int(r["ref"].rsplit("-", 1)[-1] or 0))
+        if as_json and modules:
+            # the JSON carries `module` (the text list does not print it): from the modules' lists (DGO-962)
+            members = module_members(p, pid, modules)
+            for r in rows:
+                r["module"] = r["module"] or members.get(str(r["id"]), "")
         if as_json:
             print(json.dumps({"tasks": rows}, ensure_ascii=False))
         else:
@@ -556,6 +876,8 @@ def main(argv: list[str]) -> int:
         if not ref:
             sys.exit("[project-pln] tasks show <REF>")
         t = shape(find(ref))
+        if not t["module"] and modules:
+            t["module"] = module_members(p, pid, modules, want=str(t["id"])).get(str(t["id"]), "")   # DGO-962
         # the files on it — what the store confirmed, by the name and size the item shows
         got, code = http("GET", f"{p.base}{P}/issues/{t['id']}/issue-attachments/", None, p.h)
         t["files"] = [f"{(a.get('attributes') or {}).get('name') or a.get('id')} "
@@ -580,7 +902,29 @@ def main(argv: list[str]) -> int:
                 print("\n" + (t["description"] or "(no description)"))
         return 0
 
-    if verb not in ("start", "done", "comment", "take", "attach", "label", "unlabel", "link"):
+    def para(text: str) -> str:
+        """Plain text as Plane's description/comment HTML: escaped, one paragraph per line."""
+        return "".join(f"<p>{html.escape(ln)}</p>" for ln in text.split("\n")) or "<p></p>"
+
+    if verb == "new":
+        # A request is a work item first (AGENTS.md): before this verb, a new item went through a plan file
+        # (DGO-1252 itself had to). The item is the request's own words; its link is printed, as every verb's.
+        body = {"name": new_name.strip()[:255]}
+        if comment:
+            body["description_html"] = para(comment)
+        if priority:
+            body["priority"] = priority
+        made = p.call("POST", f"{P}/issues/", body)
+        new_ref = f"{proj['identifier']}-{made.get('sequence_id')}"
+        log(f"{new_ref} created")
+        t = shape(made)
+        if as_json:
+            print(json.dumps({"ok": True, **{k: t[k] for k in ("ref", "id", "state", "group", "url")}}, ensure_ascii=False))
+        else:
+            print(f"  {t['ref']}  {t['state']}  {t['url']}")
+        return 0
+
+    if verb not in ("start", "done", "comment", "take", "attach", "label", "unlabel", "link", "edit", "rm"):
         sys.exit(f"[project-pln] unknown verb {verb!r} — see ./bbox project-pln tasks --help")
     if not ref:
         sys.exit(f"[project-pln] tasks {verb} <REF>")
@@ -664,26 +1008,113 @@ def main(argv: list[str]) -> int:
         # three steps its own screen takes. The paths are this container's (hooks/tasks brings them).
         # …and NOT the value of a flag: `--as azaria` is two arguments, and the second is a name, not
         # a file (measured 2026-10-08: `attach DGO-500 --as azaria shot.png` tried to open `azaria`).
+        # Each file is its own: one that Plane or the store refuses is said by its name and the reason, and the
+        # rest still go (DGO-1628: Plane takes no .html, the first file of three was a mock, and the run ended
+        # there — the two sheets after it never went, and the one line named an API path, not a file). The exit
+        # says whether ALL of them landed: 0; ANSWERED_REFUSED when Plane answered and refused some for good; 1 when a
+        # refusal may pass another time (`final()` below). Only a
+        # Plane that does not ANSWER stops the run, with the words hooks/tasks keeps the write by (nothing after
+        # it would get through either).
         paths = words
         if not paths:
             sys.exit("[project-pln] tasks attach <REF> <file> [<file>…]")
         A = f"{P}/issues/{it['id']}/issue-attachments/"
+
+        def no_answer(method: str, path: str, out) -> None:
+            sys.exit(f"[project-pln] {method} {path} → HTTP -1: {out.get('error') if isinstance(out, dict) else out}")
+
+        def said(out) -> str:
+            """Plane's own words: its refusals are JSON inside the error text `http()` keeps."""
+            words_ = out.get("error") if isinstance(out, dict) else out
+            try:
+                inner = json.loads(words_)
+                words_ = (inner.get("error") or inner.get("detail") or words_) if isinstance(inner, dict) else words_
+            except (TypeError, ValueError):
+                pass
+            return str(words_ or "")[:200]
+
+        def final(code: int, out=None) -> bool:
+            """A refusal that sending again cannot change: Plane or its store ANSWERED, and about the file (a type
+            it takes not, a size). A door between routes (an empty 404), a restart (5xx), a limit (408, 429), a
+            sign-in (401, 403) and no answer (-1) pass — a replay that meets one keeps the write (the second
+            reader of DGO-1628: a replay runs just as the path comes back, which is when these are seen)."""
+            if code in (401, 403, 408, 429) or not 400 <= code < 500:
+                return False
+            return not (code == 404 and said(out).startswith("the door answered 404 with no body"))
+
+        # What is on the item already, by name and size: a kept attach that the outbox replays, or a person who
+        # runs it again after one file was refused, must not put the files that landed there a second time.
+        # Plane lists only files whose upload it confirmed. (A name Plane cleans — `..`, a leading dot — never
+        # matches, so such a file is sent again; a DIFFERENT file of the same name and size is taken as there.)
+        got, code = http("GET", f"{p.base}{A}", None, p.h)
+        if code == -1:
+            no_answer("GET", A, got)
+        if code != 200 or not isinstance(got, list):
+            log(f"what is on {ref} already could not be read (HTTP {code}) — every file is sent")
+
+        def size_of(a: dict) -> int:
+            try:
+                return int((a.get("attributes") or {}).get("size") or 0)
+            except (TypeError, ValueError):
+                return -1
+        have = {((a.get("attributes") or {}).get("name"), size_of(a))
+                for a in (got if code == 200 and isinstance(got, list) else []) if isinstance(a, dict)}
+        landed, refused, passing = [], [], False   # passing: a failure that may not be one next time
         for path in paths:
             name = os.path.basename(path)
             kind = mimetypes.guess_type(name)[0] or "application/octet-stream"
-            with open(path, "rb") as f:
-                blob = f.read()
-            made = p.call("POST", A, {"name": name, "size": len(blob), "type": kind})
-            form = made.get("upload_data") or {}
-            code = upload(form.get("url") or "", form.get("fields") or {}, kind, blob)
-            if code not in (200, 201, 204):
-                sys.exit(f"[project-pln] {name}: the store did not take the file (HTTP {code})")
-            p.call("PATCH", f"{A}{made['asset_id']}/", {})
+            try:
+                with open(path, "rb") as f:
+                    blob = f.read()
+            except OSError as e:
+                refused.append({"name": name, "why": f"it cannot be read here ({e.strerror or e})"})
+                log(f"{name}: NOT attached — {refused[-1]['why']}")
+                continue
+            if (name, len(blob)) in have:
+                landed.append(name)
+                log(f"{name} ({len(blob)} bytes) is on {ref} already")
+                continue
+            made, code = http("POST", f"{p.base}{A}", {"name": name, "size": len(blob), "type": kind}, p.h)
+            if code == -1:
+                no_answer("POST", A, made)
+            why, last = "", True
+            if code not in (200, 201, 204) or not isinstance(made, dict) or not made.get("asset_id"):
+                why, last = f"Plane refused it (HTTP {code}: {said(made)})", final(code, made)
+            else:
+                form = made.get("upload_data") or {}
+                up = upload(form.get("url") or "", form.get("fields") or {}, kind, blob)
+                if up not in (200, 201, 204):
+                    # (a 404 from the store is never about the file — it is the link door between routes,
+                    # whose empty body upload() does not keep: it passes, like the API's own)
+                    why, last = f"the store did not take it (HTTP {up})", final(up) and up != 404
+                else:
+                    done_out, done = http("PATCH", f"{p.base}{A}{made['asset_id']}/", {}, p.h)
+                    if done == -1:
+                        no_answer("PATCH", f"{A}{made['asset_id']}/", done_out)
+                    if done not in (200, 201, 204):
+                        why, last = f"Plane did not confirm it (HTTP {done}: {said(done_out)})", final(done, done_out)
+            if why:
+                passing = passing or not last
+                if not last:
+                    why += " — send it again later"
+                refused.append({"name": name, "why": why})
+                log(f"{name}: NOT attached — {why}")
+                continue
+            have.add((name, len(blob)))
+            landed.append(name)
             log(f"{name} ({len(blob)} bytes) is on {ref}")
         t = shape(it)
-        print(json.dumps({"ok": True, "ref": ref, "attached": len(paths), "url": t["url"]}, ensure_ascii=False)
-              if as_json else f"  {t['ref']}  {len(paths)} file(s) attached  {t['url']}")
-        return 0
+        if as_json:
+            print(json.dumps({"ok": not refused, "ref": ref, "attached": len(landed), "files": landed,
+                              "refused": refused, "url": t["url"]}, ensure_ascii=False))
+        elif refused:
+            print(f"  {t['ref']}  {len(landed)} of {len(paths)} file(s) attached — not: "
+                  f"{', '.join(r['name'] for r in refused)}  {t['url']}")
+        else:
+            print(f"  {t['ref']}  {len(landed)} file(s) attached  {t['url']}")
+        # 0: all of them are on it. ANSWERED_REFUSED: the rest are, and every refusal is final — a replay lets it go.
+        # 1: something may yet go another time — a replay keeps the write, a person reads the line above.
+        return 0 if not refused else 1 if passing else ANSWERED_REFUSED
     if verb == "comment":
         # the words after the ref, never a flag's VALUE: joining every non-flag argument made `--as azaria`
         # part of the comment ("… azaria"), and a batch action without text post its slug alone
@@ -696,7 +1127,42 @@ def main(argv: list[str]) -> int:
             print(json.dumps({"ok": True, "ref": ref, "comment": body}, ensure_ascii=False))
         return 0
 
-    if verb == "take":
+    if verb == "edit":
+        change = {}
+        if new_name.strip():
+            change["name"] = new_name.strip()[:255]
+        if priority:
+            change["priority"] = priority
+        if comment:
+            # the words being replaced are kept ON the item first: a request quoted verbatim must never be lost
+            # to an edit (the owner's own words are the brief, AGENTS.md)
+            got, code = http("GET", f"{p.base}{P}/issues/{it['id']}/", None, p.h)
+            if code != 200 or not isinstance(got, dict) or "description_html" not in got:
+                # an answer without the field is not «no description»: what is there could not be kept
+                sys.exit(f"[project-pln] {ref}: its description could not be read (HTTP {code}), so it is not replaced")
+            old = got.get("description_html") or ""
+            if old.strip() and old.strip() not in ("<p></p>", "<p><br></p>"):   # an image alone is words too
+                p.call("POST", f"{P}/issues/{it['id']}/comments/",
+                       {"comment_html": "<p>התיאור לפני העריכה:</p>" + old})
+            change["description_html"] = para(comment)
+        if not change:
+            sys.exit('[project-pln] tasks edit <REF> [--name "…"] [--priority p] [--comment "new description"|@file]')
+        p.call("PATCH", f"{P}/issues/{it['id']}/", change)
+        log(f"{ref} edited: {', '.join(k.replace('_html', '') for k in change)}")
+    elif verb == "rm":
+        # Never a delete (an item's history, its files and its relations would go with it): the project's
+        # cancelled state, with the reason on the item — `tasks start` brings it back.
+        if not comment:
+            sys.exit('[project-pln] tasks rm <REF> --comment "why" — an item is cancelled with its reason, never deleted')
+        st = states.get("cancelled")
+        if not st:
+            sys.exit(f"[project-pln] {proj['identifier']} has no state in group cancelled — nothing was changed")
+        # the reason first: if the second request fails, the item says why it was to be cancelled, and is not
+        # cancelled with no reason
+        p.call("POST", f"{P}/issues/{it['id']}/comments/", {"comment_html": para(comment)})
+        p.call("PATCH", f"{P}/issues/{it['id']}/", {"state": st["id"]})
+        log(f"{ref} → {st['name']} (cancelled), with the reason")
+    elif verb == "take":
         mine = [my_id] if my_id else []
         others = ids_of(it)
         p.call("PATCH", f"{P}/issues/{it['id']}/", {"assignees": others + mine})

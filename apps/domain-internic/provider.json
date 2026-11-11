@@ -1,0 +1,24 @@
+{
+  "for": "domains",
+  "id": "internic",
+  "kind": "external",
+  "service": "https://portal.internic.co.il",
+  "why_external": "InterNIC (InterSpace Ltd) is a registrar's service, not software the office can run: the app bridges it",
+  "ladder": [
+    {
+      "rung": "official-api",
+      "state": "none",
+      "evidence": "InterNIC publishes no API (2026-09-23). The zone's own server, ns1/ns2.sitesdepot.com, is a Plesk of InterVision whose REST API is live but refuses callers by IP (403 Access to API is disabled for <IP>) until InterVision allows the office's address; the plesk provider of domains is ready for that key"
+    },
+    {
+      "rung": "webapp-api",
+      "state": "to-observe",
+      "evidence": "the portal is a Laravel panel; its pages call its own routes with the session cookie and a CSRF token. Called from inside the signed-in page they are the screen's own requests without the clicks. The zone editor's save must be observed once in the browser's network log before a writer on this rung replaces the clicks"
+    },
+    {
+      "rung": "browser",
+      "state": "in-use",
+      "evidence": "the office browser, signed in (login.py: the leased credential, the mailed code), driven by role and name (browser_session.py); every write is read back from the server (portal.internic_create)"
+    }
+  ]
+}

@@ -3,7 +3,7 @@
 Scope: the full sync path from source (Gmail / Drive) to a `COMPLETED` row in
 `public.incoming_documents`. Read-only review; no code or workflows changed.
 
-Live scale at review time (hacohen, `supabase-db-shlomo-laptop`):
+Live scale at review time (example, `supabase-db-owner-laptop`):
 
 | Fact | Value | Source |
 |---|---|---|
@@ -143,7 +143,7 @@ def _get_cached_row_count(cfg_name: str, repo_obj) -> int | None:
 `params["limit"]` `if limit is not None` — so no `limit` param is sent at all, and
 PostgREST applies its server-side default, **`PGRST_DB_MAX_ROWS=1000`**
 (`apps/supabase/docker-compose.yml:24`, `apps/supabase/.env.example` mirrors it). This
-endpoint (`GET /repos/<repo>/stats`) is what feeds `row_count` in the UI — at hacohen's
+endpoint (`GET /repos/<repo>/stats`) is what feeds `row_count` in the UI — at example's
 live 6,207-row `incoming_documents` table, it silently reports **≈1000, not 6,207 — an
 ~84% undercount**, and does so *forever* (30s TTL cache just re-runs the same
 truncated read). The fix is a two-line change: this exact class already has a correct,
@@ -175,7 +175,7 @@ short page. The pattern is understood and fixed in three places and missed in tw
 
 ### 2.2 Every other bounded query treated as complete truth
 
-| # | File:Line | Cap | Caller's wrong conclusion | Blast radius at hacohen scale |
+| # | File:Line | Cap | Caller's wrong conclusion | Blast radius at example scale |
 |---|---|---|---|---|
 | 1 | `api/__init__.py:1758` `_claimed_ids` | `limit=1000` on `sync_ledger` per pipe | "this is every claim this pipe holds" | Not binding today (274 total ledger rows), but no pagination loop exists — a bulk backfill that raises `batch.take` past ~1000 concurrent claims would silently drop the excess from "in flight" accounting. |
 | 2 | `api/__init__.py:1951` `_ledger_rows` | `limit=5000` per pipe | reconcile's full per-pipe ledger | Same — fine now, silent past 5,000 ledger rows for one pipe. |
@@ -418,4 +418,4 @@ primitive it calls already exists and is already correct.
 `apps/indox/app/incoming_documents/backends/{supabase,supabase_transport}.py`,
 `apps/drive/adapters/{google,local}.py`, `apps/mail/mailapi/{app,local_app}.py`,
 `apps/mail/mailview/app.py`, and every workflow JSON under `apps/indox/blueprint/n8n/`,
-cross-checked against live `supabase-db-shlomo-laptop` queries on 2026-08-05.*
+cross-checked against live `supabase-db-owner-laptop` queries on 2026-08-05.*

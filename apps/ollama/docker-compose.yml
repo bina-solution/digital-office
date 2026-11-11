@@ -1,16 +1,100 @@
 services:
+  # THE FRONT (EXU-21, gate G106): the name `ollama` and the port 11434 every caller uses — bina-ds's local route,
+  # the capability, the health probe, a linked office's route, the leaderboard — answered by a small Caddy that
+  # passes every path through to the engine below, streaming, and answers ONE thing itself: a browser's `/` (a
+  # request that accepts text/html) gets the models screen (front/index.html) instead of Ollama's «Ollama is
+  # running», so the tile «מודלים מקומיים» opens a screen. An API client's `/` still reaches Ollama.
+  # The front and its page are a directory mount: a page edit shows at once (file_server); a Caddyfile edit needs
+  # `dc restart ollama` (the config hash is unchanged, so `up -d` recreates nothing, and `admin off` rules out a
+  # reload).
   ollama:
+    image: caddy:2-alpine
+    container_name: ollama-screen-${DEPLOYMENT_NAME:-bina-deployment}
+    restart: unless-stopped
+    depends_on:
+    - ollama-engine
+    command: ["caddy", "run", "--config", "/front/Caddyfile", "--adapter", "caddyfile"]
+    volumes:
+    - ./front:/front:ro
+    # its access log (front/Caddyfile `log`), which ollama-watch reads the turns from
+    - ollama_front_log:/log
+    deploy:
+      resources:
+        limits:
+          cpus: '0.1'
+          memory: 64M
+        reservations:
+          cpus: '0.02'
+          memory: 16M
+    networks:
+    - traefik-network
+    healthcheck:
+      # the front alone (its page), so a model loading in the engine never marks the front unhealthy. Quoted whole:
+      # unquoted, the «: » in the header makes YAML read the line as a mapping, and compose refuses the file.
+      test:
+      - CMD-SHELL
+      - "wget -q -O /dev/null --header 'Accept: text/html' http://127.0.0.1:11434/ || exit 1"
+      interval: ${HEALTHCHECK_INTERVAL:-30s}
+      timeout: ${HEALTHCHECK_TIMEOUT:-10s}
+      retries: 3
+      start_period: 10s
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: '3'
+  # THE WATCHER (DGO-1797, package 4): what the models are doing, as bars in «כל מקביל» — a model in memory from
+  # the engine's /api/ps every 3 s, and each chat/generate/embed turn from the front's access log (watch/watch.py
+  # says how). It writes only the flow (`dgo:flow:ollama`, the office's one publisher, mounted read-only); it
+  # holds no port and no state, so a restart costs a few seconds of watching. No image to build: python:3.12-alpine
+  # runs watch/ as mounted, as documents does.
+  ollama-watch:
+    image: python:3.12-alpine
+    container_name: ollama-watch-${DEPLOYMENT_NAME:-bina-deployment}
+    restart: unless-stopped
+    read_only: true
+    depends_on:
+    - ollama
+    command: ["python", "-u", "/app/watch.py"]
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-}
+    volumes:
+    - ./watch:/app:ro
+    - ollama_front_log:/log:ro
+    - ../../platform-base/redis/flowpub.py:/opt/dgo/flowpub.py:ro
+    networks:
+    - traefik-network
+    deploy:
+      resources:
+        limits:
+          cpus: '0.05'
+          memory: 48M
+    logging:
+      driver: json-file
+      options:
+        max-size: 5m
+        max-file: '3'
+  # THE ENGINE: Ollama itself, reached only through the front by name. Its container has a name of its own,
+  # ollama-engine-<office>: an office that already runs the old container `ollama-<office>` (service `ollama`)
+  # converges this service FIRST (depends_on), and a new container under the old name would be refused while the
+  # old one holds it — half a stack. Under its own name the engine is created beside the old container, which
+  # compose then recreates as the front. Exec into Ollama with `dcx exec -T ollama-engine …` (the hooks) or
+  # `docker exec ollama-engine-<office> …`; the old name no longer exists, so a stale command fails loudly.
+  ollama-engine:
     # Ollama with its CPU and Vulkan backends and without CUDA (Dockerfile, which alone names the
     # version): about 470 MB against the upstream image's 3.3 GB compressed. An AMD or Intel GPU is a
     # variable (OLLAMA_GPU_DEVICE, below); an NVIDIA one needs the upstream image, which is a compose
     # override on that machine, not a variable — `bbox run` builds every service that has a `build:`
     # and would tag this build with whatever name a variable gave it (README, "GPU").
-    image: ghcr.io/solomonboltin/digital-office/ollama:${IMAGE_TAG:-latest}
+    image: ghcr.io/bina-solution/digital-office/ollama:${IMAGE_TAG:-latest}
     pull_policy: missing
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: ollama-${DEPLOYMENT_NAME:-bina-deployment}
+      # an office's own Ollama version (.env OLLAMA_VERSION), or empty = the Dockerfile's one default (DGO-1819)
+      args:
+        OLLAMA_VERSION: ${OLLAMA_VERSION:-}
+    container_name: ollama-engine-${DEPLOYMENT_NAME:-bina-deployment}
     restart: unless-stopped
     # The office's .env sizes it. A machine that is there for its models (the Dell, DGO-825) gives it
     # every core and most of its memory: OLLAMA_CPUS=4.0, OLLAMA_MEMORY=11G. The defaults are the
@@ -74,6 +158,7 @@ services:
         max-file: '3'
 volumes:
   ollama_data: null
+  ollama_front_log: null
 networks:
   traefik-network:
     external: true

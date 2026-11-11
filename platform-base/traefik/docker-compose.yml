@@ -46,9 +46,25 @@ services:
     - --serversTransport.forwardingTimeouts.idleConnTimeout=600s
     - --certificatesresolvers.myresolver.acme.httpchallenge=true
     - --certificatesresolvers.myresolver.acme.httpchallenge.entrypoint=web
-    - --certificatesresolvers.myresolver.acme.email=${TRAEFIK_ACME_EMAIL:-person174.x@example.com}
+    - --certificatesresolvers.myresolver.acme.email=${TRAEFIK_ACME_EMAIL:-person182.x@example.com}
     - --certificatesresolvers.myresolver.acme.storage=/etc/traefik/acme.json
     - --providers.docker.exposedbydefault=false
+    # WHICH ADDRESS of an app the edge dials: the one on the network the edge itself is on (below, its
+    # only network), for every container, not one picked at random. A routed container on two networks
+    # (meet-start: traefik-network and meet-net) got whichever address traefik's map iteration met first,
+    # chosen again at every reload, so it worked «sometimes»: on Exampleu, 2026-11-09, the edge dialed
+    # meet-start's meet-net address (172.21.0.3) for every signed-in request since its start — 0 of 5
+    # answered (504 after the 30 s dial timeout, or the phone gave up), and the console drew «האפליקציה
+    # לא נטענה בתוך הלשכה» (DGO-1592). A container's own `traefik.docker.network` label still wins.
+    - --providers.docker.network=traefik-network
+    # NO PHONE HOME (DGO-1596). Two switches, both off by default in traefik and both ON here until
+    # now: `checkNewVersion` asks update.traefik.io whether a newer build exists, and
+    # `sendAnonymousUsage` posts a usage payload once per start — measured from this office's own flow
+    # log (traefik → update.traefik.io and api.github.com). Neither answer changes anything this
+    # platform does: the image is pinned by tag (G15), and an office that decides to move a version
+    # does it in a commit. `/healthz` and the dashboard do not depend on either.
+    - --global.checkNewVersion=false
+    - --global.sendAnonymousUsage=false
     # …and through the door, by name on the office's own network (DGO-136).
     - --providers.docker.endpoint=tcp://docker-socket-proxy:2375
     - --providers.file.directory=/etc/traefik/
@@ -59,6 +75,9 @@ services:
     - BBOX_SSO=${BBOX_SSO:-on}
     # which identity service the forwardAuth middleware asks (config/authentik-forwardauth.yaml)
     - DGO_IDENTITY=${DGO_IDENTITY:-authentik}
+    # the console's own name, by the expression its labels use: the floor under its route names exactly it
+    # (config/console-floor.yaml)
+    - CONSOLE_BASE_URL=${CONSOLE_BASE_URL:-console.${DEPLOYMENT_DOMAIN:-localhost}}
     logging:
       driver: json-file
       options:
@@ -100,43 +119,47 @@ services:
     - ./config:/etc/traefik
     networks:
     - traefik-network
+    # the door's own network: the edge and the door, and nobody else (DGO-1652)
+    - docker-api
     labels:
     - traefik.enable=${TRAEFIK_API_DASHBOARD:-false}
     - traefik.http.routers.traefik-local.rule=Host(`traefik.localhost`)
     - traefik.http.routers.traefik-local.entrypoints=web
     - traefik.http.routers.traefik-local.service=traefik-deployment
-    - traefik.http.routers.traefik-local.middlewares=authentik@file
+    - traefik.http.routers.traefik-local.middlewares=authentik-admins@file
     - traefik.http.routers.traefik-http.rule=Host(`${TRAEFIK_API_BASE_URL}`)
     - traefik.http.routers.traefik-http.entrypoints=web
     - traefik.http.routers.traefik-http.service=traefik-deployment
-    - traefik.http.routers.traefik-http.middlewares=authentik@file
+    - traefik.http.routers.traefik-http.middlewares=authentik-admins@file
     - traefik.http.routers.traefik-https.rule=Host(`${TRAEFIK_API_BASE_URL}`)
     - traefik.http.routers.traefik-https.entrypoints=websecure
     - traefik.http.routers.traefik-https.tls=true
     - traefik.http.routers.traefik-https.tls.certresolver=${TRAEFIK_CERTRESOLVER-myresolver}
     - traefik.http.routers.traefik-https.service=traefik-deployment
-    - traefik.http.routers.traefik-https.middlewares=authentik@file
+    - traefik.http.routers.traefik-https.middlewares=authentik-admins@file,hsts@file
     - traefik.http.services.traefik-deployment.loadbalancer.server.port=8080
   # ── the door (DGO-136) ────────────────────────────────────────────────────────────────────────
   # The ONE container in this app that holds the engine socket — read-only — and the only one that
   # speaks to the engine at all. It exists because the provider's needs are exactly enumerable:
-  # GET/HEAD on /_ping, /version, /info, /events, /containers, /networks, /services, /tasks,
-  # /nodes, /swarm, /distribution. Everything else is answered 403 with the path in the sentence,
-  # and `docker logs docker-socket-proxy-*` is the record of what was refused.
+  # GET/HEAD on /_ping, /version, /events, and under /containers the list and one inspect, both cut
+  # down to the fields the provider reads (DGO-1647). Everything else is answered 403 with the path in
+  # the sentence, and `docker logs docker-socket-proxy-*` is the record of what was refused.
   #
-  # It publishes nothing. traefik reaches it by name over traefik-network, and no host port is
-  # mapped, so it is not a door from outside — it is the door the edge uses inside.
+  # It publishes nothing, and it is on ONE network: `docker-api`, internal, shared with the edge alone
+  # (DGO-1652). Until 2026-11-09 it sat on traefik-network, where every app could reach it. That is how
+  # n8n read the sign-in's secrets and the edge's TLS keys through it on Exampleu (DGO-1647). A door only the
+  # edge can reach stays closed even if a bug ever opens its rule again.
   docker-socket-proxy:
     build:
       context: ./socket-proxy
       dockerfile: Dockerfile
-    image: deployment-hacohen-socket-proxy:latest
+    image: digital-office-socket-proxy:latest
     container_name: docker-socket-proxy-${DEPLOYMENT_NAME:-bina-deployment}
     restart: unless-stopped
     volumes:
       - ${BBOX_DOCKER_SOCK:-/var/run/docker.sock}:/var/run/docker.sock:ro
     networks:
-      - traefik-network
+      - docker-api
     healthcheck:
       # A door that stopped answering is a provider that silently serves a stale snapshot; the
       # probe is a request the door itself allows, so it fails exactly when the door does.
@@ -164,3 +187,6 @@ services:
 networks:
   traefik-network:
     external: true
+  # the edge and its docker door, no app; internal: no route out, and nothing is published on it (DGO-1652)
+  docker-api:
+    internal: true

@@ -7,8 +7,9 @@ account  ──►  the domains of that account  ──►  one domain's setting
 ```
 
 An **account** is a connection in the credential plane: an **API account** (GoDaddy, Cloudflare,
-Plesk, Porkbun, DigitalOcean, Gandi, Hetzner) or a **BROWSER account** — a session the owner logged
-into once in the office's own Chromium, the only door a registrar with no API has. Nothing above
+Plesk, Porkbun, DigitalOcean, Gandi, Hetzner) or a **BROWSER account** — a registrar with no API, which
+is its own provider app (ai/context/provider-apps.md): InterNIC is `apps/domain-internic`, found by name
+(`provider_client.py`). Its CLI writes records: `./bbox domain-internic add-record …`. Nothing above
 `accounts.py` knows which kind it is talking to, and that is what makes the screens identical whether
 the control behind them is an HTTP endpoint or a button in someone's panel.
 
@@ -30,20 +31,8 @@ account" screen is built from. Per domain: `POST /records`, `POST /op`, `GET /he
 
 ## Verified facts (live, 2026-09-23/25)
 
-* Registrar **InterSpace Ltd (Internic)**; `portal.internic.co.il` is behind Imperva — a non-JS client
-  gets **HTTP 200 with a 212-byte JS challenge**, which is why this needs a real browser and why a
-  naive check reads failure as success.
-* The panel's data is at **`/dashboard/main`** (`/domains` 404s). The zone editor is per-domain at
-  `/zone/<id>`, reached by ticking the row and clicking `zone-edit` (marked `visually-hidden`).
-* **A zone row is identified by its FIELD NAMES, not by position**: a record row has
-  `select[name=rectype_<n>]` AND `input[name=specs_<n>]`; `<n>` is the TYPE's index (six CNAME rows
-  all carry `rectype_1`), so the row's ordinal is the only identity there is. Every other row with a
-  type select is a TEMPLATE (the add-record form, the SRV priority/weight/port/target sub-rows).
-  Reading those positionally invented an apex A at 93.184.216.11 that no resolver ever answered —
-  **24–36 records looked plausible; 30 are real**. The editor renders after the click, so the read
-  POLLS for a completion predicate (a zone URL AND a record row) instead of sleeping once. The click
-  may open a NEW TAB: count tabs first, close only the one you can prove you opened, leave the
-  browser back on the domain list.
+* Registrar **InterSpace Ltd (Internic)**: its portal's facts (Imperva, the panel's paths, how a zone
+  row is identified) are the provider app's — apps/domain-internic/AGENT.md.
 * The **zone is NOT at Internic**: `ns1/ns2.sitesdepot.com` is a Plesk Obsidian box of **InterVision**
   whose REST API is live but refuses callers **by IP** (`403 Access to API is disabled for <IP>`). An
   API key + our IP on their allowlist unlocks full DNS read/write via the `plesk` provider; the

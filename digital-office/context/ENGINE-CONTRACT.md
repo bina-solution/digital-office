@@ -1,7 +1,7 @@
 # Engine binding contract — how to wire a fragment to `window.DO`
 
 You are wiring static HTML screens in `digital-office/tooling/frag/*.html` to the live mock engine
-defined in `digital-office/tooling/index.base.html`. **Only add `data-*` attributes** (and, when a
+defined in `digital-office/tooling/index.html`. **Only add `data-*` attributes** (and, when a
 static repeated list must become live, replace the repeated rows with ONE container carrying
 `data-list`/`data-row`). **Never change layout, CSS, geometry, text labels, or markup structure** —
 fidelity to the real screenshots is graded pixel-by-pixel. When in doubt, bind less, keep markup identical.
@@ -58,5 +58,5 @@ Bound stat — `frag/indox-root.html`:
 Button opening a modal — `frag/mydocs-docs.html`: `<button ... data-open="new-doc">+ מסמך חדש</button>`
 
 ## Build / verify (orchestrator runs this; you do NOT need to)
-Edit frags → `cp tooling/index.base.html tooling/index.html` → `node tooling/assemble.js` →
+Edit frags → `node tooling/assemble.js` (it strips its own previous templates from `tooling/index.html`) →
 `cp tooling/dist.html platform-mockup.html` → `python3 verify/render_mock.py` → `python3 verify/ui_map_diff.py`.

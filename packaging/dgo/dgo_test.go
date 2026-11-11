@@ -234,6 +234,37 @@ func TestAnAppVerbRunsItsHookByIdOrByAliasAndPassesTheRest(t *testing.T) {
 	}
 }
 
+func TestAWordThatIsNotAHookGoesToTheAppsDeclaredFallbackAsInBbox(t *testing.T) {
+	root := checkout(t)
+	dir := filepath.Join(root, "apps", "drive")
+	must := func(err error) {
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	must(os.MkdirAll(filepath.Join(dir, "hooks"), 0o755))
+	for _, f := range []string{"cli", "ls"} {
+		must(os.WriteFile(filepath.Join(dir, "hooks", f), []byte("x"), 0o755))
+	}
+	must(os.WriteFile(filepath.Join(dir, "app.json"), []byte(`{"id":"drive","cli":{"fallback":"cli"}}`), 0o644))
+	inv, err := plan(root, []string{"drive", "-p", "admin", "files", "list"}, "linux")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if inv.argv[0] != "bash" || filepath.Base(inv.argv[1]) != "cli" || strings.Join(inv.argv[2:], " ") != "-p admin files list" {
+		t.Fatalf("plan(drive -p admin files list) = %v", inv.argv)
+	}
+	if inv, err = plan(root, []string{"drive", "ls", "/"}, "linux"); err != nil || filepath.Base(inv.argv[1]) != "ls" {
+		t.Fatalf("a hook of the app's own still wins: %v %v", inv.argv, err)
+	}
+	if inv, err = plan(root, []string{"drive"}, "linux"); err != nil || len(inv.argv) != 2 || filepath.Base(inv.argv[1]) != "cli" {
+		t.Fatalf("no word at all runs the fallback alone: %v %v", inv.argv, err)
+	}
+	if _, err := plan(root, []string{"indox", "nope"}, "linux"); err == nil || !strings.Contains(err.Error(), "no such hook") {
+		t.Fatalf("an app that declares no fallback still refuses a word it has no hook for; got %v", err)
+	}
+}
+
 func TestAnythingElseIsHandedToBbox(t *testing.T) {
 	root := checkout(t)
 	inv, err := plan(root, []string{"run", "--fast"}, "linux")

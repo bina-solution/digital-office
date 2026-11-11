@@ -18,8 +18,8 @@ LAN, PORT = "192-168-16-100.sslip.io", "8080"
 
 
 def served(module_kind="external"):
-    """One linked office sharing one app of its own host (Obsidian at FPG)."""
-    return [{"office": "fireplace", "identity": {"to": "akadmin"}, "link_port": 9006,
+    """One linked office sharing one app of its own host (Obsidian at EXF)."""
+    return [{"office": "examplef", "identity": {"to": "akadmin"}, "link_port": 9006,
              "apps": [{"alias": "obsidian", "port": 8080, "host": "obsidian", "module_kind": module_kind}]}]
 
 
@@ -35,26 +35,27 @@ def test_no_lan_name_renders_no_lan_router():
 
 def test_the_lan_form_nests_the_app_under_the_name_and_signs_in_on_the_lan_entry():
     http = routers(lan_domain=LAN, lan_port=PORT)
-    r = http["routers"]["dgo-remote-fireplace-obsidian-console-lan"]
-    assert r["rule"] == f"Host(`obsidian.fireplace.console.{LAN}`)"
+    r = http["routers"]["dgo-remote-examplef-obsidian-console-lan"]
+    assert r["rule"] == f"Host(`obsidian.examplef.console.{LAN}`)"
     assert r["entryPoints"] == ["lan"]
-    assert r["middlewares"][0] == "lan-auth@docker"
+    assert r["middlewares"][0] == "lan-auth-admins@docker", "a linked office's app is the admins' (DGO-1755)"
     assert "tls" not in r
     lan = {n: v for n, v in http["routers"].items() if "-console-lan" in n}
     # the app's own origin, the shell's question and the way in: all on the LAN entry, none on authentik
-    assert {"dgo-remote-fireplace-obsidian-console-lan-own-origin",
-            "dgo-remote-fireplace-obsidian-console-lan-signed-in",
-            "dgo-remote-fireplace-obsidian-console-lan-enter"} <= set(lan)
+    assert {"dgo-remote-examplef-obsidian-console-lan-own-origin",
+            "dgo-remote-examplef-obsidian-console-lan-signed-in",
+            "dgo-remote-examplef-obsidian-console-lan-enter"} <= set(lan)
     for v in lan.values():
         assert v["entryPoints"] == ["lan"] and "authentik@file" not in v["middlewares"]
-    own = lan["dgo-remote-fireplace-obsidian-console-lan-own-origin"]["rule"]
-    assert f"http://obsidian.fireplace.console.{LAN}:{PORT}" in own
+    own = lan["dgo-remote-examplef-obsidian-console-lan-own-origin"]["rule"]
+    assert f"http://obsidian.examplef.console.{LAN}:{PORT}" in own
 
 
-def test_the_other_forms_keep_authentik():
+def test_the_other_forms_keep_the_offices_sign_in_its_admins_one():
     http = routers(lan_domain=LAN, lan_port=PORT)
-    r = http["routers"]["dgo-remote-fireplace-obsidian-console-local"]
-    assert r["entryPoints"] == ["web"] and r["middlewares"][0] == "authentik@file"
+    r = http["routers"]["dgo-remote-examplef-obsidian-console-local"]
+    # the office's sign-in — its admins' one: a linked office's app is theirs alone (DGO-1755)
+    assert r["entryPoints"] == ["web"] and r["middlewares"][0] == "authentik-admins@file"
 
 
 def test_the_console_on_its_lan_name_may_ask_and_is_returned_to():

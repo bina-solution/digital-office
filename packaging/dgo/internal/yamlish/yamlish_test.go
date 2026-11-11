@@ -8,6 +8,8 @@ import (
 	"sort"
 	"strings"
 	"testing"
+
+	"github.com/bina-solution/digital-office/packaging/dgo/internal/pyoracle"
 )
 
 // known-answer cases: what PyYAML's safe_load answers, written as the canonical JSON the oracle
@@ -287,12 +289,13 @@ func TestAnchorsAsSafeDumpWritesThem(t *testing.T) {
 
 // python finds an interpreter with PyYAML the way each OS has it, or "" (the test then skips).
 func python(t *testing.T) []string {
-	for _, c := range [][]string{{"python3"}, {"python"}, {"py", "-3"}} {
+	for _, c := range pyoracle.Candidates { // 3.12 first (DGO-1108)
 		if _, err := exec.LookPath(c[0]); err != nil {
 			continue
 		}
 		cmd := exec.Command(c[0], append(c[1:], "-c", "import yaml")...)
 		if cmd.Run() == nil {
+			t.Log(pyoracle.Pinned(c))
 			return c
 		}
 	}

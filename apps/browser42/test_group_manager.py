@@ -1,3 +1,4 @@
+import contextlib
 import importlib.util
 import io
 import json
@@ -333,6 +334,157 @@ class GroupManagerTests(unittest.TestCase):
             # Session identity NEVER changes within a session — --fresh clears the group,
             # not the slug.
             self.assertEqual(slug, "my-session")
+
+
+class Emitted(Exception):
+    """emit() ends the process with os._exit; the tests stop it here and look at what it printed."""
+
+
+class HandoffOpenTests(unittest.TestCase):
+    """`bbox b42 open <app> <url>` (DGO-1336): recorded, awake, the slug's tabs closed, one tab — one at a time."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        root = Path(self.tmp.name)
+        self.patches = [patch.object(MODULE, "DATA", root), patch.object(MODULE, "GROUPS", root / "groups"),
+                        patch.object(MODULE.handoff, "current_episode", return_value="e1")]
+        for p in self.patches:
+            p.start()
+
+    def tearDown(self):
+        for p in self.patches:
+            p.stop()
+        self.tmp.cleanup()
+
+    def test_a_manifest_keeps_the_bare_address(self):
+        self.assertEqual(MODULE.bare("https://claude.com/cai/login/app-google-auth?open_in_browser=1&hop_nonce=x"),
+                         "https://claude.com/cai/login/app-google-auth")
+        self.assertEqual(MODULE.bare("not an address"), "")
+
+    def test_usage_is_refused_before_the_browser_is_touched(self):
+        with patch.object(MODULE.handoff, "wake", side_effect=AssertionError("woken for a usage error")):
+            for argv in ([], ["bina-claude"], ["Bina Claude", "https://claude.com/x"], ["bina-claude", "claude://x"],
+                         ["bina-claude", "https://claude.com/x", "--bogus"],
+                         ["bina-claude", "https://claude.com/x", "--slug", "Bad Slug"]):
+                with self.assertRaises((MODULE.BrowserTaskError, ValueError), msg=str(argv)):
+                    MODULE.cmd_handoff_open(argv)
+
+    def test_the_order_is_recorded_awake_closed_opened_one_tab(self):
+        steps = []
+        stale_page = types.SimpleNamespace(close=lambda: steps.append("closed a restored tab"))
+        pages = {"before": [stale_page], "after": [object()]}
+        printed = []
+
+        def tabs(_browser, slug):
+            return pages["before"] if "opened" not in steps else pages["after"]
+
+        def opened(slug, url):
+            steps.append("opened")
+            self.assertEqual((slug, url), ("claude-signin", "https://claude.com/cai/login/app-google-auth?hop_nonce=n"))
+            return {"tag": "b42g:claude-signin", "tabs": 1, "tab_id": 5, "group_id": 6, "color": "cyan"}
+
+        def record(slug, state, app=None, sentence=None, episode=None):
+            steps.append(f"recorded {state}")
+            return {"slug": slug, "for": app, "state": state, "sentence": sentence, "id": episode or "e1"}
+
+        def emitted(payload, code=0):
+            printed.append(payload)
+            raise Emitted()
+
+        with patch.object(MODULE.handoff, "wake", side_effect=lambda: steps.append("awake") or True), \
+                patch.object(MODULE, "clear_group", side_effect=lambda slug: steps.append(f"cleared {slug}")), \
+                patch.object(MODULE, "connect", return_value=(None, None)), \
+                patch.object(MODULE, "reconnect", return_value=(None, None)), \
+                patch.object(MODULE, "group_tabs", side_effect=tabs), \
+                patch.object(MODULE, "open_group", side_effect=opened), \
+                patch.object(MODULE.handoff, "write_record", side_effect=record), \
+                patch.object(MODULE, "emit", side_effect=emitted):
+            with self.assertRaises(Emitted):
+                MODULE.cmd_handoff_open(["bina-claude", "https://claude.com/cai/login/app-google-auth?hop_nonce=n",
+                                         "--slug", "claude-signin", "--sentence", "בחרו חשבון"])
+        # the person is brought to the browser at once — a cold browser takes up to 69 s to wake
+        self.assertEqual(steps, ["recorded needed", "awake", "cleared claude-signin", "closed a restored tab", "opened"])
+        answer = printed[0]
+        self.assertEqual((answer["ok"], answer["slug"], answer["for"], answer["handoff"]["sentence"]),
+                         (True, "claude-signin", "bina-claude", "בחרו חשבון"))
+        self.assertNotIn("hop_nonce", json.dumps(answer), "the address is never printed")
+
+    def refused(self, argv, patches):
+        """Run an open that is refused; return the JSON it ends with (done → emit, stopped here).
+        `patches` maps (object, attribute) → patch.object's keywords."""
+        said = []
+
+        def emitted(payload, code=0):
+            said.append((payload, code))
+            raise Emitted()
+
+        with patch.object(MODULE, "emit", side_effect=emitted), patch.object(MODULE, "tab_census", return_value={}):
+            stack = [patch.object(*target, **kw) for target, kw in patches.items()]
+            for p in stack:
+                p.start()
+            try:
+                with self.assertRaises(Emitted):
+                    MODULE.cmd_handoff_open(argv)
+            finally:
+                for p in stack:
+                    p.stop()
+        return said[0]
+
+    def test_a_browser_that_does_not_wake_opens_nothing_and_says_so_with_its_episode(self):
+        recorded = []
+        payload, code = self.refused(["bina-claude", "https://claude.com/x"], {
+            (MODULE.handoff, "wake"): {"return_value": False},
+            (MODULE.handoff, "write_record"): {"side_effect": lambda *a, **k: recorded.append(a) or {"state": "needed", "id": "e1"}},
+            (MODULE, "open_group"): {"side_effect": AssertionError("opened while asleep")}})
+        self.assertEqual((code, payload["error"]["code"], payload["episode"]), (2, "browser_not_awake", "e1"))
+        self.assertEqual(recorded[0][:2], ("bina-claude-signin", "needed"), "the record stays needed: its caller ends it")
+
+    def test_two_tabs_after_the_open_are_not_a_hand_off(self):
+        payload, code = self.refused(["bina-claude", "https://claude.com/x", "--slug", "claude-signin"], {
+            (MODULE.handoff, "wake"): {"return_value": True}, (MODULE, "clear_group"): {},
+            (MODULE, "connect"): {"return_value": (None, None)}, (MODULE, "reconnect"): {"return_value": (None, None)},
+            (MODULE, "group_tabs"): {"side_effect": [[], [object(), object()]]},
+            (MODULE, "open_group"): {"return_value": {"tab_id": 1, "group_id": 2}},
+            (MODULE.handoff, "write_record"): {"return_value": {"state": "needed", "id": "e1"}}})
+        self.assertEqual((code, payload["ok"], payload["error"]["code"]), (2, False, "not_one_tab"))
+
+    def test_an_attempt_a_newer_press_superseded_leaves_the_tabs_alone(self):
+        """Two presses during a cold wake: the older open must not decide which page is in front."""
+        payload, _ = self.refused(["bina-claude", "https://claude.com/x", "--slug", "claude-signin"], {
+            (MODULE.handoff, "write_record"): {"return_value": {"state": "needed", "id": "e1"}},
+            (MODULE.handoff, "current_episode"): {"return_value": "e2"},
+            (MODULE.handoff, "wake"): {"side_effect": AssertionError("a superseded attempt wakes nothing")},
+            (MODULE, "open_group"): {"side_effect": AssertionError("a superseded attempt opens nothing")}})
+        self.assertEqual((payload["error"]["code"], payload["episode"]), ("superseded", "e1"))
+        self.assertTrue((Path(self.tmp.name) / "handoffs" / ".claude-signin.lock").exists(), "decided under the slug's lock")
+
+    def test_a_close_by_episode_closes_only_while_that_episode_is_the_open_one(self):
+        """A watcher that ended its sign-in closes its tab — never the tab of a press made a moment after."""
+        cleared, said, printed = [], [], []
+
+        def emitted(payload, code=0):
+            said.append((payload, code))
+            raise Emitted()
+
+        def clearing():
+            return patch.object(MODULE, "clear_group", side_effect=lambda slug: cleared.append(slug) or {"closed": 1})
+
+        with clearing(), patch.object(MODULE, "emit", side_effect=emitted), \
+                patch.object(MODULE.handoff, "current_episode", return_value="e2"):
+            with self.assertRaises(Emitted):
+                MODULE.cmd_close("claude-signin", ["--episode", "e1"])
+        self.assertEqual((said[0][1], said[0][0]["error"]["code"], cleared), (3, "superseded", []))
+        with clearing(), patch.object(MODULE.os, "_exit", side_effect=SystemExit), \
+                patch("builtins.print", side_effect=lambda *a, **k: printed.append(" ".join(map(str, a)))):
+            with self.assertRaises(SystemExit):
+                MODULE.cmd_close("claude-signin", ["--episode", "e1"])
+        self.assertEqual(cleared, ["claude-signin"])
+        self.assertIn("(episode e1)", printed[0])
+        for malformed in (["--episode"], ["--bogus", "e1"], ["--episode", "e1", "more"]):
+            with patch.object(MODULE, "clear_group", side_effect=AssertionError("closed on a usage error")), \
+                    contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit) as stopped:
+                MODULE.cmd_close("claude-signin", malformed)
+            self.assertEqual(stopped.exception.code, 2, malformed)
 
 
 class FakeFrame:
@@ -748,6 +900,204 @@ class LoadErrorTests(unittest.TestCase):
 
     def test_a_broken_scan_is_no_error(self):
         self.assertEqual(MODULE.load_error(types.SimpleNamespace(contexts=None), "https://example.com"), "")
+
+
+class TabPage:
+    """A tab for `tab …`: what each verb did to it is recorded in `done`."""
+    def __init__(self, tid, url, name="", title=""):
+        self.tid, self.url, self.name, self.title, self.done = tid, url, name, title, []
+        self.tag = name[len("b42g:"):] if name.startswith("b42g:") else ""   # None: a tag that cannot be read
+        page = self
+
+        class Locator:
+            def __init__(self, selector):
+                self.selector = selector
+
+            @property
+            def first(self):
+                return self
+
+            def click(self, timeout=None):
+                page.done.append(("click", self.selector))
+
+            def aria_snapshot(self, timeout=None):
+                return "- heading \"Hi\" [level=1]"
+
+        self.Locator = Locator
+        self.keyboard = types.SimpleNamespace(type=lambda text, delay=0: self.done.append(("type", text)))
+
+    def locator(self, selector):
+        return self.Locator(selector)
+
+    def goto(self, url, wait_until=None, timeout=None):
+        self.done.append(("goto", url))
+        self.url = url
+
+    def evaluate(self, expression):
+        self.done.append(("eval", expression))
+        return 42
+
+    def screenshot(self, path, full_page=False, timeout=None):
+        Path(path).write_bytes(b"png")
+        self.done.append(("shot", full_page))
+
+    def close(self):
+        self.done.append(("close",))
+
+
+class TabCommandTests(unittest.TestCase):
+    """`tab …` (DGO-1251): any tab by its CDP id; a held tab (task, hand-off, unreadable tag) is only read;
+    page 0 and a window's last page stay."""
+    REAL_TAB_TAG = staticmethod(MODULE._tab_tag)
+    ANCHOR = "A0A0A0A0A0A0A0A0A0A0A0A0A0A0A0A0"
+    TASK = "B1B1B1B1B1B1B1B1B1B1B1B1B1B1B1B1"
+    OWNER = "C2C2C2C2C2C2C2C2C2C2C2C2C2C2C2C2"
+    TWIN = "C2C2C2C2FFFFFFFFFFFFFFFFFFFFFFFF"
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        root = Path(self.tmp.name)
+        (root / "tasks" / "demo").mkdir(parents=True)
+        (root / "tasks" / "demo" / "task.json").write_text(json.dumps({"slug": "demo", "state": "active"}))
+        self.pages = [TabPage(self.ANCHOR, "about:blank"),
+                      TabPage(self.TASK, "https://portal.example/rows?id=7", "b42g:demo", "Rows"),
+                      TabPage(self.OWNER, "https://mail.example/inbox?code=SECRET#x", "", "Inbox")]
+        self.browser = browser = types.SimpleNamespace(contexts=[types.SimpleNamespace(pages=self.pages)])
+        self.waiting = set()
+        for name, value in (("DATA", root), ("TASKS", root / "tasks"),
+                            ("connect", lambda: (None, browser)),
+                            ("_tab_tag", lambda pg: pg.tag),
+                            # the real module (bare() uses its bare_url), with who is waited for set here
+                            ("handoff", types.SimpleNamespace(waiting=lambda slug, data=None: slug in self.waiting,
+                                                              bare_url=MODULE.handoff.bare_url)),
+                            ("_target_info", lambda pg: {"targetId": pg.tid, "title": pg.title, "url": pg.url})):
+            patcher = patch.object(MODULE, name, value)
+            patcher.start()
+            self.addCleanup(patcher.stop)
+
+    def refused(self, argv, code):
+        with self.assertRaises(MODULE.BrowserTaskError) as caught:
+            MODULE.tab_command(argv)
+        self.assertEqual(caught.exception.code, code, str(caught.exception))
+        return str(caught.exception)
+
+    def test_list_names_every_tab_its_group_and_no_query(self):
+        answer = MODULE.tab_command(["list"])
+        self.assertEqual(answer["tabs_open"], 3)
+        rows = {row["id"]: row for row in answer["list"]}
+        self.assertTrue(rows[self.ANCHOR]["anchor"])
+        self.assertEqual((rows[self.TASK]["group"], rows[self.TASK]["held_by"], rows[self.TASK]["anchor"]), ("demo", "task", False))
+        self.assertEqual(rows[self.OWNER]["held_by"], "")
+        self.assertEqual(rows[self.OWNER]["url"], "https://mail.example/inbox")
+        self.assertNotIn("SECRET", json.dumps(answer))
+
+    def test_acts_on_a_tab_no_task_owns(self):
+        owner = self.pages[2]
+        self.assertEqual(MODULE.tab_command(["navigate", self.OWNER[:8], "https://site.example/a?b=c"])["tab"]["url"],
+                         "https://site.example/a")
+        MODULE.tab_command(["click", self.OWNER, "button#go"])
+        MODULE.tab_command(["type", self.OWNER, "שלום", "textarea"])
+        self.assertEqual(MODULE.tab_command(["eval", self.OWNER, "1+1"])["result"], 42)
+        self.assertEqual(owner.done, [("goto", "https://site.example/a?b=c"), ("click", "button#go"),
+                                      ("click", "textarea"), ("type", "שלום"), ("eval", "1+1")])
+
+    def test_an_active_tasks_tab_is_only_read(self):
+        for argv in (["navigate", self.TASK, "https://x.example"], ["click", self.TASK, "a"],
+                     ["type", self.TASK, "x"], ["eval", self.TASK, "1"], ["close", self.TASK]):
+            self.assertIn("task <verb> demo", self.refused(argv, "tab_owned_by_task"))
+        # its text walks the page's scroll container: the task's own `read` does that, never this verb
+        self.assertIn("task read demo", self.refused(["text", self.TASK], "tab_owned_by_task"))
+        self.assertEqual(self.pages[1].done, [])
+        self.assertIn("heading", MODULE.tab_command(["snapshot", self.TASK])["snapshot"])
+        shot = MODULE.tab_command(["shot", self.TASK, "full"])["screenshot"]
+        self.assertTrue(shot["path"].startswith("tabs/b1b1b1b1b1b1b1b1/"))
+        self.assertEqual(self.pages[1].done, [("shot", True)])
+
+    def test_text_reads_a_free_tab(self):
+        with patch.object(MODULE, "_read_whole", return_value={"text": "inbox"}) as read:
+            self.assertEqual(MODULE.tab_command(["text", self.OWNER, "5000"])["read"], {"text": "inbox"})
+        self.assertEqual(read.call_args.args[1], 5000)
+
+    def test_a_tab_whose_tag_cannot_be_read_is_held(self):
+        self.pages[2].tag = None
+        self.refused(["click", self.OWNER, "a"], "tab_owner_unknown")
+        self.assertIn("heading", MODULE.tab_command(["snapshot", self.OWNER])["snapshot"])
+        row = [r for r in MODULE.tab_command(["list"])["list"] if r["id"] == self.OWNER][0]
+        self.assertEqual((row["group"], row["held_by"]), ("?", "unknown"))
+        self.assertEqual(self.pages[2].done, [])
+
+    def test_a_tab_a_person_is_waited_for_on_is_held(self):
+        self.pages[2].tag = "signin"
+        self.waiting.add("signin")
+        self.refused(["navigate", self.OWNER, "https://x.example"], "tab_owned_by_handoff")
+        self.waiting.clear()
+        MODULE.tab_command(["navigate", self.OWNER, "https://x.example"])
+        self.assertEqual(self.pages[2].done, [("goto", "https://x.example")])
+
+    def test_tab_tag_reads_only_the_slugs_this_browser_mints(self):
+        def page(value=None, fails=False):
+            def send(method, params=None):
+                if fails:
+                    raise RuntimeError("Cannot find default execution context")
+                return {"result": {"value": value}}
+            session = types.SimpleNamespace(send=send, detach=lambda: None)
+            return types.SimpleNamespace(context=types.SimpleNamespace(new_cdp_session=lambda pg: session))
+        self.assertEqual(self.REAL_TAB_TAG(page("b42g:demo")), "demo")
+        self.assertEqual(self.REAL_TAB_TAG(page("someone-elses-name")), "")
+        self.assertEqual(self.REAL_TAB_TAG(page("")), "")
+        for foreign in ("b42g:../../x", "b42g:", "b42g:" + "a" * 200, "b42g:Demo"):
+            self.assertIsNone(self.REAL_TAB_TAG(page(foreign)), foreign)
+        self.assertIsNone(self.REAL_TAB_TAG(page(fails=True)))
+
+    def test_snapshot_without_playwright_support_is_refused_by_name(self):
+        self.pages[2].locator = lambda selector: types.SimpleNamespace(first=None)
+        self.refused(["snapshot", self.OWNER], "snapshot_unavailable")
+
+    def test_a_timeout_comes_back_with_the_task_verbs_code(self):
+        def click(timeout=None):
+            raise Exception("Timeout 15000ms exceeded.")
+        self.pages[2].locator = lambda selector: types.SimpleNamespace(first=types.SimpleNamespace(click=click))
+        self.refused(["click", self.OWNER, "a"], "operation_timeout")
+
+    def test_a_finished_task_frees_its_tab(self):
+        (Path(self.tmp.name) / "tasks" / "demo" / "task.json").write_text(json.dumps({"slug": "demo", "state": "finished"}))
+        MODULE.tab_command(["click", self.TASK, "a"])
+        self.assertEqual(self.pages[1].done, [("click", "a")])
+
+    def test_an_unreadable_task_file_keeps_the_boundary(self):
+        (Path(self.tmp.name) / "tasks" / "demo" / "task.json").write_text("{not json")
+        self.refused(["click", self.TASK, "a"], "tab_owned_by_task")
+
+    def test_the_anchor_is_never_closed(self):
+        self.refused(["close", self.ANCHOR], "tab_is_anchor")
+        MODULE.tab_command(["close", self.OWNER])
+        self.assertEqual((self.pages[0].done, self.pages[2].done), ([], [("close",)]))
+
+    def test_page_zero_and_a_windows_last_page_stay_whatever_their_tag(self):
+        self.pages[0].tag = "old-group"                  # the owner closed the anchor; a group's tab took its place
+        self.refused(["close", self.ANCHOR], "tab_is_anchor")
+        alone = TabPage("D3D3D3D3D3D3D3D3D3D3D3D3D3D3D3D3", "https://alone.example/")
+        self.browser.contexts.append(types.SimpleNamespace(pages=[alone]))
+        self.refused(["close", alone.tid], "tab_is_anchor")
+        self.assertEqual((self.pages[0].done, alone.done), ([], []))
+
+    def test_an_id_names_one_tab(self):
+        self.pages.append(TabPage(self.TWIN, "https://twin.example/"))
+        self.refused(["click", "C2C2C2C2", "a"], "ambiguous_tab")
+        self.refused(["click", "D3D3D3D3", "a"], "no_such_tab")
+        self.refused(["click", "C2C2", "a"], "usage")
+        self.refused(["click", "../../etc", "a"], "usage")
+        MODULE.tab_command(["click", self.TWIN[:12], "a"])
+        self.assertEqual(self.pages[3].done, [("click", "a")])
+
+    def test_usage(self):
+        self.refused(["open", "https://x.example"], "usage")
+        self.refused(["list", "extra"], "usage")
+        self.refused(["navigate", self.OWNER], "usage")
+        self.refused(["shot", self.OWNER, "half"], "usage")
+        self.refused(["text", self.OWNER, "abc"], "usage")
+        self.refused(["navigate", self.OWNER, "file:///etc/passwd"], "invalid_url")
 
 
 if __name__ == "__main__":

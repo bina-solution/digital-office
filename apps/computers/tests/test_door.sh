@@ -15,8 +15,26 @@ HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO="$(cd "${HERE}/../../.." && pwd)"
 IMAGE="${1:-$(docker ps --filter 'name=^computers-' --format '{{.Image}}' | head -1)}"
 [ -n "${IMAGE}" ] || { echo "no image: pass one (a Debian with ssh-keygen)"; exit 2; }
-T="$(mktemp -d)"; trap 'rm -rf "${T}"' EXIT
+# The throwaway containers bind ${T} as /repo, and the docker daemon resolves a bind's SOURCE on the HOST —
+# not in whatever container this test itself runs in. `mktemp -d` makes /tmp/<x> in the CALLER's namespace, so
+# under a gate that runs this test inside a container the daemon mounted an empty directory, the hook was not
+# there, and the run said "install rc=127": a FAIL for a machine where the door was never reached. The checkout
+# is mounted at its host path, so a directory inside it is seen on both sides; where writing there fails it
+# falls back to mktemp, and the probe below decides whether the daemon can see it at all.
+T="$(mktemp -d "${REPO}/.door-test.XXXXXX" 2>/dev/null || mktemp -d)"; trap 'rm -rf "${T}"' EXIT
 fails=0
+# Can the daemon SEE ${T}? A marker it must find through a bind of this very image, before any check runs:
+# containers that never got the hooks have not failed — they did not run — and it says so, and why. (G72's
+# three outcomes: PASS, FAIL, and NOT RUN, which only --strict counts as a failure.)
+: >"${T}/.probe"
+if ! docker run --rm -v "${T}:/probe:ro" --entrypoint sh "${IMAGE}" -c 'test -f /probe/.probe' >/dev/null 2>&1; then
+  why="the docker daemon cannot see ${T} (a bind's source is resolved on the host)"
+  docker info >/dev/null 2>&1 || why="it needs a docker engine, and this machine has none"
+  echo "NOT RUN  no sshd: ${why} — run this test on the host, or from a checkout the daemon can see"
+  echo "test_door: NOT RUN — ${why}"
+  exit 3
+fi
+rm -f "${T}/.probe"
 # here-strings, never `printf | grep -q`: under pipefail a grep -q that leaves early fails its printf (SIGPIPE)
 check() {   # name expected-line output
   if grep -qxF -- "$2" <<<"$3"; then echo "PASS  $1"; else echo "FAIL  $1"; sed 's/^/      | /' <<<"$3" | tail -15; fails=$((fails + 1)); fi

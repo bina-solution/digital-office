@@ -1,0 +1,58 @@
+/* The docs wear the office's one palette, «Olive Grove»: every colour here is a token of
+   platform-base/bina-ui/theme-tokens.css, which pack.sh copies in beside this file at build time — none is named
+   here. Starlight's dark theme is its `:root`, its light one `[data-theme='light']`; the palette's own tokens follow
+   the screen's light/dark preference, as Starlight's «auto» does. Unlayered, so it wins over Starlight's layers. */
+@import './theme-tokens.css';
+
+:root {
+	--sl-color-accent-low: var(--olive-soft);
+	--sl-color-accent: var(--olive);
+	--sl-color-accent-high: var(--olive-d);
+	--sl-color-white: var(--ink);
+	--sl-color-gray-1: var(--ink);
+	--sl-color-gray-2: var(--ink);
+	--sl-color-gray-3: var(--muted);
+	--sl-color-gray-4: var(--muted);
+	--sl-color-gray-5: var(--line);
+	--sl-color-gray-6: var(--surface);
+	--sl-color-black: var(--bg);
+}
+
+:root[data-theme='light'] {
+	--sl-color-accent-low: var(--olive-soft);
+	--sl-color-accent: var(--olive);
+	--sl-color-accent-high: var(--olive-d);
+	--sl-color-white: var(--ink);
+	--sl-color-gray-1: var(--ink);
+	--sl-color-gray-2: var(--ink);
+	--sl-color-gray-3: var(--muted);
+	--sl-color-gray-4: var(--muted);
+	--sl-color-gray-5: var(--line);
+	--sl-color-gray-6: var(--surface-2);
+	--sl-color-gray-7: var(--bg);
+	--sl-color-black: var(--surface);
+}
+
+/* a picture still to be made (astro.config.mjs, shotPlaceholders): a marked box, never a broken image */
+.shot-todo {
+	display: block;
+	margin-block: 1rem;
+	padding: 0.75rem 1rem;
+	border: 2px dashed var(--sl-color-accent);
+	border-radius: 0.5rem;
+	background: var(--sl-color-accent-low);
+	color: var(--sl-color-white);
+}
+.shot-todo small {
+	display: block;
+	margin-top: 0.25rem;
+	color: var(--sl-color-gray-3);
+}
+
+/* A command in the middle of Hebrew text is one box (build 35's shots): it broke between its words, «./bbox» at
+   the end of one line and «export» at the start of the next, and «--force» at its hyphen. As an inline-block it moves
+   to the next line whole; one longer than the line still wraps inside its own box. */
+.sl-markdown-content :not(pre) > code {
+	display: inline-block;
+	max-width: 100%;
+}

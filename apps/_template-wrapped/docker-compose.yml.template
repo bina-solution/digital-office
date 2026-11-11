@@ -1,0 +1,128 @@
+# <id> — <Vendor client> wrapped as an app of the office (ai/context/wrapped-official-app.md).
+# Three services and one volume (the worked example is apps/bina-claude/docker-compose.yml):
+#   <id>-desktop       the vendor's Linux client under Selkies: the screen (routing.service in app.json)
+#   <id>-desktop-home  one shot that makes the desktop's folder in the volume before the desktop mounts it
+#   <id>               the adapter over the vendor's headless side: the API and the CLI (capabilities[].endpoint)
+#   <id>_home          the ONE volume (data.volumes): the adapter sees its root as /data, and the desktop's home
+#                      (its sign-in, the keyring, its data) is its `desktop` folder, /data/desktop to the adapter
+# The caps are a start: measure the client on an office, and write what was measured beside them.
+services:
+  <id>-desktop:
+    image: ghcr.io/bina-solution/digital-office/<id>-desktop:${IMAGE_TAG:-latest}
+    pull_policy: missing
+    build:
+      context: .
+      dockerfile: Dockerfile.desktop
+    container_name: <id>-desktop-${DEPLOYMENT_NAME:-bina-deployment}
+    restart: unless-stopped
+    environment:
+      - PUID=1000
+      - PGID=1000
+      # nginx on the container's loopback (Dockerfile.desktop); the front door, desktop/gate.mjs, holds :3000.
+      - CUSTOM_PORT=3100
+      - CUSTOM_HTTPS_PORT=3101
+      - TZ=${TZ:-Asia/Jerusalem}
+      - TITLE=<Name>
+      - SELKIES_UI_TITLE=<Name>
+      - SELKIES_UI_SHOW_LOGO=false
+      # X11 (Xvfb + Openbox), not the Wayland compositor: the road Electron clients are known to walk.
+      - PIXELFLUX_WAYLAND=false
+      - NO_DECOR=true
+      # Served at the root, so one server answers in this office's console (/a/<id>/, the prefix stripped by
+      # app.json) and at a linked office's shared host, where a fixed SUBFOLDER would 404.
+      - SUBFOLDER=/
+      # Who may frame it: this console, plus each linked office's console that shows the tile. Per office in
+      # .env, the whole value in DOUBLE quotes (bina-claude's compose says why).
+      - SELKIES_FRAME_ANCESTORS=${<ID>_FRAME_ANCESTORS:-'self'}
+      - SELKIES_ENABLE_RESIZE=true
+      - SELKIES_ENABLE_CLIPBOARD=true
+      - PASSWORD=                   # the office's sign-in is the door; never a second password
+      - START_DOCKER=false          # the base image's own docker daemon stays off
+      - DEPLOYMENT_NAME=${DEPLOYMENT_NAME:-bina-deployment}
+    volumes:
+      # HOME (/config) is the volume's `desktop` folder; <id>-desktop-home makes it first (a subpath must
+      # exist before it is mounted).
+      - type: volume
+        source: <id>_home
+        target: /config
+        volume:
+          subpath: desktop
+    depends_on:
+      <id>-desktop-home:
+        condition: service_completed_successfully
+    # Chromium and Electron renderers share memory through /dev/shm; docker's 64 MB default crashes them.
+    shm_size: 1gb
+    networks: [traefik-network]
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "-o", "/dev/null", "http://127.0.0.1:3000/"]
+      interval: ${HEALTHCHECK_INTERVAL:-30s}
+      timeout: ${HEALTHCHECK_TIMEOUT:-8s}
+      retries: 5
+      start_period: 60s
+    deploy:
+      resources:
+        limits:
+          cpus: '${<ID>_DESKTOP_CPUS:-1}'
+          memory: ${<ID>_DESKTOP_MEMORY:-1536m}
+    logging:
+      driver: ${LOGGING_DRIVER:-json-file}
+      options:
+        max-size: 5m
+        max-file: '3'
+
+  # The desktop's home, made before the desktop mounts it: Docker refuses a subpath that does not exist, and a
+  # container whose start failed stays Created for good. No container_name: a fixed name collides on a re-run.
+  <id>-desktop-home:
+    image: ghcr.io/bina-solution/digital-office/<id>-desktop:${IMAGE_TAG:-latest}
+    pull_policy: missing
+    restart: "no"
+    entrypoint: ["/bin/sh", "-c"]
+    command: ["mkdir -p /config/desktop && chown 1000:1000 /config/desktop"]
+    # nocopy: this can be the volume's first mount, and Docker would copy the image's own /config into the
+    # volume's ROOT, which is the adapter's /data.
+    volumes:
+      - type: volume
+        source: <id>_home
+        target: /config
+        volume:
+          nocopy: true
+    network_mode: none
+    deploy:
+      resources:
+        limits:
+          cpus: '0.1'
+          memory: 32m
+    logging:
+      driver: ${LOGGING_DRIVER:-json-file}
+      options:
+        max-size: 1m
+        max-file: '2'
+
+  <id>:
+    image: ghcr.io/bina-solution/digital-office/<id>:${IMAGE_TAG:-latest}
+    pull_policy: missing
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: <id>-${DEPLOYMENT_NAME:-bina-deployment}
+    restart: unless-stopped
+    volumes:
+      - <id>_home:/data              # the same volume: the headless side signs in with the client's session
+    networks: [traefik-network]
+    deploy:
+      resources:
+        limits:
+          cpus: '${<ID>_CPUS:-0.5}'
+          memory: ${<ID>_MEMORY:-256m}
+    logging:
+      driver: ${LOGGING_DRIVER:-json-file}
+      options:
+        max-size: 5m
+        max-file: '3'
+
+volumes:
+  <id>_home:
+
+networks:
+  traefik-network:
+    external: true

@@ -171,7 +171,12 @@ import { workflow, node, links } from '@n8n-as-code/transformer';
     /*__n8n__*/ shared: [{"updatedAt":"2026-07-31T00:59:54.840Z","createdAt":"2026-07-31T00:59:54.840Z","role":"workflow:owner","workflowId":"indoxSettings01","projectId":"2xKn4WH08LyAOk2y","project":{"updatedAt":"2026-07-30T23:40:17.073Z","createdAt":"2026-07-30T23:33:30.049Z","id":"2xKn4WH08LyAOk2y","name":"Admin User <person2@example.com>","type":"personal","icon":null,"description":null,"creatorId":"544b7ec6-5907-4ee2-a94b-c5676e56835c"}}],
     id: 'indoxSettings01',
     name: 'Settings',
-    active: true,
+    // DGO-1603: OFF in the blueprint, not only on vps1. Phase 1 found no caller in the product code for
+    // any of its six webhooks (query, all_settings, company, queries, setting, settings/invalidate-cache)
+    // and 0 runs in 30 days, while the whole workflow sat on the public n8n-hooks router. Turning it back
+    // on is a decision with facts: name the caller first, then flip this to true — the allow-list is
+    // already on the webhooks, so it is not internet-open even then.
+    active: false,
     isArchived: false,
     tags: ['indox-app', 'role:api', 'settings', 'sm-refactor-v2.1', 'indox', 'main', 'sm-refactore-v2.1', 'app:indox'],
     settings: {
@@ -1008,7 +1013,9 @@ return [{ json: result }];`,
     })
     QueryWebhook = {
         path: 'query',
-        options: {},
+        // DGO-1603: the settings loader reads it in-office; no caller reaches it from outside.
+        // Public /webhook/* must not run a query against the office's database.
+        options: { ipWhitelist: '10.0.0.0/8,172.16.0.0/12,192.168.0.0/16,127.0.0.1,::1' },
     };
 
     @node({
@@ -1806,7 +1813,7 @@ return $input.all();`,
 // derive from. Until now these three TABLE_GET builders sent only \`instance\` (the row
 // DISCRIMINATOR, a COMPONENT name) and never \`__instance\` (the SCHEMA), so every settings,
 // companies and tag_rules read resolved against public regardless of who asked: a levi unit ran
-// on hacohen's config while reporting itself as levi. Measured 2026-08-28: 9 of the 15-in-17
+// on example's config while reporting itself as levi. Measured 2026-08-28: 9 of the 15-in-17
 // indoxApi01 calls arriving with no __instance were these three.
 const INSTANCE='incoming-documents-main';
 let SCHEMA='';

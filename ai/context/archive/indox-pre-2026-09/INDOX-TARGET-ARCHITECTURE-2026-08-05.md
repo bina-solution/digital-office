@@ -2,13 +2,13 @@
 
 Design deliverable. Read-only analysis of `apps/indox/app/incoming_documents/api/__init__.py` (5,265
 lines), `poller.py` (245 lines), `core/diff.py` (202 lines), and every n8n workflow named in the brief
-under `apps/indox/blueprint/n8n/`, cross-checked against live `supabase-db-shlomo-laptop` queries taken
+under `apps/indox/blueprint/n8n/`, cross-checked against live `supabase-db-owner-laptop` queries taken
 during this pass (2026-08-05, afternoon — later than `SYNC-ARCHITECTURE-REVIEW-2026-08-05.md`'s morning
 snapshot, so some numbers and even some defects differ; called out inline where they do). This document
 does not repeat that review or `MASTER-PLAN-2026-08-05-EVENING.md` — it starts from their findings and
 goes to a target architecture. Read those first if you haven't.
 
-**Live snapshot at time of writing** (`supabase-db-shlomo-laptop`, direct `psql`, un-truncated):
+**Live snapshot at time of writing** (`supabase-db-owner-laptop`, direct `psql`, un-truncated):
 
 | Fact | Value |
 |---|---|

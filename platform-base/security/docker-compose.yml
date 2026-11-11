@@ -22,7 +22,7 @@
 # app's own volume lives on.
 services:
   security:
-    image: ghcr.io/solomonboltin/digital-office/security:${IMAGE_TAG:-latest}
+    image: ghcr.io/bina-solution/digital-office/security:${IMAGE_TAG:-latest}
     pull_policy: missing
     build:
       context: .
@@ -43,6 +43,8 @@ services:
       - SECURITY_GEO=${SECURITY_GEO:-city}
       # 1 lets a LINKED office change bans and lists here; the default is read-only over a link
       - SECURITY_REMOTE_CONTROL=${SECURITY_REMOTE_CONTROL:-0}
+      # what THIS office sends out on purpose beyond egress.yaml: "app=pattern pattern; app=pattern" (DGO-1561)
+      - SECURITY_EGRESS_EXTRA=${SECURITY_EGRESS_EXTRA:-}
       - SENSOR_DIR=/sensor
       - SECURITY_DATA=/data
       - SECURITY_REGISTRY=/registry
@@ -83,7 +85,7 @@ services:
         max-file: '3'
 
   security-sensor:
-    image: ghcr.io/solomonboltin/digital-office/security:${IMAGE_TAG:-latest}
+    image: ghcr.io/bina-solution/digital-office/security:${IMAGE_TAG:-latest}
     pull_policy: missing
     build:
       context: .

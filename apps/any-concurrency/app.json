@@ -5,7 +5,9 @@
     "en": "Any Concurrency"
   },
   "layer": 3,
+  "people": "admins",
   "kind": "service",
+  "page": "concurrency",
   "version": "1.0.0",
   "summary": {
     "he": "ציר-זמן מקביליות — תצפית על ריצות במקביל",
@@ -80,18 +82,10 @@
     }
   },
   "data": {
-    "volumes": [
+    "shares": [
       "n8n_storage"
     ],
-    "on_uninstall": "keep",
-    "kv": [
-      {
-        "instance": "redis",
-        "db": 0,
-        "durable": true,
-        "note": "REDIS_URL pins /0"
-      }
-    ]
+    "on_uninstall": "keep"
   },
   "observability": {
     "sentry_platform": "python"

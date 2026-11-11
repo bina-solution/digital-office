@@ -4,7 +4,7 @@ Production-ready Ollama deployment with Traefik reverse proxy.
 
 ## Endpoints
 
-- **Production**: `https://ollama.hacohen.bina-solutions.co.il`
+- **Production**: `https://ollama.example.bina-solutions.co.il`
 - **Local**: `http://ollama.localhost`
 
 ## Security Options
@@ -52,13 +52,13 @@ for d in /sys/class/drm/renderD*; do echo "$d $(cat $d/device/vendor)"; done   #
 OLLAMA_GPU_DEVICE=/dev/dri/renderD129
 ```
 The container sees that node at the same path. Under another name Vulkan cannot match it. Unset, the
-container gets `/dev/null`, and Ollama runs on the CPU. `docker logs ollama-<office>` names the device Ollama found. The Dell
+container gets `/dev/null`, and Ollama runs on the CPU. `docker logs ollama-engine-<office>` names the device Ollama found. The Dell
 (Radeon R7 M265, GCN 1.0, 4 GiB of VRAM) is measured in DGO-825.
 
 A small GPU needs a smaller context. The context's cache is reserved when a model loads, and what does
 not fit on the GPU runs on the CPU. At 32k, qwen3:1.7b's cache took 3.8 GB on the Dell, and 13 of its 29
 layers ran on the CPU, at 4–5 tokens/s. At `OLLAMA_CONTEXT_LENGTH=16384` it is 91% on the GPU, and
-gemma4:e2b is 100% on the GPU and writes 6.9 tokens/s (DGO-908). `docker logs ollama-<office>` prints
+gemma4:e2b is 100% on the GPU and writes 6.9 tokens/s (DGO-908). `docker logs ollama-engine-<office>` prints
 `offloaded N/M layers to GPU` at every load. The offices' agents read the context from the Ollama
 itself (`/api/ps`), so no other setting has to follow.
 
@@ -108,16 +108,16 @@ office's Ollama and any linked office's (`apps/bina-ds/tools/llm-routes.mjs`, DG
 By hand, for a one-off:
 ```bash
 # Enter container
-docker exec -it ollama-bina-deployment ollama pull llama3.2
+docker exec -it ollama-engine-bina-deployment ollama pull llama3.2
 
 # Or via API
-curl -X POST https://ollama.hacohen.bina-solutions.co.il/api/pull \
+curl -X POST https://ollama.example.bina-solutions.co.il/api/pull \
   -d '{"name": "llama3.2"}'
 ```
 
 ### Chat completion
 ```bash
-curl https://ollama.hacohen.bina-solutions.co.il/api/generate \
+curl https://ollama.example.bina-solutions.co.il/api/generate \
   -d '{
     "model": "llama3.2",
     "prompt": "Hello, how are you?",
@@ -127,7 +127,7 @@ curl https://ollama.hacohen.bina-solutions.co.il/api/generate \
 
 ### List models
 ```bash
-curl https://ollama.hacohen.bina-solutions.co.il/api/tags
+curl https://ollama.example.bina-solutions.co.il/api/tags
 ```
 
 ## Environment Variables
@@ -162,11 +162,11 @@ Health check endpoint: `/api/tags`
 
 Check container health:
 ```bash
-docker inspect ollama-bina-deployment --format='{{.State.Health.Status}}'
+docker inspect ollama-engine-bina-deployment --format='{{.State.Health.Status}}'
 ```
 
 ## Integration with n8n
 
 Use the Ollama credentials in n8n with:
 - Host: `http://ollama:11434` (internal Docker network)
-- Or: `https://ollama.hacohen.bina-solutions.co.il` (external)
+- Or: `https://ollama.example.bina-solutions.co.il` (external)

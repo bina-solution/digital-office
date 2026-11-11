@@ -41,7 +41,7 @@ trap cleanup EXIT INT TERM
 clear
 echo "############################################################"
 echo "#   PORTABLE SSD  —  GitHub Actions CI  (LIVE)             #"
-echo "#   repo: solomonBoltin/deployment-hacohen                 #"
+echo "#   repo: bina-solution/digital-office                 #"
 echo "############################################################"
 echo
 if systemctl is-active --quiet github-runner; then

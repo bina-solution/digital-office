@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Post one comment on a Plane MEET item, from inside project-pln-fireplace.
+"""Post one comment on a Plane MEET item, from inside project-pln-examplef.
 usage: pl_comment.py ISSUE_ID HTML_FILE   (the key comes from plan.api_key(); it is never printed)"""
 import sys
 sys.path.insert(0, "/tmp")

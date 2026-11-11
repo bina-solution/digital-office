@@ -77,18 +77,124 @@ apply_pair() {
     log "$name: no private key rendered yet — waiting"
     return 0
   fi
-  wg-quick down "$name" 2>/dev/null || true
+  pair_down "$name"
   if sed "s|@PRIVATE@|$(cat "$KEY")|" "$conf" > "$applied"; then
     chmod 600 "$applied"
     touch -r "$conf" "$applied"
-    if wg-quick up "$name"; then
+    if pair_up "$name"; then
       log "$name up: $(wg show "$name" | head -1)"
     else
-      log "$name: wg-quick failed — this pair runs without a tunnel. Check NET_ADMIN, /dev/net/tun and the peer's endpoint."
+      log "$name: the tunnel could not be brought up (the line above says which step) — this pair runs without a tunnel. Check NET_ADMIN, /dev/net/tun and the peer's endpoint."
     fi
   else
     log "$name: the rendered config could not be written — waiting for the next render"
   fi
+}
+
+# ONE PAIR UP, WITHOUT wg-quick. The steps are wg-quick's own for the files net.py renders — link, keys,
+# addresses, MTU, routes — run here directly, and `wg` reads its keys from a file in /etc/wireguard.
+# WHY: a host whose AppArmor carries profiles for /usr/bin/wg and /usr/bin/wg-quick (Ubuntu 26.04 ships
+# both) attaches them to OUR binaries too — the container runs stacked, docker-default//&unconfined, and
+# the unconfined half takes a profile by path on exec. Under them `wg-quick up` died with «Segmentation
+# fault» and `wg setconf <iface> /dev/fd/63` (wg-quick's pipe) was refused: measured on the Dell
+# (portable-ubuntu, kernel 7.0.0-42), 2026-11-10 — no interface for any pair, every link of that office
+# down while its carrier said «up». The `wg` profile allows exactly one place for its files,
+# /etc/wireguard, so that is where the key file is; `ip` is never confined from here. A host without such
+# profiles runs the same steps, so every office has one applier.
+WG_QUICK_ONLY='Address|DNS|MTU|Table|PreUp|PostUp|PreDown|PostDown|SaveConfig'
+
+# The value of one [Interface] key of the applied file, one per line (Address may list several, comma-separated).
+conf_values() {
+  sed -n "s/^[[:space:]]*$2[[:space:]]*=[[:space:]]*//Ip" "$1" | tr ',' '\n' | sed 's/^[[:space:]]*//; s/[[:space:]]*$//' | grep -v '^$' || true
+}
+
+# A route line's MTU, or the MTU of the device it leaves by (wg-quick's reading of `ip route`: a route's
+# `mtu N`, and a `mtu lock N` it does not read, which falls through to the device as there).
+route_mtu() {
+  rm_="$(printf '%s\n' "$1" | sed -n 's/.* mtu \([0-9][0-9]*\).*/\1/p' | head -1)"
+  if [ -n "$rm_" ]; then echo "$rm_"; return 0; fi
+  dev="$(printf '%s\n' "$1" | sed -n 's/.* dev \([^ ]*\).*/\1/p' | head -1)"
+  [ -n "$dev" ] || return 0
+  ip link show dev "$dev" 2>/dev/null | sed -n 's/.* mtu \([0-9][0-9]*\).*/\1/p' | head -1
+}
+
+# wg-quick's MTU: the file's own, else the largest MTU on the way to a peer's endpoint, else the default
+# route's, else 1500 — less 80 for WireGuard's own header. A pair carried over TCP sends to 127.0.0.1, so
+# its MTU is the loopback's (65536 → 65456), exactly what wg-quick gave it.
+pair_mtu() {
+  fixed="$(conf_values "$2" MTU | head -1)"
+  if [ -n "$fixed" ]; then echo "$fixed"; return 0; fi
+  best=0
+  eps="$(wg show "$1" endpoints 2>/dev/null | awk '{print $2}')"
+  set -f      # an endpoint like [fe80::1]:51820 is a word, never a glob
+  for ep in $eps; do
+    host="${ep%:*}"; host="${host#[}"; host="${host%]}"
+    case "$host" in ''|'(none)') continue ;; esac
+    m="$(route_mtu "$(ip route get "$host" 2>/dev/null || true)")"
+    [ "${m:-0}" -gt "$best" ] && best="$m"
+  done
+  set +f
+  if [ "$best" -eq 0 ]; then
+    m="$(route_mtu "$(ip route show default 2>/dev/null | head -1)")"
+    [ "${m:-0}" -gt "$best" ] && best="$m"
+  fi
+  [ "$best" -gt 0 ] || best=1500
+  echo $((best - 80))
+}
+
+pair_up() {
+  name="$1"
+  applied="$WG_DIR/$name.conf"
+  keys="$WG_DIR/$name.wg"
+  # what `wg` reads: the applied file without the keys only wg-quick knows
+  if ! sed -E "/^[[:space:]]*($WG_QUICK_ONLY)[[:space:]]*=/Id" "$applied" > "$keys"; then
+    log "$name: could not write $keys"; return 1
+  fi
+  chmod 600 "$keys"
+  if ! ip link add "$name" type wireguard; then
+    # A kernel without WireGuard (a cloud sandbox's): the userspace one — only then, as wg-quick fell back
+    # to it. A kernel that HAS WireGuard and still refused says why on the line above (NET_ADMIN, mostly),
+    # and that is the answer, not a userspace interface. `DGO_WG_MODULE` exists for the drill alone.
+    if [ -e "${DGO_WG_MODULE:-/sys/module/wireguard}" ] || ! command -v wireguard-go >/dev/null 2>&1; then
+      log "$name: ip refused the WireGuard interface (the line above says why)"; return 1
+    fi
+    # It daemonises itself; its environment is left as it is (a WG_PROCESS_FOREGROUND set here, even empty,
+    # shadows the one it gives its own child, which then never settles — measured on vps1: no process left,
+    # its socket orphaned, and `wg setconf` waiting on it).
+    if ! wireguard-go "$name"; then
+      log "$name: no WireGuard interface — the kernel has none and wireguard-go did not start"; return 1
+    fi
+    log "$name: this kernel has no WireGuard — the userspace one (wireguard-go)"
+  fi
+  # bounded: a userspace daemon that took its socket and stopped answering would otherwise hold this loop,
+  # and with it every other pair of the office, for good
+  if ! timeout -k 5 30 wg setconf "$name" "$keys"; then
+    log "$name: wg setconf refused $keys (or did not answer in 30 s)"; pair_down "$name"; return 1
+  fi
+  for a in $(conf_values "$applied" Address); do
+    case "$a" in *:*) fam=-6 ;; *) fam=-4 ;; esac
+    if ! ip "$fam" address add "$a" dev "$name"; then
+      log "$name: the address $a could not be added"; pair_down "$name"; return 1
+    fi
+  done
+  mtu="$(pair_mtu "$name" "$applied")"
+  if ! ip link set mtu "$mtu" up dev "$name"; then
+    log "$name: the link did not come up (mtu $mtu)"; pair_down "$name"; return 1
+  fi
+  # A peer's allowed address that the interface's own network does not already cover gets a route, as
+  # wg-quick gave it (net.py's /32 inside the pair's /24 never needs one).
+  for i in $(wg show "$name" allowed-ips 2>/dev/null | awk '{for (f = 2; f <= NF; f++) print $f}'); do
+    case "$i" in '(none)') continue ;; *:*) fam=-6 ;; *) fam=-4 ;; esac
+    [ -n "$(ip "$fam" route show dev "$name" match "$i" 2>/dev/null)" ] || ip "$fam" route add "$i" dev "$name" || true
+  done
+  return 0
+}
+
+# One pair down: its interface goes, and with it its addresses and routes (a wireguard-go one ends when
+# its device is deleted). The key file goes with it.
+pair_down() {
+  ip link del "$1" 2>/dev/null || true
+  rm -f "$WG_DIR/$1.wg"
 }
 
 # An interface that is no longer in the plan is taken down HERE rather than left holding an address
@@ -102,7 +208,7 @@ retire_absent() {
       *" $name "*) continue ;;
     esac
     log "$name is no longer in the plan — down"
-    wg-quick down "$name" 2>/dev/null || true
+    pair_down "$name"
     rm -f "$applied"
   done
 }

@@ -1,0 +1,3757 @@
+{
+ "checked": "2026-11-05",
+ "sections": {
+  "hebrew_llm": [
+   {
+    "id": "hebrew-llm-leaderboard-dicta-mafat",
+    "name": "Hebrew LLM Leaderboard (DICTA + MAFAT / NNLP-IL) — ARCHIVED",
+    "kind": "leaderboard",
+    "url": "https://huggingface.co/spaces/hebrew-llm-leaderboard/leaderboard",
+    "licence": "Apache-2.0 (the Space / leaderboard code, per its card). Each listed model keeps its own licence.",
+    "results": [
+     {
+      "metric": "Status",
+      "value": "Archived. The Space shows a banner: leaderboard is archived and no longer maintained; existing results stay visible, new submissions closed.",
+      "on": "Space app.py (ARCHIVED_BANNER) + commit log 'Archive leaderboard: show banner, hide submit tab'",
+      "source_url": "https://huggingface.co/spaces/hebrew-llm-leaderboard/leaderboard/raw/main/app.py",
+      "source_date": "2026-05-15",
+      "grade": "A",
+      "note": "date = the archive commit; the results table itself shows no date. Space last modified 2026-05-17."
+     },
+     {
+      "metric": "Average of 6 tasks (top of table, 205 rows read on 2026-11-05)",
+      "value": "1) Mistral-Large-Instruct-2407 75.71 | 2) gemma-4-31B (base) 74.25 | 3) AI21-Jamba-Large-1.6 73.42 | 4) NVIDIA-Nemotron-3-Super-120B-A12B-Base 72.70 | 5) Meta-Llama-3.1-70B (base) 72.57 | 6) DictaLM-3.0-24B-Base 72.49 | 7) c4ai-command-r-plus-08-2024 72.36",
+      "on": "SNLI-he (210 ex.), HeQ QA TLNLS (1,436), Sentiment (3,000), Winograd-he (278), Translation BLEU he<->en (2,000), Israeli Trivia (300); few-shot",
+      "source_url": "https://hebrew-llm-leaderboard-leaderboard.hf.space/",
+      "source_date": "2026-05-15",
+      "grade": "A",
+      "note": "table read from the live app's Gradio config on 2026-11-05; numbers as printed"
+     },
+     {
+      "metric": "Best model per task (rows with average > 30)",
+      "value": "SNLI: Nemotron-3-Super-120B 97.38 | HeQ: c4ai-command-a-03-2025 88.43, Mistral-Large-2407 87.16 | Sentiment: Llama-3.1-70B 77.50 | Winograd: Mistral-Large-2407 88.49, gemma-4-31B 87.41 | Translation BLEU: gemma-4-31B 37.84, DictaLM-3.0-24B-Base 37.19 | Israeli Trivia: DictaLM-3.0-24B-Base 82.72, Jamba-Large-1.6 80.07",
+      "on": "same 6 tasks",
+      "source_url": "https://hebrew-llm-leaderboard-leaderboard.hf.space/",
+      "source_date": "2026-05-15",
+      "grade": "A",
+      "note": "computed by us from the printed table (no re-scoring)"
+     },
+     {
+      "metric": "Best small models (<=15B params), average",
+      "value": "DictaLM-3.0-Nemotron-12B-Base 66.47 | gemma-3-12b-pt 64.04 | gemma-2-9b-it 63.76 | Qwen2.5-14B 63.13 | Qwen3-14B-Base 63.04 | gemma-4-E4B 60.71 | Qwen3-8B 57.63 | Llama-3.1-8B-Instruct 54.83 | DictaLM-3.0-1.7B-Base 51.47 | Qwen3-4B 51.33 | Qwen3-1.7B-Base 43.28",
+      "on": "same 6 tasks",
+      "source_url": "https://hebrew-llm-leaderboard-leaderboard.hf.space/",
+      "source_date": "2026-05-15",
+      "grade": "A",
+      "note": "most are base models; instruct/chat models are scored with the same few-shot base-model protocol"
+     }
+    ],
+    "hebrew_support": "yes — Hebrew-only evaluation, but open-weights models only. No GPT / Claude / Gemini API models, no gpt-oss, no Kimi, no full DeepSeek-V3/R1 (only R1 distills) in the table.",
+    "summary_he": "לוח התוצאות של דיקטה ומפא״ת מדרג מודלים פתוחים בשש משימות בעברית. הוא הועבר לארכיון במאי 2026 ולא מתעדכן, אבל התוצאות הקיימות עדיין זמינות לצפייה.",
+    "caveats": [
+     "Designed for BASE models with few-shot prompts (the About text says so). Some chat models are clearly mis-scored: google/gemma-3-27b-it average 13.41 (0.0 on SNLI, Sentiment, Winograd), CohereForAI/c4ai-command-a-03-2025 average 30.41. Do not rank chat models from this table.",
+     "Small test sets: SNLI-he 210 examples (70 per class, machine-translated by Dicta then manually corrected), Israeli Trivia 300, Winograd 278. A gap of 1-2 points is noise.",
+     "The 'Hub License' column was captured at submission time and can be stale (e.g. it shows apache-2.0 for DictaLM-3.0-Nemotron-12B-Base, while the Hub tag now says 'other' / NVIDIA Open Model License)."
+    ],
+    "sources": [
+     {
+      "url": "https://hebrew-llm-leaderboard-leaderboard.hf.space/",
+      "date": "2026-05-15",
+      "what": "live app; table read from its /config payload; archive banner; task columns",
+      "grade": "A"
+     },
+     {
+      "url": "https://huggingface.co/spaces/hebrew-llm-leaderboard/leaderboard/raw/main/src/about.py",
+      "date": null,
+      "what": "About text: task definitions, sources, number of examples, few-shot formats; operated by MAFAT/NNLP-IL and DICTA",
+      "grade": "A"
+     },
+     {
+      "url": "https://huggingface.co/spaces/hebrew-llm-leaderboard/leaderboard/raw/main/app.py",
+      "date": "2026-05-15",
+      "what": "ARCHIVED_BANNER: archived, no longer maintained, new submissions closed (commit 'Archive leaderboard: show banner, hide submit tab' 2026-05-15)",
+      "grade": "A"
+     },
+     {
+      "url": "https://huggingface.co/blog/leaderboard-hebrew",
+      "date": "2024-05-05",
+      "what": "launch blog post: tasks (HeQ, sentiment, Winograd, translation), lighteval on Inference Endpoints, sponsors DDR&D IMOD / Webiks / DICTA",
+      "grade": "C"
+     }
+    ],
+    "grade": "A",
+    "verified_at": "2026-11-05"
+   },
+   {
+    "id": "dictalm-3-0",
+    "name": "DictaLM 3.0 (24B / Nemotron-12B / 1.7B; Base, Instruct, Thinking)",
+    "kind": "model",
+    "url": "https://huggingface.co/dicta-il/DictaLM-3.0-24B-Thinking",
+    "licence": "Apache-2.0 for the 24B (Base, Thinking) and 1.7B (Base, Instruct, Thinking) models (Hub licence tags). The Nemotron-based 12B (Base, Instruct) is under the NVIDIA Open Model License (Hub tag 'other'). The arXiv page's 'CC BY-SA 4.0' is the PAPER's licence, not the weights'.",
+    "results": [
+     {
+      "metric": "Base models, average on the Hebrew LLM Leaderboard",
+      "value": "24B 72.49 (vs Mistral-Small-3.1-24B 66.0) | 12B 66.47 (vs Nemotron-Nano-12B-v2 53.7) | 1.7B 51.47 (vs Qwen3-1.7B-Base 43.3)",
+      "on": "Hebrew LLM Leaderboard 6 tasks (paper Table 3 = leaderboard rows)",
+      "source_url": "https://arxiv.org/html/2602.02104v1",
+      "source_date": "2026-02-02",
+      "grade": "A",
+      "note": "24B-Base: Israeli Trivia 82.72 vs 58.5 for its Mistral base"
+     },
+     {
+      "metric": "Chat models, zero-shot (paper Table 8): summarization / translation / Winograd(he) / Israeli trivia / nikud",
+      "value": "DictaLM-3.0-24B-Thinking 56.86 / 30.09 / 78.06 / 60.13 / 86.86 | gemma3-27B-it 44.54 / 26.73 / 79.86 / 45.51 / 60.21 | Llama-3.3-70B-Instruct 37.83 / 19.31 / 83.45 / 60.13 / 4.05 | aya-expanse-32B 29.46 / 17.10 / 80.58 / 53.82 / 45.40 | DictaLM-3.0-Nemotron-12B-Instruct 33.27 / 13.50 / 73.74 / 45.18 / 76.12 | gemma-3-12b-it 39.48 / 16.50 / 75.90 / 44.85 / 51.78 | Qwen3-14B(think) 15.83 / 0.90 / 73.38 / 41.86 / 4.73 | DictaLM-3.0-1.7B-Instruct 9.72 / 2.16 / 58.2 / 30.21 / 52.76",
+      "on": "DICTA's new Hebrew chat suite (translation, summarization, Winograd, trivia 300 MCQ, diacritization)",
+      "source_url": "https://arxiv.org/html/2602.02104v1",
+      "source_date": "2026-02-02",
+      "grade": "C",
+      "note": "authors' own benchmark and own models; the table header says 'Winogrande' while the text says Winograd. A third-party summary (emergentmind) says summarization/translation are win-rates against Gemini-2.5-Pro outputs judged by GPT-4o — not confirmed in the HTML we read. No GPT/Claude/Gemini API model is a column."
+     },
+     {
+      "metric": "English retention (CommonSense/WinoGrande/ARC-C average)",
+      "value": "24B 74.8 vs 76.1 for Mistral-Small-3.1 (-1.3) | 12B 73.8 vs 73.3 | 1.7B 60.2 vs 58.2",
+      "on": "paper Table 4",
+      "source_url": "https://arxiv.org/html/2602.02104v1",
+      "source_date": "2026-02-02",
+      "grade": "C",
+      "note": "authors' own claim: >98% of English capability retained"
+     }
+    ],
+    "hebrew_support": "yes — Hebrew-first (about 75% Hebrew / 25% English continued pre-training, ~100B Hebrew tokens), native 65k context",
+    "summary_he": "משפחת מודלים פתוחה של דיקטה שאומנה בעיקר על עברית, בשלושה גדלים. המודל 24B הבסיסי משיג 82.7 בטריוויה ישראלית, אבל גרסת ה-12B כפופה לרישיון של NVIDIA ולא ל-Apache.",
+    "sources": [
+     {
+      "url": "https://arxiv.org/abs/2602.02104",
+      "date": "2026-02-02",
+      "what": "technical report: sizes, base models (Mistral-Small-3.1, Nemotron Nano V2, Qwen3-1.7B), authors; paper licence CC BY-SA 4.0",
+      "grade": "A"
+     },
+     {
+      "url": "https://arxiv.org/html/2602.02104v1",
+      "date": "2026-02-02",
+      "what": "Tables 3, 4 and 8; training-data sizes; 'permissive licence' wording without naming one",
+      "grade": "A"
+     },
+     {
+      "url": "https://huggingface.co/api/models/dicta-il/DictaLM-3.0-24B-Thinking",
+      "date": "2026-05-04",
+      "what": "Hub record: license:apache-2.0, created 2025-12-01, 23.57B params",
+      "grade": "A"
+     },
+     {
+      "url": "https://huggingface.co/api/models/dicta-il/DictaLM-3.0-Nemotron-12B-Base",
+      "date": "2025-12-01",
+      "what": "Hub record: license:other, license_name nvidia-open-model-license",
+      "grade": "A"
+     },
+     {
+      "url": "https://huggingface.co/api/models/dicta-il/DictaLM-3.0-1.7B-Instruct",
+      "date": "2025-12-01",
+      "what": "Hub record: license:apache-2.0, 1.72B params",
+      "grade": "A"
+     }
+    ],
+    "grade": "A",
+    "verified_at": "2026-11-05"
+   },
+   {
+    "id": "dictalm-4-0-105b-a10b-base",
+    "name": "DictaLM-4.0-105B-A10B-Base (as listed on the leaderboard)",
+    "kind": "model",
+    "url": null,
+    "licence": "UNVERIFIED — 'apache-2.0' only in the leaderboard's Hub License column. No public model page found: the Hub API answers 'Invalid username or password' for dicta-il/DictaLM-4.0-105B-A10B-Base, and no announcement was found.",
+    "results": [
+     {
+      "metric": "Average, 6 Hebrew tasks (104B params listed)",
+      "value": "70.00 (SNLI 86.29, HeQ 73.11, Sentiment 71.77, Winograd 79.18, BLEU 35.55, Israeli Trivia 74.13)",
+      "on": "Hebrew LLM Leaderboard",
+      "source_url": "https://hebrew-llm-leaderboard-leaderboard.hf.space/",
+      "source_date": "2026-05-15",
+      "grade": "A",
+      "note": "row exists in the table; nothing else about the model is public as far as we could see"
+     }
+    ],
+    "hebrew_support": "yes (per its score) — but unverifiable beyond the leaderboard row",
+    "summary_he": "בלוח העברי מופיע מודל בסיס גדול בשם DictaLM-4.0 עם ממוצע 70.0, אבל לא מצאנו לו דף ציבורי או הודעה רשמית, ולכן הרישיון והפרטים אינם מאומתים.",
+    "sources": [
+     {
+      "url": "https://hebrew-llm-leaderboard-leaderboard.hf.space/",
+      "date": "2026-05-15",
+      "what": "leaderboard row with scores, params 104.0, Hub License column apache-2.0",
+      "grade": "A"
+     }
+    ],
+    "grade": "A",
+    "verified_at": "2026-11-05"
+   },
+   {
+    "id": "gemma-3-4",
+    "name": "Google Gemma 4 (31B, 26B-A4B, E4B, E2B) and Gemma 3",
+    "kind": "model",
+    "url": "https://huggingface.co/google/gemma-4-31B",
+    "licence": "Gemma 4: Apache-2.0 (Hub tag on google/gemma-4-31B). Gemma 3: 'Gemma' terms of use (leaderboard Hub License column: gemma).",
+    "results": [
+     {
+      "metric": "Average, 6 Hebrew tasks (base models)",
+      "value": "gemma-4-31B 74.25 (#2 overall) | gemma-3-27b-pt 69.50 | gemma-4-26B-A4B 65.44 | gemma-3-12b-pt 64.04 | gemma-4-E4B 60.71 | gemma-4-E2B 49.96 | gemma-3-4b-pt 48.07 | gemma-3-270m 23.33",
+      "on": "Hebrew LLM Leaderboard",
+      "source_url": "https://hebrew-llm-leaderboard-leaderboard.hf.space/",
+      "source_date": "2026-05-15",
+      "grade": "A",
+      "note": "gemma-4-31B: SNLI 92.14, HeQ 86.77, Sentiment 67.93, Winograd 87.41, BLEU 37.84 (best), Trivia 73.42"
+     },
+     {
+      "metric": "Instruct model on the same board (evaluation failure)",
+      "value": "google/gemma-3-27b-it average 13.41 (0.0 on SNLI, Sentiment, Winograd) — not a real score of the model",
+      "on": "Hebrew LLM Leaderboard",
+      "source_url": "https://hebrew-llm-leaderboard-leaderboard.hf.space/",
+      "source_date": "2026-05-15",
+      "grade": "A",
+      "note": "use DictaLM 3.0 paper Table 8 for a working chat figure: gemma3-27B-it summarization 44.54, translation 26.73, trivia 45.51, nikud 60.21"
+     }
+    ],
+    "hebrew_support": "yes — strong for its size (a 31B base model beats most 70B models here)",
+    "summary_he": "Gemma 4 בגרסת 31B (בסיס) במקום השני בלוח העברי עם 74.25 ובתרגום הכי חזק, ברישיון Apache-2.0. Gemma 3 נמצא מעט מאחור ותחת רישיון Gemma.",
+    "sources": [
+     {
+      "url": "https://hebrew-llm-leaderboard-leaderboard.hf.space/",
+      "date": "2026-05-15",
+      "what": "leaderboard rows",
+      "grade": "A"
+     },
+     {
+      "url": "https://huggingface.co/api/models/google/gemma-4-31B",
+      "date": "2026-07-15",
+      "what": "Hub record: license:apache-2.0, created 2026-03-12",
+      "grade": "A"
+     },
+     {
+      "url": "https://arxiv.org/html/2602.02104v1",
+      "date": "2026-02-02",
+      "what": "Table 8 chat results for gemma3-27B-it and gemma-3-12b-it",
+      "grade": "C"
+     }
+    ],
+    "grade": "A",
+    "verified_at": "2026-11-05"
+   },
+   {
+    "id": "mistral-large-small",
+    "name": "Mistral Large 2407 / Mistral Small 24B / Nemo",
+    "kind": "model",
+    "url": "https://huggingface.co/mistralai/Mistral-Large-Instruct-2407",
+    "licence": "Mistral-Large-Instruct-2407: Mistral Research License (Hub tag 'other', license_name mrl) — not for commercial use without a separate licence. Mistral-Small-24B-Instruct-2501 and Mistral-Nemo: Apache-2.0 (leaderboard Hub License column).",
+    "results": [
+     {
+      "metric": "Average, 6 Hebrew tasks",
+      "value": "Mistral-Large-Instruct-2407 75.71 (#1; Winograd 88.49, HeQ 87.16) | Mistral-Small-24B-Instruct-2501 67.56 | Mistral-Small-3.1-24B-Base 66.00 | Mistral-Nemo-Instruct-2407 59.19",
+      "on": "Hebrew LLM Leaderboard",
+      "source_url": "https://hebrew-llm-leaderboard-leaderboard.hf.space/",
+      "source_date": "2026-05-15",
+      "grade": "A",
+      "note": "123B parameters; the top of the table is a 2024 model"
+     }
+    ],
+    "hebrew_support": "yes — good",
+    "summary_he": "Mistral Large 2407 מוביל את הלוח העברי עם 75.7, אבל הרישיון הוא רישיון מחקר ולא מסחרי. Mistral Small 24B נותן 67.6 ברישיון Apache-2.0.",
+    "sources": [
+     {
+      "url": "https://hebrew-llm-leaderboard-leaderboard.hf.space/",
+      "date": "2026-05-15",
+      "what": "leaderboard rows",
+      "grade": "A"
+     },
+     {
+      "url": "https://huggingface.co/api/models/mistralai/Mistral-Large-Instruct-2407",
+      "date": "2025-07-28",
+      "what": "Hub record: license:other, license_name mrl",
+      "grade": "A"
+     }
+    ],
+    "grade": "A",
+    "verified_at": "2026-11-05"
+   },
+   {
+    "id": "llama-3-4",
+    "name": "Meta Llama 3.1 / 3.3 / 4 Scout",
+    "kind": "model",
+    "url": "https://huggingface.co/meta-llama/Llama-3.3-70B-Instruct",
+    "licence": "Llama community licences (Hub tag license:llama3.3 on Llama-3.3-70B-Instruct; llama3.1 on the 3.1 models; 'other' for Llama-4-Scout) — custom terms, not OSI open source.",
+    "results": [
+     {
+      "metric": "Average, 6 Hebrew tasks",
+      "value": "Meta-Llama-3.1-70B (base) 72.57 | Llama-3.3-70B-Instruct 70.53 | Llama-3.1-70B-Instruct 69.54 | Llama-4-Scout-17B-16E 68.71 | Meta-Llama-3.1-8B-Instruct 54.83 | Meta-Llama-3.1-8B 52.29 | Llama-3.2-1B 34.79 | Llama-3.2-3B 30.17",
+      "on": "Hebrew LLM Leaderboard",
+      "source_url": "https://hebrew-llm-leaderboard-leaderboard.hf.space/",
+      "source_date": "2026-05-15",
+      "grade": "A",
+      "note": "best Sentiment scores of the table (77.5); 8B and smaller are weak in Hebrew"
+     }
+    ],
+    "hebrew_support": "partial — acceptable at 70B, weak at 8B and below",
+    "summary_he": "Llama 3.1 70B בסיס מקבל 72.6 ו-Llama 3.3 70B מקבל 70.5, אבל מודלי 8B וקטנים ממנו חלשים בעברית. הרישיון הוא רישיון הקהילה של Meta.",
+    "sources": [
+     {
+      "url": "https://hebrew-llm-leaderboard-leaderboard.hf.space/",
+      "date": "2026-05-15",
+      "what": "leaderboard rows",
+      "grade": "A"
+     },
+     {
+      "url": "https://huggingface.co/api/models/meta-llama/Llama-3.3-70B-Instruct",
+      "date": "2024-12-21",
+      "what": "Hub record: license:llama3.3",
+      "grade": "A"
+     }
+    ],
+    "grade": "A",
+    "verified_at": "2026-11-05"
+   },
+   {
+    "id": "qwen3-qwen3-5",
+    "name": "Alibaba Qwen3 / Qwen3.5 (and Qwen2.5-72B)",
+    "kind": "model",
+    "url": "https://huggingface.co/Qwen/Qwen3.5-35B-A3B-Base",
+    "licence": "Apache-2.0 (Hub tags on Qwen3.5-35B-A3B-Base and Qwen3-8B; Qwen2.5-72B shows 'other' in the leaderboard column).",
+    "results": [
+     {
+      "metric": "Average, 6 Hebrew tasks",
+      "value": "Qwen3.5-35B-A3B-Base 69.24 (SNLI 96.19) | Qwen2.5-72B 70.18 | Qwen3-32B 63.58 | Qwen3-30B-A3B-Instruct-2507 63.00 | Qwen3-14B 61.43 | Qwen3-8B 57.63 | Qwen3-4B 51.33 | Qwen3-1.7B-Base 43.28 | Qwen3-0.6B-Base 34.55",
+      "on": "Hebrew LLM Leaderboard",
+      "source_url": "https://hebrew-llm-leaderboard-leaderboard.hf.space/",
+      "source_date": "2026-05-15",
+      "grade": "A",
+      "note": "Israeli Trivia is the weak spot (Qwen3-8B 29.9, Qwen3.5-35B-A3B 53.8)"
+     },
+     {
+      "metric": "Belebele (Afro-Asiatic family average — NOT Hebrew-only)",
+      "value": "Qwen3-32B thinking 84.8, non-thinking 82.3 vs Gemma-3-27B-IT 85.9; Qwen3-4B thinking 74.1 vs Gemma-3-4B-IT 63.5",
+      "on": "Belebele, 8 Afro-Asiatic languages incl. Hebrew (heb_Hebr listed in Table 36; averages in Table 37)",
+      "source_url": "https://arxiv.org/html/2505.09388v1",
+      "source_date": null,
+      "grade": "C",
+      "note": "the Qwen3 report publishes family averages only; no Hebrew-only number. No date read from the page (arXiv id 2505.09388 = May 2025)."
+     }
+    ],
+    "hebrew_support": "partial — Hebrew is among the report's evaluated languages; mid-size models are decent, small ones weak, trivia weak",
+    "summary_he": "Qwen3.5 בגרסת 35B-A3B מגיע ל-69.2 בלוח העברי, אבל Qwen3 הקטנים (עד 8B) חלשים: 43–58. הרישיון Apache-2.0. אין ב-Qwen3 מספר בלבד לעברית ב-Belebele.",
+    "sources": [
+     {
+      "url": "https://hebrew-llm-leaderboard-leaderboard.hf.space/",
+      "date": "2026-05-15",
+      "what": "leaderboard rows",
+      "grade": "A"
+     },
+     {
+      "url": "https://arxiv.org/html/2505.09388v1",
+      "date": null,
+      "what": "Qwen3 technical report, Tables 36-37 (Belebele family averages)",
+      "grade": "A"
+     },
+     {
+      "url": "https://huggingface.co/api/models/Qwen/Qwen3.5-35B-A3B-Base",
+      "date": "2026-04-23",
+      "what": "Hub record: license:apache-2.0",
+      "grade": "A"
+     }
+    ],
+    "grade": "A",
+    "verified_at": "2026-11-05"
+   },
+   {
+    "id": "cohere-command-aya",
+    "name": "Cohere Command R+ / Aya Expanse / Aya 23",
+    "kind": "model",
+    "url": "https://huggingface.co/CohereForAI/aya-expanse-32b",
+    "licence": "CC-BY-NC-4.0 (non-commercial) per the leaderboard's Hub License column for all listed Cohere models.",
+    "results": [
+     {
+      "metric": "Average, 6 Hebrew tasks",
+      "value": "c4ai-command-r-plus-08-2024 72.36 | c4ai-command-r-plus 71.76 | aya-expanse-32b 70.24 | c4ai-command-r-08-2024 67.71 | aya-23-35B 65.42 | aya-expanse-8b 58.49 | aya-23-8B 54.06",
+      "on": "Hebrew LLM Leaderboard",
+      "source_url": "https://hebrew-llm-leaderboard-leaderboard.hf.space/",
+      "source_date": "2026-05-15",
+      "grade": "A",
+      "note": "c4ai-command-a-03-2025 shows HeQ 88.43 (best) but average 30.41 — mis-scored on other tasks"
+     }
+    ],
+    "hebrew_support": "yes — strong scores at 32B and above (vendor language list not checked here)",
+    "summary_he": "משפחת Command R+ ו-Aya Expanse מגיעה ל-70–72 בלוח העברי, אך כל הרישיונות הם CC BY-NC ולכן אסורים לשימוש מסחרי.",
+    "sources": [
+     {
+      "url": "https://hebrew-llm-leaderboard-leaderboard.hf.space/",
+      "date": "2026-05-15",
+      "what": "leaderboard rows incl. Hub License column",
+      "grade": "A"
+     }
+    ],
+    "grade": "A",
+    "verified_at": "2026-11-05"
+   },
+   {
+    "id": "nvidia-nemotron-3-super",
+    "name": "NVIDIA Nemotron 3 Super 120B-A12B (Base)",
+    "kind": "model",
+    "url": "https://huggingface.co/nvidia/NVIDIA-Nemotron-3-Super-120B-A12B-Base-BF16",
+    "licence": "NVIDIA Open Model License (leaderboard Hub License column: nvidia-open-model-license).",
+    "results": [
+     {
+      "metric": "Average, 6 Hebrew tasks",
+      "value": "72.70 (#4) — SNLI 97.38 (best of the table), HeQ 73.82, Sentiment 71.60, Winograd 84.53, BLEU 36.45, Trivia 72.43",
+      "on": "Hebrew LLM Leaderboard",
+      "source_url": "https://hebrew-llm-leaderboard-leaderboard.hf.space/",
+      "source_date": "2026-05-15",
+      "grade": "A",
+      "note": "124B total / 12B active parameters"
+     }
+    ],
+    "hebrew_support": "yes — good",
+    "summary_he": "מודל בסיס של NVIDIA בגודל 120B (12B פעילים) במקום הרביעי בלוח העברי עם 72.7, ובציון הגבוה ביותר בהסקה טקסטואלית (SNLI) – תחת רישיון NVIDIA.",
+    "sources": [
+     {
+      "url": "https://hebrew-llm-leaderboard-leaderboard.hf.space/",
+      "date": "2026-05-15",
+      "what": "leaderboard row",
+      "grade": "A"
+     }
+    ],
+    "grade": "A",
+    "verified_at": "2026-11-05"
+   },
+   {
+    "id": "ai21-jamba-large-1-6",
+    "name": "AI21 Jamba Large 1.6",
+    "kind": "model",
+    "url": "https://huggingface.co/ai21labs/AI21-Jamba-Large-1.6",
+    "licence": "'other' (leaderboard Hub License column) — AI21's Jamba Open Model License; text not read here, UNVERIFIED.",
+    "results": [
+     {
+      "metric": "Average, 6 Hebrew tasks",
+      "value": "73.42 (#3) — Israeli Trivia 80.07 (#2 after DictaLM-3.0-24B), SNLI 93.10, HeQ 81.50, Winograd 81.65",
+      "on": "Hebrew LLM Leaderboard",
+      "source_url": "https://hebrew-llm-leaderboard-leaderboard.hf.space/",
+      "source_date": "2026-05-15",
+      "grade": "A",
+      "note": "399B total parameters — impractical to self-host for a small office"
+     }
+    ],
+    "hebrew_support": "yes — scores well, including Israeli trivia (80.07)",
+    "summary_he": "Jamba Large 1.6 של AI21 במקום השלישי בלוח עם 73.4 ובמקום השני בטריוויה ישראלית, אבל בגודל כ-400B הוא לא מעשי להרצה מקומית.",
+    "sources": [
+     {
+      "url": "https://hebrew-llm-leaderboard-leaderboard.hf.space/",
+      "date": "2026-05-15",
+      "what": "leaderboard row",
+      "grade": "A"
+     }
+    ],
+    "grade": "A",
+    "verified_at": "2026-11-05"
+   },
+   {
+    "id": "deepseek-r1-distills",
+    "name": "DeepSeek (R1 distills only on the board)",
+    "kind": "model",
+    "url": "https://huggingface.co/deepseek-ai/DeepSeek-R1-Distill-Qwen-32B",
+    "licence": "MIT (leaderboard Hub License column for the distills).",
+    "results": [
+     {
+      "metric": "Average, 6 Hebrew tasks",
+      "value": "DeepSeek-R1-Distill-Qwen-32B 62.34 | -14B 57.60 | -Llama-8B 42.03 | -Qwen-7B 34.29",
+      "on": "Hebrew LLM Leaderboard",
+      "source_url": "https://hebrew-llm-leaderboard-leaderboard.hf.space/",
+      "source_date": "2026-05-15",
+      "grade": "A",
+      "note": "the full DeepSeek V3/R1/V4 models are NOT on the board; no published DICTA/MAFAT number for them"
+     }
+    ],
+    "hebrew_support": "partial — distills are mediocre in Hebrew; full models unmeasured here",
+    "summary_he": "מהמשפחה של DeepSeek נבדקו בלוח העברי רק זיקוקי R1 (עד 62.3), ולא המודלים המלאים, ולכן אין מספר מפורסם לדגמי הדגל שלהם.",
+    "sources": [
+     {
+      "url": "https://hebrew-llm-leaderboard-leaderboard.hf.space/",
+      "date": "2026-05-15",
+      "what": "leaderboard rows",
+      "grade": "A"
+     }
+    ],
+    "grade": "A",
+    "verified_at": "2026-11-05"
+   },
+   {
+    "id": "kibutzr-hebrew-coreference",
+    "name": "KibutzR — Hebrew coreference benchmark (ACL 2026)",
+    "kind": "benchmark",
+    "url": "https://aclanthology.org/2026.acl-long.488/",
+    "licence": "Paper: CC BY 4.0 (per the ACL Anthology page). Dataset licence: not stated on that page — UNVERIFIED.",
+    "results": [
+     {
+      "metric": "Finding (qualitative; no numbers read)",
+      "value": "LLMs do noticeably worse on Hebrew than on English coreference, more so on raw unsegmented text; smaller encoder models beat contemporary decoder LLMs on Hebrew",
+      "on": "KibutzR (mentions annotated at word, sub-word and multi-word level) with a segmentation-aware metric",
+      "source_url": "https://aclanthology.org/2026.acl-long.488/",
+      "source_date": null,
+      "grade": "A",
+      "note": "ACL 2026 long paper, pp. 10669-10683, July 2026 (no day shown, so date left null); models evaluated are not named on the abstract page"
+     }
+    ],
+    "hebrew_support": "yes — Hebrew-only benchmark (Greenfeld and Tsarfaty)",
+    "summary_he": "KibutzR היא אמת מידה חדשה לזיהוי כינויים (קורפרנס) בעברית. המחקר מצא שמודלי שפה גדולים חלשים יותר בעברית מאשר באנגלית, ושמקודדים קטנים עוקפים אותם.",
+    "sources": [
+     {
+      "url": "https://aclanthology.org/2026.acl-long.488/",
+      "date": null,
+      "what": "ACL Anthology page (July 2026): title, authors, abstract, DOI 10.18653/v1/2026.acl-long.488",
+      "grade": "A"
+     }
+    ],
+    "grade": "A",
+    "verified_at": "2026-11-05"
+   },
+   {
+    "id": "frontier-multilingual-tables-omit-hebrew",
+    "name": "Frontier labs' published multilingual MMLU tables (Anthropic, OpenAI MMMLU, Global-MMLU-Lite) — Hebrew missing",
+    "kind": "benchmark",
+    "url": "https://platform.claude.com/docs/en/build-with-claude/multilingual-support",
+    "licence": "MMMLU: MIT (Hub tag). Global-MMLU and Global-MMLU-Lite: Apache-2.0 (Hub tags).",
+    "results": [
+     {
+      "metric": "Anthropic: Global-MMLU as % of English, 14 languages listed",
+      "value": "Spanish, Portuguese (Brazil), Italian, French, Indonesian, German, Arabic, Chinese (Simplified), Korean, Japanese, Hindi, Bengali, Swahili, Yoruba — Hebrew is NOT in the table",
+      "on": "Claude Fable 5.1 / Opus 5.5 / Sonnet 5.5 / Haiku 5.5, zero-shot",
+      "source_url": "https://platform.claude.com/docs/en/build-with-claude/multilingual-support",
+      "source_date": null,
+      "grade": "C",
+      "note": "vendor docs page, no date shown; the page says Claude is capable in many languages beyond those benchmarked"
+     },
+     {
+      "metric": "OpenAI MMMLU languages",
+      "value": "14 configs: AR, BN, DE, ES, FR, HI, ID, IT, JA, KO, PT, SW, YO, ZH — no Hebrew",
+      "on": "openai/MMMLU dataset",
+      "source_url": "https://huggingface.co/api/datasets/openai/MMMLU",
+      "source_date": null,
+      "grade": "A",
+      "note": "read from the Hub API record on 2026-11-05"
+     },
+     {
+      "metric": "Global-MMLU-Lite languages (used in Google/Cohere reporting)",
+      "value": "23 languages, no Hebrew",
+      "on": "CohereLabs/Global-MMLU-Lite",
+      "source_url": "https://huggingface.co/api/datasets/CohereLabs/Global-MMLU-Lite",
+      "source_date": "2026-06-08",
+      "grade": "A",
+      "note": "read from the Hub API record"
+     },
+     {
+      "metric": "Global-MMLU (full) does include Hebrew",
+      "value": "42 languages incl. he; Hebrew is mid-resource and machine-translated only (no human translation)",
+      "on": "CohereLabs/Global-MMLU; paper Table 5",
+      "source_url": "https://arxiv.org/html/2412.03304v2",
+      "source_date": null,
+      "grade": "A",
+      "note": "no date read from the page (arXiv id 2412.03304 = Dec 2024); per-language accuracy rows for Hebrew were not retrievable here (Appendix F.1 tables not in the readable text)"
+     }
+    ],
+    "hebrew_support": "unknown — the three frontier labs' headline multilingual tables do not include Hebrew; no official vendor Hebrew score found",
+    "summary_he": "הטבלאות הרב-לשוניות שפרסמו Anthropic, OpenAI וגוגל (Global-MMLU Lite) לא כוללות עברית, ולכן אין להן מספר רשמי להשוואת מודלי הדגל בעברית.",
+    "sources": [
+     {
+      "url": "https://platform.claude.com/docs/en/build-with-claude/multilingual-support",
+      "date": null,
+      "what": "Anthropic multilingual table (15 rows incl. English), no Hebrew",
+      "grade": "C"
+     },
+     {
+      "url": "https://huggingface.co/api/datasets/openai/MMMLU",
+      "date": null,
+      "what": "language tags and configs of MMMLU",
+      "grade": "A"
+     },
+     {
+      "url": "https://huggingface.co/api/datasets/CohereLabs/Global-MMLU-Lite",
+      "date": "2026-06-08",
+      "what": "23 language configs",
+      "grade": "A"
+     },
+     {
+      "url": "https://huggingface.co/api/datasets/CohereLabs/Global-MMLU",
+      "date": "2025-08-14",
+      "what": "42 language configs incl. he; licence apache-2.0",
+      "grade": "A"
+     },
+     {
+      "url": "https://arxiv.org/html/2412.03304v2",
+      "date": null,
+      "what": "Global-MMLU paper: Table 5 language metadata (Hebrew mid-resource, machine-translated only)",
+      "grade": "A"
+     }
+    ],
+    "grade": "A",
+    "verified_at": "2026-11-05"
+   }
+  ],
+  "english_llm": [
+   {
+    "id": "lmarena-text-arena",
+    "name": "LMArena (now arena.ai) — Text Arena, overall",
+    "kind": "leaderboard",
+    "url": "https://arena.ai/leaderboard/text",
+    "licence": "Dataset behind the board (lmarena-ai/leaderboard-dataset): cc-by-4.0 per its Hub metadata. The board ranks models of mixed licences.",
+    "results": [
+     {
+      "metric": "Top 10, style control ON (the site default since 2025-05-16): Elo-style rating +/- half-CI, votes",
+      "value": "1 Gemini 4 Carbon (High) 1527.5 +/-9.4 (4,403 votes) | 2 Gemini 4 Argon (High) 1520.3 +/-6.3 (11,889) | 3 Claude Opus 5.5 (High) 1508.7 +/-6.6 (11,415) | 4 Muse Wonder (Max) 1507.1 +/-7.3 (7,749) | 5 Claude Fable 5.1 (Max) 1504.4 +/-5.8 (17,178) | 6 Claude Fable 5 (High) 1503.9 +/-4.2 (45,341) | 7 Claude Opus 4.6 (High) 1503.2 +/-3.3 (84,512) | 8 Claude Opus 4.7 (High) 1501.0 +/-3.8 (65,110) | 9 Claude Opus 4.6 1496.1 +/-3.2 (89,324) | 10 Gemini 3.8 Flash (High) 1495.9 +/-4.4 (47,803)",
+      "on": "Text Arena, category 'overall', config text_style_control, leaderboard_publish_date 2026-10-28",
+      "source_url": "https://huggingface.co/datasets/lmarena-ai/leaderboard-dataset",
+      "source_date": "2026-10-28",
+      "grade": "A",
+      "note": "rows read from the datasets-server (config text_style_control, split latest). The live page arena.ai/leaderboard/text, read the same day, shows the same top 10 rounded (e.g. 1528 +/-9) under the date label 'Oct 27, 2026' and marks #1 and #10 'Preliminary'. Differences of a few points inside the CI are not rank differences."
+     },
+     {
+      "metric": "Top 5 WITHOUT style control (raw)",
+      "value": "1 Gemini 4 Carbon (High) 1540.0 | 2 Gemini 4 Argon (High) 1528.6 | 3 Claude Opus 5.5 (High) 1515.8 | 4 Claude Fable 5.1 (Max) 1513.8 | 5 Claude Opus 5 (Max) 1507.9",
+      "on": "Text Arena, config text",
+      "source_url": "https://huggingface.co/datasets/lmarena-ai/leaderboard-dataset",
+      "source_date": "2026-10-28",
+      "grade": "A",
+      "note": "style control removes the length/markdown advantage; use the style-control list as the headline"
+     },
+     {
+      "metric": "Best open-licence models (style control)",
+      "value": "rank 19 Kimi K3 (Max) 1488.2 (Kimi K3 license) | rank 28 GLM-5.3 (Max) 1480.6 (MIT) | rank 29 MiMo-V2.6-Pro 1479.7 (MIT) | rank 33 GLM-5.3-Flash 1476.5 (MIT) | rank 35 DeepSeek-V4.1-Flash-20260910 (Max) 1476.2 (MIT)",
+      "on": "Text Arena, config text_style_control",
+      "source_url": "https://huggingface.co/datasets/lmarena-ai/leaderboard-dataset",
+      "source_date": "2026-10-28",
+      "grade": "A",
+      "note": "the 'license' column of the dataset is per model"
+     },
+     {
+      "metric": "Language filter",
+      "value": "None. The page's filters are Models, Labs, Rank, Rank Spread, Model, Score, Votes, Cost/Task, Price, Context Length, License Type, Score Range, Input/Output Price and Style Control; the dataset's text configs only hold category 'overall'. So there is no Hebrew-specific LMArena ranking.",
+      "on": "arena.ai/leaderboard/text",
+      "source_url": "https://arena.ai/leaderboard/text",
+      "source_date": "2026-10-27",
+      "grade": "A",
+      "note": "lmarena.ai answers with a 301 redirect to arena.ai"
+     }
+    ],
+    "hebrew_support": "unknown — votes are from all languages; no Hebrew slice is published",
+    "summary_he": "ארנה של העדפה אנושית: במקום הראשון Gemini 4 Carbon, אחריו Gemini 4 Argon ו-Claude Opus 5.5. בעמוד אין מסנן שפה, ולכן אין דירוג ייעודי לעברית.",
+    "sources": [
+     {
+      "url": "https://huggingface.co/datasets/lmarena-ai/leaderboard-dataset",
+      "date": "2026-10-28",
+      "what": "official data export (configs text, text_style_control; Bradley-Terry ratings; README: style control default since 2025-05-16)",
+      "grade": "A"
+     },
+     {
+      "url": "https://arena.ai/leaderboard/text",
+      "date": "2026-10-27",
+      "what": "live page: top 10, filters list, date label",
+      "grade": "A"
+     }
+    ],
+    "grade": "A",
+    "verified_at": "2026-11-05"
+   },
+   {
+    "id": "artificial-analysis-intelligence-index",
+    "name": "Artificial Analysis — Intelligence Index (v5.0.1)",
+    "kind": "leaderboard",
+    "url": "https://artificialanalysis.ai/leaderboards/models",
+    "licence": "proprietary site / data (licence of the data not checked); the ranked models have mixed licences",
+    "results": [
+     {
+      "metric": "Top 10 entries by Intelligence Index (reasoning-effort variants listed separately)",
+      "value": "1 Gemini 4 Carbon (high) 60 | 2 Claude Opus 5.5 (max) 59 | 3 Gemini 4 Carbon (medium) 58 | 4 Claude Opus 5.5 (xhigh) 57 | 5 GPT-6 Astra (max) 57 | 6 GPT-6 Astra (xhigh) 55 | 7 GPT-6 Astra (high) 55 | 8 GPT-6.1 Sol (max) 55 | 9 Claude Sonnet 5.5 (max) 55 | 10 Gemini 4 Carbon (low) 54 (11 GPT-6.1 Sol (xhigh) 52; 12 Claude Opus 5.5 (high) 52; GPT-6 Astra (medium) 52 ties 12th)",
+      "on": "Artificial Analysis Intelligence Index",
+      "source_url": "https://artificialanalysis.ai/leaderboards/models",
+      "source_date": null,
+      "grade": "D",
+      "note": "values re-checked against the page's raw HTML table on 2026-11-05. The page marks the Intelligence section 'Updated' but shows no date, and this page does not show the Index version (the open-weights page shows v5.0.1). Only 5 distinct model families in the top 10: Gemini 4 Carbon, Claude Opus 5.5, GPT-6 Astra, GPT-6.1 Sol, Claude Sonnet 5.5."
+     }
+    ],
+    "hebrew_support": "unknown — English-centric index; no Hebrew component",
+    "summary_he": "מדד האינטליגנציה של Artificial Analysis: Gemini 4 Carbon בראש עם 60, אחריו Claude Opus 5.5 עם 59. הרשימה מציגה כל רמת מאמץ כשורה נפרדת, ולכן יש בה רק חמש משפחות מודלים.",
+    "sources": [
+     {
+      "url": "https://artificialanalysis.ai/leaderboards/models",
+      "date": null,
+      "what": "ranking table (read 2026-11-05; no date shown on page)",
+      "grade": "D"
+     }
+    ],
+    "grade": "D",
+    "verified_at": "2026-11-05"
+   },
+   {
+    "id": "artificial-analysis-open-weights",
+    "name": "Artificial Analysis — open-weights ranking (Intelligence Index v5.0.1)",
+    "kind": "leaderboard",
+    "url": "https://artificialanalysis.ai/models/open-source",
+    "licence": "per-model licences are NOT shown on the page (UNVERIFIED there). From the LMArena dataset: MiMo-V2.6-Pro, GLM-5.3 and DeepSeek-V4.1-Flash variants are MIT; Kimi K3 has its own licence.",
+    "results": [
+     {
+      "metric": "Top 10 open-weights models by Intelligence Index",
+      "value": "1 DeepSeek V4.1 Flash 1017 (Max) 33 | 2 GLM-5.3 (Max) 32 | 3 MiMo-V2.6-Pro 30 | 4 Ling 3.1 Flash 1019 (InclusionAI) 30 | 5 MiniMax-M3.1-Flash 29 | 6 Mistral Large 4 (High) 26 | 7 Muse Spark Open (Xhigh) (Meta) 25 | 8 Qwen3.8 27B (Xhigh) 20 | 9 K2 Horizon 375B A23B (Institute of Foundation Models) 18 | 10 Beam 1.0 (Reflection) 18",
+      "on": "Artificial Analysis Intelligence Index v5.0.1",
+      "source_url": "https://artificialanalysis.ai/models/open-source",
+      "source_date": null,
+      "grade": "D",
+      "note": "page shows an 'Updated' label with no date and '(c) 2026 Artificial Analysis'. Gap to the best closed entry (60): 27 points. Kimi K3 (LMArena rank 19) is not in this top 10 list. Sizes printed on the page (total / active params): DeepSeek V4.1 Flash 552B / 16B, GLM-5.3 753B / 40B, MiniMax-M3.1-Flash 428B / 23B, Mistral Large 4 1.1T / 52B, Muse Spark Open 816B / 42B, K2 Horizon 375B / 23B, Beam 1.0 501B / 23B; Qwen3.8 27B (index 20) is the only one small enough for a single workstation GPU in this list. Values re-checked against the page's raw text on 2026-11-05."
+     }
+    ],
+    "hebrew_support": "unknown — English-centric index",
+    "summary_he": "בין מודלים פתוחי משקולות מוביל DeepSeek V4.1 Flash עם 33 נקודות, אחריו GLM-5.3 ו-MiMo-V2.6-Pro. הפער מהמודלים הסגורים הטובים ביותר הוא כ-27 נקודות.",
+    "sources": [
+     {
+      "url": "https://artificialanalysis.ai/models/open-source",
+      "date": null,
+      "what": "open-weights ranking and Index version label v5.0.1",
+      "grade": "D"
+     },
+     {
+      "url": "https://huggingface.co/datasets/lmarena-ai/leaderboard-dataset",
+      "date": "2026-10-28",
+      "what": "per-model licence column for MiMo, GLM, DeepSeek, Kimi",
+      "grade": "A"
+     }
+    ],
+    "grade": "D",
+    "verified_at": "2026-11-05"
+   }
+  ],
+  "stt_hebrew": [
+   {
+    "id": "ivrit-ai-hebrew-transcription-leaderboard",
+    "name": "ivrit.ai Hebrew Transcription Leaderboard",
+    "kind": "leaderboard",
+    "url": "https://huggingface.co/spaces/ivrit-ai/hebrew-transcription-leaderboard",
+    "licence": "Apache-2.0 (Space card). Test sets have their own terms (see hebrew_datasets).",
+    "results": [
+     {
+      "metric": "WER % on eval-d1 / eval-whatsapp / saspeech / FLEURS-he / Kan — best rows",
+      "value": "Soniox 4.8 / 9.0 / 6.5 / 17.7 / 11.4 | ivrit-ai whisper-large-v3-ct2 (20250513) 5.1 / 7.2 / 6.4 / 17.4 / 8.1 | ivrit-ai whisper-large-v3-turbo-ct2 (20250513) 5.3 / 7.1 / 6.6 / 18.1 / 8.2 | sherpa-onnx zipformer2-66m-streaming-he 5.3 / 8.8 / 6.4 / 23.4 / 11.8",
+      "on": "5 Hebrew test sets; lower is better",
+      "source_url": "https://huggingface.co/spaces/ivrit-ai/hebrew-transcription-leaderboard/raw/main/benchmark.csv",
+      "source_date": "2026-10-14",
+      "grade": "A",
+      "note": "CSV values are fractions (0.048 = 4.8%); date = last commit to the Space. Best eval-whatsapp in the file: ivrit-ai whisper-large-v3-turbo-ct2 (20250403) 6.1."
+     },
+     {
+      "metric": "WER % — general models, same columns",
+      "value": "Amazon Transcribe batch 6.6 / 10.4 / 8.5 / 23.0 / 9.0 (stream 7.9 / 12.9 / 9.0 / 28.7 / 13.1) | Deepgram nova-3 6.7 / 12.0 / 10.2 / 23.3 / 21.0 | OpenAI gpt-4o-transcribe 7.3 / 12.6 / 10.9 / 21.0 / 39.4 | OpenAI gpt-4o-mini-transcribe 9.0 / 15.8 / 15.0 / 30.0 / 46.8 | Whisper large-v2 7.7 / 12.1 / 9.8 / 26.6 / 16.4 | Whisper large-v3-turbo 8.4 / 12.8 / 10.4 / 28.9 / 15.6 | Whisper large-v3 9.8 / 13.2 / 9.4 / 26.2 / 13.4 | ElevenLabs scribe_v1 20.0 / 26.4 / 6.8 / 18.1 / 10.9 | Google speech 21.1 / 35.2 / 18.9 / 38.5 / 29.2 | NVIDIA nemotron-3.5-asr-streaming-0.6b 17.1 / 36.5 / 24.2 / 46.0 / 54.2",
+      "on": "same 5 sets",
+      "source_url": "https://huggingface.co/spaces/ivrit-ai/hebrew-transcription-leaderboard/raw/main/benchmark.csv",
+      "source_date": "2026-10-14",
+      "grade": "A",
+      "note": "the board is run by ivrit.ai, which also trains Whisper fine-tunes that sit on it (conflict of interest worth stating). Scores for some vendors vary wildly between sets (ElevenLabs 20.0 vs 6.8; OpenAI 7.3 vs 39.4), so look at all columns. The Google row does not say which Google model was used."
+     }
+    ],
+    "hebrew_support": "yes — Hebrew-only benchmark",
+    "summary_he": "לוח הקהילה של ivrit.ai למדידת שגיאות תעתוק (WER) בעברית על חמש קבוצות מבחן. Soniox ומודלי Whisper המכוונים לעברית של ivrit.ai מובילים בפער קטן; גוגל בתחתית.",
+    "sources": [
+     {
+      "url": "https://huggingface.co/spaces/ivrit-ai/hebrew-transcription-leaderboard/raw/main/benchmark.csv",
+      "date": "2026-10-14",
+      "what": "the leaderboard's result table (22 rows, 5 test sets)",
+      "grade": "A"
+     },
+     {
+      "url": "https://huggingface.co/spaces/ivrit-ai/hebrew-transcription-leaderboard/raw/main/src/about.py",
+      "date": null,
+      "what": "About text: test-set sizes and sources, WER via jiwer, average of WER across sets",
+      "grade": "A"
+     },
+     {
+      "url": "https://huggingface.co/api/spaces/ivrit-ai/hebrew-transcription-leaderboard/commits/main",
+      "date": "2026-10-14",
+      "what": "commit history: Soniox/Deepgram 2026-05-03, Nemotron 2026-06-07, zipformer2 2026-10-14",
+      "grade": "A"
+     }
+    ],
+    "grade": "A",
+    "verified_at": "2026-11-05"
+   },
+   {
+    "id": "ivrit-ai-whisper-finetunes",
+    "name": "ivrit.ai Hebrew Whisper fine-tunes (whisper-large-v3, large-v3-turbo; CT2 / GGML / ONNX; newer 'yi-whisper')",
+    "kind": "model",
+    "url": "https://huggingface.co/ivrit-ai/whisper-large-v3",
+    "licence": "Apache-2.0 (Hub tags on whisper-large-v3, whisper-large-v3-turbo, the CT2/GGML builds and yi-whisper-large-v3 / -turbo)",
+    "results": [
+     {
+      "metric": "WER %, eval-d1 / eval-whatsapp (fine-tune vs the OpenAI original it was trained from)",
+      "value": "ivrit-ai large-v3 (ct2, 20250513) 5.1 / 7.2 vs openai large-v3 9.8 / 13.2 | ivrit-ai large-v3-turbo (ct2, 20250513) 5.3 / 7.1 vs openai large-v3-turbo 8.4 / 12.8",
+      "on": "ivrit.ai leaderboard",
+      "source_url": "https://huggingface.co/spaces/ivrit-ai/hebrew-transcription-leaderboard/raw/main/benchmark.csv",
+      "source_date": "2026-10-14",
+      "grade": "A",
+      "note": "roughly halves the error on conversational Hebrew; measured by the same team that trained the models"
+     }
+    ],
+    "hebrew_support": "yes — Hebrew only. Per the model card: language detection and translation are degraded; set the language token to Hebrew explicitly.",
+    "summary_he": "כוונוני Whisper בעברית של ivrit.ai ברישיון Apache-2.0 חוצים כמעט לחצי את שיעור השגיאות של Whisper המקורי בשיחה (5.1% מול 9.8%). מתאימים להרצה מקומית.",
+    "sources": [
+     {
+      "url": "https://huggingface.co/ivrit-ai/whisper-large-v3/raw/main/README.md",
+      "date": "2025-05-22",
+      "what": "model card: Apache-2.0, trained Apr 2025 on Knesset ~4700h + crowd-transcribe-v5 ~300h + crowd-recital ~50h; limitations",
+      "grade": "C"
+     },
+     {
+      "url": "https://huggingface.co/api/models?author=ivrit-ai&limit=100&sort=createdAt",
+      "date": "2026-10-14",
+      "what": "list of 22 ivrit-ai models with licence tags and creation dates",
+      "grade": "A"
+     },
+     {
+      "url": "https://huggingface.co/spaces/ivrit-ai/hebrew-transcription-leaderboard/raw/main/benchmark.csv",
+      "date": "2026-10-14",
+      "what": "WER rows of the ivrit-ai fine-tunes and of the OpenAI originals",
+      "grade": "A"
+     }
+    ],
+    "grade": "A",
+    "verified_at": "2026-11-05"
+   },
+   {
+    "id": "openai-whisper-large-v3",
+    "name": "OpenAI Whisper large-v3 / large-v3-turbo (open weights)",
+    "kind": "model",
+    "url": "https://huggingface.co/openai/whisper-large-v3",
+    "licence": "Hub tags: apache-2.0 (large-v3), mit (large-v3-turbo). The openai/whisper code on GitHub is MIT.",
+    "results": [
+     {
+      "metric": "WER %, eval-d1 / eval-whatsapp / saspeech / FLEURS-he / Kan",
+      "value": "large-v3 9.8 / 13.2 / 9.4 / 26.2 / 13.4 | large-v3-turbo 8.4 / 12.8 / 10.4 / 28.9 / 15.6 | large-v2 7.7 / 12.1 / 9.8 / 26.6 / 16.4",
+      "on": "ivrit.ai leaderboard (faster-whisper runs)",
+      "source_url": "https://huggingface.co/spaces/ivrit-ai/hebrew-transcription-leaderboard/raw/main/benchmark.csv",
+      "source_date": "2026-10-14",
+      "grade": "A",
+      "note": "large-v2 beats v3 on three of five sets here"
+     }
+    ],
+    "hebrew_support": "yes — Hebrew is one of Whisper's languages, but 2-3x the error of the Hebrew fine-tunes on conversation",
+    "summary_he": "Whisper המקורי תומך בעברית אבל טועה כפליים ויותר ביחס לכוונונים של ivrit.ai: כ-10% WER בשיחה ו-26% ב-FLEURS לגרסה large-v3.",
+    "sources": [
+     {
+      "url": "https://huggingface.co/spaces/ivrit-ai/hebrew-transcription-leaderboard/raw/main/benchmark.csv",
+      "date": "2026-10-14",
+      "what": "WER rows",
+      "grade": "A"
+     },
+     {
+      "url": "https://huggingface.co/api/models/openai/whisper-large-v3",
+      "date": "2024-08-12",
+      "what": "Hub record: license:apache-2.0, language tag he",
+      "grade": "A"
+     },
+     {
+      "url": "https://huggingface.co/api/models/openai/whisper-large-v3-turbo",
+      "date": "2024-10-04",
+      "what": "Hub record: license:mit, language tag he",
+      "grade": "A"
+     }
+    ],
+    "grade": "A",
+    "verified_at": "2026-11-05"
+   },
+   {
+    "id": "soniox-stt",
+    "name": "Soniox (speech-to-text)",
+    "kind": "service",
+    "url": "https://soniox.com/",
+    "licence": "proprietary (commercial API)",
+    "results": [
+     {
+      "metric": "WER %, eval-d1 / eval-whatsapp / saspeech / FLEURS-he / Kan",
+      "value": "4.8 / 9.0 / 6.5 / 17.7 / 11.4",
+      "on": "ivrit.ai leaderboard",
+      "source_url": "https://huggingface.co/spaces/ivrit-ai/hebrew-transcription-leaderboard/raw/main/benchmark.csv",
+      "source_date": "2026-10-14",
+      "grade": "A",
+      "note": "lowest eval-d1 WER on the board; added to the board 2026-05-03"
+     }
+    ],
+    "hebrew_support": "yes",
+    "summary_he": "Soniox מדורג ראשון ב-eval-d1 עם 4.8% שגיאות, אבל ב-eval-whatsapp הוא חלש מ-Whisper המכוון (9.0% מול 7.2%). שירות מסחרי בענן.",
+    "sources": [
+     {
+      "url": "https://huggingface.co/spaces/ivrit-ai/hebrew-transcription-leaderboard/raw/main/benchmark.csv",
+      "date": "2026-10-14",
+      "what": "row 'soniox, stt'",
+      "grade": "A"
+     }
+    ],
+    "grade": "A",
+    "verified_at": "2026-11-05"
+   },
+   {
+    "id": "amazon-transcribe-hebrew",
+    "name": "Amazon Transcribe (Hebrew)",
+    "kind": "service",
+    "url": null,
+    "licence": "proprietary (AWS service)",
+    "results": [
+     {
+      "metric": "WER %, eval-d1 / eval-whatsapp / saspeech / FLEURS-he / Kan",
+      "value": "batch 6.6 / 10.4 / 8.5 / 23.0 / 9.0 | streaming 7.9 / 12.9 / 9.0 / 28.7 / 13.1",
+      "on": "ivrit.ai leaderboard",
+      "source_url": "https://huggingface.co/spaces/ivrit-ai/hebrew-transcription-leaderboard/raw/main/benchmark.csv",
+      "source_date": "2026-10-14",
+      "grade": "A",
+      "note": "the product page itself was not opened; Hebrew support is shown by the benchmark runs"
+     }
+    ],
+    "hebrew_support": "yes — batch and streaming both produce usable Hebrew",
+    "summary_he": "Amazon Transcribe מתמלל עברית באצווה עם 6.6% שגיאות ב-eval-d1 ו-10.4% בהודעות וואטסאפ; במצב סטרימינג התוצאות חלשות יותר.",
+    "sources": [
+     {
+      "url": "https://huggingface.co/spaces/ivrit-ai/hebrew-transcription-leaderboard/raw/main/benchmark.csv",
+      "date": "2026-10-14",
+      "what": "rows amazon-transcribe batch / stream",
+      "grade": "A"
+     }
+    ],
+    "grade": "A",
+    "verified_at": "2026-11-05"
+   },
+   {
+    "id": "deepgram-nova-3-hebrew",
+    "name": "Deepgram Nova-3 (Hebrew)",
+    "kind": "service",
+    "url": null,
+    "licence": "proprietary (commercial API)",
+    "results": [
+     {
+      "metric": "WER %, eval-d1 / eval-whatsapp / saspeech / FLEURS-he / Kan",
+      "value": "6.7 / 12.0 / 10.2 / 23.3 / 21.0",
+      "on": "ivrit.ai leaderboard",
+      "source_url": "https://huggingface.co/spaces/ivrit-ai/hebrew-transcription-leaderboard/raw/main/benchmark.csv",
+      "source_date": "2026-10-14",
+      "grade": "A",
+      "note": "run folder dated 20260503 in the Space; vendor site not opened"
+     }
+    ],
+    "hebrew_support": "yes",
+    "summary_he": "Deepgram Nova-3 מגיע ל-6.7% שגיאות ב-eval-d1 אך ל-21% בדגימות Kan, כלומר שונות גבוהה בין סוגי שמע.",
+    "sources": [
+     {
+      "url": "https://huggingface.co/spaces/ivrit-ai/hebrew-transcription-leaderboard/raw/main/benchmark.csv",
+      "date": "2026-10-14",
+      "what": "row deepgram nova-3",
+      "grade": "A"
+     }
+    ],
+    "grade": "A",
+    "verified_at": "2026-11-05"
+   },
+   {
+    "id": "openai-gpt-4o-transcribe-hebrew",
+    "name": "OpenAI gpt-4o-transcribe / gpt-4o-mini-transcribe",
+    "kind": "service",
+    "url": null,
+    "licence": "proprietary (OpenAI API)",
+    "results": [
+     {
+      "metric": "WER %, eval-d1 / eval-whatsapp / saspeech / FLEURS-he / Kan",
+      "value": "gpt-4o-transcribe 7.3 / 12.6 / 10.9 / 21.0 / 39.4 | gpt-4o-mini-transcribe 9.0 / 15.8 / 15.0 / 30.0 / 46.8",
+      "on": "ivrit.ai leaderboard",
+      "source_url": "https://huggingface.co/spaces/ivrit-ai/hebrew-transcription-leaderboard/raw/main/benchmark.csv",
+      "source_date": "2026-10-14",
+      "grade": "A",
+      "note": "the 39-47% on Kan shows an instability on long broadcast audio; no OpenAI docs page was opened"
+     }
+    ],
+    "hebrew_support": "yes — usable, less accurate than Hebrew-tuned Whisper",
+    "summary_he": "gpt-4o-transcribe עם 7.3% שגיאות ב-eval-d1 אך 39% בדגימות Kan; גרסת ה-mini גרועה יותר. תקין לשימוש כללי אך לא עדיף על Whisper מכוון.",
+    "sources": [
+     {
+      "url": "https://huggingface.co/spaces/ivrit-ai/hebrew-transcription-leaderboard/raw/main/benchmark.csv",
+      "date": "2026-10-14",
+      "what": "rows openai gpt-4o-transcribe / mini",
+      "grade": "A"
+     }
+    ],
+    "grade": "A",
+    "verified_at": "2026-11-05"
+   },
+   {
+    "id": "elevenlabs-scribe-v1-hebrew",
+    "name": "ElevenLabs Scribe v1 (speech-to-text)",
+    "kind": "service",
+    "url": null,
+    "licence": "proprietary (commercial API)",
+    "results": [
+     {
+      "metric": "WER %, eval-d1 / eval-whatsapp / saspeech / FLEURS-he / Kan",
+      "value": "20.0 / 26.4 / 6.8 / 18.1 / 10.9",
+      "on": "ivrit.ai leaderboard",
+      "source_url": "https://huggingface.co/spaces/ivrit-ai/hebrew-transcription-leaderboard/raw/main/benchmark.csv",
+      "source_date": "2026-10-14",
+      "grade": "A",
+      "note": "very uneven: 6.8% on SASpeech but 20-26% on conversational sets; run added 2025-05-20"
+     }
+    ],
+    "hebrew_support": "yes — inconsistent",
+    "summary_he": "Scribe v1 של ElevenLabs מציג תוצאות לא יציבות: 6.8% שגיאות ב-SASpeech, אבל 20% ו-26% בשיחה ובהודעות וואטסאפ.",
+    "sources": [
+     {
+      "url": "https://huggingface.co/spaces/ivrit-ai/hebrew-transcription-leaderboard/raw/main/benchmark.csv",
+      "date": "2026-10-14",
+      "what": "row elevenlabs scribe_v1",
+      "grade": "A"
+     }
+    ],
+    "grade": "A",
+    "verified_at": "2026-11-05"
+   },
+   {
+    "id": "google-cloud-speech-to-text-hebrew",
+    "name": "Google Cloud Speech-to-Text (Hebrew, iw-IL)",
+    "kind": "service",
+    "url": "https://docs.cloud.google.com/speech-to-text/docs/speech-to-text-supported-languages",
+    "licence": "proprietary (Google Cloud API)",
+    "results": [
+     {
+      "metric": "Language support",
+      "value": "Hebrew (Israel) iw-IL is listed for the chirp, chirp_2 and chirp_3 models (regions asia-southeast1, eu, europe-west4, us)",
+      "on": "supported-languages page",
+      "source_url": "https://docs.cloud.google.com/speech-to-text/docs/speech-to-text-supported-languages",
+      "source_date": "2026-10-26",
+      "grade": "C",
+      "note": "page says 'Last updated 2026-10-26 UTC'"
+     },
+     {
+      "metric": "WER %, eval-d1 / eval-whatsapp / saspeech / FLEURS-he / Kan",
+      "value": "21.1 / 35.2 / 18.9 / 38.5 / 29.2 ('google-speech')",
+      "on": "ivrit.ai leaderboard",
+      "source_url": "https://huggingface.co/spaces/ivrit-ai/hebrew-transcription-leaderboard/raw/main/benchmark.csv",
+      "source_date": "2026-10-14",
+      "grade": "A",
+      "note": "the board does not say which Google model/config was run; it may be an older model than Chirp 2/3 — do not read it as Chirp 3's quality"
+     }
+    ],
+    "hebrew_support": "yes — supported on the Chirp family; measured quality on the board is the worst of the commercial rows (model unspecified)",
+    "summary_he": "גוגל תומכת בעברית במודלי Chirp, אבל שורת גוגל בלוח ivrit.ai (21% שגיאות ב-eval-d1) היא ככל הנראה של מודל ישן ולא מציינת איזה, ולכן אין לנו מספר ל-Chirp 3.",
+    "sources": [
+     {
+      "url": "https://docs.cloud.google.com/speech-to-text/docs/speech-to-text-supported-languages",
+      "date": "2026-10-26",
+      "what": "Hebrew (Israel) iw-IL rows for chirp, chirp_2, chirp_3",
+      "grade": "C"
+     },
+     {
+      "url": "https://huggingface.co/spaces/ivrit-ai/hebrew-transcription-leaderboard/raw/main/benchmark.csv",
+      "date": "2026-10-14",
+      "what": "row google-speech",
+      "grade": "A"
+     }
+    ],
+    "grade": "A",
+    "verified_at": "2026-11-05"
+   },
+   {
+    "id": "azure-ai-speech-stt-hebrew",
+    "name": "Microsoft Azure AI Speech — speech-to-text (he-IL)",
+    "kind": "service",
+    "url": "https://learn.microsoft.com/en-us/azure/ai-services/speech-service/language-support?tabs=tts",
+    "licence": "proprietary (Azure service)",
+    "results": [
+     {
+      "metric": "Language support",
+      "value": "he-IL Hebrew (Israel) has the support marks in the speech-to-text table (real-time, fast transcription); custom speech: plain text and labeled audio",
+      "on": "Speech service language-support page",
+      "source_url": "https://learn.microsoft.com/en-us/azure/ai-services/speech-service/language-support?tabs=tts",
+      "source_date": "2026-10-28",
+      "grade": "C",
+      "note": "page metadata ms.date 2026-10-28 (updated 2026-11-01). There is NO Azure row on the ivrit.ai board, so no published Hebrew WER for Azure was found."
+     }
+    ],
+    "hebrew_support": "yes — supported; accuracy unmeasured in public benchmarks we found",
+    "summary_he": "Azure תומך בתעתוק עברית (he-IL), אבל אין שורה של Azure בלוח ivrit.ai ולכן לא מצאנו מספר WER פומבי לשירות.",
+    "sources": [
+     {
+      "url": "https://learn.microsoft.com/en-us/azure/ai-services/speech-service/language-support?tabs=tts",
+      "date": "2026-10-28",
+      "what": "he-IL rows in the STT tables",
+      "grade": "C"
+     }
+    ],
+    "grade": "C",
+    "verified_at": "2026-11-05"
+   },
+   {
+    "id": "caspi-1-7b",
+    "name": "Caspi-1.7B (OzLabs) — Hebrew fine-tune of Qwen3-ASR-1.7B",
+    "kind": "model",
+    "url": "https://huggingface.co/OzLabs/Caspi-1.7B",
+    "licence": "CC-BY-NC-4.0 (non-commercial; Hub tag and card)",
+    "results": [
+     {
+      "metric": "WER %, Caspi vs 'Ivrit v3' baseline (self-reported)",
+      "value": "eval-d1 4.2 vs 5.1 | eval-whatsapp 6.0 vs 7.2 | hebrew-speech-kan 7.1 vs 6.4 | Matti Caspi Songs 2.4 vs 3.7 | average 4.96 vs 5.6",
+      "on": "model card table",
+      "source_url": "https://huggingface.co/OzLabs/Caspi-1.7B/raw/main/README.md",
+      "source_date": "2026-03-08",
+      "grade": "C",
+      "note": "self-reported by the model's author, not on the ivrit.ai board; date = Hub lastModified; created 2026-02-08; base Qwen/Qwen3-ASR-1.7B; trained on ivrit-ai crowd-transcribe-v5 + crowd-recital"
+     }
+    ],
+    "hebrew_support": "yes — Hebrew-specialised",
+    "summary_he": "מודל תעתוק עברי מבוסס Qwen3-ASR שמדווח על 4.2% שגיאות ב-eval-d1, אבל זה דיווח עצמי, המודל לא בלוח, והרישיון הוא CC BY-NC (לא מסחרי).",
+    "sources": [
+     {
+      "url": "https://huggingface.co/OzLabs/Caspi-1.7B/raw/main/README.md",
+      "date": "2026-03-08",
+      "what": "model card with WER table and licence",
+      "grade": "C"
+     },
+     {
+      "url": "https://huggingface.co/api/models/OzLabs/Caspi-1.7B",
+      "date": "2026-03-08",
+      "what": "Hub record: license:cc-by-nc-4.0, base_model Qwen/Qwen3-ASR-1.7B",
+      "grade": "A"
+     }
+    ],
+    "grade": "C",
+    "verified_at": "2026-11-05"
+   },
+   {
+    "id": "zipformer2-66m-streaming-he",
+    "name": "zipformer2-66m-streaming-he (sherpa-onnx, ivrit-ai / thewh1teagle)",
+    "kind": "model",
+    "url": "https://huggingface.co/ivrit-ai/zipformer2-66m-streaming-he",
+    "licence": "CC-BY-4.0 (Hub tag on ivrit-ai/zipformer2-66m-streaming-he)",
+    "results": [
+     {
+      "metric": "WER %, eval-d1 / eval-whatsapp / saspeech / FLEURS-he / Kan (int8, sherpa-onnx)",
+      "value": "5.3 / 8.8 / 6.4 / 23.4 / 11.8",
+      "on": "ivrit.ai leaderboard",
+      "source_url": "https://huggingface.co/spaces/ivrit-ai/hebrew-transcription-leaderboard/raw/main/benchmark.csv",
+      "source_date": "2026-10-14",
+      "grade": "A",
+      "note": "a 66M-parameter streaming model: on the CSV, ahead of every commercial row except Soniox on eval-d1; added 2026-10-14"
+     }
+    ],
+    "hebrew_support": "yes — Hebrew-only, tiny, streaming, CPU-friendly",
+    "summary_he": "מודל סטרימינג זעיר (66M) לעברית ברישיון CC BY 4.0 שמגיע ל-5.3% שגיאות ב-eval-d1 וניתן להרצה על מעבד רגיל.",
+    "sources": [
+     {
+      "url": "https://huggingface.co/spaces/ivrit-ai/hebrew-transcription-leaderboard/raw/main/benchmark.csv",
+      "date": "2026-10-14",
+      "what": "row sherpa-onnx thewh1teagle/zipformer2-66m-streaming-he",
+      "grade": "A"
+     },
+     {
+      "url": "https://huggingface.co/api/models?author=ivrit-ai&limit=100&sort=createdAt",
+      "date": "2026-10-14",
+      "what": "ivrit-ai/zipformer2-66m-streaming-he: license:cc-by-4.0, created 2026-10-14",
+      "grade": "A"
+     }
+    ],
+    "grade": "A",
+    "verified_at": "2026-11-05"
+   }
+  ],
+  "tts_hebrew": [
+   {
+    "id": "tts-arena-hebrew",
+    "name": "TTS Arena Hebrew (ivrit.ai) — blind listening votes",
+    "kind": "leaderboard",
+    "url": "https://huggingface.co/spaces/ivrit-ai/TTS-Arena-Hebrew",
+    "licence": "Arena code: Zlib licence. Generated audio: personal, non-commercial use only, not to be redistributed (About page).",
+    "results": [
+     {
+      "metric": "Elo / win rate / votes (public leaderboard view)",
+      "value": "1 Gemini 3.1 Flash TTS (voice Puck) 1586 / 77% / 201 | 2 Deepdub dd-etts-3.3 (Emma, streaming) 1577 / 77% / 201 | 3 ElevenLabs v3 (Aria) 1547 / 66% / 206 | 4 Soniox v1 (Maya, streaming) 1537 / 66% / 163 | 5 OpenAI Realtime 1.5 [legacy] 1503 / 59% / 22 | 6 Inworld TTS v1 [legacy] 1491 / 24% / 17 | 7 Inworld TTS-2 1488 / 44% / 143 | 8 Inworld TTS v1.5 MAX 1476 / 43% / 200 | 9 Blue V2 (open source) 1475 / 38% / 125 | 10 OpenAI GPT-4o Mini TTS 1452 / 33% / 196 | 11 OpenAI TTS-1 HD 1442 / 27% / 169 | 12 OpenAI TTS-1 1418 / 21% / 189",
+      "on": "blind A/B listening votes on Hebrew sentences (categories Support, Podcast, News, Conversation, Formal, Emotional, Mixed)",
+      "source_url": "https://ivrit-ai-tts-arena-hebrew.hf.space/leaderboard",
+      "source_date": null,
+      "grade": "A",
+      "note": "live board read 2026-11-05; its history picker runs Apr 2026 - Nov 2026 (Space created 2026-04-25). Only ~160-210 votes for the main models, so the top four are within noise of each other. The same site's Models page shows different Elo values for the same models (Gemini 3.1 Flash TTS 1643, Deepdub 1638, ElevenLabs v3 1567, Soniox 1561, Inworld TTS-2 1478, Blue V2 1470, OpenAI 4o-mini 1433, tts-1-hd 1403, tts-1 1369) because the leaderboard view drops some top voters (15 excluded). Only ONE open-source model (Blue V2) is in the arena."
+     }
+    ],
+    "hebrew_support": "yes — Hebrew-only arena",
+    "summary_he": "זירת הצבעה עיוורת של ivrit.ai לדיבור סינתטי בעברית: Gemini 3.1 Flash TTS ראשון, אחריו Deepdub ו-ElevenLabs v3. יש רק כ-200 הצבעות לכל מודל, ולכן הפערים בצמרת קטנים.",
+    "sources": [
+     {
+      "url": "https://ivrit-ai-tts-arena-hebrew.hf.space/leaderboard",
+      "date": null,
+      "what": "leaderboard table: rank, model, voice, win rate, votes, Elo",
+      "grade": "A"
+     },
+     {
+      "url": "https://ivrit-ai-tts-arena-hebrew.hf.space/models",
+      "date": null,
+      "what": "models in the arena, licence column (all Proprietary except Blue V2), all-vote Elo",
+      "grade": "A"
+     },
+     {
+      "url": "https://ivrit-ai-tts-arena-hebrew.hf.space/about",
+      "date": null,
+      "what": "method (Elo from blind votes), Hugging Face login required, licence statement",
+      "grade": "A"
+     }
+    ],
+    "grade": "A",
+    "verified_at": "2026-11-05"
+   },
+   {
+    "id": "gemini-3-1-flash-tts",
+    "name": "Google Gemini 3.1 Flash TTS (preview)",
+    "kind": "service",
+    "url": null,
+    "licence": "proprietary (Gemini API)",
+    "results": [
+     {
+      "metric": "TTS Arena Hebrew rank / Elo / win rate",
+      "value": "#1 / 1586 / 77% (201 votes); model id gemini-3.1-flash-tts-preview, voice Puck",
+      "on": "TTS Arena Hebrew",
+      "source_url": "https://ivrit-ai-tts-arena-hebrew.hf.space/leaderboard",
+      "source_date": null,
+      "grade": "A",
+      "note": "preview model; the vendor docs link on the arena's Models page is truncated, so no vendor URL is given"
+     }
+    ],
+    "hebrew_support": "yes — best-rated in the Hebrew arena",
+    "summary_he": "Gemini 3.1 Flash TTS בגרסת תצוגה מקדימה מדורג ראשון בזירת ה-TTS העברית עם Elo של 1586 ושיעור ניצחון של 77%.",
+    "sources": [
+     {
+      "url": "https://ivrit-ai-tts-arena-hebrew.hf.space/leaderboard",
+      "date": null,
+      "what": "row #1",
+      "grade": "A"
+     },
+     {
+      "url": "https://ivrit-ai-tts-arena-hebrew.hf.space/models",
+      "date": null,
+      "what": "model id and voice",
+      "grade": "A"
+     }
+    ],
+    "grade": "A",
+    "verified_at": "2026-11-05"
+   },
+   {
+    "id": "deepdub-dd-etts-3-3",
+    "name": "Deepdub dd-etts-3.3",
+    "kind": "service",
+    "url": "https://deepdub.ai/",
+    "licence": "proprietary",
+    "results": [
+     {
+      "metric": "TTS Arena Hebrew rank / Elo / win rate",
+      "value": "#2 / 1577 / 77% (201 votes); voice Emma, streaming",
+      "on": "TTS Arena Hebrew",
+      "source_url": "https://ivrit-ai-tts-arena-hebrew.hf.space/leaderboard",
+      "source_date": null,
+      "grade": "A",
+      "note": "the arena's Models page shows 408 matches and Elo 1638 for the same model (all voters)"
+     }
+    ],
+    "hebrew_support": "yes — streaming-capable and #2 in the Hebrew arena",
+    "summary_he": "dd-etts-3.3 של Deepdub במקום השני בזירה העברית (Elo 1577) ותומך בסטרימינג, מה שמתאים לשיחה בזמן אמת.",
+    "sources": [
+     {
+      "url": "https://ivrit-ai-tts-arena-hebrew.hf.space/leaderboard",
+      "date": null,
+      "what": "row #2",
+      "grade": "A"
+     },
+     {
+      "url": "https://ivrit-ai-tts-arena-hebrew.hf.space/models",
+      "date": null,
+      "what": "website deepdub.ai, streaming, proprietary",
+      "grade": "A"
+     }
+    ],
+    "grade": "A",
+    "verified_at": "2026-11-05"
+   },
+   {
+    "id": "elevenlabs-v3-tts-hebrew",
+    "name": "ElevenLabs Eleven v3 (TTS)",
+    "kind": "service",
+    "url": "https://elevenlabs.io/v3",
+    "licence": "proprietary",
+    "results": [
+     {
+      "metric": "TTS Arena Hebrew rank / Elo / win rate",
+      "value": "#3 / 1547 / 66% (206 votes); voice Aria",
+      "on": "TTS Arena Hebrew",
+      "source_url": "https://ivrit-ai-tts-arena-hebrew.hf.space/leaderboard",
+      "source_date": null,
+      "grade": "A",
+      "note": "Models page: 360 matches, Elo 1567"
+     },
+     {
+      "metric": "Vendor language lists",
+      "value": "ElevenLabs' TTS overview page lists 29 languages for Multilingual v2 and 32 for Flash v2.5 and Hebrew is not among them; for Eleven v3 it says '70+ languages' without listing them",
+      "on": "ElevenLabs docs, text-to-speech overview",
+      "source_url": "https://elevenlabs.io/docs/overview/capabilities/text-to-speech",
+      "source_date": null,
+      "grade": "C",
+      "note": "Eleven v3 is the only ElevenLabs model that appears in the Hebrew arena; do not assume Hebrew works on the older models"
+     }
+    ],
+    "hebrew_support": "yes on Eleven v3 (works in the arena); not listed for Multilingual v2 / Flash v2.5",
+    "summary_he": "Eleven v3 של ElevenLabs במקום השלישי בזירה העברית. בדפי התיעוד של הדגמים הישנים (Multilingual v2, Flash v2.5) עברית אינה ברשימה, ולכן כדאי לבדוק רק את v3.",
+    "sources": [
+     {
+      "url": "https://ivrit-ai-tts-arena-hebrew.hf.space/leaderboard",
+      "date": null,
+      "what": "row #3",
+      "grade": "A"
+     },
+     {
+      "url": "https://elevenlabs.io/docs/overview/capabilities/text-to-speech",
+      "date": null,
+      "what": "model-by-model language counts; Hebrew not listed for v2 / Flash v2.5",
+      "grade": "C"
+     }
+    ],
+    "grade": "A",
+    "verified_at": "2026-11-05"
+   },
+   {
+    "id": "soniox-tts",
+    "name": "Soniox TTS (tts-rt-v1-preview)",
+    "kind": "service",
+    "url": "https://soniox.com/",
+    "licence": "proprietary",
+    "results": [
+     {
+      "metric": "TTS Arena Hebrew rank / Elo / win rate",
+      "value": "#4 / 1537 / 66% (163 votes); voice Maya, streaming",
+      "on": "TTS Arena Hebrew",
+      "source_url": "https://ivrit-ai-tts-arena-hebrew.hf.space/leaderboard",
+      "source_date": null,
+      "grade": "A",
+      "note": "preview model id tts-rt-v1-preview"
+     }
+    ],
+    "hebrew_support": "yes",
+    "summary_he": "ה-TTS של Soniox בגרסת תצוגה מקדימה במקום הרביעי בזירה העברית (Elo 1537) עם סטרימינג, ובאותה חברה שמובילה בתעתוק.",
+    "sources": [
+     {
+      "url": "https://ivrit-ai-tts-arena-hebrew.hf.space/leaderboard",
+      "date": null,
+      "what": "row #4",
+      "grade": "A"
+     },
+     {
+      "url": "https://ivrit-ai-tts-arena-hebrew.hf.space/models",
+      "date": null,
+      "what": "website soniox.com, streaming, proprietary",
+      "grade": "A"
+     }
+    ],
+    "grade": "A",
+    "verified_at": "2026-11-05"
+   },
+   {
+    "id": "openai-tts-hebrew",
+    "name": "OpenAI TTS (gpt-4o-mini-tts, tts-1-hd, tts-1, Realtime 1.5)",
+    "kind": "service",
+    "url": null,
+    "licence": "proprietary (OpenAI API)",
+    "results": [
+     {
+      "metric": "TTS Arena Hebrew rank / Elo / win rate",
+      "value": "Realtime 1.5 [legacy] #5 / 1503 / 59% (22 votes) | GPT-4o Mini TTS #10 / 1452 / 33% (196) | TTS-1 HD #11 / 1442 / 27% (169) | TTS-1 #12 / 1418 / 21% (189); voice nova (coral for Realtime)",
+      "on": "TTS Arena Hebrew",
+      "source_url": "https://ivrit-ai-tts-arena-hebrew.hf.space/leaderboard",
+      "source_date": null,
+      "grade": "A",
+      "note": "the Realtime row rests on only 22 votes; the three classic models are the bottom of the board"
+     }
+    ],
+    "hebrew_support": "yes — works, but rated below the specialised and newer services",
+    "summary_he": "מודלי ה-TTS של OpenAI עובדים בעברית אבל נמצאים בתחתית הזירה העברית: gpt-4o-mini-tts עם Elo 1452 ו-tts-1 עם 1418.",
+    "sources": [
+     {
+      "url": "https://ivrit-ai-tts-arena-hebrew.hf.space/leaderboard",
+      "date": null,
+      "what": "rows #5, #10, #11, #12",
+      "grade": "A"
+     }
+    ],
+    "grade": "A",
+    "verified_at": "2026-11-05"
+   },
+   {
+    "id": "inworld-tts-hebrew",
+    "name": "Inworld TTS (v1, v1.5 MAX, TTS-2)",
+    "kind": "service",
+    "url": "https://inworld.ai/tts",
+    "licence": "proprietary",
+    "results": [
+     {
+      "metric": "TTS Arena Hebrew rank / Elo / win rate",
+      "value": "TTS-2 #7 / 1488 / 44% (143 votes) | v1.5 MAX #8 / 1476 / 43% (200) | v1 [legacy] #6 / 1491 / 24% (17); voice Yael, streaming",
+      "on": "TTS Arena Hebrew",
+      "source_url": "https://ivrit-ai-tts-arena-hebrew.hf.space/leaderboard",
+      "source_date": null,
+      "grade": "A",
+      "note": "Inworld v1 row has 17 votes; ignore its rank"
+     }
+    ],
+    "hebrew_support": "yes — a Hebrew voice named Yael exists in the arena",
+    "summary_he": "Inworld מציעה קול עברי (Yael) עם סטרימינג, אבל נמצאת באמצע-תחתית הזירה: Elo 1488 ל-TTS-2 ו-1476 ל-v1.5 MAX.",
+    "sources": [
+     {
+      "url": "https://ivrit-ai-tts-arena-hebrew.hf.space/leaderboard",
+      "date": null,
+      "what": "rows #6-#8",
+      "grade": "A"
+     },
+     {
+      "url": "https://ivrit-ai-tts-arena-hebrew.hf.space/models",
+      "date": null,
+      "what": "website inworld.ai/tts, streaming, proprietary",
+      "grade": "A"
+     }
+    ],
+    "grade": "A",
+    "verified_at": "2026-11-05"
+   },
+   {
+    "id": "blue-v2-bluetts",
+    "name": "Blue V2 / BlueTTS (open-source Hebrew-capable TTS)",
+    "kind": "model",
+    "url": "https://github.com/maxmelichov/BlueTTS",
+    "licence": "MIT (GitHub licence of maxmelichov/BlueTTS). The arena lists Blue V2 as 'Open Source'. Voice and training-data terms not checked: UNVERIFIED.",
+    "results": [
+     {
+      "metric": "TTS Arena Hebrew rank / Elo / win rate",
+      "value": "Blue V2 (voice Female1) #9 / 1475 / 38% (125 votes); ahead of all three OpenAI classic TTS models (1452 / 1442 / 1418)",
+      "on": "TTS Arena Hebrew",
+      "source_url": "https://ivrit-ai-tts-arena-hebrew.hf.space/leaderboard",
+      "source_date": null,
+      "grade": "A",
+      "note": "the arena's website link for Blue V2 points to a Hugging Face Space titled 'BlueTTSV2 - Multilingual text-to-speech With VC'; that it is the same project as maxmelichov/BlueTTS is likely but not stated on the pages we read. GitHub description: 'Fastest Open Source TTS Model'; last push 2026-11-04."
+     }
+    ],
+    "hebrew_support": "yes",
+    "summary_he": "Blue V2 הוא מודל הקוד הפתוח היחיד בזירה העברית (מקום 9, Elo 1475), מעל כל מודלי ה-TTS הקלאסיים של OpenAI. רישיון הקוד MIT, אך תנאי הקולות לא נבדקו.",
+    "sources": [
+     {
+      "url": "https://ivrit-ai-tts-arena-hebrew.hf.space/models",
+      "date": null,
+      "what": "Blue V2: licence 'Open Source', batch, 16 steps, 270 matches",
+      "grade": "A"
+     },
+     {
+      "url": "https://ivrit-ai-tts-arena-hebrew.hf.space/leaderboard",
+      "date": null,
+      "what": "row #9 Blue V2: Elo 1475, 38% win rate, 125 votes",
+      "grade": "A"
+     },
+     {
+      "url": "https://github.com/maxmelichov/BlueTTS",
+      "date": "2026-11-04",
+      "what": "GitHub metadata: MIT, description, last push",
+      "grade": "A"
+     }
+    ],
+    "grade": "A",
+    "verified_at": "2026-11-05"
+   },
+   {
+    "id": "phonikud",
+    "name": "Phonikud — Hebrew grapheme-to-phoneme (G2P) + phonikud-tts, Pocket-TTS Hebrew LoRA, Phonikud-ChatterBox",
+    "kind": "tool",
+    "url": "https://github.com/phonikud/phonikud",
+    "licence": "GitHub shows 'Other / NOASSERTION' for phonikud and phonikud-tts; the project's explore page describes phonikud-tts as under a non-commercial licence. pocket-tts-onnx: CC-BY-4.0. phonikud-chatterbox: no licence file. Training set ILSpeech: non-commercial. Treat as NOT cleared for commercial use until read in full.",
+    "results": [
+     {
+      "metric": "Project claim (self-reported)",
+      "value": "Hebrew G2P producing IPA from unvocalised Hebrew so small local TTS models can pronounce Hebrew correctly; the repo description cites INTERSPEECH 2026; the project's page compares against ElevenLabs and Gemini (numbers not read)",
+      "on": "project pages",
+      "source_url": "https://phonikud.github.io/explore.html",
+      "source_date": null,
+      "grade": "C",
+      "note": "the explore page lists BlueTTS, Pocket-TTS (streaming ONNX with a Hebrew LoRA), Phonikud-ChatterBox and phonikud-tts; its '17-model WER vs CER benchmark' was not visible in the text we could read, so no figures are given"
+     }
+    ],
+    "hebrew_support": "yes — Hebrew-specific tooling",
+    "summary_he": "Phonikud הוא כלי קוד פתוח להמרת עברית לפונמות (IPA) שמאפשר למודלי דיבור קטנים להגות עברית נכון. רישיון הכלים וה-TTS עדיין לא ברור, ונתוני האימון (ILSpeech) לא מסחריים.",
+    "sources": [
+     {
+      "url": "https://github.com/phonikud/phonikud",
+      "date": "2026-06-17",
+      "what": "GitHub metadata: licence NOASSERTION/Other, description 'Hebrew grapheme to phoneme (INTERSPEECH 2026)', last push",
+      "grade": "A"
+     },
+     {
+      "url": "https://github.com/phonikud/phonikud-tts",
+      "date": "2026-09-18",
+      "what": "GitHub metadata: licence NOASSERTION/Other",
+      "grade": "A"
+     },
+     {
+      "url": "https://phonikud.github.io/explore.html",
+      "date": null,
+      "what": "list of Hebrew open models built on Phonikud; phonikud-tts 'non-commercial licence' wording",
+      "grade": "C"
+     },
+     {
+      "url": "https://huggingface.co/datasets/Phonikud/ILSpeech",
+      "date": "2026-05-15",
+      "what": "dataset card: about 2 hours of studio speech, two male speakers; licence 'Non commercial'",
+      "grade": "A"
+     },
+     {
+      "url": "https://arxiv.org/abs/2506.12311",
+      "date": null,
+      "what": "paper link seen in search results (abstract page not opened)",
+      "grade": "C"
+     }
+    ],
+    "grade": "A",
+    "verified_at": "2026-11-05"
+   },
+   {
+    "id": "piper-hebrew-voice",
+    "name": "Piper — official Hebrew voice he_IL-saspeech-medium (and a community Hebrew voice)",
+    "kind": "model",
+    "url": "https://huggingface.co/rhasspy/piper-voices",
+    "licence": "Piper repo and voices repo: MIT. BUT the Hebrew voice is trained on SASpeech, whose terms are non-commercial (copyright IPBC / Kan), and its model card only says 'License: See dataset URL'. Community voice notmax123/piper-medium-heb: CC-BY-NC-4.0.",
+    "results": [
+     {
+      "metric": "Piper voices repo: Hebrew voices",
+      "value": "one: he/he_IL/saspeech/medium, single speaker, 22,050 Hz, fine-tuned from the LibriTTS-R base, ONNX file about 63 MB",
+      "on": "rhasspy/piper-voices tree and MODEL_CARD",
+      "source_url": "https://huggingface.co/rhasspy/piper-voices/raw/main/he/he_IL/saspeech/medium/MODEL_CARD",
+      "source_date": "2026-11-02",
+      "grade": "A",
+      "note": "date = repo lastModified; no quality benchmark found"
+     }
+    ],
+    "hebrew_support": "yes — one voice (medium quality tier); no quality benchmark found",
+    "summary_he": "ל-Piper יש קול עברי רשמי אחד (SASpeech, איכות בינונית), אבל נתוני האימון מותרים לשימוש לא מסחרי בלבד, ולכן אסור להסתמך על רישיון ה-MIT של המאגר.",
+    "sources": [
+     {
+      "url": "https://huggingface.co/rhasspy/piper-voices/raw/main/he/he_IL/saspeech/medium/MODEL_CARD",
+      "date": null,
+      "what": "model card: he_IL, 1 speaker, medium, dataset OpenSLR 134",
+      "grade": "A"
+     },
+     {
+      "url": "https://huggingface.co/datasets/upai-inc/saspeech",
+      "date": "2024-12-26",
+      "what": "SASpeech card: free for non-commercial purposes; copyright IPBC",
+      "grade": "A"
+     },
+     {
+      "url": "https://huggingface.co/api/models/notmax123/piper-medium-heb",
+      "date": "2026-03-02",
+      "what": "community voice: license:cc-by-nc-4.0, created 2025-12-10",
+      "grade": "A"
+     }
+    ],
+    "grade": "A",
+    "verified_at": "2026-11-05"
+   },
+   {
+    "id": "meta-mms-tts-heb",
+    "name": "Meta MMS-TTS Hebrew (facebook/mms-tts-heb)",
+    "kind": "model",
+    "url": "https://huggingface.co/facebook/mms-tts-heb",
+    "licence": "CC-BY-NC-4.0 (Hub tag) — non-commercial",
+    "results": [],
+    "hebrew_support": "yes — one Hebrew checkpoint; no head-to-head number found in our sources",
+    "summary_he": "מודל ה-TTS העברי של Meta (MMS) זמין אך ברישיון CC BY-NC, כלומר לא לשימוש מסחרי; לא מצאנו עבורו מדידת איכות פומבית.",
+    "sources": [
+     {
+      "url": "https://huggingface.co/api/models/facebook/mms-tts-heb",
+      "date": "2023-09-01",
+      "what": "Hub record: license:cc-by-nc-4.0",
+      "grade": "A"
+     }
+    ],
+    "grade": "A",
+    "verified_at": "2026-11-05"
+   },
+   {
+    "id": "chatterbox-multilingual",
+    "name": "Resemble AI Chatterbox (multilingual)",
+    "kind": "model",
+    "url": "https://huggingface.co/ResembleAI/chatterbox",
+    "licence": "MIT (Hub tag on ResembleAI/chatterbox)",
+    "results": [
+     {
+      "metric": "Hebrew support and quality",
+      "value": "Hub language tags include 'he'; Resemble's own multilingual page (seen in search results) lists Hebrew. A community comparison of Hebrew TTS providers (Daniel Rosehill, GitHub repo last pushed 2026-03-22; snapshot of March 2025 per a search summary) judged Chatterbox output generic and hard to understand without niqqud",
+      "on": "Hub tags; community test (single person)",
+      "source_url": "https://github.com/danielrosehill/Hebrew-TTS-Providers",
+      "source_date": "2026-03-22",
+      "grade": "D",
+      "note": "not an official benchmark; the repo content itself was not opened (known from a search summary and the GitHub API record). The Phonikud project ships a Chatterbox variant that feeds Hebrew phonemes."
+     }
+    ],
+    "hebrew_support": "partial — Hebrew listed, quality reported poor without phoneme/niqqud help",
+    "summary_he": "Chatterbox של Resemble AI ברישיון MIT מצהיר על תמיכה בעברית, אבל בדיקה קהילתית (לא רשמית) מצאה שהאיכות חלשה בלי ניקוד או פונמות.",
+    "sources": [
+     {
+      "url": "https://huggingface.co/api/models/ResembleAI/chatterbox",
+      "date": "2026-06-10",
+      "what": "Hub record: license:mit, tag he",
+      "grade": "A"
+     },
+     {
+      "url": "https://github.com/danielrosehill/Hebrew-TTS-Providers",
+      "date": "2026-03-22",
+      "what": "community snapshot of Hebrew TTS providers (existence confirmed via GitHub API; content not read)",
+      "grade": "D"
+     },
+     {
+      "url": "https://resemble.ai/learn/models/chatterbox-multilingual",
+      "date": null,
+      "what": "vendor page seen in search results (not opened)",
+      "grade": "C"
+     }
+    ],
+    "grade": "D",
+    "verified_at": "2026-11-05"
+   },
+   {
+    "id": "google-cloud-tts-hebrew",
+    "name": "Google Cloud Text-to-Speech — Hebrew (he-IL) voices",
+    "kind": "service",
+    "url": "https://docs.cloud.google.com/text-to-speech/docs/list-voices-and-types",
+    "licence": "proprietary (Google Cloud API)",
+    "results": [
+     {
+      "metric": "Hebrew (Israel) voices listed",
+      "value": "he-IL-Standard-A..D; he-IL-Wavenet (A, B seen, labelled Premium); he-IL-Chirp3-HD-Achernar, -Achird and further Chirp 3 HD voices (labelled Premium; later names were cut off in what we read)",
+      "on": "Cloud TTS 'Supported voices and languages' page",
+      "source_url": "https://docs.cloud.google.com/text-to-speech/docs/list-voices-and-types",
+      "source_date": "2026-10-26",
+      "grade": "C",
+      "note": "page says 'Last updated 2026-10-26 UTC'. Not in the Hebrew arena (the arena tests Gemini TTS instead), so no preference score is published for these voices."
+     }
+    ],
+    "hebrew_support": "yes — Standard, Wavenet and Chirp 3 HD voices",
+    "summary_he": "ל-Google Cloud TTS יש קולות עבריים בשלוש רמות (Standard, Wavenet, Chirp 3 HD). אין להם דירוג בזירה העברית, כי שם נבדק Gemini TTS.",
+    "sources": [
+     {
+      "url": "https://docs.cloud.google.com/text-to-speech/docs/list-voices-and-types",
+      "date": "2026-10-26",
+      "what": "he-IL voice rows",
+      "grade": "C"
+     }
+    ],
+    "grade": "C",
+    "verified_at": "2026-11-05"
+   },
+   {
+    "id": "azure-neural-tts-hebrew",
+    "name": "Microsoft Azure AI Speech — Hebrew neural voices",
+    "kind": "service",
+    "url": "https://learn.microsoft.com/en-us/azure/ai-services/speech-service/language-support?tabs=tts",
+    "licence": "proprietary (Azure service)",
+    "results": [
+     {
+      "metric": "Hebrew (Israel) voices listed",
+      "value": "he-IL-HilaNeural (female), he-IL-AvriNeural (male), both 'Standard'",
+      "on": "Speech service language-support page, text-to-speech table",
+      "source_url": "https://learn.microsoft.com/en-us/azure/ai-services/speech-service/language-support?tabs=tts",
+      "source_date": "2026-10-28",
+      "grade": "C",
+      "note": "page metadata ms.date 2026-10-28. Not in the Hebrew arena, so no preference score."
+     }
+    ],
+    "hebrew_support": "yes — two standard neural voices",
+    "summary_he": "ל-Azure יש שני קולות עבריים מסוג Neural (הילה ואברי). אין להם דירוג בזירה העברית, ולכן אי אפשר להשוות אותם לשירותים האחרים לפי נתונים פומביים.",
+    "sources": [
+     {
+      "url": "https://learn.microsoft.com/en-us/azure/ai-services/speech-service/language-support?tabs=tts",
+      "date": "2026-10-28",
+      "what": "he-IL-HilaNeural and he-IL-AvriNeural rows",
+      "grade": "C"
+     }
+    ],
+    "grade": "C",
+    "verified_at": "2026-11-05"
+   },
+   {
+    "id": "amazon-polly-hebrew",
+    "name": "Amazon Polly — Hebrew",
+    "kind": "service",
+    "url": "https://docs.aws.amazon.com/polly/latest/dg/supported-languages.html",
+    "licence": "proprietary (AWS service)",
+    "results": [
+     {
+      "metric": "Hebrew on the supported-languages page",
+      "value": "Not listed: the fetched page contains Arabic, Hindi and Japanese but no entry for Hebrew / he-IL",
+      "on": "Polly 'Languages supported' page, fetched 2026-11-05",
+      "source_url": "https://docs.aws.amazon.com/polly/latest/dg/supported-languages.html",
+      "source_date": null,
+      "grade": "C",
+      "note": "absence read from a 20 KB page; the page shows no date. Re-check before relying on it."
+     }
+    ],
+    "hebrew_support": "no — not listed",
+    "summary_he": "בעמוד השפות הנתמכות של Amazon Polly אין עברית (יש ערבית, הינדית ויפנית), ולכן אין לשירות קול עברי לפי התיעוד שקראנו.",
+    "sources": [
+     {
+      "url": "https://docs.aws.amazon.com/polly/latest/dg/supported-languages.html",
+      "date": null,
+      "what": "language table without Hebrew",
+      "grade": "C"
+     }
+    ],
+    "grade": "C",
+    "verified_at": "2026-11-05"
+   }
+  ],
+  "ocr_hebrew": [
+   {
+    "id": "ivrit-ai-hebrew-handwriting-ocr",
+    "name": "ivrit.ai Hebrew Handwriting OCR benchmark + leaderboard (frontier vision models)",
+    "kind": "leaderboard",
+    "url": "https://huggingface.co/spaces/ivrit-ai/hebrew-handwriting-ocr-leaderboard",
+    "licence": "Leaderboard Space: MIT (card). Benchmark data: 'ivrit.ai License' (gated). The dataset card says it enables broad research and commercial use; the licence v2 text itself limits use to AI-model training or academic research — read https://www.ivrit.ai/en/the-license before use.",
+    "results": [
+     {
+      "metric": "LINE mode, CER median (IQR) — lower is better",
+      "value": "google gemini-flash 0.119 (0.00-0.50) | google gemini-flash-lite 0.280 (0.11-0.44) | openai gpt-5.6-sol 0.440 (0.25-0.57) | openai gpt-5.6-terra 0.585 (0.44-0.71) | anthropic claude-sonnet-5 0.615 (0.45-0.79) | anthropic claude-opus-5 0.692 (0.55-0.85) | openai gpt-5.6-luna 0.735 (0.61-0.84) | anthropic claude-haiku-4-5 0.905 (0.80-1.00)",
+      "on": "225 gold lines cropped from 10 handwritten pages by 10 writers (phone photos); line crop in, text out",
+      "source_url": "https://huggingface.co/spaces/ivrit-ai/hebrew-handwriting-ocr-leaderboard/raw/main/index.html",
+      "source_date": "2026-09-04",
+      "grade": "A",
+      "note": "the Space's CSV adds caveats the headline table hides: gemini-flash returned no text for 13 of 225 lines and its micro-averaged CER is 2.19 (some outputs are far too long), and the largest Google model (gemini-pro-latest) scored only 6 lines (187 blank outputs) and is left out of the published table. Outputs with no text are dropped from the median."
+     },
+     {
+      "metric": "FULL-PAGE mode: word coverage (higher better) / page CER (lower better)",
+      "value": "openai gpt-5.6-sol 0.462 / 0.400 | google gemini-flash-lite 0.453 / 0.353 | anthropic claude-opus-5 0.335 / 0.532 | openai gpt-5.6-terra 0.270 / 0.599 | google gemini-flash 0.215 / 0.764 | anthropic claude-sonnet-5 0.210 / 0.619 | openai gpt-5.6-luna 0.199 / 1.297 | anthropic claude-haiku-4-5 0.197 / 0.793",
+      "on": "10 whole pages",
+      "source_url": "https://huggingface.co/spaces/ivrit-ai/hebrew-handwriting-ocr-leaderboard/raw/main/index.html",
+      "source_date": "2026-09-04",
+      "grade": "A",
+      "note": "even the best full-page result leaves roughly 35-40% character error: handwritten Hebrew is NOT solved by the newest frontier models. Handwriting only; says nothing about printed invoices."
+     }
+    ],
+    "hebrew_support": "yes — Hebrew handwriting only; small benchmark (225 lines, 10 hands), phone photos, domain skewed to personal notes and forms",
+    "summary_he": "ivrit.ai מדדה מודלי ראייה מובילים על כתב יד עברי: בקריאת שורה בודדת מודלי Gemini Flash הצליחו הכי טוב, ובעמוד שלם GPT-5.6 Sol ו-Gemini Flash Lite. אפילו הטובים טועים בכ-35–40% מהתווים.",
+    "sources": [
+     {
+      "url": "https://huggingface.co/spaces/ivrit-ai/hebrew-handwriting-ocr-leaderboard/raw/main/index.html",
+      "date": "2026-09-04",
+      "what": "published leaderboard tables (line and full-page modes), method, models list",
+      "grade": "A"
+     },
+     {
+      "url": "https://huggingface.co/spaces/ivrit-ai/hebrew-handwriting-ocr-leaderboard/raw/main/data/line.csv",
+      "date": "2026-09-04",
+      "what": "full per-model line-mode numbers incl. blanks, micro CER, latency",
+      "grade": "A"
+     },
+     {
+      "url": "https://huggingface.co/spaces/ivrit-ai/hebrew-handwriting-ocr-leaderboard/raw/main/data/meta.json",
+      "date": "2026-09-04",
+      "what": "generated 2026-09-04; 225 gold lines, 10 pages; nine models scored",
+      "grade": "A"
+     },
+     {
+      "url": "https://huggingface.co/datasets/ivrit-ai/hebrew-handwriting-ocr-benchmark",
+      "date": "2026-09-04",
+      "what": "dataset card: test set only, 225 lines / 10 pages, transcribed on transcriptor.ivrit.ai, gated, ivrit.ai License",
+      "grade": "A"
+     }
+    ],
+    "grade": "A",
+    "verified_at": "2026-11-05"
+   },
+   {
+    "id": "tesseract-hebrew",
+    "name": "Tesseract OCR + heb.traineddata",
+    "kind": "tool",
+    "url": "https://github.com/tesseract-ocr/tesseract",
+    "licence": "Apache-2.0 (engine and the tessdata, tessdata_best, tessdata_fast repositories)",
+    "results": [
+     {
+      "metric": "Hebrew model files present",
+      "value": "heb.traineddata exists in tessdata_best (3,704,077 bytes), tessdata_fast (961,404 bytes) and tessdata (5,413,459 bytes)",
+      "on": "raw file HEAD requests",
+      "source_url": "https://github.com/tesseract-ocr/tessdata_best",
+      "source_date": "2024-03-09",
+      "grade": "A",
+      "note": "date = last push of tessdata_best (tessdata_fast 2024-08-01). No Hebrew accuracy number was found in the sources read."
+     }
+    ],
+    "hebrew_support": "yes — printed Hebrew, classic engine; not a layout/table/handwriting solution",
+    "summary_he": "Tesseract ברישיון Apache-2.0 כולל קבצי עברית בשלוש רמות איכות/גודל (הקטן 0.96MB, הטוב 3.7MB). זה מנוע הדפסה קלאסי, בלי מדידת דיוק עברי שמצאנו.",
+    "sources": [
+     {
+      "url": "https://github.com/tesseract-ocr/tesseract",
+      "date": "2026-11-02",
+      "what": "GitHub metadata: Apache-2.0, last push",
+      "grade": "A"
+     },
+     {
+      "url": "https://github.com/tesseract-ocr/tessdata_best",
+      "date": "2024-03-09",
+      "what": "Apache-2.0; heb.traineddata present",
+      "grade": "A"
+     },
+     {
+      "url": "https://github.com/tesseract-ocr/tessdata_fast",
+      "date": "2024-08-01",
+      "what": "Apache-2.0; heb.traineddata present",
+      "grade": "A"
+     }
+    ],
+    "grade": "A",
+    "verified_at": "2026-11-05"
+   },
+   {
+    "id": "google-cloud-vision-ocr",
+    "name": "Google Cloud Vision OCR",
+    "kind": "service",
+    "url": "https://docs.cloud.google.com/vision/docs/languages",
+    "licence": "proprietary (Google Cloud API)",
+    "results": [
+     {
+      "metric": "Language list",
+      "value": "Hebrew listed with code 'iw', script Hebr",
+      "on": "Vision API 'OCR language support' page",
+      "source_url": "https://docs.cloud.google.com/vision/docs/languages",
+      "source_date": "2026-10-26",
+      "grade": "C",
+      "note": "page says 'Last updated 2026-10-26 UTC'; whether Hebrew handwriting is supported was not stated in what we read"
+     }
+    ],
+    "hebrew_support": "yes — printed/document text (handwriting not confirmed)",
+    "summary_he": "Google Cloud Vision מונה עברית ברשימת שפות ה-OCR שלו (קוד iw). לא מצאנו בעמוד התיחסות לכתב יד עברי ולא מספר דיוק.",
+    "sources": [
+     {
+      "url": "https://docs.cloud.google.com/vision/docs/languages",
+      "date": "2026-10-26",
+      "what": "Hebrew row",
+      "grade": "C"
+     }
+    ],
+    "grade": "C",
+    "verified_at": "2026-11-05"
+   },
+   {
+    "id": "google-document-ai-ocr",
+    "name": "Google Cloud Document AI (OCR processors)",
+    "kind": "service",
+    "url": "https://docs.cloud.google.com/document-ai/docs/languages",
+    "licence": "proprietary (Google Cloud API)",
+    "results": [
+     {
+      "metric": "Language list",
+      "value": "Hebrew listed (code 'iw', script Hebr) in the language tables of the page (four occurrences)",
+      "on": "Document AI 'Supported languages' page",
+      "source_url": "https://docs.cloud.google.com/document-ai/docs/languages",
+      "source_date": null,
+      "grade": "C",
+      "note": "which processor each table belongs to (Enterprise Document OCR vs others) was not separated in our read; invoice/receipt parsers' own language limits not checked"
+     }
+    ],
+    "hebrew_support": "yes — OCR; specialised parsers (invoice, receipt) UNVERIFIED",
+    "summary_he": "Document AI של גוגל כולל עברית ברשימות השפות שלו. לא בדקנו אם גם מנתחי החשבוניות והקבלות שלו תומכים בעברית.",
+    "sources": [
+     {
+      "url": "https://docs.cloud.google.com/document-ai/docs/languages",
+      "date": null,
+      "what": "Hebrew rows",
+      "grade": "C"
+     }
+    ],
+    "grade": "C",
+    "verified_at": "2026-11-05"
+   },
+   {
+    "id": "azure-document-intelligence-read",
+    "name": "Azure Document Intelligence — Read / Layout (v3.1, v4.0)",
+    "kind": "service",
+    "url": "https://learn.microsoft.com/en-us/azure/ai-services/document-intelligence/language-support/ocr",
+    "licence": "proprietary (Azure service)",
+    "results": [
+     {
+      "metric": "Printed text, Read and Layout (v3.1 and v4.0)",
+      "value": "Hebrew (he) is in the supported list",
+      "on": "Language and locale support page",
+      "source_url": "https://learn.microsoft.com/en-us/azure/ai-services/document-intelligence/language-support/ocr",
+      "source_date": "2026-04-18",
+      "grade": "C",
+      "note": "ms.date 2026-04-18; page updated_at 2026-10-19"
+     },
+     {
+      "metric": "Handwritten text (v4.0)",
+      "value": "NOT supported for Hebrew. The v4.0 handwriting list is English, Chinese Simplified, French, German, Italian, Japanese, Korean, Portuguese, Spanish, Russian, Thai, Arabic",
+      "on": "same page",
+      "source_url": "https://learn.microsoft.com/en-us/azure/ai-services/document-intelligence/language-support/ocr",
+      "source_date": "2026-04-18",
+      "grade": "C",
+      "note": "v3.1 handwriting list is shorter. The General document model is English-only. Language support of the prebuilt invoice / receipt models is on separate pages: UNVERIFIED."
+     }
+    ],
+    "hebrew_support": "partial — printed yes; handwriting no",
+    "summary_he": "Azure Document Intelligence קורא עברית מודפסת במודלי Read ו-Layout, אבל אין לו תמיכה בכתב יד עברי. תמיכת מודלי החשבוניות והקבלות לא נבדקה.",
+    "sources": [
+     {
+      "url": "https://learn.microsoft.com/en-us/azure/ai-services/document-intelligence/language-support/ocr",
+      "date": "2026-04-18",
+      "what": "Hebrew in printed tables; handwriting tables without Hebrew; general document English only",
+      "grade": "C"
+     }
+    ],
+    "grade": "C",
+    "verified_at": "2026-11-05"
+   },
+   {
+    "id": "aws-textract-hebrew",
+    "name": "Amazon Textract",
+    "kind": "service",
+    "url": "https://aws.amazon.com/textract/faqs/",
+    "licence": "proprietary (AWS service)",
+    "results": [
+     {
+      "metric": "FAQ statement on languages",
+      "value": "detects printed text, including right-to-left and mixed-script documents, in more than 40 languages including 32 EU languages and Arabic, Chinese, Hebrew, Hindi, Japanese and Korean; recognises English handwriting only",
+      "on": "Textract FAQs",
+      "source_url": "https://aws.amazon.com/textract/faqs/",
+      "source_date": null,
+      "grade": "C",
+      "note": "this CORRECTS the common assumption that Textract has no Hebrew. The FAQ page shows no date. Whether the AnalyzeExpense (invoice/receipt) API reads Hebrew was not stated: UNVERIFIED."
+     }
+    ],
+    "hebrew_support": "partial — printed Hebrew yes; handwriting English only",
+    "summary_he": "ב-FAQ של Amazon Textract מופיעה עברית בין השפות להדפסה (מעל 40 שפות), אבל כתב יד נתמך רק באנגלית. לא ברור אם ממשק החשבוניות קורא עברית.",
+    "sources": [
+     {
+      "url": "https://aws.amazon.com/textract/faqs/",
+      "date": null,
+      "what": "FAQ answer listing Hebrew among printed-text languages",
+      "grade": "C"
+     }
+    ],
+    "grade": "C",
+    "verified_at": "2026-11-05"
+   },
+   {
+    "id": "easyocr-hebrew",
+    "name": "EasyOCR",
+    "kind": "tool",
+    "url": "https://github.com/JaidedAI/EasyOCR",
+    "licence": "Apache-2.0",
+    "results": [
+     {
+      "metric": "Hebrew in the language configuration",
+      "value": "Not found: easyocr/config.py (master) defines the language lists (Latin, Arabic, Cyrillic, Devanagari, Bengali, ...) and contains no 'he', 'iw' or 'Hebrew'",
+      "on": "source file read 2026-11-05",
+      "source_url": "https://raw.githubusercontent.com/JaidedAI/EasyOCR/master/easyocr/config.py",
+      "source_date": "2025-12-05",
+      "grade": "A",
+      "note": "date = last push to the repo; README promises '80+ supported languages'"
+     }
+    ],
+    "hebrew_support": "no — Hebrew is not in the language lists",
+    "summary_he": "EasyOCR ברישיון Apache-2.0 אבל עברית אינה ברשימות השפות בקוד שלו, ולכן הוא אינו מתאים לעברית בלי אימון נוסף.",
+    "sources": [
+     {
+      "url": "https://raw.githubusercontent.com/JaidedAI/EasyOCR/master/easyocr/config.py",
+      "date": "2025-12-05",
+      "what": "language lists without Hebrew",
+      "grade": "A"
+     },
+     {
+      "url": "https://github.com/JaidedAI/EasyOCR",
+      "date": "2025-12-05",
+      "what": "GitHub metadata: Apache-2.0",
+      "grade": "A"
+     }
+    ],
+    "grade": "A",
+    "verified_at": "2026-11-05"
+   },
+   {
+    "id": "paddleocr-hebrew",
+    "name": "PaddleOCR (PP-OCRv5) and PaddleOCR-VL",
+    "kind": "tool",
+    "url": "https://github.com/PaddlePaddle/PaddleOCR",
+    "licence": "Apache-2.0 (code; PaddleOCR-VL weights Apache-2.0 per Hub tag)",
+    "results": [
+     {
+      "metric": "Hebrew in PP-OCRv5 multilingual recognition",
+      "value": "Not listed. The docs claim 106 languages and the tables name Arabic, Persian and others, but not Hebrew (he / iw)",
+      "on": "PP-OCRv5 multilingual docs page (banner: not the latest docs version)",
+      "source_url": "https://www.paddleocr.ai/main/en/version3.x/algorithm/PP-OCRv5/PP-OCRv5_multi_languages.html",
+      "source_date": null,
+      "grade": "C",
+      "note": "one forum comment on the Hub claims the server rec model covers Hebrew; not backed by the docs"
+     },
+     {
+      "metric": "PaddleOCR-VL (0.9B)",
+      "value": "claims 109 languages; the model card names Chinese, English, Japanese, Latin, Korean, Russian, Arabic, Hindi, Thai and does not name Hebrew",
+      "on": "model card",
+      "source_url": "https://huggingface.co/PaddlePaddle/PaddleOCR-VL/raw/main/README.md",
+      "source_date": "2026-08-08",
+      "grade": "C",
+      "note": "Hub lastModified 2026-08-08; Hebrew accuracy UNVERIFIED"
+     }
+    ],
+    "hebrew_support": "unknown — Hebrew not listed for PP-OCRv5; PaddleOCR-VL Hebrew unverified",
+    "summary_he": "PaddleOCR ברישיון Apache-2.0, אבל עברית לא מופיעה ברשימת 106 השפות של PP-OCRv5. לגבי PaddleOCR-VL נטען על 109 שפות בלי לציין עברית.",
+    "sources": [
+     {
+      "url": "https://www.paddleocr.ai/main/en/version3.x/algorithm/PP-OCRv5/PP-OCRv5_multi_languages.html",
+      "date": null,
+      "what": "language tables (Hebrew absent)",
+      "grade": "C"
+     },
+     {
+      "url": "https://huggingface.co/PaddlePaddle/PaddleOCR-VL/raw/main/README.md",
+      "date": "2026-08-08",
+      "what": "109-language claim, examples of scripts",
+      "grade": "C"
+     },
+     {
+      "url": "https://github.com/PaddlePaddle/PaddleOCR",
+      "date": "2026-09-16",
+      "what": "GitHub metadata: Apache-2.0",
+      "grade": "A"
+     }
+    ],
+    "grade": "C",
+    "verified_at": "2026-11-05"
+   },
+   {
+    "id": "doctr-hebrew",
+    "name": "docTR (Mindee)",
+    "kind": "tool",
+    "url": "https://github.com/mindee/doctr",
+    "licence": "Apache-2.0",
+    "results": [
+     {
+      "metric": "Hebrew vocabulary",
+      "value": "VOCABS['hebrew'] is defined in doctr/datasets/vocabs.py (consonants, final forms, niqqud vowels, cantillation marks, presentation forms)",
+      "on": "source file read 2026-11-05",
+      "source_url": "https://raw.githubusercontent.com/mindee/doctr/main/doctr/datasets/vocabs.py",
+      "source_date": "2026-11-03",
+      "grade": "A",
+      "note": "date = last push. A vocabulary lets you TRAIN a Hebrew recogniser; we found no pretrained Hebrew checkpoint or Hebrew accuracy number."
+     }
+    ],
+    "hebrew_support": "partial — Hebrew charset supported for training; pretrained Hebrew model not found",
+    "summary_he": "ל-docTR (Apache-2.0) יש אוצר תווים עברי מוגדר, כלומר אפשר לאמן בו מזהה עברי. לא מצאנו מודל מאומן מראש לעברית ולא מדידת דיוק.",
+    "sources": [
+     {
+      "url": "https://raw.githubusercontent.com/mindee/doctr/main/doctr/datasets/vocabs.py",
+      "date": "2026-11-03",
+      "what": "hebrew vocab definitions",
+      "grade": "A"
+     },
+     {
+      "url": "https://github.com/mindee/doctr",
+      "date": "2026-11-03",
+      "what": "GitHub metadata: Apache-2.0",
+      "grade": "A"
+     }
+    ],
+    "grade": "A",
+    "verified_at": "2026-11-05"
+   },
+   {
+    "id": "surya-ocr",
+    "name": "Surya OCR (Datalab)",
+    "kind": "tool",
+    "url": "https://github.com/datalab-to/surya",
+    "licence": "Code: Apache-2.0. Model weights: modified AI Pubs Open Rail-M licence — free for research, personal use and startups under $5M funding/revenue; broader commercial use needs a paid licence from Datalab (README).",
+    "results": [
+     {
+      "metric": "Languages",
+      "value": "README: 'multilingual', scores 74.9% on an internal benchmark of 91 languages; the README text does not name Hebrew",
+      "on": "README",
+      "source_url": "https://raw.githubusercontent.com/datalab-to/surya/master/README.md",
+      "source_date": "2026-10-29",
+      "grade": "C",
+      "note": "date = last push; no Hebrew-specific number found"
+     }
+    ],
+    "hebrew_support": "unknown — not named in the README",
+    "summary_he": "Surya הוא מנוע OCR רב-לשוני: הקוד ב-Apache-2.0 אבל המשקולות בתנאי OpenRAIL-M מוגבלים לשימוש מחקרי, אישי או סטארטאפ קטן. עברית לא מוזכרת במפורש.",
+    "sources": [
+     {
+      "url": "https://raw.githubusercontent.com/datalab-to/surya/master/README.md",
+      "date": "2026-10-29",
+      "what": "licence section 'Commercial usage' and multilingual claim",
+      "grade": "C"
+     },
+     {
+      "url": "https://github.com/datalab-to/surya",
+      "date": "2026-10-29",
+      "what": "GitHub metadata: Apache-2.0 (code)",
+      "grade": "A"
+     }
+    ],
+    "grade": "C",
+    "verified_at": "2026-11-05"
+   },
+   {
+    "id": "olmocr",
+    "name": "olmOCR (Allen AI)",
+    "kind": "model",
+    "url": "https://github.com/allenai/olmocr",
+    "licence": "Apache-2.0 (code; allenai/olmOCR-2-7B-1025 weights Apache-2.0 per Hub tag)",
+    "results": [],
+    "hebrew_support": "unknown — no Hebrew claim or evaluation found (the Hub record carries no language tags; README not read)",
+    "summary_he": "olmOCR של Allen AI ברישיון Apache-2.0 (קוד ומשקולות). לא מצאנו טענת תמיכה בעברית ולא הערכה של עברית.",
+    "sources": [
+     {
+      "url": "https://github.com/allenai/olmocr",
+      "date": "2026-03-25",
+      "what": "GitHub metadata: Apache-2.0, last push",
+      "grade": "A"
+     },
+     {
+      "url": "https://huggingface.co/api/models/allenai/olmOCR-2-7B-1025",
+      "date": "2025-10-22",
+      "what": "Hub record: license:apache-2.0",
+      "grade": "A"
+     }
+    ],
+    "grade": "A",
+    "verified_at": "2026-11-05"
+   },
+   {
+    "id": "churro-3b",
+    "name": "CHURRO (Stanford OVAL) — open 3B VLM for historical text",
+    "kind": "model",
+    "url": "https://huggingface.co/stanford-oval/churro-3B",
+    "licence": "'other' — Qwen Research licence (license_name qwen-research); code/dataset terms not read. Treat as research-only.",
+    "results": [
+     {
+      "metric": "Hebrew coverage in CHURRO-DS",
+      "value": "'he' is in the dataset's language list (about 100K pages, 155 collections, 22 centuries, 46 language clusters); no Hebrew-specific accuracy figure was read",
+      "on": "dataset card",
+      "source_url": "https://huggingface.co/datasets/stanford-oval/churro-dataset",
+      "source_date": "2026-02-20",
+      "grade": "C",
+      "note": "headline claim on the model card: higher accuracy than Gemini 2.5 Pro at 15.5x lower cost on the CHURRO-DS test set (all languages together). Paper: arXiv 2509.19768 (link from the model card)."
+     }
+    ],
+    "hebrew_support": "partial — Hebrew is among the training languages of a HISTORICAL-document model; modern Hebrew handwriting/print unverified",
+    "summary_he": "CHURRO הוא מודל פתוח של סטנפורד (3B) לתעתוק מסמכים היסטוריים. עברית נכללת בשפות המאגר, אבל הרישיון מחקרי ואין מספר ייעודי לעברית.",
+    "sources": [
+     {
+      "url": "https://huggingface.co/stanford-oval/churro-3B/raw/main/README.md",
+      "date": null,
+      "what": "model card: licence qwen-research, base Qwen2.5-VL-3B-Instruct, headline claim, paper link",
+      "grade": "C"
+     },
+     {
+      "url": "https://huggingface.co/datasets/stanford-oval/churro-dataset",
+      "date": "2026-02-20",
+      "what": "language list including he; split sizes (97,151 train / 1,170 dev / 1,170 test)",
+      "grade": "A"
+     }
+    ],
+    "grade": "C",
+    "verified_at": "2026-11-05"
+   },
+   {
+    "id": "community-hebrew-ocr-sets-hf",
+    "name": "Small community Hebrew OCR datasets on Hugging Face (unvetted)",
+    "kind": "dataset",
+    "url": "https://huggingface.co/datasets/AmitKabya/hebrew-doc-ocr-benchmark",
+    "licence": "UNVERIFIED — no licence field in the AmitKabya card; mbole and youssefkhalil320 sets carry no licence tag",
+    "results": [
+     {
+      "metric": "AmitKabya/hebrew-doc-ocr-benchmark size",
+      "value": "78 document pages (46 train / 15 validation / 17 test) with markdown ground truth, doc_type / orientation / style fields",
+      "on": "dataset card",
+      "source_url": "https://huggingface.co/datasets/AmitKabya/hebrew-doc-ocr-benchmark",
+      "source_date": "2026-04-26",
+      "grade": "D",
+      "note": "other hits of the Hub search 'hebrew ocr': mbole/hebrew-ocr-dataset (2024-11-30), youssefkhalil320/hebrew-ocr-doctags-dataset and _v2 (2025-08). Content, provenance and domain (invoices or not) were not checked."
+     }
+    ],
+    "hebrew_support": "yes — Hebrew documents, tiny",
+    "summary_he": "ב-Hugging Face יש כמה מאגרי OCR עבריים קטנים של יחידים (למשל 78 עמודי מסמכים). הם לא נבדקו, בלי רישיון ברור, ואינם אמת מידה מוכרת.",
+    "sources": [
+     {
+      "url": "https://huggingface.co/datasets/AmitKabya/hebrew-doc-ocr-benchmark",
+      "date": "2026-04-26",
+      "what": "dataset card (splits and features)",
+      "grade": "D"
+     },
+     {
+      "url": "https://huggingface.co/api/datasets?search=hebrew%20ocr&limit=8&sort=downloads",
+      "date": "2026-11-05",
+      "what": "Hub search results listing the other community sets",
+      "grade": "D"
+     }
+    ],
+    "grade": "D",
+    "verified_at": "2026-11-05"
+   }
+  ],
+  "embeddings_hebrew": [
+   {
+    "id": "neodictabert-bilingual-embed",
+    "name": "NeoDictaBERT-bilingual-embed (DICTA)",
+    "kind": "model",
+    "url": "https://huggingface.co/dicta-il/neodictabert-bilingual-embed",
+    "licence": "CC-BY-4.0 on the Hub card. MISMATCH: the NeoDictaBERT paper says the models are released under a CC BY-SA licence. Ask DICTA / re-read before commercial use.",
+    "results": [
+     {
+      "metric": "NDCG@20 on the Hebrew Semantic Retrieval National Challenge",
+      "value": "0.404 for NeoDictaBERT-bilingual vs 0.397 for the baseline embedding model multilingual-e5-base",
+      "on": "Hebrew Semantic Retrieval National Challenge (Codabench), baseline setup with the embedding model swapped",
+      "source_url": "https://arxiv.org/html/2510.20386",
+      "source_date": "2025-10-23",
+      "grade": "C",
+      "note": "authors' own comparison, one baseline only; date = arXiv v1 submission. Model card adds: #10 on the private phase of the challenge."
+     }
+    ],
+    "hebrew_support": "yes — Hebrew + English (768-dim sentence-transformers model, fine-tuned from neodictabert-bilingual)",
+    "summary_he": "מודל embedding דו-לשוני עברית-אנגלית של דיקטה. הוא משפר קלות על בסיס multilingual-e5-base באתגר האחזור העברי (0.404 מול 0.397), אך הרישיון בכרטיס ובמאמר אינו תואם.",
+    "sources": [
+     {
+      "url": "https://huggingface.co/dicta-il/neodictabert-bilingual-embed/raw/main/README.md",
+      "date": "2026-02-02",
+      "what": "model card: licence CC-BY-4.0, #10 on the private phase of the challenge",
+      "grade": "C"
+     },
+     {
+      "url": "https://arxiv.org/html/2510.20386",
+      "date": "2025-10-23",
+      "what": "retrieval result 0.404 vs 0.397; CC BY-SA statement; other Hebrew benchmarks used (UD parsing, NEMO NER, sentiment, HeQ)",
+      "grade": "A"
+     }
+    ],
+    "grade": "A",
+    "verified_at": "2026-11-05"
+   },
+   {
+    "id": "multilingual-e5",
+    "name": "multilingual-e5 (large, large-instruct, base)",
+    "kind": "model",
+    "url": "https://huggingface.co/intfloat/multilingual-e5-large",
+    "licence": "MIT (Hub tags on multilingual-e5-large and -large-instruct)",
+    "results": [
+     {
+      "metric": "Role in the Hebrew retrieval challenge",
+      "value": "multilingual-e5-base was the baseline embedding model: NDCG@20 0.397 (beaten by NeoDictaBERT-bilingual at 0.404)",
+      "on": "Hebrew Semantic Retrieval National Challenge baseline",
+      "source_url": "https://arxiv.org/html/2510.20386",
+      "source_date": "2025-10-23",
+      "grade": "C",
+      "note": "no Hebrew-only score for multilingual-e5-large was found"
+     }
+    ],
+    "hebrew_support": "yes — Hub language tags include he; card says 100 languages",
+    "summary_he": "multilingual-e5 ברישיון MIT מצהיר על 100 שפות כולל עברית, והגרסה base שימשה כבסיס באתגר האחזור העברי (0.397).",
+    "sources": [
+     {
+      "url": "https://huggingface.co/api/models/intfloat/multilingual-e5-large",
+      "date": "2026-04-02",
+      "what": "Hub record: license:mit, language tag he",
+      "grade": "A"
+     },
+     {
+      "url": "https://arxiv.org/html/2510.20386",
+      "date": "2025-10-23",
+      "what": "baseline NDCG@20",
+      "grade": "A"
+     }
+    ],
+    "grade": "A",
+    "verified_at": "2026-11-05"
+   },
+   {
+    "id": "bge-m3",
+    "name": "BGE-M3 (BAAI)",
+    "kind": "model",
+    "url": "https://huggingface.co/BAAI/bge-m3",
+    "licence": "MIT (Hub tag)",
+    "results": [],
+    "hebrew_support": "unknown — card describes it as multilingual; Hebrew is not named on the card and has no Hub language tag; no Hebrew retrieval score found",
+    "summary_he": "BGE-M3 ברישיון MIT הוא מודל רב-לשוני פופולרי, אבל עברית לא מוזכרת בכרטיס שלו ולא מצאנו עבורו מדידת אחזור בעברית.",
+    "sources": [
+     {
+      "url": "https://huggingface.co/api/models/BAAI/bge-m3",
+      "date": "2024-07-03",
+      "what": "Hub record: license:mit; no he tag",
+      "grade": "A"
+     }
+    ],
+    "grade": "A",
+    "verified_at": "2026-11-05"
+   },
+   {
+    "id": "qwen3-embedding",
+    "name": "Qwen3-Embedding (0.6B / 4B / 8B)",
+    "kind": "model",
+    "url": "https://huggingface.co/Qwen/Qwen3-Embedding-8B",
+    "licence": "Apache-2.0 (Hub tags on the 8B and 0.6B models)",
+    "results": [],
+    "hebrew_support": "unknown — card says 100+ languages; Hebrew not named; no Hebrew retrieval score found",
+    "summary_he": "Qwen3-Embedding ברישיון Apache-2.0 מצהיר על יותר מ-100 שפות, אך עברית לא מופיעה בשם בכרטיס ולא מצאנו מדידת אחזור עברית.",
+    "sources": [
+     {
+      "url": "https://huggingface.co/api/models/Qwen/Qwen3-Embedding-8B",
+      "date": "2025-07-07",
+      "what": "Hub record: license:apache-2.0",
+      "grade": "A"
+     },
+     {
+      "url": "https://huggingface.co/Qwen/Qwen3-Embedding-8B/raw/main/README.md",
+      "date": "2025-07-07",
+      "what": "README mentions '100+ languages'; no mention of Hebrew",
+      "grade": "C"
+     }
+    ],
+    "grade": "A",
+    "verified_at": "2026-11-05"
+   },
+   {
+    "id": "embeddinggemma-300m",
+    "name": "EmbeddingGemma 300M (Google)",
+    "kind": "model",
+    "url": "https://huggingface.co/google/embeddinggemma-300m",
+    "licence": "Gemma terms of use (Hub tag license:gemma) — custom licence, not OSI open source",
+    "results": [],
+    "hebrew_support": "unknown — the README contains no mention of Hebrew; no Hebrew retrieval score found",
+    "summary_he": "EmbeddingGemma בגודל 300M ברישיון Gemma (מותאם, לא קוד פתוח לפי OSI). עברית לא מוזכרת בכרטיס ואין מדידה עבורה.",
+    "sources": [
+     {
+      "url": "https://huggingface.co/api/models/google/embeddinggemma-300m",
+      "date": "2025-09-25",
+      "what": "Hub record: license:gemma",
+      "grade": "A"
+     }
+    ],
+    "grade": "A",
+    "verified_at": "2026-11-05"
+   },
+   {
+    "id": "hebrew-semantic-retrieval-national-challenge",
+    "name": "Hebrew Semantic Retrieval National Challenge (Codabench #9950)",
+    "kind": "benchmark",
+    "url": "https://www.codabench.org/competitions/9950/",
+    "licence": "UNVERIFIED — the competition page could not be read (our fetch returned unrelated text)",
+    "results": [
+     {
+      "metric": "What is known second-hand",
+      "value": "NDCG@20 is the metric used in the NeoDictaBERT paper (baseline multilingual-e5-base 0.397); NeoDictaBERT-bilingual-embed placed #10 on the private phase",
+      "on": "challenge baseline setup",
+      "source_url": "https://arxiv.org/html/2510.20386",
+      "source_date": "2025-10-23",
+      "grade": "C",
+      "note": "organisers, dates, data licence and the full leaderboard are not known to us"
+     }
+    ],
+    "hebrew_support": "yes — Hebrew-only retrieval challenge",
+    "summary_he": "אתגר לאומי לאחזור סמנטי בעברית ב-Codabench. אנו מכירים אותו רק דרך המאמר וכרטיס של דיקטה; את דף התחרות עצמו לא הצלחנו לקרוא.",
+    "sources": [
+     {
+      "url": "https://huggingface.co/dicta-il/neodictabert-bilingual-embed/raw/main/README.md",
+      "date": "2026-02-02",
+      "what": "model card linking the challenge",
+      "grade": "C"
+     },
+     {
+      "url": "https://arxiv.org/html/2510.20386",
+      "date": "2025-10-23",
+      "what": "paper using the challenge for retrieval evaluation",
+      "grade": "A"
+     }
+    ],
+    "grade": "C",
+    "verified_at": "2026-11-05"
+   },
+   {
+    "id": "mteb-hebrew-tasks",
+    "name": "MTEB — Hebrew tasks",
+    "kind": "benchmark",
+    "url": "https://huggingface.co/datasets/mteb/HebrewSentimentAnalysis",
+    "licence": "MIT (Hub tag on mteb/HebrewSentimentAnalysis, .v3 and V4)",
+    "results": [
+     {
+      "metric": "Hebrew datasets in the 'mteb' Hub organisation (name contains 'hebrew')",
+      "value": "only HebrewSentimentAnalysis (v1, v3, V4) — a classification task; no Hebrew retrieval task found by name",
+      "on": "Hub dataset search, author=mteb, search=hebrew",
+      "source_url": "https://huggingface.co/api/datasets?author=mteb&search=hebrew&limit=20",
+      "source_date": "2026-11-05",
+      "grade": "D",
+      "note": "multilingual MTEB tasks that include Hebrew inside a larger language set would not show up by name; so 'no Hebrew retrieval benchmark in MTEB' is NOT proven, only that none is Hebrew-named"
+     }
+    ],
+    "hebrew_support": "partial — sentiment classification only (by task name)",
+    "summary_he": "בארגון MTEB ב-Hugging Face מצאנו לפי שם רק משימת סנטימנט עברית (סיווג). לא מצאנו משימת אחזור שנקראת בעברית, אבל משימות רב-לשוניות עם עברית עלולות לא להופיע בחיפוש.",
+    "sources": [
+     {
+      "url": "https://huggingface.co/api/datasets?author=mteb&search=hebrew&limit=20",
+      "date": "2026-11-05",
+      "what": "four Hebrew-named datasets, all sentiment",
+      "grade": "D"
+     }
+    ],
+    "grade": "D",
+    "verified_at": "2026-11-05"
+   }
+  ],
+  "open_source_systems": [
+   {
+    "id": "ollama",
+    "name": "Ollama",
+    "kind": "tool",
+    "category": "LLM runtime",
+    "url": "https://github.com/ollama/ollama",
+    "licence": "MIT",
+    "results": [],
+    "hebrew_support": "n/a — runtime; Hebrew quality depends on the model you load",
+    "summary_he": "מריץ מודלי שפה מקומית בפקודה אחת, ברישיון MIT. איכות העברית נקבעת לפי המודל שנטען.",
+    "sources": [
+     {
+      "url": "https://github.com/ollama/ollama",
+      "date": "2026-11-05",
+      "what": "GitHub metadata: MIT; last push 2026-11-05",
+      "grade": "A"
+     }
+    ],
+    "grade": "A",
+    "verified_at": "2026-11-05"
+   },
+   {
+    "id": "llama-cpp",
+    "name": "llama.cpp",
+    "kind": "tool",
+    "category": "LLM runtime",
+    "url": "https://github.com/ggml-org/llama.cpp",
+    "licence": "MIT",
+    "results": [],
+    "hebrew_support": "n/a — runtime; model-dependent (GGUF builds of DictaLM 3.0 exist on the Hub)",
+    "summary_he": "מנוע הרצה בקוד פתוח (MIT) למודלי GGUF על מעבד ומעבד גרפי. הבסיס של כלים רבים אחרים.",
+    "sources": [
+     {
+      "url": "https://github.com/ggml-org/llama.cpp",
+      "date": "2026-11-05",
+      "what": "GitHub metadata: MIT",
+      "grade": "A"
+     },
+     {
+      "url": "https://huggingface.co/api/models?author=dicta-il&limit=100&full=true&config=false",
+      "date": "2025-12-10",
+      "what": "dicta-il publishes GGUF builds (DictaLM-3.0-24B-Thinking-GGUF, 1.7B-Thinking-GGUF, Nemotron-12B-Instruct-GGUF)",
+      "grade": "A"
+     }
+    ],
+    "grade": "A",
+    "verified_at": "2026-11-05"
+   },
+   {
+    "id": "vllm",
+    "name": "vLLM",
+    "kind": "tool",
+    "category": "LLM runtime (server, GPU)",
+    "url": "https://github.com/vllm-project/vllm",
+    "licence": "Apache-2.0",
+    "results": [],
+    "hebrew_support": "n/a — runtime; DictaLM 3.0 card recommends vLLM for serving",
+    "summary_he": "שרת הסקה מהיר למודלים גדולים על GPU, ברישיון Apache-2.0. כרטיס המודל של DictaLM 3.0 ממליץ עליו.",
+    "sources": [
+     {
+      "url": "https://github.com/vllm-project/vllm",
+      "date": "2026-11-05",
+      "what": "GitHub metadata: Apache-2.0",
+      "grade": "A"
+     },
+     {
+      "url": "https://huggingface.co/dicta-il/DictaLM-3.0-24B-Thinking",
+      "date": "2025-12-10",
+      "what": "model card recommends vLLM",
+      "grade": "C"
+     }
+    ],
+    "grade": "A",
+    "verified_at": "2026-11-05"
+   },
+   {
+    "id": "sglang",
+    "name": "SGLang",
+    "kind": "tool",
+    "category": "LLM runtime (server, GPU)",
+    "url": "https://github.com/sgl-project/sglang",
+    "licence": "Apache-2.0",
+    "results": [],
+    "hebrew_support": "n/a — runtime",
+    "summary_he": "מנוע הגשה למודלי שפה וסוכנים על GPU ברישיון Apache-2.0, חלופה ל-vLLM.",
+    "sources": [
+     {
+      "url": "https://github.com/sgl-project/sglang",
+      "date": "2026-11-05",
+      "what": "GitHub metadata: Apache-2.0",
+      "grade": "A"
+     }
+    ],
+    "grade": "A",
+    "verified_at": "2026-11-05"
+   },
+   {
+    "id": "lm-studio",
+    "name": "LM Studio",
+    "kind": "tool",
+    "category": "desktop LLM app (NOT open source)",
+    "url": "https://lmstudio.ai/",
+    "licence": "The desktop app is NOT open source and its terms were not readable on lmstudio.ai (home page shows no licence or EULA text). Only the `lms` command-line tool is open source, under MIT.",
+    "results": [],
+    "hebrew_support": "n/a — model-dependent",
+    "summary_he": "אפליקציית שולחן עבודה נוחה להרצת מודלים, אבל היא אינה קוד פתוח; רק כלי הפקודה lms ברישיון MIT.",
+    "sources": [
+     {
+      "url": "https://lmstudio.ai/",
+      "date": null,
+      "what": "home page: no licence / terms text found; says it runs on MLX and llama.cpp",
+      "grade": "C"
+     },
+     {
+      "url": "https://github.com/lmstudio-ai/lms",
+      "date": "2026-10-14",
+      "what": "GitHub metadata for the CLI: MIT",
+      "grade": "A"
+     }
+    ],
+    "grade": "C",
+    "verified_at": "2026-11-05"
+   },
+   {
+    "id": "open-webui",
+    "name": "Open WebUI",
+    "kind": "tool",
+    "category": "chat UI",
+    "url": "https://github.com/open-webui/open-webui",
+    "licence": "'Open WebUI License' — BSD-3-Clause-style text PLUS a branding clause: you may not alter or remove the Open WebUI name/logo unless the deployment has at most 50 end users in any rolling 30 days, or you have written permission, or an enterprise licence. Not an OSI-approved open-source licence.",
+    "results": [],
+    "hebrew_support": "n/a — model-dependent; RTL/Hebrew UI support not checked",
+    "summary_he": "ממשק צ׳אט פופולרי למודלים מקומיים. הרישיון המותאם שלו מחייב להשאיר את המיתוג כשיש יותר מ-50 משתמשים, ולכן אינו קוד פתוח במובן המלא.",
+    "sources": [
+     {
+      "url": "https://raw.githubusercontent.com/open-webui/open-webui/main/LICENSE",
+      "date": "2026-11-05",
+      "what": "LICENSE text, clause 4 (branding, 50-user exception)",
+      "grade": "A"
+     },
+     {
+      "url": "https://github.com/open-webui/open-webui",
+      "date": "2026-11-05",
+      "what": "GitHub metadata: licence NOASSERTION/Other",
+      "grade": "A"
+     }
+    ],
+    "grade": "A",
+    "verified_at": "2026-11-05"
+   },
+   {
+    "id": "localai",
+    "name": "LocalAI",
+    "kind": "tool",
+    "category": "OpenAI-compatible local server",
+    "url": "https://github.com/mudler/LocalAI",
+    "licence": "MIT",
+    "results": [],
+    "hebrew_support": "n/a — model-dependent",
+    "summary_he": "שרת מקומי תואם ל-API של OpenAI למודלי טקסט, דיבור ותמונה, ברישיון MIT.",
+    "sources": [
+     {
+      "url": "https://github.com/mudler/LocalAI",
+      "date": "2026-11-05",
+      "what": "GitHub metadata: MIT",
+      "grade": "A"
+     }
+    ],
+    "grade": "A",
+    "verified_at": "2026-11-05"
+   },
+   {
+    "id": "jan",
+    "name": "Jan",
+    "kind": "tool",
+    "category": "desktop LLM app",
+    "url": "https://github.com/janhq/jan",
+    "licence": "Apache-2.0 (Menlo Research; the LICENSE file adds a request for attribution — GitHub labels it 'Other')",
+    "results": [],
+    "hebrew_support": "n/a — model-dependent",
+    "summary_he": "אפליקציית צ׳אט מקומית בקוד פתוח של Menlo Research, ברישיון Apache-2.0 עם בקשת ייחוס.",
+    "sources": [
+     {
+      "url": "https://raw.githubusercontent.com/janhq/jan/dev/LICENSE",
+      "date": "2026-11-05",
+      "what": "LICENSE: Apache License 2.0, copyright Menlo Research",
+      "grade": "A"
+     },
+     {
+      "url": "https://github.com/janhq/jan",
+      "date": "2026-11-05",
+      "what": "GitHub metadata",
+      "grade": "A"
+     }
+    ],
+    "grade": "A",
+    "verified_at": "2026-11-05"
+   },
+   {
+    "id": "anythingllm",
+    "name": "AnythingLLM",
+    "kind": "tool",
+    "category": "RAG chat app",
+    "url": "https://github.com/Mintplex-Labs/anything-llm",
+    "licence": "MIT",
+    "results": [],
+    "hebrew_support": "n/a — model-dependent",
+    "summary_he": "אפליקציית צ׳אט עם מסמכים (RAG) ברישיון MIT שעובדת מול מודלים מקומיים או בענן.",
+    "sources": [
+     {
+      "url": "https://github.com/Mintplex-Labs/anything-llm",
+      "date": "2026-11-05",
+      "what": "GitHub metadata: MIT",
+      "grade": "A"
+     }
+    ],
+    "grade": "A",
+    "verified_at": "2026-11-05"
+   },
+   {
+    "id": "librechat",
+    "name": "LibreChat",
+    "kind": "tool",
+    "category": "chat UI",
+    "url": "https://github.com/LibreChat-AI/LibreChat",
+    "licence": "MIT",
+    "results": [],
+    "hebrew_support": "n/a — model-dependent",
+    "summary_he": "ממשק צ׳אט רב-ספקים ברישיון MIT. המאגר עבר מ-danny-avila/LibreChat לארגון LibreChat-AI.",
+    "sources": [
+     {
+      "url": "https://github.com/LibreChat-AI/LibreChat",
+      "date": "2026-11-05",
+      "what": "GitHub metadata after redirect from danny-avila/LibreChat: MIT",
+      "grade": "A"
+     }
+    ],
+    "grade": "A",
+    "verified_at": "2026-11-05"
+   },
+   {
+    "id": "whisper-cpp",
+    "name": "whisper.cpp",
+    "kind": "tool",
+    "category": "STT engine",
+    "url": "https://github.com/ggml-org/whisper.cpp",
+    "licence": "MIT",
+    "results": [],
+    "hebrew_support": "yes via model — ivrit.ai publishes GGML builds of its Hebrew Whisper (e.g. whisper-large-v3-ggml, Apache-2.0)",
+    "summary_he": "ריצת Whisper יעילה על מעבד רגיל, ברישיון MIT. ל-ivrit.ai יש גרסאות GGML של Whisper העברי המכוון.",
+    "sources": [
+     {
+      "url": "https://github.com/ggml-org/whisper.cpp",
+      "date": "2026-11-05",
+      "what": "GitHub metadata: MIT",
+      "grade": "A"
+     },
+     {
+      "url": "https://huggingface.co/api/models?author=ivrit-ai&limit=100&sort=createdAt",
+      "date": "2026-02-09",
+      "what": "ivrit-ai/whisper-large-v3-ggml and yi-whisper-large-v3-ggml, license:apache-2.0",
+      "grade": "A"
+     }
+    ],
+    "grade": "A",
+    "verified_at": "2026-11-05"
+   },
+   {
+    "id": "faster-whisper",
+    "name": "faster-whisper",
+    "kind": "tool",
+    "category": "STT engine",
+    "url": "https://github.com/SYSTRAN/faster-whisper",
+    "licence": "MIT",
+    "results": [],
+    "hebrew_support": "yes via model — it is the engine the ivrit.ai leaderboard runs; ivrit.ai ships CT2 builds (whisper-large-v3-ct2, Apache-2.0)",
+    "summary_he": "מנוע Whisper מהיר (CTranslate2) ברישיון MIT; זה המנוע שבו לוח ivrit.ai מריץ את מודלי Whisper העבריים.",
+    "sources": [
+     {
+      "url": "https://github.com/SYSTRAN/faster-whisper",
+      "date": "2026-11-02",
+      "what": "GitHub metadata: MIT",
+      "grade": "A"
+     },
+     {
+      "url": "https://huggingface.co/spaces/ivrit-ai/hebrew-transcription-leaderboard/raw/main/benchmark.csv",
+      "date": "2026-10-14",
+      "what": "rows with engine faster-whisper",
+      "grade": "A"
+     }
+    ],
+    "grade": "A",
+    "verified_at": "2026-11-05"
+   },
+   {
+    "id": "whisperx",
+    "name": "WhisperX",
+    "kind": "tool",
+    "category": "STT pipeline (alignment, diarization)",
+    "url": "https://github.com/m-bain/whisperX",
+    "licence": "BSD-2-Clause",
+    "results": [],
+    "hebrew_support": "unknown — Hebrew alignment-model availability not checked",
+    "summary_he": "שכבה מעל Whisper למילה-מול-זמן והפרדת דוברים, ברישיון BSD-2. לא בדקנו תמיכת יישור בעברית.",
+    "sources": [
+     {
+      "url": "https://github.com/m-bain/whisperX",
+      "date": "2026-10-22",
+      "what": "GitHub metadata: BSD-2-Clause",
+      "grade": "A"
+     }
+    ],
+    "grade": "A",
+    "verified_at": "2026-11-05"
+   },
+   {
+    "id": "openai-whisper",
+    "name": "OpenAI Whisper (reference code)",
+    "kind": "tool",
+    "category": "STT engine",
+    "url": "https://github.com/openai/whisper",
+    "licence": "MIT (code); model weights on the Hub: large-v3 Apache-2.0, large-v3-turbo MIT",
+    "results": [],
+    "hebrew_support": "yes — Hebrew is a Whisper language (see stt_hebrew for WER)",
+    "summary_he": "קוד היחוס של Whisper ברישיון MIT; ה-WER שלו בעברית כפול בערך מהכוונונים של ivrit.ai.",
+    "sources": [
+     {
+      "url": "https://github.com/openai/whisper",
+      "date": "2026-08-31",
+      "what": "GitHub metadata: MIT",
+      "grade": "A"
+     }
+    ],
+    "grade": "A",
+    "verified_at": "2026-11-05"
+   },
+   {
+    "id": "piper-tts",
+    "name": "Piper (rhasspy) and its successor piper1-gpl",
+    "kind": "tool",
+    "category": "TTS engine",
+    "url": "https://github.com/rhasspy/piper",
+    "licence": "rhasspy/piper: MIT, but the repository is ARCHIVED (read-only, last push 2025-08-26). Successor OHF-Voice/piper1-gpl is GPL-3.0 (active, last push 2026-11-02).",
+    "results": [],
+    "hebrew_support": "partial — the voices repo has one Hebrew voice (he_IL-saspeech-medium) trained on non-commercial data",
+    "summary_he": "מנוע דיבור קל משקל. המאגר המקורי בארכיון ב-MIT, והמשכו GPL-3.0. יש לו קול עברי רשמי אחד שאומן על נתונים לא מסחריים.",
+    "sources": [
+     {
+      "url": "https://github.com/rhasspy/piper",
+      "date": "2025-08-26",
+      "what": "GitHub metadata: MIT, archived=true",
+      "grade": "A"
+     },
+     {
+      "url": "https://github.com/OHF-Voice/piper1-gpl",
+      "date": "2026-11-02",
+      "what": "GitHub metadata: GPL-3.0, not archived",
+      "grade": "A"
+     },
+     {
+      "url": "https://huggingface.co/rhasspy/piper-voices",
+      "date": "2026-11-02",
+      "what": "voices repo (MIT) with a he directory",
+      "grade": "A"
+     }
+    ],
+    "grade": "A",
+    "verified_at": "2026-11-05"
+   },
+   {
+    "id": "coqui-tts",
+    "name": "Coqui TTS (and the idiap fork)",
+    "kind": "tool",
+    "category": "TTS engine",
+    "url": "https://github.com/coqui-ai/TTS",
+    "licence": "Code: MPL-2.0. XTTS-v2 weights: Hub tag 'other' (custom Coqui licence; not read).",
+    "results": [],
+    "hebrew_support": "unknown — Hebrew support of XTTS-v2 not checked",
+    "summary_he": "ספריית TTS ברישיון MPL-2.0. המאגר המקורי לא עודכן מאז אוגוסט 2024; הפיתוח נמשך בהסתעפות של idiap. משקולות XTTS-v2 תחת רישיון מותאם.",
+    "sources": [
+     {
+      "url": "https://github.com/coqui-ai/TTS",
+      "date": "2024-08-16",
+      "what": "GitHub metadata: MPL-2.0, last push 2024-08-16, not archived",
+      "grade": "A"
+     },
+     {
+      "url": "https://github.com/idiap/coqui-ai-TTS",
+      "date": "2026-10-24",
+      "what": "maintained fork: MPL-2.0, last push 2026-10-24",
+      "grade": "A"
+     },
+     {
+      "url": "https://huggingface.co/api/models/coqui/XTTS-v2",
+      "date": "2023-12-11",
+      "what": "Hub record: license:other",
+      "grade": "A"
+     }
+    ],
+    "grade": "A",
+    "verified_at": "2026-11-05"
+   },
+   {
+    "id": "tesseract-ocr",
+    "name": "Tesseract",
+    "kind": "tool",
+    "category": "OCR engine",
+    "url": "https://github.com/tesseract-ocr/tesseract",
+    "licence": "Apache-2.0",
+    "results": [],
+    "hebrew_support": "yes — heb.traineddata (see ocr_hebrew)",
+    "summary_he": "מנוע OCR קלאסי ברישיון Apache-2.0 עם קבצי עברית רשמיים.",
+    "sources": [
+     {
+      "url": "https://github.com/tesseract-ocr/tesseract",
+      "date": "2026-11-02",
+      "what": "GitHub metadata: Apache-2.0",
+      "grade": "A"
+     }
+    ],
+    "grade": "A",
+    "verified_at": "2026-11-05"
+   },
+   {
+    "id": "ocrmypdf",
+    "name": "OCRmyPDF",
+    "kind": "tool",
+    "category": "PDF OCR wrapper",
+    "url": "https://github.com/ocrmypdf/OCRmyPDF",
+    "licence": "MPL-2.0",
+    "results": [],
+    "hebrew_support": "unknown — not checked; relies on an OCR engine (Tesseract has Hebrew data)",
+    "summary_he": "כלי שמוסיף שכבת טקסט לקובצי PDF סרוקים, ברישיון MPL-2.0. תמיכת העברית נגזרת מהמנוע שמאחוריו.",
+    "sources": [
+     {
+      "url": "https://github.com/ocrmypdf/OCRmyPDF",
+      "date": "2026-10-25",
+      "what": "GitHub metadata: MPL-2.0",
+      "grade": "A"
+     }
+    ],
+    "grade": "A",
+    "verified_at": "2026-11-05"
+   },
+   {
+    "id": "surya-system",
+    "name": "Surya",
+    "kind": "tool",
+    "category": "OCR + layout",
+    "url": "https://github.com/datalab-to/surya",
+    "licence": "Code Apache-2.0; model weights modified AI Pubs Open Rail-M (free for research, personal use, startups under $5M funding/revenue; otherwise paid)",
+    "results": [],
+    "hebrew_support": "unknown — see ocr_hebrew",
+    "summary_he": "OCR עם זיהוי פריסה. הקוד ב-Apache-2.0 אבל המשקולות בתנאים מגבילים לעסקים מעל סף מסוים.",
+    "sources": [
+     {
+      "url": "https://raw.githubusercontent.com/datalab-to/surya/master/README.md",
+      "date": "2026-10-29",
+      "what": "Commercial usage section",
+      "grade": "C"
+     }
+    ],
+    "grade": "C",
+    "verified_at": "2026-11-05"
+   },
+   {
+    "id": "doctr-system",
+    "name": "docTR",
+    "kind": "tool",
+    "category": "OCR toolkit",
+    "url": "https://github.com/mindee/doctr",
+    "licence": "Apache-2.0",
+    "results": [],
+    "hebrew_support": "partial — Hebrew vocabulary defined; no pretrained Hebrew model found (see ocr_hebrew)",
+    "summary_he": "ספריית OCR ברישיון Apache-2.0 עם אוצר תווים עברי, אך בלי מודל עברי מוכן שמצאנו.",
+    "sources": [
+     {
+      "url": "https://github.com/mindee/doctr",
+      "date": "2026-11-03",
+      "what": "GitHub metadata: Apache-2.0",
+      "grade": "A"
+     }
+    ],
+    "grade": "A",
+    "verified_at": "2026-11-05"
+   },
+   {
+    "id": "docling",
+    "name": "Docling",
+    "kind": "tool",
+    "category": "document conversion",
+    "url": "https://github.com/docling-project/docling",
+    "licence": "MIT",
+    "results": [],
+    "hebrew_support": "unknown — not checked; depends on the OCR backend",
+    "summary_he": "ממיר מסמכים (PDF, Office) למבנה נקי לשימוש במודלים, ברישיון MIT. תמיכת העברית תלויה במנוע ה-OCR.",
+    "sources": [
+     {
+      "url": "https://github.com/docling-project/docling",
+      "date": "2026-11-05",
+      "what": "GitHub metadata: MIT",
+      "grade": "A"
+     }
+    ],
+    "grade": "A",
+    "verified_at": "2026-11-05"
+   },
+   {
+    "id": "unstructured",
+    "name": "Unstructured (open-source library)",
+    "kind": "tool",
+    "category": "document partitioning",
+    "url": "https://github.com/Unstructured-IO/unstructured",
+    "licence": "Apache-2.0",
+    "results": [],
+    "hebrew_support": "unknown — not checked",
+    "summary_he": "ספריית פירוק מסמכים לחלקים מובנים ברישיון Apache-2.0. תמיכת העברית לא נבדקה.",
+    "sources": [
+     {
+      "url": "https://github.com/Unstructured-IO/unstructured",
+      "date": "2026-11-04",
+      "what": "GitHub metadata: Apache-2.0",
+      "grade": "A"
+     }
+    ],
+    "grade": "A",
+    "verified_at": "2026-11-05"
+   },
+   {
+    "id": "n8n",
+    "name": "n8n",
+    "kind": "tool",
+    "category": "workflow automation",
+    "url": "https://github.com/n8n-io/n8n",
+    "licence": "Sustainable Use License v1.0 (use or modify only for your own internal business purposes or non-commercial/personal use; no reselling) — NOT OSI open source. Files with '.ee.' in the name need the n8n Enterprise License.",
+    "results": [],
+    "hebrew_support": "n/a — workflow engine",
+    "summary_he": "מנוע אוטומציה עם רישיון Sustainable Use: מותר לשימוש עסקי פנימי אבל לא להפצה מסחרית, ולכן אינו קוד פתוח לפי OSI.",
+    "sources": [
+     {
+      "url": "https://raw.githubusercontent.com/n8n-io/n8n/master/LICENSE.md",
+      "date": "2026-11-05",
+      "what": "LICENSE.md: Sustainable Use License 1.0 and Enterprise carve-out",
+      "grade": "A"
+     },
+     {
+      "url": "https://github.com/n8n-io/n8n",
+      "date": "2026-11-05",
+      "what": "GitHub metadata: NOASSERTION/Other",
+      "grade": "A"
+     }
+    ],
+    "grade": "A",
+    "verified_at": "2026-11-05"
+   },
+   {
+    "id": "flowise",
+    "name": "Flowise",
+    "kind": "tool",
+    "category": "visual LLM-flow builder",
+    "url": "https://github.com/FlowiseAI/Flowise",
+    "licence": "Apache-2.0 for everything outside packages/server/src/enterprise; that directory is under a commercial licence",
+    "results": [
+     {
+      "metric": "Project status",
+      "value": "ARCHIVED: code freeze 2026-07-29, repository read-only 2026-08-13, end of life 2026-08-31; no successor maintainers named, users are told to fork",
+      "on": "maintainers' announcement (GitHub Discussions #6727); README banner 'Flowise has been archived'",
+      "source_url": "https://github.com/FlowiseAI/Flowise/discussions/6727",
+      "source_date": "2026-08-13",
+      "grade": "A",
+      "note": "dates as stated in the announcement"
+     }
+    ],
+    "hebrew_support": "n/a",
+    "summary_he": "בונה זרימות ויזואלי ל-LLM בקוד פתוח (Apache-2.0), אבל הפרויקט הועבר לארכיון באוגוסט 2026 וללא מתחזקים רשמיים — לא מומלץ להתחיל בו פרויקט חדש.",
+    "sources": [
+     {
+      "url": "https://github.com/FlowiseAI/Flowise/discussions/6727",
+      "date": "2026-08-13",
+      "what": "announcement of wind-down and dates",
+      "grade": "A"
+     },
+     {
+      "url": "https://raw.githubusercontent.com/FlowiseAI/Flowise/main/LICENSE.md",
+      "date": "2026-08-13",
+      "what": "LICENSE.md: Apache 2.0 + commercial enterprise directory",
+      "grade": "A"
+     }
+    ],
+    "grade": "A",
+    "verified_at": "2026-11-05"
+   },
+   {
+    "id": "langflow",
+    "name": "Langflow",
+    "kind": "tool",
+    "category": "visual LLM-flow builder",
+    "url": "https://github.com/langflow-ai/langflow",
+    "licence": "MIT",
+    "results": [],
+    "hebrew_support": "n/a",
+    "summary_he": "בונה זרימות ויזואלי לסוכנים ו-RAG ברישיון MIT, פעיל כיום.",
+    "sources": [
+     {
+      "url": "https://github.com/langflow-ai/langflow",
+      "date": "2026-11-05",
+      "what": "GitHub metadata: MIT",
+      "grade": "A"
+     }
+    ],
+    "grade": "A",
+    "verified_at": "2026-11-05"
+   },
+   {
+    "id": "dify",
+    "name": "Dify",
+    "kind": "tool",
+    "category": "LLM app platform",
+    "url": "https://github.com/langgenius/dify",
+    "licence": "'Dify Open Source License' = Apache-2.0 modified: commercial use allowed, but a commercial licence is needed to run a multi-tenant service (one workspace = one tenant) and you may not remove the logo / copyright in the web frontend. NOT plain Apache-2.0 / not OSI.",
+    "results": [],
+    "hebrew_support": "n/a",
+    "summary_he": "פלטפורמה לבניית אפליקציות LLM עם רישיון Apache-2.0 מותאם: אסור להפעיל אותה כשירות רב-דיירים ללא רישיון מסחרי ואסור להסיר את הלוגו.",
+    "sources": [
+     {
+      "url": "https://raw.githubusercontent.com/langgenius/dify/main/LICENSE",
+      "date": "2026-11-05",
+      "what": "LICENSE text: additional conditions (multi-tenant, logo)",
+      "grade": "A"
+     },
+     {
+      "url": "https://github.com/langgenius/dify",
+      "date": "2026-11-05",
+      "what": "GitHub metadata: NOASSERTION/Other",
+      "grade": "A"
+     }
+    ],
+    "grade": "A",
+    "verified_at": "2026-11-05"
+   },
+   {
+    "id": "haystack",
+    "name": "Haystack (deepset)",
+    "kind": "tool",
+    "category": "RAG framework",
+    "url": "https://github.com/deepset-ai/haystack",
+    "licence": "Apache-2.0",
+    "results": [],
+    "hebrew_support": "n/a — framework",
+    "summary_he": "מסגרת RAG וסוכנים של deepset ברישיון Apache-2.0, פעילה כיום.",
+    "sources": [
+     {
+      "url": "https://github.com/deepset-ai/haystack",
+      "date": "2026-11-05",
+      "what": "GitHub metadata: Apache-2.0",
+      "grade": "A"
+     }
+    ],
+    "grade": "A",
+    "verified_at": "2026-11-05"
+   },
+   {
+    "id": "easyocr-system",
+    "name": "EasyOCR",
+    "kind": "tool",
+    "category": "OCR toolkit",
+    "url": "https://github.com/JaidedAI/EasyOCR",
+    "licence": "Apache-2.0",
+    "results": [],
+    "hebrew_support": "no — Hebrew not in its language lists (see ocr_hebrew)",
+    "summary_he": "ספריית OCR ברישיון Apache-2.0 שאין בה עברית.",
+    "sources": [
+     {
+      "url": "https://github.com/JaidedAI/EasyOCR",
+      "date": "2025-12-05",
+      "what": "GitHub metadata: Apache-2.0",
+      "grade": "A"
+     }
+    ],
+    "grade": "A",
+    "verified_at": "2026-11-05"
+   },
+   {
+    "id": "paddleocr-system",
+    "name": "PaddleOCR",
+    "kind": "tool",
+    "category": "OCR toolkit",
+    "url": "https://github.com/PaddlePaddle/PaddleOCR",
+    "licence": "Apache-2.0",
+    "results": [],
+    "hebrew_support": "unknown — Hebrew not listed for PP-OCRv5 (see ocr_hebrew)",
+    "summary_he": "ערכת OCR ברישיון Apache-2.0; עברית אינה ברשימת השפות של PP-OCRv5.",
+    "sources": [
+     {
+      "url": "https://github.com/PaddlePaddle/PaddleOCR",
+      "date": "2026-09-16",
+      "what": "GitHub metadata: Apache-2.0",
+      "grade": "A"
+     }
+    ],
+    "grade": "A",
+    "verified_at": "2026-11-05"
+   },
+   {
+    "id": "olmocr-system",
+    "name": "olmOCR",
+    "kind": "tool",
+    "category": "VLM-based OCR",
+    "url": "https://github.com/allenai/olmocr",
+    "licence": "Apache-2.0",
+    "results": [],
+    "hebrew_support": "unknown — see ocr_hebrew",
+    "summary_he": "כלי OCR מבוסס מודל חזותי של Allen AI ברישיון Apache-2.0; אין עדות לתמיכה בעברית.",
+    "sources": [
+     {
+      "url": "https://github.com/allenai/olmocr",
+      "date": "2026-03-25",
+      "what": "GitHub metadata: Apache-2.0",
+      "grade": "A"
+     }
+    ],
+    "grade": "A",
+    "verified_at": "2026-11-05"
+   }
+  ],
+  "hebrew_datasets": [
+   {
+    "id": "heq",
+    "name": "HeQ — Hebrew Question Answering Dataset",
+    "kind": "dataset",
+    "url": "https://github.com/NNLP-IL/Hebrew-Question-Answering-Dataset",
+    "licence": "CC BY 4.0 (the repository's LICENSE file begins 'Attribution 4.0 International') — VERIFIED",
+    "results": [
+     {
+      "metric": "Size",
+      "value": "30,147 questions: 21,784 answerable + 8,363 unanswerable; paragraphs from Hebrew Wikipedia and Geektime; 28% manually verified. The Hebrew LLM Leaderboard uses 1,436 test prompts from it.",
+      "on": "repo README",
+      "source_url": "https://raw.githubusercontent.com/NNLP-IL/Hebrew-Question-Answering-Dataset/main/README.md",
+      "source_date": null,
+      "grade": "A",
+      "note": "run by NNLP-IL / MAFAT; paper link used by the leaderboard: https://aclanthology.org/2023.findings-emnlp.915/ (seen in the leaderboard About text, page not opened)"
+     }
+    ],
+    "hebrew_support": "yes — Hebrew-only",
+    "summary_he": "מאגר שאלות ותשובות בעברית (30 אלף שאלות) בסגנון SQuAD, מתוך ויקיפדיה וגיקטיים, ברישיון CC BY 4.0. משמש בלוח העברי של דיקטה.",
+    "sources": [
+     {
+      "url": "https://raw.githubusercontent.com/NNLP-IL/Hebrew-Question-Answering-Dataset/main/LICENSE",
+      "date": null,
+      "what": "LICENSE: Creative Commons Attribution 4.0",
+      "grade": "A"
+     },
+     {
+      "url": "https://raw.githubusercontent.com/NNLP-IL/Hebrew-Question-Answering-Dataset/main/README.md",
+      "date": null,
+      "what": "size, composition, quality labels",
+      "grade": "A"
+     }
+    ],
+    "grade": "A",
+    "verified_at": "2026-11-05"
+   },
+   {
+    "id": "belebele",
+    "name": "Belebele (Meta) — Hebrew config",
+    "kind": "dataset",
+    "url": "https://huggingface.co/datasets/facebook/belebele",
+    "licence": "CC-BY-SA-4.0 (Hub tag) — VERIFIED; ShareAlike applies to derived data",
+    "results": [
+     {
+      "metric": "Coverage",
+      "value": "122 language/script configs on the Hub incl. Hebrew (tag 'he'); the Qwen3 report lists heb_Hebr in its Belebele language table",
+      "on": "Hub API record; Qwen3 report Table 36",
+      "source_url": "https://huggingface.co/api/datasets/facebook/belebele",
+      "source_date": "2024-08-12",
+      "grade": "A",
+      "note": "date = Hub lastModified. Published per-model Hebrew-only Belebele scores were not found (Qwen3 gives language-family averages only)."
+     }
+    ],
+    "hebrew_support": "yes — multiple-choice reading comprehension, parallel across languages",
+    "summary_he": "מבחן הבנת הנקרא רב-לשוני של Meta הכולל עברית (heb_Hebr), ברישיון CC BY-SA 4.0. לא מצאנו פרסום של ציון עברי בלבד למודלים גדולים.",
+    "sources": [
+     {
+      "url": "https://huggingface.co/api/datasets/facebook/belebele",
+      "date": "2024-08-12",
+      "what": "licence tag cc-by-sa-4.0, 122 configs, language tags incl. he",
+      "grade": "A"
+     },
+     {
+      "url": "https://arxiv.org/html/2505.09388v1",
+      "date": null,
+      "what": "Qwen3 report Table 36 lists heb_Hebr",
+      "grade": "A"
+     }
+    ],
+    "grade": "A",
+    "verified_at": "2026-11-05"
+   },
+   {
+    "id": "flores-200",
+    "name": "FLORES-200 (Meta)",
+    "kind": "dataset",
+    "url": "https://huggingface.co/datasets/facebook/flores",
+    "licence": "CC-BY-SA-4.0 (Hub tag) — VERIFIED. Gated: 'auto' (you must accept access conditions on the Hub).",
+    "results": [
+     {
+      "metric": "Hebrew in the dataset",
+      "value": "language tag 'he' present on the Hub record",
+      "on": "Hub API record",
+      "source_url": "https://huggingface.co/api/datasets/facebook/flores",
+      "source_date": "2026-05-29",
+      "grade": "A",
+      "note": "date = Hub lastModified"
+     }
+    ],
+    "hebrew_support": "yes — translation evaluation (parallel sentences)",
+    "summary_he": "סט תרגום מקביל של Meta עם עברית, ברישיון CC BY-SA 4.0. הגישה מחייבת אישור תנאים ב-Hugging Face.",
+    "sources": [
+     {
+      "url": "https://huggingface.co/api/datasets/facebook/flores",
+      "date": "2026-05-29",
+      "what": "license:cc-by-sa-4.0, gated auto, language tag he",
+      "grade": "A"
+     }
+    ],
+    "grade": "A",
+    "verified_at": "2026-11-05"
+   },
+   {
+    "id": "flores-plus",
+    "name": "FLORES+ (Open Language Data)",
+    "kind": "dataset",
+    "url": "https://huggingface.co/datasets/openlanguagedata/flores_plus",
+    "licence": "CC-BY-SA-4.0 (Hub tag) — VERIFIED. Gated: 'auto'.",
+    "results": [
+     {
+      "metric": "Hebrew in the dataset",
+      "value": "language tag 'he' present on the Hub record",
+      "on": "Hub API record",
+      "source_url": "https://huggingface.co/api/datasets/openlanguagedata/flores_plus",
+      "source_date": "2026-10-25",
+      "grade": "A",
+      "note": "date = Hub lastModified; the community-maintained successor of FLORES-200"
+     }
+    ],
+    "hebrew_support": "yes — translation evaluation",
+    "summary_he": "ההמשך הקהילתי של FLORES-200, כולל עברית, ברישיון CC BY-SA 4.0 ועם שער גישה אוטומטי; עודכן באוקטובר 2026.",
+    "sources": [
+     {
+      "url": "https://huggingface.co/api/datasets/openlanguagedata/flores_plus",
+      "date": "2026-10-25",
+      "what": "license:cc-by-sa-4.0, gated auto, he",
+      "grade": "A"
+     }
+    ],
+    "grade": "A",
+    "verified_at": "2026-11-05"
+   },
+   {
+    "id": "global-mmlu",
+    "name": "Global-MMLU (Cohere Labs)",
+    "kind": "dataset",
+    "url": "https://huggingface.co/datasets/CohereLabs/Global-MMLU",
+    "licence": "Apache-2.0 (Hub tag) — VERIFIED",
+    "results": [
+     {
+      "metric": "Hebrew status",
+      "value": "42 languages incl. he. Per the paper's Table 5 Hebrew is mid-resource and its data is machine-translated only (no human-translated Hebrew); culturally sensitive / agnostic subsets exist",
+      "on": "Hub record + paper Table 5",
+      "source_url": "https://arxiv.org/html/2412.03304v2",
+      "source_date": null,
+      "grade": "A",
+      "note": "Global-MMLU-Lite (23 languages) does NOT include Hebrew. Per-model Hebrew rows could not be read (Appendix F tables)."
+     }
+    ],
+    "hebrew_support": "partial — machine-translated Hebrew MMLU, no human review",
+    "summary_he": "גרסה רב-לשונית של MMLU ל-42 שפות כולל עברית, ברישיון Apache-2.0. העברית בה מתורגמת במכונה בלבד; גרסת Lite אינה כוללת עברית.",
+    "sources": [
+     {
+      "url": "https://huggingface.co/api/datasets/CohereLabs/Global-MMLU",
+      "date": "2025-08-14",
+      "what": "license:apache-2.0, 42 configs incl. he",
+      "grade": "A"
+     },
+     {
+      "url": "https://arxiv.org/html/2412.03304v2",
+      "date": null,
+      "what": "Table 5: Hebrew, Hebrew script, mid-resource, machine-translated only",
+      "grade": "A"
+     }
+    ],
+    "grade": "A",
+    "verified_at": "2026-11-05"
+   },
+   {
+    "id": "ivrit-ai-eval-d1-whatsapp",
+    "name": "ivrit.ai eval-d1 and eval-whatsapp (ASR test sets)",
+    "kind": "dataset",
+    "url": "https://huggingface.co/datasets/ivrit-ai/eval-whatsapp",
+    "licence": "'ivrit.ai License v2' (Hub tag other / ivrit.ai-v2): CC BY 4.0 plus ivrit.ai terms — use only for training AI models or for academic research; no deep-fakes; export-control compliance (dated 2024-10-01). Gated: you must accept conditions. eval-d1 carries the same 'other' tag but its card is not readable without access: UNVERIFIED for d1.",
+    "results": [
+     {
+      "metric": "Size",
+      "value": "eval-whatsapp: 54 recordings, 70.8 minutes, Ogg/Opus voice messages from volunteers (April 2025), expert-corrected | eval-d1: about 2 hours, one two-speaker podcast episode manually transcribed, 5-minute chunks",
+      "on": "dataset card + leaderboard About text",
+      "source_url": "https://huggingface.co/datasets/ivrit-ai/eval-whatsapp",
+      "source_date": "2025-11-19",
+      "grade": "A",
+      "note": "date = Hub lastModified of both sets. The card says the licence 'enables broad research and commercial use' while the licence text restricts purposes to AI training or academic research — read the licence."
+     }
+    ],
+    "hebrew_support": "yes — Hebrew speech",
+    "summary_he": "שני סטי המבחן של ivrit.ai לתעתוק (פודקאסט של כשעתיים והודעות וואטסאפ של 70 דקות), בגישה מוגבלת ובתנאי רישיון ivrit.ai: שימוש לאימון מודלים או למחקר אקדמי בלבד.",
+    "sources": [
+     {
+      "url": "https://huggingface.co/datasets/ivrit-ai/eval-whatsapp",
+      "date": "2025-11-19",
+      "what": "card: size, date, licence name, gating",
+      "grade": "A"
+     },
+     {
+      "url": "https://www.ivrit.ai/en/the-license",
+      "date": "2024-10-01",
+      "what": "licence v2 text: CC BY 4.0 base, permitted purposes and restrictions",
+      "grade": "A"
+     },
+     {
+      "url": "https://huggingface.co/api/datasets/ivrit-ai/eval-d1",
+      "date": "2025-11-19",
+      "what": "Hub record: license:other, gated auto",
+      "grade": "A"
+     }
+    ],
+    "grade": "A",
+    "verified_at": "2026-11-05"
+   },
+   {
+    "id": "fleurs-he",
+    "name": "FLEURS Hebrew (google/fleurs)",
+    "kind": "dataset",
+    "url": "https://huggingface.co/datasets/google/fleurs",
+    "licence": "CC-BY-4.0 (Hub tag) — VERIFIED",
+    "results": [
+     {
+      "metric": "Use in ASR benchmarks",
+      "value": "about 2 hours of read speech (test set) used as the FLEURS-he column of the ivrit.ai leaderboard; best WER there 17.4% (ivrit-ai whisper-large-v3-ct2)",
+      "on": "ivrit.ai leaderboard",
+      "source_url": "https://huggingface.co/spaces/ivrit-ai/hebrew-transcription-leaderboard/raw/main/benchmark.csv",
+      "source_date": "2026-10-14",
+      "grade": "A",
+      "note": "licence from the Hub record, lastModified 2026-05-15"
+     }
+    ],
+    "hebrew_support": "yes — read speech",
+    "summary_he": "סט דיבור מוקרא של גוגל ברישיון CC BY 4.0 הכולל עברית. WER הטוב ביותר בלוח ivrit.ai לסט הזה הוא 17.4% – קשה בהרבה מסטי השיחה.",
+    "sources": [
+     {
+      "url": "https://huggingface.co/api/datasets/google/fleurs",
+      "date": "2026-05-15",
+      "what": "license:cc-by-4.0, tag he",
+      "grade": "A"
+     },
+     {
+      "url": "https://huggingface.co/spaces/ivrit-ai/hebrew-transcription-leaderboard/raw/main/src/about.py",
+      "date": null,
+      "what": "description of the FLEURS he test set",
+      "grade": "A"
+     },
+     {
+      "url": "https://huggingface.co/spaces/ivrit-ai/hebrew-transcription-leaderboard/raw/main/benchmark.csv",
+      "date": "2026-10-14",
+      "what": "FLEURS-he WER column",
+      "grade": "A"
+     }
+    ],
+    "grade": "A",
+    "verified_at": "2026-11-05"
+   },
+   {
+    "id": "saspeech",
+    "name": "SASpeech (Shaul Amsterdamski; IPBC/Kan)",
+    "kind": "dataset",
+    "url": "https://huggingface.co/datasets/upai-inc/saspeech",
+    "licence": "Custom, NON-COMMERCIAL: copyright owned by the Israeli Public Broadcasting Corporation; free for non-commercial purposes under conditions (Hub tag 'other'; full licence PDF linked from the card) — VERIFIED from the dataset card",
+    "results": [
+     {
+      "metric": "Size",
+      "value": "gold-standard subset about 4 hours (2,986 test examples) of one studio speaker, 44.1 kHz; full corpus on OpenSLR 134 has 24+ more hours",
+      "on": "dataset card",
+      "source_url": "https://huggingface.co/datasets/upai-inc/saspeech/raw/main/README.md",
+      "source_date": "2024-12-26",
+      "grade": "A",
+      "note": "used as the saspeech column of the ivrit.ai ASR board and to train the official Piper Hebrew voice"
+     }
+    ],
+    "hebrew_support": "yes — single-speaker Hebrew speech for TTS and ASR",
+    "summary_he": "מאגר דיבור של דובר יחיד שבבעלות תאגיד השידור (כאן), כ-4 שעות בגרסת הזהב. מותר לשימוש לא מסחרי בלבד, ולכן קולות שאומנו עליו מוגבלים באותו אופן.",
+    "sources": [
+     {
+      "url": "https://huggingface.co/datasets/upai-inc/saspeech/raw/main/README.md",
+      "date": "2024-12-26",
+      "what": "card: size, speaker, licence summary",
+      "grade": "A"
+     }
+    ],
+    "grade": "A",
+    "verified_at": "2026-11-05"
+   },
+   {
+    "id": "ilspeech",
+    "name": "ILSpeech (Phonikud)",
+    "kind": "dataset",
+    "url": "https://huggingface.co/datasets/Phonikud/ILSpeech",
+    "licence": "Non-commercial (card: 'Non commercial. See LICENSE') — VERIFIED from the card",
+    "results": [
+     {
+      "metric": "Size",
+      "value": "about 2 hours of studio speech from two male speakers (~578 + ~951 samples) with Hebrew text and IPA phonemes, 22.05 kHz mono",
+      "on": "dataset card",
+      "source_url": "https://huggingface.co/datasets/Phonikud/ILSpeech/raw/main/README.md",
+      "source_date": "2026-05-15",
+      "grade": "A",
+      "note": "date = Hub lastModified"
+     }
+    ],
+    "hebrew_support": "yes — phoneme-annotated Hebrew TTS data",
+    "summary_he": "כשעתיים של דיבור אולפן עם תעתיק פונמות (IPA) לאימון TTS בעברית, ברישיון לא מסחרי.",
+    "sources": [
+     {
+      "url": "https://huggingface.co/datasets/Phonikud/ILSpeech/raw/main/README.md",
+      "date": "2026-05-15",
+      "what": "card: content and licence",
+      "grade": "A"
+     }
+    ],
+    "grade": "A",
+    "verified_at": "2026-11-05"
+   },
+   {
+    "id": "kan-hebrew-speech",
+    "name": "hebrew_speech_kan (imvladikon)",
+    "kind": "dataset",
+    "url": "https://huggingface.co/datasets/imvladikon/hebrew_speech_kan",
+    "licence": "UNVERIFIED — no licence tag on the Hub. Per the leaderboard text the audio and subtitles were scraped from the Kan (Israeli Public Broadcasting) YouTube channel, so copyright is likely not the uploader's.",
+    "results": [
+     {
+      "metric": "Size and role",
+      "value": "1.7-hour validation split used as the Kan column of the ivrit.ai leaderboard",
+      "on": "leaderboard About text",
+      "source_url": "https://huggingface.co/spaces/ivrit-ai/hebrew-transcription-leaderboard/raw/main/src/about.py",
+      "source_date": null,
+      "grade": "A",
+      "note": "Hub lastModified 2023-05-05"
+     }
+    ],
+    "hebrew_support": "yes — broadcast speech",
+    "summary_he": "סט תעתוק משידורי כאן שנאסף מיוטיוב על ידי יחיד, בלי רישיון מוצהר. מתאים להשוואת מדדים בלבד, לא לשימוש מסחרי.",
+    "sources": [
+     {
+      "url": "https://huggingface.co/api/datasets/imvladikon/hebrew_speech_kan",
+      "date": "2023-05-05",
+      "what": "Hub record: no licence tag",
+      "grade": "A"
+     },
+     {
+      "url": "https://huggingface.co/spaces/ivrit-ai/hebrew-transcription-leaderboard/raw/main/src/about.py",
+      "date": null,
+      "what": "leaderboard text: 1.7 h validation set, scraped from the Kan YouTube channel, published by Vladimir Gurevich",
+      "grade": "A"
+     }
+    ],
+    "grade": "A",
+    "verified_at": "2026-11-05"
+   },
+   {
+    "id": "common-voice-17-he",
+    "name": "Mozilla Common Voice 17.0 — Hebrew",
+    "kind": "dataset",
+    "url": "https://huggingface.co/datasets/mozilla-foundation/common_voice_17_0",
+    "licence": "UNVERIFIED — the Hub record we read shows no licence tag (Common Voice is generally published under CC0 but this was not confirmed from a source here)",
+    "results": [
+     {
+      "metric": "Use in ASR benchmarks",
+      "value": "about 2 hours (validated set) are used in ivrit.ai's evaluation harness; per-model results exist in the Space's results folder but are not in its summary CSV",
+      "on": "leaderboard About text",
+      "source_url": "https://huggingface.co/spaces/ivrit-ai/hebrew-transcription-leaderboard/raw/main/src/about.py",
+      "source_date": null,
+      "grade": "A",
+      "note": ""
+     }
+    ],
+    "hebrew_support": "yes — read sentences",
+    "summary_he": "סט משפטים מוקראים מ-Common Voice 17 (כשעתיים בעברית) שבשימוש ב-ivrit.ai. הרישיון לא אומת מהמקור שקראנו.",
+    "sources": [
+     {
+      "url": "https://huggingface.co/api/datasets/mozilla-foundation/common_voice_17_0",
+      "date": "2025-10-24",
+      "what": "Hub record without licence tag",
+      "grade": "A"
+     },
+     {
+      "url": "https://huggingface.co/spaces/ivrit-ai/hebrew-transcription-leaderboard/raw/main/src/about.py",
+      "date": null,
+      "what": "leaderboard text: common_voice_17_0/he, 2 hours validated set, read sentences",
+      "grade": "A"
+     }
+    ],
+    "grade": "A",
+    "verified_at": "2026-11-05"
+   },
+   {
+    "id": "hebrew-sentiment-mafat",
+    "name": "HebrewSentiment (MAFAT / NNLP-IL)",
+    "kind": "dataset",
+    "url": "https://huggingface.co/datasets/HebArabNlpProject/HebrewSentiment",
+    "licence": "UNVERIFIED — Hub tag and card say 'other'; the card also carries 'private: true' and points to a Google Drive folder",
+    "results": [
+     {
+      "metric": "Use",
+      "value": "an early 3,000-example version (1,000 per class, linguist-tagged) is the 'Sentiment' task of the Hebrew LLM Leaderboard; the Hub copy differs from the version used",
+      "on": "leaderboard About text",
+      "source_url": "https://huggingface.co/spaces/hebrew-llm-leaderboard/leaderboard/raw/main/src/about.py",
+      "source_date": null,
+      "grade": "A",
+      "note": ""
+     }
+    ],
+    "hebrew_support": "yes — 3-class sentiment",
+    "summary_he": "מאגר סנטימנט עברי של מפא״ת ו-NNLP-IL (חיובי, שלילי, נטרלי). הרישיון לא ברור והגרסה בלוח שונה מהגרסה ב-Hugging Face.",
+    "sources": [
+     {
+      "url": "https://huggingface.co/datasets/HebArabNlpProject/HebrewSentiment/raw/main/README.md",
+      "date": "2026-04-18",
+      "what": "card: license other, private true",
+      "grade": "A"
+     },
+     {
+      "url": "https://huggingface.co/spaces/hebrew-llm-leaderboard/leaderboard/raw/main/src/about.py",
+      "date": null,
+      "what": "leaderboard text: 3,000 examples, 1,000 per class, linguist-tagged; early version",
+      "grade": "A"
+     }
+    ],
+    "grade": "A",
+    "verified_at": "2026-11-05"
+   },
+   {
+    "id": "parashoot",
+    "name": "ParaShoot (Keren and Levy, 2021)",
+    "kind": "dataset",
+    "url": "https://github.com/omrikeren/ParaShoot",
+    "licence": "UNVERIFIED — the repository's /main/LICENSE returned 404 and the README states none",
+    "results": [
+     {
+      "metric": "Size",
+      "value": "3,038 question-answer items (train 1,792 / dev 221 / test 1,025) from 493 Wikipedia articles",
+      "on": "repo README",
+      "source_url": "https://raw.githubusercontent.com/omrikeren/ParaShoot/main/README.md",
+      "source_date": null,
+      "grade": "A",
+      "note": "paper: arXiv 2109.11314 (linked in the README); a copy exists on the Hub as imvladikon/parashoot without a licence tag"
+     }
+    ],
+    "hebrew_support": "yes — SQuAD-style Hebrew QA, small",
+    "summary_he": "מאגר שאלות ותשובות קטן בעברית (3,038 פריטים מויקיפדיה) מ-2021. אין בו רישיון מוצהר, ולכן אי אפשר להניח זכויות שימוש.",
+    "sources": [
+     {
+      "url": "https://raw.githubusercontent.com/omrikeren/ParaShoot/main/README.md",
+      "date": null,
+      "what": "statistics, citation",
+      "grade": "A"
+     }
+    ],
+    "grade": "A",
+    "verified_at": "2026-11-05"
+   },
+   {
+    "id": "hesum",
+    "name": "HeSum (Hebrew summarization, BIU NLP)",
+    "kind": "dataset",
+    "url": "https://huggingface.co/datasets/biunlp/HeSum",
+    "licence": "UNVERIFIED — no licence on the dataset card",
+    "results": [
+     {
+      "metric": "Size",
+      "value": "8,000 train / 1,000 validation / 1,000 test article-summary pairs",
+      "on": "dataset card",
+      "source_url": "https://huggingface.co/datasets/biunlp/HeSum/raw/main/README.md",
+      "source_date": "2025-05-31",
+      "grade": "A",
+      "note": "paper: arXiv 2406.03897 (linked on the card); date = Hub lastModified"
+     }
+    ],
+    "hebrew_support": "yes — Hebrew abstractive summarization",
+    "summary_he": "מאגר סיכום טקסטים בעברית (8,000 לאימון, 1,000 לבדיקה) של אוניברסיטת בר-אילן. בכרטיס אין רישיון.",
+    "sources": [
+     {
+      "url": "https://huggingface.co/datasets/biunlp/HeSum/raw/main/README.md",
+      "date": "2025-05-31",
+      "what": "card: splits, paper link, no licence",
+      "grade": "A"
+     }
+    ],
+    "grade": "A",
+    "verified_at": "2026-11-05"
+   },
+   {
+    "id": "hebrew-winograd-schwartz",
+    "name": "Hebrew Winograd Schema (Vered Shwartz)",
+    "kind": "dataset",
+    "url": "https://www.cs.ubc.ca/~vshwartz/resources/winograd_he.jsonl",
+    "licence": "UNVERIFIED — the file carries no licence or attribution text",
+    "results": [
+     {
+      "metric": "Size and format",
+      "value": "278 JSONL lines, fields context / question / option1 / option2 / label",
+      "on": "the file itself",
+      "source_url": "https://www.cs.ubc.ca/~vshwartz/resources/winograd_he.jsonl",
+      "source_date": null,
+      "grade": "A",
+      "note": "a Hebrew translation of the Winograd Schema Challenge; 278 examples is the number the Hebrew LLM Leaderboard states for its Winograd task"
+     }
+    ],
+    "hebrew_support": "yes — Hebrew-only, small",
+    "summary_he": "תרגום עברי של אתגר Winograd (278 דוגמאות) מאת ד״ר ורד שוורץ. הקובץ ללא רישיון מוצהר, ולכן כדאי לבקש אישור לפני שימוש מסחרי.",
+    "sources": [
+     {
+      "url": "https://www.cs.ubc.ca/~vshwartz/resources/winograd_he.jsonl",
+      "date": null,
+      "what": "the data file",
+      "grade": "A"
+     },
+     {
+      "url": "https://huggingface.co/spaces/hebrew-llm-leaderboard/leaderboard/raw/main/src/about.py",
+      "date": null,
+      "what": "leaderboard text crediting the translation",
+      "grade": "A"
+     }
+    ],
+    "grade": "A",
+    "verified_at": "2026-11-05"
+   },
+   {
+    "id": "leaderboard-internal-snli-he-trivia",
+    "name": "SNLI-he (210 ex.) and Israeli Trivia (300 ex.) — the Hebrew LLM Leaderboard's own sets",
+    "kind": "dataset",
+    "url": null,
+    "licence": "UNVERIFIED — no public copy or licence found",
+    "results": [
+     {
+      "metric": "What the leaderboard says",
+      "value": "SNLI-he: 210 examples (70 per class) from the official SNLI test set, translated with Dicta's engine and manually corrected; Israeli Trivia: 300 multiple-choice questions curated with Avraham Elitzur",
+      "on": "leaderboard About text",
+      "source_url": "https://huggingface.co/spaces/hebrew-llm-leaderboard/leaderboard/raw/main/src/about.py",
+      "source_date": null,
+      "grade": "A",
+      "note": "SNLI itself is a Stanford dataset; its licence was not checked. A dataset called 'HebNLI' was not found in any source."
+     }
+    ],
+    "hebrew_support": "yes",
+    "summary_he": "שתי קבוצות המבחן של הלוח העברי — היסק טקסטואלי (210 דוגמאות) וטריוויה ישראלית (300 שאלות) — מתוארות בלוח, אך לא מצאנו עותק ציבורי או רישיון.",
+    "sources": [
+     {
+      "url": "https://huggingface.co/spaces/hebrew-llm-leaderboard/leaderboard/raw/main/src/about.py",
+      "date": null,
+      "what": "descriptions of both tasks",
+      "grade": "A"
+     }
+    ],
+    "grade": "A",
+    "verified_at": "2026-11-05"
+   },
+   {
+    "id": "mteb-hebrew-sentiment",
+    "name": "MTEB HebrewSentimentAnalysis (v1, v3, V4)",
+    "kind": "dataset",
+    "url": "https://huggingface.co/datasets/mteb/HebrewSentimentAnalysis",
+    "licence": "MIT (Hub tag on mteb/HebrewSentimentAnalysis, .v3 and V4) — VERIFIED as tagged",
+    "results": [],
+    "hebrew_support": "yes — sentiment classification task inside MTEB",
+    "summary_he": "משימת סנטימנט עברית בתוך MTEB, מתויגת ברישיון MIT. היא משמשת למדידת embeddings כסיווג ולא כאחזור.",
+    "sources": [
+     {
+      "url": "https://huggingface.co/api/datasets/mteb/HebrewSentimentAnalysis",
+      "date": null,
+      "what": "Hub record: license:mit",
+      "grade": "A"
+     }
+    ],
+    "grade": "A",
+    "verified_at": "2026-11-05"
+   }
+  ]
+ },
+ "notes": "READ THIS FIRST. (1) Grades used here, adapted from SCHEMA.md for benchmark evidence: A = primary artefact read directly by us (the evaluator's own results file / API record / paper table / LICENSE file); B = dated press about a result (none used); C = vendor or author documentation, model card or self-reported claim; D = third-party aggregator, tracker or informal community comparison; E = our own estimate (none used). Where a result is our own arithmetic on a primary table it is graded A and says so. (2) 'Frontier model best in Hebrew?' There is NO published Hebrew text-quality head-to-head of current GPT / Claude / Gemini API models that we could find: the DICTA+MAFAT board is open-weights only and was archived on 2026-05-15; Anthropic's multilingual table, OpenAI's MMMLU and Global-MMLU-Lite (Google/Cohere) all omit Hebrew; arena.ai has no language filter. The closest frontier-vs-frontier Hebrew evidence is per modality: handwriting OCR (ivrit.ai, 2026-09-04), TTS (ivrit.ai TTS Arena Hebrew) and STT (ivrit.ai leaderboard). (3) Model and product names (Gemini 4 Carbon, Claude Opus 5.5 / Fable 5.1, GPT-6 Astra, Muse Wonder, Kimi K3, GLM-5.3, MiMo-V2.6-Pro, gpt-5.6-sol ...) are copied exactly as printed by the sources on 2026-11-05; we did not cross-check them against vendor announcements. (4) Dates: a leaderboard that shows no date has source_date null and the note says what date we used instead. Hub 'lastModified' is used only when stated in the note. (5) URL policy: where we only read a Hugging Face API record (not the HTML page) the row's `url` is the canonical Hub page of that repo and the API URL is in `sources`; vendor home pages we never saw are null. (6) Search limits: the shared web-search budget ran out mid-task, so the last checks (ABBYY, Verbit, Hebrew invoice benchmarks on the open web, Global-MMLU per-language Hebrew rows, Artificial Analysis multilingual coverage) were done only through direct page/API fetches or not at all. See `rejected`. (7) DOUBTS worth a human look: (a) the Hebrew LLM Leaderboard is few-shot, base-model-oriented, has tiny sets (SNLI-he 210, Trivia 300) and visibly mis-scores some chat models (gemma-3-27b-it 13.41, command-a 30.41) - do not present it as a ranking of chat models; (b) licence conflicts: DictaLM-3.0-Nemotron-12B is under the NVIDIA Open Model License although the leaderboard column says apache-2.0; the NeoDictaBERT paper says CC BY-SA while the Hub card says CC BY 4.0; the arXiv page's CC BY-SA belongs to the paper not the DictaLM weights; (c) DictaLM-4.0-105B-A10B-Base appears on the board but has no public page - UNVERIFIED; (d) ivrit.ai runs the STT, TTS and handwriting boards and also trains models that appear on the STT board (conflict of interest); the handwriting set is 225 lines from 10 writers; the TTS arena has ~160-210 votes per main model and its Models page shows different Elo values than its leaderboard view; (e) the Google STT row on the ivrit.ai board does not say which Google model; (f) Artificial Analysis shows no date on either page; arena.ai marks #1 and #10 as Preliminary; (g) licence-sensitive items for a Hebrew business: Mistral Large 2407 (research licence), Cohere Command R+/Aya and Caspi-1.7B and MMS-TTS (CC BY-NC), SASpeech / ILSpeech / Phonikud and therefore Piper's Hebrew voice (non-commercial), CHURRO (Qwen research), Surya weights ($5M cap), n8n (Sustainable Use, not OSI), Open WebUI (branding clause above 50 users), Dify (no multi-tenant without licence), Flowise (archived 2026-08-13, end of life 2026-08-31), Piper (archived; successor GPL-3.0), ivrit.ai datasets (AI training or academic research only). (8) Corrections to common assumptions: Amazon Textract's FAQ lists Hebrew for printed text; Piper's official voices repo does have a Hebrew voice; Azure's Read model reads printed Hebrew but not Hebrew handwriting.",
+ "rejected": [
+  {
+   "name": "Verbit (STT / captioning)",
+   "section": "stt_hebrew",
+   "reason": "verbit.ai home page, read 2026-11-05, says nothing about Hebrew and lists only '50+ languages' for translation; no other source opened"
+  },
+  {
+   "name": "ABBYY FineReader / ABBYY OCR",
+   "section": "ocr_hebrew",
+   "reason": "no ABBYY page was opened (no stable URL known and the search budget ran out)"
+  },
+  {
+   "name": "Mistral OCR, Qwen-VL / Qwen3-VL OCR, Gemma vision OCR, DeepSeek-OCR, dots.ocr, Chandra",
+   "section": "ocr_hebrew",
+   "reason": "no Hebrew-specific claim or evaluation seen in what we read (Hub licences checked: DeepSeek-OCR MIT, Chandra OpenRAIL, olmOCR and PaddleOCR-VL Apache-2.0); frontier vision models are covered only through the ivrit.ai handwriting board"
+  },
+  {
+   "name": "Public Hebrew invoice / receipt OCR benchmark",
+   "section": "ocr_hebrew",
+   "reason": "NOT FOUND (not refuted): Hub dataset searches for 'hebrew receipt' and 'hebrew invoice' returned nothing on 2026-11-05; only handwriting (ivrit.ai, 225 lines) and tiny community sets (e.g. 78 pages) exist. A general web search could not be run because the shared search budget was exhausted."
+  },
+  {
+   "name": "HebNLI",
+   "section": "hebrew_datasets",
+   "reason": "no source for a dataset by this name; the Hebrew LLM Leaderboard's SNLI task is a 210-example translated SNLI sample"
+  },
+  {
+   "name": "Global-MMLU per-language Hebrew accuracy of GPT-4o / Claude / Gemini",
+   "section": "hebrew_llm",
+   "reason": "the paper's Appendix F tables were not in the readable HTML; Anthropic's own table omits Hebrew"
+  },
+  {
+   "name": "Artificial Analysis Multilingual Index (Hebrew coverage)",
+   "section": "hebrew_llm",
+   "reason": "no page opened; languages covered unknown"
+  },
+  {
+   "name": "Deepdub's own Hebrew TTS benchmark page and Wizwand SOTA pages",
+   "section": "tts_hebrew / hebrew_llm",
+   "reason": "seen only as search-result snippets (vendor marketing / aggregator); superseded by the arena data we read directly"
+  },
+  {
+   "name": "Hebrew Semantic Retrieval National Challenge leaderboard (Codabench 9950)",
+   "section": "embeddings_hebrew",
+   "reason": "page text unreadable by our fetcher; kept as a low-grade row based on the NeoDictaBERT paper and model card"
+  },
+  {
+   "name": "Robo-Shaul TTS project (roboshaul.com)",
+   "section": "tts_hebrew",
+   "reason": "known only as the origin of the SASpeech dataset (link seen in the ivrit.ai leaderboard text); the site was not opened, so no model row"
+  },
+  {
+   "name": "Hebrew TTS 17-model WER-vs-CER benchmark (Phonikud site)",
+   "section": "tts_hebrew",
+   "reason": "mentioned in a search snippet; the explore page text we could read contained no table, so no figures"
+  }
+ ]
+}

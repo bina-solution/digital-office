@@ -35,9 +35,28 @@ cd digital-office
 Before `bbox run`, set your domain, your business name and the other values in `.env`. If the install
 script added you to the `docker` group, log out and back in first.
 
+**No domain — a laptop, or a first look:** skip the `.env`, and the office makes a local one by itself:
+
+```bash
+DGO_LOCAL=1 ./debian-install.sh   # Docker and its compose plugin, and no .env
+./bbox run                        # no .env: a local office, every app at <name>.localhost
+```
+
+Then open `http://console.localhost`. Your business's name goes into the generated `.env` (`BUSINESS_NAME`)
+whenever you like. A machine that already ran an office and lost its `.env` is refused, not given a new one:
+new secrets would not open the data that is there.
+
 On a Mac, `./bbox run` sets up its own engine and writes a local `.env` (see `packaging/macos.md`).
-On Windows, use `bbox.cmd run`, which runs through WSL (see `ai/context/running-on-wsl.md`).
+On Windows, use `bbox.cmd`, which runs through WSL. Once per machine: from an administrator PowerShell,
+`wsl --install -d Ubuntu`, restart, and open Ubuntu once; then, from the clone, `bbox.cmd install windows`
+(it may ask for one `wsl --shutdown` and a second run), then `bbox.cmd run`
+(see `ai/context/running-on-wsl.md`).
 `./bbox help` lists every command.
+
+**What a host needs, as measured on our own hosts (2026-11-10):** an office of 60 containers, with public sites
+and meeting recordings, runs on 2 CPUs and 8 GB of RAM with swap and takes about 44 GB of disk for its images
+and data (a Debian 12 server). An 8 GB Apple Silicon MacBook runs its office in the project's engine. Fewer apps
+need less. The table, and the commands that measured it, are in `ai/context/running-the-stack.md`.
 
 Do not run `docker compose` directly. The services are compiled into `.generated/`, so a bare
 `docker compose up` starts nothing. Use `./bbox`, or `./scripts/dc` for compose itself.

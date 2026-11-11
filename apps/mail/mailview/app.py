@@ -8,7 +8,7 @@ proxy API (inbox is network-internal). Mutations = label add/remove, and sending
 (and the reader's reply / reply-all / forward) post to /api/send, which is the mail service's
 own /send and nothing more.
 """
-import os, base64, json, re, time, calendar, datetime
+import os, base64, hashlib, json, re, secrets, time, calendar, datetime
 import urllib.parse
 import requests
 from email.utils import parsedate_to_datetime
@@ -249,7 +249,8 @@ def _active_conn():
         r = _HTTP.get(GI + "/connections", timeout=10)
         r.raise_for_status()
         d = r.json() or {}
-        act = d.get("active")
+        # the mailbox this call names (a window shows the one it chose — DGO-1390), else the active one
+        act = _requested_cid() or d.get("active")
         return next((c for c in (d.get("connections") or []) if c.get("id") == act), None) or {}
     except Exception:
         return {}
@@ -298,7 +299,7 @@ def label_map():
     /organizer/settings — the SAME resolution point mailLabelEngine01 uses (`Load
     Settings` node reads `.gmail.labels[KEY].name`), so the row triage dot (see
     static/app.js) can never show a stale label TEXT: the vocabulary changed once
-    already for this client (see ai/context/hacohen-cutover-plan-2026-08-05.md §B) and
+    already for this client (see ai/context/example-cutover-plan-2026-08-05.md §B) and
     will again. No connection_id: this is the mail-scoped defaults singleton, exactly
     what the engine's own scheduled (no-override) run resolves against."""
     return jsonify(gi("/organizer/settings"))
@@ -311,30 +312,32 @@ TEST_RE = re.compile(
     r"הזרקת בדיקה|Demo Link|@demo\.indox|demo\+\d+@|@[\w.-]*example\.com"
     r"|\b[a-z]{2,}(?:-[a-z]{2,})*-\d{1,2}\b")
 
-_mode_cache = {"v": None, "t": 0.0}
+_mode_cache = {}        # mailbox id ("" = the active one) -> {"v": mode, "t": when}
 
 
 def _mode():
     """Backend mode (60s cache) — decides the test-mail default: the local mailserver
     IS the demo, so test mail shows there; on the real account it hides.
 
-    Resolved from the connection CATALOG (protocol of the active connection), not from /healthz —
-    see `_active_conn()`: the healthz read cost one write-conn IMAP NOOP, which under Gmail's
-    command throttle stalled a list load by 10-20s once a minute. /healthz remains the fallback
-    when the catalog cannot answer, so a degraded connections plane cannot take the mode with it."""
+    Resolved from the connection CATALOG (protocol of the mailbox the call names, else the active one),
+    not from /healthz — see `_active_conn()`: the healthz read cost one write-conn IMAP NOOP, which under
+    Gmail's command throttle stalled a list load by 10-20s once a minute. /healthz remains the fallback
+    when the catalog cannot answer, so a degraded connections plane cannot take the mode with it. Kept per
+    mailbox: two windows may show two mailboxes (DGO-1390)."""
     import time
-    if _mode_cache["v"] is None or time.time() - _mode_cache["t"] > 60:
+    hit = _mode_cache.setdefault(_requested_cid() or "", {"v": None, "t": 0.0})
+    if hit["v"] is None or time.time() - hit["t"] > 60:
         inst = _active_conn()
         if inst.get("protocol"):
-            _mode_cache["v"] = "local" if inst["protocol"] == "mail_imap_local" else "gmail"
-            _mode_cache["t"] = time.time()
+            hit["v"] = "local" if inst["protocol"] == "mail_imap_local" else "gmail"
+            hit["t"] = time.time()
         else:
             try:
-                _mode_cache["v"] = gi("/healthz").get("mode", "gmail")
-                _mode_cache["t"] = time.time()
+                hit["v"] = gi("/healthz").get("mode", "gmail")
+                hit["t"] = time.time()
             except Exception:
-                return _mode_cache["v"] or "gmail"
-    return _mode_cache["v"]
+                return hit["v"] or "gmail"
+    return hit["v"]
 
 
 def _ts(m):
@@ -423,6 +426,8 @@ def messages():
     is_inbox = view in ("", "inbox") and not label and not text
     folder = "INBOX" if (is_inbox or _mode() != "gmail") else "[Gmail]/All Mail"
     win, since_ts = _window_args()
+    # the row's preview line (DGO-1507): asked of the mail service only when the screen asks for it
+    snip = {"snippets": True} if request.args.get("snippets") == "1" else {}
     total, has_more, next_cursor = None, False, 0
     if view == "attention":
         fails = [l for l in gi("/labels").get("labels", []) if FAIL_RE.search(l)]
@@ -436,7 +441,7 @@ def messages():
             # the one connection lock. A single search also dedups by construction.
             terms = ["label:" + l.replace(" ", "-") for l in fails]
             body = {"query": terms[0] if len(terms) == 1 else "(" + " OR ".join(terms) + ")",
-                    "limit": limit, "folder": folder}
+                    "limit": limit, "folder": folder, **snip}
             if since_ts is not None:
                 body["since_ts"] = since_ts
             msgs = sorted(gi("/search", "POST", body).get("messages", []), key=_ts, reverse=True)
@@ -451,7 +456,7 @@ def messages():
             parts.append("label:" + label.replace(" ", "-"))
         if text:
             parts.append(text)
-        body = {"limit": limit, "folder": folder}
+        body = {"limit": limit, "folder": folder, **snip}
         if request.args.get("before_uid"):
             body["before_uid"] = int(request.args["before_uid"])
         if since_ts is not None:
@@ -515,7 +520,7 @@ N8N = os.environ.get("N8N_URL", "http://n8n:5678")
 @app.get("/api/doc-context/<mid>")
 def doc_context(mid):
     """Pipeline state for a message — via the n8n API layer (mailApi01 webhook ->
-    indoxApiRouter01), never the DB directly.
+    indoxApi01), never the DB directly.
 
     Two different answers used to collapse into one: "this message is not a document" and "the
     document system could not be asked" both came back as `{found: 0}`, so an n8n outage looked
@@ -702,7 +707,7 @@ def _forget_selection():
     """The selected-connection cache and the mode cache both describe the pointer this call just
     moved; a stale answer would send the next op to the previous account for up to 30 s."""
     _SEL["id"], _SEL["at"] = None, 0.0
-    _mode_cache["v"], _mode_cache["t"] = None, 0.0
+    _mode_cache.clear()
 
 
 @app.post("/api/connections")
@@ -736,6 +741,161 @@ def connections_select():
     r = gi("/connections/select", "POST", {"id": cid})
     _forget_selection()
     return jsonify(r)
+
+
+# ── «התחברות עם Google» from the mail screen (DGO-1390) ─────────────────────────────
+# The consent belongs to the office's credential plane (connections: the client, the grant, the instances);
+# this screen opens it and receives it, both legs through itself as the browser sees it — under the console
+# or on its own host — so the person returns to the window they started from. Google's one registered
+# address is the herd's relay (connections OAUTH_RELAY_URL). One consent is Gmail AND Drive.
+CONNECTIONS = os.environ.get("CONNECTIONS_URL", "http://connections:8990").rstrip("/")
+
+
+def _theme_block():
+    """The palette as the page carries it (index.html's stamped block): a page drawn here names no colour."""
+    try:
+        with open(os.path.join(app.static_folder, "index.html"), encoding="utf-8") as f:
+            page = f.read()
+        a, b = page.index("/* @bina-theme-tokens:start */"), page.index("/* @bina-theme-tokens:end */")
+        return page[a:b]
+    except (OSError, ValueError):
+        return ""
+
+
+_THEME = _theme_block()
+
+
+def _oauth_page(ok, title, detail="", made=None, status=200):
+    """The window Google returns to: what happened, in words, told to the window that opened it, closed."""
+    import html as _h
+    msg = _js({"type": "dgo:oauth", "ok": bool(ok), "made": made or [], "error": "" if ok else title})
+    who = next((m.get("account_hint") for m in (made or []) if m.get("account_hint")), "")
+    page = f"""<!doctype html><html lang="he" dir="rtl"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1"><title>{_h.escape(title)}</title>
+<style>{_THEME}
+body{{margin:0;min-height:100vh;display:grid;place-items:center;background:var(--bg);color:var(--ink);
+font:14px/1.5 "Segoe UI",system-ui,-apple-system,"Noto Sans Hebrew",Arial,sans-serif}}
+.card{{width:min(420px,calc(100vw - 32px));box-sizing:border-box;background:var(--surface);border:1px solid var(--line);
+border-radius:16px;padding:22px;box-shadow:var(--shadow)}}
+h1{{margin:0 0 8px;font-size:16px;font-weight:800;color:{'var(--ok)' if ok else 'var(--danger)'}}}
+p{{margin:0 0 6px;font-size:13px;color:var(--muted);overflow-wrap:anywhere}}
+button{{margin-top:14px;height:34px;padding:0 16px;border-radius:9px;border:0;background:var(--accent);color:var(--accent-ink);
+font:inherit;font-weight:700;cursor:pointer}}</style></head>
+<body><div class="card" role="status"><h1>{_h.escape(title)}</h1>
+{f"<p><bdi>{_h.escape(detail)}</bdi></p>" if detail else ""}{f"<p><bdi>{_h.escape(who)}</bdi></p>" if who else ""}
+<button type="button" onclick="window.close()">סגירת החלון</button></div>
+<script>(function(){{var m={msg};try{{if(window.opener)window.opener.postMessage(m,location.origin);}}catch(e){{}}
+if(window.opener&&m.ok)setTimeout(function(){{window.close();}},1600);}})();</script></body></html>"""
+    # X-Dgo-Oauth marks THIS page as the app's own answer: the return page clears its secret only on it (DGO-1418)
+    return Response(page, status=status, mimetype="text/html",
+                    headers={"Cache-Control": "no-store", "Referrer-Policy": "no-referrer", "X-Dgo-Oauth": "1"})
+
+
+#: Where the window that asked keeps its secret for the consent it started (DGO-1418) — `<prefix><state>`, one slot
+#: per consent, as in the drive's app.py.
+OAUTH_BIND_KEY = "dgo-oauth-bind:"
+
+
+def _js(value):
+    """A JSON value fit for a <script>: a `</script>` inside it cannot end the script."""
+    return json.dumps(value).replace("<", "\\u003c")
+
+
+def _oauth_state_of(authorize_url):
+    return (urllib.parse.parse_qs(urllib.parse.urlsplit(authorize_url).query).get("state") or [""])[0]
+
+
+def _oauth_bind_page(authorize_url, secret):
+    """Without the screen (`check` absent): this window keeps the secret itself, then goes to Google."""
+    return Response(f"""<!doctype html><html lang="he" dir="rtl"><head><meta charset="utf-8"><title>Google</title></head>
+<body><script>try{{localStorage.setItem({_js(OAUTH_BIND_KEY + _oauth_state_of(authorize_url))},{_js(secret)});}}catch(e){{}}
+location.replace({_js(authorize_url)});</script></body></html>""", status=200, mimetype="text/html",
+                    headers={"Cache-Control": "no-store", "Referrer-Policy": "no-referrer"})
+
+
+@app.get("/oauth/google/start")
+def oauth_google_start():
+    """Open Google's consent for a new mailbox. `ret` is this screen's return page, absolute, as the browser
+    sees it; `check=1` answers JSON (the screen asks first, and says a refusal in its own words). Bound to
+    THIS browser (DGO-1418): connections keeps the sha256 of a secret that goes back only in the body."""
+    check = request.args.get("check") == "1"
+    ret = (request.args.get("ret") or "").strip()
+    if not ret:          # without a return page it would be the broker's own consent, bound to nothing
+        why = "חסרה כתובת החזרה של המסך — ההתחברות ל־Google לא נפתחה."
+        return (jsonify({"error": why}), 400) if check else _oauth_page(False, "ההתחברות ל־Google לא נפתחה", why, status=400)
+    secret = secrets.token_urlsafe(24)
+    try:
+        r = _HTTP.get(CONNECTIONS + "/oauth/google-workspace-grant/start",
+                      params={"as_instance": "1", "ret": ret,
+                              "bind": hashlib.sha256(secret.encode()).hexdigest()}, timeout=20)
+        d = r.json()
+    except (requests.RequestException, ValueError):
+        why = "שירות החשבונות של הלשכה אינו עונה — ההתחברות ל־Google לא נפתחה. נסו שוב בעוד רגע."
+        return (jsonify({"error": why}), 503) if check else _oauth_page(False, "שירות החשבונות של הלשכה אינו עונה", why, status=503)
+    if r.status_code >= 400 or not d.get("authorize_url"):
+        why = d.get("error") or f"HTTP {r.status_code}"
+        status = 502 if r.status_code < 400 else r.status_code
+        # …with where it is fixed, when connections says (Google Cloud's credentials page, DGO-1634), as drive does
+        help_url = d.get("help_url") if str(d.get("help_url") or "").startswith("https://") else None
+        return (jsonify({"error": why, "provider_error": d.get("provider_error"), "help_url": help_url}), status) if check \
+            else _oauth_page(False, "ההתחברות ל־Google לא נפתחה", why, status=status)
+    if not str(d["authorize_url"]).startswith("https://") or d.get("relayed") is not True:
+        # only a RELAYED consent is bound to this browser; anything else is the broker's own, and not handed out here
+        why = "כתובת ההסכמה שהתקבלה אינה של הסכמה חתומה ומאובטחת — ההתחברות ל־Google לא נפתחה."
+        return (jsonify({"error": why}), 502) if check else _oauth_page(False, "ההתחברות ל־Google לא נפתחה", why, status=502)
+    if check:
+        resp = jsonify({"ok": True, "authorize_url": d["authorize_url"], "bind": secret})
+        resp.headers["Cache-Control"] = "no-store"
+        return resp
+    return _oauth_bind_page(d["authorize_url"], secret)
+
+
+@app.get("/oauth/google/return")
+def oauth_google_return():
+    """Where Google (through the herd's relay) sends the browser back. Nothing is done on this GET: the page
+    reads the secret its own window kept and hands it, with Google's answer, to /oauth/google/finish —
+    resolved against THIS page's address, never the base the console injects at `/a/<alias>/` (as in the
+    drive's app.py). The secret is removed only on the app's own answer (X-Dgo-Oauth); when none came, the page
+    says so and keeps it for a reload, and tells the screen nothing — its poller sees an account made anyway."""
+    page = f"""<!doctype html><html lang="he" dir="rtl"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1"><title>מחבר את החשבון</title>
+<style>{_THEME}
+body{{margin:0;min-height:100vh;display:grid;place-items:center;background:var(--bg);color:var(--ink);
+font:14px/1.5 "Segoe UI",system-ui,-apple-system,"Noto Sans Hebrew",Arial,sans-serif}}
+.card{{width:min(420px,calc(100vw - 32px));box-sizing:border-box;background:var(--surface);border:1px solid var(--line);
+border-radius:16px;padding:22px;box-shadow:var(--shadow)}} h1{{margin:0 0 8px;font-size:16px;font-weight:800}}
+p{{margin:0;font-size:13px;color:var(--muted)}}</style></head>
+<body><div class="card" role="status"><h1 id="t">מחבר את החשבון…</h1><p id="d">החשבון נבדק ונשמר בלשכה.</p></div>
+<script>(function(){{var q=new URLSearchParams(location.search),key={_js(OAUTH_BIND_KEY)}+(q.get("state")||""),bind="";
+try{{bind=localStorage.getItem(key)||"";}}catch(e){{}}
+function fail(){{document.getElementById("t").textContent="שירות החשבונות של הלשכה אינו עונה";
+document.getElementById("d").textContent="לא ידוע אם החשבון נשמר. אפשר לטעון את החלון מחדש, או לחזור למסך.";}}
+fetch(new URL("finish",location.href),{{method:"POST",credentials:"same-origin",headers:{{"Content-Type":"application/json"}},
+body:JSON.stringify({{code:q.get("code")||"",state:q.get("state")||"",error:q.get("error")||"",bind:bind}})}})
+.then(function(r){{if(!r.headers.get("X-Dgo-Oauth"))throw new Error("HTTP "+r.status);return r.text();}})
+.then(function(h){{try{{localStorage.removeItem(key);}}catch(e){{}}document.open();document.write(h);document.close();}})
+.catch(fail);}})();</script></body></html>"""
+    return Response(page, status=200, mimetype="text/html",
+                    headers={"Cache-Control": "no-store", "Referrer-Policy": "no-referrer"})
+
+
+@app.post("/oauth/google/finish")
+def oauth_google_finish():
+    """The return page's hand-over: Google's answer and the secret its window kept go to this office's
+    connections, which keeps the account, and the page says which."""
+    b = request.get_json(force=True, silent=True)
+    b = b if isinstance(b, dict) else {}
+    body = {k: str(b.get(k)) for k in ("code", "state", "error", "bind") if b.get(k)}
+    if body.get("error") == "access_denied":
+        return _oauth_page(False, "ההתחברות בוטלה", "לא נוסף חשבון. אפשר לנסות שוב מתי שרוצים.")
+    try:
+        r = _HTTP.post(CONNECTIONS + "/oauth/relayed", json=body, timeout=30)
+        d = r.json()
+    except (requests.RequestException, ValueError):
+        return _oauth_page(False, "שירות החשבונות של הלשכה אינו עונה", "החשבון לא נשמר. נסו להתחבר שוב.", status=503)
+    if not d.get("ok"):
+        return _oauth_page(False, "החשבון לא חובר", d.get("error") or f"HTTP {r.status_code}", status=400)
+    return _oauth_page(True, "החשבון חובר", "ה־Gmail וה־Drive של החשבון זמינים עכשיו בלשכה.", made=d.get("made"))
 
 
 @app.get("/healthz")

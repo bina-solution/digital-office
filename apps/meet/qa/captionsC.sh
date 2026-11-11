@@ -7,9 +7,9 @@
 #   captionsC.sh <tag> <room> [seconds of call, default 240]
 set -u
 tag="$1"; room="$2"; dur="${3:-240}"; T=/root/meet-test; out=$T/out/$tag; mkdir -p "$out"
-JIB=meet-jibri-fireplace
+JIB=meet-jibri-examplef
 cg() { echo /sys/fs/cgroup/system.slice/docker-$(docker inspect -f '{{.Id}}' "$1").scope; }
-CJ=$(cg $JIB); CA=$(cg apitools-asr-fireplace); CV=$(cg meet-jvb-fireplace)
+CJ=$(cg $JIB); CA=$(cg apitools-asr-examplef); CV=$(cg meet-jvb-examplef)
 stat() { awk -v k="$2" '$1==k{print $2}' "$1/cpu.stat"; }
 log() { echo "$(date -u +%T)Z +$(( $(date +%s) - T0 ))s $*" | tee -a "$out/timeline.log"; }
 P() { docker exec -d meet-test sh /t/participant.sh "$@"; }
@@ -18,7 +18,7 @@ J() { docker exec meet-test python3 /t/cdp.py "$1" "$2" 2>/dev/null; }
 CHAT='(function(){var s=APP.store.getState();var m=(s["features/chat"]||{}).messages||[];var c=document.getElementById("meet-captions");var n=(s["features/notifications"]||{}).notifications||[];return JSON.stringify({n:m.length,joined:APP.conference.isJoined(),muted:APP.conference.isLocalAudioMuted(),overlay:c&&c.style.display!=="none"?c.textContent.slice(0,80):null,notifications:n.map(function(x){return String((x.props||{}).title||(x.props||{}).titleKey||"").slice(0,40)}),msgs:m.map(function(x){return (x.displayName||"?")+": "+String(x.message).slice(0,110)})})})()'
 PRES='(function(){var lp=APP.conference._room.room.lastPresences||{};return JSON.stringify(Object.keys(lp).map(function(j){var si=(lp[j]||[]).filter(function(x){return x.tagName==="SourceInfo"})[0];return j.split("/")[1]+" "+(si?si.value:"-")}))})()'
 unmute() { J "$1" 'APP.conference.isJoined() && APP.conference.isLocalAudioMuted() ? (APP.conference.muteAudio(false), "unmuted") : "ok"'; }
-conferences() { docker exec meet-jvb-fireplace curl -s localhost:8080/colibri/stats | python3 -c 'import json,sys;print(json.load(sys.stdin)["conferences"])'; }
+conferences() { docker exec meet-jvb-examplef curl -s localhost:8080/colibri/stats | python3 -c 'import json,sys;print(json.load(sys.stdin)["conferences"])'; }
 busy() { docker exec $JIB python3 -c 'import urllib.request,json;print(json.load(urllib.request.urlopen("http://localhost:2222/jibri/api/v1.0/health"))["status"]["busyStatus"])' 2>/dev/null; }
 sampler() {
   echo "t,jibri_usage_us,jibri_nr_periods,jibri_nr_throttled,jibri_throttled_us,asr_usage_us,asr_nr_throttled,jvb_usage_us,load1,mem_avail_mb" > "$out/samples.csv"
@@ -58,7 +58,7 @@ docker exec $JIB sh -c 'echo auto > /run/meet-watch/captions'; log "captions ove
 new=$(comm -13 <(echo "$before") <(docker exec $JIB sh -c 'ls /storage/recordings' | sort) | tail -1); log "session $new"
 docker exec $JIB sh -c "ls -la /storage/recordings/$new; echo '--- live.txt'; cat /storage/recordings/$new/*.live.txt; echo '--- capture.json'; cat /storage/recordings/$new/*.capture.json" 2>&1 | tee -a "$out/timeline.log"
 docker logs $JIB --since 15m 2>&1 | grep meet-watch | cut -c1-300 | tee "$out/watch.log" | grep -E "caption|DEGRADED|OK again|ended|lag" | tail -40
-docker logs meet-prosody-fireplace --since 15m 2>&1 | grep -E "meet_silent_mic.*(told|first time)" | cut -c1-220 | tee -a "$out/timeline.log"
+docker logs meet-prosody-examplef --since 15m 2>&1 | grep -E "meet_silent_mic.*(told|first time)" | cut -c1-220 | tee -a "$out/timeline.log"
 python3 - "$out/samples.csv" <<'EOF' | tee -a "$out/timeline.log"
 import csv, sys
 rows = list(csv.DictReader(open(sys.argv[1])))

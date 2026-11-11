@@ -1,0 +1,130 @@
+# ai/context/seo/communities.yaml — the Israeli communities, newsletters, meetups and conferences around what DGO
+# touches (DGO-797, seo-806). One list, every entry checked: its address answered on 2026-11-10 and what it is comes
+# from its own page or from Hamakor's communities page. The rule for every one of them (the owner): arrive with a
+# guide that helps the people there, never with an advertisement — `bring` names the library piece that would.
+# An entry is re-checked with the quarterly check of the library (recheck.py), and a date of an event is said only
+# when its own page says it.
+
+checked: 2026-11-10
+sources:
+  - https://hamakor.org.il/en/communities          # Hamakor's own list of the communities it supports
+  - https://hamakor.org.il/en/events
+  - https://summit2026.reversim.com/
+  - https://sessionize.com/tlvcommunity-meetups/
+  - https://luma.com/84vsdzaq
+  - https://dev.events/AS/IL
+  - https://linktr.ee/llm.org.il                    # GenAI Israel's groups (DGO-797, 2026-11-10)
+  - https://www.meetup.com/devops-in-israel/         # links Operations Israel
+  - https://www.greeninvoice.co.il/magazine/community/
+
+communities:
+  - { name: המקור (Hamakor), kind: association, url: https://hamakor.org.il, forum: https://forum.hamakor.org.il,
+      about: "the non-profit for free and open-source software in Israel, founded 2003; runs meetups and hack-nights",
+      bring: "news/dgo-1-released-agpl — DGO under AGPL v3, what it allows and requires" }
+  - { name: מעקף (Ma'akaf), kind: community, url: https://maakaf.com,
+      about: "makes open source accessible and encourages contribution; on WhatsApp and Discord (Hamakor's list)",
+      bring: "a first-contribution guide to DGO's public repository, once CONTRIBUTING exists (DGO-794)" }
+  - { name: בוֹאוֹת (Baot), kind: community, url: https://www.baot.org,
+      about: "women in research and development (Hamakor's list)", bring: "tutorial/install-dgo-manually" }
+  - { name: Hackeriot, kind: community, url: https://www.hackeriot.org,
+      about: "women in cyber (Hamakor's list)", bring: "report/best-practices-2026-q4 — backup and security of an office" }
+  - { name: Reversim Summit 2026, kind: conference, url: https://summit2026.reversim.com,
+      about: "a community-driven, not-for-profit summit for the people who build software in Israel, organised by
+        volunteers; Nov 30 – Dec 1, 2026, Expo Tel Aviv, Pavilion 10 (its own page)",
+      bring: "a talk: an office's apps compiled from declarations — the triangle of linked offices (article/the-triangle)" }
+  - { name: רברס עם פלטפורמה (Reversim podcast), kind: podcast, url: https://www.reversim.com,
+      about: "the Hebrew software podcast behind the summit", bring: "an episode pitch on self-hosting for Israeli businesses" }
+  - { name: TLVCommunity Meetups, kind: meetup, url: https://sessionize.com/tlvcommunity-meetups/,
+      about: "recurring Tel Aviv meetups: DevOps TLV, AI Talks IL, Cloud Native (its call-for-speakers page)",
+      bring: "a talk on running 18 open-source apps behind one sign-in on one machine" }
+  - { name: n8n Israel — Tel Aviv Community Meetup, kind: meetup, url: https://luma.com/84vsdzaq,
+      about: "an n8n Israel community evening on production automation and AI systems (its event page)",
+      bring: "article/n8n — n8n for a business without Zapier, with the encryption-key trap" }
+  - { name: PyCon IL, kind: conference, url: https://pycon.org.il,
+      about: "the annual Python conference, supported by Hamakor", bring: "a talk on extracting Israeli invoices (INDOX)" }
+  - { name: PyWeb-IL, kind: meetup, url: https://www.meetup.com/pyweb-il/,
+      about: "the general-purpose Python meetup group (Hamakor's list)", bring: "the same talk, short" }
+  - { name: PyData Tel Aviv, kind: meetup, url: https://www.meetup.com/pydata-tel-aviv/,
+      about: "data scientists and developers (Hamakor's list)", bring: "the Hebrew models leaderboard (DGO-1351)" }
+  - { name: Python Israel communities, kind: hub, url: https://python.org.il/en/,
+      about: "the Python groups on Meetup, WhatsApp, Telegram and Facebook (Hamakor's list)", bring: "—" }
+  - { name: Core C++, kind: conference, url: https://corecpp.org, about: "annual C++ conference in Tel Aviv", bring: "—" }
+  - { name: Core C++ User Group, kind: meetup, url: https://www.meetup.com/corecpp/, about: "C++ meetups", bring: "—" }
+  - { name: Go Israel, kind: meetup, url: https://www.meetup.com/go-israel/,
+      about: "in-person meetups for Go programmers (Hamakor's list)",
+      bring: "the native core of DGO in Go (dgo, dgo-install, forward-auth — FACTS.md)" }
+  - { name: GopherCon Israel, kind: conference, url: https://www.gophercon.org.il, about: "the annual Go conference",
+      bring: "the same, as a talk" }
+  - { name: Rust-TLV, kind: meetup, url: https://www.meetup.com/rust-tlv/, about: "Rust meetings, in person and online", bring: "—" }
+  - { name: GitHub User Group, kind: meetup, url: https://www.meetup.com/github-user-group/, about: "GitHub features",
+      bring: "the repository as a showcase (seo-803)" }
+  - { name: dev.events — Israel, kind: calendar, url: https://dev.events/AS/IL,
+      about: "an aggregator of developer conferences and meetups in Israel; its dates are checked on each event's own page before use",
+      bring: "—" }
+  # --- groups, channels and newsletters (DGO-797, 2026-11-10). Every count is what the group's own page showed that
+  # day; a Facebook group is checked without signing in at facebook.com/groups/<slug>/about/ (name, public or
+  # private, members, created, rules). Each rule quoted is the group's own: we post only where it allows, as a member.
+  - { name: Israel n8n, kind: facebook-group, url: https://www.facebook.com/groups/n8nisrael/,
+      about: "Hebrew; for people who build automations with n8n or want to learn to connect services; public, 4,761 members
+        (its about page), created 2025-05-27; rule 2 «בלי ספאם ופרסום עצמי לא רלוונטי»: a project, blog or video is
+        welcome when it serves the community and is about automation and n8n, aggressive promotion is deleted",
+      bring: "article/n8n — n8n for a business without Zapier, with the encryption-key trap" }
+  - { name: "Vibe Coding AI Israel 🧠 קהילת הבינה המלאכותית של ישראל - Base 44, Lovable", kind: facebook-group,
+      url: https://www.facebook.com/groups/wpisrael/,
+      about: "Hebrew; «the leading community in Israel for AI development, entrepreneurship and innovation»; it was
+        «וורדפרס ישראל» until it was renamed on 2025-11-02 (created 2013-05-31); private, 20,319 members; rule «DONT TELL,
+        SHOW!»: show results, never describe yourself; content from a business page needs an explanation of what members
+        learn; Thursday threads where members present their business",
+      bring: "tutorial/install-dgo-with-claude — an office installed by an agent, shown rather than told" }
+  - { name: "Machine & Deep learning Israel", kind: facebook-group, url: https://www.facebook.com/groups/MDLI1/,
+      about: "the Israeli machine-learning and deep-learning group, for sharing articles and posting meetups; public,
+        50,822 members (its about page); no rules section is shown",
+      bring: "the Hebrew models leaderboard (DGO-1351)" }
+  - { name: Operations Israel, kind: facebook-group, url: https://www.facebook.com/groups/ops.il/,
+      about: "English; «IT Operations people of Israel. Everyone is welcome!», a group by DoiT, linked from the Devops
+        Israel meetup; public, 5,322 members, created 2013-06-03; jobs and consultant requests go only to its jobs group,
+        otherwise an instant ban",
+      bring: "tutorial/install-dgo-manually — one machine, the office's open-source apps behind one sign-in" }
+  - { name: "מורנינג של עצמאות | קהילת העצמאים והעצמאיות של morning", kind: facebook-group,
+      url: https://www.facebook.com/groups/friendsofgreeninvoice,
+      about: "Hebrew; the community of morning's (Green Invoice) self-employed and business customers, run by morning
+        (its magazine page greeninvoice.co.il/magazine/community); private, 19,698 members; rule 1 bans commercial
+        content including self-promotion, and a recommendation must disclose the relationship; business pages are not
+        admitted",
+      bring: "answers to members' own questions about a pile of supplier invoices (INDOX), in a post and never as a link,
+        and only where the admins allow it" }
+  - { name: GenAI Israel, kind: whatsapp-groups, url: https://linktr.ee/llm.org.il, forum: https://luma.com/genai-il,
+      about: "a non-profit community of GenAI practitioners, «over 7,000+» (its Luma calendar); WhatsApp groups that
+        anyone can join (GenAI Israel 1–4, some with a waiting list; Vibe Coders IL; GenAI Cyber; Clawders, on personal
+        assistants; MLOps TLV; Jobs/Freelancers; GenAI Founders through a form), an events calendar and a call for
+        talks; language not stated",
+      bring: "a talk through its call for talks: local models and agents inside a small business's own office (bina-ds)" }
+  - { name: "גיקטיים Geektime - ערוץ חדשות הטכנולוגיה וההייטק של ישראל", kind: telegram-channel, url: https://t.me/geektimecoil,
+      about: "Hebrew; Geektime's official Telegram channel (a broadcast channel); 26K subscribers (its page)",
+      bring: "news/dgo-1-released-agpl as a news tip to the editors, not a post" }
+  - { name: "גיקטיים | דיבורים", kind: telegram-group, url: https://t.me/+RUmDPkY6Mo2_fIh7,
+      about: "Hebrew; Geektime's discussion group, linked from the channel; 3,087 members; bans ads, sales messages,
+        affiliate links, URL shorteners, politics and piracy; a shared link must come with an explanation",
+      bring: "answers in threads about self-hosting and Israeli invoices; the article only when someone asks" }
+  - { name: "הניוזלטר של גיקטיים", kind: newsletter, url: https://www.geektime.co.il/weekly/,
+      about: "Hebrew; Geektime's weekly tech newsletter, every Thursday; subscriber count not shown",
+      bring: "a news tip: news/dgo-1-released-agpl" }
+  - { name: Firgun (VC Cafe), kind: newsletter, url: https://www.vccafe.com/firgun/,
+      about: "English; weekly on Israeli tech, Friday mornings, published first on LinkedIn; its page states 8,700
+        LinkedIn subscribers",
+      bring: "a founder story: Bina Solutions' open-source office for Israeli small businesses" }
+  - { name: Linux-IL, kind: mailing-list, url: https://mailman.cs.huji.ac.il/mailman/listinfo/linux-il,
+      about: "«The Israeli linux users list» (Hebrew University mailman); subscriber count not shown; recent activity not
+        checked (its archive refused the read, 403)",
+      bring: "tutorial/install-dgo-manually" }
+
+open:
+  - "Telegram directories (tgstat, telemetr) refuse a read from outside (403 / no address, 2026-11-10), and search
+    engines index almost no Facebook group or Telegram group; more groups are found from inside the platforms, and
+    added here with their own page as the source."
+  - "Accountants and bookkeepers (the readers of INDOX): no Hebrew group, channel or newsletter was found (2026-11-10)."
+  - "Leads not yet confirmed: the n8n Israel community behind the Luma meetups (luma.com/mv33cc46, registration by a
+    Google Form; platform and size not shown); Gadgety's Telegram discussion group; the DevOps-IL Google Group
+    (only a 2011 thread seen); Tel Aviv Tech Weekly (matantlv.substack.com); the SMB Agency's (Maof) newsletter."
+  - "Checked and left out (2026-11-10): ChatGPT Israel (280 members), AI Israel (suspended by its admin 2022-08-18),
+    Home Assistant Israel (58 members), t.me/linuxil (98, not shown to be Israeli), t.me/hamakor (a Russian channel)."

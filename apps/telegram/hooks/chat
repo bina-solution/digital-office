@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+#: chat — one chat by its id or title:  ./bbox telegram chat <x> history [N|all]  ·  … chat <x> message <y> mark <emoji>
+# (== dgo telegram chat …). Pipes the app's own CLI (apps/telegram/cli.py) into its container. The history is a
+# listened-to chat's thread, oldest first; a mark is a reaction from the account ("" takes it off) — DGO-1320.
+set -uo pipefail
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
+. "${REPO_ROOT}/scripts/lib.sh"
+case "${1:-}" in -h|--help|"") sed -n 's/^#: //p' "${BASH_SOURCE[0]}"; exit 0 ;; esac
+dcx exec -T telegram python - chat "$@" < "$(npath "${REPO_ROOT}")/apps/telegram/cli.py"

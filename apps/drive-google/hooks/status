@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+#: status — does the Google Drive engine answer, and which Google accounts the office has connected:  ./bbox drive-google status
+# Pipes the engine's own status.py into its container. The files themselves are worked on through «קבצים»:
+# ./bbox drive -p <address> ls / (apps/drive/hooks/cli).
+set -uo pipefail
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
+. "${REPO_ROOT}/scripts/lib.sh"
+case "${1:-}" in -h|--help) sed -n 's/^#: //p' "${BASH_SOURCE[0]}"; exit 0 ;; esac
+[ -n "$(cn drive-google)" ] || die "[drive-google] the engine does not run on this office — «קבצים» brings it up (./bbox run drive)"
+dcx exec -T drive-google python3 - 8989 < "$(npath "${REPO_ROOT}")/apps/drive-google/status.py"

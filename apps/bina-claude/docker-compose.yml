@@ -1,18 +1,17 @@
-# bina-claude — "בינה קלוד": the official Claude Code CLI inside the office, one container (DGO-1074).
+# bina-claude — «בינה קלוד»: ONLY the official Claude Desktop app, with ONE sign-in. There is no terminal.
+# The owner, 2026-11-09 (DGO-1684): «one login in the official claude desktop and we should have full cli
+# controll over it and all other 4 channels» … «Delete the terminal and make sure nobody gets mixed up again».
 #
-# Three faces on one sign-in (HOME on the volume, so ~/.claude survives every recreate):
-#   UI  — ttyd on :7681, a web terminal on one tmux session running `claude`, framed by the console at
-#         /a/bina-claude/ (app.json: the index and the /ws websocket, both stripped of the mount prefix).
-#   API — the agent.v1 adapter on :3091 (adapter/server.mjs), published on the docker HOST's loopback only,
-#         the door `bbox agent --app bina-claude …` uses — the same shape as bina-ds's :3081.
-#   CLI — `./bbox bina-claude login|status|ask|attach` (hooks/), and `claude` itself in the terminal.
-#
-# Like bina-ds, it has the office's hands: the checkout at its host path and the engine's socket, so
-# Claude runs `./bbox agent …` to reach Azaria and the rest of the office (owner, 2026-10-31: «Claude will
-# be able to use Bina DS's agents … via the CLI»).
+# Four channels on the desktop app's one sign-in:
+#   UI   — bina-claude-desktop below, streamed into the console's «בינה קלוד» tile.
+#   CLI  — `./bbox agent --app bina-claude list|new|send|follow|cancel …` and `./bbox bina-claude …` (hooks/).
+#   API  — agent.v1 on :3091 (adapter/server.mjs), the service `bina-claude` here, published on the docker
+#          HOST's loopback only — the same shape as bina-ds's :3081. It reads the app's own session files and
+#          moves the app with its own entry points (desktop/drive); it runs no Claude of its own.
+#   FLOW — the office timeline's lane `bina_claude` (adapter/spans.mjs, SPAN_SOURCE_BINA_CLAUDE in app.json).
 services:
   bina-claude:
-    image: ghcr.io/solomonboltin/digital-office/bina-claude:${IMAGE_TAG:-latest}
+    image: ghcr.io/bina-solution/digital-office/bina-claude:${IMAGE_TAG:-latest}
     pull_policy: missing
     build:
       context: .
@@ -22,29 +21,16 @@ services:
     container_name: bina-claude-${DEPLOYMENT_NAME:-bina-deployment}
     hostname: bina-claude
     restart: unless-stopped
-    # ttyd and the adapter's turns spawn children ttyd never reaps (bina-ds's compose file says why).
+    # The adapter's `docker exec` children are reaped by an init, not by node.
     init: true
     environment:
       - HOME=/data/home
       - BINA_CLAUDE_STATE=/data/bina-claude
       - BINA_CLAUDE_ADAPTER_PORT=3091
       - AGENT_TOKEN_FILE=/data/bina-claude/api-token
-      # bypassPermissions for the API's turns: the office agent operates the deployment and nobody can
-      # answer an approval prompt over agent.v1 (bina-ds's danger-full-access, owner 2026-09-17).
-      # Claude Code allows it as root only inside a declared sandbox — this container is one.
-      - BINA_CLAUDE_PERMISSION_MODE=${BINA_CLAUDE_PERMISSION_MODE:-bypassPermissions}
-      - IS_SANDBOX=1
-      - BINA_CLAUDE_MODEL=${BINA_CLAUDE_MODEL:-}
-      - BINA_CLAUDE_MAX_TURNS=${BINA_CLAUDE_MAX_TURNS:-2}
-      # The version is the image's (Dockerfile ARG); a running office never updates itself.
-      - DISABLE_AUTOUPDATER=1
-      # NOT CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: it switches Remote Control off, and Remote Control
-      # is how this office's sessions reach claude.ai/code and the Claude apps (README, «Claude's own UI»).
-      # The sign-in is the owner's claude.ai account (/login in the terminal). Claude Code prefers an API
-      # key in the environment over that login, so the office's ANTHROPIC_API_KEY is deliberately NOT
-      # forwarded: it would silently bill the API instead of the account. A key for this app alone is
-      # an explicit choice in .env.
-      - ANTHROPIC_API_KEY=${BINA_CLAUDE_ANTHROPIC_API_KEY:-}
+      # the desktop app's user (below): the adapter writes the app's brief and settings as that user
+      - BINA_CLAUDE_DESKTOP_PUID=${BINA_CLAUDE_DESKTOP_PUID:-1000}
+      - BINA_CLAUDE_DESKTOP_PGID=${BINA_CLAUDE_DESKTOP_PGID:-1000}
       - TZ=${TZ:-Asia/Jerusalem}
       - BBOX_REPO_HOST=${BBOX_REPO_HOST:-/workspace/office}
       - BBOX_DOCKER_SOCK=/var/run/docker.sock
@@ -54,9 +40,23 @@ services:
       - DEPLOYMENT_DOMAIN=${DEPLOYMENT_DOMAIN:-localhost}
     volumes:
       - bina_claude_home:/data
+      # The entrypoint is app source, mounted over the image's copy so it lands with the checkout, without an
+      # image build (DGO-1506). A single-file mount keeps the file it was given: a change reaches the
+      # container when it is recreated.
+      - ./entrypoint.sh:/entrypoint.sh:ro
+      # The agent.v1 adapter and the office timeline's lane it serves (adapter/spans.mjs, DGO-1684), the
+      # same way. A directory follows the checkout as it is: the adapter loads it when the entrypoint
+      # (re)starts it — at a recreate, and after a crash — so a checkout in the middle of an update is what
+      # a crash reloads.
+      - ./adapter:/opt/bina-claude/adapter:ro
       - type: bind
         source: ${BBOX_REPO_HOST:-../../}
         target: ${BBOX_REPO_HOST:-/workspace/office}
+      # THE OFFICE'S VAULT (DGO-1642): a session opened on the office folder is opened on the vault
+      # beside it — «בינה קלוד שנפתח על תיקיית הלשכה קורא ממנה בתחילת הסשן». Read-write for the same
+      # reason bina-ds's is: the operative's Run log is the agent's to keep, and the app's own AGENT.md
+      # draws the line (the notes are the owner's, except `Operatives/`).
+      - ${OBSIDIAN_VAULT_HOST:-obsidian_vault}:/workspace/vault
       - ${BBOX_DOCKER_SOCK:-/var/run/docker.sock}:/var/run/docker.sock
     # Never 0.0.0.0: the token is the only gate on the agent door (bina-ds's compose file says why).
     ports:
@@ -69,12 +69,13 @@ services:
       timeout: ${HEALTHCHECK_TIMEOUT:-8s}
       retries: 5
       start_period: 30s
-    # Idle it is ttyd + node (~80 MB); a turn is a Claude Code process of ~250 MB, BINA_CLAUDE_MAX_TURNS at once.
+    # One node process: the adapter, its timeline lane and the sign-in watch. The Claude sessions run in the
+    # desktop app's container, not here.
     deploy:
       resources:
         limits:
-          cpus: '2'
-          memory: 1536m
+          cpus: '0.5'
+          memory: ${BINA_CLAUDE_MEMORY:-384m}
     logging:
       driver: ${LOGGING_DRIVER:-json-file}
       options:
@@ -85,18 +86,30 @@ services:
   # is /data/desktop on the SAME volume, so every session it keeps on disk is readable by the CLI
   # (`./bbox bina-claude sessions`). Nothing is published; the stream is reached through the edge only.
   bina-claude-desktop:
-    image: ghcr.io/solomonboltin/digital-office/bina-claude-desktop:${IMAGE_TAG:-latest}
+    image: ghcr.io/bina-solution/digital-office/bina-claude-desktop:${IMAGE_TAG:-latest}
     pull_policy: missing
     build:
       context: .
       dockerfile: Dockerfile.desktop
+      args:
+        COMPOSE_VERSION: ${BBOX_COMPOSE_VERSION:-2.40.3}
     container_name: bina-claude-desktop-${DEPLOYMENT_NAME:-bina-deployment}
-    hostname: bina-claude-desktop
+    # The machine name the Claude app shows under every session (phone and desktop): the office's branch
+    # (hp-dgo, mac-dgo…), so a session tells at a glance which DGO it runs in.
+    hostname: ${DGO_BRANCH:-bina-claude-desktop}
     restart: unless-stopped
     # The base image's own init (s6) is PID 1; docker's init would sit in front of it.
     environment:
-      - PUID=1000
-      - PGID=1000
+      # THE APP WORKS IN THE OFFICE AS THE CHECKOUT'S OWNER (DGO-1684). Its sessions read and WRITE the
+      # checkout, which is mounted at its host path below; the app's user `abc` is this uid:gid. Declared per
+      # office in .env as the owner of the checkout (`stat -c %u:%g <checkout>`): 1000 where a person's home
+      # holds it (the HP), 0 on a server office whose checkout is root's under /root — measured on Exampleu,
+      # 2026-11-09: as 1000 the app could not even list /root/digital-office (Permission denied), so no
+      # session could work there and the folder picker could not show it. Root here adds no power the app does
+      # not have: it already holds the engine's socket, which is root on the host (DGO-1323, the owner's
+      # decision). Changing it re-owns the app's home once (bina-claude-desktop-home below).
+      - PUID=${BINA_CLAUDE_DESKTOP_PUID:-1000}
+      - PGID=${BINA_CLAUDE_DESKTOP_PGID:-1000}
       # nginx on the container's loopback (Dockerfile.desktop); the front door, gate.mjs, holds :3000.
       - CUSTOM_PORT=3100
       - CUSTOM_HTTPS_PORT=3101
@@ -128,11 +141,22 @@ services:
       - SELKIES_ENCODER=h264enc,jpeg
       - SELKIES_FRAMERATE=${BINA_CLAUDE_DESKTOP_FPS:-30}
       - SELKIES_ENABLE_CLIPBOARD=true
+      # The office's hands: the app's sessions run `./bbox` and `./scripts/dc` on
+      # this office themselves — the owner, 2026-11-03 (DGO-1323): «אתה רץ בתוך הhp ואמור להיות לך גישה מלאה
+      # להריץ כל פקודה … עזריה היה רק כרשת ביטחון». The socket is root on the host: his decision, recorded in
+      # ai/context/dgo-security.md. The desktop user joins the socket's group at start (Dockerfile.desktop).
       - BBOX_REPO_HOST=${BBOX_REPO_HOST:-/workspace/office}
+      - BBOX_DOCKER_SOCK=/var/run/docker.sock
+      - BBOX_HOST_DOCKER_SOCK=${BBOX_DOCKER_SOCK:-/var/run/docker.sock}
+      - BBOX_HOST_TZ=${TZ:-UTC}
       - DEPLOYMENT_NAME=${DEPLOYMENT_NAME:-bina-deployment}
+      - DEPLOYMENT_DOMAIN=${DEPLOYMENT_DOMAIN:-localhost}
+      # The base image's own docker daemon stays off: the host's engine is the one, through the socket.
+      - START_DOCKER=false
     volumes:
-      # HOME (/config) is the volume's `desktop` folder — the CLI container sees it as /data/desktop.
-      # bina-claude's entrypoint creates the folder (a subpath must exist before it is mounted).
+      - ${BBOX_DOCKER_SOCK:-/var/run/docker.sock}:/var/run/docker.sock
+      # HOME (/config) is the volume's `desktop` folder — the adapter (bina-claude above) sees it as /data/desktop.
+      # bina-claude-desktop-home makes the folder first (a subpath must exist before it is mounted).
       - type: volume
         source: bina_claude_home
         target: /config
@@ -141,9 +165,13 @@ services:
       - type: bind
         source: ${BBOX_REPO_HOST:-../../}
         target: ${BBOX_REPO_HOST:-/workspace/office}
+      # The office's vault, beside the checkout (DGO-1642) — the CLI sees what the desktop sees.
+      - ${OBSIDIAN_VAULT_HOST:-obsidian_vault}:/workspace/vault
     depends_on:
       bina-claude:
         condition: service_started
+      bina-claude-desktop-home:
+        condition: service_completed_successfully
     # Chromium's renderers share memory through /dev/shm; docker's 64 MB default crashes tabs.
     shm_size: 1gb
     networks:
@@ -154,19 +182,68 @@ services:
       timeout: ${HEALTHCHECK_TIMEOUT:-8s}
       retries: 5
       start_period: 60s
-    # An Electron app (~400-600 MB in use) + the display. Limits, not reservations.
+    # The official app is where the office's Claude sessions run (DGO-1295): the Electron app (~700 MB)
+    # + the display + ~200 MB and ~0.3 CPU per running Code session. Measured on the HP 2026-11-03 with 4
+    # sessions in 2 GB / 2 CPU (planned down to 1.32): 99.7% of its memory, the cap hit 8,010 times,
+    # 71 min throttled, the screen too slow to use (DGO-1299). Per office in .env; the reservation is
+    # the floor the CPU plan (G65) never scales below. The office that runs the sessions sets ~4 / 3 / 5g.
     deploy:
       resources:
         limits:
-          cpus: '2'
-          memory: 2g
+          cpus: '${BINA_CLAUDE_DESKTOP_CPUS:-2}'
+          memory: ${BINA_CLAUDE_DESKTOP_MEMORY:-2g}
+        reservations:
+          cpus: '${BINA_CLAUDE_DESKTOP_CPUS_FLOOR:-0.5}'
     logging:
       driver: ${LOGGING_DRIVER:-json-file}
       options:
         max-size: 5m
         max-file: '3'
+  # THE DESKTOP'S HOME, MADE BEFORE THE DESKTOP MOUNTS IT (DGO-1506). A volume subpath must exist when the
+  # container starts: Docker refuses the mount otherwise ("cannot access path …/_data/desktop: no such file
+  # or directory", exit 128), and a container whose start failed stays Created for good — a restart policy
+  # acts only on a container that ran. bina-claude's entrypoint makes the folder, but `service_started`
+  # waits for that container, not for its entrypoint, so on a fresh office the desktop was started 30 ms
+  # after it and never ran (Exampleu, 2026-11-08 20:56:26; the HP had the folder from before). One shot, as
+  # root, in the desktop's own image (present wherever the desktop can start); a second run changes nothing.
+  # The volume goes on /config: where a base image declares /config a VOLUME (linuxserver's images do), the
+  # named volume fills it and no anonymous one is left behind at every run. No container_name: a fixed name
+  # collides on a re-run and fails the whole `up`
+  # (mailserver-init says why). The home belongs to the app's user (BINA_CLAUDE_DESKTOP_PUID/PGID above): what
+  # in it is not that user's — a changed declaration, a switch that was cut short — is given to it, at every
+  # `up`. The app writes its sign-in and sessions there, and linuxserver's own start re-owns only /config's top
+  # and .local. The whole tree is asked (the first file that is not the user's ends the look), never only the
+  # top: the adapter and linuxserver re-own the top themselves (the second reader of DGO-1684). `-h`: a link is
+  # changed, never what it points at.
+  bina-claude-desktop-home:
+    image: ghcr.io/bina-solution/digital-office/bina-claude-desktop:${IMAGE_TAG:-latest}
+    pull_policy: missing
+    restart: "no"
+    entrypoint: ["/bin/sh", "-c"]
+    command: ["mkdir -p /config/desktop && { [ -z \"$$(find /config/desktop \\( ! -uid ${BINA_CLAUDE_DESKTOP_PUID:-1000} -o ! -gid ${BINA_CLAUDE_DESKTOP_PGID:-1000} \\) -print -quit)\" ] || chown -R -h ${BINA_CLAUDE_DESKTOP_PUID:-1000}:${BINA_CLAUDE_DESKTOP_PGID:-1000} /config/desktop; }"]
+    # nocopy: on a fresh office this can be the volume's first mount, and Docker would copy the image's own
+    # /config into the volume's ROOT — the adapter's /data (the second reader of DGO-1506).
+    volumes:
+      - type: volume
+        source: bina_claude_home
+        target: /config
+        volume:
+          nocopy: true
+    network_mode: none
+    deploy:
+      resources:
+        limits:
+          cpus: '0.1'
+          memory: 32m
+    logging:
+      driver: ${LOGGING_DRIVER:-json-file}
+      options:
+        max-size: 1m
+        max-file: '1'
 volumes:
   bina_claude_home:
+  # obsidian's volume, declared here because this app mounts it (same project, same volume)
+  obsidian_vault:
 networks:
   traefik-network:
     external: true

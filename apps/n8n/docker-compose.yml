@@ -147,9 +147,6 @@ services:
     - POSTGRES_USER=${POSTGRES_USER:-root}
     - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:?set in .env}
     - POSTGRES_DB=${POSTGRES_DB:-n8n}
-    - POSTGRES_USER=${POSTGRES_USER}
-    - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
-    - POSTGRES_DB=${POSTGRES_DB}
     healthcheck:
       test:
       - CMD-SHELL
@@ -161,7 +158,7 @@ services:
     container_name: n8n-${DEPLOYMENT_NAME:-bina-deployment}
     # ONE image for the main process and both workers. They are the SAME build - same context,
     # same Dockerfile, same args - and without an explicit tag compose gives each service its
-    # own image (deployment-hacohen-n8n, -n8n-worker-1, -n8n-worker-2): three separate 1.79 GB
+    # own image (digital-office-n8n, -n8n-worker-1, -n8n-worker-2): three separate 1.79 GB
     # entries for identical content. Naming it here lets the workers reference it instead of
     # redeclaring the build.
     #
@@ -344,71 +341,30 @@ services:
     - 127.0.0.1:5678:5678
     labels:
     - traefik.enable=true
-    - traefik.http.routers.n8n-local.rule=Host(`n8n.localhost`)
-    - traefik.http.routers.n8n-local.entrypoints=web
-    - traefik.http.routers.n8n-local.service=n8n
-    - traefik.http.routers.n8n-http.rule=Host(`${N8N_BASE_URL}`)
-    - traefik.http.routers.n8n-http.entrypoints=web
-    - traefik.http.routers.n8n-http.service=n8n
-    - traefik.http.routers.n8n-https.rule=Host(`${N8N_BASE_URL}`)
-    - traefik.http.routers.n8n-https.entrypoints=websecure
-    - traefik.http.routers.n8n-https.tls=true
-    - traefik.http.routers.n8n-https.service=n8n
-    - traefik.http.routers.n8n-https.tls.certresolver=${TRAEFIK_CERTRESOLVER-myresolver}
-    - traefik.http.services.n8n.loadbalancer.server.port=5678
-    # The console's desktop mode opens n8n as a window (console/static/desktop.js openExternal).
-    # n8n answers `X-Frame-Options: SAMEORIGIN`, which forbids exactly that; this drops it and lets
-    # ONLY the console frame the editor (CSP frame-ancestors), so no other site can.
+    # THE ROUTERS ARE COMPILED, not written here. Host, TLS, and — the reason this block changed —
+    # the office's SIGN-IN come from `routing` in app.json, which is the one declaration the platform
+    # reads. Until 2026-11-09 this entry said `auth: none` with its routers spelled out below and no
+    # middleware on any of them: the editor, its own login page and /rest/settings answered the whole
+    # internet on every office (measured from outside: n8n.exampleu… 200, and two scanners loading the
+    # editor within two minutes of an edge restart — DGO-1594). `auth: sso` + the `sso` block now put
+    # the same authentik forwardAuth in front of them that every other gated app gets, and the
+    # certificate resolver / console-framed host follow from it too.
+    #
+    # What stays in this file is only what the app itself knows: the middlewares its own routers carry.
+    #
+    # `n8n-embed` — the console's desktop mode opens n8n as a window (console/static/desktop.js
+    # openExternal), and n8n answers `X-Frame-Options: SAMEORIGIN`; this drops it and lets ONLY the
+    # console frame the editor (CSP frame-ancestors), so no other site can.
     - traefik.http.middlewares.n8n-embed.headers.customresponseheaders.X-Frame-Options=
     - traefik.http.middlewares.n8n-embed.headers.contentsecuritypolicy=frame-ancestors 'self' http://${CONSOLE_BASE_URL} https://${CONSOLE_BASE_URL}
-    - traefik.http.routers.n8n-local.middlewares=n8n-embed@docker
-    - traefik.http.routers.n8n-http.middlewares=n8n-embed@docker
-    - traefik.http.routers.n8n-https.middlewares=n8n-embed@docker
-    - traefik.http.routers.n8n-push-https.rule=Host(`${N8N_BASE_URL}`) && PathPrefix(`/rest/push`)
-    - traefik.http.routers.n8n-push-https.entrypoints=websecure
-    - traefik.http.routers.n8n-push-https.tls=true
-    - traefik.http.routers.n8n-push-https.service=n8n
-    - traefik.http.routers.n8n-push-https.tls.certresolver=${TRAEFIK_CERTRESOLVER-myresolver}
-    - traefik.http.routers.n8n-push-https.priority=200
-    - traefik.http.routers.n8n-push-https.middlewares=n8n-push-origin@docker
+    # `n8n-push-origin` / `n8n-frame-origin` — the editor's live updates are an EventSource
+    # (/rest/push) that a browser sends with NO Origin, and n8n refuses a push whose Origin is not the
+    # host it was forwarded for (push/origin-validator.js compares it against X-Forwarded-Host,
+    # port and all: measured 2026-11-09 on 2.17.0, a mismatch is a 500). These two write the Origin
+    # n8n expects — the editor's own host, and, in the console's frame, the host the shell frames it
+    # at (`n8n.<console host>`, which needs X-Forwarded-Host too). app.json attaches each to ONE PATH
+    # (`sub_routes`), never to the whole host.
     - traefik.http.middlewares.n8n-push-origin.headers.customrequestheaders.Origin=${N8N_PROTOCOL:-https}://${N8N_BASE_URL}
-    - traefik.http.routers.n8n-push-http.rule=Host(`${N8N_BASE_URL}`) && PathPrefix(`/rest/push`)
-    - traefik.http.routers.n8n-push-http.entrypoints=web
-    - traefik.http.routers.n8n-push-http.service=n8n
-    - traefik.http.routers.n8n-push-http.priority=200
-    - traefik.http.routers.n8n-push-http.middlewares=n8n-push-origin@docker
-    # The console's n8n TILE (DGO-907, the owner: «open … console > n8n and see the automations
-    # running and be able to edit them»). The module is `external` (app.json), so the shell frames
-    # n8n on the host it derives for an app of its own host — `n8n.<console host>` (console/static/
-    # app.js externalUrl) — and these routers answer it: the same editor, the same frame-ancestors,
-    # and its live updates (/rest/push). The host is spelled from DEPLOYMENT_DOMAIN, the console's
-    # own `console.${DEPLOYMENT_DOMAIN}` (.env.ex): CONSOLE_BASE_URL carries the edge's port on the
-    # Mac (`console.localhost:8080`), and traefik compares a Host rule without the request's port.
-    # The live updates are a same-origin EventSource, which a browser sends with no Origin, and n8n
-    # refuses a push whose Origin is not the host it was forwarded for (push/origin-validator.js): the
-    # two are written here as one host, so that holds on any port.
-    - traefik.http.routers.n8n-frame.rule=Host(`n8n.console.${DEPLOYMENT_DOMAIN:-localhost}`)
-    - traefik.http.routers.n8n-frame.entrypoints=web
-    - traefik.http.routers.n8n-frame.service=n8n
-    - traefik.http.routers.n8n-frame.middlewares=n8n-embed@docker
-    - traefik.http.routers.n8n-frame-https.rule=Host(`n8n.console.${DEPLOYMENT_DOMAIN:-localhost}`)
-    - traefik.http.routers.n8n-frame-https.entrypoints=websecure
-    - traefik.http.routers.n8n-frame-https.tls=true
-    - traefik.http.routers.n8n-frame-https.tls.certresolver=myresolver
-    - traefik.http.routers.n8n-frame-https.service=n8n
-    - traefik.http.routers.n8n-frame-https.middlewares=n8n-embed@docker
-    - traefik.http.routers.n8n-frame-push-https.rule=Host(`n8n.console.${DEPLOYMENT_DOMAIN:-localhost}`) && PathPrefix(`/rest/push`)
-    - traefik.http.routers.n8n-frame-push-https.entrypoints=websecure
-    - traefik.http.routers.n8n-frame-push-https.tls=true
-    - traefik.http.routers.n8n-frame-push-https.tls.certresolver=myresolver
-    - traefik.http.routers.n8n-frame-push-https.service=n8n
-    - traefik.http.routers.n8n-frame-push-https.priority=200
-    - traefik.http.routers.n8n-frame-push-https.middlewares=n8n-frame-origin@docker
-    - traefik.http.routers.n8n-frame-push-http.rule=Host(`n8n.console.${DEPLOYMENT_DOMAIN:-localhost}`) && PathPrefix(`/rest/push`)
-    - traefik.http.routers.n8n-frame-push-http.entrypoints=web
-    - traefik.http.routers.n8n-frame-push-http.service=n8n
-    - traefik.http.routers.n8n-frame-push-http.priority=200
-    - traefik.http.routers.n8n-frame-push-http.middlewares=n8n-frame-origin@docker
     - traefik.http.middlewares.n8n-frame-origin.headers.customrequestheaders.Origin=${N8N_PROTOCOL:-https}://n8n.console.${DEPLOYMENT_DOMAIN:-localhost}
     - traefik.http.middlewares.n8n-frame-origin.headers.customrequestheaders.X-Forwarded-Host=n8n.console.${DEPLOYMENT_DOMAIN:-localhost}
     depends_on:
@@ -498,6 +454,11 @@ services:
     # own X-Forwarded-For, so the address cannot be forged from outside.
     - N8N_TRUST_PROXY=true
     - N8N_PROXY_HOPS=${N8N_PROXY_HOPS:-1}
+    # No telemetry from this container either. The main container and the workers say false; this one, left at
+    # n8n's default, sent usage to telemetry.n8n.io and us.i.posthog.com (measured on Exampleu's server by the
+    # security app's egress view, 2026-11-09, DGO-1561).
+    - N8N_DIAGNOSTICS_ENABLED=false
+    - N8N_PERSONALIZATION_ENABLED=false
     logging:
       driver: json-file
       options:
@@ -520,6 +481,9 @@ services:
     - traefik.http.routers.n8n-hooks-https.tls.certresolver=${TRAEFIK_CERTRESOLVER-myresolver}
     - traefik.http.routers.n8n-hooks-https.service=n8n-hooks
     - traefik.http.routers.n8n-hooks-https.priority=150
+    # the public webhook router answers a machine, and the PIN costs that machine nothing: the host
+    # has a certificate either way (DGO-1595)
+    - traefik.http.routers.n8n-hooks-https.middlewares=hsts@file
     depends_on:
       redis:
         condition: service_healthy

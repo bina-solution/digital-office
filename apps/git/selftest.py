@@ -9,6 +9,9 @@ account → repo → branch → file → issue → PR → merge → release → 
     python3 apps/git/selftest.py                # full run (CREATES and DELETES a scratch repo)
     python3 apps/git/selftest.py --read-only    # only the ops that cannot change anything
     python3 apps/git/selftest.py --keep         # leave the repo behind for inspection
+    python3 apps/git/selftest.py --mirror-offline
+                                                # herd-408, NO network and NO account: two bare repos
+                                                # on this disk stand in for the source and the forge
 
 The scratch repository is named `bina-git-selftest-<timestamp>` and is DELETED at the end. Deletion
 needs a credential that may delete (a classic PAT with `delete_repo`, or a GitHub App with
@@ -24,6 +27,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import pathlib
 import subprocess
 import sys
 import time
@@ -70,16 +74,202 @@ class Report:
         return 1 if bad else 0
 
 
+def mirror_offline(rep: "Report") -> None:
+    """herd-408 — prove the two properties that keep a mirror from re-cloning 1.35 GB after a failure.
+
+    Hermetic ON PURPOSE: the app's `accounts` (vault) and `proxy` (credential → URL) are replaced
+    BEFORE `mirrors` is imported, so this case needs no vault, no httpx and no network — two bare
+    repositories on this disk stand in for the source and the forge, and real `git` does the work.
+    What it proves:
+      (1) a MISSING scratch is seeded from the TARGET FORGE when the repository is there, and the
+          source is only fetched afterwards (no source clone at all);
+      (2) a FAILED FETCH keeps the scratch, so the next attempt is incremental;
+      (3) a failed CLONE does not — an interrupted copy is not a repository to build on;
+      (4) a failure widens the clock (backoff) and a `paused` row is not scheduled at all.
+    """
+    import shutil
+    import tempfile
+    import types
+
+    here = pathlib.Path(__file__).resolve().parent
+    sys.path.insert(0, str(here))
+    tmp = pathlib.Path(tempfile.mkdtemp(prefix="git-mirror-offline-"))
+    origin_p, forge_p = tmp / "source.git", tmp / "forge.git"
+    seen: list[list[str]] = []
+
+    g_source = [""]
+    g_forge = [str(forge_p)]
+
+    def remote_url(inst_id: str, provider: str, repo: str) -> str:
+        return g_forge[0] if provider == "forgejo" else g_source[0]
+    # hermetic stubs, installed before the import below
+    sys.modules["accounts"] = types.SimpleNamespace(
+        resolve=lambda inst_id: ({"id": inst_id}, {"token": "stub"}, None),
+        provider_kind=lambda proto: ("forgejo" if proto == "forge_local" else "github", "repo"))
+    sys.modules["proxy"] = types.SimpleNamespace(remote_url=remote_url)
+    sys.modules.pop("mirrors", None)
+    import mirrors                                                # noqa: E402 — after the stubs
+
+    env = dict(os.environ, GIT_CONFIG_NOSYSTEM="1", HOME=str(tmp), GIT_TERMINAL_PROMPT="0")
+
+    def git(*a: str, cwd=None):
+        return subprocess.run(["git", *a], cwd=cwd, capture_output=True, text=True,
+                              env=env, timeout=300)
+
+    def commit_one(path: pathlib.Path, name: str, body: str) -> None:
+        git("init", "--bare", "-q", str(path))
+        work = pathlib.Path(tempfile.mkdtemp(dir=str(tmp)))
+        git("clone", "-q", str(path), str(work))
+        (work / "README.md").write_text(body, encoding="utf-8")
+        git("-C", str(work), "add", "-A")
+        git("-C", str(work), "-c", "user.name=selftest", "-c", "user.email=selftest@local",
+            "commit", "-qm", name)
+        git("-C", str(work), "push", "-q", "origin", "HEAD:refs/heads/main")
+
+    try:
+        # the SOURCE, with its own history
+        commit_one(origin_p, "one", "first\n")
+        # the FORGE holds what a PREVIOUS successful sync already pushed: the SAME history. An
+        # unrelated root here would make the seed's push a non-fast-forward — a different and real
+        # refusal that would hide the property this case is about.
+        git("init", "--bare", "-q", str(forge_p))
+        prev = tmp / "prev-mirror.git"
+        git("clone", "--mirror", "-q", str(origin_p), str(prev))
+        git("--git-dir", str(prev), "push", "--prune", "-q", str(forge_p),
+            "+refs/heads/*:refs/heads/*")
+        shutil.rmtree(prev, ignore_errors=True)
+        g_source[0] = str(origin_p)
+
+        # the app's own state, redirected to the temp dir
+        mirrors.STATE_DIR = tmp / "state"
+        mirrors.REGISTRY = mirrors.STATE_DIR / "mirrors.json"
+        mirrors.SCRATCH = mirrors.STATE_DIR / "scratch"
+        mirrors.MIN_FREE_MB = 0                                      # the check must not depend on the CI disk
+        mirrors.MAX_BYTES = 10 ** 12
+        mirrors.KEEP_SCRATCH = 1
+        mirrors.INTERVAL = 3600
+        mirrors._ensure_repo = lambda row: None                  # no forge API in this case
+        real_git = mirrors._git
+
+        def recording_git(args, cwd=None, timeout=None):
+            seen.append([str(a) for a in args])
+            # the module's own default when the caller passed none — a recording wrapper that drops
+            # the timeout would disarm the very thing the code sets (found in review)
+            return real_git(args, cwd, mirrors.GIT_TIMEOUT if timeout is None else timeout)
+
+        mirrors._git = recording_git
+        mid = "stub:github:bina-solution/demo"
+        mirrors._save([{ "id": mid, "source_account": "stub", "source_provider": "github",
+                         "source_repo": "bina-solution/demo", "target_account": "forge",
+                         "target_owner": "office", "target_repo": "demo", "private": True,
+                         "interval": 3600, "last_run": None, "last_status": "new",
+                         "paused": False, "consecutive_failures": 0, "next_due": None }])
+        scratch = mirrors.SCRATCH / mirrors._slug(mid)
+
+        def tip(path: pathlib.Path, ref: str = "refs/heads/main") -> str:
+            return (git("--git-dir", str(path), "rev-parse", ref).stdout or "").strip()
+
+        # ── (1) a missing scratch is SEEDED FROM THE FORGE, never re-cloned from the source ──────
+        res = mirrors.sync(mid)
+        clones = [c for c in seen if c and c[0] == "clone"]
+        fetches = [c for c in seen if c and c[0] == "fetch"] or \
+                  [c for c in seen if c and "--git-dir" in c and "fetch" in c]
+        forged = [c for c in clones if str(forge_p) in c]
+        sourced = [c for c in clones if str(origin_p) in c]
+        rep.add("1. a missing scratch is seeded from the TARGET FORGE", bool(forged) and not sourced,
+                f"clone-forge={len(forged)} clone-source={len(sourced)} "
+                f"seeded_from_forge={res.get('seeded_from_forge')}")
+        # The seed alone would pass this while the source was never read — the property is
+        # "seed, THEN fetch incrementally", so both halves are asserted, and the forge's tip must
+        # equal the SOURCE's tip afterwards (a seed that never fetched leaves the older history).
+        rep.add("1b. …then the source is FETCHED (not cloned) and the forge ends up at the source",
+                bool(fetches) and bool(forged) and tip(forge_p) == tip(origin_p) != "",
+                f"fetches={len(fetches)} forge_tip={tip(forge_p)[:8]} source_tip={tip(origin_p)[:8]}")
+        rep.add("1c. and the sync itself succeeded", bool(res.get("ok")), res.get("error") or "")
+
+        # ── (2) a FAILED FETCH keeps the scratch, and the NEXT attempt is incremental ─────────────
+        seen.clear()
+        g_source[0] = str(tmp / "source-is-gone.git")             # the source stops answering
+        res2 = mirrors.sync(mid)
+        rep.add("2. a failed fetch is reported as a failure", not res2.get("ok"),
+                (res2.get("error") or "")[:120])
+        rep.add("2b. …and the scratch is KEPT",
+                scratch.exists() and mirrors._scratch_usable(scratch),
+                f"scratch exists={scratch.exists()}")
+        row = mirrors._find(mid) or {}
+        rep.add("2c. …and the clock widens (backoff)",
+                int(row.get("consecutive_failures") or 0) >= 1
+                and int(row.get("next_due") or 0) > time.time(),
+                f"failures={row.get('consecutive_failures')} next_due in "
+                f"{max(0, int(row.get('next_due') or 0) - int(time.time()))}s")
+        rep.add("2d. …and it is not scheduled again immediately",
+                mid not in [r.get("id") for r in mirrors.due()])
+
+        # 2e — the recovery is what the failure costs. A new commit upstream, the source back, one run:
+        # it must FETCH (never clone) and the new commit must reach the forge.
+        work2 = pathlib.Path(tempfile.mkdtemp(dir=str(tmp)))
+        git("clone", "-q", str(origin_p), str(work2))
+        (work2 / "README.md").write_text("second\n", encoding="utf-8")
+        git("-C", str(work2), "add", "-A")
+        git("-C", str(work2), "-c", "user.name=selftest", "-c", "user.email=selftest@local",
+            "commit", "-qm", "two")
+        git("-C", str(work2), "push", "-q", "origin", "HEAD:refs/heads/main")
+        g_source[0] = str(origin_p)
+        seen.clear()
+        res2b = mirrors.sync(mid)
+        resumed_clones = [c for c in seen if c and c[0] == "clone"]
+        resumed_fetches = [c for c in seen if c and "fetch" in c]
+        rep.add("2e. the recovery run FETCHES into the kept scratch and carries the new commit",
+                bool(res2b.get("ok")) and not resumed_clones and bool(resumed_fetches)
+                and tip(forge_p) == tip(origin_p),
+                f"clones={len(resumed_clones)} fetches={len(resumed_fetches)} "
+                f"forge_tip={tip(forge_p)[:8]} source_tip={tip(origin_p)[:8]}")
+
+        # ── (3) a failed CLONE is still dropped ───────────────────────────────────────────────────
+        # BOTH ends go dark: with a live forge the scratch would be a good seed and the fetch would be
+        # the only failure (case 2 again). This is the first-ever-mirror shape — nothing to seed from,
+        # the source does not answer — and what it must NOT leave behind is a half-written repository.
+        shutil.rmtree(scratch, ignore_errors=True)
+        g_forge[0] = g_source[0] = str(tmp / "nothing-here.git")
+        res3 = mirrors.sync(mid)
+        rep.add("3. a failed CLONE leaves no half-written copy to build on",
+                (not res3.get("ok")) and not scratch.exists(),
+                f"scratch exists={scratch.exists()}")
+
+        # ── (4) paused is a state, not a number ───────────────────────────────────────────────────
+        g_forge[0], g_source[0] = str(forge_p), str(origin_p)
+        mirrors.sync(mid)
+        mirrors.set_paused(mid, True)
+        far = time.time() + 10 ** 6
+        paused_ids = [r.get("id") for r in mirrors.due(now=far)]
+        mirrors.set_paused(mid, False)
+        resumed_ids = [r.get("id") for r in mirrors.due(now=far)]
+        rep.add("4. a paused row is not scheduled; a resumed one is",
+                (mid not in paused_ids) and (mid in resumed_ids),
+                f"paused={mid in paused_ids} resumed={mid in resumed_ids}")
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+
+
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--read-only", action="store_true",
                     help="skip every step that writes to the account")
     ap.add_argument("--keep", action="store_true", help="do not delete the scratch repo")
+    ap.add_argument("--mirror-offline", action="store_true",
+                    help="herd-408: prove the mirror's scratch/seed/backoff rules with fake local "
+                         "remotes — no account, no network, nothing created on any real service")
     ap.add_argument("--account", help="connection id (default: the active account)")
     ap.add_argument("--owner", help="namespace to create the repo in (default: the account's own)")
     args = ap.parse_args()
     rep = Report()
     acc = {"account": args.account}
+
+    if args.mirror_offline:
+        print("git selftest — mirror scratch rules (offline: two bare repos stand in for the source "
+              "and the forge)")
+        mirror_offline(rep)
+        return rep.summary()
 
     print(f"git selftest against {BASE}" + ("  [READ ONLY]" if args.read_only else ""))
 

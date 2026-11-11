@@ -2,14 +2,17 @@
 
 Portainer, a screen for the engine's containers. It is **retired in the herd**
 (`apps/computers/herd.yaml`: no office runs it), and it ships off. It has no console tile and no API
-for agents.
+for agents; where an office has it on, the console's screen search finds it and opens it in its own
+tab (`module` with `embed: false`).
 
 ## Rules
 
 - **Do not enable it, and do not use its API.** It mounts the engine's socket read-write, so its
-  admin is root on the engine, and its host is not behind the office's SSO.
+  admin is root on the engine.
+  - Its host sits behind the office's sign-in (`auth: sso`; the compiler emits its routers), and
+    Portainer's own login after it (DGO-1762). Before that it was open to anyone who reached the host.
   - To see or act on containers, use `./scripts/dc` and the computers or machine apps.
-- Its sign-in is Portainer's own: user `admin`.
+- Its own login, after the office's sign-in, is user `admin`.
   - `hooks/prepare` writes the password file `apps/portainer/portainer_password.txt` (gitignored)
     once: from `.env`'s `PORTAINER_ADMIN_PASSWORD`, or a random one when `.env` has none.
   - It never rewrites a file that exists, so a later `.env` change does not reach it.

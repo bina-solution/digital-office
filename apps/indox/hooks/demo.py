@@ -20,8 +20,8 @@ Usage:
       --no-inject    seed companies + ai_cache only (skip doc placement)
 
 Mechanism (all via the INDOX API layer + the n8n inject workflow):
-  1) companies  -> indoxApiRouter01 INLINE_ACTION=TABLE_UPSERT table=companies
-  2) ai_cache   -> indoxApiRouter01 INLINE_ACTION=TABLE_UPSERT table=ai_extraction_cache
+  1) companies  -> indoxApi01 INLINE_ACTION=TABLE_UPSERT table=companies
+  2) ai_cache   -> indoxApi01 INLINE_ACTION=TABLE_UPSERT table=ai_extraction_cache
   3) docs       -> trigger "INDOX Inject Demo Blueprint" (per_sync from the blueprint)
 Default first-run settings live in n8n ("INDOX Reset + Setup"); everything demo-specific is in the YAML.
 """
@@ -56,7 +56,12 @@ DN = _dn()
 INJECT_WF = "IndoxInjectDemo01"          # display name: "INDOX Inject Demo Blueprint"
 # RESET_WF ("INDOX Reset + Setup") lived here too and was never read — demo's --reset calls the
 # local light_reset(). The id now has exactly one definition, in hooks/reset, which is what runs it.
-ROUTER_WF = "indoxApiRouter01"
+ROUTER_WF = "indoxApi01"
+# [DGO-1609, 2026-11-09] Was "indoxApiRouter01" — an id the code retired on 2026-08-12 ("folded
+# into indoxApiSupabase01", whose id became indoxApi01) while vps1 kept running the old copy. The
+# retired-workflows.txt entry says the quoted id is what kept it alive: this line and the four test
+# suites' `routerId`. Both now name the workflow the blueprints actually ship; the old copy can be
+# retired on an office once that office has been pushed to this generation.
 # [v1 retirement 2026-08-25] The demo drives the SAME reconciler production runs. It used to call
 # the v1 scanner (SyncScanner00001), which had been INACTIVE with zero retained executions for
 # weeks while every real pass went through syncV3Main0001 — so the demo was exercising a lane the
@@ -97,11 +102,17 @@ def run_wf(ck, wfid, pin_items=None, start_hint=None, timeout=120):
     wf = json.loads(b)["data"]
     nodes = wf["nodes"]
     ewt = next((n for n in nodes if n["type"] == "n8n-nodes-base.executeWorkflowTrigger"), None)
-    # executeWorkflowTrigger does NOT cascade the body via REST /run — it only runs when called by
-    # another workflow. So START from a manual/schedule trigger (which DOES cascade), and PIN the
-    # input on the executeWorkflowTrigger too, so $('When Called') still resolves to the blueprint.
-    man = next((n for n in nodes if n["type"] in ("n8n-nodes-base.manualTrigger", "n8n-nodes-base.scheduleTrigger")), None)
-    start = man or ewt or nodes[0]
+    # WHICH NODE THE RUN STARTS FROM (DGO-1609). A pinned seed is driving the `When Called` branch, so
+    # it starts THERE: the pin makes that node's output available, and the branch it feeds is the one
+    # the demo is seeding. Choosing "the first manual/schedule trigger" instead broke exactly that on
+    # indoxApi01, which carries a `Keepalive` schedule: the run went down Keepalive's branch, the
+    # pinned WhenCalled path never executed, and the seed printed "seeded N/N" having written nothing.
+    # Without a pin nothing changes — a manual trigger (or whatever comes first) starts the run.
+    if pin_items is not None and ewt:
+        start = ewt
+    else:
+        man = next((n for n in nodes if n["type"] in ("n8n-nodes-base.manualTrigger", "n8n-nodes-base.scheduleTrigger")), None)
+        start = man or nodes[0]
     tn = start["name"]
     if pin_items is not None:
         if wf.get("pinData") is None:

@@ -5,7 +5,9 @@
     "en": "App Management"
   },
   "layer": 1,
+  "people": "admins",
   "kind": "service",
+  "page": "base",
   "version": "1.0.0",
   "summary": {
     "he": "מרכז הבקרה של הפלטפורמה — התקנה, הפעלה, כיבוי והסרה של אפליקציות",

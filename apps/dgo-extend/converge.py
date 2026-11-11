@@ -45,6 +45,18 @@ import peers
 log = logging.getLogger("dgo-extend.converge")
 
 COMPUTERS_URL = os.environ.get("COMPUTERS_URL", "http://computers:8977").rstrip("/")
+#: This app's proof of who it is to `computers`, whose writes answer only a known caller (DGO-1304). Sent
+#: only to COMPUTERS_URL (`computers_headers`), never to another host.
+COMPUTERS_EXEC_TOKEN = os.environ.get("COMPUTERS_EXEC_TOKEN") or ""
+
+
+def computers_headers(url: str) -> dict:
+    """`Authorization` for a call to `computers`, and nothing for any other address."""
+    if COMPUTERS_EXEC_TOKEN and url.startswith(COMPUTERS_URL + "/"):
+        return {"authorization": f"Bearer {COMPUTERS_EXEC_TOKEN}"}
+    return {}
+
+
 #: The box that runs THIS office — the one whose console shows a placed app. Reached through
 #: `computers` like every other machine (see app.py).
 LOCAL_MACHINE = "computer_local-local"
@@ -58,7 +70,7 @@ STEPS = ["machine", "dns", "backup", "code", "engine", "env", "login", "state", 
 #: Steps a caller may ask for BY NAME that are never part of a default converge: `unlink` takes a link
 #: away, and a default run that revoked a tunnel because someone forgot an argument would be the worst
 #: kind of helpful.
-EXTRA_STEPS = ["unlink", "offsite"]   # offsite: the daily backup off the server (FPG-26), asked by the watch
+EXTRA_STEPS = ["unlink", "offsite"]   # offsite: the daily backup off the server (EXF-26), asked by the watch
 STEP_TITLES = {
     "offsite": "גיבוי מחוץ לשרת",
     "machine": "המחשב",
@@ -91,7 +103,8 @@ class StepFailed(Exception):
 def _http(method: str, url: str, body: dict | None = None, timeout: float = 30) -> dict:
     data = json.dumps(body).encode() if body is not None else None
     req = urllib.request.Request(url, data=data, method=method,
-                                 headers={"content-type": "application/json"} if data else {})
+                                 headers={**({"content-type": "application/json"} if data else {}),
+                                          **computers_headers(url)})
     try:
         with urllib.request.urlopen(req, timeout=timeout) as r:
             return json.loads(r.read() or b"{}")
@@ -396,8 +409,18 @@ P=__PATH__
 # turns "I have a restore point" into "the office cannot write", which is a strictly worse failure
 # (measured 2026-09-30: the engine's disk hit 99% during a day of converges, and containers went
 # unhealthy — the office's own health step reported them, not the disk).
-vol_mb=$(du -sm /var/lib/docker/volumes 2>/dev/null | cut -f1 || echo 0)
-vol_mb=${vol_mb:-0}
+# Only what the snapshot TAKES is counted. The off-server copies' own volumes (dgo-offsite*) are never in
+# it (the loop below), nor are the volumes `skip_vol` names. Counting them is what refused examplef every
+# day from 2026-11-06: its 8 GB staging archive and 3.8 GB speech model (data.cache) made 18.5 GB of
+# volumes ask for ~44 GB with 24 GB free, for a copy of ~6.7 GB (DGO-1508).
+skip_vol() { case "$1" in dgo-offsite*) return 0 ;; esac; return 1; }
+vol_mb=0
+for vd in /var/lib/docker/volumes/*/; do
+  [ -d "$vd" ] || continue
+  skip_vol "$(basename "$vd")" && continue
+  m=$(du -sm "$vd" 2>/dev/null | cut -f1)
+  vol_mb=$(( vol_mb + ${m:-0} ))
+done
 need_mb=$(( vol_mb * 125 / 100 ))                 # the tar itself plus the copy it is written into
 min_mb=${DGO_BACKUP_MIN_FREE_MB:-3000}
 free_mb=$(df -Pm /root | awk 'NR==2{print $4}')
@@ -439,14 +462,14 @@ done
 # no per-volume container start. A volume on a non-local driver has no such path and is reported
 # (never silently skipped): "the backup finished" must not mean "the volumes were left out".
 for v in $(docker volume ls -q); do
-  # the off-server copies (FPG-26) — an archive that held yesterday's archive would double every day
+  # the off-server copies (EXF-26) — an archive that held yesterday's archive would double every day
   case "$v" in dgo-offsite*) echo "   vol $v — the off-server copy itself, left out"; continue ;; esac
   src=/var/lib/docker/volumes/$v/_data
   if [ ! -d "$src" ]; then echo "WARN: volume $v has no local path — NOT backed up"; continue; fi
   # tar exits 1 when a file changed while it was being read — the NORMAL outcome for a volume a
   # running postgres is writing to, and the archive is still usable. Treating 1 as failure dropped
   # the platform's own postgres volume from EVERY backup (measured 2026-09-29 on vps1:
-  # "WARN: tar failed for volume deployment-hacohen_postgres_storage", 347 MB left out).
+  # "WARN: tar failed for volume digital-office_postgres_storage", 347 MB left out).
   # `|| rc=$?` and not a bare call: the script runs under `set -e`, so a tar that exits 1 (see
   # below) would abort the whole backup instead of being classified.
   rc=0
@@ -517,7 +540,7 @@ def step_backup(office: dict, ctx: dict, emit) -> dict:
         return {"summary": "אין לשכה קיימת בתיקייה — אין מה לגבות"}
     script = (BACKUP.replace("__PATH__", p).replace("__OID__", office["id"]))
     # an off-server snapshot still running beside this one: each checked the free space alone, and both
-    # together could fill the machine's disk — it ends first (FPG-26)
+    # together could fill the machine's disk — it ends first (EXF-26)
     if _detached_running(office, "offsite"):
         emit("── הגיבוי היומי מחוץ לשרת עדיין רץ על המחשב — ממתין שיסתיים")
         try:
@@ -539,7 +562,7 @@ def step_backup(office: dict, ctx: dict, emit) -> dict:
             "bytes": f.get("BYTES"), "warnings": warns}
 
 
-# ── the backup that leaves the server (FPG-26) ─────────────────────────────────────────────────────
+# ── the backup that leaves the server (EXF-26) ─────────────────────────────────────────────────────
 #: A client's office is copied off its own machine every day: the same snapshot as the backup step
 #: (every postgres dumped, every volume, .env, the certificates), ENCRYPTED on the machine before it
 #: leaves — the snapshot holds the client's secrets and their customers' data — with a key that lives
@@ -551,7 +574,21 @@ def step_backup(office: dict, ctx: dict, emit) -> dict:
 #: to THIS office's own machine, one volume per day, where its sha256 is checked against the machine's
 #: (openssl enc has no authenticated mode: the check at home is the integrity). OFFSITE_KEEP are kept.
 OFFSITE_VOLUME = "dgo-offsite"
-OFFSITE_KEEP = int(os.environ.get("DGO_OFFSITE_KEEP", "7"))
+def offsite_keep(raw) -> int:
+    """DGO_OFFSITE_KEEP as a count, never a crash: the module is imported by the server at start, so a value that
+    is not a number must not take dgo-extend down (the 11-10 crash loop behind G115 was a `float("")`). Empty is
+    the default 7; anything that is not an integer is 0, which step_offsite refuses by name — the prune's
+    `head -n -0` would otherwise delete every verified copy, and a negative one would prune nothing, silently."""
+    s = str(raw if raw is not None else "").strip()
+    if not s:
+        return 7
+    try:
+        return int(s)
+    except ValueError:
+        return 0
+
+
+OFFSITE_KEEP = offsite_keep(os.environ.get("DGO_OFFSITE_KEEP", "7"))
 OFFSITE_CIPHER, OFFSITE_ITER = "aes-256-cbc", 200000
 OFFSITE_ENCRYPT = r"""
 # ── the snapshot above, encrypted, into the office's volume the transfer carries home ─────────────
@@ -595,7 +632,7 @@ OFFSITE_SNAP_GLOB = "offsite-__OID__-[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]-[0
 def cache_volumes() -> list[str]:
     """The volumes the apps declare rebuildable (`data.cache` in their app.json: a pinned model, cached audio — never
     anything the office cannot re-fetch or re-run), read from this office's checkout. The off-server copy leaves them
-    out (FPG-92: fireplace's 3.7 GB speech model was half of a 7.6 GB copy). Never fatal: none read, none left out."""
+    out (EXF-92: examplef's 3.7 GB speech model was half of a 7.6 GB copy). Never fatal: none read, none left out."""
     if not HOME_REPO:
         return []
     try:
@@ -632,10 +669,15 @@ def offsite_script(path_q: str, oid: str, key: str, fingerprint: str, cache: lis
     if not cut or f"D={snap}" not in snapshot or "vol_mb * 225 / 100" not in snapshot or skip not in snapshot:
         raise StepFailed("תבנית הגיבוי השתנתה — הגיבוי מחוץ לשרת לא ירוץ", "", "")
     names = [c for c in cache if re.fullmatch(r"[a-z0-9_.-]+", c)]
-    if names:   # a compose project prefixes its volumes (fireplace_apitools_asr_data): the name, or *_name
+    room = 'skip_vol() { case "$1" in dgo-offsite*) return 0 ;; esac; return 1; }'
+    if room not in snapshot:
+        raise StepFailed("תבנית הגיבוי השתנתה — הגיבוי מחוץ לשרת לא ירוץ", "", "")
+    if names:   # a compose project prefixes its volumes (examplef_apitools_asr_data): the name, or *_name
         pat = "|".join(f"{c}|*_{c}" for c in names)
         snapshot = snapshot.replace(skip, skip + f'  case "$v" in {pat}) echo "   vol $v — rebuildable (data.cache), '
                                                  f'left out of the off-server copy"; continue ;; esac\n')
+        # ...and so not counted by the room check either: it asks for room for what this copy takes
+        snapshot = snapshot.replace(room, f'skip_vol() {{ case "$1" in dgo-offsite*|{pat}) return 0 ;; esac; return 1; }}')
     head = ("umask 077\n"
             f"K='{key}'\n"                       # not exported: only openssl gets it, in its own environment
             # a run killed outright (OOM, a reboot) ran no trap: its plaintext goes now
@@ -657,10 +699,57 @@ def _home_copies(oid: str) -> str:
 
 
 def offsite_home(office: dict) -> str:
-    """Where an office's off-server copies are kept (FPG-92): the machine its declaration names (`offsite_to`, a
+    """Where an office's off-server copies are kept (EXF-92): the machine its declaration names (`offsite_to`, a
     computers-app id — the herd's backup store), else DGO_OFFSITE_TO, else this home as before. A client whose copy
     grew to gigabytes does not fit an 8 GB MacBook's engine; the herd puts the store on the HP/Dell."""
     return str(office.get("offsite_to") or os.environ.get("DGO_OFFSITE_TO") or LOCAL_MACHINE)
+
+
+#: A store reached as a user who is NOT root but may run docker (DGO-1508: the Dell's sshd says `PermitRootLogin no`,
+#: `AllowUsers shlomy`, and shlomy is in the docker group). Its volumes' files are root's, so what reads, marks or
+#: removes a copy there runs in a throwaway container of this image, the copy mounted at /m. A store reached as root
+#: is served exactly as before.
+OFFSITE_HELPER = os.environ.get("DGO_OFFSITE_HELPER", "alpine:3.20")
+#: the computers app's archive in flight on such a store (apps/computers/transfer.py STAGE_VOLUME, the same variable)
+TRANSFER_STAGE_VOLUME = os.environ.get("COMPUTER_TRANSFER_STAGE_VOLUME", "bina-transfer")
+#: the file that says the store's directory IS on its disk: put there once, on that disk, when the store is set up. A
+#: disk that is not mounted (after a reboot) leaves a directory without it — at a mount point, an EMPTY directory that
+#: `[ -d ]` would pass — and the step refuses instead of writing copies onto the system disk.
+OFFSITE_STORE_MARK = ".dgo-offsite-store"
+
+
+def offsite_dir(office: dict) -> str:
+    """The directory on the store that holds the copies (DGO-1508): the store's own disk for backups (the Dell's
+    /mnt/dgo-data, herd-403), each copy a volume bound to a directory of its own under it. Declared as
+    `offsite_dir` beside `offsite_to`, else DGO_OFFSITE_DIR beside DGO_OFFSITE_TO. Empty = docker's own volumes.
+    The directory holds OFFSITE_STORE_MARK, put there when the store is set up."""
+    d = str(office.get("offsite_dir") or
+            ("" if office.get("offsite_to") else os.environ.get("DGO_OFFSITE_DIR", "")) or "").rstrip("/")
+    if d and (not re.fullmatch(r"/[A-Za-z0-9._/-]{1,200}", d) or ".." in d.split("/")):
+        raise StepFailed("offsite_dir אינו נתיב מלא ובטוח", "תקן את ההצהרה: נתיב מלא, אותיות לטיניות, ספרות, ‎. _ - /", d[:200])
+    return d
+
+
+def _on_copy(volume: str, body: str, ro: bool = False) -> str:
+    """`body` (busybox sh, the copy's files at "$m") in a throwaway container on a store reached through docker."""
+    return (f"docker run --rm --init --network none --log-driver none -v {q(volume)}:/m{':ro' if ro else ''} "
+            f"{q(OFFSITE_HELPER)} sh -c {q('m=/m; ' + body)}")
+
+
+#: `drop <volume>` on a store reached through docker: a copy bound to the store's directory is emptied first (docker
+#: removes a volume, never the files of the directory it was bound to) and its directory goes with it. A bound copy
+#: whose directory is gone holds nothing: its volume goes (it cannot be mounted to be emptied). `dev <volume>` prints
+#: the directory a copy is bound to, or nothing.
+_DROP = ("dev() { d=$(docker volume inspect -f '{{if .Options}}{{index .Options \"device\"}}{{end}}' \"$1\" "
+         "2>/dev/null) || return 1; case \"$d\" in '<no value>') d= ;; esac; printf '%s' \"$d\"; }; "
+         "drop() { d=$(dev \"$1\") || return 1; "
+         "if [ -n \"$d\" ] && [ -d \"$d\" ]; then docker run --rm --init --network none --log-driver none -v \"$1\":/m "
+         "__HELPER__ find /m -mindepth 1 -delete || return 1; fi; "
+         "docker volume rm \"$1\" >/dev/null || return 1; [ -z \"$d\" ] || [ ! -d \"$d\" ] || rmdir \"$d\" 2>/dev/null || true; }")
+
+
+def _drop_fn() -> str:
+    return _DROP.replace("__HELPER__", q(OFFSITE_HELPER))
 
 
 def _offsite_key(office: dict) -> tuple[str, str]:
@@ -789,6 +878,10 @@ def _detached_running(office: dict, name: str) -> bool:
 
 
 def step_offsite(office: dict, ctx: dict, emit) -> dict:
+    if OFFSITE_KEEP < 1:          # before any snapshot: a store told to keep none would lose every copy it holds
+        raise StepFailed("DGO_OFFSITE_KEEP חייב להיות מספר שלם 1 ומעלה",
+                         "תקן את DGO_OFFSITE_KEEP ב-.env (ריק = 7) והפעל מחדש את dgo-extend.",
+                         repr(os.environ.get("DGO_OFFSITE_KEEP")))
     p, oid = q(office["path"]), office["id"]
     have = exec_on(office["machine"], f"test -s {p}/.env && command -v openssl >/dev/null && echo ready", 30)
     if have.get("code") != 0 or "ready" not in (have.get("stdout") or ""):
@@ -801,6 +894,22 @@ def step_offsite(office: dict, ctx: dict, emit) -> dict:
         raise StepFailed("על המחשב הזה יש לשכה נוספת — הגיבוי מחוץ לשרת לוקח את כל המחשב",
                          "גיבוי לפי לשכה על מחשב משותף עוד לא נבנה; העבר כל לשכה למחשב משלה.",
                          ", ".join(others))
+    # who the store is reached as, asked BEFORE the client's machine makes a snapshot: root reads the copies on the
+    # host as always; anyone else through docker (OFFSITE_HELPER). A store that does not say is not guessed at: a
+    # docker-only store read as root would fail its check and drop a good copy.
+    sdir = offsite_dir(office)
+    who = exec_on(offsite_home(office), 'echo "STORE_UID=$(id -u)"', 30)
+    uid = re.search(r"STORE_UID=([0-9]+)", who.get("stdout") or "")
+    if not uid:
+        raise StepFailed("מחסן הגיבויים לא ענה", "ודא שהמחסן דולק ונגיש, והרץ שוב.",
+                         f"{offsite_home(office)}: {str(who.get('stderr') or who.get('error') or who.get('stdout') or '')[:200]}")
+    helper = uid.group(1) != "0"
+    if sdir and not helper:
+        # a volume bound to a directory is EMPTY on the host until a container mounts it: a root store's host
+        # paths would read and write the wrong disk
+        raise StepFailed("offsite_dir נתמך רק במחסן שנכתב דרך docker (משתמש שאינו root)",
+                         "הסר את offsite_dir, או הגדר את המחסן כמחשב שנגיש במשתמש בקבוצת docker.",
+                         f"{offsite_home(office)}: {sdir}")
     key, fp = _offsite_key(office)
     # a pre-upgrade backup that outlived its converge ends first: each checked the free space alone
     if _detached_running(office, "backup"):
@@ -835,32 +944,63 @@ def step_offsite(office: dict, ctx: dict, emit) -> dict:
     # the store is asked for room BEFORE anything moves: the transfer stages the archive and then extracts it, so
     # it needs twice the archive, and a copy that does not fit is refused by name (10-30: a 7.6 GB copy met a
     # 14 GB-free engine that keeps five copies)
-    room = exec_on(home, "df -PB1 \"$(docker info -f '{{.DockerRootDir}}' 2>/dev/null || echo /var/lib/docker)\" "
-                         "| awk 'NR==2{print $4}'", 60)
-    free = (room.get("stdout") or "").strip()
-    if nbytes and re.fullmatch(r"[0-9]{1,15}", free) and int(free) < 2 * int(nbytes) + (1 << 30):
-        raise StepFailed("אין מקום במחסן הגיבויים לעותק הזה", "פנה מקום שם, או הגדר offsite_to למחשב אחר.",
-                         f"{home}: free {int(free) >> 20} MB, needs {(2 * int(nbytes) + (1 << 30)) >> 20} MB")
-    emit(f"── {fname} ({nbytes} bytes) → {home}: {dest}")
+    if helper:
+        # the archive in flight lands on docker's own disk, the copy in the store's directory: each disk is asked for
+        # what lands on it, and one disk holding both is asked for both
+        # the store's directory must BE there and on its disk (its mark), never made here: on a disk that is not mounted
+        # (after a reboot) a `mkdir -p` would put the copies on the system disk, and they would vanish under the mount
+        room = exec_on(home, (f"[ -f {q(f'{sdir}/{OFFSITE_STORE_MARK}')} ] || {{ echo NODIR; exit 0; }}; "
+                              if sdir else "") +
+                       "df -PB1 \"$(docker info -f '{{.DockerRootDir}}' 2>/dev/null || echo /var/lib/docker)\" " +
+                       (f"{q(sdir)} " if sdir else "") + "| awk 'NR>1{print $1, $4}'", 60)
+        if "NODIR" in (room.get("stdout") or ""):
+            raise StepFailed("תיקיית הגיבויים במחסן לא נמצאה על הדיסק שלה — אולי הדיסק לא מחובר",
+                             f"חבר את הדיסק. מחסן חדש: צור את התיקייה על הדיסק ובתוכה קובץ {OFFSITE_STORE_MARK}, והרץ שוב.",
+                             f"{home}: {sdir}")
+        rows = [ln.split() for ln in (room.get("stdout") or "").splitlines()
+                if len(ln.split()) == 2 and re.fullmatch(r"[0-9]{1,15}", ln.split()[1])]
+        if nbytes and rows:
+            n, gb = int(nbytes), 1 << 30
+            wants = ([(rows[0], 2 * n + gb)] if len(rows) == 1 or rows[0][0] == rows[1][0]
+                     else [(rows[0], n + gb), (rows[1], n + gb)])
+            for (fs, free_b), want in wants:
+                if int(free_b) < want:
+                    raise StepFailed("אין מקום במחסן הגיבויים לעותק הזה", "פנה מקום שם, או הגדר offsite_to למחשב אחר.",
+                                     f"{home}: {fs[:60]} free {int(free_b) >> 20} MB, needs {want >> 20} MB")
+    else:
+        room = exec_on(home, "df -PB1 \"$(docker info -f '{{.DockerRootDir}}' 2>/dev/null || echo /var/lib/docker)\" "
+                             "| awk 'NR==2{print $4}'", 60)
+        free = (room.get("stdout") or "").strip()
+        if nbytes and re.fullmatch(r"[0-9]{1,15}", free) and int(free) < 2 * int(nbytes) + (1 << 30):
+            raise StepFailed("אין מקום במחסן הגיבויים לעותק הזה", "פנה מקום שם, או הגדר offsite_to למחשב אחר.",
+                             f"{home}: free {int(free) >> 20} MB, needs {(2 * int(nbytes) + (1 << 30)) >> 20} MB")
+    emit(f"── {fname} ({nbytes} bytes) → {home}: {dest}" + (f" ({sdir})" if sdir else ""))
     try:
+        if sdir:
+            # the copy's volume, bound to a directory of its own on the store's disk, made before the transfer
+            # (which only creates a volume that is not there)
+            must(home, f"mkdir {q(f'{sdir}/{dest}')} && docker volume create --driver local --opt type=none "
+                       f"--opt o=bind --opt device={q(f'{sdir}/{dest}')} {q(dest)} >/dev/null",
+                 60, "לא ניתן להכין את מקום הגיבוי במחסן")
         _transfer_volume(office["machine"], home, offsite_volume(oid), dest, emit)
         # what arrived was made by the client's machine: it holds EXACTLY the archive and its .json, as plain
         # files, before anything here reads it — a link or a pipe from there must not lead a root command
         # here anywhere (a .verified pointing at /etc/nologin, an archive that is /dev/zero)
         # the integrity: the file that arrived is the file the machine encrypted — and only then is the copy
         # marked as one (retention counts nothing else: a copy cut short by a crash HERE is no backup)
-        got = must(home,
-                   f"set -o pipefail; m={mount}; [ -n \"$m\" ] || exit 2; "
-                   f"odd=$(find \"$m\" -mindepth 1 \\( ! -type f -o ! \\( -name {q(fname)} -o -name {q(fname + '.json')} \\) \\) "
-                   f"-print -quit) || exit 2; [ -z \"$odd\" ] || {{ echo \"UNEXPECTED=$odd\"; exit 0; }}; "
-                   f"sha256sum \"$m\"/{q(fname)} | cut -d' ' -f1", 300, "לא ניתן לבדוק את הגיבוי שהגיע")
+        body = (f"odd=$(find \"$m\" -mindepth 1 \\( ! -type f -o ! \\( -name {q(fname)} -o -name {q(fname + '.json')} \\) \\) "
+                f"-print -quit) || exit 2; [ -z \"$odd\" ] || {{ echo \"UNEXPECTED=$odd\"; exit 0; }}; "
+                f"sha256sum \"$m\"/{q(fname)} | cut -d' ' -f1")
+        got = must(home, _on_copy(dest, "set -o pipefail; " + body, ro=True) if helper else
+                   f"set -o pipefail; m={mount}; [ -n \"$m\" ] || exit 2; " + body, 300, "לא ניתן לבדוק את הגיבוי שהגיע")
         if "UNEXPECTED=" in got:
             raise StepFailed("בגיבוי שהגיע יש משהו מלבד הארכיון", "הגיבוי לא נשמר. בדוק את השרת של הלקוח.",
                              got.strip()[:300])
         if got.strip() != sha:
             raise StepFailed("הגיבוי שהגיע אינו זהה לגיבוי שהוצפן במכונה", "הרץ שוב — ייווצר גיבוי חדש.",
                              f"sha256 {got.strip()[:12]} ≠ {sha[:12]}")
-        must(home, f"m={mount}; [ -n \"$m\" ] && rm -f \"$m\"/.verified && : > \"$m\"/.verified", 60,
+        must(home, _on_copy(dest, "rm -f \"$m\"/.verified && : > \"$m\"/.verified") if helper else
+             f"m={mount}; [ -n \"$m\" ] && rm -f \"$m\"/.verified && : > \"$m\"/.verified", 60,
              "לא ניתן לסמן את הגיבוי שנבדק")
     except Exception as e:
         # a copy that did not arrive whole is no copy: neither its volume nor the transfer's staging stays,
@@ -870,6 +1010,14 @@ def step_offsite(office: dict, ctx: dict, emit) -> dict:
         # never verified, the next run's retention removes it.
         if getattr(e, "copy_running", False):
             emit("── ההעברה עדיין רצה אחרי הביטול — העותק שלה לא נבדק, והניקוי הבא יסיר אותו")
+        elif helper:
+            stage = f"/s/{offsite_volume(oid)}__{dest}.tar"
+            # the copy's directory goes only once its volume is gone: a volume still in use keeps its directory
+            exec_on(home, f"{_drop_fn()}; drop {q(dest)}; " +
+                    (f"docker volume inspect {q(dest)} >/dev/null 2>&1 || rmdir {q(f'{sdir}/{dest}')} 2>/dev/null; "
+                     if sdir else "") +
+                    f"docker run --rm --init --network none --log-driver none -v {q(TRANSFER_STAGE_VOLUME)}:/s "
+                    f"{q(OFFSITE_HELPER)} rm -f {q(stage)} {q(stage + '.json')}", 120)
         else:
             exec_on(home, f"docker volume rm {q(dest)} >/dev/null 2>&1; "
                                    f"rm -f {q(f'/var/lib/bina-transfer/{offsite_volume(oid)}__{dest}.tar')}*", 60)
@@ -878,13 +1026,32 @@ def step_offsite(office: dict, ctx: dict, emit) -> dict:
         raise StepFailed("העברת הגיבוי נקטעה", "הרץ שוב — ייווצר גיבוי חדש.", f"{type(e).__name__}: {e}"[:500]) from e
     # the copies here: OFFSITE_KEEP newest by name (the stamp sorts by time) among those VERIFIED; one that is
     # not (a copy an older version or a crash left) is removed first. Each removal is named.
-    keep = must(home,
-                f"set -o pipefail; L=$({_home_copies(oid)}) || exit 1; "
-                f"for v in $L; do m=$(docker volume inspect -f '{{{{.Mountpoint}}}}' \"$v\"); "
-                f"[ -f \"$m\"/.verified ] && [ ! -L \"$m\"/.verified ] && echo \"$v\" || {{ docker volume rm \"$v\" >/dev/null && "
-                f"echo \"PRUNED=$v (unverified)\" >&2; }}; done | sort | head -n -{OFFSITE_KEEP} | while read -r v; do "
-                f"docker volume rm \"$v\" >/dev/null && echo \"PRUNED=$v\"; done; "
-                f"echo KEPT=$({_home_copies(oid)} | wc -l)", 180, "לא ניתן לנקות גיבויים ישנים")
+    if helper:
+        # each copy is asked through docker; one that cannot be asked (no answer, not V or U) stops the cleanup
+        # before anything is removed by count — «could not read» is never «unverified»
+        # a copy bound UNDER THIS store's directory whose own directory is gone (removed by hand) holds nothing and cannot
+        # be mounted: its volume goes. Only there — the room check proved that disk mounted (its mark) in this run; a copy
+        # bound anywhere else (an earlier offsite_dir, a disk not attached) stops the cleanup as UNREADABLE instead.
+        gone = (f"case \"$d\" in {q(sdir + '/')}*) if [ ! -d \"$d\" ]; then docker volume rm \"$v\" >/dev/null && "
+                f"echo \"PRUNED=$v (its directory is gone)\" >&2; continue; fi ;; esac; ") if sdir else ""
+        keep = must(home,
+                    f"set -o pipefail; {_drop_fn()}; L=$({_home_copies(oid)}) || exit 1; OK=; "
+                    f"for v in $L; do d=$(dev \"$v\") || d=; {gone}"
+                    f"r=$(docker run --rm --init --network none --log-driver none -v \"$v\":/m:ro "
+                    f"{q(OFFSITE_HELPER)} sh -c 'if [ -f /m/.verified ] && [ ! -L /m/.verified ]; then echo V; else echo U; fi') "
+                    f"|| r=; case \"$r\" in V) OK=\"$OK $v\" ;; U) drop \"$v\" && echo \"PRUNED=$v (unverified)\" >&2 ;; "
+                    f"*) echo \"UNREADABLE=$v\" >&2; exit 3 ;; esac; done; "
+                    f"for v in $(printf '%s\\n' $OK | sed '/^$/d' | sort | head -n -{OFFSITE_KEEP}); do "
+                    f"drop \"$v\" && echo \"PRUNED=$v\"; done; "
+                    f"echo KEPT=$({_home_copies(oid)} | wc -l)", 600, "לא ניתן לנקות גיבויים ישנים")
+    else:
+        keep = must(home,
+                    f"set -o pipefail; L=$({_home_copies(oid)}) || exit 1; "
+                    f"for v in $L; do m=$(docker volume inspect -f '{{{{.Mountpoint}}}}' \"$v\"); "
+                    f"[ -f \"$m\"/.verified ] && [ ! -L \"$m\"/.verified ] && echo \"$v\" || {{ docker volume rm \"$v\" >/dev/null && "
+                    f"echo \"PRUNED=$v (unverified)\" >&2; }}; done | sort | head -n -{OFFSITE_KEEP} | while read -r v; do "
+                    f"docker volume rm \"$v\" >/dev/null && echo \"PRUNED=$v\"; done; "
+                    f"echo KEPT=$({_home_copies(oid)} | wc -l)", 180, "לא ניתן לנקות גיבויים ישנים")
     kf = parse_facts(keep)
     return {"summary": f"גיבוי מוצפן {nbytes} bytes → {dest} · נבדק · נשמרים {kf.get('KEPT', '?')}",
             "file": fname, "bytes": nbytes, "sha256": sha,
@@ -947,7 +1114,7 @@ fi
 git -c advice.detachedHead=false checkout --quiet --detach {q(commit)}
 # A release copy carries no platform.state.yaml (a new office starts from the product default), and
 # on a fresh clone the fallback above ran before the commit put any file in the tree — the state step
-# then found no file to write (fireplace, 2026-10-22). Now that the files are here, make it.
+# then found no file to write (examplef, 2026-10-22). Now that the files are here, make it.
 [ -f platform.state.yaml ] || cp -a platform.state.default.yaml platform.state.yaml 2>/dev/null || true
 echo "HEAD=$(git rev-parse HEAD)"
 """
@@ -1003,13 +1170,23 @@ def step_engine(office: dict, ctx: dict, emit) -> dict:
 #: Is this `.env` the installer's copy of `.env.ex`? `debian-install.sh` (`setup_env_variables`, run by
 #: the engine step, which comes BEFORE env) copies the template when there is no `.env`, so a fresh
 #: machine always reached step_env with a file: `fresh` was never true, `ci-env.sh` never ran, and the
-#: office came up on the template's published placeholder secrets and its home domain (fireplace,
-#: 2026-10-22: DEPLOYMENT_DOMAIN=hacohen.…, every password the one in .env.ex). A copy is recognised by
+#: office came up on the template's published placeholder secrets and its home domain (examplef,
+#: 2026-10-22: DEPLOYMENT_DOMAIN=example.…, every password the one in .env.ex). A copy is recognised by
 #: its secrets — ALL of the template's literal ones still equal — because the URLs of a copy may
 #: already have been normalised by an earlier ENV_MERGE. `ci-env.sh` changes every one of them, so a
-#: generated `.env` can never read as a copy.
+#: generated `.env` can never read as a copy. Since DGO-1220 part 2 the template carries its secrets EMPTY:
+#: literal values alone left nothing to compare, every copy read as an office's own file, and the domain
+#: check of step_env refused it — examplef again (DGO-1495). So every key scripts/env-secrets.py names counts
+#: too (TABLE minted, APP_MADE issued by its app, EXTERNAL pasted by the owner), read from its source with
+#: `ast`, never run: a copy still has each one the template leaves empty empty or absent, while an office's own
+#: `.env` has the minted ones filled (ci-env.sh, `bbox run`, ENV_MERGE and the Linux package's header.sh mint
+#: them; debian-install.sh only copies) and a pasted provider key makes a hand-made file the office's own. A
+#: checkout without the generator is from before part 2, and its template still carries values. With neither
+#: to compare, the check FAILS rather than answer: an answer of «not a copy» would let ENV_MERGE fill the copy's
+#: secrets, and it would read as the office's own on every later run (the second reader). LIT is how many
+#: literal values matched, for step_env's words when the copy sits over data.
 TEMPLATE_CHECK = r"""
-import re
+import ast, re, sys
 def parse(path):
     out = {}
     for ln in open(path, encoding='utf-8', errors='replace').read().splitlines():
@@ -1018,17 +1195,32 @@ def parse(path):
             out[m.group(1)] = m.group(2).split(' #')[0].strip().strip("'\"")
     return out
 env, ex = parse('.env'), parse('.env.ex')
-keys = [k for k, v in ex.items() if re.search(r'(PASSWORD|SECRET|_KEY|TOKEN)$', k) and v and '${' not in v]
-print('TEMPLATE=%d' % (1 if keys and all(env.get(k) == ex[k] for k in keys) else 0))
+lit = [k for k, v in ex.items() if re.search(r'(PASSWORD|SECRET|_KEY|TOKEN)$', k) and v and '${' not in v]
+names, err = [], ''
+try:
+    for node in ast.parse(open('scripts/env-secrets.py', encoding='utf-8').read()).body:
+        if isinstance(node, ast.Assign) and any(isinstance(t, ast.Name) and t.id in ('TABLE', 'APP_MADE', 'EXTERNAL')
+                                                for t in node.targets):
+            items = node.value.keys if isinstance(node.value, ast.Dict) else getattr(node.value, 'elts', [])
+            names += [i.value for i in items if isinstance(i, ast.Constant) and isinstance(i.value, str)]
+except (OSError, SyntaxError, ValueError) as e:
+    err = '%s: %s' % (type(e).__name__, e)
+empty = [k for k in names if ex.get(k) == '']
+if not lit and not empty:
+    sys.exit("TEMPLATE_CHECK: .env.ex carries no secret value and scripts/env-secrets.py names no key it leaves "
+             "empty (%s): a copy of the template cannot be told from the office's own .env" % (err or 'none named'))
+copy = all(env.get(k) == ex[k] for k in lit) and all(env.get(k, '') == '' for k in empty)
+print('TEMPLATE=%d' % (1 if copy else 0))
+print('LIT=%d' % len(lit))
 """
 
 ENV_MERGE = r"""
 import os, re, sys, datetime, secrets, shutil
-# THE RENAME (FPG-33): an installed office moves to another domain (the owner, DGO-1032: fireplace from
-# thefireplaceguys.digital-office.co.il to fpg.digital-office.co.il). The declaration carries both names
+# THE RENAME (EXF-33): an installed office moves to another domain (the owner, DGO-1032: examplef from
+# theexamplefguys.digital-office.co.il to exf.digital-office.co.il). The declaration carries both names
 # (the record keeps `renamed_from` when its domain changes), and the rename happens only while this
 # .env still names exactly the previous one: any other domain is refused below, as before. ci-env.sh
-# wrote every host out in full (63 keys on fireplace), so every value naming the old domain as a whole
+# wrote every host out in full (63 keys on examplef), so every value naming the old domain as a whole
 # word (a host, a subdomain, a URL) gets the new one. An ADDRESS (`admin@<old>`) is not renamed: it is
 # the sign-in of an account that n8n, Plane, GlitchTip and authentik already hold, and the platform logs
 # in with it (connections → n8n, the vault's login): those keys are named in EMAILS_KEPT, and the
@@ -1119,7 +1311,7 @@ if os.environ.get('DGO_MINT') == '1':
             minted.append(key)
             have.add(key)
     # …and every own secret the template asks to be replaced. ci-env.sh randomises the keys it knows;
-    # the rest arrived as .env.ex has them (fireplace, 2026-10-22: MCP_AUTH_TOKEN=CHANGE_ME — the header
+    # the rest arrived as .env.ex has them (examplef, 2026-10-22: MCP_AUTH_TOKEN=CHANGE_ME — the header
     # n8n's MCP endpoints accept — and the SUPABASE_*_PASSWORD keygen keeps because they are not
     # missing). A key of an OUTSIDE provider (…_API_KEY, or `your-…-here`) is left as it is: a random
     # value there would read as configured.
@@ -1161,6 +1353,15 @@ if add:
                 % datetime.date.today().isoformat())
         f.write('\n'.join(add) + '\n')
 print('ADDED=' + ','.join(a.split('=', 1)[0] for a in add))
+# …and every own secret of the office, from the one table (scripts/env-secrets.py, DGO-1220): the template
+# carries them all EMPTY, so the keys just added arrive empty. --if-fresh asks this machine's volumes itself:
+# with no data it fills every key; with data only an EMPTY key whose own app keeps no data yet (an app
+# switched on later), never a password a database was made with.
+if os.path.exists('scripts/env-secrets.py'):
+    import subprocess
+    r = subprocess.run([sys.executable, 'scripts/env-secrets.py', '--env', '.env', '--if-fresh'],
+                       capture_output=True, text=True)
+    print('SECRETS=' + ('ok' if r.returncode == 0 else 'failed'))
 vals = {}
 for ln in open('.env').read().splitlines():
     m = re.match(r'^([A-Z0-9_]+)=(.*)$', ln)
@@ -1235,8 +1436,15 @@ def step_env(office: dict, ctx: dict, emit) -> dict:
     volumes = _office_data(office)
     if not fresh:
         check = base64.b64encode(TEMPLATE_CHECK.encode()).decode()
-        if parse_facts(must(office["machine"], f"cd {p} && echo {check} | base64 -d | python3 -", 60,
-                            "בדיקת עותק התבנית ב־.env נכשלה")).get("TEMPLATE") == "1":
+        facts = parse_facts(must(office["machine"], f"cd {p} && echo {check} | base64 -d | python3 -", 60,
+                                 "בדיקת עותק התבנית ב־.env נכשלה"))
+        if facts.get("TEMPLATE") == "1":
+            if volumes and facts.get("LIT", "1") == "0":
+                # A template with no secret of its own (DGO-1220): the copy did not run anything — the office's
+                # own .env is gone and the installer copied the template over again. Restore, not rotate.
+                raise StepFailed("ה־.env הוא עותק של .env.ex בלי סודות משלו, וללשכה כבר יש נתונים "
+                                 f"({volumes} volumes) — ה־.env של הלשכה עצמה חסר",
+                                 "שחזר את ה-.env מגיבוי. השלב לא ייצר סודות חדשים מעל נתונים קיימים.")
             if volumes:
                 # It RAN on the template's secrets: the databases were initialised with them, and new
                 # ones would lock every service out of its own data. That is a decision, not a step.
@@ -1257,14 +1465,16 @@ def step_env(office: dict, ctx: dict, emit) -> dict:
     if fresh:
         name = re.sub(r"[^a-z0-9]", "", office["id"].lower())[:20] or "office"
         must(office["machine"],
+             # the office's own id names it: without CI_BUSINESS_NAME ci-env.sh writes «Local office», and its
+             # slug would sign every office's mail and name its error-tracker organisation (DGO-1782's reader)
              f"cd {p} && OFFICE_DOMAIN={q(office['domain'])} CI_DEPLOYMENT_NAME={q(name)} "
-             f"bash scripts/ci-env.sh", 300, "יצירת ה־.env נכשלה")
+             f"CI_BUSINESS_NAME={q(office['id'])} bash scripts/ci-env.sh", 300, "יצירת ה־.env נכשלה")
     b64 = base64.b64encode(ENV_MERGE.encode()).decode()
     # a vault key is minted only while there is no vault or database to lock — which also covers the
     # retry of a run that failed after ci-env.sh had written the file
     mint = 0 if volumes else 1
     # an office whose declared domain changed carries the one it had: the machine's .env is moved to the
-    # new one only while it still names exactly that one (FPG-33)
+    # new one only while it still names exactly that one (EXF-33)
     old = office.get("renamed_from") or ""
     rename = (f"DGO_RENAME_FROM={q(old)} DGO_RENAME_TO={q(office['domain'])} "
               if old and old != office["domain"] else "")
@@ -1285,7 +1495,7 @@ def step_env(office: dict, ctx: dict, emit) -> dict:
     if old:
         # the machine is on the declared domain: the previous one has nothing left to say, and a later
         # change starts from this one (the second reader)
-        # …and the accounts' addresses are the `accounts` step's, after `run` (FPG-34) — recorded whenever
+        # …and the accounts' addresses are the `accounts` step's, after `run` (EXF-34) — recorded whenever
         # the machine is on the declared domain, not only when THIS run did the rename: a merge that
         # failed after its rename, or a converge cut short here, would otherwise strand them (the reader).
         # The verb is idempotent: with nothing left on the old domain it moves nothing.
@@ -1310,7 +1520,7 @@ def _forget_rename(office: dict, addresses_from: str = "") -> None:
     meanwhile (o2 → o3 while the machine moved o1 → o2): the next rename starts from o2, where the machine
     is — not from o1, which would strand it (the third reader). Saved by the app's own writer.
 
-    `addresses_from`: a domain the accounts' addresses may still be on, for the `accounts` step (FPG-34).
+    `addresses_from`: a domain the accounts' addresses may still be on, for the `accounts` step (EXF-34).
     A LIST: a second rename before the accounts moved leaves some on the first domain and, where an app
     moved meanwhile, some on the second — each is moved from (the reader)."""
     office.pop("renamed_from", None)
@@ -1335,7 +1545,7 @@ def _forget_rename(office: dict, addresses_from: str = "") -> None:
 
 
 def _address_domains(doc: dict) -> list[str]:
-    """The record's `addresses_from` as a list (a record of the first FPG-34 build held one string)."""
+    """The record's `addresses_from` as a list (a record of the first EXF-34 build held one string)."""
     v = doc.get("addresses_from") or []
     return [v] if isinstance(v, str) else [d for d in v if isinstance(d, str) and d]
 
@@ -1364,7 +1574,7 @@ def rename_script(path_q: str, old: str, new: str) -> str:
 
 
 def step_accounts(office: dict, ctx: dict, emit) -> dict:
-    """The accounts follow the domain (FPG-34). The env step moved every HOST and left every ADDRESS
+    """The accounts follow the domain (EXF-34). The env step moved every HOST and left every ADDRESS
     (`admin@<old>`): it is the sign-in of an account n8n, Plane, GlitchTip and authentik already hold,
     and the platform signs in with it. Here, with the stack up, each app moves its own accounts and then
     its own keys — `bbox rename-address <old> <new>` on the machine, every enabled app that has the hook —
@@ -1390,7 +1600,7 @@ def step_accounts(office: dict, ctx: dict, emit) -> dict:
     probe = exec_on(office["machine"], f"grep -q 'rename-address)' {p}/bbox", 20).get("code")
     if probe == 1:
         return {"summary": "הקוד של הלשכה עוד לא יודע להעביר את כתובות החשבונות — נשאר ברשומה",
-                "warnings": ["הרץ את שלב code עם גרסה שיש בה את FPG-34; הכתובות יועברו בהרצה שאחריה"]}
+                "warnings": ["הרץ את שלב code עם גרסה שיש בה את EXF-34; הכתובות יועברו בהרצה שאחריה"]}
     if probe != 0:
         raise StepFailed("לא ניתן לבדוק את קוד הלשכה במחשב", "ודא שהמחשב זמין ונסה את השלב שוב.")
     partial, done, changed, warnings, err = [], [], False, [], None
@@ -1467,7 +1677,7 @@ def platform(app):
     # (AGENTS.md), and an app's manifest may also say `system: true` or layer 0/1. Such an app stays on
     # whatever a declaration leaves out; switching one off is a declaration's explicit `disabled`. A
     # declaration that named only the business apps switched off traefik, authentik, postgres, redis,
-    # console and connections on fireplace (2026-10-22, "7 enabled · 15 switched off"), and the
+    # console and connections on examplef (2026-10-22, "7 enabled · 15 switched off"), and the
     # compiler then refused to render.
     if os.path.isfile(os.path.join("platform-base", app, "app.json")):
         return True
@@ -1632,15 +1842,18 @@ def step_run(office: dict, ctx: dict, emit) -> dict:
     # ledger too; otherwise dcx refuses every build of the older tree the code step just checked out
     # (DGO-1016, G90), and the office would be left with a checkout that is not what runs.
     back = "BBOX_ALLOW_ROLLBACK=1 " if (office.get("source") or {}).get("allow_rollback") else ""
+    # BBOX_RUN_FATAL_EXIT=0: this step reads the run's WHOLE log below and names the fix (a refused deploy →
+    # source.allow_rollback); a run that ended «NOT up» with exit 3 (DGO-995) would make wait_detached raise first,
+    # with only the log's tail — so it asks for the run's old ending, and judges it here.
     start_detached(office, "run",
-                   f"cd {q(office['path'])}\n{back}BBOX_WAIT_TIMEOUT=${{BBOX_WAIT_TIMEOUT:-900}} ./bbox run\n")
+                   f"cd {q(office['path'])}\n{back}BBOX_RUN_FATAL_EXIT=0 BBOX_WAIT_TIMEOUT=${{BBOX_WAIT_TIMEOUT:-900}} ./bbox run\n")
     wait_detached(office, "run", emit, limit=3 * 3600, every=15)
-    # `bbox run`'s exit code is not the answer. A failing `docker compose up` (an image it cannot
-    # pull, a name conflict, a port already taken) is printed and the CLI still finishes 0, so this
-    # step reported a green "bbox run הסתיים בהצלחה" over a stack that was only half brought up —
-    # measured 2026-09-29, where an unpullable image left the office's console answering 502 while
-    # this step said ok. Docker's own failures are greppable, and they are read from the WHOLE log
-    # rather than from the last poll's tail.
+    # The run's exit is not this step's answer: a failing `docker compose up` (an image it cannot
+    # pull, a name conflict, a port already taken) is printed, and this step reported a green
+    # "bbox run הסתיים בהצלחה" over a stack that was only half brought up — measured 2026-09-29,
+    # where an unpullable image left the office's console answering 502 while this step said ok.
+    # Docker's own failures are greppable, and they are read from the WHOLE log rather than from the
+    # last poll's tail.
     d = ctl_dir(office)
     bad = exec_on(office["machine"],
                   f"grep -aE 'Error response from daemon|docker: Error|failed to solve|"
@@ -1666,7 +1879,7 @@ echo "unhealthy=$(grep -c 'unhealthy' /tmp/.dgo-extend-ps)"
 echo "restarting=$(grep -c 'Restarting' /tmp/.dgo-extend-ps)"
 echo "bad=$(grep -E 'unhealthy|Restarting' /tmp/.dgo-extend-ps | cut -d'|' -f1 | tr '\n' ' ')"
 # the office's compose project as compose reads it: the containers above can all be healthy while every
-# `dc` fails (rel10 on fireplace: one app's manifest named no compose file), and then nothing can be run,
+# `dc` fails (rel10 on examplef: one app's manifest named no compose file), and then nothing can be run,
 # rebuilt or onboarded. Stderr is kept in memory (a fixed file in /tmp is another user's, or stale), and
 # the line kept is compose's — or dc's own error — never compose's warnings or bbox's notices. It must
 # never carry a value: an env file it cannot parse is named by file and line only, and any quoted text
@@ -2362,9 +2575,70 @@ def home_office() -> dict:
     Its slot is allocated once and kept in `/data/home.json`, because a slot that moves silently
     renumbers a tunnel another office has already been told about. Only PUBLIC identity material is
     ever stored here — the private half stays in the `dgo_identity` volume.
+
+    Its `serve:` is the EFFECTIVE one: what the volume says, plus what the herd file says this office
+    always gives by name (`give.py`, DGO-1433). The floor is read on top and never written — every
+    writer of home.json reads the file itself (`_read_home`) — so a line taken out of the herd file
+    withdraws its app again, and no writer of the volume can withdraw it before that.
     """
     with _HOME_LOCK:
-        return _home_office()
+        return with_give(_home_office())
+
+
+def with_give(doc: dict) -> dict:
+    """`doc` with the herd's floor merged into a COPY of its `serve:` (give.py) — `doc` itself when the herd
+    gives nothing here. A failure costs the floor, never the record: this runs inside every catalog answer."""
+    out = doc
+    try:
+        import give
+        given = give.floor(give.load_herd(), doc, declarations())
+        if given:
+            registry = catalog.load_registry(os.environ.get("DGO_REGISTRY_DIR", "/registry"))
+            out = dict(doc)
+            out["serve"] = give.merge(doc.get("serve"), given, registry)
+            # …and the map as home.json holds it, beside it: what is NAMED office-wide (an agent's token) is that one's
+            out["serve_written"] = doc.get("serve") or {}
+    except Exception as e:                              # noqa: BLE001 — see the docstring
+        try:
+            import give
+            give._once("the herd's give: was not applied (%s: %s)", type(e).__name__, str(e)[:200])
+        except Exception:                               # noqa: BLE001
+            log.warning("the herd's give: was not applied (%s)", type(e).__name__)
+    # a client's office we set up is given NOTHING of ours, whatever `serve:` or the floor says (clients.py, DGO-964):
+    # the one-way link's second guard, beside the client joiner's own — in a try of its own, so a floor that fails
+    # never takes the cut with it
+    try:
+        import clients
+        import give
+        cut = clients.withheld(give.load_herd(), doc, declarations())
+        if cut:
+            out = dict(out)
+            out["serve"] = clients.narrow(out.get("serve"), cut)
+            out.setdefault("serve_written", doc.get("serve") or {})
+    except Exception as e:                              # noqa: BLE001 — the direction (`use`) still holds the line
+        log.warning("the herd's clients were not withheld (%s: %s)", type(e).__name__, str(e)[:200])
+    return out
+
+
+def home_serve_written() -> dict:
+    """The `serve:` map as home.json HOLDS it — what a screen or an agent edits and writes back. Never the
+    effective one (`home_office`): read back and written whole, that would store the herd's floor in the volume,
+    and taking a line out of the herd file would then withdraw nothing (second reader, DGO-1433)."""
+    with _HOME_LOCK:
+        doc = _read_home()
+    return dict(doc.get("serve") or {}) if isinstance(doc.get("serve"), dict) else {}
+
+
+def given_by_herd() -> dict:
+    """{peer id: [app names]} — what the herd file says this office always gives each peer (`give.floor`), for
+    the screens and for a writer's answer; {} when it gives nothing here."""
+    try:
+        import give
+        with _HOME_LOCK:
+            doc = _home_office()
+        return {k: sorted(v) for k, v in sorted(give.floor(give.load_herd(), doc, declarations()).items())}
+    except Exception:                                   # noqa: BLE001 — a report, never a reason to fail
+        return {}
 
 
 #: Names an office must not take as its DEFAULT id: they are what every fresh machine of a kind is
@@ -2532,6 +2806,28 @@ def _set_home_serve(serve: dict) -> dict:
                 entry["identity"] = before["identity"]
             if "host" not in spec and "host" in before:
                 entry["host"] = before["host"]
+        # THE MACHINES BEHIND «מחשבים» (DGO-553): `serve.computers.machines` — `"*"`, a list of
+        # machine ids, or absent (= every machine, which is what sharing the app meant before this
+        # key existed). This loop rebuilds each entry from the keys it knows, so a key it does not
+        # name is DROPPED — and that is how the first write of this declaration came back as
+        # `{"port": 8977}` (measured 2026-11-01: the screen sent it, the store threw it away).
+        # Kept like `identity`/`host` above: naming the port again is not a statement about machines.
+        mine = spec.get("machines")
+        if isinstance(mine, str):
+            mine = mine.strip()
+            if mine == "*":
+                entry["machines"] = "*"
+        elif isinstance(mine, list):
+            ids = [str(x).strip().lower() for x in mine if str(x).strip()]
+            if all(re.match(r"^[a-z][a-z0-9_.\-]{1,80}$", x) for x in ids):
+                entry["machines"] = ids
+            else:
+                # A malformed id is not a narrowing, it is a typo: keep what was declared before
+                # rather than silently sharing nothing (the computers app reads a bad list as "none").
+                if before.get("machines") is not None:
+                    entry["machines"] = before["machines"]
+        elif "machines" not in spec and before.get("machines") is not None:
+            entry["machines"] = before["machines"]
         clean[str(k)] = entry
     # …and a caller that re-declares what the office gives is not un-narrowing an office either: the
     # screen's "give everything" names no `only`, and dropping it there would hand a narrowed office
@@ -2644,7 +2940,7 @@ def _serve_block(office: dict, home: dict) -> list[dict]:
     if not link:
         # No link declared between the two offices: nothing is served. The `use` default below is for
         # a link that names no direction — read for NO link, it mirrored to `serve`, and a new office
-        # that links to nobody (fireplace, 2026-10-22) was handed this office's apps: a bina tile, at
+        # that links to nobody (examplef, 2026-10-22) was handed this office's apps: a bina tile, at
         # an address of a pair it is not in, in the console of a client who must not see us.
         return []
     # `both` serves as well (see `_mirror`): testing for `serve` alone wrote an EMPTY block on a
@@ -2974,7 +3270,7 @@ def _mirror(direction: str) -> str:
 
 
 def _served_ports_local(office: dict, slot: int | None = None, registry: dict | None = None,
-                        peer: str = "") -> dict:
+                        peer: str = "", withheld=frozenset()) -> dict:
     """The ports a `serve` link opens HERE, from the apps this office's own record names.
 
     ONE door per link (DGO-32), plus the catalog and any app's agent API: an office whose registry
@@ -3012,6 +3308,8 @@ def _served_ports_local(office: dict, slot: int | None = None, registry: dict | 
     for app, spec in served.items():
         if app == "dgo-extend" or (only is not None and app not in only):
             continue
+        if catalog.given_by_name({str(app).lower()}, only, withheld):
+            continue                 # an admin surface this peer is never given by `*` (DGO-1360): no port for it
         if isinstance(spec, dict) and spec.get("agent_api_port"):
             out[f"{app}:agent"] = int(spec["agent_api_port"])
     return out
@@ -3022,7 +3320,7 @@ def _pair_slot(office: dict, home: dict) -> int:
     declares none (the first converged link, vps1, predates per-pair slots and shares the home's).
 
     With one interface per pair (`pairs/wg<slot>.conf`) every pair needs its own /24. Taking the home's
-    slot for every converged office gave the second one vps1's (fireplace, 2026-10-22: declared 6,
+    slot for every converged office gave the second one vps1's (examplef, 2026-10-22: declared 6,
     saved as 2, and the renderer refused "two pairs on the same slot (2)")."""
     own = (office.get("tunnel") or {}).get("slot")
     return int(own or (home.get("tunnel") or {}).get("slot"))
@@ -3041,7 +3339,7 @@ def _render_local_tunnel(emit) -> dict:
     doc = _app.render_tunnel()
     if not isinstance(doc, dict):
         # the renderer answers its refusals as the HTTP route does (a JSONResponse): read the sentence
-        # out of it, or the step crashed on `.get` and the refusal itself was never shown (fireplace,
+        # out of it, or the step crashed on `.get` and the refusal itself was never shown (examplef,
         # 2026-10-22: "'JSONResponse' object has no attribute 'get'")
         try:
             doc = json.loads(bytes(getattr(doc, "body", b"") or b"{}").decode("utf-8", "replace")) or {}
@@ -3105,7 +3403,7 @@ def step_link(office: dict, ctx: dict, emit) -> dict:
     direction = netmod.link_direction(link)
     slot = _pair_slot(office, home)
     # Refused BEFORE anything is written: this step saves the slot into the record, and a colliding
-    # slot saved once is read as the record's own from then on (fireplace, 2026-10-22).
+    # slot saved once is read as the record's own from then on (examplef, 2026-10-22).
     import app as _app
     holder = next((o["id"] for o in _app.all_declarations() if o.get("id") != office["id"]
                    and int((o.get("tunnel") or {}).get("slot") or 0) == slot), None)
@@ -3255,7 +3553,8 @@ def _home_delivery(office: dict, home: dict, direction: str, slot: int, my_addr:
     delivery = {}
     import app as _app
     for app, port in sorted(_served_ports_local(home, slot, catalog.load_registry(_app.REGISTRY_DIR),
-                                                peer=office["id"]).items()):
+                                                peer=office["id"],
+                                                withheld=_app._admin_withheld(office["id"])).items()):
         probe = must(office["machine"],
                      f"for i in $(seq 1 8); do timeout 3 bash -c 'echo > /dev/tcp/{my_addr}/{port}' "
                      f"2>/dev/null && {{ echo OPEN; break; }}; sleep 4; done; echo END", 90)

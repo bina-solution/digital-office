@@ -157,14 +157,14 @@
   // `provider`/`email`/`color` are extra fields (the app ignores them; the sim switcher polish reads
   // them). One instance is active at a time; switching swaps the folders + files the app sees.
   var ACCOUNTS = [
-    { id: "drive-local", provider: "local", protocol: "drive_local", label: "אחסון מקומי", email: null, account_hint: "מקומי · מובנה", color: "var(--olive)", status: "ok", builtin: true,
+    { id: "drive-local", provider: "local", protocol: "drive_local", label: "מנהל", profile_id: "admin", is_private: true, is_admin: true, email: null, account_hint: "admin", color: "var(--olive)", status: "ok", builtin: true,
       checked: 1, log: [{ mins: 1, level: "info", msg: "אחסון מקומי זמין" }] },
-    { id: "acc_office", provider: "gdrive", protocol: "gdrive", label: "Google Drive · בינה", email: "person105@example.com", account_hint: "person105@example.com", color: "#1a73e8", status: "ok",
+    { id: "acc_office", provider: "gdrive", protocol: "drive_google_oauth", label: "Google Drive · בינה", email: "person111@example.com", account_hint: "person111@example.com", color: "#1a73e8", status: "ok",
       checked: 6, log: [{ mins: 6, level: "info", msg: "מסונכרן — 14 קבצים" }, { mins: 2880, level: "info", msg: "אסימון הגישה חודש" }, { mins: 30240, level: "info", msg: "החשבון חובר בהצלחה" }] },
-    { id: "acc_personal", provider: "gdrive", protocol: "gdrive", label: "Google Drive · אישי", email: "person110.x@example.com", account_hint: "person110.x@example.com", color: "#e8710a", status: "warning",
+    { id: "acc_personal", provider: "gdrive", protocol: "drive_google_oauth", label: "Google Drive · אישי", email: "person116.x@example.com", account_hint: "person116.x@example.com", color: "#e8710a", status: "warning",
       reason: "מכסת האחסון כמעט מלאה (92% מתוך 15GB)", checked: 45,
       log: [{ mins: 45, level: "warn", msg: "מכסת אחסון גבוהה — 92%" }, { mins: 4320, level: "info", msg: "מסונכרן — 5 קבצים" }] },
-    { id: "acc_dropbox", provider: "dropbox", protocol: "dropbox", label: "Dropbox", email: "person105@example.com", account_hint: "Dropbox · office@bina", color: "#0061ff", status: "error",
+    { id: "acc_dropbox", provider: "dropbox", protocol: "dropbox", label: "Dropbox", email: "person111@example.com", account_hint: "Dropbox · office@bina", color: "#0061ff", status: "error",
       reason: "החיבור נותק — נדרש אימות מחדש (שגיאת הרשאה 401)", checked: 62,
       log: [{ mins: 62, level: "error", msg: "אימות נכשל — שגיאה 401 (הרשאה בוטלה)" }, { mins: 75, level: "warn", msg: "ניתוקים חוזרים מהשירות" }, { mins: 10080, level: "info", msg: "החשבון חובר בהצלחה" }] },
   ];
@@ -313,8 +313,9 @@
   var nextId = 1000;
 
   function hintFor(p) {
-    return ({ gdrive: "person119@example.com", gdrive_sa: "person120@example.com", dropbox: "person121@example.com",
-              dropbox_token: "אסימון •••••", onedrive: "person122@example.com", s3: "bucket · region" })[p] || "demo@local";
+    return ({ drive_google_oauth: "person125@example.com", drive_google_service_account: "person126@example.com",
+              gdrive: "person125@example.com", gdrive_sa: "person126@example.com", dropbox: "person127@example.com",
+              dropbox_token: "אסימון •••••", onedrive: "person128@example.com", s3: "bucket · region" })[p] || "demo@local";
   }
   // Connect a fresh instance (starts with an empty Drive) — used by the connect flow + OAuth hook below.
   function addAccount(protocol, label) {
@@ -325,43 +326,48 @@
     ACCOUNTS.push(acc); DRIVE[id] = { folders: [], files: [] };
     return acc;
   }
-  // Cloud providers offered by the connect flow (icon/name/description + per-method auth). OAuth methods
-  // carry a `sim-oauth:<protocol>` start_url that the window.open hook below turns into a real handoff.
+  // The SERVICE's catalog (apps/drive/app.py `providers`), in its words: the office's storage and Google
+  // Drive in its two ways. (Dropbox, OneDrive and S3 stood here with no adapter behind them; the
+  // simulation offers what an office can connect, DGO-1390.)
   var PROVIDERS = [
-    { name: "אחסון מקומי", icon: "hard-drive", builtin: true, description: "אחסון מובנה על השרת — מוכן לשימוש",
-      auth_methods: [{ label: "שימוש באחסון המקומי", protocol: "drive_local", recommended: true, can: "קריאה וכתיבה של קבצים מקומיים" }] },
-    { name: "Google Drive", icon: "cloud", description: "סנכרון קבצים ותיקיות מ-Google Drive",
+    { id: "local", name: "אחסון הלשכה", icon: "hard-drive", builtin: true, engine: "drive_local", private: true,
+      description: "האחסון שמובנה בלשכה. עובד מיד, בלי חשבון חיצוני, והקבצים נשארים אצלכם.",
+      auth_methods: [{ id: "profile", label: "פרופיל באחסון הלשכה", protocol: "drive_local", needs: [], recommended: true,
+                       can: "ניהול תיקיות וקבצים, העלאה, אשפה, חיפוש וקישורים ציבוריים — בנפרד לכל פרופיל." }] },
+    { id: "google_drive", name: "Google Drive", icon: "cloud", engine: "drive_google_oauth", private: false,
+      description: "החשבון שלך ב־Google. הקבצים נשארים ב־Drive; המערכת עובדת עליהם ישירות.",
       auth_methods: [
-        { label: "התחברות עם Google", protocol: "gdrive", recommended: true, start_url: "sim-oauth:gdrive",
-          can: "גישה לקבצים ולתיקיות", explain: "נפתח חלון אישור מאובטח של Google — הסיסמה שלך אינה עוברת דרך המערכת." },
-        { label: "חשבון שירות (Service Account)", protocol: "gdrive_sa", can: "גישת שרת-לשרת ללא דפדפן",
-          needs: ["client_email", "private_key"], help_url: "https://console.cloud.google.com/iam-admin/serviceaccounts" }] },
-    { name: "Dropbox", icon: "cloud", description: "חיבור לתיקיות Dropbox",
-      auth_methods: [
-        { label: "התחברות עם Dropbox", protocol: "dropbox", recommended: true, start_url: "sim-oauth:dropbox",
-          can: "גישה לקבצים", explain: "נפתח חלון אישור של Dropbox." },
-        { label: "אסימון גישה", protocol: "dropbox_token", needs: ["access_token"], can: "חיבור מהיר עם אסימון" }] },
-    { name: "OneDrive", icon: "cloud", description: "חיבור ל-Microsoft OneDrive",
-      auth_methods: [
-        { label: "התחברות עם Microsoft", protocol: "onedrive", recommended: true, start_url: "sim-oauth:onedrive",
-          can: "גישה לקבצים ולתיקיות", explain: "נפתח חלון אישור של Microsoft." }] },
-    { name: "Amazon S3 (ותואמי S3)", icon: "database", description: "דלי אחסון S3 או תואם (MinIO, R2)",
-      auth_methods: [
-        { label: "מפתחות גישה", protocol: "s3", recommended: true, needs: ["access_key_id", "secret_access_key", "bucket", "region"],
-          can: "קריאה וכתיבה לדלי", help_url: "https://docs.aws.amazon.com/IAM/latest/UserGuide/id_credentials_access-keys.html" }] },
+        { id: "oauth", label: "התחברות עם Google", protocol: "drive_google_oauth", needs: [], recommended: true,
+          can: "צפייה, העלאה, העברה, שינוי שם ומחיקה בקבצים של החשבון שתאשר.",
+          explain: "נפתח חלון של Google. אחרי האישור החשבון נבדק ונפתח כאן — גם ה־Drive וגם ה־Gmail שלו. אפשר לסגור את החלון בכל שלב: לא ייווצר חיבור.",
+          start_url: "oauth/google/start" },
+        { id: "service_account", label: "חשבון שירות (Service Account)", protocol: "drive_google_service_account", needs: [],
+          fields: [{ name: "service_account_json", label: "תוכן קובץ ה־JSON של חשבון השירות", type: "textarea" }],
+          can: "גישה מלאה דרך חשבון שירות — ללא צורך בהתחברות של משתמש.",
+          explain: "את קובץ ה־JSON של חשבון השירות מורידים ב־Google Cloud Console, במסך Service Accounts › Keys, ובוחרים אותו כאן או מדביקים את תוכנו. חשבון שירות רואה רק תיקיות ששיתפו איתו ב־Drive.",
+          help_url: "https://cloud.google.com/iam/docs/service-account-overview" }] },
   ];
   // The connect flow hands OAuth off via window.open(start_url). Real consent can't run offline, so
   // recognize our `sim-oauth:<protocol>` marker, provision the connection after a short "consent" delay
   // (the app polls GET connections and picks up the fresh one), and return a stub window.
+  // The live screen opens a BLANK window first (a window opened later is a blocked pop-up) and sends it to
+  // the address its credential plane signed — so the blank window's address is watched too (DGO-1390).
+  function handoff(proto) {
+    var prov = PROVIDERS.filter(function (p) { return (p.auth_methods || []).some(function (a) { return a.protocol === proto; }); })[0];
+    setTimeout(function () { addAccount(proto, prov ? prov.name : proto); }, 1400);
+  }
   try {
     var _open = window.open ? window.open.bind(window) : null;
     window.open = function (u) {
       var m = String(u || "").match(/^sim-oauth:(\w+)/);
       if (m) {
-        var proto = m[1];
-        var prov = PROVIDERS.filter(function (p) { return (p.auth_methods || []).some(function (a) { return a.protocol === proto; }); })[0];
-        setTimeout(function () { addAccount(proto, prov ? prov.name : proto); }, 1400);
+        handoff(m[1]);
         return { closed: false, close: function () {}, focus: function () {}, blur: function () {} };
+      }
+      if (!u || u === "about:blank") {
+        var w = { closed: false, close: function () { w.closed = true; }, focus: function () {}, blur: function () {}, location: {} };
+        Object.defineProperty(w.location, "href", { set: function (v) { var m2 = String(v).match(/^sim-oauth:(\w+)/); if (m2) handoff(m2[1]); } });
+        return w;
       }
       return _open ? _open.apply(null, arguments) : null;
     };
@@ -409,7 +415,7 @@
     }));
   }
 
-  window.fetch = function (url, opts) {
+  var route = function (url, opts) {
     var u = String(url);
     var qIdx = u.indexOf("?");
     var path = (qIdx === -1 ? u : u.slice(0, qIdx)).replace(/^\/+/, "");
@@ -526,6 +532,23 @@
 
     // never let anything escape to the real network — unknown routes get a harmless empty 200
     return j({});
+  };
+  /* The live drive names the drive it shows on every call (`connection_id`, DGO-1390) instead of moving
+     the deployment's pointer, so the request is answered from THAT account's content — and the default
+     (the pointer `connections/select` moves) stays where it was. */
+  window.fetch = function (url, opts) {
+    var m = String(url).match(/[?&]connection_id=([^&#]+)/), want = m && decodeURIComponent(m[1]);
+    if (!want || want === ACTIVE_ID || !ACCOUNTS.some(function (a) { return a.id === want; })) return route(url, opts);
+    var keep = ACTIVE_ID;
+    useAccount(want);
+    try { return route(url, opts); } finally { useAccount(keep); }
+  };
+  // the screen opens Google's window through its own route first (oauth/google/start?check=1): the
+  // simulation's answer is its offline hand-off (window.open's hook above takes the marker)
+  var _routeOauth = route;
+  route = function (url, opts) {
+    if (/(^|\/)oauth\/google\/start/.test(String(url))) return j({ ok: true, authorize_url: "sim-oauth:drive_google_oauth", bind: "sim-bind" });
+    return _routeOauth(url, opts);
   };
 
   /* ── XHR shim: only api/upload uses XMLHttpRequest in app.js (for xhr.upload.onprogress),

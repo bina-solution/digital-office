@@ -4,8 +4,8 @@
  *     node platform-base/console/test_ext_route.mjs
  *
  * A link that OPENS the app but not the screen it names looks like a link that works, so this is the
- * half of the fix that can be held without a browser. The live half (the console opened on a deep
- * link, in desktop mode) is `scripts/refactor/console-deeplink-lint.py --live`.
+ * half of the fix that can be held without a browser. The live half (a real console on a deep link,
+ * in desktop mode, photographed) is `scripts/ui-coverage/desktop-links.py`.
  *
  * The failure this guards, measured 2026-10-08 (DGO-11): `#/m/project-pln/bina/projects/<id>/issues/<id>`
  * — the link the office's own task tool hands the owner — opened Plane at its home screen in desktop

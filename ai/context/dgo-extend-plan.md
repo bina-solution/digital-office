@@ -217,7 +217,7 @@ MacBook's engine door (`packaging/macos/lan-door.py`, private sources only).
 id: vps1
 machine: computer_ssh-b154fa0c        # absent for a QR-paired office
 domain: staging.digital-office.co.il
-path: /root/deployment-hacohen
+path: /root/digital-office
 source: {repo: …, branch: dgo, commit: 5d6fa5f1, account: git_github_token-1d2d52f4}
 apps: {console: enabled, n8n: enabled, chat: disabled, …}
 identity: {office_key: ed25519:…, wg_pubkey: wg:…, fingerprint: 7K3M-Q2ZP}

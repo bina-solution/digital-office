@@ -24,7 +24,7 @@ services:
     - FLASK_DEBUG=False
     - LOG_LEVEL=INFO
     - PORT=8080
-    - OCR_ENGINE=${OCR_ENGINE:-google}
+    - OCR_ENGINE=${OCR_ENGINE:-local}
     - SENTRY_DSN=${APITOOLS_SENTRY_DSN:-}
     - SENTRY_ENVIRONMENT=${SENTRY_ENVIRONMENT:-production}
     - SENTRY_RELEASE=0.5.3
@@ -129,7 +129,7 @@ services:
     - traefik.http.routers.apitools-https.tls=true
     - traefik.http.routers.apitools-https.service=apitools
     - traefik.http.routers.apitools-https.tls.certresolver=${TRAEFIK_CERTRESOLVER-myresolver}
-    - traefik.http.routers.apitools-https.middlewares=authentik@file,apitools-retry@docker
+    - traefik.http.routers.apitools-https.middlewares=authentik@file,apitools-retry@docker,hsts@file
     - traefik.http.routers.apitools-http.middlewares=authentik@file,apitools-retry@docker
     # SSO on the -local twin too. app.json declares auth:sso for this host and apitools has no auth of
     # its own, yet this router carried only the retry middleware — and traefik routes ANY request whose
@@ -288,6 +288,16 @@ services:
     - SPEECH_UPLOAD_TTL_SECONDS=${SPEECH_UPLOAD_TTL_SECONDS:-604800}
     - SPEECH_JOB_TTL_SECONDS=${SPEECH_JOB_TTL_SECONDS:-2592000}
     - SPEECH_BEAM_SIZE=${SPEECH_BEAM_SIZE:-5}
+    # WHO SPOKE (DGO-1627). A meeting arrives as one mixed recording, so a speaker per segment is
+    # inferred from the voices: ECAPA-TDNN embeddings of each transcribed segment, agglomerated by
+    # cosine distance (the method ivrit-py's own `ivrit` engine uses). The model is baked into the
+    # image at a pinned revision, so this needs no account and no network; one thread, like the ASR,
+    # because the point of the pin is that the box keeps a core.
+    - SPEECH_DIARIZE=${SPEECH_DIARIZE:-1}
+    - SPEECH_DIARIZE_THRESHOLD=${SPEECH_DIARIZE_THRESHOLD:-0.62}
+    - SPEECH_DIARIZE_THREADS=${SPEECH_DIARIZE_THREADS:-1}
+    - SPEECH_DIARIZE_MAX_SPEAKERS=${SPEECH_DIARIZE_MAX_SPEAKERS:-8}
+    - SPEECH_DIARIZE_MODEL=${SPEECH_DIARIZE_MODEL:-/opt/diarize}
     - SPEECH_DEFAULT_LANGUAGE=${SPEECH_DEFAULT_LANGUAGE:-he}
     - SPEECH_PREFETCH=${SPEECH_PREFETCH:-0}
     volumes:
@@ -309,13 +319,13 @@ services:
       start_period: 20s
     # 2, the least Docker takes (cgroup weight 1, against 100 for a container that declares none):
     # the transcriber runs on CPU nobody else wants, and so NEVER while a meeting is being recorded.
-    # fireplace, 2026-10-26: fpg103's two passes started the second fpg104 began and ran under the
+    # examplef, 2026-10-26: exf103's two passes started the second exf104 began and ran under the
     # whole 48-minute call, on a 2-vCPU box whose recorder was already throttled (apps/meet). A
     # transcript can wait; a recording cannot be made again. (It was 256, half of apitools' 512, so
     # that the document pipeline and the database won; they still do, by more.)
     cpu_shares: 2
-    # NO SWAP for the transcriber (FPG-272): memory + swap = the memory limit itself. Compose's default lets a
-    # container swap as much again as its limit, and on fireplace (8 GB RAM, 4 GB swap — full at idle, 2026-11-02)
+    # NO SWAP for the transcriber (EXF-272): memory + swap = the memory limit itself. Compose's default lets a
+    # container swap as much again as its limit, and on examplef (8 GB RAM, 4 GB swap — full at idle, 2026-11-02)
     # the meeting's captions pushed the whole box into swap on 11-01: one 30-s segment took 271 s, the machine
     # stalled 3.5 min and the recorder's mp4 lost its index (MEET-48). Past its limit the transcriber is now
     # killed in its own cgroup (a caption segment lost, the container restarted) and the recorder never pages.
@@ -333,7 +343,7 @@ services:
           memory: ${SPEECH_MEM:-2.5G}
         reservations:
           # A whole core, held by the CPU budget (G65 keeps a declared floor at its value): at the
-          # 0.32 vCPU the scale handed it on fireplace, one pass over a 48-minute meeting took 95
+          # 0.32 vCPU the scale handed it on examplef, one pass over a 48-minute meeting took 95
           # minutes. At weight 1 (cpu_shares above) the core costs nobody anything they want.
           cpus: '1.0'
           memory: 64M

@@ -1,0 +1,22 @@
+#!/usr/bin/env bash
+#: prepare — seed the office's vault from the compiled notes at every bring-up (DGO-1642)
+#
+# `bbox run` calls this for every app that has one (`run_app_hooks prepare`), so it has exactly one
+# job: put the compiled vault in place, quietly, and never fail a bring-up over it.
+#
+# WHAT REPLACED WHAT: this file used to COPY `ai/obsidian` — a hand-written "starter brain" that was
+# another deployment's (it opens «the smart-assistant brain of digital-office», with that office's
+# night reports), one time, behind a `.office-seed` marker, into a volume named by a literal
+# (`digital-office_obsidian_vault`, wrong on every office whose compose project is not that one).
+# A client office received another company's notes, and a fresh clone received nothing at all.
+#
+# Now the vault is COMPILED from `apps/obsidian/vault.yaml` by `reconcile.render_vault()` and carried
+# in by `apps/obsidian/vault-sync.sh`, which never overwrites a note a person edited and never deletes
+# one. `./bbox obsidian sync` is the same thing on demand; see hooks/sync for where the vault is.
+set -uo pipefail
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# --no-render: `bbox run` has already rendered by the time it gets here (compose_files triggers the
+# compiler), and a second render mid-bring-up would rewrite .generated/ under a compose that is
+# already reading it.
+exec "${SCRIPT_DIR}/sync" --no-render

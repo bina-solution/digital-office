@@ -150,6 +150,41 @@ x-dgo-identity: v1 <office> <user> <unix-seconds> <hex hmac-sha256 of "v1\n<offi
   the contract, and `apps/project-pln/hooks/verify` asserts both halves of it
   (`project-pln-link-identity`, `project-pln-link-identity-forged`).
 
+### The herd's mark (DGO-1800)
+
+```
+x-dgo-herd: 1
+```
+
+* Written by the door beside `x-dgo-office` on the requests of a serve rule the delivery plan marked
+  `herd: true`. `render_link_proxy` decides the mark per pair with `give.herd_peer`: this office's own
+  key and this office's record of the peer must both be the keys `apps/computers/herd.yaml` writes for
+  their names, and a name alone never counts. `linkproxy.build_multi` marks only the rules the door
+  serves (the link's door and the catalog), never an agent port, which is a raw splice. A plan another
+  office SHIPPED never carries the mark.
+* Removed from every request the door rewrites, `_` spellings too, as `x-dgo-office` is. A peer can
+  never say it of itself through the door.
+* An app believes it only from the door's own address. Its reader is `apps/computers`, which counts,
+  then narrows, what a linked office that is not the herd's reads.
+
+### Who may arrive at a serve rule
+
+* A serve rule's `clients` is its pair's peer tunnel address. WireGuard pins a peer's SOURCE, but the kernel
+  answers any local address on any interface, and every pair's catalog listener is on the same port. So a
+  peer that widens its own AllowedIPs can reach another pair's catalog and be stamped as that office
+  (issues/a-peer-on-one-tunnel-can-reach-another-pairs-catalog-listener-…).
+* link-proxy's `admit` judges every TCP connection to a serve rule (the door, the catalog, an agent port):
+  - an address the rule does not name in `clients` is OUTSIDE;
+  - stage 1 (today) says it once per listener and address, marks `outside` on the door's access record
+    (`/api/link/access` returns it), and serves it as before;
+  - `DGO_LINK_CLIENTS=refuse` in link-proxy's own environment closes it instead. Stage 2 makes that the
+    default.
+* NOT covered here:
+  - a use rule;
+  - a unix-socket door: on an office whose tunnel runs on its machine (`converge.REMOTE_DOOR`), the catalog
+    listener is the host bridge's, and the same hole is open there until the bridge judges it (the issue's
+    last task).
+
 ## Who owns what
 
 | File | Owns |
@@ -195,7 +230,7 @@ firewall and delivery documents).
 
 ```bash
 ./bbox dgo                        # this office and its linked offices
-./bbox dgo link status            # per pair: the link as DECLARED (office, slot, endpoint, direction, fingerprint) and what is MEASURED (answers, handshake age — DEAD when stale)
+./bbox dgo link status            # per pair: the link as DECLARED (office, slot, endpoint, direction, fingerprint) and what is MEASURED (answers, handshake age — DEAD when stale); an installed office also says «layout: installed», and when it has its own DGO Extend that it is due to become a join pair (DGO-1363)
 ./bbox dgo link up|down <office>  # kind: office only — a paired office is refused (409, _PAIRED_REFUSAL) and is unpaired on its own screen
 ./bbox dgo link transport <office> tcp|udp   # the pair rides the carriers' TCP path, or WireGuard's own UDP — said on BOTH offices
 ./bbox dgo join                   # the link door, the join requests waiting, the invites, who joined

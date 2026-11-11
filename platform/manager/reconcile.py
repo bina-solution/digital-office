@@ -19,6 +19,7 @@ Verbs:
     services       print the compose SERVICE names a lane must start, DERIVED from the graph
 """
 import argparse, hashlib, shutil, json, pathlib, re, sys, subprocess, types
+import contextlib, functools, os, stat, tempfile, threading
 
 try:
     import yaml
@@ -52,7 +53,30 @@ SCHEMA = REPO / "platform/schema/app.schema.json"
 GEN = REPO / ".generated"
 
 STRENGTHS = {"requires", "wants", "requisite", "binds_to", "conflicts"}
+#: App ids the id pattern allows that YAML 1.1 (PyYAML, and the native reader after it) does not read as TEXT: in
+#: platform.state.yaml `on: { state: enabled }` is the key True and `null:` the key None, so the state can never
+#: name such an app, and `plan` sorted True (or None) among the ids and died on it (DGO-612). validate() refuses
+#: them by name.
+YAML_NON_TEXT_IDS = ("yes", "no", "on", "off", "true", "false", "null")
 HARD = {"requires", "requisite", "binds_to"}
+
+# The engine is a platform capability (packaging/native-plan.md D2; the owner, DGO-1723: «one app that
+# runs containers, and every app that needs one uses it as a dependency»). An app that runs in containers
+# — it declares `compose` — requires the office's container runtime, and its one provider («מכולות»,
+# platform-base/containers) is pulled in as any provider is. Implied here, where the resolver reads use[],
+# so no manifest repeats it; an app that provides the runtime, or declares its own use of it, is read as
+# written. The Go twin's usesOf says the same.
+CONTAINER_RUNTIME = "container-runtime"
+
+
+def uses_of(a):
+    """An app's use[] as the resolver reads it: as declared, and the container runtime its compose implies."""
+    use = a.get("use", [])
+    if not a.get("compose") or any(c.get("name") == CONTAINER_RUNTIME for c in a.get("capabilities", [])):
+        return use
+    if any(isinstance(u, dict) and u.get("capability") == CONTAINER_RUNTIME for u in use):
+        return use
+    return list(use) + [{"capability": CONTAINER_RUNTIME, "strength": "requires"}]
 
 # A brief is injected into every agent session, so its size is taken from every other app's brief.
 # This is a REFUSAL, not a warning: an unenforced budget is discovered as "the agent got dumber",
@@ -63,13 +87,13 @@ MAX_BRIEF_BYTES = 6000
 # ── company identity: BUSINESS_NAME -> COMPANY_SLUG -> every host and the mail address ─────────
 # A deployment has exactly ONE company identity, and the operator states it once, as a human name:
 #
-#   BUSINESS_NAME=Hacohen
-#     -> COMPANY_SLUG          hacohen
-#        -> DEPLOYMENT_NAME    hacohen                        -> n8n-hacohen, mailserver-hacohen, …
-#        -> DEPLOYMENT_DOMAIN  hacohen.digital-office.co.il   -> console.hacohen…, n8n.hacohen…, …
-#        -> MAIL_DOMAIN        = DEPLOYMENT_DOMAIN            -> person1@example.com
-#        -> MAIL_DKIM_SELECTOR hacohen
-#        -> GLITCHTIP_ORG_SLUG hacohen
+#   BUSINESS_NAME=Example
+#     -> COMPANY_SLUG          example
+#        -> DEPLOYMENT_NAME    example                        -> n8n-example, mailserver-example, …
+#        -> DEPLOYMENT_DOMAIN  example.digital-office.co.il   -> console.example…, n8n.example…, …
+#        -> MAIL_DOMAIN        = DEPLOYMENT_DOMAIN            -> person183@example.com
+#        -> MAIL_DKIM_SELECTOR example
+#        -> GLITCHTIP_ORG_SLUG example
 #
 # Everything after the slug is ordinary `${VAR}` interpolation, which compose already does inside
 # .env. The slug itself is the one step compose CANNOT do: there is no lowercase and no substitution
@@ -168,7 +192,7 @@ guard_envfile()
 
 
 def slugify(name):
-    """"Hacohen" -> "hacohen"; "Bina Solutions Ltd." -> "bina-solutions-ltd"."""
+    """"Example" -> "example"; "Bina Solutions Ltd." -> "bina-solutions-ltd"."""
     return re.sub(r"[^a-z0-9]+", "-", (name or "").strip().lower()).strip("-")
 
 
@@ -241,12 +265,16 @@ def sync_identity():
     """
     if not ENVFILE.is_file():
         return None
-    raw = ENVFILE.read_text(encoding="utf-8", errors="replace")
-    # Keep the file's own line endings: .env is edited on Windows and on the VPS, and rewriting
-    # LF as CRLF puts a trailing \r INSIDE every value docker then reads.
-    nl = "\r\n" if "\r\n" in raw else "\n"
-    lines = raw.split("\n")
-    lines = [ln[:-1] if ln.endswith("\r") else ln for ln in lines]
+    # Keep the file's own line endings, line by line: .env is edited on Windows and on the VPS, and
+    # rewriting LF as CRLF puts a trailing \r INSIDE every value docker then reads. newline="" reads the
+    # endings as they are — read_text's universal newlines had already made every \r\n a \n, so a CRLF
+    # .env was written back as LF (DGO-631). Lines are split where universal newlines split them (\r\n,
+    # \r, \n); each keeps its own ending, and a line added takes the ending of the line it follows.
+    with ENVFILE.open(encoding="utf-8", errors="replace", newline="") as f:
+        raw = f.read()
+    nl = "\r\n" if "\r\n" in raw else "\n"     # for a line added under a last line that had none
+    parts = re.split(r"(\r\n|\r|\n)", raw)
+    lines, ends = parts[0::2], parts[1::2] + [""]
 
     business = None
     for ln in lines:
@@ -278,14 +306,18 @@ def sync_identity():
         for i, ln in enumerate(lines):
             kv = _env_assign(ln)
             if kv and kv[0] == "BUSINESS_NAME":
+                end = ends[i]
+                if not end:                                 # the last line, with no ending: it gets one now
+                    ends[i], end = nl, ""
                 lines[i + 1:i + 1] = [DERIVED_MARKER, f"COMPANY_SLUG={slug}"]
+                ends[i + 1:i + 1] = [ends[i], end]
                 changed.append(f"COMPANY_SLUG: (absent) -> {slug}   [inserted under BUSINESS_NAME]")
                 break
 
     if changed:
-        # newline="" so `nl` (the file's OWN ending) is what lands on disk, not python's translation.
+        # newline="" so each line's OWN ending is what lands on disk, not python's translation.
         # Path.write_text() only grew a newline= kwarg in 3.10; open() has had it forever.
-        envfile_write(nl.join(lines), newline="")
+        envfile_write("".join(ln + end for ln, end in zip(lines, ends)), newline="")
         print(f"  identity  BUSINESS_NAME={business!r} -> slug {slug!r}", file=sys.stderr)
         for c in changed:
             print(f"  identity  .env {c}", file=sys.stderr)
@@ -303,6 +335,55 @@ def sync_identity():
 # Provenance travels with it: `by: user` must never be silently undone by the system.
 # The legacy `{enabled: true|false}` form still parses, so no state file has to be rewritten.
 DISPOSITIONS = ("enabled", "disabled", "archived")
+
+# ── language (the office's ONE language variable, DGO-971) ────────────────────────────────────────
+# The office is bilingual by construction — every `title`/`summary` in every app.json is `{he, en}` —
+# but nothing said WHICH of the two to show, so every screen hardcoded Hebrew. This is that variable:
+# declared once, as `language:` at the top of platform.state.yaml, and compiled once into
+# `.generated/registry/locale.json`, the file the console and every app's page read
+# (ai/context/platform-language.md). packaging/dgo's compiler is held to this by its parity tests.
+#
+# A REGISTRY and not two booleans: `dir` is what the browser needs, `label` is what a language menu
+# shows, and a third language is one entry, not a scatter of `if lang == "he"` branches.
+LANGUAGES = {
+    "he": {"label": "עברית", "label_en": "Hebrew", "dir": "rtl"},
+    "en": {"label": "English", "label_en": "English", "dir": "ltr"},
+}
+DEFAULT_LANGUAGE = "he"
+
+
+def state_language(state) -> str:
+    """The office's declared language, or DEFAULT_LANGUAGE when it declares none.
+
+    An unknown code is NOT accepted in silence: a typo (`language: eng`) would render a shell with no
+    dictionary, which looks like a broken build rather than a bad value. validate() reports it, and
+    this returns the default, so a caller is never handed a code no dictionary has."""
+    code = str((state or {}).get("language") or "").strip().lower()
+    return code if code in LANGUAGES else DEFAULT_LANGUAGE
+
+
+def language_errors(state) -> list:
+    """validate()'s check of the state's `language:` — the one top-level value it reads."""
+    raw = str(((state or {}).get("language") or "")).strip().lower()
+    if raw and raw not in LANGUAGES:
+        return [f"platform.state.yaml: language '{raw}' is not a language this platform has a dictionary "
+                f"for (expected one of {', '.join(sorted(LANGUAGES))})"]
+    return []
+
+
+def locale_doc(state) -> dict:
+    """The compiled language artifact: what every UI reads instead of guessing.
+
+    `active` is the office's language. `default` is the same value today; it exists so a client that
+    keeps a person's own choice can tell «the office changed» from «this is still the seed»."""
+    code = state_language(state)
+    return {
+        "active": code,
+        "default": code,
+        "dir": LANGUAGES[code]["dir"],
+        "available": [{"code": c, "label": v["label"], "label_en": v["label_en"], "dir": v["dir"]}
+                      for c, v in LANGUAGES.items()],
+    }
 
 
 def disposition(entry):
@@ -343,10 +424,18 @@ def current_disposition(aid):
     return "disabled"
 
 
+#: Apps an office runs unless its state says otherwise. «מכולות» (DGO-1723) is the engine every container app
+#: runs on, and every office's own containers run on it already, so an office whose state does not name it
+#: has it ON; an office that names it (off, or archived) is read as written. One app, said here once — the
+#: Go twin's OnUnlessSaid and app-management (both twins) read this rule, never a copy of it.
+ON_UNLESS_SAID = ("containers",)
+
+
 def enabled_ids(state, cat):
     """Apps the platform should actually RUN. Archived is deliberately not running."""
-    return {aid for aid, e in (state.get("apps") or {}).items()
-            if aid in cat and disposition(e) == "enabled"}
+    apps = state.get("apps") or {}
+    return ({aid for aid, e in apps.items() if aid in cat and disposition(e) == "enabled"}
+            | {aid for aid in ON_UNLESS_SAID if aid in cat and aid not in apps})
 
 
 def workflows_here(entry, runs=None) -> bool:
@@ -382,6 +471,181 @@ def linked_from(entry) -> str:
     return v if re.fullmatch(r"[a-z][a-z0-9-]{1,30}", v) else ""
 
 
+# ── how platform.state.yaml is written (DGO-616) ──────────────────────────────────────────────
+# The office's writers of this file are this compiler and its native twin (packaging/dgo
+# internal/compiler/writers.go). The twin always held the advisory lock data/.locks/platform.state from
+# its read to its replace and REPLACED the file (written beside it, renamed over it); this side wrote in
+# place with no lock, so a reader could catch the file truncated — `render` then sees no apps and plans
+# an office with nothing in it — and a writer killed half way left it empty. Both now write one way.
+_STATE_LOCK_HELD = threading.local()   # the re-entrancy count, per THREAD: another thread must wait for the flock
+
+
+@contextlib.contextmanager
+def _state_lock():
+    """data/.locks/platform.state beside the state file, held exclusively (flock, the call the twin's
+    lockState makes) from a writer's read to its replace. Re-entrant inside one thread; another thread of the
+    same process opens its own descriptor and waits on the flock like another process (the second reader: a
+    process-wide count let a second thread write without the lock). A lock that cannot be had — no fcntl
+    (Windows), a `data/.locks` that is not a directory, a mount it may not create in — stops nothing and SAYS
+    nothing: the writer's answer stays exactly what it was, which the twin's oracle tests compare byte for byte
+    (the twin, which can say it, warns)."""
+    depth = getattr(_STATE_LOCK_HELD, "depth", 0)
+    if depth:
+        _STATE_LOCK_HELD.depth = depth + 1
+        try:
+            yield
+        finally:
+            _STATE_LOCK_HELD.depth -= 1
+        return
+    fd = None
+    try:
+        import fcntl
+        locks = STATE.parent / "data" / ".locks"
+        locks.mkdir(parents=True, exist_ok=True)
+        try:
+            fd = os.open(locks / "platform.state", os.O_CREAT | os.O_RDWR, 0o666)
+        except PermissionError:   # a lock file this user may not write is locked through a read handle
+            fd = os.open(locks / "platform.state", os.O_RDONLY)
+        fcntl.flock(fd, fcntl.LOCK_EX)
+    except (ImportError, OSError):
+        if fd is not None:
+            os.close(fd)
+        fd = None
+    _STATE_LOCK_HELD.depth = 1
+    try:
+        yield
+    finally:
+        _STATE_LOCK_HELD.depth = 0
+        if fd is not None:
+            os.close(fd)   # closing the descriptor releases the flock
+
+
+def _under_state_lock(fn):
+    @functools.wraps(fn)
+    def locked(*a, **kw):
+        with _state_lock():
+            return fn(*a, **kw)
+    return locked
+
+
+def _write_state(text):
+    """platform.state.yaml := text, REPLACED: written to a `.platform.state.yaml.*` copy beside it (git
+    ignores that name), flushed, given the old file's mode and owner, and renamed over it — a reader sees
+    the old file or the new one, never a half, and a failed write leaves the old one. The twin's
+    writeState, the same rules:
+      * a state file this user may not write (a freeze: chmod 444) is refused with the PermissionError
+        the in-place write raised — a rename would ask only the directory;
+      * where only the replace is refused (a directory this user may not write in; on Windows a file
+        another process holds open without sharing its deletion) the file is written in place, as before.
+    A missing file (ensure_state's first run) is created the same way, with the mode a plain create gets."""
+    path = pathlib.Path(os.path.realpath(STATE))
+    try:
+        old = path.stat()
+    except FileNotFoundError:
+        old = None
+    if old is not None:
+        open(STATE, "r+b").close()   # the freeze answers as it always did: PermissionError, file untouched
+        mode = stat.S_IMODE(old.st_mode)
+    else:
+        umask = os.umask(0)
+        os.umask(umask)
+        mode = 0o666 & ~umask
+    def in_place():
+        with open(path, "w", encoding="utf-8", newline="\n") as f:   # open(): write_text's newline= is 3.10+
+            f.write(text)
+
+    try:
+        fd, tmp = tempfile.mkstemp(prefix="." + path.name + ".", dir=str(path.parent))
+    except PermissionError:
+        in_place()
+        return
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8", newline="\n") as f:
+            f.write(text)
+            f.flush()
+            os.fsync(f.fileno())
+        os.chmod(tmp, mode)
+        if old is not None and hasattr(os, "chown"):
+            try:
+                os.chown(tmp, old.st_uid, old.st_gid)   # root in a container must not leave the office a file it cannot edit
+            except OSError:
+                pass
+        try:
+            os.replace(tmp, path)
+        except PermissionError:
+            in_place()
+    finally:
+        if os.path.exists(tmp):
+            os.unlink(tmp)
+
+
+#: an app id as the manifests name their folders — what missing_host_devices() looks up, and nothing else
+APP_DIR_ID = re.compile(r"[a-z0-9][a-z0-9-]*")
+
+
+def missing_host_devices(aid):
+    """The devices app `aid` says it needs on THIS machine (app.json `requires_host.devices`) that are not here.
+
+    An app that drives the host's hardware — the Android emulator needs /dev/kvm (DGO-1797, package 11) — is not
+    enabled where that hardware is missing: set_disposition() refuses, with the reason, before the state file is
+    touched, so every surface that enables an app (set-state, app-management, the installer) hears the same
+    refusal. A manifest that cannot be read declares nothing here; validate() says why elsewhere."""
+    if not isinstance(aid, str) or not APP_DIR_ID.fullmatch(aid):
+        return []
+    for root in ("platform-base", "apps"):
+        path = REPO / root / aid / "app.json"
+        if not path.is_file():
+            continue
+        try:
+            man = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, UnicodeDecodeError, ValueError):
+            return []
+        need = man.get("requires_host") if isinstance(man, dict) else None
+        devices = need.get("devices") if isinstance(need, dict) else None
+        if not isinstance(devices, list):
+            return []
+        # on the host its own /dev is the truth; inside a container (app-management's set-state) it is not, so a
+        # device the container cannot see is missing only when the host's last render recorded it absent
+        facts, inside = host_device_facts(), in_container()
+        return [d for d in devices if isinstance(d, str) and d and not os.path.exists(d)
+                and not (inside and facts.get(d) is not False)]
+    return []
+
+
+#: the host's devices as the compiler saw them on the HOST (render_host_devices): set-state run inside a container
+#: — app-management's toggle shells it there — cannot see the host's /dev, so it reads this
+HOST_DEVICES = "host-devices.json"
+
+
+def in_container():
+    """True inside a container (Docker's /.dockerenv, Podman's /run/.containerenv): its /dev is not the host's."""
+    return os.path.exists("/.dockerenv") or os.path.exists("/run/.containerenv")
+
+
+def host_device_facts():
+    """{device: present} as the last render on the host recorded it; {} when there is none or it is not that."""
+    try:
+        doc = json.loads((GEN / HOST_DEVICES).read_text(encoding="utf-8"))
+    except (OSError, UnicodeDecodeError, ValueError):
+        return {}
+    return {k: v for k, v in doc.items() if isinstance(k, str) and isinstance(v, bool)} if isinstance(doc, dict) else {}
+
+
+def render_host_devices(cat):
+    """Record, on the HOST only, whether each device an app declares (requires_host.devices) is here — for a
+    set-state that runs where it cannot see (in_container). Inside a container nothing is written: its /dev would
+    say «missing» for the host's /dev/kvm and overrule the host's own word."""
+    if in_container():
+        return
+    devices = set()
+    for a in cat.values():
+        need = a.get("requires_host") if isinstance(a, dict) else None
+        listed = need.get("devices") if isinstance(need, dict) else None
+        devices.update(d for d in (listed if isinstance(listed, list) else ()) if isinstance(d, str) and d)
+    write(GEN / HOST_DEVICES, json.dumps({d: os.path.exists(d) for d in sorted(devices)}, indent=2) + "\n")
+
+
+@_under_state_lock
 def set_disposition(aid, dispo, by="user", create=False):
     """THE writer for apps.<id> in platform.state.yaml. One implementation, beside the reader.
 
@@ -406,6 +670,11 @@ def set_disposition(aid, dispo, by="user", create=False):
     """
     if dispo not in DISPOSITIONS:
         raise ValueError(f"unknown disposition {dispo!r}; expected one of {DISPOSITIONS}")
+    if dispo == "enabled":
+        missing = missing_host_devices(aid)
+        if missing:
+            raise ValueError(f"{aid} needs {', '.join(missing)} (app.json requires_host.devices), which this "
+                             f"machine does not have — not enabled, nothing written")
     txt = STATE.read_text(encoding="utf-8")
     repl = f"{{ state: {dispo}, by: {by} }}"
 
@@ -419,7 +688,7 @@ def set_disposition(aid, dispo, by="user", create=False):
     new, n = re.subn(rf"^(\s+{re.escape(aid)}:\s*)\{{([^}}]*)\}}", keep, txt, count=1, flags=re.M)
     if n:
         if new != txt:
-            STATE.write_text(new, encoding="utf-8", newline="\n")
+            _write_state(new)
             return True
         return False
     if not create:
@@ -439,7 +708,7 @@ def set_disposition(aid, dispo, by="user", create=False):
     if last is None:
         raise ValueError("platform.state.yaml has no apps: block to extend")
     lines.insert(last + 1, f"  {aid}:".ljust(20) + repl + f"   # added by {by}")
-    STATE.write_text("\n".join(lines) + "\n", encoding="utf-8", newline="\n")
+    _write_state("\n".join(lines) + "\n")
     return True
 
 
@@ -485,6 +754,50 @@ def _glyph_names():
     return set(re.findall(r"^\s+'?([a-z][a-z0-9-]*)'?:\s*'<", js, flags=re.M))
 
 
+@_under_state_lock
+def set_language(code, by="user"):
+    """THE writer of the top-level `language:` in platform.state.yaml (DGO-971; gate G33: this file is the
+    state's one writer). Returns True when the file changed.
+
+    Text surgery, for the reason set_disposition() is: the file is mostly comments that explain the model,
+    and a YAML round trip deletes every one. The line is replaced where it is; a file with no declaration
+    gets one right under `schema_version:`, the line that must stay first. Written through _write_state(),
+    under the state's lock, like every writer here. The provenance rides as a comment, so readers that
+    parse the value see only the code."""
+    code = str(code or "").strip().lower()
+    if code not in LANGUAGES:
+        raise ValueError(f"unknown language {code!r}; expected one of {', '.join(sorted(LANGUAGES))}")
+    by = re.sub(r"[^\w.@-]", "_", str(by or "user"))[:40] or "user"     # a comment: one line, no '#' games
+    txt = STATE.read_text(encoding="utf-8")
+    line = f"language: {code}   # by {by}"
+    new, n = re.subn(r"^language:[^\n]*$", lambda _m: line, txt, count=1, flags=re.M)
+    if not n:
+        new, n = re.subn(r"^(schema_version:[^\n]*\n)", lambda m: m.group(1) + "\n" + line + "\n", txt,
+                         count=1, flags=re.M)
+        if not n:
+            raise ValueError("platform.state.yaml has no schema_version: line to put the language under")
+    # The new text must READ as the code it was asked for (the second reader of slice 4) — checked before «no
+    # change» too: a file whose first `language:` already says the code while a second one further down says
+    # another would answer «already en» and go on reading «he» (the third reader). A top-level
+    # `language:` whose value sits on the next indented line is valid YAML, and the line surgery above turned it
+    # into a file PyYAML no longer parses — every later verb then died in load_state(). `language : he`,
+    # `"language": he` or a second top-level `language:` further down were written and changed nothing. So the
+    # result is parsed first, and anything but this code read back writes nothing and says what to fix.
+    try:
+        doc = yaml.safe_load(new)
+    except yaml.YAMLError:          # no class name: dgo's reader cannot know which one PyYAML raises (DGO-1238)
+        raise ValueError("platform.state.yaml would not parse with this change: nothing written — its "
+                         "`language:` is in a shape this writer does not replace; fix it by hand")
+    if not isinstance(doc, dict) or str(doc.get("language") or "").strip().lower() != code:
+        raise ValueError(f"platform.state.yaml would not read back as language {code!r}: nothing written — it "
+                         f"declares `language:` in a shape this writer does not replace; fix it by hand")
+    if new == txt:
+        return False
+    _write_state(new)
+    return True
+
+
+@_under_state_lock
 def set_office(fields, by="wizard"):
     """THE writer for `office:` in platform.state.yaml. Returns (changed, errors).
 
@@ -546,7 +859,7 @@ def set_office(fields, by="wizard"):
     text = ("".join(out).rstrip("\n") + "\n\n" + _OFFICE_HEADER.rstrip("\n") + f"  (by {by})\n"
             + yaml.safe_dump({"office": new}, allow_unicode=True, sort_keys=False,
                              default_flow_style=False, width=1000))
-    STATE.write_text(text, encoding="utf-8", newline="\n")
+    _write_state(text)
     return True, []
 
 
@@ -556,6 +869,7 @@ def remote_block():
     return block if isinstance(block, list) else []
 
 
+@_under_state_lock
 def set_remote(block):
     """THE writer for `remote:` in platform.state.yaml. Returns (changed, errors).
 
@@ -605,7 +919,7 @@ def set_remote(block):
     if block:
         text += "\n" + yaml.safe_dump({"remote": block}, allow_unicode=True, sort_keys=False,
                                       default_flow_style=False, width=1000)
-    STATE.write_text(text, encoding="utf-8", newline="\n")
+    _write_state(text)
     return True, []
 
 
@@ -680,10 +994,14 @@ def ensure_state():
             sys.exit(f"FATAL {STATE.name} is missing and there is no {DEFAULT_STATE.name} to create "
                      f"it from")
         restored = DEFAULT_STATE.read_text(encoding="utf-8")
-        print(f"  info  {STATE.name}: created from {DEFAULT_STATE.name} (this checkout's first run)")
+        said = f"  info  {STATE.name}: created from {DEFAULT_STATE.name} (this checkout's first run)"
     else:
-        print(f"  info  {STATE.name}: restored from the commit this checkout was on (ORIG_HEAD)")
-    STATE.write_text(restored, encoding="utf-8", newline="\n")
+        said = f"  info  {STATE.name}: restored from the commit this checkout was on (ORIG_HEAD)"
+    with _state_lock():
+        if STATE.exists():   # another first run created it while this one looked: never replace it, nor say so
+            return
+        print(said)          # before the write, as the twin says it (state.go): the same stdout if the write fails
+        _write_state(restored)
 
 
 def load_state():
@@ -798,6 +1116,52 @@ def _check_types(aid, val, spec, path, errs):
             _check_types(aid, el, items, f"{path}[{i}]", errs)
 
 
+VERB_NAME = re.compile(r"[a-z][a-z0-9-]{0,40}")
+
+
+def _check_ops(aid, a, spec, errs):
+    """An app's `ops` (DGO-1244), what the structural walk cannot say: each op's required keys and no key the
+    schema does not name, an id given once, the endpoint that serves it found, and a `verb` that is a verb's name.
+    A value of the wrong type the type walk has said; an op that is not an object is skipped here.
+
+    It reads the manifest only. Whether hooks/<verb> exists is DGO-1246's gate, on a whole checkout: the trees
+    validate also runs on (the store's index, the twins' test trees) hold an app's manifest without its hooks, and a
+    validate that looked for them refused all of those (measured on vps1, 2026-11-11: five Go suites)."""
+    ops = a.get("ops")
+    if not isinstance(ops, list):
+        return
+    served = [c["name"] for c in (a.get("capabilities") or [])
+              if isinstance(c, dict) and isinstance(c.get("name"), str) and c.get("endpoint")]
+    seen = set()
+    for i, op in enumerate(ops):
+        if not isinstance(op, dict):
+            continue
+        for miss in spec["required"]:
+            if miss not in op:
+                errs.append(f"{aid}: ops[{i}] has no '{miss}'")
+        for extra in sorted(set(op) - set(spec["properties"])):
+            errs.append(f"{aid}: ops[{i}] has the key '{extra}', which an op does not have")
+        oid = op.get("id")
+        if isinstance(oid, str):
+            if not VERB_NAME.fullmatch(oid):      # the op's name in every answer: the schema's pattern, held here
+                errs.append(f"{aid}: ops[{i}] id {oid!r} is not an op's name (a-z, 0-9, -)")
+            if oid in seen:
+                errs.append(f"{aid}: ops[{i}] '{oid}' is declared twice — an op's id is its name in the answer")
+            seen.add(oid)
+        path = op.get("path")
+        if isinstance(path, str) and not path.startswith("/"):
+            errs.append(f"{aid}: ops[{i}] path {path!r} does not start at the endpoint's root (/)")
+        cap = op.get("capability")
+        if cap is None and len(served) != 1:
+            errs.append(f"{aid}: ops[{i}] names no capability, and the app has {len(served)} with an endpoint — "
+                        f"name the one that serves it")
+        elif isinstance(cap, str) and cap not in served:
+            errs.append(f"{aid}: ops[{i}] capability '{cap}' is not one of this app's capabilities with an endpoint")
+        verb = op.get("verb")
+        if isinstance(verb, str) and not VERB_NAME.fullmatch(verb):   # a name, never `../x` (a `_x` file is a helper)
+            errs.append(f"{aid}: ops[{i}] verb {verb!r} is not a verb's name (a-z, 0-9, -)")
+
+
 def validate(cat):
     """Structural validation without a jsonschema dependency (it isn't installed here)."""
     schema = json.loads(SCHEMA.read_text(encoding="utf-8"))
@@ -834,16 +1198,28 @@ def validate(cat):
                         errs.append(f"{aid}: field '{k}' is missing required key '{sub}'")
             _check_enums(aid, v, spec, f"field '{k}'", errs)
             _check_types(aid, v, spec, f"field '{k}'", errs)
+        if aid in YAML_NON_TEXT_IDS:
+            errs.append(f"{aid}: id '{aid}' is a word YAML does not read as text (yes/no/on/off/true/false/null) — "
+                        f"platform.state.yaml could never name the app; choose another id")
         if a.get("layer") not in (1, 2, 3):
             errs.append(f"{aid}: layer must be 1|2|3")
         if a.get("kind") not in set(schema["properties"]["kind"]["enum"]):
             errs.append(f"{aid}: invalid kind '{a.get('kind')}'")
-        for c in a.get("capabilities", []):
+        for i, c in enumerate(a.get("capabilities", [])):
+            # A capability with no name, or a name that is not text, was a KeyError or a TypeError here — a
+            # traceback for a manifest mistake (DGO-612). No name is said here; a name of the wrong type the
+            # type check above has said. Neither is registered: nothing could `use` it.
+            if isinstance(c, dict) and "name" not in c:
+                errs.append(f"{aid}: capabilities[{i}] has no name — nothing can `use` it")
+                continue
+            if isinstance(c, dict) and not isinstance(c["name"], str):
+                continue
             provided.setdefault(c["name"], []).append(aid)
         for u in a.get("use", []):
             s = u.get("strength", "requires")
             if s not in STRENGTHS:
                 errs.append(f"{aid}: use[{u.get('capability')}] bad strength '{s}'")
+        _check_ops(aid, a, schema["properties"]["ops"]["items"], errs)
         # CONFLICTS. The loader already rejects a duplicate app id (and id != dirname), but two
         # DIFFERENT apps could still claim the same edge route or the same console tile. Whichever
         # compiled last would silently win: one app becomes unreachable, or its tile opens the
@@ -880,7 +1256,9 @@ def validate(cat):
                         f"off the manifest (what the app is FOR, its vocabulary, its traps).")
 
         comp = a.get("compose")
-        if comp and not (a["_dir"] / comp).exists():
+        # a compose that is not text (`"compose": 5`) is the type check's to say; joining it to the path was a
+        # TypeError and a traceback (DGO-612)
+        if comp and isinstance(comp, str) and not (a["_dir"] / comp).exists():
             errs.append(f"{aid}: compose '{comp}' not found")
         if a.get("kind") in ("blueprint", "library") and comp:
             errs.append(f"{aid}: kind={a['kind']} must not declare compose")
@@ -942,7 +1320,7 @@ def resolve(cat, state, roots=None):
     want, frontier = set(enabled), sorted(enabled)
     while frontier:
         aid = frontier.pop()
-        for u in cat[aid].get("use", []):
+        for u in uses_of(cat[aid]):
             if u.get("strength", "requires") not in HARD:
                 continue
             cap = u["capability"]
@@ -1028,7 +1406,7 @@ def resolve(cat, state, roots=None):
     # both be enabled" and is reported as a plan failure naming BOTH apps — never resolved by
     # silently dropping one, which is the failure mode Gateway API explicitly forbids.
     for aid in sorted(want):
-        for u in cat[aid].get("use", []):
+        for u in uses_of(cat[aid]):
             if u.get("strength") != "conflicts":
                 continue
             target = u.get("capability")
@@ -1047,7 +1425,7 @@ def resolve(cat, state, roots=None):
     # ordering graph: only `after` edges, and never through weak links (Fuchsia)
     edges = {aid: set() for aid in want}
     for aid in want:
-        for u in cat[aid].get("use", []):
+        for u in uses_of(cat[aid]):
             if not u.get("after", True) or u.get("dependency", "strong") == "weak":
                 continue
             for p in provider.get(u["capability"], []):
@@ -1106,24 +1484,78 @@ def write(path, text):
             return
     except OSError:
         pass                            # not there yet (or unreadable): writing it is the answer
-    _put(path, data)
-
-
-def _put(path, data):
-    """`data` into `path`, every time (`Path.write_bytes`) — and a compiled file ANOTHER user wrote, in a
-    directory this one owns, is replaced rather than refused.
-
-    The control plane compiles inside its container as root (app-management, for a linked office's
-    apps). Measured 2026-11-01 on the Dell (DGO-1080): the MacBook's apps arrived as root-owned
-    `remote.macbook.*.json`, and the owner's next `bbox run` refused to start on «Permission denied».
-    Only on that failure: a rename on every write would leave a single-file mount on the old inode.
-    The Go twin's `writeText` does the same."""
-    path = pathlib.Path(path)
+    # A compiled file ANOTHER user wrote, in a directory this one owns, is replaced rather than refused. The
+    # control plane compiles inside its container as root (app-management, for a linked office's apps).
+    # Measured 2026-11-01 on the Dell (DGO-1080): the MacBook's apps arrived as root-owned
+    # `remote.macbook.*.json`, and the owner's next `bbox run` refused to start on «Permission denied».
+    # Only on that failure: a rename on every write would leave a single-file mount on the old inode.
+    # The Go twin's `write` does the same. (Every writer goes through here — the edge's three files
+    # wrote past it, every render, until DGO-628.)
     try:
         path.write_bytes(data)
     except PermissionError:
         path.unlink()
         path.write_bytes(data)
+
+
+#: what the compiler writes OUTSIDE .generated/, into a committed directory: the sign-in's blueprint and the edge's two
+#: files (render_authentik, render_https_redirect, render_serve). The Go twin's handBackFiles is the same list.
+HAND_BACK_FILES = ("platform-base/authentik/blueprints/zz-generated-apps.yaml",
+                   "platform-base/traefik/config/zz-https.yaml",
+                   "platform-base/traefik/config/zz-serve.yaml")
+
+
+def hand_back(repo=None, euid=None):
+    """What a compile run AS ROOT left root-owned in a checkout someone else owns goes back to that owner
+    (DGO-121, the owner ×7: «.generated/ should not be touched at all»): every entry under `.generated/`, and the
+    compiled files in committed directories (HAND_BACK_FILES), whose owner is root gets the checkout's uid:gid.
+
+    The control plane compiles as root on the office's checkout mounted read-write — app-management's container, the
+    office agent's (bina-ds runs as root with the checkout and the engine's socket), a converge that logs in as root: measured 2026-11-10 on the Dell, 843 of 1,077 entries of .generated/ were root's (the registry's
+    remote.*.json from such a render). Every writer here — the overlays `dc` rewrites, a mkdir, a copytree — is one
+    more way in, so it is answered once, after the command, not at each of them; `write` only stopped the owner's next
+    write from failing on them. A no-op unless this process is root and the checkout is not root's (an office
+    installed under /opt as root keeps root's files). The last part of a path is never followed (lchown), os.walk
+    does not descend into a linked directory, and a .generated/ that is a link is not walked. It prints nothing
+    (callers read this program's stdout and its first stderr line) and never raises: it runs in a `finally` that
+    must not replace main()'s answer. The Go twin: compiler.HandBack. Returns how many entries it handed back."""
+    try:
+        return _hand_back(repo, euid)
+    except Exception:                    # noqa: BLE001 — never the reason a good compile reports a failure
+        return 0
+
+
+def _hand_back(repo, euid):
+    euid = (os.geteuid() if hasattr(os, "geteuid") else -1) if euid is None else euid
+    if euid != 0 or not hasattr(os, "lchown"):
+        return 0
+    repo = pathlib.Path(repo) if repo is not None else REPO
+    try:
+        owner = os.stat(repo)
+    except OSError:
+        return 0
+    if owner.st_uid == 0:
+        return 0
+    paths = []
+    gen = repo / ".generated"
+    try:
+        walk = stat.S_ISDIR(os.lstat(gen).st_mode)          # a link is not a directory to lstat
+    except OSError:
+        walk = False
+    if walk:
+        paths.append(str(gen))
+        for top, dirs, files in os.walk(gen, onerror=lambda _e: None):
+            paths += [os.path.join(top, n) for n in dirs + files]
+    paths += [str(repo / f) for f in HAND_BACK_FILES]
+    n = 0
+    for p in paths:
+        try:
+            if os.lstat(p).st_uid == 0:
+                os.lchown(p, owner.st_uid, owner.st_gid)
+                n += 1
+        except OSError:
+            continue
+    return n
 
 
 def compose_files():
@@ -1142,6 +1574,11 @@ def compose_files():
     # and the -f list is byte-identical to before.
     if (GEN / "connections.override.yml").exists():
         files.append((GEN / "connections.override.yml").relative_to(REPO).as_posix())
+    # The bounded log of every container (`logging.override.yml`, below). It carries ONLY `logging:`
+    # for names that already exist, so its position is not load-bearing; it sits before the CPU plan
+    # so the two never disagree about what "last" means.
+    if (GEN / "logging.override.yml").exists():
+        files.append((GEN / "logging.override.yml").relative_to(REPO).as_posix())
     # The SSO bootstrap follows its inputs: a label that changes with the blueprints it applies, so
     # `dc up` recreates the container when they change (see _bootstrap_inputs_overlay).
     bootstrap = _bootstrap_inputs_overlay()
@@ -1161,7 +1598,8 @@ def compose_files():
 def _compiled_services():
     """Every service name the compiled set declares: the `include:` list of .generated/compose.yml
     plus the routing/connections overlays. Raises on an unreadable file — callers decide what a
-    missing answer means for them (both today fail open: no overlay rather than a broken project)."""
+    missing answer means for them: compose_files()' overlays fail open (no overlay rather than a broken
+    project); render_logging() lets it stop the render."""
     compiled = yaml.safe_load((GEN / "compose.yml").read_text(encoding="utf-8")) or {}
     have = set((compiled.get("services") or {}).keys())
     # The compiled file is an `include:` list; the services live in the included files.
@@ -1174,6 +1612,179 @@ def _compiled_services():
         if p.exists():
             have |= set(((yaml.safe_load(p.read_text(encoding="utf-8")) or {}).get("services") or {}).keys())
     return have
+
+
+#: A container's log is bounded BY DECLARATION, not by luck. Docker's `json-file` driver has no size
+#: limit unless one is given, and an office's disk then fills one container at a time: measured on the
+#: HP 2026-11-09 (DGO-1393), `plane-db` wrote 1.2 MB a minute — 815 MB of one log — because
+#: `log_min_duration_statement=150ms` on a machine whose load makes ordinary queries slow. The office
+#: cannot legislate what each app's own service logs; it CAN legislate how much of it the disk keeps.
+#: 10 MB × 3 files = 30 MB per container at worst, which is a rounding error against a 476 GB drive.
+LOG_DRIVER = "json-file"
+LOG_MAX_SIZE = "10m"
+LOG_MAX_FILES = "3"
+
+
+def logging_overlay(services) -> str:
+    """The `logging:` of the containers that have none, as ONE overlay — the office's default.
+
+    Pure: names in, YAML text out, so a gate can prove the property without rendering (G100).
+    A service that is not named here is not bounded, which is why the gate compares this against
+    every service the composes declare rather than against a sample."""
+    if not services:
+        return ""
+    out = ["# GENERATED by platform/manager/reconcile.py — DO NOT EDIT.",
+           "# A bounded log for every container (DGO-1393): max-size x max-file per service.",
+           "services:"]
+    for name in sorted(services):
+        out.append(f"  {name}:")
+        out.append("    logging:")
+        out.append(f"      driver: {LOG_DRIVER}")
+        out.append("      options:")
+        out.append(f'        max-size: "{LOG_MAX_SIZE}"')
+        out.append(f'        max-file: "{LOG_MAX_FILES}"')
+    return "\n".join(out) + "\n"
+
+
+def _services_without_logging():
+    """Every compiled service whose OWN compose gives it no `logging:` block.
+
+    The platform's convention already bounds most services (95 of 114 today, 1m-10m x 1-3 files), and
+    an app that chose its own bound keeps it: this overlay fills the GAP, it never overrules a
+    declaration. What it must not do is leave one unbounded — `plane-db`, `project-pln`, the platform
+    postgres and the whole supabase gateway were among the 19 that had nothing (DGO-1393)."""
+    missing = set()
+    try:
+        compiled = yaml.safe_load((GEN / "compose.yml").read_text(encoding="utf-8")) or {}
+    except (OSError, yaml.YAMLError):
+        return missing                       # no compile yet, or a compile being rewritten
+    for inc in compiled.get("include") or []:
+        path = REPO / (inc if isinstance(inc, str) else inc.get("path", ""))
+        if not path.is_file():
+            continue
+        try:
+            doc = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+        except (OSError, yaml.YAMLError):
+            # A compose another session is writing right now: leave it out rather than abort the
+            # render of the whole office. Its neighbour `_bootstrap_inputs_overlay` fails the same way.
+            continue
+        for name, body in (doc.get("services") or {}).items():
+            if not isinstance(body, dict) or not body.get("logging"):
+                missing.add(name)
+    # NOT the overlays: routing/remote re-declare a service with labels alone, so asking THEM whether
+    # a service declares `logging:` answers "no" for every service the compiler routes — which would
+    # have had this function "fill" 33 services here instead of the 19 that really declare nothing,
+    # overriding bounds an app had chosen (measured 2026-11-09, before the review).
+    return missing
+
+
+def render_logging():
+    """Write `.generated/logging.override.yml` for the services that have none; remove it when empty.
+
+    CONSEQUENCE, for whoever brings an office up next: a service that gains a `logging:` block is a
+    service whose config changed, so compose RECREATES it on the next `up` — once, on the first
+    bring-up after this lands (14 containers on the HP on 2026-11-09). That is the cost of bounding a
+    log that had no ceiling, and it is paid in one restart rather than in a full disk later."""
+    text = logging_overlay(_services_without_logging() & _compiled_services())
+    if text:
+        write(GEN / "logging.override.yml", text)
+        return True
+    if (GEN / "logging.override.yml").exists():
+        (GEN / "logging.override.yml").unlink()
+    return False
+
+
+# ── a memory limit this machine cannot give, said at render (DGO-1797, package 7) ─────────────────────────────
+# The Dell's .env gave Ollama 9G of its 15.4 GB (OLLAMA_MEMORY) while the app declares 6g, and nothing said a word:
+# the compiler only showed `resources`, G30 counts the declared figure, and compose took the .env's. Said here, as
+# a warning and nothing more — a machine may mean it — for every app alike: no app is named in this code.
+#: docker's own reading of a size (compose-go's RAMInBytes): a number, a unit, binary multiples. ASCII digits and
+#: fullmatch, so the Go twin's RE2 reads exactly the same (Python's \d takes «٦», its $ a trailing newline)
+MEM_SIZE = re.compile(r"([0-9]+(?:\.[0-9]+)?) ?([kKmMgGtTpP])?[iI]?[bB]?")
+#: a compose value that is ONE reference to .env — `${NAME}`, `${NAME:-default}` or `${NAME-default}`
+ENV_ONLY = re.compile(r"\$\{([A-Za-z_][A-Za-z0-9_]*)(?:(:?-)([^}]*))?\}")
+#: one service may take this share of the machine's memory before render says so
+HOST_SHARE_PCT = 50
+MEMINFO = pathlib.Path("/proc/meminfo")
+
+
+def _mem_bytes(v):
+    """A memory size as docker reads it, in bytes (exact: integer arithmetic), or None for what is not one."""
+    if isinstance(v, bool):
+        return None
+    if isinstance(v, int):
+        return v if 0 <= v < 2 ** 62 else None
+    m = MEM_SIZE.fullmatch(v) if isinstance(v, str) else None
+    if not m:
+        return None
+    whole, _, frac = m.group(1).partition(".")
+    mult = 1024 ** "_kmgtp".index((m.group(2) or "_").lower())
+    n = int(whole) * mult + (int(frac) * mult // 10 ** len(frac) if frac else 0)
+    return n if n < 2 ** 62 else None
+
+
+def _host_mem_bytes():
+    """The machine's memory (MemTotal) — on Linux, the machine the containers share; None where there is none."""
+    try:
+        text = MEMINFO.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return None
+    m = re.search(r"^MemTotal:[ \t]+([0-9]+) kB$", text, re.M)
+    n = int(m.group(1)) * 1024 if m else 0
+    return n if 0 < n < 2 ** 62 else None
+
+
+def ceiling_warnings(cat, order):
+    """The warnings of a memory limit an .env sets too high, for every enabled app's own compose, in order:
+
+    * an .env value (`${NAME:-default}` in the compose) that raises a service's limit above the memory the APP
+      declares (app.json resources.memory) — the budget gates count the declared figure, compose takes the .env's;
+    * an .env value that gives one service more than HOST_SHARE_PCT % of this machine's memory.
+
+    Only what an .env sets: a figure written in the compose is the app's own, and G30 holds it to the machine's
+    profile. A compose that cannot be read here is left to the stages that read it to say so, and a service
+    named by anything but a string (which compose refuses) is not read."""
+    total = _host_mem_bytes()
+    out = []
+    for aid in order:
+        a = cat[aid]
+        if not a.get("compose"):
+            continue
+        try:
+            doc = yaml.safe_load((a["_dir"] / a["compose"]).read_text(encoding="utf-8"))
+        except (OSError, UnicodeDecodeError, yaml.YAMLError):
+            continue
+        services = doc.get("services") if isinstance(doc, dict) else None
+        if not isinstance(services, dict):
+            continue
+        declared = (a.get("resources") or {}).get("memory")
+        cap = _mem_bytes(declared)
+        for svc, body in services.items():
+            if not isinstance(svc, str):
+                continue
+            lim = body
+            for key in ("deploy", "resources", "limits", "memory"):
+                lim = lim.get(key) if isinstance(lim, dict) else None
+            ref = ENV_ONLY.fullmatch(lim) if isinstance(lim, str) else None
+            setby, effective = None, lim
+            if ref:
+                val = _envfile_value(ref.group(1))
+                if val is not None and (val != "" or ref.group(2) == "-"):
+                    setby, effective = ref.group(1), val
+                else:
+                    effective = ref.group(3) or ""
+            size = _mem_bytes(effective)
+            if size is None or setby is None:
+                continue
+            if cap is not None and size > cap:
+                out.append(f"warning: {aid}/{svc}: .env sets {setby}={effective}, above the {declared} the app "
+                           f"declares (app.json resources.memory) — the budget gates count {declared}")
+            if total and size * 100 > total * HOST_SHARE_PCT:
+                tenths = total * 10 // 2 ** 30
+                out.append(f"warning: {aid}/{svc}: a memory limit of {effective} ({setby} in .env) is "
+                           f"{size * 100 // total}% of this machine's {tenths // 10}.{tenths % 10} GiB — more "
+                           f"than {HOST_SHARE_PCT}% for one service")
+    return out
 
 
 # Everything authentik-bootstrap runs, and every blueprint that only IT can be trusted to apply. A
@@ -1236,9 +1847,7 @@ def _bootstrap_inputs_overlay():
                 "  authentik-bootstrap:\n"
                 "    labels:\n"
                 f"      bbox.bootstrap-inputs: {h.hexdigest()[:16]}\n")
-        # Written only on change: this runs on every dc call, and a rewrite each time would churn mtimes.
-        if not out.exists() or out.read_text(encoding="utf-8") != body:
-            out.write_text(body, encoding="utf-8", newline="\n")
+        write(out, body)        # only on change, bytes against bytes: one that is not UTF-8 is written again (DGO-629)
         return out
     except Exception:
         return out if out.exists() else None       # unreadable inputs / read-only .generated: the last good overlay
@@ -1272,11 +1881,12 @@ def _effective_cpu_budget():
     body = ("# GENERATED by reconcile.compose_files() from cpu-budget.yml — do not edit.\n"
             "# Dropped — no such service in the compiled set any more: " + ", ".join(dropped) + "\n"
             + yaml.safe_dump({"services": kept}, sort_keys=True, allow_unicode=True))
-    # Written only on change: this runs on every dc call, and a rewrite each time would churn mtimes.
-    # newline="\n" for the same reason as every other writer in this file (CRLF-hosted checkouts).
+    # write(): only on change — this runs on every dc call, and a rewrite each time would churn mtimes —
+    # bytes against bytes, so a half-written file or one in another encoding is simply different, and is
+    # written again as a missing one is. read_text raised UnicodeDecodeError there, past the OSError it
+    # caught, and every dc call failed (DGO-629).
     try:
-        if not out.exists() or out.read_text(encoding="utf-8") != body:
-            out.write_text(body, encoding="utf-8", newline="\n")
+        write(out, body)
     except OSError:
         return src                                  # cannot write .generated: the overlay as rendered
     return out
@@ -1399,7 +2009,7 @@ def published_hosts(cat, order):
     for aid in order:
         a = cat[aid]
         for r in (a.get("routing") or []):
-            if r.get("auth") != "sso":
+            if r.get("auth", "sso") != "sso":     # the routers' own default (DGO-630): a gate gets its provider
                 continue
             s = dict(r.get("sso") or {})
             if a.get("layer") == 3 and not s:
@@ -1602,7 +2212,7 @@ def sso_providers(cat, order):
     for aid in order:
         a = cat[aid]
         for r in (a.get("routing") or []):
-            if r.get("auth") != "sso":
+            if r.get("auth", "sso") != "sso":     # the routers' own default (DGO-630): a gate gets its provider
                 continue
             s = dict(r.get("sso") or {})
             layer3 = a.get("layer") == 3
@@ -1628,7 +2238,53 @@ def sso_providers(cat, order):
     return out
 
 
-def routing_labels(app_id, r, framed=""):
+def server_office():
+    """Is this a SERVER office — a public name AND a certificate to answer it with? (DGO-1595)
+
+    The redirect that takes port 80 out of service and the HSTS that pins https are for an office a
+    person reaches by name from the internet. A laptop office is `DEPLOYMENT_DOMAIN=localhost`: no
+    certificate can be issued for `<app>.localhost`, `scripts/lib.sh export_cert_resolver` empties the
+    resolver there on purpose, and port 80 IS the office — redirecting it would take the whole office
+    down. So the test is the domain, and then the resolver if this machine states one: `.env` naming
+    `TRAEFIK_CERTRESOLVER=` (present and empty) is the deliberate "no ACME here", while an ABSENT line
+    leaves compose's own `myresolver` default in force (`_envfile_value` tells those two apart).
+
+    Read once per process: every caller asks the same two keys of the same file.
+    """
+    global _SERVER_OFFICE
+    if _SERVER_OFFICE is None:
+        domain = (_envfile_value("DEPLOYMENT_DOMAIN") or "localhost").strip()
+        resolver = _envfile_value("TRAEFIK_CERTRESOLVER")
+        _SERVER_OFFICE = ("." in domain) and resolver != ""
+    return _SERVER_OFFICE
+
+
+_SERVER_OFFICE = None
+
+
+def sso_middleware(admins=False):
+    """The office's sign-in in front of a signed-in route: `authentik@file`, or — for an app whose app.json says
+    `people: admins` — `authentik-admins@file`, which also refuses a signed-in person who is not an admin
+    (forward-auth's /auth/traefik/admins, DGO-1755). Both live in traefik's FILE provider
+    (platform-base/traefik/config/authentik-forwardauth.yaml), so a router never names one that does not exist."""
+    return "authentik-admins@file" if admins else "authentik@file"
+
+
+def app_admins(manifest):
+    """Is the app one the office's admins alone open (`people: admins`, DGO-1755)?"""
+    return (manifest or {}).get("people") == "admins"
+
+
+def app_base(module, manifest):
+    """One entry of console.app_bases.json: where the console's door at /a/<alias>/ sends a request, and — for an
+    admins' app — `people: admins`, which the door refuses to a signed-in person who is not an admin (DGO-1755)."""
+    out = {"env": module.get("url_env"), "default": module["url"]}
+    if app_admins(manifest):
+        out["people"] = "admins"
+    return out
+
+
+def routing_labels(app_id, r, framed="", admins=False):
     """Emit the exact label set the platform's edge convention requires.
 
     Three routers per host (Runtipi's 'declare intent, platform emits labels'):
@@ -1636,7 +2292,39 @@ def routing_labels(app_id, r, framed=""):
       <name>-http   : Host(${<APP>_BASE_URL}) on :web
       <name>-https  : same host on :websecure + TLS via myresolver
     auth:sso attaches the authentik forwardAuth middleware to the browser-facing routers
-    (local + https), matching the established convention.
+    (local + http + https), matching the established convention.
+
+    …and an entry may carry chain members of its own, because a sign-in on the front door is not
+    always the whole chain:
+
+      `middlewares`   names of middlewares the APP defines on its own service's labels — so they are
+                      `<name>@docker` to one of these routers, and a router that dropped them drops
+                      the app's own edge behaviour: n8n's `n8n-embed` drops `X-Frame-Options` and
+                      sets `frame-ancestors` so the console may frame the editor. Attached AFTER
+                      the platform's sign-in: the sign-in is the gate, an app's header rewriting is
+                      not.
+      `sub_routes`    a PATH on this host, or on the host the shell frames this app at, that needs a
+                      chain of its own — `{"name": "push", "path": "/rest/push", "priority": 200,
+                      "on": "host"|"framed", "middlewares": […]}`. n8n refuses an EventSource whose
+                      Origin is not the host it was forwarded for, so /rest/push carries a
+                      middleware that rewrites Origin and X-Forwarded-Host — and that middleware
+                      must NOT apply to every request of the app. That is why this is a path-scoped
+                      router and not a second entry on the same host.
+
+    …and two fields about PUBLICATION, for a host that carries an API rather than a screen (DGO-1557):
+
+      `https_only: true`   no `-http` router at all. A browser gets the URL the app hands it
+                           (`STORAGE_PUBLIC_URL`), and on a server office the edge's own port-80
+                           answer is a 308 (DGO-1595) — so a plain-http twin is one more way in that
+                           nobody needs. The `-local` twin stays: it is the machine's own name.
+      `publish: "domain"`  the public routers exist only where THIS office has a public name. The
+                           host variable decides (`url_env`, else `<APP>_BASE_URL`): the value must be
+                           UNDER the office's own `DEPLOYMENT_DOMAIN` — `supabase.<domain>` is
+                           published, and `supabase.localhost` (what an office that publishes nothing
+                           declares, as Exampleu does), `supabase.internal`, a bare address or a name
+                           with a trailing dot is not. A dotted name that belongs to nobody is not a
+                           public name, and a certresolver on one is an ACME loop (DGO-901) — the
+                           identity of the office is the only honest test of "may be published".
     """
     svc = r.get("service") or app_id
     name = r.get("name") or app_id            # traefik router/service base name
@@ -1660,9 +2348,49 @@ def routing_labels(app_id, r, framed=""):
         raise SystemExit(
             f"{app_id}: routing auth '{auth}' is declared in the schema but not implemented by the "
             f"label emitter — it would publish an UNAUTHENTICATED route. Use 'sso' or 'none'.")
+    https_only = bool(r.get("https_only"))
+    publish = r.get("publish") or "always"
+    if publish not in ("always", "domain"):
+        raise SystemExit(f"{app_id}: routing publish '{publish}' is not one of 'always' | 'domain'.")
+    published = True
+    if publish == "domain":
+        hostval = (_envfile_value(r.get("url_env") or base_url_env(app_id)) or "").strip()
+        hostval = hostval.split("//", 1)[-1].split("/", 1)[0].split(":", 1)[0].lower()
+        office = (_envfile_value("DEPLOYMENT_DOMAIN") or "localhost").strip().lower()
+        # UNDER THE OFFICE'S OWN NAME, and only that: a dotted name that is not this office's
+        # (`supabase.internal`, a staging name, a bare address) is not a public name, and a
+        # certresolver on it is an ACME order no authority can issue (DGO-901).
+        published = (hostval == office or hostval.endswith("." + office)) \
+            and office not in ("", "localhost") and not hostval.endswith(".")
+        if published:
+            try:
+                import ipaddress
+                ipaddress.ip_address(hostval.split(":")[0])
+                published = False           # an address is never a name to publish
+            except ValueError:
+                pass
     L = ["traefik.enable=true"]
 
-    def router(suffix, rule, entry, tls=False, mw=False):
+    def chain(extra):
+        """The middleware chain one of this entry's routers carries: the office's sign-in first,
+        then the app's own — `<name>@docker`, because those middlewares are defined on this app's
+        own service labels, and a bare name on a docker-provider router would resolve to the FILE
+        provider's and not exist. The provider is appended here and NOWHERE declared, so a name in
+        a manifest is always a middleware the app itself must define — which is what gate G21
+        checks, and why a name carrying its own provider is not accepted."""
+        out = [sso_middleware(admins)] if auth == "sso" else []
+        for m in extra:
+            if "@" in m:
+                raise SystemExit(
+                    f"{app_id}: routing middleware '{m}' carries its own provider; a declared "
+                    f"middleware is one YOUR compose defines on your own service's labels "
+                    f"(emitted `<name>@docker`). Name it without the provider.")
+            out.append(m + "@docker")
+        return out
+
+    own_mw = list(r.get("middlewares") or [])
+
+    def router(suffix, rule, entry, tls=False, mw=True, extra=None):
         p = f"traefik.http.routers.{name}-{suffix}"
         L.append(f"{p}.rule={rule}")
         L.append(f"{p}.entrypoints={entry}")
@@ -1673,40 +2401,110 @@ def routing_labels(app_id, r, framed=""):
             # issues for `<app>.localhost`, and the edge asked again on every reload: DGO-901)
             L.append(f"{p}.tls.certresolver=${{TRAEFIK_CERTRESOLVER-myresolver}}")
         L.append(f"{p}.service={svc}")
-        if mw and auth == "sso":
+        mids = chain(own_mw if extra is None else extra) if mw else []
+        if tls and server_office():
+            # Every certificate served by this edge also PINS https for its host (DGO-1595), declared
+            # once per router here rather than in a static-entrypoint list: an entrypoint middleware
+            # is static config, and a static file that only repeats one entrypoint field was measured
+            # to fight the flags instead of merging with them (traefik v3.3: a partial entrypoint in
+            # `--configFile` plus `--entrypoints.websecure.address` in the command started the edge
+            # with a random listener port). `hsts` is defined in the generated file, so the name always
+            # resolves — a router whose middleware does not exist is dropped whole.
+            mids = mids + ["hsts@file"]
+        if mids:
             # authentik@file, NOT a bare `authentik`. The middleware is defined in traefik's FILE
             # provider (platform-base/traefik/config/authentik-forwardauth.yaml), and a bare name on
             # a docker-provider router resolves to `authentik@docker` — which is exactly the bug:
             # label-defined middlewares only exist while authentik-server is in traefik's snapshot,
             # and traefik DISCARDS any router whose middleware it cannot resolve. Every SSO-gated
             # host then serves a bare 404 while the stack reports healthy.
-            L.append(f"{p}.middlewares=authentik@file")
+            L.append(f"{p}.middlewares={','.join(mids)}")
 
-    router("local", f"Host(`{host}.localhost`)", "web", mw=True)
-    # SECURITY: the -http router historically carried no auth middleware, on the assumption that
-    # ${APP}_BASE_URL is a public domain distinct from <host>.localhost. On a *.localhost
-    # deployment (DEPLOYMENT_DOMAIN=localhost) it resolves to the SAME host as -local, and traefik
-    # may serve the UNPROTECTED one — silently bypassing SSO. Auth must never depend on which of
-    # two identical rules traefik happens to pick, so the plain-http router is gated too.
-    router("http", f"Host(`{env}`)", "web", mw=True)
-    router("https", f"Host(`{env}`)", "websecure", tls=True, mw=True)
+    # A `.localhost` twin is the LAPTOP's door (that is the only door there). On a server office an
+    # https_only host does not keep one: it is plain HTTP on port 80, no middleware, and a spoofed
+    # `Host:` header reaches it from the internet (measured by the second reader, 2026-11-09 — the
+    # same posture the old hand-written `supabase-local` router had). An API whose callers are the
+    # office network and browsers-with-a-public-name needs neither.
+    if not (https_only and server_office()):
+        router("local", f"Host(`{host}.localhost`)", "web")
+    if published and not https_only:
+        # SECURITY: the -http router historically carried no auth middleware, on the assumption that
+        # ${APP}_BASE_URL is a public domain distinct from <host>.localhost. On a *.localhost
+        # deployment (DEPLOYMENT_DOMAIN=localhost) it resolves to the SAME host as -local, and traefik
+        # may serve the UNPROTECTED one — silently bypassing SSO. Auth must never depend on which of
+        # two identical rules traefik happens to pick, so the plain-http router is gated too.
+        router("http", f"Host(`{env}`)", "web")
+    if published:
+        router("https", f"Host(`{env}`)", "websecure", tls=True)
     # The host the shell FRAMES this app at (`module.external`) is a host of its own — the nested one
     # on a `.localhost` edge — and a framed host that no router matches is a 404 nobody can explain.
     # Emitted only when this app's own host variable does not already route it (a laptop `.env` that
     # names the nested host itself), so one host never gets two identical rules.
-    if framed and framed not in _own_route_hosts(app_id, r):
-        router("frame", f"Host(`{framed}`)", "web", mw=True)
+    framed_routed = bool(framed) and framed not in _own_route_hosts(app_id, r)
+    if framed_routed:
+        router("frame", f"Host(`{framed}`)", "web")
+
+    # Path-scoped sub-routers (see the docstring): a longer rule already outranks the plain one in
+    # traefik, and `priority` says it out loud so a new twin cannot quietly change the answer.
+    for sub in (r.get("sub_routes") or []):
+        for field in ("name", "path"):
+            if not sub.get(field):
+                # A KeyError here would be a traceback with no sentence in it; a manifest is read by
+                # whoever wrote it, and the field they forgot is the whole message (G73 asks the same
+                # of every required key).
+                raise SystemExit(f"{app_id}: routing sub_route without '{field}' — every sub_route "
+                                 f"needs a 'name' (its router suffix) and a 'path' (its PathPrefix).")
+        sname, path = sub["name"], sub["path"]
+        on = sub.get("on", "host")
+        if on not in ("host", "framed"):
+            raise SystemExit(
+                f"{app_id}: routing sub_route '{sname}' declares on='{on}'; only 'host' (this "
+                f"entry's own host) or 'framed' (the host the shell frames it at) are emitted.")
+        if on == "framed" and not framed_routed:
+            continue            # only an office that frames the app at a nested host has that host
+
+        def sub_router(suffix, rule, entry, tls=False):
+            p = f"traefik.http.routers.{name}-{sname}{'-' + suffix if suffix else ''}"
+            L.append(f"{p}.rule={rule} && PathPrefix(`{path}`)")
+            L.append(f"{p}.entrypoints={entry}")
+            if tls:
+                L.append(f"{p}.tls=true")
+                L.append(f"{p}.tls.certresolver=${{TRAEFIK_CERTRESOLVER-myresolver}}")
+            if sub.get("priority") is not None:
+                L.append(f"{p}.priority={sub['priority']}")
+            L.append(f"{p}.service={svc}")
+            mids = chain(list(sub.get("middlewares") or []))
+            if tls and server_office():
+                mids = mids + ["hsts@file"]
+            if mids:
+                L.append(f"{p}.middlewares={','.join(mids)}")
+
+        if on == "host":
+            sub_router("local", f"Host(`{host}.localhost`)", "web")
+            sub_router("http", f"Host(`{env}`)", "web")
+            sub_router("https", f"Host(`{env}`)", "websecure", tls=True)
+        else:
+            # The framed host answers on `web` alone (the frame router above is web-only, and on an
+            # office whose edge is https the shell frames the app at its own host instead). A
+            # `-https` twin here would be a router no request can ever reach — the "router nobody can
+            # explain" shape this file exists to prevent.
+            sub_router("", f"Host(`{framed}`)", "web")
     L.append(f"traefik.http.services.{svc}.loadbalancer.server.port={port}")
 
     return L
 
 
-def console_passthrough_labels(app_id, r, console_r, console_app=None):
+def console_passthrough_labels(app_id, r, console_r, console_app=None, first=0, admins=False):
     """Compile direct edge routes for embedded transports the console's WSGI proxy cannot carry.
 
     The app declares only its relative endpoint. The platform owns the console hosts, Authentik
     boundary, mount prefix and Traefik mechanics, so adding another websocket app never requires
     app-specific code in the console or handwritten edge labels in the app's compose file.
+
+    `first` is the number of this app's passthroughs already compiled from its earlier routes. The
+    routers are numbered across ALL of the app's routes, so two tiles of one app never share a name:
+    traefik drops a router that two containers define differently, and bina-claude's desktop and
+    terminal both had `bina-claude-console-websocket-0`, so neither socket reached its app (DGO-1626).
     """
     module = r.get("module") or {}
     passthroughs = module.get("passthrough") or []
@@ -1737,7 +2535,7 @@ def console_passthrough_labels(app_id, r, console_r, console_app=None):
         alternatives = "|".join(re.escape(rp.lstrip("/")) for rp in reserved)
         reserved_rule = f" && !PathRegexp(`^/({alternatives})(/|$)`)"
 
-    for index, spec in enumerate(passthroughs):
+    for index, spec in enumerate(passthroughs, start=first):
         route_name = f"{app_id}-console-{spec['transport']}-{index}"
         root_mount = spec.get("mount", "alias") == "root"
         mount = spec["path"] if root_mount else f"/a/{alias}{spec['path']}"
@@ -1748,7 +2546,7 @@ def console_passthrough_labels(app_id, r, console_r, console_app=None):
             strip_name = f"{route_name}-strip"
             labels.append(f"traefik.http.middlewares.{strip_name}.stripprefix.prefixes=/a/{alias}")
             middlewares.append(strip_name)
-        middlewares.append("authentik@file")
+        middlewares.append(sso_middleware(admins))         # an admins' app is theirs on the console's host too
 
         def router(suffix, host, entrypoint, tls=False):
             key = f"traefik.http.routers.{route_name}-{suffix}"
@@ -1904,6 +2702,7 @@ def render_routing(cat, order):
     waker, woken = on_demand_waker(cat, order), False
     for aid in order:
         a = cat[aid]
+        compiled = 0  # this app's passthroughs so far: their routers are numbered across its routes
         for r in a.get("routing", []):
             passthroughs = (r.get("module") or {}).get("passthrough") or []
             if passthroughs:
@@ -1911,7 +2710,9 @@ def render_routing(cat, order):
                     raise SystemExit(f"{aid}: module.passthrough requires the console app")
                 svc = r.get("service") or aid
                 svcs.setdefault(svc, {}).setdefault("labels", []).extend(
-                    console_passthrough_labels(aid, r, console_r, cat.get("console")))
+                    console_passthrough_labels(aid, r, console_r, cat.get("console"), compiled,
+                                               admins=app_admins(a)))
+                compiled += len(passthroughs)
             if not r.get("emit_labels", True):
                 continue  # app carries its own labels in its own compose — nothing to emit
             svc = r.get("service") or aid
@@ -1919,7 +2720,7 @@ def render_routing(cat, order):
                       if (r.get("module") or {}).get("external") and r.get("host")
                       and (_envfile_value("DEPLOYMENT_DOMAIN") or "localhost") == "localhost"
                       and r.get("auth", "sso") == "sso" else "")
-            labels = routing_labels(aid, r, framed)
+            labels = routing_labels(aid, r, framed, admins=app_admins(a))
             svcs.setdefault(svc, {}).setdefault("labels", []).extend(labels)
             # An app that runs only while it is used (DGO-1270): autoheal stops it after its idle
             # window, and these routes on the waker keep its address answering while it sleeps.
@@ -2065,7 +2866,7 @@ def inputs_digest(cat, state):
 def write_plan(cat, state, order, diags):
     PLANS.mkdir(parents=True, exist_ok=True)
     digest = inputs_digest(cat, state)
-    existing = sorted(int(f.stem) for f in PLANS.glob("*.yaml") if f.stem.isdigit())
+    existing = [int(p) for p in _plan_ids()]
     pid = f"{(existing[-1] + 1) if existing else 1:04d}"
     bindings = {k: (v.get("provider") if isinstance(v, dict) else v)
                 for k, v in (state.get("bindings") or {}).items()}
@@ -2100,10 +2901,23 @@ KEEP_GENERATIONS = 20
 _GEN_SKIP = {"generations"}
 
 
+def _numbered(name: str) -> bool:
+    """A generation's or a plan's name: ASCII digits only. str.isdigit() also takes «²» and the digits of other
+    scripts, which int() then refuses — one such folder failed every render (DGO-632). The Go twin's
+    generationDirs reads ASCII digits too."""
+    return name.isascii() and name.isdigit()
+
+
+def _plan_ids():
+    """The plans under .generated/plans, by number — what write_plan numbers after and what apply takes the last
+    of. A lexical sort of every stem put «².yaml» last, and apply without --for took it (DGO-632)."""
+    return sorted((f.stem for f in PLANS.glob("*.yaml") if _numbered(f.stem)), key=int) if PLANS.is_dir() else []
+
+
 def _gen_dirs():
     if not GENS.is_dir():
         return []
-    return sorted((d for d in GENS.iterdir() if d.is_dir() and d.name.isdigit()),
+    return sorted((d for d in GENS.iterdir() if d.is_dir() and _numbered(d.name)),
                   key=lambda d: int(d.name))
 
 
@@ -2131,7 +2945,7 @@ def _sync_tree(src, dst, skip=()):
     Running containers bind-mount folders of .generated/ — connections, the console, security, dgo-extend and
     computers all mount .generated/registry — and a bind mount follows the folder it was given, not its path. A
     folder deleted and made again under a running container leaves the container on the deleted one: empty, while
-    it reports healthy. That is FPG-497 (2026-10-29): .generated/ was deleted and re-extracted at 08:45:54Z, the
+    it reports healthy. That is EXF-497 (2026-10-29): .generated/ was deleted and re-extracted at 08:45:54Z, the
     credential broker kept reading the deleted registry, and every app that started after it was refused its
     connections until connections was restarted by hand."""
     dst.mkdir(parents=True, exist_ok=True)
@@ -2160,7 +2974,7 @@ def restore_generation(gid):
     if not src.is_dir():
         sys.exit(f"FATAL no generation '{gid}' (see `reconcile.py generations`)")
     archive_generation()          # the state we are leaving is itself worth keeping
-    _sync_tree(src, GEN, skip=_GEN_SKIP)   # IN PLACE: never under a running container's mount (FPG-497)
+    _sync_tree(src, GEN, skip=_GEN_SKIP)   # IN PLACE: never under a running container's mount (EXF-497)
     return gid
 
 
@@ -2223,14 +3037,31 @@ def render(cat, order, state):
     elif (GEN / "connections.override.yml").exists():
         (GEN / "connections.override.yml").unlink()
 
+    # Every container's log is bounded here, once, for every app and every office (DGO-1393). It
+    # reads the INCLUDED app composes (never the overlays: they re-declare a service with labels
+    # alone, which would read as "declares no logging" for every routed service) and filters its
+    # answer by the compiled service set, so the file it writes names only what compose will accept.
+    render_logging()
     render_glitchtip(cat, order)
     served, serrs = serve.plan(state, cat)
     if serrs:
         sys.exit("SERVE PLAN REFUSED:\n" + "\n".join(f"  - {e}" for e in serrs))
     render_serve(cat, served, framed_hosts(cat, order), lan=lan_name(order))
-    render_registries(cat, order, served)
+    render_https_redirect(cat, order)
+    render_registries(cat, order, served, state)
+    # who may read an agent's action token from the vault (DGO-1152): connections mounts registry/ read-only
+    write(GEN / "registry" / "agent-token-readers.json",
+          json.dumps(agent_token_readers(cat, order), indent=2, ensure_ascii=False) + "\n")
+    # which linked offices are the owner's own herd (DGO-1800): computers mounts registry/ read-only
+    write(GEN / "registry" / "herd.offices.json", json.dumps(herd_offices(), indent=2, ensure_ascii=False) + "\n")
+    # every enabled app's operations, declared once (DGO-1244): bbox's help, and later the generic caller and its gate
+    write(GEN / "registry" / "ops.json", json.dumps(ops_registry(cat, order), indent=2, ensure_ascii=False) + "\n")
     render_agent_context(cat, order)
+    render_vault(cat, order)
+    render_host_devices(cat)
     render_authentik(cat, order, served)
+    for line in ceiling_warnings(cat, order):
+        print(line, file=sys.stderr)
 
     write(GEN / "resolved.json", json.dumps({
         "order": order, "migrated": migrated,
@@ -2253,6 +3084,94 @@ def lan_name(order) -> tuple[str, str]:
     addr = (_envfile_value("LAN_ADDRESS") or "").strip()
     name = (_envfile_value("LAN_DOMAIN") or "").strip() or (f"{addr.replace('.', '-')}.sslip.io" if addr else "")
     return (name, (_envfile_value("LAN_PORT") or "8080").strip()) if name else ("", "")
+
+
+def render_https_redirect(cat, order):
+    """Write the edge's port-80 answer and the HSTS every certificate carries (DGO-1595).
+
+    WHAT WAS WRONG. Every app publishes a `-http` router on traefik's `web`, so a server office
+    served its applications in cleartext: measured 2026-11-09 from outside, `http://n8n.exampleu…/`
+    answered 200 with the editor, `/rest/settings` 200 to anyone, `http://meet.exampleu…/` 200 (Jitsi),
+    and no HSTS anywhere. The console and the sign-in did redirect, by their own labels — the edge
+    had no answer of its own.
+
+    WHY THIS SHAPE.
+      * traefik v3 cannot answer 308. Its `redirectScheme`, `redirectRegex` and entrypoint redirection
+        all produce 301 or 302 — measured on this engine 2026-11-09 (`permanent: true` → 301,
+        `false` → 302) and the v3.5 reference has no status field at all. A 301 turns a POST into a
+        GET at the client, so a webhook configured with `http://` would arrive as nothing.
+      * So port 80 asks a service that answers 308 (platform-base/https-redirect) through the one
+        mechanism that returns another server's answer verbatim: `forwardAuth`. Measured on this
+        engine: a 308 from the auth server reaches the client as 308, for GET and for POST, with its
+        `Location` intact.
+      * The router carries priority 1000000 so it outranks every app's `-http` router, and its rule
+        EXCLUDES `/.well-known/acme-challenge/` — HTTP-01 renewals are answered by traefik on that
+        entrypoint, and redirecting them would fail every renewal on the office (measured: the
+        challenge path is not redirected, the rest is).
+      * It is written only when the ANSWERING APP is enabled (`https-redirect` in the compiled set)
+        and the owner has not closed it (`HTTPS_REDIRECT=off` in `.env`). A router that forwardAuths
+        to a container the office does not run answers 500 on every port-80 request — a worse
+        failure than the cleartext it replaces — and an office whose name has a dot but whose ACME
+        cannot issue (an internal `.local`, a staging name) would 308 into a certificate nobody has.
+      * Its rule names THIS OFFICE (`HostRegexp` over its domain), not `PathPrefix` alone: a bare
+        catch-all also swallowed `<app>.localhost`, which a server office still uses locally, and it
+        let a stranger's Host header choose the Location.
+      * The `hsts` middleware is written on EVERY office (so a router that references it is never
+        dropped whole — traefik discards a router whose middleware it cannot resolve) and is
+        REFERENCED only on a server office, where a certificate exists. `includeSubDomains` is on:
+        every app of the office is a subdomain of one name.
+
+    The file is generated into traefik's own config directory, like zz-serve.yaml, because the file
+    provider is the one place a static upstream and a routing decision that is not an app's can live.
+    """
+    dest = REPO / "platform-base/traefik/config/zz-https.yaml"
+    redirect = (server_office() and "https-redirect" in order
+                and (_envfile_value("HTTPS_REDIRECT") or "").strip().lower() != "off")
+    head = [
+        "# GENERATED by platform/manager/reconcile.py — DO NOT EDIT. Gitignored; see gate G9.",
+        "#",
+        "# The edge's answer on port 80 (a server office: 308 to https, never cleartext) and the HSTS",
+        "# every certificate pins (DGO-1595). The `hsts` middleware is defined on every office so no",
+        "# router can reference a middleware that does not exist; the router below exists only where a",
+        "# certificate does. Measured, do not 'simplify': traefik v3 has no 308, so the redirect is a",
+        "# forwardAuth to platform-base/https-redirect, whose answer traefik copies verbatim.",
+        "http:",
+        "  middlewares:",
+        "    hsts:",
+        "      headers:",
+        "        stsSeconds: 31536000",
+        "        stsIncludeSubdomains: true",
+    ]
+    if redirect:
+        domain = re.escape((_envfile_value("DEPLOYMENT_DOMAIN") or "").strip())
+        # Name-scoped, not a bare catch-all: `^(?:.+\\.)?<domain>$` is this office's own names — the
+        # apex and every `<app>.<domain>` — and it leaves `Host(<app>.localhost)` alone, which a
+        # server office still uses for its OWN scripts and for apps/office-routes' probe of the
+        # machine's address (that probe reads the answer's host to say "this is our edge"). The one
+        # thing a catch-all bought was redirecting a stranger's Host header, which is not wanted.
+        head += [
+            "    port80-https:",
+            "      forwardAuth:",
+            "        address: http://https-redirect:8079",
+            "        trustForwardHeader: false   # traefik REBUILDS X-Forwarded-*, so the Location is the",
+            "                                    # host it actually received, never one a client wrote",
+            "  routers:",
+            "    dgo-port80:",
+            f"      rule: HostRegexp(`^(?:.+\\.)?{domain}$`) && PathPrefix(`/`) && !PathPrefix(`/.well-known/acme-challenge/`)",
+            "      entryPoints:",
+            "      - web",
+            "      priority: 1000000",
+            "      middlewares:",
+            "      - port80-https",
+            "      service: dgo-port80",
+            "  services:",
+            "    dgo-port80:",
+            "      loadBalancer:",
+            "        servers:",
+            "        - url: http://https-redirect:8079",
+        ]
+    write(dest, "\n".join(head) + "\n")        # left alone when it says the same: traefik watches it (DGO-628)
+    return 1 if redirect else 0
 
 
 def render_serve(cat, served, framed=(), lan=("", "")):
@@ -2282,7 +3201,7 @@ def render_serve(cat, served, framed=(), lan=("", "")):
         dest.unlink(missing_ok=True)
         aliases.unlink(missing_ok=True)
         return 0
-    _put(dest, doc.encode("utf-8"))
+    write(dest, doc)          # left alone when it says the same: traefik's file provider reloads on any write (DGO-628)
     # Every router above points at `http://<alias>.<office>:<port>` — a NETWORK ALIAS on the link
     # proxy, not the peer's tunnel address (which exists only inside the tunnel container's
     # namespace and is not routable from the edge's network). An alias can only be set when the
@@ -2290,7 +3209,7 @@ def render_serve(cat, served, framed=(), lan=("", "")):
     # same breath, because a router to a name nobody resolves is a 502 with a healthy-looking stack.
     overlay = serve.render_aliases(served)
     if overlay:
-        _put(aliases, overlay.encode("utf-8"))
+        write(aliases, overlay)
     else:
         aliases.unlink(missing_ok=True)
     return len(served)
@@ -2404,6 +3323,18 @@ def _own_host_only(module: dict) -> bool:
     And hp-laptop's דפדפן showed noVNC's static error screen on the MacBook, every asset under
     `/a/browser42.hp-laptop/app/…` empty and `/websockify` unrouted (measured 2026-10-09).
     """
+    if (module.get("path_mount") and not module.get("external")
+            and not module.get("passthrough")):
+        # …unless the app SAYS it can be mounted under a path (`path_mount`, DGO-553). The console
+        # itself is the case this exists for: `embed: false` because one office has one console and
+        # it IS the one you are looking at — yet that whole shell is exactly what a linked office's
+        # «המרכז» tile is for. A DECLARATION, not an exception in this function, and it overrides
+        # only the `embed: false` half: an app that owns an origin (`external`) or answers the
+        # console's own paths (`passthrough`) cannot be mounted by asking nicely, because both were
+        # measured failing (2026-10-05, 2026-10-09) and neither is a matter of configuration.
+        # (c20aa9f4 wrote it on hp-dgo; d81bf0a7's merge dropped it while the console kept declaring
+        # it and the Go twin kept honouring it — put back by the release, 2026-11-10.)
+        return False
     return (bool(module.get("external")) or module.get("embed", True) is False
             or bool(module.get("passthrough")))
 
@@ -2465,6 +3396,20 @@ def _agent_service(man: dict) -> str:
     """
     stated = str(man.get("agent_api_service") or "").strip().lower()
     return stated if SERVICE_NAME.fullmatch(stated) and stated != "localhost" else ""
+
+
+def handoffs_address(aid: str, man: dict, route: dict) -> str:
+    """Where THIS office's console asks the app which people it is waiting for (DGO-1336), or "".
+
+    `handoffs: <path>` in the manifest (serve.handoffs_path), answered on the app's agent door — the
+    service that answers it (`_agent_service`, else the route's own) on its port (`_agent_door`). The
+    console reads the address off the tile and never names the app (G9); `/api/modules` strips it."""
+    path = serve.handoffs_path({aid: man}, aid)
+    if not path:
+        return ""
+    ui = route.get("port")
+    port = _agent_door(man, ui if isinstance(ui, int) and not isinstance(ui, bool) else 0)
+    return f"http://{_agent_service(man) or route.get('service') or aid}:{port}{path}" if port else ""
 
 
 def _endpoint_parts(endpoint) -> tuple[str, int]:
@@ -2594,6 +3539,14 @@ def remote_records(served) -> dict:
                 # the app's own port is the door.
                 "link_port": int(entry.get("link_port") or 0),
                 "agent_api_port": app.get("agent_api_port"),
+                # HOW TO REACH IT (DGO-553): the door's base and the authority that office's app answers under,
+                # as the console's tile carries them. The computers app merging a linked office's machines reads
+                # them HERE (apps/computers/remote.py) and skips a record without them, so on every office this
+                # compiler rendered the shared fleet was empty. The Go twin has written it since batch 33; its
+                # render oracle found the two apart on mac-dgo's head (e67a5ec38).
+                "door": {"base": f"http://{tile}:{int(entry.get('link_port') or 0) or app['port']}",
+                         "host": app.get("host") or "",
+                         "user": (entry.get("identity") or {}).get("to") or ""},
                 "remote": {"office": entry["office"], "label": entry["label"],
                            "link": entry["link"], "address": entry["address"],
                            "commit": entry["commit"]},
@@ -2721,7 +3674,7 @@ def main():
                                      "compose-services", "blueprints", "generations", "rollback",
                                      "apply", "enabled-apps", "set-state", "capability-provider",
                                      "serve-plan", "remote-get", "remote-set", "office-get", "office-set",
-                                     "link-endpoints"])
+                                     "link-endpoints", "lang"])
     ap.add_argument("--capability", metavar="NAME",
                     help="capability-provider: the capability name to resolve")
     ap.add_argument("--app", metavar="ID", help="set-state: the app id to write")
@@ -2740,6 +3693,9 @@ def main():
     ap.add_argument("--exclude", action="append", metavar="SVC",
                     help="services: drop these compose services from the output (repeatable or "
                          "comma-separated). Trimming a lane stays possible, but stays VISIBLE.")
+    ap.add_argument("--lang", metavar="CODE",
+                    help="lang: the language to write into platform.state.yaml (he|en). Omit to print the "
+                         "current one.")
     a = ap.parse_args()
 
     # compose-files: the ONE place that answers "which -f files are the stack?". Shell consumers
@@ -2769,6 +3725,28 @@ def main():
             print(f"{a.app} is already {have} — nothing to change")
             return 0
         print(f"{a.app} -> {a.state} (by {a.by})")
+        return 0
+
+    # lang (DGO-971): THE write path for the office's language — `bbox lang` and the control plane's
+    # /api/language. Before validation, like set-state: switching a language must not be blocked by an
+    # unrelated manifest error, and it touches no app entry. With no --lang it says what the office is in.
+    # Answered by this file alone; packaging/dgo hands the verb here (args.go).
+    if a.verb == "lang":
+        if a.lang is None:              # OMITTED says the language; an EMPTY code is a code, and is refused below
+            st = load_state()
+            code = state_language(st)
+            declared = str((st or {}).get("language") or "").strip()
+            print(f"language: {code}" + ("" if declared else "  (not declared: the default)"))
+            for c, v in LANGUAGES.items():
+                print(f"  {c}  {v['label_en']} / {v['label']}  {v['dir']}" + ("   <- active" if c == code else ""))
+            return 0
+        try:
+            changed = set_language(a.lang, by=a.by)
+        except (ValueError, OSError) as e:
+            print(f"  ERROR {e}", file=sys.stderr)
+            return 1
+        print(f"language -> {a.lang.strip().lower()} (by {a.by})" if changed
+              else f"language is already {a.lang.strip().lower()} — nothing to change")
         return 0
 
     # remote-get / remote-set: the `remote:` block for callers outside this process — the control
@@ -2864,6 +3842,7 @@ def main():
 
     cat, state = load_catalog(), load_state()
     errs, provided = validate(cat)
+    errs = language_errors(state) + errs          # the state's one value validate() does not read
     if errs:
         print("MANIFEST VALIDATION FAILED:")
         for e in errs:
@@ -3153,7 +4132,7 @@ def main():
         def csv(vals):
             return [x for v in (vals or []) for x in re.split(r"[,\s]+", v) if x]
         want = csv(a.roots)
-        have = sorted(f.stem for f in PLANS.glob("*.yaml")) if PLANS.is_dir() else []
+        have = _plan_ids()
         if not have:
             sys.exit("FATAL no plan to apply — run `reconcile.py plan` first")
         pid = want[0] if want else have[-1]
@@ -3301,6 +4280,367 @@ def render_agent_context(cat, order):
     return len(rows)
 
 
+# ── the office's vault (DGO-1642) ───────────────────────────────────────────────────────────────
+#
+# Obsidian is the app the owner calls «האפליקציה ברירת מחדל לקונטקסט»: the thing a session reads
+# first. So a vault that is right on day one and stale on day thirty is worse than an empty one,
+# because an agent believes it. The cure is the one this compiler already proved for the agent's
+# briefs (render_agent_context above): the app DECLARES what a vault holds, and the compiler renders
+# it — never a hand-maintained copy, never a "starter folder" somebody remembers to update.
+#
+# Three properties are the whole design, and the tests in platform/manager/test_vault.py are exactly
+# these three:
+#
+#   1. DERIVED AND DETERMINISTIC. Same declarations in, byte-identical notes out — no clock, no
+#      ordering by dict iteration. A diff under .generated/vault/ is therefore always a real change.
+#      The vault's AGE is kept on the vault side (by the sync), where a fact about a copy belongs.
+#   2. SCOPED, FAILING CLOSED. `scope: herd` notes (the business's own offices: their machines,
+#      addresses and every security finding) render only where DGO_OFFICE_ID is one of
+#      apps/computers/herd.yaml's `offices:`. An absent id, an unmatched id, or an unreadable herd
+#      file each mean "office only" — a client office must never hold another office's posture.
+#   3. NO SECRET. Only the deployment's PUBLIC identity is read from .env (its name and its office
+#      id). Nothing here opens a vault, a database or another app's volume.
+#
+# The compiler writes into .generated/vault/; carrying it into the vault *folder* is the app's own
+# hook (apps/obsidian/hooks/prepare → vault-sync.sh), which is also why nothing here knows what a
+# docker volume is.
+VAULT_MANIFEST = "apps/obsidian/vault.yaml"
+
+
+def _vault_manifest():
+    """The declaration, or None — and None is a readable state, not a crash: an office without the
+    app gets no vault render, and `validate` is what tells a person the file is broken."""
+    p = REPO / VAULT_MANIFEST
+    if not p.is_file():
+        return None
+    try:
+        man = yaml.safe_load(p.read_text(encoding="utf-8")) or {}
+    except yaml.YAMLError:
+        return None
+    return man if isinstance(man, dict) else None
+
+
+def _herd_office_ids():
+    """The ids under `offices:` in apps/computers/herd.yaml, or an empty set.
+
+    Read as text with a narrow reader rather than by loading the file: the only question here is
+    "is this machine one of the business's own", and a herd file that does not parse must answer NO
+    (a client office rendered from a broken file is the failure this function exists to prevent).
+    """
+    p = REPO / "apps" / "computers" / "herd.yaml"
+    try:
+        lines = p.read_text(encoding="utf-8", errors="replace").split("\n")
+    except OSError:
+        return set()
+    ids, inside = set(), False
+    for line in lines:
+        if re.match(r"^offices:\s*$", line):
+            inside = True
+            continue
+        if inside:
+            if re.match(r"^\S", line) and not line.startswith("#"):
+                break                                   # a new top-level key ends the block
+            m = re.match(r"^  ([a-z0-9][a-z0-9._-]*):\s*$", line)
+            if m:
+                ids.add(m.group(1))
+    return ids
+
+
+# an office's id or alias, and its WireGuard public key (32 bytes, base64: what every pairing shows; never a secret)
+HERD_NAME = re.compile(r"[a-z0-9][a-z0-9._-]*")
+WG_PUBLIC_KEY = re.compile(r"[A-Za-z0-9+/]{43}=")
+
+
+def herd_offices():
+    """computers' registry of the herd (DGO-1800): {"offices": {id: {"wg_public_key", "aliases"}}, "keys": every
+    office's key, sorted}. A door read from an office whose pair key is in `keys` is the owner's own and keeps the
+    whole view; any other linked office is narrowed to what this office gives it (computers' half).
+
+    By the KEY, never by a name: herd.yaml says an office is the herd's «only when its own key is the one written
+    here, never by its name alone (a client's machine may be called `portable`)» — as dgo-extend's give.py
+    matches. Ids and aliases are carried for the reader, not as identity. herd.yaml is read as YAML (as safe_load
+    reads it — a duplicate key is its last), and fails closed: a file that cannot be read gives no office, and an
+    office without a well-formed key is none of the herd's — so every linked office is narrowed.
+    """
+    try:
+        doc = yaml.safe_load((REPO / "apps" / "computers" / "herd.yaml").read_text(encoding="utf-8"))
+    except (OSError, UnicodeDecodeError, yaml.YAMLError):
+        doc = None
+    offices = doc.get("offices") if isinstance(doc, dict) else None
+    out = {}
+    for oid, o in (offices.items() if isinstance(offices, dict) else ()):
+        key = o.get("wg_public_key") if isinstance(o, dict) else None
+        if not (isinstance(oid, str) and HERD_NAME.fullmatch(oid) and isinstance(key, str)
+                and WG_PUBLIC_KEY.fullmatch(key)):
+            continue
+        aliases = o.get("aliases") if isinstance(o.get("aliases"), list) else []
+        named = []
+        for a in aliases:
+            if isinstance(a, str) and HERD_NAME.fullmatch(a) and a not in named:
+                named.append(a)
+        out[oid] = {"wg_public_key": key, "aliases": named}
+    return {"offices": out, "keys": sorted({o["wg_public_key"] for o in out.values()})}
+
+
+def _this_office_is_in_the_herd():
+    office_id = (_envfile_value("DGO_OFFICE_ID") or "").strip()
+    return bool(office_id) and office_id in _herd_office_ids()
+
+
+def _vault_front_matter(source, sha16, body=None):
+    """The marker that makes a note the compiler's: a sync may rewrite it, a person may not lose it
+    unknowingly. `source_sha` is the SOURCE's — so a reader can tell which revision of a doc this is,
+    and it does not change when the note is merely re-rendered."""
+    lines = ["---", "generated: true", f"source: {source}", f"source_sha: {sha16}"]
+    if body is not None:
+        lines.append(f"lines: {body}")
+    lines.append("---")
+    return "\n".join(lines) + "\n\n"
+
+
+def _vault_note_from_file(repo, rel):
+    """(text, source_rel, sha256) for a declared source, or a LOUD placeholder when it is missing.
+
+    A vanished source is not a gap to skip quietly: the note stays, says what is missing and how to
+    fix it, and the reason is on the page the reader was about to trust. `render_agent_context`
+    makes the same call for a missing brief, for the same reason.
+    """
+    p = repo / rel
+    try:
+        raw = p.read_bytes()
+    except OSError:
+        text = (f"# ⚠ המקור של הפתק הזה חסר\n\n"
+                f"הכספת מצהירה על `{rel}` (apps/obsidian/vault.yaml), והקובץ הזה אינו בריפו.\n\n"
+                f"אל תסתמך על הפתק הזה: הוא לא מעודכן. תקן את `{VAULT_MANIFEST}` או את הקובץ, "
+                f"והרץ `./bbox obsidian sync`.\n")
+        return (_vault_front_matter(rel, "missing") + text, rel, "missing")
+    body = raw.decode("utf-8", errors="replace")
+    sha = hashlib.sha256(raw).hexdigest()
+    nlines = body.count("\n") + (0 if body.endswith("\n") else 1)
+    return (_vault_front_matter(rel, sha[:16], nlines) + body, rel, sha)
+
+
+def _vault_office_identity():
+    """The deployment's PUBLIC identity — the two env facts a person may read in a note.
+
+    Deliberately a two-key allowlist, not "whatever .env says": the vault is copied, shown and read by
+    agents, so the compiler names exactly what it is allowed to learn from that file. A test plants a
+    secret in a temporary .env and asserts it reaches nothing (test_vault.py).
+    """
+    return {
+        "name": (_envfile_value("DEPLOYMENT_NAME") or "").strip() or "office",
+        "office_id": (_envfile_value("DGO_OFFICE_ID") or "").strip(),
+        "domain": (_envfile_value("DEPLOYMENT_DOMAIN") or "").strip() or "localhost",
+    }
+
+
+def _vault_apps_index(cat, order):
+    """[(aid, title, brief_text)] for the ENABLED apps, in the compiler's own order."""
+    rows = []
+    for aid in order:
+        a = cat.get(aid) or {}
+        rel = ((a.get("agent") or {}).get("context") or "").strip()
+        if not rel:
+            continue
+        try:
+            text = (a["_dir"] / rel).read_text(encoding="utf-8").strip()
+            sha = hashlib.sha256((a["_dir"] / rel).read_bytes()).hexdigest()
+        except OSError:
+            text = (f"!!! `{aid}` declares agent.context '{rel}' but the file is unreadable — the app "
+                    f"is installed and this note cannot tell you how to operate it.")
+            sha = "missing"
+        rows.append((aid, (a.get("title") or {}).get("he") or aid, text, rel, sha, a))
+    return rows
+
+
+def _vault_diagrams(repo):
+    """One note per archify source: the title it declares, its type, and the office's own tile."""
+    out = []
+    d = repo / "apps" / "archify" / "diagrams"
+    if not d.is_dir():
+        return out
+    for p in sorted(d.glob("*.json")):
+        try:
+            src = json.loads(p.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            continue
+        meta = src.get("meta") or {}
+        title = (meta.get("title") or p.stem).strip()
+        kind = (src.get("diagram_type") or "").strip()
+        out.append((p.name, title, kind, p.relative_to(repo).as_posix()))
+    return out
+
+
+def _vault_start_note(identity, herd, declared, app_rows, diagram_rows):
+    """«00 - START HERE» — the one note that is always the compiler's, and the map of the rest."""
+    name = identity["name"]
+    lines = [
+        "# 00 — מתחילים כאן",
+        "",
+        f"זו הכספת של לשכה דיגיטלית **{name}**"
+        + (f" (מזהה העדרי: `{identity['office_id']}`)" if identity["office_id"] else "")
+        + ".",
+        "",
+        "היא **נבנית מהריפו בכל `bbox run`** ואינה נכתבת ביד: כל פתק שכתוב בו `generated: true`"
+        " בהתחלה מגיע מהמקור שכתוב בו, ומתעדכן מעצמו. אל תערוך פתקים כאלה — ערוך את המקור.",
+        "",
+        "## לאן כותבים אדם וסוכן",
+        "",
+        "| תיקייה | של מי | מה קורה לה בסינכרון |",
+        "|---|---|---|",
+        "| `Office/`, `Architecture/`, `Apps/`, `Herd/`, `00 - START HERE.md` | המקמפל | נכתב מחדש מהמקור |",
+        "| `Notes/`, `Projects/`, `Sessions/`, `Memory/`, `_Hooks/`, `Operatives/` | שלך | לא נוגעים בה לעולם |",
+        "",
+        "הפתקים שמקורם נעלם אינם נמחקים: הם נשארים ומסומנים ברשימה ב-`.office/stale.txt`.",
+        "",
+        "## סדר הקריאה",
+        "",
+    ]
+    for i, (to, title) in enumerate(declared, 1):
+        lines.append(f"{i}. [[{to}]] — {title}")
+    if herd:
+        lines += ["", "### העדר (המשרדים של העסק עצמו)", ""]
+        for to, title in herd:
+            lines.append(f"- [[{to}]] — {title}")
+    lines += ["", "## האפליקציות שמותקנות בלשכה הזו", ""]
+    for aid, title, *_ in app_rows:
+        lines.append(f"- [[Apps/{aid}.md]] — {title}")
+    if not app_rows:
+        lines.append("- (אין אפליקציה עם בריף בלשכה הזו)")
+    if diagram_rows:
+        lines += ["", "## הארכיטקטורה, כציור", "",
+                  "הציורים החיים נפתחים בלשכה עצמה ב-`/a/archify/`; הפתקים כאן מפנים אליהם.", ""]
+        for fname, title, kind, rel in diagram_rows:
+            lines.append(f"- [[Architecture/ציור — {fname.removesuffix('.json')}.md]] — {title} ({kind})")
+    lines += [
+        "",
+        "## מה שהכספת הזו אינה מכילה",
+        "",
+        "הרשימה המלאה היא `excluded:` ב-`apps/obsidian/vault.yaml`, ו-`./bbox obsidian sync` מדפיס"
+        " אותה. העיקרון: זהו תיעוד-הכוונה של הלשכה, לא ארכיון שלה — מסמכי מחקר, דוחות תאריך,"
+        "תוכניות ופתקי עבודה נשארים בריפו.",
+        "",
+    ]
+    return "\n".join(lines)
+
+
+def render_vault(cat, order):
+    """Compile the office's vault (`.generated/vault/`) from declarations. Returns a small report.
+
+    Called from render() after the agent context, for the same reason: both are "what the agent reads
+    first", and both are derived from what the office actually has installed.
+    """
+    out = GEN / "vault"
+    man = _vault_manifest()
+    if man is None:
+        # No declaration, no vault. An office without apps/obsidian/vault.yaml gets NOTHING rather than
+        # a guess — and the gate (scripts/refactor/vault-sources-lint.py) is what says so out loud.
+        if out.exists():
+            for p in sorted(out.rglob("*"), reverse=True):
+                p.unlink() if p.is_file() else p.rmdir()
+            out.rmdir()
+        return {"notes": 0, "apps": 0, "herd": False, "declared": 0}
+
+    in_herd = _this_office_is_in_the_herd()
+    identity = _vault_office_identity()
+    app_rows = _vault_apps_index(cat, order)
+    diagram_rows = _vault_diagrams(REPO)
+    want = {}                                  # rel path -> note text
+
+    # 1. the declared documents, verbatim, with the source's own fingerprint in the front-matter
+    declared = []
+    for row in (man.get("notes") or []):
+        to, frm = (row or {}).get("to"), (row or {}).get("from")
+        if not to or not frm:
+            continue
+        text, rel, _ = _vault_note_from_file(REPO, str(frm))
+        want[to] = text
+        declared.append((to, (row.get("title") or frm).strip()))
+
+    herd = []
+    if in_herd:
+        for row in (man.get("herd_docs") or []):
+            to, frm = (row or {}).get("to"), (row or {}).get("from")
+            if not to or not frm:
+                continue
+            text, rel, _ = _vault_note_from_file(REPO, str(frm))
+            want[to] = text
+            herd.append((to, (row.get("title") or frm).strip()))
+
+    # 2. one note per ENABLED app — the contract the app already writes for itself
+    if "apps" in (man.get("generated") or []):
+        for aid, title, text, rel, sha, a in app_rows:
+            head = [f"# {title} — `{aid}`", ""]
+            caps = a.get("capabilities") or []
+            for c in caps:
+                bits = [f"capability `{c.get('name')}`"]
+                if c.get("endpoint"):
+                    bits.append(f"→ `{c['endpoint']}`")
+                head.append("- " + " · ".join(bits))
+            for r in (a.get("routing") or []):
+                m = r.get("module") or {}
+                if m.get("alias") and m.get("embed", True) is not False:
+                    head.append(f"- UI: `/a/{m['alias']}/` על מארח הקונסול")
+            want[f"Apps/{aid}.md"] = (_vault_front_matter(f"apps/{aid}/{rel}", sha[:16])
+                                      + "\n".join(head) + "\n\n" + text + "\n")
+
+    # 3. the inventory: what is installed, at a glance
+    if "inventory" in (man.get("generated") or []):
+        lines = ["# מה מותקן בלשכה הזו", "",
+                 f"נכון להרצת הקומפילציה האחרונה: **{len(app_rows)}** אפליקציות עם בריף.", "",
+                 "| אפליקציה | שם | שכבה | הכי גבוה | דלת |", "|---|---|---|---|---|"]
+        for aid, title, _text, _rel, _sha, a in app_rows:
+            ep = next((c.get("endpoint") for c in (a.get("capabilities") or []) if c.get("endpoint")), "")
+            alias = next((r["module"]["alias"] for r in (a.get("routing") or [])
+                          if (r.get("module") or {}).get("alias")
+                          and (r.get("module") or {}).get("embed", True) is not False), "")
+            lines.append(f"| `{aid}` | {title} | {a.get('layer')} | {ep or '—'} | "
+                         f"{('/a/' + alias + '/') if alias else '—'} |")
+        want["Office/מה מותקן.md"] = (_vault_front_matter("platform.state.yaml", "state") +
+                                      "\n".join(lines) + "\n")
+
+    # 4. the architecture as the office draws it
+    if "diagrams" in (man.get("generated") or []):
+        for fname, title, kind, rel in diagram_rows:
+            want[f"Architecture/ציור — {fname.removesuffix('.json')}.md"] = (
+                _vault_front_matter(rel, "diagram")
+                + f"# {title}\n\n"
+                + (f"סוג: `{kind}`\n\n" if kind else "")
+                + f"הציור החי: `/a/archify/` בלשכה הזו. המקור (וממה הוא נבנה) בריפו: `{rel}`.\n")
+
+    # 5. the index — always the compiler's
+    if "index" in (man.get("generated") or []):
+        want["00 - START HERE.md"] = (
+            _vault_front_matter(VAULT_MANIFEST, "index")
+            + _vault_start_note(identity, herd, declared, app_rows, diagram_rows))
+
+    # Write it: every note, then the manifest the sync reads. Files that are no longer wanted are
+    # REMOVED FROM .generated ONLY — the vault keeps them (the sync reports them stale); deleting a
+    # person's vault note is not something a compiler may do.
+    out.mkdir(parents=True, exist_ok=True)
+    notes_json = {}
+    for rel in sorted(want):
+        p = out / rel
+        p.parent.mkdir(parents=True, exist_ok=True)
+        write(p, want[rel])
+        notes_json[rel] = {
+            "source": next((ln.split(": ", 1)[1] for ln in want[rel].split("\n")[1:6]
+                            if ln.startswith("source: ")), ""),
+            "rendered_sha256": hashlib.sha256(want[rel].encode("utf-8")).hexdigest(),
+        }
+    for p in sorted(out.rglob("*"), reverse=True):
+        rel = p.relative_to(out).as_posix()
+        if p.is_file() and rel not in want and rel != ".vault-manifest.json":
+            p.unlink()
+        elif p.is_dir() and not any(p.iterdir()):
+            p.rmdir()
+    write(out / ".vault-manifest.json",
+          json.dumps({"version": 1, "notes": notes_json}, indent=1, sort_keys=True,
+                     ensure_ascii=False) + "\n")
+    return {"notes": len(notes_json), "apps": len(app_rows), "herd": in_herd,
+            "declared": len(declared)}
+
+
 def external_origin(app_id, r, m, default_host=""):
     """The BROWSER origin of an app the shell frames on its OWN host (`module.external`), or None.
 
@@ -3335,8 +4675,80 @@ def external_origin(app_id, r, m, default_host=""):
     return f"{proto}://{host}"
 
 
-def render_registries(cat, order, served=None):
-    """Compile the registries a BASE app reads but must not author.
+OP_KEYS = ("id", "method", "path", "endpoint", "access", "verb", "ui", "summary")
+
+
+def ops_registry(cat, order):
+    """{app: [op…]} of every enabled app that declares `ops` (DGO-1244), in app-id order. bbox's help reads it,
+    and so will DGO-1245's generic caller and DGO-1246's gate. Each op is as declared, in OP_KEYS order. Its
+    `capability` is replaced by `endpoint`: the URL of the capability that serves it, or of the app's one capability
+    with an endpoint. validate() has refused an op it could not place, so every op here has an endpoint."""
+    out = {}
+    for aid in sorted(order):
+        ops = cat[aid].get("ops")
+        if not isinstance(ops, list) or not ops:
+            continue
+        ends = {c["name"]: c["endpoint"] for c in (cat[aid].get("capabilities") or [])
+                if isinstance(c, dict) and isinstance(c.get("name"), str) and c.get("endpoint")}
+        rows = []
+        for op in ops:
+            cap = op.get("capability") or (next(iter(ends)) if len(ends) == 1 else None)
+            full = {**op, "endpoint": ends.get(cap)}
+            rows.append({k: full[k] for k in OP_KEYS if full.get(k) is not None})
+        out[aid] = rows
+    return out
+
+
+def agent_token_readers(cat, order):
+    """{agent service: [the compose services that may read its action token]} — compiled for the vault (DGO-1152).
+
+    An agent's action token drives what the agent drives — browser42's task runner drives the Chromium the owner
+    is signed into — so the vault (connections, /api/agent-token/<service>) hands it to dgo-extend alone, and to
+    nothing undeclared. This is the declaration, derived and never authored: an AGENT SERVICE is a service of an
+    enabled app whose environment names AGENT_TOKEN_FILE (where the agent keeps its token); its READERS are the
+    services of an enabled app that the PROVIDER names for one of its capabilities (`token_readers`), that `use`s
+    that capability, and only when the provider is that capability's ONE provider here — the rule
+    `capability-provider` answers by (an ambiguous capability hands its token to no one). The provider is the
+    authority: a consumer's `use` never grants itself. browser42 names newsflow for `browser`, newsflow `use`s it:
+    newsflow's service reads browser42-task-runner's token, and may then call the runner with it."""
+    holders = {}
+    for aid in order:
+        a = cat[aid]
+        if not a.get("compose"):
+            continue
+        try:
+            doc = yaml.safe_load((a["_dir"] / a["compose"]).read_text(encoding="utf-8"))
+        except (OSError, UnicodeDecodeError, yaml.YAMLError):
+            continue
+        services = doc.get("services") if isinstance(doc, dict) else None
+        for svc, body in (services.items() if isinstance(services, dict) else ()):
+            env = body.get("environment") if isinstance(body, dict) else None
+            names = (list(env) if isinstance(env, dict) else
+                     [x.split("=", 1)[0] for x in env if isinstance(x, str)] if isinstance(env, list) else [])
+            if isinstance(svc, str) and "AGENT_TOKEN_FILE" in names:
+                holders.setdefault(aid, []).append(svc)
+    readers = {}
+    for aid in order:
+        for use in (cat[aid].get("use") or []):
+            cap = use.get("capability") if isinstance(use, dict) else use
+            provs = [p for p in order
+                     if any(isinstance(c, dict) and c.get("name") == cap for c in (cat[p].get("capabilities") or []))]
+            if len(provs) != 1 or provs[0] == aid or provs[0] not in holders:
+                continue
+            # …and only where the PROVIDER names this app for this capability (`token_readers`): a consumer's `use`
+            # never grants itself the token (the second reader of the first draft)
+            named = [c.get("token_readers") for c in (cat[provs[0]].get("capabilities") or [])
+                     if isinstance(c, dict) and c.get("name") == cap]
+            if not any(isinstance(n, list) and aid in n for n in named):
+                continue
+            for agent in holders[provs[0]]:
+                readers.setdefault(agent, set()).update(s for s in compose_services(cat[aid]) if isinstance(s, str))
+    return {agent: sorted(rs) for agent, rs in sorted(readers.items()) if rs}
+
+
+def render_registries(cat, order, served=None, state=None):
+    """Compile the registries a BASE app reads but must not author (and the office's language, from
+    `state`).
 
     console's module tiles and /a/<alias>/ proxy table, and connections' per-service secret
     manifest, were all hand-written lists of layer-3 apps living inside a layer-2 app. Each app
@@ -3367,7 +4779,7 @@ def render_registries(cat, order, served=None):
             # app's screen lives in another app (machine's resource view is computers' now).
             if m.get("tile") is False:
                 if embedded and m.get("url"):
-                    bases[alias] = {"env": m.get("url_env"), "default": m["url"]}
+                    bases[alias] = app_base(m, cat[aid])
                 continue
             # `external` = the shell FRAMES this app on its own host instead of proxying it under
             # `/a/<alias>/`. It is declared by an app that is EMBEDDED as well as by one that is not,
@@ -3410,9 +4822,14 @@ def render_registries(cat, order, served=None):
                     # signed in on it and signs it in (render_serve): the shell asks before framing
                     # a host that cannot show its own sign-in, exactly as for a linked office's app.
                     ext.update(serve.OWN_HOST)
+                if m.get("tab") is True:
+                    ext["tab"] = True
+                handoffs = handoffs_address(aid, cat[aid], r)
+                if handoffs:
+                    ext["handoffs"] = handoffs
                 modules.append((m.get("order", 999), ext))
                 if embedded and m.get("url"):
-                    bases[alias] = {"env": m.get("url_env"), "default": m["url"]}
+                    bases[alias] = app_base(m, cat[aid])
                 continue
             if not embedded:
                 # A module with no alias to embed and nothing external to point at is NOT a tile —
@@ -3427,9 +4844,17 @@ def render_registries(cat, order, served=None):
                  "order": m.get("order", 999), "alias": m["alias"]}
             if m.get("service"):
                 e["service"] = m["service"]
+            # `tab: true` = the app asks for a place in the console's bar on a phone. The app declares it,
+            # as it declares its name and icon: the console's layer-2 code naming four layer-3 apps
+            # (app.js buildBottomNav) was a base app reaching above itself (DGO-1800, reading 02).
+            if m.get("tab") is True:
+                e["tab"] = True
+            handoffs = handoffs_address(aid, cat[aid], r)
+            if handoffs:
+                e["handoffs"] = handoffs
             modules.append((m.get("order", 999), e))
             if m.get("url"):
-                bases[m["alias"]] = {"env": m.get("url_env"), "default": m["url"]}
+                bases[m["alias"]] = app_base(m, cat[aid])
     # The reverse plane's tiles (DGO-30). They are compiled HERE and not merged at runtime like the
     # peer registry is, because a `serve:` entry is a fact of THIS office's desired state: it is
     # rendered from platform.state.yaml, it disappears when the entry does, and the shell must be
@@ -3446,8 +4871,14 @@ def render_registries(cat, order, served=None):
     write(reg / "console.modules.yaml", 
         "# GENERATED by platform/manager/reconcile.py from each app's routing[].module — DO NOT EDIT.\n"
         + yaml.safe_dump(modules, sort_keys=False, allow_unicode=True, default_flow_style=False))
-    write(reg / "console.app_bases.json", 
+    write(reg / "console.app_bases.json",
         json.dumps(bases, indent=2, ensure_ascii=False) + "\n")
+
+    # ── the language artifact (DGO-971) ───────────────────────────────────────────────────────────
+    # `locale.json` is the ONE file every UI reads its language from (ai/context/platform-language.md).
+    # Compiled here, beside the tiles, because a language is the same kind of fact as a tile: a property
+    # of the office, not of the app that happens to be rendering it.
+    write(reg / "locale.json", json.dumps(locale_doc(state), ensure_ascii=False, indent=2) + "\n")
 
     # ── the remote-office plane (DGO-30/DGO-37) ───────────────────────────────────────────────────
     # TWO artifacts, and the split is the whole design: `office.apps.json` is what THIS office knows
@@ -3751,4 +5182,8 @@ if __name__ == "__main__":
     # (TestRenderMatchesPython, red since; found by DGO-1040). A module-level assignment writes the
     # module's own namespace, so the guarded class is not asked.
     _ENVFILE = ENVFILE
-    sys.exit(main())
+    try:
+        _rc = main()
+    finally:
+        hand_back()                      # root compiling the office's checkout leaves it the owner's (DGO-121)
+    sys.exit(_rc)

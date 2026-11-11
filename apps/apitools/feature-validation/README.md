@@ -85,4 +85,4 @@ docker compose up aligned-value-extraction find-option-matching --build
 ```
 
 easyrun:
-cd /root/deployment-hacohen/feature-validation && docker compose up
+cd /root/digital-office/feature-validation && docker compose up

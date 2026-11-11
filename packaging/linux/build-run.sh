@@ -78,6 +78,11 @@ cp "${HERE}/adapt-host.py" "${WORK}/control/"
 [ -f "${WORK}/control/platform/.generated/compose.runtime.yml" ] \
   || die "compose.runtime.yml did not reach the control segment — the install would try to BUILD"
 [ -f .env.ex ] && cp .env.ex "${WORK}/control/binaos.env.example"
+# The template carries every secret EMPTY (DGO-1220); the header fills them with the one generator, so it
+# ships beside the template. `die`, not best-effort: without it every install would run on empty secrets.
+mkdir -p "${WORK}/control/platform/scripts"
+cp scripts/env-secrets.py scripts/env-secrets.public-sha256 "${WORK}/control/platform/scripts/" \
+  || die "scripts/env-secrets.py did not reach the control segment — the install would mint no secret"
 [ -n "${COSIGN_KEY}" ] && [ -f "${COSIGN_KEY%.key}.pub" ] && cp "${COSIGN_KEY%.key}.pub" "${WORK}/control/cosign.pub"
 
 # ── SEG runtime ───────────────────────────────────────────────────────────────────────────────

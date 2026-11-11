@@ -334,7 +334,7 @@ export default function ExtractionPage() {
           <h1>חילוץ מסמכים</h1>
           <div className="sub">
             הרצת חילוץ על מאגר הדגימה המקורקע (אמת־יסוד) דרך תהליכי ה-n8n —
-            קריאת apitools אחת לכל ערך; השאילתות נטענות מההגדרות (q_v3_*).
+            קריאת apitools אחת לכל ערך; השאילתות נטענות מההגדרות (<bdi dir="ltr">q_v3_*</bdi>).
           </div>
         </div>
         <div className="actions">

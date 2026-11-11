@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+#: cancel <id> [reason] — close a link: it answers one sentence from then on, and nothing else changes
+set -uo pipefail
+export PYTHONIOENCODING=utf-8   # its python prints «בוטל»; Windows' default io would crash on it (G10)
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ID="${1:?usage: cancel <id> [reason]}"; shift || true
+out="$("${SCRIPT_DIR}/_call" POST "/api/envelopes/${ID}/cancel")" || exit $?
+printf '%s' "${out}" | python3 -c '
+import json,sys
+j=json.load(sys.stdin)
+print("בוטל" if j.get("ok") else ("[esign] %s" % j.get("detail")))'

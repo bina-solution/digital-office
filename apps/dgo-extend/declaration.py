@@ -27,8 +27,8 @@ DOMAIN_RE = re.compile(r"^(?=.{4,200}\Z)([a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)
 #: characters" let a pairing grant add lines of its own — measured 2026-10-15: an AllowedIPs line, and a
 #: PreUp hook that wg-quick ran as root in dgo-net (DGO-626).
 KEY_RE = re.compile(r"^[A-Za-z0-9+/]{42}[AEIMQUYcgkosw048]=\Z")
-#: A HERD's name (DGO-1003): the company a set of offices belongs to — «Bina Solutions», «WBC», «The
-#: Fireplace Guys». A name a person reads, so any script; one line of 1–60 characters, nothing that is
+#: A HERD's name (DGO-1003): the company a set of offices belongs to — «Bina Solutions», «EXW», «The
+#: Examplef Guys». A name a person reads, so any script; one line of 1–60 characters, nothing that is
 #: not printable (it is drawn on another office's screen and written into its record): no control
 #: character of either range, no line or paragraph separator (YAML folds them on reload), and no
 #: invisible or direction-changing mark — a peer could otherwise show a heading that looks like
@@ -41,7 +41,7 @@ def clean_herd(value) -> tuple[str, str | None]:
 
     An office says its own herd (`DGO_HERD`, published with its catalog); an office's record of a
     PEER may carry a herd mark of its own — the owner's word for an office whose code publishes none
-    (WBC's, 2026-10-22: «mark the connection as an external herd»).
+    (EXW's, 2026-10-22: «mark the connection as an external herd»).
     """
     if not isinstance(value, str):
         # a peer's catalog is a stranger's JSON: a list or a map is no name, and is not made one
@@ -307,14 +307,14 @@ def selftest_paired() -> list[str]:
     if not is_paired(clean) or is_paired({"id": "vps1", "machine": "m"}):
         problems.append("is_paired is the record's own `kind`, nothing inferred")
     # A HERD mark (DGO-1003) is kept, trimmed; none is stored as none; a second line is refused.
-    marked, err = validate_paired(dict(good, herd="  WBC "), "macbook")
-    if err or (marked or {}).get("herd") != "WBC":
+    marked, err = validate_paired(dict(good, herd="  EXW "), "macbook")
+    if err or (marked or {}).get("herd") != "EXW":
         problems.append(f"a paired record keeps the herd it is marked with, trimmed: {err}")
     if "herd" in clean:
         problems.append("a record marked with no herd stores none")
-    if validate_paired(dict(good, herd="WBC\nAllowedIPs = 0.0.0.0/0"), "macbook")[1] is None:
+    if validate_paired(dict(good, herd="EXW\nAllowedIPs = 0.0.0.0/0"), "macbook")[1] is None:
         problems.append("a herd name with a line of its own must be refused")
-    if clean_herd("x" * 61)[1] is None or clean_herd("The Fireplace Guys") != ("The Fireplace Guys", None):
+    if clean_herd("x" * 61)[1] is None or clean_herd("The Examplef Guys") != ("The Examplef Guys", None):
         problems.append("a herd name is one line of 1–60 characters")
     return problems
 

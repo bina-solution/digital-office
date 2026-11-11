@@ -1,0 +1,3 @@
+#!/usr/bin/env bash
+#: read — a room's last messages, oldest first: <room id> [N] [--json]   (an encrypted message is read on the screen)
+exec bash "$(dirname "${BASH_SOURCE[0]}")/../tools/verb" read "$@"

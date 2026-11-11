@@ -39,6 +39,7 @@ from ..core.errors import RepoNotFound
 from ..poller import start_polling, sync_repo_once as _sync_repo_once
 from ..core.models import EventEnvelope
 from ..core.month_key import month_key_of
+from ..core.timeline_targets import timeline_targets
 from ..core.provisioning import provision_repo
 from ..kafka.admin import KafkaAdmin, NullKafkaAdmin
 from ..kafka.consumer import KafkaConsumer, NullKafkaConsumer
@@ -348,7 +349,7 @@ _EDITABLE_SETTINGS_KEYS: frozenset[str] = frozenset(
         # node's output for the whole execution, so heap grows with lane WIDTH — a 9,790-doc
         # lane cost ~1,060 MB and two on one worker tripped V8's 2,600 MB ceiling.
         "indox.statemachine.drain.parallel",  # small int, "4"  — concurrent driver lanes
-        "indox.statemachine.driver.batch",    # small int, "2000" — documents per lane
+        "indox.statemachine.driver.batch",    # small int, "500" (the owner's rule) — documents per lane
         "indox.statemachine.driver.max",      # small int, "2000" — driver entry circuit-breaker
     }
 )
@@ -1585,7 +1586,7 @@ def _compute_dashboard_stats_payload(transport, doc_table: str,
     }
     # Only when a window is actually applied. Without one nothing is excluded,
     # and the all-time payload is the one PERSISTED into `indox_dashboard_stats`
-    # — bolting a basis-shaped diagnostic onto the stored read model would put a
+    # — ownerg a basis-shaped diagnostic onto the stored read model would put a
     # number there that no longer describes it.
     if since_val is not None:
         excl = _dash_basis_excluded(transport, doc_table, basis)
@@ -2840,7 +2841,7 @@ _DEFAULT_UPLOAD_FOLDER_SETTING_KEY = "default-upload-folder"
 
 
 # Optional shrink of the stored preview. apitools' page image is a 300-DPI render
-# (`APITOOLS_PDF_DPI`) — measured 2026-08-10 over the 40 most recent documents: mean
+# (apitools' PDF_OCR_DPI, a product constant — DGO-216) — measured 2026-08-10 over the 40 most recent documents: mean
 # 722 KB, max 1.3 MB — so downscaling is tempting. It is nevertheless DEFAULT OFF.
 #
 # MEASURED, 2026-08-10, and the reason for the default: enabling it put a JPEG decode on
@@ -2896,7 +2897,7 @@ def _thumbnail_from_apitools(file_id: str, timeout: float = 30.0) -> bytes | Non
     duplicacy cause we already always do pdf to jpeg in apitools."
 
     Every document on this path is rasterised by apitools during `/documentOcr` (poppler at
-    `APITOOLS_PDF_DPI`=300, see apps/apitools/src/pdf_core/pdf_to_jpg.py), and apitools keeps
+    PDF_OCR_DPI=300, a product constant, see apps/apitools/src/pdf_core/pdf_to_jpg.py), and apitools keeps
     that raster keyed by the md5 it returns as `file_hash` — the same value INDOX stores as
     `API_TOOLS_ID`. `/documentImage?file_id=<hash>` serves it: read-only, side-effect free,
     and NOT behind apitools' `_expensive_request_slot` bulkhead, so it never queues.
@@ -3185,7 +3186,7 @@ def _enrich_registry(transport, registry: list[dict], scope: _Scope,
 #
 # TWO DATABASES, AND THEY ARE NOT THE SAME ONE. INDOX's rows live in the
 # supabase postgres; n8n's executions live in its own postgres (container
-# `n8n-postgres`, user `hacohen`, db `n8n`). Both are read here over psycopg —
+# `n8n-postgres`, user `example`, db `n8n`). Both are read here over psycopg —
 # already a dependency for the n8n credential store — on connections pinned
 # `default_transaction_read_only=on`, verified 2026-08-23 to reject a write with
 # ReadOnlySqlTransaction. This is the ONLY place in the BFF that reads n8n's
@@ -3400,7 +3401,7 @@ def _pipeline_indox_conninfo() -> str:
 
 def _pipeline_n8n_conninfo() -> str:
     return _pipeline_conninfo(
-        "PIPELINE_N8N", host="n8n-postgres", dbname="n8n", user="hacohen"
+        "PIPELINE_N8N", host="n8n-postgres", dbname="n8n", user="example"
     )
 
 
@@ -3462,7 +3463,7 @@ def _pipeline_indox_numbers(doc_table: str | None, instance: str,
         return None
     # THE BAR IS ON EVERY SCREEN, SO IT LIED ON EVERY SCREEN. All three relations below were
     # hardcoded `public.`, which is instance one's data behind the compat views — so the pipeline
-    # strip showed הכהן's totals, terminal counts and drain gate while לוי was selected, and would
+    # strip showed הדוגמה's totals, terminal counts and drain gate while לוי was selected, and would
     # have started failing outright the moment those views are dropped. Same identifier discipline
     # as everywhere else: the schema is validated, never interpolated on trust.
     if not _SAFE_SCHEMA.match(schema or ""):
@@ -3774,6 +3775,7 @@ def create_blueprint(
 
     def _perform_batch_upsert(repo: str, body: list[dict]):
         cfg = reg.get(repo)
+        _refuse_another_table(cfg, "כתיבה")
         if not isinstance(body, list):
             raise ValidationError("request body must be a JSON array of items")
         cap = _max_batch_size()
@@ -4185,6 +4187,43 @@ def create_blueprint(
             "created_at": cfg.created_at.isoformat() if cfg.created_at else None,
         }
 
+    # A CALL WITH NO INSTANCE, STAGE ONE OF TWO (DGO-1792; AGENTS.md rule 8). With no `?instance=` every
+    # read and write lands on schema `public`, whose compat views are the first client's books. Refusing
+    # it today would break nine callers that never send one, five of them writers (the WhatsApp intake,
+    # the registry converge hook, both bulk-restart scripts, ui-coverage's seeding PUT; the list is in
+    # issues/an-indox-call-without-an-instance-…). So first each one
+    # is NAMED, once per route and caller per ten minutes, and the refusal (400) comes when the log is
+    # empty for a release. Routes that read no instance's data are not named — nor GET /timeline/spans, whose
+    # instance-less call is DEFINED (every enabled production instance in turn, core/timeline_targets.py), not a
+    # default (DGO-1815).
+    _NO_INSTANCE_META = {"/health", "/openapi.json", "/instances", "/instances/<instance>/tables",
+                         "/auth/me", "/extraction/dataset", "/tests/suites"}
+    # the registry's list (its writes are not meta), and the timeline, which with no instance is served for every
+    # enabled one by its own rule (core/timeline_targets.py) — an instance-less call there is defined, not a default
+    _NO_INSTANCE_META_GET = {"/repos", "/timeline/spans"}
+    _no_instance_said: dict[tuple, float] = {}
+
+    def _name_no_instance_call():
+        # (a blueprint's hook never runs on a 404/405, so a call to a dead route is not named here)
+        rule = request.url_rule.rule if request.url_rule is not None else request.path
+        base = prefix.rstrip("/")
+        route = rule[len(base):] if base and rule.startswith(base) else rule
+        if request.method in ("OPTIONS", "HEAD") or route in _NO_INSTANCE_META or (
+                request.method == "GET" and route in _NO_INSTANCE_META_GET):
+            return None
+        caller = (request.headers.get("X-Forwarded-For") or request.remote_addr or "?").split(",")[0].strip()
+        agent = (request.headers.get("User-Agent") or "?")[:80]
+        key = (request.method, route, caller, agent)
+        now = time.time()
+        if now - _no_instance_said.get(key, 0.0) < 600.0:
+            return key
+        if len(_no_instance_said) > 2000:          # bounded: a scan of odd agents cannot grow it for ever
+            _no_instance_said.clear()
+        _no_instance_said[key] = now
+        _log.warning("indox-no-instance: %s %s caller=%r agent=%r — acts on schema public (the first "
+                     "instance's views); pass ?instance=<id>", request.method, route, caller, agent)
+        return key
+
     @bp.before_request
     def _bind_instance_schema():
         """Resolve `?instance=` ONCE per request and hang it on `g`.
@@ -4195,13 +4234,14 @@ def create_blueprint(
 
         A request that NAMES an instance never proceeds without it. The first draft swallowed every
         resolution failure and left `g` unset, so `_request_schema()` fell back to `public` — a levi
-        screen operating on hacohen's data behind a success envelope, including the action-log
+        screen operating on example's data behind a success envelope, including the action-log
         purge. Unknown instance → the ValidationError/RepoNotFound handlers (400/404); a transient
         resolution failure (registry unreachable) → 503, because refusing costs a retry and
         rebinding silently costs a cross-tenant write."""
         inst = request.args.get("instance")
         g.indox_schema = None
         if not inst:
+            _name_no_instance_call()
             return
         try:
             g.indox_schema = _instance_schema(inst)
@@ -4219,7 +4259,7 @@ def create_blueprint(
     # ── READING ONE TENANT'S DATA ────────────────────────────────────────────────────────────
     #
     # The repo config points at schema `public`, where `incoming_documents` is a COMPAT VIEW over
-    # `indox_hacohen`. So without this, every read — whichever instance the operator picked —
+    # `indox_example`. So without this, every read — whichever instance the operator picked —
     # returns instance one's rows. A instance selector over that is worse than none: it presents a
     # choice the data does not honour, which is the cross-instance read wearing a UI.
     #
@@ -4253,6 +4293,46 @@ def create_blueprint(
             raise ValidationError(f"registry gave an unusable schema name: {schema!r}")
         _instance_schema_cache[instance] = (now, schema)
         return schema
+
+    _timeline_registry = {"at": None, "rows": [], "said": None, "failed": None}
+
+    def _enabled_instance_rows() -> list[dict]:
+        """The registry's enabled instances (id, schema_name, enabled, purpose) — never raises. Cached for 60 s, as
+        `_instance_schema` is: any-concurrency polls every few seconds. No SQL transport → [] (the timeline keeps its
+        old answer, core/timeline_targets.py).
+
+        A FAILED READ serves the last good list and is not cached, so the next call reads again: answering «none»
+        would re-key every span for a minute (the default schema, ids unprefixed), and any-concurrency, which merges
+        spans by id and drops none, would hold both copies. An answer that is not a list of rows (the transport's
+        None for a body it could not parse) is such a failure, not an empty registry. While it fails it is asked
+        again at most every 10 s. Never read yet → [] (the old answer). A failure is said once per ten minutes."""
+        now = time.time()
+        if _timeline_registry["at"] is not None and now - _timeline_registry["at"] < 60.0:
+            return _timeline_registry["rows"]
+        if _timeline_registry["failed"] is not None and now - _timeline_registry["failed"] < 10.0:
+            return _timeline_registry["rows"]
+        rows: list[dict] = []
+        try:
+            base = factory(reg.get(reg.list()[0].name)) if reg.list() else None
+            transport = getattr(base, "transport", None) if base else None
+            if transport is not None and hasattr(transport, "_exec_sql"):
+                got = transport._exec_sql(
+                    "select id, schema_name, enabled, coalesce(purpose, '') as purpose "
+                    "from public.indox_instances where enabled order by id"
+                )
+                if not isinstance(got, list):
+                    raise RuntimeError(f"the registry read answered {type(got).__name__}, not rows")
+                rows = got
+        except Exception as e:
+            _timeline_registry["failed"] = now
+            said = _timeline_registry["said"]
+            if said is None or now - said >= 600.0:
+                _timeline_registry["said"] = now
+                _log.warning("timeline: the instance registry could not be read (%s) — serving its last good list "
+                             "(%d instances)", e, len(_timeline_registry["rows"]))
+            return _timeline_registry["rows"]
+        _timeline_registry.update(at=now, rows=rows, failed=None)
+        return rows
 
     _instance_tables_cache: dict[str, tuple[float, set[str]]] = {}
 
@@ -4301,6 +4381,27 @@ def create_blueprint(
         )
         return factory(scoped)
 
+    def _refuse_another_table(cfg, verb: str) -> None:
+        """A WRITE on a table other than the repo's own is refused (DGO-1815).
+
+        `?table=` makes the console a browser of every table of the instance — reading and exporting it. The
+        write paths are the documents repo's: its primary key and columns (repo_for copies `cfg` and swaps only
+        the table), its diff engine, its router, its ROW_CHANGED events under the repo's name. Pointed at another
+        table they would fetch by the wrong key, create a row where none matched, hand the router rows that are
+        not documents, and publish another table's change as a document's. So a write names the table the grid
+        shows, and here it stops unless that is the repo's own. The repo's own table, named or not, writes as
+        before; a repo that is not supabase-backed ignores `?table=` (as repo_for does). `verb` is the Hebrew
+        name of the act: the sentence reaches the person in the page's notice."""
+        table = request.args.get("table")
+        if cfg.backend != "supabase" or cfg.supabase is None:
+            return
+        own = cfg.supabase.table
+        if table and table != own:
+            raise ValidationError(
+                f"{verb} כותבת רק לטבלה של המאגר עצמו ({own}), והמסך מציג את הטבלה '{table}'. "
+                "אפשר לעיין בטבלה אחרת ולייצא אותה, אבל לא לכתוב אליה מכאן.",
+                table=table, own=own)
+
     # ── TENANTS — the registry proper, and NOT the old `/accounts` surface ───────────────────
     #
     # `/accounts` above derives "instances" from repos.json and reports a GLOBAL active one held
@@ -4320,7 +4421,10 @@ def create_blueprint(
             return jsonify({"success": True, "instances": [], "reason": "no sql transport"})
         try:
             rows = transport._exec_sql(
-                "select id, schema_name, label, enabled from public.indox_instances order by id"
+                # `purpose` so a caller can apply the office's own default (hooks/_schema-lib.sh): the ONE enabled
+                # instance whose purpose is not 'test' — every office carries the standing `test` tenant (DGO-1815)
+                "select id, schema_name, label, enabled, coalesce(purpose, '') as purpose "
+                "from public.indox_instances order by id"
             ) or []
         except Exception as e:
             _log.warning("instance list failed: %s", e)
@@ -4501,7 +4605,7 @@ def create_blueprint(
         #   /account/detail?instance=levi  ->  docs = 25,995   (levi has 1)
         #                                      columns = 46    (levi's table has 125)
         #
-        # 25,995 is hacohen's count rendered under levi's name: a cross-tenant number wearing the
+        # 25,995 is example's count rendered under levi's name: a cross-tenant number wearing the
         # other instance's label, which is the exact bleed the schema split exists to end.
         # `repo_for` points the repo at THIS instance's schema, and the row-count cache already
         # keys on the tenant, so both numbers now come from the instance the caller named.
@@ -4631,6 +4735,7 @@ def create_blueprint(
     @bp.patch("/repos/<repo>/documents/<doc_id>")
     def patch_document(repo: str, doc_id: str):
         cfg = reg.get(repo)
+        _refuse_another_table(cfg, "עריכה")
         body = request.get_json(silent=True) or {}
         if not isinstance(body, dict):
             raise ValidationError("request body must be a JSON object")
@@ -5728,7 +5833,7 @@ def create_blueprint(
                 # it is the original bug wearing a different hat.
                 # THE SCHEMA TOO: scope.doc_table is the same string in every
                 # instance schema, so without it a levi request inside the TTL
-                # of a hacohen request was served hacohen's window aggregate.
+                # of a example request was served example's window aggregate.
                 payload = _sync_cached(
                     f"dashwin:{_request_schema()}:{scope.doc_table}:{win}:"
                     f"{request.args.get('tz') or ''}:{basis}",
@@ -5850,7 +5955,7 @@ def create_blueprint(
         since_iso = _dash_win_since(win, body.get("tz"))
         # A DESTRUCTIVE ROUTE THAT WAS CROSS-TENANT. It built a raw PostgREST DELETE against
         # `{base}/rest/v1/<table>` with NO schema at all, so it always hit `public` — purging the
-        # action log while viewing `לוי` deleted הכהן's rows, and it would 404 outright the moment
+        # action log while viewing `לוי` deleted הדוגמה's rows, and it would 404 outright the moment
         # the compat views come down. It now goes through the same transport every other read and
         # write uses, so it lands in the schema the request is scoped to and nowhere else.
         try:
@@ -6177,22 +6282,56 @@ def create_blueprint(
             delta = False
         since_iso = datetime.fromtimestamp(since_ms / 1000, tz=timezone.utc).isoformat()
 
+        # WHICH INSTANCES (DGO-1815, core/timeline_targets.py): the named one, or — for any-concurrency's lane, which
+        # cannot name one — every enabled instance in turn, each span saying which, never INDOX's default alone.
+        named = request.args.get("instance")
+        targets = timeline_targets(named, getattr(g, "indox_schema", None),
+                                   None if named else _enabled_instance_rows())
         spans: list[dict] = []
         truncated: list[str] = []
+        errors: list[str] = []
+        several = len(targets) > 1
         try:
             transport = _sync_transport()
-            if "doc" in want:
-                spans.extend(_timeline_doc_spans(transport, scope.doc_table, since_iso,
-                                                 limit, delta, truncated))
-            if "action" in want:
-                spans.extend(_timeline_action_spans(transport, since_iso, limit, truncated))
-            if "sync" in want:
-                spans.extend(_timeline_sync_spans(transport, since_iso, limit, truncated))
+            for inst, schema in targets:
+                part: list[dict] = []
+                cut: list[str] = []
+                bound = getattr(g, "indox_schema", None)
+                if schema:
+                    g.indox_schema = schema        # what _request_schema() answers for this instance's reads
+                try:
+                    if "doc" in want:
+                        part.extend(_timeline_doc_spans(transport, scope.doc_table, since_iso,
+                                                        limit, delta, cut))
+                    if "action" in want:
+                        part.extend(_timeline_action_spans(transport, since_iso, limit, cut))
+                    if "sync" in want:
+                        part.extend(_timeline_sync_spans(transport, since_iso, limit, cut))
+                except Exception as e:
+                    # one instance's failure blanks only that instance: the others are still served, and
+                    # the reply names it, so a lane does not read «nothing happened» there
+                    if not several:
+                        raise
+                    errors.append(f"{inst}: {e}")
+                    continue
+                finally:
+                    g.indox_schema = bound
+                for s in part:
+                    if inst:
+                        s["meta"] = {**(s.get("meta") or {}), "instance": inst}
+                    if several and inst and s.get("id"):
+                        # any-concurrency keys a span by its id: two instances' `doc:<ID>` must not overwrite
+                        s["id"] = f"{inst}:{s['id']}"
+                spans.extend(part)
+                truncated.extend(f"{inst}:{t}" if inst and several else t for t in cut)
         except Exception as e:
             # Degrade to an empty lane rather than a 500: any-concurrency treats a failed fetch
             # as "serve the ring", and a 200 with `reachable:false` says WHY on /healthz.
             return jsonify({"spans": [], "reachable": False, "error": str(e)})
 
+        if errors and len(errors) == len(targets):
+            # every instance failed: the same answer a single failed read gives
+            return jsonify({"spans": [], "reachable": False, "error": "; ".join(errors)})
         spans.sort(key=lambda s: s["s"])
         return jsonify({
             "spans": spans,
@@ -6203,6 +6342,8 @@ def create_blueprint(
             # Named explicitly, because a silently-capped list reads as "this is everything that
             # happened" — the one lie a timeline must not tell.
             "truncated": truncated,
+            # …and so is an instance that could not be read while the others were (DGO-1815)
+            **({"errors": errors} if errors else {}),
         })
 
     # ══════════════════════════════════════════════════════════════════════
@@ -6280,6 +6421,8 @@ def create_blueprint(
         body = request.get_json(silent=True)
         if not isinstance(body, dict):
             raise ValidationError("request body must be a JSON object")
+        if request.args.get("table"):                 # the repo is looked up only when a table is named
+            _refuse_another_table(reg.get(str(body.get("repo") or "incoming-documents-main")), "הרצת ניקוז")
         mode = str(body.get("mode") or "").strip().lower()
         if mode not in ("all", "changed", "ids"):
             raise ValidationError(
@@ -6464,6 +6607,7 @@ def create_blueprint(
         discovered later.
         """
         cfg = reg.get(repo)
+        _refuse_another_table(cfg, "עריכה מרובה")
         body = request.get_json(silent=True)
         if not isinstance(body, dict):
             raise ValidationError("request body must be a JSON object")
@@ -6604,6 +6748,7 @@ def create_blueprint(
         parallelism. Failures are reported per-batch with the ids they carried.
         """
         cfg = reg.get(repo)
+        _refuse_another_table(cfg, "הפעלת פעולה")
         body = request.get_json(silent=True)
         if not isinstance(body, dict):
             raise ValidationError("request body must be a JSON object")
@@ -6852,6 +6997,7 @@ def create_blueprint(
                 raise ValidationError("unarchive runs on the -archive repo", got=repo)
             src_name, dst_name = repo, repo[: -len(suffix)]
         src_cfg = reg.get(src_name)
+        _refuse_another_table(src_cfg, "העברה לארכיון" if to_archive else "החזרה מהארכיון")
         dst_cfg = reg.get(dst_name)
         body = request.get_json(silent=True)
         if not isinstance(body, dict):
@@ -6859,7 +7005,7 @@ def create_blueprint(
         # THE SELECTION AND THE MOVE MUST READ THE SAME SCHEMA. factory(src_cfg) resolved the
         # selection through the config schema (`public` = instance one's compat view) while the
         # INSERT/DELETE below runs in _request_schema() — so a filter-archive under ?instance=levi
-        # enumerated hacohen's ids and moved levi rows that merely shared them (per-instance ID
+        # enumerated example's ids and moved levi rows that merely shared them (per-instance ID
         # sequences collide by design). repo_for() scopes the selection to the same instance the
         # SQL half writes.
         repo_obj = repo_for(src_cfg, request.args.get("instance"))

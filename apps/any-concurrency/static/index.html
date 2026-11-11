@@ -9,7 +9,7 @@
 
   Navigation: wheel = scroll rows (releases to the page at the top/bottom, never trapped),
   drag = pan. Zoom/pan with the on-screen − + ‹ › controls (also keyboard −/+ and ← →),
-  smoothly animated; double-click or "תצוגה מלאה" resets. Click a dense process (×N מקביל) to
+  smoothly animated; double-click or "כל הטווח" resets. Click a dense process (×N מקביל) to
   fan it out to its full parallelism depth; click a system header to collapse it. The pulse
   doubles as a minimap — it boxes the slice you're viewing. Gesture hint teaches then fades.
 -->
@@ -192,6 +192,11 @@ body{background:var(--bg);color:var(--ink);font-family:var(--font);font-size:14p
 #tl{display:block;width:100%;height:100%;cursor:crosshair}
 .empty{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:var(--muted);font-size:14px}
 .tlc{position:absolute;top:10px;left:12px;z-index:6;display:flex;gap:6px;align-items:center}
+/* the timeline at the screen's full height (DGO-1628 — the owner: «להעלות את החלק הזה של המסך עד למעלה … ולהשתמש
+   בכל הגודל של המסך»): the header, the tiles and the filters step aside; the same button, or Escape, brings them back */
+body.tl-full .top,body.tl-full .ctrls{display:none}
+body.tl-full .stage{margin:8px}
+.tlc button[aria-pressed=true]{border-color:var(--accent);color:var(--accent-d)}
 .tlc button{border:1px solid var(--line);background:var(--surface);color:var(--ink);font-family:inherit;
   font-size:16px;font-weight:800;width:34px;height:32px;border-radius:9px;cursor:pointer;box-shadow:var(--shadow);
   display:inline-flex;align-items:center;justify-content:center;line-height:1;transition:.1s;padding:0}
@@ -202,7 +207,7 @@ body{background:var(--bg);color:var(--ink);font-family:var(--font);font-size:14p
 .zbtn{font-size:12px!important;font-weight:700!important;width:auto!important;padding:0 12px!important;gap:6px;
   color:var(--accent-d);border-color:var(--accent-soft)!important;display:none!important}
 .zbtn.show{display:inline-flex!important}
-.hint{position:absolute;top:17px;left:178px;z-index:5;color:var(--muted);font-size:11px;font-weight:600;opacity:.72;
+.hint{position:absolute;top:17px;left:218px;z-index:5;   /* past the five controls (DGO-1628 added the fifth) */color:var(--muted);font-size:11px;font-weight:600;opacity:.72;
   pointer-events:none;background:var(--surface);padding:2px 8px;border-radius:8px;transition:opacity .6s}
 @media (pointer:coarse),(max-width:700px){.hint{display:none}}
 
@@ -486,7 +491,9 @@ button.pg-live{cursor:pointer}
       <button id="cZoomOut" title="התרחק (מקש מינוס)" aria-label="התרחק"><svg class="gi" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14"/></svg></button>
       <button id="cZoomIn" title="התקרב (מקש פלוס)" aria-label="התקרב"><svg class="gi" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></button>
       <button id="cPanR" title="הזז קדימה (מקש חץ ימינה)" aria-label="הזז קדימה"><svg class="gi" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg></button>
-      <button class="zbtn" id="zreset" title="חוזר לכל טווח הזמן ולעקיבה אחרי עכשיו"><svg class="gi" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12a9 9 0 1 0 3-6.7L3 8M3 3v5h5"/></svg> תצוגה מלאה</button>
+      <button class="zbtn" id="zreset" title="חוזר לכל טווח הזמן ולעקיבה אחרי עכשיו"><svg class="gi" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12a9 9 0 1 0 3-6.7L3 8M3 3v5h5"/></svg> כל הטווח</button>
+      <button id="cFull" aria-pressed="false" aria-label="הציר לכל גובה המסך"
+        title="הציר לכל גובה המסך (מקש F); שוב, או Escape, מחזירים את הכותרת והמסננים"><svg class="gi" viewBox="0 0 24 24" aria-hidden="true"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg></button>
     </div>
     <div class="hint">גלגלת — גלילה · מקשי החיצים — הזזה · פלוס ומינוס — זום</div></div>
 
@@ -505,7 +512,16 @@ const $=s=>document.querySelector(s), DPR=()=>Math.max(1,Math.min(2.5,devicePixe
 // that run it (every n8n worker and task runner is a lane inside it), so it is pinned directly
 // below that section in build() instead of floating by span count like every other source.
 const N8N_BG="n8n-bg";
-const HE_SRC={indox:"מסמכים נכנסים",n8n:"אוטומציות","n8n-bg":"אוטומציות - תהליכי רקע",traefik:"רשת",docker:"מכולות",gmail:"דואר",apitools:"מנוע מסמכים",mailapi:"שירות הדואר",drive:"דרייב",webhook:"וובהוק",logspan:"יומן",custom:"מותאם",wa:"ווצאפ",browser42:"דפדפן",bina:"בינה",security:"אבטחה"};
+const HE_SRC={indox:"מסמכים נכנסים",n8n:"אוטומציות","n8n-bg":"אוטומציות - תהליכי רקע",traefik:"רשת",docker:"מכולות",gmail:"דואר",apitools:"מנוע מסמכים",mailapi:"שירות הדואר",drive:"דרייב",webhook:"וובהוק",logspan:"יומן",custom:"מותאם",wa:"ווצאפ",browser42:"דפדפן",bina:"בינה",bina_claude:"בינה קלוד",security:"אבטחה",
+  // the `flow` section (every app's event stream, DGO-1402): its rows are APPS, named here as the apps name themselves
+  flow:"זרם האירועים",sites:"אתרים",meet:"פגישות",connections:"חיבורים ומפתחות",notifications:"התראות",
+  telegram:"טלגרם","domain-internic":"דומיינים",
+  // what runs on a machine of the herd, each a row he sees (DGO-1797): an ssh command, a model in memory and its
+  // turns, a CI job, the emulator — added last, so no row above changes colour (srcColor reads a key's position)
+  computers:"מחשבים",ollama:"מודלים מקומיים","ci-runner":"מריץ CI","android-emulator":"אמולטור אנדרואיד"};
+const FLOW="flow";
+// a row's name: in the flow section a row is an app, so it is called by the app's Hebrew name
+const procName=(r)=>r.g.src===FLOW?(HE_SRC[r.p.name]||r.p.name):r.p.name;
 // The timeline names no colour. It draws with the office's palette, read where it is written (the
 // theme block) each time the data is loaded — so a theme that turns is followed.
 //   a run's state: done is olive, in motion is sky, failed is plum — each a fill and the ink on it
@@ -717,7 +733,7 @@ function draw(){
         // showed its «…» at the left, as if its beginning were missing.
         const room=W-PADX-16-(railX+16);
         ctx.textAlign="right"; ctx.textBaseline="middle"; ctx.font="600 12px "+F; ctx.fillStyle=P.ink;
-        ctx.direction=/[א-ת]/.test(r.p.name)?"rtl":"ltr"; ctx.fillText(fit(r.p.name,room), W-PADX-16, ly-6); ctx.direction="rtl";
+        ctx.direction=/[א-ת]/.test(procName(r))?"rtl":"ltr"; ctx.fillText(fit(procName(r),room), W-PADX-16, ly-6); ctx.direction="rtl";
         ctx.font="600 10px "+F; ctx.fillStyle=canExp?r.g.color:P.muted;
         // in a narrow window the fold says it without its word, and then the depth without its noun - never over the lanes
         let cnt=r.p.count+" הרצות"+(r.p.depth>1?" · ×"+r.p.depth+" מקביל":""), word=canExp?(r.exp?"פרוס":"הרחב"):"";
@@ -862,7 +878,26 @@ function bindStage(){
   $("#cPanL").onclick=()=>panBy(-0.35);
   $("#cPanR").onclick=()=>panBy(0.35);
   $("#zreset").onclick=doReset;
+  // the timeline at the full height and back (DGO-1628): kept for the next visit, like a window the person sized
+  const FULL_ICON = { on: '<path d="M4 14h6v6M20 10h-6V4M14 10l7-7M3 21l7-7"/>', off: '<path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/>' };
+  const setFull = (on) => {
+    document.body.classList.toggle("tl-full", on);
+    const b = $("#cFull");
+    b.setAttribute("aria-pressed", String(on));
+    b.querySelector("svg").innerHTML = on ? FULL_ICON.on : FULL_ICON.off;
+    try { localStorage.setItem("concurrency.full", on ? "1" : ""); } catch (e) { /* no storage: this visit only */ }
+    layout(); S.scroll = clamp(S.scroll, 0, scrollMax()); layout(); drawPulse();   // a taller stage scrolls less
+  };
+  $("#cFull").onclick = () => setFull(!document.body.classList.contains("tl-full"));
+  let fullAtStart = false;
+  try { fullAtStart = localStorage.getItem("concurrency.full") === "1"; } catch (e) { /* default: the header shows */ }
+  if (fullAtStart) setFull(true);
   addEventListener("keydown",e=>{ if(/^(INPUT|TEXTAREA)$/.test((e.target.tagName)||""))return;
+    // the key, not the letter: on a Hebrew keyboard the same key types «כ»
+    if(e.code==="KeyF"&&!e.repeat&&!e.ctrlKey&&!e.metaKey&&!e.altKey){ setFull(!document.body.classList.contains("tl-full")); e.preventDefault(); return; }
+    // Escape closes what is open on top first (a process's drawer), and only then leaves the full height
+    if(e.key==="Escape"&&$("#drawer").classList.contains("show")){ closeDrawer(); e.preventDefault(); return; }
+    if(e.key==="Escape"&&document.body.classList.contains("tl-full")){ setFull(false); e.preventDefault(); return; }
     if(e.key==="ArrowLeft"){ panBy(-0.35); e.preventDefault(); }
     else if(e.key==="ArrowRight"){ panBy(0.35); e.preventDefault(); }
     else if(e.key==="+"||e.key==="="){ zoomBy(1/1.7); }

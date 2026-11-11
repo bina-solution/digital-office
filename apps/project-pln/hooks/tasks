@@ -11,6 +11,9 @@
 #   ./bbox project-pln tasks show DGO-12
 #   ./bbox project-pln tasks start|done|take|comment DGO-12 [--comment "…" | --comment @<file>]
 #   ./bbox project-pln tasks attach DGO-12 <file> [<file>…]     # a request's files, on its item
+#   ./bbox project-pln tasks new DGO "name" [--comment "description"|@<file>] [--priority high]
+#   ./bbox project-pln tasks edit DGO-12 [--name "…"] [--priority p] [--comment "new description"|@<file>]
+#   ./bbox project-pln tasks rm DGO-12 --comment "why"         # cancelled with its reason, never deleted
 #   …add `--as azaria` to act as that office agent (its own vault account).
 set -uo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -86,7 +89,9 @@ OUTBOX="${PLN_OUTBOX_DIR:-${REPO_ROOT}/.state/outbox/project-pln}"
 obx() { python3 "$(npath "${APP_DIR}/outbox.py")" --dir "${OUTBOX}" "$@"; }
 VERB="${PASSTHRU[0]}"
 case "${VERB}" in
-  start|done|comment|take|attach|label|link) WRITES=1 ;;
+  # new/edit/rm (DGO-1252) and `item …` keep a request's words too; a kept write is sent once, before any
+  # new one, so a kept `new` is made once
+  start|done|comment|take|attach|label|unlabel|link|new|edit|rm|item) WRITES=1 ;;
   *)                                         WRITES=0 ;;
 esac
 if [ "${VERB}" = flush ]; then   # send what is waiting, now — this verb and nothing else
@@ -139,6 +144,11 @@ if [ -n "${PLN_HUB:-}" ]; then   # away from home: the same verb, run on the her
 fi
 # `attach`: its files are THIS machine's and the applier runs in the container. Each is streamed in
 # under a directory of this run and named to the applier by where it landed; removed afterwards.
+# A write that is KEPT is kept as it was typed (TYPED): its files are matched to their copies by the
+# caller's own paths (COPY_FILES), and the staged ones are gone by the time it is replayed. Queuing the
+# staged paths made one attach fail at every replay and hold the office's whole queue behind it
+# (vps1, 2026-11-08 → 11-09, issues/a-queued-attach-replays-a-staged-path-that-is-gone-…).
+TYPED=("${PASSTHRU[@]}")
 STAGE=""
 if [ "${PASSTHRU[0]}" = attach ]; then
   STAGE="/tmp/plane-attach-$$"
@@ -166,32 +176,61 @@ case "${CONSOLE_HOST}" in
   # out as `://console.…` (measured on vps1, 2026-10-13).
   *)                  CONSOLE_URL="$(read_env AUTH_PROTOCOL)"; CONSOLE_URL="${CONSOLE_URL:-https}://${CONSOLE_HOST}" ;;
 esac
+# THE LINK A PERSON IS GIVEN (DGO-1433): `<the herd's hub console>/go/<KEY>` — a path that console resolves at
+# click time (platform-base/console/links.py) and that survives a sign-in, on the one console the owner reaches
+# from anywhere (apps/computers/herd.yaml `hub_console:`). On the HP or the MacBook this office's own console is
+# `console.localhost` — on his phone, his phone. An office that is not one of the herd's (a client's runs this
+# checkout) gives its OWN console's `/go/`, never ours.
+HERD_FILE="${REPO_ROOT}/apps/computers/herd.yaml"
+HUB_CONSOLE="$(sed -n 's/^hub_console:[[:space:]]*\([A-Za-z0-9.-]*\).*/\1/p' "${HERD_FILE}" 2>/dev/null | head -1)"
+ME="$(read_env DGO_OFFICE_ID)"
+LINK_BASE="${CONSOLE_URL}"
+if [ -n "${HUB_CONSOLE}" ] && [ -n "${ME}" ] && awk '/^offices:/{f=1;next} /^[^ #]/{f=0} f' "${HERD_FILE}" 2>/dev/null \
+     | grep -Eq "^  ${ME}:|^    aliases: \[([^]]*[ ,])?${ME}([ ,][^]]*)?\]"; then
+  LINK_BASE="https://${HUB_CONSOLE}"
+fi
 dcx exec -T \
   -e PLANE_API_URL="${PLN_API}" \
   -e PLANE_WORKSPACE="${WORKSPACE}" \
   -e PLANE_AS="${AS_SLUG:-local}" \
   -e CONSOLE_URL="${CONSOLE_URL}" \
+  -e LINK_BASE="${LINK_BASE}" \
   -e PLANE_LOCAL_API_TOKEN="${PLANE_LOCAL_API_TOKEN:-}" \
-  "${PLN_IN}" python3 - "${PASSTHRU[@]}" <"${APPLIER}" >"${OUT}" 2>&1
+  -e PLANE_READ_DEADLINE="${PLANE_READ_DEADLINE:-}" \
+  -e PLANE_PROGRESS_AFTER="${PLANE_PROGRESS_AFTER:-}" \
+  -e PLANE_PER_PAGE="${PLANE_PER_PAGE:-}" \
+  "${PLN_IN}" python3 - "${PASSTHRU[@]}" <"${APPLIER}" 2>&1 \
+  | tee "${OUT}" \
+  | python3 -u -c 'import sys
+for line in sys.stdin:
+    if line.startswith("[project-pln]"):
+        body = line[len("[project-pln]"):]
+        sys.stderr.write("  " + (body[1:] if body.startswith(" ") else body))
+        sys.stderr.flush()' >/dev/null
 RC=$?
 [ -z "${STAGE}" ] || dcx exec -T "${PLN_IN}" rm -rf "${STAGE}" >/dev/null 2>&1
-# The applier writes JSON on stdout under --json and log lines prefixed `[project-pln]` around it:
-# the log lines are shown, the JSON is passed through untouched so a caller can pipe it to a parser.
-if grep -q '^\[project-pln\]' "${OUT}"; then
-  sed -n 's/^\[project-pln\] //p' "${OUT}" | sed 's/^/  /' >&2
-fi
+# The applier writes JSON on stdout under --json and log lines prefixed `[project-pln]` around it.
+# The log lines are shown AS THEY ARRIVE — they are a read's progress, and a `tasks list` over a big
+# project is minutes long: until now nothing was said until it was over, which is what the owner saw as
+# a stuck command («נכשל מהר במקום להיתקע»). `${OUT}` stays the whole raw output, exactly as before, so
+# the outbox's own test for a network failure below still reads it, and everything but the prefixed lines
+# is the caller's to pipe to a parser. Both streams leave the container merged, so the split is by the
+# prefix the applier owns. A python3 filter and not `grep --line-buffered` (no such flag in the Mac's
+# BSD grep) and not `awk … fflush()` (measured 2026-11-06: mawk emitted all of it at EOF, so the lines
+# arrived after the work was over — exactly the silence this is here to remove).
 grep -v '^\[project-pln\]' "${OUT}" >"${OUT}.json"
 # A write that died on the NETWORK is no different from one that found no path a second ago: the words
 # are kept instead of lost. A refusal FROM Plane (401/404/500) is an answer, and is reported as it always
 # was — only "we could not talk to it" is queued.
 if [ "${RC}" -ne 0 ] && [ "${WRITES}" = 1 ] && [ -z "${PLN_OUTBOX_REPLAY:-}" ] \
    && grep -qiE 'urlerror|gave up|connection refused|timed out|name or service not known' "${OUT}"; then
-  N="$(obx queue --verb "${VERB}" ${COPY_FILES[@]+"${COPY_FILES[@]}"} -- "${PASSTHRU[@]}")"
+  N="$(obx queue --verb "${VERB}" ${COPY_FILES[@]+"${COPY_FILES[@]}"} -- "${TYPED[@]}")"
   say "${cy}[project-pln] Plane לא ענה — הכתיבה נשמרה, ותישלח כשתהיה דרך: בתור, ${N} ממתין${c0}"
   rm -f "${OUT}" "${OUT}.json"; exit 0
 fi
 # Reaching Plane is what "offline since …" is measured against: this run is the last time it answered.
-[ "${RC}" -eq 0 ] && obx seen >/dev/null 2>&1
+# (4 is an answer too: Plane refused part of an attach — tasks.py ANSWERED_REFUSED.)
+{ [ "${RC}" -eq 0 ] || [ "${RC}" -eq 4 ]; } && obx seen >/dev/null 2>&1
 cat "${OUT}.json"
 rm -f "${OUT}" "${OUT}.json"
 exit "${RC}"

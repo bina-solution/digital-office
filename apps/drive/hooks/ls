@@ -1,9 +1,4 @@
 #!/usr/bin/env bash
-#: ls — what is in a folder of «קבצים», by path:  ./bbox drive ls /הקלטות
-# Runs the app's own CLI inside its container (apps/drive/cli.py), so it needs no address or key.
-set -uo pipefail
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-REPO_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
-. "${REPO_ROOT}/scripts/lib.sh"
-case "${1:-}" in -h|--help) sed -n 's/^#: //p' "${BASH_SOURCE[0]}"; exit 0 ;; esac
-dcx exec -T drive python /app/cli.py ls "${1:-/}"
+#: ls — what is in a folder of «קבצים», by path:  ./bbox drive [-p <drive>] ls /הקלטות
+# The app's one door (hooks/cli → apps/drive/cli.py), on any of the office's drives.
+exec bash "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/cli" ls "$@"

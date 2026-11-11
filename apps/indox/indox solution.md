@@ -1,6 +1,16 @@
 # INDOX — the solution
 
-**As built 2026-09-02.** One document for the whole INDOX pipeline: how external sources are
+**As built 2026-09-02; refreshed against the shipped workflows 2026-11-10 (DGO-362).** The refresh compiled
+every one of the 70 workflows in `apps/indox/blueprint/n8n/` with the push toolchain (`apps/n8n/tooling/wrap.mjs`),
+on mac-dgo plus the DGO-225/283/246 edits, and checked each node count and chain this document names against them.
+- Eight matched as written.
+- Three had each gained one verify node, now described where they sit: `Assert Discovered`, `Verify Delivery` and
+  `Verify Dispatch`.
+- `indoxV2ActionsGlobal01` was 63, not 64, already on 2026-09-02.
+- Decisions D1–D11 are in §A11. The release decisions N1–N16 of 2026-09-03 are listed beside them in §A12, and they
+  are why `tag_rules` is gone from this text.
+
+One document for the whole INDOX pipeline: how external sources are
 synchronised into the platform (Part A), and how every document is then driven to its terminal
 state by the state machine (Part B). Everything here is named as it is in the code:
 `apps/indox/blueprint/n8n/<id>.workflow.ts` for workflows, `apps/indox/app/incoming_documents/api/__init__.py`
@@ -119,13 +129,18 @@ The ONLY writer of `sync_ledger` / `sync_cursor`. The op table:
 | `REAP` | claims older than the pipe's `timeout_min` → `failed` with backoff (or `needs_review` at the budget). Scheduled by `indox01` every 5 min. |
 | `GATE`, `CURSOR_GET`, `CURSOR_SET` | counts; the Gmail cursor. |
 
-**`syncV3Main0001` — Sync Main (10 nodes).** `When Called` → `Try Lock` (`processLock01`, key
+**`syncV3Main0001` — Sync Main (11 nodes).** `When Called` → `Try Lock` (`processLock01`, key
 `reconcile:<instance>`) → `Lock Acquired?` (held → dead end; the door reports `skipped`) → `Read
-Config` (one query: `indoxSyncOn`, `OldDocumentMonthsBack` (default 6), the registry, the label
-vocabulary from `tag_rules`) → `Build Pipes` (one unit per enabled pipe; a scoped run keeps one;
-`_no_units` sentinel with `status:'noop'`) → `Route Source` (drive / gmail / none) → `Discover Drive
-Each` / `Discover Gmail Each` (wait) → `Run Each` (no wait — n8n's worker pool is the backpressure)
-→ `Unlock`. Outline stamped on the execution: `sync-main_x<N>_units[_OFF]`.
+Config` (one query on the tenant's own settings: `indoxSyncOn`, `indoxOn` — both default true — and
+`OldDocumentMonthsBack` (default 6), plus the registry) → `Build Pipes` (one unit per enabled pipe; a
+scoped run keeps one; `_no_units` sentinel with `status:'noop'`; label KEYS resolve to Gmail label
+names from the ONE rules store — the mail app's organizer settings over HTTP, N1 — and a key with no
+rule is used literally) → `Route Source` (drive / gmail / none) → `Discover Drive Each` / `Discover
+Gmail Each` (wait, continue on error) → `Assert Discovered` (the one reader of a failed discovery: a
+unit whose listing never happened has no ledger rows to TAKE, so the pass throws into errorHandler01
+instead of running a unit that only looks discovered; the lock then falls to its Redis TTL) → `Run
+Each` (no wait — n8n's worker pool is the backpressure) → `Unlock`. Outline stamped on the execution:
+`sync-main_x<N>_units[_OFF]`.
 
 **`syncDiscoverDrive01` (6 nodes).** `List Req` (`createdAfter = now − months`, `limit` = the whole
 window, 2000 default / 5000 max — the drive app pages internally, newest first, so a per-page cap
@@ -141,10 +156,15 @@ message id; drops messages older than the window by their `date`; decides the ne
 clamped to `next_cursor`, never backwards, `UIDVALIDITY` change → anchor 1) → `Call UPSERT` → `Cursor
 Set Req` → `Call CURSOR_SET` → `Result`.
 
-**`syncRun01` (8 nodes).** `Take Req` (`limit = min(take, chunk)`, `months`) → `Call TAKE` → `Build
+**`syncRun01` (9 nodes).** `Take Req` (`limit = min(take, chunk)`, `months`) → `Call TAKE` (since
+DGO-246, four fifths of the pass newest first — by discovery, then by the item's own date — and one
+fifth for the backlog, failed retries first, so a fresh mail goes before the backlog and the backlog is
+never starved; a «נסה שוב» RESET stamps `discovered_at = now()`, so a retry counts as new) → `Build
 Payloads` (rows filtered on `platform_id`; payload = `listing` + the unit's `list_ctx`, `feedback`,
 budget, `__instance`) → `Route Kind` → `Deliver Drive Each` / `Deliver Gmail Each` / `Deliver Link
-Each` (no wait).
+Each` (no wait, continue on error) → `Verify Delivery`. It reads the three calls by name and fails the
+pass when a delivery could not even START. The deliveries run without waiting, so a delivery that fails
+while running is not seen here: it records itself through `FAIL` on the ledger.
 
 **`syncDeliverDrive01` (7) / `syncDeliverGmail01` (10) / `syncDeliverLink01` (10).** Download through
 `driveApi01` / `gmailApiImap01` (attachments: split, filtered by type/size; link mails: the link in
@@ -275,6 +295,31 @@ Known issues to keep in mind (documented, not defects):
 | D10 | every link in the live table works | `LINK` / `THUMBNAIL` are the private drive's own links (`https://drive.<domain>/file/d/<id>/view`); legacy `drive.google.com` rows are the client's historical Google links |
 | D11 | nothing blocks deleting a registry entry | the pipe-identity assertion is gone |
 
+### A12. The release decisions (N1–N16, 2026-09-03) — beside D1–D11
+
+The decisions taken the day after this design was built. Each one's full text, scope and proof are in
+`apps/indox/RELEASE-DECISIONS.md` §3.3; this list keeps them next to the design they amend, so neither
+is read without the other (DGO-362).
+
+| # | decision | where it shows in this document |
+|---|---|---|
+| N1 | One rule store: the mail app's organizer JSON | `Build Pipes` resolves labels from it; `tag_rules` is retired |
+| N2 | The rules editor is a real editor, in the mail app only | — (mail app) |
+| N3 | The label engine drains a backlog | — (mail app) |
+| N4 | Sync page v2: the card and the summary | §A8 |
+| N5 | The sync editor is additive and honest | §A8 |
+| N6 | Reasons everywhere | `RECORD` carries a reason; `sync_item_reasons` |
+| N7 | Error plumbing | §B9 (`ERROR` on restart) |
+| N8 | Typed-at-birth documents get base extraction | §B8 |
+| N9 | Extraction score: coverage of final values, type-aware | §B10 |
+| N10 | The 56 unknown messages get discovered | — (one-time) |
+| N11 | Mail UI: honesty first, speed second | — (mail app) |
+| N12 | One mail client | — (mail app) |
+| N13 | INDOX webapp hygiene | §A8 |
+| N14 | Dead code goes | throughout |
+| N15 | Security | — (apitools) |
+| N16 | Reasons for retry are the proof of «נסה שוב» | §A8, §B9 |
+
 ---
 
 ## Part B — The state machine
@@ -297,14 +342,17 @@ Two invariants every node repeats: **an action always stamps its own completion 
 re-dispatches it forever), and **the only sanctioned re-run is `STATUS='ACTION_RESTART'`** — the
 machine never retries itself.
 
-**`indox01` — the scheduler (9 nodes).** `Tick` (2 min, deliberately not settings-driven: an interval
+**`indox01` — the scheduler (10 nodes).** `Tick` (2 min, deliberately not settings-driven: an interval
 is registered in main's memory at activation) → `Load Plan` (`public.app_settings` `indox.auto.%`,
 `public.indox_instances` with `enabled` and `purpose <> 'test'`, `public.app_schedule_state`) →
 `Decide Due` (master `indox.auto.on`, default **false**; per job `indox.auto.<job>.on`, default on;
 state-based dueness: a pair with no state row is due) → `Route Job` → `Call Drain` (`drain` 2 min,
 `drain_full` 120 min → `mode=all`) / `Call Sync` (15 min) / `Call Reaper` (5 min, `op:'REAP'`) /
 `Call Health` (10 min) → `Mark Dispatched` (stamps `last_run_at` before the call; its RETURNING list
-is a field filter — anything not named there is gone).
+is a field filter — anything not named there is gone) → `Verify Dispatch` (the one reader of a failed
+dispatch: each Call continues on error and is terminal, so a job whose sub-workflow never started was
+reported nowhere while its stamp suppressed the retry for the job's whole cadence; it throws once
+every due Call has answered).
 
 ### B2. `indoxV2BaseDrain01` — the drainer (26 nodes)
 
@@ -438,7 +486,7 @@ independently`) → `Switch1`:
 `docBaseRouterDecide` / `docBaseDecide` / `unknownTypeAction` can return (gate G51 checks it; five
 retired names were removed 2026-09-02).
 
-### B6. `indoxV2ActionsGlobal01` — the global actions (64 nodes)
+### B6. `indoxV2ActionsGlobal01` — the global actions (63 nodes)
 
 `Route Mode` (`export_decide` / execute) → `DOC BASE Action Switch`:
 
@@ -620,7 +668,7 @@ panel at zero. BFF / webapp changes need the image rebuilt (`bbox run`). Migrati
 `psql -v schema=indox_<tenant> -f scripts/ops/migrations/<file>.sql` per tenant, then
 `notify pgrst, 'reload schema'`.
 
-### C3. The server (hacohen-prod), lessons of this release
+### C3. The server (example-prod), lessons of this release
 
 - The tenant schema was owned by `supabase_admin`; `postgres` (every hook's role) could not CREATE
   in it. `alter schema indox_<t> owner to postgres` before migrations.

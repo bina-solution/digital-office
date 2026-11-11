@@ -71,7 +71,7 @@
   function gm(sender, color, text, mins) { return { id: uid(), dir: 'in', sender: sender, scolor: color, text: text, mins: mins, status: 'in' }; }
   var THREADS = {
     'wa-biz': [
-      { id: 'c_carton', name: 'ישראל קרטון בע״מ', handle: '+972 3-000-0032', initials: 'יק', color: 'var(--sky-d)', tag: 'ספק', unread: 2, pinned: true, online: true, mins: 6,
+      { id: 'c_carton', name: 'ישראל קרטון בע״מ', handle: '+972 3-000-0041', initials: 'יק', color: 'var(--sky-d)', tag: 'ספק', unread: 2, pinned: true, online: true, mins: 6,
         msgs: [ m('in', 'שלום, שלחנו את חשבונית 20458 במייל. אפשר לאשר קבלה?', 55),
                 m('out', 'התקבלה, תודה. נעביר לתשלום שוטף+30.', 40),
                 m('in', 'מעולה. מצרף גם תעודת משלוח לחודש הבא.', 8),
@@ -81,7 +81,7 @@
                 m('out', 'בטח! שולח לך עכשיו הצעה מסודרת.', 52),
                 m('out', 'הצעת מחיר OT-2026-00001 — מצורפת. תקפה ל-14 יום.', 51, 'delivered'),
                 m('in', 'קיבלתי, תודה רבה 🙏', 26) ] },
-      { id: 'c_bakery', name: 'מאפיית הבוקר', handle: '+972 50-000-0033', initials: 'מה', color: 'var(--lime-d)', tag: 'לקוח', unread: 1, pinned: false, online: true, mins: 95,
+      { id: 'c_bakery', name: 'מאפיית הבוקר', handle: '+972 50-000-0042', initials: 'מה', color: 'var(--lime-d)', tag: 'לקוח', unread: 1, pinned: false, online: true, mins: 95,
         msgs: [ m('in', 'הזמנה שבועית קבועה — אפשר לחדש?', 130),
                 m('out', 'חידשנו! קבלה IR-2026-00001 נשלחה.', 120),
                 m('in', 'תודה, נתראה בשבוע הבא', 95) ] },

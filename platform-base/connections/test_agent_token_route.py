@@ -88,6 +88,63 @@ def test_a_vault_that_cannot_tell_its_own_office_serves_nobody_but_the_operator(
         assert c.get("/api/agent-token/bina-ds").status_code == 200
 
 
+NEWSFLOW = {**EXTEND, "service": "newsflow", "app": "newsflow", "container_name": "newsflow-local",
+            "container_id": "f" * 64, "ip": "172.18.0.20"}
+
+
+@contextlib.contextmanager
+def _readers(text):
+    """The compiler's registry/agent-token-readers.json (DGO-1152), as `text` — or none, for None."""
+    real = app.GENERATED
+    app.GENERATED = tempfile.mkdtemp(prefix="agentreaders-")
+    if text is not None:
+        with open(os.path.join(app.GENERATED, "agent-token-readers.json"), "w", encoding="utf-8") as f:
+            f.write(text)
+    try:
+        yield
+    finally:
+        app.GENERATED = real
+
+
+def test_a_reader_the_compiler_names_reads_that_agents_token_and_no_other():
+    with _readers('{"bina-ds": ["newsflow"], "browser42-task-runner": ["social-list", ""]}\n'):
+        with _as(NEWSFLOW) as c:
+            r = c.get("/api/agent-token/bina-ds")
+            assert r.status_code == 200 and r.get_json()["token"] == TOKEN, r.get_json()
+            assert (_log()[-1]["decision"], _log()[-1]["service"], _log()[-1]["agent"]) == ("allow", "newsflow", "bina-ds")
+            other = c.get("/api/agent-token/browser42-task-runner")
+            assert other.status_code == 403 and "token" not in other.get_json(), other.get_json()
+            assert "social-list" not in other.get_json()["error"]          # the compiled names stay in the log
+        with _as({**NEWSFLOW, "service": ""}) as c:                        # an empty name is never a reader
+            assert c.get("/api/agent-token/browser42-task-runner").status_code == 403
+    assert (_log()[-1]["decision"], _log()[-1]["service"]) == ("refuse", "")
+
+
+def test_a_bad_name_is_a_400_before_the_registry_is_read():
+    with _readers('{"../x": ["newsflow"]}\n'):
+        with _as(NEWSFLOW) as c:
+            assert c.get("/api/agent-token/..%2Fx").status_code in (400, 404)
+            assert c.get("/api/agent-token/" + "a" * 80).status_code == 400
+
+
+def test_a_named_reader_still_needs_both_factors_and_this_office():
+    with _readers('{"bina-ds": ["newsflow"]}\n'):
+        for who in ({**NEWSFLOW, "method": "ip", "container_id": ""}, {**NEWSFLOW, "project": "other-office"},
+                    {**NEWSFLOW, "ok": False}):
+            for mode in ("warn", "enforce", "off"):
+                with _as(who, mode) as c:
+                    assert c.get("/api/agent-token/bina-ds").status_code == 403, (who, mode)
+
+
+def test_no_registry_or_a_registry_of_another_shape_names_nobody():
+    for text in (None, "{not json", '["newsflow"]', '{"bina-ds": "newsflow"}', '{"bina-ds": [5, null]}'):
+        with _readers(text):
+            with _as(NEWSFLOW) as c:
+                assert c.get("/api/agent-token/bina-ds").status_code == 403, text
+            with _as(EXTEND) as c:
+                assert c.get("/api/agent-token/bina-ds").status_code == 200, text      # dgo-extend, always
+
+
 def test_the_operator_on_loopback_may_read_it():
     with _as(LOOPBACK) as c:
         assert c.get("/api/agent-token/bina-ds").status_code == 200

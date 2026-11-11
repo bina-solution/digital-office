@@ -209,9 +209,10 @@
     if (v == null || v === "") q.delete(k); else q.set(k, v);
     const s = q.toString();
     const href = location.pathname + (s ? "?" + s : "") + location.hash;
-    try { history[replace ? "replaceState" : "pushState"](null, "", href); } catch (e) { /* a sandboxed page */ }
+    // a replaced entry keeps its state (the sheet marks the step it made with it: sheet.js); a new one starts empty
+    try { history[replace ? "replaceState" : "pushState"](replace ? history.state : null, "", href); } catch (e) { /* a sandboxed page */ }
   };
-  MF.setHash = (h) => { try { history.replaceState(null, "", location.pathname + location.search + (h ? "#" + h : "")); } catch (e) { /* */ } };
+  MF.setHash = (h) => { try { history.replaceState(history.state, "", location.pathname + location.search + (h ? "#" + h : "")); } catch (e) { /* */ } };
   let current = null;
   MF.go = (href, opt = {}) => {
     try { history[opt.replace ? "replaceState" : "pushState"](null, "", href); } catch (e) { location.href = href; return; }
@@ -232,7 +233,8 @@
     e.preventDefault();
     MF.go(a.getAttribute("href"));
   });
-  window.addEventListener("popstate", () => MF.render());
+  // Back inside one view (a meeting's sheet, its tab) is that view's to take; anything else draws the page again
+  window.addEventListener("popstate", () => { if (current && current.popstate && current.popstate()) return; MF.render(); });
   // the page is drawn once the document is parsed (the scripts may run before the body exists) and its styles are in
   MF.start = () => {
     if (!(MF.Home && MF.Meeting)) return;

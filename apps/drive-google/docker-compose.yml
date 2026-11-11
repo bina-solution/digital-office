@@ -1,0 +1,53 @@
+# drive-google — Google Drive, an EXTERNAL engine of «קבצים» (apps/drive/ENGINES.md, DGO-1500).
+# Nothing of Google runs here: it bridges Drive v3 for the Google accounts the office connects (each a
+# vault instance; the grant is read per call, never kept here). No screen and no route of its own: the
+# generic `drive` app reaches it at http://drive-google:8989 over drive-engine.v1.
+services:
+  drive-google:
+    image: ghcr.io/bina-solution/digital-office/drive-google:${IMAGE_TAG:-latest}
+    pull_policy: missing
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: drive-google-${DEPLOYMENT_NAME:-bina-deployment}
+    hostname: drive-google
+    restart: unless-stopped
+    environment:
+      - SENTRY_DSN=${DRIVE_SENTRY_DSN:-}
+      - DEPLOYMENT_NAME=${DEPLOYMENT_NAME:-bina-deployment}
+      - CONNECTIONS_URL=${CONNECTIONS_URL:-http://connections:8990}
+      # OAuth CLIENT (not a grant): needed to REFRESH a person's access token. The grant itself never
+      # lands here — it is read from the vault per call.
+      - N8N_GOOGLE_OAUTH_CLIENT_ID=${N8N_GOOGLE_OAUTH_CLIENT_ID:-}
+      - N8N_GOOGLE_OAUTH_CLIENT_SECRET=${N8N_GOOGLE_OAUTH_CLIENT_SECRET:-}
+      # the canonical `download` op's content-addressed cache (dlcache.py) — a cache, regenerated
+      - DRIVE_DLCACHE_DIR=/data/.dlcache
+    volumes:
+      - drive_google_data:/data
+    networks:
+      - traefik-network
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request,sys;sys.exit(0 if urllib.request.urlopen('http://localhost:8989/healthz',timeout=8).status==200 else 1)"]
+      interval: ${HEALTHCHECK_INTERVAL:-30s}
+      timeout: ${HEALTHCHECK_TIMEOUT:-10s}
+      retries: 3
+      start_period: 15s
+    deploy:
+      resources:
+        limits:
+          # every call is a wait on Google; a download streams through. No pictures are drawn here (Google
+          # draws its own), so no decoder needs the room drive-local has.
+          cpus: '0.5'
+          memory: 256M
+    logging:
+      driver: ${LOGGING_DRIVER:-json-file}
+      options:
+        max-size: 5m
+        max-file: '3'
+
+volumes:
+  drive_google_data:
+
+networks:
+  traefik-network:
+    external: true

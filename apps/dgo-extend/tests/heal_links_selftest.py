@@ -125,29 +125,29 @@ if calls["find"] or (app._listen_ports().get("carried") or {}).get("port"):
 # The MacBook at a coffee shop (2026-11-01): every PUBLIC pair it dials died at one moment, because its own
 # network moved. Both get a fresh source port on THIS pass, with no first sighting to wait out, and a status
 # still «ok» from a pass that ran before the tunnels died does not hold one back.
-FP = {"office": "fireplace", "dial": "home", "slot": 6, "endpoint": "93.184.216.10",
-      "endpoint_port": 51820, "record": {"id": "fireplace"}}
+FP = {"office": "examplef", "dial": "home", "slot": 6, "endpoint": "93.184.216.13",
+      "endpoint_port": 51820, "record": {"id": "examplef"}}
 app._link_pairs = lambda home, records: [VPS, FP]
 app.all_declarations = lambda: [VPS["record"], FP["record"]]
 app._write_listen_ports({})
 gone = int(NOW) - 230
 alive.clear()
 alive.update({"wg2": {"alive": False, "handshake_at": gone}, "wg6": {"alive": False, "handshake_at": gone + 40}})
-app.heal_links({"vps1": {"ok": False}, "fireplace": {"ok": True}})
-moved = {o: (app._listen_ports().get(o) or {}).get("port") for o in ("vps1", "fireplace")}
+app.heal_links({"vps1": {"ok": False}, "examplef": {"ok": True}})
+moved = {o: (app._listen_ports().get(o) or {}).get("port") for o in ("vps1", "examplef")}
 if not all(moved.values()):
     problems.append(f"a laptop that changed networks re-ports every public pair on one pass, got {moved}")
-if not all((app._listen_ports().get(o) or {}).get("down_since") for o in ("vps1", "fireplace")):
+if not all((app._listen_ports().get(o) or {}).get("down_since") for o in ("vps1", "examplef")):
     problems.append("a pair re-ported on its first sighting keeps `down_since`, so its budget resets when it is back")
 alive.update({"wg2": {"alive": True, "handshake_at": int(NOW)}, "wg6": {"alive": True, "handshake_at": int(NOW)}})
-app.heal_links({"vps1": {"ok": True}, "fireplace": {"ok": True}})
-if any((app._listen_ports().get(o) or {}).get("count") for o in ("vps1", "fireplace")):
+app.heal_links({"vps1": {"ok": True}, "examplef": {"ok": True}})
+if any((app._listen_ports().get(o) or {}).get("count") for o in ("vps1", "examplef")):
     problems.append("a roamed pair that is back starts a fresh budget (count 0): the seventh move must not be refused")
 
 # …while one public pair that died ALONE waits for HEAL_AFTER as before: it may be the peer that is down.
 app._write_listen_ports({})
 alive.update({"wg6": {"alive": True, "handshake_at": int(NOW)}})
-app.heal_links({"vps1": {"ok": False}, "fireplace": {"ok": True}})
+app.heal_links({"vps1": {"ok": False}, "examplef": {"ok": True}})
 if (app._listen_ports().get("vps1") or {}).get("port"):
     problems.append("a single public pair down on its first sighting is not re-ported yet")
 
@@ -286,8 +286,8 @@ alive.clear()
 alive.update({"wg2": {"alive": False, "handshake_at": gone2},
               "wg6": {"alive": False, "handshake_at": gone2 + 40}})
 calls["find"].clear()
-app.heal_links({"vps1": {"ok": True}, "fireplace": {"ok": True}})   # a STALE «ok», both of them
-roamed_moved = {o: (app._listen_ports().get(o) or {}).get("port") for o in ("vps1", "fireplace")}
+app.heal_links({"vps1": {"ok": True}, "examplef": {"ok": True}})   # a STALE «ok», both of them
+roamed_moved = {o: (app._listen_ports().get(o) or {}).get("port") for o in ("vps1", "examplef")}
 if not all(roamed_moved.values()):
     problems.append("FIND 3: a roamed office re-ports every public pair on one pass even with a stale "
                     f"«ok» beside it, got {roamed_moved}")

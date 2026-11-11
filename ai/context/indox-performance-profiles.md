@@ -95,12 +95,12 @@ Three classes — do NOT treat them the same:
 | 1 | Orchestrator - Parallel Document Processing :: `Rate Limit Batches` (splitInBatches) | `batch_size ǀǀ 5` | default → `perf_extract_fanout` (substituted) |
 | 2 | indox-v2 Actions — BS :: `Loop Over Items7` + `Loop Over Items` (batchSize 5 = BS extract fan-out feeders) | 5 | `perf_extract_fanout` |
 | 3 | Query PURCHASE_ID :: `Extract AFTER1/BELOW1` http-batching {5, 5-10s} — ONLY this Query has pacing! | inconsistent | ALL 5 Query WFs get `{batchSize: perf_apitools_feed, batchInterval: perf_apitools_feed_ms}` |
-| 4 | indox api - supabase :: `Poll Line Changes` schedule 30s + `Get Changed Docs` limit 40 | fixed | `perf_line_poll_s` / `perf_line_poll_limit` |
-| 5 | Incoming Documents v2 :: `Wait` (random 3–9s jitter) + `Loop Over Items37/38` (5/6) | fixed | `perf_main_jitter_max_s` (0 on ci/laptop), fan constants |
+| 4 | indox api - supabase :: `Poll Line Changes` schedule 30s + `Get Changed Docs` limit 40 | fixed | `perf_line_poll_s` / `perf_line_poll_limit`. **Retired 2026-11-10 (DGO-433).** The owner order of 2026-08-16 removed the poll: the drainer is the only initiator. Its workflow was retired too. The knob had applied to nothing since then, and it left the manifest and every profile. |
+| 5 | Incoming Documents v2 :: `Wait` (random 3–9s jitter) + `Loop Over Items37/38` (5/6) | fixed | `perf_main_jitter_max_s` (0 on ci/laptop), fan constants. **Retired 2026-11-10 (DGO-433).** indoxV2Driver01 has no wait node any more, so the knob applied to nothing. It left the manifest and every profile, together with BS01's dead `Loop Over Items` target of row 2. `apps/n8n/test_perf_manifest_targets.py` now fails a knob aimed at a node that is not there. |
 | 6 | Gmail scanners ×3 :: Schedule 3min | fixed | `perf_scanner_interval_min` |
 | 7 | Sync Scanner/Scan Unit :: Schedule 15m, take 50, chunk 25, gmail take 10 | fixed ×2 places | `perf_sync_interval_min` / `perf_sync_take` / `perf_sync_chunk` |
 | 8 | Batch Upsert (+legacy Create/Update paths) :: `Wait 35s` | sheets-era throttle | verify dead post-tier-2; live → `perf_upsert_wait_s` (0 supabase) |
-| 9 | .env/compose: N8N_WORKER_CONCURRENCY, worker count, APITOOLS_GUNICORN_WORKERS, APITOOLS_MAX_CONCURRENT_JSON_QUERY/OCR, APITOOLS_PDF_DPI | scattered | generated `# perf-profile:<name>` .env block |
+| 9 | .env/compose: N8N_WORKER_CONCURRENCY, worker count, APITOOLS_GUNICORN_WORKERS, APITOOLS_MAX_CONCURRENT_JSON_QUERY/OCR (the PDF DPI is no knob: a product constant since DGO-216) | scattered | generated `# perf-profile:<name>` .env block |
 | 10 | indox-test CLI: budgets, --budget-scale, watch-poll, suite pg_sleep | CLI consts | `perf_test_budget_scale` etc. |
 
 **B. Correctness-serializers (batchSize=1) — PINNED BY DESIGN, profiles must NOT touch:**

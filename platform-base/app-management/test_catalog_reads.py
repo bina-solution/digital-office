@@ -113,3 +113,56 @@ def test_one_catalog_answer_parses_no_compose_file_it_has_already_read(tmp_path,
     again = app._catalog()
     assert [a["services"] for a in again] == [a["services"] for a in first]
     assert "docker-compose.yml" not in calls, f"a second answer parsed a compose file again: {calls}"
+
+
+def test_open_goes_inside_exactly_when_the_console_has_a_tile(tmp_path, monkeypatch):
+    """DGO-1502: «פתיחה» on the apps screen sent n8n (its own host, `embed: false`) to a new tab while the
+    console's rail framed it; and machine (`tile: false`) went to `#/m/machine`, a screen nobody has."""
+    shapes = {
+        "own-host": {"host": "n8n", "module": {"id": "own-host", "external": True, "embed": False}},
+        "framed": {"host": "fr", "module": {"id": "framed", "alias": "framed", "embed": True}},
+        "door": {"host": "machine", "module": {"id": "door", "alias": "door", "embed": True, "tile": False}},
+        "no-tile": {"host": "svc", "module": {"id": "no-tile", "embed": False}},
+    }
+    import json
+    for n, r in shapes.items():
+        d = tmp_path / "apps" / n
+        d.mkdir(parents=True)
+        (d / "app.json").write_text(json.dumps({"id": n, "layer": 3, "routing": [r]}), encoding="utf-8")
+    (tmp_path / "platform-base").mkdir()
+    (tmp_path / "platform.state.yaml").write_text("apps: {}\n", encoding="utf-8")
+    monkeypatch.setattr(app, "REPO", str(tmp_path))
+    monkeypatch.setattr(app, "STATE", str(tmp_path / "platform.state.yaml"))
+    monkeypatch.setattr(app, "_container_index", lambda: {})
+    monkeypatch.setattr(app, "_auth_blockers", lambda: {})
+    monkeypatch.setattr(app, "_disposition", lambda entry: (entry or {}).get("state", "disabled"))
+    got = {a["id"]: a["launch"]["embed"] for a in app._catalog() if a.get("launch")}
+    assert got == {"own-host": True, "framed": True, "door": False, "no-tile": False}
+
+
+def test_screen_is_said_only_for_an_app_that_declared_one(tmp_path, monkeypatch):
+    """DGO-1760, the owner: «למה יש שתי אפלקציות כניסה ? כפל זה חמור» — the console's screen search listed
+    forward-auth («זהות וכניסה») and traefik as screens: each has a host on routing[0] and declares none. Its
+    launch keeps the url (the apps screen opens by it) and says `screen: false`; a declared module, on any
+    routing entry and with `embed: false` too (authentik's shape), is a screen."""
+    import json
+    shapes = {
+        "service": [{"host": "signin"}],                                              # forward-auth, traefik
+        "declared": [{"host": "auth", "module": {"name": "Auth", "embed": False}}],   # authentik
+        "later": [{"host": "api"}, {"host": "ui", "module": {"id": "later"}}],        # mail: mailview
+        "door": [{"host": "machine", "module": {"alias": "door", "tile": False}}],   # machine: its screen is «מחשבים»
+    }
+    for n, r in shapes.items():
+        d = tmp_path / "apps" / n
+        d.mkdir(parents=True)
+        (d / "app.json").write_text(json.dumps({"id": n, "layer": 3, "routing": r}), encoding="utf-8")
+    (tmp_path / "platform-base").mkdir()
+    (tmp_path / "platform.state.yaml").write_text("apps: {}\n", encoding="utf-8")
+    monkeypatch.setattr(app, "REPO", str(tmp_path))
+    monkeypatch.setattr(app, "STATE", str(tmp_path / "platform.state.yaml"))
+    monkeypatch.setattr(app, "_container_index", lambda: {})
+    monkeypatch.setattr(app, "_auth_blockers", lambda: {})
+    monkeypatch.setattr(app, "_disposition", lambda entry: (entry or {}).get("state", "disabled"))
+    got = {a["id"]: (a["launch"]["screen"], bool(a["launch"]["url"])) for a in app._catalog() if a.get("launch")}
+    assert got == {"service": (False, True), "declared": (True, True), "later": (True, True),
+                   "door": (False, True)}, got

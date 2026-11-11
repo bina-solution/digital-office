@@ -36,6 +36,7 @@ func coreManifests(t *testing.T) map[string]string {
 		"platform-base/app-management/app.json", "platform-base/traefik/app.json", "platform-base/forward-auth/app.json",
 		"platform-base/connections/app.json", "platform-base/console/app.json", "platform-base/notifications/app.json",
 		"platform-base/bina-ui/app.json", "apps/dgo-extend/app.json", "apps/computers/app.json",
+		"platform-base/containers/app.json",
 	} {
 		b, err := os.ReadFile(filepath.Join(checkout(t), p))
 		if err != nil {
@@ -70,6 +71,10 @@ func TestTheCatalogWithNoEngineMatchesFlask(t *testing.T) {
 		"routing": [{"host": "abs", "module": {"id": "abs-tile", "url": "https://elsewhere.example/x"}}]}`
 	files["apps/zz-blank/app.json"] = `{"id": "zz-blank", "layer": 3, "routing": [{"host": "blank", "module": {"url": "  "}}],
 		"data": {"on_uninstall": "delete", "volumes": ["blank_data"]}}`
+	// a host and no screen declared (forward-auth's shape, DGO-1760): its launch says screen false
+	files["apps/zz-svc/app.json"] = `{"id": "zz-svc", "layer": 3, "routing": [{"host": "svc"}, {"host": "svc2"}]}`
+	// a door whose screen lives in another app (machine's, in «מחשבים»): tile false, screen false
+	files["apps/zz-door/app.json"] = `{"id": "zz-door", "layer": 3, "routing": [{"host": "door", "module": {"alias": "door", "tile": false}}]}`
 	state, err := os.ReadFile(filepath.Join(checkout(t), "platform.state.core.yaml"))
 	if err != nil {
 		t.Fatal(err)
@@ -97,6 +102,10 @@ func TestTheCatalogWithNoEngineMatchesFlask(t *testing.T) {
 	same("an app archived")
 	now += 100
 	same("nothing changed")
+	// «מכולות» named off (a phone before its owner installs it): read as written, where unnamed it is on (DGO-1723)
+	now += 100
+	write(t, repo, map[string]string{"platform.state.yaml": string(state) + "  containers: { state: disabled }\n"})
+	same("containers named off")
 }
 
 // TestTheCatalogIsTheContainersWhereThisCannotVouch: an office with an engine; a .env (app.py reads

@@ -39,6 +39,20 @@ The screen is `/a/my-docs/` (`#/m/my-docs/<view>` or `doc/<id>`). From the shell
 - `pay` marks money as received: only from evidence the owner pointed at.
 - Deleting a customer or an item is his to ask for.
 
+## Client documents in one house style, from data (`line`, DGO-1454)
+
+`./bbox my-docs line <data.json> [<out.pdf>] [--html] [--drive "/folder/"]` makes a quote, a service agreement, or
+both, in the business's one style: the bs101 agreement's look, written in Olive Grove's own values. The input is a
+JSON document. `line/example.json` is a whole one, with a made-up customer, and `line/line.py`'s header is the
+contract. A real customer's data is the business's file: it lives in the drive beside the PDF it made (for example
+`/פגישות/2026-11-08 · exu102/מקור/`), never in this repository.
+
+It renders with WeasyPrint, else a local Chromium, else the Chromium of the office's browser42 image in a throwaway
+container. The last is what the MacBook gets, because `bbox` runs hooks in its engine's guest. Without a renderer
+that works, it writes the HTML and exits 1; the exit codes are in line.py's header. It is not the ledger: it
+numbers nothing and issues nothing. A quote that must be a tax
+document is a ledger QUOTE (`POST /api/documents`). Tests: `python3 apps/my-docs/line/test_line.py`.
+
 ## Traps
 
 - The pass-through forwards every path and method, and apitools has no sign-in of its own. The

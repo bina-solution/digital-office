@@ -246,7 +246,7 @@ def test_no_pair_secret_and_no_agent_door_ask_nothing():
     try:
         cv = _Cv([])
         url = "http://dgo-net:9406/api/link/catalog"
-        none = projection.pull_agents(cv, {"id": "macbook"}, "fireplace", CATALOG, url, now=1000)
+        none = projection.pull_agents(cv, {"id": "macbook"}, "examplef", CATALOG, url, now=1000)
         assert none["*"]["ok"] is False and cv.asked == [], none
         assert projection.pull_agents(cv, {"id": "macbook"}, "hp-laptop",
                                       {"apps": [CATALOG["apps"][1]]}, url, now=1000) == {}
@@ -260,9 +260,9 @@ def test_a_peer_with_no_pair_secret_here_is_not_asked_of_the_vault_every_pass():
         asked = []
         links.pair_tokens = lambda home, peer: asked.append(peer) or []
         url = "http://dgo-net:9406/api/link/catalog"
-        projection.pull_agents(_Cv([]), {"id": "macbook"}, "fireplace", CATALOG, url, now=1000)
-        assert projection.pull_agents(_Cv([]), {"id": "macbook"}, "fireplace", CATALOG, url, now=1060) == {}
-        assert asked == ["fireplace"], asked                      # one read, then the back-off holds
+        projection.pull_agents(_Cv([]), {"id": "macbook"}, "examplef", CATALOG, url, now=1000)
+        assert projection.pull_agents(_Cv([]), {"id": "macbook"}, "examplef", CATALOG, url, now=1060) == {}
+        assert asked == ["examplef"], asked                      # one read, then the back-off holds
     finally:
         links.pair_tokens, links.put = saved
 

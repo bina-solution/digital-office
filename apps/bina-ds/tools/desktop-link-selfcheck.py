@@ -16,7 +16,8 @@ the person actually meets — the console, in desktop mode:
      session let a real extra tab pass as a pass (measured 2026-10-13, which is why this check exists).
 
 Guarded for a machine that cannot run it (no playwright, no console): it says "not run" and exits 0,
-so a gate suite may call it anywhere. Exit 1 only when the desktop behaved wrongly.
+so a gate suite may call it anywhere. Exit 1 when the desktop behaved wrongly — or when a QA_STORAGE_STATE it was
+given cannot be loaded (a signed-in run that is not signed in is not a pass).
 """
 import glob
 import json
@@ -33,6 +34,21 @@ except ImportError:
 URL = sys.argv[1] if len(sys.argv) > 1 else "http://console:8000"
 AUTH = {"X-authentik-username": "admin", "X-authentik-email": "admin@office.local",
         "X-authentik-name": "Admin", "X-authentik-groups": "authentik Admins"}
+#: DGO-1813: a signed-in browser instead of forged headers — `bbox flow-qa-session` writes it, and URL is then the
+#: office's real console address. The console believes a forged groups header only until its stage two; it names
+#: every forged run in its log until then (console-unproved-admin). `/a/bina` is an admins' door.
+STORAGE_STATE = os.environ.get("QA_STORAGE_STATE", "")
+
+
+def signed_in():
+    """How this run is someone: a storage state when one is given, else the forged headers (stage one only)."""
+    if STORAGE_STATE:
+        return {"storage_state": STORAGE_STATE}
+    print("note: no QA_STORAGE_STATE — the admin identity is FORGED in headers (refused by the console from "
+          "DGO-1813's stage two; mint one with `bbox flow-qa-session`)")
+    return {"extra_http_headers": AUTH}
+
+
 
 STATE = """() => ({
   hash: location.hash,
@@ -67,8 +83,7 @@ def main() -> int:
 def _run() -> int:
     with sync_playwright() as p:
         b = browser(p.chromium)
-        ctx = b.new_context(extra_http_headers=AUTH, viewport={"width": 1440, "height": 900},
-                            locale="he-IL")
+        ctx = b.new_context(**signed_in(), viewport={"width": 1440, "height": 900}, locale="he-IL")
         popups = []
         ctx.on("page", lambda pg: popups.append(pg.url))
         page = ctx.new_page()

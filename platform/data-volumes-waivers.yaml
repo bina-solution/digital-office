@@ -23,6 +23,10 @@ lan-console:
   # declares it in its own data.volumes and the backup carries it from there; lan-console writes nothing to it.
   - "forward_auth_data"
 
+bina-claude:
+  # The same vault, for the desktop app's sessions (DGO-1642) — obsidian's volume, carried from obsidian.
+  - "obsidian_vault"
+
 app-management:
   # Mounts the repository root so it can render and converge the deployment — that IS its job.
   # The repo is in git; a backup of it would be a backup of the source tree.
@@ -48,6 +52,10 @@ bina-ds:
   # container). Tracked source, same reason as app-management above; the gate cannot clear it
   # statically because the source is an interpolated absolute path.
   - "${BBOX_REPO_HOST:-../../}"
+  # The office's vault (DGO-1642), mounted so a session reads it first. obsidian declares obsidian_vault in its
+  # own data.volumes and the backup carries it from there, once; the agents only read it and append Operatives/
+  # run logs to it.
+  - "obsidian_vault"
 
 openhands:
   # Three absolute host paths pinned to the production checkout location. They are the repo (and
@@ -55,13 +63,13 @@ openhands:
   # but the gate cannot prove that statically because the path is absolute and does not resolve on
   # any other machine. That non-portability is a real wart (this app cannot run on a host where the
   # repo lives anywhere else); it is tracked separately, not hidden by this waiver.
-  - "/root/deployment-hacohen"
-  - "/root/deployment-hacohen/ai/obsidian"
+  - "/root/digital-office"
+  - "/root/digital-office/ai/obsidian"
   # Scratch: files the agent downloaded while working. Untracked and regenerable — losing it costs
   # nothing a re-run does not replace. (The path used to say `development/openhands/downloads`,
   # naming a directory the platform refactor deleted; docker would have silently created an empty
   # one. G26 found that, and it now points at apps/openhands/downloads.)
-  - "/root/deployment-hacohen/apps/openhands/downloads"
+  - "/root/digital-office/apps/openhands/downloads"
 
 portainer:
   # A single generated file holding portainer's bootstrap admin password. Gitignored, so the gate is
@@ -88,4 +96,15 @@ dgo-extend:
   # checkout). Waived at the DEFAULT a clone runs, which is what G26 can read from the tree alone;
   # the door record is carried by `bbox export` beside the identity, not by a data backup.
   - "/var/lib/bbox/.dgo/doors"
+
+ci-runner:
+  # The runner's WORK directory (`${CI_RUNNER_WORK:-/var/lib/dgo-ci-runner/work}`, bind-mounted at the same path so
+  # a job's own `docker run -v` resolves on the engine): each job's checkout and build scratch, rebuilt by the next
+  # job — nothing there is the office's. What the app keeps (the registration, the job record, the heartbeat) is
+  # `ci_runner_state`, declared in its app.json. Waived at the default a clone runs, which is what G26 reads.
+  - "/var/lib/dgo-ci-runner/work"
+  # The office's heavy-job slot directory (DGO-1797 package 6): the flock `heavy`, the holder line and the readiness
+  # record that scripts/lib.sh heavy_admit and scripts/ops/heavy-hold.sh share — a lock and its notes, rebuilt by
+  # the next heavy job, never restored (gitignored; office-backup.md does not carry it). machine reads it too.
+  - "../../data/.locks"
 

@@ -76,9 +76,10 @@ def test_openapi_spec_lists_all_routes(app):
         "/repos/{repo}/documents/query",
         "/repos/{repo}/documents/{id}",
         "/repos/{repo}/documents/{id}/history",
-        "/repos/{repo}/kafka/tail",
     ]:
         assert required in paths, f"missing path {required}"
+    # the kafka tail went in the final release (9df84f270, «dead routes gone»); the spec must not promise it
+    assert "/repos/{repo}/kafka/tail" not in paths
 
 
 def test_auth_me_unauthenticated(app):
@@ -222,46 +223,11 @@ def test_document_history_empty_when_kafka_disabled(app):
     assert r.get_json()["events"] == []
 
 
-def test_kafka_tail_emits_ready_event(app):
-    """Verify the SSE handler returns text/event-stream and the first
-    `event: ready` frame. We can't iterate the infinite generator in a
-    test, so we read just the first chunk and abort."""
+def test_the_kafka_tail_is_gone(app):
+    """The SSE kafka tail was removed in the final release (9df84f270, «dead routes gone»; nothing in the repo
+    calls it). Its two tests — a ready frame, and 400 with kafka off — kept failing on every tree; what holds now is
+    that the route does not answer."""
     client = app.test_client()
     _create_repo(client)
-    # Pre-publish one event so the tail has a payload waiting in
-    # from_beginning mode.
-    client.put(
-        "/incomingDocuments/repos/facade_repo/documents",
-        json=[{"ID": "a", "STATUS": "X"}],
-    )
-    resp = client.get(
-        "/incomingDocuments/repos/facade_repo/kafka/tail?from_beginning=true",
-        buffered=False,
-    )
-    try:
-        assert resp.status_code == 200
-        assert resp.mimetype == "text/event-stream"
-        # Read the first frame ("event: ready\ndata: {...}\n\n")
-        chunks = []
-        it = resp.response
-        for chunk in it:
-            chunks.append(chunk.decode("utf-8") if isinstance(chunk, bytes) else chunk)
-            if "ready" in chunks[0] and "\n\n" in "".join(chunks):
-                break
-            if len(chunks) > 5:
-                break
-        body = "".join(chunks)
-        assert "event: ready" in body
-        assert "facade_repo" in body  # topic name leaks through
-    finally:
-        resp.close()
-
-
-def test_kafka_tail_404_when_disabled(app):
-    client = app.test_client()
-    body = dict(_REPO)
-    body["name"] = "no_kafka2"
-    body["kafka"] = {"enabled": False, "partitions": 1, "retention_hours": 1}
-    client.post("/incomingDocuments/repos", json=body)
-    r = client.get("/incomingDocuments/repos/no_kafka2/kafka/tail")
-    assert r.status_code == 400
+    r = client.get("/incomingDocuments/repos/facade_repo/kafka/tail?from_beginning=true")
+    assert r.status_code == 404

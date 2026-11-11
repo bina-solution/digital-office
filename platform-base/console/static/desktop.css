@@ -41,6 +41,14 @@ html.dk-on #app,html.dk-on .bottomnav,html.dk-on .skiplink{display:none!importan
 .dk-bar .dk-office[data-office-hue]{color:var(--office-hue)}
 .dk-bar .office-animal{width:14px;height:14px;vertical-align:-2px}
 .dk-bar .office-animal svg{width:14px;height:14px}
+/* every item keeps its own width and the app's name is the one that may shorten: what does not fit
+   steps aside whole (desktop.js fitBar, DGO-1637), in this order — the clock, the window/view/help
+   menus (they open from the mark then), the search's word, the account's name */
+.dk-bar>*{flex:none}
+.dk-bar .dk-appname{flex:0 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis}
+.dk-bar.f-clock .dk-clock,
+.dk-bar.f-menus [data-menu=win],.dk-bar.f-menus [data-menu=view],.dk-bar.f-menus [data-menu=help],
+.dk-bar.f-srch .dk-srch span{display:none}
 .dk-bar .dk-grow{flex:1}
 .dk-bar .dk-clock{color:var(--muted);font-variant-numeric:tabular-nums}
 .dk-bar .dk-srch{display:flex;align-items:center;gap:6px;color:var(--muted)}
@@ -74,6 +82,36 @@ html.dk-on #app,html.dk-on .bottomnav,html.dk-on .skiplink{display:none!importan
   background:var(--dk-glass);backdrop-filter:blur(16px) saturate(1.3);-webkit-backdrop-filter:blur(16px) saturate(1.3);
   border:1px solid var(--line);border-radius:18px;z-index:9000;max-width:calc(100vw - 40px)}
 .dk-dock .sep{width:1px;align-self:stretch;background:var(--line);margin:4px 2px}
+/* ── THE DOCK'S SLOTS (DGO-1426/1427, the owner's msg 337) ────────────────────────────────────────
+   One slot per KIND of app; the copies of it open ABOVE the slot on hover, the way a macOS stack does.
+   The stack is a child of the slot, so the pointer never leaves the hover to reach it. */
+.dk-slot{position:relative;flex:none;display:grid;place-items:center}
+.dk-slot > .dk-ic{transition:transform var(--dur-base) var(--ease-standard)}
+.dk-slot:hover > .dk-ic{transform:translateY(-7px) scale(1.14)}
+.dk-n{position:absolute;inset-block-start:-3px;inset-inline-end:-3px;min-width:16px;height:16px;padding:0 4px;
+  border-radius:8px;background:var(--ink);color:var(--surface);font-size:10.5px;font-weight:700;
+  display:grid;place-items:center;z-index:2;pointer-events:none}
+.dk-stack{position:absolute;inset-block-end:calc(100% + 10px);inset-inline-start:50%;transform:translateX(calc(50% + var(--stack-dx))) translateY(8px);
+  --stack-dx:0px;display:grid;gap:2px;min-width:190px;padding:6px;border-radius:14px;background:var(--dk-glass);
+  backdrop-filter:blur(18px) saturate(1.3);-webkit-backdrop-filter:blur(18px) saturate(1.3);
+  border:1px solid var(--line);box-shadow:var(--shadow-lg);
+  opacity:0;pointer-events:none;transition:opacity var(--dur-base) var(--ease-standard),transform var(--dur-base) var(--ease-standard);z-index:9001}
+.dk-slot:hover .dk-stack,.dk-stack:hover{opacity:1;pointer-events:auto;transform:translateX(calc(50% + var(--stack-dx))) translateY(0)}
+.dk-stack-i{display:grid;grid-template-columns:20px 1fr auto;align-items:center;gap:8px;padding:7px 9px;border:0;border-radius:10px;
+  background:transparent;color:inherit;font:inherit;font-size:13px;text-align:start;cursor:default;white-space:nowrap}
+.dk-stack-i:hover{background:color-mix(in srgb,CanvasText 9%,transparent)}
+.dk-stack-i svg{width:20px;height:20px;min-width:20px}
+.dk-stack-i .dk-stack-o{font-size:11.5px;opacity:.62}
+.dk-stack-i.is-own .dk-stack-o{opacity:.85;font-weight:600}
+.dk-stack-i[data-office-hue]{border-inline-start:3px solid var(--office-hue);padding-inline-start:7px}
+/* An app that was not on the row a moment ago arrives — it does not pop into place (DGO-1427). */
+@keyframes dkBorn{from{opacity:0;transform:translateY(14px) scale(.72)}60%{opacity:1;transform:translateY(-3px) scale(1.06)}to{transform:translateY(0) scale(1)}}
+.dk-slot.dk-born{animation:dkBorn .62s var(--ease-standard) both}
+.dk-slot.dk-born::after{content:"";position:absolute;inset:-6px;border-radius:16px;pointer-events:none;
+  box-shadow:0 0 0 2px color-mix(in srgb,CanvasText 22%,transparent);animation:dkBornRing .9s ease-out both}
+@keyframes dkBornRing{from{opacity:.9;transform:scale(.9)}to{opacity:0;transform:scale(1.35)}}
+@media (prefers-reduced-motion:reduce){.dk-slot.dk-born,.dk-slot.dk-born::after{animation:none}}
+
 .dk-ic{width:var(--dock-tile,46px);height:var(--dock-tile,46px);border-radius:12px;display:grid;place-items:center;position:relative;border:0;padding:0;
   cursor:default;transition:transform var(--dur-base) var(--ease-standard);flex:none;box-shadow:inset 0 0 0 1px var(--dk-tint)}
 .dk-ic svg{width:24px;height:24px}
@@ -182,6 +220,21 @@ html.dk-on #app,html.dk-on .bottomnav,html.dk-on .skiplink{display:none!importan
 /* the sign-in card of an app on its own host (desktop.js askOwnHost) — over the frame, never beside it */
 .dk-ask{position:absolute;inset:0;overflow:auto;padding:0 18px;background:var(--bg)}
 .dk-ask:empty{display:none}
+/* a hand-off (desktop.js hoMark, DGO-1434): the window that asked says it waits for him in the office
+   browser beside it — sky, «in motion, it informs» — and the browser's title says whom it serves (the
+   shell's own `.pill.need`, «needs a person»). Over the top of the frame, never beside it */
+.dk-ho{position:absolute;inset-block-start:0;inset-inline:0;z-index:4;display:flex;align-items:center;gap:10px;
+  min-height:46px;padding:7px 12px;box-sizing:border-box;background:var(--sky-soft);color:var(--ink);
+  border-bottom:1px solid var(--sky-line);font-size:13px}
+.dk-ho-pulse{width:9px;height:9px;border-radius:50%;background:var(--sky-d);flex:none;animation:dkHoPulse 1.4s ease-in-out infinite}
+@keyframes dkHoPulse{50%{opacity:.35;transform:scale(.7)}}
+@media (prefers-reduced-motion:reduce){.dk-ho-pulse{animation:none}}
+.dk-ho-t{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.dk-ho-grow{flex:1}
+.dk-ho .btn.sm{display:inline-flex;align-items:center;height:30px;box-sizing:border-box;flex:none}
+.dk-title .dk-ho-pill{flex:none;font-weight:600}
+/* …and the title gives way to it: the name shrinks (an ellipsis), the pill and the icon stay whole */
+.dk-title .dk-t{min-width:0;overflow:hidden;text-overflow:ellipsis}
 .dk-rz{position:absolute;z-index:3}
 .dk-rz.n{top:-3px;left:10px;right:10px;height:8px;cursor:ns-resize}.dk-rz.s{bottom:-3px;left:10px;right:10px;height:8px;cursor:ns-resize}
 .dk-rz.e{right:-3px;top:10px;bottom:10px;width:8px;cursor:ew-resize}.dk-rz.w{left:-3px;top:10px;bottom:10px;width:8px;cursor:ew-resize}
@@ -253,15 +306,6 @@ html.dk-on #app,html.dk-on .bottomnav,html.dk-on .skiplink{display:none!importan
 .dk-set .dk-row input[type=checkbox]:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 .dk-set .dk-row select{font:inherit;padding:4px 8px;border-radius:8px;border:1px solid var(--line);background:var(--surface);color:var(--ink)}
 .dk-set .dk-note{color:var(--muted);font-size:12.5px;margin-top:10px}
-
-/* ── the account chip, carried from the classic top bar into the menu bar ── */
-.dk-bar .dk-acct{display:flex;align-items:center;margin-inline-end:4px}
-.dk-bar .dk-acct.hidden{display:none}
-.dk-bar .dk-acct .acct-btn{height:24px;padding:0 8px;border-radius:var(--radius-pill);background:none;border:1px solid var(--line);font-size:12px}
-.dk-bar .dk-acct .acct-btn:hover{background:var(--dk-tint)}
-.dk-bar .dk-acct .acct-hint{display:none}
-.dk-bar .dk-acct .acct-lbl{font-weight:600}
-.dk-bar .dk-acct .acct-menu{top:calc(100% + 8px)}
 
 /* ── a window's collection (associative memory, desktop-memory.js) ── */
 .dk-col{position:absolute;top:0;height:100%;width:300px;display:none;flex-direction:column;background:var(--surface);color:var(--ink);
@@ -365,13 +409,19 @@ html.dk-on #app,html.dk-on .bottomnav,html.dk-on .skiplink{display:none!importan
 .dk-mem table.rec th{background:var(--surface-2);color:var(--muted);font-weight:600}
 
 /* compact: a desktop that got narrower keeps every window alive; the focused one fills the screen
-   above the dock and the rest wait behind it, loaded (desktop.js setCompact) */
-.dk.compact canvas,.dk.compact .dk-bar,.dk.compact .dk-dim,.dk.compact .dk-col,.dk.compact .dk-rz,.dk.compact .dk-snap{display:none!important}
+   between the bar and the dock and the rest wait behind it, loaded (desktop.js setCompact). The bar
+   stays — it is the screen's one header and names the window, so a window draws no title bar of its
+   own — and the dock is budgeted for this width again, so it is never a sideways scroller (DGO-1637).
+   29px = the bar's 28 and its bottom line. */
+.dk.compact canvas,.dk.compact .dk-dim,.dk.compact .dk-col,.dk.compact .dk-rz,.dk.compact .dk-snap,.dk.compact .dk-win>.dk-tb{display:none!important}
 .dk.compact{background:var(--bg)}
-.dk.compact .dk-win{left:0!important;top:0!important;width:100%!important;height:calc(100% - 78px)!important;transform:none!important;border-radius:0!important;transition:none!important;box-shadow:none!important}
+/* the bar's pill animation would start from the wide desk's geometry: 0.55 s of a bar too narrow or
+   gone, over the window (second reader, DGO-1637) — compact puts it in place at once */
+.dk.compact .dk-bar{transition:none}
+.dk.compact .dk-win{left:0!important;top:29px!important;width:100%!important;height:calc(100% - 29px - 78px)!important;transform:none!important;border-radius:0!important;transition:none!important;box-shadow:none!important}
 .dk.compact .dk-win:not(.focused){visibility:hidden}
-.dk.compact .dk-win>.dk-tb,.dk.compact .dk-win>.dk-body{border-radius:0}
-.dk.compact .dk-dock{max-width:calc(100vw - 16px);overflow-x:auto;bottom:8px}
+.dk.compact .dk-win>.dk-body{border-radius:0}
+.dk.compact .dk-dock{max-width:calc(100vw - 16px);bottom:8px}
 
 /* an external app's window (its own host, framed as is): a passing hint about the way out */
 .dk-exthint{position:absolute;inset-inline:12px;bottom:12px;padding:8px 12px;border-radius:10px;background:var(--ink);color:var(--surface);

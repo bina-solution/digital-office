@@ -41,6 +41,8 @@ from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 
+from flow_source import PREFIX as FLOW_PREFIX, SRC as FLOW_SRC, span_of as _flow_span
+
 # ── Sentry/GlitchTip error reporting (platform standard) ──────────────────────────
 # Wired declaratively: glitchtip-push mints this service's project + deterministic DSN into
 # ANY_CONCURRENCY_SENTRY_DSN in .env; compose maps it to SENTRY_DSN. No-op if unset. sentry-sdk
@@ -145,6 +147,16 @@ ENABLE_N8N     = os.getenv("ENABLE_N8N",     "1") not in _OFF
 ENABLE_TRAEFIK = os.getenv("ENABLE_TRAEFIK", "1") not in _OFF
 ENABLE_DOCKER  = os.getenv("ENABLE_DOCKER",  "1") not in _OFF
 ENABLE_WEBHOOK = os.getenv("ENABLE_WEBHOOK", "1") not in _OFF
+# FLOW source (DGO-1402): every app's event stream, `dgo:flow:<app>` (flow.v1) on the office redis this service
+# already holds (REDIS_URL) — the owner: «כל מקביל פשוט נרשם לכולם בברירת מחדל». One src, one ring, a row per app;
+# the event → span rules are flow_source.py. Needs REDIS_URL; without it the lane says so and stays off.
+ENABLE_FLOW    = os.getenv("ENABLE_FLOW",    "1") not in _OFF and bool(os.getenv("REDIS_URL", ""))
+FLOW_BUFFER    = int(os.getenv("FLOW_BUFFER", "20000"))
+FLOW_SEED_H    = max(0.1, float(os.getenv("FLOW_SEED_H", "24") or 24))      # window read once per stream found
+FLOW_SCAN_S    = max(5.0, float(os.getenv("FLOW_SCAN_S", "30") or 30))      # how often new streams are looked for
+# a bar whose end never came is closed (as `unknown`) after this — longer than the longest work an app
+# publishes as one bar (meet's recordings run may take an hour)
+FLOW_OPEN_TTL_S = max(60.0, float(os.getenv("FLOW_OPEN_TTL_S", "7200") or 7200))
 ENABLE_LOGSPAN = os.getenv("ENABLE_LOGSPAN", os.getenv("ENABLE_WA",      "1")) not in _OFF and bool(LOGSPAN_CONTAINER)
 ENABLE_CUSTOM  = os.getenv("ENABLE_CUSTOM",  os.getenv("ENABLE_APITOOLS", "1")) not in _OFF and bool(CUSTOM_CONTAINER)
 # Public alias for the "custom" source, contributed by the app that feeds it (see its app.json
@@ -462,6 +474,8 @@ _N8N_TASKS_KEY = f"{N8N_LANES_SRC}:tasks"
 _BASE_SOURCES = ["n8n", "traefik", "docker", "logspan", "custom", "webhook", "wa", "apitools"]
 if ENABLE_N8N_LANES:
     _BASE_SOURCES.append(N8N_LANES_SRC)
+if ENABLE_FLOW:
+    _BASE_SOURCES.append(FLOW_SRC)
 DEFAULT_SOURCES = ",".join(dict.fromkeys(
     _BASE_SOURCES + [s.src for s in CUSTOM_SOURCE_LIST] + [s.src for s in SPAN_SOURCE_LIST]))
 
@@ -1441,7 +1455,7 @@ def _n8n_deployment_suffixes(names: list[str]) -> frozenset[str]:
 
 
 def _n8n_lane_name(container: str, suffixes: frozenset[str] = frozenset()) -> str | None:
-    """`n8n-worker-1-runners-shlomo-laptop` -> `runner-1`; a non-n8n container -> None."""
+    """`n8n-worker-1-runners-owner-laptop` -> `runner-1`; a non-n8n container -> None."""
     n = (container or "").strip().lstrip("/")
     stems = [n]
     for suf in suffixes:
@@ -1708,6 +1722,61 @@ async def span_pull_loop(store: RingStore, broadcast, health: dict[str, Any],
                 print(f"[{source.src}] span pull failed ({source.url}): "
                       f"{type(exc).__name__}: {exc!r}; retry in 15s")
                 await asyncio.sleep(15)
+
+
+async def flow_loop(r, store: RingStore, broadcast, health: dict[str, Any]) -> None:
+    """Every app's event stream, as the `flow` lane (DGO-1402; the rules are flow_source.py).
+
+    Streams are FOUND, not configured: every FLOW_SCAN_S a SCAN for `dgo:flow:*` adds the ones not yet heard,
+    each seeded once over FLOW_SEED_H (a stream is capped at ~1000 entries by its publisher, so a seed is
+    small). Between scans one `XREAD BLOCK` waits on all of them at once and returns the moment any app tells
+    something. The cursor of a stream advances per entry, so a restart of redis or of this loop re-reads at
+    most the seed window — the store merges by id, so a re-read is not a duplicate."""
+    last: dict[str, str] = {}
+    opened: dict[str, dict[str, Any]] = {}
+    scanned_at = 0.0
+    while True:
+        try:
+            rows: list[dict[str, Any]] = []
+            # a stream's cursor moves only once its events are in the store: a failure between the read
+            # and the store re-reads them next time instead of losing them (the store merges by id)
+            moved: dict[str, str] = {}
+            stale: list[dict[str, Any]] = []
+            if time.monotonic() - scanned_at >= FLOW_SCAN_S:
+                scanned_at = time.monotonic()
+                floor = f"{int((time.time() - FLOW_SEED_H * 3600) * 1000)}-0"
+                async for key in r.scan_iter(match=FLOW_PREFIX + "*", count=1000, _type="stream"):
+                    if key in last or key in moved:
+                        continue
+                    seed = await r.xrange(key, min=floor, max="+", count=2000)
+                    rows += [s for eid, f in seed if (s := _flow_span(key, eid, f, opened))]
+                    moved[key] = seed[-1][0] if seed else floor
+                    print(f"[{FLOW_SRC}] hears {key} (seeded {len(seed)} event(s) over {FLOW_SEED_H:g}h)")
+                # A bar whose end never came (the app restarted mid-upload, its last event was dropped) is
+                # closed as `unknown` after FLOW_OPEN_TTL_S — never left «running» for ever (the second reader).
+                stale = await store.close_stale_open("", FLOW_OPEN_TTL_S * 1000)
+            if last:
+                got = await r.xread(dict(last), count=500, block=5000)
+                for key, entries in got or []:
+                    for eid, f in entries:
+                        moved[key] = eid
+                        if (s := _flow_span(key, eid, f, opened)):
+                            rows.append(s)
+            new = await store.upsert_many(rows) if rows else []
+            last.update(moved)
+            for it in stale:
+                opened.pop(it.get("id"), None)
+            _mark_source(health, True, event=bool(new))
+            if new or stale:
+                await broadcast({"type": "delta", "rows": new + stale})
+            if not last:
+                await asyncio.sleep(FLOW_SCAN_S)        # no app has told anything yet: look again later
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:
+            _mark_source(health, False, repr(exc))
+            print(f"[{FLOW_SRC}] reading the event streams failed: {type(exc).__name__}: {exc!r}; retry in 15s")
+            await asyncio.sleep(15)
 
 
 async def _running_container_names(docker: aiodocker.Docker) -> list[str]:
@@ -2161,6 +2230,8 @@ async def lifespan(app: FastAPI):
     # /api/spans serves the requested window from the endpoint itself, so history is not capped by
     # this buffer (same division of labour as the n8n source and its DB).
     app.state.span_stores = {_ss.src: RingStore(_ss.buffer) for _ss in SPAN_SOURCE_LIST}
+    # Every app's event stream: ONE ring for the whole `flow` section, a row per app (DGO-1402).
+    app.state.flow_store = RingStore(FLOW_BUFFER)
     # Legacy aliases for backward-compat with downstream code that still uses old names
     app.state.wa_store = app.state.logspan_store
     app.state.apitools_store = app.state.custom_store
@@ -2187,6 +2258,7 @@ async def lifespan(app: FastAPI):
         app.state.source_health[_cs.key] = _source_health(True)
     for _ss in SPAN_SOURCE_LIST:
         app.state.source_health[_ss.key] = _source_health(True)
+    app.state.source_health[FLOW_SRC] = _source_health(ENABLE_FLOW)
 
     # Postgres pool (n8n) — created lazily by _n8n_pool_supervisor with retries
     app.state.pool = None
@@ -2269,6 +2341,19 @@ async def lifespan(app: FastAPI):
         print("[span] sources: " + ", ".join(
             f"{s.src}<-{s.url}(buf={s.buffer})" for s in SPAN_SOURCE_LIST)
             + f" every {SPAN_SOURCE_POLL_S:g}s")
+
+    # Every app's event stream rides the office redis the queue reader already opened; with no redis the
+    # lane says why instead of reading empty (an empty lane would read as "no app did anything").
+    if ENABLE_FLOW:
+        if app.state.redis is not None:
+            tasks.append(asyncio.create_task(
+                flow_loop(app.state.redis, app.state.flow_store, app.state.hub.broadcast,
+                          app.state.source_health[FLOW_SRC])
+            ))
+            print(f"[{FLOW_SRC}] every {FLOW_PREFIX}* stream, found every {FLOW_SCAN_S:g}s "
+                  f"(buf={FLOW_BUFFER}, seed={FLOW_SEED_H:g}h)")
+        else:
+            _mark_source(app.state.source_health[FLOW_SRC], False, "the office redis did not answer (REDIS_URL)")
 
     # Per-task spans read n8n's event-bus log off the shared n8n volume — no docker socket, no
     # n8n process involved, so it starts whether or not the docker client came up.
@@ -2533,6 +2618,8 @@ async def _spans_now(hours: float, src_set: set[str]) -> list[dict[str, Any]]:
         out.extend(app.state.n8n_lane_store.since(since_ms))
     if "webhook" in src_set:
         out.extend(app.state.webhook_store.since(since_ms))
+    if FLOW_SRC in src_set:
+        out.extend(app.state.flow_store.since(since_ms))
     return out
 
 
@@ -2839,6 +2926,13 @@ async def get_sources() -> dict[str, Any]:
         # `ok` answers: can this source still be read or written?
         "webhook": {**_detail("webhook", ENABLE_WEBHOOK, {"buffer": WEBHOOK_BUFFER}),
                     "ok": ENABLE_WEBHOOK, "mode": "push"},
+        # Every app's event stream (DGO-1402): healthy while redis answers — an app that told nothing yet is
+        # not a broken lane, the same reading as the webhook door's.
+        FLOW_SRC: _detail(FLOW_SRC, ENABLE_FLOW, {
+            "streams": FLOW_PREFIX + "*", "buffer": FLOW_BUFFER, "seed_hours": FLOW_SEED_H,
+            "scan_seconds": FLOW_SCAN_S,
+            "apps": sorted({str(it.get("svc")) for it in app.state.flow_store.items}),
+        }),
         **{
             cs.key: _detail(cs.key, True, {"container": cs.container, "buffer": cs.buffer})
             for cs in EXTRA_CUSTOM_SOURCES

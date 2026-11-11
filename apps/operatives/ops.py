@@ -226,6 +226,15 @@ def usable(ops: list[dict]) -> list[dict]:
 HE_PREFIX = re.compile(r"^[והבלמשכ](?=[א-ת]{3,})")   # the one-letter prefixes Hebrew glues on
 STOP = {"the", "a", "an", "to", "of", "and", "on", "in", "for", "me", "my", "please", "את", "של", "על",
         "לי", "אני", "זה", "גם", "עם", "בבקשה", "היי", "תעשה", "אפשר"}
+# A work item's key is ONE word whatever its project: the recipes say «DGO-123», and a client's office keys its
+# items EXU-11, ASSETS-1, EXAMPLEM-5 (Exampleu, 2026-11-10: «תראה לי את EXU-11» matched no recipe, because the
+# key's letters were the word that matched). So every <PROJECT>-<n> is read as the same word, on both sides.
+# Not `\b` in front: Python sees no boundary between a Hebrew prefix and a Latin key («לDGO-7»), and that key
+# would stay «לdgo». Any hyphen counts, a non-breaking one or a dash included (the second reader).
+# Known and bounded: a lookalike («covid-19», «utf-8») is read as a key too; an acting recipe then runs on a
+# ref that names no item, and Plane refuses it.
+ITEM_KEY = re.compile(r"(?<![a-z0-9])[a-z][a-z0-9]{1,11}[-‐-―]\d+(?![a-z0-9])")
+ITEM_WORD = "itemkey"
 
 
 def words(text: str) -> list[frozenset]:
@@ -235,6 +244,7 @@ def words(text: str) -> list[frozenset]:
     DGO-56 drew the recipe that closes an item."""
     text = unicodedata.normalize("NFKD", str(text or "").lower())
     text = "".join(c for c in text if not unicodedata.combining(c))       # niqqud and accents
+    text = ITEM_KEY.sub(ITEM_WORD, text)                                  # DGO-123 and EXU-11 are one word
     out, seen = [], set()                  # a set beside the list: a 300 KB paste stays well under a second
     for w in re.findall(r"[a-z0-9]+|[א-ת]+", text):
         if w in STOP or w.isdigit():
@@ -281,6 +291,13 @@ def score(request: str, op: dict, asked: list = None, head: list = None) -> floa
         # one shared word is chance ("שלח לי את זה" is not a mail): a phrase counts from two
         if shared >= 2:
             best = max(best, value)
+    # …except a one-word COMMAND: the owner's «קדימה» is a whole request of one word (DGO-1301). It counts
+    # only for an operative that declares `command: true`, and only when the request is that word and
+    # nothing else, so «קדימה» in a sentence is still chance and no other one-word phrase turns into an order.
+    if len(asked) == 1 and op.get("command") is True:
+        for have in when:
+            if len(have) == 1 and asked[0] & have[0]:
+                best = max(best, 1.0)
     # The head counts when the request opens with the phrase's own first word: its first MEANINGFUL word
     # for an operative that reads or adds, its very first word for one that acts — «תשלח מייל ל-…» is an
     # order, «To send an email to customers, n8n uses …» is not, though both carry «send an email».

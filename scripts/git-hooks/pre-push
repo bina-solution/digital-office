@@ -1,0 +1,32 @@
+#!/usr/bin/env bash
+# pre-push — what a push may send, by the office's branch rule (DGO-1764; the rule and why it lives in git:
+# _office_branch.sh). Git hands over `<local ref> <local oid> <remote ref> <remote oid>` per ref it is about to send,
+# after every alias, refspec, config (`remote.*.push`), `--all`, `--mirror` and `--tags` is resolved: what is judged is
+# what would be sent, not how it was asked for. A non-zero exit sends nothing.
+#
+# Allowed: any local commit (the office's branch, HEAD of a probe, a sha — follow.sh pushes `<sha>:refs/heads/<office>`)
+# onto the remote's refs/heads/<office>, as a fast-forward of what the remote holds: what lands is judged, not its name.
+# Refused: anything else — another branch, a tag, a deletion, a new branch on the remote, a forced (non-fast-forward)
+# update, or one whose remote commit this checkout has not fetched (fetch and merge first).
+. "$(dirname "$0")/_office_branch.sh"
+OFFICE="$(ob_branch)"
+INPUT="$(cat)"
+[ -n "${OFFICE}" ] || exit 0
+REMOTE="${1:-the remote}"
+
+WHY=""
+while read -r lref loid rref roid; do
+  [ -n "${rref}" ] || continue
+  if ob_zero "${loid}"; then WHY="it would delete ${rref} on ${REMOTE}"
+  elif [ "${rref}" != "refs/heads/${OFFICE}" ]; then WHY="it would push ${lref} to ${rref}; this office pushes refs/heads/${OFFICE} only"
+  elif ob_zero "${roid}"; then WHY="it would create ${OFFICE} on ${REMOTE} (it is not there yet)"
+  elif ! git merge-base --is-ancestor "${roid}" "${loid}" 2>/dev/null; then
+    WHY="it is not a fast-forward of ${REMOTE}'s ${OFFICE} (or that commit is not fetched here): fetch and merge first — a forced push is never the office's"
+  fi
+  [ -n "${WHY}" ] && break
+done <<EOF
+${INPUT}
+EOF
+
+[ -n "${WHY}" ] || exit 0
+ob_refuse "${WHY}" "Nothing was sent (AGENTS.md rule 6). The owner's explicit ask runs with DGO_GIT_OVERRIDE=1."

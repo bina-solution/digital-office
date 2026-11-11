@@ -12,7 +12,7 @@
 # That fallback exists for a good reason — it makes read-only tooling survive deployment-name drift
 # between a laptop (`…-local-dev`) and CI (`…-<DN>`). It is exactly wrong for a restore. On a host
 # running TWO deployments, `cn supabase-db` from the deployment named `restore-test` finds no
-# `supabase-db-restore-test`, no bare `supabase-db`, and then MATCHES `supabase-db-shlomo-laptop` —
+# `supabase-db-restore-test`, no bare `supabase-db`, and then MATCHES `supabase-db-owner-laptop` —
 # the live one. The next line in a restore hook is `drop database`.
 #
 # This is not hypothetical: restoring into a second deployment on the same host is the DOCUMENTED
@@ -70,7 +70,7 @@ archive_project() {
 # which the archiver refuses: a query that FAILED (quoting, credentials) must never pass as "absent"
 # on both sides of a restore (the second reader of DGO-1037).
 #
-# WHY THIS EXISTS (measured 2026-10-11 on wbc-vps — a deployment that could not be backed up at all)
+# WHY THIS EXISTS (measured 2026-10-11 on exw-vps — a deployment that could not be backed up at all)
 #
 # Every backup hook reaches its database through a helper that sends psql's stderr to /dev/null,
 # because an expected table may legitimately not exist yet. The consequence is that a FAILED query

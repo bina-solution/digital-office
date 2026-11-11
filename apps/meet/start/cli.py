@@ -13,7 +13,15 @@ import re
 import sys
 from urllib.parse import quote
 
-import server
+# Before server.py is compiled — most of this helper's 28.8 MB — it asks to be the one the kernel takes if the
+# container's memory cap is passed, never the server it shares the cap with (EXU-20). server.py does it too, later.
+try:
+    with open("/proc/self/oom_score_adj", "w") as _adj:
+        _adj.write("1000")
+except OSError:                                           # (no /proc: a Mac, Windows)
+    pass
+
+import server  # noqa: E402
 
 
 def flat(v):

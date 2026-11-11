@@ -6,6 +6,7 @@
   },
   "layer": 3,
   "kind": "adapter",
+  "page": "base",
   "version": "0.7.4",
   "summary": {
     "he": "שירות צ׳אט — צ׳אט מקומי, וואטסאפ וטלגרם דרך חיבורים, ובוטים שניתן לשייך לכל חיבור",
@@ -45,14 +46,19 @@
         "display_name": "משתמש 2"
       },
       {
-        "id": "hacohenbot1",
-        "display_name": "בוט הכהנים"
+        "id": "examplebot1",
+        "display_name": "בוט הדוגמה"
       }
     ]
   },
   "use": [
     {
       "capability": "workflow",
+      "strength": "requires",
+      "after": true
+    },
+    {
+      "capability": "identity",
       "strength": "requires",
       "after": true
     },
@@ -144,6 +150,7 @@
         "name": "צ׳אט",
         "desc": "שיחות מרובות ספקים (וואטסאפ / טלגרם / מקומי)",
         "order": 4,
+        "tab": true,
         "url_env": "CHAT_URL",
         "url": "http://chat:3000"
       },

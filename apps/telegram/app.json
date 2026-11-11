@@ -1,0 +1,119 @@
+{
+  "id": "telegram",
+  "title": {
+    "he": "טלגרם",
+    "en": "Telegram"
+  },
+  "layer": 3,
+  "people": "admins",
+  "kind": "service",
+  "page": "base",
+  "version": "0.1.0",
+  "summary": {
+    "he": "הטלגרם של הלשכה — החשבון של הבעלים, הצ׳אטים שהלשכה מאזינה להם, וכל הודעה בהם כאירוע בזרם",
+    "en": "The office's Telegram — the owner's account, the chats the office listens to, and every message there as an event on the stream"
+  },
+  "capabilities": [
+    {
+      "name": "telegram",
+      "type": "service",
+      "interface": "telegram.v1",
+      "endpoint": "http://telegram:8984",
+      "contract": "platform-service.v1",
+      "required_ops": [
+        "status",
+        "listChats",
+        "watch",
+        "send",
+        "flow"
+      ]
+    }
+  ],
+  "use": [
+    {
+      "capability": "kv",
+      "strength": "wants",
+      "after": false,
+      "dependency": "weak"
+    },
+    {
+      "capability": "identity",
+      "strength": "requires",
+      "after": true
+    }
+  ],
+  "connections": [],
+  "compose": "docker-compose.yml",
+  "routing": [
+    {
+      "host": "telegram",
+      "port": 8984,
+      "auth": "sso",
+      "module": {
+        "group": "ראשי",
+        "icon": "message",
+        "embed": true,
+        "alias": "telegram",
+        "id": "telegram",
+        "name": "טלגרם",
+        "desc": "החשבון, הצ׳אטים שהלשכה מאזינה להם, והזרם החי",
+        "order": 3,
+        "service": "telegram",
+        "url_env": "TELEGRAM_URL",
+        "url": "http://telegram:8984"
+      },
+      "sso": {
+        "slug": "telegram",
+        "display_name": "Telegram",
+        "default_host": "telegram.localhost",
+        "base_url_env": "TELEGRAM_BASE_URL",
+        "local_twin": true
+      }
+    }
+  ],
+  "health": {
+    "structural": "auto",
+    "probe": {
+      "http": "http://telegram:8984/healthz",
+      "interval": "30s"
+    }
+  },
+  "data": {
+    "volumes": [
+      "telegram_data"
+    ],
+    "on_uninstall": "keep"
+  },
+  "resources": {
+    "cpus": "0.25",
+    "memory": "192M"
+  },
+  "observability": {
+    "sentry_platform": "python"
+  },
+  "agent": {
+    "context": "AGENT.md",
+    "order": 27
+  },
+  "contributes": {
+    "connection_providers": [
+      {
+        "id": "telegram-bot",
+        "title": "Telegram bots — tokens from BotFather",
+        "title_he": "בוטים של טלגרם — טוקנים מ-BotFather",
+        "kind": "config",
+        "optional": true,
+        "platform_protocols": [
+          "telegram_bot"
+        ],
+        "group": "תקשורת",
+        "now": "Nothing to paste: a bot token is an INSTANCE of protocol `telegram_bot` ({token, username}), written by the telegram app itself — it asks BotFather, as the connected owner's account, and stores the answer here under the name the owner gave (POST /api/bots/token). The token never passes through a chat, a screen or a shell line.",
+        "probe": {
+          "type": "http",
+          "url": "http://telegram:8984/healthz"
+        },
+        "wizard": "open טלגרם (/a/telegram/), connect the account, then «טוקן של בוט לחיבורים»."
+      }
+    ]
+  }
+}

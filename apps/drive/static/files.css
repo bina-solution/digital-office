@@ -284,8 +284,9 @@ button.crumb:hover{background:color-mix(in srgb,var(--ink) 6%,transparent);color
 .vcard span{font-size:var(--fs-meta);color:var(--muted)}
 
 /* ── home ─────────────────────────────────────────────────────────────────── */
-/* recent files: a grid that fills its rows on a wide box; a swipeable strip on a phone, where a
-   card cut at the edge is the sign that there is more */
+/* recent files: a grid that fills its rows on a wide box; a swipeable strip on a narrow one (a tablet's
+   pane), where a card cut at the edge is the sign that there is more. A phone lists them as rows
+   (views.js HomeView, DGO-1507). */
 .strip{display:grid;gap:12px;grid-template-columns:repeat(auto-fill,minmax(176px,1fr))}
 .fx-content[data-cw="xs"] .strip,.fx-content[data-cw="s"] .strip{grid-template-columns:none;grid-auto-flow:column;grid-auto-columns:150px;
   overflow-x:auto;padding-bottom:6px;scroll-snap-type:x proximity;scrollbar-width:none;margin-inline:-12px;padding-inline:12px}
@@ -346,6 +347,17 @@ button.crumb:hover{background:color-mix(in srgb,var(--ink) 6%,transparent);color
 .tab.on{color:var(--accent-d)} .tab.on .pill{background:var(--accent-soft)}
 /* a short box keeps every word under its icon — the tab only gets lower */
 .fx[data-h="s"] .tab{min-height:48px;gap:1px} .fx[data-h="s"] .tab .pill{height:24px;width:48px}
+/* …and inside the console (it answered `bina:search-taken`, shell.js) a phone has the office's tab bar
+   already: the same places are one row of chips under the header, never a second bar (DGO-1507) */
+.fx-places{flex:none;display:flex;gap:6px;overflow-x:auto;scrollbar-width:none;padding:3px 8px 8px;min-width:0}   /* (3px: a chip's focus ring is not cut by the row's own scroll box) */
+.fx-places::-webkit-scrollbar{display:none}
+.fx-chip{flex:none;display:inline-flex;align-items:center;gap:6px;height:36px;padding:0 14px;border-radius:var(--r-pill);
+  border:1px solid var(--line);background:var(--surface);color:var(--ink);font-size:var(--fs-body);font-weight:600;white-space:nowrap}
+.fx-chip.on{background:var(--accent-soft);border-color:var(--olive-line);color:var(--accent-d)}
+.fx-chip:focus-visible{outline-offset:2px}
+.fx[data-w="n"][data-shell] .up{bottom:calc(8px + env(safe-area-inset-bottom,0px) + var(--up-lift,0px));
+  max-height:calc(100% - var(--up-lift,0px) - 64px - 72px)}
+.fx[data-w="n"][data-h="s"][data-shell] .up{bottom:calc(6px + var(--up-lift,0px));max-height:calc(100% - 48px - var(--up-lift,0px) - 12px)}
 /* «+» on a phone is the top bar's filled button, not a floating one: a floating button lies over the
    list (a row's ⋮ and ▷ sit right under it), the player and the upload queue — the top bar covers nothing */
 .icbtn.add{background:var(--accent);color:var(--accent-ink);border-radius:var(--r-pill)}
@@ -523,7 +535,8 @@ input[type=range]{accent-color:var(--accent);height:20px}
 .fx[data-w="n"][data-h="s"] .up{bottom:calc(48px + 6px + var(--up-lift,0px));max-height:calc(100% - 48px - var(--up-lift,0px) - 54px - 12px)}
 .fx[data-h="s"] .up .up-l{max-height:96px}
 .fx[data-w="n"] .up .up-l{min-height:0}
-/* the touch sizes: nothing a finger has to hit is smaller than 36px */
+/* the touch sizes: nothing a finger has to hit is smaller than 36px (the places' chips are 36 and 40 here) */
+.fx[data-touch]:not([data-tiny]) .fx-chip{height:40px}
 .fx[data-touch] .nav-h button{width:36px;height:36px}
 .fx[data-touch] .top-search .x{width:34px;height:34px;top:3px}
 .fx[data-touch] .rowact{width:40px;height:40px}
@@ -808,7 +821,7 @@ body[data-tiny] #bina-tell{inset-block-start:6px;inset-block-end:auto;inset-inli
 .newver span{flex:1;min-width:0}
 .rc-list .newver{margin:4px 0 10px}
 
-/* ── 44: NOTHING A FINGER OR A POINTER REACHES IS SMALLER (the release bar, FPG-385) ─────────────
+/* ── 44: NOTHING A FINGER OR A POINTER REACHES IS SMALLER (the release bar, EXF-385) ─────────────
    Measured on the live office at 412, 768 and 1280: the icon buttons were 40, a row's ⋮ and ▷ 36,
    a selection circle 26, the side's rows 38, the path 36, the sort words 28, «כל הקבצים» 17. This
    block is last so it wins over every size above; a widget (data-tiny) keeps its own compact faces.
@@ -860,3 +873,90 @@ body[data-tiny] #bina-tell{inset-block-start:6px;inset-block-end:auto;inset-inli
 .fx:not([data-tiny]) .lr .th.folder{box-shadow:inset 0 0 0 1px var(--olive-line)}
 /* a contact's phone and address are links a finger presses */
 .cardview .facts a{display:inline-flex;align-items:center;min-height:44px;color:var(--sky-d)}
+
+/* ── every drive in one app (accounts.js, DGO-1390) ───────────────────────────
+   A drive's row is a nav row with two lines (who · what kind) and its own ⋮; the office's default for the
+   agents carries the bot glyph. The connect dialog is the move dialog's frame (.dlg) with a step strip,
+   choice cards and the facts a check produced; nothing here names a colour. */
+.nav-i.drv{padding:0;gap:0}
+.drv-pick{flex:1;min-width:0;display:flex;align-items:center;gap:10px;min-height:inherit;padding:6px 10px;text-align:start;border-radius:inherit}
+.drv-pick .lbl{display:flex;flex-direction:column;line-height:1.25}
+/* a name reads the way its own first letter does (dir=auto), so an address keeps its beginning; the box hugs
+   it on the menu's side whichever way it reads */
+.drv-n{align-self:flex-start;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.drv-k{font-size:var(--fs-meta);font-weight:400;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.nav-i.drv.on .drv-k{color:var(--accent-d)}
+.drv-def{flex:none;display:grid;place-items:center;color:var(--muted)}
+.drv-more{flex:none;width:36px;align-self:stretch;display:grid;place-items:center;border-radius:var(--r-ctl);color:var(--muted);opacity:0}
+.drv-more:hover{background:color-mix(in srgb,var(--ink) 7%,transparent);color:var(--ink)}
+.nav-i.drv:hover .drv-more,.nav-i.drv:focus-within .drv-more,.nav-i.drv.on .drv-more,.fx[data-touch] .drv-more{opacity:1}
+.nav-i.drv.warn .ic{color:var(--warn)}
+.nav-i.drv-add{color:var(--accent-d);font-weight:700}
+.nav-i.drv-add .ic{color:var(--accent-d)}
+.fx:not([data-tiny]) .drv-more{width:44px}
+
+.dlg.cw{width:min(560px,100%)}
+.steps{display:flex;gap:4px;margin:0;padding:10px 12px;list-style:none;border-bottom:1px solid var(--line);overflow-x:auto}
+.steps li{display:flex;align-items:center;gap:6px;flex:1;min-width:0;font-size:var(--fs-meta);color:var(--muted);white-space:nowrap}
+.steps .n{flex:none;width:22px;height:22px;border-radius:var(--r-pill);display:grid;place-items:center;border:1px solid var(--line);font-weight:700}
+.steps .t{overflow:hidden;text-overflow:ellipsis}
+.steps li.on{color:var(--ink);font-weight:700}
+.steps li.on .n{background:var(--accent);border-color:transparent;color:var(--accent-ink)}
+.steps li.done .n{background:var(--accent-soft);border-color:var(--olive-line);color:var(--accent-d)}
+.cw-b{display:flex;flex-direction:column;gap:12px;padding:14px 16px}
+.cw-lead{font-size:var(--fs-body);color:var(--muted)}
+.cw-cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:10px}
+.cw-cards.one{grid-template-columns:minmax(0,1fr)}
+.cw-card{display:grid;grid-template-columns:auto minmax(0,1fr);grid-template-areas:"pic pt" "pic pd";align-items:center;gap:2px 12px;
+  padding:12px 14px;border:1px solid var(--line);border-radius:var(--r-card);background:var(--surface);text-align:start}
+.cw-card:hover{border-color:var(--olive-line);background:var(--surface-2)}
+.cw-card .pic{grid-area:pic;width:40px;height:40px;border-radius:var(--r-ctl);display:grid;place-items:center;background:var(--accent-soft);color:var(--accent-d)}
+.cw-card .pt{grid-area:pt;display:flex;align-items:center;gap:8px;font-weight:800;min-width:0}
+.cw-card .pd{grid-area:pd;font-size:var(--fs-meta);color:var(--muted);min-width:0}
+.cw-cards.one .cw-card{grid-template-columns:minmax(0,1fr);grid-template-areas:"pt" "pd"}
+.cw .tag,.pf-row .tag{flex:none;height:20px;padding:0 8px;border-radius:var(--r-pill);display:inline-flex;align-items:center;
+  font-size:var(--fs-meta);font-weight:600;background:var(--sky-soft);color:var(--sky-d)}
+.pf-row .tag.warn{background:var(--lime-soft);color:var(--lime-d)}
+.cw-note{display:flex;align-items:center;gap:8px;font-size:var(--fs-meta);color:var(--muted)}
+.cw-wait{display:flex;align-items:center;gap:10px;padding:12px 14px;border-radius:var(--r-ctl);background:var(--sky-soft);color:var(--sky-d)}
+.cw-wait .spin{display:grid;animation:spin 1.6s linear infinite}
+/* a state said in a box: olive it is well · lime look here · plum it failed (there was no callout in this app) */
+.callout{display:flex;align-items:flex-start;gap:10px;padding:12px 14px;border-radius:var(--r-ctl);border:1px solid var(--line);background:var(--surface-2)}
+.callout b{display:block;font-weight:800}
+.callout .sub{margin-top:2px;font-size:var(--fs-meta);color:var(--muted);overflow-wrap:anywhere}
+.callout.ok{background:var(--ok-soft);border-color:var(--olive-line)} .callout.ok>.ic{color:var(--ok)}
+.callout.warn{background:var(--warn-soft);border-color:var(--lime-line)} .callout.warn>.ic{color:var(--warn)}
+.callout.bad{background:var(--danger-soft);border-color:var(--plum-line)} .callout.bad>.ic{color:var(--danger)}
+.cw-link{display:inline-flex;align-items:center;gap:6px;color:var(--sky-d);font-weight:600}
+.cw-form{display:flex;flex-direction:column;gap:12px}
+.cw-field{display:flex;flex-direction:column;gap:6px}
+.cw-field .fl{display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:var(--fs-meta);font-weight:700;color:var(--muted)}
+.cw-field input,.cw-field textarea{width:100%;border:1px solid var(--line);border-radius:var(--r-ctl);background:var(--surface);padding:8px 10px}
+.cw-field input{height:40px}
+.cw-field textarea{resize:vertical;font-family:var(--mono);font-size:var(--fs-meta);min-height:120px}
+.cw-file{position:relative;display:inline-flex;align-items:center;gap:6px;color:var(--sky-d);cursor:pointer}
+.cw-file input{position:absolute;inset:0;opacity:0;cursor:pointer}
+.cw-check{display:flex;align-items:center;gap:8px}
+.cw-facts{display:grid;grid-template-columns:auto minmax(0,1fr);gap:4px 14px;margin:0;padding:10px 12px;border:1px solid var(--line);border-radius:var(--r-ctl)}
+.cw-facts dt{font-size:var(--fs-meta);color:var(--muted)}
+.cw-facts dd{margin:0;font-weight:600;overflow-wrap:anywhere}
+.cw-key{padding:12px;border:1px dashed var(--olive-line);border-radius:var(--r-ctl);background:var(--surface-2);overflow-wrap:anywhere;user-select:all}
+/* «חיבור Google Drive» in one screen (DGO-1500): each way a box of its own — what it gives, its steps, its button */
+.cw-way{display:flex;flex-direction:column;gap:8px;padding:12px 14px;border:1px solid var(--line);border-radius:var(--r-card);background:var(--surface)}
+.cw-way-h{display:flex;align-items:center;gap:8px;font-weight:800}
+.cw-way-d{font-size:var(--fs-meta);color:var(--muted);display:flex;align-items:flex-start;gap:6px;overflow-wrap:anywhere}
+.cw-way-a{display:flex;flex-wrap:wrap;gap:8px;justify-content:flex-start}
+.cw-steps{margin:0;padding-inline-start:20px;display:flex;flex-direction:column;gap:8px;font-size:var(--fs-meta)}
+.cw-steps li{min-width:0}
+.cw-steps li>*{display:block}
+.cw-steps li>*+*{margin-top:6px}
+.cw-steps li>.copyline{display:flex}
+.cw-steps li>.cw-link{display:inline-flex}
+.cw-steps li::marker{font-weight:800;color:var(--accent-d)}
+.cw-steps .copyline{max-width:100%}
+.pf-list{display:flex;flex-direction:column;border:1px solid var(--line);border-radius:var(--r-card);overflow:clip}
+.pf-row{display:flex;align-items:center;gap:10px;padding:6px 6px 6px 14px;border-bottom:1px solid var(--line)}
+.pf-row:last-child{border-bottom:0}
+.pf-ic{flex:none;color:var(--muted)}
+.pf-n{flex:1;min-width:0;display:flex;align-items:center;flex-wrap:wrap;gap:6px;font-weight:700}
+.pf-id{font-size:var(--fs-meta);font-weight:400;color:var(--muted)}

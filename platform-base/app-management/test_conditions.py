@@ -269,8 +269,8 @@ def test_a_localhost_twin_with_a_port_is_still_http(monkeypatch):
 
 
 def test_a_real_domain_is_https(monkeypatch):
-    _env(monkeypatch, {"N8N_BASE_URL": "n8n.hacohen.digital-office.co.il"})
-    assert app._public_origin("n8n", "n8n", None) == "https://n8n.hacohen.digital-office.co.il"
+    _env(monkeypatch, {"N8N_BASE_URL": "n8n.example.digital-office.co.il"})
+    assert app._public_origin("n8n", "n8n", None) == "https://n8n.example.digital-office.co.il"
 
 
 def test_the_entry_own_env_wins_over_the_convention(monkeypatch):
@@ -279,10 +279,44 @@ def test_the_entry_own_env_wins_over_the_convention(monkeypatch):
 
 
 def test_no_env_at_all_falls_back_to_the_deployment_domain(monkeypatch):
-    _env(monkeypatch, {"DEPLOYMENT_DOMAIN": "hacohen.digital-office.co.il"})
-    assert app._public_origin("glitchtip", "glitchtip", None) == "https://glitchtip.hacohen.digital-office.co.il"
+    _env(monkeypatch, {"DEPLOYMENT_DOMAIN": "example.digital-office.co.il"})
+    assert app._public_origin("glitchtip", "glitchtip", None) == "https://glitchtip.example.digital-office.co.il"
     _env(monkeypatch, {})
     assert app._public_origin("glitchtip", "glitchtip", None) == "http://glitchtip.localhost"
+
+
+# ── «פתיחה» opens inside the console whenever the console has a tile (DGO-1502) ──────────────────
+def test_an_app_on_its_own_host_opens_inside_like_its_tile():
+    """Exampleu, 2026-11-09: the apps screen sent n8n to a new tab (`embed: false`) while the console's
+    rail framed the same app on its own host — the compiler gives every external module with a host a
+    tile. The rule is the compiler's, so it is checked against every manifest that declares one."""
+    import glob
+    import json
+    import os
+    root = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..")
+    seen = {}
+    for f in glob.glob(os.path.join(root, "apps", "*", "app.json")) + \
+             glob.glob(os.path.join(root, "platform-base", "*", "app.json")):
+        routing = json.load(open(f, encoding="utf-8")).get("routing") or [{}]
+        r = next((x for x in routing if x.get("module")), routing[0])     # the entry _catalog reads
+        m = r.get("module") or {}
+        if not m or not r.get("host"):
+            continue
+        # BOTH directions, against the compiler's tile rule (reconcile.py render_registries)
+        tile = m.get("tile") is not False and (bool(m.get("external")) or
+                                               (bool(m.get("alias")) and m.get("embed", True) is not False))
+        seen[m.get("id") or f] = tile
+        assert app.opens_inside(m) == tile, f
+    assert seen.get("n8n") is True and seen.get("meet") is True     # the scan read the real manifests
+    assert seen.get("machine") is False                             # a door with no tile
+
+
+def test_what_opened_inside_and_in_a_tab_before_still_does():
+    assert app.opens_inside({"embed": True, "alias": "drive"})
+    assert not app.opens_inside({"embed": False, "alias": "n"})     # an app with no tile: its own tab
+    assert not app.opens_inside({})
+    assert not app.opens_inside({"embed": True, "alias": "machine", "tile": False})   # no «אין מסך»
+    assert not app.opens_inside({"external": True, "tile": False})
 
 
 # ── what a linked office stopped giving ──────────────────────────────────────────────────────
@@ -300,3 +334,15 @@ def test_a_tile_whose_office_stopped_giving_the_app_is_withdrawn_and_a_silent_of
     assert app.withdrawn_tiles([], tiles) == []                                 # nobody answered: nothing is judged
     assert app.withdrawn_tiles(block + [{"office": "vps1", "apps": []}], tiles) == ["browser42.macbook", "notes.vps1"]
     assert app.withdrawn_tiles(block, [{"id": "drive.macbook", "remote": {"office": "macbook", "alias": "drive"}}]) == []
+
+
+def test_the_generation_is_read_from_ascii_digits_only(tmp_path, monkeypatch):
+    """observedGeneration from ASCII-digit names only, as the compiler names a generation (DGO-632): isdigit()
+    took «²» — int() then failed and every app reported generation 0 — and read «٣٣» as 33."""
+    gens = tmp_path / ".generated" / "generations"
+    for name in ("0001", "0007", "²", "٣٣", "notes"):
+        (gens / name).mkdir(parents=True)
+    monkeypatch.setattr(app, "REPO", str(tmp_path))
+    assert app._generation() == 7
+    (gens / "²").rmdir()
+    assert app._generation() == 7                       # «٣٣» is no generation either

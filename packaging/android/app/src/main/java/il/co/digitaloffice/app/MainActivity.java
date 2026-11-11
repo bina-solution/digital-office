@@ -13,6 +13,7 @@ import android.os.Looper;
 import android.util.TypedValue;
 import android.view.View;
 import android.view.WindowManager;
+import android.widget.Button;
 import android.widget.FrameLayout;
 import android.widget.LinearLayout;
 import android.widget.ProgressBar;
@@ -83,6 +84,12 @@ public class MainActivity extends Activity {
         bar = new ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal);
         bar.setMax(100);
         root.addView(bar);
+        // every stage, its numbers and the logs, live (DGO-1328)
+        Button status = new Button(this);
+        status.setText(R.string.status);
+        status.setAllCaps(false);
+        status.setOnClickListener(v -> startActivity(new Intent(this, StatusActivity.class)));
+        root.addView(status);
         log = new TextView(this);
         log.setTypeface(Typeface.MONOSPACE);
         log.setTextSize(TypedValue.COMPLEX_UNIT_SP, 10);
@@ -159,7 +166,9 @@ public class MainActivity extends Activity {
             boolean spin = false;   // the bar turns only while something is under way
             if (failed != null) {
                 s = failed;
-            } else if (!EngineService.installed(MainActivity.this)) {
+            } else if (!EngineService.hasQemu(MainActivity.this)) {
+                // the machine's own office (no core in front of it) runs only under QEMU: AVF is the core's engine
+                // alone (EngineService), so an APK with no QEMU (x86_64) has no engine on this path
                 s = getString(R.string.setup_no_engine);
             } else if (unpacking || !EngineService.guest(MainActivity.this).exists()) {
                 if (!unpacking) unpack();
@@ -217,7 +226,12 @@ public class MainActivity extends Activity {
         return nativeCore;
     }
 
-    /** One tick of the native core's screen: started once, then its log until its edge answers. */
+    /**
+     * One tick of the native core's first screen: the core started once, and the console opened as soon as its
+     * edge answers — a running office opens at once. One that is not up within a moment (a fresh start, a slow
+     * phone) hands over to «מצב הלשכה» (DGO-1723): what comes up, part by part, in Hebrew, never a raw log — and
+     * that screen opens the office itself once its sign-in answers (StatusActivity.OPEN).
+     */
     private void core() {
         if (ready) {
             startActivity(new Intent(this, OfficeActivity.class).putExtra(OfficeActivity.URL, coreLink())
@@ -225,31 +239,18 @@ public class MainActivity extends Activity {
             finish();   // the app is the office: back from it leaves the app, the core keeps running
             return;
         }
-        String s;
-        boolean stopped = false;
-        if (!NativeService.running() && asked == 0) {
+        if (asked == 0) {
             asked = System.currentTimeMillis();
-            if (!askedPermission && Build.VERSION.SDK_INT >= 33
-                    && checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
-                askedPermission = true;
-                requestPermissions(new String[]{Manifest.permission.POST_NOTIFICATIONS}, 2);
-            }
-            startForegroundService(new Intent(this, NativeService.class));
-            s = getString(R.string.setup_starting);
-        } else if (!NativeService.running() && System.currentTimeMillis() - asked > 10_000) {
-            s = getString(R.string.setup_engine_stopped);   // it ended: its log says why; coming back starts it again
-            stopped = true;
-        } else {
-            // seen running: a Stop (or an end) from now on is said, not undone by the next tick
-            if (NativeService.running()) asked = System.currentTimeMillis();
-            s = getString(R.string.setup_starting);
+            if (!NativeService.running()) startForegroundService(new Intent(this, NativeService.class));
+            state.setText(getString(R.string.setup_starting));
+            bar.setIndeterminate(true);
         }
-        state.setText(s);
-        bar.setIndeterminate(!stopped);
-        if (stopped) bar.setProgress(0);
-        log.setText(tail(NativeService.log(this), 2500));
-        scroll.post(() -> scroll.fullScroll(View.FOCUS_DOWN));
-        tick.postDelayed(refresh, 1000);
+        if (System.currentTimeMillis() - asked > 800) {
+            startActivity(new Intent(this, StatusActivity.class).putExtra(StatusActivity.OPEN, true));
+            finish();
+            return;
+        }
+        tick.postDelayed(refresh, 200);
     }
 
     /**
@@ -257,14 +258,8 @@ public class MainActivity extends Activity {
      * on this phone alone), else the console. Only the office's own sign-in host's setup page is taken.
      */
     private String coreLink() {
-        File f = NativeService.firstRunLink(this);
-        try {
-            String link = f.exists() ? new String(java.nio.file.Files.readAllBytes(f.toPath()), java.nio.charset.StandardCharsets.UTF_8).trim() : "";
-            if (link.startsWith("http://signin.localhost:8080/setup?")) return link;
-        } catch (IOException ignored) {
-            // no link to read: the console, whose sign-in leads on
-        }
-        return CONSOLE;
+        String link = NativeService.firstRunUrl(this);   // none to read: the console, whose sign-in leads on
+        return link != null ? link : CONSOLE;
     }
 
     private void start() {
@@ -302,7 +297,7 @@ public class MainActivity extends Activity {
                     prefs.edit().putBoolean("bbox_lines", true).apply();
                 }
                 boolean bbox = prefs.getBoolean("bbox_lines", false);
-                boolean up = said.contains("up. check health") || said.contains("up, with problems");
+                boolean up = runEnded(said);   // «NOT up:» too: the console opens on what the office says
                 if ((up || !bbox) && edgeAnswers()) {
                     ready = true;
                     return;
@@ -321,7 +316,7 @@ public class MainActivity extends Activity {
      * — a 302 to the office's own sign-in host. A 200 is never ours (forward-auth answers 2xx only to a
      * session); a 502 is the edge with forward-auth not answering yet.
      */
-    private static boolean signInAnswers() {
+    static boolean signInAnswers() {
         HttpURLConnection c = null;
         try {
             c = (HttpURLConnection) new URL("http://127.0.0.1:8080/").openConnection(Proxy.NO_PROXY);
@@ -421,6 +416,21 @@ public class MainActivity extends Activity {
         } catch (Exception e) {
             return e.toString();
         }
+    }
+
+    /**
+     * bbox run's last word on the office's console, its codes already gone (tail): «up.» — up; «up, with
+     * problems:» — up, a part of it not (the ending a unit that sets BBOX_ASSUME_DNS_OK is still given); «NOT up:»
+     * — a fatal problem, the run's exit 3 (DGO-995). Each ENDS the run: whoever waits for it stops waiting, and
+     * the screen opens on what the office says about itself. Read here once, so the three readers agree.
+     */
+    static boolean runEnded(String said) {
+        return said.contains("up. check health") || said.contains("up, with problems") || runFatal(said);
+    }
+
+    /** The run ended «NOT up:» (DGO-995): a service unhealthy, a build or a convergence failed. */
+    static boolean runFatal(String said) {
+        return said.contains("NOT up:");
     }
 
     private int dp(int v) {

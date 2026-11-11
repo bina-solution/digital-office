@@ -1,0 +1,269 @@
+{
+  "made": "2026-11-05",
+  "item": "DGO-1403 (craft-008), under DGO-1381",
+  "input": "newsflow on the HP, 500 items (382 of 2026-11-04, 118 of 2026-11-05); the bot's ten ideas of 2026-11-04 18:26 UTC (the group, message 198); the brief «מה אנחנו מספרים לעולם — 2026-11-04»; FACTS.md; what the office measured today",
+  "ideas": [
+    {
+      "id": "i01",
+      "title": "חשבונית נכנסה למייל — ושורה הופיעה בטבלת ההוצאות",
+      "from": "new — the reel of DGO-1401 (seo-904), measured today",
+      "format": ["reel", "post"],
+      "claim": "סוכן ה-AI של הלשכה מכניס חשבונית מהמייל לטבלת ההוצאות נכון ובזול — 1.6 סנט — אבל לא מהר: שבע וחצי דקות.",
+      "ours": {
+        "kind": "measurement",
+        "status": "have",
+        "evidence": "2026-11-05 12:32–12:40 UTC on staging: one sentence to עזריה; it found the email, read the PDF, wrote «הוצאות נובמבר 2026.csv» with date, supplier, number, 1,169.49 + 210.51 VAT = 1,380.00 and the due date — every field right. Tokens: 1,220,224 cached, 43,994 fresh, 9,954 out on deepseek-flash = $0.016 at the off-peak price of the official page. A real screen of the office, a demo invoice marked as one."
+      },
+      "hooks": [
+        "חשבונית נכנסה למייל. אף מספר לא הוקלד.",
+        "כמה עולה ל-AI להכניס חשבונית אחת לטבלה? 1.6 סנט.",
+        "הסוכן של הלשכה מילא את טבלת ההוצאות לבד."
+      ],
+      "sources": [
+        {"title": "DeepSeek — Models & Pricing (deepseek-flash, off-peak)", "url": "https://api-docs.deepseek.com/quick_start/pricing", "primary": true, "accessed": "2026-11-05"},
+        {"title": "The run itself: agent session 7b5d68af on vps1 (staging), and the CSV it wrote", "url": "https://drive.staging.digital-office.co.il/file/d/1REDACTEDdrivexxxxxxxxxxx0053/view", "primary": true, "accessed": "2026-11-05"}
+      ],
+      "top_results": {
+        "query": "איך לחלץ אוטומטית נתונים מחשבוניות וקבלות בעברית לתוך טבלה",
+        "what_they_say": "Google (he, IL, 2026-11-05): ads and pages of WellyBox, אישיוויז, optipay, חשבון פשוט, תקציבית — SaaS that collects invoices from mail and WhatsApp; a 45-minute YouTube course on n8n + Google Sheets.",
+        "our_difference": "None of them shows the cost and the time of one invoice, measured, nor runs on the business's own server; we show both numbers, including the slow one."
+      },
+      "facts_used": ["the office agent עזריה (FACTS: Names)", "«מייל», «דרייב» (FACTS: Bina's own apps)"]
+    },
+    {
+      "id": "i02",
+      "title": "את מי ה-AI ממליץ לעסק ישראלי: 40 שאלות, ChatGPT וגוגל, בעברית ובאנגלית",
+      "from": "new — DGO-1404 (craft-009), the AEO baseline",
+      "format": ["article", "reel", "post"],
+      "claim": "כשעסק ישראלי שואל את ה-AI על כלים לעסק, הוא מקבל רשימה שמשתנה מריצה לריצה ושמצוטטים בה אתרים מסוימים — ואפשר למדוד את זה.",
+      "ours": {
+        "kind": "measurement",
+        "status": "will-measure",
+        "plan": "run 1 of aeo-panel-v1 today (40 prompts × ChatGPT, Google AI Overviews, Google AI Mode, read in Israel without signing in); runs 2–3 and the weekly re-run on the same prompts",
+        "by": "2026-11-05",
+        "evidence": "aeo-panel-v1: 40 fixed prompts in Hebrew and English (category, problem, comparison, brand, local), every named brand and every cited source recorded."
+      },
+      "hooks": [
+        "את מי ChatGPT ממליץ לעסק ישראלי? שאלנו 40 פעמים.",
+        "שאלנו את גוגל בעברית איזה כלים לקנות לעסק.",
+        "ככה נראית רשימת ההמלצות של ה-AI לעסקים בישראל."
+      ],
+      "sources": [
+        {"title": "SparkToro — AIs are highly inconsistent when recommending brands (2026-01-27)", "url": "https://sparktoro.com/blog/new-research-ais-are-highly-inconsistent-when-recommending-brands-or-products-marketers-should-take-care-when-tracking-ai-visibility/", "primary": true, "accessed": "2026-11-05"},
+        {"title": "Google Search Central — AI features and your website (updated 2025-12-10)", "url": "https://developers.google.com/search/docs/appearance/ai-features", "primary": true, "accessed": "2026-11-05"},
+        {"title": "Ahrefs — the most-cited domains on Perplexity (live page, 2026-11-03)", "url": "https://ahrefs.com/blog/most-cited-domains-perplexity/", "primary": true, "accessed": "2026-11-05"}
+      ],
+      "top_results": {
+        "query": "which brands does ChatGPT recommend Israel small business Hebrew study",
+        "what_they_say": "No study names whom the engines recommend to Israeli businesses in Hebrew: vendor pages (presenc.ai, Go Top SEO) and English studies (SparkToro, a Search Engine Land report on local results) only.",
+        "our_difference": "The first published Hebrew panel, read from Israel, with every prompt, answer and cited source open — and the same prompts again every week."
+      },
+      "facts_used": []
+    },
+    {
+      "id": "i03",
+      "title": "מה להריץ על המחשב של העסק ומה לשכור: מדדנו דיבור, קריינות וסוכן",
+      "from": "redo of the 2026-11-04 article ideas 1 and 2 («האינפרנס המקומי הוא לא בזבוז — הוא הרווח», «כמה עולה לעסק ישראלי להריץ AI על השרת שלו»)",
+      "format": ["article", "post"],
+      "claim": "לעסק קטן בלי כרטיס גרפי משתלם להריץ אצלו תמלול וקריינות בעברית, ולשכור את מודל השפה הגדול לפי שימוש — והמספרים שלנו מראים למה.",
+      "ours": {
+        "kind": "measurement",
+        "status": "have",
+        "evidence": "Measured on our own machines: Hebrew transcription (ivrit.ai) runs at RTF 0.29–0.35 on 2 vCPU with no GPU (apps/apitools/AGENT.md, 2026-10-07); a Hebrew voice (BlueTTS, MIT) rendered 25.4 s of speech in 14.6 s on 1.5 vCPU of vps1 (2026-11-05); the agent's invoice run cost $0.016 in API tokens (i01). The HP office (6 cores, 9 GB, no GPU) is the business-class box."
+      },
+      "hooks": [
+        "תמלול וקריינות בעברית רצים אצלכם. מודל השפה — לא.",
+        "מה כדאי להריץ על המחשב של העסק? מדדנו.",
+        "שרת של שתי ליבות מקריא עברית מהר מזמן אמת."
+      ],
+      "sources": [
+        {"title": "DeepSeek — Models & Pricing", "url": "https://api-docs.deepseek.com/quick_start/pricing", "primary": true, "accessed": "2026-11-05"},
+        {"title": "BlueTTS — Hebrew text-to-speech on ONNX Runtime (MIT)", "url": "https://github.com/maxmelichov/BlueTTS", "primary": true, "accessed": "2026-11-05"},
+        {"title": "ivrit.ai — Hebrew speech models", "url": "https://huggingface.co/ivrit-ai", "primary": true, "accessed": "2026-11-05"}
+      ],
+      "top_results": {
+        "query": "עלות הרצת מודל AI מקומי מול API לעסק קטן השוואה 2026",
+        "what_they_say": "English cost breakdowns (fungies.io, dev.to, jwatte.com, vucense) agree: for most small businesses the cloud API is cheaper, local pays only for privacy or volume — all from assumptions, none measured in Hebrew.",
+        "our_difference": "We split the job instead of picking a side, and every number is measured on a business-class machine, in Hebrew — the opposite of yesterday's angle, which argued a conclusion with no number."
+      },
+      "facts_used": ["vps1 is a Hostinger KVM 2: 2 vCPU, 8 GB (FACTS: Where it runs)"]
+    },
+    {
+      "id": "i04",
+      "title": "עברית נכנסת, עברית יוצאת — על שרת אחד קטן",
+      "from": "redo of the 2026-11-04 reel idea 2 («לא צריך אינטרנט: מודל עברי + TTS על לפטופ במצב טיסה»)",
+      "format": ["reel"],
+      "claim": "הודעה קולית בעברית מתומללת והתשובה מוקראת בעברית על השרת של העסק — בלי שהקול יוצא לענן.",
+      "ours": {
+        "kind": "screen",
+        "status": "will-measure",
+        "plan": "record the office doing it: a voice note to the office, transcribed by apitools (ivrit.ai), answered and read back by BlueTTS on the same server; the language model in the middle is named as what it is (a cloud API) unless a local one runs",
+        "by": "2026-11-12",
+        "evidence": "Both halves are measured already (i03); the screen is what is missing."
+      },
+      "hooks": [
+        "הקול הזה לא יצא מהמחשב של העסק.",
+        "דיברתי עם השרת בעברית. הוא ענה בעברית.",
+        "תמלול וקריינות בעברית, בלי ענן, על שתי ליבות."
+      ],
+      "sources": [
+        {"title": "ivrit.ai Hebrew TTS Arena — blind votes", "url": "https://ivrit-ai-tts-arena-hebrew.hf.space/leaderboard", "primary": true, "accessed": "2026-11-05"},
+        {"title": "BlueTTS (MIT)", "url": "https://github.com/maxmelichov/BlueTTS", "primary": true, "accessed": "2026-11-05"}
+      ],
+      "top_results": {
+        "query": "תמלול עברית מקומי בלי ענן",
+        "what_they_say": "ivrit.ai's own pages and transcription services; no one shows the round trip (Hebrew in, Hebrew out) on a business's own small server.",
+        "our_difference": "A real round trip on our own server, with the time of each half on screen, and the cloud step named."
+      },
+      "facts_used": ["«כלי מסמכים» (apitools) holds the office's speech-to-text (FACTS: Bina's own apps)"]
+    },
+    {
+      "id": "i05",
+      "title": "82 בקשות לסוכן AI בשבוע — כמה באמת נמסרו",
+      "from": "redo of the 2026-11-04 article idea 3 («הפער בין היכולת לאימוץ», EXF as the case)",
+      "format": ["article", "post"],
+      "claim": "סוכן AI שמנהל עבודה של עסק אמיתי נכשל בעיקר כשהוא מכריז «בוצע» בלי למדוד — וזה ניתן לתיקון בקוד, לא בפרומפט.",
+      "ours": {
+        "kind": "verdict",
+        "status": "have",
+        "evidence": "Our own ledger (DGO-1352): the owner's 82 group messages of 2026-11-03/04 read one by one — 31 delivered and seen, 22 partial, 21 not done, 5 answered on the wrong subject — and the fix that shipped: marks derived from a record of the request, «done» only with proof he can open."
+      },
+      "needs_owner": "publishing our own internal numbers is his call",
+      "hooks": [
+        "82 בקשות לבוט בשבוע. 31 נמסרו באמת.",
+        "הסוכן כתב «בוצע». בדקנו כמה באמת בוצע.",
+        "מה למדנו מניהול עסק אמיתי דרך סוכן AI."
+      ],
+      "sources": [
+        {"title": "The group ledger, DGO-1352 (internal)", "url": "https://console.staging.digital-office.co.il/#/m/plane.hp-laptop/bina/projects/e13492c5-ae57-4c34-8cd2-85e4aa65bab9/issues/e6c1ae31-86c9-4bb6-bcfa-1396baf0ef7b", "primary": true, "accessed": "2026-11-05"},
+        {"title": "Anthropic — Building effective agents", "url": "https://www.anthropic.com/engineering/building-effective-agents", "primary": true, "accessed": "2026-11-05"}
+      ],
+      "top_results": {
+        "query": "AI agent reliability real business case study tasks completed",
+        "what_they_say": "Benchmarks and vendor case studies; the 2026-11-04 idea leaned on an Ad Age essay and on a client's name.",
+        "our_difference": "A real week of one business's requests, counted, with the failure modes and the code that fixed them — and no client named."
+      },
+      "facts_used": []
+    },
+    {
+      "id": "i06",
+      "title": "מה אלטמן באמת אמר על הרצת AI על המחשב שלכם — תמללנו בעצמנו",
+      "from": "redo of the 2026-11-04 post idea 1 (an Altman quote with one number of ours under it)",
+      "format": ["post", "thread"],
+      "claim": "המשפט הוויראלי «הרצת AI מקומית היא הקצאה איומה של משאבים» הוא כיתוב של קליפ; מה שאלטמן אמר בפודקאסט היה על זיכרון שיושב במחשבים בלי שימוש.",
+      "ours": {
+        "kind": "verdict",
+        "status": "will-measure",
+        "plan": "transcribe the Cheeky Pint episode with the office's own speech model (apitools, whisper for English), quote the exact words with their timestamp, then the one number of ours from i03",
+        "by": "2026-11-07",
+        "evidence": "The caption circulated on Reddit and X; the outlets quote different words (DRAM «used 5% of the time»). Yesterday's idea quoted the caption as his words."
+      },
+      "hooks": [
+        "אלטמן לא אמר את המשפט שכולם מצטטים.",
+        "«הרצת AI מקומית היא בזבוז» — מי אמר את זה באמת?",
+        "תמללנו את הפודקאסט בעצמנו. הנה המילים המדויקות."
+      ],
+      "sources": [
+        {"title": "Cheeky Pint (Stripe) — the episode with Sam Altman, late October 2026 (the audio is the primary source)", "url": "https://share.transistor.fm/s/387ebac2", "primary": true, "accessed": "2026-11-05"},
+        {"title": "r/LocalLLaMA — the clip with the viral caption (the caption's origin)", "url": "https://www.reddit.com/r/LocalLLaMA/top/?t=week", "primary": false, "accessed": "2026-11-05"},
+        {"title": "OpenAI — news (the company's own statements)", "url": "https://openai.com/news/", "primary": true, "accessed": "2026-11-05"}
+      ],
+      "top_results": {
+        "query": "Sam Altman local inference terrible allocation scarce resources",
+        "what_they_say": "Dozens of outlets repeat the caption or a DRAM version; none links a transcript.",
+        "our_difference": "The words from the audio, transcribed on our own server, with the timestamp — and what it means for a business with one machine."
+      },
+      "facts_used": []
+    },
+    {
+      "id": "i07",
+      "title": "הלשכה הדיגיטלית: עסק שלם על מחשב אחד — סיור של 12 דקות",
+      "from": "kept from 2026-11-04 (the long YouTube video)",
+      "format": ["long-video"],
+      "claim": "אפשר להריץ את המערכות של עסק — מייל, קבצים, פגישות, משימות וסוכן — על מחשב אחד שלכם, ולהגיע אליהן מכל מקום.",
+      "ours": {
+        "kind": "screen",
+        "status": "will-measure",
+        "plan": "after the tour is re-shot at desktop size with every screen checked first (DGO-1380, tgr-001): chapters, a Hebrew voice he picked (DGO-1401), Hebrew SRT, three titles and thumbnails in YouTube's Test & Compare",
+        "by": "2026-11-14",
+        "evidence": "The office itself; FACTS.md for every sentence."
+      },
+      "hooks": [
+        "עסק שלם על מחשב אחד. סיור של 12 דקות.",
+        "כל המערכות של העסק, על המחשב שלכם.",
+        "ככה נראית לשכה דיגיטלית מבפנים."
+      ],
+      "sources": [
+        {"title": "The public source code (AGPL v3)", "url": "https://github.com/bina-solution/digital-office", "primary": true, "accessed": "2026-11-05"},
+        {"title": "GNU AGPL v3", "url": "https://www.gnu.org/licenses/agpl-3.0.html", "primary": true, "accessed": "2026-11-05"}
+      ],
+      "top_results": {
+        "query": "self-hosted office all in one server tour Hebrew",
+        "what_they_say": "Home-lab tours (CasaOS, Umbrel, Coolify) in English, none for a business and none in Hebrew.",
+        "our_difference": "A business's whole office, in Hebrew, on one machine, linked to the others — shot from the real office."
+      },
+      "facts_used": ["one command `./bbox run`", "Hebrew console on phone, tablet, desktop", "linked offices (FACTS)"]
+    },
+    {
+      "id": "x01",
+      "title": "סייבר: מה שלמדנו מ-CWE-bench v2 ומבוטנט האנדרואיד",
+      "from": "2026-11-04 post idea 3",
+      "format": ["post"],
+      "claim": "הבנצ'מרק החדש ופירוק הבוטנט מלמדים משהו על עסק בלי מנהל מערכות.",
+      "ours": {"kind": "", "status": "have", "evidence": ""},
+      "hooks": ["מה למדנו מ-CWE-bench v2.", "גוגל פירקה בוטנט על אנדרואידים מאושרים.", "סייבר לעסק בלי מנהל מערכות."],
+      "sources": [{"title": "CWE-bench v2 (Hugging Face blog)", "url": "https://huggingface.co/blog", "primary": true, "accessed": "2026-11-04"}],
+      "top_results": {"query": "CWE-bench v2", "what_they_say": "The benchmark's own post and its coverage.", "our_difference": ""},
+      "facts_used": []
+    },
+    {
+      "id": "x02",
+      "title": "פרומפט אחד — הצעת מחיר בעברית מלאה, 40 שניות, בלי עכבר",
+      "from": "2026-11-04 reel idea 1",
+      "format": ["reel"],
+      "claim": "הלשכה מפיקה הצעת מחיר מלאה מפרומפט אחד ב-40 שניות.",
+      "ours": {"kind": "screen", "status": "have", "evidence": ""},
+      "hooks": ["הצעת מחיר בעברית מלאה ב-40 שניות.", "פרומפט אחד, הצעת מחיר אחת.", "בלי עכבר, בלי טופס."],
+      "sources": [],
+      "top_results": {"query": "הצעת מחיר AI עברית", "what_they_say": "", "our_difference": ""},
+      "facts_used": []
+    },
+    {
+      "id": "x03",
+      "title": "המשרד עונה לך בטלגרם",
+      "from": "2026-11-04 reel idea 3",
+      "format": ["reel"],
+      "claim": "הבוט מקבל הודעה, פותח פריט ועונה.",
+      "ours": {"kind": "screen", "status": "will-measure", "plan": "", "by": "", "evidence": "the group bot"},
+      "needs_owner": "his own group is private: a demo chat is needed, and the bot is mid-repair (DGO-1352)",
+      "hooks": ["המשרד עונה לך בטלגרם.", "כתבתי לבוט. הוא פתח משימה.", "ניהול העסק מתוך קבוצת טלגרם."],
+      "sources": [],
+      "top_results": {"query": "", "what_they_say": "", "our_difference": ""},
+      "facts_used": []
+    },
+    {
+      "id": "x04",
+      "title": "המודל העברי הטוב ביותר למחשב אחד — מדדנו",
+      "from": "2026-11-04 post idea 2",
+      "format": ["post"],
+      "claim": "מדדנו איזה מודל עברי רץ הכי טוב על מחשב אחד.",
+      "ours": {"kind": "measurement", "status": "will-measure", "plan": "", "by": "", "evidence": "the Hebrew model board is DGO-1383's work (the site session)"},
+      "hooks": ["המודל העברי הטוב ביותר למחשב אחד.", "מדדנו מודלים בעברית על מחשב רגיל.", "איזה מודל עברי רץ אצלכם?"],
+      "sources": [],
+      "top_results": {"query": "", "what_they_say": "", "our_difference": ""},
+      "facts_used": []
+    },
+    {
+      "id": "x05",
+      "title": "וואטסאפ זיהתה טקסט — מה זה אומר לחשבוניות של העסק",
+      "from": "new candidate from the day's news (geektime, 2026-11-04: «וואטסאפ השיקה פיצ'ר זיהוי טקסט חכם»)",
+      "format": ["post"],
+      "claim": "הפיצ'ר החדש של וואטסאפ קורא טקסט מחשבוניות.",
+      "ours": {"kind": "israeli", "status": "have", "evidence": "WhatsApp is the national operating system (BRIEF)"},
+      "hooks": ["וואטסאפ קוראת עכשיו טקסט. גם חשבוניות?", "הפיצ'ר החדש של וואטסאפ, והחשבוניות שלכם.", "זיהוי טקסט בוואטסאפ: מה זה נותן לעסק."],
+      "sources": [{"title": "WABetaInfo — WhatsApp is rolling out message text actions", "url": "https://wabetainfo.com/whatsapp-is-rolling-out-message-text-actions-on-android-and-ios/", "primary": true, "accessed": "2026-11-05"}],
+      "top_results": {"query": "WhatsApp smart text recognition November 2026", "what_they_say": "The feature is «text actions»: dates, addresses and numbers in a MESSAGE become shortcuts, by regular expressions on the device — not reading text from invoices.", "our_difference": ""},
+      "facts_used": []
+    }
+  ]
+}

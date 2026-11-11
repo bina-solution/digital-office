@@ -1,6 +1,6 @@
 # «קבצים» (apps/drive) — release state and what comes next
 
-State on 2026-10-28: **released on the FPG office** (`drive-fireplace`, build `05e2857611ca` and on).
+State on 2026-10-28: **released on the EXF office** (`drive-examplef`, build `05e2857611ca` and on).
 This file is the map for whoever picks the app up next; the agent brief is [AGENT.md](AGENT.md).
 
 ## What the release is
@@ -13,7 +13,8 @@ This file is the map for whoever picks the app up next; the agent brief is [AGEN
 | Media on the server | probe, thumbnails (128–2048), waveforms; a browser recording is remuxed so it seeks | `media_jobs.py`, `media.py` |
 | «הקלטות» | the recorder tile (`/rec/`): records in the browser, keeps every second on the device until saved, saves to `/הקלטות` | `static/js/recorder.js` |
 | Agents | every file by path: `bbox drive ls/find/get/put/mkdir`, `api/fs` | [AGENT.md](AGENT.md) |
-| Meetings | meet-start copies each recording into `/פגישות/<date> · <room>/` (FPG only, `apps/meet/start/server.py`) | — |
+| **Every drive in one app** (DGO-1390) | «כוננים» in the side: each profile of the office's storage, each Google account, each service account; «חיבור חשבון» (Google sign-in through the herd's relay, a service-account JSON, a profile) with a real check; «ניהול פרופילים». A window names its drive (`?drive=`, `connection_id` on every call) — the agents' default moves only on purpose. The Google adapter answers what the screen asks (paths, tree, views, media, storage, star, thumbnails, exports). CLI: `bbox drive profile list`, `-p <drive>` on every verb | `static/js/accounts.js`, `adapters/google.py`, `cli.py`, `hooks/cli` |
+| Meetings | meet-start copies each recording into `/פגישות/<date> · <room>/` (EXF only, `apps/meet/start/server.py`) | — |
 | **A small window is a widget** | a box under 300 tall, or under 560×440, shows ONE thing: what plays (the player's face), what is open (the viewer, its bar thinned), pictures one at a time (Photos, a folder of pictures), video posters, else the place's short list; the place's name switches place. The console's own smallest form (a window pushed far aside) gets play/pause + the track, pause/resume while recording, the upload percent (`bina:widget`) | `static/js/widget.js`, `files.css` («a window too small») |
 
 ## How it is proven (run these before any deploy)
@@ -28,7 +29,7 @@ python apps/drive/test_core.py                           # the server
 node digital-office/sim/build.mjs && python digital-office/sim/flow-qa.py drive   # inside the office (also --mobile, windows --tiles drive)
 ```
 
-Deploy (FPG): one service, never a stack-wide up — stage `static.tgz` + the code, then
+Deploy (EXF): one service, never a stack-wide up — stage `static.tgz` + the code, then
 `deploy-files.sh` (aborts while an upload is running; backs up the image as `drive-backup:<ts>` and the
 source to `/root/backups/drive-src-<ts>.tgz`; `up -d --no-build --no-deps drive`). Open windows offer
 «רענון» by themselves (the build id in `/api/changes`).
@@ -41,12 +42,12 @@ source to `/root/backups/drive-src-<ts>.tgz`; `up -d --no-build --no-deps drive`
    line; the rest (chat, my-docs, INDOX, the console's own screens…) need their faces.
 2. **«פתיחה באמצעות» companions** for what ~50 native viewers do not cover: Collabora/WOPI (office
    editing), Gotenberg (conversion to PDF), code-server, a CAD viewer — each an installable app that
-   registers in the `open-with` slot. A resource decision first: the FPG server has 2 cores.
+   registers in the `open-with` slot. A resource decision first: the EXF server has 2 cores.
 3. **The shared blocks' language**: `platform-base/bina-ui`'s `binaSaid` has no `L()` wrappers while
    the apps' copies (after the language commits) do — a `theme-token-lint.py --fix` re-stamps the
    Hebrew-only source over them. Put the `L()` version into the source once (owner of bina-ui).
 4. **The recorder tile's glyph**: the console has no `mic` in its icon set (the tile uses `activity`);
-   adding it needs a console rebuild, which waits for the console's own pending changes on FPG.
+   adding it needs a console rebuild, which waits for the console's own pending changes on EXF.
 5. **An English tile name** for «הקלטות»: the app schema's module has no `name_en` (schema change).
 6. **The simulator's drive data**: the mock has no audio or video files, so its Music and Videos are
    empty states — add a few so the sim's map shows the player and the posters.

@@ -177,7 +177,7 @@ class Matching(unittest.TestCase):
             "היי פתח את הדפדפן לשכה על google.com ושלח לי צילום מסך": "browser.shot",
             "מה המצב? מה נשאר לשחרור?": "tasks.open",
             "הוסף הערה לפריט העבודה DGO-908 בשם azaria עם הטקסט: עובד": "tasks.comment",
-            "שלח מייל ל-shlomo שמסביר מי אתה": "mail.send",
+            "שלח מייל ל-owner שמסביר מי אתה": "mail.send",
             "מה מצב הלשכה, הכל עובד?": "office.status",
             "יש מיילים חדשים?": "mail.inbox",
             "תסגור את DGO-950, בוצע": "tasks.done",
@@ -219,6 +219,13 @@ class Matching(unittest.TestCase):
                               "מה מצב ה-n8n": "n8n.status"}.items():
             self.assertEqual(self.best(request), want, request)
 
+    def test_a_one_word_command_is_its_own_request(self):
+        # the owner's «קדימה» (DGO-1301): one word, a whole order — and only when it is the whole request
+        for request in ("קדימה", "קדימה!", "יאללה קדימה"):
+            self.assertEqual(self.best(request), "office.forward", request)
+        for request in ("קדימה עם המיילים", "הרכב נסע קדימה", "לא קדימה", "קדימה?", "אל תריץ קדימה"):
+            self.assertNotEqual(self.best(request), "office.forward", request)
+
     def test_requests_no_operative_covers(self):
         # one shared word is chance; a tie at the top is a question, not a choice
         for request in ("תן לי 1000 מילים על אהבה", "send it", "שלח לי את זה", "open DGO-950", "close the browser"):
@@ -226,7 +233,7 @@ class Matching(unittest.TestCase):
 
     def test_saying_no_or_asking_gets_no_recipe_that_acts(self):
         # matched by words alone these got close / send / photograph (the operatives' second reader)
-        for request in ("אל תסגור את DGO-950", "don't send an email to shlomo", "did you send the email to shlomo?",
+        for request in ("אל תסגור את DGO-950", "don't send an email to owner", "did you send the email to owner?",
                         "אל תצלם את האתר", "לא לשלוח מייל לשלמה"):
             hit = self.best(request)
             acting = [op for op in self.ops if op.get("id") == hit and op.get("acts")]

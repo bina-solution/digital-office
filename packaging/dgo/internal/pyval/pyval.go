@@ -20,7 +20,7 @@ import (
 	"unicode"
 	"unicode/utf8"
 
-	"github.com/solomonBoltin/deployment-hacohen/packaging/dgo/internal/yamlish"
+	"github.com/bina-solution/digital-office/packaging/dgo/internal/yamlish"
 )
 
 // Repr is repr(). One limit, by construction: a map[string]any's keys are listed sorted (the decode

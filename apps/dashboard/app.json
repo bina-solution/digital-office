@@ -5,7 +5,9 @@
     "en": "Control centre"
   },
   "layer": 3,
+  "people": "admins",
   "kind": "service",
+  "page": "base",
   "version": "0.1.0",
   "summary": {
     "he": "כל המחשבים של כל הלשכות עם נקודה ירוקה, ומה שעובדים עליו עכשיו",
@@ -17,6 +19,24 @@
       "capability": "identity",
       "strength": "requires",
       "after": true
+    },
+    {
+      "capability": "kv",
+      "strength": "wants",
+      "after": false,
+      "dependency": "weak"
+    },
+    {
+      "capability": "telegram",
+      "strength": "wants",
+      "after": false,
+      "dependency": "weak"
+    },
+    {
+      "capability": "secrets",
+      "strength": "wants",
+      "after": false,
+      "dependency": "weak"
     }
   ],
   "connections": [],
@@ -57,7 +77,7 @@
     "on_uninstall": "keep"
   },
   "resources": {
-    "cpus": "0.2",
-    "memory": "112M"
+    "cpus": "0.25",
+    "memory": "144M"
   }
 }

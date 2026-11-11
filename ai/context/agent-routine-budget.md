@@ -37,7 +37,7 @@ one through its own plugin:
 
 ```
 apps/bina-ds/plugins/office-workspace/lib/index.js
-    ctx.workspaceRegistry.create(path, title)      # «הלשכה הדיגיטלית» → /root/deployment-hacohen
+    ctx.workspaceRegistry.create(path, title)      # «הלשכה הדיגיטלית» → /root/digital-office
 ```
 
 So the routine is not a folder that has to be invented: it is a **second registered workspace** —

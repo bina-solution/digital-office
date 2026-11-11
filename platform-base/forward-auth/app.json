@@ -1,8 +1,8 @@
 {
   "id": "forward-auth",
   "title": {
-    "he": "זהות וכניסה (Go)",
-    "en": "Forward-auth (Go)"
+    "he": "זהות וכניסה",
+    "en": "Forward-auth"
   },
   "layer": 1,
   "kind": "service",
@@ -49,5 +49,8 @@
     "volumes": ["forward_auth_data"],
     "on_uninstall": "keep",
     "note": "Its one fact — who may sign in — is the users file in the forward_auth_data volume, written once at first-run setup (DGO-1090); during a migration it also reads authentik's own database, never writing it."
+  },
+  "resources": {
+    "memory": "64M"
   }
 }

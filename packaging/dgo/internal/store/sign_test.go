@@ -16,7 +16,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/solomonBoltin/deployment-hacohen/packaging/trust"
+	"github.com/bina-solution/digital-office/packaging/trust"
 )
 
 // TestRelsignSignsItDgoVerifiesItAndTheReverse holds the store to packaging/relsign's own code, on a

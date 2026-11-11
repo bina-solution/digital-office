@@ -1,10 +1,11 @@
 {
   "id": "traefik",
   "title": {
-    "he": "שער הכניסה",
+    "he": "נתב הקצה",
     "en": "Traefik"
   },
   "layer": 1,
+  "people": "admins",
   "kind": "service",
   "version": "3.3",
   "system": true,

@@ -16,7 +16,7 @@ from urllib.parse import urljoin, urlparse, urlunparse
 
 import requests
 import yaml
-from flask import Flask, request, Response, jsonify, send_from_directory
+from flask import Flask, g, request, Response, jsonify, redirect, send_from_directory
 from flask_compress import Compress
 
 ROOT = os.path.dirname(os.path.abspath(__file__))
@@ -65,6 +65,22 @@ app = Flask(__name__, static_folder=None)
 # the `Response(r.iter_content(...), direct_passthrough=True)` streaming path for
 # "text/event-stream" in app_proxy() is skipped outright, before flask-compress even looks at
 # COMPRESS_STREAMS. Verified against the installed flask_compress source, not assumed.
+#
+# …and a compressed shell file revalidates (DGO-611). flask-compress answers a STREAMED response (send_from_directory's)
+# conditionally on the ETag it writes ("<file's>:br") only for the endpoints COMPRESS_STREAMING_ENDPOINT_CONDITIONAL
+# names — "static" — and the shell is served by `spa`: a reload got the whole compressed file again for the ETag the
+# browser held (measured in the image: 200, 61,619 bytes, every time; If-Modified-Since alone was a 304, and a browser
+# sends both). `spa` is NOT named there: it also hands back what an app answers (app_proxy), and a named endpoint's
+# compressed stream is buffered whole (second reader). So only the shell's own files (`g.shell_file`, set in spa) are
+# made conditional again, after compression — this hook is registered before Compress, and Flask runs them in reverse.
+def _shell_file_revalidates(resp):
+    if g.get("shell_file") and request.method in ("GET", "HEAD") and resp.status_code == 200 \
+            and resp.headers.get("Content-Encoding"):
+        resp.make_conditional(request)
+    return resp
+
+
+app.after_request(_shell_file_revalidates)
 Compress(app)
 
 
@@ -73,12 +89,130 @@ def healthz():
     return {"ok": True}
 
 
+# ── the office's admins (DGO-1755) ─────────────────────────────────────────────────────────────
+# forward-auth tells every app a person's groups (X-authentik-groups, `|`-joined, as /api/me reads them). `admins`
+# opens the office's root apps — an app.json's `people: admins`; «authentik Admins» is the same group's name under
+# authentik and with the SSO off. traefik's `authentik-admins@file` refuses anyone else at the app's own host, but
+# THIS door (/a/<alias>/) reaches an app's container directly, past traefik, so it asks the same question itself —
+# and so do the shell's own doors to the credential plane and to a service's accounts.
+ADMIN_GROUPS = {"admins", "authentik-admins", "authentik Admins"}   # forward-auth's two names, authentik's own
+
+
+def _is_admin():
+    """Does the request's groups header name an admins' group? STAGE ONE of DGO-1813 (AGENTS rule 8): the header is
+    still believed from any caller, as it always was, but a belief the request cannot prove — its sign-in headers
+    were not written by a sign-in hop or the console's link builder (`_signin_proved`) — is NAMED in the log, so
+    every office lists who still opens an admins' door on a header it wrote itself. Stage two believes it only when
+    proved, once that log is empty."""
+    believed = bool(ADMIN_GROUPS & set((request.headers.get("X-authentik-groups") or "").split("|")))
+    if believed and not _signin_proved():
+        try:
+            _name_unproved_admin()
+        except Exception:      # naming must never change an answer (48 threads share the dict below)
+            pass
+    return believed
+
+
+#: (door, caller) → when it was last named: once per ten minutes each. Bounded: past 256 keys the ones older than
+#: ten minutes go, and if that is not enough, all of them (a forger varying its address cannot grow it without end)
+_UNPROVED_ADMIN_SAID: dict = {}
+
+
+def _admins_door(path):
+    """The DOOR a path is, never the path itself: the path is the caller's to choose (`/api/conn/<anything>` reaches
+    the gate, a 404 included), and it can hold a token (`/api/conn/broker/redeem/<tok>`). So the door is one of a
+    fixed set: `/a/<alias>/` (an alias that resolved — the only way past `_admins_alias`), the credential plane's
+    two prefixes, a service's accounts by its validated name, the language, or `other`."""
+    parts = path.split("/")
+    if len(parts) > 2 and parts[1] == "a" and re.fullmatch(r"[a-z0-9][a-z0-9.-]{0,62}", parts[2] or ""):
+        return f"/a/{parts[2]}/"
+    if path == "/api/connections" or path.startswith("/api/connections/"):
+        return "/api/connections"
+    if path.startswith("/api/conn/"):
+        return "/api/conn/"
+    if len(parts) > 4 and parts[1:3] == ["api", "svc"] and parts[4] == "connections":
+        name = parts[3] if re.fullmatch(r"[a-z0-9][a-z0-9-]{0,62}", parts[3] or "") else "?"
+        return f"/api/svc/{name}/connections"
+    return path if path == "/api/language" else "other"
+
+
+def _name_unproved_admin():
+    door = _admins_door(request.path or "/")
+    caller = request.remote_addr or "?"
+    now = time.time()
+    if now - _UNPROVED_ADMIN_SAID.get((door, caller), 0.0) < 600:
+        return
+    if len(_UNPROVED_ADMIN_SAID) >= 256:
+        for k, at in list(_UNPROVED_ADMIN_SAID.items()):
+            if now - at >= 600:
+                _UNPROVED_ADMIN_SAID.pop(k, None)
+        if len(_UNPROVED_ADMIN_SAID) >= 256:
+            _UNPROVED_ADMIN_SAID.clear()
+    _UNPROVED_ADMIN_SAID[(door, caller)] = now
+    hops = len(_signin_hops())
+    # hops=0 means THIS console could not resolve traefik/the door at all: then every admin is named, a person
+    # through traefik too — the line says so, so stage two's «the log is empty» is never read off such an office
+    app.logger.warning("console-unproved-admin: %r %r caller=%r agent=%r hops=%d — an admins' door opened on a "
+                       "groups header no sign-in hop wrote (DGO-1813; refused from stage two)%s", request.method,
+                       door, caller, (request.headers.get("User-Agent") or "")[:80], hops,
+                       "" if hops else " — NO sign-in hop resolves here, so this names traefik's own requests too")
+
+
+def _admins_path(path, method):
+    """Is this a door of the shell only the office's admins go through? The credential plane (every key of the office,
+    /api/connections and /api/conn/…), a WRITE to a platform service's accounts (/api/svc/<s>/connections…: add,
+    select, remove — INDOX's read-only probes and every service's readyz stay everyone's), and a change of
+    the office's language."""
+    if path == "/api/connections" or path.startswith(("/api/connections/", "/api/conn/")):
+        return True
+    parts = path.split("/")
+    if len(parts) > 4 and parts[1:3] == ["api", "svc"] and parts[4] == "connections":
+        return method not in ("GET", "HEAD")
+    return path == "/api/language" and method not in ("GET", "HEAD")
+
+
+def _not_for_you(title="האפליקציה הזאת"):
+    """The answer to a signed-in person who is not an admin at an admins' door: the card to a page, the sentence as
+    JSON to a call. 403, never a hint of what the app holds."""
+    text = "רק מנהלי הלשכה נכנסים לכאן: זה פותח את המחשבים, החיבורים והמפתחות של הלשכה. אם זה נחוץ לך, פנו לבעל הלשכה."
+    if "text/html" in (request.headers.get("Accept") or "").lower():
+        return Response(_card(title, "למנהלי הלשכה בלבד", f"<p>{text}</p>"), status=403,
+                        content_type="text/html; charset=utf-8")
+    return jsonify(error="admins_only", message=text), 403
+
+
+@app.before_request
+def _admins_doors():
+    if _admins_path(request.path, request.method) and not _is_admin():
+        return _not_for_you("הדלת הזאת")
+    return None
+
+
 @app.get("/api/me")
 def me():
     u = {k.replace("X-authentik-", ""): request.headers.get(k) for k in _AUTH}
     return jsonify(user=u.get("username") or "אורח", email=u.get("email"),
                    name=u.get("name") or u.get("username") or "אורח",
                    groups=(u.get("groups") or "").split("|") if u.get("groups") else [])
+
+
+@app.get("/api/signout")
+def signout():
+    """Where a person signs out of THIS office (DGO-1621): the office's own sign-in app's page — the sign-in app
+    signs out every app of the office at once. Its own route, not a field of /api/me, whose answer the native core
+    (packaging/dgo) repeats byte for byte. Empty for a visitor nobody signed in, and under authentik, whose outpost
+    sign-out no router of an app's host delivers — the menu then says there is no sign-out here, rather than offer
+    a link that reloads the console. And only at the office's own console host (CONSOLE_HOST): at a LAN address
+    (apps/lan-console) the person signed in through that app's own sign-in, which this page does not end, and a
+    phone there cannot reach the sign-in host. The request's host only CHOOSES between the two; the address given
+    is the office's own, and the page adds its return address (`rd`) itself. Nor through another office's link
+    (X-DGO-Office, which the door writes on everything it hands on, with the console's own Host): that person
+    signed in at the office they browse from, and this office's sign-in page is not theirs to reach."""
+    signed_in = bool(request.headers.get("X-authentik-username"))
+    own = os.getenv("DGO_IDENTITY", "authentik") == "forward-auth"
+    here = request.host.split(":")[0].lower() == os.getenv("CONSOLE_HOST", "").split(":")[0].lower()
+    linked = bool(request.headers.get("X-DGO-Office"))
+    return jsonify(url=os.getenv("CONSOLE_SIGNOUT_URL", "") if signed_in and own and here and not linked else "")
 
 
 
@@ -111,6 +245,11 @@ def _peer_entries():
             with open(os.path.join(PEERS_DIR, n), encoding="utf-8") as f:
                 doc = json.load(f) or {}
         except (OSError, ValueError):
+            continue
+        if not isinstance(doc, dict):
+            # a list or a scalar is no placement (DGO-611): `.get` on it raised, and /api/modules answered 500 —
+            # no tiles at all, for one file. Skipped by name; the rest of the rail stands.
+            app.logger.warning("peers.d/%s is not a JSON object — skipped", n)
             continue
         if doc.get("alias") and doc.get("module"):
             out.append(doc)
@@ -216,10 +355,14 @@ def _modules():
     return yaml.safe_load(open(os.path.join(ROOT, "modules.yaml"))) or []
 
 
+#: What a tile carries for THIS server only: `door`, how it reaches a remote app (an internal address
+#: and the identity mapping of the link), and `handoffs`, where it asks an app which people it is
+#: waiting for (DGO-1336). The browser needs the tile, not the route.
+SERVER_ONLY = ("door", "handoffs")
+
+
 def _tiles():
-    # `door` is how THIS server reaches a remote app (an internal address and the identity mapping of
-    # the link); the browser needs the tile, not the route.
-    return [{k: v for k, v in m.items() if k != "door"} for m in _modules()]
+    return [{k: v for k, v in m.items() if k not in SERVER_ONLY} for m in _modules()]
 
 
 def _digest(*chunks):
@@ -261,9 +404,109 @@ def modules():
     return jsonify(modules=_tiles())
 
 
+# ── a person needed in another app's screen (DGO-1336) ──────────────────────────────────────────
+# The owner pressed «Continue with Google» in the HP's Claude tile on his phone; Google's account
+# chooser opened in the office browser's own display, and he went on looking at «Sign In» («זה לא עובד
+# לא פותח לי שום דפדפן», 2026-11-04). An app that holds such a screen records each hand-off and lists
+# the current ones (`handoffs` in its manifest; the compiler puts the address on its tile, here and on
+# every office it is given to), so this server asks every tile that carries one and answers the shell
+# with what concerns IT: in which tile the person is needed (`at`), for which tile (`for`, the app that
+# asked, in the same office), and how it stands. The shell switches him there and back
+# (static/handoffs.js). Records only — no address, no tab, nothing that acts.
+HANDOFFS_TIMEOUT_S = float(os.getenv("CONSOLE_HANDOFFS_TIMEOUT_S", "3"))
+#: Every open shell asks every 2 s; an app is asked once for all of them in this window — and an app
+#: that did not answer is not asked again for a while, so a fallen link does not hold every request.
+HANDOFFS_FRESH_S, HANDOFFS_SILENT_S = 1.0, 15.0
+_HANDOFFS_SEEN = {}                     # address → (asked at, records, answered)
+#: What a record may say to the shell — a linked office's answer is data, never a command: a slug that
+#: is not one could steer the shell's address, so it is checked here, where the address is built.
+HANDOFF_SLUG = re.compile(r"[a-z0-9]+(?:-[a-z0-9]+)*")
+HANDOFF_STATES = ("needed", "done", "failed")
+
+
+def _handoffs_of(address):
+    """One app's list. An app that does not answer keeps its LAST GOOD answer: a link that drops for a
+    moment (the HP while its browser wakes) must not read as "the hand-off is gone", or the shell would
+    forget the way back it promised the person (the second reader of DGO-1336)."""
+    seen = _HANDOFFS_SEEN.get(address)
+    now = time.time()
+    if seen and now - seen[0] < (HANDOFFS_FRESH_S if seen[2] else HANDOFFS_SILENT_S):
+        return seen[1]
+    records, answered = (seen[1] if seen else []), False
+    try:
+        r = requests.get(address, timeout=HANDOFFS_TIMEOUT_S)
+        if r.ok:
+            records = [h for h in (r.json().get("handoffs") or []) if isinstance(h, dict)]
+            answered = True
+    except (requests.RequestException, ValueError, AttributeError):
+        pass
+    _HANDOFFS_SEEN[address] = (now, records, answered)
+    return records
+
+
+#: The tiles that list hand-offs, kept while the registry they come from is unchanged: every visible
+#: shell asks every 2 s, and the console must not parse the whole registry for each of them.
+_HANDOFF_TILES = {"key": None, "tiles": []}
+
+
+def _handoff_tiles():
+    try:
+        key = (os.stat(os.path.join(GENERATED, "console.modules.yaml")).st_mtime, _peers_stamp())
+    except OSError:
+        key = (None, _peers_stamp())
+    if key != _HANDOFF_TILES["key"]:
+        _HANDOFF_TILES.update(key=key, tiles=_modules())
+    return _HANDOFF_TILES["tiles"]
+
+
+def _office_of(tile):
+    r = tile.get("remote")
+    return str(r.get("office") or "") if isinstance(r, dict) else ""
+
+
+def _names_of(tile):
+    """What a tile is called: its id and alias here, and — a linked office's — what it is called THERE
+    (the same names static/module-ref.js resolves a link by)."""
+    r = tile.get("remote") if isinstance(tile.get("remote"), dict) else {}
+    return {str(x) for x in (tile.get("id"), tile.get("alias"), r.get("module_id"), r.get("alias")) if x}
+
+
+def handoffs_for(tiles, ask=None, now=None):
+    """The hand-offs of every tile that lists them, each placed on THIS office's tiles. Pure but for
+    `ask` (default `_handoffs_of`), so the rule is testable without a network. A record whose slug,
+    state or id is not one is dropped; `age` is how long ago it last changed."""
+    ask = ask or _handoffs_of
+    stamp = time.time() if now is None else now
+    out = []
+    for at in tiles:
+        address = at.get("handoffs")
+        if not isinstance(address, str) or not address.startswith("http://"):
+            continue
+        office = _office_of(at)
+        for h in ask(address):
+            slug, state, hid = str(h.get("slug") or ""), str(h.get("state") or ""), str(h.get("id") or "")
+            if not (HANDOFF_SLUG.fullmatch(slug) and state in HANDOFF_STATES and HANDOFF_SLUG.fullmatch(hid)):
+                continue
+            app_id = str(h.get("for") or "")
+            target = next((t.get("id") for t in tiles
+                           if t is not at and _office_of(t) == office and app_id in _names_of(t)), "")
+            try:
+                age = max(0, int(stamp - float(h.get("updated_at"))))
+            except (TypeError, ValueError):
+                age = None
+            out.append({"at": at.get("id"), "for": target or "", "app": app_id, "slug": slug, "state": state,
+                        "sentence": str(h.get("sentence") or "")[:300], "id": hid, "age": age})
+    return out
+
+
+@app.get("/api/handoffs")
+def handoffs():
+    return jsonify(handoffs=handoffs_for(_handoff_tiles()))
+
+
 # ── may an app be shown INSIDE this console? (#63) ─────────────────────────────
 # A window on an app's own host that the app forbids being framed in stayed EMPTY — the browser
-# draws its own grey error page and tells the page that framed it nothing (FPG, 2026-10-28: the
+# draws its own grey error page and tells the page that framed it nothing (EXF, 2026-10-28: the
 # services window). The browser decides from two headers of the app's answer, so the console asks
 # the same answer server-side and judges it the way a browser does:
 #   · CSP `frame-ancestors` (when present it wins: browsers then ignore X-Frame-Options) must allow
@@ -273,8 +516,51 @@ def modules():
 # failure, a sign-in page) is "unknown" and the shell frames as it always did. Only hosts of this
 # office's own domain are asked (no open fetcher inside the office network), and nothing of the
 # body is read or returned.
+#
+# THE ANSWER JUDGED IS THE APP'S OWN (DGO-1502). This request carries nobody's sign-in, so an app
+# behind the office's sign-in answers it with a redirect to the sign-in page — and that page refuses
+# every frame (`X-Frame-Options: DENY`, forward-auth renderLogin), on purpose. Followed to the end,
+# the chain judged THE SIGN-IN PAGE: Meet, Plane and Obsidian were all "refused" on Exampleu's office
+# (measured 2026-11-09), while each answers a signed-in browser with no framing header at all. A
+# desktop window of Meet was emptied into the «נפתחת בלשונית נפרדת» card, and the next open of it went
+# straight to a new tab — «פגישות נפתחת לפעמים רק בחוץ». So a redirect is followed only while it stays
+# on the asked origin (an app's own `/` → `/signin`); one that leaves it is the door the person's
+# browser passes with its own session, and the verdict is "unknown". It also keeps this fetcher on the
+# office's own hosts: an office host that redirects elsewhere is not followed there.
+# What this check can still see is the answer of an app whose own host answers WITHOUT the sign-in
+# (`auth: none` — the #63 case, chimney-services, sets X-Frame-Options itself). An app behind the
+# sign-in that refused frames by itself could not be told apart from one that does not; none of the
+# own-host tiles behind it does today (Meet, Plane, Obsidian, measured on Exampleu).
 FRAME_CHECK_TTL = int(os.environ.get("FRAME_CHECK_TTL", "300"))
+FRAME_CHECK_HOPS = 5
 _frame_seen = {}
+_REDIRECTS = (301, 302, 303, 307, 308)
+
+
+def _origin(u):
+    """scheme://host:port, the host lower-cased and the scheme's default port written out, so
+    `https://Svc` and `https://svc:443/x` are one origin. A malformed port raises ValueError."""
+    p = urlparse(u)
+    port = p.port or {"http": 80, "https": 443}.get(p.scheme)
+    return f"{p.scheme}://{(p.hostname or '').lower()}:{port}"
+
+
+def frame_answer(url):
+    """The asked origin's OWN answer to `url`: (response, None), or (None, why) when the redirects
+    leave that origin (or never end). Each hop is closed; nothing of a body is read."""
+    here = _origin(url)
+    for _ in range(FRAME_CHECK_HOPS + 1):
+        r = requests.get(url, timeout=(3, 4), allow_redirects=False, stream=True,
+                         headers={"Accept": "text/html", "Sec-Fetch-Dest": "iframe"})
+        r.close()
+        loc = next((v for k, v in r.headers.items() if k.lower() == "location"), "")
+        if r.status_code not in _REDIRECTS or not loc:
+            return r, None
+        nxt = urljoin(url, loc)
+        if _origin(nxt) != here:
+            return None, "redirect to " + (urlparse(nxt).hostname or "another address")
+        url = nxt
+    return None, "too many redirects"
 
 
 def _csp_allows(policy, console_origin, app_origin):
@@ -360,19 +646,19 @@ def frame_check():
     host = (u.hostname or "").lower()
     if u.scheme not in ("http", "https") or not host or not dom or not (host == dom or host.endswith("." + dom)):
         return jsonify(verdict="unknown", why="not an address of this office"), 400
-    app_origin = f"{u.scheme}://{u.netloc}"
+    app_origin = f"{u.scheme}://{u.netloc.lower()}"
     key = (console_origin, app_origin + (u.path or "/"))
     hit = _frame_seen.get(key)
     if hit and time.time() - hit[0] < FRAME_CHECK_TTL:
         return jsonify(hit[1])
     try:
-        r = requests.get(url, timeout=(3, 4), allow_redirects=True, stream=True,
-                         headers={"Accept": "text/html", "Sec-Fetch-Dest": "iframe"})
-        r.close()
-        landed = urlparse(r.url)
-        verdict, why = frame_verdict(r.headers, console_origin, f"{landed.scheme}://{landed.netloc}")
-        out = {"verdict": verdict, "why": why, "status": r.status_code}
-    except requests.RequestException as e:
+        r, left = frame_answer(url)
+        if r is None:
+            out = {"verdict": "unknown", "why": left}
+        else:
+            verdict, why = frame_verdict(r.headers, console_origin, app_origin)
+            out = {"verdict": verdict, "why": why, "status": r.status_code}
+    except (requests.RequestException, ValueError) as e:    # ValueError: a Location that is no URL
         out = {"verdict": "unknown", "why": type(e).__name__}
     _frame_seen[key] = (time.time(), out)
     return jsonify(out)
@@ -408,28 +694,19 @@ def connections_proxy(sub=""):
     return _proxy(url)
 
 
-@app.route("/api/conn/oauth/<cid>/start", methods=["GET"])
-def conn_oauth_start(cid):
-    """Begin an OAuth grant. NOT served by conn_generic below: connections' oauth entry points are
-    browser-facing (/oauth/<cid>/start, /oauth/callback — the one registered redirect URI) and are
-    deliberately NOT under /api like the rest of its API. The generic passthrough prepends /api and
-    404s, which silently dead-ended the install wizard's 'connect Google' button — it reads
-    authorize_url out of this JSON."""
-    return _proxy(f"{CONNECTIONS_URL}/oauth/{cid}/start")
-
-
 @app.route("/api/conn/<path:sub>", methods=["GET", "POST", "DELETE"])
 def conn_generic(sub):
-    """Passthrough to any connections API path (set/add/regenerate/export/oauth)."""
+    """Passthrough to any connections API path (set/add/regenerate/export)."""
     return _proxy(f"{CONNECTIONS_URL}/api/{sub}")
 
 
 # ── platform services (drive/mail) — the connection (account) plane ───────────────
 # A platform service owns its own accounts + ONE active pointer, and exposes
-# /manifest, /readyz, /connections (see ai/context/platform-service-contract.md §2). The console is
-# the only HUMAN surface for that plane, so it proxies exactly those endpoints — same-origin, with
-# the shell's SSO already applied. Nothing sensitive rides back: the contract forbids the list
-# endpoint from returning secrets, so credentials still never cross into the browser (§5).
+# /manifest, /readyz, /connections (see ai/context/platform-service-contract.md §2). Each app shows and
+# connects its accounts in its own screen (DGO-1624); the console proxies /readyz and /connections for
+# another app's screen that reads them (INDOX reads mail's) — same-origin, with the shell's SSO already
+# applied. Nothing sensitive rides back: the contract forbids the list endpoint from returning secrets,
+# so credentials still never cross into the browser (§5).
 # GENERATED IN, not written here: PLATFORM_SERVICES is compiled by reconcile.py from the
 # `capabilities` of every INSTALLED app that declares contract "platform-service.v1"
 # ({"drive": "http://drive:8975", "mail": "http://mailapi:8970"}). This file used to hold that map
@@ -452,16 +729,11 @@ def svc_connections(service, sub=""):
     return _proxy(f"{base.rstrip('/')}/connections" + (f"/{sub}" if sub else ""))
 
 
-@app.route("/api/svc/<service>/<any(manifest, readyz, providers):what>", methods=["GET"])
+@app.route("/api/svc/<service>/<any(readyz):what>", methods=["GET"])
 def svc_meta(service, what):
-    """/manifest = which protocols this service can connect (drives the 'add account' choice);
-    /readyz = does the ACTIVE account actually probe ok — the same readiness contract n8n reads,
-    so the console's dot and the automation layer can never disagree;
-    /providers = the service's OWN provider catalogue — which providers exist, which auth method
-    each offers, and the exact field keys it will accept. The connect wizard reads it instead of
-    the hardcoded map it used to carry; without it in this allowlist the request falls through to
-    the SPA catch-all, the wizard gets index.html where it expected JSON, and every provider card
-    is missing (measured 2026-09-02)."""
+    """/readyz = does the ACTIVE account actually probe ok — the same readiness contract n8n reads; INDOX reads
+    mail's from the browser. /manifest and /providers went with the shell's connect wizard (DGO-1624): each app
+    connects its accounts in its own screen, from its own service."""
     base = SVC_BASES.get(service)
     if not base:
         return jsonify(error="unknown_service", service=service), 404
@@ -522,6 +794,7 @@ def api_office():
 
 def _proxy(url):
     fwd = {k: v for k, v in request.headers if k.lower() not in _HOP}
+    _drop_unproved_signin(fwd)
     try:
         r = requests.request(request.method, url, params=request.args,
                              data=request.get_data(), headers=fwd, timeout=40)
@@ -550,7 +823,14 @@ APP_BASES = {
 # every click on it answered `unknown_app` until someone restarted the console (2026-09-29:
 # digital-assets and social-list, enabled and rendered while the console had been up for hours).
 _BASES_FILE = os.path.join(GENERATED, "console.app_bases.json")
-_BASES_SEEN = {"mtime": None, "peers": None, "map": dict(APP_BASES)}
+_ADMIN_BASES = ("connections",)      # of APP_BASES: the credential plane is the office's admins' (DGO-1755)
+_BASES_SEEN = {"mtime": None, "peers": None, "map": dict(APP_BASES), "admins": frozenset(_ADMIN_BASES)}
+
+
+def _admins_alias(name):
+    """Is /a/<name>/ a door only the office's admins go through (DGO-1755)?"""
+    _app_bases()
+    return name in _BASES_SEEN["admins"]
 
 
 def _app_bases():
@@ -572,13 +852,114 @@ def _app_bases():
             fresh = {**remote, **dict(APP_BASES)}
             for alias, spec in compiled.items():
                 fresh[alias] = os.getenv(spec["env"], spec["default"]) if spec.get("env") else spec["default"]
-            _BASES_SEEN.update(mtime=mtime, peers=peers_stamp, map=fresh)
+            # who may go through each door (DGO-1755): an admins' app (`people: admins`, compiled in), the credential
+            # plane, and — until a linked office's catalog says who opens its apps — every placement there
+            admins = set(_ADMIN_BASES) | {a for a in remote if a not in compiled} | {
+                alias for alias, spec in compiled.items() if spec.get("people") == "admins"}
+            _BASES_SEEN.update(mtime=mtime, peers=peers_stamp, map=fresh, admins=frozenset(admins))
         except (OSError, ValueError, KeyError, TypeError):
             pass                     # a half-written file: keep the last good map, try next request
     return _BASES_SEEN["map"]
 
 
 _app_bases()
+
+
+# ── the office's language (DGO-971, ai/context/platform-language.md) ─────────────────────────────
+# ONE variable for the whole office: `language:` in platform.state.yaml, compiled by reconcile.py (and its Go
+# twin) into .generated/registry/locale.json. Read here per request, re-read when the file changes, like the
+# bases above: switching a language must not need a restart of the shell. Two readers:
+#   · GET /api/language answers it;
+#   · app_proxy() puts <meta name="bina-lang"> at the start of every page it frames (_inject_lang): how a
+#     framed app learns the language with no cookie, no fetch and no cross-origin request
+#     (bina-ui/bina-lang.js reads it). It outranks a per-browser choice there by the runtime's design: inside
+#     the console the office's language is the one shown.
+# The fallback is Hebrew with `available` naming Hebrew only: an honest «not known», never an empty menu.
+# Not here yet: the shell's own <html lang dir> and the switcher, which are display changes and come as a
+# mock first; and the write path, which is the control plane's.
+_LOCALE_FILE = os.path.join(GENERATED, "locale.json")
+_LOCALE_FALLBACK = {"active": "he", "default": "he", "dir": "rtl",
+                    "available": [{"code": "he", "label": "עברית", "label_en": "Hebrew", "dir": "rtl"}]}
+_LOCALE_SEEN = {"mtime": None, "doc": _LOCALE_FALLBACK}
+_LANG_CODE = re.compile(r"[a-z]{2,3}(-[a-z0-9]{2,8})?")
+
+
+def _locale():
+    """The compiled language document, re-read whenever the file changes; the last good one while it is
+    half-written, and the fallback while there is none."""
+    try:
+        mtime = os.stat(_LOCALE_FILE).st_mtime
+    except OSError:
+        return _LOCALE_SEEN["doc"]
+    if mtime != _LOCALE_SEEN["mtime"]:
+        try:
+            with open(_LOCALE_FILE, encoding="utf-8") as f:
+                doc = json.load(f)
+            if (isinstance(doc, dict) and _LANG_CODE.fullmatch(str(doc.get("active") or ""))
+                    and doc.get("dir") in ("rtl", "ltr")):
+                _LOCALE_SEEN.update(mtime=mtime, doc=doc)
+        except (OSError, ValueError):
+            pass                     # half-written: keep the last good document, try next request
+    return _LOCALE_SEEN["doc"]
+
+
+def _lang_meta(doc=None):
+    """`<meta name="bina-lang">` for a framed page: the code and its direction, nothing a page could inject
+    through (the document was checked when it was read)."""
+    doc = doc or _locale()
+    return f'<meta name="bina-lang" content="{doc["active"]}" data-dir="{doc["dir"]}">'
+
+
+_HEAD_OPEN = re.compile(r"<head\b[^>]*>", re.I)
+_HTML_OPEN = re.compile(r"<html\b[^>]*>", re.I)
+_DOCTYPE = re.compile(r"<!doctype\b[^>]*>", re.I)
+
+
+def _inject_lang(html, doc=None):
+    """The meta at the START of <head>, so a script in <head> that reads it once finds it. A page with no
+    <head> (connections' ui.html) gets it after <html>, or after the doctype: never BEFORE the doctype,
+    which puts the page in quirks mode (the second reader of DGO-971). Found on the page itself, not on a
+    lowercased copy whose offsets can differ."""
+    meta = _lang_meta(doc)
+    for pattern in (_HEAD_OPEN, _HTML_OPEN, _DOCTYPE):
+        m = pattern.search(html)
+        if m:
+            return html[:m.end()] + meta + html[m.end():]
+    return meta + html
+
+
+@app.get("/api/language")
+def language():
+    """The office's language, and every language this platform has a dictionary for."""
+    return jsonify(_locale())
+
+
+@app.post("/api/language")
+def language_set():
+    """Switch the office's language through the control plane, which owns the write (this base app mounts no
+    repo; app-management runs `reconcile.py lang` and the render). The answer is the plane's own: the new
+    document, or its refusal with the reason. The caller's headers go with it as _proxy() sends them, the
+    link's X-DGO-Office included, so the plane's refusal of a linked caller holds through this door too; only
+    the body is rewritten, to say the console asked."""
+    body = request.get_json(silent=True) or {}
+    # a body that is not an object, and a «code» no language has (any length the browser sends), are answered
+    # here by name — never a 500, never megabytes handed on (the second reader of slice 4)
+    if not isinstance(body, dict):
+        return jsonify(ok=False, error="the body is a JSON object of named fields: {\"lang\": \"en\"}"), 400
+    lang = str(body.get("lang") or "").strip()
+    if len(lang) > 40:
+        return jsonify(ok=False, error="unknown_language", detail="not a language code"), 400
+    payload = json.dumps({"lang": lang, "by": "console"}).encode()
+    fwd = {k: v for k, v in request.headers if k.lower() not in _HOP and k.lower() != "content-length"}
+    fwd["Content-Type"] = "application/json"
+    try:
+        # the plane's own worst case is 20 s for the lock, 60 s for the write and 120 s for the render: waited out
+        # whole, so a slow render is never told as «unreachable» while the switch lands (the third reader)
+        r = requests.post(f"{APP_MANAGEMENT_URL}/api/language", data=payload, headers=fwd, timeout=210)
+    except requests.RequestException as e:
+        return jsonify(ok=False, error="control_plane_unreachable", message=str(e)[:200]), 502
+    return Response(r.content, status=r.status_code,
+                    content_type=r.headers.get("Content-Type", "application/json"))
 
 
 # ── a REMOTE app through this console's own origin ───────────────────────────────────────────────
@@ -644,6 +1025,92 @@ def _doors_of(tiles):
             "oid": str(t["remote"].get("office") or ""),
         }
     return doors
+
+
+def _nests_host(hostname: str) -> bool:
+    """Can this console's own host carry an app's label in front of it? (app.js `noNestedHost`, server-side.)
+
+    On `*.localhost` every label is its own site, a bare service name and an IP address resolve nothing
+    under them — so a nested host is not an address to send a person to, and nothing here offers one.
+    """
+    h = (hostname or "").strip().lower()
+    if not h or ":" in h or h.endswith(".localhost") or h == "localhost":
+        return False
+    if h.replace(".", "").isdigit():                      # an IPv4 address
+        return False
+    return "." in h
+
+
+def _external_redirect(name: str):
+    """Where a `<alias>.<office>` TILE of a linked office is actually opened — or None.
+
+    `/a/<id>/` answers a LOCAL app (or a tile whose door this office reaches). A remote tile that owns
+    its own origin (`external: true` — the official Claude app, Plane) is framed by the shell on
+    `<host>.<this console's host>`, an address the SHELL builds (app.js `externalUrl`); it was never a
+    route of `/a/`. So a link written as `/a/bina-claude.hp-laptop/` answered `unknown_app` — measured
+    2026-11-04 on vps1, after our own message told the owner to open exactly that (DGO-1338; the rule
+    of DGO-1268 was written for this and broken again). The name is redirected to the address the
+    shell would have opened, and ONLY for a remote tile of that kind: a local app's alias keeps its
+    404 (it is a typo), a tile with a door never reaches here, and a console whose host cannot nest
+    keeps its 404 rather than sending a person to a name that resolves nowhere.
+    """
+    for t in _tiles():
+        if str(t.get("id")) != name or not isinstance(t.get("remote"), dict) or not t.get("external"):
+            continue
+        label = str(t.get("host") or t["id"])
+        if not _nests_host(request.host.split(":")[0]):
+            return None
+        proto = (request.headers.get("X-Forwarded-Proto") or request.scheme or "https").split(",")[0].strip()
+        tail = str(t.get("path") or "")
+        return f"{proto}://{label}.{request.host}{tail if tail.startswith('/') else '/'}"
+    return None
+
+
+#: The hops that WRITE the sign-in headers: traefik (forward-auth, every person's request) and the link's
+#: door (the mapped user of a linked office). By container name of THIS deployment, re-read once a minute.
+_SIGNIN_HOPS = {"at": 0.0, "addrs": set()}
+
+
+def _signin_hops():
+    import socket
+    now = time.time()
+    if _SIGNIN_HOPS["at"] and now - _SIGNIN_HOPS["at"] < (60 if _SIGNIN_HOPS["addrs"] else 15):
+        return _SIGNIN_HOPS["addrs"]
+    dn = os.getenv("DEPLOYMENT_NAME") or "bina-deployment"
+    addrs = set()
+    for name in (f"traefik-{dn}", f"dgo-net-{dn}", f"dgo-link-{dn}"):
+        try:
+            addrs |= {str(i[4][0]) for i in socket.getaddrinfo(name, None, proto=socket.IPPROTO_TCP)}
+        except OSError:
+            continue
+    _SIGNIN_HOPS.update(at=now, addrs=addrs)
+    return addrs
+
+
+#: A WSGI environ key only this process can set: a network request reaches the WSGI environ as REMOTE_ADDR,
+#: the request line and HTTP_* keys for its headers, never as a key of this name. The link builder
+#: (`_frame_answer`, run in-process by link_cli.py) sets it on its own test_client request.
+_LINK_BUILDER_MARK = "dgo.console.link_builder"
+
+
+def _signin_proved():
+    """Were THIS request's sign-in headers written by a sign-in hop — traefik (forward-auth, every person's request;
+    with the SSO off, traefik writes them itself) or the link's door — or is it the console's own link builder's
+    in-process request (the mark above)? The one answer both the forwarding (`_drop_unproved_signin`) and the
+    admins' gate (`_is_admin`) take."""
+    return (request.remote_addr or "") in _signin_hops() or request.environ.get(_LINK_BUILDER_MARK) is True
+
+
+def _drop_unproved_signin(fwd):
+    """A sign-in header is a fact only when traefik (or the door) wrote it. The console is reachable from
+    every container on the office network, and it forwarded whatever headers it was given — so any container
+    could call `/a/computers/…/exec` here with its own `X-authentik-username` and be a PERSON to the app
+    behind it (DGO-1304, the second reader). From anywhere else, the headers are dropped, not believed —
+    except the console's own link builder, whose in-process request carries the mark defined above."""
+    if _signin_proved():
+        return
+    for k in [k for k in fwd if k.lower().startswith("x-authentik-")]:
+        fwd.pop(k)
 
 
 def _as_remote(fwd, door):
@@ -868,7 +1335,17 @@ def app_proxy(name, sub):
     if door:
         base = door["base"]
     if not base:
+        # a tile of a linked office that owns its own origin: `/a/<id>/` was never its route, and a
+        # person who was handed that link gets the address the shell itself would have opened
+        url = _external_redirect(name) if request.method == "GET" else None
+        if url:
+            return redirect(url, code=302)
+    if not base:
         return jsonify(error="unknown_app", app=name), 404
+    # past traefik: this door asks who may go through it itself — an admins' app, and (until a linked office says
+    # who opens its apps) every app of a linked office, are the office's admins' alone (DGO-1755)
+    if (door or _admins_alias(name)) and not _is_admin():
+        return _not_for_you()
     # THE QUERY GOES THROUGH VERBATIM. `params=request.args` round-trips every parameter through
     # urlencode(), which is lossy for any URL that is not a list of `k=v` pairs. DSH (the office
     # agent, module `bina`) addresses its client bundles as
@@ -884,6 +1361,7 @@ def app_proxy(name, sub):
     url = base.rstrip("/") + "/" + sub + (("?" + query) if query else "")
     fwd = {k: v for k, v in request.headers if k.lower() not in _HOP}
     fwd["X-Forwarded-Prefix"] = f"/a/{name}"
+    _drop_unproved_signin(fwd)
     if door:
         _as_remote(fwd, door)
 
@@ -930,7 +1408,12 @@ def app_proxy(name, sub):
     # with UnboundLocalError — the console answered 500 for the whole office and GlitchTip raised it
     # as the newest alert within the minute (measured 2026-10-12 22:16, notification 3205861). The
     # two lines above are the fix, and they are why the assignment stays where the original was.
-    if (r.status_code == 404 and asked_for_a_page and request.method == "GET"
+    # …unless the app MEANS its error and says so (`X-Bina-Final: 1`): then its answer is the page, exactly
+    # as it gave it — no fallback here and no card below. A site the office serves under `/a/sites/public/
+    # <id>/` answers a missing page with the site's own 404, and the fallback put the Sites app itself in
+    # the site's frame, with 200 (measured on Exampleu, 2026-11-09, DGO-1591).
+    final = r.headers.get("X-Bina-Final") == "1"
+    if (r.status_code == 404 and asked_for_a_page and request.method == "GET" and not final
             and "." not in (sub or "").rsplit("/", 1)[-1]):
         r.close()
         try:
@@ -954,11 +1437,11 @@ def app_proxy(name, sub):
     if said:
         r.close()
         return _remote_refusal(door, said, r.status_code, asked_for_a_page)
-    if door and asked_for_a_page and r.status_code >= 400 and "text/html" not in ct:
+    if door and not final and asked_for_a_page and r.status_code >= 400 and "text/html" not in ct:
         return Response(_remote_asleep(door, "הלשכה ענתה, אבל האפליקציה הזאת לא זמינה בה כרגע.",
                                        raw=str(r.status_code)),
                         status=r.status_code, content_type="text/html; charset=utf-8")
-    if not door and asked_for_a_page and r.status_code >= 400 and "text/html" not in ct:
+    if not door and not final and asked_for_a_page and r.status_code >= 400 and "text/html" not in ct:
         return Response(_app_no_screen(name, r.status_code, r.content[:2000].decode("utf-8", "replace")),
                         status=r.status_code, content_type="text/html; charset=utf-8")
 
@@ -973,6 +1456,7 @@ def app_proxy(name, sub):
     if "text/html" in ct:
         html = _rewrite_abs(r.content.decode("utf-8", "replace"), name)
         html = _inject_base(html, f"/a/{name}/")
+        html = _inject_lang(html)            # the office's language (DGO-971)
         _hi = html.lower().find("</head>")   # case-insensitive: injecting before <!DOCTYPE> forces quirks mode
         _css = EMBED_CSS + APP_EMBED_CSS.get(name, "")
         html = (html[:_hi] + _css + html[_hi:]) if _hi >= 0 else _css + html
@@ -1010,7 +1494,7 @@ def app_proxy(name, sub):
     # document) out of this process's memory — but only in pieces of a BOUNDED size. With
     # `chunk_size=None`, urllib3 reads a body that has a Content-Length with ONE `read(None)`: the
     # whole file, in memory, before the first byte goes out. That is what OOM-killed this worker at
-    # its 256M limit five times on FPG (DGO-1231, 10-28..10-30): a 297 MB and a 369 MB meeting mp4
+    # its 256M limit five times on EXF (DGO-1231, 10-28..10-30): a 297 MB and a 369 MB meeting mp4
     # served through /a/meet/recordings, each kill at ~250 MB anon. An event-stream is chunked, so
     # it keeps `None` below: each chunk is passed on the moment it arrives.
     #
@@ -1077,6 +1561,329 @@ def _referer_app():
     return m.group(2)
 
 
+# ── /go/<ref>: the ONE link a person is given (DGO-1433, links.py) ─────────────────────────────────
+# A PATH, resolved here against this console's own live registry and answered with a 302 to the shell's
+# route for it — so it survives any sign-in round trip (a `#` fragment never reaches a server), names the
+# thing rather than the mechanism, and opens on every console that has the thing. What does not resolve is
+# this console's card, in Hebrew, and never another tile — JSON only to the shell's own frame-link catcher, which asks.
+PLANE_WORKSPACE = os.getenv("PLANE_WORKSPACE", "bina")
+
+
+def _own_office():
+    """This office's id — DGO_OFFICE_ID, which the console's compose hands it (the control plane's office record
+    carries no id: reconcile.OFFICE_FIELDS) — or "" when the office declares none."""
+    own = str(os.getenv("DGO_OFFICE_ID") or "").strip().lower()
+    if own:
+        return own                     # never a call to the control plane per link (it may be down: 3 s each)
+    return str(((_office_record() or {}).get("office") or {}).get("id") or "").strip().lower()
+
+
+def go_resolve(ref, query=""):
+    """`links.resolve` against this console's tiles — the one resolution `/go/` and `/api/links` share."""
+    import links
+    return links.resolve(ref, query, _tiles(), _own_office(), PLANE_WORKSPACE)
+
+
+@app.get("/go/", defaults={"ref": ""}, strict_slashes=False)
+@app.get("/go/<path:ref>")
+def go(ref):
+    from flask import redirect
+    from html import escape
+    hit = go_resolve(ref, request.query_string.decode("latin-1"))
+    if request.accept_mimetypes.best_match(["text/html", "application/json"]) == "application/json" \
+            and request.accept_mimetypes["application/json"] > request.accept_mimetypes["text/html"]:
+        # the shell's own frame-link catcher asks for the route itself (static/app.js `goTo`): it moves its route
+        # rather than loading itself again inside an app's frame. One URL, two bodies by Accept: never kept by a cache.
+        resp = jsonify(hit)
+        resp.headers["Cache-Control"] = "no-store"
+        resp.headers["Vary"] = "Accept"
+        return resp, (200 if hit.get("to") else (300 if hit.get("choices") else 404))
+    if hit.get("to"):
+        resp = redirect(hit["to"], 302)
+        resp.headers["Cache-Control"] = "no-store"
+        return resp
+    # several linked offices run what the link asks for, and this one does not: the choice, each its own link
+    picks = "".join(f'<li><a href="{escape(c["go"], quote=True)}" target="_top" dir="ltr">{escape(c["tile"])}</a></li>'
+                    for c in hit.get("choices") or [])
+    page = _card("הקישור לא נפתח" if not picks else "באיזו לשכה?",
+                 "אין כאן מה שהקישור הזה מבקש" if not picks else "הקישור מתאים לכמה לשכות",
+                 f'<p>{escape(hit.get("why") or "")}</p>' + (f"<ul>{picks}</ul>" if picks else "")
+                 + f'<p>הקישור שנפתח: <code dir="ltr">/go/{escape(ref)}</code></p>'
+                 '<p>קישור של הלשכה נראה כך: <code dir="ltr">/go/DGO-1433</code> למשימה, '
+                 '<code dir="ltr">/go/meet/&lt;חדר&gt;</code> לפגישה, '
+                 '<code dir="ltr">/go/&lt;אפליקציה&gt;.&lt;לשכה&gt;</code> לאפליקציה.</p>')
+    return Response(page, status=300 if picks else 404, content_type="text/html; charset=utf-8",
+                    headers={"Cache-Control": "no-store"})
+
+
+# ── links_check: a link is opened past the sign-in BEFORE anybody is given it (DGO-1433) ────────────────
+# No HTTP route: the builder (`bbox console link`, link_cli.py) calls `links_check` IN this container's own
+# process (`docker exec … python3 -c 'import app; app.links_check(…)'`), so nothing is exposed — not through the
+# edge, not to a caller on the office network, not on a native console's loopback (second reader). The check
+# replays what the edge sends AFTER the sign-in, as the person it names (`user`, required — no identity, no
+# check), for the frame the shell would load for that link: a tile this console proxies is asked through its own
+# `/a/<id>/` (`app_proxy`, in process); a linked office's own-host tile is asked at its door, addressed by the
+# tile's own name `<alias>.<office>` (never a field a peer wrote), with the Host the edge's router writes
+# (`<alias>.localhost`, link-proxy `route`) — the far door maps the identity as it does for the edge. A redirect
+# within the app is followed (three at most) as a browser would; a redirect anywhere else, the door's refusal,
+# the console's card, `unknown_app`, a sign-in page or anything not a page is a FAILURE with its sentence — a 302
+# to a sign-in never counts (the owner's phone, twice: `/a/bina-claude.hp-laptop/`). What it proves is said
+# exactly: the page answered past the gate. That the screen drew is a browser's to prove.
+
+
+def _judge_page(status, headers, body):
+    """(ok, sentence) for what a frame was answered, read as a person's browser would show it."""
+    import re as _re
+    head = (body or b"")[:4096].decode("utf-8", "replace")
+    low = head.lower()
+    ctype = str((headers or {}).get("Content-Type") or "")
+    if 300 <= int(status or 0) < 400:
+        return False, f"האפליקציה ענתה הפניה ({status} אל {(headers or {}).get('Location') or '?'}) — הפניה אינה המסך"
+    said = (headers or {}).get("X-Dgo-Door")
+    if said:
+        return False, f"דלת הקישור ענתה במקום האפליקציה ({status}, {said}): " + _DOOR_SAID.get(said, "הלשכה לא ענתה דרך הקישור.")
+    if int(status or 0) != 200:
+        return False, f"האפליקציה ענתה {status} ולא את המסך"
+    if "text/html" not in ctype.lower():
+        return False, f"התשובה אינה דף ({ctype or 'בלי סוג'})"
+    if "data-card" in low[:600]:
+        return False, "הקונסול הציג את הכרטיס שלו — לאפליקציה אין מסך להציג כרגע"
+    if '"unknown_app"' in low or "unknown_app" in low[:200]:
+        return False, "הקונסול לא מכיר את האפליקציה (unknown_app)"
+    if "/if/flow/" in low or "ak-flow" in low or "<ak-" in low:
+        return False, "נפתח דף התחברות ולא האפליקציה"
+    m = _re.search(r"<title[^>]*>([^<]{0,120})", head, _re.I)
+    title = (m.group(1).strip() if m else "") or "בלי כותרת"
+    return True, f"200 · דף ({len(body or b'')} בתים) · «{title}»"
+
+
+def _same_place(location, prefix):
+    """The path a redirect leads to when it stays inside the app (relative, or under `prefix`), else None."""
+    loc = str(location or "")
+    if loc.startswith("/") and not loc.startswith("//"):
+        return loc if (not prefix or loc.startswith(prefix)) else None
+    return None
+
+
+def _frame_answer(tile, inner, user):
+    """(ok, sentence, how) — the frame the shell loads for `tile` with `inner`, asked as the edge asks it."""
+    tid = str(tile.get("id") or "")
+    path = inner if inner.startswith("/") else "/" + inner
+    # asked as `user` AMONG THE OFFICE'S ADMINS: the link builder runs in this process (link_cli.py, `docker exec`),
+    # never for a browser's request, and this process cannot read another person's groups — so the check is of the
+    # frame. Whether a person the owner invited may open an admins' app is the door's own answer (DGO-1755).
+    hdrs = {"Accept": "text/html", "X-authentik-username": user, "X-authentik-groups": "admins"}
+    local = tid in _app_bases() or tid in _remote_doors()
+    alias = str(tile.get("alias") or "")
+    if local or (not tile.get("office") and not tile.get("remote") and alias in _app_bases()):
+        mount = f"/a/{tid if local else alias}"
+        asked = mount + path
+        for _hop in range(4):
+            # in-process, so its address is 127.0.0.1 — not a sign-in hop — and the /a/ proxy would drop the
+            # identity this check is asked as; the WSGI mark (no network caller can set one) keeps it (DGO-1792)
+            r = app.test_client().get(asked, headers=hdrs, environ_base={_LINK_BUILDER_MARK: True})
+            nxt = _same_place(r.headers.get("Location"), mount + "/") if 300 <= r.status_code < 400 else None
+            if not nxt:
+                break
+            asked = nxt
+        ok, said = _judge_page(r.status_code, r.headers, r.get_data())
+        return ok, said, f"{asked} (דרך הקונסול)"
+    office = str(tile.get("office") or (tile.get("remote") or {}).get("office") or "")
+    if not office or not tid.endswith("." + office):
+        return False, "אין לקונסול הזה דרך לפתוח את המסך הזה מעבר להתחברות — הקישור לא נבדק ולכן לא ניתן", tid
+    far = tid[: -len(office) - 1]
+    try:
+        with open(os.path.join(GENERATED, f"remote.{office}.{far}.json"), encoding="utf-8") as f:
+            port = int(json.load(f).get("link_port") or 0)
+    except (OSError, ValueError, TypeError):
+        port = 0
+    if not port:
+        return False, f"לא נמצאה הדלת של {office} לאפליקציה הזאת בלשכה הזאת", f"{tid} (דלת)"
+    base = f"http://{tid}:{port}"            # the tile's own name — the network alias the link's door answers on
+    asked = path
+    # inside a recheck pass, the door's cookies are kept for the pass (_PASS_JARS): signed in once per door and person
+    jar = None if _PASS_JARS is None else _PASS_JARS.setdefault((base, user), requests.cookies.RequestsCookieJar())
+    for _hop in range(4):
+        try:
+            r = requests.get(base + asked, headers={**hdrs, "Host": f"{far}.localhost"}, timeout=25,
+                             allow_redirects=False, **({} if jar is None else {"cookies": jar}))
+        except requests.RequestException as e:
+            app.logger.warning("links check: %s did not answer (%s)", base + asked, type(e).__name__)
+            return False, f"הדלת של {office} לא ענתה — הלשכה כבויה, מנותקת, או שהקישור אליה נפל", base + asked
+        if jar is not None:
+            for c in r.cookies:      # sent back to this door over its internal http, so a Secure mark is dropped here
+                c.secure = False
+                jar.set_cookie(c)
+        nxt = _same_place(r.headers.get("Location"), "") if 300 <= r.status_code < 400 else None
+        if not nxt:
+            break
+        asked = nxt
+    ok, said = _judge_page(r.status_code, r.headers, r.content)
+    return ok, said, f"{base}{asked} (Host {far}.localhost)"
+
+
+def _checked_path(hit):
+    """The `/go/` link exactly as it was checked — its inner route and query included (second reader: the builder
+    handed out the app's home while it had checked a screen inside it)."""
+    to, tid, kind = hit["to"], hit["tile"], hit.get("kind")
+    if kind == "item":
+        return "/go/" + hit["ref"] + to.split(f"/browse/{hit['ref']}/", 1)[1]
+    if kind == "meeting":
+        return "/go/meet/" + to.split("/flow/", 1)[1]
+    return "/go/" + tid + to[len(f"/#/m/{tid}"):]
+
+
+def links_check(ref, user, query=""):
+    """Resolve `ref` as `/go/` does, then open its frame past the sign-in as `user`. `ok` only when the page answered;
+    `path` is the link that was checked. Called in this process only (link_cli.py) — never over HTTP."""
+    hit = go_resolve(ref, query)
+    canon = hit.get("ref") or str(ref or "").strip("/")
+    out = {"ref": canon, "path": f"/go/{canon}", "kind": hit.get("kind") or "", "at": int(time.time())}
+    if not str(user or "").strip():
+        return {**out, "ok": False, "why": "בלי זהות אין בדיקה — הקישור נבדק כמו שהוא נפתח לאדם מסוים"}
+    if not hit.get("to"):
+        return {**out, "ok": False, "why": hit.get("why") or "הקישור לא נפתר",
+                **({"choices": hit["choices"]} if hit.get("choices") else {})}
+    out.update(opens=hit["to"], tile=hit["tile"], path=_checked_path(hit), user=str(user).strip())
+    tile = next((m for m in _modules() if m.get("id") == hit["tile"]), None)
+    if tile is None:
+        return {**out, "ok": False, "why": "המסך נעלם מהלשכה בזמן הבדיקה"}
+    inner = hit["to"][len(f"/#/m/{hit['tile']}"):]
+    ok, said, how = _frame_answer(tile, inner, str(user).strip())
+    out["checks"] = [{"what": how, "ok": ok, "said": said}]
+    return {**out, "ok": ok, **({} if ok else {"why": said})}
+
+
+# ── the ledger: every link a person was given, opened again every 15 minutes (DGO-1433) ─────────────────
+# A link is a record: what was given, to whom, as whom it was opened, when, and every time it was opened again —
+# one line each, appended, never edited (LINKS_DIR, the console's own volume). `bbox console link` records a link
+# only after links_check passed; the console opens every link given again every LINKS_RECHECK_SECONDS (gunicorn's
+# one worker starts the loop, gunicorn.conf.py), and a link that STOPPED opening is a notice in the office's
+# notifications, with the sentence why — before the owner meets it; one that came back closes it.
+LINKS_DIR = os.getenv("LINKS_DIR", "/app/links")
+LINKS_RECHECK_SECONDS = int(os.getenv("LINKS_RECHECK_SECONDS", "900") or 0)
+LINKS_RECHECK_DAYS = int(os.getenv("LINKS_RECHECK_DAYS", "14") or 0)    # a link given longer ago is not opened again
+LINKS_NOTIFY_URL = os.getenv("LINKS_NOTIFY_URL", "http://notifications:8977/api/notifications")
+_DAY = 86400
+# {(door, user): cookie jar} while a recheck pass runs, else None: a door that signs a person in on every request
+# without a cookie (the HP's Plane: office_identity.py) minted a session per link and per hop, 96 times a day for
+# every link — the pattern of the 972k-session jam. One pass signs in once per door (second reader, DGO-1433).
+_PASS_JARS = None
+
+
+def _num(v):
+    try:
+        return int(float(v))
+    except (TypeError, ValueError):
+        return 0
+
+
+def _ledger_path():
+    return os.path.join(LINKS_DIR, "ledger.jsonl")
+
+
+def links_record(row):
+    """One line of the ledger, appended under a lock (the builder's process and the loop write it)."""
+    import fcntl
+    os.makedirs(LINKS_DIR, exist_ok=True)
+    with open(_ledger_path(), "a", encoding="utf-8") as f:
+        fcntl.flock(f, fcntl.LOCK_EX)
+        f.write(json.dumps(row, ensure_ascii=False) + "\n")
+
+
+def links_given():
+    """{path: what the ledger knows of each link GIVEN — its last verdict on top}."""
+    out = {}
+    try:
+        with open(_ledger_path(), encoding="utf-8") as f:
+            for line in f:
+                try:
+                    row = json.loads(line)
+                except ValueError:
+                    continue
+                if isinstance(row, dict) and str(row.get("path") or "").startswith("/go/"):
+                    out.setdefault(row["path"], {}).update({k: v for k, v in row.items() if v is not None})
+    except OSError:
+        return {}
+    return {p: r for p, r in out.items() if r.get("given_at")}
+
+
+def _links_notice(row, ok, said):
+    """The office's notice for a link that stopped opening (error) or came back (info) — one per link, updated.
+    True only when the notifications app took it: a refusal or a stopped app is said again on the next pass."""
+    link = row.get("link") or row.get("path")
+    body = f"הקישור {link} " + ("נפתח שוב." if ok else f"הפסיק להיפתח: {said}. הוא ייבדק שוב בעוד רבע שעה.")
+    try:
+        r = requests.post(LINKS_NOTIFY_URL, json={
+            "source": "links", "source_id": row.get("path"), "level": "info" if ok else "error",
+            "title": "קישור שנשלח חזר להיפתח" if ok else "קישור שנשלח הפסיק להיפתח", "body": body,
+            "link": row.get("path")}, timeout=10)
+    except requests.RequestException as e:
+        app.logger.warning("links recheck: the notice for %s was not written (%s)", row.get("path"), type(e).__name__)
+        return False
+    if not r.ok:
+        app.logger.warning("links recheck: the notice for %s was refused (%s)", row.get("path"), r.status_code)
+    return bool(r.ok)
+
+
+def links_recheck():
+    """Open again every link given in the last LINKS_RECHECK_DAYS, as the person it was opened as, and say a CHANGE.
+
+    A change is against what the owner was last TOLD — the row's `noticed`, and a link given is told as opening —
+    and it is written as told only once the notifications app took it: a notice that failed is said again, and one
+    left up for a link given again is closed (second reader). A check line is written when the verdict changes, for
+    the first check after a link is given, and once a day — not 96 lines a day for every link ever given. One link
+    whose check raises is a verdict of its own, never the end of the pass for the links after it."""
+    global _PASS_JARS
+    now = int(time.time())
+    seen = []
+    _PASS_JARS = {}
+    try:
+        for path, row in sorted(links_given().items()):
+            # older than the window: not opened again — unless the owner was last told it is broken, which stays
+            # checked until the notice that it opens again is said (second reader: it stayed up forever)
+            if LINKS_RECHECK_DAYS > 0 and now - _num(row.get("given_at")) > LINKS_RECHECK_DAYS * _DAY \
+                    and bool(row.get("noticed", True)):
+                continue
+            ref, _, query = path[len("/go/"):].partition("?")
+            try:
+                out = links_check(ref, row.get("as") or "", query)
+            except Exception as e:                      # noqa: BLE001 — one link's check never stops the others
+                app.logger.warning("links recheck: the check of %s failed (%s)", path, type(e).__name__)
+                out = {"ok": False, "why": "הבדיקה עצמה נכשלה — היא תרוץ שוב בעוד רבע שעה"}
+            ok = bool(out.get("ok"))
+            said = out.get("why") or "; ".join(c.get("said", "") for c in out.get("checks") or [])
+            at = _num(out.get("at")) or now
+            line = {"path": path, "link": row.get("link"), "checked_at": at, "ok": ok, "said": said}
+            if ok != bool(row.get("noticed", True)) and _links_notice(row, ok, said):
+                line["noticed"] = ok
+            last = _num(row.get("checked_at"))
+            if ok != bool(row.get("ok", True)) or "noticed" in line or last <= _num(row.get("given_at")) \
+                    or at - last >= _DAY:
+                links_record(line)
+            seen.append({"path": path, "link": row.get("link"), "ok": ok, "said": said})
+    finally:
+        _PASS_JARS = None
+    return seen
+
+
+def start_links_recheck():
+    """The loop, in the server only (gunicorn.conf.py `post_worker_init`): never in a process that imports this file."""
+    import threading
+    if LINKS_RECHECK_SECONDS <= 0 or getattr(start_links_recheck, "started", False):
+        return
+    start_links_recheck.started = True
+
+    def loop():
+        while True:
+            time.sleep(LINKS_RECHECK_SECONDS)
+            try:
+                links_recheck()
+            except Exception as e:                      # noqa: BLE001 — the loop outlives one bad pass
+                app.logger.warning("links recheck: the pass failed (%s)", type(e).__name__)
+    threading.Thread(target=loop, daemon=True, name="links-recheck").start()
+
+
 @app.route("/", defaults={"p": "index.html"})
 @app.route("/<path:p>")
 def spa(p):
@@ -1100,6 +1907,7 @@ def spa(p):
         owner = _referer_app()
         if owner and (owner in _app_bases() or owner in _remote_doors()):
             return app_proxy(owner, p)
+    g.shell_file = True                         # the shell's own file: revalidated after compression (DGO-611)
     resp = send_from_directory(STATIC, p) if os.path.isfile(full) \
         else send_from_directory(STATIC, "index.html")
     resp.headers["Cache-Control"] = "no-cache"

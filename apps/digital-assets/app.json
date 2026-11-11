@@ -5,7 +5,9 @@
     "en": "Digital assets"
   },
   "layer": 3,
+  "people": "admins",
   "kind": "service",
+  "page": "services",
   "version": "0.1.0",
   "summary": {
     "he": "כל מה שהעסק מציג לעולם — לוגו, שם, תיאורים, תוכן ומדיה — במשבצות מסודרות לפי תבניות, ומשם לכל ערוץ: רשתות, אתר ומוצרים",

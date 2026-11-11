@@ -48,11 +48,14 @@ from __future__ import annotations
 
 import ipaddress
 import json
+import logging
 import re
 import time
 from pathlib import Path
 
 import catalog
+
+_log = logging.getLogger("dgo-extend.linkproxy")
 
 #: The tunnel interface, and the only interface traffic may arrive on (`firewall.py` owns the name).
 WG_IF = "wg0"
@@ -363,8 +366,25 @@ def build_multi(home: dict, pairs: list[dict], served_by_peer: dict | None = Non
         # they are how that office learns what it was given, and the door routes by that same list.
         only = catalog.only_for(home.get("serve"), oid)
         given = own if only is None else {k: v for k, v in own.items() if k == SELF_APP or k in only}
-        rules.extend(_pair_rules(home_id, oid, slot, side, link, given,
-                                 served_by_peer.get(oid) or {}, control_bind, halves, host_doors))
+        # …and never an admin surface's agent door by `*` (DGO-1360): the caller says which apps this pair is not
+        # given (`withheld`); a catalog that hid the app while its adapter's port stayed spliced here would
+        # leave the very door the rule closes (second reader: the hub reached the MacBook's agent on 3081).
+        withheld = pair.get("withheld") or frozenset()
+        if withheld:
+            given = {k: v for k, v in given.items()
+                     if k == SELF_APP or not catalog.given_by_name({str(k).lower()}, only, withheld)}
+        mine = _pair_rules(home_id, oid, slot, side, link, given,
+                           served_by_peer.get(oid) or {}, control_bind, halves, host_doors)
+        # THE HERD'S MARK (DGO-1800): the caller decided by key whether this peer is the herd's (give.herd_peer —
+        # both records are the caller's, this renderer reads no disk); the doors that LET THE PEER IN carry it, and
+        # link-proxy writes x-dgo-herd on their requests. Strictly `True`: anything else marks nothing. Only the rules
+        # the DOOR serves (link-proxy: a serve rule of kind `door`, or the catalog's) — an agent port is a raw splice
+        # that rewrites no header, so a mark there would promise a removal nothing performs (the second reader).
+        if pair.get("herd") is True:
+            mine = [{**r, "herd": True}
+                    if r.get("direction") == "serve" and (r.get("kind") == "door" or str(r.get("app")) == SELF_APP)
+                    else r for r in mine]
+        rules.extend(mine)
         meta.append({"office": oid, "slot": slot, "side": side, "self": _address(slot, side),
                      "peer": _address(slot, 3 - side),
                      # The interface is the pair's (`wg<slot>`) when the tunnel runs HERE, and the
@@ -382,8 +402,26 @@ def build_multi(home: dict, pairs: list[dict], served_by_peer: dict | None = Non
         for pair in _shipped_pairs(doc):
             if pair["office"] not in own:
                 meta.append({**pair, "rendered_by": by})
-        rules.extend({**r, "rendered_by": by} for r in doc.get("rules") or []
+        # …never with the herd's mark: a plan another office wrote cannot say that office (or any) is the herd's
+        rules.extend({**{k: v for k, v in r.items() if k != "herd"}, "rendered_by": by}
+                     for r in doc.get("rules") or []
                      if isinstance(r, dict) and str(r.get("office") or "") not in own)
+    # The SAME rule twice is one door, not a clash (DGO-653): the HP's whole delivery plan was refused as
+    # «פורט … מבוקש גם עבור X וגם עבור X» over two identical rows of one office and app. A copy that differs
+    # only in which plan shipped it is dropped, and said with both sources, so the writer that doubles it
+    # shows itself the next time; a rule that differs in anything else still goes through the clash check.
+    kept: list[dict] = []
+    first_of: dict[str, dict] = {}
+    for rule in rules:
+        key = json.dumps({k: v for k, v in rule.items() if k != "rendered_by"}, sort_keys=True, default=str)
+        if key in first_of:
+            _log.warning("delivery plan: rule %s/%s on %s:%s twice (from %s and %s) — one door, the copy dropped",
+                         rule.get("office"), rule.get("app"), rule.get("bind"), rule.get("port"),
+                         first_of[key].get("rendered_by") or home_id, rule.get("rendered_by") or home_id)
+            continue
+        first_of[key] = rule
+        kept.append(rule)
+    rules[:] = kept
     seen: list[dict] = []
     # The doors a declaration decides come first, so a listener that CAN move never takes a port one
     # of them needs: a pair's door, its catalog listener and everything this office serves are fixed
@@ -402,9 +440,10 @@ def build_multi(home: dict, pairs: list[dict], served_by_peer: dict | None = Non
             if free is not None:
                 rule["port"], clash = free, None
         if clash is not None:
+            src = lambda r: f" (מהתוכנית של {r['rendered_by']})" if r.get("rendered_by") else ""  # noqa: E731
             raise LinkProxyError(f"פורט {rule['port']} ({rule['bind']}) מבוקש גם עבור "
-                                 f"{clash['office']}/{clash['app']} וגם עבור "
-                                 f"{rule['office']}/{rule['app']} — דלת אחת, אפליקציה אחת")
+                                 f"{clash['office']}/{clash['app']}{src(clash)} וגם עבור "
+                                 f"{rule['office']}/{rule['app']}{src(rule)} — דלת אחת, אפליקציה אחת")
         seen.append(rule)
     plan = {"office": home_id, "generated_at": int(time.time()), "rules": rules, "pairs": meta}
     if meta:

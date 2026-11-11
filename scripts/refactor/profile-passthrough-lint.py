@@ -42,8 +42,12 @@ Exit 0 = every profile knob is plumbed. Exit 1 = at least one cannot reach any c
 NUMBERING (2026-08-06): moved off G31, which `layer0-lint.py` also declared. `layer0-lint`
 stays: it is referenced in GATES.md, scripts/ci/gates.sh and .github/workflows/ci-verify.yml
 (5 references), while this gate is referenced in NONE of them — so this was the one that
-could move for the cost of a single line. That it is unwired is its own finding: it runs in
-no lane and has no GATES.md row, so nothing it asserts is currently enforced.
+could move for the cost of a single line. That it was unwired was its own finding, and it was
+closed the same way: `unwired_gates()` caught it on 2026-08-09 and it was wired into
+`scripts/refactor/run-gates.py`. What did NOT move with the declaration was the number this
+program PRINTS: all four branches kept printing `G31`, so the runner's report named
+`layer0-lint` whenever this gate failed, from 2026-08-06 until 2026-11-03 — when the number,
+and the `GATES.md` row that had been missing since the renumber, were fixed together.
 """
 import pathlib
 import re
@@ -98,7 +102,7 @@ def compose_referenced_vars():
 def main():
     verbose = "--verbose" in sys.argv
     if not PROFILES.exists():
-        print(f"G31 FAIL — {PROFILES} not found")
+        print(f"G57 FAIL — {PROFILES} not found")
         return 1
 
     profiles = profile_env_keys()
@@ -107,7 +111,7 @@ def main():
 
     missing = [k for k in all_keys if k not in referenced and k not in EXEMPT]
 
-    print(f"G31 — {len(profiles)} profile(s), {len(all_keys)} distinct env knob(s), "
+    print(f"G57 — {len(profiles)} profile(s), {len(all_keys)} distinct env knob(s), "
           f"{len(referenced)} var(s) referenced by compose")
     if verbose:
         for k in all_keys:
@@ -115,7 +119,7 @@ def main():
             print(f"    {k:<38} {where}")
 
     if missing:
-        print(f"G31 FAIL — {len(missing)} profile knob(s) cannot reach any container:")
+        print(f"G57 FAIL — {len(missing)} profile knob(s) cannot reach any container:")
         for k in missing:
             owners = sorted(p for p, ks in profiles.items() if k in ks)
             print(f"    {k}   (set by: {', '.join(owners)})")
@@ -127,7 +131,7 @@ def main():
         print("  or add it to EXEMPT in this file WITH the reason it is consumed elsewhere.")
         return 1
 
-    print("G31 PASS — every profile knob is referenced by at least one compose file")
+    print("G57 PASS — every profile knob is referenced by at least one compose file")
     return 0
 
 

@@ -196,7 +196,7 @@ guard-DSL (§E.2). This keeps it seedable via `TABLE_UPSERT` `[config]` and diff
   // so the generic handler stays type-agnostic [linking].
   "side_effects": {
     "priority_sync": {
-      "endpoint": "https://msh.macomp.vip/odata/Priority/tabula.ini/mscohen/SHIM_RECEIVE_SUPDOC",
+      "endpoint": "https://erp.example.com/odata/Priority/tabula.ini/msexample/SHIM_RECEIVE_SUPDOC",
       "id_field": "SELECTED_DOC_ID",            // INVOICE_ID for invoices; SHIPMENT_ID for shipments [linking]
       "field_map": { "SUPNAME":"SELECTED_COMPANY_ID", "IVNUM":"SELECTED_DOC_ID", "CURDATE":"SELECTED_DOC_DATE", "QPRICE":"SELECTED_DOC_AMOUNT" /* …13 fields */ }
     },

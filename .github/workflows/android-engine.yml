@@ -8,12 +8,27 @@ name: android-engine
 # goes to a draft pre-release as a tarball (the account's Actions storage is full; release assets are
 # outside it). No KVM is open to an app on any phone, so the guest runs under QEMU's TCG: measured ~20×
 # slower to boot on the MacBook engine (no KVM, arm64, as a phone). Only on request: a push to
-# dgo-stable whose head commit says "[android-engine]".
+# dgo-stable whose head commit says "[android-engine]" (QEMU itself only with "[android-engine-qemu]" or the
+# dispatch input `qemu`: otherwise the guest job carries the QEMU of a draft built from the same recipe — DGO-1818).
 
 on:
   push:
     branches: [dgo-stable]
   workflow_dispatch:
+    inputs:
+      public:
+        description: "make the guest from the public copy, the one a phone may fetch (as [android-engine-public] does)"
+        type: boolean
+        default: true
+      arch:
+        description: "the machine's architecture: arm64 (a phone) or amd64 (an x86_64 Android, the emulator — DGO-1723; no QEMU job)"
+        type: choice
+        options: [arm64, amd64]
+        default: arm64
+      qemu:
+        description: "build QEMU too, on GitHub's hosted runner (hours; arm64 only) — off: the guest job carries the QEMU of the newest draft built from the same recipe; only a change of the recipe needs a build"
+        type: boolean
+        default: false
 
 permissions:
   contents: write   # the draft release, and nothing else
@@ -34,18 +49,21 @@ jobs:
   guest:
     if: >-
       github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[android-engine]')
-      || contains(github.event.head_commit.message, '[android-engine-public]')
+      || (contains(github.event.head_commit.message, '[android-engine-public]') || inputs.public)
     concurrency:
-      group: android-engine-guest-${{ github.ref }}
+      # an amd64 machine in a group of its own: it never cancels a phone's (arm64) build, nor is cancelled by one
+      group: android-engine-guest-${{ github.ref }}${{ inputs.arch == 'amd64' && '-amd64' || '' }}
       cancel-in-progress: true
     runs-on: [self-hosted, portable, ssd]
     timeout-minutes: 600   # the office's images built for arm64 through emulation on 2–3 of the Dell's 4 CPUs, an hour's wait for room
+    env:
+      GUEST_ARCH: ${{ inputs.arch || 'arm64' }}   # guest-box.sh's and guest.sh's; every file below is named by it
     steps:
       # no token left in .git/config: this checkout is copied, .git and all, into the published guest disk
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
-          fetch-depth: ${{ contains(github.event.head_commit.message, '[android-engine-public]') && '0' || '1' }}
+          fetch-depth: ${{ (contains(github.event.head_commit.message, '[android-engine-public]') || inputs.public) && '0' || '1' }}
       # gh, where the runner has none (as android-app.yml): a pinned release, checked against its digest —
       # before the build, with the draft below, so that a token or a gh that cannot write a release fails in
       # seconds and not after the build's hour (run 64, 2026-11-03: HTTP 403 creating the draft at its end)
@@ -68,7 +86,7 @@ jobs:
       - name: The engine's draft, before the build
         env:
           GH_TOKEN: ${{ github.token }}
-          PUBLIC: ${{ contains(github.event.head_commit.message, '[android-engine-public]') && '1' || '' }}
+          PUBLIC: ${{ (contains(github.event.head_commit.message, '[android-engine-public]') || inputs.public) && '1' || '' }}
         run: |
           set -euo pipefail
           t="android-engine-${{ github.run_number }}"
@@ -76,16 +94,19 @@ jobs:
           printf '%s' "${seen}" | grep -qi "not found" || { echo "::error::could not tell whether draft ${t} exists: ${seen}"; exit 1; }
           title="The Android engine (draft)"
           [ -z "${PUBLIC}" ] || title="The Android engine, its guest made from the public copy of ${GITHUB_SHA::8} (draft)"
-          gh release create "${t}" --draft --prerelease --target "${GITHUB_SHA}" --title "${title}" \
-            --notes "QEMU for android/arm64 and the guest it boots (DGO-1071)."
+          notes="QEMU for android/arm64 and the guest it boots (DGO-1071)."
+          if [ "${GUEST_ARCH}" != arm64 ]; then
+            title="${title% (draft)}, for ${GUEST_ARCH} (draft)"; notes="The guest for an x86_64 Android, the emulator (DGO-1723): no QEMU."
+          fi
+          gh release create "${t}" --draft --prerelease --target "${GITHUB_SHA}" --title "${title}" --notes "${notes}"
           echo "draft ${t} made"
       # the export parses every JavaScript file it changes, and the Dell's runner has no node of its own
       - uses: actions/setup-node@v4
-        if: contains(github.event.head_commit.message, '[android-engine-public]')
+        if: (contains(github.event.head_commit.message, '[android-engine-public]') || inputs.public)
         with:
           node-version: '22'
       - name: The public copy as the guest's source (when the commit asks for it)
-        if: contains(github.event.head_commit.message, '[android-engine-public]')
+        if: (contains(github.event.head_commit.message, '[android-engine-public]') || inputs.public)
         run: |
           set -euo pipefail
           bash scripts/ci/pip-ensure.sh yaml:pyyaml
@@ -122,6 +143,7 @@ jobs:
             case "${kept}" in ''|*[!0-9]*) kept=0 ;; esac
             kept=$(( kept / 1024 ))
           fi
+          [ "${GUEST_ARCH}" = arm64 ] || kept=0   # the kept store is the arm64 machine's: an amd64 build is room-from-zero
           free="$(df -Pk "${RUNNER_TEMP}" | awk 'NR == 2 {print int($4 / 1048576)}')"
           echo "${free} GB free where the box works, ${kept} GB in its kept store; load $(cut -d' ' -f1-3 /proc/loadavg)"
           [ $(( free + kept )) -ge 30 ] || { echo "::error::${free} GB free in ${RUNNER_TEMP} and ${kept} GB kept, the box needs 30"; exit 1; }
@@ -177,11 +199,12 @@ jobs:
           # dind first: it nests the box's cgroups before guest-box.sh forks anything (its own cgroup namespace)
           docker run --rm --privileged --pull never --cgroupns private --name "dgo-guest-${GITHUB_RUN_ID}" \
             --cpus "${cpus}" --cpu-shares 128 --memory "${mem}" --memory-swap "${mem}" -e GUEST_BOX_CPUS="${cpus}" \
+            -e GUEST_ARCH="${GUEST_ARCH}" \
             -v "${SRC:-${GITHUB_WORKSPACE}}:/src:ro" -v "${RUNNER_TEMP}/guest:/work" -v "${STORE}:/store" \
             "${BOX}" dind bash /src/packaging/android/engine/guest-box.sh /work
-          mv "${RUNNER_TEMP}"/guest/out/dgo-guest-arm64.img.xz.* "${RUNNER_TEMP}"/guest/out/dgo-guest-arm64.manifest.json .
+          mv "${RUNNER_TEMP}"/guest/out/dgo-guest-${GUEST_ARCH}.img.xz.* "${RUNNER_TEMP}"/guest/out/dgo-guest-${GUEST_ARCH}.manifest.json .
           rm -rf pieces && mv "${RUNNER_TEMP}/guest/out/pieces" pieces
-          ls -la dgo-guest-arm64.img.xz.* dgo-guest-arm64.manifest.json; echo "$(ls pieces | wc -l) pieces"
+          ls -la dgo-guest-${GUEST_ARCH}.img.xz.* dgo-guest-${GUEST_ARCH}.manifest.json; echo "$(ls pieces | wc -l) pieces"
       - name: What the box left
         if: always()
         run: |
@@ -198,6 +221,7 @@ jobs:
       - name: Attached to the engine's draft
         env:
           GH_TOKEN: ${{ github.token }}
+          QEMU_ASKED: ${{ ((github.event_name == 'workflow_dispatch' && inputs.qemu && inputs.arch != 'amd64') || contains(github.event.head_commit.message, '[android-engine-qemu]')) && '1' || '' }}
         run: |
           set -euo pipefail
           t="android-engine-${{ github.run_number }}"
@@ -208,37 +232,44 @@ jobs:
             # replace the old ones (the digest is uploaded again last), and a part this run has not (its .xz
             # smaller) goes too — the parts are joined in name order
             had="$(gh release view "${t}" --json assets --jq '.assets[].name')"
-            if printf '%s\n' "${had}" | grep -x dgo-guest-arm64.img.xz.sha256 >/dev/null; then
-              gh release delete-asset "${t}" dgo-guest-arm64.img.xz.sha256 -y
+            if printf '%s\n' "${had}" | grep -x dgo-guest-${GUEST_ARCH}.img.xz.sha256 >/dev/null; then
+              gh release delete-asset "${t}" dgo-guest-${GUEST_ARCH}.img.xz.sha256 -y
             fi
-            for a in $(printf '%s\n' "${had}" | grep -E '^dgo-guest-arm64\.img\.xz\.part[0-9]+$' || true); do
+            for a in $(printf '%s\n' "${had}" | grep -E "^dgo-guest-${GUEST_ARCH}\.img\.xz\.part[0-9]+\$" || true); do
               [ -e "${a}" ] || gh release delete-asset "${t}" "${a}" -y
             done
-            gh release upload "${t}" dgo-guest-arm64.img.xz.part* --clobber
+            gh release upload "${t}" dgo-guest-${GUEST_ARCH}.img.xz.part* --clobber
           elif ! printf '%s' "${seen}" | grep -qi "not found"; then
             echo "::error::could not tell whether draft ${t} exists: ${seen}"; exit 1
           else
             title="The Android engine (draft)"
             [ -z "${PUBLIC_COPY:-}" ] || title="The Android engine, its guest made from the public copy of ${GITHUB_SHA::8} (draft)"
-            gh release create "${t}" dgo-guest-arm64.img.xz.part* --draft --prerelease \
-              --target "${GITHUB_SHA}" --title "${title}" \
-              --notes "QEMU for android/arm64 and the guest it boots (DGO-1071)."
+            notes="QEMU for android/arm64 and the guest it boots (DGO-1071)."
+            if [ "${GUEST_ARCH}" != arm64 ]; then
+              title="${title% (draft)}, for ${GUEST_ARCH} (draft)"; notes="The guest for an x86_64 Android, the emulator (DGO-1723): no QEMU."
+            fi
+            gh release create "${t}" dgo-guest-${GUEST_ARCH}.img.xz.part* --draft --prerelease \
+              --target "${GITHUB_SHA}" --title "${title}" --notes "${notes}"
           fi
           # QEMU, when this run's own qemu job makes none (GitHub's runners out of reach, DGO-1116): from the
           # newest whole draft built from the same recipe — the qemu job below, its recipe's files — so the
           # APK still takes one draft whole. Another recipe is never borrowed: the qemu job must build it.
           # (Before the digest: a draft with the digest is taken as whole, QEMU and all.)
-          # the recipe at commit $1, as one digest — or a failure (an API's error is no recipe to compare)
+          # the recipe at commit $1, as one digest — or a failure (an API's error is no recipe to compare).
+          # The qemu job without its `if:` (the key and its continued lines): when it runs is no part of what it
+          # builds; its runner, its env and its steps are (DGO-1818)
           recipe() {
             local wf sh dir
             wf="$(gh api "repos/${GITHUB_REPOSITORY}/contents/.github/workflows/android-engine.yml?ref=$1" --jq .content)" || return 1
             sh="$(gh api "repos/${GITHUB_REPOSITORY}/contents/packaging/android/engine/collect-qemu.sh?ref=$1" --jq .sha)" || return 1
             dir="$(gh api "repos/${GITHUB_REPOSITORY}/contents/packaging/android/engine/dgo-qemu?ref=$1" --jq '.[] | "\(.path) \(.type) \(.sha)"')" || return 1
-            wf="$(printf '%s' "${wf}" | base64 -d | sed -n '/^  qemu:/,$p')" || return 1
+            wf="$(printf '%s' "${wf}" | base64 -d | sed -n '/^  qemu:/,$p' \
+              | awk '/^    if:/ { s = 1; next } s && /^      / { next } { s = 0; print }')" || return 1
             [ -n "${wf}" ] && [ -n "${sh}" ] && [ -n "${dir}" ] || return 1
             printf '%s\n%s\n%s\n' "${wf}" "${sh}" "${dir}" | sha256sum | cut -d' ' -f1
           }
-          if ! gh release view "${t}" --json assets --jq '.assets[].name' | grep -x qemu-android-arm64.tgz.sha256 >/dev/null; then
+          # (an amd64 machine's draft carries none: the x86_64 Android's engine is AVF, or a QEMU of its own — DGO-1723)
+          if [ "${GUEST_ARCH}" = arm64 ] && ! gh release view "${t}" --json assets --jq '.assets[].name' | grep -x qemu-android-arm64.tgz.sha256 >/dev/null; then
             want="$(recipe "${GITHUB_SHA}")" || want=""
             from=""
             # every candidate whose QEMU is whole there (both files uploaded), newest first; one whose copy does
@@ -261,8 +292,12 @@ jobs:
               gh release upload "${t}" "${q}/qemu-android-arm64.tgz" --clobber
               gh release upload "${t}" "${q}/qemu-android-arm64.tgz.sha256" --clobber
               echo "QEMU from ${from}, built from the same recipe"
-            else
+            elif [ -n "${QEMU_ASKED:-}" ]; then
               echo "::warning::no draft holds a QEMU of this recipe — the qemu job's own is the one ${t} waits for"
+            else
+              # the guest is still attached whole below (android-guest boots it); the run fails after it, by name
+              noqemu="no draft holds a QEMU of recipe ${want:-(unreadable)} and the qemu job was not asked for: ${t} has no QEMU and is not whole — dispatch android-engine with qemu, or push [android-engine] [android-engine-qemu] together"
+              echo "::warning::${noqemu}"
             fi
           fi
           # the pieces a phone fetches and their list (DGO-1089; the list among them under its own SHA-256, the
@@ -274,16 +309,24 @@ jobs:
             [ -e "pieces/${a}" ] || gh release delete-asset "${t}" "${a}" -y
           done
           gh release upload "${t}" pieces/* --clobber
-          gh release upload "${t}" dgo-guest-arm64.manifest.json --clobber
+          gh release upload "${t}" dgo-guest-${GUEST_ARCH}.manifest.json --clobber
           # the public copy the guest was made from, with its tree's hash (the step that made it)
           if [ -n "${PUBLIC_COPY:-}" ]; then
             gh release upload "${t}" "${RUNNER_TEMP}/public-copy.tar.gz" "${RUNNER_TEMP}/public-copy.tree" --clobber
           fi
-          gh release upload "${t}" dgo-guest-arm64.img.xz.sha256 --clobber
-          rm -rf dgo-guest-arm64.img.xz.part* dgo-guest-arm64.img.xz.sha256 dgo-guest-arm64.manifest.json pieces   # the parts and the pieces: twice the .xz on the runner's disk
+          gh release upload "${t}" dgo-guest-${GUEST_ARCH}.img.xz.sha256 --clobber
+          rm -rf dgo-guest-${GUEST_ARCH}.img.xz.part* dgo-guest-${GUEST_ARCH}.img.xz.sha256 dgo-guest-${GUEST_ARCH}.manifest.json pieces   # the parts and the pieces: twice the .xz on the runner's disk
+          [ -z "${noqemu:-}" ] || { echo "::error::${noqemu}"; exit 1; }
 
+  # Only on request (DGO-1818): the recipe is pinned, and the guest job carries the QEMU of a draft built from
+  # the same recipe, so a build is needed only when the recipe changes. Asked for every run, a hosted runner
+  # that takes no job while billing is stopped (DGO-1116) failed in seconds and turned the run of a whole
+  # draft red: a run's status that says the opposite of its draft, to everyone and everything reading it.
+  # (A push saying only [android-engine-qemu] builds QEMU alone; with [android-engine] beside it, the guest too.)
   qemu:
-    if: github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[android-engine]')
+    if: >-
+      (github.event_name == 'workflow_dispatch' && inputs.qemu && inputs.arch != 'amd64')
+      || contains(github.event.head_commit.message, '[android-engine-qemu]')
     concurrency:
       group: android-engine-${{ github.ref }}
       cancel-in-progress: true

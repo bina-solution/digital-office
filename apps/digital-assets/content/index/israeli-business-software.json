@@ -1,0 +1,3845 @@
+{
+ "topic": "israeli-business-software",
+ "checked": "2026-11-05",
+ "notes": "Part 1: seeds verified by opening the vendor homepages and SEC filings on 2026-11-05. | Part 2. WordPress.org plugin active installs seen (D, bracket floors): Morning for WooCommerce 1,000+, SUMIT Payment Gateway 1,000+, Yaad Sarig (Hyp/YaadPay) 2,000+, Z-Credit 900+, Pelecard 200+, Allpay 70+, Yesh Invoice 20+. The 'url' field of some global companies (Melio, Tipalti, Cloudinary, Sisense, Wiz, Sapiens, Magic, Check Point, NiCE, Similarweb, Payoneer, Gong, Papaya, Kaltura, Radware, Varonis, Elementor, Cato) is the company's well-known domain, not necessarily opened. | SUMMARY OF LIMITS: the shared WebSearch budget ran out after about 40 searches (the last Fundbox search was refused); everything after that came from direct page fetches only, no workaround attempted. Several sites returned 403, empty shells or connection errors (see rejected). The Israel-wide reference total (about 600k active businesses / עוסקים) was NOT sourced in this pass, so claims near or above 100k (morning 170k, Grow 100k+, smoove 'hundreds of thousands') could not be cross-checked here. Wix's 304.2M registered users / 6.1M premium subscriptions come from a search excerpt of the 20-F; the opened parts of the 20-F (Tel Aviv address only) did not contain them. Weak Israeli-identity rows to double-check: glassix, commbox, tabit, smoove, priority-software, walkme, hibob/connecteam (directory evidence only). Optional extra fields used: price_note (when a price was seen but could not be converted to ILS). Rows with users = null have no public figure found.\n\nTop-up 2026-11-05: REFERENCE TOTAL (active businesses in Israel): 711,465 active businesses and 4,321,627 employee jobs in 2024 (grade A, a government statistic), per the Central Bureau of Statistics release 'Business Demography 2022-2024' dated 2025-08-07: https://www.cbs.gov.il/he/mediarelease/DocLib/2025/250/29_25_250b.pdf - the PDF was opened (no PDF reader here, so its text objects were decoded locally; the totals appear in the summary line and in the table, where 486,689 + 190,884 + 17,739 + 16,153 = 711,465; Hebrew words in that decode come out reversed). The same release gives 84,006 new businesses in 2024 (6.8% of all active). Also: 697,000 active businesses in 2023 per the CBS as quoted by ice.co.il on 2025-01-14 (opened): https://www.ice.co.il/consumerism/news/article/1046820 ; about 731,600 in 2025 per Maariv, 2026-07-30 (opened; the article names no source): https://www.maariv.co.il/economy/israel/article-1350420 . The CBS counts a business as active if it had positive activity in at least one month of the year (protocol.co.il, opened: https://protocol.co.il/business-demography/). For scale: Grow's 100,000+ businesses is about 14% of the 2024 count and morning's 170,000 about 24%; any figure labelled 'businesses' above about 711,000 cannot be Israel-only, and the existing smoove claim (200k-900k businesses and companies) sits close to the whole market, so it deserves a check.\nFORMAT NOTE: each user_updates entry carries 'users' as asked, plus optional keys for the merger: 'sources_add' (sources to append to the existing row), 'owner_or_parent', 'public_company', 'why_israeli_add', and 'replaces_existing': true where it overrides an existing figure (grow-meshulam C to B, hilan C to D).\nMETHOD: SEC figures were read in the filings themselves (EDGAR company search, full-text search for the document name, then the document in 100k-character chunks). Hebrew press and company pages were opened one by one. JS-rendered Israeli sites that returned 403, empty shells or Cloudflare/Incapsula waits to plain fetches were read in the built-in browser pane as an ordinary visitor (scrolling so the page's own counters run); no challenge was bypassed (Beecomm refused to load at all). Google Play download brackets (D, unit downloads) were read from the rendered store pages on 2026-11-05; they count app installs, not customers or users.\nUSERS UPDATES BY GRADE (22 updates: 20 fill rows that had none, 2 replace an existing figure): A 5, B 5, C 4, D 8. NEW ROWS BY USERS GRADE: A 2, B 3, C 11, D 2, null 2.\nSTILL WITHOUT A FIGURE (no public number found; no defensible E model, so left null): forter, nevo, payme, rav-messer, rivhit, tor4you.\nDOUBTS TO CHECK BEFORE PUBLISHING: (1) hilan - Hebrew Wikipedia says about 1,800 companies in the HR segment while the existing C figure from the homepage reads 'hundreds'; the TASE periodic report was not opened. (2) ontopo - the existing row failed the gate for an http-only source; ontopo.com/he/il opens over https and is added as a source in its update. (3) walkme - its 20-F FY2023 cover gives Tel Aviv as the principal office, unlike the existing row's HQ San Francisco. (4) Bit's date is the page's last-updated stamp (2026-04-05). (5) PayBox ownership is as of June 2024 (Discount was negotiating to buy Shufersal's stake). (6) The Michpal deals for Interspace-Tranzila (70%, NIS 80M valuation) and Makano/Meckano (70%, about NIS 66M) are as reported on 2026-08-20/26; closing was not checked. (7) The 'url' of global-e and jfrog is the well-known company domain, not opened (the filings were); bit-hapoalim uses its Google Play listing as url because bitpay.co.il redirect-looped in a plain fetch. (8) Linet and Z-Credit are new rows with no user figure (Linet shows testimonials only; Z-Credit's real domain is z-credit.com, not zcredit.co.il, and shows no counts); Dibs and Yad2 are new rows whose only figure is a Google Play download bracket (D, installs not users), and Yad2 is a classifieds marketplace with paid business ads rather than business software in the strict sense - drop them if the page should keep only rows with a customer or user count. (8b) Fundbox's 150,000 small businesses (press release of 2025-11-19) was read in a search-result excerpt because the syndication page failed the TLS handshake; Calcalist Tech (opened, 2021-11-30) supports the Israeli identity and gives an older, wider 325,000 'connected with' figure. Snyk has only a low-confidence tracker figure (Latka 5K, undated, unsourced), used as D; Forter, Nevo, PayMe, Rivhit, Rav Messer and Tor4You had no usable public figure (searches and pages opened gave no counts). (9) Several ranges for 'thousands' (2,000-9,000) and 'hundreds of thousands' (200,000-900,000) follow the earlier convention and are our reading of the wording, labelled in each note.\nSEARCH BUDGET: 27 of 40 WebSearch calls used.",
+ "rows": [
+  {
+   "id": "monday-com",
+   "name_he": "monday.com",
+   "name_en": "monday.com",
+   "url": "https://monday.com/",
+   "category": "work-management",
+   "summary_he": "פלטפורמת ענן לניהול עבודה, פרויקטים ותהליכים, עם מוצרי CRM, שירות ופיתוח, המשמשת צוותים בארגונים קטנים וגדולים ברחבי העולם.",
+   "why_israeli": "Principal executive offices at 6 Yitzhak Sadeh Street, Tel Aviv (cover page of its Form 20-F FY2025, opened); files 20-F as a foreign private issuer.",
+   "sources": [
+    {
+     "url": "https://www.sec.gov/Archives/edgar/data/0001845338/000117891326000870/zk2634436.htm",
+     "date": "2026-03-13",
+     "what": "Form 20-F FY2025 (opened): Tel Aviv address; 'over 250,000 customers as of December 31, 2025'; 4,281 customers above $50k ARR. Date is the filing-announcement date per monday.com IR.",
+     "grade": "A"
+    },
+    {
+     "url": "https://ir.monday.com/news-and-events/news-releases/news-details/2026/monday-com-Files-its-2025-Annual-Report-on-Form-20-F/default.aspx",
+     "date": "2026-03-13",
+     "what": "Company IR notice that the 2025 20-F was filed (seen in search results).",
+     "grade": "B"
+    }
+   ],
+   "grade": "A",
+   "verified_at": "2026-11-05",
+   "users": {
+    "low": 250000,
+    "high": null,
+    "unit": "customers",
+    "scope": "worldwide",
+    "grade": "A",
+    "source_url": "https://www.sec.gov/Archives/edgar/data/0001845338/000117891326000870/zk2634436.htm",
+    "source_date": "2026-03-13",
+    "note": "20-F text: 'over 250,000 customers as of December 31, 2025' (a search excerpt of the same filing words it 'paying customers'). All monday products combined (work management, CRM, service, dev)."
+   },
+   "price_from_ils": null,
+   "hebrew_ui": null,
+   "rtl": null,
+   "allocation_numbers": null,
+   "owner_or_parent": null,
+   "public_company": "NASDAQ:MNDY"
+  },
+  {
+   "id": "wix",
+   "name_he": "וויקס (Wix)",
+   "name_en": "Wix.com",
+   "url": "https://www.wix.com/",
+   "category": "ecommerce-sites",
+   "summary_he": "פלטפורמה לבניית אתרים, חנויות מקוונות ועסקים דיגיטליים עם כלי בינה מלאכותית; בבעלותה גם Base44 לבניית אפליקציות.",
+   "why_israeli": "Principal executive offices at 5 Yunitsman St., Tel Aviv (cover page of its Form 20-F FY2025, opened); files 20-F as a foreign private issuer.",
+   "sources": [
+    {
+     "url": "https://www.sec.gov/Archives/edgar/data/1576789/000162828026015222/wix-20251231.htm",
+     "date": "2025-12-31",
+     "what": "Form 20-F FY2025: Tel Aviv address seen in the opened first part; registered-users (304.2M) and premium-subscription (6.1M) figures seen in a search excerpt of this filing, not in the opened part. Date = fiscal year end; filing date not seen.",
+     "grade": "A"
+    }
+   ],
+   "grade": "A",
+   "verified_at": "2026-11-05",
+   "users": {
+    "low": 304200000,
+    "high": 304200000,
+    "unit": "registered users",
+    "scope": "worldwide",
+    "grade": "A",
+    "source_url": "https://www.sec.gov/Archives/edgar/data/1576789/000162828026015222/wix-20251231.htm",
+    "source_date": "2025-12-31",
+    "note": "Total registered users 304.2M at 2025-12-31 (282.4M a year earlier); includes Base44 users. Total premium subscriptions 6.1M (down 1%); Wix says it will stop reporting that number regularly. Figures quoted from a search excerpt of the 20-F; not re-read in the opened part."
+   },
+   "price_from_ils": null,
+   "hebrew_ui": null,
+   "rtl": null,
+   "allocation_numbers": null,
+   "owner_or_parent": null,
+   "public_company": "NASDAQ:WIX"
+  },
+  {
+   "id": "nayax",
+   "name_he": "נאיקס (Nayax)",
+   "name_en": "Nayax",
+   "url": "https://www.nayax.com/",
+   "category": "payments-clearing",
+   "summary_he": "פתרונות תשלום ללא מזומן ותוכנת ניהול למכונות אוטומטיות ולנקודות מכירה לא מאוישות, בשיטת תשלום לפי מכשיר מחובר.",
+   "why_israeli": "Principal executive offices at 3 Arik Einstein St., Herzliya, Israel (cover page of its Form 20-F FY2025, opened); listed on Nasdaq and TASE.",
+   "sources": [
+    {
+     "url": "https://www.sec.gov/Archives/edgar/data/0001901279/000117891326000779/zk2634476.htm",
+     "date": "2025-12-31",
+     "what": "Form 20-F FY2025 (opened): Herzliya address; 'approximately 115,000 [customers] as of December 31, 2025'; Nasdaq NYAX and TASE listing. Date = fiscal year end.",
+     "grade": "A"
+    },
+    {
+     "url": "https://ir.nayax.com/news/news-details/2026/Nayax-Reports-Fourth-Quarter-and-Full-Year-2025-Results/default.aspx",
+     "date": null,
+     "what": "FY2025 results release (seen in search results): about 1.463M managed and connected devices, almost 115,000 customers, 19,400 added in 2025.",
+     "grade": "B"
+    }
+   ],
+   "grade": "A",
+   "verified_at": "2026-11-05",
+   "users": {
+    "low": 115000,
+    "high": 115000,
+    "unit": "customers",
+    "scope": "worldwide",
+    "grade": "A",
+    "source_url": "https://www.sec.gov/Archives/edgar/data/0001901279/000117891326000779/zk2634476.htm",
+    "source_date": "2025-12-31",
+    "note": "About 115,000 customers at 2025-12-31 per the 20-F; the results release adds ~1.463M managed and connected devices (+16.1%)."
+   },
+   "price_from_ils": null,
+   "hebrew_ui": null,
+   "rtl": null,
+   "allocation_numbers": null,
+   "owner_or_parent": null,
+   "public_company": "NASDAQ:NYAX; TASE:NYAX"
+  },
+  {
+   "id": "morning-green-invoice",
+   "name_he": "מורנינג (חשבונית ירוקה)",
+   "name_en": "morning (Green Invoice)",
+   "url": "https://greeninvoice.co.il/",
+   "category": "invoicing-accounting",
+   "summary_he": "מערכת ענן להפקת חשבוניות וקבלות ולניהול הכנסות והוצאות לעצמאים ולעסקים קטנים; חשבונית ירוקה שינתה את שמה ל-morning.",
+   "why_israeli": "Hebrew-only Israeli-tax product on greeninvoice.co.il (VAT, exempt/authorized dealers, Israel Invoice allocation-number rules); the homepage names no HQ city or parent.",
+   "sources": [
+    {
+     "url": "https://greeninvoice.co.il/",
+     "date": null,
+     "what": "Homepage (opened): '170,000 independent business owners' trust the system; banner on the allocation-number requirement for invoices over 5,000 NIS from June 2026 and a link to an 'Israel Invoice' explainer; free-trial month; © 2026.",
+     "grade": "C"
+    },
+    {
+     "url": "https://www.bhol.co.il/news/1427521",
+     "date": null,
+     "what": "Article (seen in search results) that Green Invoice is renamed morning with a new UI.",
+     "grade": "D"
+    }
+   ],
+   "grade": "C",
+   "verified_at": "2026-11-05",
+   "users": {
+    "low": 170000,
+    "high": 170000,
+    "unit": "business owners (self-employed and businesses)",
+    "scope": "israel",
+    "grade": "C",
+    "source_url": "https://greeninvoice.co.il/",
+    "source_date": null,
+    "note": "Homepage claim, undated (© 2026). Another morning page seen in search results still says 'over 160 thousand businesses', so the figure moves; scope assumed Israel (Hebrew, Israeli-tax product)."
+   },
+   "price_from_ils": null,
+   "hebrew_ui": true,
+   "rtl": true,
+   "allocation_numbers": null,
+   "owner_or_parent": null,
+   "public_company": null
+  },
+  {
+   "id": "grow-meshulam",
+   "name_he": "Grow (משולם)",
+   "name_en": "Grow (formerly Meshulam)",
+   "url": "https://grow.business/",
+   "category": "payments-clearing",
+   "summary_he": "חברת סליקה ובנקאות לעסקים קטנים: סליקת אשראי, Bit, Apple Pay וגוגל פיי, קישורי תשלום וחשבוניות באפליקציה.",
+   "why_israeli": "Operating company named in the footer: גרואו פיימנטס בע״מ (ח.פ 500000211), holding an Israel Securities Authority payment-company licence; Hebrew-language site.",
+   "sources": [
+    {
+     "url": "https://grow.business/",
+     "date": null,
+     "what": "Homepage (opened): '+100,000 businesses use Grow solutions', '+1,000 new customers every month', '0.75% per transaction + 59 NIS per month', licence and company number in the footer.",
+     "grade": "C"
+    }
+   ],
+   "grade": "C",
+   "verified_at": "2026-11-05",
+   "users": {
+    "low": 100000,
+    "high": null,
+    "unit": "businesses",
+    "scope": "israel",
+    "grade": "C",
+    "source_url": "https://grow.business/",
+    "source_date": null,
+    "note": "Homepage claim '+100,000' (undated); the brief's Calcalist grade-B source for the same figure was not found in this pass. Scope assumed Israel."
+   },
+   "price_from_ils": {
+    "amount": 59,
+    "period": "month",
+    "per": "business",
+    "source_url": "https://grow.business/",
+    "date": "2026-11-05",
+    "note": "Plus 0.75% per transaction, per the homepage."
+   },
+   "hebrew_ui": true,
+   "rtl": true,
+   "allocation_numbers": null,
+   "owner_or_parent": null,
+   "public_company": null
+  },
+  {
+   "id": "hyp-payment-solutions",
+   "name_he": "הייפ (Hyp)",
+   "name_en": "Hyp Payment Solutions",
+   "url": "https://hyp.co.il/",
+   "category": "payments-clearing",
+   "summary_he": "חברת פתרונות תשלום וסליקה, שמפעילה גם מערכת חשבוניות דיגיטליות ותוכנת EZcount.",
+   "why_israeli": "Copyright holder הייפ פתרונות תשלום בע״מ, address Jabotinsky 9, Bnei Brak, Israel (homepage footer, opened); Hebrew site.",
+   "sources": [
+    {
+     "url": "https://hyp.co.il/",
+     "date": null,
+     "what": "Homepage (opened): live counter '62,524+ customers working with us' and '1,820,386+ digital invoices' per month; copyright to Hyp Payment Solutions Ltd.; no mention of CreditGuard.",
+     "grade": "C"
+    }
+   ],
+   "grade": "C",
+   "verified_at": "2026-11-05",
+   "users": {
+    "low": 62524,
+    "high": 62524,
+    "unit": "customers",
+    "scope": "israel",
+    "grade": "C",
+    "source_url": "https://hyp.co.il/",
+    "source_date": null,
+    "note": "Looks like a live homepage counter, read on 2026-11-05. The brief links Hyp with CreditGuard; the Hyp homepage does not mention CreditGuard, so that link is unverified. Scope assumed Israel."
+   },
+   "price_from_ils": null,
+   "hebrew_ui": true,
+   "rtl": true,
+   "allocation_numbers": null,
+   "owner_or_parent": null,
+   "public_company": null
+  },
+  {
+   "id": "ezcount",
+   "name_he": "EZcount (איזיקאונט)",
+   "name_en": "EZcount (EasyCount)",
+   "url": "https://www.ezcount.co.il/",
+   "category": "invoicing-accounting",
+   "summary_he": "תוכנת חשבוניות וקבלות בענן עם סליקת אשראי מתוך המסמך, כחלק מקבוצת Hyp.",
+   "why_israeli": "Hebrew site; copyright הייפ פתרונות תשלום בע״מ, offices in Bnei Brak (Jabotinsky 9) and Yavne (Nahal Shener 3), per the homepage footer (opened).",
+   "sources": [
+    {
+     "url": "https://www.ezcount.co.il/",
+     "date": null,
+     "what": "Homepage (opened): counters '5000 satisfied customers', '150000 invoices every month'; 'cloud accounting from Hyp'; no prices on the page.",
+     "grade": "C"
+    },
+    {
+     "url": "https://www.zoominfo.com/c/ezcount/459513335",
+     "date": null,
+     "what": "Directory profile (seen in search results): 11-50 employees, Israel.",
+     "grade": "D"
+    }
+   ],
+   "grade": "C",
+   "verified_at": "2026-11-05",
+   "users": {
+    "low": 5000,
+    "high": 5000,
+    "unit": "customers",
+    "scope": "israel",
+    "grade": "C",
+    "source_url": "https://www.ezcount.co.il/",
+    "source_date": null,
+    "note": "Homepage counter 'satisfied customers: 5000' looks like a static marketing figure; invoice-volume counters on the same page (150,000/month) differ from Hyp's own page (1.82M/month), so treat as low-confidence."
+   },
+   "price_from_ils": null,
+   "hebrew_ui": true,
+   "rtl": true,
+   "allocation_numbers": null,
+   "owner_or_parent": "Hyp Payment Solutions Ltd. (copyright holder on ezcount.co.il; 'cloud accounting from Hyp')",
+   "public_company": null
+  },
+  {
+   "id": "cardcom",
+   "name_he": "קארדקום (Cardcom)",
+   "name_en": "Cardcom",
+   "url": "https://www.cardcom.solutions/",
+   "category": "payments-clearing",
+   "summary_he": "חברת סליקה ופתרונות תשלום לעסקים, עם שער תשלומים וחשבוניות אוטומטיות, המוגדרת בישראל כחברת אשראי.",
+   "why_israeli": "Headquarters listed at Harokmim 26, Azrieli compound, Holon (homepage footer, opened); Hebrew site.",
+   "sources": [
+    {
+     "url": "https://www.cardcom.solutions/",
+     "date": null,
+     "what": "Homepage (opened): 'tens of thousands of businesses'; says it became an official credit company; HQ Holon.",
+     "grade": "C"
+    }
+   ],
+   "grade": "C",
+   "verified_at": "2026-11-05",
+   "users": {
+    "low": 20000,
+    "high": 90000,
+    "unit": "businesses",
+    "scope": "israel",
+    "grade": "C",
+    "source_url": "https://www.cardcom.solutions/",
+    "source_date": null,
+    "note": "Claim is only 'tens of thousands of businesses' (undated); read here as 20k-90k. Scope assumed Israel."
+   },
+   "price_from_ils": null,
+   "hebrew_ui": true,
+   "rtl": true,
+   "allocation_numbers": null,
+   "owner_or_parent": null,
+   "public_company": null
+  },
+  {
+   "id": "payplus",
+   "name_he": "פיי פלוס (PayPlus)",
+   "name_en": "PayPlus",
+   "url": "https://www.payplus.co.il/",
+   "category": "payments-clearing",
+   "summary_he": "חברת סליקה ושער תשלומים לעסקים בכל ערוצי המכירה, עם ייצוא חשבוניות למערכות הנהלת חשבונות.",
+   "why_israeli": "Hebrew site on a .co.il domain, footer 'PayPlus LTD', integrates with Israeli accounting software (Priority, Hashavshevet); no HQ address shown.",
+   "sources": [
+    {
+     "url": "https://www.payplus.co.il/",
+     "date": null,
+     "what": "Homepage (opened): 'tens of thousands of businesses manage payments with our solutions'; sample API; export to SAP, Priority, Hashavshevet.",
+     "grade": "C"
+    }
+   ],
+   "grade": "C",
+   "verified_at": "2026-11-05",
+   "users": {
+    "low": 20000,
+    "high": 90000,
+    "unit": "businesses",
+    "scope": "israel",
+    "grade": "C",
+    "source_url": "https://www.payplus.co.il/",
+    "source_date": null,
+    "note": "Claim is only 'tens of thousands of businesses' (undated); read here as 20k-90k. Scope assumed Israel."
+   },
+   "price_from_ils": null,
+   "hebrew_ui": true,
+   "rtl": true,
+   "allocation_numbers": null,
+   "owner_or_parent": null,
+   "public_company": null
+  },
+  {
+   "id": "tranzila",
+   "name_he": "טרנזילה (Tranzila)",
+   "name_en": "Tranzila Paytech",
+   "url": "https://www.tranzila.com/",
+   "category": "payments-clearing",
+   "summary_he": "חברת סליקה ופתרונות תשלום, כולל סליקה בנייד ומערכת חשבוניות דיגיטליות מאושרת, ממשרדיה בנתניה.",
+   "why_israeli": "Address Meir Ariel 6, Netanya, Israel in the footer; header 'Tranzila Paytech' (homepage, opened); Hebrew site.",
+   "sources": [
+    {
+     "url": "https://www.tranzila.com/",
+     "date": null,
+     "what": "Homepage (opened): self-ranking '#1 clearing services in Israel (2026)'; mobile-payment plan from 29 NIS per month; invoicing system approved by the Tax Authority; no customer count.",
+     "grade": "C"
+    },
+    {
+     "url": "https://www.bizportal.co.il/capitalmarket/news/article/20040479",
+     "date": "2026-08-26",
+     "what": "the user figure",
+     "grade": "B"
+    }
+   ],
+   "grade": "C",
+   "verified_at": "2026-11-05",
+   "users": {
+    "low": 2000,
+    "high": 9000,
+    "unit": "businesses (small and medium businesses)",
+    "scope": "israel",
+    "grade": "B",
+    "source_url": "https://www.bizportal.co.il/capitalmarket/news/article/20040479",
+    "source_date": "2026-08-26",
+    "note": "Bizportal: the Interspace-Tranzila customer base 'includes thousands of small and medium businesses' (no exact number). The range is our reading of 'thousands'. The Android app 'Tranzila' has only 1K+ downloads (not used)."
+   },
+   "price_from_ils": {
+    "amount": 29,
+    "period": "month",
+    "per": "business",
+    "source_url": "https://www.tranzila.com/",
+    "date": "2026-11-05",
+    "note": "'From 29 NIS per month' for the mobile-payments plan, per the homepage."
+   },
+   "hebrew_ui": true,
+   "rtl": true,
+   "allocation_numbers": null,
+   "owner_or_parent": null,
+   "public_company": null
+  },
+  {
+   "id": "sumit",
+   "name_he": "סאמיט (SUMIT)",
+   "name_en": "SUMIT",
+   "url": "https://www.sumit.co.il/",
+   "category": "invoicing-accounting",
+   "summary_he": "מערכת ענן לניהול עסק והפקת חשבוניות, עם מסלול חינמי לעוסק פטור ומסלולים בתשלום נמוך.",
+   "why_israeli": "Hebrew-language product that serves 'businesses in Israel' (homepage, opened); the page names no HQ or parent.",
+   "sources": [
+    {
+     "url": "https://www.sumit.co.il/",
+     "date": null,
+     "what": "Homepage (opened): 'over 35,000 businesses in Israel' use SUMIT; free exempt-dealer plan at 0 NIS, paid plans from 19 NIS per month + VAT; © 2026.",
+     "grade": "C"
+    }
+   ],
+   "grade": "C",
+   "verified_at": "2026-11-05",
+   "users": {
+    "low": 35000,
+    "high": null,
+    "unit": "businesses",
+    "scope": "israel",
+    "grade": "C",
+    "source_url": "https://www.sumit.co.il/",
+    "source_date": null,
+    "note": "'Over 35,000 businesses in Israel' on the homepage, undated (© 2026)."
+   },
+   "price_from_ils": {
+    "amount": 0,
+    "period": "month",
+    "per": "business",
+    "source_url": "https://www.sumit.co.il/",
+    "date": "2026-11-05",
+    "note": "Free 'exempt dealer' plan with no time limit; the cheapest paid plan starts at 19 NIS per month + VAT."
+   },
+   "hebrew_ui": true,
+   "rtl": true,
+   "allocation_numbers": null,
+   "owner_or_parent": null,
+   "public_company": null
+  },
+  {
+   "id": "invoice4u",
+   "name_he": "Invoice4U (חשבונית 4U)",
+   "name_en": "Invoice4U",
+   "url": "https://www.invoice4u.co.il/",
+   "category": "invoicing-accounting",
+   "summary_he": "תוכנת חשבוניות אונליין הפועלת מאז 2004, הכוללת קבלת מספרי הקצאה מרשות המסים והפקת חשבוניות כחוק.",
+   "why_israeli": "Hebrew site on a .co.il domain, 'since 2004', Israeli-tax invoices; no HQ or parent named on the page.",
+   "sources": [
+    {
+     "url": "https://www.invoice4u.co.il/",
+     "date": null,
+     "what": "Homepage (opened): 'document issuing from 21 per month' (currency not shown); links an article 'allocation number for an invoice 2026' and a guide on receiving allocation numbers from the Tax Authority; customer counter shows 0 (placeholder).",
+     "grade": "C"
+    },
+    {
+     "url": "https://play.google.com/store/apps/details?id=com.invoice4u&hl=en",
+     "date": null,
+     "what": "the user figure",
+     "grade": "D"
+    }
+   ],
+   "grade": "C",
+   "verified_at": "2026-11-05",
+   "users": {
+    "low": 10000,
+    "high": null,
+    "unit": "downloads",
+    "scope": "israel",
+    "grade": "D",
+    "source_url": "https://play.google.com/store/apps/details?id=com.invoice4u&hl=en",
+    "source_date": null,
+    "note": "Google Play 'Invoice4u' Android app: 10K+ downloads, 50 reviews (read 2026-11-05). The website counters render 0 (placeholders), so no company figure exists. A download bracket, not a customer count."
+   },
+   "price_from_ils": null,
+   "hebrew_ui": true,
+   "rtl": true,
+   "allocation_numbers": true,
+   "owner_or_parent": null,
+   "public_company": null,
+   "price_note": "Page says 'from 21 per month' without a currency, so not converted."
+  },
+  {
+   "id": "rivhit",
+   "name_he": "ריווחית (Rivhit)",
+   "name_en": "Rivhit",
+   "url": "https://www.rivhit.co.il/",
+   "category": "invoicing-accounting",
+   "summary_he": "ספקית פתרונות לניהול עסק, הנהלת חשבונות, שכר וסליקה, הפועלת מעל 20 שנה.",
+   "why_israeli": "Hebrew site of an Israeli provider (phone 03-0000013, homepage opened); describes 20+ years serving businesses.",
+   "sources": [
+    {
+     "url": "https://www.rivhit.co.il/",
+     "date": null,
+     "what": "Homepage (opened): 'over 20 years'; 'Rivhit Online' 12-for-10 months offer; business counter shows 0 (placeholder); no prices or counts.",
+     "grade": "C"
+    }
+   ],
+   "grade": "C",
+   "verified_at": "2026-11-05",
+   "users": null,
+   "price_from_ils": null,
+   "hebrew_ui": true,
+   "rtl": true,
+   "allocation_numbers": null,
+   "owner_or_parent": null,
+   "public_company": null
+  },
+  {
+   "id": "bizibox",
+   "name_he": "ביזיבוקס (bizibox)",
+   "name_en": "bizibox",
+   "url": "https://www.bizibox.biz/",
+   "category": "invoicing-accounting",
+   "summary_he": "פלטפורמה לאוטומציה של הנהלת חשבונות עם התאמת בנק ותיעוד הוצאות, לבעלי עסקים ולמשרדי רואי חשבון.",
+   "why_israeli": "Footer lists I Fact LTD, Tuval 40, Ramat Gan (homepage, opened); Hebrew site.",
+   "sources": [
+    {
+     "url": "https://www.bizibox.biz/",
+     "date": null,
+     "what": "Homepage (opened): 'join thousands of business owners', 'join hundreds of offices' (accountants); one-month free trial.",
+     "grade": "C"
+    }
+   ],
+   "grade": "C",
+   "verified_at": "2026-11-05",
+   "users": {
+    "low": 2000,
+    "high": 9000,
+    "unit": "business owners (plus hundreds of accountant offices)",
+    "scope": "israel",
+    "grade": "C",
+    "source_url": "https://www.bizibox.biz/",
+    "source_date": null,
+    "note": "Only 'thousands of business owners' and 'hundreds of offices' are claimed; read here as 2k-9k and 200-900 offices. Undated."
+   },
+   "price_from_ils": null,
+   "hebrew_ui": true,
+   "rtl": true,
+   "allocation_numbers": null,
+   "owner_or_parent": null,
+   "public_company": null
+  },
+  {
+   "id": "hashavshevet-h-erp",
+   "name_he": "חשבשבת (H-ERP)",
+   "name_en": "Hashavshevet H-ERP",
+   "url": "https://www.h-erp.co.il/",
+   "category": "erp",
+   "summary_he": "תוכנת הנהלת חשבונות ו-ERP ותיקה לעסקים, הכוללת ניהול מלאי ופיננסים, בבעלות קבוצת חילן מאז 2021.",
+   "why_israeli": "Hebrew Wikipedia (opened): Israeli company founded Dec 1985 by Dr Avraham and Rachel Midan, HQ Beit Hillel 3, Tel Aviv, about 200 employees; homepage schema data gives the same address.",
+   "sources": [
+    {
+     "url": "https://www.h-erp.co.il/",
+     "date": null,
+     "what": "Homepage (opened; hashavshevet.co.il redirects here): Tel Aviv address, 10 service branches in Israel, notice about the Tax Authority Israel-Invoice allocation load; no customer count; no mention of Hilan.",
+     "grade": "C"
+    },
+    {
+     "url": "https://he.wikipedia.org/wiki/%D7%97%D7%A9%D7%91%D7%A9%D7%91%D7%AA",
+     "date": null,
+     "what": "Hebrew Wikipedia (opened): founded Dec 1985; software 'common among businesses in Israel'; about 200 employees; sold to Hilan in Oct 2021 for NIS 210M; stays an independent company.",
+     "grade": "D"
+    },
+    {
+     "url": "https://www.bizportal.co.il/capitalmarket/news/article/797897",
+     "date": "2021-11-16",
+     "what": "Bizportal (opened): Hilan expected to buy Hashavshevet for NIS 210 million plus 15-35% royalties 2022-2031 on overseas revenue growth.",
+     "grade": "B"
+    },
+    {
+     "url": "https://downloads.h-erp.co.il/Files/Zoom/IsrInv2024.pdf",
+     "date": null,
+     "what": "H-ERP's own 'Israel Invoice 2024' guide (seen in search results, not opened): evidence of allocation-number support.",
+     "grade": "C"
+    }
+   ],
+   "grade": "B",
+   "verified_at": "2026-11-05",
+   "users": {
+    "low": 10000,
+    "high": 30000,
+    "unit": "customers (businesses)",
+    "scope": "israel",
+    "grade": "E",
+    "source_url": "https://he.wikipedia.org/wiki/%D7%97%D7%A9%D7%91%D7%A9%D7%91%D7%AA",
+    "source_date": null,
+    "note": "Our model: about 200 employees (he.wikipedia, opened) x an assumed NIS 300k-500k revenue per employee = NIS 60-100M revenue, divided by an assumed NIS 3,000-6,000 per customer per year (licence + support) gives roughly 10k-30k customers. The company publishes no count; Wikipedia says only that the software is common among Israeli businesses."
+   },
+   "price_from_ils": null,
+   "hebrew_ui": true,
+   "rtl": true,
+   "allocation_numbers": true,
+   "owner_or_parent": "Hilan bought Hashavshevet (NIS 210M, announced Nov 2021, bizportal 2021-11-16; Hebrew Wikipedia says Oct 2021)",
+   "public_company": null
+  },
+  {
+   "id": "hilan",
+   "name_he": "חילן (Hilan)",
+   "name_en": "Hilan Ltd.",
+   "url": "https://www.hilan.co.il/",
+   "category": "payroll-hr",
+   "summary_he": "קבוצת תוכנה ושירותים לשכר, נוכחות וניהול הון אנושי, שמשרתת מאות ארגונים; חברה ציבורית בבורסה בתל אביב.",
+   "why_israeli": "Head office Meitav 8, Tel Aviv (homepage, opened); Hebrew site; shares quoted on the Tel Aviv Stock Exchange (bizportal quote page seen in search results).",
+   "sources": [
+    {
+     "url": "https://www.hilan.co.il/",
+     "date": null,
+     "what": "Homepage (opened): 'hundreds of customers from a range of sectors'; products Hilan payroll, time & attendance, HR, BPO; Hashavshevet shown among group companies.",
+     "grade": "C"
+    },
+    {
+     "url": "https://www.bizportal.co.il/capitalmarket/quote/news/1084698",
+     "date": null,
+     "what": "TASE quote/news page for Hilan (seen in search results, not opened).",
+     "grade": "D"
+    }
+   ],
+   "grade": "C",
+   "verified_at": "2026-11-05",
+   "users": {
+    "low": 200,
+    "high": 900,
+    "unit": "customers (organizations)",
+    "scope": "israel",
+    "grade": "C",
+    "source_url": "https://www.hilan.co.il/",
+    "source_date": null,
+    "note": "Homepage says 'hundreds of customers'; read here as 200-900 organizations. Customers are mostly large employers, so employee counts are far higher (not found)."
+   },
+   "price_from_ils": null,
+   "hebrew_ui": true,
+   "rtl": true,
+   "allocation_numbers": null,
+   "owner_or_parent": null,
+   "public_company": "TASE:HLAN"
+  },
+  {
+   "id": "michpal",
+   "name_he": "מיכפל (Michpal)",
+   "name_en": "Michpal Technologies",
+   "url": "https://www.michpal.co.il/",
+   "category": "payroll-hr",
+   "summary_he": "ספקית תוכנות שכר ומשאבי אנוש עם ניסיון של מעל 40 שנה בתחום.",
+   "why_israeli": "Legal name מיכפל טכנולוגיות בע״מ, address Derech Yitzhak Rabin 1, Petah Tikva (homepage, opened); Hebrew site.",
+   "sources": [
+    {
+     "url": "https://www.michpal.co.il/",
+     "date": null,
+     "what": "Homepage (opened): 'leading payroll for over 40 years', quote-on-request pricing; no customer count.",
+     "grade": "C"
+    },
+    {
+     "url": "https://www.bizportal.co.il/capitalmarket/news/article/20040479",
+     "date": "2026-08-26",
+     "what": "the user figure",
+     "grade": "B"
+    }
+   ],
+   "grade": "C",
+   "verified_at": "2026-11-05",
+   "users": {
+    "low": 15000,
+    "high": null,
+    "unit": "customers",
+    "scope": "israel",
+    "grade": "B",
+    "source_url": "https://www.bizportal.co.il/capitalmarket/news/article/20040479",
+    "source_date": "2026-08-26",
+    "note": "Bizportal: the Interspace-Tranzila deal lets Michpal offer payment solutions to 'more than 15 thousand Michpal customers' (company disclosure reported by the press)."
+   },
+   "price_from_ils": null,
+   "hebrew_ui": true,
+   "rtl": true,
+   "allocation_numbers": null,
+   "owner_or_parent": null,
+   "public_company": null
+  },
+  {
+   "id": "comax",
+   "name_he": "קומקס (COMAX)",
+   "name_en": "COMAX",
+   "url": "https://comaxerp.com/",
+   "category": "erp",
+   "summary_he": "מערכת ERP וקופות חכמות לעסקים קמעונאיים וסיטונאיים, כולל קופה ניידת ואפליקציית סוכני מכירות.",
+   "why_israeli": "Address Metzada 7, Bnei Brak in the footer (homepage, opened); Hebrew site with 10-year-plus Israeli customers.",
+   "sources": [
+    {
+     "url": "https://comaxerp.com/",
+     "date": null,
+     "what": "Homepage (opened; comax.co.il redirects here): ERP, COMAX SHOP smart POS, COMAX PAY mobile POS; live counters show 0; no customer count.",
+     "grade": "C"
+    },
+    {
+     "url": "https://comaxerp.com/wp-content/uploads/2024/04/חשבונית-ישראל-מדריך-מפורט.pdf",
+     "date": "2024-04-01",
+     "what": "Comax 'Israel Invoice detailed guide' PDF (seen in search results, not opened; date is the upload folder 2024/04).",
+     "grade": "C"
+    },
+    {
+     "url": "https://play.google.com/store/apps/details?id=com.comaxPhone&hl=en",
+     "date": null,
+     "what": "the user figure",
+     "grade": "D"
+    }
+   ],
+   "grade": "C",
+   "verified_at": "2026-11-05",
+   "users": {
+    "low": 10000,
+    "high": null,
+    "unit": "downloads",
+    "scope": "israel",
+    "grade": "D",
+    "source_url": "https://play.google.com/store/apps/details?id=com.comaxPhone&hl=en",
+    "source_date": null,
+    "note": "Google Play 'Comax ERP' manager app: 10K+ downloads, 67 reviews (read 2026-11-05). The homepage counters (active users, registers) render 0, so no company figure exists. A download bracket, not a customer count."
+   },
+   "price_from_ils": null,
+   "hebrew_ui": true,
+   "rtl": true,
+   "allocation_numbers": true,
+   "owner_or_parent": null,
+   "public_company": null
+  },
+  {
+   "id": "synel",
+   "name_he": "סינאל (Synel)",
+   "name_en": "Synel",
+   "url": "https://www.synel.co.il/",
+   "category": "payroll-hr",
+   "summary_he": "מערכות נוכחות, שכר ובקרת כניסה לארגונים, כולל שעוני נוכחות, אפליקציה ותוכנת שכר.",
+   "why_israeli": "Hebrew RTL site of an Israeli vendor with Israeli customers (Super-Pharm testimonial, 'over 30 years'); no HQ address on the page.",
+   "sources": [
+    {
+     "url": "https://www.synel.co.il/",
+     "date": null,
+     "what": "Homepage (opened): time & attendance, payroll (Harmony), access control; 20 client logos; 'over 30 years'; no customer count.",
+     "grade": "C"
+    },
+    {
+     "url": "https://play.google.com/store/apps/details?id=harmony.smart.co.il.synel&hl=en",
+     "date": null,
+     "what": "the user figure",
+     "grade": "D"
+    }
+   ],
+   "grade": "C",
+   "verified_at": "2026-11-05",
+   "users": {
+    "low": 50000,
+    "high": null,
+    "unit": "downloads",
+    "scope": null,
+    "grade": "D",
+    "source_url": "https://play.google.com/store/apps/details?id=harmony.smart.co.il.synel&hl=en",
+    "source_date": null,
+    "note": "Google Play 'SYNEL HARMONY SMART' (employee app of its time-and-attendance system): 50K+ downloads, 155 reviews (read 2026-11-05); publisher SYNEL M.L.L PAYWAY LTD. A third-party page showed '120,000 customers' in an unfinished table (seen in a search result, not used)."
+   },
+   "price_from_ils": null,
+   "hebrew_ui": true,
+   "rtl": true,
+   "allocation_numbers": null,
+   "owner_or_parent": null,
+   "public_company": null
+  },
+  {
+   "id": "inforu",
+   "name_he": "אינפורו (InforU)",
+   "name_en": "InforU",
+   "url": "https://www.inforu.co.il/",
+   "category": "marketing-messaging",
+   "summary_he": "פלטפורמת הודעות SMS, וואטסאפ ודיוור לעסקים עם שרתים בישראל, בבעלות קבוצת שמיר מערכות.",
+   "why_israeli": "Footer 'from Shamir Systems', servers 'in Israel only' (homepage, opened); Hebrew site.",
+   "sources": [
+    {
+     "url": "https://www.inforu.co.il/",
+     "date": null,
+     "what": "Homepage (opened): 'over 30 thousand customers', 'tens of billions of messages a year', 25+ years, 250+ integrations; ISO 27001.",
+     "grade": "C"
+    }
+   ],
+   "grade": "C",
+   "verified_at": "2026-11-05",
+   "users": {
+    "low": 30000,
+    "high": null,
+    "unit": "customers",
+    "scope": "israel",
+    "grade": "C",
+    "source_url": "https://www.inforu.co.il/",
+    "source_date": null,
+    "note": "'Over 30 thousand customers' / '30,000 business customers', undated. Scope assumed Israel."
+   },
+   "price_from_ils": null,
+   "hebrew_ui": true,
+   "rtl": true,
+   "allocation_numbers": null,
+   "owner_or_parent": "Part of Shamir Systems (שמיר מערכות), per the homepage footer",
+   "public_company": null
+  },
+  {
+   "id": "voicenter",
+   "name_he": "וויסנטר (Voicenter)",
+   "name_en": "Voicenter",
+   "url": "https://www.voicenter.co.il/",
+   "category": "customer-service-contact",
+   "summary_he": "מרכזיית ענן ופתרונות תקשורת לעסקים, עם ממשקי API ושילוב עם עשרות מערכות מידע.",
+   "why_israeli": "Hebrew site; schema country IL; Israeli phone numbers and a .co.il contact (homepage, opened); no street address.",
+   "sources": [
+    {
+     "url": "https://www.voicenter.co.il/",
+     "date": null,
+     "what": "Homepage (opened): '3000+ business organizations', 20+ APIs, 70+ connected systems, 99.99% SLA; no prices on the page.",
+     "grade": "C"
+    }
+   ],
+   "grade": "C",
+   "verified_at": "2026-11-05",
+   "users": {
+    "low": 3000,
+    "high": null,
+    "unit": "business organizations",
+    "scope": "israel",
+    "grade": "C",
+    "source_url": "https://www.voicenter.co.il/",
+    "source_date": null,
+    "note": "'3000+ business organizations' on the Hebrew homepage, undated. Scope assumed Israel."
+   },
+   "price_from_ils": null,
+   "hebrew_ui": true,
+   "rtl": true,
+   "allocation_numbers": null,
+   "owner_or_parent": null,
+   "public_company": null
+  },
+  {
+   "id": "base44",
+   "name_he": "Base44",
+   "name_en": "Base44 (Wix)",
+   "url": "https://base44.com/",
+   "category": "ai-tools",
+   "summary_he": "פלטפורמת בינה מלאכותית שבונה אפליקציות ואתרים מתיאור בטקסט; נרכשה על ידי Wix ב-2025 ופועלת כמוצר נפרד.",
+   "why_israeli": "Globes headline 'Wix acquires Israeli vibe coding co Base44' (seen in search results); founder Maor Owner; owned by Tel Aviv-based Wix (homepage footer: © 2026 Wix.com Ltd.).",
+   "sources": [
+    {
+     "url": "https://www.calcalistech.com/ctechnews/article/sy194qsg11g",
+     "date": "2025-11-19",
+     "what": "Calcalist/CTech headline (found on the opened tag page): 'Base44 becomes Wix's surprise growth engine with 2 million users, $50M ARR'. Article body not opened.",
+     "grade": "B"
+    },
+    {
+     "url": "https://en.globes.co.il/en/article-wix-acquires-israeli-vibe-coding-co-base44-1001513267",
+     "date": null,
+     "what": "Globes headline (seen in search results, not opened): Wix acquires Israeli vibe-coding company Base44.",
+     "grade": "B"
+    },
+    {
+     "url": "https://techcrunch.com/2025/06/18/6-month-old-solo-owned-vibe-coder-base44-sells-to-wix-for-80m-cash",
+     "date": "2025-06-18",
+     "what": "TechCrunch (seen in search results, not opened): solo-founded Base44 sold to Wix for $80M cash.",
+     "grade": "B"
+    },
+    {
+     "url": "https://base44.com/",
+     "date": null,
+     "what": "Homepage (opened): free plan, paid from $16/month billed annually; © 2026 Wix.com Ltd.; no user count on the page.",
+     "grade": "C"
+    }
+   ],
+   "grade": "B",
+   "verified_at": "2026-11-05",
+   "users": {
+    "low": 2000000,
+    "high": 2000000,
+    "unit": "users",
+    "scope": "worldwide",
+    "grade": "B",
+    "source_url": "https://www.calcalistech.com/ctechnews/article/sy194qsg11g",
+    "source_date": "2025-11-19",
+    "note": "Headline figure from Nov 2025. Wix's 20-F counts Base44 users inside its 304.2M registered users. Later 2026 headlines on the same tag page give ARR ($100M in March, $200M in August) but no newer user count."
+   },
+   "price_from_ils": null,
+   "hebrew_ui": null,
+   "rtl": null,
+   "allocation_numbers": null,
+   "owner_or_parent": "Wix.com bought Base44 for about $80M cash plus earn-outs (June 2025; TechCrunch headline)",
+   "public_company": null,
+   "price_note": "USD pricing on the homepage: free, then from $16/month billed annually; not converted."
+  },
+  {
+   "id": "icount",
+   "name_he": "iCount (אייקאונט)",
+   "name_en": "iCount",
+   "url": "https://www.icount.net/",
+   "category": "invoicing-accounting",
+   "summary_he": "מערכת ענן לניהול עסק: הפקת חשבוניות וקבלות, מעקב הוצאות, חיוב בכרטיס אשראי ו-CRM, עם אתר מקומי לישראל.",
+   "why_israeli": "Footer '© 2023 iCount LTD'; the site greets visitors 'tuning in from Israel' and links an Israeli local site (homepage, opened); StartUpIM lists iCount Systems Ltd with a Series A in July 2025 led by J2 Ventures (search result).",
+   "sources": [
+    {
+     "url": "https://www.icount.net/",
+     "date": null,
+     "what": "Homepage (opened): '60,000 freelancers are already working with us'; 45-day free trial; no prices; English page.",
+     "grade": "C"
+    },
+    {
+     "url": "https://startupim.com/company/icount-systems-ltd",
+     "date": null,
+     "what": "StartUpIM profile (seen in search results, not opened): iCount Systems Ltd, funding.",
+     "grade": "D"
+    },
+    {
+     "url": "https://appfollow.io/ios/icount-pos/1542990531?country=il",
+     "date": null,
+     "what": "App-store tracker (seen in search results): Israeli App Store text '46,000+ businesses'.",
+     "grade": "D"
+    }
+   ],
+   "grade": "C",
+   "verified_at": "2026-11-05",
+   "users": {
+    "low": 46000,
+    "high": 60000,
+    "unit": "businesses and freelancers (company claims)",
+    "scope": "worldwide",
+    "grade": "C",
+    "source_url": "https://www.icount.net/",
+    "source_date": null,
+    "note": "Homepage (opened) says 60,000 freelancers; a search excerpt of the company site said 'Join 50,000 businesses worldwide'; the Israeli App Store text said 46,000+ businesses. The brief's seed was 50k."
+   },
+   "price_from_ils": null,
+   "hebrew_ui": null,
+   "rtl": null,
+   "allocation_numbers": null,
+   "owner_or_parent": null,
+   "public_company": null
+  },
+  {
+   "id": "connecteam",
+   "name_he": "Connecteam (קונקטים)",
+   "name_en": "Connecteam",
+   "url": "https://connecteam.com/",
+   "category": "work-management",
+   "summary_he": "אפליקציה לניהול עובדי שטח וקו חזית: משמרות, שעון נוכחות, משימות, צ'אט והדרכות, עם מסלול חינם לעסקים קטנים.",
+   "why_israeli": "StartUpIM and job-board profiles (search results, not opened) list Tel Aviv, founded 2014/2015; the homepage itself names no location.",
+   "sources": [
+    {
+     "url": "https://connecteam.com/",
+     "date": null,
+     "what": "Homepage (opened): 'Trusted by 80,000+ businesses worldwide', '1.8M+ managers and employees', free under 10 employees.",
+     "grade": "C"
+    },
+    {
+     "url": "https://startupim.com/company/connecteam",
+     "date": null,
+     "what": "StartUpIM profile (seen in search results): Tel Aviv-Yafo address.",
+     "grade": "D"
+    }
+   ],
+   "grade": "C",
+   "verified_at": "2026-11-05",
+   "users": {
+    "low": 80000,
+    "high": 80000,
+    "unit": "businesses",
+    "scope": "worldwide",
+    "grade": "C",
+    "source_url": "https://connecteam.com/",
+    "source_date": null,
+    "note": "Homepage claim, undated; a job-board profile in search results still said 36,000+ companies, so the figure grew or varies by source. 1.8M+ managers and employees use it."
+   },
+   "price_from_ils": null,
+   "hebrew_ui": null,
+   "rtl": null,
+   "allocation_numbers": null,
+   "owner_or_parent": null,
+   "public_company": null,
+   "price_note": "Free full access under 10 employees; paid plan prices are on a separate page not opened."
+  },
+  {
+   "id": "hibob",
+   "name_he": "HiBob (בוב)",
+   "name_en": "HiBob (Bob)",
+   "url": "https://www.hibob.com/",
+   "category": "payroll-hr",
+   "summary_he": "מערכת ענן לניהול משאבי אנוש לחברות בינוניות: קליטת עובדים, שכר, ביצועים ונתוני כוח אדם.",
+   "why_israeli": "StartUpIM profile (search result, not opened) lists Tel Aviv-Yafo, founded 2015; Brandon Hall profile lists an office in Israel; homepage shows 'Hi Bob, Inc.' only.",
+   "sources": [
+    {
+     "url": "https://www.hibob.com/",
+     "date": null,
+     "what": "Homepage (opened): 'Join 5,500+ companies and 1,230,200 people using Bob right now'.",
+     "grade": "C"
+    },
+    {
+     "url": "https://startupim.com/company/hibob/raw",
+     "date": null,
+     "what": "StartUpIM profile (seen in search results): Tel Aviv-Yafo, cloud HR platform.",
+     "grade": "D"
+    },
+    {
+     "url": "https://sacra.com/c/hibob/",
+     "date": "2026-09-01",
+     "what": "Sacra (search result excerpt): $166M financing led by Salesforce and more than 5,500 customers disclosed on 2026-09-01.",
+     "grade": "D"
+    }
+   ],
+   "grade": "C",
+   "verified_at": "2026-11-05",
+   "users": {
+    "low": 5500,
+    "high": 5500,
+    "unit": "companies",
+    "scope": "worldwide",
+    "grade": "C",
+    "source_url": "https://www.hibob.com/",
+    "source_date": null,
+    "note": "'5,500+ companies' and 1,230,200 people managed on Bob (homepage live counter). Other sources seen: 5,000+ (ERPResearch), 4,800 organizations (Brandon Hall PDF)."
+   },
+   "price_from_ils": null,
+   "hebrew_ui": null,
+   "rtl": null,
+   "allocation_numbers": null,
+   "owner_or_parent": null,
+   "public_company": null
+  },
+  {
+   "id": "gong",
+   "name_he": "Gong (גונג)",
+   "name_en": "Gong",
+   "url": "https://www.gong.io/",
+   "category": "crm",
+   "summary_he": "פלטפורמה שמנתחת שיחות ופגישות מכירה בבינה מלאכותית ונותנת לצוותי מכירות תחזיות ותובנות.",
+   "why_israeli": "Ynetnews covers Gong's $500M revenue milestone; legal entity Gong.io Ltd. with a Ramat Gan address in a profile; HQ San Francisco; founders Amit Bendov and Eilon Reshef (nationality not stated in sources seen).",
+   "sources": [
+    {
+     "url": "https://salestechstar.com/?p=224317",
+     "date": null,
+     "what": "Press-release repost (search result): 'Gong surpasses 4,000 customers'. Date not shown in the result.",
+     "grade": "B"
+    },
+    {
+     "url": "https://www.ynetnews.com/business/article/bjcou2xygx",
+     "date": null,
+     "what": "Ynetnews (search result, not opened): Gong crosses $500 million revenue milestone.",
+     "grade": "B"
+    },
+    {
+     "url": "https://startupim.com/company/gong-io/raw",
+     "date": null,
+     "what": "StartUpIM profile (search result, not opened).",
+     "grade": "D"
+    }
+   ],
+   "grade": "B",
+   "verified_at": "2026-11-05",
+   "users": {
+    "low": 4000,
+    "high": 5000,
+    "unit": "customers (companies)",
+    "scope": "worldwide",
+    "grade": "B",
+    "source_url": "https://salestechstar.com/?p=224317",
+    "source_date": null,
+    "note": "'More than 4,000 customers' in a press release; a later profile said 5,000+ companies and a database 4,500. Release date not shown, so the range is approximate."
+   },
+   "price_from_ils": null,
+   "hebrew_ui": null,
+   "rtl": null,
+   "allocation_numbers": null,
+   "owner_or_parent": null,
+   "public_company": null
+  },
+  {
+   "id": "lusha",
+   "name_he": "Lusha (לושה)",
+   "name_en": "Lusha",
+   "url": "https://www.lusha.com/",
+   "category": "crm",
+   "summary_he": "פלטפורמת מידע עסקי לאנשי מכירות: פרטי קשר של בעלי תפקידים בחברות ואותות קנייה, עם מסלול חינם.",
+   "why_israeli": "Globes headline 'Israeli B2B contact data co Lusha raises $40m' (search result); profiles: Tel Aviv-based, founded 2016 by Yoni Tserruya and Assaf Eisenstein, offices in Tel Aviv and Boston.",
+   "sources": [
+    {
+     "url": "https://www.lusha.com/",
+     "date": null,
+     "what": "Homepage (opened): 'Trusted by 280,000+ GTM teams worldwide'; 515M+ contacts, 29M+ companies; free plan; no HQ shown.",
+     "grade": "C"
+    },
+    {
+     "url": "https://en.globes.co.il/en/article-1001360268",
+     "date": null,
+     "what": "Globes (search result, not opened; tech.eu URL dates the round to 2021-02-10): Israeli B2B contact data company Lusha raises $40m.",
+     "grade": "B"
+    },
+    {
+     "url": "https://startupim.com/company/lusha",
+     "date": null,
+     "what": "StartUpIM profile (search result, not opened).",
+     "grade": "D"
+    }
+   ],
+   "grade": "C",
+   "verified_at": "2026-11-05",
+   "users": {
+    "low": 280000,
+    "high": 280000,
+    "unit": "GTM / revenue teams (company claim)",
+    "scope": "worldwide",
+    "grade": "C",
+    "source_url": "https://www.lusha.com/",
+    "source_date": null,
+    "note": "Homepage counts teams, not seats. Profile sites in search results say 'over 1 million users' (D, unpinned page); a 2021 article said 460,000 users and 120,000 companies."
+   },
+   "price_from_ils": null,
+   "hebrew_ui": null,
+   "rtl": null,
+   "allocation_numbers": null,
+   "owner_or_parent": null,
+   "public_company": null
+  },
+  {
+   "id": "cato-networks",
+   "name_he": "Cato Networks (קאטו)",
+   "name_en": "Cato Networks",
+   "url": "https://www.catonetworks.com/",
+   "category": "security-it",
+   "summary_he": "פלטפורמת רשת ואבטחה בענן (SASE) המאחדת תקשורת בין סניפים, עובדים מרחוק ואבטחת סייבר לארגונים.",
+   "why_israeli": "Company press release datelined Tel Aviv, Israel (search result excerpt); founded 2015 per a summary of the release.",
+   "sources": [
+    {
+     "url": "https://www.catonetworks.com/news/cato-surpasses-350-million-arr-with-43-yoy-growth-in-2025/",
+     "date": "2026-02-01",
+     "what": "Cato press release, Feb 2026 (seen in search results; the fetch returned empty): over 4,000 enterprises worldwide, ARR above $350M. Day of month not shown, so 2026-02-01 is a placeholder for 'February 2026'.",
+     "grade": "B"
+    },
+    {
+     "url": "https://www.webull.com/news/15299278439654400",
+     "date": null,
+     "what": "News repost (search result): 'over $415M ARR', more than 4,800 customers (mid-2026).",
+     "grade": "D"
+    }
+   ],
+   "grade": "B",
+   "verified_at": "2026-11-05",
+   "users": {
+    "low": 4000,
+    "high": 4800,
+    "unit": "enterprise customers",
+    "scope": "worldwide",
+    "grade": "B",
+    "source_url": "https://www.catonetworks.com/news/cato-surpasses-350-million-arr-with-43-yoy-growth-in-2025/",
+    "source_date": "2026-02-01",
+    "note": "4,000+ in the Feb 2026 release; 4,800+ in a later repost of a mid-2026 update; older profiles said 3,500+. Page body was not opened."
+   },
+   "price_from_ils": null,
+   "hebrew_ui": null,
+   "rtl": null,
+   "allocation_numbers": null,
+   "owner_or_parent": null,
+   "public_company": null
+  },
+  {
+   "id": "check-point",
+   "name_he": "צ'ק פוינט (Check Point)",
+   "name_en": "Check Point Software Technologies",
+   "url": "https://www.checkpoint.com/",
+   "category": "security-it",
+   "summary_he": "ספקית אבטחת סייבר לארגונים וממשלות: חומות אש, אבטחת ענן, נקודות קצה ואבטחת רשת.",
+   "why_israeli": "Principal executive offices: 5 Owner Kaplan Street, Tel Aviv, Israel (cover page of its Form 20-F FY2025, opened).",
+   "sources": [
+    {
+     "url": "https://www.sec.gov/Archives/edgar/data/0001015922/000117891326001932/zk2634942.htm",
+     "date": "2025-12-31",
+     "what": "Form 20-F FY2025 (opened, first 100k characters): Tel Aviv address; Nasdaq CHKP. Customer count not in the part read. Date = fiscal year end.",
+     "grade": "A"
+    },
+    {
+     "url": "https://app.researchpool.com/provider/globenewswire/chkp-check-point-software-reports-fourth-quarter-and-2025-full-year-results-44QGcgCCXb",
+     "date": "2026-02-12",
+     "what": "Q4 2025 results release (seen in search results; the fetch returned 403): boilerplate 'safeguard over 100,000 organizations globally'.",
+     "grade": "B"
+    }
+   ],
+   "grade": "A",
+   "verified_at": "2026-11-05",
+   "users": {
+    "low": 100000,
+    "high": null,
+    "unit": "organizations",
+    "scope": "worldwide",
+    "grade": "B",
+    "source_url": "https://app.researchpool.com/provider/globenewswire/chkp-check-point-software-reports-fourth-quarter-and-2025-full-year-results-44QGcgCCXb",
+    "source_date": "2026-02-12",
+    "note": "Company boilerplate 'over 100,000 organizations'; a marketing-style figure that counts all organizations protected, including very small ones."
+   },
+   "price_from_ils": null,
+   "hebrew_ui": null,
+   "rtl": null,
+   "allocation_numbers": null,
+   "owner_or_parent": null,
+   "public_company": "NASDAQ:CHKP"
+  },
+  {
+   "id": "nice",
+   "name_he": "נייס (NiCE)",
+   "name_en": "NiCE Ltd.",
+   "url": "https://www.nice.com/",
+   "category": "customer-service-contact",
+   "summary_he": "פלטפורמת ענן למוקדי שירות ולחוויית לקוח (CXone) הכוללת בינה מלאכותית, אנליטיקה ותפעול לארגונים גדולים.",
+   "why_israeli": "A Nov 2025 Form 6-K (search result excerpt) lists principal executive offices at 13 Zarchin Street, Ra'anana, Israel; NiCE files Form 20-F.",
+   "sources": [
+    {
+     "url": "https://quantisnow.com/insight/sec-form-6k-filed-by-nice-ltd-6112021",
+     "date": "2025-11-01",
+     "what": "6-K mirror page (search result, not opened): Ra'anana address. Day of month not shown; date is a placeholder for 'November 2025'.",
+     "grade": "A"
+    },
+    {
+     "url": "https://quantisnow.com/insight/sec-form-6k-filed-by-nice-ltd-5974361",
+     "date": "2025-09-01",
+     "what": "6-K mirror page (search result, not opened): a search excerpt tied the Cognigy-acquisition release ('more than 25,000 existing customers') to Sept 2025. Which mirror carries it is not pinned.",
+     "grade": "B"
+    }
+   ],
+   "grade": "B",
+   "verified_at": "2026-11-05",
+   "users": {
+    "low": 25000,
+    "high": null,
+    "unit": "customers",
+    "scope": "worldwide",
+    "grade": "B",
+    "source_url": "https://quantisnow.com/insight/sec-form-6k-filed-by-nice-ltd-5974361",
+    "source_date": "2025-09-01",
+    "note": "'More than 25,000 existing customers' from the Sept 2025 Cognigy acquisition release, as relayed in a search excerpt; the exact release page was not opened."
+   },
+   "price_from_ils": null,
+   "hebrew_ui": null,
+   "rtl": null,
+   "allocation_numbers": null,
+   "owner_or_parent": null,
+   "public_company": "NASDAQ:NICE"
+  },
+  {
+   "id": "melio",
+   "name_he": "מליו (Melio)",
+   "name_en": "Melio",
+   "url": "https://www.meliopayments.com/",
+   "category": "banking-finance-tools",
+   "summary_he": "פלטפורמת תשלומים לעסקים קטנים בארה״ב לתשלום לספקים בהעברה בנקאית, בכרטיס אשראי ובצ'ק; נרכשה על ידי Xero.",
+   "why_israeli": "Times of Israel (opened): HQ New York, about 400 of ~600 employees at its Tel Aviv offices and R&D center; Globes calls it an 'Israeli fintech company' (opened).",
+   "sources": [
+    {
+     "url": "https://www.timesofisrael.com/new-zealands-xero-to-snap-up-israeli-fintech-startup-melio-for-up-to-3-billion/",
+     "date": "2025-06-25",
+     "what": "Times of Israel (opened): 'used by 80,000 customers to process more than $30 billion in payments'; ~400 of ~600 workers in Tel Aviv.",
+     "grade": "B"
+    },
+    {
+     "url": "https://en.globes.co.il/en/article-xero-buys-israeli-fintech-co-melio-for-3b-1001513741",
+     "date": "2025-06-25",
+     "what": "Globes (opened): Xero buys Israeli fintech Melio; $2.5B cash and shares up front plus $500M milestones; founders named.",
+     "grade": "B"
+    }
+   ],
+   "grade": "B",
+   "verified_at": "2026-11-05",
+   "users": {
+    "low": 80000,
+    "high": 80000,
+    "unit": "customers",
+    "scope": "worldwide",
+    "grade": "B",
+    "source_url": "https://www.timesofisrael.com/new-zealands-xero-to-snap-up-israeli-fintech-startup-melio-for-up-to-3-billion/",
+    "source_date": "2025-06-25",
+    "note": "Mostly US small businesses (product is US-focused); figure quoted at the time of the Xero deal. The 'url' field is Melio's well-known domain, not opened."
+   },
+   "price_from_ils": null,
+   "hebrew_ui": null,
+   "rtl": null,
+   "allocation_numbers": null,
+   "owner_or_parent": "Xero agreed to buy Melio in June 2025 (about $2.5B up front plus $500M milestones; Globes and Times of Israel 2025-06-25)",
+   "public_company": null
+  },
+  {
+   "id": "tipalti",
+   "name_he": "טיפלטי (Tipalti)",
+   "name_en": "Tipalti",
+   "url": "https://tipalti.com/",
+   "category": "banking-finance-tools",
+   "summary_he": "פלטפורמה לאוטומציה של תשלומים לספקים ושותפים, חשבונות לתשלום והתאמות פיננסיות, בעיקר לחברות בינוניות.",
+   "why_israeli": "Wikipedia (mirror seen in search results): founded 2010, HQ Foster City, California, with R&D in Kibbutz Glil-Yam, Israel.",
+   "sources": [
+    {
+     "url": "https://en.wikipedia.com/wiki/Tipalti",
+     "date": null,
+     "what": "Wikipedia copy (search result, not opened): surpassed 2,500 customers and 1,000 employees in Sept 2022; R&D in Glil-Yam, Israel.",
+     "grade": "D"
+    },
+    {
+     "url": "https://www.businesswire.com/news/home/20210714005183/en/Tipalti-Continues-Revenue-Growth-by-More-Than-80-Increases-Annualized-Transactions-to-More-Than-23-Billion",
+     "date": "2021-07-14",
+     "what": "Company release (search result, not opened): revenue growth and $23B annualized transactions; a CPA Practice Advisor article of the same day put customers above 1,500.",
+     "grade": "B"
+    }
+   ],
+   "grade": "D",
+   "verified_at": "2026-11-05",
+   "users": {
+    "low": 2500,
+    "high": null,
+    "unit": "customers",
+    "scope": "worldwide",
+    "grade": "D",
+    "source_url": "https://en.wikipedia.com/wiki/Tipalti",
+    "source_date": "2022-09-01",
+    "note": "Latest dated figure found: 2,500+ customers in Sept 2022 (day not shown). An aggregator listed '5000+' but with placeholder fields, so it was ignored. The 'url' field is Tipalti's well-known domain, not opened."
+   },
+   "price_from_ils": null,
+   "hebrew_ui": null,
+   "rtl": null,
+   "allocation_numbers": null,
+   "owner_or_parent": null,
+   "public_company": null
+  },
+  {
+   "id": "similarweb",
+   "name_he": "סימילרווב (Similarweb)",
+   "name_en": "Similarweb",
+   "url": "https://www.similarweb.com/",
+   "category": "marketing-messaging",
+   "summary_he": "פלטפורמת נתוני תעבורה ושיווק דיגיטלי המאפשרת לעסקים לעקוב אחרי אתרים, אפליקציות ומתחרים.",
+   "why_israeli": "Wikipedia (opened): founded 2007 in Tel Aviv by Or Offer; offices in New York, Givatayim and London; NYSE-listed Similarweb Ltd.",
+   "sources": [
+    {
+     "url": "https://ir.similarweb.com/financials/all-sec-filings/content/0001842731-26-000009/a6-kxex992xq42025smwbsha.htm",
+     "date": "2026-02-17",
+     "what": "SEC 6-K exhibit (opened): 'total ARR customer base grew to 6,128 accounts, an 11% increase' at Dec 31, 2025; published Feb 17, 2026.",
+     "grade": "A"
+    },
+    {
+     "url": "https://en.wikipedia.org/wiki/Similarweb",
+     "date": null,
+     "what": "Wikipedia (opened): founded in Israel 2007; NYSE: SMWB; 1,288 employees.",
+     "grade": "D"
+    }
+   ],
+   "grade": "A",
+   "verified_at": "2026-11-05",
+   "users": {
+    "low": 6128,
+    "high": 6128,
+    "unit": "ARR customer accounts",
+    "scope": "worldwide",
+    "grade": "A",
+    "source_url": "https://ir.similarweb.com/financials/all-sec-filings/content/0001842731-26-000009/a6-kxex992xq42025smwbsha.htm",
+    "source_date": "2026-02-17",
+    "note": "Accounts with ARR at Dec 31, 2025 (+11% year over year); customers above $100k ARR were 454 per the Business Wire version of the release (search result)."
+   },
+   "price_from_ils": null,
+   "hebrew_ui": null,
+   "rtl": null,
+   "allocation_numbers": null,
+   "owner_or_parent": null,
+   "public_company": "NYSE:SMWB"
+  },
+  {
+   "id": "payoneer",
+   "name_he": "פיוניר (Payoneer)",
+   "name_en": "Payoneer",
+   "url": "https://www.payoneer.com/",
+   "category": "payments-clearing",
+   "summary_he": "פלטפורמת תשלומים ופיננסים לעסקים קטנים ופרילנסרים בשווקים חוצי גבולות: קבלת תשלומים, כרטיסים וחשבונות.",
+   "why_israeli": "Form 10-K FY2025 (opened): 'approximately 51% of our workforce is based in Israel'; HQ is New York. A search excerpt of the same 10-K adds 79% of R&D resources in Israel and an Israeli subsidiary, Payoneer Research and Development Ltd.",
+   "sources": [
+    {
+     "url": "https://www.sec.gov/Archives/edgar/data/1845815/000110465926020487/payo-20251231x10k.htm",
+     "date": "2025-12-31",
+     "what": "Form 10-K FY2025 (opened, first 100k characters): 'nearly 2 million active customers'; 195 Broadway, New York; ~51% of workforce in Israel; Nasdaq PAYO. Date = fiscal year end.",
+     "grade": "A"
+    }
+   ],
+   "grade": "A",
+   "verified_at": "2026-11-05",
+   "users": {
+    "low": 1900000,
+    "high": 2000000,
+    "unit": "active customers",
+    "scope": "worldwide",
+    "grade": "A",
+    "source_url": "https://www.sec.gov/Archives/edgar/data/1845815/000110465926020487/payo-20251231x10k.htm",
+    "source_date": "2025-12-31",
+    "note": "10-K wording: 'nearly 2 million active customers'. Revenue from customers based in Israel is immaterial (search excerpt), so this is a global figure with almost no Israeli users."
+   },
+   "price_from_ils": null,
+   "hebrew_ui": null,
+   "rtl": null,
+   "allocation_numbers": null,
+   "owner_or_parent": null,
+   "public_company": "NASDAQ:PAYO"
+  },
+  {
+   "id": "yotpo",
+   "name_he": "יוטפו (Yotpo)",
+   "name_en": "Yotpo",
+   "url": "https://www.yotpo.com/",
+   "category": "marketing-messaging",
+   "summary_he": "פלטפורמת שיווק לחנויות מקוונות: ביקורות לקוחות, מועדוני נאמנות, דוא״ל והודעות SMS.",
+   "why_israeli": "Innovation Authority success-story page (search result): founded 2011 by Omri Cohen and Tomer Tagrin, Israeli reviews and UGC platform; PitchBook lists Tel Aviv HQ.",
+   "sources": [
+    {
+     "url": "https://www.yotpo.com/",
+     "date": null,
+     "what": "Homepage (opened): '35K+ Growing brands trust Yotpo'; 180+ integrations.",
+     "grade": "C"
+    },
+    {
+     "url": "https://innovationisrael.org.il/en/success-story/yotpo",
+     "date": null,
+     "what": "Israel Innovation Authority success story (search result, not opened): Yotpo, Israeli UGC platform; the excerpt cited over 30,000 e-commerce customers.",
+     "grade": "D"
+    }
+   ],
+   "grade": "C",
+   "verified_at": "2026-11-05",
+   "users": {
+    "low": 30000,
+    "high": 35000,
+    "unit": "brands (e-commerce customers)",
+    "scope": "worldwide",
+    "grade": "C",
+    "source_url": "https://www.yotpo.com/",
+    "source_date": null,
+    "note": "Homepage '35K+ growing brands' (opened, undated); an older summary of company statements said over 30,000 e-commerce customers."
+   },
+   "price_from_ils": null,
+   "hebrew_ui": null,
+   "rtl": null,
+   "allocation_numbers": null,
+   "owner_or_parent": null,
+   "public_company": null
+  },
+  {
+   "id": "elementor",
+   "name_he": "אלמנטור (Elementor)",
+   "name_en": "Elementor",
+   "url": "https://elementor.com/",
+   "category": "ecommerce-sites",
+   "summary_he": "בונה אתרים חזותי לוורדפרס עם תוספי חנות ושיווק, בשימוש מעצבים, סוכנויות ובעלי עסקים.",
+   "why_israeli": "Wikipedia (opened): founded 2016 by Yoni Luksenberg and Ariel Klikstein, headquartered in Ramat Gan, Israel.",
+   "sources": [
+    {
+     "url": "https://wordpress.org/plugins/elementor/",
+     "date": "2026-11-05",
+     "what": "WordPress.org plugin page (opened): '10+ million' active installations; version 4.3.6. Date = day the page was read.",
+     "grade": "D"
+    },
+    {
+     "url": "https://en.wikipedia.org/wiki/Elementor",
+     "date": null,
+     "what": "Wikipedia (opened): founded 2016; HQ Ramat Gan; over 10 million active installations (Feb 2025); $15M from Lightspeed in 2020.",
+     "grade": "D"
+    }
+   ],
+   "grade": "D",
+   "verified_at": "2026-11-05",
+   "users": {
+    "low": 10000000,
+    "high": null,
+    "unit": "WordPress sites (active installs of the free plugin)",
+    "scope": "worldwide",
+    "grade": "D",
+    "source_url": "https://wordpress.org/plugins/elementor/",
+    "source_date": "2026-11-05",
+    "note": "WordPress.org shows only the top bracket '10+ million'; counts sites, not paying customers."
+   },
+   "price_from_ils": null,
+   "hebrew_ui": null,
+   "rtl": null,
+   "allocation_numbers": null,
+   "owner_or_parent": null,
+   "public_company": null
+  },
+  {
+   "id": "priority-software",
+   "name_he": "פריוריטי (Priority Software)",
+   "name_en": "Priority Software",
+   "url": "https://www.priority-software.com/",
+   "category": "erp",
+   "summary_he": "מערכת ERP ישראלית לעסקים בינוניים וגדולים בישראל ובעולם; רכשה ב-2021 את מערכת בתי הספר משו״ב.",
+   "why_israeli": "Bought the Israeli school system Mashov for NIS 50M in Dec 2021 (Hamichlol citing Calcalist, opened); keeps an 'SOP Tax Authorities IL' document for Israeli requirements (search result). HQ city is not stated on the pages opened, so Israeli identity rests on these indirect facts.",
+   "sources": [
+    {
+     "url": "https://www.priority-software.com/blog/2025-in-review/",
+     "date": "2026-01-14",
+     "what": "Blog post (opened): 'Priority helps thousands of companies around the world'; no HQ, owner or exact count.",
+     "grade": "C"
+    },
+    {
+     "url": "https://www.priority-software.com/?p=55243",
+     "date": null,
+     "what": "FAQ page (opened): 'thousands of companies'; the 75,000 figure was NOT on this page.",
+     "grade": "C"
+    },
+    {
+     "url": "https://cdn.priority-software.com/docs/SOP_Tax_Authorities_IL_25_0_H.pdf",
+     "date": null,
+     "what": "Priority document 'SOP Tax Authorities IL' (search result, not opened).",
+     "grade": "C"
+    },
+    {
+     "url": "https://www.hamichlol.org.il/%D7%9E%D7%A9%D7%95%22%D7%91",
+     "date": "2021-12-05",
+     "what": "Hamichlol on Mashov (opened): sold to Priority Software in Dec 2021 for NIS 50M, citing Calcalist of 5 Dec 2021.",
+     "grade": "D"
+    }
+   ],
+   "grade": "C",
+   "verified_at": "2026-11-05",
+   "users": {
+    "low": 2000,
+    "high": 75000,
+    "unit": "companies",
+    "scope": "worldwide",
+    "grade": "C",
+    "source_url": "https://www.priority-software.com/blog/2025-in-review/",
+    "source_date": "2026-01-14",
+    "note": "Opened pages say only 'thousands of companies'. A search excerpt (not re-opened) quoted a company FAQ page as saying 'over 75,000 companies in 70+ countries', matching the brief's seed; treat the upper bound as unverified. The same excerpt said Blackstone is the majority holder; not verified, so owner stays null."
+   },
+   "price_from_ils": null,
+   "hebrew_ui": null,
+   "rtl": null,
+   "allocation_numbers": null,
+   "owner_or_parent": null,
+   "public_company": null
+  },
+  {
+   "id": "fireberry",
+   "name_he": "פיירברי (Fireberry, לשעבר Powerlink)",
+   "name_en": "Fireberry (formerly Powerlink)",
+   "url": "https://www.fireberry.com/",
+   "category": "crm",
+   "summary_he": "מערכת CRM לניהול לידים, מכירות ושירות לקוחות, הנמכרת בישראל גם דרך שותפים כמו קונסיסט.",
+   "why_israeli": "StartUpIM lists 'Powerlink Software' as a Tel Aviv company founded 1997 (search result); Consist's Hebrew product sheet (Sept 2025) offers Fireberry CRM in Israel with Hebrew support (search result). The English site names no HQ.",
+   "sources": [
+    {
+     "url": "https://fireberry.com/about",
+     "date": null,
+     "what": "About page (opened): '20k+ Satisfied users', '13 Years in operation'; no HQ, no mention of Powerlink.",
+     "grade": "C"
+    },
+    {
+     "url": "https://startupim.com/company/powerlink-software",
+     "date": null,
+     "what": "StartUpIM profile of Powerlink Software (search result, not opened).",
+     "grade": "D"
+    },
+    {
+     "url": "https://www.consist.co.il/media/2531/consists-fireberry-crm-product-sheet_he_sept-2025.pdf",
+     "date": "2025-09-01",
+     "what": "Consist Hebrew product sheet (search result, not opened; date from file name).",
+     "grade": "C"
+    }
+   ],
+   "grade": "C",
+   "verified_at": "2026-11-05",
+   "users": {
+    "low": 20000,
+    "high": 20000,
+    "unit": "users (labelled 'satisfied users')",
+    "scope": "worldwide",
+    "grade": "C",
+    "source_url": "https://fireberry.com/about",
+    "source_date": null,
+    "note": "About-page counter, undated, not split by country. The brief's seed '2,000+ in Israel' (C) was not found in this pass."
+   },
+   "price_from_ils": null,
+   "hebrew_ui": true,
+   "rtl": null,
+   "allocation_numbers": null,
+   "owner_or_parent": null,
+   "public_company": null
+  },
+  {
+   "id": "mashov",
+   "name_he": "משו״ב (Mashov)",
+   "name_en": "Mashov school management system",
+   "url": null,
+   "category": "vertical",
+   "summary_he": "מערכת אינטרנטית לניהול בתי ספר: ציונים, שיעורי בית, שיבוץ ותקשורת בין צוות, תלמידים והורים.",
+   "why_israeli": "Hamichlol (opened): built in 2006 by Dr Mira Hameiri for Israeli schools; sold to Priority Software in Dec 2021 for NIS 50M (citing Calcalist, 5 Dec 2021).",
+   "sources": [
+    {
+     "url": "https://www.hamichlol.org.il/%D7%9E%D7%A9%D7%95%22%D7%91",
+     "date": "2021-12-05",
+     "what": "Hamichlol (opened): operating in 1,550 schools and educational institutions as of 2021; sale to Priority for NIS 50M.",
+     "grade": "D"
+    }
+   ],
+   "grade": "D",
+   "verified_at": "2026-11-05",
+   "users": {
+    "low": 1550,
+    "high": 1550,
+    "unit": "schools and educational institutions",
+    "scope": "israel",
+    "grade": "D",
+    "source_url": "https://www.hamichlol.org.il/%D7%9E%D7%A9%D7%95%22%D7%91",
+    "source_date": "2021-12-05",
+    "note": "Count 'as of 2021'; no counts of students, teachers or parents on the page. Official site URL was not opened, so 'url' is null."
+   },
+   "price_from_ils": null,
+   "hebrew_ui": true,
+   "rtl": true,
+   "allocation_numbers": null,
+   "owner_or_parent": "Priority Software bought Mashov (NIS 50M, Dec 2021, Calcalist via Hamichlol)",
+   "public_company": null
+  },
+  {
+   "id": "smoove",
+   "name_he": "סמוב (smoove)",
+   "name_en": "smoove",
+   "url": "https://www.smoove.io/",
+   "category": "marketing-messaging",
+   "summary_he": "פלטפורמת דיוור ואוטומציה שיווקית בעברית, עם 100 אנשי קשר ראשונים בחינם.",
+   "why_israeli": "Hebrew right-to-left site (© smoove 2024); no address or owner on the page, so the Israeli identity rests on the Hebrew-first product.",
+   "sources": [
+    {
+     "url": "https://www.smoove.io/",
+     "date": null,
+     "what": "Homepage (opened): 'hundreds of thousands of businesses and companies' chose smoove; first 100 contacts free; © 2024.",
+     "grade": "C"
+    }
+   ],
+   "grade": "C",
+   "verified_at": "2026-11-05",
+   "users": {
+    "low": 200000,
+    "high": 900000,
+    "unit": "businesses and companies (company claim)",
+    "scope": "israel",
+    "grade": "C",
+    "source_url": "https://www.smoove.io/",
+    "source_date": null,
+    "note": "'Hundreds of thousands' read as 200k-900k; this looks inflated against roughly 600k active Israeli businesses overall (that total is not sourced in this pass) and may count free or dormant accounts. Doubtful."
+   },
+   "price_from_ils": null,
+   "hebrew_ui": true,
+   "rtl": true,
+   "allocation_numbers": null,
+   "owner_or_parent": null,
+   "public_company": null
+  },
+  {
+   "id": "glassix",
+   "name_he": "גלאסיקס (Glassix)",
+   "name_en": "Glassix",
+   "url": "https://glassix.com/",
+   "category": "customer-service-contact",
+   "summary_he": "פלטפורמת שיחות רב-ערוצית לשירות ומכירות עם צ'אטבוט ובינה מלאכותית, עם אתר בעברית.",
+   "why_israeli": "Weak: the site has a Hebrew version at glassix.co.il (title 'omnichannel communication platform for service, sales and support centers'); no address or founders on the pages opened. Israeli identity to be confirmed.",
+   "sources": [
+    {
+     "url": "https://glassix.com/",
+     "date": null,
+     "what": "English homepage (opened): 'Trusted By Over 1000 Great Businesses'; Hebrew version link.",
+     "grade": "C"
+    },
+    {
+     "url": "https://glassix.co.il/",
+     "date": null,
+     "what": "Hebrew homepage (opened): no count, address or prices; 'get a demo and prices'.",
+     "grade": "C"
+    }
+   ],
+   "grade": "C",
+   "verified_at": "2026-11-05",
+   "users": {
+    "low": 1000,
+    "high": null,
+    "unit": "businesses",
+    "scope": "worldwide",
+    "grade": "C",
+    "source_url": "https://glassix.com/",
+    "source_date": null,
+    "note": "'Over 1000 businesses' on the English homepage, undated."
+   },
+   "price_from_ils": null,
+   "hebrew_ui": true,
+   "rtl": true,
+   "allocation_numbers": null,
+   "owner_or_parent": null,
+   "public_company": null
+  },
+  {
+   "id": "commbox",
+   "name_he": "קומבוקס (CommBox)",
+   "name_en": "CommBox",
+   "url": "https://www.commbox.io/",
+   "category": "customer-service-contact",
+   "summary_he": "פלטפורמת תקשורת רב-ערוצית לשירות לקוחות עם צ'אטבוטים, וואטסאפ וממשק אחיד לנציגים, בעיקר לארגונים גדולים.",
+   "why_israeli": "Hebrew right-to-left homepage naming Israeli customers (Clalit, Clal Insurance, Pelephone, HFD, Brimag); no address or founders on the pages opened. Israeli identity is likely but not documented.",
+   "sources": [
+    {
+     "url": "https://www.commbox.io/",
+     "date": null,
+     "what": "English homepage (opened): 'Powering 100M+ conversations annually for 300+ global enterprises'.",
+     "grade": "C"
+    },
+    {
+     "url": "https://www.commbox.io/he/home",
+     "date": null,
+     "what": "Hebrew homepage (opened): customer stories of Israeli enterprises; no address or prices. The fetch tool reported that the page text contained instruction-like wording; it was ignored.",
+     "grade": "C"
+    }
+   ],
+   "grade": "C",
+   "verified_at": "2026-11-05",
+   "users": {
+    "low": 300,
+    "high": null,
+    "unit": "enterprises",
+    "scope": "worldwide",
+    "grade": "C",
+    "source_url": "https://www.commbox.io/",
+    "source_date": null,
+    "note": "'300+ global enterprises' on the English homepage, undated."
+   },
+   "price_from_ils": null,
+   "hebrew_ui": true,
+   "rtl": true,
+   "allocation_numbers": null,
+   "owner_or_parent": null,
+   "public_company": null
+  },
+  {
+   "id": "activetrail",
+   "name_he": "אקטיב טרייל (ActiveTrail)",
+   "name_en": "ActiveTrail",
+   "url": "https://www.activetrail.co.il/",
+   "category": "marketing-messaging",
+   "summary_he": "פלטפורמת דיוור ואוטומציה שיווקית בעברית: ניוזלטרים, SMS, דפי נחיתה ותהליכים אוטומטיים.",
+   "why_israeli": "Hebrew right-to-left site, Israeli phone number 03-0000014, ISO 27001 link (homepage, opened); no street address on the page.",
+   "sources": [
+    {
+     "url": "https://www.activetrail.co.il/",
+     "date": null,
+     "what": "Homepage (opened): no customer count, no prices; case study of Inter Fashion; ISO 27001.",
+     "grade": "C"
+    },
+    {
+     "url": "https://enlyft.com/tech/products/activetrail",
+     "date": null,
+     "what": "the user figure",
+     "grade": "D"
+    }
+   ],
+   "grade": "C",
+   "verified_at": "2026-11-05",
+   "users": {
+    "low": 3341,
+    "high": 3341,
+    "unit": "companies (detected using the product)",
+    "scope": "worldwide",
+    "grade": "D",
+    "source_url": "https://enlyft.com/tech/products/activetrail",
+    "source_date": null,
+    "note": "Enlyft (formerly iDatalabs; opened): 'data on 3,341 companies that use ActiveTrail'; 34% of them in Israel, 22% in the US, 14% in France. A tracker's detection count, not the company's own customer count (an older snapshot in a search result said 3,658). Undated."
+   },
+   "price_from_ils": null,
+   "hebrew_ui": true,
+   "rtl": true,
+   "allocation_numbers": null,
+   "owner_or_parent": null,
+   "public_company": null
+  },
+  {
+   "id": "rav-messer",
+   "name_he": "רב מסר (Rav Messer)",
+   "name_en": "Rav Messer",
+   "url": "https://www.responder.co.il/",
+   "category": "marketing-messaging",
+   "summary_he": "מערכת דיוור ואוטומציה שיווקית בעברית עם דפי נחיתה כלולים, ותמיכה בשעות ערב ובסופי שבוע.",
+   "why_israeli": "Hebrew site, Israeli phone 03-000-0015, CEO named as Roni Horowitz, ISO 27001 link, © Rav Messer 2026 (homepage, opened); no street address.",
+   "sources": [
+    {
+     "url": "https://www.responder.co.il/",
+     "date": null,
+     "what": "Homepage (opened): no customer count or prices; support hours; webinars.",
+     "grade": "C"
+    }
+   ],
+   "grade": "C",
+   "verified_at": "2026-11-05",
+   "users": null,
+   "price_from_ils": null,
+   "hebrew_ui": true,
+   "rtl": true,
+   "allocation_numbers": null,
+   "owner_or_parent": null,
+   "public_company": null
+  },
+  {
+   "id": "tor4you",
+   "name_he": "Tor4You (תור פור יו)",
+   "name_en": "Tor4You",
+   "url": "https://www.tor4you.co.il/",
+   "category": "scheduling-booking",
+   "summary_he": "מערכת יומן וזימון תורים אונליין עם תזכורות בוואטסאפ ו-SMS וסנכרון ליומני גוגל ואאוטלוק.",
+   "why_israeli": "Hebrew site; contact address Cyprus 10, Tel Aviv 6901653 (homepage, opened).",
+   "sources": [
+    {
+     "url": "https://www.tor4you.co.il/",
+     "date": null,
+     "what": "Homepage (opened): free trial, no setup cost, no prices and no customer count.",
+     "grade": "C"
+    }
+   ],
+   "grade": "C",
+   "verified_at": "2026-11-05",
+   "users": null,
+   "price_from_ils": null,
+   "hebrew_ui": true,
+   "rtl": true,
+   "allocation_numbers": null,
+   "owner_or_parent": null,
+   "public_company": null
+  },
+  {
+   "id": "arbox",
+   "name_he": "ארבוקס (Arbox)",
+   "name_en": "Arbox",
+   "url": "https://www.arboxapp.com/",
+   "category": "vertical",
+   "summary_he": "פלטפורמה לניהול מכוני כושר וסטודיו: מנויים, שיעורים, נוכחות ותשלומים, עם אפליקציה נפרדת לחברי המועדון.",
+   "why_israeli": "Search result excerpts: Bnei Brak-based startup founded 2015 by Alen Debensason and Ran Lev; Calcalist reported a $2M seed (2020). Homepage footer: '© 2023 Arbox Ltd.'",
+   "sources": [
+    {
+     "url": "https://www.arboxapp.com/",
+     "date": null,
+     "what": "Homepage (opened): 'Free forever', no prices, no customer count; © 2023 Arbox Ltd.",
+     "grade": "C"
+    },
+    {
+     "url": "https://www.calcalist.co.il/articles/0,7340,L-3833935,00.html",
+     "date": null,
+     "what": "Calcalist (search result, not opened): Arbox raises $2M seed led by Pico Ventures.",
+     "grade": "B"
+    },
+    {
+     "url": "https://play.google.com/store/apps/details?id=arbox.app.com&hl=en",
+     "date": null,
+     "what": "the user figure",
+     "grade": "D"
+    }
+   ],
+   "grade": "C",
+   "verified_at": "2026-11-05",
+   "users": {
+    "low": 100000,
+    "high": null,
+    "unit": "downloads",
+    "scope": null,
+    "grade": "D",
+    "source_url": "https://play.google.com/store/apps/details?id=arbox.app.com&hl=en",
+    "source_date": null,
+    "note": "Google Play 'Arbox' member app: 100K+ downloads, 3.63K reviews (read 2026-11-05). Each studio also has its own white-label Arbox app (separate listings, not summed). A download bracket of the members' app, not a count of businesses."
+   },
+   "price_from_ils": null,
+   "hebrew_ui": null,
+   "rtl": null,
+   "allocation_numbers": null,
+   "owner_or_parent": null,
+   "public_company": null,
+   "price_note": "Homepage advertises a free plan ('Free forever, no credit card'); no paid prices on the page."
+  },
+  {
+   "id": "tabit",
+   "name_he": "טאביט (Tabit)",
+   "name_en": "Tabit",
+   "url": "https://www.tabit.cloud/",
+   "category": "restaurants-hospitality",
+   "summary_he": "מערכת קופה וניהול למסעדות ובתי קפה הכוללת הזמנות, מלצרות דיגיטלית ותשלומים.",
+   "why_israeli": "Weak: homepage lists an EMEA office in Yakum, Israel and a Hebrew link 'take me to the Israeli site'; the US office is in Aventura, Florida. Founding and HQ are not stated on the page.",
+   "sources": [
+    {
+     "url": "https://www.tabit.cloud/",
+     "date": null,
+     "what": "Homepage (opened): offices in Aventura (US), Sydney, Yakum (Israel); no venue count, no prices.",
+     "grade": "C"
+    },
+    {
+     "url": "https://refreshmiami.com/tabits-new-us-hq-in-aventura-is-primed-for-growth-weve-got-pictures/",
+     "date": "2022-12-28",
+     "what": "the user figure",
+     "grade": "B"
+    }
+   ],
+   "grade": "C",
+   "verified_at": "2026-11-05",
+   "users": {
+    "low": 2000,
+    "high": 9000,
+    "unit": "venues (restaurants and hotels)",
+    "scope": "worldwide",
+    "grade": "B",
+    "source_url": "https://refreshmiami.com/tabits-new-us-hq-in-aventura-is-primed-for-growth-weve-got-pictures/",
+    "source_date": "2022-12-28",
+    "note": "RefreshMiami: Tabit 'now serves thousands of restaurants and hotels globally' and has over 300 employees (company claim in dated press). An earlier piece (2020-06-25) said about a thousand restaurants. The range is our reading of 'thousands'; the figure is nearly four years old."
+   },
+   "price_from_ils": null,
+   "hebrew_ui": null,
+   "rtl": null,
+   "allocation_numbers": null,
+   "owner_or_parent": null,
+   "public_company": null
+  },
+  {
+   "id": "papaya-global",
+   "name_he": "פפאיה גלובל (Papaya Global)",
+   "name_en": "Papaya Global",
+   "url": "https://www.papayaglobal.com/",
+   "category": "payroll-hr",
+   "summary_he": "פלטפורמה לשכר ותשלומים גלובליים לארגונים עם עובדים בעשרות מדינות, כולל העסקה ותשלום לקבלנים.",
+   "why_israeli": "A Papaya Global press release on PR Newswire Israel is datelined Tel Aviv (search result); Wikipedia (opened): founded 2016 by Eynat Guez, Ruben Drong and Ofer Herman, HQ New York.",
+   "sources": [
+    {
+     "url": "https://en.wikipedia.org/wiki/Papaya_Global",
+     "date": null,
+     "what": "Wikipedia (opened): founded 2016; HQ New York; supports organizations in over 160 countries; ~832 employees (2024); funding rounds up to a $3.7B valuation (2021).",
+     "grade": "D"
+    },
+    {
+     "url": "https://prnewswire.com/il/news-releases/papaya-global-completes-its-unified-payroll-and-payments-platform-with-the-launch-of-the-first-global-direct-deposit-301954918.html",
+     "date": null,
+     "what": "PR Newswire Israel release (search result, not opened), datelined Tel Aviv.",
+     "grade": "B"
+    },
+    {
+     "url": "https://www.papayaglobal.com/",
+     "date": null,
+     "what": "the user figure",
+     "grade": "C"
+    }
+   ],
+   "grade": "D",
+   "verified_at": "2026-11-05",
+   "users": {
+    "low": 1000,
+    "high": null,
+    "unit": "enterprises",
+    "scope": "worldwide",
+    "grade": "C",
+    "source_url": "https://www.papayaglobal.com/",
+    "source_date": null,
+    "note": "Homepage call to action 'Join 1,000+ enterprises' (undated). Third-party trackers seen in a search result were consistent but not opened (Bloomberry: 900 companies detected; AppsRunTheWorld: 1,000)."
+   },
+   "price_from_ils": null,
+   "hebrew_ui": null,
+   "rtl": null,
+   "allocation_numbers": null,
+   "owner_or_parent": null,
+   "public_company": null
+  },
+  {
+   "id": "appsflyer",
+   "name_he": "אפספלייר (AppsFlyer)",
+   "name_en": "AppsFlyer",
+   "url": "https://www.appsflyer.com/",
+   "category": "marketing-messaging",
+   "summary_he": "פלטפורמת מדידה ושיוך שיווקי לאפליקציות, המאפשרת למפרסמים לדעת אילו קמפיינים מביאים משתמשים.",
+   "why_israeli": "Wikipedia (opened): 'founded in Israel in 2011 by Oren Kaniel and Reshef Mann'; HQ San Francisco; homepage legal name 'AppsFlyer Ltd'.",
+   "sources": [
+    {
+     "url": "https://www.appsflyer.com/",
+     "date": null,
+     "what": "Homepage (opened): 'Trusted by 15,000 brands and counting'; structured data: founded 2011, SF address.",
+     "grade": "C"
+    },
+    {
+     "url": "https://en.wikipedia.org/wiki/AppsFlyer",
+     "date": null,
+     "what": "Wikipedia (opened): founded in Israel 2011; about 1,500 employees in 2026; 20+ offices.",
+     "grade": "D"
+    }
+   ],
+   "grade": "C",
+   "verified_at": "2026-11-05",
+   "users": {
+    "low": 15000,
+    "high": 15000,
+    "unit": "brands",
+    "scope": "worldwide",
+    "grade": "C",
+    "source_url": "https://www.appsflyer.com/",
+    "source_date": null,
+    "note": "Homepage heading, undated."
+   },
+   "price_from_ils": null,
+   "hebrew_ui": null,
+   "rtl": null,
+   "allocation_numbers": null,
+   "owner_or_parent": null,
+   "public_company": null
+  },
+  {
+   "id": "pelecard",
+   "name_he": "פלאקארד (Pelecard)",
+   "name_en": "Pelecard",
+   "url": "https://pelecard.com/",
+   "category": "payments-clearing",
+   "summary_he": "חברת סליקה ופתרונות תשלום לעסקים, עם מסופים, סליקה אונליין ומערכת התאמות בענן.",
+   "why_israeli": "Hebrew site; contact address Derech Eden 9, Rishon LeZion (homepage, opened).",
+   "sources": [
+    {
+     "url": "https://pelecard.com/",
+     "date": null,
+     "what": "Homepage (opened): 'over 35 years' in payments; 30-day free trial of the cloud reconciliation system; no counts, no prices.",
+     "grade": "C"
+    },
+    {
+     "url": "https://wordpress.org/plugins/search/israel/",
+     "date": "2026-11-05",
+     "what": "WordPress.org search results (opened): 'Pelecard Gateway' by Pelecard, 200+ active installations.",
+     "grade": "D"
+    }
+   ],
+   "grade": "D",
+   "verified_at": "2026-11-05",
+   "users": {
+    "low": 200,
+    "high": null,
+    "unit": "WordPress/WooCommerce sites (active installs of its plugin)",
+    "scope": "israel",
+    "grade": "D",
+    "source_url": "https://wordpress.org/plugins/search/israel/",
+    "source_date": "2026-11-05",
+    "note": "Only a floor: it counts sites using the WooCommerce plugin, not merchants of the clearing company."
+   },
+   "price_from_ils": null,
+   "hebrew_ui": true,
+   "rtl": true,
+   "allocation_numbers": null,
+   "owner_or_parent": null,
+   "public_company": null
+  },
+  {
+   "id": "allpay",
+   "name_he": "אולפיי (Allpay)",
+   "name_en": "Allpay",
+   "url": "https://www.allpay.co.il/",
+   "category": "payments-clearing",
+   "summary_he": "שער תשלומים לעסקים בישראל עם כרטיסי אשראי וארנקים דיגיטליים, תשלומים ומשיכת כספים לבנקים בישראל.",
+   "why_israeli": "Allpay LTD on an Israeli .co.il domain; the WordPress.org plugin text mentions Israeli bank payouts and invoices. The homepage opened is in Russian, with no address.",
+   "sources": [
+    {
+     "url": "https://www.allpay.co.il/",
+     "date": null,
+     "what": "Homepage (opened, Russian-language): 'hundreds of companies already trust Allpay'; free connection; © 2021.",
+     "grade": "C"
+    },
+    {
+     "url": "https://wordpress.org/plugins/search/israel/",
+     "date": "2026-11-05",
+     "what": "WordPress.org search results (opened): 'Allpay Payment Gateway', 70+ active installations; card and wallet payments with Israeli bank payouts and invoices.",
+     "grade": "D"
+    }
+   ],
+   "grade": "C",
+   "verified_at": "2026-11-05",
+   "users": {
+    "low": 200,
+    "high": 900,
+    "unit": "companies (company claim)",
+    "scope": "israel",
+    "grade": "C",
+    "source_url": "https://www.allpay.co.il/",
+    "source_date": null,
+    "note": "'Hundreds of companies' read as 200-900; undated."
+   },
+   "price_from_ils": null,
+   "hebrew_ui": null,
+   "rtl": null,
+   "allocation_numbers": null,
+   "owner_or_parent": null,
+   "public_company": null
+  },
+  {
+   "id": "upay",
+   "name_he": "יופיי (uPay)",
+   "name_en": "uPay",
+   "url": "https://www.upay.co.il/",
+   "category": "payments-clearing",
+   "summary_he": "חברת סליקה לעסקים קטנים עם הפקת חשבוניות חינם ועמלה הנגבית רק לאחר שהכסף נכנס לחשבון.",
+   "why_israeli": "Footer: יופיי פיננסים בע״מ / UPAY LTD, Hebrew right-to-left site, Israeli phone 03-0000016 (homepage, opened); no street address.",
+   "sources": [
+    {
+     "url": "https://www.upay.co.il/",
+     "date": null,
+     "what": "Homepage (opened): 'thousands of businesses have already joined'; three business plans without prices; invoicing service free.",
+     "grade": "C"
+    }
+   ],
+   "grade": "C",
+   "verified_at": "2026-11-05",
+   "users": {
+    "low": 2000,
+    "high": 9000,
+    "unit": "businesses (company claim)",
+    "scope": "israel",
+    "grade": "C",
+    "source_url": "https://www.upay.co.il/",
+    "source_date": null,
+    "note": "'Thousands of businesses' read as 2k-9k; undated."
+   },
+   "price_from_ils": null,
+   "hebrew_ui": true,
+   "rtl": true,
+   "allocation_numbers": null,
+   "owner_or_parent": null,
+   "public_company": null
+  },
+  {
+   "id": "payme",
+   "name_he": "פיימי (PayMe)",
+   "name_en": "PayMe",
+   "url": "https://www.payme.io/",
+   "category": "payments-clearing",
+   "summary_he": "תשתית תשלומים לפלטפורמות ושווקים מקוונים, עם משרדים בתל אביב ובלונדון.",
+   "why_israeli": "Legal entity PayMe LTD; the homepage lists an Israel office in Tel Aviv, an EMEA office in London and a US office in Delaware (opened).",
+   "sources": [
+    {
+     "url": "https://www.payme.io/",
+     "date": null,
+     "what": "Homepage (opened): no merchant count; prices exclude VAT; offices Tel Aviv, London, Delaware.",
+     "grade": "C"
+    }
+   ],
+   "grade": "C",
+   "verified_at": "2026-11-05",
+   "users": null,
+   "price_from_ils": null,
+   "hebrew_ui": null,
+   "rtl": null,
+   "allocation_numbers": null,
+   "owner_or_parent": null,
+   "public_company": null
+  },
+  {
+   "id": "shva",
+   "name_he": "שב״א (Shva)",
+   "name_en": "Shva (Automated Banking Services)",
+   "url": "https://www.shva.co.il/",
+   "category": "payments-clearing",
+   "summary_he": "תשתית הסליקה הלאומית בישראל: מנהלת את רשת הכספומטים ואת העברת עסקאות האשראי בין בתי עסק, חברות כרטיסים ובנקים.",
+   "why_israeli": "Hebrew site of the national payments infrastructure, address Harokmim 26, Holon (homepage, opened).",
+   "sources": [
+    {
+     "url": "https://www.shva.co.il/",
+     "date": "2026-11-05",
+     "what": "Homepage (opened): monthly dashboard dated 05/11/26: average 4,226,626 credit cards in daily use; card spending NIS 48.2B in the economy; no merchant count; owners not named.",
+     "grade": "C"
+    }
+   ],
+   "grade": "C",
+   "verified_at": "2026-11-05",
+   "users": {
+    "low": 4226626,
+    "high": 4226626,
+    "unit": "credit cards in daily use (monthly average, not businesses)",
+    "scope": "israel",
+    "grade": "C",
+    "source_url": "https://www.shva.co.il/",
+    "source_date": "2026-11-05",
+    "note": "A usage metric of the infrastructure, not customers; merchants or terminals are not published on the page."
+   },
+   "price_from_ils": null,
+   "hebrew_ui": true,
+   "rtl": true,
+   "allocation_numbers": null,
+   "owner_or_parent": null,
+   "public_company": null
+  },
+  {
+   "id": "nevo",
+   "name_he": "נבו (Nevo)",
+   "name_en": "Nevo legal database",
+   "url": "https://www.nevo.co.il/",
+   "category": "vertical",
+   "summary_he": "מאגר משפטי בעברית: פסיקה, חקיקה וספרות משפטית, עם כלי בינה מלאכותית לעורכי דין ושופטים.",
+   "why_israeli": "Hebrew right-to-left product for Israeli law (case law, legislation) on a .co.il domain; the page names no HQ.",
+   "sources": [
+    {
+     "url": "https://www.nevo.co.il/",
+     "date": null,
+     "what": "Homepage (opened): '90% of judges, their court assistants and 90% of State Attorneys chose Nevo this year'; 'Nevo AI'; price list link without amounts.",
+     "grade": "C"
+    }
+   ],
+   "grade": "C",
+   "verified_at": "2026-11-05",
+   "users": null,
+   "price_from_ils": null,
+   "hebrew_ui": true,
+   "rtl": true,
+   "allocation_numbers": null,
+   "owner_or_parent": null,
+   "public_company": null
+  },
+  {
+   "id": "ontopo",
+   "name_he": "אונטופו (Ontopo)",
+   "name_en": "Ontopo",
+   "url": "https://ontopo.com/",
+   "category": "restaurants-hospitality",
+   "summary_he": "פלטפורמת הזמנת מקומות במסעדות עם דירוגי מסעדות פופולריות, בעברית ובשפות נוספות.",
+   "why_israeli": "Hebrew site; footer: הייפ ניהול לקוחות בע״מ, Shoham 5, Ramat Gan (homepage, opened).",
+   "sources": [
+    {
+     "url": "http://ontopo.com/he/il",
+     "date": null,
+     "what": "Hebrew homepage (opened): language selector, 'popular restaurants 2025' list; no counts.",
+     "grade": "C"
+    },
+    {
+     "url": "https://play.google.com/store/apps/details?id=io.ontopo.topapp&hl=en",
+     "date": null,
+     "what": "the user figure",
+     "grade": "D"
+    }
+   ],
+   "grade": "C",
+   "verified_at": "2026-11-05",
+   "users": {
+    "low": 100000,
+    "high": null,
+    "unit": "downloads",
+    "scope": "israel",
+    "grade": "D",
+    "source_url": "https://play.google.com/store/apps/details?id=io.ontopo.topapp&hl=en",
+    "source_date": null,
+    "note": "Google Play diner app 'ontopo: Restaurant Booking': 100K+ downloads, 701 reviews (read 2026-11-05). The venue-side app has 1K+. A download bracket, not a user count; the site publishes no figures."
+   },
+   "price_from_ils": null,
+   "hebrew_ui": true,
+   "rtl": true,
+   "allocation_numbers": null,
+   "owner_or_parent": null,
+   "public_company": null
+  },
+  {
+   "id": "kaltura",
+   "name_he": "קלטורה (Kaltura)",
+   "name_en": "Kaltura",
+   "url": "https://corp.kaltura.com/",
+   "category": "vertical",
+   "summary_he": "פלטפורמת וידאו בענן לחינוך ולארגונים: הרצאות, וובינרים, ספריות וידאו ושידורים חיים.",
+   "why_israeli": "Wikipedia (opened): 'founded in Israel' in fall 2006; legally headquartered in New York with its main R&D in Ramat Gan, Israel.",
+   "sources": [
+    {
+     "url": "https://en.wikipedia.org/wiki/Kaltura",
+     "date": null,
+     "what": "Wikipedia (opened): founded 2006 in Israel by Ron Yekutiel and others; Nasdaq KLTR since July 2021; 569 employees (July 2024); no customer count.",
+     "grade": "D"
+    },
+    {
+     "url": "https://www.sec.gov/Archives/edgar/data/1432133/000162828026018182/kltr-20251231.htm",
+     "date": "2026-03-16",
+     "what": "the user figure",
+     "grade": "A"
+    }
+   ],
+   "grade": "D",
+   "verified_at": "2026-11-05",
+   "users": {
+    "low": 800,
+    "high": null,
+    "unit": "customers",
+    "scope": "worldwide",
+    "grade": "A",
+    "source_url": "https://www.sec.gov/Archives/edgar/data/1432133/000162828026018182/kltr-20251231.htm",
+    "source_date": "2026-03-16",
+    "note": "Form 10-K FY2025, Item 1 Customers and Industries: 'As of December 31, 2025, we served over 800 customers'. The cover page gives New York (860 Broadway) as the principal office; the Israeli link stays as in the existing row (R&D)."
+   },
+   "price_from_ils": null,
+   "hebrew_ui": null,
+   "rtl": null,
+   "allocation_numbers": null,
+   "owner_or_parent": null,
+   "public_company": "NASDAQ:KLTR"
+  },
+  {
+   "id": "varonis",
+   "name_he": "וארוניס (Varonis)",
+   "name_en": "Varonis Systems",
+   "url": "https://www.varonis.com/",
+   "category": "security-it",
+   "summary_he": "תוכנה לאבטחת נתונים וזיהוי חשיפות והרשאות, בענן ובארגון, עם מחקר ופיתוח בהרצליה.",
+   "why_israeli": "Wikipedia (opened): founded 2005 by Yaki Faitelson and Ohad Korkus; HQ Miami, Florida; R&D offices in Herzliya, Israel.",
+   "sources": [
+    {
+     "url": "https://en.wikipedia.org/wiki/Varonis_Systems",
+     "date": null,
+     "what": "Wikipedia (opened): Nasdaq VRNS since 2014; 2,658 employees (2025); 10-K for 2024 reports customers in 95 countries; no customer count.",
+     "grade": "D"
+    },
+    {
+     "url": "https://www.varonis.com/",
+     "date": null,
+     "what": "the user figure",
+     "grade": "C"
+    }
+   ],
+   "grade": "D",
+   "verified_at": "2026-11-05",
+   "users": {
+    "low": 8000,
+    "high": null,
+    "unit": "customers",
+    "scope": "worldwide",
+    "grade": "C",
+    "source_url": "https://www.varonis.com/",
+    "source_date": null,
+    "note": "Homepage banner 'Trusted by 8,000+ customers' (the page also mentions G2's Spring 2026 reports); the FY2025 10-K gives no customer total (only 'more than 95 countries'), so this stays a company claim."
+   },
+   "price_from_ils": null,
+   "hebrew_ui": null,
+   "rtl": null,
+   "allocation_numbers": null,
+   "owner_or_parent": null,
+   "public_company": "NASDAQ:VRNS"
+  },
+  {
+   "id": "radware",
+   "name_he": "ראדוור (Radware)",
+   "name_en": "Radware",
+   "url": "https://www.radware.com/",
+   "category": "security-it",
+   "summary_he": "אבטחת יישומים ורשת: הגנה מפני מתקפות DDoS, חומת אש ליישומי אינטרנט ואבטחת API.",
+   "why_israeli": "Wikipedia (opened): 'global headquarters is in Israel', international HQ in Ramat HaHayal, Tel Aviv; co-founder and CEO Roy Zisapel since 1997; US office in Mahwah, NJ.",
+   "sources": [
+    {
+     "url": "https://en.wikipedia.org/wiki/Radware",
+     "date": null,
+     "what": "Wikipedia (opened): 'more than 12,500 customers' (undated); Nasdaq RDWR; 1000+ employees.",
+     "grade": "D"
+    }
+   ],
+   "grade": "D",
+   "verified_at": "2026-11-05",
+   "users": {
+    "low": 12500,
+    "high": null,
+    "unit": "customers",
+    "scope": "worldwide",
+    "grade": "D",
+    "source_url": "https://en.wikipedia.org/wiki/Radware",
+    "source_date": null,
+    "note": "Undated Wikipedia sentence 'more than 12,500 customers'."
+   },
+   "price_from_ils": null,
+   "hebrew_ui": null,
+   "rtl": null,
+   "allocation_numbers": null,
+   "owner_or_parent": null,
+   "public_company": "NASDAQ:RDWR"
+  },
+  {
+   "id": "cloudinary",
+   "name_he": "קלאודינרי (Cloudinary)",
+   "name_en": "Cloudinary",
+   "url": "https://cloudinary.com/",
+   "category": "ai-tools",
+   "summary_he": "פלטפורמה לניהול ואופטימיזציה של תמונות וסרטונים לאתרים ולחנויות, בשימוש מפתחים ומותגים.",
+   "why_israeli": "Wikipedia (opened): 'founded in 2012 in Israel' by Itai Lahan, Tal Lev-Ami and Nadav Soferman; HQ San Jose, California.",
+   "sources": [
+    {
+     "url": "https://en.wikipedia.org/wiki/Cloudinary",
+     "date": "2022-12-31",
+     "what": "Wikipedia (opened): as of 2022 manages 50 billion assets for 'almost 10,000 customers worldwide'; 325 employees (Oct 2021). Date = year end placeholder for 'as of 2022'.",
+     "grade": "D"
+    }
+   ],
+   "grade": "D",
+   "verified_at": "2026-11-05",
+   "users": {
+    "low": 9000,
+    "high": 10000,
+    "unit": "customers",
+    "scope": "worldwide",
+    "grade": "D",
+    "source_url": "https://en.wikipedia.org/wiki/Cloudinary",
+    "source_date": "2022-12-31",
+    "note": "'Almost 10,000 customers' as of 2022 per Wikipedia; likely higher now. The 'url' field is the company's well-known domain, not opened."
+   },
+   "price_from_ils": null,
+   "hebrew_ui": null,
+   "rtl": null,
+   "allocation_numbers": null,
+   "owner_or_parent": null,
+   "public_company": null
+  },
+  {
+   "id": "sisense",
+   "name_he": "סיסנס (Sisense)",
+   "name_en": "Sisense",
+   "url": "https://www.sisense.com/",
+   "category": "ai-tools",
+   "summary_he": "פלטפורמת אנליטיקה ובינה עסקית שמטמיעים בתוך מוצרים ויישומים כדי להציג נתונים ללקוחות.",
+   "why_israeli": "Wikipedia (opened): 'founded in 2004 in Tel Aviv, Israel'; HQ New York City.",
+   "sources": [
+    {
+     "url": "https://en.wikipedia.org/wiki/Sisense",
+     "date": "2019-05-01",
+     "what": "Wikipedia (opened): after the May 2019 Periscope Data deal the combined company had over 2,000 customers and 700+ employees; 2022 layoffs of about half the staff. Day of month not shown.",
+     "grade": "D"
+    }
+   ],
+   "grade": "D",
+   "verified_at": "2026-11-05",
+   "users": {
+    "low": 2000,
+    "high": null,
+    "unit": "customers",
+    "scope": "worldwide",
+    "grade": "D",
+    "source_url": "https://en.wikipedia.org/wiki/Sisense",
+    "source_date": "2019-05-01",
+    "note": "Old figure (May 2019) and the company then halved its staff in 2022, so it may be outdated. The 'url' field is the company's well-known domain, not opened."
+   },
+   "price_from_ils": null,
+   "hebrew_ui": null,
+   "rtl": null,
+   "allocation_numbers": null,
+   "owner_or_parent": null,
+   "public_company": null
+  },
+  {
+   "id": "wiz",
+   "name_he": "וויז (Wiz)",
+   "name_en": "Wiz",
+   "url": "https://www.wiz.io/",
+   "category": "security-it",
+   "summary_he": "פלטפורמת אבטחת ענן שסורקת סביבות ענן ומזהה סיכונים וחשיפות; נרכשה על ידי אלפבית (גוגל) ב-2026.",
+   "why_israeli": "Wikipedia (opened): calls Wiz an 'Israeli-American cloud security company'; most engineering personnel are in Tel Aviv; HQ New York; founders previously founded Adallom.",
+   "sources": [
+    {
+     "url": "https://en.wikipedia.org/wiki/Wiz,_Inc.",
+     "date": "2026-03-11",
+     "what": "Wikipedia (opened): Alphabet completed the $32B all-cash acquisition on 11 March 2026; 45% market share of the Fortune 100 (Feb 2024); ~1,800 employees (2025). No customer count.",
+     "grade": "D"
+    },
+    {
+     "url": "https://www.wiz.io/",
+     "date": null,
+     "what": "the user figure",
+     "grade": "C"
+    }
+   ],
+   "grade": "D",
+   "verified_at": "2026-11-05",
+   "users": {
+    "low": 65,
+    "high": null,
+    "unit": "Fortune 100 companies (חברות מתוך ה-Fortune 100)",
+    "scope": "worldwide",
+    "grade": "C",
+    "source_url": "https://www.wiz.io/",
+    "source_date": null,
+    "note": "Homepage: 'Trusted by more than 65% of Fortune 100 companies' - a share of a fixed list of 100, read as more than 65 companies. The page publishes no overall customer total; undated."
+   },
+   "price_from_ils": null,
+   "hebrew_ui": null,
+   "rtl": null,
+   "allocation_numbers": null,
+   "owner_or_parent": "Alphabet (Google) acquired Wiz for $32B; completed 2026-03-11 (Wikipedia)",
+   "public_company": null
+  },
+  {
+   "id": "sapiens",
+   "name_he": "סאפיינס (Sapiens)",
+   "name_en": "Sapiens International",
+   "url": "https://www.sapiens.com/",
+   "category": "vertical",
+   "summary_he": "תוכנה למבטחים לניהול פוליסות, תביעות ופעילות ביטוח, שמכרה חברה ישראלית לקרן Advent ב-2025.",
+   "why_israeli": "Wikipedia (opened): incorporated in 1982 after separating from the Weizmann Institute; founders Tsvi Misinai, Tuvi Orbach and Shai Sole; global HQ moved to London in June 2026.",
+   "sources": [
+    {
+     "url": "https://en.wikipedia.org/wiki/Sapiens_International_Corporation",
+     "date": "2025-12-17",
+     "what": "Wikipedia (opened): Advent International completed the purchase on 17 Dec 2025; about 5,000 employees; no customer count.",
+     "grade": "D"
+    },
+    {
+     "url": "https://www.sec.gov/Archives/edgar/data/885740/000101376225003193/ea0235334-20f_sapiens.htm",
+     "date": "2025-03-27",
+     "what": "the user figure",
+     "grade": "A"
+    }
+   ],
+   "grade": "D",
+   "verified_at": "2026-11-05",
+   "users": {
+    "low": 600,
+    "high": null,
+    "unit": "customers",
+    "scope": "worldwide",
+    "grade": "A",
+    "source_url": "https://www.sec.gov/Archives/edgar/data/885740/000101376225003193/ea0235334-20f_sapiens.htm",
+    "source_date": "2025-03-27",
+    "note": "Form 20-F for FY2024, Item 4.B: 'Sapiens currently serves more than 600 customers globally' (no 'as of' date inside the sentence). Sapiens was taken private by Advent in Dec 2025, so this is its last annual report. Cover page: Azrieli Center, 26 Harokmim St., Holon, Israel."
+   },
+   "price_from_ils": null,
+   "hebrew_ui": null,
+   "rtl": null,
+   "allocation_numbers": null,
+   "owner_or_parent": "Advent International completed the purchase on 2025-12-17 (Formula Systems kept a minority stake)",
+   "public_company": null
+  },
+  {
+   "id": "magic-software",
+   "name_he": "מג׳יק (Magic Software)",
+   "name_en": "Magic Software Enterprises",
+   "url": "https://www.magicsoftware.com/",
+   "category": "erp",
+   "summary_he": "ספקית פלטפורמות לפיתוח מהיר, אינטגרציה ויישומים עסקיים, הפועלת מאור יהודה, ונמכרה ל-Matrix ב-2026.",
+   "why_israeli": "Wikipedia (opened): HQ Or Yehuda, Israel; founded 1983 by David Assia and Yaki Dunietz; owned by the Formula group from 1998.",
+   "sources": [
+    {
+     "url": "https://en.wikipedia.org/wiki/Magic_Software_Enterprises",
+     "date": "2026-02-01",
+     "what": "Wikipedia (opened): listed on Nasdaq and TASE until sold to Matrix IT in February 2026; 2500+ employees (2022); no customer count.",
+     "grade": "D"
+    },
+    {
+     "url": "https://www.sec.gov/Archives/edgar/data/876779/000121390025043459/ea0241007-20f_magic.htm",
+     "date": "2025-05-15",
+     "what": "the user figure",
+     "grade": "A"
+    }
+   ],
+   "grade": "D",
+   "verified_at": "2026-11-05",
+   "users": {
+    "low": 2000,
+    "high": 9000,
+    "unit": "enterprises",
+    "scope": "worldwide",
+    "grade": "A",
+    "source_url": "https://www.sec.gov/Archives/edgar/data/876779/000121390025043459/ea0241007-20f_magic.htm",
+    "source_date": "2025-05-15",
+    "note": "Form 20-F for FY2024, Introduction: 'Thousands of enterprises in approximately 50 countries use our products and services' (undated sentence) and 'hundreds of customers mainly in Israel and in North America'. The range is our reading of 'thousands'. Cover page: Terminal Center, Or Yehuda, Israel; about 3,787 employees."
+   },
+   "price_from_ils": null,
+   "hebrew_ui": null,
+   "rtl": null,
+   "allocation_numbers": null,
+   "owner_or_parent": "Matrix IT bought Magic from Formula Systems and others, completed February 2026 (Wikipedia)",
+   "public_company": null
+  },
+  {
+   "id": "ex-libris",
+   "name_he": "אקס ליברי (Ex Libris)",
+   "name_en": "Ex Libris",
+   "url": "https://exlibrisgroup.com/",
+   "category": "vertical",
+   "summary_he": "תוכנות לניהול ספריות אקדמיות ולאומיות: קטלוג, חיפוש, שימור דיגיטלי ורשימות קריאה, בענן; חלק מקבוצת Clarivate.",
+   "why_israeli": "Wikipedia (opened): HQ at Malha Technology Park, Jerusalem; founded 1986 by Azriel Morag; the software began at the Hebrew University in 1980.",
+   "sources": [
+    {
+     "url": "https://en.wikipedia.org/wiki/Ex_Libris_Group",
+     "date": null,
+     "what": "Wikipedia (opened): 'services to thousands of customers in more than 90 countries' (undated); 43 of the top 50 universities as of 2015; over 40 national libraries; owned by Clarivate (dates inconsistent in the article).",
+     "grade": "D"
+    }
+   ],
+   "grade": "D",
+   "verified_at": "2026-11-05",
+   "users": {
+    "low": 2000,
+    "high": 9000,
+    "unit": "customers (libraries and institutions)",
+    "scope": "worldwide",
+    "grade": "D",
+    "source_url": "https://en.wikipedia.org/wiki/Ex_Libris_Group",
+    "source_date": null,
+    "note": "'Thousands of customers in more than 90 countries', undated; read as 2k-9k. The 'url' field is the company's well-known domain, not opened."
+   },
+   "price_from_ils": null,
+   "hebrew_ui": null,
+   "rtl": null,
+   "allocation_numbers": null,
+   "owner_or_parent": "Clarivate (through ProQuest/Ex Libris; ProQuest bought Ex Libris in 2015 for about $500M per Wikipedia reference titles; Clarivate bought ProQuest in 2021)",
+   "public_company": null
+  },
+  {
+   "id": "forter",
+   "name_he": "פורטר (Forter)",
+   "name_en": "Forter",
+   "url": "https://www.forter.com/",
+   "category": "payments-clearing",
+   "summary_he": "פלטפורמת מניעת הונאות ואופטימיזציית תשלומים לחנויות מקוונות, המזהה מי עומד מאחורי כל רכישה.",
+   "why_israeli": "Wikipedia (opened): infobox lists Tel Aviv, Israel and New York City; founded 2013 by Michael Reitblat, Liron Damri and Alon Shemesh, ex-Fraud Sciences engineers who served in Israeli Army intelligence.",
+   "sources": [
+    {
+     "url": "https://en.wikipedia.org/wiki/Forter",
+     "date": null,
+     "what": "Wikipedia (opened): processed more than $1 trillion of transactions and 1.5 billion online identities (undated); no merchant or customer count.",
+     "grade": "D"
+    }
+   ],
+   "grade": "D",
+   "verified_at": "2026-11-05",
+   "users": null,
+   "price_from_ils": null,
+   "hebrew_ui": null,
+   "rtl": null,
+   "allocation_numbers": null,
+   "owner_or_parent": null,
+   "public_company": null
+  },
+  {
+   "id": "fundbox",
+   "name_he": "פאנדבוקס (Fundbox)",
+   "name_en": "Fundbox",
+   "url": "https://fundbox.com/",
+   "category": "banking-finance-tools",
+   "summary_he": "פלטפורמת אשראי להון חוזר לעסקים קטנים ושירותי תשלום, המשולבת בתוכנות הנהלת חשבונות.",
+   "why_israeli": "Wikipedia (opened): 'founded in August 2013 in Israel' by Yuval Ariav, Eyal Shinar and Tomer Michaeli; HQ San Francisco.",
+   "sources": [
+    {
+     "url": "https://en.wikipedia.org/wiki/Fundbox",
+     "date": null,
+     "what": "Wikipedia (opened): revolving credit line up to $100,000 via a banking partner, Flex Pay; no customer count.",
+     "grade": "D"
+    }
+   ],
+   "grade": "D",
+   "verified_at": "2026-11-05",
+   "users": null,
+   "price_from_ils": null,
+   "hebrew_ui": null,
+   "rtl": null,
+   "allocation_numbers": null,
+   "owner_or_parent": null,
+   "public_company": null
+  },
+  {
+   "id": "mind-cti",
+   "name_he": "מיינד סי.טי.איי (MIND CTI)",
+   "name_en": "MIND CTI",
+   "url": "https://www.mindcti.com/",
+   "category": "vertical",
+   "summary_he": "תוכנות חיוב ושירות לקוחות לחברות תקשורת, כולל MINDBill ושירותי הודעות, מיוקנעם.",
+   "why_israeli": "Wikipedia (opened): headquartered in Yokneam, Israel; founded in the 1990s by Monica Iancu and Lior Salansky (the article gives both 1995 and 1986); Nasdaq MNDO.",
+   "sources": [
+    {
+     "url": "https://en.wikipedia.org/wiki/Mind_CTI",
+     "date": null,
+     "what": "Wikipedia (opened): 144 employees at end of fiscal 2023; customers in over 40 countries; delisted from TASE in Nov 2009; no customer count.",
+     "grade": "D"
+    },
+    {
+     "url": "https://www.sec.gov/Archives/edgar/data/1119083/000117891326001091/zk2634570.htm",
+     "date": "2026-03-18",
+     "what": "the user figure",
+     "grade": "A"
+    }
+   ],
+   "grade": "D",
+   "verified_at": "2026-11-05",
+   "users": {
+    "low": 2000,
+    "high": 9000,
+    "unit": "organizations",
+    "scope": "worldwide",
+    "grade": "A",
+    "source_url": "https://www.sec.gov/Archives/edgar/data/1119083/000117891326001091/zk2634570.htm",
+    "source_date": "2026-03-18",
+    "note": "Form 20-F FY2025, Item 4 Customers: the enterprise-software customer list ends with 'other thousands of small to very large organizations'; separately, the messaging solutions are 'used by more than 100 enterprise customers, mostly in Germany'. The range is our reading of 'thousands'. The report also says no new customers were recruited in 2024 or 2025. Cover page: 2 HaCarmel St., Yoqneam, Israel."
+   },
+   "price_from_ils": null,
+   "hebrew_ui": null,
+   "rtl": null,
+   "allocation_numbers": null,
+   "owner_or_parent": null,
+   "public_company": "NASDAQ:MNDO"
+  },
+  {
+   "id": "snyk",
+   "name_he": "סניק (Snyk)",
+   "name_en": "Snyk",
+   "url": "https://snyk.io/",
+   "category": "security-it",
+   "summary_he": "פלטפורמת אבטחה למפתחים שמוצאת פגיעויות בקוד, בספריות קוד פתוח ובתשתיות ענן.",
+   "why_israeli": "Wikipedia (opened): founded 2015 'out of Tel Aviv and London' by Guy Podjarny, Assaf Hefetz and Danny Grander (Unit 8200 alumni); HQ Boston; offices include Tel Aviv.",
+   "sources": [
+    {
+     "url": "https://en.wikipedia.org/wiki/Snyk",
+     "date": null,
+     "what": "Wikipedia (opened): about 1,400 employees in 2022; no customer count.",
+     "grade": "D"
+    },
+    {
+     "url": "https://getlatka.com/companies/snyk",
+     "date": null,
+     "what": "the user figure",
+     "grade": "D"
+    }
+   ],
+   "grade": "D",
+   "verified_at": "2026-11-05",
+   "users": {
+    "low": 5000,
+    "high": 5000,
+    "unit": "customers",
+    "scope": "worldwide",
+    "grade": "D",
+    "source_url": "https://getlatka.com/companies/snyk",
+    "source_date": null,
+    "note": "Latka (opened) lists 5K customers in its competitors table with no date or source - low confidence. A jobs-site excerpt in a search result gave 4,744 customers at the end of 2025 (not opened), and Snyk's own 2021 funding announcement cited 1,200+."
+   },
+   "price_from_ils": null,
+   "hebrew_ui": null,
+   "rtl": null,
+   "allocation_numbers": null,
+   "owner_or_parent": null,
+   "public_company": null
+  },
+  {
+   "id": "ten-bis",
+   "name_he": "תן ביס (10bis)",
+   "name_en": "10bis",
+   "url": "https://www.10bis.co.il/",
+   "category": "restaurants-hospitality",
+   "summary_he": "שירות הזמנות אוכל וכרטיס ארוחות לעובדים, שנרכש על ידי Takeaway.com ב-2018.",
+   "why_israeli": "Wikipedia (Takeaway.com article, opened): Takeaway.com 'acquired Israeli food delivery company 10bis' in 2018 for EUR 135M. The 10bis site is a JavaScript shell with no readable text.",
+   "sources": [
+    {
+     "url": "https://en.wikipedia.org/wiki/10bis",
+     "date": "2018-01-01",
+     "what": "Wikipedia (opened; redirects to the Takeaway.com article): 10bis bought for EUR 135M in 2018; Takeaway later acquired by Prosus in Oct 2025; no 10bis user counts. Day and month not shown.",
+     "grade": "D"
+    },
+    {
+     "url": "https://www.10bis.co.il/next/",
+     "date": null,
+     "what": "the user figure",
+     "grade": "C"
+    }
+   ],
+   "grade": "D",
+   "verified_at": "2026-11-05",
+   "users": {
+    "low": 3500,
+    "high": null,
+    "unit": "companies (employer customers)",
+    "scope": "israel",
+    "grade": "C",
+    "source_url": "https://www.10bis.co.il/next/",
+    "source_date": null,
+    "note": "Company site (opened in a browser; the homepage redirects to /next/): '10bis ... among its customers over 3,500 companies', 'more than 80% of Israel's hi-tech companies', and the 10bis card is accepted at over 7,000 restaurants. The consumer Android app has 1M+ downloads (D). Undated."
+   },
+   "price_from_ils": null,
+   "hebrew_ui": null,
+   "rtl": null,
+   "allocation_numbers": null,
+   "owner_or_parent": "Takeaway.com bought 10bis for EUR 135M (2018); Takeaway itself was acquired by Prosus in Oct 2025 (Wikipedia). The brief's Cibus/Pluxee link is not supported by what was opened.",
+   "public_company": null
+  },
+  {
+   "id": "walkme",
+   "name_he": "וואוק-מי (WalkMe)",
+   "name_en": "WalkMe",
+   "url": "https://www.walkme.com/",
+   "category": "work-management",
+   "summary_he": "פלטפורמת אימוץ דיגיטלי שמנחה עובדים בתוך תוכנות הארגון בעזרת הוראות על המסך; נרכשה על ידי SAP ב-2024.",
+   "why_israeli": "Wikipedia (opened): founded 2011 by Dan Adika, Rafael Sweary, Eyal Cohen and Yuval Shalom Ozanna; HQ San Francisco with a Tel Aviv office; 'Globes named it Israel's most promising start up' in 2016. The article does not say outright that it was founded in Israel.",
+   "sources": [
+    {
+     "url": "https://en.wikipedia.org/wiki/WalkMe",
+     "date": "2024-09-01",
+     "what": "Wikipedia (opened): SAP agreed in June 2024 to buy WalkMe at $14.00 per share (about $1.5B equity value), completed Sept 2024; 1,100 employees; no customer count.",
+     "grade": "D"
+    },
+    {
+     "url": "https://www.sec.gov/Archives/edgar/data/1847584/000117891324000974/zk2431111.htm",
+     "date": "2024-03-18",
+     "what": "the user figure",
+     "grade": "A"
+    }
+   ],
+   "grade": "D",
+   "verified_at": "2026-11-05",
+   "users": {
+    "low": 1640,
+    "high": 1640,
+    "unit": "customers",
+    "scope": "worldwide",
+    "grade": "A",
+    "source_url": "https://www.sec.gov/Archives/edgar/data/1847584/000117891324000974/zk2431111.htm",
+    "source_date": "2024-03-18",
+    "note": "Form 20-F FY2023, Item 4: 'As of December 31, 2023, we had approximately 1,640 customers including 410 of the Global 2000'. This is the last annual report before SAP completed the acquisition in Sept 2024."
+   },
+   "price_from_ils": null,
+   "hebrew_ui": null,
+   "rtl": null,
+   "allocation_numbers": null,
+   "owner_or_parent": "SAP bought WalkMe (about $1.5B equity value, completed Sept 2024; Wikipedia)",
+   "public_company": null
+  },
+  {
+   "id": "bit-hapoalim",
+   "name_he": "ביט (Bit)",
+   "name_en": "Bit (Bank Hapoalim)",
+   "url": "https://play.google.com/store/apps/details?id=com.bnhp.payments.paymentsapp&hl=en",
+   "category": "payments-clearing",
+   "summary_he": "אפליקציית תשלומים והעברות כסף של בנק הפועלים. גם עצמאים ובעלי עסקים קטנים משתמשים בה לקבלת תשלומים, ובמאי 2026 עלתה העמלה על קבלות שנתיות שמעל 25,000 ש״ח.",
+   "why_israeli": "Walla Finance (page updated 2026-04-05) calls it the BIT payment app of Bank Hapoalim; the Google Play listing (opened) is published by 'BankHapoalim' and is Hebrew-named. The bitpay.co.il domain only redirect-looped in a plain fetch, so the opened Play listing is used as the official page.",
+   "sources": [
+    {
+     "url": "https://finance.walla.co.il/item/3828696",
+     "date": "2026-04-05",
+     "what": "Walla Finance (opened; the date is the page's last-updated stamp): Bit serves about 3.5 million active users; the bank says the new receiving fee (0.8% above NIS 25,000 a year from 2026-05-01) touches about 7% of users, mainly self-employed and small service providers.",
+     "grade": "B"
+    },
+    {
+     "url": "https://www.mako.co.il/finances-news/Article-3a2f2532b660a91027.htm",
+     "date": "2025-10-21",
+     "what": "Mako (opened): a Bank of Israel survey found that about 40% of Bit and PayBox payments in 2022-2024 were for business owners.",
+     "grade": "B"
+    },
+    {
+     "url": "https://play.google.com/store/apps/details?id=com.bnhp.payments.paymentsapp&hl=en",
+     "date": null,
+     "what": "Google Play listing (opened): developer BankHapoalim, 5M+ downloads, 49.6K reviews; no date on the page.",
+     "grade": "D"
+    }
+   ],
+   "grade": "B",
+   "verified_at": "2026-11-05",
+   "users": {
+    "low": 3500000,
+    "high": 3500000,
+    "unit": "active users (משתמשים פעילים)",
+    "scope": "israel",
+    "grade": "B",
+    "source_url": "https://finance.walla.co.il/item/3828696",
+    "source_date": "2026-04-05",
+    "note": "Walla: 'about 3.5 million active users' (consumer and business together). Google Play shows 5M+ downloads of the Android app (D, not users). Bit is a consumer payments app that self-employed people also use to get paid; there is no separate business-customer count."
+   },
+   "price_from_ils": null,
+   "price_note": "From 2026-05-01 the fee for receiving money is 0.8% on annual receipts above NIS 25,000 (it was 0.6%), per Walla.",
+   "hebrew_ui": true,
+   "rtl": true,
+   "allocation_numbers": null,
+   "owner_or_parent": "Bank Hapoalim (Walla: 'the BIT payment app of Bank Hapoalim')",
+   "public_company": null
+  },
+  {
+   "id": "paybox",
+   "name_he": "פייבוקס (PayBox)",
+   "name_en": "PayBox",
+   "url": "https://www.payboxapp.com/",
+   "category": "payments-clearing",
+   "summary_he": "ארנק דיגיטלי להעברות כסף וגבייה בקבוצות, בשליטת בנק דיסקונט. בעלי עסקים קטנים משתמשים בו לקבלת תשלומים, עם מסלול חינמי עד תקרת קבלות שנתית.",
+   "why_israeli": "Hebrew site (opened) with a digital card issued by Cal; Globes (2024-06-10) says Israel Discount Bank holds 50.1% and Shufersal 49.9%, with Discount in advanced talks to buy Shufersal's stake for NIS 77 million.",
+   "sources": [
+    {
+     "url": "https://www.mako.co.il/finances-news/Article-3a2f2532b660a91027.htm",
+     "date": "2025-10-21",
+     "what": "Mako (opened): PayBox has over 5 million downloads and over 1.7 million unique users a month; from Oct 2025 the free Basic tier caps incoming payments at NIS 50,000 a year; a Bank of Israel survey says about 40% of Bit and PayBox payments went to business owners.",
+     "grade": "B"
+    },
+    {
+     "url": "https://en.globes.co.il/en/article-Discount-Bank-in-talks-to-buy-out-Shufersals-PayBox-stake-1001481160",
+     "date": "2024-06-10",
+     "what": "Globes (opened): 1.5 million monthly active users and 2.5 million registered users; ownership Discount 50.1% / Shufersal 49.9%.",
+     "grade": "B"
+    },
+    {
+     "url": "https://www.payboxapp.com/",
+     "date": null,
+     "what": "Homepage (opened): Hebrew; free service for customers of all banks; a PayBox business section; no user counter; undated.",
+     "grade": "C"
+    },
+    {
+     "url": "https://play.google.com/store/apps/details?id=com.payboxapp&hl=en",
+     "date": null,
+     "what": "Google Play listing (opened): 1M+ downloads, 78.4K reviews; no date on the page.",
+     "grade": "D"
+    }
+   ],
+   "grade": "B",
+   "verified_at": "2026-11-05",
+   "users": {
+    "low": 1700000,
+    "high": null,
+    "unit": "monthly unique users (משתמשים ייחודיים בחודש)",
+    "scope": "israel",
+    "grade": "B",
+    "source_url": "https://www.mako.co.il/finances-news/Article-3a2f2532b660a91027.htm",
+    "source_date": "2025-10-21",
+    "note": "Mako: 'more than 1.7 million unique users a month' and over 5 million downloads. Globes (2024-06-10) gave 1.5 million monthly active and 2.5 million registered users. Consumer and business use are not separated."
+   },
+   "price_from_ils": null,
+   "price_note": "Basic tier is free up to NIS 50,000 of incoming payments a year; the Plus tier needs a PayBox credit card (Mako, Oct 2025).",
+   "hebrew_ui": true,
+   "rtl": true,
+   "allocation_numbers": null,
+   "owner_or_parent": "Israel Discount Bank 50.1% and Shufersal 49.9% as of June 2024; Discount was negotiating to buy out Shufersal (Globes 2024-06-10). Later status not checked.",
+   "public_company": null
+  },
+  {
+   "id": "jfrog",
+   "name_he": "ג׳יפרוג (JFrog)",
+   "name_en": "JFrog",
+   "url": "https://jfrog.com/",
+   "category": "security-it",
+   "summary_he": "פלטפורמה לניהול שרשרת האספקה של תוכנה, שבה משתמשים צוותי פיתוח בארגונים מכל התעשיות ובכל הגדלים. החברה רשומה בנתניה ומנפיקה דוחות 10-K בארה״ב.",
+   "why_israeli": "Form 10-K FY2025 (opened): registered office at 3 HaMachshev Street, Netanya, Israel; R&D employees located primarily in Israel and India; principal executive offices in Sunnyvale, California.",
+   "sources": [
+    {
+     "url": "https://www.sec.gov/Archives/edgar/data/1800667/000119312526051382/frog-20251231.htm",
+     "date": "2026-02-13",
+     "what": "Form 10-K for FY2025 (opened; date = filing date from the EDGAR index): about 6,600 customer organizations at 2025-12-31; 1,168 customers with ARR of $100k or more; 74 customers with ARR of $1M or more.",
+     "grade": "A"
+    }
+   ],
+   "grade": "A",
+   "verified_at": "2026-11-05",
+   "users": {
+    "low": 6600,
+    "high": 6600,
+    "unit": "organizations",
+    "scope": "worldwide",
+    "grade": "A",
+    "source_url": "https://www.sec.gov/Archives/edgar/data/1800667/000119312526051382/frog-20251231.htm",
+    "source_date": "2026-02-13",
+    "note": "10-K, Item 1 Customers: 'a global customer base of approximately 6,600 organizations across all industries and sizes' as of December 31, 2025."
+   },
+   "price_from_ils": null,
+   "hebrew_ui": null,
+   "rtl": null,
+   "allocation_numbers": null,
+   "owner_or_parent": null,
+   "public_company": "NASDAQ:FROG"
+  },
+  {
+   "id": "global-e",
+   "name_he": "גלובל-אי (Global-e)",
+   "name_en": "Global-e Online",
+   "url": "https://www.global-e.com/",
+   "category": "ecommerce-sites",
+   "summary_he": "פלטפורמה שמאפשרת לחנויות אונליין למכור לקונים בחו״ל: תשלום ומיסוי מקומיים, משלוחים והחזרות. משרתת בעיקר מותגים וקמעונאים גדולים.",
+   "why_israeli": "Form 20-F FY2025 (opened): principal executive offices at 9 HaPsagot Street, Petah Tikva, Israel; filed by Global-E Online Ltd. The global-e.com homepage itself was not opened.",
+   "sources": [
+    {
+     "url": "https://www.sec.gov/Archives/edgar/data/1835963/000117891326001772/zk2634880.htm",
+     "date": "2026-03-26",
+     "what": "Form 20-F for FY2025 (opened; date = filing date from EDGAR): 1,547 merchants on the enterprise platforms at 2025-12-31 plus 'thousands' on Shopify Managed Markets; 2025 GMV $6,569M; Petah Tikva address.",
+     "grade": "A"
+    }
+   ],
+   "grade": "A",
+   "verified_at": "2026-11-05",
+   "users": {
+    "low": 1547,
+    "high": 1547,
+    "unit": "merchants",
+    "scope": "worldwide",
+    "grade": "A",
+    "source_url": "https://www.sec.gov/Archives/edgar/data/1835963/000117891326001772/zk2634880.htm",
+    "source_date": "2026-03-26",
+    "note": "20-F: 'As of December 31, 2025, we had 1,547 merchants using our enterprise platforms'; the filing adds 'thousands of merchants' using Shopify Managed Markets (not counted here)."
+   },
+   "price_from_ils": null,
+   "hebrew_ui": null,
+   "rtl": null,
+   "allocation_numbers": null,
+   "owner_or_parent": null,
+   "public_company": "NASDAQ:GLBE"
+  },
+  {
+   "id": "easycard",
+   "name_he": "איזיקארד (EasyCard)",
+   "name_en": "EasyCard",
+   "url": "https://www.e-c.co.il/",
+   "category": "payments-clearing",
+   "summary_he": "בית תוכנה מנתניה המציע סליקת אשראי למסופים ולאתרים, כולל חומרת תשלום. באתר מונים של עסקים, משתמשים וסכום יומי שנסלק.",
+   "why_israeli": "Homepage (opened): Hebrew site, address 'המלאכה 4, נתניה' in the footer; describes itself as a software house providing financial solutions to businesses.",
+   "sources": [
+    {
+     "url": "https://www.e-c.co.il/",
+     "date": null,
+     "what": "Homepage (opened): counters '10K businesses that clear with us', '25K users', 55M NIS cleared a day, 10 join daily; page title 'clearing for businesses from 35 NIS'; undated live counters.",
+     "grade": "C"
+    }
+   ],
+   "grade": "C",
+   "verified_at": "2026-11-05",
+   "users": {
+    "low": 10000,
+    "high": 10000,
+    "unit": "businesses",
+    "scope": "israel",
+    "grade": "C",
+    "source_url": "https://www.e-c.co.il/",
+    "source_date": null,
+    "note": "Homepage counter 'עסקים וסולקים איתנו' = 10K (another counter says 25K users); undated and possibly a static marketing number."
+   },
+   "price_from_ils": null,
+   "price_note": "Page title says clearing 'from 35 NIS' without a period or conditions; a PAX terminal is listed at 1,404 NIS one-off.",
+   "hebrew_ui": true,
+   "rtl": true,
+   "allocation_numbers": null,
+   "owner_or_parent": null,
+   "public_company": null
+  },
+  {
+   "id": "meckano",
+   "name_he": "מקאנו (Meckano)",
+   "name_en": "Meckano",
+   "url": "https://www.meckano.co.il/",
+   "category": "payroll-hr",
+   "summary_he": "מערכת ענן לשעון נוכחות וניהול שעות עבודה, משימות והסכמי עבודה, לעסקים קטנים ועד ארגונים. באוגוסט 2026 דווח שמיכפל תרכוש 70% מהחברה.",
+   "why_israeli": "Hebrew site (opened) with an Israeli phone number (0737-969-270); Bizportal and Funder (both 2026-08-20) report Michpal Technologies, a TASE-listed Israeli company, buying 70% of the company.",
+   "sources": [
+    {
+     "url": "https://www.bizportal.co.il/capitalmarket/news/article/20039732",
+     "date": "2026-08-20",
+     "what": "Bizportal (opened): Michpal pays about NIS 66M for 70% of Makano (Meckano); Makano serves more than 3,500 customers; over 90% of its revenue is recurring.",
+     "grade": "B"
+    },
+    {
+     "url": "https://www.funder.co.il/article/208097",
+     "date": "2026-08-20",
+     "what": "Funder (opened): same deal; Makano's platform is used by more than 3,500 customers, from large organizations to small businesses.",
+     "grade": "B"
+    },
+    {
+     "url": "https://www.meckano.co.il/",
+     "date": null,
+     "what": "Company site (opened; counters read after scrolling): 600K+ employees start their day with it, 4.7M+ hours counted daily, NIS 55M+ saved a year; undated marketing counters.",
+     "grade": "C"
+    },
+    {
+     "url": "https://play.google.com/store/apps/details?id=com.kfir.Meckano&hl=en",
+     "date": null,
+     "what": "Google Play listing (opened): 100K+ downloads, 618 reviews.",
+     "grade": "D"
+    }
+   ],
+   "grade": "B",
+   "verified_at": "2026-11-05",
+   "users": {
+    "low": 3500,
+    "high": null,
+    "unit": "customers",
+    "scope": "israel",
+    "grade": "B",
+    "source_url": "https://www.bizportal.co.il/capitalmarket/news/article/20039732",
+    "source_date": "2026-08-20",
+    "note": "Both articles say 'more than 3,500 customers' (reporting the acquisition disclosure). The company's own counters show 600K+ employees using it daily (C, undated)."
+   },
+   "price_from_ils": null,
+   "hebrew_ui": true,
+   "rtl": true,
+   "allocation_numbers": null,
+   "owner_or_parent": "Michpal Technologies agreed in August 2026 to buy 70% for about NIS 66M (Bizportal 2026-08-20).",
+   "public_company": null
+  },
+  {
+   "id": "yesh-invoice",
+   "name_he": "יש חשבונית (Yesh Invoice)",
+   "name_en": "Yesh Invoice",
+   "url": "https://www.yeshinvoice.co.il/",
+   "category": "invoicing-accounting",
+   "summary_he": "מערכת ענן להפקת חשבוניות וקבלות לעצמאים ולעסקים קטנים, עם סליקת אשראי, סנכרון לרואה החשבון ותמיכה במודל חשבונית ישראל. שלושה מסלולים בשקלים לחודש.",
+   "why_israeli": "Hebrew site (opened in a browser); footer: all rights reserved to יש חשבונית בע״מ; states 'a certificate approved by the Tax Authority'; Hebrew support by WhatsApp and email on Sunday-Thursday.",
+   "sources": [
+    {
+     "url": "https://www.yeshinvoice.co.il/pricing",
+     "date": null,
+     "what": "Pricing page (opened in a browser): 24 / 37 / 48 NIS a month (before VAT, paid yearly 288 / 445 / 580); 'tens of thousands of satisfied customers - self-employed'; each plan lists support for the Israel Invoice model; undated.",
+     "grade": "C"
+    },
+    {
+     "url": "https://play.google.com/store/apps/details?id=com.app.yeshinvoice&hl=en",
+     "date": null,
+     "what": "Google Play listing (opened): developer 'Yesh Invoice Ltd', 100K+ downloads, 345 reviews.",
+     "grade": "D"
+    }
+   ],
+   "grade": "C",
+   "verified_at": "2026-11-05",
+   "users": {
+    "low": 20000,
+    "high": 90000,
+    "unit": "satisfied customers (לקוחות מרוצים)",
+    "scope": "israel",
+    "grade": "C",
+    "source_url": "https://www.yeshinvoice.co.il/pricing",
+    "source_date": null,
+    "note": "Wording 'עשרות אלפי לקוחות מרוצים' (tens of thousands); the numeric range is our reading of the phrase; undated. The Android app has 100K+ downloads (D)."
+   },
+   "price_from_ils": {
+    "amount": 24,
+    "period": "month (one yearly payment of 288)",
+    "per": "Yesh Hatchala plan: unlimited documents, 1 business",
+    "source_url": "https://www.yeshinvoice.co.il/pricing",
+    "date": "2026-11-05",
+    "note": "Before VAT; 30 days free; API usage 0.25 NIS per extra document after 40 free a month; plans 37 (2 businesses) and 48 (3 businesses)."
+   },
+   "hebrew_ui": true,
+   "rtl": true,
+   "allocation_numbers": true,
+   "owner_or_parent": null,
+   "public_company": null
+  },
+  {
+   "id": "konimbo",
+   "name_he": "קונימבו (Konimbo)",
+   "name_en": "Konimbo",
+   "url": "https://konimbo.co.il/",
+   "category": "ecommerce-sites",
+   "summary_he": "פלטפורמה ישראלית להקמת חנות אונליין בעברית עם סליקה, ליווי וצוות מומחי איקומרס, המיועדת בעיקר לעסקים שיש להם גם חנות פיזית.",
+   "why_israeli": "Hebrew site (opened in a browser) with an Israeli phone number (09-0000017), customer stories of Israeli stores, and 'a team of 45 e-commerce professionals' on the homepage.",
+   "sources": [
+    {
+     "url": "https://konimbo.co.il/",
+     "date": null,
+     "what": "Homepage (opened in a browser; www.konimbo.co.il redirects here): 'over 1200 businesses' grow their revenue with a Konimbo store; PCI Level 1 payments; undated.",
+     "grade": "C"
+    }
+   ],
+   "grade": "C",
+   "verified_at": "2026-11-05",
+   "users": {
+    "low": 1200,
+    "high": null,
+    "unit": "businesses",
+    "scope": "israel",
+    "grade": "C",
+    "source_url": "https://konimbo.co.il/",
+    "source_date": null,
+    "note": "Homepage wording 'מעל 1200 עסקים' (over 1,200 businesses); undated company claim."
+   },
+   "price_from_ils": null,
+   "hebrew_ui": true,
+   "rtl": true,
+   "allocation_numbers": null,
+   "owner_or_parent": null,
+   "public_company": null
+  },
+  {
+   "id": "mishloha",
+   "name_he": "משלוחה (Mishloha)",
+   "name_en": "Mishloha",
+   "url": "https://www.mishloha.co.il/",
+   "category": "restaurants-hospitality",
+   "summary_he": "פלטפורמת הזמנת משלוחי אוכל ומרקט עם ארנק דיגיטלי וצבירת קרדיט, ואפליקציית ניהול הזמנות למסעדות.",
+   "why_israeli": "Hebrew site (opened in a browser) claiming restaurants 'from Kiryat Shmona to Eilat'; Hebrew Google Play listings by 'Mishloha - Food Delivery'; a ZoomInfo profile seen in a search result lists an Israeli company with 51-200 employees.",
+   "sources": [
+    {
+     "url": "https://www.mishloha.co.il/",
+     "date": null,
+     "what": "Homepage (opened in a browser; plain fetches got HTTP 403): 'close to 2,000 restaurants performing deliveries' across Israel; up to 25% credit back; undated.",
+     "grade": "C"
+    },
+    {
+     "url": "https://play.google.com/store/apps/details?id=com.mishloha.mishapp&hl=en",
+     "date": null,
+     "what": "Google Play consumer app (opened): 1M+ downloads, 22.8K reviews.",
+     "grade": "D"
+    },
+    {
+     "url": "https://play.google.com/store/apps/details?id=com.mishloha.mishadmin&hl=en",
+     "date": null,
+     "what": "Google Play restaurant-management app (opened): 5K+ downloads.",
+     "grade": "D"
+    },
+    {
+     "url": "https://www.zoominfo.com/c/mishloha/372534632",
+     "date": null,
+     "what": "ZoomInfo profile (seen in a search result, not opened): 51-200 employees, Israel.",
+     "grade": "D"
+    }
+   ],
+   "grade": "C",
+   "verified_at": "2026-11-05",
+   "users": {
+    "low": 1500,
+    "high": 2000,
+    "unit": "restaurants (מסעדות)",
+    "scope": "israel",
+    "grade": "C",
+    "source_url": "https://www.mishloha.co.il/",
+    "source_date": null,
+    "note": "Homepage: 'קרוב ל-2,000 מסעדות' (close to 2,000 restaurants); we read it as 1,500-2,000. The consumer app has 1M+ downloads (D) and the restaurant-management app 5K+ downloads (D)."
+   },
+   "price_from_ils": null,
+   "hebrew_ui": true,
+   "rtl": true,
+   "allocation_numbers": null,
+   "owner_or_parent": null,
+   "public_company": null
+  },
+  {
+   "id": "bmby",
+   "name_he": "במבי (bmby)",
+   "name_en": "BMBY Software Systems",
+   "url": "https://bmby.co.il/",
+   "category": "crm",
+   "summary_he": "מערכת CRM וניהול מכירות לנדל״ן: לידים, חוזים, שיווק פרויקטים ושירות לקוחות, בשימוש יזמים, חברות בנייה ומתווכים בישראל וב-21 מדינות.",
+   "why_israeli": "Hebrew site (opened in a browser): software house founded in 2003 by Mark Zeevi, chairman and owner; English site: B.M.B.Y Software Systems Ltd., 13 HaYetsira St., Yokneam Illit, Israel.",
+   "sources": [
+    {
+     "url": "https://bmby.co.il/",
+     "date": null,
+     "what": "Hebrew homepage (opened in a browser): 'thousands of satisfied, loyal customers in Israel and worldwide'; the numeric counters stayed at 0 when read.",
+     "grade": "C"
+    },
+    {
+     "url": "https://en.bmby.com/",
+     "date": null,
+     "what": "English homepage (opened): operating 'in 21 countries since 2003'; client list of Israeli developers and brokerages; the counters (active users, countries) rendered as 0.",
+     "grade": "C"
+    }
+   ],
+   "grade": "C",
+   "verified_at": "2026-11-05",
+   "users": {
+    "low": 2000,
+    "high": 9000,
+    "unit": "customers",
+    "scope": "worldwide",
+    "grade": "C",
+    "source_url": "https://bmby.co.il/",
+    "source_date": null,
+    "note": "Wording 'אלפי לקוחות מרוצים ונאמנים בארץ ובעולם' (thousands of customers); the range is our reading of 'thousands'; the page's own counters did not render a number."
+   },
+   "price_from_ils": null,
+   "hebrew_ui": true,
+   "rtl": true,
+   "allocation_numbers": null,
+   "owner_or_parent": "Hebrew site: the founder Mark Zeevi is chairman and owner.",
+   "public_company": null
+  },
+  {
+   "id": "timewatch",
+   "name_he": "טיימווטש (Timewatch)",
+   "name_en": "Timewatch (LSH Vision)",
+   "url": "https://www.timewatch.co.il/",
+   "category": "payroll-hr",
+   "summary_he": "שעוני נוכחות ומערכת ענן לדיווח ובקרת שעות עובדים: ביומטרי, קירבה, זיהוי פנים ודיווח מהנייד, עם דוחות לרואה החשבון.",
+   "why_israeli": "Hebrew site (opened in a browser) with an Israeli 1-700 number; the Google Play app is published by 'LSH Vision Ltd' under a Hebrew name.",
+   "sources": [
+    {
+     "url": "https://www.timewatch.co.il/",
+     "date": null,
+     "what": "Homepage (opened in a browser): 'join the thousands of organizations that already enjoy' the service; claims about 5% saving on payroll costs; undated.",
+     "grade": "C"
+    },
+    {
+     "url": "https://play.google.com/store/apps/details?id=com.timewatch&hl=en",
+     "date": null,
+     "what": "Google Play listing (opened): developer LSH Vision Ltd, 100K+ downloads, 377 reviews.",
+     "grade": "D"
+    }
+   ],
+   "grade": "C",
+   "verified_at": "2026-11-05",
+   "users": {
+    "low": 2000,
+    "high": 9000,
+    "unit": "organizations",
+    "scope": "israel",
+    "grade": "C",
+    "source_url": "https://www.timewatch.co.il/",
+    "source_date": null,
+    "note": "Wording 'אלפי הארגונים' (thousands of organizations); range is our reading of 'thousands'; undated. The Android app has 100K+ downloads (D)."
+   },
+   "price_from_ils": null,
+   "hebrew_ui": true,
+   "rtl": true,
+   "allocation_numbers": null,
+   "owner_or_parent": null,
+   "public_company": null
+  },
+  {
+   "id": "ok2go",
+   "name_he": "OK2GO (אוקיי טו גו)",
+   "name_en": "OK2GO",
+   "url": "https://ok2go.co.il/",
+   "category": "payroll-hr",
+   "summary_he": "מערכות לדיווח נוכחות עובדים עם אפליקציה, שעון ומודולים לאיכון עובדי שטח, ניהול פרויקטים, משימות וטפסים.",
+   "why_israeli": "Hebrew site on a .co.il domain (opened in a browser) with accessibility tooling in Hebrew; the Google Play app has a Hebrew name and is published by OK2GO.",
+   "sources": [
+    {
+     "url": "https://ok2go.co.il/",
+     "date": null,
+     "what": "Homepage (opened in a browser): 'join the 200,000 users who already chose us'; modules for field-worker tracking, projects, tasks and forms; undated.",
+     "grade": "C"
+    },
+    {
+     "url": "https://play.google.com/store/apps/details?id=com.ok2go.ok2go&hl=en",
+     "date": null,
+     "what": "Google Play listing (opened): developer OK2GO, 100K+ downloads, 364 reviews.",
+     "grade": "D"
+    }
+   ],
+   "grade": "C",
+   "verified_at": "2026-11-05",
+   "users": {
+    "low": 200000,
+    "high": 200000,
+    "unit": "users",
+    "scope": null,
+    "grade": "C",
+    "source_url": "https://ok2go.co.il/",
+    "source_date": null,
+    "note": "Homepage wording 'הצטרפו ל-200,000 משתמשים' (200,000 users, the source's own word); undated; the page does not say Israel-only. The Android app has 100K+ downloads (D)."
+   },
+   "price_from_ils": null,
+   "hebrew_ui": true,
+   "rtl": true,
+   "allocation_numbers": null,
+   "owner_or_parent": null,
+   "public_company": null
+  },
+  {
+   "id": "comsign",
+   "name_he": "קומסיין (Comsign)",
+   "name_en": "Comsign (Comda group)",
+   "url": "https://www.comsign.co.il/",
+   "category": "documents-esign",
+   "summary_he": "גורם מאשר לחתימה דיגיטלית מאושרת בישראל: כרטיסי חתימה, חתימה אלקטרונית על מסמכים וחשבוניות דיגיטליות, לעורכי דין, רופאים וארגונים.",
+   "why_israeli": "About page (opened in a browser): a Comda-group company approved by the Ministry of Justice as a certifying authority under Israeli law; he.wikipedia (opened): founded 2000, HQ Tel Aviv with branches in Haifa, Jerusalem and Be'er Sheva.",
+   "sources": [
+    {
+     "url": "https://www.comsign.co.il/%d7%90%d7%95%d7%93%d7%95%d7%aa/",
+     "date": null,
+     "what": "About page (opened in a browser): serves 'hundreds of thousands of customers and citizens' who use an electronic signature daily; approved by the Ministry of Justice as a CA; the only Israeli eIDAS-recognised provider (company claim); undated.",
+     "grade": "C"
+    },
+    {
+     "url": "https://he.wikipedia.org/wiki/%D7%A7%D7%95%D7%9E%D7%A1%D7%99%D7%99%D7%9F",
+     "date": null,
+     "what": "Hebrew Wikipedia (opened): part of the Comdea/Comda group, founded 2000, about 50 employees (group about 140), HQ Tel Aviv.",
+     "grade": "D"
+    }
+   ],
+   "grade": "C",
+   "verified_at": "2026-11-05",
+   "users": {
+    "low": 200000,
+    "high": 900000,
+    "unit": "customers and citizens (לקוחות ואזרחים)",
+    "scope": "israel",
+    "grade": "C",
+    "source_url": "https://www.comsign.co.il/%d7%90%d7%95%d7%93%d7%95%d7%aa/",
+    "source_date": null,
+    "note": "Wording 'מאות אלפי לקוחות ואזרחים' (hundreds of thousands of customers and citizens); the range is our reading of 'hundreds of thousands'; the count mixes businesses and individuals; undated."
+   },
+   "price_from_ils": null,
+   "hebrew_ui": true,
+   "rtl": true,
+   "allocation_numbers": null,
+   "owner_or_parent": "Comda / Comdea group (about page and Hebrew Wikipedia)",
+   "public_company": null
+  },
+  {
+   "id": "linet",
+   "name_he": "לינט (Linet)",
+   "name_en": "Linet",
+   "url": "https://www.linet.org.il/",
+   "category": "invoicing-accounting",
+   "summary_he": "תוכנת ענן לניהול עסק: חשבוניות וקבלות, הנהלת חשבונות, קופה רושמת, מלאי וממשק לחנות אינטרנטית. שלושה מסלולים בשקלים לחודש עם ניסיון חינם ל-30 יום.",
+   "why_israeli": "Hebrew site with an Israeli phone number (070-000-0012), opened in a browser (plain fetches get a Cloudflare wait page); the homepage says the software is registered with the Israel Tax Authority and offers a Hebrew or English interface.",
+   "sources": [
+    {
+     "url": "https://www.linet.org.il/",
+     "date": null,
+     "what": "Homepage (opened in a browser): modules for invoices, bookkeeping for sole traders, companies and associations, cash register, card clearing, stock, e-shop interface; 'software registered with the Tax Authority'; customer testimonials but no customer count; undated.",
+     "grade": "C"
+    },
+    {
+     "url": "https://www.linet.org.il/pricelist/",
+     "date": null,
+     "what": "Price list (opened in a browser): Basic 9, PRO 29, GOLD 59 NIS a month with a 30-day free trial; undated.",
+     "grade": "C"
+    }
+   ],
+   "grade": "C",
+   "verified_at": "2026-11-05",
+   "users": null,
+   "price_from_ils": {
+    "amount": 9,
+    "period": "month",
+    "per": "Basic plan (30-day free trial, no support)",
+    "source_url": "https://www.linet.org.il/pricelist/",
+    "date": "2026-11-05",
+    "note": "PRO 29 and GOLD 59 a month; the page does not say whether VAT is included."
+   },
+   "hebrew_ui": true,
+   "rtl": true,
+   "allocation_numbers": null,
+   "owner_or_parent": null,
+   "public_company": null,
+   "price_note": "Allocation-number support was not stated on the homepage or the price list, so it stays null. No customer figure is published (testimonials only)."
+  },
+  {
+   "id": "dibs",
+   "name_he": "דיבס (Dibs)",
+   "name_en": "Dibs",
+   "url": "https://dibs-app.com/",
+   "category": "scheduling-booking",
+   "summary_he": "אפליקציה ומערכת לניהול עסק קטן: יומן תורים שבו הלקוחות קובעים בעצמם, יחד עם חשבוניות וסליקה. מציעה ניסיון חינם של 14 יום.",
+   "why_israeli": "Hebrew site (opened in a browser) and a Hebrew-named Google Play listing by 'Dibs Management'; the product bundles invoices and card clearing for businesses. No company address or .il domain was seen, so the Israeli link rests on the Hebrew-only product.",
+   "sources": [
+    {
+     "url": "https://dibs-app.com/",
+     "date": null,
+     "what": "Hebrew homepage (opened in a browser): scheduling, invoices and clearing in one app; 14 days free; badge '10K+ downloads' and rating 5.0; undated.",
+     "grade": "C"
+    },
+    {
+     "url": "https://play.google.com/store/apps/details?id=com.dibs.app&hl=en",
+     "date": null,
+     "what": "Google Play listing (opened): publisher 'Dibs Management', 50K+ downloads, 119 reviews, rating 4.5.",
+     "grade": "D"
+    }
+   ],
+   "grade": "D",
+   "verified_at": "2026-11-05",
+   "users": {
+    "low": 50000,
+    "high": null,
+    "unit": "downloads",
+    "scope": null,
+    "grade": "D",
+    "source_url": "https://play.google.com/store/apps/details?id=com.dibs.app&hl=en",
+    "source_date": null,
+    "note": "Google Play bracket read on 2026-11-05 (50K+); the company's own badge says 10K+ (older). Installs of the app, not businesses or customers."
+   },
+   "price_from_ils": null,
+   "hebrew_ui": true,
+   "rtl": true,
+   "allocation_numbers": null,
+   "owner_or_parent": null,
+   "public_company": null
+  },
+  {
+   "id": "yad2",
+   "name_he": "יד2 (Yad2)",
+   "name_en": "Yad2",
+   "url": "https://www.yad2.co.il/",
+   "category": "ecommerce-sites",
+   "summary_he": "לוח מודעות ישראלי לנדל״ן, רכב ומוצרים. עסקים, בעיקר בנדל״ן וברכב, מפרסמים בו בתשלום עם חשיפה מוגברת, ויש בו גם חלק של עסקים למכירה ובעלי מקצוע.",
+   "why_israeli": "Hebrew site and Hebrew Google Play listing (opened); Hebrew Wikipedia (opened): founded in 2005 by Shaun Tal, and Apex Fund bought control from KKR in December 2025 for $950 million.",
+   "sources": [
+    {
+     "url": "https://he.wikipedia.org/wiki/%D7%99%D7%932",
+     "date": null,
+     "what": "Hebrew Wikipedia (opened; page title 'יד2'): founded 2005; paid ads with greater visibility and advertising for business clients, mainly in real estate and vehicles; Apex took control from KKR in Dec 2025 ($950M).",
+     "grade": "D"
+    },
+    {
+     "url": "https://www.yad2.co.il/",
+     "date": null,
+     "what": "Homepage (opened in a browser): sections for real estate, new homes, cars, products, jobs, businesses for sale, professionals and commercial property; no counts.",
+     "grade": "C"
+    },
+    {
+     "url": "https://play.google.com/store/apps/details?id=com.goldtouch.ct.yad2&hl=en",
+     "date": null,
+     "what": "Google Play listing (opened): publisher 'yad2 apps', 1M+ downloads, 37.3K reviews.",
+     "grade": "D"
+    }
+   ],
+   "grade": "D",
+   "verified_at": "2026-11-05",
+   "users": {
+    "low": 1000000,
+    "high": null,
+    "unit": "downloads",
+    "scope": "israel",
+    "grade": "D",
+    "source_url": "https://play.google.com/store/apps/details?id=com.goldtouch.ct.yad2&hl=en",
+    "source_date": null,
+    "note": "Google Play bracket read on 2026-11-05 (1M+): installs of the consumer app, not business customers. No count of business advertisers was found; it is a classifieds marketplace with paid business ads rather than business software in the strict sense."
+   },
+   "price_from_ils": null,
+   "hebrew_ui": true,
+   "rtl": true,
+   "allocation_numbers": null,
+   "owner_or_parent": "Apex Fund bought control from KKR in December 2025 for $950M (Hebrew Wikipedia).",
+   "public_company": null
+  },
+  {
+   "id": "malam-payroll-plus",
+   "name_he": "מלם שכר פלוס",
+   "name_en": "Malam Payroll Plus",
+   "url": "https://www.malam-payroll.com/",
+   "category": "payroll-hr",
+   "summary_he": "חברה מקבוצת מלם תים שנותנת שירותי שכר, חשבות שכר במיקור חוץ, נוכחות ומשאבי אנוש לארגונים במגזר הציבורי והעסקי, וכוללת בתוכה את סינריון.",
+   "why_israeli": "Hebrew site (opened in a browser): describes itself as a company of the Malam Team group and 'the largest and leading company in Israel' for human-capital technology; about 650 employees in Israel and worldwide.",
+   "sources": [
+    {
+     "url": "https://www.malam-payroll.com/%d7%90%d7%95%d7%93%d7%95%d7%aa-%d7%94%d7%97%d7%91%d7%a8%d7%94/",
+     "date": null,
+     "what": "About page (opened in a browser): '+3,500 customers in Israel and worldwide', '+650 employees', '+70 years of experience', and a service to employees of employers 'over 2 million a month'; lists acquired companies including Synerion (formerly Lavi Timetech); undated.",
+     "grade": "C"
+    }
+   ],
+   "grade": "C",
+   "verified_at": "2026-11-05",
+   "users": {
+    "low": 3500,
+    "high": null,
+    "unit": "customers",
+    "scope": "worldwide",
+    "grade": "C",
+    "source_url": "https://www.malam-payroll.com/%d7%90%d7%95%d7%93%d7%95%d7%aa-%d7%94%d7%97%d7%91%d7%a8%d7%94/",
+    "source_date": null,
+    "note": "About page counter '+3,500 לקוחות בארץ ובעולם' (3,500+ customers in Israel and abroad); the page also says its services reach over 2 million employees of employers a month. Undated company claim."
+   },
+   "price_from_ils": null,
+   "hebrew_ui": true,
+   "rtl": true,
+   "allocation_numbers": null,
+   "owner_or_parent": "Malam Team group (about page); parent's stock listing not checked.",
+   "public_company": null
+  },
+  {
+   "id": "synerion",
+   "name_he": "סינריון (Synerion)",
+   "name_en": "Synerion (formerly Lavi Timetech)",
+   "url": "https://www.synerion.com/",
+   "category": "payroll-hr",
+   "summary_he": "תוכנת ענן לניהול כוח אדם: נוכחות ושעות עבודה, שיבוץ משמרות ושכר, לחברות בכל הגדלים. הייתה לביא טיימטק ונמצאת היום בקבוצת מלם שכר פלוס.",
+   "why_israeli": "Malam Payroll Plus's about page (opened) lists Synerion, formerly Lavi Timetech, among the companies the Israeli group acquired; the Synerion site (opened) is in English and gives no address.",
+   "sources": [
+    {
+     "url": "https://www.synerion.com/",
+     "date": null,
+     "what": "Homepage (opened in a browser): 'thousands of customers', 'millions of active users', 40+ years of experience, integrations with over 100 systems; undated.",
+     "grade": "C"
+    },
+    {
+     "url": "https://www.malam-payroll.com/%d7%90%d7%95%d7%93%d7%95%d7%aa-%d7%94%d7%97%d7%91%d7%a8%d7%94/",
+     "date": null,
+     "what": "Malam Payroll Plus about page (opened in a browser): Synerion (formerly Lavi Timetech) is one of its acquired companies, with time and attendance, payroll and cloud HR solutions.",
+     "grade": "C"
+    }
+   ],
+   "grade": "C",
+   "verified_at": "2026-11-05",
+   "users": {
+    "low": 2000,
+    "high": 9000,
+    "unit": "customers",
+    "scope": "worldwide",
+    "grade": "C",
+    "source_url": "https://www.synerion.com/",
+    "source_date": null,
+    "note": "Homepage wording 'Thousands of satisfied customers' / 'Thousands of customers globally'; the range is our reading of 'thousands'; the page also claims 'millions of active users'; undated."
+   },
+   "price_from_ils": null,
+   "hebrew_ui": null,
+   "rtl": null,
+   "allocation_numbers": null,
+   "owner_or_parent": "Malam Payroll Plus (Malam Team group), per the group's about page.",
+   "public_company": null
+  },
+  {
+   "id": "smart-school",
+   "name_he": "סמארט סקול (Smart School)",
+   "name_en": "Smart School (Webtop)",
+   "url": "https://www.smartschool.co.il/",
+   "category": "vertical",
+   "summary_he": "בית תוכנה לניהול פדגוגי בבתי ספר: מערכת למורים ופורטל Webtop להורים ולתלמידים, שמאושרות על ידי משרד החינוך.",
+   "why_israeli": "Hebrew site on a .co.il domain (opened in a browser); the Webtop login page footer reads all rights reserved to סמארט סקול בע״מ; the site says its systems are approved by the Ministry of Education.",
+   "sources": [
+    {
+     "url": "https://www.smartschool.co.il/",
+     "date": null,
+     "what": "Homepage (opened in a browser): 'over 1,300 satisfied schools'; elsewhere 'hundreds of institutions' use it; products for teachers (Smart School), parents and students (Webtop) and a Talmash app; undated.",
+     "grade": "C"
+    },
+    {
+     "url": "https://webtop.smartschool.co.il/account/login",
+     "date": null,
+     "what": "Webtop login page (opened in a browser; reached from webtop.co.il): footer '© all rights reserved to Smart School Ltd 2021'; sign-in also through the Ministry of Education.",
+     "grade": "C"
+    }
+   ],
+   "grade": "C",
+   "verified_at": "2026-11-05",
+   "users": {
+    "low": 1300,
+    "high": null,
+    "unit": "schools (בתי ספר)",
+    "scope": "israel",
+    "grade": "C",
+    "source_url": "https://www.smartschool.co.il/",
+    "source_date": null,
+    "note": "Homepage: 'למעלה מ-1,300 בתי ספר מרוצים' (over 1,300 satisfied schools); the intro text says 'hundreds of institutions', so the two claims on the same page differ - the numeric one is used. Undated company claim."
+   },
+   "price_from_ils": null,
+   "hebrew_ui": true,
+   "rtl": true,
+   "allocation_numbers": null,
+   "owner_or_parent": null,
+   "public_company": null
+  },
+  {
+   "id": "z-credit",
+   "name_he": "זד קרדיט (Z-Credit)",
+   "name_en": "Z-Credit",
+   "url": "https://www.z-credit.com/site/",
+   "category": "payments-clearing",
+   "summary_he": "חברה ישראלית לסליקת אשראי לעסקים, שמתאימה את פתרון הסליקה לצורכי העסק. באתר דפי שירותים ומוצרים, בלוג ויצירת קשר.",
+   "why_israeli": "Hebrew site (opened in a browser) titled 'Z-Credit - credit-card clearing solutions for businesses' with an Israeli 077 phone number (070-00-00-018); no company address or legal name was visible in the text read.",
+   "sources": [
+    {
+     "url": "https://www.z-credit.com/site/",
+     "date": null,
+     "what": "Homepage (opened in a browser; zcredit.co.il does not resolve): Hebrew pitch for tailored card-clearing for new or existing, large or small businesses; menu of services and products, blog, about, contact; no customer figure; undated.",
+     "grade": "C"
+    }
+   ],
+   "grade": "C",
+   "verified_at": "2026-11-05",
+   "users": null,
+   "price_from_ils": null,
+   "hebrew_ui": true,
+   "rtl": true,
+   "allocation_numbers": null,
+   "owner_or_parent": null,
+   "public_company": null,
+   "price_note": "No customer figure on the homepage; the earlier note about a 'Z-Credit Checkout' plugin with 900+ installs could not be re-found in the WordPress.org API."
+  }
+ ],
+ "rejected": [
+  {
+   "name": "Duda",
+   "url": "https://www.duda.co/",
+   "reason": "Israeli identity not evidenced in sources opened: TechCrunch (2021-06-15, opened) names founders Itai Sadan and Amir Glatt but never mentions Israel; a profile in search results lists Palo Alto HQ with offices in Israel. Counts seen: 1M+ published sites and 17,000 developers (TechCrunch 2021); company agency page '18,000,000 websites by 17,000 customers'."
+  },
+  {
+   "name": "vcita",
+   "url": "https://www.vcita.com/",
+   "reason": "Homepage (opened): HQ St. Petersburg, Florida, '+150,000 SMB users', founded 2010; Wikipedia page returned 404; no source for Israeli origin found."
+  },
+  {
+   "name": "Workiz",
+   "url": "https://www.workiz.com/",
+   "reason": "Homepage (opened): footer in San Diego, 'Trusted by 120K+ home service pros in US and Canada'; no Israeli origin source."
+  },
+  {
+   "name": "JFrog",
+   "url": "https://jfrog.com/",
+   "reason": "Homepage shows only '© JFrog Ltd' and 'over 80% of the Fortune 100' (a share, not a count); Wikipedia page returned 404; no HQ or customer count obtained."
+  },
+  {
+   "name": "SentinelOne",
+   "url": "https://www.sentinelone.com/",
+   "reason": "Wikipedia (opened): HQ Mountain View with a Tel Aviv office, but it does not say the company was founded in Israel; no customer count."
+  },
+  {
+   "name": "CyberArk",
+   "url": "https://www.cyberark.com/",
+   "reason": "Homepage redirects to Palo Alto Networks (acquired); no longer an independent product row."
+  },
+  {
+   "name": "Rapyd",
+   "url": "https://www.rapyd.net/",
+   "reason": "Homepage (opened) has no counts or HQ; footer 'Rapyd Financial Network (2016) Ltd.' only."
+  },
+  {
+   "name": "Fireblocks",
+   "url": "https://www.fireblocks.com/",
+   "reason": "Homepage counters did not load; no counts, HQ or founders on the page."
+  },
+  {
+   "name": "Comeet",
+   "url": "https://www.comeet.com/",
+   "reason": "Homepage (opened) says 'Comeet is now Spark Hire Recruit'; no HQ or counts."
+  },
+  {
+   "name": "Global-e",
+   "url": "https://www.global-e.com/",
+   "reason": "Investor-relations page returned 403; only a third-party page (stockanalysis.com: about 1,550 enterprise platform merchants) was seen; Israeli identity not evidenced in sources opened."
+  },
+  {
+   "name": "Riskified",
+   "reason": "Form 20-F FY2025 seen only through a search excerpt (merchants in about 36 countries, Tel Aviv a key hub); no count or HQ obtained."
+  },
+  {
+   "name": "Optimove",
+   "url": "https://www.optimove.com/",
+   "reason": "Homepage (opened) shows 'Optimove Inc.' only; Israeli origin and a 2016 figure of about 200 companies came from a search excerpt without a pinned source."
+  },
+  {
+   "name": "Fiverr",
+   "reason": "Wikipedia (opened): Tel Aviv HQ, NYSE FVRR, but a freelancer marketplace rather than business software; no buyer count obtained."
+  },
+  {
+   "name": "Taboola",
+   "reason": "Advertising network whose 'users' are readers, not business software in the owner's sense; not researched."
+  },
+  {
+   "name": "Deel",
+   "reason": "HQ in the US; Israeli R&D not checked."
+  },
+  {
+   "name": "ZoomInfo",
+   "reason": "Not Israeli (as the brief says)."
+  },
+  {
+   "name": "Lightricks",
+   "reason": "Consumer creative apps; not researched."
+  },
+  {
+   "name": "Zencity",
+   "reason": "City-government product; not researched."
+  },
+  {
+   "name": "Konimbo",
+   "url": "https://www.konimbo.co.il/",
+   "reason": "Page returned only a redirect stub; the StoreLeads figure (about 850 live stores) was not re-checked."
+  },
+  {
+   "name": "10bis / Cibus (Pluxee)",
+   "reason": "Pages are JavaScript shells with no readable text."
+  },
+  {
+   "name": "Mishloha",
+   "reason": "HTTP 403 on the homepage."
+  },
+  {
+   "name": "Beecomm",
+   "reason": "Connection reset on two attempts."
+  },
+  {
+   "name": "ComSign",
+   "reason": "Page returned empty content twice."
+  },
+  {
+   "name": "Z-Credit",
+   "reason": "Domain tried (zcredit.co.il) did not resolve; the WordPress plugin 'Z-Credit Checkout' shows 900+ active installs but vendor identity is unverified."
+  },
+  {
+   "name": "Bit (Hapoalim), Paybox, Pepper Pay, Max, Yad2, Tailor Brands",
+   "reason": "Not completed: the shared WebSearch budget ended before these. Tailor Brands homepage (opened) says '200,000+ businesses formed' and 'founded in New York City in 2014' while Calcalist coverage calls it Israeli-made; unresolved."
+  },
+  {
+   "name": "Beecomm",
+   "url": "https://www.beecomm.co.il/",
+   "reason": "Plain fetches were refused or timed out and the browser pane could not navigate to the site; a CB Insights listing seen in a search result calls it a US-listed POS firm founded in 2000. No Israeli identity or customer count was verified."
+  },
+  {
+   "name": "Bringg",
+   "url": "https://www.bringg.com/",
+   "reason": "Homepage (opened) shows only a client list and product claims: no HQ, founding year or customer count; the About path tried returned 404 and en.wikipedia returned 404."
+  },
+  {
+   "name": "Pepper (Bank Leumi)",
+   "url": "https://play.google.com/store/apps/details?id=com.pepper.ldb&hl=en",
+   "reason": "Google Play (opened): 'Pepper - Mobile Banking' by Bank Leumi, 1M+ downloads. It is a consumer digital-bank app, not business software; no separate 'Pepper Pay' business product was found."
+  },
+  {
+   "name": "Max (business)",
+   "reason": "Not researched beyond the brief: Max (Max It Finance) is an acquirer already covered by the payment-providers index (Bank of Israel licence list); no business-software product page with its own count was checked."
+  },
+  {
+   "name": "Heshbonit Online",
+   "reason": "No official domain could be established from the pages and search results opened; nothing verified."
+  },
+  {
+   "name": "Kalegal (law-office software)",
+   "url": "https://www.bhol.co.il/news/1238852",
+   "reason": "Only a sponsored article (HTTP 403 when opened; seen in a search result) says most law firms use it; no number and the site domain was not found (kalegal.co.il does not resolve)."
+  },
+  {
+   "name": "Medical Manage / PuzzleSoft, Medform, Einstein-Web (clinic software)",
+   "url": "https://puzzlesoft.ai/",
+   "reason": "Israeli clinic-software vendors found in search results; the PuzzleSoft site (opened) is now an enterprise healthcare-platform pitch (puzzlesoft.ai) with no customer count, and none of the others were opened."
+  },
+  {
+   "name": "BrokerCRM, KLOYZ, Agentsuites (real-estate CRM)",
+   "reason": "Early-stage Israeli real-estate CRM startups seen in Product Hunt and CB Insights search results; no customer counts and none opened. BMBY was added instead."
+  },
+  {
+   "name": "Riskified",
+   "url": "https://www.sec.gov/Archives/edgar/data/1851112/000185111226000007/rskd-20251231.htm",
+   "reason": "Form 20-F FY2025 opened for 200,000 characters: cover page gives 220 5th Avenue, New York; no merchant count and no Israeli address were found in the parts read."
+  },
+  {
+   "name": "Ituran",
+   "url": "https://www.sec.gov/Archives/edgar/data/1337117/000117891326002205/zk2635065.htm",
+   "reason": "Form 20-F FY2025 (opened): Azor, Israel address and over a million subscribers in Israel alone, but it is a vehicle-tracking service sold mostly to consumers and fleets, not business software; left out."
+  },
+  {
+   "name": "Mashmarot Technologies (shift scheduling)",
+   "url": "https://mishmarot.com/",
+   "reason": "Bizportal (2026-08-20) says Michpal bought 70% in July 2025 for about NIS 19.5M; mishmarot.com (opened) is a Hebrew shift-scheduling site with no counts, and the link between the two names was not confirmed."
+  },
+  {
+   "name": "WeSign (Comda)",
+   "url": "https://wesign.com/",
+   "reason": "Site (opened) says WESIGNATURE is licensed to R2P2 Inc. and uses an eIDAS certificate by Sectigo; no Israeli link or customer count found."
+  },
+  {
+   "name": "Pulseem",
+   "url": "https://site.pulseem.co.il/",
+   "reason": "Hebrew marketing-messaging site (opened in a browser) with an Israeli phone, but no customer count on the pages read."
+  },
+  {
+   "name": "UCAN2",
+   "url": "https://www.ucan2.co.il/",
+   "reason": "Hebrew online-bookkeeping service with an accountant (opened in a browser); testimonials only, no customer count."
+  },
+  {
+   "name": "Optimove",
+   "url": "https://en.wikipedia.org/wiki/Optimove",
+   "reason": "Wikipedia (opened): founded in Tel Aviv in 2009, now headquartered in New York, more than 200 employees; no customer or brand count, so no user figure."
+  },
+  {
+   "name": "BlueVine, Tailor Brands",
+   "reason": "The English Wikipedia titles tried returned 404 and no other source was opened, so neither Israeli origin nor a customer count was verified."
+  },
+  {
+   "name": "Rivhit, Comax, Invoice4U website counters",
+   "reason": "The live counters on the three homepages render 0 even after scrolling and waiting, so they are placeholders; only Google Play brackets exist (see the Invoice4U and Comax updates; Rivhit's own app was not found, the Play app found belongs to a third-party developer)."
+  },
+  {
+   "id": "fundbox (user figure)",
+   "reason": "the 150,000 figure was read from a search excerpt; the page itself did not load, so it is not a source we opened (2026-11-05)"
+  }
+ ]
+}

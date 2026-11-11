@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
-"""decide-lane-reachability-lint — every action a decide RETURNS must have a router lane, and
-every router lane must be RETURNED by some decide.
+"""decide-lane-reachability-lint — gate G104: every action a decide RETURNS must have a router
+lane, and every router lane must be RETURNED by some decide.
 
     python3 scripts/refactor/decide-lane-reachability-lint.py [--self-test]
 
@@ -207,7 +207,7 @@ def main():
     homeless = [f for f in fs if f[0] == "action-with-no-lane"]
     strict = "--strict" in sys.argv
 
-    print("decide-lane-reachability: %d decided action(s), %d router lane(s), %d exemption(s)"
+    print("G104 — %d decided action(s), %d router lane(s), %d exemption(s)"
           % (len(decided), len(laned), len(EXEMPT)))
 
     # THE DIRECTION THAT FAILS. A lane with no producer is unambiguous: a dispatch target nothing
@@ -234,11 +234,11 @@ def main():
 
     print("")
     if not dead:
-        print("PASS - every router lane has a producer%s"
+        print("G104 PASS - every router lane has a producer%s"
               % ("" if not homeless else "; %d advisory item(s) above" % len(homeless)))
         return 1 if (strict and homeless) else 0
-    print("%d dead lane(s). Remove the lane, or restore the decide branch that fed it, or add "
-          "the name to EXEMPT with the reason it is one-sided." % len(dead))
+    print("G104 FAIL — %d dead lane(s). Remove the lane, or restore the decide branch that fed it, "
+          "or add the name to EXEMPT with the reason it is one-sided." % len(dead))
     return 1
 
 

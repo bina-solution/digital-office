@@ -47,6 +47,11 @@ RUN sh harness/customize.sh harness/profile
 COPY adapter /opt/bina/adapter
 COPY harness/entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
+# `bbox` from ANY directory (DGO-977): the agent's shell is wherever its last task left it, and a bare `bbox …`
+# outside the checkout was "command not found" — the one failure of the local benchmark (gemma4:e2b, 15/16). An
+# exec wrapper, not a symlink: bbox finds its checkout from its own path (BASH_SOURCE), and /workspace/office is
+# the checkout, mounted there or linked there by the entrypoint.
+RUN printf '#!/bin/sh\nexec /workspace/office/bbox "$@"\n' > /usr/local/bin/bbox && chmod 0755 /usr/local/bin/bbox
 
 # THE COMPOSE IN THIS IMAGE IS THE HOST'S. The agent's `./bbox run` brings containers up, and a
 # container is the hash of what compose made of its service — another version than the host's makes

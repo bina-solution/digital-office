@@ -9,9 +9,9 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	"github.com/solomonBoltin/deployment-hacohen/packaging/dgo/internal/compiler"
-	"github.com/solomonBoltin/deployment-hacohen/packaging/dgo/internal/pyval"
-	"github.com/solomonBoltin/deployment-hacohen/packaging/dgo/internal/yamlish"
+	"github.com/bina-solution/digital-office/packaging/dgo/internal/compiler"
+	"github.com/bina-solution/digital-office/packaging/dgo/internal/pyval"
+	"github.com/bina-solution/digital-office/packaging/dgo/internal/yamlish"
 )
 
 // officePut is api_office_put() where this office has no container engine — the phone's core

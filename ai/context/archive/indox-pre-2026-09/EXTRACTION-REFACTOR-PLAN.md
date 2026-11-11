@@ -8,18 +8,18 @@ rather than folded in silently — see §0.
 
 ## 0. Corrections to the brief, up front
 
-**0.1 — Which database this plan's live numbers come from.** The brief (and the deployment-hacohen
-skill it points at) describes `hacohen-vps` (the production VPS). Mid-research the coordinator
+**0.1 — Which database this plan's live numbers come from.** The brief (and the digital-office
+skill it points at) describes `example-vps` (the production VPS). Mid-research the coordinator
 confirmed this session's actual working environment is the **local dev stack** — every container
-suffixed `-shlomo-laptop`, reached through `DOCKER_HOST=unix:///run/bbox-docker.sock` (from WSL, per
+suffixed `-owner-laptop`, reached through `DOCKER_HOST=unix:///run/bbox-docker.sock` (from WSL, per
 `CLAUDE.md`'s "Windows via `bbox.cmd`" path). Before that correction arrived, one research pass tried
-`ssh hacohen-vps` — it **failed outright** (`Permission denied (publickey,password)`, the configured
+`ssh example-vps` — it **failed outright** (`Permission denied (publickey,password)`, the configured
 key is no longer authorized on that host) before any query ran, and a second pass probed
-`https://n8n.hacohen.bina-solutions.co.il` directly — also read-only (an unauthenticated `curl`/`GET`
+`https://n8n.example.bina-solutions.co.il` directly — also read-only (an unauthenticated `curl`/`GET`
 against a public webhook path, no write, no credential guessing beyond one attempt). **No query, read
 or write, ever reached production.** Every population count and every "is this node live" check in
 this document was re-run (or run for the first time) against the local stack, confirmed by container
-name (`supabase-db-shlomo-laptop`, `n8n-postgres-shlomo-laptop`) and cross-checked against the
+name (`supabase-db-owner-laptop`, `n8n-postgres-owner-laptop`) and cross-checked against the
 coordinator's own expected numbers (56,249/56,250 total rows, ~6,200 real rows) before being trusted.
 
 **0.2 — `indoxProcessDocument01` is not the main pipeline.** The brief's throughput argument centers
@@ -49,7 +49,7 @@ refactor's own schema additions, or it risks being silently reverted by an unrel
 `git reset`.
 
 **0.5 — The settings cache-invalidation webhook is LIVE on this session's environment.** Confirmed
-directly against `n8n-postgres-shlomo-laptop`:
+directly against `n8n-postgres-owner-laptop`:
 ```
 select active, nodes::text like '%Invalidate Cache Webhook%', nodes::text like '%settings-invalidate-cache-webhook%'
 from workflow_entity where id='indoxSettings01';
@@ -638,8 +638,8 @@ readers):
 | `apps/indox/app/webapp/src/pages/DashboardPage.tsx:20` | **User-facing Hebrew label**: `FROM_OFFICE: 'מהמשרד'` ("from the office") — this is the one place end users actually see the wrong word; must become `'מהמחסן'` ("from the warehouse") to match the rename's own stated purpose, not just the column name |
 | `apps/indox/storage/incoming_documents/repos.json:197,204` | Repo-registry column metadata (`"name": "FROM_OFFICE"` / `"FROM_OFFICE_CHECK"`) |
 | `ai/context/indox-state-machine-v2.md:110` | Documents the `check_from_office` state-machine action: *"WH settings → `indoxV2SearchWarehouse01` warehouse search → writer(FROM_OFFICE_CHECK)"* — **confirms "warehouse" is already the internal concept name**; the underlying search workflow is already called `indoxV2SearchWarehouse01`, not `indoxV2SearchOffice01`. This corroborates the owner's framing directly: the code already knows this is about a warehouse, only the column/action names lag. |
-| `ai/context/indox-experience-design.md:119`, `ai/context/hacohen-legacy-migration-spec.md:30` | Column referenced in architecture docs |
-| `ai/obsidian/Projects/deployment-hacohen/High-Load Supervised Run 2026-06-23.md` | A **real production incident** about this exact column: `FROM_OFFICE_CHECK` writes were silently not persisting (root-caused to an `alwaysOutputData`-masked empty return — a different failure shape than the `executeWorkflowTrigger` schema-drop bug, but the same *category* of "write silently vanished" defect this whole plan keeps finding). Cited here as evidence this column is operationally fragile, not just semantically misnamed — worth extra care during the rename. |
+| `ai/context/indox-experience-design.md:119`, `ai/context/example-legacy-migration-spec.md:30` | Column referenced in architecture docs |
+| `ai/obsidian/Projects/digital-office/High-Load Supervised Run 2026-06-23.md` | A **real production incident** about this exact column: `FROM_OFFICE_CHECK` writes were silently not persisting (root-caused to an `alwaysOutputData`-masked empty return — a different failure shape than the `executeWorkflowTrigger` schema-drop bug, but the same *category* of "write silently vanished" defect this whole plan keeps finding). Cited here as evidence this column is operationally fragile, not just semantically misnamed — worth extra care during the rename. |
 | `platform-base/n8n/extensions/bina-solutions-nodes/gsheet-table-api.md:42` | The same legacy Google-Sheets-backed table-API allowlist flagged in §2.2b for `TOTAL_AMOUNT` — a **third** system with `FROM_OFFICE`/`FROM_OFFICE_CHECK` hardcoded, outside `apps/indox/` |
 
 Also found, and **not** the same live column** — flagging so it isn't conflated during the rename:
@@ -905,7 +905,7 @@ only so it isn't mistaken for something this refactor should also fix.
 
 ### 4.3 `PGRST_DB_MAX_ROWS=1000` — confirmed live
 
-`docker inspect supabase-rest-shlomo-laptop` → `PGRST_DB_MAX_ROWS=1000` (local stack, confirmed
+`docker inspect supabase-rest-owner-laptop` → `PGRST_DB_MAX_ROWS=1000` (local stack, confirmed
 directly, not from a doc). Any verification query or backfill script in this plan that reads
 `incoming_documents` without explicit pagination will silently see at most 1,000 rows. Every SQL in
 §3's verification steps must page explicitly (`limit`/`offset` or keyset) once run against more than
@@ -1204,15 +1204,15 @@ small child table replacing a sparse JSON-blob column — a real simplification,
 ## Appendix — commands used to produce this document's live numbers (local stack, reproducible)
 
 ```bash
-# from WSL, targeting the bbox docker context (NOT hacohen-vps):
+# from WSL, targeting the bbox docker context (NOT example-vps):
 export DOCKER_HOST=unix:///run/bbox-docker.sock
-docker exec supabase-db-shlomo-laptop psql -U postgres -d postgres -c "select count(*) from public.incoming_documents;"
-docker exec n8n-postgres-shlomo-laptop psql -U hacohen -d n8n -t -c \
+docker exec supabase-db-owner-laptop psql -U postgres -d postgres -c "select count(*) from public.incoming_documents;"
+docker exec n8n-postgres-owner-laptop psql -U example -d n8n -t -c \
   "select active, nodes::text like '%Invalidate Cache Webhook%' from workflow_entity where id='indoxSettings01';"
-docker inspect supabase-rest-shlomo-laptop --format '{{range .Config.Env}}{{println .}}{{end}}' | grep PGRST
+docker inspect supabase-rest-owner-laptop --format '{{range .Config.Env}}{{println .}}{{end}}' | grep PGRST
 
 # §8's full column ledger — generate one count per column, then run it:
-docker exec supabase-db-shlomo-laptop psql -U postgres -d postgres -t -A -f - <<'SQL'
+docker exec supabase-db-owner-laptop psql -U postgres -d postgres -t -A -f - <<'SQL'
 select string_agg(
   format('select %L::text as col, %L::text as typ, count(%I) as n from incoming_documents',
          column_name, data_type, column_name),
@@ -1224,12 +1224,12 @@ SQL
 # ^ paste the single generated line back into psql -f to get every column's live count in one pass.
 
 # TYPE breakdown + BS-line-count cross-check used in §2.2a:
-docker exec supabase-db-shlomo-laptop psql -U postgres -d postgres -t -c \
+docker exec supabase-db-owner-laptop psql -U postgres -d postgres -t -c \
   "select \"TYPE\", count(*) from incoming_documents group by 1 order by 2 desc;" -c \
   "select count(*) from incoming_documents where \"BS_EXTRACTED_LINES\" is not null and \"TYPE\" not ilike '%balance%';"
 
 # FROM_OFFICE / FROM_OFFICE_CHECK value distribution used in §2.8:
-docker exec supabase-db-shlomo-laptop psql -U postgres -d postgres -t -c \
+docker exec supabase-db-owner-laptop psql -U postgres -d postgres -t -c \
   "select \"FROM_OFFICE\", count(*) from incoming_documents group by 1 order by 2 desc;" -c \
   "select \"FROM_OFFICE_CHECK\", count(*) from incoming_documents group by 1 order by 2 desc;"
 ```

@@ -3,7 +3,7 @@
 # Both are computed here, on the same snapshot, so the difference is attributable rather than
 # argued about. Every group the raw key sees but the detector does not is listed with the reason.
 DK="docker -H unix:///run/bbox-docker.sock"
-$DK exec -i supabase-db-shlomo-laptop psql -U postgres -tAf - <<'SQL'
+$DK exec -i supabase-db-owner-laptop psql -U postgres -tAf - <<'SQL'
 SET statement_timeout='180s';
 WITH bad_docid AS (
   SELECT btrim("DOC_ID") AS did FROM public.incoming_documents

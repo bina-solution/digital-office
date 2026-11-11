@@ -1,0 +1,23 @@
+#!/usr/bin/env bash
+#: media — a watched chat message's file, saved where a session can open it:  ./bbox telegram media <chat_id> <message_id> [path]
+# The picture behind a «[תמונה]» in the event stream (tg-g-003). The app serves it at GET /api/media; this brings it
+# to a file and prints the path, so the answerer reads the image instead of guessing at it (DGO-1339).
+# Prints the saved path on the last line; exit 3 when the app or the file is not there.
+set -uo pipefail
+# Its Hebrew messages are printed by this shell: inherit UTF-8 io, or a Windows host crashes on them (G10)
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
+. "${REPO_ROOT}/scripts/lib.sh"
+CHAT="${1:-}"; MSG="${2:-}"; OUT="${3:-}"
+[ -n "${CHAT}" ] && [ -n "${MSG}" ] || { sed -n 's/^#: //p' "${BASH_SOURCE[0]}" >&2; exit 2; }
+case "${CHAT}${MSG}" in *=*|*/*|*" "*) echo "media: chat_id and message_id are numbers" >&2; exit 2 ;; esac
+if [ -z "${OUT}" ]; then
+  case "${MSG}" in
+    *[!0-9]*) echo "media: message_id is a number" >&2; exit 2 ;;
+  esac
+  OUT="/tmp/tg-${CHAT}-${MSG}"
+fi
+URL="${TELEGRAM_URL:-http://telegram:8984}/api/media?chat_id=${CHAT}&message_id=${MSG}"
+code=$(curl -sS -m 60 -o "${OUT}" -w '%{http_code}' "${URL}" 2>/dev/null) || { echo "media: the telegram app did not answer at ${URL%%\?*}" >&2; exit 3; }
+[ "${code}" = "200" ] || { echo "media: ${code} for message ${MSG} in ${CHAT}: $(head -c 300 "${OUT}" 2>/dev/null)" >&2; rm -f "${OUT}"; exit 3; }
+[ -s "${OUT}" ] || { echo "media: the app sent an empty file" >&2; rm -f "${OUT}"; exit 3; }
+echo "${OUT}"

@@ -144,15 +144,13 @@ ci-small:        # 2 vCPU GitHub runner
     perf_scan_take: 25
     perf_sync_chunk: 10
     perf_batch_upsert: 10
-    perf_main_jitter_max_s: 0
-    perf_line_poll_s: 15
     perf_lock_ttl_s: 480
     perf_test_budget_scale: 1.5
 
-vps-2core:       # 2-vCPU / 8 GiB VPS (fireplace, Hostinger KVM 2) — added 2026-10-26
+vps-2core:       # 2-vCPU / 8 GiB VPS (examplef, Hostinger KVM 2) — added 2026-10-26
   # WHY THIS PROFILE EXISTS. The selector handed a 2-core / 7.8 GiB box `ci-small`, whose CPU
   # envelope says host_cpus 4 x 4.0 = 16 vCPU — a budget EIGHT times the machine — and `vps`
-  # (requires 3 cores) could not fit. MEASURED on fireplace 2026-10-26 (cgroup cpu.stat and
+  # (requires 3 cores) could not fit. MEASURED on examplef 2026-10-26 (cgroup cpu.stat and
   # memory.stat of all 62 containers, 16 samples over 10 min, a transcription running):
   #   * the recorder (meet-jibri) had been scaled to 0.48 of a core and lost 2.6% of a call
   #     (issues/meet-recorder-throttled-to-half-a-core-recordings-lose-sound-and-time.yaml);
@@ -190,7 +188,7 @@ vps-2core:       # 2-vCPU / 8 GiB VPS (fireplace, Hostinger KVM 2) — added 202
   env:
     HEALTHCHECK_INTERVAL: 90s   # see the note under ci-small: the probes were the storm
     HEALTHCHECK_TIMEOUT: 30s
-    # n8n on fireplace runs ~500 executions a DAY (2026-10-22..26, execution_entity) — 20 an hour —
+    # n8n on examplef runs ~500 executions a DAY (2026-10-22..26, execution_entity) — 20 an hour —
     # on two workers of 4 slots each plus a webhook process. 2 x 2 slots is four parallel
     # executions on two cores, which is already more than the cores can run at once.
     N8N_WORKER_CONCURRENCY: 2
@@ -215,8 +213,6 @@ vps-2core:       # 2-vCPU / 8 GiB VPS (fireplace, Hostinger KVM 2) — added 202
     perf_scan_take: 25
     perf_sync_chunk: 10
     perf_batch_upsert: 10
-    perf_main_jitter_max_s: 0
-    perf_line_poll_s: 15
     perf_lock_ttl_s: 480
     perf_test_budget_scale: 1.5
 
@@ -264,8 +260,6 @@ laptop:          # dev box — SIZE TO THE DOCKER VM (6 CPUs / ~12G), not host t
     perf_scan_take: 50
     perf_sync_chunk: 25
     perf_batch_upsert: 25
-    perf_main_jitter_max_s: 0
-    perf_line_poll_s: 10
     perf_lock_ttl_s: 300
     perf_test_budget_scale: 1.0
 
@@ -319,8 +313,6 @@ vps:             # 4-core VPS
     perf_scan_take: 50
     perf_sync_chunk: 25
     perf_batch_upsert: 25
-    perf_main_jitter_max_s: 3
-    perf_line_poll_s: 20
     perf_lock_ttl_s: 480
     perf_test_budget_scale: 1.25
 
@@ -377,8 +369,6 @@ prod:            # 8-core production — stability-first; pinned by the Phase-3 
     perf_scan_take: 50
     perf_sync_chunk: 25
     perf_batch_upsert: 25
-    perf_main_jitter_max_s: 6
-    perf_line_poll_s: 30
     perf_lock_ttl_s: 600
     perf_test_budget_scale: 1.0
 
@@ -684,7 +674,5 @@ wsl-10g:         # THIS laptop: 6 cores, but a 9.7 GiB WSL2 VM — added 2026-08
     perf_scan_take: 50
     perf_sync_chunk: 25
     perf_batch_upsert: 25
-    perf_main_jitter_max_s: 6
-    perf_line_poll_s: 30
     perf_lock_ttl_s: 600
     perf_test_budget_scale: 1.0

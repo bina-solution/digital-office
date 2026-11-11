@@ -32,7 +32,9 @@
 .switchlbl .switch{flex:none}
 
 /* pipe cards: two-up when there is room, so seven pipes are four rows instead of seven ribbons */
-.pipes{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,540px),1fr));gap:14px;align-items:start}
+/* DGO-613: 520, the written standard (platform-ui-ux rule 4) and the simulation's value since DGO-525.
+   540 put ONE 1076px card per row at 1366; 520 gives two 531px cards with nothing cut. */
+.pipes{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,520px),1fr));gap:14px;align-items:start}
 .pipe{margin:0;padding:16px 18px 14px;display:flex;flex-direction:column;gap:12px;min-width:0}
 .pipe.paused{opacity:.72}
 .pipe-head{display:flex;align-items:center;gap:8px;flex-wrap:wrap;min-width:0}

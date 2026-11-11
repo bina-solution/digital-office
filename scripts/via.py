@@ -14,11 +14,17 @@ A laptop away from home has no pair that answers to the offices at home, but the
 hub, a verb runs as if it were typed there: its Plane, its links, its compute. The owner, 2026-11-01:
 «no matter where I am, everything keeps working and I have control over the full herd».
 
-How: `bbox remote <office> computers /api/computers/computer_local-local/exec`. That is the office's
+How, first: THE JOB DOOR (DGO-1797, package 10). If the office runs `ci-runner` and takes jobs from this office
+(its CI_RUNNER_ACCEPT_FROM), a verb on its list (`./bbox ci-runner door` there) is asked as a NAMED job —
+`POST /api/door/jobs` through the link, which signs the request as this office — and its log is printed when it
+ends; the exit is the job's. No shell is opened there. Any other answer (no door, not this office's to ask, not a
+door verb) and the call goes on as before. `--put` files, and BBOX_VIA_DOOR=off, skip the door.
+How, else: `bbox remote <office> computers /api/computers/computer_local-local/exec`. That is the office's
 own Computers app, reached through the link with the link's own credential (scripts/remote.py), and it
 runs a shell on that office's machine. The checkout is the one the office's own containers were started
 from (their compose project's working directory), so nothing here names a path per office. Every
 argument is shell-quoted on the way, so what arrives there is exactly what was typed here.
+An office with neither (no host shell — the HP has no sshd — and no door that runs the verb) is said in those words.
 Exit status: the remote command's own, 2 when the office could not be asked at all.
 """
 from __future__ import annotations
@@ -51,6 +57,98 @@ WHERE = ("W=$(docker inspect --format '{{index .Config.Labels \"com.docker.compo
          "cd \"$W\" && ")
 
 
+DOOR_APP = "ci-runner"          # the app whose job door runs a named job (apps/ci-runner/door.py)
+DOOR_DONE = ("done", "failed", "timeout", "cancelled")
+
+
+def _remote_json(office: str, alias: str, path: str, method: str = "GET", body=None, timeout: int = 30):
+    """One call through the link with scripts/remote.py --json → (HTTP status, body text); (0, why) when the office
+    could not be asked at all."""
+    call = [sys.executable, os.path.join(REPO, "scripts", "remote.py"), office, alias, path, "--json",
+            "--timeout", str(timeout), "-X", method]
+    if body is not None:
+        call += ["-H", "Content-Type: application/json", "--data-raw=" + json.dumps(body, ensure_ascii=False)]
+    try:
+        p = subprocess.run(call, capture_output=True, text=True, timeout=timeout + 30)
+    except (OSError, subprocess.TimeoutExpired) as e:
+        return 0, f"could not ask ({type(e).__name__})"
+    start = p.stdout.find("{")
+    try:
+        out = json.loads(p.stdout[start:], strict=False) if start >= 0 else {}
+    except ValueError:
+        out = {}
+    if not out:
+        return 0, (p.stdout + p.stderr).strip()[-200:]
+    return int(out.get("status") or 0), str(out.get("body") or "")
+
+
+def _door_published(office: str) -> bool:
+    """Whether `office` publishes its job door to this one at all: the compiler's record of that remote app
+    (.generated/registry/remote.<office>.ci-runner.json, what scripts/remote.py itself resolves from). Read before
+    any call, so a `bbox via` to an office with no door costs nothing (the second reader measured ~1 s a call)."""
+    return os.path.isfile(os.path.join(REPO, ".generated", "registry", f"remote.{office}.{DOOR_APP}.json"))
+
+
+def _door_verb(words: list) -> bool:
+    """Whether `bbox <words>` is a job the door runs, by the door's OWN check (apps/ci-runner/door.py `validate`
+    over its jobs.json — the one copy, loaded from this checkout): a verb off the list then never costs a link round
+    trip just to be told 400. A door.py that cannot be LOADED here is asked anyway (its own answer decides); a
+    jobs.json that is missing here means nothing goes to the door — the host shell, as before the door existed."""
+    try:
+        import importlib.util
+        spec = importlib.util.spec_from_file_location("ci_runner_door", os.path.join(REPO, "apps", DOOR_APP, "door.py"))
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        return mod.validate({"name": "bbox", "args": {"verb": list(words)}})[0] is not None
+    except Exception:                                     # noqa: BLE001 — an unreadable check never blocks the ask
+        return True
+
+
+def door(office: str, words: list, timeout: int) -> tuple[int | None, str]:
+    """Ask `office`'s job door for `bbox <words>` → (the job's exit, "") when the door ran it, or (None, why) when the
+    door is not the way — then the host shell is asked, and `why` is said if that fails too."""
+    status, text = _remote_json(office, DOOR_APP, "/api/door/jobs", "POST", {"name": "bbox", "args": {"verb": words}})
+    if status != 202:
+        try:
+            why = json.loads(text).get("error") or ""
+        except ValueError:
+            why = ""
+        return None, (f"its job door answered {status}" + (f": {why[:160]}" if why else "")) if status else \
+            "its job door could not be asked"
+    try:
+        jid = json.loads(text)["data"]["id"]
+    except (ValueError, KeyError, TypeError):
+        return None, "its job door answered without a job id"
+    row, end = {}, time.monotonic() + timeout + 60
+    while time.monotonic() < end:
+        status, text = _remote_json(office, DOOR_APP, f"/api/door/jobs/{jid}")
+        if status == 200:
+            try:
+                row = json.loads(text).get("data") or {}
+            except ValueError:
+                row = {}
+            if row.get("state") in DOOR_DONE:
+                break
+        time.sleep(2)
+    else:
+        sys.stderr.write(f"via: job {jid} on {office}'s door had not ended after {timeout + 60} s — it goes on there\n")
+        return 124, ""
+    offset = 0
+    while True:
+        status, page = _remote_json(office, DOOR_APP, f"/api/door/jobs/{jid}/log?offset={offset}")
+        if status != 200 or not page:
+            break
+        sys.stdout.write(page)
+        offset += len(page.encode("utf-8"))
+    state, code = row.get("state"), row.get("exit")
+    if state == "done":
+        return 0, ""
+    if state == "timeout":
+        sys.stderr.write(f"via: the job ran past its timeout on {office}'s door and was stopped there\n")
+        return 124, ""
+    return (code if isinstance(code, int) and code else 1), ""
+
+
 def usage(code: int = 2) -> int:
     sys.stderr.write("usage: bbox via <office> [--timeout S] [--put FILE]… <bbox args…>\n")
     return code
@@ -72,6 +170,12 @@ def main(argv: list) -> int:
         rest = rest[2:]
     if not rest:
         return usage()
+    door_why = ""
+    if (not puts and (os.environ.get("BBOX_VIA_DOOR") or "on").lower() != "off" and _door_published(office)
+            and _door_verb(rest)):
+        got, door_why = door(office, rest, timeout)
+        if got is not None:
+            return got
     # Each carried file: written there under its own name (an attachment is named after it), in a directory
     # of this run that only root can read (it may be a client's document) and that goes when the shell does
     # — a command stopped at its timeout included, which is why a signal is turned into an exit.
@@ -119,8 +223,9 @@ def main(argv: list) -> int:
         sys.stderr.write(f"via: {office} answered {refused.group(0)} at once (its apps restarting?) — asking again in 15 s\n")
         time.sleep(15)
     start = raw.find('{"')
+    also = f" (and {door_why})" if door_why else ""
     if start < 0:
-        sys.stderr.write(f"via: {office} could not be asked — {(raw + p.stderr).strip()[-400:]}\n")
+        sys.stderr.write(f"via: {office} could not be asked — {(raw + p.stderr).strip()[-400:]}{also}\n")
         return 2
     try:
         out = json.loads(raw[start:], strict=False)
@@ -142,6 +247,9 @@ def main(argv: list) -> int:
         # a shell that never started (ssh refused, the machine asleep) says why only in these words
         why = " — ".join(str(out[k]) for k in ("reason", "action") if out.get(k))
         sys.stderr.write(f"via: {office} answered exit {code} and printed nothing{' — ' + why if why else ''}\n")
+        if door_why:
+            sys.stderr.write(f"via: {office} has no host shell that answers, and no job door that runs this verb "
+                             f"({door_why})\n")
     return code if isinstance(code, int) else 2
 
 

@@ -8,7 +8,7 @@ WHY THIS GATE EXISTS
 
 `data/registry/sync_registry.json` is the client's live pipe configuration. Four of its rows
 (`gmail-doc`, `gmail-bs`, `gmail-link`, `mail-private`) name `mail_imap_app_password-51185288` —
-person9@example.com, the client's real mailbox. Two fixture workflows read that registry and fanned
+person10@example.com, the client's real mailbox. Two fixture workflows read that registry and fanned
 out over whatever they found:
 
   * `sv3Inject3x001`'s `Plan` looped EVERY row with no `enabled` filter, 3 documents each. Three of
@@ -38,7 +38,7 @@ THE RULES
       : {})` and `if (x) params.connection_id = x` both OMIT the key when the id is falsy, and an
       omitted `connection_id` used to resolve through mailapi's ambient `/data/active.json` — the
       client's Gmail. That is how 148 fixture messages addressed to @demo.indox ended up in
-      person9@example.com between 2026-08-05 and 2026-08-09. Stamping the key unconditionally turns
+      person10@example.com between 2026-08-05 and 2026-08-09. Stamping the key unconditionally turns
       the same mistake into a loud 400.
 
   R3  A test blueprint that builds a mail op must carry the local-only guard — a
@@ -65,7 +65,7 @@ THE RULES
       `__instance:'test'` (either quote style) at least once, must carry NO `__instance` literal
       naming any OTHER instance (expressions and variables are outside this rule — a literal is
       what makes the binding legible before anything runs; one call pinned to 'test' and another
-      pinned to 'hacohen' is worse than pinning nothing, because the first green covers for the
+      pinned to 'example' is worse than pinning nothing, because the first green covers for the
       second), and must not call drive DISCOVERY — `op:'connections'` in a driveApi01-calling
       blueprint, the raw `:8975/connections` endpoint, or `engine/profiles`. Test connections
       come from indox_test.settings key='test_connections'; discovery binds whatever identities
@@ -627,9 +627,9 @@ def self_test() -> int:
             {"name": "Call", "parameters": {"workflowInputs": {"value":
                 {"__instance": "test"}}}}]}, [], set(), prefix_owner=True)))
     chk("R7(b) fires on a literal pinning a DIFFERENT instance next to the correct one",
-        any("__instance:'hacohen'" in f for f in check_blueprint("x.json", {"nodes": [
+        any("__instance:'example'" in f for f in check_blueprint("x.json", {"nodes": [
             {"name": "N", "parameters": {"jsCode":
-                "a={__instance:'test'}; b={__instance:'hacohen'};"}}]}, [], set(),
+                "a={__instance:'test'}; b={__instance:'example'};"}}]}, [], set(),
             prefix_owner=True)))
     chk("R7(b) ignores expression/variable-valued __instance — a variable is not a literal",
         not any(f.startswith("R7 ") for f in check_blueprint("x.json", {"nodes": [

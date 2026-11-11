@@ -3,7 +3,8 @@
 #: person finished (measured, never assumed), on a session tab that has no task budget.
 # await — what an agent runs after handing a person a link.
 #
-#   bbox b42 open whatsapp-pair https://web.whatsapp.com       # the tab the human will look at
+#   bbox b42 group whatsapp-pair https://web.whatsapp.com      # the tab the human will look at
+#   (`bbox b42 open <app> <url>` is the hand-off: it also brings the browser to whoever looks — DGO-1336)
 #   bbox b42 await whatsapp-pair "notext:Scan the QR code with your phone's camera" 280
 #
 # Why here and not only under `task`: a TASK is killed by its own clocks — 30 minutes of total wall

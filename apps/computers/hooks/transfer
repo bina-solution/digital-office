@@ -1,0 +1,3 @@
+#!/usr/bin/env bash
+#: transfer — copy a docker volume between two computers, resumable: <from> <to> <volume> [--dest-volume V] [--restart] | status <job> | cancel <job> [--json]
+exec bash "$(dirname "${BASH_SOURCE[0]}")/../tools/verb" transfer "$@"

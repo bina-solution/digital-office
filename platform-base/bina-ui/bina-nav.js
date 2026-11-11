@@ -735,8 +735,11 @@ var BinaNav = (function () {
   // the same in every app.
   function adoptStatic(doc) {
     var menus = doc.querySelectorAll(".bnv:not([data-bnv-mounted])");
-    for (var i = 0; i < menus.length; i++) {
-      var menu = menus[i];
+    // one call per menu, so each control and each shut holds ITS menu (a loop's `var` would hand every
+    // handler the last one)
+    for (var i = 0; i < menus.length; i++) adoptOne(doc, menus[i]);
+  }
+  function adoptOne(doc, menu) {
       try {
         var parent = menu.parentElement;
         if (parent && parent.classList && typeof parent.closest === "function" && !parent.closest(".bnv-host")) {
@@ -759,6 +762,38 @@ var BinaNav = (function () {
         });
         doc.addEventListener("keydown", function (ev) { if (ev.key === "Escape") shut(); });
         menu.setAttribute("data-bnv-mounted", "static");
+        // …and the rail's way in, which a mounted menu has in its brand row (DGO-1591, the owner: «חצי תפריט …
+        // לא נפתח, לא נסגר» — a static menu at a rail's width showed its icons and no way to their names). Its
+        // head gets the same one control, where the menu stands in the component's grid (`.appgrid`: its column
+        // is the grid's, so a rail is a rail's width): open → shut; a chosen rail → the whole menu again; names
+        // hidden (a rail by width) → the whole menu over the page; the whole menu → a chosen rail. The same
+        // steps as the mounted control's (`build()`), and a chosen rail is remembered the same way — per page,
+        // since a static menu has no id of the app's: under the console every app shares one origin.
+        var mhead = menu.querySelector(".bnv-head");
+        if (mhead && !mhead.querySelector(".bnv-collapse") && parent && parent.classList.contains("appgrid")) {
+          var railKey = "bnav:rail:static:" + ((doc.location && doc.location.pathname) || "") + "#" + (menu.id || "");
+          var setRail = function (on) {
+            menu.classList.toggle("is-rail", !!on);
+            try { localStorage.setItem(railKey, on ? "1" : "0"); } catch (e) { /* private mode */ }
+          };
+          try { if (localStorage.getItem(railKey) === "1") menu.classList.add("is-rail"); } catch (e) { /* private mode */ }
+          // the head's own text is THE sign of names on screen: it is there from the first paint (the rows'
+          // labels come when the app renders them, and a missing node reads as "hidden")
+          var nameShown = function () {
+            return shown(mhead.querySelector(".bnv-head-text") || menu.querySelector(".bnv-label"));
+          };
+          var cbtn = el("button", "bnv-collapse", svg("chevron-end"));
+          cbtn.type = "button";
+          cbtn.title = LABELS.rail;
+          cbtn.setAttribute("aria-label", LABELS.rail);
+          cbtn.addEventListener("click", function () {
+            if (menu.classList.contains("is-open")) { shut(); return; }
+            if (nameShown()) { setRail(true); return; }
+            if (menu.classList.contains("is-rail")) setRail(false);
+            if (!nameShown()) { menu.classList.add("is-open"); scrim.classList.add("is-open"); }
+          });
+          mhead.appendChild(cbtn);
+        }
         // …and the way in: the component's own 48px button, exactly as a page that placed none
         if (typeof doc.querySelector === "function" && !doc.querySelector("[data-nav-toggle]")) {
           var b = el("button", "bnv-burger is-float");
@@ -776,7 +811,6 @@ var BinaNav = (function () {
           if (doc.documentElement && doc.documentElement.classList) doc.documentElement.classList.add("bnv-float");
         }
       } catch (e) { /* one menu that cannot be adopted is not the other menus' problem */ }
-    }
   }
   if (typeof document !== "undefined" && typeof document.querySelectorAll === "function") {
     if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", function () { adoptStatic(document); });

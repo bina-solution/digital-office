@@ -31,20 +31,9 @@ services:
       options:
         max-size: 10m
         max-file: '3'
-    labels:
-    - traefik.enable=true
-    - traefik.http.routers.portainer-local.rule=Host(`portainer.localhost`)
-    - traefik.http.routers.portainer-local.entrypoints=web
-    - traefik.http.routers.portainer-local.service=portainer
-    - traefik.http.routers.portainer-http.rule=Host(`${PORTAINER_BASE_URL}`)
-    - traefik.http.routers.portainer-http.entrypoints=web
-    - traefik.http.routers.portainer-http.service=portainer
-    - traefik.http.routers.portainer-https.rule=Host(`${PORTAINER_BASE_URL}`)
-    - traefik.http.routers.portainer-https.entrypoints=websecure
-    - traefik.http.routers.portainer-https.tls=true
-    - traefik.http.routers.portainer-https.tls.certresolver=${TRAEFIK_CERTRESOLVER-myresolver}
-    - traefik.http.routers.portainer-https.service=portainer
-    - traefik.http.services.portainer.loadbalancer.server.port=9000
+    # No traefik labels here: app.json declares the route with `auth: sso`, and the compiler emits its
+    # routers with the office's sign-in (authentik@file) in front of Portainer's own login (DGO-1762).
+    # This screen is root on the engine — it was reachable by anyone who could reach its host.
     healthcheck:
       test:
       - CMD

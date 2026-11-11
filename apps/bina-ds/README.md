@@ -105,10 +105,19 @@ office has a local route. It keeps a short persona, bash, the file tools and com
 - Measured on the Dell (DGO-825): the route is live in the catalog on the next request, a session
   that selects it sends its whole turn there, and the turn completes.
 
-**Choosing the model also changes the default.** `session/selectModel`, which the web model
-picker sends, rewrites `agent-default-model` in `settings.yaml` too. Every new session then
-starts on the chosen route. On an office whose agent works on its own (goals, the pulse), choose
-the local model for the conversation and put the default back afterwards.
+**In the web picker, choosing the model also changes the default.** `session/selectModel`, which
+the web model picker sends, rewrites `agent-default-model` in `settings.yaml` too. Every new
+session then starts on the chosen route, the default preset follows it (`tools/llm-routes.mjs`),
+and on a local default the seder cycles are refused.
+
+**Through agent.v1, the model is that session's own** (DGO-1731):
+- `POST /v1/sessions/{id}/model` (and `bbox agent model <id> --set`) puts the office's default
+  back after it selects. It answers `default`: `kept`, `restored`, `changed` with `why`, or
+  `unknown` with `why`.
+- `default: true` (`--default`) makes the selection the office's default too.
+
+Measured on the HP 2026-11-11: two per-session sets moved its default from qwen3:1.7b to DeepSeek,
+then to the Dell's qwen3:4b, unseen.
 
 ## The clock — n8n, declared with this app (`blueprint/n8n/`)
 

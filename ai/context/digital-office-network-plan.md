@@ -367,7 +367,7 @@ rev 1 נתן ללשכה המקומית להנפיק ולחתום לעצמה את
 ```
 # ההתקנה עצמה — offices (הבעל), לא network
 POST http://offices:8983/api/offices                     {"id":"vps1","machine":"...","domain":"...",
-                                                          "path":"/root/deployment-hacohen",
+                                                          "path":"/root/digital-office",
                                                           "source":{"repo":"...","ref":"<commit>"},
                                                           "apps":["traefik","network","site-runtime",
                                                                   "app-management"]}
@@ -572,7 +572,7 @@ POST /listRoutes /writeRoute /deleteRoute /installNode /verifyNode /listLinks /c
 ## 12. ריבוי לקוחות
 
 ```
-Tenant: shlomo      office: macbook1   server: vps1        → console.staging.digital-office.co.il
+Tenant: owner      office: macbook1   server: vps1        → console.staging.digital-office.co.il
 Tenant: customer-a  office: a-laptop   server: a-vps       → a.digital-office.co.il
 Tenant: customer-b  office: (אין)      server: shared-vps  → b.digital-office.co.il
 ```

@@ -489,6 +489,31 @@ def api_mirror_sync(mid: str, wait: int = 0):
             "note": "הסנכרון רץ ברקע — מצב ההתקדמות ב-GET /api/mirrors."}
 
 
+@app.post("/api/mirrors/{mid:path}/pause")
+def api_mirror_pause(mid: str, on: int = -1):
+    """Stop (on=1) or restart (on=0) the SCHEDULE of one mirror — the row's `paused` state.
+
+    `on` is REQUIRED: a bare POST to this path must not change anything. A default would make a typo
+    or a probe with an empty query string pause a schedule, and a pause is the state a person is
+    least likely to notice going missing.
+
+    A plain `def`, like every mirror route: it touches the registry, never a clone. Pausing used to be
+    done by setting the row's interval to ten years (the MacBook, 2026-11-09T15:45Z), which is a
+    number pretending to be a state — invisible in the row's own vocabulary and easy to undo by
+    accident. A pause stops the scheduler only: a manual sync, the scratch and the forge copy survive.
+    """
+    if on not in (0, 1):
+        return JSONResponse({"ok": False,
+                             "error": "צריך on=1 (השהיה) או on=0 (הפעלה) — בלי ערך אין שינוי."},
+                            status_code=400)
+    try:
+        row = mirrors.set_paused(mid, bool(on))
+    except mirrors.MirrorError as e:
+        return JSONResponse({"ok": False, "error": e.he_message}, status_code=e.status)
+    return {"ok": True, "mirror": row,
+            "note": "התזמון הופסק — סנכרון ידני ימשיך לעבוד." if on else "התזמון חזר לפעול."}
+
+
 @app.delete("/api/mirrors/{mid:path}")
 def api_mirror_delete(mid: str, delete_repo: int = 0):
     try:

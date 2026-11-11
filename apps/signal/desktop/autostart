@@ -1,0 +1,21 @@
+#!/bin/sh
+# /usr/local/bin/signal-desktop-session — the Selkies session's one application: Signal Desktop (DGO-1264).
+# openbox runs it (through ~/.config/openbox/autostart, which names only this file) as the image's user `abc`,
+# with HOME=/config, the volume's `desktop` folder. POSIX sh. From apps/_template-wrapped/desktop/autostart.template.
+
+# The keyring Signal keeps its database key in, unlocked at every start by a password minted once into HOME:
+# without it Signal cannot open its own database after a recreate, and the phone has to be linked again.
+[ -n "${DBUS_SESSION_BUS_ADDRESS:-}" ] || eval "$(dbus-launch --sh-syntax)"
+KEYPW="${HOME}/.keyring-pass"
+[ -s "${KEYPW}" ] || ( umask 077; head -c 24 /dev/urandom | od -An -tx1 | tr -d ' \n' > "${KEYPW}" )
+eval "$(gnome-keyring-daemon --replace --unlock --components=secrets < "${KEYPW}" | sed 's/^/export /')"
+export XDG_CURRENT_DESKTOP="${XDG_CURRENT_DESKTOP:-GNOME}"   # Electron finds the keyring only on a named desktop
+
+# No updater to turn off: Signal's Linux build updates through apt; the image is the version, and an update is a
+# rebuild. (Signal refuses to run a build that is too old: keep the image rebuilt, at least monthly.)
+
+# Brought back whenever it exits. --no-sandbox: the container is the sandbox. No GPU here.
+while :; do
+  signal-desktop --no-sandbox --disable-gpu --password-store=gnome-libsecret >>"${HOME}/.signal-desktop.log" 2>&1
+  sleep 3
+done

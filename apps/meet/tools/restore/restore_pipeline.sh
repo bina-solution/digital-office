@@ -35,7 +35,7 @@ done
 [ -n "${VENV:-}" ] && source "$VENV/bin/activate"
 POST="highpass=f=80,acompressor=threshold=-28dB:ratio=3:attack=5:release=150:makeup=6,loudnorm=I=-18:TP=-2:LRA=11"
 LN="loudnorm=I=-18:TP=-2:LRA=11"
-base=$(basename "$IN" .mp4)                 # fpg103_2026-10-26-13-10-48
+base=$(basename "$IN" .mp4)                 # exf103_2026-10-26-13-10-48
 room=${base%_*}; stamp=${base##*_}
 name="${room}-${TAG}_${stamp}"
 mkdir -p "$OUT/tmp"
@@ -83,7 +83,7 @@ if [ $VIDEO = 1 ]; then
   if iscut $LISTEN; then
     python "$HERE/cutvideo.py" "$IN" "$LMAP" "$W.listen.m4a" "$OUT/$name.mp4"
   else
-    # no -shortest: Jibri's video track ends a few seconds before its audio, and -shortest cut the restored audio's tail (fpg103 lost 4.5 s, 2026-10-27)
+    # no -shortest: Jibri's video track ends a few seconds before its audio, and -shortest cut the restored audio's tail (exf103 lost 4.5 s, 2026-10-27)
     ffmpeg -nostdin -v error -y -i "$IN" -i "$W.listen.m4a" -map 0:v:0 -map 1:a:0 -c:v copy -c:a copy -movflags +faststart "$OUT/$name.mp4"
   fi
 fi

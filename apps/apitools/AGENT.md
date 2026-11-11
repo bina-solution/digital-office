@@ -64,9 +64,8 @@ curl -s http://apitools-asr:8987/speechHealth          # model state, queue dept
 `POST /documentOcr` (multipart `file`, at most 50 MB) returns a `file_hash` (md5 of the content)
 plus the OCR JSON; `POST /documentJsonQuery` answers position-based questions over that result, and
 takes that hash as its `file_id`. `?ocr_engine=local|google` picks the engine per request and skips
-the cache. Google Vision is the
-engine unless `OCR_ENGINE=local`, and the `google-vision-key` connection probe is this app's
-`/health`. Depth: `apps/apitools/README.md`. Traps worth repeating: a query is bounded by
+the cache. The engine is local unless `OCR_ENGINE=google` names Google Vision; the
+`google-vision-key` connection probe is this app's `/health`. Depth: `apps/apitools/README.md`. Traps worth repeating: a query is bounded by
 `APITOOLS_QUERY_SOFT_TIMEOUT` and a "find option" over a huge candidate list is what made that a
 real limit; the bulkhead's slots are file locks, so two containers have two pools.
 

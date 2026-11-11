@@ -1,0 +1,62 @@
+# newsflow — the office's own news, collected through the office browser (DGO-1348).
+#
+# One container, no dependencies to install: the service is stdlib Python (an HTTP server, sqlite and a
+# small redis client), so the image builds in seconds and there is no package to re-pin. Each category is a
+# row in `NEWSFLOW_SOURCES`-less config inside main.py, and every source's failure is reported in the run,
+# never swallowed. The page it collects with is browser42's own Chromium — the same signed-in browser the
+# owner watches — so what it reads is what a person would see.
+services:
+  newsflow:
+    image: newsflow:${IMAGE_TAG:-latest}
+    build:
+      context: .
+      dockerfile: Dockerfile
+    pull_policy: missing
+    container_name: newsflow-${DEPLOYMENT_NAME:-bina-deployment}
+    hostname: newsflow
+    restart: unless-stopped
+    environment:
+      - NEWSFLOW_PORT=8991
+      - NEWSFLOW_DB=/data/newsflow.db
+      # «בשגרה» (the owner, 2026-11-04): one pass every N minutes on the app's own clock, 0 = on demand only.
+      # A pass now ends every browser task it opens (browser42 finishes a task only on its evidence: inspect →
+      # extract → screenshot → verify → finish), so the routine can run again. Six hours, not minutes: one pass
+      # drives the shared browser for ten to twenty minutes, and that browser is the owner's too.
+      - NEWSFLOW_EVERY_MIN=${NEWSFLOW_EVERY_MIN:-360}
+      # the office browser: its agent door (browser42's own floor), never a second Chromium
+      - BROWSER42_URL=${BROWSER42_URL:-http://browser42:8766}
+      # the office's event stream (flow.v1): this app writes dgo:flow:newsflow
+      - REDIS_PASSWORD=${REDIS_PASSWORD:-}
+      - TZ=${TZ:-Asia/Jerusalem}
+    volumes:
+      # the articles and the runs. Losing it loses the feed, not the sources — they are declared in main.py.
+      - newsflow_data:/data
+    networks:
+      - traefik-network
+    healthcheck:
+      # python, never curl: the image is python:3.12-slim and carries no curl (gate G18)
+      test: ["CMD", "python", "-c", "import urllib.request,sys;sys.exit(0 if urllib.request.urlopen('http://localhost:8991/healthz',timeout=8).status==200 else 1)"]
+      interval: ${HEALTHCHECK_INTERVAL:-30s}
+      timeout: ${HEALTHCHECK_TIMEOUT:-10s}
+      retries: 3
+      start_period: 10s
+    deploy:
+      resources:
+        limits:
+          cpus: '0.25'
+          memory: 192M
+        reservations:
+          cpus: '0.02'
+          memory: 32M
+    logging:
+      driver: ${LOGGING_DRIVER:-json-file}
+      options:
+        max-size: 5m
+        max-file: '3'
+
+volumes:
+  newsflow_data:
+
+networks:
+  traefik-network:
+    external: true

@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+#: show <id> — one envelope: its state, its audit trail, and whether the chain still verifies
+set -uo pipefail
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+out="$("${SCRIPT_DIR}/_call" GET "/api/envelopes/${1:?usage: show <id>}")" || exit $?
+printf '%s' "${out}" | python3 -c '
+import json,sys
+d=json.load(sys.stdin)
+if not d.get("ok"): raise SystemExit(d.get("detail"))
+e=d["data"]["envelope"]
+print("%s  %s" % (e["id"], e["status"]), e["doc_name"])
+print("  signer:", e["signer_name"], "| sent:", e["created_at"], "| expires:", e["expires_at"])
+if e.get("signed_at"): print("  signed:", e["signed_at"], "| drive:", e.get("drive_path"))
+print("  chain:", "OK" if d["data"]["chain"]["ok"] else "BROKEN at %s" % d["data"]["chain"]["first_bad"])
+for ev in d["data"]["events"]:
+    print("   %2d %s %-24s %s" % (ev["seq"], ev["at"][:19].replace("T"," "), ev["type"], ev["data"][:90]))'

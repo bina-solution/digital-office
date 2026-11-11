@@ -127,6 +127,10 @@ type Server struct {
 	// a page that waits for the machine, so an app opened after the phone restarted comes up instead of
 	// answering nobody.
 	Wake func(host string, ask bool) (step string, has bool)
+	// Waiting, when set, is that page (and an API's answer) for a woken host instead of this edge's own plain
+	// one: the phone's core sets serve.Absent, which says in Hebrew where the app's machine stands — fetched,
+	// unpacked, coming up, or not installed and how to install it (DGO-1723) — never the app's English step.
+	Waiting http.Handler
 }
 
 // The headers the machine's forward-auth takes the core's identity by (FORWARD_AUTH_EDGE_TOKEN): when, and
@@ -183,22 +187,31 @@ func withoutSession(h http.Header) {
 	}
 }
 
-// machine is the proxy to the machine's edge on port: proxyTo's, without the core's sign-in, signed.
+// machine is the proxy to the machine's edge on port: MachineProxy, one a boot.
 func (s *Server) machine(port int, token string) http.Handler {
 	key := strconv.Itoa(port) + " " + token
 	if h, ok := s.machines.Load(key); ok {
 		return h.(http.Handler)
 	}
+	h, _ := s.machines.LoadOrStore(key, MachineProxy(port, token, s.logf))
+	return h.(http.Handler)
+}
+
+// MachineProxy is the proxy to the machine's edge on loopback port: proxyTo's, without the core's sign-in,
+// each request signed with the machine's token for this boot (SignForMachine). The identity it signs is the
+// one the request carries out: the gate's, written by proxyTo — or, for a request the core's own console
+// received from this edge (internal/native: an app under /a/<name>/), the identity this edge wrote onto it
+// then, which the console believed as its trusted hop.
+func MachineProxy(port int, token string, logf func(string, ...any)) http.Handler {
 	to := &url.URL{Scheme: "http", Host: net.JoinHostPort("127.0.0.1", strconv.Itoa(port))}
-	inner := proxyTo(to, nil, "the machine", s.logf).(*httputil.ReverseProxy)
+	inner := proxyTo(to, nil, "the machine", logf).(*httputil.ReverseProxy)
 	rewrite := inner.Rewrite
 	inner.Rewrite = func(pr *httputil.ProxyRequest) {
 		rewrite(pr)
 		withoutSession(pr.Out.Header)
 		SignForMachine(pr.Out.Header, token, pr.Out.Method, pr.Out.Host, pr.Out.URL.RequestURI())
 	}
-	h, _ := s.machines.LoadOrStore(key, http.Handler(inner))
-	return h.(http.Handler)
+	return inner
 }
 
 // waiting answers a host of the machine's while it comes up: 503 and Retry-After, and to a browser's page a
@@ -313,6 +326,10 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 					return // an anonymous caller signs in first: nobody but the owner starts the machine
 				}
 				step, _ := s.Wake(host, true)
+				if s.Waiting != nil {
+					s.Waiting.ServeHTTP(w, r)
+					return
+				}
 				waiting(w, r, step)
 				return
 			}

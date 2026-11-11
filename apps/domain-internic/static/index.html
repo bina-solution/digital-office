@@ -1,0 +1,281 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>אינטרניק</title>
+<!-- the design system's palette, bundled: every app carries its own copy on purpose (it must stay
+     independently installable), and gate G27 keeps the token block identical to the source -->
+<style>
+:root{
+  --radius:16px;--radius-sm:9px;--radius-pill:999px;
+  --font:"Segoe UI",system-ui,-apple-system,"Noto Sans Hebrew","Assistant",Arial,sans-serif;
+  --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+/* @bina-theme-tokens:start */
+/* OLIVE GROVE — the one palette of the office (the owner, 2026-10-07 · DGO-450). Four hues, sampled
+   from his mock-up, and the ground they stand on. A screen never writes a colour: it names one of
+   these. Each hue is the colour itself (a FILL — a button, a bar, a dot), «-d» for text and thin
+   lines on the ground (4.5:1 or more), «-soft» and «-line» for a tint and its hairline, and «-ink»
+   for what is written ON the fill. The role names every screen already uses point at them:
+   (no backtick in this block: one of its copies lives inside a script's template string)
+     olive  the brand and the main action · what is well, what is done
+     sky    what is in motion, what only informs · a link
+     lime   look here — a warning, something waiting
+     plum   a person must act — a failure, a removal, the one final action
+   Contrast, measured (WCAG): ink on the ground 13.7 · muted 4.65 · light text on olive 5.51 and on
+   plum 9.54 · ink on lime 6.88 · its ink on sky 6.32 · sky-d 4.61 · lime-d 4.70 · violet 5.32 ·
+   on the desk: its ink 6.32 (dark: 13.96), and 11.2 where the sky pales (dark: 5.12). */
+:root,:root[data-theme="light"]{
+  color-scheme:light;
+  accent-color:var(--accent);   /* the browser's OWN controls - a checkbox, a radio, a range, a progress bar - on both grounds: said once, here (it was said for eight single controls, and every other one was the browser's blue) */
+  --bg:#f3f5f7; --surface:#fff; --surface-2:#f9fafb; --ink:#1f2a17; --muted:#6a7068; --line:#dcdfde;
+  --olive:#56693f; --olive-d:#475734; --olive-soft:#e7eae4; --olive-line:#bfc6b6; --olive-ink:#f3f5f7;
+  --sky:#7baae3; --sky-d:#2a6fc4; --sky-soft:#edf3fb; --sky-line:#cddff4; --sky-ink:#13263f;
+  --lime:#a9b84c; --lime-d:#69732e; --lime-soft:#f3f5e6; --lime-line:#dee4bb; --lime-ink:#1f2a17;
+  --plum:#5b3349; --plum-d:#4a303b; --plum-soft:#e8e2e6; --plum-line:#c1b1ba; --plum-ink:#f3f5f7;
+  --accent:var(--olive); --accent-d:var(--olive-d); --accent-soft:var(--olive-soft); --accent-ink:var(--olive-ink);
+  --blue:var(--sky-d); --amber:var(--lime-d); --red:var(--plum);
+  --violet:#7c5c6d;   /* plum, lifted a fifth toward white: someone has to look — nothing has failed */
+  --ok:var(--olive); --warn:var(--lime-d); --danger:var(--plum); --info:var(--sky-d);
+  --ok-soft:var(--olive-soft); --warn-soft:var(--lime-soft); --danger-soft:var(--plum-soft); --info-soft:var(--sky-soft);
+  --red-soft:var(--plum-soft); --amber-soft:var(--lime-soft); --blue-soft:var(--sky-soft); --violet-soft:var(--plum-soft);
+  --side:var(--olive); --side-ink:#f3f5f7; --side-mut:#dce1da; --side-line:#788765;
+  --desk:var(--sky); --desk-ink:var(--sky-ink);   /* desktop mode's ground is the sky (the owner, DGO-452), and what is written straight on it */
+  --scrim:rgba(31,42,23,.5);                      /* what dims a screen behind a pop-up */
+  --shadow:0 1px 3px rgba(31,42,23,.08),0 6px 24px rgba(31,42,23,.06);
+  --shadow-lg:0 20px 60px rgba(31,42,23,.28);
+  /* ONE COLOUR AND ONE ANIMAL PER OFFICE (the owner, 2026-10-09 · flt-002). When offices are linked,
+     a person reads WHICH office a thing belongs to without opening it, so each office gets a hue of
+     its own. The hue is an IDENTITY and never a health state: an office that stopped answering keeps
+     its colour, and the quiet mark is the one that says "not answering". Each is an ALIAS of the
+     palette's own hue — no fourth value is invented, and because the ground re-points the hue, the
+     office mark follows the ground by itself. Each office's animal (elephant, deer, eagle) is a
+     glyph of bina-icons.js. */
+  --office-hp:var(--muted);   /* hp · elephant — grey: the heavy laptop at home, in the palette's own grey */
+  --office-mac:var(--lime);   /* macbook · deer — yellow: the palette has one yellow and it is lime. A FILL, so what is written ON it is --lime-ink, never this */
+  --office-vps:var(--sky-d);  /* vps · eagle — deep sky blue, «the eagle in the clouds». THE OWNER'S OWN CHOICE (2026-10-09, in writing: vps = נשר + כחול-שמיים) — this line is the colour he picked, not a default kept for him */
+}
+
+/* ── A LINKED OFFICE'S MARK, BY NAME (flt-004) ───────────────────────────────────────────────
+   The link carries a NAME — mark: {color, animal} in the catalog, from the office's own identity
+   — and never a value: the office that DRAWS a linked tile owns the pixels, so it paints the name
+   with its own palette. These seven rules are that translation, one per family above; a screen sets
+   data-office-hue="lime" and paints var(--office-hue).
+   A name this file does not know paints nothing, which is why the vocabulary in
+   apps/dgo-extend/identity.py may only name families that exist here — and why --red and --ok
+   are not among them: they mean «danger» and «it is well» on every screen in the office. */
+[data-office-hue="grey"]   { --office-hue:var(--muted); }
+[data-office-hue="lime"]   { --office-hue:var(--lime); }
+[data-office-hue="sky"]    { --office-hue:var(--sky-d); }
+[data-office-hue="olive"]  { --office-hue:var(--olive-d); }
+[data-office-hue="plum"]   { --office-hue:var(--plum); }
+[data-office-hue="blue"]   { --office-hue:var(--blue); }
+[data-office-hue="violet"] { --office-hue:var(--violet); }
+/* the dark ground is the same four hues on the palette's own ink, and the SAME legend. Olive on that
+   ink is 2.5:1, so its text step there is olive LIFTED — its own hue and saturation, lighter (7.14
+   on a card, 4.82 on its own tint) — and the brand, the main action and «it is well» take that step.
+   Lime stays «look here» and the sky «in motion», as on the light ground: were lime the accent here
+   (it was, for a day), a warning, a selection and «it is well» were one colour. Each «-d» on its
+   own «-soft» there, measured: olive 4.82 · sky 4.62 · lime 4.63 · plum 4.71. */
+@media (prefers-color-scheme:dark){
+  :root{ color-scheme:dark;
+         --bg:#141b0f; --surface:#1f2a17; --surface-2:#192213; --ink:#f3f5f7; --muted:#a2a8a2; --line:#414a3b;
+         --olive-d:#a5ba8c; --olive-soft:#384629; --olive-line:#56693f;
+         --sky-d:#7baae3; --sky-soft:#2e3f38; --sky-line:#4d6a8c;
+         --lime-d:#a9b84c; --lime-soft:#3b4622; --lime-line:#69732e;
+         --plum-d:#ad99a4; --plum-soft:#402f33; --plum-line:#7c5c6d;
+         --accent:var(--olive-d); --accent-ink:var(--surface);
+         --red:#ad99a4; --violet:#bdadb6; --danger:#ad99a4; --ok:var(--olive-d); --side:var(--surface);
+         --desk:var(--sky-ink); --desk-ink:var(--ink); --scrim:rgba(0,0,0,.6);
+         --shadow:0 1px 3px rgba(0,0,0,.4),0 6px 24px rgba(0,0,0,.3);
+         --shadow-lg:0 20px 60px rgba(0,0,0,.55); }
+}
+:root[data-theme="midnight"]{
+  color-scheme:dark;
+  --bg:#141b0f; --surface:#1f2a17; --surface-2:#192213; --ink:#f3f5f7; --muted:#a2a8a2; --line:#414a3b;
+  --olive-d:#a5ba8c; --olive-soft:#384629; --olive-line:#56693f;
+  --sky-d:#7baae3; --sky-soft:#2e3f38; --sky-line:#4d6a8c;
+  --lime-d:#a9b84c; --lime-soft:#3b4622; --lime-line:#69732e;
+  --plum-d:#ad99a4; --plum-soft:#402f33; --plum-line:#7c5c6d;
+  --accent:var(--olive-d); --accent-ink:var(--surface);
+  --red:#ad99a4; --violet:#bdadb6; --danger:#ad99a4; --ok:var(--olive-d); --side:var(--surface);
+  --desk:var(--sky-ink); --desk-ink:var(--ink); --scrim:rgba(0,0,0,.6);
+  --shadow:0 1px 3px rgba(0,0,0,.4),0 6px 24px rgba(0,0,0,.3);
+  --shadow-lg:0 20px 60px rgba(0,0,0,.55);
+}
+/* THE KEYBOARD'S RING - what the browser draws around the stop the keyboard is on, in the palette, wherever
+   a part draws none of its own. It has no specificity at all (:where), so any rule of a part wins. Two
+   screens said this for themselves; on the others nearly every stop wore the browser's ring (DGO-455).
+   A field keeps the offset it has - fourteen rules draw a field's own outline and say no offset. An area
+   (a scroll box, a table) takes the ring inside, where nothing clips it; a control takes it outside,
+   where a filled button does not hide it. */
+:where(:focus-visible){outline:2px solid var(--accent)}
+:where(:focus-visible:not(a,button,summary,[role=button],input,select,textarea)){outline-offset:-2px}
+:where(a,button,summary,[role=button]):focus-visible{outline-offset:2px}
+/* HEBREW AT A HEAVY WEIGHT - on Windows, where the first family of --font is installed. "Segoe UI" has its
+   Hebrew in Light, Regular, Semibold and Bold. Asked for 800 or 900 the browser takes the family's Black
+   face, which has none, and so has every family after it - so the Hebrew of every title at 800 was drawn in
+   the system's last-resort serif, thin, beside Latin in Black: «חשבונות ומראות» at 20px is 150px wide at 700
+   and 120px at 800 (Chrome 154; the screens ask for 800 in 167 places, the question's title among them).
+   These faces give the family's HEBREW RANGE the faces that have it. A family a sheet names is no longer the
+   system's for those characters, so every weight and both styles are named, each as the system resolves it:
+   measured, only upright 800 and 900 change. Any other character is not theirs and goes on to the next
+   family the screen names - system-ui in --font, on Windows the same faces, Black included - which is why
+   G27 asks that system-ui follows wherever a screen names this family itself. Where the family is not
+   installed nothing here resolves and nothing changes. */
+@font-face{font-family:"Segoe UI";src:local("Segoe UI Light");font-weight:100 300;unicode-range:U+0590-05FF,U+FB1D-FB4F}
+@font-face{font-family:"Segoe UI";src:local("Segoe UI");font-weight:400;unicode-range:U+0590-05FF,U+FB1D-FB4F}
+@font-face{font-family:"Segoe UI";src:local("Segoe UI Semibold");font-weight:500 600;unicode-range:U+0590-05FF,U+FB1D-FB4F}
+@font-face{font-family:"Segoe UI";src:local("Segoe UI Bold");font-weight:700 900;unicode-range:U+0590-05FF,U+FB1D-FB4F}
+@font-face{font-family:"Segoe UI";src:local("Segoe UI Light Italic");font-weight:100 300;font-style:italic;unicode-range:U+0590-05FF,U+FB1D-FB4F}
+@font-face{font-family:"Segoe UI";src:local("Segoe UI Italic");font-weight:400;font-style:italic;unicode-range:U+0590-05FF,U+FB1D-FB4F}
+@font-face{font-family:"Segoe UI";src:local("Segoe UI Semibold Italic");font-weight:500 600;font-style:italic;unicode-range:U+0590-05FF,U+FB1D-FB4F}
+@font-face{font-family:"Segoe UI";src:local("Segoe UI Bold Italic");font-weight:700 900;font-style:italic;unicode-range:U+0590-05FF,U+FB1D-FB4F}
+/* @bina-theme-tokens:end */
+
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 var(--font)}
+main{max-width:880px;margin:0 auto;padding:20px 16px 48px;display:grid;gap:16px}
+h1{font-size:22px;margin:0}
+.sub{color:var(--muted);margin:2px 0 0}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);padding:16px}
+.card h2{font-size:16px;margin:0 0 10px}
+.row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.chip{display:inline-flex;align-items:center;gap:6px;padding:3px 10px;border-radius:var(--radius-pill);font-size:13px;border:1px solid var(--line);background:var(--surface-2)}
+.chip.ok{background:var(--ok-soft);border-color:var(--olive-line);color:var(--olive-d)}
+.chip.warn{background:var(--warn-soft);border-color:var(--lime-line);color:var(--lime-d)}
+.chip.bad{background:var(--danger-soft);border-color:var(--plum-line);color:var(--plum-d)}
+button{font:inherit;border-radius:var(--radius-sm);border:1px solid var(--line);background:var(--surface);color:var(--ink);padding:7px 14px;cursor:pointer}
+button.main{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+button:disabled{opacity:.55;cursor:default}
+input{font:inherit;border:1px solid var(--line);border-radius:var(--radius-sm);padding:7px 10px;background:var(--surface);color:var(--ink);min-width:0}
+table{width:100%;border-collapse:collapse;font-size:14px}
+th,td{text-align:start;padding:6px 8px;border-bottom:1px solid var(--line);vertical-align:top}
+th{color:var(--muted);font-weight:600}
+td.mono{font-family:var(--mono);direction:ltr;text-align:left;word-break:break-all}
+.muted{color:var(--muted)}
+.empty{color:var(--muted);padding:6px 0}
+.events li{margin:0 0 6px}
+.events{margin:0;padding-inline-start:18px}
+a{color:var(--sky-d)}
+@media (max-width:560px){th:nth-child(4),td:nth-child(4){display:none}}
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>אינטרניק</h1>
+    <p class="sub">ספק הדומיינים של הלשכה — הפורטל, אזורי ה-DNS והרשומות, דרך הדפדפן של הלשכה</p>
+  </header>
+
+  <section class="card" aria-labelledby="h-session">
+    <h2 id="h-session">החיבור לפורטל</h2>
+    <div class="row" id="session"><span class="chip">בודק…</span></div>
+    <p class="muted" id="session-why"></p>
+    <div class="row">
+      <button class="main" id="btn-login" type="button">התחברות לפורטל</button>
+      <button id="btn-refresh" type="button">רענון</button>
+      <a href="/a/browser42/" target="_top">תצוגת הדפדפן</a>
+    </div>
+  </section>
+
+  <section class="card" aria-labelledby="h-domains">
+    <h2 id="h-domains">הדומיינים בחשבון</h2>
+    <div id="domains" class="empty">עוד לא נקראו. <button id="btn-domains" type="button">קריאה מהפורטל</button></div>
+  </section>
+
+  <section class="card" aria-labelledby="h-zone">
+    <h2 id="h-zone">אזור DNS</h2>
+    <form class="row" id="zone-form">
+      <label for="zone-domain" class="muted">דומיין</label>
+      <input id="zone-domain" dir="ltr" placeholder="digital-office.co.il" required>
+      <button type="submit">קריאת האזור</button>
+    </form>
+    <div id="zone" class="empty"></div>
+  </section>
+
+  <section class="card" aria-labelledby="h-flow">
+    <h2 id="h-flow">מה קרה</h2>
+    <ul class="events" id="events"><li class="empty">אין אירועים עדיין</li></ul>
+  </section>
+</main>
+<script>
+// Relative to the page, never to <base>: the console injects <base href="/a/<alias>/"> (DGO-1418).
+const at = (p) => new URL(p, location.href).toString();
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+async function api(path, opts) {
+  try { const r = await fetch(at(path), opts); return await r.json(); }
+  // the chip says it in Hebrew («האפליקציה לא עונה»); the engine's own words («SyntaxError: Unexpected token '<'…»
+  // when a sign-in page answers instead of the app) are one hover away, never the line under it (DGO-1593)
+  catch (e) { return {ok: false, state: "unreachable", error: "", detail: String(e)}; }
+}
+const STATES = {ok: ["מחובר", "ok"], needs_human_login: ["לא מחובר", "warn"], session_expired: ["הסשן פג", "warn"],
+  blocked: ["חסימת בוטים", "bad"], browser_unavailable: ["הדפדפן לא זמין", "bad"], captcha: ["captcha — נדרש אדם", "bad"],
+  needs_mail_code: ["ממתין לקוד מהמייל", "warn"], login_failed: ["הסיסמה נדחתה", "bad"],
+  credential_not_configured: ["אין פרטי כניסה", "warn"], unreachable: ["האפליקציה לא עונה", "bad"],
+  provider_unavailable: ["הספק לא זמין", "bad"], selector_missing: ["הדף השתנה", "bad"]};
+function chip(state, extra) {
+  const [label, cls] = STATES[state] || [state || "לא ידוע", "warn"];
+  return `<span class="chip ${cls}">${esc(label)}</span>${extra ? ` <span class="muted">${esc(extra)}</span>` : ""}`;
+}
+async function refresh() {
+  const st = await api("api/state");
+  const s = st.session || {};
+  const cred = (st.credential || {}).rows || [];
+  const w = st.write || {};
+  $("session").innerHTML = chip(s.authenticated ? "ok" : (s.state || st.state), s.url || "") +
+    ` <span class="chip ${cred.length ? "ok" : "warn"}">${cred.length ? "פרטי כניסה שמורים" : "אין פרטי כניסה"}</span>` +
+    ` <span class="chip ${w.enabled ? "ok" : "warn"}">${w.enabled ? "הלשכה כותבת רשומות לבד" : "כתיבה ראשונה דורשת אישור"}</span>`;
+  $("session-why").textContent = s.authenticated ? "" : (s.reason || st.error || "");
+  $("session-why").title = st.detail || "";
+  loadEvents();
+}
+async function loadEvents() {
+  const f = await api("api/flow?n=15");
+  const ev = f.events || [];
+  $("events").innerHTML = ev.length ? ev.map((e) => `<li><span class="muted">${esc((e.at || "").replace("T", " ").slice(0, 16))}</span> · ${esc(e.title)}</li>`).join("")
+    : `<li class="empty">אין אירועים עדיין</li>`;
+}
+$("btn-refresh").onclick = refresh;
+$("btn-login").onclick = async () => {
+  $("btn-login").disabled = true; $("session-why").textContent = "מתחבר — עד שתי דקות אם הפורטל שולח קוד במייל…";
+  const r = await api("api/login", {method: "POST"});
+  $("btn-login").disabled = false;
+  $("session-why").textContent = r.ok ? (r.already_signed_in ? "כבר מחובר." : "התחברות הצליחה.") : (r.reason || r.error || (STATES[r.state] || [])[0] || r.state);
+  $("session-why").title = r.ok ? "" : (r.detail || "");
+  refresh();
+};
+$("btn-domains").onclick = async () => {
+  $("domains").textContent = "קורא מהפורטל…";
+  const r = await api("api/domains");
+  if (!r.ok) { $("domains").innerHTML = chip(r.state, r.error || r.reason); return; }
+  const rows = r.domains || [];
+  $("domains").innerHTML = rows.length ? `<table><thead><tr><th>דומיין</th><th>תוקף</th><th>שרתי שמות</th></tr></thead><tbody>` +
+    rows.map((d) => `<tr><td class="mono">${esc(d.name)}</td><td>${esc(d.expiry_iso || d.expiry || "")}</td><td class="mono">${esc((d.nameservers || []).join(" "))}</td></tr>`).join("") + `</tbody></table>`
+    : `<div class="empty">אין דומיינים בחשבון</div>`;
+};
+$("zone-form").onsubmit = async (ev) => {
+  ev.preventDefault();
+  const d = $("zone-domain").value.trim();
+  // the domain whose zone is read is the page's own address (`?zone=<domain>`), read on load below: the console
+  // mirrors it (`#/m/domain-internic?zone=<domain>`), so one domain's records can be linked and sent (G83)
+  const u = new URL(location.href);
+  u.searchParams.set("zone", d);
+  if (u.href !== location.href) history.replaceState(null, "", u.href);
+  $("zone").textContent = "קורא את עורך האזור…";
+  const r = await api("api/zones/" + encodeURIComponent(d));
+  if (!r.ok) { $("zone").innerHTML = chip(r.state, r.error || r.reason); return; }
+  const recs = r.records || [];
+  $("zone").innerHTML = `<table><thead><tr><th>סוג</th><th>שם</th><th>ערך</th><th>TTL</th></tr></thead><tbody>` +
+    recs.map((x) => `<tr><td>${esc(x.type)}</td><td class="mono">${esc(x.name)}</td><td class="mono">${esc(x.content ?? x.value)}</td><td>${esc(x.ttl)}</td></tr>`).join("") + `</tbody></table>`;
+};
+refresh();
+// a link to one domain's zone (`?zone=<domain>`) opens on that zone: the same read as the form's
+{
+  const z = new URL(location.href).searchParams.get("zone");
+  if (z) { $("zone-domain").value = z; $("zone-form").requestSubmit(); }
+}
+</script>
+</body>
+</html>

@@ -1014,7 +1014,7 @@ let where = '1=1';
 // [schema-per-instance 2026-08-27] see the note on Build Get All SQL — 'public' is the migration
 // fallback, not a default instance, and it goes when the compatibility views do.
 // GET IS BATCH-SHAPED, so the instance can legitimately arrive PER ROW rather than at the top
-// level: indoxV2Driver01 sends filters:[{ID:...,__instance:'hacohen'},...]. Reading only the top
+// level: indoxV2Driver01 sends filters:[{ID:...,__instance:'example'},...]. Reading only the top
 // level made a fully-migrated, correctly tenant-aware caller fail closed -- the same class of
 // mistake as conflating "instance" with "__instance" earlier today: right rule, wrong field.
 // Lift it from the rows when they AGREE. Rows that disagree are a genuinely unsafe request (one
@@ -1181,7 +1181,7 @@ const j=$json; const t=String(j.table||''); if(!ALLOW[t]) throw new Error('table
 const inst=(j.instance===undefined||j.instance===null)?'':String(j.instance);
 if(INSTANCE[t] && !inst) throw new Error('read of public.'+t+" needs an \`instance\` (or instance:'*' to read across all of them) — without one this returns another instance's config");
 // [schema-per-instance 2026-08-27] The instance's data lives in its own schema. A caller that
-// knows which instance it is acting for passes \`__instance\` (the instance id, e.g. 'hacohen' —
+// knows which instance it is acting for passes \`__instance\` (the instance id, e.g. 'example' —
 // NOT the schema); anything that does not yet falls back
 // to \`public\`, where compatibility VIEWS point at the live instance. That fallback is scaffolding
 // for the migration, not a default instance — it disappears with the views in the same change that

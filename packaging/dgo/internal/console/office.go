@@ -9,8 +9,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/solomonBoltin/deployment-hacohen/packaging/dgo/internal/compiler"
-	"github.com/solomonBoltin/deployment-hacohen/packaging/dgo/internal/yamlish"
+	"github.com/bina-solution/digital-office/packaging/dgo/internal/compiler"
+	"github.com/bina-solution/digital-office/packaging/dgo/internal/yamlish"
 )
 
 // officeRecord is app.py's _office_record(): this office's record as app-management keeps it —

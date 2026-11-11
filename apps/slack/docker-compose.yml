@@ -1,0 +1,144 @@
+# slack — Slack's own Linux client wrapped as an app of the office (DGO-1264; ai/context/wrapped-official-app.md).
+# Three services and one volume, from apps/_template-wrapped:
+#   slack-desktop       Slack under Selkies: the screen (routing.service in app.json). amd64 only (Dockerfile.desktop)
+#   slack-desktop-home  one shot that makes the desktop's and the adapter's folders in the volume before they mount
+#   slack               the adapter over Slack's Web API: the API and the CLI (chat.v1)
+#   slack_home          the ONE volume (data.volumes): `desktop` is the desktop's home, `adapter` the adapter's own
+#                       token, the only part the adapter mounts
+# The caps are a start: measure the client on an office, and write what was measured beside them.
+services:
+  slack-desktop:
+    image: ghcr.io/bina-solution/digital-office/slack-desktop:${IMAGE_TAG:-latest}
+    pull_policy: missing
+    build:
+      context: .
+      dockerfile: Dockerfile.desktop
+    container_name: slack-desktop-${DEPLOYMENT_NAME:-bina-deployment}
+    restart: unless-stopped
+    environment:
+      - PUID=1000
+      - PGID=1000
+      # nginx on the container's loopback (Dockerfile.desktop); the front door, desktop/gate.mjs, holds :3000.
+      - CUSTOM_PORT=3100
+      - CUSTOM_HTTPS_PORT=3101
+      - TZ=${TZ:-Asia/Jerusalem}
+      - TITLE=Slack
+      - SELKIES_UI_TITLE=Slack
+      - SELKIES_UI_SHOW_LOGO=false
+      - PIXELFLUX_WAYLAND=false     # X11 (Xvfb + Openbox): the road Electron clients are known to walk
+      - NO_DECOR=true
+      - SUBFOLDER=/                 # at the root: this console's /a/slack/ and a linked office's shared host
+      # Who may frame it: this console, plus each linked office's console that shows the tile (per office in
+      # .env, the whole value in DOUBLE quotes — bina-claude's compose says why).
+      - SELKIES_FRAME_ANCESTORS=${SLACK_FRAME_ANCESTORS:-'self'}
+      - SELKIES_ENABLE_RESIZE=true
+      - SELKIES_ENABLE_CLIPBOARD=true
+      - PASSWORD=                   # the office's sign-in is the door; never a second password
+      - START_DOCKER=false
+      - DEPLOYMENT_NAME=${DEPLOYMENT_NAME:-bina-deployment}
+    volumes:
+      - type: volume
+        source: slack_home
+        target: /config
+        volume:
+          subpath: desktop
+    depends_on:
+      slack-desktop-home:
+        condition: service_completed_successfully
+    shm_size: 1gb                   # Chromium and Electron renderers share memory through /dev/shm
+    networks: [traefik-network]
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "-o", "/dev/null", "http://127.0.0.1:3000/"]
+      interval: ${HEALTHCHECK_INTERVAL:-30s}
+      timeout: ${HEALTHCHECK_TIMEOUT:-8s}
+      retries: 5
+      start_period: 60s
+    deploy:
+      resources:
+        limits:
+          cpus: '${SLACK_DESKTOP_CPUS:-1}'
+          memory: ${SLACK_DESKTOP_MEMORY:-2g}
+    logging:
+      driver: ${LOGGING_DRIVER:-json-file}
+      options:
+        max-size: 5m
+        max-file: '3'
+
+  # The homes, made before they are mounted: Docker refuses a subpath that does not exist, and a container whose
+  # start failed stays Created for good. No container_name: a fixed name collides on a re-run.
+  # It runs from the ADAPTER's image (python-slim, every architecture), as root: the desktop's image is amd64
+  # only, and the adapter must not depend on it to start.
+  slack-desktop-home:
+    image: ghcr.io/bina-solution/digital-office/slack:${IMAGE_TAG:-latest}
+    pull_policy: missing
+    user: "0:0"
+    restart: "no"
+    entrypoint: ["/bin/sh", "-c"]
+    command: ["mkdir -p /config/desktop /config/adapter && chown 1000:1000 /config/desktop /config/adapter && chmod 700 /config/adapter"]
+    # nocopy: this can be the volume's first mount, and Docker would copy the image's own /config into its root
+    volumes:
+      - type: volume
+        source: slack_home
+        target: /config
+        volume:
+          nocopy: true
+    network_mode: none
+    deploy:
+      resources:
+        limits:
+          cpus: '0.1'
+          memory: 32m
+    logging:
+      driver: ${LOGGING_DRIVER:-json-file}
+      options:
+        max-size: 1m
+        max-file: '2'
+
+  slack:
+    image: ghcr.io/bina-solution/digital-office/slack:${IMAGE_TAG:-latest}
+    pull_policy: missing
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: slack-${DEPLOYMENT_NAME:-bina-deployment}
+    restart: unless-stopped
+    environment:
+      - SLACK_STATE=/data/adapter
+      - SLACK_HTTP_TIMEOUT=30
+      - SLACK_ADAPTER_PORT=3094
+      - REDIS_PASSWORD=${REDIS_PASSWORD:-}   # the office's one publisher writes dgo:flow:slack (flowpub.py)
+    # Only the volume's `adapter` folder: the adapter must NOT see `desktop/`, the screen's keyring and session.
+    volumes:
+      - type: volume
+        source: slack_home
+        target: /data/adapter
+        volume:
+          subpath: adapter
+      - ../../platform-base/redis/flowpub.py:/opt/dgo/flowpub.py:ro
+    depends_on:
+      slack-desktop-home:
+        condition: service_completed_successfully
+    networks: [traefik-network]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:3094/v1/health', timeout=5)"]
+      interval: ${HEALTHCHECK_INTERVAL:-30s}
+      timeout: ${HEALTHCHECK_TIMEOUT:-8s}
+      retries: 3
+      start_period: 10s
+    deploy:
+      resources:
+        limits:
+          cpus: '${SLACK_CPUS:-0.25}'
+          memory: ${SLACK_MEMORY:-96m}
+    logging:
+      driver: ${LOGGING_DRIVER:-json-file}
+      options:
+        max-size: 5m
+        max-file: '3'
+
+volumes:
+  slack_home:
+
+networks:
+  traefik-network:
+    external: true

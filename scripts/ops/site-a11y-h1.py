@@ -23,7 +23,7 @@ import shutil
 import sys
 
 SITE = os.environ.get("SITE_DIR", "/opt/bina-sites/digital-office/site")
-PUBLIC = os.environ.get("SITE_PUBLIC", "/var/lib/docker/volumes/deployment-hacohen_sites_state/_data/public/digital-office")
+PUBLIC = os.environ.get("SITE_PUBLIC", "/var/lib/docker/volumes/digital-office_sites_state/_data/public/digital-office")
 BACKUP = os.environ.get("SITE_BACKUP", "/root/site-a11y-backup")
 PAGES = ("features.html", "business-model.html", "vision.html", "about.html")
 SR_ONLY = ".sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;border:0}\n"

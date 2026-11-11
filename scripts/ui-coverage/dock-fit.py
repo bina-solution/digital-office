@@ -15,7 +15,12 @@ budget is only true if someone measures the rendered row. This does, at the widt
   · every app reachable: the apps the dock did not draw are in the «עוד» door's panel, every panel
     tile is inside the panel's box, and clicking one opens it (a window, or the app's own host);
   · the dock's own size does not change with the estate: same width for 0 apps and for 40
-    (the property that makes the next install a non-event).
+    (the property that makes the next install a non-event);
+  · and the SCREEN it sits on is whole at every width from 360 up (DGO-1637): the menu bar on the
+    screen with no item cut, a desk opened wide and then narrowed in place (`--narrow`) keeping its
+    bar, its search and a dock inside the screen with Files under ONE bar, and a phone (`--phones`)
+    with no sideways scroll. `--static-from <checkout>` serves a commit's console and Files static
+    files to the live console's page — a before/after pair with no deploy.
 
 It needs a browser and a reachable console: the ui-capture image has both
 (`scripts/ui-coverage/Dockerfile`), e.g.
@@ -41,6 +46,9 @@ if hasattr(sys.stdout, "reconfigure"):
     sys.stderr.reconfigure(encoding="utf-8", errors="replace")
 
 DEFAULT_WIDTHS = ["1294x810", "1440x900", "1920x1080"]
+#: DGO-1637's acceptance: every width from 360 up — a desk narrowed in place, and a phone from the start
+DEFAULT_NARROW = ["1100x800", "900x760", "700x760", "390x844", "360x780"]
+DEFAULT_PHONES = ["390x844", "360x780"]
 #: How long a console gets to mount the desktop, in each viewport.
 READY_S = 25.0
 
@@ -92,6 +100,243 @@ PROBES = """
 
 HITS = "() => [...document.querySelectorAll('.dk-more .htile')].map(e => e.dataset.mid)"
 
+#: DGO-1637 — the desk on a screen NARROWER than it was opened at («התפריט … נחתך באמצע ברגע שהמסך
+#: צר מדי, זה באג»). Compact hid the bar (search and menus gone), kept the wide dock as a sideways
+#: scroller cut at the screen's edge, and let Files draw its phone tabs above the dock: two bars. What
+#: must hold at every width: the page does not scroll sideways; the bar is on the screen with the
+#: office's mark and the search, and no item of it is cut; the dock is inside the screen and is no
+#: scroller; the focused app draws no phone tabs of its own under the shell's bars.
+NARROW = """
+() => {
+  const vw = innerWidth, box = e => e.getBoundingClientRect();
+  const shown = e => !!e && e.offsetWidth > 0 && e.offsetHeight > 0 && getComputedStyle(e).visibility !== 'hidden';
+  const bar = document.querySelector('.dk-bar'), dock = document.querySelector('.dk-dock');
+  const b = shown(bar) ? box(bar) : null;
+  const items = b ? [...bar.children].filter(e => !e.classList.contains('dk-grow') && shown(e)) : [];
+  const cut = b ? items.filter(e => { const r = box(e);
+      return r.left < Math.max(0, b.left) - .5 || r.right > Math.min(vw, b.right) + .5; })
+    .map(e => (e.className || e.tagName) + ':' + (e.textContent || '').trim().slice(0, 12)) : [];
+  const tiles = dock ? [...dock.querySelectorAll('.dk-ic')] : [];
+  const d = shown(dock) ? box(dock) : null;
+  let tabs = null;                  // null: the focused window's page could not be read (another host)
+  try { const f = document.querySelector('.dk-win.focused iframe'), doc = f && f.contentDocument;
+        if (doc && doc.querySelector('.fx')) tabs = !!doc.querySelector('.fx-tabs'); } catch (e) { /* ignore */ }
+  return { compact: !!document.querySelector('.dk.compact'),
+           hscroll: document.documentElement.scrollWidth > vw + 1,
+           bar: !!b, mark: shown(bar && bar.querySelector('.dk-logo')), search: shown(bar && bar.querySelector('.dk-srch')),
+           cut: cut, barOverflow: b ? bar.scrollWidth > bar.clientWidth + 1 : null,
+           folds: bar ? [...bar.classList].filter(c => /^f-/.test(c)) : [],
+           dock: !!d, dockIn: d ? d.left >= -.5 && d.right <= vw + .5 : false,
+           // a scroller is a box that SCROLLS: the tiles' tooltips overhang the pill by design (MEASURE)
+           dockScrolls: dock ? /auto|scroll/.test(getComputedStyle(dock).overflowX) && dock.scrollWidth > dock.clientWidth + 1 : null,
+           offScreen: tiles.filter(e => { const r = box(e); return r.left < -.5 || r.right > vw + .5; }).length,
+           appTabs: tabs };
+}
+"""
+
+#: The office's mark menu, opened: whole inside the screen, and what it offers.
+MARK_MENU = """
+() => { const m = document.querySelector('.dk-menu'); if (!m) return null; const r = m.getBoundingClientRect();
+  return { inside: r.left >= -.5 && r.right <= innerWidth + .5 && r.bottom <= innerHeight + .5,
+           items: [...m.querySelectorAll('[role=menuitem]')].map(e => e.textContent.trim()) }; }
+"""
+
+#: The classic shell on a screen that is narrow from the start (a phone): no sideways scroll, the
+#: search whole on the screen, and Files with ONE bar at the bottom (the office's, DGO-1507).
+PHONE = """
+() => { const vw = innerWidth, s = document.querySelector('#paletteBtn'), r = s && s.getBoundingClientRect();
+  let tabs = null;
+  try { const doc = document.querySelector('#frame').contentDocument;
+        if (doc && doc.querySelector('.fx')) tabs = !!doc.querySelector('.fx-tabs'); } catch (e) { /* ignore */ }
+  return { desk: !!document.querySelector('.dk'), hscroll: document.documentElement.scrollWidth > vw + 1,
+           search: !!r && r.width > 0 && r.left >= -.5 && r.right <= vw + .5, appTabs: tabs }; }
+"""
+
+
+def bar_problems(m: dict) -> list[str]:
+    """What NARROW says is wrong with the bar and the dock, in words."""
+    out = []
+    if m["hscroll"]:
+        out.append("the page scrolls sideways")
+    if not (m["bar"] and m["mark"] and m["search"]):
+        out.append(f"the bar is not on the screen whole (bar {m['bar']}, mark {m['mark']}, search {m['search']})")
+    if m["cut"] or m["barOverflow"]:
+        out.append(f"the bar is cut: {m['cut'][:4]}")
+    if not (m["dock"] and m["dockIn"]) or m["offScreen"]:
+        out.append(f"the dock is not inside the screen ({m['offScreen']} tile(s) off it)")
+    if m["dockScrolls"]:
+        out.append("the dock is a sideways scroller")
+    return out
+
+
+def _wanted(entry: str, name: str, path: str) -> bool:
+    """An --static-only entry: a bare name matches a file of that name; one with a `/` is a served path
+    (without its leading slash), and a trailing `*` makes it a prefix."""
+    if "/" not in entry:
+        return name == entry
+    served = path.lstrip("/")
+    return served.startswith(entry[:-1]) if entry.endswith("*") else served == entry
+
+
+def static_router(root: str, console_url: str, as_user: str = "", only: frozenset = frozenset()):
+    """Serve the console's and Files' static files from a CHECKOUT instead of the console answering —
+    so one live console shows what a commit's screens do (a before/after pair: the base commit, then
+    the change), with no deploy. Files' own page (index.html) stays the app's: its server marks it.
+    Only the console's own host is answered: an app on its own host keeps its own files.
+
+    `as_user`: the console on its own address has nobody signed in, so it lists no apps and no window
+    can be opened (`apps 0`). The edge's forward-auth names the person in `X-authentik-username`; this
+    names a PROOF user the same way, on GET/HEAD to the console's host only — a read-only look, never
+    a write in anybody's name.
+
+    `only`: serve just these from the checkout — a file NAME (`desktop.js`), or a served PATH, `*` closing a
+    prefix (`a/drive/*` = all of Files' static). A checkout's WHOLE console beside another office's server is
+    not that office: measured on vps1, mac-dgo's app.js and index.html against vps1-dgo's server failed every
+    API call («Failed to fetch»), so the shell listed no app — while the change under test was two files.
+    Name the files the change touched (a bare `app.js` would be the console's AND Files' — use a path)."""
+    base = pathlib.Path(root).resolve() if root else None
+    con = base / "platform-base/console/static" if base else None
+    drv = base / "apps/drive/static" if base else None
+    from urllib.parse import urlparse
+    host = urlparse(console_url).netloc
+
+    def handle(route):
+        u = urlparse(route.request.url)
+        if u.netloc != host:
+            route.continue_()
+            return
+        p = u.path
+        f = None
+        if base and p.startswith("/a/drive/"):
+            rest = p[len("/a/drive/"):]
+            if rest and not rest.endswith(".html"):
+                f = drv / rest
+        elif base and p.count("/") == 1:
+            f = con / (p[1:] or "index.html")
+        if f is not None and (not only or any(_wanted(o, f.name, p) for o in only)):
+            f = f.resolve()
+            if f.is_file() and (con in f.parents or drv in f.parents):
+                route.fulfill(path=str(f))
+                return
+        if as_user and route.request.method in ("GET", "HEAD"):
+            route.continue_(headers={**route.request.headers, "x-authentik-username": as_user})
+            return
+        route.continue_()
+    return handle
+
+
+def narrowed(browser, url: str, sizes: list[str], keep: str, route) -> int:
+    """A desk opened wide with Files in a window, then the screen made narrower step by step — the
+    owner's own move (MEET-28, 43:58). Returns how many widths failed."""
+    failed = 0
+    ctx = browser.new_context(viewport={"width": 1440, "height": 900})
+    if route:
+        ctx.route("**/*", route)
+    page = ctx.new_page()
+    errors: list[str] = []
+    page.on("pageerror", lambda e: errors.append(str(e)))
+    page.goto(url, wait_until="domcontentloaded", timeout=45000)
+    try:
+        page.wait_for_function("!!window.BinaDesktop", timeout=int(READY_S * 1000))
+        page.evaluate("window.BinaDesktop.enable()")
+        page.wait_for_selector(".dk-dock .dk-ic", timeout=int(READY_S * 1000))
+    except Exception as e:                                      # noqa: BLE001 — reported, not raised
+        print(f"FAIL  narrowed · the desktop never mounted a dock: {type(e).__name__}")
+        ctx.close()
+        return len(sizes)
+    # The shell lists its apps only once its boot has asked the office (and its linked offices) who it
+    # is — tens of seconds on a herd's centre (measured on the HP: the dock mounted with `apps 0` while
+    # /api/modules answered 57). Waited for here, so the window the owner had open is really opened.
+    try:
+        page.wait_for_function("typeof MODULES !== 'undefined' && Array.isArray(MODULES) && MODULES.length > 0",
+                               timeout=45000)
+    except Exception:                                           # noqa: BLE001 — said in the line below
+        print("NOTE  narrowed · the shell listed no app within 45 s — the app in the window is not measured")
+    app = page.evaluate("""() => { const all = typeof MODULES !== 'undefined' && Array.isArray(MODULES) ? MODULES : [];
+        const m = all.find(x => x.id === 'drive') || all.find(x => x.embed);
+        if (m) window.BinaDesktop.openModule(m, ''); return m ? m.id : null; }""")
+    page.wait_for_timeout(3000)                                 # the app's page loads and offers its search
+    for spec in sizes:
+        # one width that breaks (a click or a load that times out) is that width's FAIL, not the run's end
+        try:
+            failed += narrow_one(page, spec, keep, app, errors)
+        except Exception as e:                                  # noqa: BLE001 — reported, not raised
+            failed += 1
+            print(f"FAIL  narrowed 1440→{spec} · the measurement broke: {type(e).__name__}: {str(e)[:160]}")
+    ctx.close()
+    return failed
+
+
+def narrow_one(page, spec: str, keep: str, app: str, errors: list[str]) -> int:
+    w, _, h = spec.partition("x")
+    page.set_viewport_size({"width": int(w), "height": int(h or 800)})
+    page.wait_for_timeout(900)                                  # the resize's debounce, then the bar's fit
+    if keep:
+        page.screenshot(path=str(pathlib.Path(keep) / f"narrowed-{spec}.png"))
+    m = page.evaluate(NARROW)
+    problems = bar_problems(m)
+    if int(w) < 1024 and not m["compact"]:
+        problems.append("the desk did not go compact below 1024")
+    if m["compact"] and m["appTabs"]:           # (a wide desk's window may have its own: it is a window)
+        problems.append(f"`{app}` draws its own phone tabs above the dock: two bars")
+    # the mark's menu — only when the mark is on the screen at all (bar_problems already said it is not)
+    if m["mark"]:
+        page.click(".dk-bar .dk-logo")
+        page.wait_for_timeout(250)
+        if keep:
+            page.screenshot(path=str(pathlib.Path(keep) / f"narrowed-menu-{spec}.png"))
+        mm = page.evaluate(MARK_MENU)
+        if not mm or not mm["inside"]:
+            problems.append("the mark's menu is not whole inside the screen")
+        elif "f-menus" in m["folds"] and not any(t.startswith("חלון") for t in mm["items"]):
+            problems.append("the bar folded its menus and the mark's menu does not offer them")
+        if mm:
+            page.click(".dk-bar .dk-logo")                      # the same press closes it
+            page.wait_for_timeout(150)
+    if errors:
+        problems.append(f"JS errors: {errors[:2]}")
+        errors.clear()
+    print(f"{'PASS' if not problems else 'FAIL'}  narrowed 1440→{spec} · compact {m['compact']}, folds "
+          f"{','.join(m['folds']) or '—'}, app `{app}` own tabs {m['appTabs']}")
+    for pr in problems:
+        print(f"        {pr}")
+    return 1 if problems else 0
+
+
+def phone(browser, url: str, sizes: list[str], keep: str, route) -> int:
+    """The classic shell at a phone's width from the start, Files open. Returns how many failed."""
+    failed = 0
+    for spec in sizes:
+        w, _, h = spec.partition("x")
+        ctx = browser.new_context(viewport={"width": int(w), "height": int(h or 800)}, is_mobile=True, has_touch=True)
+        if route:
+            ctx.route("**/*", route)
+        try:
+            page = ctx.new_page()
+            page.goto(url + "#/m/drive", wait_until="domcontentloaded", timeout=45000)
+            page.wait_for_timeout(4000)
+            if keep:
+                page.screenshot(path=str(pathlib.Path(keep) / f"phone-{spec}.png"))
+            m = page.evaluate(PHONE)
+        except Exception as e:                                  # noqa: BLE001 — that width's FAIL
+            failed += 1
+            print(f"FAIL  phone {spec} · the measurement broke: {type(e).__name__}: {str(e)[:160]}")
+            ctx.close()
+            continue
+        problems = []
+        if m["hscroll"]:
+            problems.append("the page scrolls sideways")
+        if not m["search"]:
+            problems.append("the search is not whole on the screen")
+        if m["appTabs"]:
+            problems.append("Files draws its own phone tabs above the office's: two bars")
+        failed += 1 if problems else 0
+        print(f"{'PASS' if not problems else 'FAIL'}  phone {spec} · desk {m['desk']}, Files own tabs {m['appTabs']}")
+        for pr in problems:
+            print(f"        {pr}")
+        ctx.close()
+    return failed
+
 #: A window's three controls, as drawn. In a right-to-left bar the group sits at the bar's start (its
 #: right end) and the first control in the DOM is the outermost: x FALLS along the DOM order.
 LIGHTS = """
@@ -140,7 +385,8 @@ def chrome_path():
     return None
 
 
-def run(url: str, widths: list[str], keep: str) -> int:
+def run(url: str, widths: list[str], keep: str, narrow: list[str] = (), phones: list[str] = (),
+        static_from: str = "", as_user: str = "", static_only: frozenset = frozenset()) -> int:
     try:
         from playwright.sync_api import sync_playwright
     except ImportError:
@@ -150,6 +396,9 @@ def run(url: str, widths: list[str], keep: str) -> int:
 
     failed = 0
     exe = chrome_path()
+    route = static_router(static_from, url, as_user, static_only) if (static_from or as_user) else None
+    if keep:
+        pathlib.Path(keep).mkdir(parents=True, exist_ok=True)
     with sync_playwright() as p:
         launch = {"args": ["--no-sandbox"]}
         if exe:
@@ -158,6 +407,8 @@ def run(url: str, widths: list[str], keep: str) -> int:
         for spec in widths:
             w, _, h = spec.partition("x")
             ctx = browser.new_context(viewport={"width": int(w), "height": int(h or 800)})
+            if route:
+                ctx.route("**/*", route)
             page = ctx.new_page()
             errors: list[str] = []
             page.on("pageerror", lambda e: errors.append(str(e)))
@@ -176,7 +427,10 @@ def run(url: str, widths: list[str], keep: str) -> int:
                 pathlib.Path(keep).mkdir(parents=True, exist_ok=True)
                 page.screenshot(path=str(pathlib.Path(keep) / f"dock-{spec}.png"))
             m = page.evaluate(MEASURE)
-            problems = []
+            # …and the bar above it is whole (DGO-1637) — once it has settled into its pill (a 350 ms
+            # timer, then a 550 ms transition): mid-way it is still wider than it will be
+            page.wait_for_timeout(1000)
+            problems = bar_problems(page.evaluate(NARROW))
             if m["overflows"]:
                 problems.append(f"the row is {m['row']:.0f}px inside a {m['box']:.0f}px pill")
             if m["outside"]:
@@ -269,8 +523,13 @@ def run(url: str, widths: list[str], keep: str) -> int:
             for pr in problems:
                 print(f"        {pr}")
             ctx.close()
+        if narrow:
+            failed += narrowed(browser, url, list(narrow), keep, route)
+        if phones:
+            failed += phone(browser, url, list(phones), keep, route)
         browser.close()
-    print(f"\n{len(widths) - failed}/{len(widths)} widths passed")
+    total = len(widths) + len(narrow) + len(phones)
+    print(f"\n{total - failed}/{total} widths passed")
     return 1 if failed else 0
 
 
@@ -278,10 +537,21 @@ def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--url", default=os.environ.get("DOCK_FIT_URL", "http://console:8000/"))
     ap.add_argument("--widths", default=",".join(DEFAULT_WIDTHS))
+    ap.add_argument("--narrow", default=",".join(DEFAULT_NARROW),
+                    help="widths a desk opened at 1440 is narrowed to, in turn ('' = none)")
+    ap.add_argument("--phones", default=",".join(DEFAULT_PHONES),
+                    help="phone widths the classic shell is opened at, Files in front ('' = none)")
+    ap.add_argument("--static-from", default="",
+                    help="a checkout whose console and Files static files are served instead of the console's")
+    ap.add_argument("--as-user", default=os.environ.get("DOCK_FIT_AS_USER", ""),
+                    help="a proof user named to the console (GET/HEAD only), so it lists apps and opens windows")
+    ap.add_argument("--static-only", default="",
+                    help="with --static-from: serve only these file names (the files the change under test touched)")
     ap.add_argument("--screenshots", default="")
     a = ap.parse_args()
-    widths = [x.strip() for x in a.widths.split(",") if x.strip()]
-    return run(a.url.rstrip("/") + "/", widths, a.screenshots)
+    split = lambda s: [x.strip() for x in s.split(",") if x.strip()]   # noqa: E731
+    return run(a.url.rstrip("/") + "/", split(a.widths), a.screenshots, split(a.narrow), split(a.phones),
+               a.static_from, a.as_user, frozenset(split(a.static_only)))
 
 
 if __name__ == "__main__":

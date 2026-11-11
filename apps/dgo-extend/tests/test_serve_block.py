@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
-"""test_serve_block — an office that links to nobody is served nothing (FPG-8).
+"""test_serve_block — an office that links to nobody is served nothing (EXF-8).
 
 `converge._serve_block` writes the `serve:` list into the PEER's platform.state.yaml: the apps of this
 office the peer may open. It read the link's direction with a `use` default, and for an office with NO
-link that default mirrored to `serve` — fireplace, a client's office declared with no link at all, was
+link that default mirrored to `serve` — examplef, a client's office declared with no link at all, was
 handed the Mac's bina tile at an address of a pair it is not in (measured 2026-10-22, state step:
-«מוגשות ללשכה fireplace: bina (10.79.2.1:3080)»).
+«מוגשות ללשכה examplef: bina (10.79.2.1:3080)»).
 
 Run: python3 apps/dgo-extend/tests/test_serve_block.py  (inside the app's image, or with its deps)
 """
@@ -29,7 +29,7 @@ def check(cond, what):
 
 
 def main() -> int:
-    alone = {"id": "fireplace", "path": "/opt/digital-office/fireplace"}
+    alone = {"id": "examplef", "path": "/opt/digital-office/examplef"}
     check(converge._serve_block(alone, HOME) == [], "an office with no link is served nothing")
     check(converge._serve_block({**alone, "links": []}, HOME) == [], "…nor one with an empty link list")
     check(converge._serve_block({**alone, "links": [{"office": "hp-laptop", "direction": "use"}]}, HOME) == [],

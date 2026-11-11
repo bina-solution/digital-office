@@ -1,0 +1,69 @@
+#!/usr/bin/env bash
+#: «קבצים» from the shell — every drive of the office (a profile of its storage, a Google account), by path:
+#:   ./bbox drive profile list                      every drive, and the default (*)
+#:   ./bbox drive -p person30@example.com files list /עבודה
+#:   ./bbox drive -p admin folders list · tree · file <path> · find <text> · link <path> · storage
+#:   ./bbox drive -p admin get "/הקלטות/x.m4a" [dest]   ·   put ./doc.pdf /מסמכים/ [--replace]
+#:   ./bbox drive -p admin mkdir · mv <path> <folder> · rename <path> <name> · rm <path> · restore <name>
+#:   ./bbox drive help                              all of it (apps/drive/cli.py)
+#
+# The app's one door to the shell (app.json `cli.fallback`): `bbox drive <anything>` and `dgo drive <anything>`
+# that is not a hook of its own lands here, `-p <drive>` first or anywhere. apps/drive/cli.py is run from the
+# checkout (no image rebuild) inside the office network — in the drive's own container when this office runs
+# the drive, else in the credential plane's container (every office has one, on the office network where the
+# link's names resolve) against the door of the office the herd names (scripts/herd_home.py): from the MacBook,
+# the HP's drive. Bytes stream through stdin/stdout, so `get` and `put` take any size.
+set -uo pipefail
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
+. "${REPO_ROOT}/scripts/lib.sh"
+CLI="$(npath "${REPO_ROOT}")/apps/drive/cli.py"
+
+# the verb and the -p word, wherever they stand; everything else travels as it was typed
+ARGS=("$@"); VERB=""; skip=""
+for a in "${ARGS[@]}"; do
+  if [ -n "${skip}" ]; then skip=""; continue; fi
+  case "${a}" in -p|--profile|--drive) skip=1 ;; -*) ;; *) VERB="${a}"; break ;; esac
+done
+[ -n "${VERB}" ] || set -- help "$@"
+
+if running "drive-${DN}"; then
+  IN=drive; API=""
+else
+  WHERE="$(python3 "$(npath "${REPO_ROOT}/scripts/herd_home.py")" drive "$(read_env_value DGO_OFFICE_ID)")"
+  API="${WHERE#* }"; [ "${API}" != "${WHERE}" ] || API=""
+  [ -n "${API}" ] || die "[drive] the drive does not run on this office, and no linked office's drive may be used from here"
+  IN=connections
+  echo "[drive] the drive runs on a linked office — ${API}" >&2
+fi
+run() { dcx exec -T -e "DRIVE_API=${API}" "${IN}" python3 -c "$(cat "${CLI}")" "$@"; }
+
+# the two verbs that move bytes between THIS machine and the drive: a local file is read or written here
+case "${VERB}" in
+  get|download)
+    # bbox drive [-p x] get <remote> [dest]: a destination that is a folder takes the file's own name
+    P=(); REST=(); skip=""
+    for a in "$@"; do
+      if [ -n "${skip}" ]; then P+=("${a}"); skip=""; continue; fi
+      case "${a}" in -p|--profile|--drive) P+=("${a}"); skip=1 ;; get|download) ;; *) REST+=("${a}") ;; esac
+    done
+    src="${REST[0]:-}"; dest="${REST[1]:-}"
+    [ -n "${src}" ] || die "[drive] get needs a /path"
+    [ -n "${dest}" ] || { run ${P[@]+"${P[@]}"} get "${src}"; exit $?; }
+    [ -d "${dest}" ] && dest="${dest%/}/$(basename "${src}")"
+    run ${P[@]+"${P[@]}"} get "${src}" > "${dest}.part" && mv "${dest}.part" "${dest}" \
+      && echo "[drive] ${src} → ${dest} ($(wc -c < "${dest}" | tr -d ' ') bytes)" >&2
+    rc=$?; [ -f "${dest}.part" ] && rm -f "${dest}.part"; exit "${rc}" ;;
+  put|upload)
+    # bbox drive [-p x] put <local file> [remote]: a remote ending in / (or none) keeps the file's name
+    P=(); REST=(); FLAGS=(); skip=""
+    for a in "$@"; do
+      if [ -n "${skip}" ]; then P+=("${a}"); skip=""; continue; fi
+      case "${a}" in -p|--profile|--drive) P+=("${a}"); skip=1 ;; put|upload) ;; --*) FLAGS+=("${a}") ;; *) REST+=("${a}") ;; esac
+    done
+    src="${REST[0]:-}"; dest="${REST[1]:-/}"
+    [ -f "${src}" ] || die "[drive] no such file here: ${src:-<none>}"
+    case "${dest}" in */) dest="${dest}$(basename "${src}")" ;; esac
+    run ${P[@]+"${P[@]}"} put "${dest}" ${FLAGS[@]+"${FLAGS[@]}"} < "${src}"; exit $? ;;
+esac
+run "$@"

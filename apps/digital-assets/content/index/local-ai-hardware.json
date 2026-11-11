@@ -1,0 +1,4040 @@
+{
+ "topic": "local-ai-hardware",
+ "checked": "2026-11-05",
+ "notes": "Checked 2026-11-05. Tier rule: smallest bracket among 8/16/24/32/64 GB that holds memory_gb; anything above 64 GB is '128gb+' (so 12 GB cards sit in '16gb', 36 GB Macs in '64gb', 96 GB in '128gb+'). ILS prices are values read from the opened product/list pages on 2026-11-05 (incl. VAT as shown); Ivory pages say 'prices valid until 05/11/2026' and most GPUs were marked NOT AVAILABLE - the price is a list price, not a buyable one. A search-result summary gave a wrong Zap price (5060 Ti 'from 1,900' vs 3,540 on the page), so all prices come from fetched pages; Zap list entries for Apple/GMKtec were read from list pages. Speeds are not comparable across rows: hardware-corner uses Qwen3/gpt-oss at 4k context (March 2026 page), the Apple rows use llama.cpp's classic Llama 7B pp512/tg128 table, DGX Spark/Strix Halo use gpt-oss-120B pp2048/tg32. Hardware-corner pages mostly do not state a llama.cpp build. LocalScore is a crowd-sourced leaderboard and sometimes disagrees strongly (RTX 5090 66 vs 200 tok/s). 'fits' with grade E is our own size arithmetic. Apple's lineup in the Israeli listings now includes M5 Pro/Max/Ultra and 'M6' minis (iDigital and Zap) - the brief's M4/M3 Ultra parts are shown as older rows. No official USD MSRP page was opened: MSRPs come from Wikipedia (grade D); null where none was seen.\n\nTop-up 2026-11-05: Top-up for the 21-row index; checked 2026-11-05. 29 new rows, built to the same row shape as local-ai-hardware.json. Method: Israeli prices were read from opened Zap model pages (price comparison, grade D), store pages reached through Zap's redirects (1pc.co.il, cell-tec.co.il, pccenter.co.il, mac-kanyon.co.il - grade C) and Ivory product pages (grade C). Zap model pages show no price-update date (only the date the model was added to Zap), so every Zap price is 'seen 2026-11-05'. Zap 'lowest offer' can be a seller with a 7-10 business-day delivery; Eilat in-store-only offers are recorded in the note, never as the price. Prices are what the pages showed, not stock confirmations. Speeds: llama.cpp's own 'Performance of llama.cpp on ...' discussions (CUDA #15013, ROCm #15021, Vulkan #10879, SYCL #23313, Apple #4167, Snapdragon #8273, Arm #30069) - community-submitted Llama 2 7B Q4_0 pp512/tg128 rows, graded C like the existing Apple rows; scoreboard rows are undated, different submitters use different builds, so rows are not comparable across thread types. hardware-corner pages (grade D) add Qwen3 / gpt-oss numbers for NVIDIA cards. Vendor figures (NVIDIA Orin Nano blog, Hailo model zoo) are grade C. Where a speed was measured on a sibling machine (DGX Spark for the ASUS GX10, Surface Laptop 7 for the OmniBook X 14, platform rows for Strix Halo machines, other laptops for the CPU-only row) the row says so. MSRPs come from Wikipedia (grade D). 'fits' marked grade E is our own size arithmetic. Not reachable: iDigital collections for MacBook Air / Mac Studio / Mac mini (HTTP 429), KSP (403), CNX Software, Phoronix and OpenBenchmarking (403), justine.lol (connection refused), amd.com blog (timeout). WebSearch used 6 of the 10 allowed calls. Two suggestions for existing rows: the ASUS ROG Flow Z13 128GB is 14,990 at Priority Computers on Zap (index row has Bug 15,103); the RTX 5060 8GB row can take Zap's 1,990.",
+ "rows": [
+  {
+   "id": "rtx-5060-8gb",
+   "name_he": "NVIDIA GeForce RTX 5060 8GB",
+   "name_en": "NVIDIA GeForce RTX 5060 8GB",
+   "url": null,
+   "category": "gpu",
+   "tier": "8gb",
+   "memory_gb": 8,
+   "memory_kind": "VRAM",
+   "summary_he": "כרטיס כניסה: 8GB מספיקים למודלים של 7-9B בכימות Q4, אבל לא למודלים גדולים או להקשר ארוך. נתוני המהירות מבלוג בלבד, באמינות נמוכה.",
+   "why_israeli": "No Israeli listing was opened this session, so no ILS price.",
+   "price_ils": null,
+   "price_usd_msrp": {
+    "amount": 299,
+    "currency": "USD",
+    "source_url": "https://en.wikipedia.org/wiki/GeForce_RTX_50_series",
+    "source_date": null,
+    "grade": "D",
+    "note": "Launch MSRP per Wikipedia (RTX 5060, released 2025-05-19)"
+   },
+   "published_speed": [
+    {
+     "model": "Llama 3.1 8B Q4_K_M",
+     "tokens_per_s_gen": 30,
+     "tokens_per_s_prompt": null,
+     "runtime": "Ollama with llama.cpp backend; no versions stated",
+     "source_url": "https://dev.to/jovan_chan_9500711396d4e6/rtx-5060-for-local-ai-in-2026-when-448-gbs-hits-an-8gb-wall-4hao",
+     "date": null,
+     "grade": "D",
+     "note": "Approximate ('~30'); the blog does not say who measured it or how, and misdates the card's launch. Treat as low reliability. Same table: Gemma 3 9B ~27, Phi-3.5 Mini 3.8B ~65 tok/s."
+    }
+   ],
+   "fits": "7-9B Q4_K_M (blog table: Mistral 7B ~33, Gemma 3 9B ~27 tok/s); beyond that the 8 GB limit bites - basis: blog + 8 GB arithmetic (grade E)",
+   "power_w": 145,
+   "sources": [
+    {
+     "url": "https://dev.to/jovan_chan_9500711396d4e6/rtx-5060-for-local-ai-in-2026-when-448-gbs-hits-an-8gb-wall-4hao",
+     "date": null,
+     "what": "Blog speed table, 145 W TDP",
+     "grade": "D"
+    },
+    {
+     "url": "https://en.wikipedia.org/wiki/GeForce_RTX_50_series",
+     "date": null,
+     "what": "Launch MSRP $299",
+     "grade": "D"
+    }
+   ],
+   "grade": "D",
+   "verified_at": "2026-11-05"
+  },
+  {
+   "id": "rtx-3060-12gb",
+   "name_he": "NVIDIA GeForce RTX 3060 12GB",
+   "name_en": "NVIDIA GeForce RTX 3060 12GB",
+   "url": null,
+   "category": "gpu",
+   "tier": "16gb",
+   "memory_gb": 12,
+   "memory_kind": "VRAM",
+   "summary_he": "כרטיס ותיק עם 12GB שמריץ מודלים עד כ-14B בכימות Q4 במהירות סבירה. ברשימת Ivory המחיר נמוך, אך המוצר לא היה זמין במלאי.",
+   "why_israeli": "Ivory (ivory.co.il) lists Gigabyte RTX 3060 WindForce OC 12GB; page says the product is not available.",
+   "price_ils": {
+    "amount": 1480,
+    "currency": "ILS",
+    "store": "Ivory",
+    "source_url": "https://www.ivory.co.il/catalog.php?id=57590",
+    "date": "2026-11-05",
+    "note": "New (Gigabyte GV-N3060WF2OC-12GD) list price; page: prices valid until 05/11/2026",
+    "availability": "not available (page: 'מוצר זה לא זמין')",
+    "grade": "C",
+    "eilat_branch_price": 1254
+   },
+   "price_usd_msrp": {
+    "amount": 329,
+    "currency": "USD",
+    "source_url": "https://en.wikipedia.org/wiki/GeForce_30_series",
+    "source_date": null,
+    "grade": "D",
+    "note": "Launch MSRP per Wikipedia (RTX 3060 12 GB, 2021-02-25)"
+   },
+   "price_usd_market": {
+    "amount": 230,
+    "currency": "USD",
+    "source_url": "https://www.hardware-corner.net/gpu-llm-benchmarks/rtx-3060-12gb/",
+    "grade": "D",
+    "date": "2026-03",
+    "note": "hardware-corner 'Current Price in US' labelled 'Avg. Market Value' (not an MSRP)"
+   },
+   "published_speed": [
+    {
+     "model": "Qwen3 8B Q4_K (4k context)",
+     "tokens_per_s_gen": 55.2,
+     "tokens_per_s_prompt": 1696.8,
+     "runtime": "llama.cpp-style GGUF benchmark (hardware-corner; build not stated on this page)",
+     "source_url": "https://www.hardware-corner.net/gpu-llm-benchmarks/rtx-3060-12gb/",
+     "date": "2026-03",
+     "grade": "D",
+     "note": "At 32k context: 31.9 gen / 764.7 prompt."
+    },
+    {
+     "model": "Qwen3 14B Q4_K (4k context)",
+     "tokens_per_s_gen": 31.2,
+     "tokens_per_s_prompt": 972.6,
+     "runtime": "llama.cpp-style GGUF benchmark (hardware-corner; build not stated on this page)",
+     "source_url": "https://www.hardware-corner.net/gpu-llm-benchmarks/rtx-3060-12gb/",
+     "date": "2026-03",
+     "grade": "D"
+    }
+   ],
+   "fits": "14B Q4 (page: 'Max Model 14B', Qwen3 14B Q4_K up to 16k context); 30B-class does not fit in 12 GB",
+   "power_w": 170,
+   "sources": [
+    {
+     "url": "https://www.ivory.co.il/catalog.php?id=57590",
+     "date": "2026-11-05",
+     "what": "Israeli list price, out of stock",
+     "grade": "C"
+    },
+    {
+     "url": "https://www.hardware-corner.net/gpu-llm-benchmarks/rtx-3060-12gb/",
+     "date": "2026-03",
+     "what": "Speeds, TDP 170 W, US market value $230",
+     "grade": "D"
+    },
+    {
+     "url": "https://en.wikipedia.org/wiki/GeForce_30_series",
+     "date": null,
+     "what": "Launch MSRP",
+     "grade": "D"
+    }
+   ],
+   "grade": "C",
+   "verified_at": "2026-11-05"
+  },
+  {
+   "id": "arc-b580-12gb",
+   "name_he": "Intel Arc B580 12GB",
+   "name_en": "Intel Arc B580 12GB",
+   "url": null,
+   "category": "gpu",
+   "tier": "16gb",
+   "memory_gb": 12,
+   "memory_kind": "VRAM",
+   "summary_he": "כרטיס אינטל עם 12GB במחיר נמוך. פועל עם llama.cpp דרך Vulkan; לפי בלוג אחד מעט איטי מ-RTX 3060 (נתון באמינות נמוכה).",
+   "why_israeli": "Ivory lists Acer Nitro Arc B580 OC 12GB; page says the product is not available. Zap/Ivory snippets in search results show similar B580 cards in the 1,361-1,570 range (not opened).",
+   "price_ils": {
+    "amount": 1429,
+    "currency": "ILS",
+    "store": "Ivory",
+    "source_url": "https://www.ivory.co.il/catalog.php?id=128052",
+    "date": "2026-11-05",
+    "note": "New (Acer Nitro B580 OC, DP.Z4BWW.P01); page: prices valid until 05/11/2026",
+    "availability": "not available (page: 'מוצר זה לא זמין')",
+    "grade": "C",
+    "eilat_branch_price": 1211
+   },
+   "price_usd_msrp": {
+    "amount": 249,
+    "currency": "USD",
+    "source_url": "https://dev.to/jovan_chan_9500711396d4e6/intel-arc-b580-12gb-for-local-ai-in-2026-real-benchmarks-and-the-cuda-free-reality-31b5",
+    "source_date": null,
+    "grade": "D",
+    "note": "Launch MSRP $249 (Dec 2024) per a blog; no first-party page opened"
+   },
+   "published_speed": [
+    {
+     "model": "Llama 3.1 8B Instruct Q4_K_M",
+     "tokens_per_s_gen": 28.1,
+     "tokens_per_s_prompt": 590,
+     "runtime": "llama.cpp Vulkan backend ('build b3xxx' placeholder, Intel Arc driver 31.0.x)",
+     "source_url": "https://dev.to/jovan_chan_9500711396d4e6/intel-arc-b580-12gb-for-local-ai-in-2026-real-benchmarks-and-the-cuda-free-reality-31b5",
+     "date": "2026-06",
+     "grade": "D",
+     "note": "Prompt speed given only as a 590-640 range for 8B models; setup not described. Same blog: Mistral 7B Q4_K_M 31.4, Llama 3.2 13B Q4_K_M 17.2 tok/s (10.5 GB)."
+    }
+   ],
+   "fits": "~13B Q4 (blog: Llama 3.2 13B Q4_K_M 17.2 tok/s using 10.5 GB VRAM)",
+   "power_w": null,
+   "sources": [
+    {
+     "url": "https://www.ivory.co.il/catalog.php?id=128052",
+     "date": "2026-11-05",
+     "what": "Israeli list price, out of stock",
+     "grade": "C"
+    },
+    {
+     "url": "https://dev.to/jovan_chan_9500711396d4e6/intel-arc-b580-12gb-for-local-ai-in-2026-real-benchmarks-and-the-cuda-free-reality-31b5",
+     "date": "2026-06",
+     "what": "Blog benchmark table and MSRP",
+     "grade": "D"
+    }
+   ],
+   "grade": "D",
+   "verified_at": "2026-11-05"
+  },
+  {
+   "id": "rtx-4060-ti-16gb",
+   "name_he": "NVIDIA GeForce RTX 4060 Ti 16GB",
+   "name_en": "NVIDIA GeForce RTX 4060 Ti 16GB",
+   "url": null,
+   "category": "gpu",
+   "tier": "16gb",
+   "memory_gb": 16,
+   "memory_kind": "VRAM",
+   "summary_he": "16GB VRAM במחיר בינוני; מריץ מודלים עד כ-20B בכימות Q4, אך לפי אותה סדרת בדיקות איטי בכ-35% מ-RTX 5060 Ti.",
+   "why_israeli": "Ivory lists ASUS Dual RTX 4060 Ti Advanced 16GB; stock status is not shown on the page. Zap's Gigabyte AERO OC 16GB page says the product is not available.",
+   "price_ils": {
+    "amount": 2375,
+    "currency": "ILS",
+    "store": "Ivory",
+    "source_url": "https://www.ivory.co.il/catalog.php?id=105400",
+    "date": "2026-11-05",
+    "note": "New (ASUS Dual RTX 4060 Ti Advanced 16GB, DUAL-RTX4060TI-A16G); page: prices valid until 05/11/2026",
+    "availability": "stock status not shown on the page",
+    "grade": "C",
+    "eilat_branch_price": 2012
+   },
+   "price_usd_msrp": {
+    "amount": 499,
+    "currency": "USD",
+    "source_url": "https://en.wikipedia.org/wiki/GeForce_40_series",
+    "source_date": null,
+    "grade": "D",
+    "note": "Launch MSRP per Wikipedia (RTX 4060 Ti 16 GB, 2023-07-18)"
+   },
+   "price_usd_market": {
+    "amount": 400,
+    "currency": "USD",
+    "source_url": "https://www.hardware-corner.net/gpu-llm-benchmarks/rtx-4060-ti-16gb/",
+    "grade": "D",
+    "date": "2026-03",
+    "note": "hardware-corner 'Current Price in US' labelled 'Avg. Market Value' (not an MSRP)"
+   },
+   "published_speed": [
+    {
+     "model": "Qwen3 8B Q4_K (4k context)",
+     "tokens_per_s_gen": 45.8,
+     "tokens_per_s_prompt": 2675.2,
+     "runtime": "llama.cpp-style GGUF benchmark (hardware-corner; build not stated on this page)",
+     "source_url": "https://www.hardware-corner.net/gpu-llm-benchmarks/rtx-4060-ti-16gb/",
+     "date": "2026-03",
+     "grade": "D",
+     "note": "32k context: 25.5 gen / 760.3 prompt."
+    },
+    {
+     "model": "Qwen3 14B Q4_K (4k context)",
+     "tokens_per_s_gen": 27.4,
+     "tokens_per_s_prompt": 1645.7,
+     "runtime": "llama.cpp-style GGUF benchmark (hardware-corner; build not stated on this page)",
+     "source_url": "https://www.hardware-corner.net/gpu-llm-benchmarks/rtx-4060-ti-16gb/",
+     "date": "2026-03",
+     "grade": "D"
+    },
+    {
+     "model": "gpt-oss 20B MXFP4 (4k context)",
+     "tokens_per_s_gen": 63.2,
+     "tokens_per_s_prompt": 3274.2,
+     "runtime": "llama.cpp-style GGUF benchmark (hardware-corner; build not stated on this page)",
+     "source_url": "https://www.hardware-corner.net/gpu-llm-benchmarks/rtx-4060-ti-16gb/",
+     "date": "2026-03",
+     "grade": "D"
+    }
+   ],
+   "fits": "~20B Q4 in 16 GB (page: gpt-oss 20B MXFP4 runs at 128k context); 30B-class does not fit",
+   "power_w": 165,
+   "sources": [
+    {
+     "url": "https://www.ivory.co.il/catalog.php?id=105400",
+     "date": "2026-11-05",
+     "what": "Israeli list price",
+     "grade": "C"
+    },
+    {
+     "url": "https://www.hardware-corner.net/gpu-llm-benchmarks/rtx-4060-ti-16gb/",
+     "date": "2026-03",
+     "what": "Speeds, TDP 165 W, US market value $400",
+     "grade": "D"
+    },
+    {
+     "url": "https://en.wikipedia.org/wiki/GeForce_40_series",
+     "date": null,
+     "what": "Launch MSRP",
+     "grade": "D"
+    }
+   ],
+   "grade": "C",
+   "verified_at": "2026-11-05"
+  },
+  {
+   "id": "rtx-5060-ti-16gb",
+   "name_he": "NVIDIA GeForce RTX 5060 Ti 16GB",
+   "name_en": "NVIDIA GeForce RTX 5060 Ti 16GB",
+   "url": null,
+   "category": "gpu",
+   "tier": "16gb",
+   "memory_gb": 16,
+   "memory_kind": "VRAM",
+   "summary_he": "כרטיס 16GB חדש וזול יחסית - נקודת כניסה סבירה לעסק קטן; מודלים עד כ-20B בכימות Q4 במהירות טובה.",
+   "why_israeli": "Zap lists Gigabyte RTX 5060 Ti 16GB EAGLE OC from 4 stores; Ivory's ASUS Dual 5060 Ti 16GB lists a lower price but is not available. NOTE: a search-result summary had claimed 'from 1,900' for the Zap model - the opened page says 3,540, so page values are used.",
+   "price_ils": {
+    "amount": 3540,
+    "currency": "ILS",
+    "store": "Zap (price comparison, 4 stores, lowest listed)",
+    "source_url": "https://www.zap.co.il/model.aspx?modelid=1260754",
+    "date": "2026-11-05",
+    "note": "New (Gigabyte GV-N506TEAGLE OC-16GD); Zap range 3,540-3,960; Zap entry dated 1/2026, no price-update date shown",
+    "availability": "listed by 4 stores",
+    "grade": "D",
+    "other_prices": [
+     {
+      "amount": 2489,
+      "store": "Ivory",
+      "source_url": "https://www.ivory.co.il/catalog.php?id=133836",
+      "note": "New ASUS Dual 5060 Ti 16GB OC; Eilat 2,109; valid until 05/11/2026",
+      "availability": "not available"
+     }
+    ]
+   },
+   "price_usd_msrp": {
+    "amount": 429,
+    "currency": "USD",
+    "source_url": "https://en.wikipedia.org/wiki/GeForce_RTX_50_series",
+    "source_date": null,
+    "grade": "D",
+    "note": "Launch MSRP per Wikipedia (RTX 5060 Ti 16 GB, 2025-04-16)"
+   },
+   "price_usd_market": {
+    "amount": 549,
+    "currency": "USD",
+    "source_url": "https://www.hardware-corner.net/gpu-llm-benchmarks/rtx-5060-ti-16gb/",
+    "grade": "D",
+    "date": "2026-03",
+    "note": "hardware-corner 'Current Price in US' labelled 'Avg. Market Value' (not an MSRP)"
+   },
+   "published_speed": [
+    {
+     "model": "Qwen3 8B Q4_K (4k context)",
+     "tokens_per_s_gen": 69.2,
+     "tokens_per_s_prompt": 2965.1,
+     "runtime": "llama.cpp-style GGUF benchmark (hardware-corner; build not stated on this page)",
+     "source_url": "https://www.hardware-corner.net/gpu-llm-benchmarks/rtx-5060-ti-16gb/",
+     "date": "2026-03",
+     "grade": "D",
+     "note": "32k context: 38.9 gen / 915.1 prompt."
+    },
+    {
+     "model": "Qwen3 14B Q4_K (4k context)",
+     "tokens_per_s_gen": 41.1,
+     "tokens_per_s_prompt": 1743.0,
+     "runtime": "llama.cpp-style GGUF benchmark (hardware-corner; build not stated on this page)",
+     "source_url": "https://www.hardware-corner.net/gpu-llm-benchmarks/rtx-5060-ti-16gb/",
+     "date": "2026-03",
+     "grade": "D"
+    },
+    {
+     "model": "gpt-oss 20B MXFP4 (4k context)",
+     "tokens_per_s_gen": 92.1,
+     "tokens_per_s_prompt": 3585.2,
+     "runtime": "llama.cpp-style GGUF benchmark (hardware-corner; build not stated on this page)",
+     "source_url": "https://www.hardware-corner.net/gpu-llm-benchmarks/rtx-5060-ti-16gb/",
+     "date": "2026-03",
+     "grade": "D"
+    }
+   ],
+   "fits": "~20B Q4 (page: 'Max Model 20B'; says 30B-class models are out of reach)",
+   "power_w": 180,
+   "sources": [
+    {
+     "url": "https://www.zap.co.il/model.aspx?modelid=1260754",
+     "date": "2026-11-05",
+     "what": "Israeli from-price 3,540-3,960",
+     "grade": "D"
+    },
+    {
+     "url": "https://www.ivory.co.il/catalog.php?id=133836",
+     "date": "2026-11-05",
+     "what": "Ivory ASUS Dual list price, not available",
+     "grade": "C"
+    },
+    {
+     "url": "https://www.hardware-corner.net/gpu-llm-benchmarks/rtx-5060-ti-16gb/",
+     "date": "2026-03",
+     "what": "Speeds, TDP 180 W, US market value $549",
+     "grade": "D"
+    },
+    {
+     "url": "https://en.wikipedia.org/wiki/GeForce_RTX_50_series",
+     "date": null,
+     "what": "Launch MSRP",
+     "grade": "D"
+    }
+   ],
+   "grade": "C",
+   "verified_at": "2026-11-05"
+  },
+  {
+   "id": "rtx-4070-ti-super-16gb",
+   "name_he": "NVIDIA GeForce RTX 4070 Ti SUPER 16GB",
+   "name_en": "NVIDIA GeForce RTX 4070 Ti SUPER 16GB",
+   "url": null,
+   "category": "gpu",
+   "tier": "16gb",
+   "memory_gb": 16,
+   "memory_kind": "VRAM",
+   "summary_he": "מהיר בכ-40% מה-5060 Ti באותה קיבולת של 16GB, ביוקר גבוה יותר; תקרה של כ-20B בכימות Q4.",
+   "why_israeli": "Ivory lists MSI RTX 4070 Ti SUPER Ventus 3X OC; page says the product is not available. Zap's PNY 4070 Ti SUPER page says not available (no price).",
+   "price_ils": {
+    "amount": 4380,
+    "currency": "ILS",
+    "store": "Ivory",
+    "source_url": "https://www.ivory.co.il/catalog.php?id=96303",
+    "date": "2026-11-05",
+    "note": "New (MSI Ventus 3X OC 16GB); page: prices valid until 05/11/2026",
+    "availability": "not available (page: 'מוצר זה לא זמין')",
+    "grade": "C",
+    "eilat_branch_price": 3711
+   },
+   "price_usd_msrp": {
+    "amount": 799,
+    "currency": "USD",
+    "source_url": "https://en.wikipedia.org/wiki/GeForce_40_series",
+    "source_date": null,
+    "grade": "D",
+    "note": "Launch MSRP per Wikipedia (RTX 4070 Ti Super, Jan 2024)"
+   },
+   "price_usd_market": {
+    "amount": 690,
+    "currency": "USD",
+    "source_url": "https://www.hardware-corner.net/gpu-llm-benchmarks/rtx-4070-ti-super/",
+    "grade": "D",
+    "date": null,
+    "note": "hardware-corner 'Current Price in US' labelled 'Avg. Market Value' (not an MSRP)"
+   },
+   "published_speed": [
+    {
+     "model": "Qwen3 8B Q4_K (4k context)",
+     "tokens_per_s_gen": 96.3,
+     "tokens_per_s_prompt": 5220.1,
+     "runtime": "llama.cpp-style GGUF benchmark (hardware-corner; build not stated on this page)",
+     "source_url": "https://www.hardware-corner.net/gpu-llm-benchmarks/rtx-4070-ti-super/",
+     "date": null,
+     "grade": "D",
+     "note": "32k context: 54.5 gen / 1616.6 prompt. Page is undated (mentions a '2026 review')."
+    },
+    {
+     "model": "Qwen3 14B Q4_K (4k context)",
+     "tokens_per_s_gen": 58.1,
+     "tokens_per_s_prompt": 3048.0,
+     "runtime": "llama.cpp-style GGUF benchmark (hardware-corner; build not stated on this page)",
+     "source_url": "https://www.hardware-corner.net/gpu-llm-benchmarks/rtx-4070-ti-super/",
+     "date": null,
+     "grade": "D"
+    },
+    {
+     "model": "gpt-oss 20B MXFP4 (4k context)",
+     "tokens_per_s_gen": 128.9,
+     "tokens_per_s_prompt": 5628.1,
+     "runtime": "llama.cpp-style GGUF benchmark (hardware-corner; build not stated on this page)",
+     "source_url": "https://www.hardware-corner.net/gpu-llm-benchmarks/rtx-4070-ti-super/",
+     "date": null,
+     "grade": "D"
+    }
+   ],
+   "fits": "~20B Q4 (page: 'Max Model 20B'; 70B does not run)",
+   "power_w": 285,
+   "sources": [
+    {
+     "url": "https://www.ivory.co.il/catalog.php?id=96303",
+     "date": "2026-11-05",
+     "what": "Israeli list price, out of stock",
+     "grade": "C"
+    },
+    {
+     "url": "https://www.hardware-corner.net/gpu-llm-benchmarks/rtx-4070-ti-super/",
+     "date": null,
+     "what": "Speeds (page undated; 2026 review), TDP 285 W, US market value $690",
+     "grade": "D"
+    },
+    {
+     "url": "https://en.wikipedia.org/wiki/GeForce_40_series",
+     "date": null,
+     "what": "Launch MSRP",
+     "grade": "D"
+    }
+   ],
+   "grade": "C",
+   "verified_at": "2026-11-05"
+  },
+  {
+   "id": "mac-mini-m4-16gb",
+   "name_he": "Apple Mac mini M4 (16GB)",
+   "name_en": "Apple Mac mini M4 16GB / 512GB (MU9E3HB/A)",
+   "url": null,
+   "category": "mini-pc",
+   "tier": "16gb",
+   "memory_gb": 16,
+   "memory_kind": "unified",
+   "summary_he": "מיני מחשב שקט עם זיכרון מאוחד 16GB; מתאים למודלים קטנים (7-8B). ב-iDigital אזל; ב-Zap מחיר החל מ-3,790 ש״ח.",
+   "why_israeli": "Sold by Israeli retailers: Zap comparison lists it from 4 stores (Store Mobile, Pisi Online...), iDigital lists it as sold out.",
+   "price_ils": {
+    "amount": 3790,
+    "currency": "ILS",
+    "store": "Zap (comparison; lowest listed seller Store Mobile)",
+    "source_url": "https://www.zap.co.il/models.aspx?sog=c-brandpc&db252715=252716&db5802401=5806835",
+    "date": "2026-11-05",
+    "note": "New, local warranty; from-price across 4 stores (Zap model page /model.aspx?modelid=1237759 as shown on the list)",
+    "availability": "listed on Zap by 4 stores",
+    "grade": "D",
+    "other_prices": [
+     {
+      "amount": 4329,
+      "store": "iDigital",
+      "source_url": "https://www.idigital.co.il/products/mac-mini-m4-mu9e3hb-a",
+      "note": "'From' price; Eilat branch 3,669; page opened via the collection",
+      "availability": "sold out"
+     }
+    ]
+   },
+   "price_usd_msrp": null,
+   "published_speed": [
+    {
+     "model": "Llama 7B Q4_0 (M4, 10 GPU cores, 120 GB/s)",
+     "tokens_per_s_gen": 24.11,
+     "tokens_per_s_prompt": 221.29,
+     "runtime": "llama.cpp llama-bench, Llama 7B (pp512 / tg128)",
+     "source_url": "https://github.com/ggml-org/llama.cpp/discussions/4167",
+     "date": null,
+     "grade": "C",
+     "note": "Undated summary row of the community table (build 8e672ef)."
+    },
+    {
+     "model": "Llama 7B Q8_0 (M4)",
+     "tokens_per_s_gen": 13.54,
+     "tokens_per_s_prompt": 223.64,
+     "runtime": "llama.cpp llama-bench, Llama 7B (pp512 / tg128)",
+     "source_url": "https://github.com/ggml-org/llama.cpp/discussions/4167",
+     "date": null,
+     "grade": "C"
+    }
+   ],
+   "fits": "7-8B Q4-Q8 comfortably; up to ~13B Q4 with short context - basis: our size arithmetic (Q4 ~0.55-0.6 GB per 1B params, ~5 GB left for macOS and context), grade E",
+   "power_w": null,
+   "sources": [
+    {
+     "url": "https://www.zap.co.il/models.aspx?sog=c-brandpc&db252715=252716&db5802401=5806835",
+     "date": "2026-11-05",
+     "what": "Zap list: M4 16GB/512GB from 3,790 (4 stores)",
+     "grade": "D"
+    },
+    {
+     "url": "https://www.idigital.co.il/collections/mac-mini",
+     "date": "2026-11-05",
+     "what": "iDigital: M4 16GB/512GB from 4,329, sold out",
+     "grade": "C"
+    },
+    {
+     "url": "https://github.com/ggml-org/llama.cpp/discussions/4167",
+     "date": null,
+     "what": "llama.cpp Apple Silicon table",
+     "grade": "C"
+    }
+   ],
+   "grade": "C",
+   "verified_at": "2026-11-05"
+  },
+  {
+   "id": "mac-mini-m6-16gb",
+   "name_he": "Apple Mac mini M6 (16GB)",
+   "name_en": "Apple Mac mini M6 12-core CPU / 12-core GPU, 16GB / 256GB (MHQK4HB/A)",
+   "url": null,
+   "category": "mini-pc",
+   "tier": "16gb",
+   "memory_gb": 16,
+   "memory_kind": "unified",
+   "summary_he": "הגרסה הבסיסית והזולה ביותר של המיני בדור החדש (שבב M6); 16GB זיכרון מאוחד לפי Zap. מתאים למודלים קטנים בלבד.",
+   "why_israeli": "In stock at iDigital per its collection page; Zap shows a lower from-price from 8 stores. Memory is not stated on the iDigital page - 16GB is from the Zap listing.",
+   "price_ils": {
+    "amount": 3417,
+    "currency": "ILS",
+    "store": "Zap (comparison; Or PC, 8 stores)",
+    "source_url": "https://www.zap.co.il/models.aspx?sog=c-brandpc&db252715=252716&db5802401=5806835",
+    "date": "2026-11-05",
+    "note": "New; M6 16GB / 256GB (Zap model page /model.aspx?modelid=1270201 as shown on the list)",
+    "availability": "listed on Zap by 8 stores",
+    "grade": "D",
+    "other_prices": [
+     {
+      "amount": 3790,
+      "store": "iDigital",
+      "source_url": "https://www.idigital.co.il/products/mac-mini-m6-mhqk4hb-a",
+      "note": "'From' price (12-core CPU / 12-core GPU / 256GB SSD); Eilat 3,212",
+      "availability": "in stock"
+     }
+    ]
+   },
+   "price_usd_msrp": null,
+   "published_speed": [
+    {
+     "model": "Llama 7B Q4_0 (M6, 8 GPU cores, 170 GB/s)",
+     "tokens_per_s_gen": 35.74,
+     "tokens_per_s_prompt": 988.93,
+     "runtime": "llama.cpp llama-bench, Llama 7B (pp512 / tg128), build c1d0e7a",
+     "source_url": "https://github.com/ggml-org/llama.cpp/discussions/4167",
+     "date": null,
+     "grade": "C",
+     "note": "Summary row for an 8-GPU-core M6; iDigital lists the mini with a 12-core GPU, so this probably understates it. Undated row."
+    },
+    {
+     "model": "Llama 7B Q8_0 (M6, 8 GPU cores)",
+     "tokens_per_s_gen": 21.01,
+     "tokens_per_s_prompt": 970.46,
+     "runtime": "llama.cpp llama-bench, Llama 7B (pp512 / tg128), build c1d0e7a",
+     "source_url": "https://github.com/ggml-org/llama.cpp/discussions/4167",
+     "date": null,
+     "grade": "C"
+    }
+   ],
+   "fits": "7-8B Q4-Q8 comfortably; up to ~13B Q4 with short context - basis: our size arithmetic (grade E)",
+   "power_w": null,
+   "sources": [
+    {
+     "url": "https://www.zap.co.il/models.aspx?sog=c-brandpc&db252715=252716&db5802401=5806835",
+     "date": "2026-11-05",
+     "what": "Zap list: M6 16GB/256GB from 3,417 (8 stores)",
+     "grade": "D"
+    },
+    {
+     "url": "https://www.idigital.co.il/collections/mac-mini",
+     "date": "2026-11-05",
+     "what": "iDigital: Mac mini M6 from 3,790, in stock",
+     "grade": "C"
+    },
+    {
+     "url": "https://github.com/ggml-org/llama.cpp/discussions/4167",
+     "date": null,
+     "what": "M6 row of the llama.cpp Apple Silicon table",
+     "grade": "C"
+    }
+   ],
+   "grade": "C",
+   "verified_at": "2026-11-05"
+  },
+  {
+   "id": "mac-mini-m4-pro-24gb",
+   "name_he": "Apple Mac mini M4 Pro (24GB)",
+   "name_en": "Apple Mac mini M4 Pro 12-core CPU / 16-core GPU, 24GB / 512GB (MCX44HB/A)",
+   "url": null,
+   "category": "mini-pc",
+   "tier": "24gb",
+   "memory_gb": 24,
+   "memory_kind": "unified",
+   "summary_he": "24GB זיכרון מאוחד ורוחב פס 273GB/s - מהירות יצירה כפולה בערך מ-M4 הבסיסי; מתאים למודלים בינוניים (כ-14B ומעלה).",
+   "why_israeli": "iDigital lists it as sold out; a KSP price (6,298) appeared only in a search-result summary.",
+   "price_ils": {
+    "amount": 6469,
+    "currency": "ILS",
+    "store": "iDigital",
+    "source_url": "https://www.idigital.co.il/products/mac-mini-m4-pro-mcx44hb-a",
+    "date": "2026-11-05",
+    "note": "New; 'From' price on the collection page; Eilat branch 5,482",
+    "availability": "sold out",
+    "grade": "C",
+    "other_prices": [
+     {
+      "amount": 6298,
+      "store": "KSP",
+      "source_url": "https://ksp.co.il/link/Mac-mini-M4",
+      "note": "Seen only in a search-result summary (24GB/512GB); page not opened",
+      "availability": "unknown"
+     }
+    ]
+   },
+   "price_usd_msrp": null,
+   "published_speed": [
+    {
+     "model": "Llama 7B Q4_0 (M4 Pro, 16 GPU cores, 273 GB/s)",
+     "tokens_per_s_gen": 49.64,
+     "tokens_per_s_prompt": 364.06,
+     "runtime": "llama.cpp llama-bench, Llama 7B (pp512 / tg128)",
+     "source_url": "https://github.com/ggml-org/llama.cpp/discussions/4167",
+     "date": null,
+     "grade": "C",
+     "note": "Undated summary row (build 8e672ef); 20-core GPU variant: 50.74 / 439.78."
+    },
+    {
+     "model": "Llama 7B Q8_0 (M4 Pro, 16 GPU cores)",
+     "tokens_per_s_gen": 30.54,
+     "tokens_per_s_prompt": 367.13,
+     "runtime": "llama.cpp llama-bench, Llama 7B (pp512 / tg128)",
+     "source_url": "https://github.com/ggml-org/llama.cpp/discussions/4167",
+     "date": null,
+     "grade": "C"
+    }
+   ],
+   "fits": "~14B Q8 or ~24B Q4 - basis: our size arithmetic leaving ~5 GB for macOS and context (grade E)",
+   "power_w": null,
+   "sources": [
+    {
+     "url": "https://www.idigital.co.il/collections/mac-mini",
+     "date": "2026-11-05",
+     "what": "iDigital: M4 Pro 24GB/512GB from 6,469, sold out",
+     "grade": "C"
+    },
+    {
+     "url": "https://github.com/ggml-org/llama.cpp/discussions/4167",
+     "date": null,
+     "what": "llama.cpp Apple Silicon table",
+     "grade": "C"
+    }
+   ],
+   "grade": "C",
+   "verified_at": "2026-11-05"
+  },
+  {
+   "id": "mac-mini-m5-pro-24gb",
+   "name_he": "Apple Mac mini M5 Pro (24GB)",
+   "name_en": "Apple Mac mini M5 Pro 24GB / 512GB (MHQN4HB/A)",
+   "url": null,
+   "category": "mini-pc",
+   "tier": "24gb",
+   "memory_gb": 24,
+   "memory_kind": "unified",
+   "summary_he": "הדור החדש מעל ה-M4 Pro: כ-64 טוקנים/שנייה ביצירה ב-Q4 על 7B (מדידה ב-llama.cpp) ו-1,350 בעיבוד פרומפט.",
+   "why_israeli": "In stock at iDigital per its collection page; Zap shows a lower from-price from 5 stores.",
+   "price_ils": {
+    "amount": 6490,
+    "currency": "ILS",
+    "store": "Zap (comparison; Or PC, 5 stores)",
+    "source_url": "https://www.zap.co.il/models.aspx?sog=c-brandpc&db252715=252716&db5802401=5806835",
+    "date": "2026-11-05",
+    "note": "New; M5 Pro, 24GB / 512GB (Zap model page /model.aspx?modelid=1273035 as shown on the list)",
+    "availability": "listed on Zap by 5 stores",
+    "grade": "D",
+    "other_prices": [
+     {
+      "amount": 7090,
+      "store": "iDigital",
+      "source_url": "https://www.idigital.co.il/products/mac-mini-m5-pro-mhqn4hb-a",
+      "note": "'From' price (15-core CPU / 16-core GPU / 512GB; page does not list memory); Eilat 6,008",
+      "availability": "in stock"
+     }
+    ]
+   },
+   "price_usd_msrp": null,
+   "published_speed": [
+    {
+     "model": "Llama 7B Q4_0 (M5 Pro, 10+5 CPU, 16 GPU, 24 GB)",
+     "tokens_per_s_gen": 63.86,
+     "tokens_per_s_prompt": 1350.43,
+     "runtime": "llama.cpp llama-bench, Llama 7B (pp512 / tg128), build c3a1128",
+     "source_url": "https://github.com/ggml-org/llama.cpp/discussions/4167",
+     "date": "2026-04-14",
+     "grade": "C",
+     "note": "Community comment (bnggge) on the exact 24 GB / 16-GPU configuration. Summary row (build 60081bb): 67.59 gen / 1340.44 prompt."
+    },
+    {
+     "model": "Llama 7B Q8_0 (M5 Pro, 24 GB)",
+     "tokens_per_s_gen": 37.78,
+     "tokens_per_s_prompt": 1304.66,
+     "runtime": "llama.cpp llama-bench, Llama 7B (pp512 / tg128), build c3a1128",
+     "source_url": "https://github.com/ggml-org/llama.cpp/discussions/4167",
+     "date": "2026-04-14",
+     "grade": "C"
+    }
+   ],
+   "fits": "~14B Q8 or ~24B Q4 - basis: our size arithmetic (grade E); same 24 GB as the M4 Pro",
+   "power_w": null,
+   "sources": [
+    {
+     "url": "https://www.zap.co.il/models.aspx?sog=c-brandpc&db252715=252716&db5802401=5806835",
+     "date": "2026-11-05",
+     "what": "Zap list: M5 Pro 24GB/512GB from 6,490 (5 stores)",
+     "grade": "D"
+    },
+    {
+     "url": "https://www.idigital.co.il/collections/mac-mini",
+     "date": "2026-11-05",
+     "what": "iDigital: M5 Pro from 7,090, in stock",
+     "grade": "C"
+    },
+    {
+     "url": "https://github.com/ggml-org/llama.cpp/discussions/4167",
+     "date": "2026-04-14",
+     "what": "M5 Pro 24 GB results",
+     "grade": "C"
+    }
+   ],
+   "grade": "C",
+   "verified_at": "2026-11-05"
+  },
+  {
+   "id": "rtx-3090-24gb",
+   "name_he": "NVIDIA GeForce RTX 3090 24GB (משומש)",
+   "name_en": "NVIDIA GeForce RTX 3090 24GB (used)",
+   "url": null,
+   "category": "gpu",
+   "tier": "24gb",
+   "memory_gb": 24,
+   "memory_kind": "VRAM",
+   "summary_he": "24GB VRAM שמאפשרים מודלים של 30-34B בכימות Q4 במחיר משומש נמוך יחסית. מחיר משומש ישראלי מתועד לא נמצא.",
+   "why_israeli": "No Israeli used-market (Yad2) listing could be opened; a TMS page (new-old-stock Gigabyte Turbo) returned 403 and its price appeared only in a search snippet, so no ILS price is recorded.",
+   "price_ils": null,
+   "price_usd_msrp": {
+    "amount": 1499,
+    "currency": "USD",
+    "source_url": "https://en.wikipedia.org/wiki/GeForce_30_series",
+    "source_date": null,
+    "grade": "D",
+    "note": "Launch MSRP per Wikipedia (RTX 3090, 2020-09-24)"
+   },
+   "price_usd_market": {
+    "amount": 1000,
+    "currency": "USD",
+    "source_url": "https://www.hardware-corner.net/gpu-llm-benchmarks/rtx-3090/",
+    "grade": "D",
+    "date": "2026-03",
+    "note": "hardware-corner 'Current Price in US' labelled 'Avg. Market Value' (not an MSRP)"
+   },
+   "published_speed": [
+    {
+     "model": "Qwen3 8B Q4_K (4k context)",
+     "tokens_per_s_gen": 115.3,
+     "tokens_per_s_prompt": 4049.6,
+     "runtime": "CUDA, -fa 1 (hardware-corner)",
+     "source_url": "https://www.hardware-corner.net/gpu-llm-benchmarks/rtx-3090/",
+     "date": "2026-03",
+     "grade": "D",
+     "note": "32k context: 67.9 gen / 1714.6 prompt."
+    },
+    {
+     "model": "Qwen3 30B A3B Q4_K (4k context)",
+     "tokens_per_s_gen": 153.6,
+     "tokens_per_s_prompt": 2988.6,
+     "runtime": "CUDA, -fa 1 (hardware-corner)",
+     "source_url": "https://www.hardware-corner.net/gpu-llm-benchmarks/rtx-3090/",
+     "date": "2026-03",
+     "grade": "D"
+    },
+    {
+     "model": "Qwen3 32B Q4_K (4k context)",
+     "tokens_per_s_gen": 35.1,
+     "tokens_per_s_prompt": 1087.9,
+     "runtime": "CUDA, -fa 1 (hardware-corner)",
+     "source_url": "https://www.hardware-corner.net/gpu-llm-benchmarks/rtx-3090/",
+     "date": "2026-03",
+     "grade": "D"
+    },
+    {
+     "model": "LLaMA 3 8B Q4_K_M (pp512 / tg512)",
+     "tokens_per_s_gen": 115.42,
+     "tokens_per_s_prompt": 4030.4,
+     "runtime": "llama.cpp llama-bench on RunPod; version not stated",
+     "source_url": "https://github.com/XiongjieDai/GPU-Benchmarks-on-LLM-Inference",
+     "date": "2024-05",
+     "grade": "D",
+     "note": "Older independent cross-check (snapshot May 2024)."
+    }
+   ],
+   "fits": "30-34B Q4 (page: 'Max Model 34B'; Qwen3 32B Q4_K 35.1 tok/s; a 35B MXFP4 model runs fully in VRAM)",
+   "power_w": 350,
+   "sources": [
+    {
+     "url": "https://www.hardware-corner.net/gpu-llm-benchmarks/rtx-3090/",
+     "date": "2026-03",
+     "what": "Speeds, TDP 350 W, US market value $1,000",
+     "grade": "D"
+    },
+    {
+     "url": "https://github.com/XiongjieDai/GPU-Benchmarks-on-LLM-Inference",
+     "date": "2024-05",
+     "what": "Independent LLaMA 3 8B numbers",
+     "grade": "D"
+    },
+    {
+     "url": "https://en.wikipedia.org/wiki/GeForce_30_series",
+     "date": null,
+     "what": "Launch MSRP",
+     "grade": "D"
+    }
+   ],
+   "grade": "D",
+   "verified_at": "2026-11-05"
+  },
+  {
+   "id": "rtx-4090-24gb",
+   "name_he": "NVIDIA GeForce RTX 4090 24GB (מחודש)",
+   "name_en": "NVIDIA GeForce RTX 4090 24GB (refurbished)",
+   "url": null,
+   "category": "gpu",
+   "tier": "24gb",
+   "memory_gb": 24,
+   "memory_kind": "VRAM",
+   "summary_he": "24GB VRAM ומהירות גבוהה מאוד; ב-Ivory נמצא רק דגם מחודש (refurbished) ב-6,990 ש״ח, ולא היה זמין במלאי.",
+   "why_israeli": "Ivory lists a refurbished ASUS ROG Strix RTX 4090 OC ('מציאון - מוחדש'); new 4090 listings seen in search results were not opened.",
+   "price_ils": {
+    "amount": 6990,
+    "currency": "ILS",
+    "store": "Ivory",
+    "source_url": "https://www.ivory.co.il/catalog.php?id=131241",
+    "date": "2026-11-05",
+    "note": "REFURBISHED (returned/used/display stock per the page), ASUS ROG Strix RTX 4090 OC 24GB; valid until 05/11/2026; warranty not stated",
+    "availability": "not available (page: 'מוצר זה לא זמין')",
+    "grade": "C",
+    "eilat_branch_price": 5923
+   },
+   "price_usd_msrp": {
+    "amount": 1599,
+    "currency": "USD",
+    "source_url": "https://en.wikipedia.org/wiki/GeForce_40_series",
+    "source_date": null,
+    "grade": "D",
+    "note": "Launch MSRP per Wikipedia (RTX 4090, 2022-10-12)"
+   },
+   "price_usd_market": {
+    "amount": 2200,
+    "currency": "USD",
+    "source_url": "https://www.hardware-corner.net/gpu-llm-benchmarks/rtx-4090/",
+    "grade": "D",
+    "date": "2026-03",
+    "note": "hardware-corner 'Current Price in US' labelled 'Avg. Market Value' (not an MSRP)"
+   },
+   "published_speed": [
+    {
+     "model": "Qwen3 8B Q4_K (4k context)",
+     "tokens_per_s_gen": 141.3,
+     "tokens_per_s_prompt": 9250.5,
+     "runtime": "llama.cpp-style GGUF benchmark (hardware-corner; build not stated on this page)",
+     "source_url": "https://www.hardware-corner.net/gpu-llm-benchmarks/rtx-4090/",
+     "date": "2026-03",
+     "grade": "D",
+     "note": "32k context: 82.3 gen / 3560.1 prompt."
+    },
+    {
+     "model": "Qwen3 30B A3B Q4_K (4k context)",
+     "tokens_per_s_gen": 207.3,
+     "tokens_per_s_prompt": 6159.4,
+     "runtime": "llama.cpp-style GGUF benchmark (hardware-corner; build not stated on this page)",
+     "source_url": "https://www.hardware-corner.net/gpu-llm-benchmarks/rtx-4090/",
+     "date": "2026-03",
+     "grade": "D"
+    },
+    {
+     "model": "Qwen3 32B Q4_K (4k context)",
+     "tokens_per_s_gen": 39.6,
+     "tokens_per_s_prompt": 2448.0,
+     "runtime": "llama.cpp-style GGUF benchmark (hardware-corner; build not stated on this page)",
+     "source_url": "https://www.hardware-corner.net/gpu-llm-benchmarks/rtx-4090/",
+     "date": "2026-03",
+     "grade": "D"
+    },
+    {
+     "model": "Meta Llama 3.1 8B Instruct Q4_K_M",
+     "tokens_per_s_gen": 120,
+     "tokens_per_s_prompt": 7594,
+     "runtime": "LocalScore benchmark (crowd-sourced leaderboard)",
+     "source_url": "https://www.localscore.ai",
+     "date": "2026-11-05",
+     "grade": "D",
+     "note": "Leaderboard shows two RTX 4090 entries (120 and 90.5 tok/s gen)."
+    }
+   ],
+   "fits": "30-34B Q4 (Qwen3 32B Q4_K 39.6 tok/s); 70B does not fit in 24 GB",
+   "power_w": 450,
+   "sources": [
+    {
+     "url": "https://www.ivory.co.il/catalog.php?id=131241",
+     "date": "2026-11-05",
+     "what": "Refurbished list price, out of stock",
+     "grade": "C"
+    },
+    {
+     "url": "https://www.hardware-corner.net/gpu-llm-benchmarks/rtx-4090/",
+     "date": "2026-03",
+     "what": "Speeds, TDP 450 W, US market value $2,200",
+     "grade": "D"
+    },
+    {
+     "url": "https://www.localscore.ai",
+     "date": "2026-11-05",
+     "what": "Leaderboard entries",
+     "grade": "D"
+    },
+    {
+     "url": "https://en.wikipedia.org/wiki/GeForce_40_series",
+     "date": null,
+     "what": "Launch MSRP",
+     "grade": "D"
+    }
+   ],
+   "grade": "C",
+   "verified_at": "2026-11-05"
+  },
+  {
+   "id": "rtx-5090-32gb",
+   "name_he": "NVIDIA GeForce RTX 5090 32GB",
+   "name_en": "NVIDIA GeForce RTX 5090 32GB",
+   "url": null,
+   "category": "gpu",
+   "tier": "32gb",
+   "memory_gb": 32,
+   "memory_kind": "VRAM",
+   "summary_he": "32GB VRAM - הכרטיס הצרכני החזק ביותר; מריץ מודלים של 32-35B בכימות Q4 במהירות גבוהה. ב-Ivory 12,950 ש״ח, לא זמין במלאי.",
+   "why_israeli": "Ivory lists ZOTAC RTX 5090 SOLID OC; page says not available. Zap's Gigabyte 5090 GAMING OC page says not available (no price).",
+   "price_ils": {
+    "amount": 12950,
+    "currency": "ILS",
+    "store": "Ivory",
+    "source_url": "https://www.ivory.co.il/catalog.php?id=132282",
+    "date": "2026-11-05",
+    "note": "New (ZOTAC GAMING RTX 5090 SOLID OC 32GB); page: prices valid until 05/11/2026",
+    "availability": "not available (page: 'מוצר זה לא זמין')",
+    "grade": "C",
+    "eilat_branch_price": 10974
+   },
+   "price_usd_msrp": {
+    "amount": 1999,
+    "currency": "USD",
+    "source_url": "https://en.wikipedia.org/wiki/GeForce_RTX_50_series",
+    "source_date": null,
+    "grade": "D",
+    "note": "Launch MSRP per Wikipedia (RTX 5090, 2025-01-30)"
+   },
+   "price_usd_market": {
+    "amount": 3699,
+    "currency": "USD",
+    "source_url": "https://www.hardware-corner.net/gpu-llm-benchmarks/rtx-5090/",
+    "grade": "D",
+    "date": "2026-03",
+    "note": "hardware-corner 'Current Price in US' labelled 'Avg. Market Value' (not an MSRP)"
+   },
+   "published_speed": [
+    {
+     "model": "Qwen3 8B Q4_K (4k context)",
+     "tokens_per_s_gen": 200.4,
+     "tokens_per_s_prompt": 11933.4,
+     "runtime": "llama.cpp build 8189 (named on this row; other rows unstated)",
+     "source_url": "https://www.hardware-corner.net/gpu-llm-benchmarks/rtx-5090/",
+     "date": "2026-03",
+     "grade": "D",
+     "note": "32k context: 129.8 gen / 6034.2 prompt."
+    },
+    {
+     "model": "Qwen3 30B A3B Q4_K (4k context)",
+     "tokens_per_s_gen": 226.1,
+     "tokens_per_s_prompt": 7093.0,
+     "runtime": "llama.cpp build 8189",
+     "source_url": "https://www.hardware-corner.net/gpu-llm-benchmarks/rtx-5090/",
+     "date": "2026-03",
+     "grade": "D"
+    },
+    {
+     "model": "Qwen3 32B Q4_K (4k context)",
+     "tokens_per_s_gen": 61.4,
+     "tokens_per_s_prompt": 2931.3,
+     "runtime": "llama.cpp-style GGUF benchmark (hardware-corner; build not stated on this page)",
+     "source_url": "https://www.hardware-corner.net/gpu-llm-benchmarks/rtx-5090/",
+     "date": "2026-03",
+     "grade": "D"
+    },
+    {
+     "model": "Meta Llama 3.1 8B Instruct Q4_K_M",
+     "tokens_per_s_gen": 66.3,
+     "tokens_per_s_prompt": 6297,
+     "runtime": "LocalScore benchmark (crowd-sourced leaderboard)",
+     "source_url": "https://www.localscore.ai",
+     "date": "2026-11-05",
+     "grade": "D",
+     "note": "Conflicts with the 200 tok/s above - the leaderboard mixes setups and drivers; treat as a lower bound."
+    }
+   ],
+   "fits": "32-35B Q4 (page: 'Max Model 34B'; Qwen3 32B Q4_K 61.4 tok/s; Qwen3.5 35B MXFP4 165 tok/s); 70B does not fit in 32 GB",
+   "power_w": 575,
+   "sources": [
+    {
+     "url": "https://www.ivory.co.il/catalog.php?id=132282",
+     "date": "2026-11-05",
+     "what": "Israeli list price, out of stock",
+     "grade": "C"
+    },
+    {
+     "url": "https://www.hardware-corner.net/gpu-llm-benchmarks/rtx-5090/",
+     "date": "2026-03",
+     "what": "Speeds, TDP 575 W, US market value $3,699",
+     "grade": "D"
+    },
+    {
+     "url": "https://www.localscore.ai",
+     "date": "2026-11-05",
+     "what": "Leaderboard entry",
+     "grade": "D"
+    },
+    {
+     "url": "https://en.wikipedia.org/wiki/GeForce_RTX_50_series",
+     "date": null,
+     "what": "Launch MSRP",
+     "grade": "D"
+    }
+   ],
+   "grade": "C",
+   "verified_at": "2026-11-05"
+  },
+  {
+   "id": "mac-studio-m4-max-36gb",
+   "name_he": "Apple Mac Studio M4 Max (36GB)",
+   "name_en": "Apple Mac Studio M4 Max 14-core CPU / 32-core GPU, 36GB / 512GB (MU963HB/A)",
+   "url": null,
+   "category": "workstation",
+   "tier": "64gb",
+   "memory_gb": 36,
+   "memory_kind": "unified",
+   "summary_he": "36GB זיכרון מאוחד ורוחב פס 410GB/s; מריץ מודלים עד כ-30B בכימות Q4. ב-Bug 9,399 ש״ח, חסר זמנית.",
+   "why_israeli": "Bug lists it (Eilat branch cheaper); the page is ambiguous - it also shows an M3 Ultra configuration - and marks the item temporarily out of stock.",
+   "price_ils": {
+    "amount": 9399,
+    "currency": "ILS",
+    "store": "Bug",
+    "source_url": "https://www.bug.co.il/brand/apple/m3/ultra/mu963hb/a",
+    "date": "2026-11-05",
+    "note": "New; list price (page does not label it 'regular'); config 14-core CPU / 32-core GPU / 36GB / 512GB; page undated",
+    "availability": "out of stock (page: 'חסר זמנית')",
+    "grade": "C",
+    "eilat_branch_price": 7965.25
+   },
+   "price_usd_msrp": null,
+   "published_speed": [
+    {
+     "model": "Llama 7B Q4_0 (M4 Max, 32 GPU cores, 410 GB/s)",
+     "tokens_per_s_gen": 69.95,
+     "tokens_per_s_prompt": 713.93,
+     "runtime": "llama.cpp llama-bench, Llama 7B (pp512 / tg128)",
+     "source_url": "https://github.com/ggml-org/llama.cpp/discussions/4167",
+     "date": null,
+     "grade": "C",
+     "note": "Undated summary row (build 8e672ef). 40-core GPU variant: 83.06 / 885.68."
+    },
+    {
+     "model": "Llama 7B Q8_0 (M4 Max, 32 GPU cores)",
+     "tokens_per_s_gen": 43.87,
+     "tokens_per_s_prompt": 718.56,
+     "runtime": "llama.cpp llama-bench, Llama 7B (pp512 / tg128)",
+     "source_url": "https://github.com/ggml-org/llama.cpp/discussions/4167",
+     "date": null,
+     "grade": "C"
+    }
+   ],
+   "fits": "~30B Q4 comfortably, 14B Q8 with long context - basis: our size arithmetic (grade E)",
+   "power_w": null,
+   "sources": [
+    {
+     "url": "https://www.bug.co.il/brand/apple/m3/ultra/mu963hb/a",
+     "date": "2026-11-05",
+     "what": "Price, configs, out of stock",
+     "grade": "C"
+    },
+    {
+     "url": "https://github.com/ggml-org/llama.cpp/discussions/4167",
+     "date": null,
+     "what": "llama.cpp Apple Silicon table",
+     "grade": "C"
+    }
+   ],
+   "grade": "C",
+   "verified_at": "2026-11-05"
+  },
+  {
+   "id": "mac-studio-m5-max-36gb",
+   "name_he": "Apple Mac Studio M5 Max (36GB)",
+   "name_en": "Apple Mac Studio M5 Max 36GB / 512GB (MHL64HB/A)",
+   "url": null,
+   "category": "workstation",
+   "tier": "64gb",
+   "memory_gb": 36,
+   "memory_kind": "unified",
+   "summary_he": "דור חדש: ה-M5 Max (40 ליבות GPU) הגיע ל-120 טוקנים/שנייה ביצירה ב-Q4 על 7B. בישראל כ-9,789 ש״ח (Carmel PC דרך Zap).",
+   "why_israeli": "Listed on Zap by Carmel PC (9,789) and Makanion (10,402). The 36GB configuration likely has fewer GPU cores than the measured 40-core chip.",
+   "price_ils": {
+    "amount": 9789,
+    "currency": "ILS",
+    "store": "Zap (comparison; Carmel PC)",
+    "source_url": "https://www.zap.co.il/models.aspx?sog=c-brandpc&db252715=252716&db5802401=5806835",
+    "date": "2026-11-05",
+    "note": "New; M5 Max, 36GB / 512GB (MHL64HB/A); Makanion lists 10,402",
+    "availability": "listed on Zap",
+    "grade": "D",
+    "other_prices": [
+     {
+      "amount": 10402,
+      "store": "Makanion (via Zap)",
+      "source_url": "https://www.zap.co.il/models.aspx?sog=c-brandpc&db252715=252716&db5802401=5806835",
+      "note": "M5 Max 36GB/512GB",
+      "availability": "listed on Zap"
+     }
+    ]
+   },
+   "price_usd_msrp": null,
+   "published_speed": [
+    {
+     "model": "Llama 7B Q4_0 (M5 Max, 40 GPU cores, 614 GB/s, 128 GB)",
+     "tokens_per_s_gen": 119.92,
+     "tokens_per_s_prompt": 3219.99,
+     "runtime": "llama.cpp llama-bench, Llama 7B (pp512 / tg128), build c1d0e7a",
+     "source_url": "https://github.com/ggml-org/llama.cpp/discussions/4167",
+     "date": "2026-08-25",
+     "grade": "C",
+     "note": "ggerganov's run. Earlier builds (8e672ef, Mar 2026) gave prompt ~990-1,050 and gen ~103-104 on 64/128 GB machines. The 36 GB model may use a 32-core GPU, for which the table has no data."
+    },
+    {
+     "model": "Llama 7B Q8_0 (M5 Max, 40 GPU cores)",
+     "tokens_per_s_gen": 72.42,
+     "tokens_per_s_prompt": 3143.81,
+     "runtime": "llama.cpp llama-bench, Llama 7B (pp512 / tg128), build c1d0e7a",
+     "source_url": "https://github.com/ggml-org/llama.cpp/discussions/4167",
+     "date": "2026-08-25",
+     "grade": "C"
+    }
+   ],
+   "fits": "~30B Q4 comfortably, 14B Q8 with long context - basis: our size arithmetic (grade E)",
+   "power_w": null,
+   "sources": [
+    {
+     "url": "https://www.zap.co.il/models.aspx?sog=c-brandpc&db252715=252716&db5802401=5806835",
+     "date": "2026-11-05",
+     "what": "Zap list: M5 Max 36GB/512GB 9,789 (Carmel PC)",
+     "grade": "D"
+    },
+    {
+     "url": "https://github.com/ggml-org/llama.cpp/discussions/4167",
+     "date": "2026-08-25",
+     "what": "M5 Max results",
+     "grade": "C"
+    }
+   ],
+   "grade": "C",
+   "verified_at": "2026-11-05"
+  },
+  {
+   "id": "mac-studio-m5-ultra-96gb",
+   "name_he": "Apple Mac Studio M5 Ultra (96GB)",
+   "name_en": "Apple Mac Studio M5 Ultra 30-core CPU / 64-core GPU, 96GB / 1TB",
+   "url": null,
+   "category": "workstation",
+   "tier": "128gb+",
+   "memory_gb": 96,
+   "memory_kind": "unified",
+   "summary_he": "96GB זיכרון מאוחד שמאפשר מודלים בני 100B+ בכימות נמוכה (gpt-oss-120B דורש כ-59GiB). בישראל 21,490 ש״ח אצל Schneider (דרך Zap).",
+   "why_israeli": "Listed on Zap by Schneider (21,490) and Makanion (22,885); a 256GB/4TB M5 Ultra is listed at 51,365 (Makanion).",
+   "price_ils": {
+    "amount": 21490,
+    "currency": "ILS",
+    "store": "Zap (comparison; Schneider)",
+    "source_url": "https://www.zap.co.il/models.aspx?sog=c-brandpc&db252715=252716&db5802401=5806835",
+    "date": "2026-11-05",
+    "note": "New; M5 Ultra 30C/64C, 96GB / 1TB (listing title says 'laptop' but describes Mac Studio)",
+    "availability": "listed on Zap",
+    "grade": "D",
+    "other_prices": [
+     {
+      "amount": 22885,
+      "store": "Makanion (via Zap)",
+      "source_url": "https://www.zap.co.il/models.aspx?sog=c-brandpc&db252715=252716&db5802401=5806835",
+      "note": "MHL74HB-A 96GB/1TB",
+      "availability": "listed on Zap"
+     },
+     {
+      "amount": 51365,
+      "store": "Makanion (via Zap)",
+      "source_url": "https://www.zap.co.il/models.aspx?sog=c-brandpc&db252715=252716&db5802401=5806835",
+      "note": "M5 Ultra 256GB / 4TB",
+      "availability": "listed on Zap"
+     }
+    ]
+   },
+   "price_usd_msrp": null,
+   "published_speed": [
+    {
+     "model": "Llama 7B Q4_0 (M5 Ultra, 80 GPU cores, 1,228 GB/s)",
+     "tokens_per_s_gen": 179.1,
+     "tokens_per_s_prompt": 4944.66,
+     "runtime": "llama.cpp llama-bench, Llama 7B (pp512 / tg128), build c1d0e7a",
+     "source_url": "https://github.com/ggml-org/llama.cpp/discussions/4167",
+     "date": null,
+     "grade": "C",
+     "note": "Summary row for the 80-core GPU chip; the 64-core GPU variant sold with 96GB has no data in the table."
+    },
+    {
+     "model": "Llama 7B Q8_0 (M5 Ultra, 80 GPU cores)",
+     "tokens_per_s_gen": 119.01,
+     "tokens_per_s_prompt": 4910.55,
+     "runtime": "llama.cpp llama-bench, Llama 7B (pp512 / tg128), build c1d0e7a",
+     "source_url": "https://github.com/ggml-org/llama.cpp/discussions/4167",
+     "date": null,
+     "grade": "C"
+    }
+   ],
+   "fits": "gpt-oss 120B MXFP4 (59.02 GiB per hardware-corner's DGX Spark table) fits in 96 GB; 70B Q8 (~70 GB) is borderline - basis: model file sizes + our arithmetic (grade E)",
+   "power_w": null,
+   "sources": [
+    {
+     "url": "https://www.zap.co.il/models.aspx?sog=c-brandpc&db252715=252716&db5802401=5806835",
+     "date": "2026-11-05",
+     "what": "Zap list: M5 Ultra 96GB/1TB 21,490 (Schneider)",
+     "grade": "D"
+    },
+    {
+     "url": "https://github.com/ggml-org/llama.cpp/discussions/4167",
+     "date": null,
+     "what": "M5 Ultra row",
+     "grade": "C"
+    },
+    {
+     "url": "https://www.hardware-corner.net/first-dgx-spark-llm-benchmarks/",
+     "date": "2025-10-15",
+     "what": "gpt-oss 120B MXFP4 file size",
+     "grade": "D"
+    }
+   ],
+   "grade": "C",
+   "verified_at": "2026-11-05"
+  },
+  {
+   "id": "mac-studio-m3-ultra-96gb",
+   "name_he": "Apple Mac Studio M3 Ultra (96GB ומעלה)",
+   "name_en": "Apple Mac Studio M3 Ultra 28-core CPU / 60-core GPU, 96GB base (up to 512GB)",
+   "url": null,
+   "category": "workstation",
+   "tier": "128gb+",
+   "memory_gb": 96,
+   "memory_kind": "unified",
+   "summary_he": "הדור הקודם בקצה העליון, עם זיכרון מאוחד שניתן להגדיל עד 512GB. מחיר ישראלי מאומת לא נמצא.",
+   "why_israeli": "The Bug Mac Studio page shows an M3 Ultra configuration (96GB base, 256/512GB options) but its price (9,399) belongs to the M4 Max base; no verified M3 Ultra price found.",
+   "price_ils": null,
+   "price_usd_msrp": null,
+   "published_speed": [
+    {
+     "model": "Llama 7B Q4_0 (M3 Ultra, 60 GPU cores, 800 GB/s)",
+     "tokens_per_s_gen": 88.4,
+     "tokens_per_s_prompt": 1073.09,
+     "runtime": "llama.cpp llama-bench, Llama 7B (pp512 / tg128)",
+     "source_url": "https://github.com/ggml-org/llama.cpp/discussions/4167",
+     "date": null,
+     "grade": "C",
+     "note": "80-core GPU variant: 92.14 / 1471.24."
+    },
+    {
+     "model": "Llama 7B Q8_0 (M3 Ultra, 60 GPU cores)",
+     "tokens_per_s_gen": 63.55,
+     "tokens_per_s_prompt": 1085.76,
+     "runtime": "llama.cpp llama-bench, Llama 7B (pp512 / tg128)",
+     "source_url": "https://github.com/ggml-org/llama.cpp/discussions/4167",
+     "date": null,
+     "grade": "C"
+    }
+   ],
+   "fits": "96 GB: gpt-oss 120B MXFP4 (59 GiB); 256/512 GB options allow much larger MoE models - basis: file sizes, our arithmetic (grade E)",
+   "power_w": null,
+   "sources": [
+    {
+     "url": "https://www.bug.co.il/brand/apple/m3/ultra/mu963hb/a",
+     "date": "2026-11-05",
+     "what": "M3 Ultra configuration options on the Bug page",
+     "grade": "C"
+    },
+    {
+     "url": "https://github.com/ggml-org/llama.cpp/discussions/4167",
+     "date": null,
+     "what": "M3 Ultra rows",
+     "grade": "C"
+    }
+   ],
+   "grade": "C",
+   "verified_at": "2026-11-05"
+  },
+  {
+   "id": "dgx-spark-128gb",
+   "name_he": "NVIDIA DGX Spark (128GB)",
+   "name_en": "NVIDIA DGX Spark GB10, 128GB unified, 4TB",
+   "url": null,
+   "category": "workstation",
+   "tier": "128gb+",
+   "memory_gb": 128,
+   "memory_kind": "unified",
+   "summary_he": "מחשב AI שולחני של אנבידיה עם 128GB זיכרון מאוחד; מריץ gpt-oss-120B בכ-39-53 טוקנים/שנייה. ב-Ivory 23,990 ש״ח.",
+   "why_israeli": "Ivory lists the NVIDIA DGX Spark (NVDGXSPARK-PB) and partner variants (Gigabyte AI TOP ATOM); the page carries Ivory's 'bargain' open-box/returned disclaimer.",
+   "price_ils": {
+    "amount": 23990,
+    "currency": "ILS",
+    "store": "Ivory",
+    "source_url": "https://www.ivory.co.il/catalog.php?id=168451",
+    "date": "2026-11-05",
+    "note": "New or open-box (page carries a 'מציאון' disclaimer); 128GB LPDDR5x (273 GB/s), 4TB; page: prices valid until 05/11/2026",
+    "availability": "stock status not shown on the page",
+    "grade": "C",
+    "eilat_branch_price": 20330,
+    "other_prices": [
+     {
+      "amount": 19990,
+      "store": "PNY via Pc-Online/Zap",
+      "source_url": "https://www.zap.co.il/models.aspx?sog=c-pcdesktop&db4514981=11778114",
+      "note": "Seen only in a search-result summary; not opened",
+      "availability": "unknown"
+     }
+    ]
+   },
+   "price_usd_msrp": null,
+   "published_speed": [
+    {
+     "model": "gpt-oss 120B MXFP4 (pp2048 / tg32)",
+     "tokens_per_s_gen": 38.55,
+     "tokens_per_s_prompt": 1723.07,
+     "runtime": "llama.cpp (CUDA); build not stated",
+     "source_url": "https://www.hardware-corner.net/first-dgx-spark-llm-benchmarks/",
+     "date": "2025-10-15",
+     "grade": "D",
+     "note": "Numbers originate from a llama.cpp discussion thread; the article calls the Spark '$4000+'."
+    },
+    {
+     "model": "gpt-oss 20B MXFP4 (pp2048 / tg32)",
+     "tokens_per_s_gen": 58.97,
+     "tokens_per_s_prompt": 3621.59,
+     "runtime": "llama.cpp (CUDA)",
+     "source_url": "https://www.hardware-corner.net/first-dgx-spark-llm-benchmarks/",
+     "date": "2025-10-15",
+     "grade": "D"
+    },
+    {
+     "model": "Qwen3 MoE 30B-A3B Q8_0 (pp2048 / tg32)",
+     "tokens_per_s_gen": 47.08,
+     "tokens_per_s_prompt": 2916.25,
+     "runtime": "llama.cpp (CUDA)",
+     "source_url": "https://www.hardware-corner.net/first-dgx-spark-llm-benchmarks/",
+     "date": "2025-10-15",
+     "grade": "D"
+    },
+    {
+     "model": "gpt-oss 120B MXFP4 (empty context)",
+     "tokens_per_s_gen": 52.9,
+     "tokens_per_s_prompt": 1689,
+     "runtime": "llama.cpp b6767 (JetsonHacks)",
+     "source_url": "https://jetsonhacks.com/wp-content/uploads/2025/10/SparkThorLlamaBenchmarks.html",
+     "date": "2025-10-15",
+     "grade": "D",
+     "note": "Later build after a decode optimisation; figures as summarised from search results (page not opened)."
+    }
+   ],
+   "fits": "120B-class MoE (gpt-oss 120B MXFP4, 59 GiB) at ~39-53 tok/s; dense 70B is slow on 273 GB/s - basis: measured rows above",
+   "power_w": 240,
+   "sources": [
+    {
+     "url": "https://www.ivory.co.il/catalog.php?id=168451",
+     "date": "2026-11-05",
+     "what": "Israeli list price, specs; 240 W external PSU, CPU TDP 140 W",
+     "grade": "C"
+    },
+    {
+     "url": "https://www.hardware-corner.net/first-dgx-spark-llm-benchmarks/",
+     "date": "2025-10-15",
+     "what": "DGX Spark vs Strix Halo llama.cpp numbers",
+     "grade": "D"
+    },
+    {
+     "url": "https://github.com/ggml-org/llama.cpp/discussions/16578",
+     "date": "2025-10",
+     "what": "Performance of llama.cpp on DGX Spark (thread seen in search results)",
+     "grade": "C"
+    }
+   ],
+   "grade": "C",
+   "verified_at": "2026-11-05"
+  },
+  {
+   "id": "rtx-pro-6000-96gb",
+   "name_he": "NVIDIA RTX PRO 6000 Blackwell 96GB",
+   "name_en": "NVIDIA RTX PRO 6000 Blackwell Workstation Edition 96GB",
+   "url": null,
+   "category": "gpu",
+   "tier": "128gb+",
+   "memory_gb": 96,
+   "memory_kind": "VRAM",
+   "summary_he": "כרטיס עבודה עם 96GB VRAM; מריץ Llama 70B בכימות Q4 בכ-32 טוקנים/שנייה וגם מודלי 120B. לא נמצא מחיר ישראלי.",
+   "why_israeli": "No Israeli retailer listing found in the searches run; US/EU street prices only (not recorded as MSRP).",
+   "price_ils": null,
+   "price_usd_msrp": null,
+   "published_speed": [
+    {
+     "model": "Qwen3 8B Q4_K (4k context)",
+     "tokens_per_s_gen": 173.7,
+     "tokens_per_s_prompt": 10964.1,
+     "runtime": "llama.cpp-style GGUF benchmark (hardware-corner; build not stated on this page)",
+     "source_url": "https://www.hardware-corner.net/gpu-llm-benchmarks/rtx-pro-6000-blackwell/",
+     "date": "2026-03",
+     "grade": "D"
+    },
+    {
+     "model": "Llama 3.3 70B Q4_K (4k context)",
+     "tokens_per_s_gen": 32.0,
+     "tokens_per_s_prompt": 1689.1,
+     "runtime": "llama.cpp-style GGUF benchmark (hardware-corner; build not stated on this page)",
+     "source_url": "https://www.hardware-corner.net/gpu-llm-benchmarks/rtx-pro-6000-blackwell/",
+     "date": "2026-03",
+     "grade": "D",
+     "note": "128k context: 16.6 gen."
+    },
+    {
+     "model": "gpt-oss 120B MXFP4 (4k context)",
+     "tokens_per_s_gen": 210.1,
+     "tokens_per_s_prompt": 4578.6,
+     "runtime": "llama.cpp-style GGUF benchmark (hardware-corner; build not stated on this page)",
+     "source_url": "https://www.hardware-corner.net/gpu-llm-benchmarks/rtx-pro-6000-blackwell/",
+     "date": "2026-03",
+     "grade": "D"
+    },
+    {
+     "model": "Qwen3.5 122B Q4_K (4k context)",
+     "tokens_per_s_gen": 98.4,
+     "tokens_per_s_prompt": 3055.0,
+     "runtime": "llama.cpp build 8288",
+     "source_url": "https://www.hardware-corner.net/gpu-llm-benchmarks/rtx-pro-6000-blackwell/",
+     "date": "2026-03",
+     "grade": "D"
+    },
+    {
+     "model": "Meta Llama 3.1 8B Instruct Q4_K_M",
+     "tokens_per_s_gen": 85.8,
+     "tokens_per_s_prompt": 6346,
+     "runtime": "LocalScore benchmark (crowd-sourced leaderboard)",
+     "source_url": "https://www.localscore.ai",
+     "date": "2026-11-05",
+     "grade": "D",
+     "note": "Workstation Edition entry; lower than the hardware-corner run."
+    }
+   ],
+   "fits": "70B Q4 (32 tok/s) and 120B-class MoE (gpt-oss 120B 210 tok/s; Mistral 123B Q4_K 19 tok/s) - basis: measured rows above",
+   "power_w": 600,
+   "sources": [
+    {
+     "url": "https://www.hardware-corner.net/gpu-llm-benchmarks/rtx-pro-6000-blackwell/",
+     "date": "2026-03",
+     "what": "Speeds table",
+     "grade": "D"
+    },
+    {
+     "url": "https://www.localscore.ai",
+     "date": "2026-11-05",
+     "what": "Leaderboard entry",
+     "grade": "D"
+    },
+    {
+     "url": "https://wccftech.com/nvidia-rtx-pro-6000-blackwell-launch-flagship-gb202-gpu-24k-cores-96-gb-600w-td",
+     "date": null,
+     "what": "Headline: up to 600 W TDP (seen in search results)",
+     "grade": "D"
+    }
+   ],
+   "grade": "D",
+   "verified_at": "2026-11-05"
+  },
+  {
+   "id": "asus-rog-flow-z13-128gb",
+   "name_he": "ASUS ROG Flow Z13 (Ryzen AI Max+ 395, 128GB)",
+   "name_en": "ASUS ROG Flow Z13 GZ302EAC-RU179X, Ryzen AI MAX+ 395, 128GB LPDDR5X-8000",
+   "url": null,
+   "category": "laptop",
+   "tier": "128gb+",
+   "memory_gb": 128,
+   "memory_kind": "unified",
+   "summary_he": "מחשב נייד/טאבלט עם Ryzen AI Max+ 395 ו-128GB זיכרון משותף; פלטפורמת Strix Halo מריצה gpt-oss-120B בכ-34 טוקנים/שנייה. ב-Bug 15,103 ש״ח.",
+   "why_israeli": "Bug lists the model (Eilat branch cheaper); Zap search snippets show similar 128GB listings (not opened).",
+   "price_ils": {
+    "amount": 15103,
+    "currency": "ILS",
+    "store": "Bug",
+    "source_url": "https://www.bug.co.il/brand/asus/rog/flow/z13/kjp/gz302eac/ru179x",
+    "date": "2026-11-05",
+    "note": "New, 1TB SSD, 13.4-inch touchscreen laptop; page has no promo end date or page date",
+    "availability": "stock not shown on the page",
+    "grade": "C",
+    "eilat_branch_price": 12799.15
+   },
+   "price_usd_msrp": null,
+   "published_speed": [
+    {
+     "model": "gpt-oss 120B MXFP4 (pp2048 / tg32) - Strix Halo platform",
+     "tokens_per_s_gen": 34.13,
+     "tokens_per_s_prompt": 339.87,
+     "runtime": "llama.cpp; backend and build not stated",
+     "source_url": "https://www.hardware-corner.net/first-dgx-spark-llm-benchmarks/",
+     "date": "2025-10-15",
+     "grade": "D",
+     "note": "Generic Strix Halo number from the article - not measured on this laptop; power-limited laptop silicon may differ."
+    }
+   ],
+   "fits": "gpt-oss 120B MXFP4 (59 GiB) fits in 128 GB (Strix Halo row above); dense 70B is slow on LPDDR5X bandwidth - basis: article + file size",
+   "power_w": null,
+   "sources": [
+    {
+     "url": "https://www.bug.co.il/brand/asus/rog/flow/z13/kjp/gz302eac/ru179x",
+     "date": "2026-11-05",
+     "what": "Israeli price, specs",
+     "grade": "C"
+    },
+    {
+     "url": "https://www.hardware-corner.net/first-dgx-spark-llm-benchmarks/",
+     "date": "2025-10-15",
+     "what": "Strix Halo gpt-oss 120B numbers",
+     "grade": "D"
+    }
+   ],
+   "grade": "C",
+   "verified_at": "2026-11-05"
+  },
+  {
+   "id": "gmktec-evo-x2-96gb",
+   "name_he": "GMKtec EVO-X2 (Ryzen AI Max+ 395, 96GB)",
+   "name_en": "GMKtec EVO-X2, Ryzen AI Max+ 395, 96GB",
+   "url": null,
+   "category": "mini-pc",
+   "tier": "128gb+",
+   "memory_gb": 96,
+   "memory_kind": "unified",
+   "summary_he": "מיני PC עם Ryzen AI Max+ 395; גרסת 96GB נמכרת בישראל כיבוא אישי ב-12,999 ש״ח (Playmack דרך Zap).",
+   "why_israeli": "Zap lists EVO-X2 variants from Playmack as personal-import offers (fsPersonalImport links): 64GB 9,499; 96GB 12,999; unspecified 12,900.",
+   "price_ils": {
+    "amount": 12999,
+    "currency": "ILS",
+    "store": "Zap (comparison; Playmack, personal-import listing)",
+    "source_url": "https://www.zap.co.il/models.aspx?sog=c-brandpc&db252715=11779504&db254278=5782973",
+    "date": "2026-11-05",
+    "note": "IMPORT (personal-import offer on Zap), 96GB; no 128GB variant seen on the page; page undated",
+    "availability": "listed on Zap",
+    "grade": "D",
+    "other_prices": [
+     {
+      "amount": 9499,
+      "store": "Playmack (via Zap)",
+      "source_url": "https://www.zap.co.il/models.aspx?sog=c-brandpc&db252715=11779504&db254278=5782973",
+      "note": "EVO-X2 64GB, import",
+      "availability": "listed on Zap"
+     },
+     {
+      "amount": 12900,
+      "store": "Playmack (via Zap)",
+      "source_url": "https://www.zap.co.il/models.aspx?sog=c-brandpc&db252715=11779504&db254278=5782973",
+      "note": "EVO-X2, memory not shown, import",
+      "availability": "listed on Zap"
+     }
+    ]
+   },
+   "price_usd_msrp": null,
+   "published_speed": [
+    {
+     "model": "gpt-oss 120B MXFP4 (pp2048 / tg32) - Strix Halo platform",
+     "tokens_per_s_gen": 34.13,
+     "tokens_per_s_prompt": 339.87,
+     "runtime": "llama.cpp; backend and build not stated",
+     "source_url": "https://www.hardware-corner.net/first-dgx-spark-llm-benchmarks/",
+     "date": "2025-10-15",
+     "grade": "D",
+     "note": "Generic Strix Halo number from the article - not measured on this mini PC."
+    }
+   ],
+   "fits": "gpt-oss 120B MXFP4 (59 GiB) in 96 GB; basis: Strix Halo row + file size",
+   "power_w": null,
+   "sources": [
+    {
+     "url": "https://www.zap.co.il/models.aspx?sog=c-brandpc&db252715=11779504&db254278=5782973",
+     "date": "2026-11-05",
+     "what": "Zap GMKtec list with import offers",
+     "grade": "D"
+    },
+    {
+     "url": "https://www.hardware-corner.net/first-dgx-spark-llm-benchmarks/",
+     "date": "2025-10-15",
+     "what": "Strix Halo gpt-oss 120B numbers",
+     "grade": "D"
+    }
+   ],
+   "grade": "D",
+   "verified_at": "2026-11-05"
+  },
+  {
+   "id": "rtx-5070-12gb",
+   "name_he": "NVIDIA GeForce RTX 5070 12GB",
+   "name_en": "NVIDIA GeForce RTX 5070 12GB",
+   "url": null,
+   "category": "gpu",
+   "tier": "16gb",
+   "memory_gb": 12,
+   "memory_kind": "VRAM",
+   "summary_he": "כרטיס 12GB מהדור החדש: Qwen3 14B בכימות Q4 רץ בו בכ-54 טוקנים/שנייה, אבל 12GB הם תקרה למודלים גדולים יותר.",
+   "why_israeli": "Zap lists the Gigabyte RTX 5070 12GB WINDFORCE OC SFF from 13 offers (header says 11 stores); an Eilat-only in-store offer is lower.",
+   "price_ils": {
+    "amount": 3689,
+    "currency": "ILS",
+    "store": "Zap (price comparison; lowest online offer Office Pro)",
+    "source_url": "https://www.zap.co.il/model.aspx?modelid=1260759",
+    "date": "2026-11-05",
+    "note": "New (Gigabyte GeForce RTX 5070 12GB WINDFORCE OC SFF, GV-N5070WF3OC-12GD); page range 3,689-4,599; TMS Eilat in-store only 3,305; Zap entry dated 1/2026, no price-update date shown",
+    "availability": "Office Pro: free shipping, delivery up to 2 business days",
+    "grade": "D"
+   },
+   "price_usd_msrp": {
+    "amount": 549,
+    "currency": "USD",
+    "source_url": "https://en.wikipedia.org/wiki/GeForce_RTX_50_series",
+    "source_date": null,
+    "grade": "D",
+    "note": "Launch MSRP per Wikipedia (RTX 5070 12 GB); the page's table and lead give conflicting release dates"
+   },
+   "price_usd_market": {
+    "amount": 650,
+    "currency": "USD",
+    "source_url": "https://www.hardware-corner.net/gpu-llm-benchmarks/rtx-5070/",
+    "grade": "D",
+    "date": "2026-03",
+    "note": "hardware-corner 'Current Price in US' labelled 'Avg. Market Value' (not an MSRP)"
+   },
+   "published_speed": [
+    {
+     "model": "Qwen3 8B Q4_K (4k context)",
+     "tokens_per_s_gen": 85.8,
+     "tokens_per_s_prompt": 3487.7,
+     "runtime": "llama.cpp-style GGUF benchmark (hardware-corner; build not stated on this page)",
+     "source_url": "https://www.hardware-corner.net/gpu-llm-benchmarks/rtx-5070/",
+     "date": "2026-03",
+     "grade": "D",
+     "note": "16k context: 59.1 gen / 1600.8 prompt; 32k: 43.6 / 898.8."
+    },
+    {
+     "model": "Qwen3 14B Q4_K (4k context)",
+     "tokens_per_s_gen": 54.2,
+     "tokens_per_s_prompt": 2144.2,
+     "runtime": "llama.cpp-style GGUF benchmark (hardware-corner; build not stated on this page)",
+     "source_url": "https://www.hardware-corner.net/gpu-llm-benchmarks/rtx-5070/",
+     "date": "2026-03",
+     "grade": "D",
+     "note": "16k context: 40.6 gen / 1315.2 prompt."
+    },
+    {
+     "model": "Llama 2 7B Q4_0 (pp512 / tg128)",
+     "tokens_per_s_gen": 128.21,
+     "tokens_per_s_prompt": 5783.44,
+     "runtime": "llama.cpp llama-bench, CUDA, Llama 2 7B Q4_0 (pp512 / tg128), -ngl 99, flash-attention on (commit not listed)",
+     "source_url": "https://github.com/ggml-org/llama.cpp/discussions/15013",
+     "date": null,
+     "grade": "C",
+     "note": "Community-submitted scoreboard row (Spyro000), undated. Flash-attention off: 127.54 gen / 5184.75 prompt."
+    }
+   ],
+   "fits": "14B Q4 (hardware-corner: 'Max Model 14B', Qwen3 14B Q4_K up to 16k context); gpt-oss 20B and 30B-class models are not on its table - basis: page + 12 GB arithmetic (grade E)",
+   "power_w": 250,
+   "sources": [
+    {
+     "url": "https://www.zap.co.il/model.aspx?modelid=1260759",
+     "date": "2026-11-05",
+     "what": "Israeli price range, store list",
+     "grade": "D"
+    },
+    {
+     "url": "https://www.hardware-corner.net/gpu-llm-benchmarks/rtx-5070/",
+     "date": "2026-03",
+     "what": "Speeds, 12 GB GDDR7, TDP 250 W, US market value $650",
+     "grade": "D"
+    },
+    {
+     "url": "https://github.com/ggml-org/llama.cpp/discussions/15013",
+     "date": null,
+     "what": "llama.cpp CUDA scoreboard row",
+     "grade": "C"
+    },
+    {
+     "url": "https://en.wikipedia.org/wiki/GeForce_RTX_50_series",
+     "date": null,
+     "what": "Launch MSRP $549",
+     "grade": "D"
+    }
+   ],
+   "grade": "C",
+   "verified_at": "2026-11-05"
+  },
+  {
+   "id": "rtx-5070-ti-16gb",
+   "name_he": "NVIDIA GeForce RTX 5070 Ti 16GB",
+   "name_en": "NVIDIA GeForce RTX 5070 Ti 16GB",
+   "url": null,
+   "category": "gpu",
+   "tier": "16gb",
+   "memory_gb": 16,
+   "memory_kind": "VRAM",
+   "summary_he": "16GB ורוחב פס גבוה: כ-156 טוקנים/שנייה על gpt-oss-20B וכ-74 על Qwen3 14B. בהשוואת המחירים של Zap זה החל מ-5,515 ש״ח.",
+   "why_israeli": "Zap lists the Gigabyte RTX 5070 Ti GAMING OC 16G from 12 online offers plus two Eilat in-store offers.",
+   "price_ils": {
+    "amount": 5515,
+    "currency": "ILS",
+    "store": "Zap (price comparison; lowest online offer Office Pro)",
+    "source_url": "https://www.zap.co.il/model.aspx?modelid=1260781",
+    "date": "2026-11-05",
+    "note": "New (Gigabyte GeForce RTX 5070 Ti GAMING OC 16G, GV-N507TGAMING OC-16GD); online range 5,515-6,119; Eilat in-store only: Ofek PC 4,873, TMS 5,094; Zap entry dated 1/2026, no price-update date shown",
+    "availability": "Office Pro: free shipping, delivery up to 2 business days",
+    "grade": "D"
+   },
+   "price_usd_msrp": {
+    "amount": 749,
+    "currency": "USD",
+    "source_url": "https://en.wikipedia.org/wiki/GeForce_RTX_50_series",
+    "source_date": null,
+    "grade": "D",
+    "note": "Launch MSRP per Wikipedia (RTX 5070 Ti 16 GB)"
+   },
+   "price_usd_market": {
+    "amount": 916,
+    "currency": "USD",
+    "source_url": "https://www.hardware-corner.net/gpu-llm-benchmarks/rtx-5070-ti/",
+    "grade": "D",
+    "date": "2026-03",
+    "note": "hardware-corner 'Current Price in US' labelled 'Avg. Market Value' (not an MSRP)"
+   },
+   "published_speed": [
+    {
+     "model": "Qwen3 8B Q4_K (4k context)",
+     "tokens_per_s_gen": 120.5,
+     "tokens_per_s_prompt": 5557.3,
+     "runtime": "llama.cpp-style GGUF benchmark (hardware-corner; build not stated on this page)",
+     "source_url": "https://www.hardware-corner.net/gpu-llm-benchmarks/rtx-5070-ti/",
+     "date": "2026-03",
+     "grade": "D",
+     "note": "32k context: 63.3 gen / 2269.0 prompt."
+    },
+    {
+     "model": "Qwen3 14B Q4_K (4k context)",
+     "tokens_per_s_gen": 74.3,
+     "tokens_per_s_prompt": 3264.7,
+     "runtime": "llama.cpp-style GGUF benchmark (hardware-corner; build not stated on this page)",
+     "source_url": "https://www.hardware-corner.net/gpu-llm-benchmarks/rtx-5070-ti/",
+     "date": "2026-03",
+     "grade": "D",
+     "note": "32k context: 45.5 gen / 1658.2 prompt. The page headline quotes 2,304 t/s prompt 'at 4k' but its table shows that value at 16k; the table's 4k value is used here."
+    },
+    {
+     "model": "gpt-oss 20B MXFP4 (4k context)",
+     "tokens_per_s_gen": 156.0,
+     "tokens_per_s_prompt": 6178.3,
+     "runtime": "llama.cpp-style GGUF benchmark (hardware-corner; build not stated on this page)",
+     "source_url": "https://www.hardware-corner.net/gpu-llm-benchmarks/rtx-5070-ti/",
+     "date": "2026-03",
+     "grade": "D",
+     "note": "128k context: 66.6 gen / 1363.7 prompt."
+    },
+    {
+     "model": "Llama 2 7B Q4_0 (pp512 / tg128)",
+     "tokens_per_s_gen": 182.43,
+     "tokens_per_s_prompt": 8419.56,
+     "runtime": "llama.cpp llama-bench, CUDA, Llama 2 7B Q4_0 (pp512 / tg128), -ngl 99, flash-attention on (commit 933414c)",
+     "source_url": "https://github.com/ggml-org/llama.cpp/discussions/15013",
+     "date": null,
+     "grade": "C",
+     "note": "Community-submitted scoreboard row (TinyServal), undated. Flash-attention off: 176.85 gen / 6952.38 prompt."
+    }
+   ],
+   "fits": "~20B Q4 (hardware-corner: 'Max Model 20B'; gpt-oss 20B MXFP4 runs to 128k context); 30B-class does not fit in 16 GB - basis: page + arithmetic (grade E)",
+   "power_w": 300,
+   "sources": [
+    {
+     "url": "https://www.zap.co.il/model.aspx?modelid=1260781",
+     "date": "2026-11-05",
+     "what": "Israeli price range, store list",
+     "grade": "D"
+    },
+    {
+     "url": "https://www.hardware-corner.net/gpu-llm-benchmarks/rtx-5070-ti/",
+     "date": "2026-03",
+     "what": "Speeds ('Updated Benchmarks: March 2026'), TDP 300 W, US market value $916",
+     "grade": "D"
+    },
+    {
+     "url": "https://github.com/ggml-org/llama.cpp/discussions/15013",
+     "date": null,
+     "what": "llama.cpp CUDA scoreboard row",
+     "grade": "C"
+    },
+    {
+     "url": "https://en.wikipedia.org/wiki/GeForce_RTX_50_series",
+     "date": null,
+     "what": "Launch MSRP $749",
+     "grade": "D"
+    }
+   ],
+   "grade": "C",
+   "verified_at": "2026-11-05"
+  },
+  {
+   "id": "rtx-5080-16gb",
+   "name_he": "NVIDIA GeForce RTX 5080 16GB",
+   "name_en": "NVIDIA GeForce RTX 5080 16GB",
+   "url": null,
+   "category": "gpu",
+   "tier": "16gb",
+   "memory_gb": 16,
+   "memory_kind": "VRAM",
+   "summary_he": "אותם 16GB כמו ה-5070 Ti: מהיר ממנו בכ-10% ביצירת טקסט ובכ-15 עד 50% בעיבוד פרומפט, בתוספת מחיר של כ-1,000 ש״ח.",
+   "why_israeli": "Zap lists the Gigabyte RTX 5080 WindForce OC SFF 16G from 6 offers (header says 5 stores); other 5080 boards on Zap's list start at 6,693-7,490.",
+   "price_ils": {
+    "amount": 6549,
+    "currency": "ILS",
+    "store": "Zap (price comparison; lowest online offer Carmel Pisi)",
+    "source_url": "https://www.zap.co.il/model.aspx?modelid=1243021",
+    "date": "2026-11-05",
+    "note": "New (Gigabyte GeForce RTX 5080 WindForce OC SFF 16G, GV-N5080WF3OC-16GD); range 6,549-8,889; Playmax 8,200 is a purchase-from-abroad offer; TMS Eilat in-store only 6,794; Zap entry dated 2/2025, no price-update date shown",
+    "availability": "Carmel Pisi: free shipping, delivery up to 2 business days",
+    "grade": "D"
+   },
+   "price_usd_msrp": {
+    "amount": 999,
+    "currency": "USD",
+    "source_url": "https://en.wikipedia.org/wiki/GeForce_RTX_50_series",
+    "source_date": null,
+    "grade": "D",
+    "note": "Launch MSRP per Wikipedia (RTX 5080 16 GB)"
+   },
+   "price_usd_market": {
+    "amount": 1400,
+    "currency": "USD",
+    "source_url": "https://www.hardware-corner.net/gpu-llm-benchmarks/rtx-5080/",
+    "grade": "D",
+    "date": null,
+    "note": "hardware-corner 'Current Price in US' labelled 'Avg. Market Value' (not an MSRP)"
+   },
+   "published_speed": [
+    {
+     "model": "Qwen3 8B Q4_K (4k context)",
+     "tokens_per_s_gen": 129.1,
+     "tokens_per_s_prompt": 6410.1,
+     "runtime": "llama.cpp-style GGUF benchmark (hardware-corner; build not stated on this page)",
+     "source_url": "https://www.hardware-corner.net/gpu-llm-benchmarks/rtx-5080/",
+     "date": null,
+     "grade": "D",
+     "note": "32k context: 72.5 gen / 1943.3 prompt. Page carries no update date (title says 2026)."
+    },
+    {
+     "model": "Qwen3 14B Q4_K (4k context)",
+     "tokens_per_s_gen": 80.6,
+     "tokens_per_s_prompt": 3820.5,
+     "runtime": "llama.cpp-style GGUF benchmark (hardware-corner; build not stated on this page)",
+     "source_url": "https://www.hardware-corner.net/gpu-llm-benchmarks/rtx-5080/",
+     "date": null,
+     "grade": "D",
+     "note": "32k context: 51.9 gen / 1326.1 prompt."
+    },
+    {
+     "model": "gpt-oss 20B MXFP4 (4k context)",
+     "tokens_per_s_gen": 172.4,
+     "tokens_per_s_prompt": 9146.1,
+     "runtime": "llama.cpp build 8233 (named beside this row on the page)",
+     "source_url": "https://www.hardware-corner.net/gpu-llm-benchmarks/rtx-5080/",
+     "date": null,
+     "grade": "D",
+     "note": "128k context: 105.6 gen / 1726.6 prompt."
+    },
+    {
+     "model": "Llama 2 7B Q4_0 (pp512 / tg128)",
+     "tokens_per_s_gen": 184.68,
+     "tokens_per_s_prompt": 9487.7,
+     "runtime": "llama.cpp llama-bench, CUDA, Llama 2 7B Q4_0 (pp512 / tg128), -ngl 99, flash-attention on (commit 8a4280c)",
+     "source_url": "https://github.com/ggml-org/llama.cpp/discussions/15013",
+     "date": null,
+     "grade": "C",
+     "note": "Community-submitted scoreboard row (Hedede), undated. Flash-attention off: 181.99 gen / 8297.36 prompt."
+    }
+   ],
+   "fits": "~20B Q4 (hardware-corner: 'Max Model 20B', up to ~28B with aggressive quantisation); 30B-class and up does not fit in 16 GB - basis: page + arithmetic (grade E)",
+   "power_w": 360,
+   "sources": [
+    {
+     "url": "https://www.zap.co.il/model.aspx?modelid=1243021",
+     "date": "2026-11-05",
+     "what": "Israeli price range, store list",
+     "grade": "D"
+    },
+    {
+     "url": "https://www.hardware-corner.net/gpu-llm-benchmarks/rtx-5080/",
+     "date": null,
+     "what": "Speeds, TDP 360 W, US market value $1,400 (page undated)",
+     "grade": "D"
+    },
+    {
+     "url": "https://github.com/ggml-org/llama.cpp/discussions/15013",
+     "date": null,
+     "what": "llama.cpp CUDA scoreboard row",
+     "grade": "C"
+    },
+    {
+     "url": "https://en.wikipedia.org/wiki/GeForce_RTX_50_series",
+     "date": null,
+     "what": "Launch MSRP $999",
+     "grade": "D"
+    }
+   ],
+   "grade": "C",
+   "verified_at": "2026-11-05"
+  },
+  {
+   "id": "rx-9070-xt-16gb",
+   "name_he": "AMD Radeon RX 9070 XT 16GB",
+   "name_en": "AMD Radeon RX 9070 XT 16GB",
+   "url": null,
+   "category": "gpu",
+   "tier": "16gb",
+   "memory_gb": 16,
+   "memory_kind": "VRAM",
+   "summary_he": "כרטיס AMD עם 16GB: מודל 7B בכימות Q4 רץ בו ב-97 עד 142 טוקנים/שנייה, תלוי אם משתמשים ב-ROCm או ב-Vulkan.",
+   "why_israeli": "Zap lists the Gigabyte AORUS RX 9070 XT ELITE 16G from 10 offers; Ivory lists five 9070 XT boards at 3,990-4,390 (Sapphire PULSE page opened).",
+   "price_ils": {
+    "amount": 3750,
+    "currency": "ILS",
+    "store": "Zap (price comparison; lowest online offer Hi-Tech Mobile)",
+    "source_url": "https://www.zap.co.il/model.aspx?modelid=1260814",
+    "date": "2026-11-05",
+    "note": "New (Gigabyte AORUS Radeon RX 9070 XT ELITE 16G, GV-R9070XTAORUS E-16GD); range 3,750-5,239 (10 offers, header says 8 stores); Playmac 4,200 is a purchase-from-abroad offer; TMS Eilat in-store only 4,407; Zap entry dated 1/2026, no price-update date shown",
+    "availability": "Hi-Tech Mobile: free shipping, delivery up to 10 business days",
+    "grade": "D",
+    "other_prices": [
+     {
+      "amount": 4090,
+      "store": "Ivory",
+      "source_url": "https://www.ivory.co.il/catalog.php?id=124407",
+      "note": "New (Sapphire PULSE RX 9070 XT 16GB, 11348-03-20G); Eilat branch 3,466; prices valid until 05/11/2026; min PSU 750 W, 2x8-pin; page carries Ivory's 'bargain' definition boilerplate but does not label this unit",
+      "availability": "no 'not available' notice; branch-stock check link"
+     }
+    ]
+   },
+   "price_usd_msrp": {
+    "amount": 599,
+    "currency": "USD",
+    "source_url": "https://en.wikipedia.org/wiki/Radeon_RX_9000_series",
+    "source_date": null,
+    "grade": "D",
+    "note": "Launch MSRP per Wikipedia (RX 9070 XT, 6 Mar 2025)"
+   },
+   "published_speed": [
+    {
+     "model": "Llama 2 7B Q4_0 (pp512 / tg128), ROCm",
+     "tokens_per_s_gen": 97.28,
+     "tokens_per_s_prompt": 4903.51,
+     "runtime": "llama.cpp llama-bench, ROCm/HIP, Llama 2 7B Q4_0 (pp512 / tg128), -ngl 99, flash-attention on (commit 583cb83)",
+     "source_url": "https://github.com/ggml-org/llama.cpp/discussions/15021",
+     "date": null,
+     "grade": "C",
+     "note": "Community-submitted scoreboard row (Hadrianneue), undated. Flash-attention off: 101.27 gen / 5055.19 prompt."
+    },
+    {
+     "model": "Llama 2 7B Q4_0 (pp512 / tg128), ROCm 7.1.1 on Fedora 44",
+     "tokens_per_s_gen": 122.17,
+     "tokens_per_s_prompt": 4294.94,
+     "runtime": "llama.cpp llama-bench, ROCm 7.1.1, flash-attention on, build 505b1ed (b10034)",
+     "source_url": "https://github.com/ggml-org/llama.cpp/discussions/15021",
+     "date": "2026-07-15",
+     "grade": "C",
+     "note": "Comment by cipputi; first of three runs (gen 122.17 / 121.83 / 122.25; prompt 4294.94 / 4273.35 / 4300.05)."
+    },
+    {
+     "model": "Llama 2 7B Q4_0 (pp512 / tg128), Vulkan",
+     "tokens_per_s_gen": 142.0,
+     "tokens_per_s_prompt": 5603.63,
+     "runtime": "llama.cpp llama-bench, Vulkan, Llama 2 7B Q4_0 (pp512 / tg128), flash-attention on (commit 9a4580b)",
+     "source_url": "https://github.com/ggml-org/llama.cpp/discussions/10879",
+     "date": null,
+     "grade": "C",
+     "note": "Community-submitted scoreboard row, undated. Flash-attention off: 136.56 gen / 5201.65 prompt."
+    }
+   ],
+   "fits": "~14B Q8 or ~20B Q4 in 16 GB; no model-fit table was found for AMD cards, so this is size arithmetic (grade E)",
+   "power_w": 304,
+   "sources": [
+    {
+     "url": "https://www.zap.co.il/model.aspx?modelid=1260814",
+     "date": "2026-11-05",
+     "what": "Israeli price range, store list",
+     "grade": "D"
+    },
+    {
+     "url": "https://www.ivory.co.il/catalog.php?id=124407",
+     "date": "2026-11-05",
+     "what": "Ivory list price for Sapphire PULSE 9070 XT",
+     "grade": "C"
+    },
+    {
+     "url": "https://github.com/ggml-org/llama.cpp/discussions/15021",
+     "date": "2026-07-15",
+     "what": "ROCm scoreboard + dated comment",
+     "grade": "C"
+    },
+    {
+     "url": "https://github.com/ggml-org/llama.cpp/discussions/10879",
+     "date": null,
+     "what": "Vulkan scoreboard row",
+     "grade": "C"
+    },
+    {
+     "url": "https://en.wikipedia.org/wiki/Radeon_RX_9000_series",
+     "date": null,
+     "what": "Launch MSRP $599, TBP 304 W",
+     "grade": "D"
+    }
+   ],
+   "grade": "C",
+   "verified_at": "2026-11-05"
+  },
+  {
+   "id": "rx-9070-16gb",
+   "name_he": "AMD Radeon RX 9070 16GB",
+   "name_en": "AMD Radeon RX 9070 16GB",
+   "url": null,
+   "category": "gpu",
+   "tier": "16gb",
+   "memory_gb": 16,
+   "memory_kind": "VRAM",
+   "summary_he": "הדגם הזול של AMD עם 16GB: 2,879 ש״ח במחיר הנמוך ב-Zap, ו-115 טוקנים/שנייה על Llama 7B בכימות Q4 ב-ROCm.",
+   "why_israeli": "Zap lists the Gigabyte RX 9070 Gaming OC 16G from 11 offers (header says 9 stores); Ivory lists Sapphire 9070 boards at 3,490-3,990 (list page only).",
+   "price_ils": {
+    "amount": 2879,
+    "currency": "ILS",
+    "store": "Zap (price comparison; lowest online offer Hi-Tech Mobile)",
+    "source_url": "https://www.zap.co.il/model.aspx?modelid=1260790",
+    "date": "2026-11-05",
+    "note": "New (Gigabyte Radeon RX 9070 Gaming OC 16G, GV-R9070GAMING OC-16GD); range 2,879-4,219; Playmac 3,400 is a purchase-from-abroad offer; TMS Eilat in-store only 3,302; Zap entry dated 1/2026, no price-update date shown",
+    "availability": "Hi-Tech Mobile: free shipping, delivery within 10 business days",
+    "grade": "D",
+    "other_prices": [
+     {
+      "amount": 3490,
+      "store": "Ivory (list page only)",
+      "source_url": "https://www.ivory.co.il/catalog.php?act=cat&id=2652&f=1259",
+      "note": "New (Sapphire PULSE RX 9070 16GB, catalog.php?id=124416); Eilat 2,957; product page not opened",
+      "availability": "unknown"
+     }
+    ]
+   },
+   "price_usd_msrp": {
+    "amount": 549,
+    "currency": "USD",
+    "source_url": "https://en.wikipedia.org/wiki/Radeon_RX_9000_series",
+    "source_date": null,
+    "grade": "D",
+    "note": "Launch MSRP per Wikipedia (RX 9070)"
+   },
+   "published_speed": [
+    {
+     "model": "Llama 2 7B Q4_0 (pp512 / tg128), ROCm",
+     "tokens_per_s_gen": 115.32,
+     "tokens_per_s_prompt": 2452.68,
+     "runtime": "llama.cpp llama-bench, ROCm/HIP, Llama 2 7B Q4_0 (pp512 / tg128), -ngl 99, flash-attention on (commit d0660f2)",
+     "source_url": "https://github.com/ggml-org/llama.cpp/discussions/15021",
+     "date": null,
+     "grade": "C",
+     "note": "Community-submitted scoreboard row (andj1210), undated. Flash-attention off: 114.48 gen / 2381.77 prompt. A dated comment (prototypicall, 2025-08-17, build 65349f2) shows 99.39 gen / 2361.10 prompt off and 97.10 / 1147.66 on - results vary by setup."
+    }
+   ],
+   "fits": "~14B Q8 or ~20B Q4 in 16 GB - size arithmetic (grade E); no Vulkan row for this card in the scoreboard that was opened",
+   "power_w": 220,
+   "sources": [
+    {
+     "url": "https://www.zap.co.il/model.aspx?modelid=1260790",
+     "date": "2026-11-05",
+     "what": "Israeli price range, store list",
+     "grade": "D"
+    },
+    {
+     "url": "https://github.com/ggml-org/llama.cpp/discussions/15021",
+     "date": null,
+     "what": "ROCm scoreboard row and comment",
+     "grade": "C"
+    },
+    {
+     "url": "https://en.wikipedia.org/wiki/Radeon_RX_9000_series",
+     "date": null,
+     "what": "Launch MSRP $549; the table lists 220 W but the text does not clearly tie it to the 9070 rather than the 9070 GRE",
+     "grade": "D"
+    }
+   ],
+   "grade": "C",
+   "verified_at": "2026-11-05"
+  },
+  {
+   "id": "rx-9060-xt-16gb",
+   "name_he": "AMD Radeon RX 9060 XT 16GB",
+   "name_en": "AMD Radeon RX 9060 XT 16GB",
+   "url": null,
+   "category": "gpu",
+   "tier": "16gb",
+   "memory_gb": 16,
+   "memory_kind": "VRAM",
+   "summary_he": "הדרך הזולה ל-16GB: 2,759 ש״ח. איטי יותר מה-9070 (כ-65 עד 74 טוקנים/שנייה על 7B Q4 לעומת 97 עד 142).",
+   "why_israeli": "Zap lists the Gigabyte RX 9060 XT GAMING OC 16G from 7 stores; Ivory's AMD list shows 16GB 9060 XT boards from 2,390 (list page only).",
+   "price_ils": {
+    "amount": 2759,
+    "currency": "ILS",
+    "store": "Zap (price comparison; lowest online offer Office Pro)",
+    "source_url": "https://www.zap.co.il/model.aspx?modelid=1260789",
+    "date": "2026-11-05",
+    "note": "New (Gigabyte Radeon RX 9060 XT GAMING OC 16G, GV-R9060XTGAMING OC-16GD); range 2,759-3,379; TMS Eilat in-store only 2,667; Zap entry dated 1/2026, no price-update date shown",
+    "availability": "Office Pro: free shipping, delivery up to 2 business days",
+    "grade": "D",
+    "other_prices": [
+     {
+      "amount": 2390,
+      "store": "Ivory (list page only)",
+      "source_url": "https://www.ivory.co.il/catalog.php?act=cat&id=2652&f=1259",
+      "note": "New (PowerColor Reaper RX 9060 XT 16GB); Eilat 2,025; product page not opened",
+      "availability": "unknown"
+     }
+    ]
+   },
+   "price_usd_msrp": {
+    "amount": 349,
+    "currency": "USD",
+    "source_url": "https://en.wikipedia.org/wiki/Radeon_RX_9000_series",
+    "source_date": null,
+    "grade": "D",
+    "note": "Launch MSRP per Wikipedia (RX 9060 XT 16 GB; the 8 GB model is $299)"
+   },
+   "published_speed": [
+    {
+     "model": "Llama 2 7B Q4_0 (pp512 / tg128), ROCm",
+     "tokens_per_s_gen": 65.42,
+     "tokens_per_s_prompt": 1479.27,
+     "runtime": "llama.cpp llama-bench, ROCm/HIP, Llama 2 7B Q4_0 (pp512 / tg128), -ngl 99, flash-attention on (commit a0e13dc)",
+     "source_url": "https://github.com/ggml-org/llama.cpp/discussions/15021",
+     "date": null,
+     "grade": "C",
+     "note": "Community-submitted scoreboard row (lcy0321), undated; the 8 GB / 16 GB variant is not stated. Flash-attention off: 67.58 gen / 1419.67 prompt."
+    },
+    {
+     "model": "Llama 2 7B Q4_0 (pp512 / tg128), Vulkan",
+     "tokens_per_s_gen": 74.01,
+     "tokens_per_s_prompt": 3228.15,
+     "runtime": "llama.cpp llama-bench, Vulkan, Llama 2 7B Q4_0 (pp512 / tg128), flash-attention on (commit f1cee99)",
+     "source_url": "https://github.com/ggml-org/llama.cpp/discussions/10879",
+     "date": null,
+     "grade": "C",
+     "note": "Community-submitted scoreboard row, undated. Flash-attention off: 71.07 gen / 2844.80 prompt."
+    }
+   ],
+   "fits": "~14B Q8 or ~20B Q4 in 16 GB - size arithmetic (grade E); generation is the slowest of the three 16 GB RDNA4 cards in these tables",
+   "power_w": 160,
+   "sources": [
+    {
+     "url": "https://www.zap.co.il/model.aspx?modelid=1260789",
+     "date": "2026-11-05",
+     "what": "Israeli price range, store list",
+     "grade": "D"
+    },
+    {
+     "url": "https://www.ivory.co.il/catalog.php?act=cat&id=2652&f=1259",
+     "date": "2026-11-05",
+     "what": "Ivory AMD category list",
+     "grade": "C"
+    },
+    {
+     "url": "https://github.com/ggml-org/llama.cpp/discussions/15021",
+     "date": null,
+     "what": "ROCm scoreboard row",
+     "grade": "C"
+    },
+    {
+     "url": "https://github.com/ggml-org/llama.cpp/discussions/10879",
+     "date": null,
+     "what": "Vulkan scoreboard row",
+     "grade": "C"
+    },
+    {
+     "url": "https://en.wikipedia.org/wiki/Radeon_RX_9000_series",
+     "date": null,
+     "what": "Launch MSRP $349 (16 GB), TBP 160 W",
+     "grade": "D"
+    }
+   ],
+   "grade": "C",
+   "verified_at": "2026-11-05"
+  },
+  {
+   "id": "radeon-ai-pro-r9700-32gb",
+   "name_he": "AMD Radeon AI PRO R9700 32GB",
+   "name_en": "AMD Radeon AI PRO R9700 32GB (PowerColor AIPROR970032G-B)",
+   "url": null,
+   "category": "gpu",
+   "tier": "32gb",
+   "memory_gb": 32,
+   "memory_kind": "VRAM",
+   "summary_he": "כרטיס עבודה של AMD עם 32GB: מכיל מודל של כ-30B בכימות Q4 על כרטיס אחד, ב-10,607 ש״ח ב-1PC. כ-94 עד 153 טוקנים/שנייה על 7B Q4.",
+   "why_israeli": "1PC (1pc.co.il, Netanya) lists it with a shipping-warehouse stock; Comp Master lists it higher on Zap's search page.",
+   "price_ils": {
+    "amount": 10607,
+    "currency": "ILS",
+    "store": "1PC (store page reached from a Zap search listing)",
+    "source_url": "https://1pc.co.il/web/item/221514?utm_source=zap",
+    "date": "2026-11-05",
+    "note": "PowerColor Radeon AI PRO R9700 32GB GDDR6 (AIPROR970032G-B); new/import not stated; VAT not stated; warranty 2 years (CD-LOG); page notes prices and stock come from suppliers",
+    "availability": "shipping warehouse: in stock, delivery up to 7 business days; Netanya store pickup: not in stock",
+    "grade": "C",
+    "other_prices": [
+     {
+      "amount": 11532,
+      "store": "Comp Master (via Zap search)",
+      "source_url": "https://www.zap.co.il/search.aspx?keyword=radeon+ai+pro+r9700",
+      "note": "PowerColor R9700 32GB (AIPROR970032G-B); Zap search listing",
+      "availability": "listed on Zap"
+     }
+    ]
+   },
+   "price_usd_msrp": null,
+   "published_speed": [
+    {
+     "model": "Llama 2 7B Q4_0 (pp512 / tg128), ROCm",
+     "tokens_per_s_gen": 97.98,
+     "tokens_per_s_prompt": 4773.07,
+     "runtime": "llama.cpp llama-bench, ROCm/HIP, Llama 2 7B Q4_0 (pp512 / tg128), -ngl 99, flash-attention on (commit bd4ef13)",
+     "source_url": "https://github.com/ggml-org/llama.cpp/discussions/15021",
+     "date": null,
+     "grade": "C",
+     "note": "Community-submitted scoreboard row (gogich77), undated. Flash-attention off: 93.84 gen / 4443.54 prompt."
+    },
+    {
+     "model": "Llama 2 7B Q4_0 (pp512 / tg128), Vulkan",
+     "tokens_per_s_gen": 152.7,
+     "tokens_per_s_prompt": 5907.66,
+     "runtime": "llama.cpp llama-bench, Vulkan, Llama 2 7B Q4_0 (pp512 / tg128), flash-attention on (commit dd1ea52)",
+     "source_url": "https://github.com/ggml-org/llama.cpp/discussions/10879",
+     "date": null,
+     "grade": "C",
+     "note": "Community-submitted scoreboard row, undated. Flash-attention off: 145.67 gen / 5609.82 prompt. Vulkan generation is ~55% faster than ROCm in the two scoreboards."
+    }
+   ],
+   "fits": "~30-35B Q4 on a single card (a Qwen3 32B Q4 file is roughly 20 GB) - size arithmetic (grade E); the ROCm thread also holds a Qwen3 32B run on a Gigabyte R9700 whose numbers were not captured",
+   "power_w": null,
+   "sources": [
+    {
+     "url": "https://1pc.co.il/web/item/221514?utm_source=zap",
+     "date": "2026-11-05",
+     "what": "Israeli price, stock, warranty",
+     "grade": "C"
+    },
+    {
+     "url": "https://www.zap.co.il/search.aspx?keyword=radeon+ai+pro+r9700",
+     "date": "2026-11-05",
+     "what": "Zap listings 10,607 and 11,532",
+     "grade": "D"
+    },
+    {
+     "url": "https://github.com/ggml-org/llama.cpp/discussions/15021",
+     "date": null,
+     "what": "ROCm scoreboard row",
+     "grade": "C"
+    },
+    {
+     "url": "https://github.com/ggml-org/llama.cpp/discussions/10879",
+     "date": null,
+     "what": "Vulkan scoreboard row",
+     "grade": "C"
+    }
+   ],
+   "grade": "C",
+   "verified_at": "2026-11-05"
+  },
+  {
+   "id": "rx-7900-xtx-24gb",
+   "name_he": "AMD Radeon RX 7900 XTX 24GB",
+   "name_en": "AMD Radeon RX 7900 XTX 24GB",
+   "url": null,
+   "category": "gpu",
+   "tier": "24gb",
+   "memory_gb": 24,
+   "memory_kind": "VRAM",
+   "summary_he": "24GB בכרטיס AMD מהדור הקודם: 111 עד 191 טוקנים/שנייה על 7B בכימות Q4 לפי מגישים שונים. לא נמצאה הצעה ישראלית.",
+   "why_israeli": "No Israeli listing found: Zap search ('7900 XTX', 'RX 7900 XTX 24GB') returned no card, and Ivory's AMD category (18 listings) holds only RX 9060 XT / 9070 / 9070 XT boards.",
+   "price_ils": null,
+   "price_usd_msrp": {
+    "amount": 999,
+    "currency": "USD",
+    "source_url": "https://en.wikipedia.org/wiki/Radeon_RX_7000_series",
+    "source_date": null,
+    "grade": "D",
+    "note": "Launch MSRP per Wikipedia (RX 7900 XTX, 13 Dec 2022); a card from the previous generation"
+   },
+   "published_speed": [
+    {
+     "model": "Llama 2 7B Q4_0 (pp512 / tg128), ROCm",
+     "tokens_per_s_gen": 170.12,
+     "tokens_per_s_prompt": 3874.25,
+     "runtime": "llama.cpp llama-bench, ROCm/HIP, Llama 2 7B Q4_0 (pp512 / tg128), -ngl 99, flash-attention on (commit 2f0c2db)",
+     "source_url": "https://github.com/ggml-org/llama.cpp/discussions/15021",
+     "date": null,
+     "grade": "C",
+     "note": "Community-submitted scoreboard row (Diablo-D3), undated. Flash-attention off: 167.11 gen / 3552.27 prompt. Other dated submissions in the same thread (2025-08/09) range 110.70-124.61 gen with flash-attention on - e.g. totaldev 2025-08-08 build 6118: 124.61 / 3674.25."
+    },
+    {
+     "model": "Llama 2 7B Q4_0 (pp512 / tg128), Vulkan",
+     "tokens_per_s_gen": 190.92,
+     "tokens_per_s_prompt": 3889.54,
+     "runtime": "llama.cpp llama-bench, Vulkan, Llama 2 7B Q4_0 (pp512 / tg128), flash-attention on (commit 304665f)",
+     "source_url": "https://github.com/ggml-org/llama.cpp/discussions/10879",
+     "date": null,
+     "grade": "C",
+     "note": "Community-submitted scoreboard row, undated. Flash-attention off: 182.63 gen / 3726.99 prompt."
+    }
+   ],
+   "fits": "~30-34B Q4 in 24 GB (a Qwen3 32B Q4 file is roughly 20 GB) - size arithmetic (grade E)",
+   "power_w": 355,
+   "sources": [
+    {
+     "url": "https://github.com/ggml-org/llama.cpp/discussions/15021",
+     "date": null,
+     "what": "ROCm scoreboard row and dated comments",
+     "grade": "C"
+    },
+    {
+     "url": "https://github.com/ggml-org/llama.cpp/discussions/10879",
+     "date": null,
+     "what": "Vulkan scoreboard row",
+     "grade": "C"
+    },
+    {
+     "url": "https://en.wikipedia.org/wiki/Radeon_RX_7000_series",
+     "date": null,
+     "what": "Launch MSRP $999, TBP 355 W, 24 GB GDDR6",
+     "grade": "D"
+    },
+    {
+     "url": "https://www.ivory.co.il/catalog.php?act=cat&id=2652&f=1259",
+     "date": "2026-11-05",
+     "what": "Ivory AMD category: no 7900 XTX listed",
+     "grade": "C"
+    }
+   ],
+   "grade": "C",
+   "verified_at": "2026-11-05"
+  },
+  {
+   "id": "arc-pro-b50-16gb",
+   "name_he": "Intel Arc Pro B50 16GB",
+   "name_en": "Intel Arc Pro B50 16GB GDDR6 (workstation card)",
+   "url": null,
+   "category": "gpu",
+   "tier": "16gb",
+   "memory_gb": 16,
+   "memory_kind": "VRAM",
+   "summary_he": "כרטיס עבודה קטן של אינטל עם 16GB שמקבל חשמל מהחריץ בלבד. איטי ליצירה (כ-46 עד 48 טוקנים/שנייה על 7B Q4), ב-2,890 ש״ח ב-Ivory.",
+   "why_israeli": "Ivory lists it (the only Intel card in its Intel graphics category); the page offers a branch-stock check and 3 years of Ivory warranty.",
+   "price_ils": {
+    "amount": 2890,
+    "currency": "ILS",
+    "store": "Ivory",
+    "source_url": "https://www.ivory.co.il/intel-arc-pro-b50-16gb-professional-graphics-card.html",
+    "date": "2026-11-05",
+    "note": "Intel Arc Pro B50 16GB GDDR6 (128-bit, 224 GB/s); Eilat branch 2,449; prices valid until 05/11/2026; min PSU 300 W, slot-powered (no external connector); page carries Ivory's 'bargain' definition boilerplate but does not label this unit as new or clearance",
+    "availability": "no 'not available' notice; branch-stock check link",
+    "grade": "C",
+    "eilat_branch_price": 2449
+   },
+   "price_usd_msrp": null,
+   "published_speed": [
+    {
+     "model": "Llama 2 7B Q4_0 (pp512 / tg128), Vulkan",
+     "tokens_per_s_gen": 47.69,
+     "tokens_per_s_prompt": 1122.53,
+     "runtime": "llama.cpp llama-bench, Vulkan, Llama 2 7B Q4_0 (pp512 / tg128), flash-attention on (commit aa46bda)",
+     "source_url": "https://github.com/ggml-org/llama.cpp/discussions/10879",
+     "date": null,
+     "grade": "C",
+     "note": "Community-submitted scoreboard row, undated. Flash-attention off: 46.30 gen / 1186.45 prompt."
+    },
+    {
+     "model": "Llama 2 7B Q4_0 (pp512 / tg128), SYCL",
+     "tokens_per_s_gen": 45.92,
+     "tokens_per_s_prompt": 424.5,
+     "runtime": "llama.cpp llama-bench, SYCL, Llama 2 7B Q4_0 (pp512 / tg128) (build c0c7e14 / 9298; precision and host not stated)",
+     "source_url": "https://github.com/ggml-org/llama.cpp/discussions/23313",
+     "date": "2026-05-28",
+     "grade": "C",
+     "note": "Comment-table row by @thordarsen; the thread calls these 'unverified reference figures' and the B50 row's source table is ambiguous."
+    }
+   ],
+   "fits": "7-14B Q4 in 16 GB; generation is bandwidth-limited (224 GB/s), so expect ~46 tok/s on a 7B Q4 file and far less on 14B - basis: scoreboard rows + arithmetic (grade E)",
+   "power_w": null,
+   "sources": [
+    {
+     "url": "https://www.ivory.co.il/intel-arc-pro-b50-16gb-professional-graphics-card.html",
+     "date": "2026-11-05",
+     "what": "Israeli price, specs, warranty",
+     "grade": "C"
+    },
+    {
+     "url": "https://github.com/ggml-org/llama.cpp/discussions/10879",
+     "date": null,
+     "what": "Vulkan scoreboard row",
+     "grade": "C"
+    },
+    {
+     "url": "https://github.com/ggml-org/llama.cpp/discussions/23313",
+     "date": "2026-05-28",
+     "what": "SYCL thread row",
+     "grade": "C"
+    }
+   ],
+   "grade": "C",
+   "verified_at": "2026-11-05"
+  },
+  {
+   "id": "arc-a770-16gb",
+   "name_he": "Intel Arc A770 16GB",
+   "name_en": "Intel Arc A770 16GB",
+   "url": null,
+   "category": "gpu",
+   "tier": "16gb",
+   "memory_gb": 16,
+   "memory_kind": "VRAM",
+   "summary_he": "כרטיס 16GB ישן של אינטל (2022): 53 עד 67 טוקנים/שנייה על 7B בכימות Q4 ב-Vulkan או SYCL. לא נמצאה הצעה ישראלית לחדש.",
+   "why_israeli": "No Israeli listing found: Ivory's Intel graphics category shows only the Arc Pro B50, and Zap's graphics-card filters have no Arc entry.",
+   "price_ils": null,
+   "price_usd_msrp": null,
+   "published_speed": [
+    {
+     "model": "Llama 2 7B Q4_0 (pp512 / tg128), Vulkan",
+     "tokens_per_s_gen": 53.07,
+     "tokens_per_s_prompt": 1119.68,
+     "runtime": "llama.cpp llama-bench, Vulkan, Llama 2 7B Q4_0 (pp512 / tg128), flash-attention on (commit a69d54f)",
+     "source_url": "https://github.com/ggml-org/llama.cpp/discussions/10879",
+     "date": null,
+     "grade": "C",
+     "note": "Community-submitted scoreboard row, undated. Flash-attention off: 52.56 gen / 1073.85 prompt."
+    },
+    {
+     "model": "Llama 2 7B Q4_0 (pp512 / tg128), SYCL FP32",
+     "tokens_per_s_gen": 67.09,
+     "tokens_per_s_prompt": 706.72,
+     "runtime": "llama.cpp llama-bench, SYCL, Llama 2 7B Q4_0 (pp512 / tg128), flash-attention on, build 19e92c3, i7-13700K, Ubuntu 24.04.4",
+     "source_url": "https://github.com/ggml-org/llama.cpp/discussions/23313",
+     "date": "2026-05-29",
+     "grade": "C",
+     "note": "Comment-table row by @arthw. Flash-attention off (2026-05-19, build 053e01d): 59.03 gen / 937.24 prompt. A second host (i5-14600K, CachyOS, 2026-05-22): 55.53 / 894.44. The thread calls these 'unverified reference figures'."
+    }
+   ],
+   "fits": "7-14B Q4 in 16 GB - size arithmetic (grade E)",
+   "power_w": null,
+   "sources": [
+    {
+     "url": "https://github.com/ggml-org/llama.cpp/discussions/10879",
+     "date": null,
+     "what": "Vulkan scoreboard row",
+     "grade": "C"
+    },
+    {
+     "url": "https://github.com/ggml-org/llama.cpp/discussions/23313",
+     "date": "2026-05-29",
+     "what": "SYCL thread rows",
+     "grade": "C"
+    },
+    {
+     "url": "https://www.ivory.co.il/catalog.php?act=cat&id=2652&f=17712",
+     "date": "2026-11-05",
+     "what": "Ivory Intel graphics category: only the Arc Pro B50",
+     "grade": "C"
+    }
+   ],
+   "grade": "C",
+   "verified_at": "2026-11-05"
+  },
+  {
+   "id": "rtx-pro-5000-blackwell-48gb",
+   "name_he": "NVIDIA RTX PRO 5000 Blackwell 48GB",
+   "name_en": "NVIDIA RTX PRO 5000 Blackwell 48GB (Lenovo 4X61T68168)",
+   "url": null,
+   "category": "gpu",
+   "tier": "64gb",
+   "memory_gb": 48,
+   "memory_kind": "VRAM",
+   "summary_he": "כרטיס עבודה עם 48GB: מריץ Llama 3.3 70B בכימות Q4 בכ-24 טוקנים/שנייה על כרטיס אחד. מחיר ישראלי מ-24,195 ש״ח.",
+   "why_israeli": "Sal-Tech sells the Lenovo-branded board (listed on Zap and on cell-tec.co.il); Zap shows four more offers at 27,270-31,590.",
+   "price_ils": {
+    "amount": 24195,
+    "currency": "ILS",
+    "store": "Sal-Tech (store page cell-tec.co.il, reached from a Zap listing)",
+    "source_url": "https://www.cell-tec.co.il/product.asp?Pid=4X61T68168&Cat2Cat1ID=138&Cat2ID=240&aff=Zap&lang=he",
+    "date": "2026-11-05",
+    "note": "Lenovo NVIDIA RTX PRO 5000 Blackwell 48GB GDDR7 (4X61T68168); VAT not stated; new/import field garbled on the page; warranty '3 Years (CRU)'; max power 300 W",
+    "availability": "listed 'In stock' (12 units)",
+    "grade": "C",
+    "other_prices": [
+     {
+      "amount": 27270,
+      "store": "Office Pro (via Zap search)",
+      "source_url": "https://www.zap.co.il/search.aspx?keyword=RTX+PRO+5000+Blackwell",
+      "note": "Lenovo 4X61T68168",
+      "availability": "listed on Zap"
+     },
+     {
+      "amount": 29460,
+      "store": "Comp Master (via Zap search)",
+      "source_url": "https://www.zap.co.il/search.aspx?keyword=RTX+PRO+5000+Blackwell",
+      "note": "Lenovo 4X61T68168",
+      "availability": "listed on Zap"
+     },
+     {
+      "amount": 31590,
+      "store": "PC Center (via Zap search)",
+      "source_url": "https://www.zap.co.il/search.aspx?keyword=RTX+PRO+5000+Blackwell",
+      "note": "RTX PRO 5000 Blackwell 48GB",
+      "availability": "listed on Zap"
+     }
+    ]
+   },
+   "price_usd_msrp": null,
+   "price_usd_market": {
+    "amount": 4600,
+    "currency": "USD",
+    "source_url": "https://www.hardware-corner.net/gpu-llm-benchmarks/rtx-pro-5000-blackwell/",
+    "grade": "D",
+    "date": "2026-03",
+    "note": "hardware-corner 'Current Price in US' labelled 'Avg. Market Value' (not an MSRP)"
+   },
+   "published_speed": [
+    {
+     "model": "Llama 3.3 70B Q4_K (4k context)",
+     "tokens_per_s_gen": 24.0,
+     "tokens_per_s_prompt": 1022.9,
+     "runtime": "llama.cpp-style GGUF benchmark (hardware-corner; build not stated on this page)",
+     "source_url": "https://www.hardware-corner.net/gpu-llm-benchmarks/rtx-pro-5000-blackwell/",
+     "date": "2026-03",
+     "grade": "D",
+     "note": "16k context: 22.4 gen / 826.3 prompt (page: 'Max 16k')."
+    },
+    {
+     "model": "Qwen3 32B Q4_K (4k context)",
+     "tokens_per_s_gen": 46.6,
+     "tokens_per_s_prompt": 2030.3,
+     "runtime": "llama.cpp-style GGUF benchmark (hardware-corner; build not stated on this page)",
+     "source_url": "https://www.hardware-corner.net/gpu-llm-benchmarks/rtx-pro-5000-blackwell/",
+     "date": "2026-03",
+     "grade": "D",
+     "note": "64k context: 28.9 gen / 629.6 prompt."
+    },
+    {
+     "model": "Qwen3 30B A3B Q4_K (4k context)",
+     "tokens_per_s_gen": 188.8,
+     "tokens_per_s_prompt": 5266.1,
+     "runtime": "llama.cpp-style GGUF benchmark (hardware-corner; build not stated on this page)",
+     "source_url": "https://www.hardware-corner.net/gpu-llm-benchmarks/rtx-pro-5000-blackwell/",
+     "date": "2026-03",
+     "grade": "D",
+     "note": "256k context: 37.0 gen / 364.1 prompt."
+    },
+    {
+     "model": "gpt-oss 20B MXFP4 (4k context)",
+     "tokens_per_s_gen": 213.4,
+     "tokens_per_s_prompt": 10339.6,
+     "runtime": "llama.cpp-style GGUF benchmark (hardware-corner; build not stated on this page)",
+     "source_url": "https://www.hardware-corner.net/gpu-llm-benchmarks/rtx-pro-5000-blackwell/",
+     "date": "2026-03",
+     "grade": "D"
+    }
+   ],
+   "fits": "70B Q4 (hardware-corner: 'Max Model 70B', Llama 3.3 70B Q4_K up to 16k context at 22-24 tok/s)",
+   "power_w": 300,
+   "sources": [
+    {
+     "url": "https://www.cell-tec.co.il/product.asp?Pid=4X61T68168&Cat2Cat1ID=138&Cat2ID=240&aff=Zap&lang=he",
+     "date": "2026-11-05",
+     "what": "Israeli price, stock, warranty, 300 W",
+     "grade": "C"
+    },
+    {
+     "url": "https://www.zap.co.il/search.aspx?keyword=RTX+PRO+5000+Blackwell",
+     "date": "2026-11-05",
+     "what": "Zap search listings 24,195-31,590 (plus a 72GB PNY at 50,129)",
+     "grade": "D"
+    },
+    {
+     "url": "https://www.hardware-corner.net/gpu-llm-benchmarks/rtx-pro-5000-blackwell/",
+     "date": "2026-03",
+     "what": "Speeds, TDP 300 W, US market value $4,600",
+     "grade": "D"
+    }
+   ],
+   "grade": "C",
+   "verified_at": "2026-11-05"
+  },
+  {
+   "id": "macbook-air-m5-16gb",
+   "name_he": "Apple MacBook Air 13.6 M5 (16GB)",
+   "name_en": "Apple MacBook Air 13.6-inch M5, 16GB / 512GB (MDH74HB/A family)",
+   "url": null,
+   "category": "laptop",
+   "tier": "16gb",
+   "memory_gb": 16,
+   "memory_kind": "unified",
+   "summary_he": "המחשב הנייד הבסיסי של אפל עם 16GB מאוחדים: כ-32 טוקנים/שנייה על 7B בכימות Q8. מתאים למודלים קטנים (7 עד 8B), מ-4,649 ש״ח.",
+   "why_israeli": "Zap lists it from 15 online stores (GoMobile, Selfie, Ofek PC, Optimize, Schneider...). The Apple Israel store URLs tried (apple.com/il/shop/buy-mac/...) returned 404, so all Apple prices in this top-up come from resellers.",
+   "price_ils": {
+    "amount": 4649,
+    "currency": "ILS",
+    "store": "Zap (price comparison; lowest online offer GoMobile)",
+    "source_url": "https://www.zap.co.il/model.aspx?modelid=1263226",
+    "date": "2026-11-05",
+    "note": "New (Apple MacBook Air 13.6 M5, 16GB RAM / 512GB SSD per store listings; 10-core CPU / 8-core GPU per listings); online range 4,649-5,391 (the page's stated range 4,649-9,349 does not match its offers); Eilat in-store only: GoMobile 3,969, Ofek PC 3,990, iSal 3,999; Zap entry dated 3/2026, no price-update date shown",
+    "availability": "GoMobile: free shipping, delivery up to 7 business days; Ofek PC 4,728 + 20 shipping, up to 2 business days",
+    "grade": "D"
+   },
+   "price_usd_msrp": null,
+   "published_speed": [
+    {
+     "model": "Llama 7B Q8_0 (M5, 10 GPU cores, 154 GB/s)",
+     "tokens_per_s_gen": 31.88,
+     "tokens_per_s_prompt": 722.79,
+     "runtime": "llama.cpp llama-bench, Llama 7B (pp512 / tg128), Metal, build c1d0e7a",
+     "source_url": "https://github.com/ggml-org/llama.cpp/discussions/4167",
+     "date": null,
+     "grade": "C",
+     "note": "Summary row of the community table for the 10-GPU-core M5 (build c1d0e7a); the Q4_0 cell of that row is blank, so Q8_0 and F16 are shown. The same table has an 8-GPU-core M5 row with no data."
+    },
+    {
+     "model": "Llama 7B F16 (M5, 10 GPU cores)",
+     "tokens_per_s_gen": 18.42,
+     "tokens_per_s_prompt": 715.42,
+     "runtime": "llama.cpp llama-bench, Llama 7B (pp512 / tg128), Metal, build c1d0e7a",
+     "source_url": "https://github.com/ggml-org/llama.cpp/discussions/4167",
+     "date": null,
+     "grade": "C"
+    }
+   ],
+   "fits": "7-8B Q4-Q8 comfortably; up to ~13B Q4 with short context - basis: our size arithmetic (grade E)",
+   "power_w": null,
+   "sources": [
+    {
+     "url": "https://www.zap.co.il/model.aspx?modelid=1263226",
+     "date": "2026-11-05",
+     "what": "Israeli price range, store list, Eilat-only offers",
+     "grade": "D"
+    },
+    {
+     "url": "https://github.com/ggml-org/llama.cpp/discussions/4167",
+     "date": null,
+     "what": "M5 row of the llama.cpp Apple Silicon table",
+     "grade": "C"
+    }
+   ],
+   "grade": "C",
+   "verified_at": "2026-11-05"
+  },
+  {
+   "id": "macbook-air-m5-24gb",
+   "name_he": "Apple MacBook Air 13 M5 (24GB)",
+   "name_en": "Apple MacBook Air 13-inch M5, 24GB / 512GB (Z1L6001F7 family)",
+   "url": null,
+   "category": "laptop",
+   "tier": "24gb",
+   "memory_gb": 24,
+   "memory_kind": "unified",
+   "summary_he": "אותו שבב M5 עם 24GB: מרחיב את התקרה לכ-14B בכימות Q8 או כ-24B ב-Q4, אבל רוחב הפס (154GB/s) מגביל את מהירות היצירה. מ-5,436 ש״ח.",
+   "why_israeli": "Zap lists the configure-to-order 24GB Air from 13 stores (Ofek PC, Maor Deal, Bug, Optimize, StoreMobile...).",
+   "price_ils": {
+    "amount": 5436,
+    "currency": "ILS",
+    "store": "Zap (price comparison; lowest online offer Ofek PC)",
+    "source_url": "https://www.zap.co.il/model.aspx?modelid=1264187",
+    "date": "2026-11-05",
+    "note": "New (Apple MacBook Air 13 M5, 24GB unified / 512GB SSD, 10-core CPU / 10-core GPU per listings); online range 5,436-6,814; Eilat in-store only: Bug 4,635, iSal 4,720; listings differ by colour; Zap entry dated 4/2026, no price-update date shown",
+    "availability": "Ofek PC: 20 shipping included, 'immediate stock', delivery up to 2 business days",
+    "grade": "D"
+   },
+   "price_usd_msrp": null,
+   "published_speed": [
+    {
+     "model": "Llama 7B Q8_0 (M5, 10 GPU cores, 154 GB/s)",
+     "tokens_per_s_gen": 31.88,
+     "tokens_per_s_prompt": 722.79,
+     "runtime": "llama.cpp llama-bench, Llama 7B (pp512 / tg128), Metal, build c1d0e7a",
+     "source_url": "https://github.com/ggml-org/llama.cpp/discussions/4167",
+     "date": null,
+     "grade": "C",
+     "note": "Summary row of the community table for the 10-GPU-core M5 (build c1d0e7a); the Q4_0 cell of that row is blank, so Q8_0 and F16 are shown. The same table has an 8-GPU-core M5 row with no data."
+    },
+    {
+     "model": "Llama 7B F16 (M5, 10 GPU cores)",
+     "tokens_per_s_gen": 18.42,
+     "tokens_per_s_prompt": 715.42,
+     "runtime": "llama.cpp llama-bench, Llama 7B (pp512 / tg128), Metal, build c1d0e7a",
+     "source_url": "https://github.com/ggml-org/llama.cpp/discussions/4167",
+     "date": null,
+     "grade": "C"
+    }
+   ],
+   "fits": "~14B Q8 or ~24B Q4 - basis: our size arithmetic leaving ~5 GB for macOS and context (grade E); generation speed is the same 154 GB/s chip as the 16GB Air",
+   "power_w": null,
+   "sources": [
+    {
+     "url": "https://www.zap.co.il/model.aspx?modelid=1264187",
+     "date": "2026-11-05",
+     "what": "Israeli price range, store list, Eilat-only offers",
+     "grade": "D"
+    },
+    {
+     "url": "https://github.com/ggml-org/llama.cpp/discussions/4167",
+     "date": null,
+     "what": "M5 row of the llama.cpp Apple Silicon table",
+     "grade": "C"
+    }
+   ],
+   "grade": "C",
+   "verified_at": "2026-11-05"
+  },
+  {
+   "id": "macbook-air-m5-32gb",
+   "name_he": "Apple MacBook Air 13.6 M5 (32GB)",
+   "name_en": "Apple MacBook Air 13.6-inch M5, 32GB / 512GB (Z1L6001CJ family)",
+   "url": null,
+   "category": "laptop",
+   "tier": "32gb",
+   "memory_gb": 32,
+   "memory_kind": "unified",
+   "summary_he": "32GB מאוחדים במחשב נייד דק מ-6,299 ש״ח. נכנס בו מודל של כ-30B, אבל עם רוחב פס של 154GB/s הוא איטי.",
+   "why_israeli": "Zap lists it from 7 stores (Bug, Or PC, iSell, Store Mobile, Priority...).",
+   "price_ils": {
+    "amount": 6299,
+    "currency": "ILS",
+    "store": "Zap (price comparison; Bug and Or PC at the same price)",
+    "source_url": "https://www.zap.co.il/model.aspx?modelid=1264015",
+    "date": "2026-11-05",
+    "note": "New (Apple MacBook Air 13.6 M5, 32GB / 512GB, 10-core CPU / 10-core GPU per listings); online range 6,299-7,582; Eilat in-store only: Bug 5,339, iSell 5,355; Zap entry dated 4/2026, no price-update date shown",
+    "availability": "Bug: free shipping, up to 6 business days; Or PC: up to 3 business days",
+    "grade": "D"
+   },
+   "price_usd_msrp": null,
+   "published_speed": [
+    {
+     "model": "Llama 7B Q8_0 (M5, 10 GPU cores, 154 GB/s)",
+     "tokens_per_s_gen": 31.88,
+     "tokens_per_s_prompt": 722.79,
+     "runtime": "llama.cpp llama-bench, Llama 7B (pp512 / tg128), Metal, build c1d0e7a",
+     "source_url": "https://github.com/ggml-org/llama.cpp/discussions/4167",
+     "date": null,
+     "grade": "C",
+     "note": "Summary row of the community table for the 10-GPU-core M5 (build c1d0e7a); the Q4_0 cell of that row is blank, so Q8_0 and F16 are shown. The same table has an 8-GPU-core M5 row with no data."
+    },
+    {
+     "model": "Llama 7B F16 (M5, 10 GPU cores)",
+     "tokens_per_s_gen": 18.42,
+     "tokens_per_s_prompt": 715.42,
+     "runtime": "llama.cpp llama-bench, Llama 7B (pp512 / tg128), Metal, build c1d0e7a",
+     "source_url": "https://github.com/ggml-org/llama.cpp/discussions/4167",
+     "date": null,
+     "grade": "C"
+    }
+   ],
+   "fits": "~30B Q4 fits in 32 GB (about 17-18 GB file) but generation is bandwidth-bound: 154 GB/s / ~17 GB gives a ceiling near 9 tok/s - our arithmetic (grade E)",
+   "power_w": null,
+   "sources": [
+    {
+     "url": "https://www.zap.co.il/model.aspx?modelid=1264015",
+     "date": "2026-11-05",
+     "what": "Israeli price range, store list, Eilat-only offers",
+     "grade": "D"
+    },
+    {
+     "url": "https://github.com/ggml-org/llama.cpp/discussions/4167",
+     "date": null,
+     "what": "M5 row of the llama.cpp Apple Silicon table",
+     "grade": "C"
+    }
+   ],
+   "grade": "C",
+   "verified_at": "2026-11-05"
+  },
+  {
+   "id": "macbook-pro-14-m5-pro-48gb",
+   "name_he": "Apple MacBook Pro 14 M5 Pro (48GB)",
+   "name_en": "Apple MacBook Pro 14-inch M5 Pro (15-core CPU, 16-core GPU), 48GB / 1TB (Z1MH0013M family)",
+   "url": null,
+   "category": "laptop",
+   "tier": "64gb",
+   "memory_gb": 48,
+   "memory_kind": "unified",
+   "summary_he": "48GB מאוחדים ושבב M5 Pro: כ-68 טוקנים/שנייה על 7B בכימות Q4 ומקום למודל של כ-32B. ב-Zap מ-11,374 ש״ח.",
+   "why_israeli": "Zap lists it from 14 stores (Hi-Tech Mobile, Carmel Pisi, iCell, Ofek PC, Bug...).",
+   "price_ils": {
+    "amount": 11374,
+    "currency": "ILS",
+    "store": "Zap (price comparison; lowest online offer Hi-Tech Mobile)",
+    "source_url": "https://www.zap.co.il/model.aspx?modelid=1264553",
+    "date": "2026-11-05",
+    "note": "New (Apple MacBook Pro 14 M5 Pro, 15-core CPU / 16-core GPU, 48GB / 1TB); online range 11,374-12,968; Eilat in-store only: iCell 9,687, Ofek PC 9,690, Bug 9,745; Zap entry dated 5/2026, no price-update date shown",
+    "availability": "Hi-Tech Mobile: free shipping, delivery up to 10 business days; Carmel Pisi 11,375, up to 2 business days",
+    "grade": "D"
+   },
+   "price_usd_msrp": null,
+   "published_speed": [
+    {
+     "model": "Llama 7B Q4_0 (M5 Pro, 16 GPU cores, 307 GB/s)",
+     "tokens_per_s_gen": 67.59,
+     "tokens_per_s_prompt": 1340.44,
+     "runtime": "llama.cpp llama-bench, Llama 7B (pp512 / tg128), Metal, build 60081bb",
+     "source_url": "https://github.com/ggml-org/llama.cpp/discussions/4167",
+     "date": null,
+     "grade": "C",
+     "note": "Summary row for the 16-core-GPU M5 Pro, undated. 20-core variant (build c1d0e7a): 66.33 gen / 1620.64 prompt."
+    },
+    {
+     "model": "Llama 7B Q8_0 (M5 Pro, 16 GPU cores)",
+     "tokens_per_s_gen": 38.94,
+     "tokens_per_s_prompt": 1302.59,
+     "runtime": "llama.cpp llama-bench, Llama 7B (pp512 / tg128), Metal, build 60081bb",
+     "source_url": "https://github.com/ggml-org/llama.cpp/discussions/4167",
+     "date": null,
+     "grade": "C"
+    }
+   ],
+   "fits": "~32B Q4-Q6 with long context; a 70B Q4 file (~40 GB) would leave almost no room for macOS and context - our size arithmetic (grade E)",
+   "power_w": null,
+   "sources": [
+    {
+     "url": "https://www.zap.co.il/model.aspx?modelid=1264553",
+     "date": "2026-11-05",
+     "what": "Israeli price range, store list, Eilat-only offers",
+     "grade": "D"
+    },
+    {
+     "url": "https://github.com/ggml-org/llama.cpp/discussions/4167",
+     "date": null,
+     "what": "M5 Pro rows of the llama.cpp Apple Silicon table",
+     "grade": "C"
+    }
+   ],
+   "grade": "C",
+   "verified_at": "2026-11-05"
+  },
+  {
+   "id": "macbook-pro-14-m5-max-64gb",
+   "name_he": "Apple MacBook Pro 14 M5 Max (64GB)",
+   "name_en": "Apple MacBook Pro 14-inch M5 Max (18-core CPU, 40-core GPU), 64GB / 2TB (Z1MK000HD)",
+   "url": null,
+   "category": "laptop",
+   "tier": "64gb",
+   "memory_gb": 64,
+   "memory_kind": "unified",
+   "summary_he": "64GB ושבב M5 Max עם 40 ליבות GPU במחשב נייד: כ-120 טוקנים/שנייה על 7B בכימות Q4 ומקום למודל 70B בכימות Q4 (כ-40GB). 21,949 ש״ח.",
+   "why_israeli": "Sold through Zap's own shop (zapstore) as an external-seller offer with a 12-month importer warranty.",
+   "price_ils": {
+    "amount": 21949,
+    "currency": "ILS",
+    "store": "Zapstore (shop.zap.co.il offer page)",
+    "source_url": "https://shop.zap.co.il/product-model?offerid=23188558&storeid=6078&modelid=6078_Z1MK000HD",
+    "date": "2026-11-05",
+    "note": "New (Apple MacBook Pro 14 M5 Max 18C/40C, 64GB / 2TB, Silver, Z1MK000HD); page shows 'final price' 21,949, down from 24,304 (-9%); warranty 12 months through the official importer; the page does not describe the offer as time-limited (the Zap list page marks zapstore prices 'limited time')",
+    "availability": "stock status not stated; buy buttons shown; delivery up to 8 business days, free shipping",
+    "grade": "D"
+   },
+   "price_usd_msrp": null,
+   "published_speed": [
+    {
+     "model": "Llama 7B Q4_0 (M5 Max, 40 GPU cores, 614 GB/s)",
+     "tokens_per_s_gen": 119.92,
+     "tokens_per_s_prompt": 3219.99,
+     "runtime": "llama.cpp llama-bench, Llama 7B (pp512 / tg128), Metal, build c1d0e7a",
+     "source_url": "https://github.com/ggml-org/llama.cpp/discussions/4167",
+     "date": null,
+     "grade": "C",
+     "note": "Summary row for the 40-core-GPU M5 Max (the same GPU count as this laptop); undated. The 32-core M5 Max row has no data."
+    },
+    {
+     "model": "Llama 7B Q8_0 (M5 Max, 40 GPU cores)",
+     "tokens_per_s_gen": 72.42,
+     "tokens_per_s_prompt": 3143.81,
+     "runtime": "llama.cpp llama-bench, Llama 7B (pp512 / tg128), Metal, build c1d0e7a",
+     "source_url": "https://github.com/ggml-org/llama.cpp/discussions/4167",
+     "date": null,
+     "grade": "C"
+    }
+   ],
+   "fits": "70B Q4 (~40 GB) with room for context; 120B-class MoE (gpt-oss 120B MXFP4, 59 GiB) is too tight in 64 GB - our size arithmetic (grade E)",
+   "power_w": null,
+   "sources": [
+    {
+     "url": "https://shop.zap.co.il/product-model?offerid=23188558&storeid=6078&modelid=6078_Z1MK000HD",
+     "date": "2026-11-05",
+     "what": "Zapstore offer page: price, warranty, config",
+     "grade": "D"
+    },
+    {
+     "url": "https://github.com/ggml-org/llama.cpp/discussions/4167",
+     "date": null,
+     "what": "M5 Max rows of the llama.cpp Apple Silicon table",
+     "grade": "C"
+    }
+   ],
+   "grade": "C",
+   "verified_at": "2026-11-05"
+  },
+  {
+   "id": "macbook-pro-16-m5-max-128gb",
+   "name_he": "Apple MacBook Pro 16 M5 Max (128GB)",
+   "name_en": "Apple MacBook Pro 16-inch M5 Max (18-core CPU, 40-core GPU), 128GB / 2TB (Z1N2000HN / Z1MY000HM)",
+   "url": null,
+   "category": "laptop",
+   "tier": "128gb+",
+   "memory_gb": 128,
+   "memory_kind": "unified",
+   "summary_he": "128GB מאוחדים ורוחב פס 614GB/s במחשב נייד: מכיל את gpt-oss-120B (59GiB) ומודל 70B בכימות Q4. כ-120 טוקנים/שנייה על 7B Q4. מ-25,847 ש״ח.",
+   "why_israeli": "Zap lists it from 5 stores (Ofek PC, Or PC, Priority, Makaniyon, Zap shop).",
+   "price_ils": {
+    "amount": 25847,
+    "currency": "ILS",
+    "store": "Zap (price comparison; lowest online offer Ofek PC)",
+    "source_url": "https://www.zap.co.il/model.aspx?modelid=1264905",
+    "date": "2026-11-05",
+    "note": "New (Apple MacBook Pro 16 M5 Max 18C/40C, 128GB / 2TB); online range 25,847-29,081; most store listings use code Z1N2001JF with 'US' in the name (keyboard layout may differ); Eilat in-store only: Ofek PC 21,888; Zap entry dated 5/2026, no price-update date shown",
+    "availability": "Ofek PC: 20 shipping included, listed in stock, delivery up to 2 business days",
+    "grade": "D"
+   },
+   "price_usd_msrp": null,
+   "published_speed": [
+    {
+     "model": "Llama 7B Q4_0 (M5 Max, 40 GPU cores, 614 GB/s)",
+     "tokens_per_s_gen": 119.92,
+     "tokens_per_s_prompt": 3219.99,
+     "runtime": "llama.cpp llama-bench, Llama 7B (pp512 / tg128), Metal, build c1d0e7a",
+     "source_url": "https://github.com/ggml-org/llama.cpp/discussions/4167",
+     "date": null,
+     "grade": "C",
+     "note": "Summary row, undated. The existing index row for the M5 Max Studio records the same run as ggerganov's (2026-08-25); earlier builds gave ~103-104 gen on 64/128 GB machines."
+    },
+    {
+     "model": "Llama 7B Q8_0 (M5 Max, 40 GPU cores)",
+     "tokens_per_s_gen": 72.42,
+     "tokens_per_s_prompt": 3143.81,
+     "runtime": "llama.cpp llama-bench, Llama 7B (pp512 / tg128), Metal, build c1d0e7a",
+     "source_url": "https://github.com/ggml-org/llama.cpp/discussions/4167",
+     "date": null,
+     "grade": "C"
+    }
+   ],
+   "fits": "gpt-oss 120B MXFP4 (59 GiB, the file size recorded in the index's DGX Spark row) and 70B Q4/Q8 fit in 128 GB - basis: those file sizes + our arithmetic (grade E)",
+   "power_w": null,
+   "sources": [
+    {
+     "url": "https://www.zap.co.il/model.aspx?modelid=1264905",
+     "date": "2026-11-05",
+     "what": "Israeli price range, store list, Eilat-only offer",
+     "grade": "D"
+    },
+    {
+     "url": "https://github.com/ggml-org/llama.cpp/discussions/4167",
+     "date": null,
+     "what": "M5 Max rows of the llama.cpp Apple Silicon table",
+     "grade": "C"
+    }
+   ],
+   "grade": "C",
+   "verified_at": "2026-11-05"
+  },
+  {
+   "id": "mac-studio-m5-ultra-256gb",
+   "name_he": "Apple Mac Studio M5 Ultra (256GB)",
+   "name_en": "Apple Mac Studio M5 Ultra 36-core CPU / 80-core GPU, 256GB / 4TB (Z1U5000M2)",
+   "url": null,
+   "category": "workstation",
+   "tier": "128gb+",
+   "memory_gb": 256,
+   "memory_kind": "unified",
+   "summary_he": "256GB מאוחדים ורוחב פס של 1.2TB/s: כ-179 טוקנים/שנייה על 7B בכימות Q4 ומקום למודלים ענקיים. 51,365 ש״ח בחנות Mac-Kanyon.",
+   "why_israeli": "Mac-Kanyon (mac-kanyon.co.il, listed on Zap as Makanyon) sells it; the same chip with 96GB is already in the index at 21,490.",
+   "price_ils": {
+    "amount": 51365,
+    "currency": "ILS",
+    "store": "Mac-Kanyon (store page reached from a Zap listing)",
+    "source_url": "https://www.mac-kanyon.co.il/product.asp?Pid=Z1U5000M2&Cat2Cat1ID=1039&Cat2ID=0&aff=Zap&lang=he",
+    "date": "2026-11-05",
+    "note": "Mac Studio M5 Ultra 36cCPU/80cGPU 256GB / 4TB (SKU Z1U5000M2); 6 instalments of 8,561 shown; warranty field garbled (looks like 36 months); new/import not clearly stated",
+    "availability": "listed 'in stock'",
+    "grade": "C",
+    "other_prices": [
+     {
+      "amount": 51365,
+      "store": "Makanyon (via Zap Apple-desktop list)",
+      "source_url": "https://www.zap.co.il/models.aspx?sog=c-brandpc&db252715=252716&db5802401=5806835",
+      "note": "Same SKU on Zap's list (/fs?pid=1459852891)",
+      "availability": "listed on Zap"
+     }
+    ]
+   },
+   "price_usd_msrp": null,
+   "published_speed": [
+    {
+     "model": "Llama 7B Q4_0 (M5 Ultra, 80 GPU cores, 1,228 GB/s)",
+     "tokens_per_s_gen": 179.1,
+     "tokens_per_s_prompt": 4944.66,
+     "runtime": "llama.cpp llama-bench, Llama 7B (pp512 / tg128), Metal, build c1d0e7a",
+     "source_url": "https://github.com/ggml-org/llama.cpp/discussions/4167",
+     "date": null,
+     "grade": "C",
+     "note": "Summary row for the 80-core-GPU chip, which is exactly this configuration (36 CPU / 80 GPU cores); undated."
+    },
+    {
+     "model": "Llama 7B Q8_0 (M5 Ultra, 80 GPU cores)",
+     "tokens_per_s_gen": 119.01,
+     "tokens_per_s_prompt": 4910.55,
+     "runtime": "llama.cpp llama-bench, Llama 7B (pp512 / tg128), Metal, build c1d0e7a",
+     "source_url": "https://github.com/ggml-org/llama.cpp/discussions/4167",
+     "date": null,
+     "grade": "C"
+    }
+   ],
+   "fits": "70B Q8 (~70-75 GB) and gpt-oss 120B MXFP4 (59 GiB, the file size recorded in the index's DGX Spark row) fit with a large margin in 256 GB; larger MoE models are plausible but no file-size basis was opened - our arithmetic (grade E)",
+   "power_w": null,
+   "sources": [
+    {
+     "url": "https://www.mac-kanyon.co.il/product.asp?Pid=Z1U5000M2&Cat2Cat1ID=1039&Cat2ID=0&aff=Zap&lang=he",
+     "date": "2026-11-05",
+     "what": "Israeli price, config, stock",
+     "grade": "C"
+    },
+    {
+     "url": "https://www.zap.co.il/models.aspx?sog=c-brandpc&db252715=252716&db5802401=5806835",
+     "date": "2026-11-05",
+     "what": "Zap Apple-desktop list entry",
+     "grade": "D"
+    },
+    {
+     "url": "https://github.com/ggml-org/llama.cpp/discussions/4167",
+     "date": null,
+     "what": "M5 Ultra row of the llama.cpp Apple Silicon table",
+     "grade": "C"
+    }
+   ],
+   "grade": "C",
+   "verified_at": "2026-11-05"
+  },
+  {
+   "id": "mac-mini-m6-24gb",
+   "name_he": "Apple Mac mini M6 (24GB)",
+   "name_en": "Apple Mac mini M6 12-core CPU / 12-core GPU, 24GB (256GB or 512GB SSD; MHQM4HB/A for 512GB)",
+   "url": null,
+   "category": "mini-pc",
+   "tier": "24gb",
+   "memory_gb": 24,
+   "memory_kind": "unified",
+   "summary_he": "הגרסה של 24GB במיני החדש: מ-4,389 ש״ח (256GB SSD). מכיל מודלים עד כ-14B בכימות Q8, אבל רוחב פס של 170GB/s איטי מה-M4/M5 Pro.",
+   "why_israeli": "Zap's Apple-desktop list shows seven 24GB M6 offers (iSal, Ofek PC, iSell, Schneider, Makanyon x2, JoyMobile official import).",
+   "price_ils": {
+    "amount": 4389,
+    "currency": "ILS",
+    "store": "Zap (Apple-desktop list; seller iSal / 'AI Sal')",
+    "source_url": "https://www.zap.co.il/models.aspx?sog=c-brandpc&db252715=252716&db5802401=5806835&pageinfo=2",
+    "date": "2026-11-05",
+    "note": "New; 24GB / 256GB; single-store list entry (/fs?pid=1452406595), store page not opened. 24GB / 256GB also at Makanyon 4,581. 24GB / 512GB offers on the same list: Ofek PC 4,964 (incl. 20 shipping), iSell 4,969, Schneider 5,090, Makanyon 5,416, JoyMobile 5,641 (labelled official import)",
+    "availability": "listed on Zap",
+    "grade": "D"
+   },
+   "price_usd_msrp": null,
+   "published_speed": [
+    {
+     "model": "Llama 7B Q4_0 (M6, 8 GPU cores, 170 GB/s)",
+     "tokens_per_s_gen": 35.74,
+     "tokens_per_s_prompt": 988.93,
+     "runtime": "llama.cpp llama-bench, Llama 7B (pp512 / tg128), Metal, build c1d0e7a",
+     "source_url": "https://github.com/ggml-org/llama.cpp/discussions/4167",
+     "date": null,
+     "grade": "C",
+     "note": "Summary row for an 8-GPU-core M6; Zap lists this mini with a 12-core GPU, so the table probably understates it. Undated."
+    },
+    {
+     "model": "Llama 7B Q8_0 (M6, 8 GPU cores)",
+     "tokens_per_s_gen": 21.01,
+     "tokens_per_s_prompt": 970.46,
+     "runtime": "llama.cpp llama-bench, Llama 7B (pp512 / tg128), Metal, build c1d0e7a",
+     "source_url": "https://github.com/ggml-org/llama.cpp/discussions/4167",
+     "date": null,
+     "grade": "C"
+    }
+   ],
+   "fits": "~14B Q8 or ~24B Q4 - basis: our size arithmetic leaving ~5 GB for macOS and context (grade E)",
+   "power_w": null,
+   "sources": [
+    {
+     "url": "https://www.zap.co.il/models.aspx?sog=c-brandpc&db252715=252716&db5802401=5806835&pageinfo=2",
+     "date": "2026-11-05",
+     "what": "Zap Apple-desktop list, page 2: M6 24GB offers",
+     "grade": "D"
+    },
+    {
+     "url": "https://www.zap.co.il/models.aspx?sog=c-brandpc&db252715=252716&db5802401=5806835",
+     "date": "2026-11-05",
+     "what": "Zap Apple-desktop list, page 1: more 24GB M6 offers",
+     "grade": "D"
+    },
+    {
+     "url": "https://github.com/ggml-org/llama.cpp/discussions/4167",
+     "date": null,
+     "what": "M6 row of the llama.cpp Apple Silicon table",
+     "grade": "C"
+    }
+   ],
+   "grade": "C",
+   "verified_at": "2026-11-05"
+  },
+  {
+   "id": "asus-ascent-gx10-128gb",
+   "name_he": "ASUS Ascent GX10 (NVIDIA GB10, 128GB)",
+   "name_en": "ASUS Ascent GX10 desktop AI computer, NVIDIA GB10 Grace Blackwell, 128GB LPDDR5x, 1TB (90MS0371-M00030)",
+   "url": null,
+   "category": "workstation",
+   "tier": "128gb+",
+   "memory_gb": 128,
+   "memory_kind": "unified",
+   "summary_he": "תאומה של ה-DGX Spark: אותו שבב GB10 ו-128GB, ב-21,580 ש״ח ב-Ivory. ה-Spark מריץ gpt-oss-120B בכ-53 טוקנים/שנייה (המדידה לא בוצעה על ה-GX10).",
+   "why_israeli": "Ivory lists it in its 'AI PC workstations' category next to the DGX Spark (the category holds exactly these two products).",
+   "price_ils": {
+    "amount": 21580,
+    "currency": "ILS",
+    "store": "Ivory",
+    "source_url": "https://www.ivory.co.il/asus-ascent-gx10-nvidia-gb10-128gb-1tb.html",
+    "date": "2026-11-05",
+    "note": "ASUS Ascent GX10 (90MS0371-M00030), 128GB LPDDR5x 8533 MT/s, 256-bit, 273 GB/s, 1TB NVMe; Eilat branch 18,288; prices valid until 05/11/2026; warranty 1 year via Ivory; page carries Ivory's 'bargain' definition boilerplate and does not say whether this unit is new, refurbished or imported",
+    "availability": "no 'not available' notice; add-to-cart shown; branch-stock check link",
+    "grade": "C",
+    "eilat_branch_price": 18288
+   },
+   "price_usd_msrp": null,
+   "published_speed": [
+    {
+     "model": "gpt-oss 120B MXFP4 (pp2048 / tg32) - measured on DGX Spark (same GB10 chip)",
+     "tokens_per_s_gen": 52.87,
+     "tokens_per_s_prompt": 1689.47,
+     "runtime": "llama.cpp b6767 (CUDA), JetsonHacks run",
+     "source_url": "https://computingforgeeks.com/jetson-thor-vs-dgx-spark/",
+     "date": "2025-10",
+     "grade": "D",
+     "note": "JetsonHacks table (llama.cpp b6767, MXFP4 GGUF, single stream) as reproduced by ComputingForGeeks, updated 2026-10-28; the data itself is from October 2025. At 32K context: 38.76 gen."
+    },
+    {
+     "model": "gpt-oss 20B MXFP4 (pp2048 / tg32) - measured on DGX Spark",
+     "tokens_per_s_gen": 79.74,
+     "tokens_per_s_prompt": 3610.56,
+     "runtime": "llama.cpp b6767 (CUDA), JetsonHacks run",
+     "source_url": "https://computingforgeeks.com/jetson-thor-vs-dgx-spark/",
+     "date": "2025-10",
+     "grade": "D"
+    }
+   ],
+   "fits": "120B-class MoE (gpt-oss 120B MXFP4, 59 GiB per the index's DGX Spark row) fits in 128 GB; dense 70B is slow at 273 GB/s - basis: measured rows + file size",
+   "power_w": 240,
+   "sources": [
+    {
+     "url": "https://www.ivory.co.il/asus-ascent-gx10-nvidia-gb10-128gb-1tb.html",
+     "date": "2026-11-05",
+     "what": "Israeli list price, specs; external 240 W adapter, CPU TDP 140 W",
+     "grade": "C"
+    },
+    {
+     "url": "https://www.ivory.co.il/ai-pc-workstations.html",
+     "date": "2026-11-05",
+     "what": "Ivory AI-workstation category: DGX Spark 23,990 and GX10 21,580",
+     "grade": "C"
+    },
+    {
+     "url": "https://computingforgeeks.com/jetson-thor-vs-dgx-spark/",
+     "date": "2026-10-28",
+     "what": "Spark vs Thor llama.cpp numbers",
+     "grade": "D"
+    },
+    {
+     "url": "https://github.com/ggml-org/llama.cpp/discussions/16578",
+     "date": "2025-10",
+     "what": "Performance of llama.cpp on DGX Spark (thread title seen in search results, not opened)",
+     "grade": "C"
+    }
+   ],
+   "grade": "C",
+   "verified_at": "2026-11-05"
+  },
+  {
+   "id": "jetson-agx-thor-128gb",
+   "name_he": "NVIDIA Jetson AGX Thor (128GB)",
+   "name_en": "NVIDIA Jetson AGX Thor Developer Kit, 128GB LPDDR5X (945-14070-0085-000)",
+   "url": null,
+   "category": "edge",
+   "tier": "128gb+",
+   "memory_gb": 128,
+   "memory_kind": "unified",
+   "summary_he": "ערכת פיתוח של NVIDIA לרובוטיקה עם 128GB: gpt-oss-120B רץ בה בכ-42 טוקנים/שנייה, כ-20% פחות מה-DGX Spark. 23,756 ש״ח ב-PC Center.",
+   "why_israeli": "PC Center (pccenter.co.il) lists it in stock; the only Jetson on Zap's search is this kit (no Orin Nano / NX / AGX Orin listing).",
+   "price_ils": {
+    "amount": 23756,
+    "currency": "ILS",
+    "store": "PC Center (store page reached from a Zap listing)",
+    "source_url": "https://www.pccenter.co.il/product.asp?Pid=1045981&Cat2Cat1ID=1183&Cat2ID=1204&aff=Zap&lang=he",
+    "date": "2026-11-05",
+    "note": "NVIDIA Jetson AGX Thor Developer Kit (945-14070-0085-000); page text is partly garbled (a second block shows 23,754 and 23,519 without labels); VAT, warranty and new/import not stated; the page shows an odd date next to 'in stock' (2027-11-05) that it does not explain",
+    "availability": "listed 'in stock'; Zap shows free shipping, delivery within 5 business days",
+    "grade": "C"
+   },
+   "price_usd_msrp": {
+    "amount": 5499,
+    "currency": "USD",
+    "source_url": "https://computingforgeeks.com/jetson-thor-vs-dgx-spark/",
+    "source_date": "2026-10-28",
+    "grade": "D",
+    "note": "List price per ComputingForGeeks (about $5,300 on Amazon, October 2026)"
+   },
+   "published_speed": [
+    {
+     "model": "gpt-oss 120B MXFP4 (pp2048 / tg32)",
+     "tokens_per_s_gen": 41.82,
+     "tokens_per_s_prompt": 937.81,
+     "runtime": "llama.cpp b6767 (CUDA), JetsonHacks run",
+     "source_url": "https://computingforgeeks.com/jetson-thor-vs-dgx-spark/",
+     "date": "2025-10",
+     "grade": "D",
+     "note": "JetsonHacks table (llama.cpp b6767, MXFP4 GGUF, single stream) as reproduced by ComputingForGeeks, updated 2026-10-28; the data itself is from October 2025. At 32K context: 32.62 gen."
+    },
+    {
+     "model": "gpt-oss 20B MXFP4 (pp2048 / tg32)",
+     "tokens_per_s_gen": 57.18,
+     "tokens_per_s_prompt": 1861.26,
+     "runtime": "llama.cpp b6767 (CUDA), JetsonHacks run",
+     "source_url": "https://computingforgeeks.com/jetson-thor-vs-dgx-spark/",
+     "date": "2025-10",
+     "grade": "D"
+    }
+   ],
+   "fits": "120B-class MoE (gpt-oss 120B MXFP4, ~59 GiB) at ~42 tok/s; NVIDIA's own vLLM figures (8 concurrent requests, aggregate, not comparable): 150.8 tok/s on Llama 3.1 8B and 12.64 on Llama 3.3 70B, per ComputingForGeeks",
+   "power_w": 130,
+   "sources": [
+    {
+     "url": "https://www.pccenter.co.il/product.asp?Pid=1045981&Cat2Cat1ID=1183&Cat2ID=1204&aff=Zap&lang=he",
+     "date": "2026-11-05",
+     "what": "Israeli price, 128GB LPDDR5X 273 GB/s, 40-130 W range (label garbled)",
+     "grade": "C"
+    },
+    {
+     "url": "https://www.zap.co.il/search.aspx?keyword=jetson",
+     "date": "2026-11-05",
+     "what": "Zap search: only Jetson listed is the AGX Thor at 23,756",
+     "grade": "D"
+    },
+    {
+     "url": "https://computingforgeeks.com/jetson-thor-vs-dgx-spark/",
+     "date": "2026-10-28",
+     "what": "Thor vs Spark llama.cpp numbers, 40-130 W, $5,499 list",
+     "grade": "D"
+    }
+   ],
+   "grade": "C",
+   "verified_at": "2026-11-05"
+  },
+  {
+   "id": "jetson-orin-nano-super-8gb",
+   "name_he": "NVIDIA Jetson Orin Nano Super (8GB)",
+   "name_en": "NVIDIA Jetson Orin Nano Super Developer Kit, 8GB LPDDR5",
+   "url": "https://www.nvidia.com/en-us/autonomous-machines/embedded-systems/jetson-orin/nano-super-developer-kit/",
+   "category": "edge",
+   "tier": "8gb",
+   "memory_gb": 8,
+   "memory_kind": "unified",
+   "summary_he": "מחשב קצה קטן של NVIDIA עם 8GB (עד 25W): Llama 3.1 8B בכימות INT4 רץ בו ב-19 טוקנים/שנייה לפי NVIDIA. לא נמצאה חנות ישראלית.",
+   "why_israeli": "No Israeli retailer found: Zap searches ('jetson orin nano', 'jetson') return no Orin Nano, and a web search surfaced only foreign shops plus an Arrow listing of a SKU for regions that include IL (945-13766-0005-000; seen in a search summary, page not opened).",
+   "price_ils": null,
+   "price_usd_msrp": {
+    "amount": 249,
+    "currency": "USD",
+    "source_url": "https://developer.nvidia.com/blog/nvidia-jetson-orin-nano-developer-kit-gets-a-super-boost/",
+    "source_date": "2024-12-17",
+    "grade": "C",
+    "note": "Price per NVIDIA's launch blog ('$249, down from $499')"
+   },
+   "published_speed": [
+    {
+     "model": "Llama 3.1 8B (INT4, MLC API)",
+     "tokens_per_s_gen": 19.14,
+     "tokens_per_s_prompt": null,
+     "runtime": "MLC API, INT4 (NVIDIA's own table)",
+     "source_url": "https://developer.nvidia.com/blog/nvidia-jetson-orin-nano-developer-kit-gets-a-super-boost/",
+     "date": "2024-12-17",
+     "grade": "C",
+     "note": "Vendor figure. Same table: Qwen2.5 7B 21.75; Gemma 2 9B 9.21; Phi 3.5 3B 38.1; Llama 3.2 3B 43.07; Gemma 2 2B 34.97; SmolLM2 64.5 tok/s."
+    },
+    {
+     "model": "Llama 3.2 3B (INT4, MLC API)",
+     "tokens_per_s_gen": 43.07,
+     "tokens_per_s_prompt": null,
+     "runtime": "MLC API, INT4 (NVIDIA's own table)",
+     "source_url": "https://developer.nvidia.com/blog/nvidia-jetson-orin-nano-developer-kit-gets-a-super-boost/",
+     "date": "2024-12-17",
+     "grade": "C"
+    }
+   ],
+   "fits": "7-9B models at INT4 in 8 GB (Qwen2.5 7B 21.75, Gemma 2 9B 9.21 tok/s per NVIDIA); nothing larger - basis: vendor table",
+   "power_w": 25,
+   "sources": [
+    {
+     "url": "https://developer.nvidia.com/blog/nvidia-jetson-orin-nano-developer-kit-gets-a-super-boost/",
+     "date": "2024-12-17",
+     "what": "Speed table, $249, 8GB LPDDR5 102 GB/s, 7/15/25 W modes",
+     "grade": "C"
+    },
+    {
+     "url": "https://www.nvidia.com/en-us/autonomous-machines/embedded-systems/jetson-orin/nano-super-developer-kit/",
+     "date": null,
+     "what": "Specs: 67 INT8 TOPS, 8GB 128-bit LPDDR5, 7W-25W",
+     "grade": "C"
+    },
+    {
+     "url": "https://www.zap.co.il/search.aspx?keyword=jetson+orin+nano",
+     "date": "2026-11-05",
+     "what": "Zap search: no results",
+     "grade": "D"
+    }
+   ],
+   "grade": "C",
+   "verified_at": "2026-11-05"
+  },
+  {
+   "id": "rpi-ai-hat-plus-2-hailo-10h-8gb",
+   "name_he": "Raspberry Pi AI HAT+ 2 (Hailo-10H, 8GB)",
+   "name_en": "Raspberry Pi AI HAT+ 2 with Hailo-10H (40 TOPS INT4, 8GB on-board RAM) for Raspberry Pi 5",
+   "url": "https://www.raspberrypi.com/products/ai-hat-plus-2/",
+   "category": "edge",
+   "tier": "8gb",
+   "memory_gb": 8,
+   "memory_kind": "accelerator DRAM",
+   "summary_he": "תוסף ל-Raspberry Pi 5 עם שבב Hailo-10H של חברה ישראלית ו-8GB משלו. מריץ רק מודלים של 1 עד 4B, במהירות של 2 עד 10 טוקנים/שנייה לפי Hailo.",
+   "why_israeli": "The accelerator is made by Hailo Technologies, headquartered in Tel Aviv (founded 2017). No Israeli retailer listing for the HAT or for the Hailo-10H M.2 module was found (Zap search returned none).",
+   "price_ils": null,
+   "price_usd_msrp": {
+    "amount": 200,
+    "currency": "USD",
+    "source_url": "https://www.raspberrypi.com/products/ai-hat-plus-2/",
+    "source_date": null,
+    "grade": "C",
+    "note": "Raspberry Pi's product page says 'Available now for $200' (page undated, currency sign only). Launch price was reported as $130 (Hardware Corner, 2026-01-15); raspberry.tips (2026-10-21) says it costs more since the April 2026 price increases"
+   },
+   "published_speed": [
+    {
+     "model": "Llama3.2-1B-Instruct (A8W4)",
+     "tokens_per_s_gen": 9.82,
+     "tokens_per_s_prompt": null,
+     "runtime": "Hailo GenAI runtime on Hailo-10H (vendor table; unit of TPS not stated, read as tokens/s)",
+     "source_url": "https://github.com/hailo-ai/hailo_model_zoo_genai/blob/main/docs/MODELS.rst",
+     "date": null,
+     "grade": "C",
+     "note": "Time to first token 0.35 s. Vendor table, undated; the same table lists a Gemma4-E2B at 5.47 TPS."
+    },
+    {
+     "model": "Qwen2.5-1.5B-Instruct (A8W4)",
+     "tokens_per_s_gen": 7.32,
+     "tokens_per_s_prompt": null,
+     "runtime": "Hailo GenAI runtime on Hailo-10H (vendor table)",
+     "source_url": "https://github.com/hailo-ai/hailo_model_zoo_genai/blob/main/docs/MODELS.rst",
+     "date": null,
+     "grade": "C",
+     "note": "TTFT 0.37 s. DeepSeek-R1-Distill-Qwen-1.5B: 7.59 TPS, TTFT 1.45 s."
+    },
+    {
+     "model": "Qwen3-4B-Instruct-2507 (A16W4)",
+     "tokens_per_s_gen": 2.07,
+     "tokens_per_s_prompt": null,
+     "runtime": "Hailo GenAI runtime on Hailo-10H (vendor table)",
+     "source_url": "https://github.com/hailo-ai/hailo_model_zoo_genai/blob/main/docs/MODELS.rst",
+     "date": null,
+     "grade": "C",
+     "note": "TTFT 1.53 s; needs the full 8 GB of DRAM per the same table."
+    },
+    {
+     "model": "qwen2 Q4_0, 630M params / 403 MiB, on the Raspberry Pi 5 CPU alone (baseline, 2 GB Pi)",
+     "tokens_per_s_gen": 33.84,
+     "tokens_per_s_prompt": 289.92,
+     "runtime": "llama.cpp llama-bench, CPU backend, build 836d571; generation best at 2 threads, prompt best at 4 threads",
+     "source_url": "https://github.com/ggml-org/llama.cpp/discussions/30069",
+     "date": "2026-10-06",
+     "grade": "C",
+     "note": "Community post by manunicholasjacob. The post's command names a 0.5B model while its table labels it 'qwen2 1B Q4_0'; either way a tiny model, so not comparable with the Hailo rows above."
+    }
+   ],
+   "fits": "1-1.5B models at 4-bit (2-4 GB of the HAT's DRAM) at 7-10 tok/s; 4B at ~2 tok/s; nothing larger is listed, and Hardware Corner calls the board the wrong tool for 7B and larger models. The same Hailo-10H also ships as an M.2 module (hailo.ai); no price or Israeli listing found for it. raspberry.tips (2026-10-21) found no independent reproducible tok/s measurements.",
+   "power_w": 2.5,
+   "sources": [
+    {
+     "url": "https://www.raspberrypi.com/products/ai-hat-plus-2/",
+     "date": null,
+     "what": "Specs, $200, 8GB on-board RAM, 40 TOPS INT4 (page undated)",
+     "grade": "C"
+    },
+    {
+     "url": "https://github.com/hailo-ai/hailo_model_zoo_genai/blob/main/docs/MODELS.rst",
+     "date": null,
+     "what": "Hailo's own per-model TPS/TTFT table for Hailo-10H",
+     "grade": "C"
+    },
+    {
+     "url": "https://hailo.ai/products/ai-accelerators/hailo-10h-ai-accelerator/",
+     "date": null,
+     "what": "Hailo-10H: 40 TOPS INT4, 2.5 W typical (chip only), M.2 module",
+     "grade": "C"
+    },
+    {
+     "url": "https://www.hardware-corner.net/local-llms-raspberry-pi-ai-hat-plus-2/",
+     "date": "2026-01-15",
+     "what": "Independent view: low single digits to ~8 tok/s, 1-1.5B models, $130 at launch",
+     "grade": "D"
+    },
+    {
+     "url": "https://raspberry.tips/en/?p=9674",
+     "date": "2026-10-21",
+     "what": "No independent tok/s yet; price rose after April 2026",
+     "grade": "D"
+    },
+    {
+     "url": "https://en.wikipedia.org/wiki/Hailo_Technologies",
+     "date": null,
+     "what": "Hailo HQ Tel Aviv, founded February 2017",
+     "grade": "D"
+    },
+    {
+     "url": "https://github.com/ggml-org/llama.cpp/discussions/30069",
+     "date": "2026-10-06",
+     "what": "Raspberry Pi 5 CPU baseline",
+     "grade": "C"
+    }
+   ],
+   "grade": "C",
+   "verified_at": "2026-11-05"
+  },
+  {
+   "id": "hp-zbook-ultra-g1a-128gb",
+   "name_he": "HP ZBook Ultra G1a (Ryzen AI Max, 128GB)",
+   "name_en": "HP ZBook Ultra G1a A3ZG1ET, 14-inch, AMD Ryzen AI MAX, 128GB",
+   "url": null,
+   "category": "laptop",
+   "tier": "128gb+",
+   "memory_gb": 128,
+   "memory_kind": "unified",
+   "summary_he": "תחנת עבודה ניידת בגודל 14 אינץ' עם זיכרון משותף של 128GB (פלטפורמת Strix Halo). 25,341 ש״ח ב-Dio Plus; הנתונים הם של הפלטפורמה ולא של הדגם.",
+   "why_israeli": "Dio Plus lists it (a single offer on Zap's 128GB-laptop list); the store page itself did not render, so only the Zap listing is confirmed.",
+   "price_ils": {
+    "amount": 25341,
+    "currency": "ILS",
+    "store": "Zap (laptop list, 128GB filter; seller Dio Plus)",
+    "source_url": "https://www.zap.co.il/models.aspx?sog=c-pclaptop&db147733=10660144",
+    "date": "2026-11-05",
+    "note": "New; HP ZBook Ultra G1a A3ZG1ET, 14-inch, 'AMD Ryzen AI MAX', 128GB; SSD not stated; single-offer list entry (/fs?pid=1215109375) that redirects to dioplus.co.il/items/9071332, whose page returned only a navigation link",
+    "availability": "listed on Zap (1 offer)",
+    "grade": "D"
+   },
+   "price_usd_msrp": null,
+   "published_speed": [
+    {
+     "model": "Llama 2 7B Q4_0 (pp512 / tg128), Vulkan - 'AMD Ryzen Al Max+ 300 Series' platform row",
+     "tokens_per_s_gen": 54.38,
+     "tokens_per_s_prompt": 1704.3,
+     "runtime": "llama.cpp llama-bench, Vulkan, Llama 2 7B Q4_0 (pp512 / tg128), flash-attention on (commit fb4b273)",
+     "source_url": "https://github.com/ggml-org/llama.cpp/discussions/10879",
+     "date": null,
+     "grade": "C",
+     "note": "Platform number, not measured on this laptop; the scoreboard row does not name the machine or the exact chip. Flash-attention off: 51.81 gen / 1487.08 prompt."
+    },
+    {
+     "model": "gpt-oss 120B MXFP4 (pp2048 / tg32) - Strix Halo platform",
+     "tokens_per_s_gen": 34.13,
+     "tokens_per_s_prompt": 339.87,
+     "runtime": "llama.cpp; backend and build not stated",
+     "source_url": "https://www.hardware-corner.net/first-dgx-spark-llm-benchmarks/",
+     "date": "2025-10-15",
+     "grade": "D",
+     "note": "Generic Strix Halo number from the article - not measured on this laptop; a power-limited 14-inch chassis may differ."
+    }
+   ],
+   "fits": "gpt-oss 120B MXFP4 (59 GiB, the file size recorded in the index's DGX Spark row) fits in 128 GB at ~34 tok/s (platform row); dense 70B is slow on LPDDR5X bandwidth - basis: platform rows + file size",
+   "power_w": null,
+   "sources": [
+    {
+     "url": "https://www.zap.co.il/models.aspx?sog=c-pclaptop&db147733=10660144",
+     "date": "2026-11-05",
+     "what": "Zap 128GB-laptop list: ZBook Ultra G1a 25,341; ROG Flow Z13 14,990",
+     "grade": "D"
+    },
+    {
+     "url": "https://github.com/ggml-org/llama.cpp/discussions/10879",
+     "date": null,
+     "what": "Vulkan scoreboard, Ryzen AI Max+ row",
+     "grade": "C"
+    },
+    {
+     "url": "https://www.hardware-corner.net/first-dgx-spark-llm-benchmarks/",
+     "date": "2025-10-15",
+     "what": "Strix Halo gpt-oss 120B numbers",
+     "grade": "D"
+    }
+   ],
+   "grade": "C",
+   "verified_at": "2026-11-05"
+  },
+  {
+   "id": "gmktec-evo-x2-64gb",
+   "name_he": "GMKtec EVO-X2 (Ryzen AI Max+ 395, 64GB)",
+   "name_en": "GMKtec EVO-X2 AI Mini PC, AMD Ryzen AI Max+ 395, 64GB",
+   "url": null,
+   "category": "mini-pc",
+   "tier": "64gb",
+   "memory_gb": 64,
+   "memory_kind": "unified",
+   "summary_he": "גרסת 64GB של אותו מיני PC, בייבוא אישי ב-9,499 ש״ח - זול ב-3,500 ש״ח מגרסת 96GB, אבל 64GB צפופים מדי ל-gpt-oss-120B.",
+   "why_israeli": "Zap lists three EVO-X2 variants from Playmack as personal-import offers (64GB 9,499; 96GB 12,999; one with memory not shown 12,900).",
+   "price_ils": {
+    "amount": 9499,
+    "currency": "ILS",
+    "store": "Zap (comparison; Playmack, personal-import listing)",
+    "source_url": "https://www.zap.co.il/models.aspx?sog=c-brandpc&db252715=11779504&db254278=5782973",
+    "date": "2026-11-05",
+    "note": "IMPORT (personal-import offer on Zap, /fsPersonalImport.aspx?pid=1456933721), 64GB; SSD size not stated; page undated",
+    "availability": "listed on Zap",
+    "grade": "D"
+   },
+   "price_usd_msrp": null,
+   "published_speed": [
+    {
+     "model": "Llama 2 7B Q4_0 (pp512 / tg128), Vulkan - 'AMD Ryzen Al Max+ 300 Series' platform row",
+     "tokens_per_s_gen": 54.38,
+     "tokens_per_s_prompt": 1704.3,
+     "runtime": "llama.cpp llama-bench, Vulkan, Llama 2 7B Q4_0 (pp512 / tg128), flash-attention on (commit fb4b273)",
+     "source_url": "https://github.com/ggml-org/llama.cpp/discussions/10879",
+     "date": null,
+     "grade": "C",
+     "note": "Platform number, not measured on this mini PC. Flash-attention off: 51.81 gen / 1487.08 prompt."
+    },
+    {
+     "model": "gpt-oss 120B MXFP4 (pp2048 / tg32) - Strix Halo platform",
+     "tokens_per_s_gen": 34.13,
+     "tokens_per_s_prompt": 339.87,
+     "runtime": "llama.cpp; backend and build not stated",
+     "source_url": "https://www.hardware-corner.net/first-dgx-spark-llm-benchmarks/",
+     "date": "2025-10-15",
+     "grade": "D",
+     "note": "Generic Strix Halo number from the article - measured with more memory than this 64GB variant has."
+    }
+   ],
+   "fits": "30-35B Q4-Q8 and 70B Q4 (~40 GB) fit in 64 GB; gpt-oss 120B MXFP4 (59 GiB) would leave almost nothing for the OS and the GPU's share - our size arithmetic (grade E)",
+   "power_w": null,
+   "sources": [
+    {
+     "url": "https://www.zap.co.il/models.aspx?sog=c-brandpc&db252715=11779504&db254278=5782973",
+     "date": "2026-11-05",
+     "what": "Zap GMKtec list with import offers",
+     "grade": "D"
+    },
+    {
+     "url": "https://github.com/ggml-org/llama.cpp/discussions/10879",
+     "date": null,
+     "what": "Vulkan scoreboard, Ryzen AI Max+ row",
+     "grade": "C"
+    },
+    {
+     "url": "https://www.hardware-corner.net/first-dgx-spark-llm-benchmarks/",
+     "date": "2025-10-15",
+     "what": "Strix Halo gpt-oss 120B numbers",
+     "grade": "D"
+    }
+   ],
+   "grade": "C",
+   "verified_at": "2026-11-05"
+  },
+  {
+   "id": "lenovo-thinkpad-e14-g7-core-ultra-7-258v-32gb",
+   "name_he": "Lenovo ThinkPad E14 Gen 7 (Core Ultra 7 258V, 32GB) - Copilot+",
+   "name_en": "Lenovo ThinkPad E14 Gen 7 21U2001XIV, Intel Core Ultra 7 258V (Lunar Lake), 32GB / 1TB",
+   "url": null,
+   "category": "laptop",
+   "tier": "32gb",
+   "memory_gb": 32,
+   "memory_kind": "unified",
+   "summary_he": "מחשב עסקי עם Core Ultra 7 258V ו-32GB (בחנות מוגדר Copilot+ עם NPU של עד 47 TOPS). ב-llama.cpp הוא רץ על כרטיס המסך המשולב: כ-25 טוקנים/שנייה על 7B Q4.",
+   "why_israeli": "Zap lists it from six stores (Office Pro, BayPo, PC Center, ADS, Priority, Dio Plus); ADS' listing calls it a Copilot+ PC with an NPU of up to 47 TOPS.",
+   "price_ils": {
+    "amount": 6478,
+    "currency": "ILS",
+    "store": "Zap (price comparison; lowest offer Office Pro)",
+    "source_url": "https://www.zap.co.il/model.aspx?modelid=1252845",
+    "date": "2026-11-05",
+    "note": "New (Lenovo ThinkPad E14 Gen 7 21U2001XIV; Core Ultra 7, '258V in several listings'; 32GB / 1TB, 14-inch WUXGA); range 6,478-9,257 (Dio Plus 9,257); 3-year warranty noted by BayPo and Dio Plus; Zap entry dated 8/2025, no price-update date shown",
+    "availability": "Office Pro: free shipping, delivery up to 2 business days",
+    "grade": "D"
+   },
+   "price_usd_msrp": null,
+   "published_speed": [
+    {
+     "model": "Llama 2 7B Q4_0 (pp512 / tg128), SYCL on Core Ultra 7 258V (Arc Graphics iGPU)",
+     "tokens_per_s_gen": 24.61,
+     "tokens_per_s_prompt": 535.62,
+     "runtime": "llama.cpp llama-bench, SYCL, Llama 2 7B Q4_0 (pp512 / tg128), FP16, flash-attention off, build 6471e3c (9607), Ubuntu 26.04",
+     "source_url": "https://github.com/ggml-org/llama.cpp/discussions/23313",
+     "date": "2026-06-12",
+     "grade": "C",
+     "note": "Comment-table row by @twoplan on the same SKU as this laptop; the thread calls its figures 'unverified reference figures'."
+    },
+    {
+     "model": "Llama 2 7B Q4_0 (pp512 / tg128), Vulkan - 'Intel Core Ultra 200 Series' platform row",
+     "tokens_per_s_gen": 25.12,
+     "tokens_per_s_prompt": 867.27,
+     "runtime": "llama.cpp llama-bench, Vulkan, Llama 2 7B Q4_0 (pp512 / tg128), flash-attention on (commit 4a89937)",
+     "source_url": "https://github.com/ggml-org/llama.cpp/discussions/10879",
+     "date": null,
+     "grade": "C",
+     "note": "Platform row that does not name the SKU. Flash-attention off: 24.37 gen / 864.99 prompt."
+    }
+   ],
+   "fits": "7-8B Q4-Q8 at ~25 tok/s on the integrated GPU; larger models are slower because memory bandwidth is shared. These llama.cpp rows use the iGPU - none of the llama.cpp threads opened lists an Intel NPU result, so the NPU's 47 TOPS do not translate into published LLM speeds here",
+   "power_w": null,
+   "sources": [
+    {
+     "url": "https://www.zap.co.il/model.aspx?modelid=1252845",
+     "date": "2026-11-05",
+     "what": "Israeli price range, store list, Copilot+/NPU mention",
+     "grade": "D"
+    },
+    {
+     "url": "https://github.com/ggml-org/llama.cpp/discussions/23313",
+     "date": "2026-06-12",
+     "what": "SYCL row for Core Ultra 7 258V",
+     "grade": "C"
+    },
+    {
+     "url": "https://github.com/ggml-org/llama.cpp/discussions/10879",
+     "date": null,
+     "what": "Vulkan row for Core Ultra 200 Series",
+     "grade": "C"
+    }
+   ],
+   "grade": "C",
+   "verified_at": "2026-11-05"
+  },
+  {
+   "id": "hp-omnibook-x14-snapdragon-x-elite-16gb",
+   "name_he": "HP OmniBook X 14 (Snapdragon X Elite, 16GB)",
+   "name_en": "HP OmniBook X 14-fe0006nn, Snapdragon X Elite X1E-78-100 (12-core), 16GB / 1TB",
+   "url": null,
+   "category": "laptop",
+   "tier": "16gb",
+   "memory_gb": 16,
+   "memory_kind": "unified",
+   "summary_he": "מחשב Snapdragon X Elite עם 16GB ב-5,129 ש״ח. ב-llama.cpp על ה-CPU כ-20 טוקנים/שנייה על 7B Q4 (נמדד ב-Surface Laptop 7, לא בדגם הזה); ה-NPU לא נמדד בטבלאות.",
+   "why_israeli": "OLSale lists it (single store on Zap); the store page (olsale.co.il/items/9536365) returned no product text, so only the Zap search listing is confirmed. A 32GB sibling (fe0005nn) is listed at 5,599.",
+   "price_ils": {
+    "amount": 5129,
+    "currency": "ILS",
+    "store": "Zap (search results; seller OLSale)",
+    "source_url": "https://www.zap.co.il/search.aspx?keyword=snapdragon+x+elite",
+    "date": "2026-11-05",
+    "note": "New; HP OmniBook X 14-fe0006nn, Snapdragon X Elite X1E-78-100 12-core, 16GB, 1TB PCIe NVMe; free shipping; the listing mentions a dedicated NPU but not Copilot+; single-store entry (/fs?pid=1446825851)",
+    "availability": "listed on Zap (1 store)",
+    "grade": "D"
+   },
+   "price_usd_msrp": null,
+   "published_speed": [
+    {
+     "model": "Llama 7B Q4_0 (pp512 / tg128), CPU backend - Surface Laptop 7 15-inch, Snapdragon X Elite, 12 threads",
+     "tokens_per_s_gen": 19.83,
+     "tokens_per_s_prompt": 63.05,
+     "runtime": "llama.cpp llama-bench, CPU only, build fa42aa6 (3897)",
+     "source_url": "https://github.com/ggml-org/llama.cpp/discussions/8273",
+     "date": "2024-10-08",
+     "grade": "C",
+     "note": "Community post by AndreasKunar on a different laptop with the same SoC family. Arm-optimised Q4_0_4_8: 23.24 gen / 178.88 prompt. An earlier build (cddae48): Q4_0 20.72 / 66.63; Q8_0 12.65 / 63.51."
+    },
+    {
+     "model": "DeepSeek-R1-Distill-Qwen-7B Q4_0, CPU vs NPU (device not specified)",
+     "tokens_per_s_gen": 20.0,
+     "tokens_per_s_prompt": null,
+     "runtime": "llama.cpp CPU-only; the same model via Microsoft's AI Toolkit on the NPU gave about 12 tok/s (mixed NPU and CPU)",
+     "source_url": "https://github.com/ggml-org/llama.cpp/discussions/8273",
+     "date": "2025-03-30",
+     "grade": "C",
+     "note": "Approximate figures quoted in prose by AndreasKunar - the NPU path was slower than the CPU in that test."
+    }
+   ],
+   "fits": "7-8B Q4 at ~20 tok/s on the CPU; 16 GB RAM limits models to ~13B Q4. llama.cpp's docs describe a Hexagon NPU backend (v73/v75/v79/v81; Windows on Snapdragon in a separate guide), but the only table there is for a v79 chip, not this laptop",
+   "power_w": null,
+   "sources": [
+    {
+     "url": "https://www.zap.co.il/search.aspx?keyword=snapdragon+x+elite",
+     "date": "2026-11-05",
+     "what": "Zap search: two OmniBook X 14 listings (16GB 5,129; 32GB 5,599)",
+     "grade": "D"
+    },
+    {
+     "url": "https://github.com/ggml-org/llama.cpp/discussions/8273",
+     "date": "2024-10-08",
+     "what": "Snapdragon X Elite / X Plus CPU results and the 2025-03-30 NPU comparison",
+     "grade": "C"
+    },
+    {
+     "url": "https://github.com/ggml-org/llama.cpp/blob/master/docs/backend/snapdragon/README.md",
+     "date": null,
+     "what": "llama.cpp Hexagon NPU backend doc (Llama 3.2 1B Q4_0 on v79: 51.54 tok/s tg64)",
+     "grade": "C"
+    }
+   ],
+   "grade": "C",
+   "verified_at": "2026-11-05"
+  },
+  {
+   "id": "lenovo-thinkpad-p14s-g6-ryzen-ai-9-hx-pro-370-64gb",
+   "name_he": "Lenovo ThinkPad P14s Gen 6 (Ryzen AI 9 HX PRO 370, 64GB)",
+   "name_en": "Lenovo ThinkPad P14s Gen 6 21RV0017IV, AMD Ryzen AI 9 HX PRO 370, Radeon 890M, 64GB / 1TB",
+   "url": null,
+   "category": "laptop",
+   "tier": "64gb",
+   "memory_gb": 64,
+   "memory_kind": "unified",
+   "summary_he": "מחשב עבודה עם 64GB ו-Radeon 890M. אין מדידה על 7B: בפוסט אחד מודל של 12GB רץ ב-3 עד 7 טוקנים/שנייה על ה-iGPU, ו-AMD מציינת 50.7 על מודל 1B.",
+   "why_israeli": "Zap lists it from four offers (Zap shop external seller, Hai Computers, Schneider, Dio Plus).",
+   "price_ils": {
+    "amount": 11857,
+    "currency": "ILS",
+    "store": "Zap (price comparison; lowest offer, Zap shop external seller)",
+    "source_url": "https://www.zap.co.il/model.aspx?modelid=1248375",
+    "date": "2026-11-05",
+    "note": "New (Lenovo ThinkPad P14s Gen 6 21RV0017IV, 14-inch, Win 11 Pro); range 11,857-13,495; Zap entry dated 5/2025, no price-update date shown; the page does not state the NPU",
+    "availability": "free shipping, delivery up to 8 business days (Hai Computers 12,490 and Schneider 12,990 up to 3 days)",
+    "grade": "D"
+   },
+   "price_usd_msrp": null,
+   "published_speed": [
+    {
+     "model": "30B-class model at Q3, 12.43 GiB (Vulkan, Radeon 890M on a Ryzen AI 9 HX 370)",
+     "tokens_per_s_gen": 7.01,
+     "tokens_per_s_prompt": 93.54,
+     "runtime": "llama.cpp llama-bench, Vulkan (RADV), Ubuntu 26.04, GPU power level forced to 'high'; build not stated",
+     "source_url": "https://github.com/ggml-org/llama.cpp/discussions/27051",
+     "date": "2026-08-14",
+     "grade": "C",
+     "note": "Community post by mhuttes14 (pp512 / tg128). At the default power level the same model gave 3.21-3.32 gen / 81.58 prompt. A 12 GiB model at ~7 tok/s implies roughly 85 GB/s effective bandwidth (our arithmetic)."
+    },
+    {
+     "model": "Llama 3.2 1B Instruct, 4-bit (LM Studio, Ryzen AI 9 HX 375)",
+     "tokens_per_s_gen": 50.7,
+     "tokens_per_s_prompt": null,
+     "runtime": "LM Studio (llama.cpp-based); AMD's own claim; backend and settings not captured",
+     "source_url": "https://www.amd.com/en/blogs/2024/accelerating-llama-cpp-performance-in-consumer-llm.html",
+     "date": null,
+     "grade": "C",
+     "note": "'Up to' vendor figure seen only in a search-result summary (the page timed out when fetched); the press coverage (FoneArena, 2024-10-31) reports only relative gains - 27% over a Core Ultra 7 in tokens/s, with iGPU acceleration - and no absolute figures. It is the HX 375, one tier above this laptop's chip."
+    }
+   ],
+   "fits": "64 GB of shared memory holds 30B-class Q3-Q4 files (12-18 GB) with room for context, but generation on the 890M is slow (~7 tok/s at best in the post above); the NPU is not used by these llama.cpp / LM Studio figures - our reading of the sources",
+   "power_w": null,
+   "sources": [
+    {
+     "url": "https://www.zap.co.il/model.aspx?modelid=1248375",
+     "date": "2026-11-05",
+     "what": "Israeli price range, store list, RAM/graphics",
+     "grade": "D"
+    },
+    {
+     "url": "https://github.com/ggml-org/llama.cpp/discussions/27051",
+     "date": "2026-08-14",
+     "what": "Strix Point (Radeon 890M) post",
+     "grade": "C"
+    },
+    {
+     "url": "https://www.fonearena.com/blog/439205/amd-ryzen-ai-300-performance.html",
+     "date": "2024-10-31",
+     "what": "Press coverage of AMD's LM Studio comparison (relative figures only)",
+     "grade": "B"
+    },
+    {
+     "url": "https://www.amd.com/en/blogs/2024/accelerating-llama-cpp-performance-in-consumer-llm.html",
+     "date": null,
+     "what": "AMD blog (title and URL seen in search results; page not read)",
+     "grade": "C"
+    }
+   ],
+   "grade": "C",
+   "verified_at": "2026-11-05"
+  },
+  {
+   "id": "lenovo-ideapad-slim-3-15irh10-i7-13620h-16gb-cpu-only",
+   "name_he": "מחשב משרדי רגיל, 16GB, CPU בלבד (Lenovo IdeaPad Slim 3 15IRH10)",
+   "name_en": "Typical office laptop, 16GB DDR5, CPU only - Lenovo IdeaPad Slim 3 15IRH10 83K100KSIV (Core i7-13620H, 512GB)",
+   "url": null,
+   "category": "laptop",
+   "tier": "16gb",
+   "memory_gb": 16,
+   "memory_kind": "system RAM",
+   "summary_he": "מחשב משרדי בסיסי עם 16GB ובלי כרטיס מסך ייעודי: כ-6 עד 10 טוקנים/שנייה על 7B בכימות Q4 על ה-CPU (נמדד במחשבים דומים, לא בדגם הזה). 2,699 ש״ח.",
+   "why_israeli": "Zap lists this model from nine offers (OMC Computers North, Pisi Online, Dioticom, BayPo, Turbo PC...) plus an Eilat in-store offer.",
+   "price_ils": {
+    "amount": 2699,
+    "currency": "ILS",
+    "store": "Zap (price comparison; lowest online offer 'או אם סי מחשבים צפון')",
+    "source_url": "https://www.zap.co.il/model.aspx?modelid=1246164",
+    "date": "2026-11-05",
+    "note": "New (Lenovo IdeaPad Slim 3 15IRH10 83K100KSIV; Core i7-13620H, 16GB DDR5, 512GB SSD); range 2,699-3,250 (9 offers, header says 8 stores); 'Shop Eilat' in-store only 2,500; no price-update date shown",
+    "availability": "free shipping, delivery up to 3 business days",
+    "grade": "D"
+   },
+   "price_usd_msrp": null,
+   "published_speed": [
+    {
+     "model": "Llama 7B Q4_0 (pp512 / tg128) - Lenovo Yoga 730-15IKB, Core i7-8550U, 16GB, CPU 8 threads (floor)",
+     "tokens_per_s_gen": 6.37,
+     "tokens_per_s_prompt": 16.29,
+     "runtime": "llama.cpp llama-bench, CPU backend, build e3af5563 (6878)",
+     "source_url": "https://www.mgroeber.de/benchmarking-llamacpp-on-legacy-hardware-2.html",
+     "date": "2026-02-02",
+     "grade": "D",
+     "note": "Personal blog (updated 2026-08-20) that says the numbers are rough. A 2018 15 W laptop CPU, far older than the i7-13620H."
+    },
+    {
+     "model": "Llama 7B Q4_0 (pp512 / tg128) - Lenovo Yoga 7 2-in-1 Gen 10, Ryzen AI 7 350, 32GB, CPU 4 threads",
+     "tokens_per_s_gen": 10.49,
+     "tokens_per_s_prompt": 31.37,
+     "runtime": "llama.cpp llama-bench, CPU backend, build e3af5563 (6878); the Radeon 860M was not used",
+     "source_url": "https://www.mgroeber.de/benchmarking-llamacpp-on-legacy-hardware-2.html",
+     "date": "2026-02-02",
+     "grade": "D",
+     "note": "A modern 2025 laptop CPU on 32 GB. 8 threads: 10.27 gen / 35.84 prompt."
+    },
+    {
+     "model": "llama3.1:8b (Ollama, CPU only) - Ryzen 7 7840U laptop",
+     "tokens_per_s_gen": 10.81,
+     "tokens_per_s_prompt": null,
+     "runtime": "Ollama 0.0.0 (experimental build), no GPU used",
+     "source_url": "https://community.frame.work/t/llm-benchmark-amd-7840u/49351",
+     "date": "2025-01-05",
+     "grade": "D",
+     "note": "Forum post by nocoffei using Ollama's benchmark tool (not llama-bench); mistral:7b 11.99 tok/s in the same post."
+    }
+   ],
+   "fits": "3-8B Q4 at roughly 5-12 tok/s - usable for short offline tasks and batch jobs, slow for chat; ~13B Q4 is the ceiling in 16 GB. No benchmark exists for the i7-13620H itself in what was opened; the speeds are from other laptops",
+   "power_w": null,
+   "sources": [
+    {
+     "url": "https://www.zap.co.il/model.aspx?modelid=1246164",
+     "date": "2026-11-05",
+     "what": "Israeli price range, store list",
+     "grade": "D"
+    },
+    {
+     "url": "https://www.mgroeber.de/benchmarking-llamacpp-on-legacy-hardware-2.html",
+     "date": "2026-02-02",
+     "what": "llama-bench CPU rows on 16GB / 32GB laptops",
+     "grade": "D"
+    },
+    {
+     "url": "https://community.frame.work/t/llm-benchmark-amd-7840u/49351",
+     "date": "2025-01-05",
+     "what": "Ollama CPU-only results on a Ryzen 7 7840U",
+     "grade": "D"
+    }
+   ],
+   "grade": "D",
+   "verified_at": "2026-11-05"
+  }
+ ],
+ "rejected": [
+  {
+   "name": "AMD Radeon RX 7900 XTX 24GB",
+   "reason": "Israeli prices seen only in search snippets (refurbished/unavailable) and no measured llama.cpp benchmark found - only calculator-site estimates."
+  },
+  {
+   "name": "Intel Arc Pro B60 24GB",
+   "reason": "No Israeli listing found; speed figures only from forum/blog summaries and estimator sites."
+  },
+  {
+   "name": "Typical office laptop, 16GB RAM, CPU only",
+   "reason": "No measured CPU-only llama.cpp source retrieved before the search budget ran out (Phoronix returned 403). Brief item left open."
+  },
+  {
+   "name": "Framework Desktop / HP Z2 Mini G1a (Ryzen AI Max+ 395)",
+   "reason": "No Israeli retailer listing found for either; Strix Halo covered by the ASUS ROG Flow Z13 and GMKtec EVO-X2 rows instead."
+  },
+  {
+   "name": "MacBook Air / MacBook Pro",
+   "reason": "No MacBook price page was opened; only a Zap category link appeared in search results."
+  },
+  {
+   "name": "NVIDIA GeForce RTX 5060 8GB",
+   "reason": "Already in the index (rtx-5060-8gb), so not duplicated. Suggested update for that row, which has no ILS price: Zap's graphics-card list shows the Gigabyte RTX 5060 WindForce 2 8GB from 1,990 (10 stores, https://www.zap.co.il/model.aspx?modelid=1260749) and the AERO OC from 2,189, read on 2026-11-05."
+  },
+  {
+   "name": "NVIDIA GeForce RTX 4060 8GB",
+   "reason": "No standalone card found: Zap's RTX 4060 chipset filter returned only four complete gaming PCs (8,720-9,153), and hardware-corner's GPU list and the llama.cpp CUDA thread have a 4060 Ti but no plain 4060 row."
+  },
+  {
+   "name": "NVIDIA RTX PRO 4000 Blackwell 24GB",
+   "reason": "Israeli price found (Lenovo-branded 4X61T95636: 8,289 at Sal-Tek, cell-tec.co.il page opened: in stock, 3-year, max power 140 W; other Zap offers 8,890-10,490) but no published LLM speed - hardware-corner has the PRO 5000 and 6000 pages only. Easy to add if a benchmark turns up."
+  },
+  {
+   "name": "Apple Mac mini M4 Pro 48GB / 64GB, Mac Studio M4 Max 64GB / 128GB, MacBook Air M4 (16/24/32GB), MacBook Pro M4 Max (64/128GB)",
+   "reason": "Not found as new stock in the Israeli pages opened: Zap's Apple desktop list (2 pages, 32 items) shows only one M4 Pro (24GB, 6,499 at one reseller), M5/M6 minis, Studio M5 Max 36GB and M5 Ultra; Zap's Apple laptop list shows MacBook Air M5 (16/24/32GB) and MacBook Pro M5 / M5 Pro / M5 Max, so the M5 rows replace the M4 ones. iDigital's Air, Studio and mini collection pages answered HTTP 429 (rate limit) and could not be read; apple.com/il/shop URLs returned 404; KSP returned 403."
+  },
+  {
+   "name": "Apple Mac Studio M5 Max 64GB / 128GB",
+   "reason": "Only 36GB Studio configurations (9,789-10,402) appear on Zap's Apple desktop list; the 64GB and 128GB M5 Max configurations were found as MacBook Pro rows instead (same chip, 40-core GPU)."
+  },
+  {
+   "name": "Apple MacBook Neo 13 (A18 Pro, 8GB)",
+   "reason": "Zap lists it from 2,377 (24 stores, https://www.zap.co.il/model.aspx?modelid=1263242) but no llama.cpp or other published LLM speed for the A18 Pro was found, and the llama.cpp Apple table has no A-series row, so a row would have no speed."
+  },
+  {
+   "name": "Framework Desktop / HP Z2 Mini G1a / Minisforum MS-S1 MAX / Beelink GTR9 Pro / Bosgame M5 (Ryzen AI Max+ 395)",
+   "reason": "No Israeli listing found: Ivory's Mini PC category (32 items) holds no Ryzen AI Max+ 395 or HX 370 machine, and Zap's GMKtec list covers only the EVO-X2. Strix Halo is covered by the GMKtec EVO-X2 64GB and HP ZBook Ultra G1a rows here and the ASUS ROG Flow Z13 / EVO-X2 96GB rows already in the index."
+  },
+  {
+   "name": "ASUS ProArt PX13 HN7306EA (listed on Zap with 'Ryzen AI MAX+ 395, 128GB', 20,486-21,685)",
+   "reason": "Zap's spec fields for this model look inconsistent with the model name and were not checked against an ASUS page, so it is left out rather than listed as a Strix Halo laptop. Zap model page: https://www.zap.co.il/model.aspx?modelid=1265137."
+  },
+  {
+   "name": "Raspberry Pi AI HAT+ (Hailo-8 / Hailo-8L, 13 and 26 TOPS) and the older AI Kit",
+   "reason": "raspberrypi.com/products/ai-hat-plus/ returned 404 in this session, so what it can run and its price were not verified; the generative-AI case is covered by the AI HAT+ 2 (Hailo-10H) row."
+  },
+  {
+   "name": "Hailo-10H M.2 module (stand-alone)",
+   "reason": "hailo.ai confirms an M.2 module and starter kit but shows no price (distributors only) and no Israeli retailer was found; its speeds are the same Hailo table used in the AI HAT+ 2 row, where the M.2 form factor is noted."
+  },
+  {
+   "name": "Intel Arc Pro B60 (24GB) and Arc Pro B70",
+   "reason": "The llama.cpp SYCL thread (#23313) has measured rows (B60: 77.9-80.0 tok/s tg128, B70: 105-111) but Ivory's Intel category lists only the Arc Pro B50 and no Israeli listing was found; memory sizes were not confirmed from an opened source."
+  },
+  {
+   "name": "NVIDIA Jetson AGX Orin 64GB / Orin NX",
+   "reason": "The llama.cpp CUDA thread has an AGX Orin 64GB row (Llama 2 7B Q4_0: 33.58-35.88 tok/s tg128) but Zap's search shows no AGX Orin or Orin NX listing (the only Jetson is the AGX Thor), so no Israeli price."
+  },
+  {
+   "name": "Qualcomm Snapdragon X Elite / Intel Core Ultra 200V / AMD Ryzen AI 300 NPU-only LLM speeds",
+   "reason": "No independent same-model, same-quantisation NPU benchmark was found. The only NPU datum is a prose remark in llama.cpp discussion #8273 (a 7B distill: ~12 tok/s on the NPU via Microsoft's AI Toolkit vs ~20 on the CPU), quoted in the OmniBook X 14 row; the Copilot+ rows therefore carry CPU / iGPU llama.cpp speeds and say so."
+  }
+ ]
+}

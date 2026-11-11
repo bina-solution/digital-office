@@ -8,7 +8,7 @@
 # Usage: ./scripts/acceptance-run.sh <seed|reset|trigger|measure|full> [N]
 set -uo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"; cd "$ROOT"
-CMD="${1:-measure}"; N="${2:-30}"; DN=shlomo-laptop
+CMD="${1:-measure}"; N="${2:-30}"; DN=owner-laptop
 FULL_RESET_WF=IndoxResetFull01; SCANNER_WF=SyncScanner00001
 EM=$(grep -E '^N8N_OWNER_EMAIL=' .env | cut -d= -f2-); PW=$(grep -E '^N8N_OWNER_PASSWORD=' .env | cut -d= -f2-)
 

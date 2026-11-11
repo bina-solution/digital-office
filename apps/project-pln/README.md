@@ -245,8 +245,22 @@ means the same thing in both places.
 ./bbox project-pln tasks comment DGO-12 "…"      # or: take, to assign it to me
 ./bbox project-pln tasks attach DGO-12 mockup.png notes.pdf   # a request's files, on its item
 ./bbox project-pln tasks label MEET-15 נותח        # add labels by name; a missing one is created
-./bbox project-pln tasks link MEET-15 DGO-1003 FPG-2  # related both ways, across projects
+./bbox project-pln tasks link MEET-15 DGO-1003 EXF-2  # related both ways, across projects
 ```
+
+- **A read that is slow says so, and gives up** (the owner: «נכשל מהר במקום להיתקע»). DGO alone
+  is ~1,450 items and this Plane answers a page of `issues/?expand=…` in 3–11 s, so `list` used to be
+  minutes of silence — the same thing on screen as a stuck command. Now:
+  - every read past `PLANE_PROGRESS_AFTER` seconds (default 3) prints one line to **stderr** — page n,
+    items, seconds — at most every `PLANE_PROGRESS_EVERY` (5). `--json` on stdout is untouched, so a
+    parser never sees them;
+  - at `PLANE_READ_DEADLINE` seconds (default 120, `0` = no ceiling) the read STOPS: non-zero exit, and a
+    message naming the address it was still asking, how many pages and items it got, and how to ask for
+    less (`--project`, `--mine`, `--state`);
+  - pages are asked for at `PLANE_PER_PAGE` rows (default 200): measured `per_page=200` → 200 rows and
+    DGO's `total_pages` 29 → 8, the same rows in a quarter of the round trips. Plane's public API
+    **ignores** `?assignee=` / `?state=` (measured: the page count does not move even for a real user
+    id), so `--mine`/`--state` stay client-side — the page size is the only saving the API offers.
 
 - **A meeting has three steps (DGO-1005).** The meetings app marks `הקלטה` when it records and `תומלל`
   when the transcript is in. Whoever reads the meeting and turns it into work marks the third one,
@@ -282,6 +296,11 @@ means the same thing in both places.
   Mutating verbs answer `{"ok": true, "ref": …, "id": …, "state": …, "group": …, "url": …}` with
   `--json`, and one human line without it. `group` is the portable half of a state (`unstarted`,
   `started`, `completed`) — the Hebrew name is the owner's to change, the group is not.
+  `attach` tries every file and says each on its own line: one that Plane or its store refuses is named
+  with the reason, and the rest still go. With `--json` it answers `{"ok": …, "attached": <n>, "files":
+  [names], "refused": [{"name", "why"}], …}`; it exits 0 when all landed, and 4 when Plane answered and
+  refused some — the outbox counts that as sent (a replay cannot change the answer). A file already on
+  the item by name and size is not sent a second time (DGO-1628).
 - **429 is waited out**, never failed: Plane's key is limited to 60 requests/minute.
 
 ### A plan costs what it changes  (DGO-559)

@@ -9,8 +9,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/solomonBoltin/deployment-hacohen/packaging/dgo/internal/pyval"
-	"github.com/solomonBoltin/deployment-hacohen/packaging/dgo/internal/yamlish"
+	"github.com/bina-solution/digital-office/packaging/dgo/internal/pyval"
+	"github.com/bina-solution/digital-office/packaging/dgo/internal/yamlish"
 )
 
 // ── what reconcile.py makes of values no validator refused, and of what it never validates ─────────
@@ -181,8 +181,9 @@ func TestGenerationsWithTiedNumbersListAsIterdirDoes(t *testing.T) {
 }
 
 // TestValidateReadsManifestsAsPythonDoes: the validator's own reading — a list it iterates, an entry
-// it indexes, a name it hashes, a path it joins, a sort of the names it claimed — and where Python's
-// raises, the verbs that validate end there; `layer` is compared by ==.
+// it indexes, a sort of the names it claimed — and where Python's raises, the verbs that validate end
+// there; `layer` is compared by ==. A capability with no name, a name that is not text and a compose that
+// is not a path are SAID now on both sides (DGO-612), no longer where they die.
 func TestValidateReadsManifestsAsPythonDoes(t *testing.T) {
 	repo := pyFixture(t, map[string]string{
 		"apps/a/app.json": manifest("a", 3, ""),

@@ -46,7 +46,7 @@ def base_kind(p, group):
 
 #: the fasteners that hold a cap down, by its base: Tapcons 1/4″ × 1-3/4″ into a brick chimney, #10 hex screws into
 #: a chase or a flue's flashing — through the skirt, ≤ ANCHOR_PITCH apart and two a side at least. The same rule
-#: places them in FPG's FreeCAD library (apps/chimney-services/cad, FPG-604: 14 at 30 × 24).
+#: places them in EXF's FreeCAD library (apps/chimney-services/cad, EXF-604: 14 at 30 × 24).
 ANCHOR_PITCH = 12.0
 
 

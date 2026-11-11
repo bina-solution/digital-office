@@ -15,8 +15,10 @@
 # declared. A default is a product decision; a runtime is a deployment's.
 #
 # THE LIST BELOW is the owner's decision of 2026-09-17 — "the platform, the four business apps, the
-# office agent, and nothing else" — written out: **19 of the 41 catalog apps on** (the seven layer-1
-# apps, the seven layer-2 apps, apitools, indox, drive, mail, bina-ds) and the rest off. The ten apps
+# office agent, and nothing else" — written out: **the platform's chassis apps marked `true` below,
+# apitools, indox, drive, mail and bina-ds on**, and the rest off. The lines below are the list and the
+# count; a number here went stale as the catalog grew («19 of 41» when it was written, 17 of 70 on
+# 2026-11-10). The ten apps
 # that joined after that decision (computers, git, sites, domains, telegram-tv, project-pln,
 # dgo-extend, social-list, digital-assets, archify) are therefore off.
 #
@@ -26,6 +28,8 @@
 #
 # The shape of an app's own state entry, its instances and its `remote:` block all still live in
 # platform.state.yaml once an office has one; `schema_version` is checked by the compiler either way.
+# ONE EXCEPTION, at the end: INDOX's bootstrap seed. A fresh office needs its first INDOX instance
+# before any person can make one (DGO-1026), and this file is the only thing a fresh office has.
 schema_version: 1
 
 # WHICH PROVIDER TO PULL IN, when two apps provide one capability and the office runs neither: the
@@ -75,6 +79,11 @@ apps:
   # ── gallery — installable apps that ship DISABLED (the app-store surface).
   #    Declared and present in the catalog; `bbox apps enable ollama` turns one on.
   ollama:           { enabled: false }
+  # The office's GitHub runner as an app (DGO-1797): an office that runs CI for the business enables it (the Dell).
+  ci-runner:        { enabled: false }
+  # The office's emulated Android phone (DGO-1797): an office with KVM that tests the APK enables it (the Dell);
+  # refused where /dev/kvm is missing (requires_host).
+  android-emulator: { enabled: false }
   openhands:        { enabled: false }
   # Container management UI. Layer 3 because it is an OPTIONAL operator tool, not platform chassis.
   portainer:        { enabled: false }
@@ -104,8 +113,32 @@ apps:
   social-list:      { enabled: false }
   digital-assets:   { enabled: false }
   archify:          { enabled: false }
+  # DGO-553: the browser terminal. Off in the PRODUCT DEFAULT for the file's own reason — it joined
+  # after the owner's 2026-09-17 decision, like the ten above it — and listed here rather than left
+  # out, because this file's convention is one line per CATALOG app: an app that is absent reads as a
+  # decision nobody made (`disposition()` answers "disabled" either way, so only a reader would notice).
+  terminal:         { enabled: false }
+
   # The watchful agent (awareness + repair) and the chat surface — operator tools, off by default.
   raphael:          { enabled: false }
   chat:             { enabled: false }
   # Error tracking. Off by default: a fresh install has no Sentry/GlitchTip project to report to.
   glitchtip:        { enabled: false }
+
+# ── INDOX's first instance (DGO-1026) ──────────────────────────────────────────────────────────
+# A fresh office with INDOX on came up with NO schema. apps/indox/hooks/apply-schema seeds the
+# instance registry (public.indox_instances) from this block, on its first run only, and the
+# default declared none. So `apply-schema --all` found no instance and died on its usage line, and
+# onboard said «the INDOX schema was NOT created» (the cloud proof). One business is one instance,
+# called `main` here. apply-schema seeds an EMPTY registry from the office's own platform.state.yaml,
+# and from THIS block when the office's file declares no INDOX instance (an office installed before
+# this block existed heals the same way, on its next run). Once the registry has rows it is the truth;
+# this block is read again only as apply-schema's fallback when the database cannot be reached.
+# `test` is INDOX's permanent test instance: every suite provisions and resets it, so no test ever
+# touches the business's own schema. The schema name follows the registry's law
+# (schema_name = 'indox_' || id).
+instances:
+  indox:
+    bootstrap_seed:
+      - { id: main, schema: indox_main, label: "ראשי", enabled: true }
+      - { id: test, schema: indox_test, label: "בדיקות", enabled: true, purpose: test }

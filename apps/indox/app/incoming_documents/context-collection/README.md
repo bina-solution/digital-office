@@ -14,7 +14,8 @@ context-collection/
 ├── apitools-snapshot/
 │   └── STRUCTURE.md           ← snapshot of the apitools project today
 ├── sample-data/
-│   └── incoming-documents.csv ← full production GSheet export (39,582 rows × 52 cols)
+│   └── incoming-documents.csv.xz ← full production GSheet export (39,582 rows × 52 cols) — a client's data:
+│                                kept in the office's own store, never in the tree (DGO-1792, G92)
 └── config/
     ├── production-config.md   ← live spreadsheet ID, tab, credentials, infra
     └── placeholders.env       ← env vars needed; unknowns flagged __PLACEHOLDER__
@@ -49,10 +50,10 @@ Settings, Upload Doc To API TOOLS, Search File, Search File In Warehouse Scans, 
 - `apitools-snapshot/STRUCTURE.md` — current code layout, existing routes, env vars, dependencies, and an explicit list of what is **not** present today (no GSheet/Supabase/Kafka clients).
 
 ### Sample data
-- `sample-data/incoming-documents.csv` — full export of the production sheet `AutomationValues / מסמכים נכנסים` (52-column header, 39,582 data rows).
+- `sample-data/incoming-documents.csv` — full export of the production sheet `AutomationValues / מסמכים נכנסים` (52-column header, 39,582 data rows). A client's data: since 2026-11-10 (DGO-1792) it is not in the tree — the path is ignored, and one copy stays on the MacBook's checkout, outside git.
 
 ### Config
-- `config/production-config.md` — live spreadsheet ID `1REDACTEDdrivexxxxxxxxxxxxxxxxxxxxxxxxxx0049`, tab `מסמכים נכנסים` (gid 542119184), n8n Google credential `e2knIZpw8YF0QBAB`.
+- `config/production-config.md` — live spreadsheet ID `1REDACTEDdrivexxxxxxxxxxxxxxxxxxxxxxxxxx0047`, tab `מסמכים נכנסים` (gid 542119184), n8n Google credential `e2knIZpw8YF0QBAB`.
 - `config/placeholders.env` — env-var template with `__PLACEHOLDER__` markers for unprovisioned secrets.
 
 ## Gaps / things the plan calls for that don't exist yet
@@ -61,7 +62,7 @@ Settings, Upload Doc To API TOOLS, Search File, Search File In Warehouse Scans, 
 | `Incoming Documents 0.1.6` | ✅ Found (`xWM5NQjGxl0qAhHg`, inactive in n8n). Already exposes a `Webhook` trigger — natural place to insert the Kafka consumer. Still needs its `Call 'Incoming Document Batch Update'` nodes re-pointed at the new Python API in phase 4. |
 | Supabase batch upsert workflow | ✅ Found (`OtbKllH7OGAlUVDQ` — *Batch Upsert Supabase (untested example)*, inactive). Implements the same Webhook contract as `Batch Upsert` over PostgREST, plus auto-introspection / schema DDL and a built-in batch-get webhook. |
 | Kafka broker | ⚠️ Not deployed in `compose.yml`. Phase 2 must decide: deploy Redpanda/Kafka, or fall back to Redis Streams. |
-| Google Service Account JSON | ⚠️ Today n8n uses an **OAuth2 user** (`person17.x@example.com`). The Python service should switch to a service account with explicit sheet sharing. |
+| Google Service Account JSON | ⚠️ Today n8n uses an **OAuth2 user** (`person18.x@example.com`). The Python service should switch to a service account with explicit sheet sharing. |
 | `INCOMING_DOCS_REPO_REGISTRY` storage location | ⚠️ Plan does not specify. Tentatively local file in `.storage/`. |
 
 ## Phase 1 — Done. Ready for Phase 2.

@@ -118,6 +118,41 @@ def test_console_websocket_passthrough_keeps_console_host_sso_and_strips_mount()
     assert not any("CONSOLE_BASE_URL" in label or ":8080" in label for label in ported)
 
 
+def test_two_tiles_of_one_app_never_share_a_router_or_middleware_name():
+    """Traefik DROPS a router or middleware that two containers define differently ("defined multiple
+    times with different configurations"), on both of them, and the request falls through to the next
+    match. bina-claude's desktop (`/a/bina-claude/api`) and its second tile of the time (`/a/claude-terminal/ws`,
+    deleted since, DGO-1684) each compiled `bina-claude-console-websocket-0`, so on Exampleu, 2026-11-09, the
+    owner's `GET /a/bina-claude/api/websockets` reached the console's HTTP proxy and got 400, every few
+    seconds: «websocket disconnected» (DGO-1626). An app with two tiles of that shape is rendered here."""
+    import yaml
+    desk = {"host": "claude", "port": 3000, "auth": "sso", "service": "bina-claude-desktop", "emit_labels": True,
+            "module": {"alias": "bina-claude", "id": "bina-claude", "embed": True, "url": "http://bina-claude-desktop:3000/",
+                       "passthrough": [{"path": "/api", "transport": "websocket", "match": "prefix", "strip_mount_prefix": True}]}}
+    second = {"host": "claude-second", "name": "claude-second", "port": 7681, "auth": "sso", "service": "bina-claude",
+              "emit_labels": True,
+              "module": {"alias": "claude-second", "id": "claude-second", "embed": True, "url": "http://bina-claude:7681",
+                         "passthrough": [{"path": "/ws", "transport": "websocket", "strip_mount_prefix": True},
+                                         {"path": "/token", "transport": "http", "strip_mount_prefix": True}]}}
+    cat = {"console": {"id": "console", "routing": [{"host": "console", "port": 8000}]},
+           "bina-claude": {"id": "bina-claude", "routing": [desk, second]}}
+    services = yaml.safe_load(rc.render_routing(cat, ["console", "bina-claude"]))["services"]
+    owner = {}
+    for svc, body in services.items():
+        for label in body.get("labels", []):
+            key, _, value = label.partition("=")
+            parts = key.split(".")
+            if parts[:2] == ["traefik", "http"] and parts[2] in ("routers", "middlewares"):
+                for other, seen in owner.get((parts[2], parts[3]), {}).items():
+                    assert other == svc, f"{parts[2]} {parts[3]} is defined on {other} and on {svc}"
+                owner.setdefault((parts[2], parts[3]), {})[svc] = value
+    desktop = "\n".join(services["bina-claude-desktop"]["labels"])
+    other = "\n".join(services["bina-claude"]["labels"])
+    assert "bina-claude-console-websocket-0-https.rule=Host(`${CONSOLE_BASE_URL:-console.${DEPLOYMENT_DOMAIN:-localhost}}`) && PathPrefix(`/a/bina-claude/api`)" in desktop
+    assert "bina-claude-console-websocket-1-https.rule=Host(`${CONSOLE_BASE_URL:-console.${DEPLOYMENT_DOMAIN:-localhost}}`) && Path(`/a/claude-second/ws`)" in other
+    assert "bina-claude-console-http-2-https.rule=Host(`${CONSOLE_BASE_URL:-console.${DEPLOYMENT_DOMAIN:-localhost}}`) && Path(`/a/claude-second/token`)" in other
+
+
 def test_console_registry_contains_only_enabled_embedded_modules(tmp_path, monkeypatch):
     manifest = {
         "id": "cloud-tool",
@@ -227,6 +262,32 @@ def test_on_a_real_domain_a_framed_tile_carries_the_origin_its_routers_serve(tmp
     assert "url" not in tile("DEPLOYMENT_DOMAIN=localhost\n")              # derived by the shell there
 
 
+def test_meet_is_framed_through_the_console_on_every_kind_of_office(tmp_path, monkeypatch):
+    """DGO-1502 («כל האפלקציות יפתחו גם בתוך הלשכה ולא רק בחוץ כמו שפגישות»): Meet's REAL manifest compiles to
+    a same-origin tile, `/a/meet/`, with no own host — on a real domain and on `.localhost` alike. Its tile was
+    made `external` (2026-10-27) while it was a redirect into Jitsi; it is «פגישות» now, meet-start's own page,
+    which reads its root off its address. On its own host the desktop's frame check judged the office sign-in
+    page (refused). It is also PUBLISHED as embedded to a linked office (office.apps.json → serve.through_console),
+    so a `*.localhost` console gets a proxy for it instead of a nested host it can never frame; that the far
+    meet-start believes the door's identity is a separate step (MEET_TRUSTED_PEERS names traefik and console)."""
+    root = pathlib.Path(__file__).resolve().parents[2]
+    cat = {"console": {"id": "console", "routing": [{"host": "console", "port": 8000}]},
+           "meet": json.loads((root / "apps/meet/app.json").read_text(encoding="utf-8"))}
+    monkeypatch.setattr(rc, "GEN", tmp_path / ".generated")
+    for env in ("DEPLOYMENT_DOMAIN=exampleu.example.co.il\n", "DEPLOYMENT_DOMAIN=localhost\n"):
+        rc.envfile_write(env)
+        rc.render_registries(cat, ["console", "meet"])
+        mods = rc.yaml.safe_load((tmp_path / ".generated/registry/console.modules.yaml").read_text(encoding="utf-8"))
+        meet = next(m for m in mods if m["id"] == "meet")
+        assert meet["embed"] == "/a/meet/" and not meet.get("external") and "url" not in meet, (env, meet)
+        bases = json.loads((tmp_path / ".generated/registry/console.app_bases.json").read_text(encoding="utf-8"))
+        assert bases["meet"]["default"] == "http://meet-start:8080"         # the proxy's own target
+        published = json.loads((tmp_path / ".generated/registry/office.apps.json").read_text(encoding="utf-8"))
+        rows = published.get("apps", published) if isinstance(published, dict) else published
+        row = next(a for a in rows if a.get("app") == "meet" or a.get("id") == "meet")
+        assert row["module"]["kind"] == "embedded", row                       # a peer gets a proxy for it
+
+
 # ── ordering ──────────────────────────────────────────────────────────────────
 
 def test_provider_is_ordered_before_its_consumer():
@@ -243,6 +304,59 @@ def test_hard_use_pulls_the_provider_in_even_when_not_enabled():
     order, diags = rc.resolve(cat, state("web"))
     assert set(order) == {"db", "web"}
     assert any("pulled in as provider" in m for lvl, m in diags if lvl == "info")
+
+
+def test_an_app_that_runs_in_containers_pulls_in_the_container_runtime():
+    """DGO-1723 (native-plan.md D2): «one app runs containers, and every app that needs one uses it as a
+    dependency». No manifest says so — a `compose` is the saying — and the provider is pulled in and
+    ordered first, as any provider is."""
+    cat = catalog(app("containers", layer=1, caps=[cap("container-runtime")]),
+                  {**app("web"), "compose": "docker-compose.yml"}, app("lib"))
+    # an office that named it off (a phone before its owner installs it) has it pulled in by a container app
+    order, diags = rc.resolve(cat, {"apps": {"web": {"state": "enabled"}, "lib": {"state": "enabled"},
+                                             "containers": {"state": "disabled"}}})
+    assert errors(diags) == []
+    assert set(order) == {"containers", "web", "lib"}
+    assert order.index("containers") < order.index("web")
+    assert ("info", "containers: pulled in as provider of 'container-runtime' for web") in diags
+    # …and one that does not name it runs it anyway (ON_UNLESS_SAID): nothing to pull in
+    order, diags = rc.resolve(cat, state("web", "lib"))
+    assert errors(diags) == [] and set(order) == {"containers", "web", "lib"}
+    assert not [m for _, m in diags if "pulled in" in m]
+
+
+def test_the_runtime_itself_and_an_app_that_declares_its_use_are_read_as_written():
+    """A provider of the runtime does not require it — with two runtimes on, each with a compose of its own,
+    a requirement would leave each with two eligible providers and no rule to choose — and an app that
+    declares its own use of the runtime keeps its own words: a `wants`, here, pulls nothing in."""
+    rt = [cap("container-runtime")]
+    cat = catalog({**app("containers", layer=1, caps=rt), "compose": "c.yml"},
+                  {**app("containers2", layer=1, caps=rt), "compose": "c.yml"},
+                  {**app("web", use=[use("container-runtime", strength="wants")]), "compose": "w.yml"})
+    assert rc.uses_of(cat["containers"]) == []
+    assert rc.uses_of(cat["web"]) == [use("container-runtime", strength="wants")]
+    order, diags = rc.resolve(cat, state("web", "containers", "containers2"))
+    assert errors(diags) == []
+    assert set(order) == {"web", "containers", "containers2"}
+    order, diags = rc.resolve(cat, {"apps": {"web": {"state": "enabled"},
+                                             "containers": {"state": "disabled"}, "containers2": {"state": "disabled"}}})
+    assert errors(diags) == [] and order == ["web"]
+
+
+def test_an_office_runs_the_runtime_unless_its_state_says_otherwise():
+    """ON_UNLESS_SAID: every office's own containers run on «מכולות» already, so a state that does not name
+    it has it on; a state that names it is read as written (a phone, before its owner installs it)."""
+    cat = catalog(app("containers", layer=1, caps=[cap("container-runtime")]), app("lib"))
+    assert rc.enabled_ids(state("lib"), cat) == {"lib", "containers"}
+    assert rc.enabled_ids({"apps": {"lib": {"state": "enabled"}, "containers": {"state": "disabled"}}}, cat) == {"lib"}
+    assert rc.enabled_ids(state("lib"), catalog(app("lib"))) == {"lib"}
+
+
+def test_a_container_app_with_no_runtime_in_the_catalog_is_an_error():
+    cat = catalog({**app("web"), "compose": "docker-compose.yml"})
+    _, diags = rc.resolve(cat, state("web"))
+    assert errors(diags) == ["web: requires capability 'container-runtime' — no provider in catalog "
+                             "and not declared in platform/legacy-capabilities.yaml"]
 
 
 def test_wants_does_not_pull_anything_in():
@@ -1011,6 +1125,42 @@ def test_a_manifest_that_states_its_own_agent_door_is_believed():
     man = json.loads((HERE.parent.parent / "apps/browser42/app.json").read_text(encoding="utf-8"))
     assert ":8931" in man["capabilities"][0]["endpoint"]      # the browser MCP — not the door
     assert rc._agent_door(man, 80) == 8766                    # the task runner
+
+
+def test_an_app_that_lists_its_hand_offs_is_asked_from_its_tile_here_and_on_a_linked_office(tmp_path, monkeypatch):
+    """DGO-1336: the owner pressed «Continue with Google» in the HP's Claude tile on his phone, Google's
+    chooser opened in the office browser's own display, and nothing told the screen in front of him.
+    browser42 lists its hand-offs (`handoffs` in its manifest, on its agent door) and the console asks
+    the address on the tile — it must never name browser42 itself (G9). Here the agent door is the task
+    runner (`agent_api_service`); on a linked office it is `<alias>.<office>:<agent_api_port>`, which
+    the link delivers to the same runner. Read from the real manifest: a copy here would go on passing
+    after the declaration was deleted from the real one."""
+    man = json.loads((HERE.parent.parent / "apps/browser42/app.json").read_text(encoding="utf-8"))
+    assert man["handoffs"] == "/v1/handoffs"
+    cat = {"browser42": man,
+           "drive": {"id": "drive", "routing": [{"port": 8975, "module": {
+               "name": "דרייב", "icon": "folder", "group": "עסק", "alias": "drive", "embed": True}}]}}
+    monkeypatch.setattr(rc, "GEN", tmp_path / ".generated")
+    rc.render_registries(cat, ["browser42", "drive"])
+    mods = rc.yaml.safe_load((tmp_path / ".generated/registry/console.modules.yaml").read_text(encoding="utf-8"))
+    tiles = {m["id"]: m for m in mods}
+    assert tiles["browser42"]["handoffs"] == "http://browser42-task-runner:8766/v1/handoffs"
+    assert "handoffs" not in tiles["drive"]
+    linked = [{"office": "hp-laptop", "address": "10.79.3.1", "label": {"he": "HP", "en": "HP"}, "apps": [
+        {"app": "browser42", "alias": "browser42", "port": 80, "agent_api_port": 8766, "name": "דפדפן הלשכה",
+         "icon": "monitor", "group": "עסק", "desc": "", "order": 260, "host": "browser42.localhost",
+         "module": {"kind": "external"}, "module_id": "browser42"},
+        {"app": "drive", "alias": "drive", "port": 8975, "agent_api_port": None, "name": "דרייב", "icon": "folder",
+         "group": "עסק", "desc": "", "order": 10, "host": "drive.localhost", "module": {"kind": "external"},
+         "module_id": "drive"}]}]
+    far = {t["id"]: t for t in rc.serve.module_entries(linked, cat)}
+    assert far["browser42.hp-laptop"]["handoffs"] == "http://browser42.hp-laptop:8766/v1/handoffs"
+    assert "handoffs" not in far["drive.hp-laptop"]
+    # a declaration this office's copy of the manifest does not make is never invented
+    assert "handoffs" not in rc.serve.module_entries(linked, {**cat, "browser42": {**man, "handoffs": None}})[0]
+    for broken in ("v1/handoffs", "/v1/hand offs", "http://x/v1", 7, ["/v1"]):
+        assert rc.serve.handoffs_path({"a": {"handoffs": broken}}, "a") == ""
+    assert rc.handoffs_address("x", {"handoffs": "/v1/handoffs"}, {"port": 80}) == "", "no agent door, no address"
 
 
 def test_an_app_that_states_no_door_keeps_the_capability_derivation_exactly():

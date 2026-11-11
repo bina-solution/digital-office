@@ -54,3 +54,11 @@ preload_app = False
 worker_tmp_dir = "/dev/shm"
 
 graceful_timeout = int(os.getenv("GUNICORN_GRACEFUL_TIMEOUT", "30"))
+
+
+def post_worker_init(worker):
+    """The ledger's re-check loop (app.py `start_links_recheck`, DGO-1433) runs in the server's worker only — never in
+    a process that merely imports app.py (the builder's `docker exec … import app`). One worker by default (above), so
+    one loop; a second worker would only open the links twice."""
+    import app as console
+    console.start_links_recheck()

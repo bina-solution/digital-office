@@ -101,6 +101,11 @@ services:
       # are the same values the mailserver service is configured with, deliberately: if the checker
       # read its own copy, it could report a setup as correct while the MTA used something else.
       - MAIL_DOMAIN=${MAIL_DOMAIN:-local.test}
+      # The OTHER domains this machine serves, on top of MAIL_DOMAIN — a company address on the
+      # company's own domain (person3@example.com), whose MX also points here. Read by the
+      # engine reconciler (profiles.served_domains) to decide whether a declared profile at another
+      # domain may be brought up, and by mailboxd as the list it will create at.
+      - MAIL_DOMAINS=${MAIL_DOMAINS:-}
       - MAIL_FQDN=${MAIL_FQDN:-mail.local.test}
       - MAIL_DKIM_SELECTOR=${MAIL_DKIM_SELECTOR:-${DEPLOYMENT_NAME:-bina-deployment}}
       # Set on a VPS so the checker can verify A/PTR without guessing. Left empty on a laptop, where
@@ -238,13 +243,13 @@ services:
       - traefik.http.routers.mailview.service=mailview
       # …and its HTTPS twin, on the address sign-in sends people back to (MAIL_BASE_URL). Without it an
       # office with a public name had NO router for https://mail.<domain>: the edge answered with its own
-      # default certificate and nothing behind it, and the mail tile could not open (fireplace,
+      # default certificate and nothing behind it, and the mail tile could not open (examplef,
       # 2026-10-22). A local office has an empty resolver (lib.sh export_cert_resolver): no ACME there.
       - traefik.http.routers.mailview-https.rule=Host(`${MAIL_BASE_URL:-mail.${DEPLOYMENT_DOMAIN:-localhost}}`)
       - traefik.http.routers.mailview-https.entrypoints=websecure
       - traefik.http.routers.mailview-https.tls=true
       - traefik.http.routers.mailview-https.tls.certresolver=${TRAEFIK_CERTRESOLVER-myresolver}
-      - traefik.http.routers.mailview-https.middlewares=authentik@file
+      - traefik.http.routers.mailview-https.middlewares=authentik@file,hsts@file
       - traefik.http.routers.mailview-https.service=mailview
       - traefik.http.services.mailview.loadbalancer.server.port=8976
     healthcheck:
@@ -268,7 +273,7 @@ services:
   #
   # This replaced GreenMail, and the reason is not features — it is honesty. GreenMail is a TEST
   # double: it accepts every recipient, and for an address it has never seen it CREATES a local
-  # mailbox and files the message there. So `POST /send {"to":"person82@example.com"}` answered
+  # mailbox and files the message there. So `POST /send {"to":"person88@example.com"}` answered
   # {"ok":true,"via":"smtp"} while the mail sat in a fake inbox inside the container. Every layer
   # above it — the app, n8n, the operator — was told mail had been sent that had not been sent.
   #
@@ -425,6 +430,10 @@ services:
       # else. Same variable the MTA and mailapi read — an address this service invents at a domain
       # the MX does not point here for is a black hole that looks live in the UI.
       - MAIL_DOMAIN=${MAIL_DOMAIN:-local.test}
+      # The domains this machine serves ON TOP OF MAIL_DOMAIN — see mailboxd.served_domains(). The
+      # guard above is unchanged in spirit; what it compares against is declared rather than assumed
+      # to be one domain, because a company's own domain's MX can also point here.
+      - MAIL_DOMAINS=${MAIL_DOMAINS:-}
       # The account mailapi logs in as. Named here so deleting it can be REFUSED.
       #
       # H6 (2026-08-05): this defaulted to `admin` while mailapi (above, `LOCALMAIL_USER=
@@ -485,7 +494,7 @@ services:
   #
   # The SELECTOR is the deployment name, and that is the multi-tenant hinge. The published record
   # lives at `<selector>._domainkey.<domain>`, so two companies sharing digital-office.co.il get
-  # `hacohen._domainkey…` and `acme._domainkey…` — different records, different keys, neither able
+  # `example._domainkey…` and `acme._domainkey…` — different records, different keys, neither able
   # to sign for the other, and no coordination needed between them beyond one DNS entry each.
   #
   # The private key never leaves the mail_config volume. Nothing here prints it; the setup API reads
@@ -581,8 +590,8 @@ services:
         # mail_config VOLUME outlives .env. Re-point a machine at another company (new COMPANY_SLUG,
         # so new MAIL_DOMAIN) without wiping volumes and postfix-accounts.cf still lists the old
         # company's addresses. Measured on staging 2026-07-29: five accounts, ONE of them belonged
-        # to this deployment — person83@example.com, person84@example.com
-        # and person85.x-x@example.com were the previous tenant's, and they were on the
+        # to this deployment — person89@example.com, person90@example.com
+        # and person91.x-x@example.com were the previous tenant's, and they were on the
         # new company's mailbox screen. No MX points here for those domains, so they could not
         # receive a single message; they were pure leakage of one customer's names to the next.
         #
@@ -594,10 +603,22 @@ services:
         #     created it (the ledger below)                LOCALMAIL_EXTRA_USERS is how you delete
         #                                                  a declared mailbox; otherwise the env is
         #                                                  a list you can only ever add to.
-        #   · anything else at THIS domain              -> KEPT. That is a mailbox a person created
-        #                                                  from the UI through mailboxd. It is
+        #   · anything else at a domain we serve        -> KEPT. That is a mailbox a person created
+        #                                                  from the UI through mailboxd, or a profile
+        #                                                  the engine reconciler created. It is
         #                                                  declared nowhere, and a restart that
         #                                                  deleted it would be a catastrophe.
+        #
+        # "we serve" is now more than MAIL_DOMAIN: a company's own address (hello@<the company's
+        # domain>) has its MX on THIS machine too, and that domain arrives in MAIL_DOMAINS. With the
+        # old single-domain test, the first restart after such a mailbox was created would have
+        # deleted its account line as a previous tenant's — mail kept, but nobody able to log in.
+        served=" ${MAIL_DOMAIN:-local.test} "
+        for d in $$(printf '%s' "${MAIL_DOMAINS:-}" | tr ',;' '  '); do
+          d="$$(printf '%s' "$$d" | tr '[:upper:]' '[:lower:]')"
+          [ -n "$$d" ] || continue
+          case "$$served" in *" $$d "*) ;; *) served="$$served$$d " ;; esac
+        done
         #
         # THE MAIL IS NOT TOUCHED — same decision as mailboxd's delete (see delete_mailbox()): the
         # account stops resolving, every message stays in /var/mail. And the accounts file is copied
@@ -611,7 +632,11 @@ services:
           case "$$ln" in *'|'*) ;; *) printf '%s\n' "$$ln" >> "$$keep"; continue ;; esac
           a="$${ln%%|*}"
           if grep -qxF "$$a" "$$want"; then printf '%s\n' "$$ln" >> "$$keep"; continue; fi
-          if [ "$${a#*@}" != "${MAIL_DOMAIN:-local.test}" ] || { [ -f "$$led" ] && grep -qxF "$$a" "$$led"; }; then
+          # The address's own domain, lowercased, matched against the served set as whole words.
+          ad="$$(printf '%s' "$${a#*@}" | tr '[:upper:]' '[:lower:]')"
+          ours=0
+          case "$$served" in *" $$ad "*) ours=1 ;; esac
+          if [ "$$ours" = 0 ] || { [ -f "$$led" ] && grep -qxF "$$a" "$$led"; }; then
             echo "mailserver-init: removing $$a — not declared by this deployment (mail kept in /var/mail)"
             dropped=$$((dropped + 1))
             continue
@@ -748,41 +773,67 @@ services:
         cat "$$tmp" > "$$main"
 
         # ── DKIM keypair + the three tables OpenDKIM reads ──────────────────────────────────────
-        dom="$${addr#*@}"
+        # ONE key and ONE table entry PER SERVED DOMAIN (the `served` set, computed above), not for
+        # the primary address's domain only. With a single-domain SigningTable every other address
+        # this deployment sends as — hello@<the company's own domain> — went out UNSIGNED, which is
+        # how a reply to a business proposal lands in spam (DGO-1389). "We serve it" and "we sign it"
+        # are now the same set, so the two cannot drift apart.
         sel="${MAIL_DKIM_SELECTOR:-${DEPLOYMENT_NAME:-bina-deployment}}"
         # A selector is a DNS label: letters, digits and hyphens only.
         sel="$$(echo "$$sel" | tr '[:upper:]' '[:lower:]' | tr -c 'a-z0-9-' '-' | sed 's/^-*//; s/-*$$//')"
         [ -n "$$sel" ] || sel=mail
-        kd="$$cfg/opendkim/keys/$$dom"
-        if [ -s "$$kd/$$sel.private" ]; then
-          echo "mailserver-init: DKIM key for $$dom (selector $$sel) already exists — leaving it alone"
-        else
-          mkdir -p "$$kd"
-          # 2048 is the floor receivers expect now; 1024 still verifies but is increasingly distrusted.
-          opendkim-genkey -b 2048 -s "$$sel" -d "$$dom" -D "$$kd"
-          echo "mailserver-init: generated DKIM key for $$dom (selector $$sel)"
-        fi
-        # Rewritten every run on purpose: these three are DERIVED from the key that exists, so they
-        # cannot drift from it. Regenerating a table is free; regenerating a key would invalidate
-        # every signature already published in DNS, which is why the key above is create-only.
-        #
-        # The KeyTable must point at /etc/opendkim/keys/…, NOT at the path we just wrote the key to.
-        # docker-mailserver copies this whole directory to /etc/opendkim at startup, and OpenDKIM
-        # walks the key's path and refuses any key reachable through a world-writable directory:
-        #     key data is not secure: /tmp can be read or written by other users
-        #     error loading key 'sel._domainkey.domain'
-        # /tmp is 1777, so a KeyTable naming /tmp/docker-mailserver/... is rejected for every
-        # message. That does not degrade to unsigned mail — OpenDKIM fails the milter, Postfix
-        # answers 451, and the deployment cannot send AT ALL. Caught only by actually sending one.
-        printf '%s._domainkey.%s %s:%s:/etc/opendkim/keys/%s/%s.private\n' \
-          "$$sel" "$$dom" "$$dom" "$$sel" "$$dom" "$$sel" > "$$cfg/opendkim/KeyTable"
-        # refile: (regex) rather than a plain lookup — a plain SigningTable matches the envelope
-        # address EXACTLY, so mail from any address other than the one listed goes out UNSIGNED.
-        # That is the failure this hit in production: the server signed nothing and looked fine.
-        printf '*@%s %s._domainkey.%s\n' "$$dom" "$$sel" "$$dom" > "$$cfg/opendkim/SigningTable"
-        printf '127.0.0.1\nlocalhost\n%s\n172.16.0.0/12\n192.168.0.0/16\n10.0.0.0/8\n' "$$dom" \
-          > "$$cfg/opendkim/TrustedHosts"
-        chmod 600 "$$kd/$$sel.private" 2>/dev/null || true
+        # The domains to sign for: the served set PLUS the primary mailbox's own domain, which the
+        # single-domain block signed for even when it was not MAIL_DOMAIN — that guarantee stays.
+        # Lowercased, trailing dots dropped and de-duplicated the way mailsetup's `served_domains()`
+        # does it, so the mail server and the checklist cannot read "served" two ways (a duplicate
+        # `*@domain` line is also something an OpenDKIM table parser is free to refuse).
+        dkdoms=" "
+        for d in $$served "$${addr#*@}"; do
+          d="$$(printf '%s' "$$d" | tr '[:upper:]' '[:lower:]' | sed 's/\.*$$//')"
+          [ -n "$$d" ] || continue
+          case "$$dkdoms" in *" $$d "*) continue ;; esac
+          dkdoms="$$dkdoms$$d "
+        done
+        # The directory FIRST: on a fresh volume $$cfg/opendkim does not exist yet, and under `set -eu`
+        # a `: >` into it ends the init — which, through mailserver's
+        # `depends_on: service_completed_successfully`, keeps the mail server from starting at all.
+        mkdir -p "$$cfg/opendkim"
+        : > "$$cfg/opendkim/KeyTable"          # rebuilt from the keys that exist on every run
+        : > "$$cfg/opendkim/SigningTable"      # …so a domain that is no longer served leaves no line
+        for dom in $$dkdoms; do
+          kd="$$cfg/opendkim/keys/$$dom"
+          if [ -s "$$kd/$$sel.private" ]; then
+            echo "mailserver-init: DKIM key for $$dom (selector $$sel) already exists — leaving it alone"
+          else
+            mkdir -p "$$kd"
+            # 2048 is the floor receivers expect now; 1024 still verifies but is increasingly distrusted.
+            opendkim-genkey -b 2048 -s "$$sel" -d "$$dom" -D "$$kd"
+            echo "mailserver-init: generated DKIM key for $$dom (selector $$sel)"
+          fi
+          echo "mailserver-init: publish TXT $$sel._domainkey.$$dom (the public half: $$kd/$$sel.txt)"
+          # Rewritten every run on purpose: these are DERIVED from the key that exists, so they
+          # cannot drift from it. Regenerating a table is free; regenerating a key would invalidate
+          # every signature already published in DNS, which is why the key above is create-only.
+          #
+          # The KeyTable must point at /etc/opendkim/keys/…, NOT at the path we just wrote the key to.
+          # docker-mailserver copies this whole directory to /etc/opendkim at startup, and OpenDKIM
+          # walks the key's path and refuses any key reachable through a world-writable directory:
+          #     key data is not secure: /tmp can be read or written by other users
+          #     error loading key 'sel._domainkey.domain'
+          # /tmp is 1777, so a KeyTable naming /tmp/docker-mailserver/... is rejected for every
+          # message. That does not degrade to unsigned mail — OpenDKIM fails the milter, Postfix
+          # answers 451, and the deployment cannot send AT ALL. Caught only by actually sending one.
+          printf '%s._domainkey.%s %s:%s:/etc/opendkim/keys/%s/%s.private\n' \
+            "$$sel" "$$dom" "$$dom" "$$sel" "$$dom" "$$sel" >> "$$cfg/opendkim/KeyTable"
+          # refile: (regex) rather than a plain lookup — a plain SigningTable matches the envelope
+          # address EXACTLY, so mail from any address other than the one listed goes out UNSIGNED.
+          # That is the failure this hit in production: the server signed nothing and looked fine.
+          printf '*@%s %s._domainkey.%s\n' "$$dom" "$$sel" "$$dom" >> "$$cfg/opendkim/SigningTable"
+          chmod 600 "$$kd/$$sel.private" 2>/dev/null || true
+        done
+        { printf '127.0.0.1\nlocalhost\n172.16.0.0/12\n192.168.0.0/16\n10.0.0.0/8\n'
+          for dom in $$dkdoms; do printf '%s\n' "$$dom"; done
+        } > "$$cfg/opendkim/TrustedHosts"
         chown -R opendkim:opendkim "$$cfg/opendkim" 2>/dev/null || true
     volumes:
       - mail_config:/tmp/docker-mailserver
@@ -795,7 +846,7 @@ services:
         max-file: '1'
 
 volumes:
-  # NAME DELIBERATELY UNCHANGED — renaming it orphans deployment-hacohen_gmail_imap_data.
+  # NAME DELIBERATELY UNCHANGED — renaming it orphans digital-office_gmail_imap_data.
   gmail_imap_data:
   # The real MTA's state. GreenMail kept everything in memory — a restart wiped the mailbox, which
   # was tolerable for a test double and is not for a mail server: these four hold the only copy of

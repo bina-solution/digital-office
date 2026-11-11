@@ -40,7 +40,8 @@ REPO = pathlib.Path(__file__).resolve().parents[2]
 #: Where remote-provider listing actually happens. Keeping the scope tight keeps the gate honest —
 #: a broad scan over the whole tree would drown in false positives from unrelated `limit=` kwargs.
 SCOPED = (
-    "apps/drive/adapters/",
+    "apps/drive-google/",          # Google Drive's listing, since the split (DGO-1500; was apps/drive/adapters/)
+    "apps/drive-local/",           # …and the office storage's, which apps/drive/adapters/ held beside it
     "apps/mail/mailapi/",
 )
 
@@ -95,6 +96,10 @@ def scan(overrides=None):
     for scope in SCOPED:
         base = REPO / scope
         if not base.is_dir():
+            # a scope that is gone is a scan of nothing: the code it guarded moved (DGO-1500 moved Google's
+            # listing out of apps/drive/adapters/ and this gate kept printing PASS over an empty tree)
+            findings.append((scope, 0, "the scoped directory does not exist — point SCOPED at where the "
+                                       "provider's listing lives now"))
             continue
         for p in sorted(base.rglob("*.py")):
             rel = p.relative_to(REPO).as_posix()
@@ -114,7 +119,7 @@ def scan(overrides=None):
 
 SELF_TEST = [
     # THE ACTUAL BUG — one request, a page size, no token, no limit.
-    ("the real 2026-08-05 defect", "apps/drive/adapters/google.py",
+    ("the real 2026-08-05 defect", "apps/drive-google/gdrive.py",
      'def _list(self, qs):\n'
      '    d = self._json("GET", f"{API}/files", params={\n'
      '        "q": qs, "fields": f"files({FIELDS})", "pageSize": 500})\n'
@@ -125,7 +130,7 @@ SELF_TEST = [
      '    return r.json()["messages"]\n', True),
 
     # the fix — follows the token
-    ("paginates properly", "apps/drive/adapters/google.py",
+    ("paginates properly", "apps/drive-google/gdrive.py",
      'def _list(self, qs, limit=None):\n'
      '    out, page = [], None\n'
      '    while True:\n'
@@ -137,7 +142,7 @@ SELF_TEST = [
      '        if not page:\n'
      '            return out\n', False),
     # deliberately capped — a browse view, which is legitimate
-    ("explicitly bounded by the caller", "apps/drive/adapters/google.py",
+    ("explicitly bounded by the caller", "apps/drive-google/gdrive.py",
      'def trashed(self, limit=1000):\n'
      '    d = self._json("GET", f"{API}/files", params={"pageSize": limit})\n'
      '    return d.get("files", [])\n', False),
@@ -148,12 +153,12 @@ SELF_TEST = [
      '    r = self._req("GET", url, params={"maxResults": 200})\n'
      '    return r.json()\n', False),
     # a readiness probe — one row, deliberately. Not a listing.
-    ("health probe, pageSize 1", "apps/drive/adapters/google.py",
+    ("health probe, pageSize 1", "apps/drive-google/gdrive.py",
      'def probe(self):\n'
      '    r = self._req("GET", f"{API}/files", params={"pageSize": 1, "fields": "files(id)"})\n'
      '    return None if r.status_code < 400 else _reason(r)\n', False),
     # no listing at all
-    ("not a list call", "apps/drive/adapters/google.py",
+    ("not a list call", "apps/drive-google/gdrive.py",
      'def delete(self, fid):\n'
      '    return self._json("DELETE", f"{API}/files/{fid}")\n', False),
     # out of scope — same shape, but not a provider adapter

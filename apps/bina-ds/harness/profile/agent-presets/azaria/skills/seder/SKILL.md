@@ -159,14 +159,14 @@ this mod bullshit, keep clean and offical like dsreleased». ולכן:
 ### תיקיית היום — יום אחד, מקום אחד
 
 **בית הסדר — «שגרת עזריה» (2026-10-14).** הדלת יוצרת כל שיחה של סדר בתוך סביבת העבודה **`שגרת עזריה`**,
-שהמכונה שלה היא `/root/deployment-hacohen/data/bina-ds/sedarim` — ולכן **זה ה-cwd של השיחה הזו** וזה
-הנתיב שבו יושבים תיקיות היום. **כל נתיב שאתה כותב — מלא** (`/root/deployment-hacohen/…`); הלשכה עצמה
-נשארת ב-`/root/deployment-hacohen`, ופקודות עליה נכתבות כ-`cd /root/deployment-hacohen && …`.
+שהמכונה שלה היא `/root/digital-office/data/bina-ds/sedarim` — ולכן **זה ה-cwd של השיחה הזו** וזה
+הנתיב שבו יושבים תיקיות היום. **כל נתיב שאתה כותב — מלא** (`/root/digital-office/…`); הלשכה עצמה
+נשארת ב-`/root/digital-office`, ופקודות עליה נכתבות כ-`cd /root/digital-office && …`.
 
-כל סדר נרשם תחת התאריך שלו ב-`/root/deployment-hacohen/data/bina-ds/sedarim/<YYYY-MM-DD>/`:
+כל סדר נרשם תחת התאריך שלו ב-`/root/digital-office/data/bina-ds/sedarim/<YYYY-MM-DD>/`:
 
 ```
-/root/deployment-hacohen/data/bina-ds/sedarim/2026-10-14/
+/root/digital-office/data/bina-ds/sedarim/2026-10-14/
   index.md              טבלת הסדרים של היום, עם קישור לכל שיחה + „מאזן היום”
   sessions.json         אותה רשימה, לקריאה במכונה
   07-00-shacharit.md    הסדר עצמו: הבריף שנמסר לו, הקישור, והמאזן שלו

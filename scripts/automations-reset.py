@@ -96,7 +96,7 @@ def run_wf(name, node, cred_type, cred_id, http_params, start='Run'):
         rest('POST', f'/rest/workflows/{wid}/run', {"startNodes": [{"name": "Run"}], "triggerToStartFrom": {"name": "Manual", "data": {"main": [[{"json": {}}]]}}})
         time.sleep(4)
         # fetch latest execution
-        ex = subprocess.run(['docker', 'exec', f'n8n-postgres-{env("DEPLOYMENT_NAME","shlomo-laptop")}', 'psql', '-U', 'hacohen', '-d', 'n8n', '-tAc',
+        ex = subprocess.run(['docker', 'exec', f'n8n-postgres-{env("DEPLOYMENT_NAME","owner-laptop")}', 'psql', '-U', 'example', '-d', 'n8n', '-tAc',
                              f"select id from execution_entity where \"workflowId\"='{wid}' order by \"startedAt\" desc limit 1;"], capture_output=True, text=True, encoding='utf-8', errors='replace').stdout.strip()
         d = rest('GET', f'/rest/executions/{ex}?includeData=true').get('data', {})
         if not d.get('data'):
@@ -176,10 +176,10 @@ def trash_files_batched(fid):
     try:
         rest('POST', f'/rest/workflows/{wid}/run', {"startNodes": [{"name": "List"}], "triggerToStartFrom": {"name": "Manual", "data": {"main": [[{"json": {}}]]}}})
         # poll until not running (up to ~90s)
-        dn = env('DEPLOYMENT_NAME', 'shlomo-laptop')
+        dn = env('DEPLOYMENT_NAME', 'owner-laptop')
         for _ in range(30):
             time.sleep(3)
-            ex = subprocess.run(['docker', 'exec', f'n8n-postgres-{dn}', 'psql', '-U', 'hacohen', '-d', 'n8n', '-tAc',
+            ex = subprocess.run(['docker', 'exec', f'n8n-postgres-{dn}', 'psql', '-U', 'example', '-d', 'n8n', '-tAc',
                                  f"select status from execution_entity where \"workflowId\"='{wid}' order by \"startedAt\" desc limit 1;"],
                                 capture_output=True, text=True, encoding='utf-8', errors='replace').stdout.strip()
             if ex and ex != 'running':
@@ -262,7 +262,7 @@ def reset_label_engine():
                         "sendBody": True, "specifyBody": "json", "jsonBody": json.dumps(body)})
     if 'redis' not in SKIP:
         rp = env('REDIS_PASSWORD')
-        dn = env('DEPLOYMENT_NAME', 'shlomo-laptop')
+        dn = env('DEPLOYMENT_NAME', 'owner-laptop')
         patterns = ['n8n.process_lock.*', 'n8n.label-engine.*', 'n8n:cache:*settings*', 'n8n:cache:*compan*']
         print(" clearing Redis keys:", patterns, "(DRY)" if DRY else "")
         if not DRY:
@@ -279,7 +279,7 @@ def reset_supabase():
     sheet data tab). Fixed schema -> no bootstrap row needed."""
     if 'supabase' in SKIP:
         return
-    dn = env('DEPLOYMENT_NAME', 'shlomo-laptop')
+    dn = env('DEPLOYMENT_NAME', 'owner-laptop')
     print("== reset-supabase ==")
     cnt = subprocess.run(['docker', 'exec', f'supabase-db-{dn}', 'psql', '-U', 'postgres', '-d', 'postgres', '-tAc',
                           'select count(*) from incoming_documents;'], capture_output=True, text=True,

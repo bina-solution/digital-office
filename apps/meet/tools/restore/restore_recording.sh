@@ -12,7 +12,7 @@
 #   transcript.json                   faster-whisper (ivrit-ai/whisper-large-v3-turbo-ct2, int8, beam 5, temperature
 #                                     fallback, word timestamps) for every ASR input
 #   stats.json                        burst/hole statistics of the original (the damage fingerprint)
-# Then: restore_transcript.sh OUT_DIR <room>-<tag>_<stamp> "method text" "benchmark text"   (LLM layer + Plane comment)
+# Then: restore_transcript.sh OUT_DIR <room>-<tag>_<stamp> "method text" "benchmark text"   (word vote, or the LLM layer with --llm deepseek; + Plane comment)
 #
 # Needs: ffmpeg, python with numpy soundfile soxr scipy faster-whisper (set VENV to a venv to activate).
 # CPU: whisper turbo int8 runs at ~0.3x real time per worker on 6 ARM cores; a 48-min recording trimmed to 25 min takes
@@ -52,7 +52,7 @@ fi
 [ -f "$NAME.ogg" ] || ffmpeg -nostdin -v error -y -i listen.wav -vn -ac 1 -ar 16000 -c:a libopus -b:a 32k -f ogg "$NAME.ogg"
 if [ $VIDEO = 1 ] && [ ! -f "$NAME.mp4" ]; then
   ffmpeg -nostdin -v error -y -i listen.wav -c:a aac -b:a 96k listen.m4a
-  # no -shortest: Jibri's video track ends a few seconds before its audio, and -shortest cut the restored audio's tail (fpg103 lost 4.5 s, 2026-10-27)
+  # no -shortest: Jibri's video track ends a few seconds before its audio, and -shortest cut the restored audio's tail (exf103 lost 4.5 s, 2026-10-27)
   ffmpeg -nostdin -v error -y -i "$IN" -i listen.m4a -map 0:v:0 -map 1:a:0 -c:v copy -c:a copy -movflags +faststart "$NAME.mp4"
 fi
 for f in trim.wav "$NAME.ogg"; do echo "$f $(ffprobe -v error -show_entries format=duration -of csv=p=0 "$f") s"; done

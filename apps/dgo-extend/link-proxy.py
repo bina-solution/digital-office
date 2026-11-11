@@ -77,6 +77,16 @@ IDENTITY_FAMILY = b"x-authentik-"
 #: an app asked to fetch something "from the office that asked" (a move pulls the app's data from
 #: there) reads it here, and a peer cannot name a third office in its place.
 OFFICE_HEADER = b"x-dgo-office"
+#: What the consuming side writes about a mapping: its `from` list, the peer's own user names that map onto the
+#: served identity. It is written by the `dgo-remote-<office>-identity` middleware (platform/manager/serve.py
+#: and its Go twin) and by the console's `_as_remote`. Nothing on the serving side reads it, and a peer can
+#: write anything there, so the door removes it along with the identity it replaces (hos-006, DGO-1155).
+FROM_HEADER = b"x-dgo-from"
+#: THE PEER IS THE HERD'S, BY KEY (DGO-1800) — written `1` by the door on the requests of a rule the delivery plan
+#: marked (`herd: true`: linkproxy.build_multi, decided by give.herd_peer from both offices' WireGuard keys), and
+#: REMOVED from every request on every rule, so a peer can never say it of itself. An app behind the door believes it
+#: only from the door's own address, as it does x-dgo-office (apps/computers narrows what a non-herd office reads).
+HERD_HEADER = b"x-dgo-herd"
 #: What the door may write as the mapped user: the rule `platform/manager/serve.py`'s HEADER_RE holds.
 #: A value stored before that rule was asked ("owner\n") is never written — a line break in a header
 #: value ends the head early, and the signature line would carry it too (DGO-622).
@@ -246,8 +256,12 @@ _access_lock = threading.Lock()
 
 def access_record(rec: dict) -> None:
     try:
-        line = (json.dumps(rec, ensure_ascii=False, separators=(",", ":")) + "\n").encode("utf-8")
         with _access_lock:
+            # `end`, the wall clock when the line is written, under the lock that orders the file: the log's
+            # order exactly. `ts` is the request's start and `ms` is monotonic, so `ts + ms` drifts from it by a
+            # clock step during a long connection; dgo-extend `_door_access` searches the log by this (DGO-1769).
+            rec["end"] = round(time.time(), 3)
+            line = (json.dumps(rec, ensure_ascii=False, separators=(",", ":")) + "\n").encode("utf-8")
             ACCESS_LOG.parent.mkdir(parents=True, exist_ok=True)
             try:
                 if ACCESS_LOG.stat().st_size > ACCESS_MAX_BYTES:
@@ -339,6 +353,51 @@ def _pump(src: socket.socket, dst: socket.socket, meter: dict | None = None) -> 
                 pass
 
 
+# ── WHO MAY ARRIVE at a serve rule (issues/a-peer-on-one-tunnel-can-reach-another-pairs-catalog-listener-…) ──
+# A serve rule's `clients` is its pair's PEER tunnel address (linkproxy: `[peer_addr]`), and WireGuard pins a
+# peer's packets to it — but WireGuard checks only a packet's SOURCE, and the kernel answers any local address on
+# any interface. So a peer that widens its own AllowedIPs can reach ANOTHER pair's catalog listener (every pair's
+# is on the same port, each bound to its own pair address) and be stamped as that pair's office. A connection from
+# an address the rule does not name is OUTSIDE. Stage 1 (AGENTS rule 8: enumerate, warn, then refuse): it is SAID —
+# one log line per listener and address, and `outside` on the door's access record (dgo-extend's
+# `/api/link/access` returns it; the security app's ingest does not copy it yet) — and served as before.
+# DGO_LINK_CLIENTS=refuse in this process's environment closes it instead; stage 2 makes that the default once
+# the counts say no legitimate caller is outside (`--check` connects from inside the namespace and is said too).
+# A use rule names no clients (this office's own apps). A unix-socket door has no address, so the far end whose
+# tunnel runs on its machine (`converge.REMOTE_DOOR`) is NOT covered here: its host bridge must judge it.
+CLIENTS_MODE = (os.environ.get("DGO_LINK_CLIENTS") or "warn").strip().lower()
+_SAID_OUTSIDE: set = set()
+
+
+def outside(rule: dict, peer: str) -> bool:
+    """Is `peer` an address this SERVE rule does not name in its `clients`? Never for a use rule, a rule that names
+    no clients, or a connection with no address (a unix socket)."""
+    clients = rule.get("clients") or []
+    if isinstance(clients, str):
+        clients = [clients]
+    if not isinstance(clients, (list, tuple, set, frozenset)):
+        return False                # a shape nobody renders (a hand-edited plan): judged by nothing, never a crash
+    peer = str(peer or "").replace("::ffff:", "", 1)
+    return rule.get("direction") == "serve" and bool(clients) and bool(peer) \
+        and peer not in {str(c) for c in clients}
+
+
+def admit(rule: dict, peer: str) -> bool:
+    """Whether to serve a connection from `peer`. Outside is said once per listener and address (bounded), then
+    served (stage 1) — or closed when DGO_LINK_CLIENTS=refuse."""
+    if not outside(rule, peer):
+        return True
+    refuse = CLIENTS_MODE == "refuse"
+    key = (str(rule.get("bind")), rule.get("port"), str(peer))
+    if key not in _SAID_OUTSIDE:
+        if len(_SAID_OUTSIDE) >= 1024:
+            _SAID_OUTSIDE.clear()
+        _SAID_OUTSIDE.add(key)
+        log(f"{'REFUSED' if refuse else 'OUTSIDE (served: stage 1)'} {peer} at {rule.get('bind')}:{rule.get('port')} "
+            f"({rule.get('office')}/{rule.get('app')}) — this rule's clients are {list(rule.get('clients') or [])}")
+    return not refuse
+
+
 class Forwarder(threading.Thread):
     """One rule: listen on `bind:port`, deliver every connection to `target`."""
 
@@ -370,7 +429,7 @@ class Forwarder(threading.Thread):
         srv.settimeout(1.0)
         while not self._halt.is_set():
             try:
-                client, _addr = srv.accept()
+                client, addr = srv.accept()
             except socket.timeout:
                 continue
             except OSError:
@@ -378,6 +437,9 @@ class Forwarder(threading.Thread):
             if self._halt.is_set():
                 client.close()
                 break
+            if not admit(self.rule, addr[0] if isinstance(addr, tuple) and addr else ""):
+                client.close()
+                continue
             threading.Thread(target=self._serve, args=(client,), daemon=True).start()
         try:
             srv.close()
@@ -501,22 +563,41 @@ def _palette() -> str:
     keeps it). The card names its tokens, so it is the office's colours on the reader's light or dark
     ground, and no second copy of them is written here. A file that cannot be read gives a card in
     the browser's own colours — a card all the same."""
-    name = "bina-theme-tokens"          # the marked region, as the console's own card reads its (app.py: _static_block)
+    return _static_block("index.html", "bina-theme-tokens")
+
+
+def _static_block(file: str, name: str) -> str:
+    """A marked region of one of this app's own static files (G27 keeps them), as the console's own card
+    reads its (app.py: _static_block); nothing when the file cannot be read."""
     try:
-        page = (Path(__file__).resolve().parent / "static" / "index.html").read_text(encoding="utf-8")
+        page = (Path(__file__).resolve().parent / "static" / file).read_text(encoding="utf-8")
         return page.split(f"/* @{name}:start */", 1)[1].split(f"/* @{name}:end */", 1)[0]
     except (OSError, IndexError):
         return ""
 
 
+def _static_bytes(file: str) -> bytes:
+    try:
+        return (Path(__file__).resolve().parent / "static" / file).read_bytes()
+    except OSError:
+        return b""
+
+
+# THE card (DGO-1501): the office's one card on the logo wall — static/card.css is its stamped copy — with
+# the alert glyph of the office's icon set (bina-icons `alert`), as the console's frame card draws it.
+_ALERT = ('<svg class="ic-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" '
+          'stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 '
+          '0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg>')
 _CARD = ('<!doctype html><html lang="he" dir="rtl" data-card><head><meta charset="utf-8">'
          '<meta http-equiv="refresh" content="15"><meta name="viewport" content="width=device-width, initial-scale=1">'
-         '<title>%s</title><style>' + _palette().replace("%", "%%") +
-         'body{margin:0;background:var(--bg);color:var(--ink);font-family:"Segoe UI",system-ui,'
-         '"Noto Sans Hebrew",Arial,sans-serif;font-size:14px;line-height:1.6;display:grid;place-items:center;'
-         'min-height:100vh}.c{background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:22px 26px;'
-         'max-width:34em;margin:16px}p{margin:8px 0 0;color:var(--muted)}</style></head><body><div class="c"><b>%s</b>'
-         '<p>%s</p><p>המסך הזה בודק שוב בעצמו.</p></div></body></html>')
+         '<title>%s</title><style>'
+         + (':root{--font:"Segoe UI",system-ui,-apple-system,"Noto Sans Hebrew","Assistant",Arial,sans-serif}'
+            + _palette() + _static_block("card.css", "card")).replace("%", "%%") +
+         '</style></head><body><div class="xn"><div class="xn-card"><span class="xn-ic">' + _ALERT + '</span>'
+         '<h2>%s</h2><p>%s</p><p>המסך הזה בודק שוב בעצמו.</p></div></div></body></html>')
+# The wall the card stands on. The card asks for it at /bina-wall.svg on the host it was answered on — the
+# app's — and that request reaches the door for the same reason the page did, so the door answers it too.
+_WALL = _static_bytes("bina-wall.svg")
 _SAID = {
     "bad-head": (b"400 Bad Request", "הבקשה לא תקינה",
                  "בכותרות הבקשה יש מעבר שורה בתוך שורה — הדלת לא מעבירה בקשה שאפשר לקרוא בשתי דרכים."),
@@ -529,9 +610,26 @@ _SAID = {
 }
 
 
-def _say(client: socket.socket, reason: str, head: bytes = b"") -> None:
-    """Answer for the door itself and close. Never raises: the client may already be gone."""
+def _say(client: socket.socket, reason: str, head: bytes = b"") -> bool:
+    """Answer for the door itself and close. Never raises: the client may already be gone. True when what
+    it answered was the card's wall (a 200, not a refusal), so the access record can say so."""
     status, title, text = _SAID[reason]
+    first = head.split(b"\r\n", 1)[0].split(b" ")
+    if (reason != "bad-head" and _WALL and len(first) >= 2 and first[0] == b"GET"
+            and first[1].split(b"?", 1)[0] == b"/bina-wall.svg"):
+        # the card's own wall (see _WALL): an image, with no door header — it is not the door's refusal.
+        # Never for a head the door refused to read (bad-head): that one is refused whatever it asks for.
+        try:
+            client.sendall(b"HTTP/1.1 200 OK\r\nContent-Type: image/svg+xml\r\nContent-Security-Policy: default-src 'none'"
+                           b"\r\nX-Content-Type-Options: nosniff\r\nCache-Control: public, max-age=86400\r\nContent-Length: "
+                           + str(len(_WALL)).encode("ascii") + b"\r\nConnection: close\r\n\r\n" + _WALL)
+        except OSError:
+            pass
+        try:
+            client.close()
+        except OSError:
+            pass
+        return True
     accept = next((ln for ln in head.split(b"\r\n")[1:] if ln.lower().startswith(b"accept:")), b"")
     page = b"text/html" in accept.lower()
     body = (_CARD % (title, title, text)).encode("utf-8") if page else b""
@@ -545,6 +643,7 @@ def _say(client: socket.socket, reason: str, head: bytes = b"") -> None:
         client.close()
     except OSError:
         pass
+    return False
 
 
 def _host_of(head: bytes) -> str:
@@ -771,7 +870,7 @@ class Door(threading.Thread):
 
     @staticmethod
     def rewrite(head: bytes, ident: str, office: str = "", signature: bytes = b"",
-                host: str = "", forwarded: bool = True) -> bytes:
+                host: str = "", forwarded: bool = True, herd: bool = False) -> bytes:
         """The head as the app must see it: the peer's identity claims REMOVED, ours written — the
         user it becomes here (`ident`), the office it came from (`office`, see OFFICE_HEADER) and the
         PROOF of both (`signature`, see ID_HEADER).
@@ -799,7 +898,10 @@ class Door(threading.Thread):
         # consuming edge writes for an app that checks who is calling. Nothing else is touched.
         came = _host_of(head)
         for line in raw[1:]:
-            name = line.split(b":", 1)[0].strip().lower()
+            # compared with `_` read as `-`: a WSGI app (Flask) reads `X_DGO_Office` as `X-DGO-Office`, and
+            # `X_authentik_username` as the identity this door writes, so a peer's underscore spelling is the same
+            # claim and goes with it (DGO-1155; the Go edge's edge.Claimed reads names the same way)
+            name = line.split(b":", 1)[0].strip().lower().replace(b"_", b"-")
             if host and name == b"host":
                 line = b"Host: " + host.encode("latin-1")
             elif host and name == b"origin" and came:
@@ -812,7 +914,8 @@ class Door(threading.Thread):
             # the request came from: the service sees this door as its caller, and nothing a peer wrote.
             if not forwarded and name in FORWARDED:
                 continue
-            if line and name not in (b"connection", OFFICE_HEADER, ID_HEADER) and not name.startswith(IDENTITY_FAMILY):
+            if line and name not in (b"connection", OFFICE_HEADER, ID_HEADER, FROM_HEADER, HERD_HEADER) \
+                    and not name.startswith(IDENTITY_FAMILY):
                 lines.append(line)
         lines.append(b"Connection: Upgrade" if Door.websocket(head) else b"Connection: close")
         if ident and not HEADER_VALUE.match(ident):       # DGO-622: the last door before the wire
@@ -822,6 +925,8 @@ class Door(threading.Thread):
             lines.append(IDENTITY_HEADER.title() + b": " + ident.encode("latin-1"))
         if office:
             lines.append(OFFICE_HEADER.title() + b": " + office.encode("latin-1"))
+            if herd:                                        # the herd's mark rides only with the door's own office
+                lines.append(HERD_HEADER.title() + b": 1")
         if signature:
             lines.append(ID_HEADER.title() + b": " + signature)
         return b"\r\n".join(lines) + b"\r\n\r\n"
@@ -842,6 +947,8 @@ class Door(threading.Thread):
         rec = {"ts": round(time.time(), 3), "office": office, "peer_ip": peer, "host": host,
                "app": host.split(".", 1)[0] if host else "", "user": "", "method": method, "path": path,
                "status": 0, "bytes_in": 0, "bytes_out": 0, "ms": 0, "ws": False, "said": ""}
+        if outside(self.rule, peer):
+            rec["outside"] = True       # not one of this rule's clients (WHO MAY ARRIVE, above): served in stage 1
 
         def done(status: int = 0, said: str = "", up: dict | None = None, down: dict | None = None) -> None:
             rec["status"] = status
@@ -856,8 +963,10 @@ class Door(threading.Thread):
             # A name nothing is served under is answered, not hung: the consuming side shows a page
             # that says what happened instead of a timeout nobody can read.
             log(f"{host or '(no Host header)'}: no app is served under that name")
-            _say(client, "no-app", head)
-            done(404, "no-app")
+            if _say(client, "no-app", head):
+                done(200, "the-wall")       # the card's own wall, answered by the door (_say)
+            else:
+                done(404, "no-app")
             return
         name, port, ident = route[:3]
         rec["user"] = ident
@@ -869,8 +978,10 @@ class Door(threading.Thread):
             target = (head.split(b"\r\n", 1)[0].split(b" ") + [b"", b""])[1]
             log(f"{host}: {target[:120].decode('latin-1', 'replace') or '(no target)'} is not a path "
                 f"this door answers")
-            _say(client, "no-app", head)
-            done(404, "path-not-served")
+            if _say(client, "no-app", head):
+                done(200, "the-wall")
+            else:
+                done(404, "path-not-served")
             return
         try:
             infos = socket.getaddrinfo(name, port, type=socket.SOCK_STREAM)
@@ -881,15 +992,18 @@ class Door(threading.Thread):
             upstream.settimeout(None)
         except OSError as e:
             log(f"{host}: nothing answers at {name}:{port} ({e.strerror or e})")
-            _say(client, "app-down", head)
-            done(502, "app-down")
+            if _say(client, "app-down", head):
+                done(200, "the-wall")
+            else:
+                done(502, "app-down")
             return
         rest = head[head.index(b"\r\n\r\n") + 4:]
         up_m: dict = {"bytes": len(head)}
         down_m: dict = {}
         try:
             upstream.sendall(self.rewrite(head, ident, office, identity_signature(office, ident),
-                                          origin_host, forwarded=not door) + rest)
+                                          origin_host, forwarded=not door,
+                                          herd=self.rule.get("herd") is True) + rest)
             if self.websocket(head):
                 # A websocket is the one connection that stays open — and only once the APP has
                 # agreed to it. Until its `101` nothing more of the client's is forwarded: an app
@@ -951,6 +1065,9 @@ class Door(threading.Thread):
                 break
             # the peer's tunnel address for a TCP door; a unix-socket door (a host bridge) has none
             peer = addr[0] if isinstance(addr, tuple) and addr else ""
+            if not admit(self.rule, peer):
+                client.close()
+                continue
             threading.Thread(target=self._serve, args=(client, peer), daemon=True).start()
         try:
             srv.close()
@@ -1115,6 +1232,84 @@ def check() -> int:
     return 1 if bad else 0
 
 
+# ── a proxy left in a namespace that is gone ends, so its restart joins the live one (DGO-1753) ─────────────
+# This process runs in dgo-net's namespace. When dgo-net is restarted (by hand, or by Docker after a crash) it
+# gets a NEW namespace and this process stays in the old one, whose endpoint Docker took away: every door of the
+# office closed while the container still runs. Measured on the Dell, 2026-11-10, beside the carrier
+# (carrier/netns.go says the same for it, and why «gone» is read as NO DEFAULT ROUTE: devices that are not
+# Docker's — a kernel WireGuard interface, tunl0 — can outlive dgo-net there, and none carries a default route).
+# The one exception to «never exits» above: no default route for STRANDED_AFTER seconds, past STRANDED_GRACE after
+# the start, and it exits non-zero; its restart policy starts it again, and a start joins the namespace dgo-net
+# holds now. A look that fails, or finds a default route, ends the run — a live namespace is never left.
+def _seconds(name: str, default: float) -> float:
+    try:
+        return max(0.0, float(os.environ.get(name, default)))
+    except ValueError:                       # a bad setting is the default, never a crash loop of the door
+        return default
+
+
+STRANDED_GRACE = _seconds("DGO_LINK_STRANDED_GRACE", 30.0)
+STRANDED_AFTER = _seconds("DGO_LINK_STRANDED_AFTER", 20.0)
+STRANDED_EXIT = 3
+
+
+def no_default_route(route4: str, route6: str) -> bool:
+    """/proc/net/route and /proc/net/ipv6_route hold no default route through anything but `lo` (IPv6 keeps a
+    reject route for ::/0 on lo in every namespace; it is not a way out)."""
+    for i, line in enumerate(route4.splitlines()):
+        f = line.split()
+        # Iface Destination Gateway Flags RefCnt Use Metric Mask …; the first line is the header
+        if i > 0 and len(f) >= 8 and f[0] != "lo" and f[1] == "00000000" and f[7] == "00000000":
+            return False
+    for line in route6.splitlines():
+        f = line.split()
+        # destination prefix-length source prefix-length next-hop metric refcnt use flags iface
+        if len(f) >= 10 and f[0] == "0" * 32 and f[1] == "00" and f[9] != "lo":
+            return False
+    return True
+
+
+class Stranded:
+    """One look at a time: is this process left in a dead namespace? (`gone` None: the look failed.)"""
+
+    def __init__(self, start: float, grace: float = STRANDED_GRACE, after: float = STRANDED_AFTER):
+        self.start, self.grace, self.after, self.since = start, grace, after, None
+
+    def step(self, now: float, gone) -> bool:
+        if gone is not True or now - self.start < self.grace:
+            self.since = None
+            return False
+        if self.since is None:
+            self.since = now
+        return now - self.since >= self.after
+
+
+def _look_routes():
+    """No default route here? None when the IPv4 table cannot be read: it always exists, and the IPv6 one read
+    alone (lo's reject route only) would call a live namespace gone (the third reader of DGO-1753)."""
+    try:
+        route4 = Path("/proc/self/net/route").read_text()
+    except OSError:
+        return None
+    try:
+        route6 = Path("/proc/self/net/ipv6_route").read_text()
+    except OSError:
+        route6 = ""
+    return no_default_route(route4, route6)
+
+
+def watch_namespace(every: float = 5.0, clock=time.monotonic, look=_look_routes, end=os._exit, stop=None,
+                    grace: float = STRANDED_GRACE, after: float = STRANDED_AFTER, sleep=time.sleep) -> None:
+    s = Stranded(clock(), grace, after)
+    while not (stop is not None and stop.is_set()):
+        sleep(every)
+        if s.step(clock(), look()):
+            log(f"no default route in this namespace for {int(clock() - s.since)}s: dgo-net was restarted under "
+                f"this proxy — ending, so that its restart joins the namespace dgo-net holds now")
+            end(STRANDED_EXIT)
+            return
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description="the link proxy — what a link delivers, not what it allows")
     ap.add_argument("--check", action="store_true",
@@ -1123,6 +1318,7 @@ def main() -> int:
     if args.check:
         return check()
     log(f"starting from {BASE} (plan {PLAN})")
+    threading.Thread(target=watch_namespace, daemon=True, name="dgo-link-netns").start()
     Proxy().run()
     return 0
 

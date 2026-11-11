@@ -21,10 +21,27 @@ if [ "${OFFICE}" != /workspace/office ] && [ -d "${OFFICE}" ] && [ -w /workspace
 fi
 cd /workspace/office 2>/dev/null || cd "${OFFICE}" 2>/dev/null || cd "${HOME}"
 
+# THE DESKTOP'S OWN BROWSER, FOR THE SIGN-IN ONLY (DGO-1506). «Continue with Google» opens the sign-in as a
+# system URL: it opens in a throwaway Chromium window on this same screen (bina-claude-signin-browser, which
+# opens nothing else), and claude.ai's answer comes back through the app's own claude:// handler, which the
+# image's /usr/local/bin/claude-desktop makes work in a container. The desktop user's mimeapps.list names
+# the browser for http and https: that is what gio (xdg-open's road under XDG_CURRENT_DESKTOP=GNOME) and
+# xdg-open's generic road read, and a build cannot write into this volume. $BROWSER is the same answer for
+# an xdg-open that finds no handler. claude:// is left to the app, which names itself its handler. A
+# window's profile left by a stop is cleared.
+rm -rf "${TMPDIR:-/tmp}"/bina-claude-signin.* 2>/dev/null
+command -v xdg-mime >/dev/null 2>&1 \
+  && xdg-mime default bina-claude-web.desktop x-scheme-handler/https x-scheme-handler/http 2>/dev/null
+BROWSER=/usr/local/bin/bina-claude-signin-browser
+export BROWSER
+
 # Brought back whenever it exits (a sign-out, a crash, the window closed): this display has one purpose.
 # --no-sandbox: Chromium's sandbox needs user namespaces docker's default seccomp denies; the container is
 # the sandbox. No GPU here.
+# Chromium picks its secret store from the desktop it sees; under openbox it sees none and falls back to
+# basic_text, so the app keeps no OAuth token and every recreate signs out (DGO-1335). Name the keyring.
+export XDG_CURRENT_DESKTOP="${XDG_CURRENT_DESKTOP:-GNOME}"
 while :; do
-  claude-desktop --no-sandbox --disable-gpu >>"${HOME}/.claude-desktop.log" 2>&1
+  claude-desktop --no-sandbox --disable-gpu --password-store=gnome-libsecret >>"${HOME}/.claude-desktop.log" 2>&1
   sleep 3
 done

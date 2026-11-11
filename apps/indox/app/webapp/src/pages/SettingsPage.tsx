@@ -195,7 +195,7 @@ const ROUTER_CAP_NOTES: Record<string, ReactNode> = {
     <>
       מוגבל ל-5 בכוונה: ה-p95 של הפעולה הזו הוא 183 שניות לשורה, מול{' '}
       <span className="mono">executionTimeout</span> של 3,600 שניות בראוטר. קבוצה רחבה יותר
-      נהרגת באמצע — ואז היא סוגרת <b>אפס</b> שורות שיגור, כך שהניסיון כולו נעלם מהיומן.
+      נהרגת באמצע — ואז היא סוגרת <b>אפס</b> שורות ביומן הפעולות, כך שהניסיון כולו נעלם ממנו.
     </>
   ),
 };
@@ -512,7 +512,7 @@ function pipelineFacts(ps: PipelineStatus): ConfirmFact[] {
       kind: ps.drain ? 'warn' : 'muted',
     },
     {
-      label: 'שיגורים ב-5 הדקות האחרונות',
+      label: 'פעולות ב-5 הדקות האחרונות',
       value: heNum(ps.dispatch_5m),
       kind: ps.dispatch_5m > 0 ? 'warn' : 'muted',
     },
@@ -549,13 +549,13 @@ function UnlockAllButton() {
               <>
                 {' '}
                 <b>אבל משהו עובד כרגע</b> — {ps.drivers === 1 ? 'דרייבר אחד' : `${heNum(ps.drivers)} דרייברים`} ו-
-                {ps.dispatch_5m === 1 ? 'שיגור אחד' : `${heNum(ps.dispatch_5m)} שיגורים`} בחמש הדקות האחרונות. שחרור עכשיו פותח את הדלת
+                {ps.dispatch_5m === 1 ? 'פעולה אחת' : `${heNum(ps.dispatch_5m)} פעולות`} בחמש הדקות האחרונות. שחרור עכשיו פותח את הדלת
                 לדרייבר נוסף על אותם מסמכים בזמן שהראשון עוד באמצע. זה המצב שבו הכפתור הזה מזיק.
               </>
             ) : (
               <>
                 {' '}
-                <b>שום דבר לא בתעופה</b> — אין דרייברים פעילים, אין שיגורים בחמש הדקות האחרונות,
+                <b>שום דבר לא בתעופה</b> — אין דרייברים פעילים, אין פעולות בחמש הדקות האחרונות,
                 ו-{ps.locks_stale === 1 ? 'נעילה אחת' : `${heNum(ps.locks_stale)} מהנעילות`} כבר ישנות. זה בדיוק המצב שבו הכפתור הזה הוא
                 התיקון הנכון: מה שנשאר הוא דליפה, לא עבודה.
               </>
@@ -1380,7 +1380,7 @@ export default function SettingsPage() {
                 {routerCaps.length > 0 && (
                   <details className="rosetting" open style={{ marginTop: 10 }}>
                     <summary>
-                      תקרות שיגור לפי פעולה (action_router)
+                      תקרות הראוטר לפי פעולה (action_router)
                       <span className="len num">{routerCaps.length}</span>
                     </summary>
                     <div className="muted small" style={{ margin: '8px 0 4px', lineHeight: 1.7 }}>

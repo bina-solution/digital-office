@@ -106,7 +106,7 @@ tasks may use more — that's fine for development work.
 
 Track issues compactly:
 ```
-#4 | open   | balance-sheet crash | shlomo | 14:22
-#3 | done   | update version      | shlomo | 13:45 (commit abc1234)
+#4 | open   | balance-sheet crash | owner | 14:22
+#3 | done   | update version      | owner | 13:45 (commit abc1234)
 #2 | active | add company field   | zeevi  | 12:10
 ```

@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/solomonBoltin/deployment-hacohen/packaging/dgo/internal/store"
+	"github.com/bina-solution/digital-office/packaging/dgo/internal/store"
 )
 
 // The store's word is answered in-process on every OS — before the WSL hand-off, which would

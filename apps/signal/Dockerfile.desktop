@@ -1,0 +1,62 @@
+# signal-desktop — Signal Desktop, streamed into the console with Selkies (DGO-1264). Built from
+# apps/_template-wrapped (ai/context/wrapped-official-app.md); the worked example is apps/bina-claude.
+#
+# The base is linuxserver's Selkies image, PINNED BY DIGEST, the same pin as the other wraps.
+FROM ghcr.io/linuxserver/baseimage-selkies:debiantrixie@sha256:51461db2f6c9ff821ba58773e989b8f83ce0a4fcaac7497649dd76c4e819e327
+
+# The keyring and the session bus keep the client's link to the phone. Fonts that render Hebrew and emoji. node
+# runs the front door (desktop/gate.mjs).
+RUN apt-get update && apt-get install -y --no-install-recommends \
+      ca-certificates curl gnupg procps dbus-x11 gnome-keyring libsecret-1-0 libsecret-tools \
+      fonts-noto-core fonts-noto-color-emoji culmus nodejs \
+ && rm -rf /var/lib/apt/lists/*
+
+# SIGNAL'S OWN REPOSITORY, exactly as signal.org/download/linux says (keys.asc and its signal-desktop.sources:
+# suite xenial, amd64 only). Signal publishes no fingerprint for this key: the one checked here is the key as
+# updates.signal.org served it over HTTPS on 2026-11-10 (uid «Open Whisper Systems», computed from the key
+# file, sha256 2aca20b8…95491). A changed key fails the build; a person checks it with Signal before this line
+# changes. amd64 only: Signal ships no arm64 Linux build, so this image builds on the HP, vps1 and GitHub's runner.
+RUN [ "$(dpkg --print-architecture)" = amd64 ] || { echo "Signal ships amd64 only for Linux; this is $(dpkg --print-architecture)" >&2; exit 1; } \
+ && curl -fsSL https://updates.signal.org/desktop/apt/keys.asc | gpg --dearmor > /usr/share/keyrings/signal-desktop-keyring.gpg \
+ && gpg --show-keys --with-colons /usr/share/keyrings/signal-desktop-keyring.gpg \
+      | grep -q '^fpr:::::::::DBA36B5181D0C816F630E889D980A17457F6FB06:$' \
+ && [ "$(gpg --show-keys --with-colons /usr/share/keyrings/signal-desktop-keyring.gpg | grep -c '^pub:')" = 1 ] \
+ && printf 'Types: deb\nURIs: https://updates.signal.org/desktop/apt\nSuites: xenial\nComponents: main\nArchitectures: amd64\nSigned-By: /usr/share/keyrings/signal-desktop-keyring.gpg\n' \
+      > /etc/apt/sources.list.d/signal-desktop.sources \
+ && apt-get update && apt-get install -y --no-install-recommends signal-desktop \
+ && rm -rf /var/lib/apt/lists/* \
+ && command -v signal-desktop
+
+# THE BUILD'S DEADLINE. Signal compiles one into every release (`buildExpiration`, ms since the epoch: its release
+# commit + 90 days, scripts/get-expire-time.mjs in Signal-Desktop) and refuses to run past it while its process
+# stays up. It is read here, once, out of the package (an asar archive keeps its JSON as plain bytes), so
+# desktop/health compares a number instead of reading 100+ MB every 30 s. A package without it, or one already
+# past it, fails the build: the check would otherwise never fire. A rebuild that keeps this layer from the
+# cache keeps the old Signal and the old deadline: `./scripts/dc build --no-cache signal-desktop`.
+RUN exp="$(grep -aoE '"buildExpiration": ?[0-9]{13}' /opt/Signal/resources/app.asar | head -n 1 | grep -oE '[0-9]{13}$')" \
+ && { [ -n "${exp}" ] || { echo "no buildExpiration in /opt/Signal/resources/app.asar:" >&2; ls -la /opt/Signal/resources >&2; exit 1; }; } \
+ && { [ "${exp}" -gt "$(( $(date +%s) * 1000 ))" ] || { echo "this Signal expired at ${exp} (ms)" >&2; exit 1; }; } \
+ && printf '%s\n' "${exp}" > /usr/local/share/signal-build-expiration
+COPY desktop/health /usr/local/bin/signal-health
+RUN chmod 755 /usr/local/bin/signal-health
+
+# What the session runs: the autostart only names the launcher, and the launcher lives in the image.
+COPY desktop/autostart /usr/local/bin/signal-desktop-session
+RUN chmod 755 /usr/local/bin/signal-desktop-session \
+ && printf '/usr/local/bin/signal-desktop-session\n' > /defaults/autostart
+
+# THE FRONT DOOR: nginx on the container's loopback, gate.mjs on :3000 for the edge, the console and the link
+# proxy only. The checks fail the build if linuxserver changes the lines the sed edits.
+RUN sed -i -e 's/^\(\s*\)listen 3000 default_server;/\1listen 127.0.0.1:3000 default_server;/' \
+           -e 's/^\(\s*\)listen 3001 ssl;/\1listen 127.0.0.1:3001 ssl;/' \
+           -e '/listen \[::\]/d' /defaults/default.conf \
+ && grep -q 'listen 127.0.0.1:3000 default_server;' /defaults/default.conf \
+ && grep -q 'listen 127.0.0.1:3001 ssl;' /defaults/default.conf \
+ && ! grep -qE 'listen (\[::\]:)?300[01]' /defaults/default.conf
+COPY desktop/gate.mjs /opt/signal/gate.mjs
+COPY desktop/svc-gate /etc/s6-overlay/s6-rc.d/svc-signal-gate
+RUN echo longrun > /etc/s6-overlay/s6-rc.d/svc-signal-gate/type \
+ && mkdir -p /etc/s6-overlay/s6-rc.d/svc-signal-gate/dependencies.d \
+ && touch /etc/s6-overlay/s6-rc.d/svc-signal-gate/dependencies.d/init-services \
+ && touch /etc/s6-overlay/s6-rc.d/user/contents.d/svc-signal-gate \
+ && chmod 755 /etc/s6-overlay/s6-rc.d/svc-signal-gate/run

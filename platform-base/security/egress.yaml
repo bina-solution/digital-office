@@ -1,0 +1,118 @@
+# platform-base/security/egress.yaml — where each app of an office may open a connection to the internet (DGO-1561).
+# Read by egress.py: the security app's API marks every outbound flow that no rule here declares (`declared: false`,
+# /api/egress) and counts them in its summary — judged by the names the office's own resolver answered, never a TLS
+# server name or a PTR. A name rule declares its destination on any port. An office adds what it uses on purpose:
+#   SECURITY_EGRESS_EXTRA="@host=api.anthropic.com claude.ai; drive=www.googleapis.com oauth2.googleapis.com"
+# Keys are compose service names; `@host` is the machine itself (dockerd, apt, time, an SSH session's programs);
+# `@unnamed` is a container known only by its address or its image (`image:<name>`: builds, one-off `docker run`s).
+# A destination the security app already names (this machine, a container, a linked office, a private network,
+# multicast) is never judged. Measured on Exampleu's server, 2026-11-09 (DGO-1495), unless a line says otherwise.
+apps:
+  "@host":
+    - "@dns"                                  # the machine's resolver
+    - "@ntp"                                  # time (systemd-timesyncd)
+    - "*.docker.io"                           # image pulls and builds: registry-1, auth (Docker Hub)
+    - "*.docker.com"                          # …its blob CDN (production.cloudfront.docker.com)
+    - ghcr.io                                 # images from GitHub's registry (42 of the compose files')
+    - pkg-containers.githubusercontent.com    # …its blob CDN
+    - quay.io                                 # images from Quay (2)
+    - "*.quay.io"
+    - deb.debian.org                          # apt: Debian's security updates (unattended-upgrades)
+    - security.debian.org
+    - debian.map.fastly.net                   # …deb.debian.org's CDN
+    - pypi.org                                # first-party image builds: pip
+    - files.pythonhosted.org
+    - registry.npmjs.org                      # …and npm
+    - github.com                              # the office's own code: the release it follows
+    - codeload.github.com
+    - stun.cloudflare.com                     # the security sensor asks its public address — only behind NAT
+  "@unnamed":                                 # a container with no compose name: image builds, one-off `docker run`s
+    - "@dns"
+    - "*.docker.io"
+    - "*.docker.com"                          # …and download.docker.com (the docker CLI inside an image)
+    - deb.debian.org
+    - security.debian.org
+    - debian.map.fastly.net
+    - deb.nodesource.com                      # node inside an image
+    - pypi.org
+    - files.pythonhosted.org
+    - registry.npmjs.org
+    - github.com
+    - codeload.github.com
+    - "*.githubusercontent.com"
+    - downloads.claude.ai                     # the Claude app inside bina-claude-desktop's image (DGO-1506)
+  traefik-deployment:
+    - acme-v02.api.letsencrypt.org            # the office's certificates
+    - acme-staging-v02.api.letsencrypt.org
+  security:
+    - download.db-ip.com                      # the map's location database: static downloads, nothing sent
+  meet-jvb:
+    - "*"                                     # meeting media goes to each participant's own address
+  browser42-browser:
+    - "*"                                     # the office browser goes where a person sends it
+  browser42-mcp: []      # NOWHERE OUTSIDE THE OFFICE, on purpose (DGO-1561, slice 2). The Playwright
+                         # MCP server reaches the browser's CDP endpoint on this app's own network
+                         # (browser42-browser-internal:9222) and nothing else: its code is installed at
+                         # build time (apps/browser42/Dockerfile.mcp), so a start downloads nothing.
+                         # It used to run `npx -y @playwright/mcp@0.0.83`, and a fresh container opened
+                         # a connection to registry.npmjs.org before it served anything (measured on
+                         # Exampleu's server, 2026-11-09). Any flow this app makes outside is a defect,
+                         # and this line is what makes that say «never declared» instead of «nobody
+                         # thought about it».
+  bina-claude:
+    - api.anthropic.com                       # the Claude API (DGO-1506)
+    - console.anthropic.com                   # its sign-in
+    - claude.ai                               # Remote Control
+    - "*.claude.ai"
+  bina-claude-desktop:                        # the official Claude app (DGO-1506)
+    - api.anthropic.com
+    - console.anthropic.com
+    - claude.ai
+    - "*.claude.ai"
+    - s-cdn.anthropic.com                     # its own assets
+    - assets-proxy.anthropic.com
+    - hcaptcha.com                            # its sign-in page's captcha
+    - "*.hcaptcha.com"
+    - accounts.google.com                     # «continue with Google» on its sign-in
+    - "*.gvt1.com"                            # its Chromium's component updates (redirector.gvt1.com, rr*.gvt1.com)
+  app-management:
+    - github.com                              # an app installed from the catalog's source
+    - codeload.github.com
+  # ── read from each app's code, not measured on Exampleu (it does not run them) ──
+  dgo-net:                                    # the link: the herd's relay and hub by name (a peer's bare
+    - "*.digital-office.co.il"                # public address is not judged as declared yet: slice 2 reads
+  dgo-extend:                                 # the link's own peer list)
+    - "*.digital-office.co.il"
+  dgo-link:
+    - "*.digital-office.co.il"
+  dgo-carry:
+    - "*.digital-office.co.il"
+  connections:
+    - "*.digital-office.co.il"                # the herd's one OAuth relay (vps1's connections /oauth/relay)
+    - oauth2.googleapis.com                   # token exchange for a connected Google account
+  mailserver:
+    - "@smtp"                                 # mail goes to each recipient's own server
+  mailapi:
+    - oauth2.googleapis.com                   # Gmail accounts; an account's own IMAP/SMTP host is the office's
+    - imap.gmail.com                          #   SECURITY_EGRESS_EXTRA (mailapi=imap.example.com)
+    - smtp.gmail.com
+  incoming-documents:
+    - oauth2.googleapis.com
+    - www.googleapis.com
+  bina-ds:
+    - api.deepseek.com                        # the office agent's model
+  telegram:
+    - api.telegram.org
+  chat:
+    - api.telegram.org
+  social-list:
+    - graph.facebook.com
+  ollama-engine:                              # the engine pulls the models; the front (`ollama`) never goes out
+    - huggingface.co                          # model downloads
+    - "*.huggingface.co"
+  git:
+    - api.github.com
+    - github.com
+  chimney-services:
+    - fcm.googleapis.com                      # push notifications
+    - web.push.apple.com

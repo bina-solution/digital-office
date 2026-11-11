@@ -1,0 +1,33 @@
+%% DGO-357: `bbox run` in every case. Three entries, then ONE path; read from bbox (the run) branch, :610-819),
+%% bbox:25-39 (the macOS hand-off), bbox.cmd (the Windows hand-off) and scripts/lib.sh. The only splits are the
+%% ones the code makes: whether an .env is generated, the foreign-container refusal, and the accommodations,
+%% each of which acts only where its own condition holds (a low nofile limit, a dead default bridge, a
+%% MITM-proxied sandbox) and is a no-op elsewhere.
+flowchart TD
+    W["Windows: bbox.cmd run<br/>registers the reboot keepalive, converges the firewall (again after the run)"] --> WSL["wsl.exe -d Ubuntu -u root<br/>./bbox run in the same checkout"]
+    M["macOS: ./bbox run on the host<br/>(only engine, install macos and agent stay on the host)"] --> LIMA["packaging/macos/engine.sh exec: starts the engine if stopped,<br/>then ./bbox run inside the Lima guest"]
+    L["Linux, a VPS or a cloud sandbox:<br/>./bbox run"]
+    WSL --> E
+    LIMA --> E
+    L --> E
+    E["need_docker<br/>the project's own engine, never Docker Desktop (28.x is pinned and checked in the Lima guest)"] --> A["heavy_admit: one heavy job at a time<br/>disk_admit: gives back dangling images and build cache; on a low disk it warns, and refuses only where BBOX_DISK_ENFORCE=1"]
+    A --> ENV{"no .env, in the Mac guest<br/>or a sandbox with a proxy CA?"}
+    ENV -- yes --> GEN["scripts/ci-env.sh writes one,<br/>then bbox run starts again"]
+    GEN --> E
+    ENV -- "no (a laptop or a VPS brings its own .env; without one the stack starts on defaults)" --> S["ensure_secrets<br/>checkout-owner setup"]
+    S --> R["ensure_rendered: reconcile.py render<br/>apps/*, platform-base/*, platform.state.yaml and .env into .generated/"]
+    R --> N["ensure_network, ensure_perf_profile<br/>(a profile by cores and memory unless .env names one; CPUs clamped to the host)"]
+    N --> F{"another compose project<br/>holds a name this stack needs?"}
+    F -- yes --> STOP["refuse, naming the containers"]
+    F -- no --> P["run_app_hooks prepare<br/>each app's own bootstrap: sign-in, GlitchTip, ..."]
+    P --> C["accommodations, each only where needed:<br/>nofile clamp (low hard limit), serial host-network build (dead default bridge, e.g. the Dell),<br/>CA-shadowed base images and a serial build (MITM-proxied sandbox)"]
+    C --> UP["dc up -d --build --wait<br/>(300 s, BBOX_WAIT_TIMEOUT; no --build when the serial build already ran)"]
+    UP --> SSO["ensure_sso_current"]
+    SSO --> RN["run_pending_renames<br/>(whole-stack runs)"]
+    RN --> UP2["dc up -d again<br/>starts what waited, says what it re-created"]
+    UP2 --> HR["heavy_release"]
+    HR --> CV["ensure_converged<br/>the control-plane app's reconcile: n8n blueprints, schema"]
+    CV --> OB["run_app_hooks onboard<br/>each app's first-run seeding"]
+    OB --> G70["G70: every sign-in host is routed<br/>(whole-stack runs)"]
+    G70 --> FOL["follow.sh install<br/>the DGO_FOLLOW timer (whole-stack runs)"]
+    FOL --> DONE["up — or «up, with problems», each named (exit 0)"]

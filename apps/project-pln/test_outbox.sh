@@ -34,6 +34,8 @@ running() { [ "${STUB_RUNNING:-0}" = 1 ]; }            # a local project-pln con
 dcx() {                                                # every call is answered, from STUB_*_RC
   echo "dcx $*" >> "${STUB_LOG}"
   case " $* " in *"python3 -c"*) return "${STUB_PROBE_RC:-0}" ;; esac   # where.sh's reachability probe
+  case " $* " in *" sh -c "*) return 0 ;; esac                          # an attach's file streamed in
+  case " $* " in *"python3 - "*) [ -z "${STUB_DCX_SAY:-}" ] || echo "${STUB_DCX_SAY}" ;; esac   # the applier's words
   return "${STUB_DCX_RC:-0}"                                            # the applier in the container
 }
 EOF
@@ -41,6 +43,9 @@ cat > "${T}/bbox" <<'EOF'
 #!/usr/bin/env bash
 echo "bbox $*" >> "${STUB_LOG}"
 [ "${STUB_BBOX_RC:-0}" = 0 ] || { echo "  [project-pln] Plane refused (HTTP 500)" >&2; exit "${STUB_BBOX_RC}"; }
+case " $* " in *" attach "*)                           # an attach Plane answers by refusing part of it
+  [ -z "${STUB_ATTACH_RC:-}" ] || { echo "  [project-pln] mock.html: NOT attached — Plane refused it (HTTP 400)" >&2; exit "${STUB_ATTACH_RC}"; } ;;
+esac
 echo "  [project-pln] did $*"
 EOF
 chmod +x "${T}/bbox"
@@ -55,7 +60,7 @@ run() {   # run <name> <want exit> <want in output> <must not be in output|-> --
   out="$(cd "${T}" && env ${UNSET_SESSION[@]+"${UNSET_SESSION[@]}"} -u PLANE_API_URL -u PLN_OUTBOX_DIR \
          -u PLN_OUTBOX_REPLAY STUB_LOG="${LOG}" STUB_RUNNING="${RUNNING:-0}" \
          STUB_PROBE_RC="${PROBE_RC:-0}" STUB_DCX_RC="${DCX_RC:-0}" STUB_BBOX_RC="${BBOX_RC:-0}" \
-         bash "${T}/apps/project-pln/hooks/tasks" "$@" 2>&1)"; rc=$?
+         STUB_DCX_SAY="${DCX_SAY:-}" STUB_ATTACH_RC="${ATTACH_RC:-}" bash "${T}/apps/project-pln/hooks/tasks" "$@" 2>&1)"; rc=$?
   if [ "${rc}" = "${want}" ] && { [ -z "${must}" ] || printf '%s' "${out}" | grep -qF -- "${must}"; } \
      && { [ "${mustnot}" = "-" ] || ! printf '%s' "${out}" | grep -qF -- "${mustnot}"; }; then
     echo "PASS  ${name}"
@@ -116,13 +121,55 @@ sys.stderr.write("[project-pln] URLError: <urlopen error [Errno 111] Connection 
 EOF
 DCX_RC=1 run "network death mid-write: kept, not failed" 0 "בתור, 1 ממתין" - -- comment DGO-1 "y"
 
+# ── 7. an ATTACH that Plane did not answer is kept by the caller's own path, so its replay finds the copy.
+#       Queuing the staged path (/tmp/plane-attach-<pid>/…, removed after the run) failed every replay and
+#       held the office's whole queue behind it (vps1, 2026-11-08 → 11-09).
+clean
+printf 'model\n' > "${T}/loans-model.md"
+RUNNING=1 DCX_RC=1 DCX_SAY="URLError: <urlopen error timed out>" \
+  run "attach, Plane did not answer: kept, not failed" 0 "בתור, 1 ממתין" - -- attach DGO-1 "${T}/loans-model.md"
+entry="$(ls -d "${T}/.state/outbox/project-pln/pending/"*/ 2>/dev/null | head -1)"
+args="$(python3 -c 'import json,sys; print("|".join(json.load(open(sys.argv[1]))["args"]))' "${entry}entry.json" 2>/dev/null)"
+# the copy keeps the file's OWN name (files/<i>/<name>): the replay lands as «loans-model.md», not «0-loans-model.md»,
+# and so it can see the files that landed before the line went down (DGO-1628's second reader)
+case "${args}" in
+  "attach|DGO-1|${entry}files/0/loans-model.md")
+    echo "PASS  attach: kept with its copy's path, not the staged one, under its own name" ;;
+  *) echo "FAIL  attach: queued args «${args:-no entry}»"; FAILS=$((FAILS + 1)) ;;
+esac
+: > "${LOG}"
+RUNNING=1 run "attach: the replay names the copy" 0 "" - -- flush
+grep -q "^bbox project-pln tasks attach DGO-1 .*/files/0/loans-model.md" "${LOG}" \
+  && ! grep -q 'plane-attach-' "${LOG}" \
+  && echo "PASS  attach: the replay attaches the kept copy" \
+  || { echo "FAIL  attach: replay line «$(grep '^bbox' "${LOG}" | head -1)»"; FAILS=$((FAILS + 1)); }
+
+# ── 8. a replayed attach that Plane ANSWERED and refused in part (exit 4: a file of a type it takes not) is
+#       said and leaves the queue — kept, it would fail at every replay and hold the office's every later write
+#       behind it for good — and the next write still goes out (DGO-1628's second reader).
+clean
+printf '<!doctype html>\n' > "${T}/mock.html"
+run "offline: an attach is kept" 0 "בתור, 1 ממתין" - -- attach DGO-1 "${T}/mock.html"
+run "offline: a comment after it" 0 "בתור, 2 ממתין" - -- comment DGO-1 "after"
+: > "${LOG}"
+ATTACH_RC=4 RUNNING=1 run "a replay Plane refused in part is said, and leaves the queue" 0 "ולא יישלח שוב" - -- flush
+[ "$(entries)" = 0 ] && grep -q '^bbox project-pln tasks comment DGO-1 after' "${LOG}" \
+  && echo "PASS  a refused attach does not hold the queue: the comment behind it went out" \
+  || { echo "FAIL  after a refused attach: $(entries) waiting, replayed «$(grep '^bbox' "${LOG}" | tr '\n' '|')»"; FAILS=$((FAILS + 1)); }
+# …and only an ATTACH may say so: a 4 from any other verb keeps its entry, as every other failure does
+clean
+run "offline: a comment is kept" 0 "בתור, 1 ממתין" - -- comment DGO-1 "kept"
+BBOX_RC=4 RUNNING=1 run "a 4 from a comment is a failure: kept (flush exits 3, as for any failure)" 3 "נשאר בתור, 1 ממתין" - -- flush
+[ "$(entries)" = 1 ] && echo "PASS  a 4 from another verb does not drop its write" \
+  || { echo "FAIL  a 4 from a comment left $(entries) entries, wanted 1"; FAILS=$((FAILS + 1)); }
+
 # ── a queued PLAN carries a copy of the plan file, and replays as `plan` ────────────────────────────
 clean
 out="$(cd "${T}" && env -u PLANE_API_URL -u PLN_OUTBOX_DIR -u PLN_OUTBOX_REPLAY STUB_LOG="${LOG}" \
       bash "${T}/apps/project-pln/hooks/plan" 'apps/project-pln/plans/x.yaml' --dry-run 2>&1)"; rc=$?
 if [ "${rc}" = 0 ] && printf '%s' "${out}" | grep -qF "בתור, 1 ממתין"; then
   entry="$(ls -d "${T}/.state/outbox/project-pln/pending/"*/ | head -1)"
-  if [ -n "${entry}" ] && [ -f "${entry}files/0-x.yaml" ]; then
+  if [ -n "${entry}" ] && [ -f "${entry}files/0/x.yaml" ]; then
     echo "PASS  plan: kept with a copy of the plan file"
   else
     echo "FAIL  plan: no copy of the plan file in ${entry:-the entry}"; FAILS=$((FAILS + 1))
@@ -132,9 +179,52 @@ else
 fi
 : > "${LOG}"
 RUNNING=1 PROBE_RC=0 run "plan: replayed as a plan, once" 0 "" - -- flush
-grep -q '^bbox project-pln plan .*0-x.yaml --dry-run' "${LOG}" \
+grep -q '^bbox project-pln plan .*/0/x.yaml --dry-run' "${LOG}" \
   && echo "PASS  plan: replay is «plan <the copy> --dry-run»" \
   || { echo "FAIL  plan: replay line «$(grep '^bbox' "${LOG}" | head -1)»"; FAILS=$((FAILS + 1)); }
+
+# ── 6. a queued PLAN replayed through the REAL hook finishes: its own flush does not wait on the lock its
+#       replay holds. The stand-in bbox above never runs the hook, so this hung only in production
+#       (vps1, 2026-11-05: 75 minutes, every later write of the office behind it).
+limited() {   # limited <seconds> <command…>: run in a group of its own, ended whole at the limit (exit 124)
+  python3 -c '
+import os, signal, subprocess, sys
+p = subprocess.Popen(sys.argv[2:], start_new_session=True)
+try:
+    sys.exit(p.wait(timeout=float(sys.argv[1])))
+except subprocess.TimeoutExpired:
+    os.killpg(p.pid, signal.SIGKILL)
+    sys.exit(124)' "$@"
+}
+clean
+cp "${T}/bbox" "${T}/bbox.stand-in"            # put back after this case: the next one may want it
+cat > "${T}/bbox" <<'EOF'
+#!/usr/bin/env bash
+echo "bbox $*" >> "${STUB_LOG}"
+case "$1 ${2:-}" in
+  "project-pln plan") shift 2; exec bash "$(dirname "$0")/apps/project-pln/hooks/plan" "$@" ;;
+esac
+echo "  [project-pln] did $*"
+EOF
+setup="$(cd "${T}" && env -u PLANE_API_URL -u PLN_OUTBOX_DIR -u PLN_OUTBOX_REPLAY -u PLN_BBOX STUB_LOG="${LOG}" \
+         bash "${T}/apps/project-pln/hooks/plan" 'apps/project-pln/plans/x.yaml' --dry-run 2>&1)"
+if ! printf '%s' "${setup}" | grep -qF "בתור, 1 ממתין"; then
+  echo "FAIL  plan: the plan to replay was not queued:"; printf '%s\n' "${setup}" | sed 's/^/        /'
+  FAILS=$((FAILS + 1))
+else
+  : > "${LOG}"
+  # 120 s: a pass takes under a second, and a loaded office must not read as this hang
+  out="$(cd "${T}" && limited 120 env ${UNSET_SESSION[@]+"${UNSET_SESSION[@]}"} -u PLANE_API_URL -u PLN_OUTBOX_DIR \
+         -u PLN_OUTBOX_REPLAY -u PLN_BBOX STUB_LOG="${LOG}" STUB_RUNNING=1 \
+         bash "${T}/apps/project-pln/hooks/tasks" flush 2>&1)"; rc=$?
+  if [ "${rc}" != 124 ] && grep -q '^dcx exec .*PLANE_PLAN_DRY_RUN' "${LOG}"; then
+    echo "PASS  plan: a replay through the real hook reaches its applier (its own flush does not wait on the lock)"
+  else
+    echo "FAIL  plan: the replay through the real hook did not reach its applier (exit ${rc}; 124 = still waiting after 120 s):"
+    printf '%s\n' "${out}" | sed 's/^/        /'; FAILS=$((FAILS + 1))
+  fi
+fi
+mv "${T}/bbox.stand-in" "${T}/bbox"
 
 echo
 [ "${FAILS}" = 0 ] && { echo "outbox: all cases passed"; exit 0; }

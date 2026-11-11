@@ -28,7 +28,7 @@ git -C "${repo}" archive HEAD | tar -x -C "${tmp}/copy"
 cd "${tmp}/copy"
 cp platform.state.core.yaml platform.state.yaml
 # no secret and no domain of the host's in reach: a phone's root is rendered for the phone alone
-N8N_ENCRYPTION_KEY_SECRET= CHANGE_ME \
+N8N_ENCRYPTION_KEY_SECRET= OFFICE_DOMAIN= \
   CI_IDENTITY=forward-auth CI_ENV_FORCE=1 CI_DEPLOYMENT_NAME=local CI_EDGE_PORT=8080 bash scripts/ci-env.sh
 "${dgo}" render > render.log 2>&1 || { cat render.log >&2; echo "office-root.sh: the core office does not render" >&2; exit 1; }
 
@@ -47,6 +47,16 @@ cp .generated/registry/console.modules.yaml "${root}/.generated/registry/"
 # the icon set (office-set), 28 KB
 mkdir -p "${root}/platform-base/bina-ui"
 cp platform-base/bina-ui/theme-tokens.css platform-base/bina-ui/bina-icons.js "${root}/platform-base/bina-ui/"
+
+# THE SCREENS THE CORE ANSWERS ITSELF (DGO-1338). A phone has no container for «התראות» or «אפליקציות»: the
+# core answers both from its own process (native.go's doors, serve's own screen) and sends their pages from
+# this root — a root without them answered 404 for /a/alerts/ while its API said 200 (measured 2026-11-04 on
+# a clean emulator, 0.1.85). Each screen is its directory whole: the page, its css and its js.
+for d in platform-base/notifications/static platform-base/app-management/static; do
+  [ -d "${d}" ] || { echo "office-root.sh: the core's screen ${d} is missing" >&2; exit 1; }
+  mkdir -p "${root}/$(dirname "${d}")"
+  cp -R "${d}" "${root}/${d}"
+done
 
 manifests="$(find "${root}" -name app.json | wc -l | tr -d ' ')"
 catalog="$(ls platform-base/*/app.json apps/*/app.json | wc -l | tr -d ' ')"

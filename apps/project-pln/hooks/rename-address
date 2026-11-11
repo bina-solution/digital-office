@@ -7,7 +7,7 @@
 # follows whenever no account holds the old address any more — moved now, moved by an earlier run cut short
 # before the key, or never created (the next onboard then makes it on the new domain, not the old). The
 # domains come from the environment (DGO_RENAME_FROM, DGO_RENAME_TO, DGO_RENAME_DRY_RUN), set by `bbox
-# rename-address [--dry-run] <old> <new>`, which runs this for every enabled app that has one (FPG-34).
+# rename-address [--dry-run] <old> <new>`, which runs this for every enabled app that has one (EXF-34).
 #
 # NOT bootstrap.py's PLANE_OWNER_TAKE_OVER: that hands the instance to another PERSON (a new user, the old
 # one released). Here the person is the same and only their domain moved. An address — or an invitation —

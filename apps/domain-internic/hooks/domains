@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+#: domains — the account's domains, read off the InterNIC portal:  ./bbox domain-internic domains
+# Pipes the app's own CLI (apps/domain-internic/cli.py) into its container, or — on an office that does not
+# run it — into the credential plane's container, at the linked office's door (../where.sh).
+set -uo pipefail
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
+. "${REPO_ROOT}/scripts/lib.sh"
+case "${1:-}" in -h|--help) sed -n 's/^#: //p' "${BASH_SOURCE[0]}"; exit 0 ;; esac
+. "${SCRIPT_DIR}/../where.sh"
+di_cli domains "$@"

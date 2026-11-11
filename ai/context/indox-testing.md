@@ -1,7 +1,7 @@
 # INDOX testing — how the suites, the CLI, and CI relate
 
-Authored 2026-07-07 (release-v2-lockin Phase 1b). Companion: `release-lockin-plan.md`,
-`indox-v2.1-state-machine-plan.md`.
+Authored 2026-07-07 (release-v2-lockin Phase 1b). Companion: `release-lockin-plan.md` (since 2026-11-10 in
+`legacy/ai-context-20261110/`), `indox-v2.1-state-machine-plan.md`.
 
 ## The one entrypoint
 

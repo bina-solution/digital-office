@@ -1,0 +1,84 @@
+# office-routes — the office's own routes, as a platform service (see app.py's docstring, DGO-543).
+#
+# Three things about this compose are load-bearing and easy to get wrong:
+#
+#  * NO HOST MOUNT AT ALL, deliberately. The first version of this app mounted the machine's root
+#    read-only to read its addresses; measured 2026-10-12, that answers with the CONTAINER's
+#    namespace (`/proc/net/route` → eth0 172.18.0.1), so it offered an address no phone could dial.
+#    Which addresses the machine holds is a fact of the machine: the screen takes what the office
+#    already declares about it, SEARCHES for it by knocking (`/api/find`, accepting only this
+#    office's own edge), and the Windows side — where the machine is — refuses to open its rule for
+#    anything else. No host root, no engine socket.
+#
+#  * NO OPENED PORT ON THE HOST, and no capability of its own. The edge routes to this service over
+#    traefik-network like every other app; the doors this app OPENS are the office's, rendered by the
+#    compiler, and the machine's firewall is converged where the machine is (scripts/windows/
+#    firewall-converge.ps1, reading `.generated/network.json`).
+#
+#  * THE IMAGE NAME IS THE APP'S ID — `office-routes`, the name CI publishes for this app directory
+#    (one image per app that carries a Dockerfile, .github/workflows/images.yml). It was `network`
+#    while the app was still called that, and an image name CI never publishes is a fresh machine
+#    that cannot pull it.
+services:
+  # THE NAME OF THIS SERVICE IS THE APP'S ID, and it is deliberately not the everyday word
+  # `network`: (a) this engine carries a SECOND stack of an older platform on the same
+  # `traefik-network`, with a service called `network` of its own — measured 2026-10-12, the name resolved to TWO addresses and both the console's
+  # proxy and this app's first call to the control plane landed on the other office (the tile showed
+  # «Platform-OS · Network», and the control plane answered 404 for an endpoint it does not have).
+  # A name only this office answers to is what makes the app reachable at all.
+  office-routes:
+    # The image CI publishes for this commit; `pull_policy: missing` means a checkout that has built
+    # it is untouched, and `build:` stays as the fallback.
+    image: ghcr.io/bina-solution/digital-office/office-routes:${IMAGE_TAG:-latest}
+    pull_policy: missing
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: office-routes-${DEPLOYMENT_NAME:-bina-deployment}
+    hostname: office-routes
+    restart: unless-stopped
+    environment:
+      - SENTRY_DSN=${OFFICE_ROUTES_SENTRY_DSN:-}
+      - DEPLOYMENT_NAME=${DEPLOYMENT_NAME:-bina-deployment}
+      # the one writer of the office's state blocks — every change this screen makes goes through it,
+      # BY THE DEPLOYMENT-SUFFIXED NAME (`app-management-hp`): the bare `app-management` is answered
+      # by two containers on this engine, and app.py refuses the bare name on its own as well.
+      - APP_MANAGEMENT_URL=${APP_MANAGEMENT_URL:-http://app-management-${DEPLOYMENT_NAME:-bina-deployment}:8080}
+      # THIS APP'S OWN HOST — the platform's way of telling an app where it is served (`app.json`,
+      # `routing[].sso.base_url_env`). `/api/find` needs it and nothing else to recognise an answer
+      # as this office's: an office's edge sends an unknown caller to `auth.<this office's domain>`.
+      - OFFICE_ROUTES_BASE_URL=${OFFICE_ROUTES_BASE_URL:-office-routes.${DEPLOYMENT_DOMAIN:-localhost}}
+      - OFFICE_ROUTES_EDGE_PORT=${OFFICE_ROUTES_EDGE_PORT:-80}
+      - OFFICE_ROUTES_STATE_DIR=/data
+    volumes:
+      - office_routes_state:/data
+    networks:
+      - traefik-network
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request,sys;sys.exit(0 if urllib.request.urlopen('http://localhost:8080/healthz',timeout=8).status==200 else 1)"]
+      interval: ${HEALTHCHECK_INTERVAL:-30s}
+      timeout: ${HEALTHCHECK_TIMEOUT:-10s}
+      retries: 3
+      start_period: 15s
+    deploy:
+      resources:
+        limits:
+          # Two screen reads and, when somebody opens a route, one call to the control plane that
+          # waits for a converge. The ceiling is set by that wait, not by this service's own work.
+          cpus: '0.2'
+          memory: 128M
+        reservations:
+          cpus: '0.01'
+          memory: 24M
+    logging:
+      driver: ${LOGGING_DRIVER:-json-file}
+      options:
+        max-size: 5m
+        max-file: '3'
+
+volumes:
+  office_routes_state:
+
+networks:
+  traefik-network:
+    external: true

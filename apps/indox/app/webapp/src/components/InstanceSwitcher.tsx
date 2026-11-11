@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { api, InstanceAccount, InstanceDetail, NewInstanceSpec } from '../api';
+import { api, defaultInstanceId, InstanceAccount, InstanceDetail, NewInstanceSpec } from '../api';
 import { Ic } from './DataGrid';
 import { IC } from '../icons';
 
@@ -96,7 +96,11 @@ export default function InstanceSwitcher({
 
   if (accounts.length === 0) return null;
 
-  const current = accounts.find((a) => a.id === active) ?? accounts[0];
+  // a link naming an id the registry does not hold shows the office's own default, not whichever sorts first
+  const current =
+    accounts.find((a) => a.id === active) ??
+    accounts.find((a) => a.id === defaultInstanceId(accounts)) ??
+    accounts[0];
 
   async function select(id: string) {
     if (id === active) {
@@ -266,7 +270,7 @@ export default function InstanceSwitcher({
             {/* ONLY THIS INSTANCE'S OWN NUMBERS. `detail` survives an instance change while the
                 refetch is in flight, so the panel used to paint the PREVIOUS instance's figures
                 under the new one's name — observed: לוי's panel reading 26,006 מסמכים, which is
-                הכהן's count, for as long as the request took. The payload names the instance it
+                הדוגמה's count, for as long as the request took. The payload names the instance it
                 describes, so the render simply waits until that name is the one on screen. */}
             {detail && detail.account.id === active ? (
               <dl className="kv" style={{ padding: '0 6px' }}>

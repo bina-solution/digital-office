@@ -20,7 +20,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/solomonBoltin/deployment-hacohen/packaging/dgo/internal/yamlish"
+	"github.com/bina-solution/digital-office/packaging/dgo/internal/yamlish"
 )
 
 // ── the oracle: platform-base/console/app.py itself, answering through Flask's test client ────────
@@ -410,8 +410,8 @@ func TestNotFoundIsWerkzeugs(t *testing.T) {
 
 // TestConditionalAnswersMatchFlask: the validators a browser sends back, as app.py answers them —
 // 304 for a match, If-None-Match winning over If-Modified-Since, 412 for an If-Match that does not
-// hold (and for `*`, which werkzeug never counts), and a 200 for the ETag of a compressed answer,
-// which app.py never matches.
+// hold (and for `*`, which werkzeug never counts) — and the ETag of a compressed answer, sent back with
+// the same coding offered, is a 304 too (DGO-611: it was a 200 of the whole file on every load).
 func TestConditionalAnswersMatchFlask(t *testing.T) {
 	o := newOffice(t)
 	paths := []string{"/app.js", "/no/such/thing"}
@@ -438,12 +438,26 @@ func TestConditionalAnswersMatchFlask(t *testing.T) {
 			{"If-Modified-Since", last}, {"If-Modified-Since", earlier}, {"If-Modified-Since", later}, {"If-Modified-Since", ""},
 			{"If-None-Match", `"other"`, "If-Modified-Since", last}, {"If-None-Match", etag, "If-Modified-Since", earlier},
 			{"If-None-Match", etag, "Accept-Encoding", "deflate"}, {"If-Match", `"nope"`, "Accept-Encoding", "deflate"},
+			{"If-Match", etag, "Accept-Encoding", "deflate"}, {"If-Match", compressed, "Accept-Encoding", "deflate"},
 			{"If-Range", etag},
 		} {
 			reqs = append(reqs, fetch(p, hs...), ask("HEAD", p, hs...))
 		}
 	}
 	answers := compare(t, o, o.env(), reqs)
+	revalidated := 0
+	for i, r := range reqs {
+		if r.Path == paths[0] && len(r.Headers) == 2 && r.Headers[0][0] == "If-None-Match" &&
+			strings.HasSuffix(r.Headers[0][1], `:deflate"`) && r.Headers[1] == [2]string{"Accept-Encoding", "deflate"} {
+			revalidated++
+			if answers[i].Status != http.StatusNotModified {
+				t.Errorf("%s %s with its compressed ETag back: %d — must be a 304", r.Method, r.Path, answers[i].Status)
+			}
+		}
+	}
+	if revalidated != 2 {
+		t.Fatalf("the corpus must revalidate %s with its compressed ETag (GET and HEAD), found %d", paths[0], revalidated)
+	}
 	codes := map[int]int{}
 	for _, a := range answers {
 		codes[a.Status]++
@@ -575,6 +589,10 @@ func TestJSONRoutesMatchFlask(t *testing.T) {
 		o.writeJSON(t, "peers.d/zz--marked.json", obj{"office": "zz", "alias": "m", "module": obj{"id": "m.zz", "order": 2,
 			"remote": obj{"office": "zz", "label": "written by hand"}}})
 		o.write(t, "peers.d/notes.txt", "not a placement")
+		// a peer file that is not an object is no placement: skipped, and the rest of the rail stands (DGO-611 —
+		// app.py raised on `.get`, and /api/modules was a 500 with no tiles at all)
+		o.writeJSON(t, "peers.d/a-list.json", []any{"a"})
+		o.write(t, "peers.d/b-scalar.json", `"a placement"`)
 		o.writeJSON(t, "peers.d/link.json", obj{"at": at, "offices": obj{
 			"vps1": obj{"ok": false, "hop": "tunnel", "why": "המנהרה נפלה."}, "macbook": obj{"ok": true, "hop": "", "why": ""}}})
 		o.write(t, "modules.yaml", "- id: settings\n  name: הגדרות מסוף\n  icon: monitor\n  order: 13\n- id: framed\n  embed: /a/x/\n  order: 1\n- id: about\n  order: 13\n")
@@ -626,10 +644,6 @@ func TestWhatThisPortCannotReadIsTheContainers(t *testing.T) {
 		}, [2]int{500, 500}},
 		{"a registry that is a mapping", func(t *testing.T, o office) {
 			o.writeYAML(t, "generated/console.modules.yaml", obj{"id": "a"})
-		}, [2]int{500, 500}},
-		{"a peer file holding a list", func(t *testing.T, o office) {
-			o.writeYAML(t, "generated/console.modules.yaml", []any{obj{"id": "a"}})
-			o.writeJSON(t, "peers.d/x.json", []any{"a"})
 		}, [2]int{500, 500}},
 		{"offices that are a list", func(t *testing.T, o office) {
 			o.writeYAML(t, "generated/console.modules.yaml", []any{remoteTile("bina", "macbook", "המקבוק", 900)})

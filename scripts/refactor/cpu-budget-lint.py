@@ -40,7 +40,9 @@ On an emulated CPU it holds every capped service instead, uncapped (`cpus: '0'`)
 machine alone, and not of how many cores it boots with.
 
 The sum is computed from the app compose files, not from `dc config`, for the same reason G30 does:
-the gate must run on a checkout with no engine. A reservation is a floor, not a cap, and is ignored.
+the gate must run on a checkout with no engine. A floor (`reservations.cpus`, or `x-cpu-floor`, which no
+container's configuration carries: floor_of) is not a cap: it is not summed, and the plan holds it.
+An office whose profile was chosen for another claim says its own cores with PERF_HOST_CPUS (envelope).
 Exit 0 = within budget. Exit 1 = over budget, or the profile has no CPU envelope.
 """
 import os
@@ -81,13 +83,33 @@ def to_cpus(v, env):
         return None
 
 
+FLOOR_X = "x-cpu-floor"          # a service's floor for THIS budget alone: never part of its container (floor_of)
+
+
+def floor_of(svc, env):
+    """A service's own floor: `deploy.resources.reservations.cpus`, or its `x-cpu-floor`, whichever says more.
+
+    Two spellings of one claim, "below this it cannot do its job", read by this budget alone (docker does
+    not enforce a CPU reservation outside swarm). They differ in what they cost to SAY. A container's
+    identity is a hash of its service's configuration as compose serialises it, and a `reservations`
+    block is in it — a block that holds `cpus: 0` changes it too — so declaring or moving one re-creates
+    the container at its office's next converge. An `x-` field is not: compose-go's ServiceConfig keeps
+    extensions out of its JSON (`json:"-"`), and that JSON is what docker/compose's ServiceHash hashes
+    (measured in their source, 2026-11-10). For a service whose re-creation costs work in flight — bina-ds,
+    where every agent lane of an office lives — the floor is an `x-cpu-floor`, set per office from .env,
+    and reaches the kernel through `apply` (`docker update`) with nothing re-created (DGO-1730)."""
+    res = (svc.get("deploy") or {}).get("resources") or {}
+    return max(to_cpus((res.get("reservations") or {}).get("cpus"), env) or 0.0,
+               to_cpus(svc.get(FLOOR_X), env) or 0.0)
+
+
 def declared(env, enabled):
     """[(cpus, service, app, raw, floor)] for every capped service of every enabled app.
 
-    `floor` is the service's OWN declared reservation (`deploy.resources.reservations.cpus`) —
-    compose's word for "at least this much", and the one number in this file a service gets to say
-    about itself. It is never above the service's own cap: a reservation larger than the limit is
-    the limit. See `scale_for` for why a floor matters (DGO-523)."""
+    `floor` is the service's OWN declared floor (`floor_of`: its `deploy.resources.reservations.cpus`,
+    compose's word for "at least this much", or its `x-cpu-floor`) — the one number in this file a
+    service gets to say about itself. It is never above the service's own cap: a floor larger than the
+    limit is the limit. See `scale_for` for why a floor matters (DGO-523)."""
     rows = []
     for root in ROOTS:
         for app_dir in sorted((REPO / root).iterdir()):
@@ -102,9 +124,36 @@ def declared(env, enabled):
                 raw = (res.get("limits") or {}).get("cpus")
                 c = to_cpus(raw, env)
                 if c:
-                    floor = to_cpus((res.get("reservations") or {}).get("cpus"), env) or 0.0
-                    rows.append((c, sname, app_dir.name, str(raw), min(floor, c)))
+                    rows.append((c, sname, app_dir.name, str(raw), min(floor_of(svc, env), c)))
     return rows
+
+
+def envelope(p, env, machine=None):
+    """(host_cpus, cpu_overcommit, who said the cores): a profile's CPU envelope, its cores said per office.
+
+    A profile bundles three claims about a machine: its memory, its cores, and the knobs sized for both (`env:`).
+    An office picks the profile whose claim BINDS it. The HP runs `ci-small` for its 9.7 GiB WSL VM; `wsl-10g`'s
+    memory budget is smaller, and switching changes HEALTHCHECK_INTERVAL and with it nearly every container's
+    configuration. But ci-small says 4 cores on a 6-core VM, so the HP's CPU budget was 16 where the machine gives
+    24. Every cap was scaled by 0.564, the agents' container to 1.13 of a core (DGO-1730).
+
+    `PERF_HOST_CPUS` in .env is the cores this office's CPU budget is for, and nothing else: the rest of the
+    profile stands, and the plan reaches the containers by `docker update`, so nothing is re-created.
+
+    It is a count of THIS machine's cores, so it is held to one. It must be a plain number (`6`, `5.5`, not `inf`,
+    `1e9` or `6_0`, which float() reads as 60), and no more than the machine has: a budget sized for cores that
+    are not there scales nothing down. That was the 2026-09-30 condition, 47 vCPU of caps contending on 4 cores.
+    A refused value is said, and the profile's cores stand."""
+    said = str(env.get("PERF_HOST_CPUS") or "").strip()
+    profile = (p.get("host_cpus"), p.get("cpu_overcommit"))
+    if not said:
+        return (*profile, "the profile")
+    if not re.fullmatch(r"\d+(\.\d+)?", said) or float(said) <= 0:
+        return (*profile, f"the profile; PERF_HOST_CPUS={said!r} is no count of cores, ignored")
+    machine = os.cpu_count() if machine is None else machine
+    if machine and float(said) > machine:
+        return (*profile, f"the profile; PERF_HOST_CPUS={said} is more than this machine's {machine} cores, ignored")
+    return float(said), p.get("cpu_overcommit"), "PERF_HOST_CPUS in .env"
 
 
 def scale_for(rows, budget):
@@ -180,7 +229,7 @@ def render_overlay(rows, budget, path, cores=None, slow=None):
     head = ("# GENERATED by scripts/perf-profile-apply — do not edit. Gate G65 (cpu-budget-lint.py).\n"
             f"# Enabled services declare {total:.2f} vCPU of caps; the profile's budget is {budget:.2f}\n"
             f"# (host_cpus x cpu_overcommit), so the caps are scaled by {scale:.3f} (floor {FLOOR}).\n"
-            + (f"# {len(held)} service(s) declare a floor of their own (reservations.cpus) and are held AT\n"
+            + (f"# {len(held)} service(s) declare a floor of their own (reservations.cpus or x-cpu-floor), held AT\n"
                f"# it, the budget taken out of the rest first: "
                + ", ".join(f"{s} {f:g}" for s, f in sorted(held)) + ".\n" if held else "")
             + f"# The plan's own sum is {sum(plan.values()):.2f} vCPU.\n"
@@ -272,6 +321,53 @@ def self_test():
         checks.append(("emulated: no YAML anchors or aliases", "&id" not in txt and "*id" not in txt))
         checks.append(("emulated: G65 still reads the plan as current, and as the emulated one",
                        f"declare {total:.2f} vCPU" in txt[:400] and "budget is 2.00" in txt[:400] and EMULATED in txt[:400]))
+    # the floor's two spellings (floor_of): the larger wins, an .env value reaches it, an unset one is no floor
+    env = {"AGENT_FLOOR": "1.5"}
+    for svc, want, what in (
+            ({"deploy": {"resources": {"reservations": {"cpus": "0.25"}}}}, 0.25, "a reservation is a floor"),
+            ({"x-cpu-floor": "0.75"}, 0.75, "an x-cpu-floor is a floor"),
+            ({"x-cpu-floor": "0.1", "deploy": {"resources": {"reservations": {"cpus": "0.3"}}}}, 0.3,
+             "both said: the larger holds"),
+            ({"x-cpu-floor": "${AGENT_FLOOR:-0}"}, 1.5, "an x-cpu-floor from .env holds"),
+            ({"x-cpu-floor": "${UNSET_FLOOR:-0}"}, 0.0, "an x-cpu-floor whose variable is unset is no floor"),
+            ({}, 0.0, "no floor said, none taken")):
+        checks.append((f"floor_of: {what}", floor_of(svc, env) == want))
+    # the envelope's cores: the profile's, unless this office's .env says its own — a count of THIS machine's
+    prof = {"host_cpus": 4, "cpu_overcommit": 4.0}
+    for said, want, what in ((None, 4, "no PERF_HOST_CPUS: the profile's cores"),
+                             ("6", 6.0, "PERF_HOST_CPUS=6 on a 6-core machine: six, the ratio the profile's"),
+                             ("5.5", 5.5, "a fraction of the machine is a claim"),
+                             ("0", 4, "0 is no claim"),
+                             ("six", 4, "a word is refused"),
+                             ("inf", 4, "inf is refused"),
+                             ("1e9", 4, "1e9 is refused"),
+                             ("6_0", 4, "6_0 (float() reads 60) is refused"),
+                             ("60", 4, "more cores than the machine has is refused")):
+        got = envelope(prof, {"PERF_HOST_CPUS": said} if said else {}, machine=6)
+        checks.append((f"envelope: {what}", got[0] == want and got[1] == 4.0
+                       and (said in (None, "6", "5.5") or "ignored" in got[2] or said == "0")))
+    with tempfile.TemporaryDirectory() as d:
+        # the wiring: declared() reads a service's x-cpu-floor, its value from .env, on a checkout made here
+        global REPO
+        saved, REPO = REPO, pathlib.Path(d)
+        try:
+            (REPO / "platform-base").mkdir()
+            (REPO / "apps" / "agents").mkdir(parents=True)
+            (REPO / "apps" / "agents" / "docker-compose.yml").write_text(
+                "services:\n  agents:\n    deploy: {resources: {limits: {cpus: '${AGENTS_CPUS:-2}'}}}\n"
+                "    x-cpu-floor: ${AGENTS_FLOOR:-0}\n", encoding="utf-8")
+            got = declared({"AGENTS_FLOOR": "2"}, {"agents"})
+            unset = declared({}, {"agents"})
+        finally:
+            REPO = saved
+        checks.append(("declared: a service's x-cpu-floor from .env is its floor",
+                       got == [(2.0, "agents", "agents", "${AGENTS_CPUS:-2}", 2.0)] and unset[0][4] == 0.0))
+        # the HP's case: the agents' container declares 2, the rest is far over a budget of 4 — its floor holds it
+        p = pathlib.Path(d) / "agents.yml"
+        render_overlay(got + [(6.0, "rest", "x", "6", 0.0)], 4.0, p, cores=6, slow=False)
+        y = yaml.safe_load(p.read_text(encoding="utf-8"))
+        checks.append(("native: a floor equal to its cap keeps the whole cap; the rest shares what is left",
+                       y[PLAN]["agents"] == 2.0 and y[PLAN]["rest"] <= 2.0 and sum(y[PLAN].values()) <= 4.0))
     real = subprocess.run
     for said, want in (("qemu\n", True), ("kvm\n", False), ("none\n", False), (None, False)):
         def fake(*a, said=said, **k):
@@ -312,7 +408,7 @@ def main():
         print(f"G65 FAIL — unknown performance profile {prof!r} (known: {', '.join(sorted(profiles))})")
         return 1
     p = profiles[prof] or {}
-    host_cpus, ratio = p.get("host_cpus"), p.get("cpu_overcommit")
+    host_cpus, ratio, said = envelope(p, env)
     if not host_cpus or not ratio:
         print(f"G65 FAIL — profile {prof!r} declares no CPU envelope (host_cpus + cpu_overcommit).")
         print("  Add both beside host_mem / mem_overcommit in platform/profiles/perf-profiles.yml.")
@@ -320,15 +416,15 @@ def main():
     budget = float(host_cpus) * float(ratio)
     rows = declared(env, enabled)
     total = sum(c for c, *_ in rows)
-    print(f"G65 — profile {prof!r}: host_cpus {host_cpus} x{float(ratio):g} = {budget:g} vCPU budget")
+    print(f"G65 — profile {prof!r}: host_cpus {float(host_cpus):g} ({said}) x{float(ratio):g} = {budget:g} vCPU budget")
     # The envelope is a claim about THIS machine. A profile whose host_cpus is more than the box has
-    # renders a plan sized for a machine that is not there: fireplace (2 vCPU) ran `ci-small`
+    # renders a plan sized for a machine that is not there: examplef (2 vCPU) ran `ci-small`
     # (host_cpus 4, budget 16) for weeks, and the recorder's cap came out at 0.48 of a core
-    # (issues/fireplace-perf-profile-declares-four-cores-on-a-two-core-box.yaml, 2026-10-26). Said,
+    # (issues/examplef-perf-profile-declares-four-cores-on-a-two-core-box.yaml, 2026-10-26). Said,
     # not failed: CI renders on runners of every size, and the selector is where the choice is made.
     machine = os.cpu_count() or 0
     if machine and float(host_cpus) > machine:
-        print(f"G65 WARNING — profile {prof!r} declares host_cpus {host_cpus}, this machine has {machine}: "
+        print(f"G65 WARNING — profile {prof!r} declares host_cpus {float(host_cpus):g} ({said}), this machine has {machine}: "
               f"the budget is {budget / machine:.1f}x the box. `python3 platform/manager/select-profile.py "
               f"--explain` names the profile whose envelope fits; PERFORMANCE_PROFILE in .env adopts it.")
     print(f"      {len(enabled)} enabled app(s), {len(rows)} capped service(s), declared sum {total:.2f} vCPU")

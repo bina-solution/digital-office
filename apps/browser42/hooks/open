@@ -1,0 +1,22 @@
+#!/usr/bin/env bash
+#: open <app> <url> [--slug <slug>] [--sentence <text>] — a page a PERSON must act on, brought to whoever looks
+# open — what an app runs when it needs a person in the office browser (DGO-1336): its own «Continue
+# with Google», a consent, a code typed by a human.
+#
+#   bbox b42 open bina-claude "https://claude.com/cai/login/app-google-auth?…" --slug claude-signin
+#   → {"ok": true, "slug": "claude-signin", "for": "bina-claude", "handoff": {"state": "needed", …}, …}
+#
+# The browser is woken first (a sleeping browser's close is a no-op and its restored tabs keep their
+# tags), every tab of the slug is closed, one tab opens at the address, and the hand-off is RECORDED —
+# `needed`, for <app>, with the sentence the person reads (apps/browser42/handoff.py). Every console that
+# shows this browser reads that record (GET /handoff/, and the task runner's GET /v1/handoffs across a
+# link) and switches the person to the browser while it is needed. Whoever finishes the errand ends it:
+# `bbox b42 handoff <slug> --done`, or `--failed "<sentence>"`. The address is never printed or kept.
+set -euo pipefail
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
+. "${REPO_ROOT}/scripts/lib.sh"   # say, die, colors, DOCKER_HOST
+
+BROWSER="$(docker ps --filter name=browser42-browser --format '{{.Names}}' | head -1)"
+[ -n "${BROWSER}" ] || die "browser42-browser not running — run 'bbox run' first"
+docker exec -i "${BROWSER}" python3 /group-manager.py handoff-open "$@"

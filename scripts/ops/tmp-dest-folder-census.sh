@@ -19,7 +19,7 @@ probe () {
   fi
   local t0 t1 out n
   t0=$(date +%s%3N)
-  out=$($D exec -i drive-shlomo-laptop python3 -c '
+  out=$($D exec -i drive-owner-laptop python3 -c '
 import json,sys,urllib.request
 b=sys.stdin.read().encode()
 r=urllib.request.Request("http://127.0.0.1:8975/list",data=b,headers={"Content-Type":"application/json"})
@@ -34,16 +34,16 @@ except Exception as e:
 }
 
 echo "=== SCANNED family ==="
-probe "to_sync  1stuMS.. srukot-lifney-shemot" 1REDACTEDdrivexxxxxxxxxxxxxxx0094 20000 "$CUT"
-probe "synced   1YpapJ.. srukot-hitzliach"     1REDACTEDdrivexxxxxxxxxxxxxxx0002 20000 "$CUT"
-probe "failed   1m25Rd.. srukot-nichshal(B)"   1REDACTEDdrivexxxxxxxxxxxxxxx0009 20000 "$CUT"
-probe "REGISTRY-failed 11rj5z.. acharei-shemot" 1REDACTEDdrivexxxxxxxxxxxxxxx0014 20000 "$CUT"
+probe "to_sync  1stuMS.. srukot-lifney-shemot" 1REDACTEDdrivexxxxxxxxxxxxxxx0095 20000 "$CUT"
+probe "synced   1YpapJ.. srukot-hitzliach"     1REDACTEDdrivexxxxxxxxxxxxxxx0080 20000 "$CUT"
+probe "failed   1m25Rd.. srukot-nichshal(B)"   1REDACTEDdrivexxxxxxxxxxxxxxx0007 20000 "$CUT"
+probe "REGISTRY-failed 11rj5z.. acharei-shemot" 1REDACTEDdrivexxxxxxxxxxxxxxx0012 20000 "$CUT"
 echo
 echo "=== CHAT-EXPORT family ==="
-probe "to_sync  1DYzDE.. yetzu-chat-lifney"    1REDACTEDdrivexxxxxxxxxxxxxxx0098 20000 "$CUT"
-probe "synced   1xthre.. yetzu-chat-acharei"   1REDACTEDdrivexxxxxxxxxxxxxxx0093 20000 "$CUT"
-probe "failed   1PYaVJ.. yetzu-chat-nichshal"  1REDACTEDdrivexxxxxxxxxxxxxxx0015 20000 "$CUT"
+probe "to_sync  1DYzDE.. yetzu-chat-lifney"    1REDACTEDdrivexxxxxxxxxxxxxxx0100 20000 "$CUT"
+probe "synced   1xthre.. yetzu-chat-acharei"   1REDACTEDdrivexxxxxxxxxxxxxxx0094 20000 "$CUT"
+probe "failed   1PYaVJ.. yetzu-chat-nichshal"  1REDACTEDdrivexxxxxxxxxxxxxxx0013 20000 "$CUT"
 echo
 echo "=== unbounded (no window) totals, for headroom sizing ==="
-probe "synced   1YpapJ.. FULL"                 1REDACTEDdrivexxxxxxxxxxxxxxx0002 20000 ""
-probe "synced   1xthre.. FULL"                 1REDACTEDdrivexxxxxxxxxxxxxxx0093 20000 ""
+probe "synced   1YpapJ.. FULL"                 1REDACTEDdrivexxxxxxxxxxxxxxx0080 20000 ""
+probe "synced   1xthre.. FULL"                 1REDACTEDdrivexxxxxxxxxxxxxxx0094 20000 ""

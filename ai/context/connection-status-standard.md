@@ -150,7 +150,7 @@ WireGuard kept counting it as sent.** Steps that proved it:
 1. A local listener test (the peer's endpoint pointed at another container for 20 s) showed the
    handshake initiations **are** transmitted: `RX … from ('172.18.0.2', 51820) len 148 type 1`.
 2. `tcpdump` on the office's own machine showed each one leaving as
-   `192.168.5.15.51820 > 31.97.196.82.51820: UDP, length 148` — out of the VM, on the wire.
+   `192.168.5.15.51820 > 93.184.216.5.51820: UDP, length 148` — out of the VM, on the wire.
 3. `tcpdump` on the server, and its ufw counter, saw **none** of them — while 148-byte packets of the
    same shape, from the same machine and from another container, sent to the same address and port,
    arrived every time (proved by the counter moving by exactly the number sent).

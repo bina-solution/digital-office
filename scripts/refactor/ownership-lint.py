@@ -79,7 +79,7 @@ def apps_with_unnamed_compose():
     only through `app.json` `compose` — yet still renders its routing and cpu-budget overrides — so the
     office's WHOLE compose project becomes invalid the moment the app is enabled («service X has neither
     an image nor a build context specified»), and every compose call on that office fails. Measured on
-    fireplace, 2026-10-22: chimney-services, enabled by rel10, stopped every `dc` there (FPG-35's run).
+    examplef, 2026-10-22: chimney-services, enabled by rel10, stopped every `dc` there (EXF-35's run).
     A blueprint or a library runs no services (the compiler's validate refuses `compose` on them), so
     they are not asked. Returns (each finding as the line that fixes it, how many manifests were read)."""
     out, scanned = [], 0

@@ -58,6 +58,7 @@ var binaAsk, binaTell;
     + "@media (pointer:coarse){.bask-btn{height:44px}.bask-field input{height:44px}}"
     + "@media (max-height:399px){.bask{padding:8px}.bask-card{padding:12px}.bask-acts{margin-top:10px}}"   // the side menu's own short frame
     + "#bina-tell{position:fixed;inset-block-end:16px;inset-inline-start:16px;z-index:2147483001;display:grid;gap:8px;max-width:min(420px,calc(100vw - 32px))}"
+    + "#bina-tell[data-at~=top]{inset-block-start:16px;inset-block-end:auto}#bina-tell[data-at~=end]{inset-inline-start:auto;inset-inline-end:16px}"   // where it covers nothing (place())
     + ".btell{--c:var(--ok);padding:10px 14px;border-radius:12px;background:color-mix(in srgb,var(--c) 14%,var(--surface));color:var(--ink);border:1px solid color-mix(in srgb,var(--c) 38%,var(--surface));border-inline-start:4px solid var(--c);font:13px/1.45 var(--font,system-ui,sans-serif);box-shadow:var(--shadow-lg);cursor:pointer;text-align:start}"
     + ".btell.warn{--c:var(--lime)}.btell.bad{--c:var(--red)}"   // --ok and --red, not the bare hues: they are the steps that are lifted on the dark ground
     + ".btell small{display:block;margin-top:2px;font-size:11.5px;color:var(--muted);overflow-wrap:anywhere;unicode-bidi:plaintext}"
@@ -162,6 +163,47 @@ var binaAsk, binaTell;
     });
   };
 
+  // The notice never sits on a control of the page (DGO-618): it keeps its corner while that covers nothing, and
+  // otherwise takes the first corner that does — at every frame size, a desktop window of 380 x 260 included,
+  // where the bottom corner is where a window keeps its buttons. With no corner free at its full width, the corners
+  // again at two thirds and at half of it (a narrower notice fits over a title, beside a window's ✕); with none
+  // free at all, the place that covers fewest.
+  var CONTROLS = "button,a[href],input:not([type=hidden]),select,textarea,summary,[role=button],[tabindex]:not([tabindex='-1'])";
+  function covered(box) {
+    var b = box.getBoundingClientRect(), n = 0;
+    if (b.width < 2 || b.height < 2) return 0;
+    doc.querySelectorAll(CONTROLS).forEach(function (c) {
+      var r = c.getBoundingClientRect();     // the cheap test first: on a screen of thousands of rows most are far away
+      if (Math.min(b.right, r.right) - Math.max(b.left, r.left) <= 1 || Math.min(b.bottom, r.bottom) - Math.max(b.top, r.top) <= 1) return;
+      // inside the notice, in a part of the page made inert (a window the page put over it), or not drawn: not a control here
+      if (box.contains(c) || c.closest("[inert]") || (c.checkVisibility && !c.checkVisibility({ checkVisibilityCSS: true }))) return;
+      n++;
+    });
+    return n;
+  }
+  function put(box, at, w) {
+    if (at) box.setAttribute("data-at", at); else box.removeAttribute("data-at");
+    box.style.maxWidth = w;
+    // a top spot lets go of the bottom, written on the element: a page's own rule that lifts the notice off its bar
+    // (`body:has(…) #bina-tell{inset-block-end:…}`) out-ranks the attribute, and the box stretched to the full height
+    box.style.insetBlockEnd = at.indexOf("top") < 0 ? "" : "auto";
+  }
+  function place(box) {
+    var best = null;
+    ["", "min(280px,calc((100vw - 32px) * .66))", "min(210px,calc((100vw - 32px) * .5))"].some(function (w) {
+      return ["", "end", "top", "top end"].some(function (at) {
+        put(box, at, w);
+        var n = covered(box);
+        if (!best || n < best.n) best = { at: at, w: w, n: n };
+        return n === 0;
+      });
+    });
+    put(box, best.at, best.w);
+  }
+  var placing = 0;
+  function replace() { var box = doc.getElementById("bina-tell"); if (box && box.firstChild) place(box); }
+  window.addEventListener("resize", function () { clearTimeout(placing); placing = setTimeout(replace, 120); });
+
   // The third word is how long the notice stays (ms) — or what more it carries: { ms, more, act, stay }.
   //   more  the service's own sentence, on a line of its own under the notice's words
   //   act   [label, fn] — one way on from the notice (an undo, a refresh): pressing it runs fn and takes the notice down
@@ -178,12 +220,13 @@ var binaAsk, binaTell;
     if (o.act) {
       var go = el("button", "", o.act[0]);
       go.setAttribute("type", "button");
-      go.addEventListener("click", function (e) { e.stopPropagation(); n.remove(); o.act[1](); });
+      go.addEventListener("click", function (e) { e.stopPropagation(); n.remove(); replace(); o.act[1](); });
       n.appendChild(go);
     }
-    n.addEventListener("click", function () { n.remove(); });
+    n.addEventListener("click", function () { n.remove(); replace(); });
     box.appendChild(n);
-    if (!o.stay) setTimeout(function () { n.remove(); }, o.ms || (kind === "bad" ? 9000 : 5200));
+    place(box);
+    if (!o.stay) setTimeout(function () { n.remove(); replace(); }, o.ms || (kind === "bad" ? 9000 : 5200));
     return n;
   };
 })();
@@ -212,13 +255,15 @@ function bytes(n) {
   if (n < 1073741824) return (n / 1048576).toFixed(1) + ' MB';
   return (n / 1073741824).toFixed(2) + ' GB';
 }
+// One of a unit is said as one, never «1 דקות» (Exampleu's «סבב אחרון», 2026-11-09, DGO-1502) — the same
+// `one()` every other count on this screen goes through.
 function ago(ts) {
   if (!ts) return '—';
   const d = Math.max(0, Math.floor(Date.now() / 1000) - ts);
-  if (d < 60) return d === 1 ? 'לפני שנייה' : 'לפני ' + d + ' שניות';
-  if (d < 3600) return 'לפני ' + Math.floor(d / 60) + ' דקות';
-  if (d < 86400) return 'לפני ' + Math.floor(d / 3600) + ' שעות';
-  return 'לפני ' + Math.floor(d / 86400) + ' ימים';
+  if (d < 60) return 'לפני ' + one(d, 'שנייה', 'שניות');
+  if (d < 3600) return 'לפני ' + one(Math.floor(d / 60), 'דקה', 'דקות');
+  if (d < 86400) return 'לפני ' + one(Math.floor(d / 3600), 'שעה', 'שעות');
+  return 'לפני ' + one(Math.floor(d / 86400), 'יום', 'ימים');
 }
 function stateChip(site) {
   const st = site.last_state || 'unknown';
@@ -290,6 +335,7 @@ async function overview(force) {
     const up = s.uptime || {};
     const f = s.findings || {};
     const v = s.visits || {};
+    const open = siteHref(s);
     return `<div class="site ${esc(s.last_state || 'unknown')}" data-id="${esc(s.id)}">
       <div class="top">
         <div>
@@ -310,6 +356,7 @@ async function overview(force) {
         <span class="badge ltr">${esc(s.machine)}</span>
         <span class="badge">${esc(ago(s.last_checked))}</span></div>
       ${s.last_error ? `<div class="finding error" style="margin:0"><div class="fd">${esc(s.last_error)}</div></div>` : ''}
+      ${open ? `<div class="actions-row"><a class="btn" href="${esc(open)}" target="_blank" rel="noopener">פתח אתר ↗</a></div>` : ''}
     </div>`;
   }).join('');
 
@@ -328,9 +375,15 @@ async function overview(force) {
       </div>
     </section>`;
   [...document.querySelectorAll('.site')].forEach((el) => {
-    el.onclick = () => go('#/s/' + el.dataset.id);
+    el.onclick = (e) => { if (!e.target.closest('a')) go('#/s/' + el.dataset.id); };
   });
 }
+
+// Where «פתח אתר» goes: for a site the office serves, the office's own copy of it (`public/<id>/`,
+// relative, so it is `/a/sites/public/<id>/` in the console, behind its sign-in) — what the office
+// built, whatever a domain resolves to today; for a site its machine serves, its own address. Before
+// DGO-1591 a site with no domain had no way to be opened at all.
+function siteHref(s) { return s.preview || s.url || ''; }
 
 function emptyState() {
   return `<section class="card">
@@ -442,7 +495,7 @@ async function detail(id, tab, force) {
           <div class="note">${(s.findings || {}).warn || 0} אזהרות · ${(s.findings || {}).info || 0} מידע</div></div>
       </div>
       <div class="actions-row" style="margin-top:12px">
-        ${s.url ? `<a class="btn" href="${esc(s.url)}" target="_blank" rel="noopener">פתח אתר ↗</a>` : ''}
+        ${siteHref(s) ? `<a class="btn" href="${esc(siteHref(s))}" target="_blank" rel="noopener">פתח אתר ↗</a>` : ''}
         <button class="btn" data-act="probe">בדוק עכשיו</button>
         <button class="btn" data-act="collect">אסוף ביקורים</button>
         <button class="btn" data-act="scan">הרץ סריקות</button>

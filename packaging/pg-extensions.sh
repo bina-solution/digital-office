@@ -5,7 +5,7 @@
 # postgres:17 — but only if nothing depends on the extensions supabase's fork bundles. "Available"
 # is irrelevant; only `pg_extension` (actually created) can break a restore.
 set -uo pipefail
-D=shlomo-laptop
+D=owner-laptop
 
 for pair in "supabase-db:postgres" "authentik-postgres:authentik" "glitchtip-postgres:glitchtip" "n8n-postgres:n8n"; do
   c="${pair%%:*}"; u="${pair##*:}"

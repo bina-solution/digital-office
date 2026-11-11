@@ -1,0 +1,30 @@
+# Script references that are NOT a sibling in this tree, acknowledged one by one with their reason.
+# The script half of scripts/refactor/paths-exist.py (gate G0), beside external-paths.yaml.
+# EMPTY = every "${REPO_ROOT}/…" a script names is a file this tree ships. This list must reach empty.
+#
+# One entry names ONE reference in ONE file and says how many times that file makes it, so a second,
+# new reference of the same text still fails, and an entry nothing references any more fails too.
+# A file or a directory is never waived whole: a denial of a path, not of a script's judgment.
+script_refs:
+  - file: scripts/lib.sh
+    ref: '${REPO_ROOT}/data/.locks/rename-pending'
+    count: 2
+    why: >-
+      a lock NOTE, written on demand: note_pending_renames() creates it when apps are off or still
+      wait on an older domain, and run_pending_renames() reads it back on a later bbox run. It
+      exists only after a rename has something to note, so its absence is the normal case and not a
+      rotted path; data/.locks/ itself is created at run time for the same reason.
+  - file: scripts/test_follow.sh
+    ref: '${REPO_ROOT}/code.txt'
+    count: 1
+    why: >-
+      a fixture, not a file in this tree: the reference is inside a stub COMMAND the test writes for
+      its own temporary checkout, so REPO_ROOT there is that temp repo, and the test creates code.txt
+      in it (line 71, and again in every `fresh` it runs).
+  - file: scripts/ui-coverage/flow-qa.sh
+    ref: '${REPO_ROOT}/digital-office/sim/platform-sim.html'
+    count: 1
+    why: >-
+      a BUILD ARTIFACT of the dev-only workbench (node digital-office/sim/build.mjs), gitignored and
+      absent from a fresh clone by design. The line that names it is the guard that refuses to run
+      the offline lane and says what to build — the reference is the explanation, not a rot.

@@ -8,7 +8,7 @@ cd "$(dirname "$0")/.."
 LOGS_DIR="./development/system-logs"
 DATE=$(date +%Y-%m-%d)
 RETENTION=10
-SERVICES="traefik portainer n8n n8n-postgres redis redisinsight apitools chat ollama open-webui"
+SERVICES="traefik portainer n8n n8n-postgres redis redisinsight apitools chat ollama-engine open-webui"
 
 for s in $SERVICES; do
     mkdir -p "$LOGS_DIR/$s"

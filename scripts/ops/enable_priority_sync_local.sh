@@ -3,7 +3,7 @@
 #
 # THE ONE THING THAT MATTERS: `indox.actions.priority_sync.local` must be 'true' before
 # activePrioritySync is flipped. That setting is the only thing standing between this action and
-# the client's real ERP at https://msh.macomp.vip/... -- the router resolves per item:
+# the client's real ERP at https://erp.example.com/... -- the router resolves per item:
 #
 #   __priority_local === false ? <client ERP> : <priorityLocalApi01>
 #
@@ -16,8 +16,8 @@
 #        enable_priority_sync_local.sh off        -- flip back
 set -u
 DK="docker -H unix:///run/bbox-docker.sock"
-PSQL="$DK exec -i supabase-db-shlomo-laptop psql -U postgres -tAc"
-ENVF=/mnt/c/Users/user/Desktop/personalWorkspace/AutomateOs/deployment-hacohen/.env
+PSQL="$DK exec -i supabase-db-owner-laptop psql -U postgres -tAc"
+ENVF=/mnt/c/Users/user/Desktop/personalWorkspace/AutomateOs/digital-office/.env
 
 local_mode () {
   $PSQL "SELECT lower(btrim(value)) FROM public.settings
@@ -39,7 +39,7 @@ require_local () {
     echo "         CLIENT'S ERP. Set the setting first, or leave this off."
     exit 1
   fi
-  local w; w=$($DK exec -i n8n-postgres-shlomo-laptop psql -U hacohen -d n8n -tAc \
+  local w; w=$($DK exec -i n8n-postgres-owner-laptop psql -U example -d n8n -tAc \
     "SELECT active::text FROM workflow_entity WHERE id='priorityLocalApi01'" | tr -d '\r ')
   echo "  priorityLocalApi01 active = '${w:-<missing>}'"
   [ "$w" = "true" ] || { echo "  ABORT: the local mock is not active; there is nowhere safe to send."; exit 1; }
@@ -71,7 +71,7 @@ case "${1:-check}" in
 
     wu=$(grep -E '^BS_WEBHOOK_USER=' "$ENVF" | head -1 | cut -d= -f2-)
     wp=$(grep -E '^BS_WEBHOOK_PASS=' "$ENVF" | head -1 | cut -d= -f2-)
-    $DK exec -e I="$IDS" -e U="$wu" -e P="$wp" n8n-shlomo-laptop node -e '
+    $DK exec -e I="$IDS" -e U="$wu" -e P="$wp" n8n-owner-laptop node -e '
 const auth=Buffer.from(process.env.U+":"+process.env.P).toString("base64");
 fetch("http://localhost:5678/webhook/indox-drain",{method:"POST",
  headers:{"Content-Type":"application/json",Authorization:"Basic "+auth},

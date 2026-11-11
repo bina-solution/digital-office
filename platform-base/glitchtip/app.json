@@ -5,7 +5,12 @@
     "en": "GlitchTip"
   },
   "layer": 2,
+  "people": "admins",
   "kind": "service",
+  "page": "base",
+  "share": {
+    "local": "Error reports carry this office's stack traces and request data, secrets in their context among them: each office keeps its own, and none is read across a link."
+  },
   "version": "1.0.0",
   "summary": {
     "he": "מעקב שגיאות תואם Sentry",
@@ -60,7 +65,7 @@
     {
       "host": "glitchtip",
       "port": 8000,
-      "auth": "none",
+      "auth": "sso",
       "emit_labels": false,
       "module": {
         "name": "GlitchTip",

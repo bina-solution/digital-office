@@ -4,12 +4,12 @@
 # row with THREE. Old order sorted completeness first, so OLD won and a deliverable document was
 # demoted. COMPLETED must now win regardless of flag count.
 DK="docker -H unix:///run/bbox-docker.sock"
-ENVF=/mnt/c/Users/user/Desktop/personalWorkspace/AutomateOs/deployment-hacohen/.env
+ENVF=/mnt/c/Users/user/Desktop/personalWorkspace/AutomateOs/digital-office/.env
 WU=$(grep -E '^BS_WEBHOOK_USER=' "$ENVF" | head -1 | cut -d= -f2-)
 WP=$(grep -E '^BS_WEBHOOK_PASS=' "$ENVF" | head -1 | cut -d= -f2-)
 P=zzpw$(date +%H%M%S)
 
-$DK exec -i supabase-db-shlomo-laptop psql -U postgres -tAf - <<SQL
+$DK exec -i supabase-db-owner-laptop psql -U postgres -tAf - <<SQL
 SET session_replication_role = replica;
 INSERT INTO public.incoming_documents
  ("ID","COMPANY_ID","DOC_ID","HASH","TYPE","STATUS","DOC_DATE","DOC_TOTAL_AMOUNT","SOURCE_TYPE",
@@ -23,7 +23,7 @@ SET session_replication_role = origin;
 SELECT '  seeded: OLD(3 flags, newer) vs COMPLETED(1 flag, older)';
 SQL
 
-$DK exec -e I="${P}_old,${P}_cmp" -e U="$WU" -e P="$WP" n8n-shlomo-laptop node -e '
+$DK exec -e I="${P}_old,${P}_cmp" -e U="$WU" -e P="$WP" n8n-owner-laptop node -e '
 const auth=Buffer.from(process.env.U+":"+process.env.P).toString("base64");
 fetch("http://localhost:5678/webhook/indox-drain",{method:"POST",
  headers:{"Content-Type":"application/json",Authorization:"Basic "+auth},
@@ -33,10 +33,10 @@ fetch("http://localhost:5678/webhook/indox-drain",{method:"POST",
 sleep 60
 
 echo "  --- result ---"
-$DK exec -i supabase-db-shlomo-laptop psql -U postgres -tAc \
+$DK exec -i supabase-db-owner-laptop psql -U postgres -tAc \
  "SELECT '    '||rpad(\"ID\",18)||rpad(coalesce(\"STATUS\",'-'),12)||'into='||coalesce(\"MERGED_INTO\",'-')
   FROM public.incoming_documents WHERE \"ID\" LIKE '${P}%' ORDER BY \"ID\""
-$DK exec -i supabase-db-shlomo-laptop psql -U postgres -tAc \
+$DK exec -i supabase-db-owner-laptop psql -U postgres -tAc \
  "SELECT CASE
     WHEN (SELECT \"STATUS\" FROM public.incoming_documents WHERE \"ID\"='${P}_cmp')='MERGED'
       THEN '    FAIL: the COMPLETED row was absorbed'
@@ -44,7 +44,7 @@ $DK exec -i supabase-db-shlomo-laptop psql -U postgres -tAc \
       THEN '    PASS: COMPLETED survived, OLD absorbed'
     ELSE '    INCONCLUSIVE: neither merged yet' END"
 
-$DK exec -i supabase-db-shlomo-laptop psql -U postgres -tAc \
+$DK exec -i supabase-db-owner-laptop psql -U postgres -tAc \
  "DELETE FROM public.indox_action_execution_log WHERE \"ID\" LIKE '${P}%';
   DELETE FROM public.incoming_documents WHERE \"ID\" LIKE '${P}%'" >/dev/null 2>&1
 echo "  (fixtures removed)"

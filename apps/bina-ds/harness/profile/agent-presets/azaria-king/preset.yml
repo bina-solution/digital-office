@@ -1,0 +1,5 @@
+# Display text only (id = this directory's name). The King preset is installed into
+# $DSH_HOME/.agent-presets beside azaria-local, and the King session is created with `-p azaria-king`.
+name: עזריה המלך
+description: שומר סשן ה-King ב-Claude Code — בודק כל כמה דקות שהעבודה לא נתקעה, מאשר, ממשיך, ומדווח. לא שואל את הבעלים שום דבר.
+order: 2

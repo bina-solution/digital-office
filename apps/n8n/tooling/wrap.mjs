@@ -41,8 +41,13 @@ const HERE = path.dirname(fileURLToPath(import.meta.url));
 // lockfile hash (a lockfile bump = a fresh cache dir). On native Windows / Linux-native repos it
 // stays beside this file.
 import { createHash } from "node:crypto";
+//
+// BBOX_WRAP_CACHE=1 asks for the same cache from anywhere: tooling/wrap.sh runs this file from a scratch box
+// inside the office's n8n container (a host with no node, DGO-1746), and a box is removed after each run — so
+// beside this file, every push and pull would `npm ci` 289 packages inside production n8n. Keyed by the
+// lockfile, in the container's own home, it is installed once per lockfile.
 function toolHome() {
-  if (process.platform !== "win32" && HERE.startsWith("/mnt/")) {
+  if (process.platform !== "win32" && (HERE.startsWith("/mnt/") || process.env.BBOX_WRAP_CACHE === "1")) {
     const lock = path.join(HERE, "package-lock.json");
     const h = createHash("sha256").update(fs.readFileSync(lock)).digest("hex").slice(0, 12);
     return path.join(os.homedir(), ".cache", "bbox-n8n-tooling", h);
@@ -57,15 +62,33 @@ const NODE_KEYS = ["notes", "notesInFlow", "disabled", "continueOnFail"];
 
 function ensureDeps() {
   if (fs.existsSync(N8NAC)) return;
-  fs.mkdirSync(TOOL_HOME, { recursive: true });
-  if (TOOL_HOME !== HERE) {
-    fs.copyFileSync(path.join(HERE, "package.json"), path.join(TOOL_HOME, "package.json"));
-    fs.copyFileSync(path.join(HERE, "package-lock.json"), path.join(TOOL_HOME, "package-lock.json"));
+  const npm = process.platform === "win32" ? "npm.cmd" : "npm";
+  if (TOOL_HOME === HERE) {
+    console.error("[wrap] toolchain not installed — running npm ci in " + TOOL_HOME);
+    execFileSync(npm, ["ci", "--no-audit", "--no-fund"], { cwd: TOOL_HOME, stdio: "inherit" });
+    if (!fs.existsSync(N8NAC)) throw new Error("npm ci did not produce n8nac — check network/registry");
+    return;
   }
-  console.error("[wrap] toolchain not installed — running npm ci in " + TOOL_HOME);
-  execFileSync(process.platform === "win32" ? "npm.cmd" : "npm", ["ci", "--no-audit", "--no-fund"],
-    { cwd: TOOL_HOME, stdio: "inherit" });
-  if (!fs.existsSync(N8NAC)) throw new Error("npm ci did not produce n8nac — check network/registry");
+  // A CACHE outlives this run (a /mnt checkout's, or the one in n8n's container, DGO-1746), so it is built beside
+  // and renamed into place whole: an npm ci cut short (an OOM inside n8n's cgroup) or two first runs at once never
+  // leave a half toolchain that the check above would take for an installed one (the second reader).
+  const tmp = `${TOOL_HOME}.tmp-${process.pid}`;
+  fs.rmSync(tmp, { recursive: true, force: true });
+  fs.mkdirSync(tmp, { recursive: true });
+  fs.copyFileSync(path.join(HERE, "package.json"), path.join(tmp, "package.json"));
+  fs.copyFileSync(path.join(HERE, "package-lock.json"), path.join(tmp, "package-lock.json"));
+  console.error("[wrap] toolchain not installed — running npm ci in " + tmp + ", then into " + TOOL_HOME);
+  try {
+    execFileSync(npm, ["ci", "--no-audit", "--no-fund"], { cwd: tmp, stdio: "inherit" });
+    if (!fs.existsSync(path.join(tmp, "node_modules", "n8nac", "dist", "index.js"))) {
+      throw new Error("npm ci did not produce n8nac — check network/registry");
+    }
+    if (fs.existsSync(N8NAC)) return;                                    // another run finished first: its is whole
+    fs.rmSync(TOOL_HOME, { recursive: true, force: true });              // a half one left from before this rule
+    fs.renameSync(tmp, TOOL_HOME);
+  } finally {
+    fs.rmSync(tmp, { recursive: true, force: true });
+  }
 }
 
 const ENV = { ...process.env, N8NAC_TELEMETRY_DISABLED: "1" };

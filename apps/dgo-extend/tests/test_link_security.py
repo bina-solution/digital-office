@@ -14,8 +14,8 @@ uses, never on a re-implementation of it:
      other office" — publishes the vault and machine plane while a serve that NAMES apps does not.
   2. **Identity crosses the link boundedly.** The door writes the catalog's mapped user for the app
      being reached and strips the peer's whole `X-authentik-*` family; on the consuming side the
-     compiler puts this office's own `authentik@file` BEFORE the mapping, which is what makes a
-     forged `X-authentik-username` irrelevant rather than trusted.
+     compiler puts this office's own sign-in (`serve.REMOTE_SIGN_IN`, its admins' since DGO-1755) BEFORE
+     the mapping, which is what makes a forged `X-authentik-username` irrelevant rather than trusted.
   3. **The tunnel/role model.** Direction is enforced in the rendered delivery plan: a link this
      office serves renders no rule that reaches back, every rule that reaches a peer names the peer's
      OWN tunnel address, and a peer that did not answer is written down as not answering (status,
@@ -412,8 +412,19 @@ def c_identity_crosses_boundedly():
     claimed = (b"POST /api/x HTTP/1.1\r\nHost: bina.localhost\r\nConnection: keep-alive, upgrade\r\n"
                b"X-authentik-username: root-of-the-peer\r\nX-Authentik-Groups: authentik Admins\r\n"
                b"X-authentik-jwt: e30.e30.x\r\nX-DGO-Office: some-third-office\r\n"
+               b"X-DGO-From: akadmin,root-of-the-peer\r\n"
+               # the same claims spelled with `_`, which a WSGI app (Flask) reads as the `-` names (DGO-1155)
+               b"X_DGO_From: akadmin\r\nX_DGO_Office: some-third-office\r\nX_authentik_username: akadmin\r\n"
+               b"X_Dgo_Identity: v1 some-third-office akadmin 0 00\r\n"
                b"Content-Length: 2\r\n\r\n{}")
     head = _headers(door_mod.Door.rewrite(claimed, "owner@local", "macbook"))
+    if "x-dgo-from" in head:
+        problems.append(f"the consuming side's `from` list is no app's business on this side, and a peer writes "
+                        f"what it likes there: it must not arrive (hos-006, DGO-1155), got {head.get('x-dgo-from')}")
+    spelled = [k for k in head if k in ("x_dgo_from", "x_dgo_office", "x_authentik_username", "x_dgo_identity")]
+    if spelled:
+        problems.append(f"a claimed header spelled with `_` reaches a WSGI app as the `-` one, and must not arrive "
+                        f"(DGO-1155), got {spelled}")
     if head.get("x-authentik-username") != ["owner@local"] or \
             [k for k in head if k.startswith("x-authentik-")] != ["x-authentik-username"]:
         problems.append(f"the mapped user is the only identity that may arrive, got {head}")
@@ -426,8 +437,22 @@ def c_identity_crosses_boundedly():
 
     # FROM ANYWHERE ELSE: on the consuming side the router chain is what decides whether an incoming
     # identity header is believed, and the answer is the ORDER — this office's own outpost
-    # (`authentik@file`, which overwrites every `X-authentik-*` with its own answer) runs BEFORE the
-    # middleware that writes the mapped user. After it, the request carries this office's user.
+    # (`serve.REMOTE_SIGN_IN`: `authentik-admins@file` since DGO-1755, the same definition as
+    # `authentik@file` — under forward-auth it asks the admins' path — which replaces the identity
+    # headers, X-authentik-username among them, with its own answer:
+    # platform-base/traefik/config/authentik-forwardauth.yaml) runs BEFORE the middleware that writes the
+    # mapped user. After it, the request carries this office's user. (The LAN entry's own outpost,
+    # `lan-auth-admins@docker`, is not rendered here.)
+    sign_in = serve_mod.REMOTE_SIGN_IN
+    # …and the order is worth something only while that sign-in IS an outpost that overwrites: the edge's
+    # forward-auth template defines it beside `authentik`, with X-authentik-username among its answers
+    fa = (ROOT / "platform-base/traefik/config/authentik-forwardauth.yaml").read_text(encoding="utf-8")
+    defined = re.search(r'range \$mw := list ([^}]*)\}', fa)
+    if not (sign_in.endswith("@file") and defined and f'"{sign_in[:-len("@file")]}"' in defined.group(1)
+            and "- X-authentik-username" in fa):
+        problems.append(f"the sign-in in front of a linked office's app ({sign_in}) must be one of the edge's "
+                        f"forward-auth middlewares that overwrite X-authentik-* "
+                        f"(platform-base/traefik/config/authentik-forwardauth.yaml)")
     served = {"drive": {"port": 8975}, "bina": {"port": 3080}}
     entry = {"office": "macbook", "address": "10.79.3.2", "label": {"he": "המקבוק", "en": "MacBook"},
              "link": "macbook", "link_port": 9002, "identity": {"to": "owner@local"},
@@ -440,13 +465,13 @@ def c_identity_crosses_boundedly():
         return problems
     doc = yaml.safe_load(serve_mod.render(entries, console, domain="office.example"))
     chain = doc["http"]["routers"]["dgo-remote-macbook-bina-console"]["middlewares"]
-    if chain[0] != "authentik@file":
-        problems.append(f"this office's own SSO must run FIRST, so a forged header is already gone "
-                        f"before the mapping is written, got {chain}")
+    if chain[0] != sign_in:
+        problems.append(f"this office's own SSO ({sign_in}) must run FIRST, so a forged header is already "
+                        f"gone before the mapping is written, got {chain}")
     mapping = f"dgo-remote-{entry['office']}-identity"
     if mapping not in chain:
         problems.append(f"the mapped identity middleware is missing from the chain: {chain}")
-    elif chain.index(mapping) < chain.index("authentik@file"):
+    elif sign_in not in chain or chain.index(mapping) < chain.index(sign_in):
         problems.append(f"the mapping must be written AFTER the outpost overwrites the header, got {chain}")
     written = doc["http"]["middlewares"][mapping]["headers"]["customRequestHeaders"]
     if written.get("X-authentik-username") != "owner@local":
@@ -590,11 +615,13 @@ def c_door_with_no_tile_is_narrow():
     answer = _asked_the_door(_door(doc, "vps1"), "workflow-hooks.hp-laptop",
                              b"POST /webhook/meet-recordings?x=1 HTTP/1.1\r\nHost: workflow-hooks.hp-laptop\r\n"
                              b"X-Forwarded-For: 10.0.0.9\r\nForwarded: for=10.0.0.9\r\nX-Real-IP: 10.0.0.9\r\n"
+                             b"X_Forwarded_For: 10.0.0.8\r\nX_Real_IP: 10.0.0.8\r\n"   # `_` spellings (DGO-1155)
                              b"X-Dgo-Office: macbook\r\nX-authentik-username: akadmin\r\nContent-Length: 0\r\n\r\n")
     head = _headers(seen.get("head") or b"")
     if not answer.startswith(b"HTTP/1.1 200"):
         problems.append(f"the path the door was given must reach the service, got {answer[:60]!r}")
-    for name in ("x-forwarded-for", "forwarded", "x-real-ip", "x-authentik-username"):
+    for name in ("x-forwarded-for", "forwarded", "x-real-ip", "x-authentik-username", "x_forwarded_for",
+                 "x_real_ip"):
         if name in head:
             problems.append(f"the service behind a door with no tile must not see the peer's {name}: {head[name]}")
     if head.get("x-dgo-office") != ["vps1"]:
@@ -1755,6 +1782,97 @@ def _link_listener_routes():
                     and deco.args and isinstance(deco.args[0], ast.Constant)):
                 out.append(deco.args[0].value)
     return out
+
+
+# ── 9 · the carriers' TCP door: a pair is NAMED and PROVED before a byte moves ────────────────────
+# §9's 2026-10-19 paragraph is the one security claim the carriers added, and it was held only by
+# `carrier/carry_test.go` — a Go test that no gate in `scripts/refactor/` runs (no gate has a Go step).
+# So its two halves are asked HERE, on the source that decides them, in the shape of the rest.
+CARRIER = APP / "carrier"
+
+
+def _go_func(source: str, name: str) -> str:
+    """One Go function's text — a plain func or a method (`func (d *door) carry(`), which is what
+    `door.go`'s handlers are — from its `func` line to the next top-level `func`."""
+    m = re.search(rf"^func (?:\([^)]*\) )?{re.escape(name)}\(", source, re.M)
+    if not m:
+        return ""
+    rest = source[m.start():]
+    nxt = re.search(r"^func ", rest[4:], re.M)
+    return rest[:nxt.start() + 4] if nxt else rest
+
+
+@claim("§9 · the carriers' door answers nothing to a connection that cannot name the pair")
+def c_carrier_answers_no_stranger():
+    """§9: “That door answers nothing to a connection that cannot name the pair (a tag of both public
+    keys)”. Asked of `carrier/wire.go`, which decides it: the tag is a SHA-256 over BOTH public keys;
+    `AcceptHandshake` reads that tag, resolves it through the plan's own `find`, and on an unknown tag
+    returns BEFORE it writes anything. A stranger therefore gets silence, not an error page that
+    confirms the port is a door."""
+    problems = []
+    wire = (CARRIER / "wire.go").read_text(encoding="utf-8")
+    tag_fn = _go_func(wire, "pairTag")
+    if not tag_fn:
+        return ["wire.go names no `pairTag`: the pair's name is not a function any more"]
+    for half in ("dialerPub", "acceptorPub"):
+        if half not in tag_fn:
+            problems.append(f"the pair's tag must cover {half} too — §9: a tag of both public keys")
+    if "sha256" not in tag_fn.lower():
+        problems.append("the tag must be a SHA-256 of both halves, got a different hash")
+    accept = _go_func(wire, "AcceptHandshake")
+    if not accept:
+        return problems + ["wire.go names no `AcceptHandshake`: nobody checks the tag any more"]
+    if "find(tag)" not in accept:
+        problems.append("the acceptor must resolve the tag through the plan's own `find`")
+    refusal = accept.find("peerPub == nil")
+    first_write = accept.find("c.Write(")
+    if refusal == -1:
+        problems.append("an unknown tag must be refused (`peerPub == nil`), and it is not")
+    elif first_write != -1 and first_write < refusal:
+        problems.append("the acceptor writes to the connection BEFORE it knows the pair — that is "
+                        "the answer §9 says a stranger never gets")
+    elif "errHandshake" not in accept[refusal:refusal + 200]:
+        problems.append("an unknown tag must end in the handshake error, not fall through")
+    if "string(hello[:len(magic)]) != magic" not in accept:
+        problems.append("the first bytes must be the carrier's own magic, and refused otherwise")
+    return problems
+
+
+@claim("§9 · nobody is admitted to the carriers' door without proving a pair's private key")
+def c_carrier_needs_the_pair_key():
+    """§9: “admits nobody who cannot prove a pair's private key (a static X25519 agreement, never
+    sent)”. Three measurements on `carrier/wire.go`: the shared secret is an X25519 agreement; the
+    secret itself is never an argument to a write (only a constant-time proof of it crosses, one per
+    direction, over both nonces); and `door.go`'s `/carry` upgrades and hands the connection to the
+    carrier's handshake before a datagram flows."""
+    problems = []
+    wire = (CARRIER / "wire.go").read_text(encoding="utf-8")
+    secret_fn = _go_func(wire, "pairSecret")
+    if not secret_fn:
+        return ["wire.go names no `pairSecret`: the pair's agreement is not a function any more"]
+    if "X25519" not in secret_fn:
+        problems.append("the pair's secret must come from a static X25519 agreement")
+    writes = [line.strip() for line in wire.splitlines() if "c.Write(" in line]
+    if not writes:
+        problems.append("wire.go writes nothing at all — this claim would measure the wrong file")
+    for line in writes:
+        # `proofOf(secret, …)` is the PROOF of the secret, which is the one thing §9 says may cross;
+        # the secret itself as a write's own argument is what “never sent” forbids.
+        if "secret" in line and "proofOf(secret" not in line:
+            problems.append(f"a write carries the secret itself: {line!r} — §9: never sent")
+    for role, fn in (("acceptor", "AcceptHandshake"), ("dialer", "DialHandshake")):
+        body = _go_func(wire, fn)
+        if f'proofOf(secret, "{role}"' not in body:
+            problems.append(f"{fn} does not prove the {role}'s half of the shared secret")
+        if "hmac.Equal" not in body:
+            problems.append(f"{fn} compares a proof without a constant-time comparison")
+    door = (CARRIER / "door.go").read_text(encoding="utf-8")
+    carry = _go_func(door, "carry")
+    if "acceptWS(w, r, src)" not in carry:
+        problems.append("`/carry` must upgrade through the carrier's own `acceptWS`")
+    elif "d.c.handle(conn)" not in carry:
+        problems.append("`/carry` must hand the connection to the carrier's handshake (`handle`)")
+    return problems
 
 
 def main() -> int:

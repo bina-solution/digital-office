@@ -104,12 +104,12 @@ import { workflow, node, links } from '@n8n-as-code/transformer';
 //             .out(1) → BuildCallIncomingDocumentBatchUpdateStatusMissingLink
 //                → UpsertCentral (↩ loop)
 //             .out(1) → LoopOverItems (↩ loop)
-//         .out(9) → ActionUpdateStatusApiToolsIdFailed
+//         .out(8) → ActionUpdateStatusApiToolsIdFailed
 //            → LoopOverItems20
 //             .out(1) → BuildCallIncomingDocumentBatchUpdateStatusApiToolsFailed1
 //                → UpsertCentral (↩ loop)
 //             .out(1) → LoopOverItems20 (↩ loop)
-//         .out(11) → ActionCheckFromOffice1
+//         .out(10) → ActionCheckFromOffice1
 //            → WhReqSettings
 //              → GetWarehouseSetting
 //                → RestoreDocsFromOffice
@@ -118,32 +118,32 @@ import { workflow, node, links } from '@n8n-as-code/transformer';
 //                      → BuildCallIncomingDocumentBatchUpdateFromOffice
 //                        → UpsertCentral (↩ loop)
 //                   .out(1) → LoopOverItems1 (↩ loop)
-//         .out(18) → ActionPrioritySync
+//         .out(17) → ActionPrioritySync
 //            → LoopOverItems30
 //             .out(1) → LoopOverItems30 (↩ loop)
 //             .out(1) → MapRequest
 //                → PostPriorityTable
 //                  → BuildBatchUpdatePrioritySync
 //                    → UpsertCentral (↩ loop)
-//         .out(20) → ActionRestartPrioritySync
+//         .out(19) → ActionRestartPrioritySync
 //            → BuildBatchUpdateRestartPrioritySync
 //              → UpsertCentral (↩ loop)
-//         .out(21) → ActionMarkCompleted
+//         .out(20) → ActionMarkCompleted
 //            → LoopOverItems6
 //             .out(1) → BuildCallIncomingDocumentBatchUpdateStatusCompleted
 //                → UpsertCentral (↩ loop)
 //             .out(1) → LoopOverItems6 (↩ loop)
-//         .out(22) → ActionUpdateDocId
+//         .out(21) → ActionUpdateDocId
 //            → LoopOverItems35
 //             .out(1) → BuildCallIncomingDocumentBatchUpdate4
 //                → UpsertCentral (↩ loop)
 //             .out(1) → LoopOverItems35 (↩ loop)
-//         .out(24) → StopAndErrorUnhandledAction
-//         .out(25) → ActionExtractPerType
+//         .out(23) → StopAndErrorUnhandledAction
+//         .out(24) → ActionExtractPerType
 //            → CallShipmentdocex01
 //              → BuildPerTypeUpsert
 //                → UpsertCentralPerType
-//         .out(28) → ActionSelectType
+//         .out(27) → ActionSelectType
 //            → LoopSelectType
 //             .out(1) → CallSelecttype01
 //                → BuildSelectTypeUpsert
@@ -158,7 +158,7 @@ import { workflow, node, links } from '@n8n-as-code/transformer';
 @workflow({
     /*__n8n__*/ description: null,
     /*__n8n__*/ isArchived: false,
-    /*__n8n__*/ connections: {"When Called":{"main":[[{"node":"Route Mode","type":"main","index":0}]]},"Loop Over Items15":{"main":[[],[{"node":"Build: Update NAME","type":"main","index":0},{"node":"Build Drive Rename (update_name)","type":"main","index":0},{"node":"Loop Over Items15","type":"main","index":0}]]},"Loop Over Items11":{"main":[[],[{"node":"Build: Restart (clear completed flags)","type":"main","index":0},{"node":"Loop Over Items11","type":"main","index":0}]]},"Loop Over Items6":{"main":[[],[{"node":"Build: Call 'Incoming Document Batch Update' - STATUS COMPLETED","type":"main","index":0},{"node":"Loop Over Items6","type":"main","index":0}]]},"Action: Mark Completed":{"main":[[{"node":"Loop Over Items6","type":"main","index":0}]]},"Action: Get Short Doc ID1":{"main":[[{"node":"Loop Over Items5","type":"main","index":0}]]},"Map Request":{"main":[[{"node":"Post Priority Table","type":"main","index":0}]]},"3a. GDOC Action Switch1":{"main":[[{"node":"Action: Update NAME","type":"main","index":0}],[{"node":"Action: Restart GDOC","type":"main","index":0}],[],[],[{"node":"Action: Get Short Doc ID1","type":"main","index":0}],[{"node":"Action: Find Link in Drive","type":"main","index":0}],[{"node":"Action: Update Status MISSING_LINK","type":"main","index":0}],[],[],[{"node":"Action: Update STATUS - API_TOOLS_ID_FAILED","type":"main","index":0}],[],[{"node":"Action: Check From Office1","type":"main","index":0}],[],[],[],[],[],[],[{"node":"Action: priority_sync","type":"main","index":0}],[],[{"node":"Action: restart priority_sync","type":"main","index":0}],[{"node":"Action: Mark Completed","type":"main","index":0}],[{"node":"Action: update DOC_ID","type":"main","index":0}],[],[{"node":"Stop and Error - Unhandled ACTION","type":"main","index":0}],[{"node":"Action: Extract Per Type","type":"main","index":0}],[],[],[{"node":"Action: Select Type","type":"main","index":0}]]},"Action: Select Type":{"main":[[{"node":"Loop (select type)","type":"main","index":0}]]},"Loop (select type)":{"main":[[],[{"node":"Call SelectType01","type":"main","index":0},{"node":"Loop (select type)","type":"main","index":0}]]},"Call SelectType01":{"main":[[{"node":"Build Select Type Upsert","type":"main","index":0}]]},"Build Select Type Upsert":{"main":[[{"node":"Upsert (central)","type":"main","index":0}]]},"Action: Restart GDOC":{"main":[[{"node":"Loop Over Items11","type":"main","index":0}]]},"Action: Update Status MISSING_LINK":{"main":[[{"node":"Loop Over Items","type":"main","index":0}]]},"Action: Update NAME":{"main":[[{"node":"Loop Over Items15","type":"main","index":0}]]},"Action: Find Link in Drive":{"main":[[{"node":"Loop Over Items2","type":"main","index":0}]]},"Loop Over Items35":{"main":[[],[{"node":"Build: Call 'Incoming Document Batch Update'4","type":"main","index":0},{"node":"Loop Over Items35","type":"main","index":0}]]},"Action: priority_sync":{"main":[[{"node":"Loop Over Items30","type":"main","index":0}]]},"Loop Over Items5":{"main":[[],[{"node":"Build: Call 'Incoming Document Batch Update'1","type":"main","index":0},{"node":"Loop Over Items5","type":"main","index":0}]]},"Loop Over Items30":{"main":[[],[{"node":"Loop Over Items30","type":"main","index":0},{"node":"Map Request","type":"main","index":0}]]},"Loop Over Items1":{"main":[[],[{"node":"Call Search From Waerhouse","type":"main","index":0},{"node":"Loop Over Items1","type":"main","index":0}]]},"Call Search File":{"main":[[{"node":"If Found File1","type":"main","index":0}]]},"Action: update DOC_ID":{"main":[[{"node":"Loop Over Items35","type":"main","index":0}]]},"Post Priority Table":{"main":[[{"node":"Build: Batch Update - priority_sync","type":"main","index":0}]]},"Restore Docs (From Office)":{"main":[[{"node":"Loop Over Items1","type":"main","index":0}]]},"Action: Update STATUS - API_TOOLS_ID_FAILED":{"main":[[{"node":"Loop Over Items20","type":"main","index":0}]]},"Loop Over Items":{"main":[[],[{"node":"Build: Call 'Incoming Document Batch Update' - STATUS MISSING_LINK","type":"main","index":0},{"node":"Loop Over Items","type":"main","index":0}]]},"Loop Over Items2":{"main":[[],[{"node":"Call Search File","type":"main","index":0},{"node":"Loop Over Items2","type":"main","index":0}]]},"Loop Over Items20":{"main":[[],[{"node":"Build: Call 'Incoming Document Batch Update' - STATUS API_TOOLS_FAILED1","type":"main","index":0},{"node":"Loop Over Items20","type":"main","index":0}]]},"Get Warehouse Setting":{"main":[[{"node":"Restore Docs (From Office)","type":"main","index":0}]]},"Action: Check From Office1":{"main":[[{"node":"WH Req (settings)","type":"main","index":0}]]},"WH Req (settings)":{"main":[[{"node":"Get Warehouse Setting","type":"main","index":0}]]},"If Found File1":{"main":[[{"node":"Build: Call 'Incoming Document Batch Update' - LINK FOUND","type":"main","index":0}],[{"node":"Build: Call 'Incoming Document Batch Update' - SEARCH_IN_DRIVE_COMPLETED","type":"main","index":0}]]},"Call Search From Waerhouse":{"main":[[{"node":"Build: Call 'Incoming Document Batch Update' - FROM_OFFICE","type":"main","index":0}]]},"Build: Call 'Incoming Document Batch Update' - STATUS MISSING_LINK":{"main":[[{"node":"Upsert (central)","type":"main","index":0}]]},"Build: Call 'Incoming Document Batch Update' - SEARCH_IN_DRIVE_COMPLETED":{"main":[[{"node":"Upsert (central)","type":"main","index":0}]]},"Build: Batch Update - priority_sync":{"main":[[{"node":"Upsert (central)","type":"main","index":0}]]},"Build: Call 'Incoming Document Batch Update' - STATUS COMPLETED":{"main":[[{"node":"Upsert (central)","type":"main","index":0}]]},"Build: Update NAME":{"main":[[{"node":"Upsert (central)","type":"main","index":0}]]},"Build: Call 'Incoming Document Batch Update' - STATUS API_TOOLS_FAILED1":{"main":[[{"node":"Upsert (central)","type":"main","index":0}]]},"Build: Restart (clear completed flags)":{"main":[[{"node":"Upsert (central)","type":"main","index":0}]]},"Build: Call 'Incoming Document Batch Update'4":{"main":[[{"node":"Upsert (central)","type":"main","index":0}]]},"Build: Call 'Incoming Document Batch Update'1":{"main":[[{"node":"Upsert (central)","type":"main","index":0}]]},"Build: Call 'Incoming Document Batch Update' - FROM_OFFICE":{"main":[[{"node":"Upsert (central)","type":"main","index":0}]]},"Build: Call 'Incoming Document Batch Update' - LINK FOUND":{"main":[[{"node":"Upsert (central)","type":"main","index":0}]]},"Route Mode":{"main":[[{"node":"Decide Shipment Action","type":"main","index":0}],[{"node":"Dedupe Docs (execute)","type":"main","index":0}]]},"Action: Extract Per Type":{"main":[[{"node":"Call ShipmentDocEx01","type":"main","index":0}]]},"Build Per Type Upsert":{"main":[[{"node":"Upsert (central) - Per Type","type":"main","index":0}]]},"Call ShipmentDocEx01":{"main":[[{"node":"Build Per Type Upsert","type":"main","index":0}]]},"Build Drive Rename (update_name)":{"main":[[{"node":"Drive Rename (update_name)","type":"main","index":0}]]},"Dedupe Docs (execute)":{"main":[[{"node":"3a. GDOC Action Switch1","type":"main","index":0}]]},"Action: restart priority_sync":{"main":[[{"node":"Build: Batch Update - restart priority_sync","type":"main","index":0}]]},"Build: Batch Update - restart priority_sync":{"main":[[{"node":"Upsert (central)","type":"main","index":0}]]}},
+    /*__n8n__*/ connections: {"When Called":{"main":[[{"node":"Route Mode","type":"main","index":0}]]},"Loop Over Items15":{"main":[[],[{"node":"Build: Update NAME","type":"main","index":0},{"node":"Build Drive Rename (update_name)","type":"main","index":0},{"node":"Loop Over Items15","type":"main","index":0}]]},"Loop Over Items11":{"main":[[],[{"node":"Build: Restart (clear completed flags)","type":"main","index":0},{"node":"Loop Over Items11","type":"main","index":0}]]},"Loop Over Items6":{"main":[[],[{"node":"Build: Call 'Incoming Document Batch Update' - STATUS COMPLETED","type":"main","index":0},{"node":"Loop Over Items6","type":"main","index":0}]]},"Action: Mark Completed":{"main":[[{"node":"Loop Over Items6","type":"main","index":0}]]},"Action: Get Short Doc ID1":{"main":[[{"node":"Loop Over Items5","type":"main","index":0}]]},"Map Request":{"main":[[{"node":"Post Priority Table","type":"main","index":0}]]},"3a. GDOC Action Switch1":{"main":[[{"node":"Action: Update NAME","type":"main","index":0}],[{"node":"Action: Restart GDOC","type":"main","index":0}],[],[],[{"node":"Action: Get Short Doc ID1","type":"main","index":0}],[{"node":"Action: Find Link in Drive","type":"main","index":0}],[{"node":"Action: Update Status MISSING_LINK","type":"main","index":0}],[],[{"node":"Action: Update STATUS - API_TOOLS_ID_FAILED","type":"main","index":0}],[],[{"node":"Action: Check From Office1","type":"main","index":0}],[],[],[],[],[],[],[{"node":"Action: priority_sync","type":"main","index":0}],[],[{"node":"Action: restart priority_sync","type":"main","index":0}],[{"node":"Action: Mark Completed","type":"main","index":0}],[{"node":"Action: update DOC_ID","type":"main","index":0}],[],[{"node":"Stop and Error - Unhandled ACTION","type":"main","index":0}],[{"node":"Action: Extract Per Type","type":"main","index":0}],[],[],[{"node":"Action: Select Type","type":"main","index":0}]]},"Action: Select Type":{"main":[[{"node":"Loop (select type)","type":"main","index":0}]]},"Loop (select type)":{"main":[[],[{"node":"Call SelectType01","type":"main","index":0},{"node":"Loop (select type)","type":"main","index":0}]]},"Call SelectType01":{"main":[[{"node":"Build Select Type Upsert","type":"main","index":0}]]},"Build Select Type Upsert":{"main":[[{"node":"Upsert (central)","type":"main","index":0}]]},"Action: Restart GDOC":{"main":[[{"node":"Loop Over Items11","type":"main","index":0}]]},"Action: Update Status MISSING_LINK":{"main":[[{"node":"Loop Over Items","type":"main","index":0}]]},"Action: Update NAME":{"main":[[{"node":"Loop Over Items15","type":"main","index":0}]]},"Action: Find Link in Drive":{"main":[[{"node":"Loop Over Items2","type":"main","index":0}]]},"Loop Over Items35":{"main":[[],[{"node":"Build: Call 'Incoming Document Batch Update'4","type":"main","index":0},{"node":"Loop Over Items35","type":"main","index":0}]]},"Action: priority_sync":{"main":[[{"node":"Loop Over Items30","type":"main","index":0}]]},"Loop Over Items5":{"main":[[],[{"node":"Build: Call 'Incoming Document Batch Update'1","type":"main","index":0},{"node":"Loop Over Items5","type":"main","index":0}]]},"Loop Over Items30":{"main":[[],[{"node":"Loop Over Items30","type":"main","index":0},{"node":"Map Request","type":"main","index":0}]]},"Loop Over Items1":{"main":[[],[{"node":"Call Search From Waerhouse","type":"main","index":0},{"node":"Loop Over Items1","type":"main","index":0}]]},"Call Search File":{"main":[[{"node":"If Found File1","type":"main","index":0}]]},"Action: update DOC_ID":{"main":[[{"node":"Loop Over Items35","type":"main","index":0}]]},"Post Priority Table":{"main":[[{"node":"Build: Batch Update - priority_sync","type":"main","index":0}]]},"Restore Docs (From Office)":{"main":[[{"node":"Loop Over Items1","type":"main","index":0}]]},"Action: Update STATUS - API_TOOLS_ID_FAILED":{"main":[[{"node":"Loop Over Items20","type":"main","index":0}]]},"Loop Over Items":{"main":[[],[{"node":"Build: Call 'Incoming Document Batch Update' - STATUS MISSING_LINK","type":"main","index":0},{"node":"Loop Over Items","type":"main","index":0}]]},"Loop Over Items2":{"main":[[],[{"node":"Call Search File","type":"main","index":0},{"node":"Loop Over Items2","type":"main","index":0}]]},"Loop Over Items20":{"main":[[],[{"node":"Build: Call 'Incoming Document Batch Update' - STATUS API_TOOLS_FAILED1","type":"main","index":0},{"node":"Loop Over Items20","type":"main","index":0}]]},"Get Warehouse Setting":{"main":[[{"node":"Restore Docs (From Office)","type":"main","index":0}]]},"Action: Check From Office1":{"main":[[{"node":"WH Req (settings)","type":"main","index":0}]]},"WH Req (settings)":{"main":[[{"node":"Get Warehouse Setting","type":"main","index":0}]]},"If Found File1":{"main":[[{"node":"Build: Call 'Incoming Document Batch Update' - LINK FOUND","type":"main","index":0}],[{"node":"Build: Call 'Incoming Document Batch Update' - SEARCH_IN_DRIVE_COMPLETED","type":"main","index":0}]]},"Call Search From Waerhouse":{"main":[[{"node":"Build: Call 'Incoming Document Batch Update' - FROM_OFFICE","type":"main","index":0}]]},"Build: Call 'Incoming Document Batch Update' - STATUS MISSING_LINK":{"main":[[{"node":"Upsert (central)","type":"main","index":0}]]},"Build: Call 'Incoming Document Batch Update' - SEARCH_IN_DRIVE_COMPLETED":{"main":[[{"node":"Upsert (central)","type":"main","index":0}]]},"Build: Batch Update - priority_sync":{"main":[[{"node":"Upsert (central)","type":"main","index":0}]]},"Build: Call 'Incoming Document Batch Update' - STATUS COMPLETED":{"main":[[{"node":"Upsert (central)","type":"main","index":0}]]},"Build: Update NAME":{"main":[[{"node":"Upsert (central)","type":"main","index":0}]]},"Build: Call 'Incoming Document Batch Update' - STATUS API_TOOLS_FAILED1":{"main":[[{"node":"Upsert (central)","type":"main","index":0}]]},"Build: Restart (clear completed flags)":{"main":[[{"node":"Upsert (central)","type":"main","index":0}]]},"Build: Call 'Incoming Document Batch Update'4":{"main":[[{"node":"Upsert (central)","type":"main","index":0}]]},"Build: Call 'Incoming Document Batch Update'1":{"main":[[{"node":"Upsert (central)","type":"main","index":0}]]},"Build: Call 'Incoming Document Batch Update' - FROM_OFFICE":{"main":[[{"node":"Upsert (central)","type":"main","index":0}]]},"Build: Call 'Incoming Document Batch Update' - LINK FOUND":{"main":[[{"node":"Upsert (central)","type":"main","index":0}]]},"Route Mode":{"main":[[{"node":"Decide Shipment Action","type":"main","index":0}],[{"node":"Dedupe Docs (execute)","type":"main","index":0}]]},"Action: Extract Per Type":{"main":[[{"node":"Call ShipmentDocEx01","type":"main","index":0}]]},"Build Per Type Upsert":{"main":[[{"node":"Upsert (central) - Per Type","type":"main","index":0}]]},"Call ShipmentDocEx01":{"main":[[{"node":"Build Per Type Upsert","type":"main","index":0}]]},"Build Drive Rename (update_name)":{"main":[[{"node":"Drive Rename (update_name)","type":"main","index":0}]]},"Dedupe Docs (execute)":{"main":[[{"node":"3a. GDOC Action Switch1","type":"main","index":0}]]},"Action: restart priority_sync":{"main":[[{"node":"Build: Batch Update - restart priority_sync","type":"main","index":0}]]},"Build: Batch Update - restart priority_sync":{"main":[[{"node":"Upsert (central)","type":"main","index":0}]]}},
     /*__n8n__*/ tags: [{"updatedAt":"2026-08-16T14:20:49.737Z","createdAt":"2026-08-16T14:20:49.737Z","id":"93ff3a3f-6b78-5d0a-a4de-2948ea161953","name":"app:indox"},{"updatedAt":"2026-08-05T22:56:59.007Z","createdAt":"2026-08-05T22:56:59.007Z","id":"b481a46d-6a18-4fdc-9eb5-c2d8ed3a639a","name":"role:action"},{"updatedAt":"2026-08-05T22:56:59.007Z","createdAt":"2026-08-05T22:56:59.007Z","id":"edad0600-cc86-4f33-b016-311b555b8f4e","name":"indox-app"}],
     /*__n8n__*/ versionMetadata: {"name":null,"description":null},
     /*__n8n__*/ meta: {"templateCredsSetupCompleted":true},
@@ -348,7 +348,7 @@ export class IndoxV2ActionsShipmentWorkflow {
     @node({
         id: '9ed4806f-95f7-4071-9454-2d616ed8421a',
         name: '3a. GDOC Action Switch1',
-        /*__n8n__*/ notes: "[dead-arm ledger 2026-08-31] Six rules of this switch are Inv-clone residue no decide can emit for a doc routed here (the router routes by DOC_TYPE; reachable = the shipment decide's emit-set + the global decide's): no_action_awating_doc_id, no_action_doc_date_missing, no_action_doc_total_amount_missing, update_status_missing_shipment, extract_invoice_google_ai, select_invoice_values, action_extract_shipment_ids (comment-only in this decide too -- the 18-node link chain behind it was deleted 2026-09-01, same evidence as Inv's). The RULES stay in place -- deleting a rule re-indexes every output after it -- but their outputs are cleared and the one exclusive subtree (missing-shipment noOp -> Loop Over Items17 -> the MISSING_SHIPMENT build) is deleted. extract_invoice_google_ai's wire was an extra feeder into the live 'Action: Extract Per Type', removed. __unhandled_action__ stays: it is the loud-refusal guard.",
+        /*__n8n__*/ notes: "[dead-arm ledger 2026-08-31] Six rules of this switch are Inv-clone residue no decide can emit for a doc routed here (the router routes by DOC_TYPE; reachable = the shipment decide's emit-set + the global decide's): no_action_awating_doc_id, no_action_doc_date_missing, no_action_doc_total_amount_missing, update_status_missing_shipment, extract_invoice_google_ai, select_invoice_values, action_extract_shipment_ids (comment-only in this decide too -- the 18-node link chain behind it was deleted 2026-09-01, same evidence as Inv's). The RULES stay in place -- deleting a rule re-indexes every output after it -- but their outputs are cleared and the one exclusive subtree (missing-shipment noOp -> Loop Over Items17 -> the MISSING_SHIPMENT build) is deleted. extract_invoice_google_ai's wire was an extra feeder into the live 'Action: Extract Per Type', removed. __unhandled_action__ stays: it is the loud-refusal guard. [DGO-242, 2026-11-10] The get_api_tools_id rule is deleted, not just cleared: BaseDocEx01 owns API_TOOLS_ID and no decide returns it, so a stale one now reaches the fallback and fails loudly instead of vanishing on an empty output. Every later output moved down one, the fallback with them (24 -> 23, still __unhandled_action__), and G41 check C fails a numeric fallback whose output runs anything but a Stop and Error.",
         type: 'n8n-nodes-base.switch',
         version: 2,
         position: [3280, 6048],
@@ -389,10 +389,6 @@ export class IndoxV2ActionsShipmentWorkflow {
                 {
                     value2: 'no_action_link_not_found',
                     outputKey: 'no_action_link_not_found',
-                },
-                {
-                    value2: 'get_api_tools_id',
-                    outputKey: 'get_api_tools_id',
                 },
                 {
                     value2: 'update_status_api_tools_failed',
@@ -477,7 +473,7 @@ export class IndoxV2ActionsShipmentWorkflow {
             ],
         },
         options: {
-            fallbackOutput: 24,
+            fallbackOutput: 23,
         },
     };
 
@@ -624,7 +620,8 @@ export class IndoxV2ActionsShipmentWorkflow {
         position: [4176, 7552],
     })
     LoopOverItems30 = {
-        batchSize: 15,
+        // DGO-283 (the owner: «25 במקביל»): the priority-sync loop's batch, 15 → 25 (same as the invoice router's)
+        batchSize: 25,
         options: {
             reset: '={{ !String($prevNode.name).includes("Loop")  }}',
         },
@@ -715,7 +712,7 @@ export class IndoxV2ActionsShipmentWorkflow {
     })
     PostPriorityTable = {
         method: 'POST',
-        url: '={{ $("Action: priority_sync").item.json.__priority_local === false ? "https://msh.macomp.vip/odata/Priority/tabula.ini/mscohen/SHIM_RECEIVE_SUPDOC" : "http://n8n-webhook:5678/webhook/indox-priority-local" }}',
+        url: '={{ $("Action: priority_sync").item.json.__priority_local === false ? "https://erp.example.com/odata/Priority/tabula.ini/msexample/SHIM_RECEIVE_SUPDOC" : "http://n8n-webhook:5678/webhook/indox-priority-local" }}',
         authentication: 'genericCredentialType',
         genericAuthType: 'httpBasicAuth',
         sendBody: true,
@@ -2560,15 +2557,15 @@ return __out;
         this._3aGdocActionSwitch1.out(4).to(this.ActionGetShortDocId1.in(0));
         this._3aGdocActionSwitch1.out(5).to(this.ActionFindLinkInDrive.in(0));
         this._3aGdocActionSwitch1.out(6).to(this.ActionUpdateStatusMissingLink.in(0));
-        this._3aGdocActionSwitch1.out(9).to(this.ActionUpdateStatusApiToolsIdFailed.in(0));
-        this._3aGdocActionSwitch1.out(11).to(this.ActionCheckFromOffice1.in(0));
-        this._3aGdocActionSwitch1.out(18).to(this.ActionPrioritySync.in(0));
-        this._3aGdocActionSwitch1.out(20).to(this.ActionRestartPrioritySync.in(0));
-        this._3aGdocActionSwitch1.out(21).to(this.ActionMarkCompleted.in(0));
-        this._3aGdocActionSwitch1.out(22).to(this.ActionUpdateDocId.in(0));
-        this._3aGdocActionSwitch1.out(24).to(this.StopAndErrorUnhandledAction.in(0));
-        this._3aGdocActionSwitch1.out(25).to(this.ActionExtractPerType.in(0));
-        this._3aGdocActionSwitch1.out(28).to(this.ActionSelectType.in(0));
+        this._3aGdocActionSwitch1.out(8).to(this.ActionUpdateStatusApiToolsIdFailed.in(0));
+        this._3aGdocActionSwitch1.out(10).to(this.ActionCheckFromOffice1.in(0));
+        this._3aGdocActionSwitch1.out(17).to(this.ActionPrioritySync.in(0));
+        this._3aGdocActionSwitch1.out(19).to(this.ActionRestartPrioritySync.in(0));
+        this._3aGdocActionSwitch1.out(20).to(this.ActionMarkCompleted.in(0));
+        this._3aGdocActionSwitch1.out(21).to(this.ActionUpdateDocId.in(0));
+        this._3aGdocActionSwitch1.out(23).to(this.StopAndErrorUnhandledAction.in(0));
+        this._3aGdocActionSwitch1.out(24).to(this.ActionExtractPerType.in(0));
+        this._3aGdocActionSwitch1.out(27).to(this.ActionSelectType.in(0));
         this.ActionSelectType.out(0).to(this.LoopSelectType.in(0));
         this.LoopSelectType.out(1).to(this.CallSelecttype01.in(0));
         this.LoopSelectType.out(1).to(this.LoopSelectType.in(0));

@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""test_pair_slot — every converged link uses its OWN /24 (FPG-8).
+"""test_pair_slot — every converged link uses its OWN /24 (EXF-8).
 
 step_link took the home office's single `tunnel.slot` for every converged office and saved it over the
 pair's declared one. vps1 (the first converged link) shares the home's slot, so the second converged
-office got vps1's: fireplace was declared with slot 6, saved as 2, and the renderer refused "two pairs on
+office got vps1's: examplef was declared with slot 6, saved as 2, and the renderer refused "two pairs on
 the same slot (2)". The serve block and the agent hand-off computed this office's address (`.1`) from the
 same field. And the renderer's refusal, an HTTP response, crashed `_render_local_tunnel` on `.get`.
 

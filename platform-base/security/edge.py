@@ -26,6 +26,10 @@ import netparse as np
 from dockerapi import Docker, DockerError
 
 _SUFFIX = re.compile(r"-(https|http|local|frame|own-origin|signed-in|enter|websocket(-\d+)?|http-\d+|https-\d+)$")
+#: Let's Encrypt's HTTP-01 validation, answered by the edge's own ACME router (the office's certificates
+#: are renewed through it — traefik-docker-compose.yml `acme.httpchallenge`). It is the edge's request,
+#: not the caller's, and DGO-1577's release renews three domains: a renewal that failed must be visible.
+ACME_PREFIX = "/.well-known/acme-challenge/"
 #: The office's sign-in services: authentik, and forward-auth, which replaces it (r030-002). A router
 #: of theirs is the sign-in page itself, never an app behind it.
 _AUTH_APPS = ("forward-auth", "authentik")
@@ -101,9 +105,21 @@ class Routers:
         with self.lock:
             self.meta, self.titles, self.offices, self.at = meta, titles, offices, time.time()
 
-    def classify(self, router: str) -> dict:
-        """→ {kind, app, office}."""
+    def classify(self, router: str, path: str = "") -> dict:
+        """→ {kind, app, office}.
+
+        `path` is asked too, because two requests are the EDGE's own and no router of the office's: Let's
+        Encrypt's validation (the office's certificates: `/.well-known/acme-challenge/<token>`, answered
+        by traefik's internal ACME router) and a redirect. Without it the validation fell through to
+        «private» (an app behind the sign-in, DGO-1597) or to «none» when the router was `-`, so a
+        certificate's renewal was either invisible or, worse, looked like a scanner asking the bare
+        address — and the scan jail counts those.
+        """
+        if (path or "").split("?", 1)[0].startswith(ACME_PREFIX):
+            return {"kind": "acme", "app": "acme", "office": ""}
         name = (router or "").split("@", 1)[0]
+        if name.startswith("acme") or name.startswith("traefik-acme"):
+            return {"kind": "acme", "app": "acme", "office": ""}
         if not name:
             return {"kind": "none", "app": "", "office": ""}
         if name.startswith("dgo-remote-"):

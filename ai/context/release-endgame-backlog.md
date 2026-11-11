@@ -2,8 +2,9 @@
 
 Everything left between "here" and a **fast, proven, well-organised release**: backend-API
 config unification, apitools speed, the 5-minute CI lane, remaining correctness opens, and
-the release-plan proof phases. Companion to `release-lockin-plan.md` (phases/gates) — this
-doc is the concrete work list. Check items off here; keep gate definitions there.
+the release-plan proof phases. Companion to `release-lockin-plan.md` (phases/gates; since 2026-11-10 in
+`legacy/ai-context-20261110/`) — this doc is the concrete work list. Check items off here; keep gate
+definitions there.
 
 Lanes (do not cross): `release-v2-lockin` = stabilisation lane (other agent).
 `ci-image-prebake-poc` = speed/CI lane. apitools changes land via the submodule.

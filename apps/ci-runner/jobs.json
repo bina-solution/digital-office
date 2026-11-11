@@ -1,0 +1,22 @@
+{
+  "about": "The job door's NAMED jobs (DGO-1797, package 9): what a linked office may ask this office to run. A job is an argv template — every argument is a fixed word or a {placeholder} whose value must match its pattern — never a shell string. v1 holds read-only bbox verbs only (class light: they take no heavy-job slot). JSON, not YAML: the server and the worker are standard library only.",
+  "jobs": {
+    "bbox": {
+      "class": "light",
+      "timeout_s": 300,
+      "what": "a read-only bbox verb, in this office's own checkout",
+      "verbs": [
+        ["status"],
+        ["dgo", "link", "status"],
+        ["computers", "herd"],
+        ["ci-runner", "status"],
+        ["ci-runner", "jobs"],
+        ["ci-runner", "queue"],
+        ["project-pln", "tasks", "show", "{ref}"]
+      ],
+      "args": {
+        "ref": "^[A-Z][A-Z0-9]{1,9}-[0-9]{1,6}$"
+      }
+    }
+  }
+}

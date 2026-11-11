@@ -1,4 +1,4 @@
-"""connections — the single credential plane for deployment-hacohen.
+"""connections — the single credential plane for digital-office.
 
 One declarative catalog (providers/*.yaml) describes EVERY secret/connection in the estate; a
 per-service manifest (manifests/*.yaml) declares what each service requires. Values are the only
@@ -13,7 +13,7 @@ state and warm-start from .env, resolved in a fixed order:
 
 Interfaces: HTTP API + this UI + cli.py (declarative-driven throughout).
 """
-import base64, glob, hashlib, html, json, os, re, secrets, socket, string, tempfile, threading, time, urllib.parse, urllib.request, urllib.error
+import base64, glob, hashlib, hmac, html, json, os, re, secrets, socket, string, tempfile, threading, time, urllib.parse, urllib.request, urllib.error
 from concurrent.futures import ThreadPoolExecutor
 
 import yaml
@@ -471,7 +471,48 @@ def _field_store_key(cid, prov, field):
 
 
 # ── audit log (append-only, in the vault): reveal/edit/rotate/connect/revoke ──
+# ── the fourth channel: what was done to a connection, on `dgo:flow:connections` (flow.v1, DGO-1402) ──
+# Through the office's ONE publisher, platform-base/redis/flowpub.py, mounted read-only at /opt/dgo
+# (docker-compose.yml) — «כל מקביל» draws it as the row «חיבורים ומפתחות», agents hear it (`./bbox
+# connections flow`). WHAT goes out: the act, the connection's or instance's id and scalar facts (a
+# test's status, a field's name). NEVER a value, a masked value, a token or a key list — the stream is
+# read by every agent of the office. An image run without the mount publishes nothing and works the same.
+import sys as _sys
+
+_sys.path.insert(0, "/opt/dgo")
+try:
+    import flowpub as _flowpub
+except ImportError:
+    _flowpub = None
+
+#: audit event → (flow type, what a person reads; {id} is the connection or the instance)
+_FLOW_ACTS = {
+    "reveal": ("connection.revealed", "ערך של «{id}» הוצג"),
+    "test": ("connection.tested", "החיבור «{id}» נבדק"),
+    "edit": ("connection.changed", "החיבור «{id}» שונה"),
+    "rotate": ("connection.rotated", "הסוד של «{id}» הוחלף"),
+    "add": ("connection.added", "נוסף החיבור «{id}»"),
+    "clear": ("connection.reverted", "החיבור «{id}» חזר לברירת המחדל"),
+    "disconnect": ("connection.disconnected", "החיבור «{id}» נותק"),
+    "instance-create": ("instance.created", "נוסף המופע «{id}»"),
+    "instance-delete": ("instance.deleted", "המופע «{id}» הוסר"),
+    "instance-secret-update": ("instance.changed", "הפרטים של המופע «{id}» עודכנו"),
+}
+
+
+def _flow(event, cid, **extra):
+    if _flowpub is None or event not in _FLOW_ACTS:
+        return
+    type_, title = _FLOW_ACTS[event]
+    facts = {k: v for k, v in extra.items() if isinstance(v, (bool, int, float)) or k in ("status", "field", "protocol", "source")}
+    facts = {k: (str(v)[:80] if isinstance(v, str) else v) for k, v in facts.items()}
+    if event == "test" and extra.get("status") not in (None, "healthy"):
+        type_ = "connection.tested.failed"                   # drawn red: the probe did not find it healthy
+    _flowpub.emit("connections", type_, title.format(id=str(cid)[:80]), {"id": str(cid)[:80], **facts})
+
+
 def _audit(event, cid, **extra):
+    _flow(event, cid, **extra)
     try:
         store = vault_read()
         log = store.get("__audit__", [])
@@ -725,6 +766,23 @@ def api_resolve(cid):
     return jsonify(id=cid, source=source, masked=mask(value), resolved=bool(value))
 
 
+@app.get("/api/is-set/<cid>")
+def api_is_set(cid):
+    """Is this connection SET — a value the office holds for it (its vault override or its .env key), not a
+    placeholder — yes or no, and nothing else. (Not `/api/set/<id>`: that path WRITES a value, POST, and clears
+    it, DELETE.)
+
+    For a gate that runs before something leaves the office (DGO-1814: the Drive agent asks it before its OpenAI
+    nodes, and n8n keeps every node's answer in the execution's record). So: no value and no mask of one
+    (`/api/resolve` masks: three characters and two of the key), and no live probe (`/api/connections` probes
+    every provider of the office, some of them outside it). Unknown id → 404, `set: false`."""
+    prov = {**catalog(), **custom_catalog(vault_read())}.get(cid)
+    if not prov:
+        return jsonify(id=cid, set=False, known=False), 404
+    _, value = resolve(cid, prov, vault_read())
+    return jsonify(id=cid, set=bool(value) and not _is_placeholder(value), known=True)
+
+
 @app.get("/api/cred/<cid>")
 def api_cred(cid):
     """The full editable field-set of one credential (primary + envs_extra companions) so the
@@ -875,6 +933,7 @@ def api_clear(cid):
     if not field and cid in (store.get("__custom__") or {}):
         del store["__custom__"][cid]
     vault_write(store)
+    _flow("clear", cid, **({"field": field} if field else {}))
     return jsonify(ok=True, id=cid, field=field, reverted_to="env")
 
 
@@ -909,6 +968,7 @@ def api_add():
                                                "wizard": b.get("wizard") or "",
                                                "consumers": b.get("consumers", [])}
     vault_write(store)
+    _flow("add", cid)
     return jsonify(ok=True, id=cid, source="db", masked=mask(v))
 
 
@@ -1057,6 +1117,7 @@ def api_disconnect(cid):
         return jsonify(ok=st in (200, 204), id=cid, action="whatsapp-logout", bot_status=st)
     store.pop(cid, None)                       # oauth token or user override both live under cid
     vault_write(store)
+    _flow("disconnect", cid)
     return jsonify(ok=True, id=cid, action=("revoke-grant" if kind == "oauth-grant" else "clear-override"),
                    reverted_to="needs_action" if kind == "oauth-grant" else "env")
 
@@ -1255,10 +1316,25 @@ def api_instance_secret(iid):
     return jsonify(protocol=rec.get("protocol"), secret=rec.get("secret") or {})
 
 
-#: Who may read an agent's action token here. One service: the link plane hands it to the offices this
-#: office serves its agent to (DGO-32, DGO-1127). Anything else asks the agent with its own token.
+#: Who may read an agent's action token here. One service always: the link plane hands it to the offices this
+#: office serves its agent to (DGO-32, DGO-1127). Anything else asks the agent with its own token — or is one
+#: of the readers the compiler declares for that agent (agent_readers, below).
 AGENT_TOKEN_READERS = {"dgo-extend"}
 _SERVICE_NAME = re.compile(r"^[a-z0-9][a-z0-9_.\-]{0,63}$")
+
+
+def agent_readers(agent):
+    """The services the COMPILER says may read `agent`'s token (DGO-1152): registry/agent-token-readers.json,
+    {agent service: [reader services]}, derived from the manifests — the services of an app that `use`s a
+    capability the agent's app is the one provider of (newsflow uses `browser`: browser42-task-runner's token).
+    Never authored here, never widened by a request: a file that is missing or not that shape grants nothing."""
+    try:
+        with open(os.path.join(GENERATED, "agent-token-readers.json"), encoding="utf-8") as f:
+            data = json.load(f)
+    except (OSError, ValueError):
+        return set()
+    readers = data.get(agent) if isinstance(data, dict) else None
+    return {r for r in readers if isinstance(r, str) and r} if isinstance(readers, list) else set()
 
 
 @app.get("/api/agent-token/<service>")
@@ -1271,16 +1347,17 @@ def api_agent_token(service):
     host, so a dgo-extend of another compose project is refused too. Each answer is in the grant log."""
     ident = broker.caller()
     project = identity.own_project()
-    allowed = ident.get("method") == "loopback" or (
-        ident.get("ok") and ident.get("method") == "container-id+ip"
-        and ident.get("service") in AGENT_TOKEN_READERS
-        and bool(project) and ident.get("project") == project)
     if not _SERVICE_NAME.match(service or ""):
         return jsonify(error="not a service name"), 400
+    readers = AGENT_TOKEN_READERS | agent_readers(service)
+    allowed = ident.get("method") == "loopback" or (
+        ident.get("ok") and ident.get("method") == "container-id+ip"
+        and ident.get("service") in readers
+        and bool(project) and ident.get("project") == project)
     if not allowed:
-        why = (f"only this office's {', '.join(sorted(AGENT_TOKEN_READERS))}, identified by container id "
-               f"and address, reads an agent's token (caller: {ident.get('service') or 'unidentified'}, "
-               f"{ident.get('method')}, project {ident.get('project') or '?'})")
+        why = (f"only this office's {', '.join(sorted(AGENT_TOKEN_READERS))} or a reader the compiler names for "
+               f"{service}, identified by container id and address, reads its token (caller: "
+               f"{ident.get('service') or 'unidentified'}, {ident.get('method')}, project {ident.get('project') or '?'})")
         broker.audit("agent-token", "refuse", ident, agent=service, reason=why)
         return jsonify(error=why, decision="refuse"), 403
     token, why = identity.agent_token(service)
@@ -1348,16 +1425,17 @@ def callback_base():
     return os.environ.get("CONNECTIONS_PUBLIC_URL", "https://connections.localhost").rstrip("/")
 
 
-def authorize_url(prov, as_instance=False):
+def authorize_url(prov, as_instance=False, state=None, redirect_uri=None):
     o = prov["oauth"]
     client_id = resolve_value(o["client_ref"] + "-id") or resolve_value(o["client_ref"]) \
         or os.environ.get("N8N_GOOGLE_OAUTH_CLIENT_ID", "")
     # `state` is the only channel that survives the round-trip to the provider, so the as_instance
     # choice rides in it (the callback is a bare provider redirect — it carries nothing of ours).
+    # A relayed consent (below) brings its own signed state and the relay's address.
     params = {"client_id": client_id, "response_type": "code",
-              "redirect_uri": f"{callback_base()}/oauth/callback",
+              "redirect_uri": redirect_uri or f"{callback_base()}/oauth/callback",
               "scope": " ".join(o["scopes"]),
-              "state": prov["id"] + ("|as_instance" if as_instance else "")}
+              "state": state or (prov["id"] + ("|as_instance" if as_instance else ""))}
     params.update(o.get("extra", {}))
     from urllib.parse import urlencode
     return o["authorize_url"] + "?" + urlencode(params), client_id
@@ -1414,7 +1492,57 @@ def oauth_start(cid):
     if not prov or "oauth" not in prov:
         return jsonify(error="not an oauth connection"), 404
     as_instance = request.args.get("as_instance") == "1"
+    ret = (request.args.get("ret") or "").strip()
+    if ret:
+        # a RELAYED consent: an app of this office asks, and the browser comes back to that app (`ret`)
+        if not as_instance:
+            return jsonify(error="a relayed consent connects an account (as_instance=1) — nothing else comes back this way"), 400
+        if len(ret) > 600 or not _ret_allowed(ret):
+            return jsonify(error="ret must be an app's own return page (…/oauth/google/return) on this herd's names"), 400
+        if not _state_key(prov):
+            # no client secret on this office: said as the refusal it is, in the same plain words (DGO-1634) — and
+            # told apart from no client at all, whose fix is another (a new client vs. its secret pasted here)
+            _url, client_id = authorize_url(prov, as_instance)
+            return _refusal_answer("no_secret" if _real_client(client_id) else "no_client",
+                                   _relay_base() + "/oauth/relay", client_id)
+        # Bound to the BROWSER that asked (DGO-1418): the app keeps a secret in that window's own storage and gives
+        # here only its sha256. /oauth/relayed completes the consent only with the secret — so a consent link that
+        # somebody else opens and approves comes back to a page that cannot finish it.
+        bind = (request.args.get("bind") or "").strip().lower()
+        if not re.fullmatch(r"[0-9a-f]{64}", bind):
+            return jsonify(error="a relayed consent is bound to the window that asked for it: bind=<sha256 hex of its secret>"), 400
+        redirect = _relay_base() + "/oauth/relay"
+        nonce = secrets.token_urlsafe(18)
+        exp = int(time.time()) + _STATE_TTL
+        with _STATES_LOCK:
+            for k in [k for k, v in _OAUTH_STATES.items() if v["t"] < time.time()]:
+                _OAUTH_STATES.pop(k, None)
+            while len(_OAUTH_STATES) >= _STATES_MAX:          # a flood of starts cannot grow it without end
+                _OAUTH_STATES.pop(next(iter(_OAUTH_STATES)))
+            _OAUTH_STATES[nonce] = {"c": cid, "r": ret, "t": exp, "b": bind}
+        state = sign_state(prov, {"c": cid, "i": 1 if as_instance else 0, "n": nonce, "r": ret, "u": redirect, "t": exp})
+        url, client_id = authorize_url(prov, as_instance, state=state, redirect_uri=redirect)
+        refused = _provider_refusal(url) if _real_client(client_id) else "no_client"
+        if refused:
+            return _refusal_answer(refused, redirect, client_id)
+        return jsonify(id=cid, authorize_url=url, client_id_present=bool(client_id), redirect_uri=redirect,
+                       relayed=True, as_instance=as_instance, platform_protocols=_platform_protocols(prov))
     url, client_id = authorize_url(prov, as_instance)
+    # The broker's own consent is asked FIRST too (DGO-1634). The console's «חיבור חשבון חדש» comes here, and it
+    # opened Google's English error page in a new window — «פתח חלון הרשאות … לא ברור לי מה זה אומר» on Exampleu,
+    # where the office's client was gone at Google. Its return address is this office's own callback, which Google
+    # knows only when it was registered on the client, so a live client refuses it as redirect_uri_mismatch: said.
+    refused = _provider_refusal(url) if _real_client(client_id) else "no_client"
+    if refused:
+        said, status = _refusal_answer(refused, f"{callback_base()}/oauth/callback", client_id)
+        if request.args.get("go") == "1":       # a browser sent here: a page of the same words, never Google's
+            d = said.get_json()
+            return Response(f"<!doctype html><meta charset=utf-8><meta name=viewport content='width=device-width'>"
+                            f"<body dir=rtl style='font-family:system-ui,sans-serif;max-width:36em;margin:2em auto;"
+                            f"padding:0 1em;line-height:1.6'><p>{html.escape(d['error'])}</p>"
+                            f"<p><a href='{html.escape(_REFUSAL_HELP)}' target=_blank rel=noopener>Google Cloud — "
+                            f"מזהי התחברות</a></p></body>", status=status, mimetype="text/html")
+        return said, status
     if request.args.get("go") == "1":
         return Response(status=302, headers={"Location": url})
     return jsonify(id=cid, authorize_url=url, client_id_present=bool(client_id),
@@ -1433,26 +1561,9 @@ def oauth_callback():
     prov = catalog().get(cid or "")
     if not code or not prov or "oauth" not in prov:
         return Response("<h3>connections: invalid oauth callback</h3>", mimetype="text/html", status=400)
-    o = prov["oauth"]
-    client_id = resolve_value(o["client_ref"] + "-id") or os.environ.get("N8N_GOOGLE_OAUTH_CLIENT_ID", "")
-    client_secret = resolve_value(o["client_ref"] + "-secret") or os.environ.get("N8N_GOOGLE_OAUTH_CLIENT_SECRET", "")
-    from urllib.parse import urlencode
-    body = urlencode({"code": code, "client_id": client_id, "client_secret": client_secret,
-                      "redirect_uri": f"{callback_base()}/oauth/callback",
-                      "grant_type": "authorization_code"}).encode()
-    try:
-        req = urllib.request.Request(o["token_url"], data=body, method="POST")
-        with urllib.request.urlopen(req, timeout=15) as r:
-            tok = json.load(r)
-    except urllib.error.HTTPError as e:
-        # The provider answered, and its body names the reason (`invalid_grant`,
-        # `redirect_uri_mismatch`, `invalid_client`) — "HTTP Error 400: Bad Request" names nothing.
-        said = html.escape(e.read().decode("utf-8", "replace")[:400])
-        return Response(f"<h3>connections: token exchange refused ({e.code})</h3><pre>{said}</pre>",
-                        mimetype="text/html", status=502)
-    except Exception as e:
-        return Response(f"<h3>connections: token exchange failed: {html.escape(str(e))}</h3>",
-                        mimetype="text/html", status=502)
+    tok, refused = _exchange(prov, code, f"{callback_base()}/oauth/callback")
+    if refused:
+        return Response(f"<h3>connections: token exchange {html.escape(refused)}</h3>", mimetype="text/html", status=502)
     store = vault_read(); store[cid] = json.dumps(tok); vault_write(store)   # grant now owned by connections
     if as_instance:
         made = instances_from_grant(prov, tok)
@@ -1466,6 +1577,271 @@ def oauth_callback():
     injected = inject_into_n8n(prov, tok)
     return Response(f"<h3>connections: {cid} connected ✓</h3><p>tokens stored in the vault; injected into "
                     f"{injected} n8n credential(s). You can close this tab.</p>", mimetype="text/html")
+
+
+def _exchange(prov, code, redirect_uri):
+    """(tokens, None) for a consent code, or (None, the refusal in words). The redirect_uri is the one
+    the consent was ASKED with — Google refuses the code under any other."""
+    o = prov["oauth"]
+    client_id = resolve_value(o["client_ref"] + "-id") or os.environ.get("N8N_GOOGLE_OAUTH_CLIENT_ID", "")
+    client_secret = resolve_value(o["client_ref"] + "-secret") or os.environ.get("N8N_GOOGLE_OAUTH_CLIENT_SECRET", "")
+    body = urllib.parse.urlencode({"code": code, "client_id": client_id, "client_secret": client_secret,
+                                   "redirect_uri": redirect_uri, "grant_type": "authorization_code"}).encode()
+    try:
+        req = urllib.request.Request(o["token_url"], data=body, method="POST")
+        with urllib.request.urlopen(req, timeout=15) as r:
+            return json.load(r), None
+    except urllib.error.HTTPError as e:
+        # The provider answered, and its body names the reason (`invalid_grant`,
+        # `redirect_uri_mismatch`, `invalid_client`) — "HTTP Error 400: Bad Request" names nothing.
+        return None, f"refused ({e.code}): {e.read().decode('utf-8', 'replace')[:400]}"
+    except Exception as e:
+        return None, f"failed: {e}"
+
+
+# ── A CONSENT THAT COMES BACK THROUGH THE HERD'S DOOR (DGO-1390) ────────────────────────────────────
+# Google returns a person only to an address registered on the OAuth client: https, on a public name.
+# An office at home (the HP, a laptop — `*.localhost`) has none, and registering one per office is a
+# Google Cloud form per office. So the product registers ONE: `OAUTH_RELAY_URL/oauth/relay`, on the
+# herd's public door. The office that starts a consent for one of its apps SIGNS the state (HMAC under the
+# OAuth client's secret, which only our offices hold) and names where the browser comes back: `ret`, the
+# app's own return page as the browser saw it, through whichever console it was opened in. The relay
+# checks the signature and sends the browser there with Google's code — it exchanges nothing and keeps
+# nothing. The app hands the code to ITS office's connections (`/oauth/relayed`), which takes it only for
+# a nonce it issued itself (so a consent finished on another office — another of our clients — cannot be
+# planted here) and only with the secret of the BROWSER that started it (DGO-1418: the app's start keeps a
+# secret in that window, connections only its sha256 — a consent link somebody else approves cannot be
+# finished), exchanges it, and keeps the account. The grant never reaches the relay's vault.
+_STATE_TTL = 15 * 60
+_STATES_MAX = 1000
+_STATES_LOCK = threading.Lock()
+_OAUTH_STATES = {}      # nonce -> {c: provider id, r: ret, t: expiry, b: sha256 of the browser's secret} — once each
+
+
+def _relay_base():
+    """Where Google sends the browser back for a relayed consent: the declared relay, else this office."""
+    return (os.environ.get("OAUTH_RELAY_URL") or callback_base()).rstrip("/")
+
+
+#: The only page a consent comes back to: an app's own return page (drive's, mailview's), at any mount — the
+#: console's /a/<alias>[.<office>]/ or the app's own host.
+_RETURN_PATH = re.compile(r"^(/[A-Za-z0-9._~%!$&'()*+,;=:@-]+)*/oauth/google/return$")
+
+
+def _ret_allowed(ret):
+    """Is `ret` one of OUR apps' return pages? The relay is public and hands Google's code to the address a state
+    names, so that address is held to the herd's own names — `*.localhost` (an office at home, seen through its
+    console) and the product's domain (OAUTH_RETURN_DOMAINS), plus this office's own — and to the return path.
+    Checked where the state is made (/start) and again where it is used (/oauth/relay)."""
+    try:
+        u = urllib.parse.urlsplit(str(ret or ""))
+        host = (u.hostname or "").lower()
+    except ValueError:
+        return False
+    if u.scheme not in ("http", "https") or not host or u.username or u.password or u.query or u.fragment:
+        return False
+    domains = [d.strip().lower().lstrip(".") for d in
+               (os.environ.get("OAUTH_RETURN_DOMAINS") or "localhost,digital-office.co.il").split(",") if d.strip()]
+    own = (urllib.parse.urlsplit(callback_base()).hostname or "").lower().split(".", 1)
+    if len(own) == 2 and "." in own[1]:
+        domains.append(own[1])                           # connections.<this office's domain> → <domain>
+    return any(host == d or host.endswith("." + d) for d in domains) and bool(_RETURN_PATH.match(u.path))
+
+
+#: What the person is told when the provider would refuse the consent before it starts — said in the window
+#: they are in, instead of the provider's English error page after a new one opened. Plain words first (what is
+#: missing, and who fixes it), the address to register last (DGO-1634: «יותר ברור מה צריך לעשות»).
+_REFUSAL_HE = {
+    "no_client": "ההתחברות עם Google עוד לא פתוחה בלשכה הזו: אין לה עדיין מזהה התחברות של Google (OAuth client). "
+                 "מי שמנהל את Google Cloud של העסק יוצר אחד, עם כתובת החזרה {uri}",
+    "no_secret": "ההתחברות עם Google עוד לא פתוחה בלשכה הזו: יש לה מזהה התחברות (OAuth client), אבל לא את הסוד שלו "
+                 "(client secret). מי שמנהל את Google Cloud של העסק מעתיק אותו ממסך המזהה ומוסיף אותו ב«חיבורים ומפתחות»",
+    "invalid_client": "ההתחברות עם Google עוד לא פתוחה בלשכה הזו: מזהה ההתחברות שלה (OAuth client) נמחק אצל Google. "
+                      "מי שמנהל את Google Cloud של העסק יוצר מזהה חדש, עם כתובת החזרה {uri}",
+    "redirect_uri_mismatch": "ההתחברות עם Google עוד לא פתוחה בלשכה הזו: Google לא מכיר את כתובת החזרה שלה. "
+                             "מי שמנהל את Google Cloud של העסק מוסיף אותה למזהה ההתחברות: {uri}",
+    "disabled_client": "ההתחברות עם Google עוד לא פתוחה בלשכה הזו: מזהה ההתחברות שלה הושבת ב־Google Cloud",
+    "*": "Google מסרב לפתוח את ההתחברות עם המזהה שמוגדר בלשכה",
+}
+#: Where that is done: Google Cloud's credentials page, where an OAuth client is created and its return addresses
+#: are listed («שיהיה פה קישור לזה»). Every refusal answer carries it; the screens show it as a link.
+_REFUSAL_HELP = "https://console.cloud.google.com/apis/credentials"
+
+
+def _refusal_answer(refused, redirect, client_id):
+    """The 409 a consent that the provider would refuse gets, from either start: the sentence, what Google said,
+    the address to register, and where to do it."""
+    return jsonify(error=_REFUSAL_HE.get(refused, _REFUSAL_HE["*"]).format(uri=redirect), provider_error=refused,
+                   redirect_uri=redirect, client_id_present=_real_client(client_id), help_url=_REFUSAL_HELP), 409
+
+
+#: A Google OAuth client id has a shape of its own: one in it is real whatever its random part spells (`xxx`, `todo`
+#: are placeholder markers anywhere else).
+_GOOGLE_CLIENT_ID = re.compile(r"\d+-[0-9a-z]+\.apps\.googleusercontent\.com")
+
+
+def _real_client(client_id):
+    """Is an OAuth client configured at all — not absent, not a template's placeholder?"""
+    v = str(client_id or "").strip()
+    return bool(v) and (bool(_GOOGLE_CLIENT_ID.fullmatch(v)) or not _is_placeholder(v))
+
+
+def _provider_refusal(url):
+    """The provider's refusal of this consent request ("invalid_client", "redirect_uri_mismatch", …), or "".
+    Google refuses a dead client or an unregistered address BEFORE anyone signs in — by redirecting the
+    first request to its error page — so asking it costs one request and no person. Measured 2026-11-05:
+    every office's client answered `invalid_client: The OAuth client was not found`."""
+    q = urllib.parse.parse_qs(urllib.parse.urlsplit(url).query)
+    key = ((q.get("client_id") or [""])[0], (q.get("redirect_uri") or [""])[0])
+    hit = _REFUSALS.get(key)
+    if hit and hit[0] > time.time():             # one question a minute per client and address, not one per start
+        return hit[1]
+
+    class _Stop(urllib.request.HTTPRedirectHandler):
+        def redirect_request(self, *a, **k):
+            return None
+    try:
+        r = urllib.request.build_opener(_Stop).open(
+            urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0 (DGO connections)"}), timeout=8)
+        loc = r.headers.get("Location") or ""
+    except urllib.error.HTTPError as e:
+        loc = e.headers.get("Location") or ""
+    except Exception:
+        # the provider cannot be asked from here: the person sees its own answer — and the next start for a minute
+        # does not wait the whole timeout again (every start of the broker's own asks now too, DGO-1634)
+        _REFUSALS[key] = (time.time() + 60, "")
+        return ""
+    said = ""
+    if "/oauth/error" in loc:
+        err = (urllib.parse.parse_qs(urllib.parse.urlsplit(loc).query).get("authError") or [""])[0]
+        try:
+            raw = base64.urlsafe_b64decode(err + "=" * (-len(err) % 4))
+        except Exception:
+            raw = b""
+        m = re.search(rb"(invalid_client|redirect_uri_mismatch|disabled_client|invalid_request|access_denied)", raw)
+        said = m.group(1).decode() if m else "error"
+    _REFUSALS[key] = (time.time() + 60, said)
+    return said
+
+
+_REFUSALS = {}          # (client id, return address) -> (until, the provider's answer) — _provider_refusal
+
+
+def _state_key(prov):
+    o = prov.get("oauth") or {}
+    sec = resolve_value(o.get("client_ref", "") + "-secret") or os.environ.get("N8N_GOOGLE_OAUTH_CLIENT_SECRET", "")
+    return hashlib.sha256(b"dgo-oauth-relay\x1f" + sec.encode()).digest() if sec and not _is_placeholder(sec) else b""
+
+
+def _b64u(raw):
+    return base64.urlsafe_b64encode(raw).rstrip(b"=").decode()
+
+
+def sign_state(prov, payload):
+    body = _b64u(json.dumps(payload, separators=(",", ":")).encode())
+    return "r1." + body + "." + _b64u(hmac.new(_state_key(prov), body.encode(), hashlib.sha256).digest())
+
+
+def open_state(state):
+    """(payload, provider, "") for a state one of our offices signed and that has not expired, else
+    (None, None, why)."""
+    parts = str(state or "").split(".")
+    if len(parts) != 3 or parts[0] != "r1":
+        return None, None, "not a relayed consent"
+    try:
+        payload = json.loads(base64.urlsafe_b64decode(parts[1] + "=" * (-len(parts[1]) % 4)))
+    except Exception:
+        return None, None, "an unreadable state"
+    prov = catalog().get(str(payload.get("c") or "")) if isinstance(payload, dict) else None
+    if not prov or "oauth" not in prov:
+        return None, None, "an unknown provider"
+    key = _state_key(prov)
+    want = _b64u(hmac.new(key, parts[1].encode(), hashlib.sha256).digest()) if key else ""
+    if not key or not hmac.compare_digest(want, parts[2]):
+        return None, None, "a state no office of ours signed"
+    if time.time() > float(payload.get("t") or 0):
+        return None, None, "a consent older than 15 minutes"
+    if not re.match(r"^https?://[^\s/]+/", str(payload.get("r") or "")):
+        return None, None, "no address to return to"
+    return payload, prov, ""
+
+
+@app.get("/oauth/relay")
+def oauth_relay():
+    """Google's ONE return address for the whole herd. Served without the office's sign-in (the person
+    returning from Google may be a client's, with no account on this office), so it does one thing: a
+    state one of our offices signed → 302 to the return page that state names, with Google's answer.
+    It never exchanges a code and never writes the vault."""
+    payload, _prov, why = open_state(request.args.get("state"))
+    if payload and not _ret_allowed(payload.get("r")):
+        payload, why = None, "a return address that is not one of our apps' return pages"
+    if not payload:
+        return Response(f"<!doctype html><meta charset=utf-8><h3>החיבור לא הושלם</h3><p>{html.escape(why)}</p>",
+                        mimetype="text/html", status=400)
+    back = {k: request.args[k] for k in ("code", "state", "error") if request.args.get(k)}
+    ret = payload["r"]
+    return Response(status=302, headers={"Location": ret + ("&" if "?" in ret else "?") + urllib.parse.urlencode(back),
+                                         "Cache-Control": "no-store", "Referrer-Policy": "no-referrer"})
+
+
+def _upsert_grant_instances(prov, tok):
+    """One instance per platform protocol the grant covers (one Google consent is Drive AND Gmail). An
+    account connected again is the SAME instance with a fresh token, never a second row."""
+    hint = _grant_account_hint(prov, tok)
+    made = []
+    for proto in _platform_protocols(prov):
+        # the whole read-modify-write, its audit line included, under the vault's lock (api_instance_secret_put
+        # says why: an audit written from outside it can put back a store without this token)
+        with _vault_lock:
+            store = vault_read()
+            same = next((iid for iid, rec in _instances(store).items()
+                         if rec.get("protocol") == proto and rec.get("account_hint") == hint and hint != prov.get("id")), None)
+            if same:
+                rec = store[_INSTANCES][same]
+                rec["secret"], rec["status"], rec["updated_at"] = dict(tok), "ok", int(time.time())
+                vault_write(store)
+                _audit("instance-secret-update", same, replace=True, keys=sorted(tok))
+                made.append({"id": same, "protocol": proto, "account_hint": hint, "again": True})
+            else:
+                made.append({"id": create_instance(proto, f"{hint} ({proto.split('_')[0]})", dict(tok), hint),
+                             "protocol": proto, "account_hint": hint, "again": False})
+    return made
+
+
+@app.post("/oauth/relayed")
+def oauth_relayed():
+    """An app of THIS office hands over the code its return page received: {code, state, bind} (or {error,
+    state, bind}). Only for a consent this office started (its nonce, once), only with the secret of the
+    browser that started it (`bind`, DGO-1418), and only from this office's own services — a request relayed
+    through the edge, the console or a link is refused."""
+    if _relayed():
+        return jsonify(ok=False, error="a consent is completed by this office's own app, not through a relay"), 403
+    b = request.get_json(force=True, silent=True)
+    if not isinstance(b, dict):
+        return jsonify(ok=False, error="the body is a JSON object: {code, state, bind}"), 400
+    payload, prov, why = open_state(b.get("state"))
+    if not payload:
+        return jsonify(ok=False, error=why), 400
+    with _STATES_LOCK:
+        mine = _OAUTH_STATES.pop(str(payload.get("n") or ""), None)
+    if not mine or mine["r"] != payload.get("r") or mine["c"] != payload.get("c"):
+        return jsonify(ok=False, error="this consent was not started on this office, or it was already used"), 409
+    secret = str(b.get("bind") or "")
+    if not mine.get("b") or not secret or len(secret) > 200 or not hmac.compare_digest(
+            hashlib.sha256(secret.encode("utf-8", "replace")).hexdigest(), mine["b"]):
+        return jsonify(ok=False, error="this consent was started in another browser — connect the account from the "
+                                       "window that asked for it"), 403
+    if b.get("error"):
+        return jsonify(ok=False, error=f"Google: {b['error']}"), 400
+    if not b.get("code"):
+        return jsonify(ok=False, error="no code came back from Google"), 400
+    if not payload.get("i"):                     # before the exchange: a code is spent once, and never for nothing
+        return jsonify(ok=False, error="only an account consent (as_instance) is completed this way"), 400
+    tok, refused = _exchange(prov, b["code"], payload["u"])
+    if refused:
+        return jsonify(ok=False, error=f"Google: the code was {refused}"), 502
+    made = _upsert_grant_instances(prov, tok)
+    return jsonify(ok=True, made=made, account_hint=(made[0]["account_hint"] if made else None))
 
 
 def _grant_account_hint(prov, tok):

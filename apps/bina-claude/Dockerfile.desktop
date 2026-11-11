@@ -18,7 +18,7 @@ FROM ghcr.io/linuxserver/baseimage-selkies:debiantrixie@sha256:51461db2f6c9ff821
 # GNOME Keyring + the session bus: the app keeps its sign-in in the desktop's keyring, and without an
 # unlocked one it asks again on every launch (the docs' own troubleshooting). Fonts that render Hebrew
 # and emoji. git + the CLI's tools for the app's Code tab on the office checkout. node runs the front
-# door (gate.mjs), the same one the terminal has.
+# door (gate.mjs).
 RUN apt-get update && apt-get install -y --no-install-recommends \
       ca-certificates curl gnupg dbus-x11 gnome-keyring libsecret-1-0 libsecret-tools \
       fonts-noto-core fonts-noto-color-emoji culmus \
@@ -35,6 +35,35 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
  && rm -rf /var/lib/apt/lists/* \
  && command -v claude-desktop
 
+# The Docker CLI + compose plugin PINNED to the engine's versions (28.5.2 / 2.40.3), as the adapter's
+# Dockerfile does (gate G74; Docker 29 fails silently): the base image ships 29.x, and the app's sessions
+# drive the office through the host's socket (DGO-1323). The compose version is the HOST's, handed in by the
+# compose file as for the adapter (gate G74): one that differs hashes services differently and recreates them.
+ARG COMPOSE_VERSION=2.40.3
+RUN install -m 0755 -d /etc/apt/keyrings \
+ && curl -fsSL https://download.docker.com/linux/debian/gpg -o /etc/apt/keyrings/docker.asc \
+ && echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/debian trixie stable" \
+      > /etc/apt/sources.list.d/docker.list \
+ && apt-get update && apt-get install -y --no-install-recommends --allow-downgrades \
+      docker-ce-cli=5:28.5.2-1~debian.13~trixie \
+      docker-compose-plugin=${COMPOSE_VERSION}-1~debian.13~trixie \
+      docker-buildx-plugin \
+ && rm -rf /var/lib/apt/lists/* \
+ && docker --version | grep -q ' 28\.5\.2,' && docker compose version | grep -qF "v${COMPOSE_VERSION}"
+
+# The host's docker group id is the host's own (it differs between machines), so the desktop user (abc) joins
+# whatever group owns the mounted socket at start — the base image runs /custom-cont-init.d as root before
+# the app. No socket mounted: nothing to join.
+RUN mkdir -p /custom-cont-init.d \
+ && printf '%s\n' '#!/bin/bash' \
+      's=/var/run/docker.sock; [ -S "$s" ] || exit 0' \
+      'g="$(stat -c %g "$s")"' \
+      'getent group "$g" >/dev/null || groupadd -o -g "$g" "hostdocker$g"' \
+      'n="$(getent group "$g" | cut -d: -f1)"; usermod -aG "$n" abc' \
+      'echo "[docker-socket] abc joined group $n ($g) for $s ($(stat -c %a "$s"))"' \
+      > /custom-cont-init.d/50-docker-socket-group \
+ && chmod 755 /custom-cont-init.d/50-docker-socket-group
+
 # What the session runs (the base image's single-application hook, X11 mode: openbox runs
 # ~/.config/openbox/autostart, copied from /defaults on the first start). The autostart only names the
 # launcher, which lives in the image — so a new image changes what runs, even on a /config that keeps
@@ -49,7 +78,7 @@ RUN chmod 755 /usr/local/bin/bina-claude-desktop \
 # THE FRONT DOOR. The stream is a signed-in Claude account; the image's nginx listens on every interface,
 # where any container of traefik-network could reach it. So nginx moves to the container's loopback
 # (CUSTOM_PORT=3100 in docker-compose.yml; init-nginx substitutes the port into this template), and
-# gate.mjs takes :3000 and admits the edge and the console only — the terminal's own door, the same file.
+# gate.mjs takes :3000 and admits the edge and the console only.
 RUN sed -i -e 's/^\(\s*\)listen 3000 default_server;/\1listen 127.0.0.1:3000 default_server;/' \
            -e 's/^\(\s*\)listen 3001 ssl;/\1listen 127.0.0.1:3001 ssl;/' \
            -e '/listen \[::\]/d' /defaults/default.conf \
@@ -63,3 +92,37 @@ RUN echo longrun > /etc/s6-overlay/s6-rc.d/svc-bina-gate/type \
  && touch /etc/s6-overlay/s6-rc.d/svc-bina-gate/dependencies.d/init-services \
  && touch /etc/s6-overlay/s6-rc.d/user/contents.d/svc-bina-gate \
  && chmod 755 /etc/s6-overlay/s6-rc.d/svc-bina-gate/run
+
+# THE DESKTOP'S OWN BROWSER, FOR THE SIGN-IN ONLY (DGO-1506). «Continue with Google» is a browser round
+# trip: the app opens its sign-in as a system URL and waits for claude.ai to answer with a claude:// link.
+# Both ends were broken here: the image had no browser (the click did nothing), and the package's claude://
+# handler starts the app without --no-sandbox, which dies in a container (the answer could never arrive).
+#   bina-claude-signin-browser  Chromium on the screen the console streams, for the app's sign-in on
+#                               claude.ai/claude.com only (it runs unsandboxed as a user that can reach the
+#                               host's docker socket), in a throwaway profile, for 15 minutes at most
+#   claude-desktop              first on PATH: the app with this container's flags, for its handler too
+# The policy lets claude.ai open claude:// links without a prompt, blocks downloads, and keeps the browser
+# plain: no sign-in to Chromium, no sync, no saved passwords. Which handler opens http/https is written
+# into the desktop user's own mimeapps.list at session start (desktop/autostart). The checks: the binary the
+# wrapper runs is the one /usr/bin/claude-desktop links to (so the wrapper skips nothing), the package's
+# handler resolves `claude-desktop` through PATH, and the tools both scripts lean on are here.
+RUN apt-get update && apt-get install -y --no-install-recommends \
+      chromium procps xdg-utils libglib2.0-bin coreutils \
+ && rm -rf /var/lib/apt/lists/* \
+ && dpkg-query -W chromium
+COPY desktop/signin-browser /usr/local/bin/bina-claude-signin-browser
+COPY desktop/claude-desktop /usr/local/bin/claude-desktop
+COPY desktop/browser-policy.json /etc/chromium/policies/managed/bina-claude.json
+RUN chmod 755 /usr/local/bin/bina-claude-signin-browser /usr/local/bin/claude-desktop \
+ && printf '%s\n' '[Desktop Entry]' 'Type=Application' 'Name=Browser' \
+      'Exec=/usr/local/bin/bina-claude-signin-browser %u' 'NoDisplay=true' 'Terminal=false' \
+      'MimeType=x-scheme-handler/http;x-scheme-handler/https;' \
+      > /usr/share/applications/bina-claude-web.desktop \
+ && test -x /usr/lib/claude-desktop/claude-desktop \
+ && [ "$(readlink -f /usr/bin/claude-desktop)" = /usr/lib/claude-desktop/claude-desktop ] \
+ && sed -n '/^\[Desktop Entry\]/,/^\[Desktop Action/p' /usr/share/applications/com.anthropic.Claude.desktop \
+      | grep -q '^Exec=claude-desktop %U$' \
+ && grep -q 'x-scheme-handler/claude' /usr/share/applications/com.anthropic.Claude.desktop \
+ && command -v ps && command -v pkill && command -v xdg-mime && command -v gio && command -v timeout \
+ && jq -e '.AutoLaunchProtocolsFromOrigins[0].protocol == "claude" and .DownloadRestrictions == 3' \
+      /etc/chromium/policies/managed/bina-claude.json

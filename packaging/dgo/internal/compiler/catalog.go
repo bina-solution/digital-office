@@ -24,8 +24,8 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/solomonBoltin/deployment-hacohen/packaging/dgo/internal/pyval"
-	"github.com/solomonBoltin/deployment-hacohen/packaging/dgo/internal/yamlish"
+	"github.com/bina-solution/digital-office/packaging/dgo/internal/pyval"
+	"github.com/bina-solution/digital-office/packaging/dgo/internal/yamlish"
 )
 
 // App is one manifest as load_catalog() keeps it: the decoded JSON plus where it lives.
@@ -64,6 +64,14 @@ var catalogRoots = []struct {
 // Python raises what load_catalog does not catch — a manifest that is not UTF-8, nesting past the
 // recursion limit, a document that is no object — one FATAL line in the traceback's place.
 func LoadCatalog(repo string) (*Catalog, error) {
+	return LoadCatalogSkipping(repo, nil)
+}
+
+// LoadCatalogSkipping is LoadCatalog that first asks skip about each app's own folder, before a byte of its
+// manifest is read: true leaves the app out of the catalog, an error stops the load. The store's build asks it
+// whether the folder is a link (DGO-1742), as catalog.py does before it reads a manifest; reconcile.py has no such
+// question, and LoadCatalog asks none.
+func LoadCatalogSkipping(repo string, skip func(root, dir string) (bool, error)) (*Catalog, error) {
 	cat := &Catalog{Apps: map[string]*App{}}
 	for _, r := range catalogRoots {
 		dir := filepath.Join(repo, r.name)
@@ -73,6 +81,15 @@ func LoadCatalog(repo string) (*Catalog, error) {
 		matches, _ := filepath.Glob(filepath.Join(dir, "*", "app.json"))
 		sort.Strings(matches)
 		for _, m := range matches {
+			if skip != nil {
+				left, err := skip(r.name, filepath.Dir(m))
+				if err != nil {
+					return nil, err
+				}
+				if left {
+					continue
+				}
+			}
 			rel := strings.TrimPrefix(m, repo+string(filepath.Separator)) // as relative_to prints it: this OS's separators
 			text, err := readText(m)
 			var undecodable *dies

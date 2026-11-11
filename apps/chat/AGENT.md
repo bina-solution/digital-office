@@ -9,8 +9,16 @@ freely and send only when told to.
 
 **Who a call acts as:**
 
-- With `TRUST_EDGE_AUTH=true`, the shipped default in `.env.ex`, chat trusts every in-network
-  caller.
+- With `TRUST_EDGE_AUTH=true`, the shipped default in `.env.ex`, a route behind `isAuthenticated`
+  believes a caller only when it came through the edge (forward-auth's `X-authentik-username`, from
+  the address of traefik, the console or the link's door), carries the office's `CHAT_API_TOKEN` as
+  `X-Chat-Office-Token` (minted per office; `CHAT_READ_TOKEN` on the same header opens only `GET /api/accounts`
+  and `GET /api/readyz`), or the office's chat credential as Basic auth on
+  `/api/` (never the shipped fallback password), or is the container itself
+  (`src/api/middleware/edge_caller.js`). On chatapi's account, bot-settings and connection routes a
+  key-shaped header is resolved instead: only an active admin's profile key passes (unknown 401,
+  inactive or not an admin 403). Under `CHAT_CALLER_MODE=warn`, today's default, any
+  other caller is answered and named in the log (`chat-unproved-caller: …`); `enforce` refuses it.
 - A call with no key acts on the account it names (`connection_id` in the body or the query). With
   none, it acts on the account selected in the screen's switcher, or the first admin's.
 - A profile key (`X-Chat-Profile-Key` or `Authorization: Bearer`, never in the query string) acts

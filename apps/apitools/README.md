@@ -220,7 +220,7 @@ curl -s -X POST http://127.0.0.1:8080/documentJsonQuery \
 ## Troubleshooting
 
 - pdf2image requires poppler (installed via `poppler-utils` on Debian/Ubuntu). If you see "PDFInfoNotInstalledError", install poppler or use the Docker image.
-- OCR calls use Google Vision API over HTTP. Without a valid API key, `/documentOcr` will fail on first uncached files. The service caches results in `.storage/ocr_cache/` by MD5, so retries on the same file can hit the cache.
+- OCR is local (Tesseract) unless `OCR_ENGINE=google` names Google Vision; then it goes over HTTP, and without a valid API key `/documentOcr` fails on first uncached files. The service caches results in `.storage/ocr_cache/` by MD5, so retries on the same file can hit the cache.
 - For production, prefer running via Gunicorn (as the Dockerfile does). The Flask dev server is single-process and not for load.
 - Logs are written to `logs/apitools.log` in non-debug mode and to stdout.
 

@@ -206,6 +206,12 @@ cp -r "${STAGING}/platform/." "${PREFIX}/" 2>/dev/null || true
 # enough, and without it every interpolated value silently becomes empty. A fresh install failed
 # with `env file /opt/binaos/.env not found`.
 ln -sf "${CONFIG}/binaos.env" "${PREFIX}/.env"
+# The office's own secrets (DGO-1220): binaos.env comes from the template, which carries every secret EMPTY.
+# They are filled here, through the link, only while this machine holds none of the office's data volumes,
+# so a reinstall over an office that has data writes nothing (scripts/env-secrets.py --if-fresh).
+if [ -f "${PREFIX}/scripts/env-secrets.py" ] && command -v python3 >/dev/null 2>&1; then
+  ( cd "${PREFIX}" && python3 scripts/env-secrets.py --env .env --if-fresh ) || say "the office's secrets were not minted (scripts/env-secrets.py) — run it before starting"
+fi
 
 # ── adapt the compose to THIS host ────────────────────────────────────────────────────────────
 # ORDER MATTERS, and getting it wrong is why this shipped broken twice. This block rewrites the
@@ -293,6 +299,16 @@ fi
 
 [ "${KEEP_STAGING}" = 1 ] || rm -rf "${STAGING}"
 
-say "installed. start with:  systemctl start binaos"
+# The template names no office (BUSINESS_NAME empty since DGO-1802), and nothing in this package turns a name
+# into its slug (that is the render's job, and a customer's machine has no render). With no slug every address
+# would be `console..digital-office.co.il`, so the unit refuses to start, and the installer says what to write.
+# (one opening quote may come first; `COMPANY_SLUG=""`, `=#x` and `= # note` name nothing — the unit's own check)
+if grep -Eq '^COMPANY_SLUG=[^#[:space:]]?[A-Za-z0-9]' "${CONFIG}/binaos.env" 2>/dev/null; then
+  say "installed. start with:  systemctl start binaos"
+else
+  say "installed. Name the office first, in ${CONFIG}/binaos.env:"
+  say "  BUSINESS_NAME=\"Your Business\"   and   COMPANY_SLUG=your-business   (lower case, dashes: every address derives from it)"
+  say "then:  systemctl start binaos"
+fi
 exit 0
 @@PAYLOAD_FOLLOWS@@

@@ -48,8 +48,11 @@ data/document-extraction-test-group/
 data/research/open-hands/
 **/logs/*.log
 
-# large media dropped from dataset (kept in backups)
-data/chat-dumps/*.mp4
+# A client's own data never rides the tree (DGO-1792): a chat export of a client's group, a production sheet's
+# full export. Each office keeps such files in its own store; gate G92 refuses a chat export or an undeclared
+# archive anywhere in the tree, and the public export holds back both (scripts/release/public/exclude.txt).
+data/chat-dumps/
+apps/indox/app/incoming_documents/context-collection/sample-data/
 
 # --- tenant-specific operational config (never commit) ---
 # This deployment's REAL sync registry: connection ids and live Drive folder ids for one
@@ -105,6 +108,9 @@ apps/n8n/.credentials-state/
 # time-boxed working scratchpad (planning/snapshots; real design docs live in ai/context/)
 next-7h/
 .tmp-indox-v2-ct/
+# a browser42 session's raw answers dumped at the root while it debugged (seven were committed, 2026-11-10 deep scan)
+/.tmp-b42*.json
+/.b42a_extract*.json
 .n8n-push-stage/
 # `bbox n8n push`'s lock and its holder (apps/n8n/hooks/push): an office made from the public copy, which
 # holds the lock back, showed a dirty tree after its first push (DGO-1029). HERE the lock is also tracked,
@@ -114,8 +120,11 @@ next-7h/
 /.n8n-push.lock.meta
 # sandbox-only build/test artifacts (never committed)
 scratchpad-mockbot/
+# a test's throwaway working directory, made in the checkout so the daemon can bind it
+# (apps/computers/tests/test_door.sh); its trap removes it, a kill leaves it
+/.door-test.*/
 production/chat/_wa_data/
-production/whatsapp-hacohanim/_wa_media/
+production/whatsapp-example/_wa_media/
 Dockerfile.local
 proxy-ca.crt
 
@@ -135,6 +144,10 @@ platform-base/authentik/blueprints/zz-generated-apps.yaml
 # into traefik's own bind-mounted file-provider directory because an external server URL is not
 # expressible in a docker label; see platform/manager/serve.py.
 platform-base/traefik/config/zz-serve.yaml
+# …and the edge's port-80 answer + the HSTS every certificate pins (DGO-1595): rendered by
+# reconcile.render_https_redirect on EVERY render — only where a certificate exists does it carry
+# the `dgo-port80` router, so a `.localhost` office compiles the middleware and no redirect.
+platform-base/traefik/config/zz-https.yaml
 # The three writers that share that directory, same reasoning as zz-serve.yaml above: generated
 # config, not source. `sites/public.py` writes sites-public.yaml (the office's public paths),
 # `dgo-extend/converge.py` writes dgo-extend-peer.yaml, and the offices app writes offices-peer.yaml.
@@ -201,12 +214,16 @@ exports/
 # business data: it must never enter git history. The CSVs stay on disk because the owner needs
 # them as the success baseline -- the scripts beside them regenerate everything from source.
 data/ground-truth/*.csv
+# …and the Drive dumps gt_drive_dump.py writes (file names, owners' addresses, ids): tracked by f72812997 although
+# this section said never; out of the tree since DGO-1792. gt_build.py reads them from disk.
+data/ground-truth/*.jsonl
 apps/n8n/.push-cache/
 
 # INDOX cycle run-output dumps: evidence, not source (~68 MB). Kept on disk, out of history.
-apps/indox/issues/completed-docs.csv
-apps/indox/issues/completed-merged.csv
-apps/indox/issues/decide-census-20260819.csv
+# Since DGO-1792 the rule is the folder's, not three names': apps/indox/issues/ holds issue NOTES (.md) in the tree,
+# and every dump beside them — rows of a client's documents, backups, cohorts, forensics — stays on the office's disk.
+apps/indox/issues/*
+!apps/indox/issues/*.md
 
 # Cygwin/MSYS crash dumps — never source.
 *.stackdump
@@ -234,8 +251,11 @@ data/backups/
 # engine-wide job locks (scripts/lib.sh heavy_admit) — runtime state, never content
 data/.locks/
 
+# the links given to people, and each time they were opened again (`bbox console link`, DGO-1433) — the hub's record
+data/links/
+
 # digital-assets output: the business's own domains, written by the app at run time
-# (`data/wbcpq.com/…` — site content and generated media). Repository content never lives here, so
+# (`data/exwpq.com/…` — site content and generated media). Repository content never lives here, so
 # the whole dotted-name directory is ignored rather than one domain at a time.
 /data/*.*/
 
@@ -275,3 +295,17 @@ data/.locks/
 # The writes that found no path to Plane, kept until one is back: this office's own runtime state, like
 # the job locks above — it holds the words of tickets and copies of their files, never repository content.
 /.state/outbox/
+
+# --- sessions' scratch left in the checkout (DGO-1767) ---
+# October's sessions kept their working files in the checkout itself: the notes and briefs of work items
+# (`data/tmp-sessions/`, 395 files), screenshots of Plane and of tiles, and one-off probes at the root
+# (`tmp-*.py`). None of it is repository content and none of it was ignored, so ONE `git add -A` in the
+# checkout six sessions share would have taken all of it — which is why every commit here names its paths.
+# A design page of the control centre sits beside them with captures of LIVE data (the owner's group, the
+# LAN's addresses): it must never be committed. New scratch goes to `ci-artifacts/` (ignored above) or to a
+# session's own scratchpad; these rules cover what is already here.
+/data/tmp-sessions/
+/data/plane-shots/
+/data/tile-shots/
+/tmp-*.py
+/apps/dashboard/static/design/

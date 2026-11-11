@@ -635,6 +635,8 @@ def x_single_view(man) -> list[dict]:
         # sections are the map's screens now — an extractor (`x_data_management`), not a
         # declaration that hides four of them.
         "dgo-extend": "apps/dgo-extend/static/index.html",
+        # [2026-11-11] one page, no router (the smell probe over it was empty when it was declared)
+        "domain-internic": "apps/domain-internic/static/index.html",
     }
     for app, spec in man["single_view"].items():
         rel = probes.get(app)

@@ -1,0 +1,54 @@
+# documents — «מסמכים»: ONE list over the business's documents, issued and incoming (DGO-1630).
+#
+# An index, not a second book: the issued documents stay in apitools' ledger, the incoming ones in INDOX, and this
+# service READS both (server/documents_core.py: a read-only client, one resolve() choke point) into its own SQLite on
+# its own volume — dropped, it is rebuilt from them. No image to build: python:3.12-alpine runs server/ as mounted.
+# The screen comes after the owner's pick of the mock (DGO-1630), so the host is routed behind sign-in and has no tile.
+services:
+  documents:
+    image: python:3.12-alpine
+    container_name: documents-${DEPLOYMENT_NAME:-bina-deployment}
+    hostname: documents
+    restart: unless-stopped
+    read_only: true
+    working_dir: /app
+    command: ["python", "-u", "server.py"]
+    environment:
+      # the office's binding: which providers it reads (local = the ledger, indox = INDOX). A provider that is not
+      # installed here answers «לא ענה» for ITS half of the list; the other half keeps working.
+      DOCUMENTS_PROVIDERS: ${DOCUMENTS_PROVIDERS:-local,indox}
+      DOCUMENTS_LEDGER_URL: ${DOCUMENTS_LEDGER_URL:-http://apitools:8080}
+      DOCUMENTS_INDOX_URL: ${DOCUMENTS_INDOX_URL:-http://incoming-documents:8080/incomingDocuments}
+      DOCUMENTS_INDOX_REPO: ${DOCUMENTS_INDOX_REPO:-incoming-documents-main}
+      DOCUMENTS_SYNC_SECONDS: ${DOCUMENTS_SYNC_SECONDS:-300}
+      DOCUMENTS_DB: /data/documents.sqlite
+      # the event stream (flow.v1, DGO-1402) rides the office redis: `dgo:flow:documents`
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-}
+      TZ: Asia/Jerusalem
+    volumes:
+      - ./server:/app:ro
+      - documents_data:/data
+      # the office's ONE flow.v1 publisher (DGO-1402) — the platform's file, never a copy of it here
+      - ../../platform-base/redis/flowpub.py:/opt/dgo/flowpub.py:ro
+    networks:
+      - traefik-network
+    # busybox wget (4 kB), never a second Python in a small cap: a Python probe is 24.7 MB (EXU-20, measured)
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-T", "5", "-O", "/dev/null", "http://127.0.0.1:8080/healthz"]
+      interval: ${HEALTHCHECK_INTERVAL:-30s}
+      timeout: ${HEALTHCHECK_TIMEOUT:-10s}
+      retries: 3
+      start_period: 10s
+    deploy:
+      resources:
+        limits: { cpus: "0.2", memory: 96M }
+    logging:
+      driver: json-file
+      options: { max-size: "5m", max-file: "3" }
+
+volumes:
+  documents_data:
+
+networks:
+  traefik-network:
+    external: true

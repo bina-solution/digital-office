@@ -1,0 +1,34 @@
+#!/usr/bin/env bash
+#: callers — the writes that had no known caller (what `enforce` would refuse), by source:  ./bbox computers callers [--json]
+# DGO-1304: every write of computers names its caller (caller.py). While COMPUTERS_EXEC_AUTH=warn, an unknown
+# caller is let through and counted; this prints the count per source container and route. Exit 0 when there
+# is none (the office may go `enforce`), 1 when there are some, 2 when the app cannot be read.
+set -uo pipefail
+export PYTHONIOENCODING=utf-8
+case "${1:-}" in -h|--help) sed -n 's/^#: //p' "${BASH_SOURCE[0]}"; exit 0 ;; esac
+CONTAINER="$(docker ps --filter 'name=^computers-' --format '{{.Names}}' 2>/dev/null | head -1)"
+[ -n "${CONTAINER}" ] || { echo "computers is not running here" >&2; exit 2; }
+docker exec -i "${CONTAINER}" python3 - "${1:-}" <<'PY'
+import json, sys, urllib.request
+try:
+    d = json.loads(urllib.request.urlopen("http://127.0.0.1:8977/api/callers", timeout=30).read())
+except Exception as e:                               # noqa: BLE001
+    print(f"computers did not answer /api/callers ({e}) — an app older than DGO-1304?", file=sys.stderr)
+    sys.exit(2)
+if sys.argv[1] == "--json":
+    print(json.dumps(d, ensure_ascii=False, indent=1))
+    sys.exit(1 if d.get("count") else 0)
+print(f"mode {d['mode']} · enforced machines {', '.join(d['enforce_machines']) or '—'} · shares to "
+      f"{', '.join(d['share_to']) or '—'} · token {'minted' if d['token'] else 'MISSING'}")
+for r in d.get("unknown") or []:
+    print(f"  {r['count']:>5}  {r['source']:<15} {r['name'] or '?':<28} {r['method']:<6} {r['route']}")
+print(f"{d['count']} write(s) with no known caller since the app started" +
+      ("" if d["count"] else " — this office may go COMPUTERS_EXEC_AUTH=enforce"))
+reads = d.get("door_reads") or []
+if reads:                                            # counted, not refused: what narrowing a linked office would touch
+    print("reads from other offices, through the link (herd = the door said so, by key — DGO-1800):")
+    for r in reads:
+        print(f"  {r['count']:>5}  {r['office']:<15} {'herd' if r.get('herd') else 'NOT herd':<9} GET    {r['route']}")
+    print(f"  reads by an office that is not the herd's (what narrowing would touch): {d.get('door_reads_not_herd', '?')}")
+sys.exit(1 if d["count"] else 0)
+PY

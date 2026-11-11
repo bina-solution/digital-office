@@ -533,8 +533,7 @@ Desktop mode is an **optional mode beside the current shell** (P12, P16, P43) an
 **Real apps.** This Mac runs the real stack in the project engine (`./bbox engine status` → Running; `./bbox status` → 41/42 up). `./bbox run console` rebuilds the console with desktop mode. At <http://console.localhost:8080>, *הגדרות מסוף → מצב שולחן עבודה* opens every real app in a window. INDOX, drive and the בינה ודעת app were verified live; stashed INDOX reflows to its narrow layout at a 522 px viewport.
 
 **Shell integration.**
-- **Account chip.** The focused window's account chip (for apps with a `service`: drive, mail, git, sites, domains, computers) moves into the menu bar and follows focus.
-- **Account switches.** `reloadEmbeddedApp()` hands a switch to `BinaDesktop.reloadService()`, which asks every window of that service to re-read (`platform:connection-changed`) and reloads it if it doesn't answer.
+- **Accounts (since DGO-1624, 2026-11-10: 0ef50561b, d08e74468).** The office's bar and the menu bar carry no app's account. Each app shows, switches and connects its accounts in its own screen, so the shell sends no `platform:connection-changed` and has no `reloadEmbeddedApp()`. Before that, the focused window's chip followed focus in the menu bar, and a switch asked every window of the service to re-read.
 
 **Associative: `desktop-memory.js`, A1–A9 and E7.**
 - **The panel.** Every app window has a collection button in its title bar (with a count). The panel sits on the window's side facing the screen middle and moves and scales with the window.

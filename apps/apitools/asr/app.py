@@ -138,7 +138,7 @@ def _model(name: str | None, *, strict: bool) -> str:
 
 # The words the audio is likely to hold, given to the model as the text before the first words (faster-whisper's
 # `initial_prompt`; OpenAI's audio API calls the field `prompt`). Without one the office's Hebrew model wrote «DGO fee»
-# as «DGOP» and «Zelle» as «Zelt» in a meeting's live captions (FPG-471, measured 2026-10-29); the caller that knows
+# as «DGOP» and «Zelle» as «Zelt» in a meeting's live captions (EXF-471, measured 2026-10-29); the caller that knows
 # the meeting's words (meet-start, from its vocabulary file) sends them. None: as before, nothing is prepended.
 # A prompt also conditions the style, so it is kept short (the window has 448 tokens) — at most PROMPT_MAX characters.
 PROMPT_MAX = 600
@@ -150,8 +150,12 @@ def _prompt(text: str | None) -> str | None:
 
 
 def _options(language: str | None, beam_size: int | None, vad: bool | None, words: bool | None,
-             model: str | None = None, prompt: str | None = None) -> dict[str, Any]:
+             model: str | None = None, prompt: str | None = None,
+             num_speakers: int | None = None) -> dict[str, Any]:
     return {
+        # who spoke (DGO-1627): the caller may know how many people were in the room (a meeting's
+        # roster); when it does, the clustering is told instead of guessing
+        "num_speakers": int(num_speakers) if num_speakers else None,
         "prompt": _prompt(prompt),
         "model": model or ENGINE.name,
         # `auto`: each stretch in the language it is spoken (meant for `whisper`; DGO-955)
@@ -260,8 +264,9 @@ async def _handle_transcribe(
     async_flag: bool,
     model: str | None = None,
     prompt: str | None = None,
+    num_speakers: int | None = None,
 ) -> Response:
-    options = _options(language, beam_size, vad, words, model, prompt)
+    options = _options(language, beam_size, vad, words, model, prompt, num_speakers)
     if file is not None and file.filename:
         try:
             source = JOBS.save_upload(file.file, file.filename)
@@ -321,6 +326,7 @@ async def openai_transcriptions(
     beam_size: int | None = Query(None),
     vad: bool | None = Query(None),
     words: bool | None = Query(None),
+    num_speakers: int | None = Query(None, ge=1, le=32),
     async_: bool = Query(False, alias="async"),
 ) -> Response:
     fmt = (response_format or "json").lower()
@@ -328,7 +334,7 @@ async def openai_transcriptions(
         raise HTTPException(400, f"unsupported response_format '{response_format}' (use one of {', '.join(FORMATS)})")
     del temperature  # a client's temperature is not used by this engine
     return await _handle_transcribe(request, file, path, language, fmt, beam_size, vad, words, async_,
-                                    _model(model, strict=False), prompt)
+                                    _model(model, strict=False), prompt, num_speakers)
 
 
 @app.post("/transcribe")
@@ -343,13 +349,14 @@ async def op_transcribe(
     beam_size: int | None = Query(None),
     vad: bool | None = Query(None),
     words: bool | None = Query(None),
+    num_speakers: int | None = Query(None, ge=1, le=32),
     async_: bool = Query(False, alias="async"),
 ) -> Response:
     fmt = (response_format or "json").lower()
     if fmt not in FORMATS:
         raise HTTPException(400, f"unsupported response_format '{response_format}' (use one of {', '.join(FORMATS)})")
     return await _handle_transcribe(request, file, path, language, fmt, beam_size, vad, words, async_,
-                                    _model(model, strict=True), prompt)
+                                    _model(model, strict=True), prompt, num_speakers)
 
 
 @app.get("/v1/audio/transcriptions/{job_id}")

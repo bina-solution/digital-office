@@ -18,6 +18,7 @@ import (
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
@@ -37,11 +38,11 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/solomonBoltin/deployment-hacohen/packaging/dgo/internal/compiler"
-	"github.com/solomonBoltin/deployment-hacohen/packaging/dgo/internal/console"
-	"github.com/solomonBoltin/deployment-hacohen/packaging/dgo/internal/edge"
-	"github.com/solomonBoltin/deployment-hacohen/packaging/dgo/internal/serve"
-	"github.com/solomonBoltin/deployment-hacohen/packaging/dgo/internal/yamlish"
+	"github.com/bina-solution/digital-office/packaging/dgo/internal/compiler"
+	"github.com/bina-solution/digital-office/packaging/dgo/internal/console"
+	"github.com/bina-solution/digital-office/packaging/dgo/internal/edge"
+	"github.com/bina-solution/digital-office/packaging/dgo/internal/serve"
+	"github.com/bina-solution/digital-office/packaging/dgo/internal/yamlish"
 )
 
 // The sockets, in the directory --dir names.
@@ -193,9 +194,18 @@ func machineHosts(root string) map[string]bool {
 	return hosts
 }
 
-// machineApps are the apps of the core's state that the machine enabled (`by: machine`, mirrored by the
-// control plane once the machine said its enable was done): the office's half that runs in the machine.
-// A state the core cannot read holds none — the control plane says why, where it reads it.
+// coreServed are the apps of an office that the core answers itself — the console, app-management's
+// control plane and the edge in its own process, forward-auth beside it. Every other app of its state that
+// runs in containers runs in the machine (android-path.md), whatever enabled it.
+var coreServed = map[string]bool{"console": true, "app-management": true, "forward-auth": true, "traefik": true}
+
+// machineApps are the apps of the core's state that the machine runs: those it enabled (`by: machine`,
+// mirrored by the control plane once the machine said its enable was done), and every other enabled app
+// whose manifest runs it in containers (`compose`) and that the core does not answer itself — the core
+// office's own dgo-extend, computers, connections and notifications, which on every other office run in
+// containers too (DGO-1328: «הרחבת הלשכה» on the phone is the Mac's, in the phone's machine). The office's
+// half that runs in the machine; a state the core cannot read holds none — the control plane says why,
+// where it reads it.
 func machineApps(root string) []string {
 	doc, err := compiler.ReadState(root)
 	top, isMap := doc.(*yamlish.Map)
@@ -208,15 +218,34 @@ func machineApps(root string) []string {
 		return nil
 	}
 	var on []string
+	var cat *compiler.Catalog // read once, when an app's manifest is asked
+	noCatalog := false        // …and when it does not read, the machine's own (by: machine) are still its
 	for _, aid := range apps.Keys() {
 		entry, _ := apps.Get(aid)
 		e, isMap := entry.(*yamlish.Map)
 		if !isMap {
 			continue
 		}
-		by, _ := e.Get("by")
-		if d, err := compiler.Disposition(entry); err == nil && d == "enabled" && by == "machine" {
+		if d, err := compiler.Disposition(entry); err != nil || d != "enabled" {
+			continue
+		}
+		if by, _ := e.Get("by"); by == "machine" {
 			on = append(on, aid)
+			continue
+		}
+		if coreServed[aid] || noCatalog {
+			continue
+		}
+		if cat == nil {
+			if cat, err = compiler.LoadCatalog(root); err != nil {
+				noCatalog = true
+				continue
+			}
+		}
+		if app := cat.Apps[aid]; app != nil {
+			if c, _ := app.Doc().Get("compose"); c != nil && c != "" {
+				on = append(on, aid)
+			}
 		}
 	}
 	return on
@@ -282,8 +311,9 @@ func (g *machineGate) get() (int, string) {
 		g.proved = key
 		return port, token
 	}
+	first := g.failed != key // said once a machine: the status (status.go) asks every 2 s while one boots
 	g.failed, g.failedAt = key, time.Now()
-	if g.logf != nil {
+	if g.logf != nil && first {
 		g.logf("the machine on 127.0.0.1:%d has not proved its token (yet): its apps answer nothing until it does", port)
 	}
 	return 0, ""
@@ -335,6 +365,205 @@ func machine(path string) (int, string) {
 	return port, f[1]
 }
 
+// machineConsole is the console container's place on the phone (console.Config.Fallback, DGO-1328): every
+// route the core's console does not answer — an app's screen under /a/<name>/, which the console proxies to
+// the app on every other office — goes to the machine's own console once the machine is up and has proved
+// its token, through the machine's edge as the core's edge sends an app's host (edge.MachineProxy: the
+// identity the edge wrote, signed for that one request, the core's own sign-in never). Before then it is
+// absent: the page that waits for the machine (serve.Absent). Without it every container app — «הרחבת
+// הלשכה», «התראות», «חיבורים ומפתחות», «מחשבים» — answered «the machine runs, the app does not answer
+// yet» on the phone, its machine up or not.
+func machineConsole(up func() (int, string), absent http.Handler, logf func(string, ...any)) http.Handler {
+	var proxies sync.Map // "port token" → its proxy: one a boot
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		port, token := up()
+		if port == 0 {
+			absent.ServeHTTP(w, r)
+			return
+		}
+		// the app routes and the API only: a route of the shell's own that the core's console did not answer
+		// (a first screen it could not tell, a Range, a name of index.html) is not the machine console's to
+		// answer with its shell, which may be another build than the APK's
+		if (r.Method == http.MethodGet || r.Method == http.MethodHead) &&
+			!strings.HasPrefix(r.URL.Path, "/a/") && !strings.HasPrefix(r.URL.Path, "/api/") {
+			absent.ServeHTTP(w, r)
+			return
+		}
+		key := strconv.Itoa(port) + " " + token
+		h, ok := proxies.Load(key)
+		if !ok {
+			h, _ = proxies.LoadOrStore(key, edge.MachineProxy(port, token, logf))
+		}
+		if r.Method != http.MethodGet || !strings.Contains(r.Header.Get("Accept"), "text/html") {
+			h.(http.Handler).ServeHTTP(w, r)
+			return
+		}
+		// a page, while the machine's apps still come up (its edge and sign-in answer before its console
+		// does): the edge's own 404 for a host it has no router for yet, or a 502–504, is the page that waits —
+		// which says the machine runs and its app is starting — never the edge's bare error
+		p := &pageOrWait{ResponseWriter: w}
+		h.(http.Handler).ServeHTTP(p, r)
+		if p.waiting {
+			absent.ServeHTTP(w, r)
+		}
+	})
+}
+
+// pageOrWait passes the machine's answer to a page on, unless it is its edge saying the app is not there
+// yet: then nothing of it is written, and waiting says so.
+type pageOrWait struct {
+	http.ResponseWriter
+	waiting, decided bool
+}
+
+func (p *pageOrWait) WriteHeader(code int) {
+	if p.decided {
+		return
+	}
+	if code >= 100 && code < 200 && code != http.StatusSwitchingProtocols {
+		p.ResponseWriter.WriteHeader(code) // an interim answer (103 Early Hints) is not the answer
+		return
+	}
+	p.decided = true
+	h := p.Header()
+	notYet := code == http.StatusBadGateway || code == http.StatusServiceUnavailable || code == http.StatusGatewayTimeout ||
+		code == http.StatusNotFound && strings.HasPrefix(h.Get("Content-Type"), "text/plain")
+	if notYet {
+		p.waiting = true
+		for k := range h {
+			delete(h, k) // the page that waits writes its own
+		}
+		return
+	}
+	p.ResponseWriter.WriteHeader(code)
+}
+
+func (p *pageOrWait) Write(b []byte) (int, error) {
+	if !p.decided {
+		p.WriteHeader(http.StatusOK)
+	}
+	if p.waiting {
+		return len(b), nil
+	}
+	return p.ResponseWriter.Write(b)
+}
+
+// Flush passes a flush on once the answer is passed on, and only then: a flush while it is undecided, or
+// waiting, would send a status of its own before the page that waits (the proxy flushes a streamed answer
+// at once).
+func (p *pageOrWait) Flush() {
+	if p.decided && !p.waiting {
+		_ = http.NewResponseController(p.ResponseWriter).Flush()
+	}
+}
+
+// Unwrap lets http.ResponseController reach the writer beneath for the rest (a hijack, a deadline).
+func (p *pageOrWait) Unwrap() http.ResponseWriter { return p.ResponseWriter }
+
+// MachineTiles is the file in the sockets' directory that keeps the machine's tiles as they were last read.
+const MachineTiles = "machine-tiles.json"
+
+// machineTiles are the machine's console's tiles (console.Config.More, DGO-1328): the apps the machine runs
+// and the offices its dgo-extend links, which no registry built into the APK can hold. Answered at once from
+// what was last read — kept in the sockets' directory, so a core started again shows them while the machine
+// comes up — and read again in the background, at most every 15 s while the machine is up, with the identity
+// of the request that asks: the machine's console, like every app behind its edge, answers someone signed in
+// and no one else. A tile is shown once the machine answered it, and goes with the first answer without it.
+type machineTiles struct {
+	up     func() (int, string)
+	file   string
+	host   string // the console's host, as the machine's edge routes it
+	client *http.Client
+	logf   func(string, ...any)
+	mu     sync.Mutex
+	last   []byte
+	asked  time.Time
+	asking bool
+}
+
+func newMachineTiles(up func() (int, string), file, host string, logf func(string, ...any)) *machineTiles {
+	t := http.DefaultTransport.(*http.Transport).Clone()
+	t.Proxy = nil
+	m := &machineTiles{up: up, file: file, host: host, logf: logf,
+		client: &http.Client{Transport: t, Timeout: 10 * time.Second,
+			CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}}
+	if b, err := os.ReadFile(file); err == nil && len(b) <= 4<<20 {
+		m.last = b
+	}
+	return m
+}
+
+// get is console.Config.More: the tiles last read, and a read asked in the background when they are old —
+// never waited for here: the machine's proof may take seconds while it boots, and the rail waits on nothing.
+func (m *machineTiles) get(r *http.Request) []byte {
+	m.mu.Lock()
+	last := m.last
+	ask := !m.asking && time.Since(m.asked) >= 15*time.Second && r.Header.Get("X-authentik-username") != ""
+	if ask {
+		m.asking, m.asked = true, time.Now()
+	}
+	m.mu.Unlock()
+	if ask {
+		ids := http.Header{} // copied: the request is answered before the read ends
+		for _, k := range edge.Identity {
+			if v := r.Header.Get(k); v != "" {
+				ids.Set(k, v)
+			}
+		}
+		go m.read(ids)
+	}
+	return last
+}
+
+// read asks the machine's console for its tiles, once it is up — its /api/modules, signed as the core's
+// edge signs — and keeps an answer that reads as one (a 200 whose JSON holds a modules list), written whole.
+func (m *machineTiles) read(ids http.Header) {
+	defer func() {
+		m.mu.Lock()
+		m.asking = false
+		m.mu.Unlock()
+	}()
+	port, token := m.up()
+	if port == 0 {
+		m.mu.Lock()
+		m.asked = time.Time{} // no machine yet: the next rail asks again (up is a file's read until it is)
+		m.mu.Unlock()
+		return
+	}
+	req, err := http.NewRequest("GET", "http://"+net.JoinHostPort("127.0.0.1", strconv.Itoa(port))+"/api/modules", nil)
+	if err != nil {
+		return
+	}
+	req.Host = m.host
+	for k, vs := range ids {
+		req.Header[k] = vs
+	}
+	edge.SignForMachine(req.Header, token, req.Method, req.Host, req.URL.RequestURI())
+	res, err := m.client.Do(req)
+	if err != nil {
+		m.logf("the machine's tiles were not read: %v", err)
+		return
+	}
+	defer res.Body.Close()
+	body, err := io.ReadAll(io.LimitReader(res.Body, 4<<20))
+	var said struct {
+		Modules []json.RawMessage `json:"modules"`
+	}
+	if err != nil || res.StatusCode != http.StatusOK || json.Unmarshal(body, &said) != nil || said.Modules == nil {
+		m.logf("the machine's tiles were not read: its console answered %d", res.StatusCode)
+		return
+	}
+	part := m.file + ".part"
+	if err := os.WriteFile(part, body, 0o600); err == nil {
+		if err := os.Rename(part, m.file); err != nil {
+			os.Remove(part)
+		}
+	}
+	m.mu.Lock()
+	m.last = body
+	m.mu.Unlock()
+}
+
 // Options is what the core is built from, besides the office root.
 type Options struct {
 	Listen  string // the edge's address: a loopback one, unix:<path>, or "" for EdgeSocket in Dir
@@ -345,10 +574,13 @@ type Options struct {
 	Apps    string // app-management's container URL, likewise
 }
 
-// Core is the three servers, listening.
+// Core is the three servers, listening, and the status the app's screen reads (status.go).
 type Core struct {
 	servers []*http.Server
 	errc    chan error
+	stop    chan struct{} // ends sayStatus…
+	done    chan struct{} // …which closes this as it returns
+	status  string        // the file it writes, removed when the core stops
 }
 
 // local marks a request that came over one of the core's sockets as the local hop it is (above).
@@ -446,9 +678,17 @@ func Open(root string, o Options, logger *log.Logger) (*Core, error) {
 	} else if shell == nil {
 		return nil, errors.New("this dgo was built without the console's files (-tags consoleembed): --static <dir> is needed")
 	}
+	// the console container is the machine's console once it is up (a container app's screen under /a/), and
+	// before then a clear page, not the proxy's error; its rail shows the machine's tiles too (DGO-1328)
+	tiles := newMachineTiles(gate.get, sock(MachineTiles), "console."+o.Domain, logger.Printf)
+	// No in-process doors here (console.Config.Doors stays empty): hp-dgo's alerts and dgo-extend handlers
+	// (internal/notices, internal/extend, DGO-1328) would answer before the machine's console, and the machine
+	// runs those apps itself — its notices would never reach the phone, and a page before the machine is up
+	// would be a stub instead of the machine's own «not installed» answer (DGO-1723). The release that took both
+	// lines kept this one (DGO-969); the packages stay, ready for a phone with no machine.
 	con, err := console.New(console.Config{Static: o.Static, Shell: shell, Upstream: o.Console,
 		Trusted: []netip.Prefix{netip.MustParsePrefix("127.0.0.1/32")}, Lookup: lookup, Logf: logger.Printf,
-		Absent: serve.Absent(m)}) // a container app's page before the machine runs: a clear page, not the proxy's error
+		Fallback: machineConsole(gate.get, serve.Absent(m), logger.Printf), More: tiles.get})
 	if err != nil {
 		return nil, err
 	}
@@ -462,6 +702,7 @@ func Open(root string, o Options, logger *log.Logger) (*Core, error) {
 	}
 	front.Machine = gate.get
 	front.Wake = m.wake(root, o.Domain)
+	front.Waiting = serve.Absent(m) // a container app's host waits on the same Hebrew page as the console's (DGO-1723)
 	at, err := edgeListener(o.Listen, sock(EdgeSocket))
 	if err != nil {
 		return nil, err
@@ -501,6 +742,9 @@ func Open(root string, o Options, logger *log.Logger) (*Core, error) {
 	}
 	logger.Printf("the office's core: the edge on %s (signin.%s → forward-auth, console.%s → the console, gated); %s and %s in %s",
 		at.name, o.Domain, o.Domain, ConsoleSocket, ControlSocket, o.Dir)
+	// what the app's status screen reads, from now on (DGO-1723)
+	c.stop, c.done, c.status = make(chan struct{}), make(chan struct{}), filepath.Join(o.Dir, StatusFile)
+	go sayStatus(root, o.Dir, m, logger.Printf, c.stop, c.done)
 	// the office as it was: apps the machine runs bring the machine back with the core (a phone restarted,
 	// the app opened again) — asked for once here, every listener bound, and again by any of their hosts
 	// opened before it is up
@@ -542,6 +786,18 @@ func edgeListener(addr, socket string) (edgeAt, error) {
 // Close stops the servers, the edge first, finishing the requests in flight until ctx ends; the first
 // that could not finish is the error.
 func (c *Core) Close(ctx context.Context) error {
+	if c.stop != nil {
+		// its last write done (or 5 s: a proof it was asking ends in 3), then the file goes — a core that stopped
+		// is never said to be up by the file it left
+		close(c.stop)
+		c.stop = nil
+		select {
+		case <-c.done:
+		case <-time.After(5 * time.Second):
+		case <-ctx.Done():
+		}
+		_ = os.Remove(c.status)
+	}
 	var first error
 	for i := len(c.servers) - 1; i >= 0; i-- {
 		if err := c.servers[i].Shutdown(ctx); err != nil && first == nil {

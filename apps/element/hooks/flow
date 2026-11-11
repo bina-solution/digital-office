@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+#: flow — what Element's adapter did (a sign-in, a message sent, a room read), the last 10 and then live: [-n N] [--once] [--json]
+# The event stream (build-your-first-app.md «The event stream», flow.v1): the adapter publishes through
+# platform-base/redis/flowpub.py onto dgo:flow:element, and this verb is the platform's own reader.
+exec bash "$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)/platform-base/redis/hooks/flow" element "$@"

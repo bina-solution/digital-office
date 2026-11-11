@@ -7,8 +7,8 @@ document adds new evidence beyond those (the per-hop cost chain in §1, the apit
 §2, the live v1/v3 parallel sync engine identified by file in §5), it says so and cites the exact
 read. Everything else is cited back to the source document rather than restated as new.
 
-**Verified this session, live, via WSL `docker exec` against `n8n-postgres-shlomo-laptop` /
-`supabase-db-shlomo-laptop`** (numbers below are used throughout, not re-derived per-section):
+**Verified this session, live, via WSL `docker exec` against `n8n-postgres-owner-laptop` /
+`supabase-db-owner-laptop`** (numbers below are used throughout, not re-derived per-section):
 
 | Fact | Value | How |
 |---|---:|---|

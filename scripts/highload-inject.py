@@ -20,13 +20,13 @@ import sys, os, json, time, subprocess, shutil, csv, re, random
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 BASE = 'http://localhost:5678'
 CK = os.path.join(ROOT, 'data', '_runs', 'hli_cookies.txt')
-DN = 'shlomo-laptop'
+DN = 'owner-laptop'
 CRED_DRIVE = 'KirWFwoFdEFmnN0R'
 # IMPORTANT: To-Process == BalanceSheetSourceFolder1 (same Drive folder id) -> anything dropped there is
 # typed BALANCE_SHEET by the BS Sync runner. General docs (invoice/shipment/unknown) MUST go to a
 # GeneralDocs source folder instead, or they get mis-typed as BS.
-BS_FOLDER = '1REDACTEDdrivexxxxxxxxxxxxxxx0005'        # BalanceSheetSourceFolder1 (== DocumentsToProcessFolder)
-GENERAL_FOLDER = '1REDACTEDdrivexxxxxxxxxxxxxxx0004'   # GeneralDocsSourceFolder1
+BS_FOLDER = '1REDACTEDdrivexxxxxxxxxxxxxxx0002'        # BalanceSheetSourceFolder1 (== DocumentsToProcessFolder)
+GENERAL_FOLDER = '1REDACTEDdrivexxxxxxxxxxxxxxx0001'   # GeneralDocsSourceFolder1
 TO_PROCESS = BS_FOLDER  # back-compat
 LABEL_DOC = 'Label_11'   # save-documents
 LABEL_BS = 'Label_10'    # save-aging-reports (BS)
@@ -63,7 +63,7 @@ def rest(method, path, body=None):
 
 
 def psql(q):
-    return subprocess.run(['docker', 'exec', f'n8n-postgres-{DN}', 'psql', '-U', 'hacohen', '-d', 'n8n', '-tAc', q],
+    return subprocess.run(['docker', 'exec', f'n8n-postgres-{DN}', 'psql', '-U', 'example', '-d', 'n8n', '-tAc', q],
                           capture_output=True, text=True, encoding='utf-8', errors='replace').stdout.strip()
 
 

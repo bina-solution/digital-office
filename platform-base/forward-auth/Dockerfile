@@ -15,6 +15,8 @@ WORKDIR /src
 # go.mod first, sources second: an edit to a .go file does not invalidate the module layer.
 COPY go.mod ./
 COPY *.go ./
+# the pages' look and the logo wall, embedded by ui.go (go:embed): kept copies, stamped by gate G27
+COPY ui ./ui
 # CGO_ENABLED=0 is what lets the runtime stage be `scratch` AND what lets this same source
 # cross-compile to any OS from one host:
 #     GOOS=darwin  GOARCH=arm64 CGO_ENABLED=0 go build -o forward-auth .

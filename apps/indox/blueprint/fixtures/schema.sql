@@ -21,7 +21,7 @@
 -- THIS FILE IS APPLIED INTO AN INSTANCE SCHEMA, NOT INTO `public`.
 --
 -- An INDOX instance is a tenant and its data lives in its own schema (`platform.state.yaml` →
--- indox.entries[].schema, e.g. `indox_hacohen`). The applier — apps/indox/hooks/apply-schema —
+-- indox.entries[].schema, e.g. `indox_example`). The applier — apps/indox/hooks/apply-schema —
 -- creates that schema and sets `search_path` before sending a byte of this file, so every
 -- unqualified table name below resolves to the tenant's own table.
 --
@@ -603,6 +603,32 @@ select l.source,
                                                                     as waiting
   from sync_ledger l
  group by l.source;
+
+-- THE SYNC BOARD'S REASONS (owner 2026-09-03: every red item explains itself): per pipe, the top
+-- reasons among its failed + needs_review items, read by the BFF beside sync_item_counts
+-- (api/__init__.py, `table="sync_item_reasons"`). Identifiers are FOLDED for the grouping only (an
+-- 18+ character token is a drive id, a message id or a hash; "[line 3]" is a line number), so 25
+-- red items with one cause are one chip, not 25; the row keeps its exact text.
+-- Migration for an existing tenant: scripts/ops/migrations/2026-09-03_sync_item_reasons.sql — the
+-- definition below is that migration's, verbatim, so on a tenant that has it this is a no-op.
+-- [DGO-235, 2026-11-10] It was in the migration only, so a freshly provisioned office had no view
+-- and the board's read failed there; lint_schema_drift (gate G109) now fails the build on that.
+create or replace view sync_item_reasons as
+select l.source,
+       regexp_replace(l.source, '^[^/]*/', '')          as pipe,
+       regexp_replace(regexp_replace(
+         coalesce(nullif(btrim(l.last_error), ''), '(no reason recorded)'),
+         '[A-Za-z0-9_-]{18,}', '<id>', 'g'),
+         '\[line \d+\]', '[line n]', 'g')                  as reason,
+       count(*)::int                                     as n,
+       max(coalesce(l.delivered_at, l.discovered_at))    as last_at
+  from sync_ledger l
+ where l.status in ('failed', 'needs_review')
+ group by l.source,
+          regexp_replace(regexp_replace(
+            coalesce(nullif(btrim(l.last_error), ''), '(no reason recorded)'),
+            '[A-Za-z0-9_-]{18,}', '<id>', 'g'),
+            '\[line \d+\]', '[line n]', 'g');
 
 -- RETIRED 2026-09-02 (both dropped by the sync_item_counts migration): `sync_pipe_state` (run
 -- journal — a pass is visible as the ledger's own timestamps now) and `sync_attempt` (folded into
@@ -1205,7 +1231,7 @@ alter table incoming_documents add column if not exists "DUP_CAUSE" TEXT;
 -- [cutover 2026-08-31] TENANT-LOCAL, no longer `public.`. These used to be declared as shared
 -- public views, which forced apply-schema to STRIP them (an apply under search_path=<tenant>
 -- would have silently repointed the shared copy at whichever tenant ran last), which in turn
--- left every fresh tenant WITHOUT them — the hand-made indox_hacohen copies were the only
+-- left every fresh tenant WITHOUT them — the hand-made indox_example copies were the only
 -- reason extraction worked. Unqualified, each tenant gets its own copy bound to its own tables
 -- by the apply preamble's search_path, which is exactly what the hand-made copies were.
 create or replace view company_registry as
@@ -1292,7 +1318,7 @@ $bind$;
 -- [cutover 2026-08-31] TENANT-LOCAL, no longer `public.`. These used to be declared as shared
 -- public views, which forced apply-schema to STRIP them (an apply under search_path=<tenant>
 -- would have silently repointed the shared copy at whichever tenant ran last), which in turn
--- left every fresh tenant WITHOUT them — the hand-made indox_hacohen copies were the only
+-- left every fresh tenant WITHOUT them — the hand-made indox_example copies were the only
 -- reason extraction worked. Unqualified, each tenant gets its own copy bound to its own tables
 -- by the apply preamble's search_path, which is exactly what the hand-made copies were.
 create or replace view extraction_queries as
@@ -1318,7 +1344,7 @@ select q.instance,
       -- company_registry (created above in this same apply, first on the search_path). The
       -- qualified `public.company_registry` that stood here bound every tenant's extraction
       -- queries to instance one's registry — measured: indox_test.extraction_queries joined
-      -- public.company_registry, i.e. the test tenant's extraction read hacohen's companies.
+      -- public.company_registry, i.e. the test tenant's extraction read example's companies.
       left join company_registry r on r.instance = s.instance
      where s.key like 'q\_v3\_%'
   ) q;
@@ -1424,7 +1450,7 @@ create index if not exists indox_priority_local_received_idx
 -- [cutover 2026-08-31] TENANT-LOCAL, no longer `public.`. These used to be declared as shared
 -- public views, which forced apply-schema to STRIP them (an apply under search_path=<tenant>
 -- would have silently repointed the shared copy at whichever tenant ran last), which in turn
--- left every fresh tenant WITHOUT them — the hand-made indox_hacohen copies were the only
+-- left every fresh tenant WITHOUT them — the hand-made indox_example copies were the only
 -- reason extraction worked. Unqualified, each tenant gets its own copy bound to its own tables
 -- by the apply preamble's search_path, which is exactly what the hand-made copies were.
 create or replace view v_indox_priority_local_dupes as
@@ -1497,13 +1523,13 @@ $mirror_archive$;
 
 
 -- ── FOUR TABLES A REAL TENANT HAS AND THIS FILE DID NOT ──────────────────────────────────────
--- [2026-08-28, reported by the tenancy session] hacohen holds 17 tables; this fixture built 13.
+-- [2026-08-28, reported by the tenancy session] example holds 17 tables; this fixture built 13.
 -- The four below reached production through migrations and by hand and never came back here, so
 -- a tenant provisioned from the fixture was missing tables indoxApi01 addresses — the exact
 -- "fresh deploy is not compared to a migrated one" mechanism issues/schema-drift-fixture-vs-live.md
--- leaves open. Definitions taken from the live indox_hacohen, not reconstructed from memory.
+-- leaves open. Definitions taken from the live indox_example, not reconstructed from memory.
 
--- The dedup audit trail. 10,184 rows on hacohen, and it was undeclared everywhere — found only
+-- The dedup audit trail. 10,184 rows on example, and it was undeclared everywhere — found only
 -- because ownership was traced by REFERENCE rather than by name prefix.
 create table if not exists merge_audit (
   id                   bigserial primary key,

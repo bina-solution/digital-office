@@ -86,6 +86,8 @@ var binaNoAnswer = () => ({ ok: false, status: 0, json: async () => ({}), text: 
       ".pw-guards .dk-row select{min-height:30px}",
       ".pw-callout{border:1px solid var(--warn);background:var(--warn-soft);border-radius:12px;padding:12px 14px;margin-top:14px;font-size:13px}",
       ".pw-callout.bad{border-color:var(--danger);background:var(--danger-soft)}",
+      // a plain fact, nothing to look at or do (a server: no sleep) — the ground's own colours, not «look here»
+      ".pw-callout.calm{border-color:var(--line);background:var(--surface-2)}",
       ".pw-callout h4{margin:0 0 4px;font-size:13px}.pw-callout p{margin:0 0 8px}",
       ".pw-callout pre{direction:ltr;text-align:left;unicode-bidi:isolate;background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:8px 10px;font-size:11.5px;overflow:auto;max-height:170px;white-space:pre;margin:6px 0 8px}",
       ".pw-actions{display:flex;gap:8px;flex-wrap:wrap;align-items:center}",
@@ -102,11 +104,14 @@ var binaNoAnswer = () => ({ ok: false, status: 0, json: async () => ({}), text: 
     document.head.appendChild(st);
   }
 
+  // the card's subtitle on a computer that sleeps — a laptop, an engine's VM on one; a server's own is said in draw()
+  const SUB = "כשהמחשב שהלשכה רצה עליו נכנס לשינה, הכל נעצר — גם הסוכנים — עד שהוא מתעורר. כאן בוחרים מה הלשכה עושה בכל מצב.";
+
   function render(host) {
     injectCss();
     const card = document.createElement("div");
     card.className = "wcard dk-set pw";
-    card.innerHTML = '<h3>חשמל ושינה</h3><div class="sub">הלשכה רצה במכונה וירטואלית על המחשב הזה. כשהמחשב נכנס לשינה הכל נעצר — גם הסוכנים — עד שהוא מתעורר. כאן בוחרים מה הלשכה עושה בכל מצב.</div><div class="pw-body"><div class="pw-live">טוען את מצב המחשב…</div></div>';
+    card.innerHTML = '<h3>חשמל ושינה</h3><div class="sub">' + SUB + '</div><div class="pw-body"><div class="pw-live">טוען את מצב המחשב…</div></div>';
     host.appendChild(card);
     const body = card.querySelector(".pw-body");
     let data = null, saved = null, timer = 0;
@@ -164,6 +169,21 @@ var binaNoAnswer = () => ({ ok: false, status: 0, json: async () => ({}), text: 
       // A Windows host has no power agent YET: that is a fact about the machine, not a fault, and
       // the command that starts the Mac's agent is not what its owner should be told to run.
       const onWindows = agent === "absent" && data.host_os === "windows";
+      // A SERVER (DGO-1801, vps1): never a power agent, no host-side pass naming an OS, the machine itself reports no
+      // battery, AND it is not an engine's VM on a person's computer (`engine_vm` "": neither the Mac's engine nor WSL —
+      // inside either there is no battery to see, and a Mac whose agent never started must keep the card that says so).
+      // Nothing there sleeps and nothing can be set, so the card says that in one line — not the laptop's sleep matrix
+      // under a red «not enforced». Anything a machine does not say (an older one) is drawn as before.
+      const server = agent === "absent" && !data.host_os && data.battery === false && data.engine_vm === "";
+      // the subtitle is said on EVERY draw, both ways: a draw that changed it must not leave it for the next one
+      const sub = card.querySelector(".sub");
+      if (sub) sub.textContent = server ? "הלשכה רצה כאן על שרת." : SUB;
+      if (server) {
+        card.classList.remove("pw-idle");
+        body.innerHTML = '<div class="pw-callout calm"><h4>אין כאן שינה</h4><p>המחשב הזה הוא שרת, בלי סוללה ובלי סוכן חשמל. ' +
+          "הוא לא נכנס לשינה, והלשכה פועלת בו כל הזמן, ולכן אין כאן מה להגדיר.</p></div>";
+        return;
+      }
       // What is not enforced does not look in force: the switches stayed bright green right over
       // «ההגדרות לא נאכפות כרגע». They can still be set — they are what the agent will apply.
       card.classList.toggle("pw-idle", agent !== "running");
@@ -220,8 +240,9 @@ var binaNoAnswer = () => ({ ok: false, status: 0, json: async () => ({}), text: 
             'מהמחשב לישון. מה שקורה כשהמכסה נסגר או כשהמסך ננעל נקבע בהגדרות החשמל של Windows; מה שנבחר כאן יחול ' +
             'כשיהיה סוכן כזה.</p></div>'
           : '<div class="pw-callout bad"><h4>ההגדרות לא נאכפות כרגע</h4><p>סוכן החשמל רץ על המחשב עצמו ומתחיל עם המנוע של הלשכה. ' +
-          'בשרת אין שינה, ואין כאן מה להגדיר. במק מפעילים אותו כך:</p>' +
-          '<pre class="pw-cmd" dir="ltr">./bbox engine power start</pre></div>';
+          'בשרת אין שינה, ואין כאן מה להגדיר. במק הוא עולה לבד עם הפקודה הבאה של הלשכה.</p>' +
+          // the command is the operator's, one click away — not body text (UI law 3, DGO-387)
+          '<details><summary>הפקודה שמפעילה אותו עכשיו</summary><pre class="pw-cmd" dir="ltr">./bbox engine power start</pre></details></div>';
       }
       const wantsLid = p.lid.ac === "run" || p.lid.battery === "run";
       // THE PERMISSION IS A macOS FACT, AND AN ABSENT ONE IS NOT A MISSING ONE (DGO-520). This drew

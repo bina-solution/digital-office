@@ -83,7 +83,9 @@ export class SyncSourcesTestWorkflow {
         httpMethod: 'POST',
         path: 'sync-sources-e2e-lane',
         responseMode: 'responseNode',
-        options: {},
+        // DGO-1603: only the office's own test lane calls it (http://n8n-webhook:5678).
+        // Public /webhook/* must not reach a lane that writes.
+        options: { ipWhitelist: '10.0.0.0/8,172.16.0.0/12,192.168.0.0/16,127.0.0.1,::1' },
     };
 
     @node({

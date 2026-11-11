@@ -10,12 +10,24 @@ const basicAuth = require('basic-auth');
 
 // When the app is fronted by an SSO edge (Authentik forward-auth), it must NOT run its own login —
 // otherwise it can't be embedded in the console and users hit a second login. TRUST_EDGE_AUTH=true
-// makes this app trust the edge and drop its local auth entirely (identity is asserted upstream).
+// makes this app trust the edge: a request is believed when it CAME through the edge (or carries the
+// office's service token), not merely because it arrived — see edge_caller.js.
 const EDGE_AUTH = process.env.TRUST_EDGE_AUTH === 'true';
+
+const edgeCaller = require('./edge_caller');
+const callerCheck = edgeCaller.middleware({
+  mode: process.env.CHAT_CALLER_MODE,
+  deployment: process.env.DEPLOYMENT_NAME,
+  token: process.env.CHAT_API_TOKEN,
+  // the office's READ token: GET /api/accounts and /api/readyz only (edge_caller.js READ_ROUTES) — for the office agent
+  readToken: process.env.CHAT_READ_TOKEN,
+  // the office's chat credential as Basic auth on /api/, as below without edge trust — never the shipped fallback
+  basic: edgeCaller.basicChecker({ username: CONFIG.AUTH_USERNAME, password: CONFIG.AUTH_PASSWORD, parse: basicAuth }),
+});
 
 const isAuthenticated = (req, res, next) => {
   if (EDGE_AUTH) {
-    return next();   // gated by Authentik at the edge — no app-level login
+    return callerCheck(req, res, next);
   }
   if (req.session.authenticated) {
     return next();

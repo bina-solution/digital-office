@@ -75,6 +75,17 @@
       "default": false,
       "description": "true = cannot be disabled or uninstalled (the platform itself). Layer 1 is normally system:true."
     },
+    "page": {
+      "type": "string",
+      "enum": ["meetings", "tasks", "mail", "drive", "ai", "notes", "services", "documents", "recording", "browser", "concurrency", "base"],
+      "description": "The page of the product this app belongs to: the owner's twelve, in his order (DGO-1042, module «המוצר הסופי · 1»). These are meetings, tasks, mail, drive, ai, notes (obsidian), services, documents, recording, browser, concurrency (any-concurrency), and base. base is the platform every office runs on, plus the shared services every page leans on: its apps and links, its machines, chat, automations, git and security. services is the business's own line of work: a client's or the business's apps (DGO-1044). The app says it about itself: no list of apps by page exists anywhere else. scripts/app-standard/measure.py groups INVENTORY.md by it, and holds a page once declared. Both compilers refuse a value not in this list. A product app with no page is listed apart, as a decision still to write (DGO-1045): it joins a page or goes to the archive (G34)."
+    },
+    "people": {
+      "type": "string",
+      "enum": ["everyone", "admins"],
+      "default": "everyone",
+      "description": "Who of the office's signed-in people opens this app (DGO-1755). `everyone` (the default): every person who signs in. `admins`: the office's admins only — an app that is root on the office (a terminal, its apps, its connections and keys, its automations, its security, its links, an agent with full access) or that acts as the owner's own accounts. Both compilers put `authentik-admins@file` (forward-auth's /auth/traefik/admins) on every signed-in route of an `admins` app, and the console's door refuses it to anyone else; a person the owner invited (group `people`) is never an admin."
+    },
     "core": {
       "type": "boolean",
       "default": false,
@@ -166,6 +177,14 @@
               "type": "string"
             },
             "description": "Ops adapters MAY implement; consumers must negotiate (unequal-feature-set problem)."
+          },
+          "token_readers": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "pattern": "^[a-z0-9][a-z0-9-]*$"
+            },
+            "description": "The apps this PROVIDER lets read its agent's action token from the vault (DGO-1152) — e.g. browser42's `browser`: [\"newsflow\"], which calls its task runner. The compiler lists a reader only where it is named here AND `use`s this capability AND this app is the capability's one provider; a consumer never grants itself."
           },
           "link": {
             "type": "boolean",
@@ -367,7 +386,61 @@
             "items": {
               "type": "string"
             },
-            "description": "Path prefixes exempt from auth (e.g. /webhook, /healthz) — Cloudron proxyAuth '!' semantics."
+            "description": "Path prefixes exempt from auth (e.g. /webhook, /healthz) — Cloudron proxyAuth '!' semantics, and a DECLARATION, not a mechanism: the compiler does not implement it, so every router it emits for this entry is behind the sign-in. It exists so an app that serves an open path through its OWN routers (a `n8n-hooks` router on a second service, drive's `/file/d/`) can say so in one place the platform reads — gate G21 accepts such a router only for a prefix listed here, and prints a note when the entry is a compiled one. A path that must answer the whole internet is NEVER a `sub_routes` entry: a sub-route inherits its entry's chain (the sign-in included)."
+          },
+          "middlewares": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Middlewares THIS app defines on its own service's labels, attached to this entry's routers AFTER the platform's sign-in (emitted `<name>@docker`; a name carrying its own provider is REFUSED — the provider is the emitter's to append, and gate G21 checks the middleware exists in the app's own compose, because traefik DROPS a whole router whose middleware it cannot resolve). For the app behaviour the edge must not lose when the compiler owns the routers — n8n's `n8n-embed` drops `X-Frame-Options` so the console may frame the editor (DGO-1594). A middleware that must apply to ONE PATH and not the whole host belongs in `sub_routes`."
+          },
+          "sub_routes": {
+            "type": "array",
+            "description": "Path-scoped routers on this entry's host, or on the host the shell frames the app at (`on: framed`), each with its own middlewares. For an endpoint whose HEADERS differ from the rest of the app: n8n's `/rest/push` is an EventSource the app refuses unless Origin/X-Forwarded-Host name the host it was forwarded for, and that rewriting must not touch every request (DGO-1594). It is NOT a way to make a path public — a sub-route carries its entry's sign-in (see `auth_exclude` for how an open path is declared, and serve it from a router of your own).",
+            "items": {
+              "type": "object",
+              "required": ["name", "path"],
+              "additionalProperties": false,
+              "properties": {
+                "name": {
+                  "type": "string",
+                  "description": "Router suffix: `<entry name>-<sub name>` (plus `-local`/`-http`/`-https`, or `-https` on the framed host)."
+                },
+                "path": {
+                  "type": "string",
+                  "description": "The PathPrefix this router matches, appended to the entry's own host rule."
+                },
+                "priority": {
+                  "type": "integer",
+                  "description": "traefik priority; a longer rule already outranks the plain router, and this says it out loud."
+                },
+                "on": {
+                  "type": "string",
+                  "enum": ["host", "framed"],
+                  "default": "host",
+                  "description": "host = this entry's own host; framed = the host the console frames the app at (emitted only where that host exists)."
+                },
+                "middlewares": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  },
+                  "description": "This router's own chain, after the platform's sign-in — same rules as the entry's `middlewares`."
+                }
+              }
+            }
+          },
+          "https_only": {
+            "type": "boolean",
+            "default": false,
+            "description": "No `-http` router on the `web` entrypoint: a host that carries an API rather than a screen is reached over https, and the edge's own port-80 answer is a 308 (DGO-1595). The `-local` twin stays — it is the machine's own name, not the internet. Set it on an app whose callers are given a URL by the app itself (supabase's STORAGE_PUBLIC_URL) rather than typed by a person (DGO-1557)."
+          },
+          "publish": {
+            "type": "string",
+            "enum": ["always", "domain"],
+            "default": "always",
+            "description": "`domain` = this entry's public routers exist only where the office has a public name. The host variable decides (`url_env`, else `<APP>_BASE_URL`): a `.localhost` value renders the `-local` router and nothing else — which is how an office that publishes NOTHING declares it (Exampleu sets SUPABASE_BASE_URL=supabase.localhost), and it is also what keeps a certresolver off a name no authority can issue for."
           },
           "on_demand": {
             "type": "object",
@@ -409,6 +482,11 @@
                 "type": "boolean",
                 "default": true,
                 "description": "false = the app keeps its /a/<alias>/ door (its API, for the console and for apps that read it) and its place in the office's catalog (a linked office still reaches it through the link), but the launcher shows NO tile for it — here or as a linked office's tile — because its screen lives in another app. machine (2026-10-21, DGO-890): its resource view moved into computers."
+              },
+              "tab": {
+                "type": "boolean",
+                "default": false,
+                "description": "true = the app asks for a place in the console's bar on a phone; the compiler carries it into console.modules.yaml (`tab: true`), and the console shows the declared apps there, in their order. Declared by the app, never named by the console (DGO-1800)."
               },
               "external": {
                 "type": "boolean",
@@ -706,7 +784,23 @@
             "type": "string",
             "pattern": "^[a-z0-9_.-]+$"
           },
-          "description": "Volumes (of `volumes`) that hold only what the office can re-fetch or re-run — a pinned model, cached audio. The off-server copy leaves them out (FPG-92); the pre-upgrade backup still takes them."
+          "description": "Volumes (of `volumes`) that hold only what the office can re-fetch or re-run — a pinned model, cached audio. The off-server copy leaves them out (EXF-92); the pre-upgrade backup still takes them."
+        },
+        "writers": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^[a-z0-9][a-z0-9_.-]*$"
+          },
+          "description": "Services of this app's compose that write to its stores while they run: a quiesced export (`--quiesce`) stops exactly these and starts them again after (DGO-1510; it used to pick containers by name). Each is a service of the app's own docker-compose.yml whose container_name is `<service>-${DEPLOYMENT_NAME:-bina-deployment}`, and never a database or key-value store, which the export dumps (G26)."
+        },
+        "shares": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^[a-z0-9_.-]+$"
+          },
+          "description": "Volumes this app's compose mounts that ANOTHER app owns (that app's `volumes`): backed up, restored and purged with their owner only — never carried by an export scoped to this app, written by an import scoped to it, or removed by its `uninstall --purge` (DGO-1510). G26: each is a named volume of this app's compose, owned by exactly one other app; and every volume is in one app's `volumes` only."
         }
       }
     },
@@ -777,6 +871,11 @@
       "pattern": "^[a-z][a-z0-9-]{1,62}$",
       "description": "The compose service that ANSWERS this app's agent door (its `agent_api_port`, stated or derived), when it is not the service that serves the UI. A linked office reaches the agent door through the serving office's link, which delivers it to this service; without it the link delivers to the UI's service, and an app whose API is a container of its own answered 502 to every far CLI (browser42: the UI is browser42-caddy, the task runner is browser42-task-runner; DGO-1018). It is stated, never inferred from a capability's endpoint: an API with no authentication of its own must not be handed to a linked office by inference. Sharing an app then shares its screen, its API and its CLI, with nothing declared by hand in any office."
     },
+    "handoffs": {
+      "type": "string",
+      "pattern": "^/[A-Za-z0-9/_.-]*$",
+      "description": "The path, on this app's AGENT door (`agent_api_port`, answered by `agent_api_service`), at which it lists the people it is waiting for (DGO-1336): an app that hands a person a screen of its own — browser42 opening Google's account chooser for another app's «Continue with Google» — keeps one record per hand-off (who asked, `needed` → `done` | `failed`, a sentence; never an address) and lists the current ones here. The compiler renders the address onto the app's console tile, here and on every linked office it is given to (`http://<service>:<port><path>`, `http://<alias>.<office>:<port><path>`), and the console reads it to bring the screen to whoever is looking while an app waits for him, and the app back when it is done. The console never names the app (G9): the declaration is the only way it knows. An internal address — `/api/modules` never hands it to a browser."
+    },
     "contributes": {
       "type": "object",
       "additionalProperties": false,
@@ -839,7 +938,7 @@
     "cli": {
       "type": "object",
       "additionalProperties": false,
-      "description": "How this app appears in the bbox CLI. The CLI dispatches `bbox <id-or-alias> <verb>` to <root>/<id>/hooks/<verb> generically, so an app's command surface is the set of files in its hooks/ directory and NOTHING is declared in bbox. Before this existed, bbox carried a `case` block per app plus its verbs in the help heredoc, so adding an app meant editing the CLI — the exact coupling gate G31 forbids everywhere else.",
+      "description": "How this app appears in the bbox CLI. The CLI dispatches `bbox <id-or-alias> <verb>` to <root>/<id>/hooks/<verb> generically, so an app's command surface is the set of files in its hooks/ directory and NOTHING is declared in bbox. Before this existed, bbox carried a `case` block per app plus its verbs in the help heredoc, so adding an app meant editing the CLI — the exact coupling gate G31 forbids everywhere else. The rule every verb keeps (the grammar, --json, exit codes 0/1/2/3, help, secrets, writes) and its API twin: ai/context/app-cli-api-standard.md.",
       "properties": {
         "alias": {
           "type": "string",
@@ -848,6 +947,104 @@
         "fallback": {
           "type": "string",
           "description": "Hook that receives the verb as its FIRST ARGUMENT when no hooks/<verb> exists. Lets an app expose several verbs from one implementation (browser42: dump|load|list|info all reach hooks/state) without a file of boilerplate per verb."
+        }
+      }
+    },
+    "ops": {
+      "type": "array",
+      "description": "The app's operations, declared once (DGO-1244, ai/context/app-cli-api-standard.md §3): each is one route of its API, and the verb and the screen action that reach it. Both compilers render every enabled app's ops into .generated/registry/ops.json. `bbox help` reads that file for an op's line. The hooks stay the implementation: an op names its hook as `verb`, and an op with no verb is reached only through the API until DGO-1245's generic caller. DGO-1246's gate reads the same declaration, so an op with a face missing is said.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "method", "path", "access"],
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9-]{0,40}$",
+            "description": "The op's name, unique in the app; the `op` of a canonical answer ({ok, op, data})."
+          },
+          "method": {
+            "type": "string",
+            "enum": ["GET", "POST", "PUT", "PATCH", "DELETE"]
+          },
+          "path": {
+            "type": "string",
+            "pattern": "^/",
+            "description": "The route, from the root of the endpoint the op is served on (`capability`'s endpoint): /api/tags."
+          },
+          "capability": {
+            "type": "string",
+            "description": "The capability (this app's `capabilities[].name`) whose endpoint serves the route. Optional when the app has exactly one capability with an endpoint."
+          },
+          "access": {
+            "type": "string",
+            "enum": ["read", "write"],
+            "description": "By the op's PURPOSE. read: it asks, and nothing the office keeps is what it is for. A model loaded into memory to answer is a side effect, not the op. write: the change is the point: a file, a record, a model taken out of memory, a message sent. It belongs to the op, not the route: one route may carry two ops (ollama's generate reads and its unload writes, both POST /api/generate), so a caller or a gate looks access up by the op's id, never by method and path."
+          },
+          "verb": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9-]{0,40}$",
+            "description": "The CLI verb that runs this op: a file of the app's hooks/ by its base name (`bbox <app> <verb>`), or any name when the app declares `cli.fallback`. Both compilers hold the name. DGO-1246's gate holds the file, on a whole checkout: validate also runs on trees that carry a manifest without its hooks."
+          },
+          "ui": {
+            "type": "string",
+            "description": "The screen action that calls this route, in words a person sees (a button, a tab). Absent: the op has no screen action yet, and the gate says so."
+          },
+          "summary": {
+            "type": "object",
+            "properties": {
+              "he": {"type": "string"},
+              "en": {"type": "string"}
+            },
+            "additionalProperties": false
+          }
+        }
+      }
+    },
+    "requires_host": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "devices": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^/dev/[A-Za-z0-9_./-]+$"
+          }
+        }
+      },
+      "description": "What of the host this app drives, said so it is never enabled where that is missing: `devices` — the device files it maps into its container (the Android emulator: /dev/kvm). The compiler's one writer of the desired state (set_disposition) refuses to enable it on a machine without them, with the reason, before anything is written; every surface that enables an app (set-state, app-management, the installer) hears that refusal (DGO-1797)."
+    },
+    "share": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["local"],
+      "description": "This app is never published on a link, said on purpose (DGO-1055): another office reaches what it does some other way, or must not reach it at all. app-standard/measure.py reads the sentence as the share column's answer instead of a gap. An app with a door in the link catalog needs no such line.",
+      "properties": {
+        "local": {
+          "type": "string",
+          "minLength": 20,
+          "description": "Why it stays on this office, in one sentence (e.g. 'Docker management is root on this office's engine: it never crosses a link')."
+        }
+      }
+    },
+    "wraps": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["client"],
+      "description": "This app WRAPS a vendor's official client (the bina-claude shape, ai/context/app-cli-api-standard.md §6): the vendor's own Linux client streamed as the screen, its own headless side behind the CLI and the API. Declaring it puts the app under gate G108 (wrapped-app-lint): a wrapped app keeps the four channels — screen, CLI, API, event stream — like any other. The catalogue of candidates is DGO-1265.",
+      "properties": {
+        "client": {
+          "type": "string",
+          "description": "The vendor's official client this app streams as its screen, and where it comes from (e.g. 'Claude Desktop for Linux, Anthropic's apt repository')."
+        },
+        "headless": {
+          "type": "string",
+          "description": "The vendor's own headless side behind the CLI and the API (e.g. 'Claude Code CLI', 'freecadcmd'), or 'none: <why>' when the vendor has none — gate G108 then owes no API and no flow, and refuses the claim without a reason, beside a headless_app, or on an app that has an API."
+        },
+        "headless_app": {
+          "type": "string",
+          "description": "The id of the app that carries the headless side, when it is an app of its own (cad's is cad-api): G108 then reads the CLI, the API and the event stream there too."
         }
       }
     },

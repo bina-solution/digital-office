@@ -131,7 +131,10 @@ export class IndoxIntegrationHealthWorkflow {
         httpMethod: 'POST',
         path: 'trigger-indox-health',
         responseMode: 'responseNode',
-        options: {},
+        // DGO-1603 (G97): nothing in the product code calls this one over HTTP from outside; it is the
+        // office's own health trigger. The edge publishes /webhook/* publicly, so the office's own
+        // ranges are the answer.
+        options: { ipWhitelist: '10.0.0.0/8,172.16.0.0/12,192.168.0.0/16,127.0.0.1,::1' },
     };
 
     @node({

@@ -12,7 +12,7 @@ export const meta = {
 // with a space. Another machine — for example a Claude cloud VM — passes args.repo = its clone's absolute
 // path. args.import = false skips the import step where digital assets is not running; the files are the
 // source, and `./bbox digital-assets content` imports them later on the office that runs the app.
-const REPO = (args && args.repo) || '/Users/shlomobolotin/הלשכה הדיגיטלית שלי '
+const REPO = (args && args.repo) || '/Users/owner/הלשכה הדיגיטלית שלי '
 const IMPORT = !(args && args.import === false)
 const C = REPO + '/apps/digital-assets/content'
 const WORDS = { article: '1,800–2,400', project: '450–650', tutorial: '1,000–2,200', comparison: '1,200–1,800', directory: '1,500–3,000', news: '400–800', report: '1,000–2,500', glossary: '40–90 per entry, 50 entries' }

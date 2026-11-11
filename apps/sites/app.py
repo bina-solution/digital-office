@@ -45,10 +45,12 @@ import re
 from pathlib import Path
 
 from fastapi import FastAPI, Request
+from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 
 import checks
+import indexnow
 import machines
 import public
 import runtime
@@ -198,6 +200,8 @@ def site_view(site: dict, with_uptime: bool = True) -> dict:
     out["findings"] = _finding_counts(site["id"])
     out["visits"] = store.visits_total(site["id"], 7)
     out["url"] = runtime.site_url(site)
+    # where the office shows a site it serves itself — even one with no domain yet (DGO-1591)
+    out["preview"] = public.preview_path(site)
     out["container"] = runtime.container_name(site)
     out["managed"] = runtime.is_managed(site)
     out["log_source"] = runtime.log_source(site)["kind"]
@@ -221,6 +225,7 @@ def api_overview():
                                           "enabled", "monitor", "last_state", "last_checked",
                                           "last_error")},
                      "url": runtime.site_url(s),
+                     "preview": public.preview_path(s),
                      "uptime": store.uptime_summary(s["id"], 24),
                      "visits": store.visits_total(s["id"], 7),
                      "findings": _finding_counts(s["id"])})
@@ -340,6 +345,13 @@ async def api_site_patch(sid: str, request: Request):
     body.pop("id", None)
     if "hosts" in body:
         body["hosts"] = [h.strip().lower() for h in (body["hosts"] or []) if h and h.strip()]
+    # Who serves the site is decided by `mode` and `entries`: only a request that names one of them converges
+    # (the screen's save sends both, and is also how a failed convergence is retried); a flag alone
+    # (`{"public": {"indexnow": false}}`) is a record edit, not a reason to re-sync and stop or start a container.
+    moves = isinstance(body.get("public"), dict) and bool({"mode", "entries"} & set(body["public"]))
+    if isinstance(body.get("public"), dict):
+        # the screen sends `{mode, entries}`: a key it does not send (`indexnow: false`) is kept, not erased
+        body["public"] = {**(site.get("public") or {}), **body["public"]}
     if isinstance(body.get("public"), dict) and "entries" in body["public"]:
         entries, bad = public.clean_entries(body["public"]["entries"],
                                             body.get("hosts") or site.get("hosts") or [])
@@ -351,7 +363,7 @@ async def api_site_patch(sid: str, request: Request):
     store.event(sid, "update", "הגדרות האתר עודכנו",
                 {"fields": sorted(body.keys())})
     out = {"ok": True, "site": site_view(saved)}
-    if "public" in body:
+    if moves:
         threading.Thread(target=_converge_public_bg, args=(saved, site), daemon=True,
                          name=f"sites-public-{sid}").start()
         out["public"] = {"started": True, "mode": public.mode_of(saved),
@@ -383,7 +395,7 @@ def _converge_public(site: dict, prev: dict, apply_mode: bool = True) -> dict:
         report["warning"] = "לא הוגדר נתיב ציבורי — לאתר אין כתובת פומבית"
         return report
     if mode == "office":
-        report["sync"] = _json(public.sync, site, True)
+        report["sync"] = _json(public.sync, site, True, True)      # wait: the container stops next
         if isinstance(report["sync"], JSONResponse):
             report["sync"] = {"ok": False, "reason": report["sync"].body.decode()[:200]}
         report["edge"] = _json(public.publish, "", True)
@@ -465,8 +477,8 @@ async def api_site_deploy(sid: str, request: Request):
 
 @app.post("/api/sites/{sid}/{action}")
 async def api_site_action(sid: str, action: str, request: Request):
-    """start | stop | restart | probe | collect | scan — one route, because they are one kind of
-    thing: an action the owner asks for now, whose result is reported as it happened."""
+    """start | stop | restart | probe | collect | seed | sync | publish | scan | indexnow — one route, because they
+    are one kind of thing: an action the owner asks for now, whose result is reported as it happened."""
     site, bad = _site_or_404(sid)
     if bad:
         return bad
@@ -490,7 +502,10 @@ async def api_site_action(sid: str, action: str, request: Request):
         res = _json(runtime.seed_content, site, bool(body.get("force")))
         store.event(sid, "seed", "תוכן האתר הועתק לדפוס", res if isinstance(res, dict) else {})
     elif action == "sync":
-        res = _json(public.sync, site, bool(body.get("force")))
+        # off the event loop: a sync of a big site is minutes of slices through the computers door, and
+        # inside this `async` route it stopped EVERY request meanwhile — the public pages and /healthz
+        # with them, which is how a container gets restarted in the middle of its own sync
+        res = await run_in_threadpool(_json, public.sync, site, bool(body.get("force")))
         if isinstance(res, dict) and res.get("ok"):
             store.event(sid, "sync", f"התוכן נאסף ללשכה ({res.get('files')} קבצים)")
     elif action == "publish":
@@ -500,11 +515,27 @@ async def api_site_action(sid: str, action: str, request: Request):
     elif action == "scan":
         names = body.get("checks") or None
         res = scheduler.run_scan(sid, names, trigger="manual")
+    elif action == "indexnow":
+        # the changed addresses to the search engines now (`all`: every address of the sitemap) — an outside
+        # call that waits on the engine's answer, so off the event loop
+        res = await run_in_threadpool(_json, indexnow.submit, site, bool(body.get("all")))
+        if isinstance(res, dict):
+            indexnow.record(site, res)
     else:
         return _err("פעולה לא מוכרת", 404)
     if isinstance(res, JSONResponse):
         return res
     return {"ok": True, "action": action, "result": res, "site": site_view(site)}
+
+
+@app.get("/api/sites/{sid}/indexnow")
+def api_site_indexnow(sid: str):
+    """What the office tells the search engines about this site: on or why not, the key file, the last answer
+    and how many addresses wait to be sent."""
+    site, bad = _site_or_404(sid)
+    if bad:
+        return bad
+    return _json(indexnow.status, site)
 
 
 @app.get("/api/sites/{sid}/status")
@@ -592,19 +623,50 @@ def _public_response(sid: str, path: str, request: Request) -> Response:
     router, and a site that is not `mode: office` answers 404 here rather than being served twice.
     """
     site = store.get_site(sid)
+    # An error here is the SITE's answer, not a screen of this app the console should find instead: it
+    # says so (`X-Bina-Final`), and the console passes it on as it is (DGO-1591).
     if not site or public.mode_of(site) != "office":
-        return Response(content=b"Not Found", status_code=404, media_type="text/plain")
+        return Response(content=b"Not Found", status_code=404, media_type="text/plain",
+                        headers={"X-Bina-Final": "1"})
     host = request.headers.get("x-forwarded-host") or request.headers.get("host") or ""
-    out = public.serve(site, path, host=host)
-    return Response(content=out["body"], status_code=out["status"], headers=out["headers"])
+    # The console names its mount here (`/a/sites`): a page seen through it carries a base of its own.
+    # The client's address is the edge's first X-Forwarded-For (traefik writes it); it only counts a visit.
+    ip = ((request.headers.get("x-forwarded-for") or "").split(",")[0].strip()
+          or request.headers.get("x-real-ip") or (request.client.host if request.client else ""))
+    # What the visitor asked for, as the edge saw it: the scheme, and the path before the edge's rewrite
+    # (`X-Replaced-Path`, traefik's own header) with the query — a plain-http request is sent on to it (DGO-1765).
+    # The LAST `X-Replaced-Path`: traefik ADDS its own after any copy a client sent, and the client's
+    # copy must not choose the path of the Location.
+    replaced = (request.headers.getlist("x-replaced-path") or [""])[-1]
+    asked = public.asked_address(site, host, path, replaced, request.url.query)
+    # A HEAD asks what a GET would answer, without the body (uvicorn sends none): the same answer, and not a visit.
+    out = public.serve(site, path, host=host, prefix=request.headers.get("x-forwarded-prefix") or "",
+                       count=request.method != "HEAD", ua=request.headers.get("user-agent") or "", ip=ip,
+                       scheme=request.headers.get("x-forwarded-proto") or "", asked=asked)
+    headers = dict(out["headers"])
+    if out["status"] >= 400:            # a missing page, «not synced yet», an unreadable file: the site's answer
+        headers["X-Bina-Final"] = "1"
+    return Response(content=out["body"], status_code=out["status"], headers=headers)
 
 
-@app.get("/public/{sid}")
+# GET and HEAD: FastAPI, unlike Starlette, does not answer HEAD on a GET route — every public page answered a HEAD
+# with 405 (measured on digital-office.co.il and bina-solutions.co.il, 2026-11-10, DGO-1772), and link checkers,
+# uptime monitors, card fetchers and some crawlers ask HEAD first.
+@app.api_route("/public/{sid}", methods=["GET", "HEAD"])
 def public_serve_root(sid: str, request: Request):
+    # The site's root WITHOUT its slash. The edge never sends this (its rewrite ends in `/`), but a
+    # browser opening the app's own prefix does — and there every relative URL in the page resolves
+    # one directory too high (against `/public/`), so pictures and links break. nginx answers a
+    # directory asked for without its slash with a 301 to the slash; so does this, with a RELATIVE
+    # Location, which is right under any prefix the app is reached through.
+    site = store.get_site(sid)
+    if site and public.mode_of(site) == "office":
+        query = request.url.query
+        return Response(status_code=301, headers={"Location": f"{sid}/" + (f"?{query}" if query else "")})
     return _public_response(sid, "", request)
 
 
-@app.get("/public/{sid}/{path:path}")
+@app.api_route("/public/{sid}/{path:path}", methods=["GET", "HEAD"])
 def public_serve(sid: str, path: str, request: Request):
     return _public_response(sid, path, request)
 
@@ -630,7 +692,8 @@ async def api_site_slots_apply(sid: str, request: Request):
     bundle = body.get("bundle") or {}
     if not isinstance(bundle, dict) or not bundle.get("slots"):
         return _err("לא התקבלו משבצות (bundle.slots) לעדכון", 400)
-    res = _json(public.slots_apply, site, bundle, body.get("actor") or "", body.get("client") or "")
+    res = await run_in_threadpool(_json, public.slots_apply, site, bundle, body.get("actor") or "",
+                                  body.get("client") or "")      # it ends in a sync: off the event loop
     if isinstance(res, JSONResponse):
         return res
     return {"ok": True, **res, "site": site_view(site)}

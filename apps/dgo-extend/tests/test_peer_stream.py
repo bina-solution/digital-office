@@ -5,7 +5,7 @@
 
 `peer_proxy` handed on `r.iter_content(chunk_size=None)`, and urllib3 reads a body that has a
 Content-Length with ONE `read(None)`: a meeting's recording opened as a remote tile sat whole in this
-160M container. The console was OOM-killed exactly that way on FPG (DGO-1231). Measured here with the
+160M container. The console was OOM-killed exactly that way on EXF (DGO-1231). Measured here with the
 real requests and the real web stack (this app's image) against a real server: the first piece the
 door hands on is at most PASS_CHUNK, the whole body still arrives intact, and an event-stream keeps
 passing on each event as it arrives. Hermetic: a loopback server, a scratch volume and registry.

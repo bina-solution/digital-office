@@ -56,22 +56,22 @@ import subprocess
 import sys
 
 DOCKER = ["docker", "-H", "unix:///run/bbox-docker.sock"]
-DB = DOCKER + ["exec", "-i", "supabase-db-shlomo-laptop",
+DB = DOCKER + ["exec", "-i", "supabase-db-owner-laptop",
                "psql", "-U", "postgres", "-d", "postgres"]
 CONN = "drive_google_service_account-ea660043"
 
 # ---- the corrected `failed` folder for drive-gdoc-scanned --------------------------------------
-# The registry points at 1REDACTEDdrivexxxxxxxxxxxxxxx0014 'acharei shemot, sroukot Boris nichshal'
+# The registry points at 1REDACTEDdrivexxxxxxxxxxxxxxx0012 'acharei shemot, sroukot Boris nichshal'
 # (101 files in window). The real failed folder of this family is
-# 1REDACTEDdrivexxxxxxxxxxxxxxx0009 'sroukot- nichshal (Boris)' (918 files in window). Established
+# 1REDACTEDdrivexxxxxxxxxxxxxxx0007 'sroukot- nichshal (Boris)' (918 files in window). Established
 # by the tri-state sibling resolution in scripts/ops/registry-fix-drive-gdoc-warehouse.sql:26.
-SCANNED_FAILED_WRONG = "1REDACTEDdrivexxxxxxxxxxxxxxx0014"
-SCANNED_FAILED_RIGHT = "1REDACTEDdrivexxxxxxxxxxxxxxx0009"
+SCANNED_FAILED_WRONG = "1REDACTEDdrivexxxxxxxxxxxxxxx0012"
+SCANNED_FAILED_RIGHT = "1REDACTEDdrivexxxxxxxxxxxxxxx0007"
 
-F_SCANNED_SYNCED = "1REDACTEDdrivexxxxxxxxxxxxxxx0002"
+F_SCANNED_SYNCED = "1REDACTEDdrivexxxxxxxxxxxxxxx0080"
 F_SCANNED_FAILED = SCANNED_FAILED_RIGHT
-F_CHAT_SYNCED = "1REDACTEDdrivexxxxxxxxxxxxxxx0093"
-F_CHAT_FAILED = "1REDACTEDdrivexxxxxxxxxxxxxxx0015"
+F_CHAT_SYNCED = "1REDACTEDdrivexxxxxxxxxxxxxxx0094"
+F_CHAT_FAILED = "1REDACTEDdrivexxxxxxxxxxxxxxx0013"
 
 
 def readonly_entry(name, folder, page_size):

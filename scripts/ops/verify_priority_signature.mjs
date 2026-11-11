@@ -56,7 +56,7 @@ if (fromMigration !== fromFixture) {
 console.log('  copy-drift gate: migration and fixture definitions are identical');
 
 // ---------------------------------------------------------------- 1. the LIVE mapping
-const nodes = JSON.parse(psql('n8n-postgres-shlomo-laptop', 'hacohen', 'n8n',
+const nodes = JSON.parse(psql('n8n-postgres-owner-laptop', 'example', 'n8n',
   "SELECT nodes::text FROM workflow_entity WHERE id='indoxV2ActionsShip01'"));
 const mapNode = nodes.find((n) => n.name === 'Map Request');
 if (!mapNode) { console.error('FATAL: no Map Request node in the live indoxV2ActionsShip01'); process.exit(1); }
@@ -112,7 +112,7 @@ SELECT json_agg(json_build_object(
   ${COLS.map((c) => `'${c}', p."${c}"`).join(',\n  ')}
 ))::text FROM picked p;`;
 
-const rows = JSON.parse(psql('supabase-db-shlomo-laptop', 'postgres', null, sql).trim() || '[]');
+const rows = JSON.parse(psql('supabase-db-owner-laptop', 'postgres', null, sql).trim() || '[]');
 console.log(`  rows under test: ${rows.length}`);
 
 // ---------------------------------------------------------------- 3. compare

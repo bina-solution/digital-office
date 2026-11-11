@@ -257,8 +257,10 @@ def run(url, shots, only, scheme="light", surface="files", forced=False):
                 if rec:
                     pg.wait_for_function("() => !F.state.recList.loading", timeout=15000)
                 else:
-                    pg.wait_for_function("(() => { const r = F.state.route, l = F.state.list;"
-                                         " return l.key === [r.view, r.id || '', r.q || ''].join('\\u241f') && !l.loading; })()",
+                    # the page's own key for the route (F.data.keyOf), never a copy of it: the copy here missed the
+                    # drive when it joined the key (9b45c8c9): the first state timed out after 15 s and the walk ended there
+                    pg.wait_for_function("(() => { const l = F.state.list;"
+                                         " return l.key === F.data.keyOf(F.state.route) && !l.loading; })()",
                                          timeout=15000)
                 pg.wait_for_timeout(250)
                 if len(st) > 2:

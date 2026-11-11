@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+#: site [section] — the approved stories, the only feed that leaves the office:  ./bbox newsflow site funding
+set -uo pipefail
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+exec "${SCRIPT_DIR}/_call" GET "/api/site${1:+?section=$1}"

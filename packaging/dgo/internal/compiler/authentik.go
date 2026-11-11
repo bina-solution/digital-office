@@ -9,8 +9,8 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/solomonBoltin/deployment-hacohen/packaging/dgo/internal/pyval"
-	"github.com/solomonBoltin/deployment-hacohen/packaging/dgo/internal/yamlish"
+	"github.com/bina-solution/digital-office/packaging/dgo/internal/pyval"
+	"github.com/bina-solution/digital-office/packaging/dgo/internal/yamlish"
 )
 
 // ── the sign-in blueprint: one authentik proxy provider per host an enabled app publishes ──────────
@@ -73,7 +73,7 @@ func publishedHosts(cat *Catalog, order []string) (*yamlish.Map, error) {
 			return nil, err
 		}
 		for _, r := range routes {
-			if !pyEqual(get(r, "auth"), "sso") {
+			if !pyEqual(getOr(r, "auth", "sso"), "sso") { // the routers' own default (DGO-630)
 				continue
 			}
 			s, err := dict(get(r, "sso"), aid+": routing.sso")
@@ -132,7 +132,7 @@ func ssoProviders(repo string, cat *Catalog, order []string, env *dotenv) ([]sso
 			return nil, err
 		}
 		for _, r := range routes {
-			if !pyEqual(get(r, "auth"), "sso") {
+			if !pyEqual(getOr(r, "auth", "sso"), "sso") { // the routers' own default (DGO-630): a gate gets its provider
 				continue
 			}
 			declared, err := dict(get(r, "sso"), aid+": routing.sso")
@@ -141,7 +141,7 @@ func ssoProviders(repo string, cat *Catalog, order []string, env *dotenv) ([]sso
 			}
 			s := yamlish.NewMap() // dict(r.get("sso") or {}): a copy
 			for _, k := range declared.Keys() {
-				s.Set(k, get(declared, k))
+				s.SetFrom(declared, k)
 			}
 			layer3 := pyEqual(get(doc, "layer"), int64(3))
 			if layer3 && s.Len() == 0 {
@@ -157,7 +157,7 @@ func ssoProviders(repo string, cat *Catalog, order []string, env *dotenv) ([]sso
 				full := ordered("slug", slug, "display_name", either(get(s, "display_name"), enName(get(doc, "title"), pyval.Str(slug))),
 					"base_url_env", v, "default_host", host+".localhost", "local_twin", true)
 				for _, k := range s.Keys() {
-					full.Set(k, get(s, k))
+					full.SetFrom(s, k)
 				}
 				s = full
 			}

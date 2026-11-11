@@ -16,7 +16,7 @@ services:
     # fetched only when it is not here already, so a checkout that has built it is untouched;
     # the `build:` below stays as the fallback. Needs the GHCR package readable — a package made
     # from a private repo is private, so `docker login ghcr.io` on a machine that must pull.
-    image: ghcr.io/solomonboltin/digital-office/bina-ds:${IMAGE_TAG:-latest}
+    image: ghcr.io/bina-solution/digital-office/bina-ds:${IMAGE_TAG:-latest}
     pull_policy: missing
     build:
       context: .
@@ -33,6 +33,12 @@ services:
     # hour later. docker-init as PID 1 reaps them; it costs nothing and changes nothing else.
     init: true
     environment:
+      # who the office agent is to `computers` when it runs a command on a machine (its AGENT.md curl;
+      # the writes answer only a known caller — DGO-1304)
+      - COMPUTERS_EXEC_TOKEN=${COMPUTERS_EXEC_TOKEN:-}
+      # the agent's proof to chat for its two reads (operatives/chat.accounts.md): READ only — GET /api/accounts and
+      # GET /api/readyz — never the office token that opens every route (DGO-1812)
+      - CHAT_READ_TOKEN=${CHAT_READ_TOKEN:-}
       - DSH_HOME=/data/dsh
       - DSH_PROFILE=bina
       - DSH_PORT=3080
@@ -105,6 +111,14 @@ services:
       # The engine's socket: the agent operates the deployment (build, up, down, logs, exec) through
       # it. Root on the engine, by design — owner decision 2026-09-17 ("full access to the office").
       - ${BBOX_DOCKER_SOCK:-/var/run/docker.sock}:/var/run/docker.sock
+      # THE OFFICE'S VAULT (DGO-1642). The agent reads it first in a session and writes only
+      # `Operatives/` — that is the app's own rule (apps/obsidian/AGENT.md), and this mount is what
+      # makes the vault reachable by the agent at all. Read-write on purpose: the operative's Run log
+      # is the agent's to keep. The same `source` shape as obsidian's own compose file, so an office
+      # that names a host folder (`OBSIDIAN_VAULT_HOST`) mounts that folder and nothing else moves;
+      # one that does not gets the project's own `obsidian_vault` volume, created on first use.
+      # An office with no Obsidian still starts: the mount is a named volume that docker creates.
+      - ${OBSIDIAN_VAULT_HOST:-obsidian_vault}:/workspace/vault
     # The agent.v1 adapter, published on the docker HOST's loopback only — the one door `bbox agent`
     # uses from any host: on Linux directly, on the macOS engine through Lima's loopback forward
     # (measured 2026-09-30: a guest 127.0.0.1 port answers on the Mac's 127.0.0.1 with no config).
@@ -124,11 +138,33 @@ services:
     # python), all inside this limit. At 1 CPU / 1 GiB, with 4-5 agents and 7 subagents at once,
     # a plain `sed -n` took 3-17 s and model requests stalled 30-245 s (measured 2026-09-29), and
     # the harness alone sat at 466 MiB idle. Limits, not reservations: an idle harness costs nothing.
+    #
+    # THESE TWO NUMBERS ARE ALSO THE MANIFEST'S, AND THE MANIFEST IS WHAT THE SCREENS PROMISE.
+    # `app.json` -> `resources` declares exactly this pair (rel-1, G30): the apps screen's room check
+    # and every human-facing figure read the manifest, while the kernel enforces this line, and the
+    # two said 1 CPU / 1 GiB against 2 / 2 GiB here — the manifest lied in both directions.
+    # The memory figure was settled by measurement, not by taste (2026-11-05): the kernel's own
+    # high-water mark for this container over two days of real sessions is 1779 MiB of the 2048 MiB
+    # cap, `memory.events` reads max 0 / oom_kill 0, and no allocation failure appears in 48 h of
+    # logs — so 2 GiB is a cap this workload has not been squeezed by. An earlier container that did
+    # touch 2048 MiB is why the margin is kept rather than the figure raised: raising it would grow
+    # the office's overcommit (G30) for a peak that already fits, and the enforced value is unchanged.
+    # CPU: this box's CFS quota is 0.64 (cpu-budget-lint scales this '2' to the 2-core machine) and
+    # it does throttle (60047 of 1078207 periods over 2 days), which is the measurement against
+    # cutting it to 1 — the comment above is why the cap stays 2 on a machine that has the cores.
+    # Per office (DGO-1730):
+    #   BINA_DS_CPUS       this cap. It is part of the container's configuration: changing it re-creates
+    #                      bina-ds at the office's next converge, and every lane in it ends.
+    #   BINA_DS_CPU_FLOOR  what the CPU budget (gate G65) may not take below, when it scales every cap
+    #                      down to the machine. An `x-` field, outside what compose hashes, so setting it
+    #                      re-creates nothing: `docker update` gives it to the running container. The HP,
+    #                      where the herd's lanes live, had this 2 scaled to 1.13 and every lane starved.
     deploy:
       resources:
         limits:
-          cpus: '2'
+          cpus: ${BINA_DS_CPUS:-2}
           memory: 2g
+    x-cpu-floor: ${BINA_DS_CPU_FLOOR:-0}
   # Every Ollama this office can reach (its own `ollama` app, or a linked office's) as a model route of
   # the agent, beside DeepSeek (tools/llm-routes.mjs, DGO-825). The harness mounts its pi-ai adapter
   # dormant and re-reads the `llm-pi-ai:` section of settings.yaml per request, so a route written
@@ -136,7 +172,7 @@ services:
   # harness's YAML library), same settings volume, the checkout read-only for the compiled registry,
   # and the office network, where a linked office's app answers at `<alias>.<office>`.
   bina-ds-llm-routes:
-    image: ghcr.io/solomonboltin/digital-office/bina-ds:${IMAGE_TAG:-latest}
+    image: ghcr.io/bina-solution/digital-office/bina-ds:${IMAGE_TAG:-latest}
     pull_policy: missing
     container_name: bina-ds-llm-routes-${DEPLOYMENT_NAME:-bina-deployment}
     restart: unless-stopped
@@ -154,6 +190,10 @@ services:
       - type: bind
         source: ${BBOX_REPO_HOST:-../../}
         target: ${BBOX_REPO_HOST:-/workspace/office}
+        read_only: true
+      - type: volume
+        source: ${OBSIDIAN_VAULT_HOST:-obsidian_vault}
+        target: /workspace/vault
         read_only: true
     networks:
       - traefik-network
@@ -173,6 +213,9 @@ services:
         max-file: '3'
 volumes:
   bina_ds_home:
+  # The vault is obsidian's volume: declared here because this app mounts it, and by the same name
+  # compose resolves per project (`<project>_obsidian_vault`) — the two apps are one stack.
+  obsidian_vault:
 networks:
   traefik-network:
     external: true

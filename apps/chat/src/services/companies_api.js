@@ -1,5 +1,6 @@
 const axios = require('axios');
 const { CONFIG } = require('../config');
+const { defaultResolver, instanceParams } = require('./indox_instance');
 
 // In-memory cache of companies { name: { identifiers: string[], mails: string[] } }
 let companiesCache = {};
@@ -42,7 +43,8 @@ const fetchCompanies = async (force = false) => {
   if (CONFIG.INDOX_API_BASE) {
     const url = `${CONFIG.INDOX_API_BASE}${CONFIG.INDOX_API_PREFIX}/config/companies`;
     try {
-      const res = await axios.get(url, { timeout: 20000 });
+      // that instance's companies (indox_instance.js), not «the first client's»
+      const res = await axios.get(url, { timeout: 20000, params: await instanceParams(defaultResolver()) });
       const projected = projectIndoxRows(res.data && res.data.companies);
       if (Object.keys(projected).length) {
         companiesCache = projected;

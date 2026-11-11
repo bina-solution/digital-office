@@ -9,8 +9,8 @@ nodes, so a gap is a named node — either a missing test lane or a dead node to
 Usage:
   python3 scripts/n8n-node-coverage.py --since-id 3735000 [--min 85] [--wf name ...]
 
-Runs on the WSL side (needs docker exec into n8n-postgres). Exit 1 when any workflow in
-scope is under --min percent.
+Runs where `./scripts/dc` runs (needs docker exec into the office's n8n-postgres). Exit 1 when
+any workflow in scope is under --min percent.
 """
 import argparse
 import json
@@ -18,8 +18,31 @@ import os
 import subprocess
 import sys
 
-PG = ["docker", "exec", "n8n-postgres-shlomo-laptop", "psql", "-U", "hacohen", "-d", "n8n",
-      "-t", "-A"]
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+
+def env(k, d=""):
+    """One key from the office's `.env` — the file every container name is compiled from."""
+    try:
+        with open(os.path.join(ROOT, ".env"), encoding="utf-8", errors="replace") as f:
+            for ln in f:
+                if ln.startswith(k + "="):
+                    return ln.split("=", 1)[1].strip()
+    except OSError:
+        pass
+    return d
+
+
+# The container name was `n8n-postgres-owner-laptop`, one office's, hardcoded — so on every other
+# office psql failed, `sql()` returned "", and EVERY workflow read "MISSING from n8n". That is a
+# silent zero dressed as a finding, and it is why this tool could not measure anything after the
+# office it was written on. Every container here is `<service>-<DEPLOYMENT_NAME>` (lib.sh's
+# PG_CONTAINER, pg-maintenance.sh, highload-inject.py all derive it the same way), so this does too,
+# with PG_CONTAINER kept as the override those scripts already honour.
+DN = os.environ.get("DEPLOYMENT_NAME") or env("DEPLOYMENT_NAME", "bina-deployment")
+PG = ["docker", "exec", os.environ.get("PG_CONTAINER") or "n8n-postgres-%s" % DN,
+      "psql", "-U", os.environ.get("POSTGRES_USER") or env("POSTGRES_USER", "example"),
+      "-d", os.environ.get("POSTGRES_DB") or env("POSTGRES_DB", "n8n"), "-t", "-A"]
 
 # The estate under the 85% bar: sync + state machine. Extractor/utility workflows are listed
 # too but reported separately (informational) — their bar is owned by the extraction gates.
@@ -72,8 +95,22 @@ INFO = ["indoxV2ExtractBalanceSheet01", "indoxV2ExtractInvoiceGemini01",
 
 
 def sql(q):
-    return subprocess.run(PG + ["-c", q], capture_output=True).stdout.decode(
-        "utf-8", errors="replace").strip()
+    """The query's rows, newline-joined — and a FAILURE when the database was not reachable.
+
+    The empty string has to keep meaning "this workflow is not in n8n" (that is a real report:
+    a CORE workflow the instance does not run). What it must never also mean is "docker exec
+    could not reach psql", because then every workflow reads MISSING and the number becomes a
+    measurement over nothing (measured 2026-11-03: the container was named
+    `n8n-postgres-owner-laptop` while this office's is `n8n-postgres-staging`, and 32 of the 37
+    CORE workflows "did not exist" — none of it true). psql exits 0 for a query with no rows and
+    non-zero for a connection/auth/SQL error, so that is the discriminator.
+    """
+    r = subprocess.run(PG + ["-c", q], capture_output=True)
+    if r.returncode != 0:
+        err = r.stderr.decode("utf-8", errors="replace").strip()
+        raise SystemExit("n8n-node-coverage: psql failed (rc=%d) in %s — the n8n database is not "
+                         "reachable from here:\n  %s" % (r.returncode, PG[2], err[:400]))
+    return r.stdout.decode("utf-8", errors="replace").strip()
 
 
 def load_deflatten():

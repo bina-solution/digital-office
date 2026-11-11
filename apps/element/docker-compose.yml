@@ -1,0 +1,149 @@
+# element — Element Desktop wrapped as an app of the office (DGO-1264; ai/context/wrapped-official-app.md).
+# Three services and one volume, from apps/_template-wrapped:
+#   element-desktop       Element Desktop under Selkies: the screen (routing.service in app.json)
+#   element-desktop-home  one shot that makes the desktop's folder in the volume before the desktop mounts it
+#   element               the adapter over the Matrix client-server API: the API and the CLI (chat.v1)
+#   element_home          the ONE volume (data.volumes): its `desktop` folder is the desktop's home, and its
+#                         `adapter` folder is the adapter's own device, the only part the adapter mounts
+# The caps are a start: measure the client on an office, and write what was measured beside them.
+services:
+  element-desktop:
+    image: ghcr.io/bina-solution/digital-office/element-desktop:${IMAGE_TAG:-latest}
+    pull_policy: missing
+    build:
+      context: .
+      dockerfile: Dockerfile.desktop
+    container_name: element-desktop-${DEPLOYMENT_NAME:-bina-deployment}
+    restart: unless-stopped
+    environment:
+      - PUID=1000
+      - PGID=1000
+      # nginx on the container's loopback (Dockerfile.desktop); the front door, desktop/gate.mjs, holds :3000.
+      - CUSTOM_PORT=3100
+      - CUSTOM_HTTPS_PORT=3101
+      - TZ=${TZ:-Asia/Jerusalem}
+      - TITLE=Element
+      - SELKIES_UI_TITLE=Element
+      - SELKIES_UI_SHOW_LOGO=false
+      # X11 (Xvfb + Openbox), not the Wayland compositor: the road Electron clients are known to walk.
+      - PIXELFLUX_WAYLAND=false
+      - NO_DECOR=true
+      # Served at the root, so one server answers in this office's console (/a/element/, the prefix stripped by
+      # app.json) and at a linked office's shared host, where a fixed SUBFOLDER would 404.
+      - SUBFOLDER=/
+      # Who may frame it: this console, plus each linked office's console that shows the tile. Per office in
+      # .env, the whole value in DOUBLE quotes (bina-claude's compose says why).
+      - SELKIES_FRAME_ANCESTORS=${ELEMENT_FRAME_ANCESTORS:-'self'}
+      - SELKIES_ENABLE_RESIZE=true
+      - SELKIES_ENABLE_CLIPBOARD=true
+      - PASSWORD=                   # the office's sign-in is the door; never a second password
+      - START_DOCKER=false          # the base image's own docker daemon stays off
+      - DEPLOYMENT_NAME=${DEPLOYMENT_NAME:-bina-deployment}
+    volumes:
+      # HOME (/config) is the volume's `desktop` folder; element-desktop-home makes it first (a subpath must
+      # exist before it is mounted).
+      - type: volume
+        source: element_home
+        target: /config
+        volume:
+          subpath: desktop
+    depends_on:
+      element-desktop-home:
+        condition: service_completed_successfully
+    # Chromium and Electron renderers share memory through /dev/shm; docker's 64 MB default crashes them.
+    shm_size: 1gb
+    networks: [traefik-network]
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "-o", "/dev/null", "http://127.0.0.1:3000/"]
+      interval: ${HEALTHCHECK_INTERVAL:-30s}
+      timeout: ${HEALTHCHECK_TIMEOUT:-8s}
+      retries: 5
+      start_period: 60s
+    deploy:
+      resources:
+        limits:
+          cpus: '${ELEMENT_DESKTOP_CPUS:-1}'
+          memory: ${ELEMENT_DESKTOP_MEMORY:-1536m}
+    logging:
+      driver: ${LOGGING_DRIVER:-json-file}
+      options:
+        max-size: 5m
+        max-file: '3'
+
+  # The desktop's home, made before the desktop mounts it: Docker refuses a subpath that does not exist, and a
+  # container whose start failed stays Created for good. No container_name: a fixed name collides on a re-run.
+  # It also makes the adapter's folder, which runs as 1000 on a volume whose root Docker creates as root.
+  element-desktop-home:
+    image: ghcr.io/bina-solution/digital-office/element-desktop:${IMAGE_TAG:-latest}
+    pull_policy: missing
+    restart: "no"
+    entrypoint: ["/bin/sh", "-c"]
+    command: ["mkdir -p /config/desktop /config/adapter && chown 1000:1000 /config/desktop /config/adapter && chmod 700 /config/adapter"]
+    # nocopy: this can be the volume's first mount, and Docker would copy the image's own /config into the
+    # volume's ROOT, which is the adapter's /data.
+    volumes:
+      - type: volume
+        source: element_home
+        target: /config
+        volume:
+          nocopy: true
+    network_mode: none
+    deploy:
+      resources:
+        limits:
+          cpus: '0.1'
+          memory: 32m
+    logging:
+      driver: ${LOGGING_DRIVER:-json-file}
+      options:
+        max-size: 1m
+        max-file: '2'
+
+  element:
+    image: ghcr.io/bina-solution/digital-office/element:${IMAGE_TAG:-latest}
+    pull_policy: missing
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: element-${DEPLOYMENT_NAME:-bina-deployment}
+    restart: unless-stopped
+    environment:
+      - ELEMENT_STATE=/data/adapter
+      - ELEMENT_ADAPTER_PORT=3093
+      - REDIS_PASSWORD=${REDIS_PASSWORD:-}   # the office's one publisher writes dgo:flow:element (flowpub.py)
+    # Only the volume's `adapter` folder: the adapter keeps its own Matrix device there, and it must NOT see
+    # `desktop/`, which holds Element's keyring and its password (the screen's session and its keys).
+    volumes:
+      - type: volume
+        source: element_home
+        target: /data/adapter
+        volume:
+          subpath: adapter
+      - ../../platform-base/redis/flowpub.py:/opt/dgo/flowpub.py:ro
+    depends_on:
+      element-desktop-home:
+        condition: service_completed_successfully
+    networks: [traefik-network]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:3093/v1/health', timeout=5)"]
+      interval: ${HEALTHCHECK_INTERVAL:-30s}
+      timeout: ${HEALTHCHECK_TIMEOUT:-8s}
+      retries: 3
+      start_period: 10s
+    deploy:
+      resources:
+        limits:
+          cpus: '${ELEMENT_CPUS:-0.25}'
+          memory: ${ELEMENT_MEMORY:-96m}
+    logging:
+      driver: ${LOGGING_DRIVER:-json-file}
+      options:
+        max-size: 5m
+        max-file: '3'
+
+volumes:
+  element_home:
+
+networks:
+  traefik-network:
+    external: true

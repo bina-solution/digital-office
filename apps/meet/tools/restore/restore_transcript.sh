@@ -2,20 +2,23 @@
 # LLM reconstruction layer over the ASR inputs of restore_recording.sh, then the Plane comment (HTML + text) with
 # timestamps on the ORIGINAL recording clock.
 #
-# usage: restore_transcript.sh OUT_DIR NAME "method text" "benchmark text" [--window 20] [--keyfile ~/.deepseek_key]
+# usage: restore_transcript.sh OUT_DIR NAME "method text" "benchmark text" [--window 20] [--llm deepseek [--keyfile ~/.deepseek_key]]
 #   NAME = <room>-restored2_<stamp> (the file name without extension, as written by restore_recording.sh)
-# The LLM (DeepSeek chat via its API; the key is read from --keyfile and never printed) may only choose among the
-# hypotheses and fix split/merged words — measured on the benchmark: 0.5–1.4 % of its words occur in no hypothesis.
-# Without an API key, pass --rover to use plain word voting instead (lower recall, no LLM).
+# By default the hypotheses are merged by plain word voting (rover.py): local, no outside service. A meeting's words
+# go to an outside LLM only when the operator writes `--llm deepseek` (the owner's rule: no outside AI without his
+# word — DGO-1792). That LLM (DeepSeek chat via its API; the key is read from --keyfile and never printed) may only
+# choose among the hypotheses and fix split/merged words — measured on the benchmark: 0.5–1.4 % of its words occur
+# in no hypothesis. `--rover` is still accepted and is the default.
 set -e
 HERE=$(cd "$(dirname "$0")" && pwd)
 OUT=$1; NAME=$2; METHOD=$3; BENCH=$4; shift 4
-WINDOW=20; KEYFILE=${DEEPSEEK_KEYFILE:-$HOME/.deepseek_key}; ROVER=0
+WINDOW=20; KEYFILE=${DEEPSEEK_KEYFILE:-$HOME/.deepseek_key}; ROVER=1; PROVIDER=""
 while [ $# -gt 0 ]; do
   case $1 in
     --window) WINDOW=$2; shift 2 ;;
     --keyfile) KEYFILE=$2; shift 2 ;;
     --rover) ROVER=1; shift ;;
+    --llm) PROVIDER=$2; ROVER=0; shift 2 ;;
     *) echo "unknown option $1"; exit 1 ;;
   esac
 done
@@ -27,8 +30,8 @@ if [ $ROVER = 1 ]; then
   python "$HERE/rover.py" final.json --group rec --primary raw --sys $SYS 2>/dev/null
   KEY=rover/rec.wav
 else
-  python "$HERE/llm_layer.py" final.json --group rec --window $WINDOW --keyfile "$KEYFILE" --sys $SYS 2>&1 | grep -v "^system" || true
+  python "$HERE/llm_layer.py" final.json --group rec --window $WINDOW --provider "$PROVIDER" --keyfile "$KEYFILE" --sys $SYS 2>&1 | grep -v "^system" || true
   KEY=llm/rec.wav
 fi
 python "$HERE/mk_comment2.py" final.json $KEY comment.html comment.txt --name "$NAME.ogg" --method "$METHOD" --bench "$BENCH" --map trim.map.json --min-lp -9
-echo "comment: $OUT/comment.html  (post with pl_comment.py from inside project-pln-fireplace)"
+echo "comment: $OUT/comment.html  (post with pl_comment.py from inside project-pln-examplef)"

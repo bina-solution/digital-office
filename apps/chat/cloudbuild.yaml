@@ -6,7 +6,7 @@ steps:
       - |
         gcloud compute ssh instance-20241230-133133 \
           --command="sudo systemctl stop app1"
-        gcloud compute scp  / instance-20241230-133133:/home/solomonBoltin/app1
+        gcloud compute scp  / instance-20241230-133133:/home/bina-solution/app1
         gcloud compute ssh instance-20241230-133133 \
           --command="sudo systemctl start app1"
 

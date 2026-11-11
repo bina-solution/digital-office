@@ -1,0 +1,64 @@
+# android-emulator — «אמולטור אנדרואיד»: the office's emulated Android phone (DGO-1797, package 11).
+#
+# The owner's rule for the Dell: the emulator is an app he sees and uses, nothing started on the host by hand. One
+# service: the supervisor (server/, the door on :8080 and the heat governor) runs the emulator with a window on
+# TigerVNC's Xvnc, and websockify serves noVNC on :6080 — the screen the console frames (browser42's stack). It
+# needs the host's KVM (app.json requires_host: refused where /dev/kvm is missing); ANDROID_KVM_DEVICE maps it.
+# Off by default, and the device starts only when asked (POST /api/start) and the heat allows.
+services:
+  android-emulator:
+    image: ghcr.io/bina-solution/digital-office/android-emulator:${IMAGE_TAG:-latest}
+    pull_policy: missing
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: android-emulator-${DEPLOYMENT_NAME:-bina-deployment}
+    hostname: android-emulator
+    restart: unless-stopped
+    # the emulator, Xvnc, websockify and fluxbox are the server's children: an init reaps them
+    init: true
+    # the host's KVM: the app is refused where /dev/kvm is missing (requires_host), so the default is the device
+    devices:
+      - ${ANDROID_KVM_DEVICE:-/dev/kvm}:/dev/kvm
+    environment:
+      EMU_PORT: "8080"
+      EMU_AVD: dgo
+      EMU_MEMORY_MB: ${ANDROID_EMULATOR_MEMORY_MB:-3072}
+      # /data: the 1 GB APK twice (staged and installed) and its libraries — install-check measured 8 GB; a
+      # machine check (the app asks 2 GB + 10 GB before it fetches) needs 20480 here
+      EMU_PARTITION_MB: ${ANDROID_EMULATOR_PARTITION_MB:-8192}
+      EMU_APKS: /apks
+      # the office's event stream (flow.v1): this app writes dgo:flow:android-emulator
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-}
+      TZ: ${TZ:-Asia/Jerusalem}
+    volumes:
+      - android_emulator_avd:/root/.android/avd
+      - android_emulator_apks:/apks
+      - ./server:/app:ro
+      - ../../platform-base/redis/flowpub.py:/opt/dgo/flowpub.py:ro
+    networks:
+      - traefik-network
+    # one physical core — cpu0 and its sibling, the governor pins it there — and the guest's 3 GB plus qemu's
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 5g
+    healthcheck:
+      # python, never curl: the image carries python3 for the supervisor (gate G18)
+      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/healthz', timeout=5)"]
+      interval: ${HEALTHCHECK_INTERVAL:-30s}
+      timeout: ${HEALTHCHECK_TIMEOUT:-10s}
+      retries: 3
+      start_period: 30s
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: '3'
+volumes:
+  android_emulator_avd: null
+  android_emulator_apks: null
+networks:
+  traefik-network:
+    external: true

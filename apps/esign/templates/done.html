@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex, nofollow">
+  <title>נחתם — {{ env.doc_name }}</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='esign.css') }}">
+</head>
+<body>
+<div class="wrap">
+  <div class="card center">
+    <div class="big">נחתם. תודה.</div>
+    <p>{{ env.doc_name }} נחתם בידי <strong>{{ env.signer_name }}</strong>
+      {% if env.signed_at %}בתאריך {{ env.signed_at[:16].replace('T', ' ') }}{% endif %}.</p>
+    <p class="note">העותק החתום נשמר בלשכה של בינה סלושנס. אין צורך לעשות דבר נוסף,
+      והקישור הזה סגור.</p>
+    {% if pades %}
+    <p class="note">חתימה דיגיטלית: {{ 'תקינה' if pades.get('intact') else 'לא אומתה' }}
+      · כיסוי: {{ pades.get('coverage', '') }}</p>
+    {% endif %}
+  </div>
+  <p class="foot">בינה סלושנס · הלשכה הדיגיטלית</p>
+</div>
+</body>
+</html>

@@ -345,6 +345,15 @@ guard — and **4i**, its runtime watcher, plus the Dockerfile patch):
 | Runtime watcher (20s) | Detects a mid-life wipe, restores, then drops the Chrome child so Docker restarts the stack on a profile that is whole again. |
 | No premature kill | The CDP watchdog now waits for the **first successful probe** (15 min backstop) instead of a fixed 45s grace — the old grace was shorter than a cold start, so it killed a browser that was still coming up, and that restart is what turned a slow start into the 09-22 wipe. |
 
+**Which copy is the backup (decided 2026-11-10, DGO-327).** Two copies, two jobs, and neither is the only
+home of a password (the credential plane holds the logins too: «One login, two stores» above):
+- **The snapshot** (`data/browser42/profile-snapshot/` and its `.prev`) is THE automatic backup of this
+  host's browser: the guard promotes into it, monotone in cookies, and restores from it at boot and at run time.
+- **`bbox b42 state dump|load`** is the MANUAL, encrypted copy that leaves the machine: dumped by a person or an
+  operator once a session is worth keeping (a WhatsApp pairing), and restored by `hooks/onboard` into a new
+  office's empty browser. It is not wired into the guard's promotion: it stops the browser, and it refuses
+  without `BROWSER42_STATE_PASSPHRASE` — empty on the HP — so run every five minutes it would fail every time.
+
 **The 2026-09-27 failure, and why the guard above did not catch it.** The guard reasoned about
 "wiped" (0–1 cookies) and had no notion of "logged out". A profile that is signed out of everything
 still carries ~25 tracking cookies (facebook: `datr`/`fr`/`sb`/`wd`), so it passed `profile_is_real`,

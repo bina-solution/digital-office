@@ -1,0 +1,15 @@
+#!/usr/bin/env bash
+#: status [--json] — the store and the last collection pass:  ./bbox newsflow status
+set -uo pipefail
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+out="$("${SCRIPT_DIR}/_call" GET /api/status)" || exit $?
+if [ "${1:-}" = "--json" ]; then printf '%s\n' "${out}"; exit 0; fi
+printf '%s' "${out}" | python3 -c '
+import json,sys
+d=json.load(sys.stdin)
+print("newsflow %s · %s articles · %s sources · %s categories" % (d["version"], d["articles"], d["sources"], d["categories"]))
+r=d.get("last_run")
+if not r: print("no collection pass yet"); raise SystemExit(0)
+print("last run %s → %s · added %s · sources ok %s" % (r["started_at"], r.get("ended_at") or "…", r["added"], r["sources_ok"]))
+bad = r.get("report") or {}
+print("sources that did not answer: %s" % (", ".join(bad) if bad else "none"))'

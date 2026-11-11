@@ -17,7 +17,7 @@ when there is no HE (an English meeting). ANALYSIS is what was understood from t
      "topics":    [{"s": 69, "e": 158, "title": "…", "body": "…"}],
      "decisions": [{"id": "D1", "t": 145, "text": "…", "type": "…"}],
      "tasks":     [{"id": "T1", "t": 97, "text": "…", "who": "…", "area": "…", "due": "",
-                    "plane": {"key": "FPG-622", "url": "https://…"}}],
+                    "plane": {"key": "EXF-622", "url": "https://…"}}],
      "questions": [{"id": "Q1", "t": 230, "text": "…", "blocks": "what cannot go on until it is answered"}]}
 
 A question is something said and left OPEN in the meeting that blocks work — never a clear statement turned around
@@ -26,7 +26,7 @@ said clearly is a decision, a task, or nothing. So each question names what it "
 MAX_QUESTIONS of them; more is refused, not trimmed — the analysis is redone.
 
 A task that already has its Plane item says so in "plane"; link_tasks.py (run in meet-start) then stores it approved
-with that link, so the page shows «ב-Plane · FPG-622» and approving it never files a second item. Plane stays the one
+with that link, so the page shows «ב-Plane · EXF-622» and approving it never files a second item. Plane stays the one
 place tasks are managed; the page only points at it.
 
 Exit 0 written, 2 refused (nothing written). A second run with the same input writes the same files.
@@ -64,6 +64,8 @@ def load(path, what):
 
 
 def segments(asr):
+    """[(start, end, text, speaker)] — the speaker is the transcriber's own label (DGO-1627:
+    «דובר 1», «דובר 2»…), empty for a transcript made before the diarizer existed."""
     out = []
     for s in asr.get("segments") or []:
         try:
@@ -71,7 +73,7 @@ def segments(asr):
         except (KeyError, TypeError, ValueError):
             continue
         if text and not FILLER.fullmatch(text):
-            out.append((a, max(a + 0.1, b), text))
+            out.append((a, max(a + 0.1, b), text, str(s.get("speaker") or "").strip()))
     return out
 
 
@@ -139,15 +141,29 @@ def main(argv):
     wh = segments(load(opts["whisper"], "whisper")) if opts.get("whisper") else []
     if not he and not wh:
         die("no transcript: give --he and/or --whisper with words in them")
-    last = max([e for _, e, _ in he + wh] + [1.0])
+    last = max([e for _, e, _, _ in he + wh] + [1.0])
     dur = round(duration_of(rec, last), 1)
 
+    # WHO SAID THIS LINE (DGO-1627). The transcript carries one label per line («דובר 1», «דובר 2»…),
+    # found by the diarizer from the voices; a name is given to a label only when the analysis says so
+    # (`names: {"דובר 1": "שלמה"}`), because an algorithm must not invent somebody's name. A transcript
+    # made before the diarizer has no labels, and then the analysis' own `speaker` is the fallback —
+    # that is the line that used to make every speaker «שלמה».
     speaker = str(an.get("speaker") or (an.get("who") or ["משתתף"])[0])
-    colors = {speaker: HUES[0]}
-    for w in an.get("who") or []:
-        colors.setdefault(str(w), HUES[len(colors) % len(HUES)])
-    turns = [{"id": f"t{i:04d}", "s": round(a, 2), "e": round(b, 2), "who": speaker, "text": t, "flags": []}
-             for i, (a, b, t) in enumerate(he or wh)]
+    names = {str(k): str(v) for k, v in (an.get("names") or {}).items() if str(v).strip()}
+    lines = he or wh
+    labels = []
+    for line in lines:
+        label = line[3] or speaker
+        if label not in labels:
+            labels.append(label)
+    people = [names.get(label, label) for label in labels] or [speaker]
+    colors = {}
+    for i, name in enumerate(people):
+        colors.setdefault(name, HUES[i % len(HUES)])
+    turns = [{"id": f"t{i:04d}", "s": round(a, 2), "e": round(b, 2),
+              "who": names.get(sp, sp) if sp else speaker, "text": t, "flags": []}
+             for i, (a, b, t, sp) in enumerate(lines)]
     # data.js "tail" is what was said AFTER the call (stage.js: «אחרי השיחה»), shown with the lines in the player — a
     # second transcript there doubled every line with the weaker one (MEET-48: Whisper over ivrit). ivrit is the
     # transcript; Whisper stays on the MEET item, and is the transcript only when there is no ivrit.
@@ -179,7 +195,9 @@ def main(argv):
         if not href:
             die(f"analysis.docs[{i}]: needs href")
         docs.append({"title": str(d.get("title") or href), "href": href})
-    people = [str(w) for w in an.get("who") or []] or [speaker]
+    # the analysis knows who was IN the room; the transcript knows who was HEARD. The page wants
+    # both, in the transcript's order first (it is the new fact).
+    people = people + [str(w) for w in an.get("who") or [] if str(w) not in people] or [speaker]
     title = str(an.get("title") or room)
     used = ("he", "he") if he else ("whisper", "whisper")    # the one the lines came from
     m = load(opts[used[0]], used[1]).get("model") if opts.get(used[0]) else None
@@ -202,7 +220,13 @@ def main(argv):
     flow = {"room": room, "title": title, "started": started, "session": session, "length": dur, "who": people,
             "tags": list(an.get("tags") or []), "docs": docs,
             "stages": {"best": {"state": "done", "detail": f"{len(turns)} שורות, {words} מילים"},
-                       "speakers": {"state": "done", "detail": ", ".join(people)},
+                       # «done» only when the transcript names voices; before the diarizer it was
+                       # one name and no evidence (DGO-1627)
+                       # «done» only when the transcript names more than one voice. The page's states
+                       # are done/running/waiting/off/failed (start/server.py STAGE_STATES); «waiting»
+                       # is the honest one while one voice is all the transcript has.
+                       "speakers": {"state": "done" if len(labels) > 1 else "waiting",
+                                    "detail": ", ".join(people) if people else "—"},
                        "summary": {"state": "done", "detail": f"{len(topics)} נושאים · {len(data['decisions'])} החלטות · "
                                                               f"{len(tasks)} משימות · {len(data['questions'])} שאלות"}}}
     folder = os.path.join(os.path.dirname(rec), "flow")

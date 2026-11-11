@@ -33,8 +33,8 @@
 # refuses to restart it. Counted from the dispatch log, so there is no side state to drift.
 set -u
 DK="docker -H unix:///run/bbox-docker.sock"
-PSQL="$DK exec -i supabase-db-shlomo-laptop psql -U postgres -tAc"
-ENVF=/mnt/c/Users/user/Desktop/personalWorkspace/AutomateOs/deployment-hacohen/.env
+PSQL="$DK exec -i supabase-db-owner-laptop psql -U postgres -tAc"
+ENVF=/mnt/c/Users/user/Desktop/personalWorkspace/AutomateOs/digital-office/.env
 REPO=incoming-documents-main
 BFF=http://incoming-documents:8080/incomingDocuments
 
@@ -133,20 +133,58 @@ ids_of () {   # $1 = limit
     ORDER BY created_at ASC LIMIT $1) t" | grep -v '^SET$' | tr -d '\r'
 }
 
+# The tenant every PATCH names (DGO-1815): the office's SOLE enabled production tenant (purpose not 'test'), or
+# INDOX_INSTANCE when it says that same one — and only when public.incoming_documents, the view this script reads,
+# is THAT tenant's table. The public views were made by hand over one tenant (the 2026-08 tenancy migration); a
+# PATCH naming another would create rows in another client's books. Anything else refuses.
+tenant () {
+  local raw rows n id schema base
+  raw=$($PSQL "select id || '|' || schema_name from public.indox_instances
+               where enabled and coalesce(purpose,'') <> 'test' order by id") \
+    || { echo "  refused: the instance registry (public.indox_instances) could not be read" >&2; return 1; }
+  rows=$(printf '%s\n' "$raw" | tr -d '\r' | sed '/^$/d')
+  n=$(printf '%s\n' "$rows" | sed '/^$/d' | wc -l | tr -d ' ')
+  if [ "$n" != 1 ]; then
+    echo "  refused: $n enabled production tenants ($(echo $rows)) — this tool reads public.* and works on one" >&2
+    return 1
+  fi
+  id="${rows%%|*}"; schema="${rows##*|}"
+  if [ -n "${INDOX_INSTANCE:-}" ] && [ "$INDOX_INSTANCE" != "$id" ]; then
+    echo "  refused: INDOX_INSTANCE=$INDOX_INSTANCE, but the office's production tenant is '$id'" >&2
+    return 1
+  fi
+  base=$($PSQL "select string_agg(distinct n.nspname, ',') from pg_depend d
+                join pg_rewrite r on r.oid = d.objid join pg_class c on c.oid = d.refobjid
+                join pg_namespace n on n.oid = c.relnamespace
+                where r.ev_class = to_regclass('public.incoming_documents') and d.refobjid <> r.ev_class
+                  and d.classid = 'pg_rewrite'::regclass and d.refclassid = 'pg_class'::regclass
+                  and c.relname = 'incoming_documents'" | tr -d '\r' | sed '/^$/d')
+  if [ "$base" != "$schema" ]; then
+    echo "  refused: public.incoming_documents reads '${base:-no such view}', not $schema — this tool's reads and its PATCH would name different books" >&2
+    return 1
+  fi
+  printf '%s\n' "$id"
+}
+
 patch_ids () {   # $1 = comma list
-  $DK exec -e I="$1" -e B="$BFF" -e R="$REPO" n8n-shlomo-laptop node -e '
+  local inst
+  inst=$(tenant) || return 1
+  $DK exec -e I="$1" -e B="$BFF" -e R="$REPO" -e N="$inst" n8n-owner-laptop node -e '
 const ids = process.env.I.split(",").filter(Boolean);
 (async () => {
   let ok = 0, fail = 0;
   for (const id of ids) {
     try {
-      const r = await fetch(process.env.B + "/repos/" + process.env.R + "/documents/" + encodeURIComponent(id),
+      const r = await fetch(process.env.B + "/repos/" + process.env.R + "/documents/" + encodeURIComponent(id)
+          + "?instance=" + encodeURIComponent(process.env.N),
         { method: "PATCH", headers: {"Content-Type":"application/json"},
           body: JSON.stringify({ STATUS: "ACTION_RESTART" }) });
       if (r.ok) ok++; else { fail++; if (fail < 4) console.log("    " + id + " -> " + r.status + " " + (await r.text()).slice(0,140)); }
     } catch (e) { fail++; if (fail < 4) console.log("    " + id + " ERR " + e.message); }
   }
   console.log("    patched ok=" + ok + "  failed=" + fail);
+  // any main not restarted fails the step: draining one that is not ACTION_RESTART aborts the whole driver run
+  process.exitCode = fail ? 1 : 0;
 })();'
 }
 
@@ -154,7 +192,7 @@ drain_ids () {
   local wu wp
   wu=$(grep -E '^BS_WEBHOOK_USER=' "$ENVF" | head -1 | cut -d= -f2-)
   wp=$(grep -E '^BS_WEBHOOK_PASS=' "$ENVF" | head -1 | cut -d= -f2-)
-  $DK exec -e I="$1" -e U="$wu" -e P="$wp" n8n-shlomo-laptop node -e '
+  $DK exec -e I="$1" -e U="$wu" -e P="$wp" n8n-owner-laptop node -e '
 const auth=Buffer.from(process.env.U+":"+process.env.P).toString("base64");
 fetch("http://localhost:5678/webhook/indox-drain",{method:"POST",
  headers:{"Content-Type":"application/json",Authorization:"Basic "+auth},
@@ -181,7 +219,7 @@ case "${1:-list}" in
     echo "  proving on a single document: $ID"
     $PSQL "SELECT '    before: status='||coalesce(\"STATUS\",'-')||' into='||coalesce(\"MERGED_INTO\",'-')
            FROM public.incoming_documents WHERE \"ID\"='$ID'"
-    patch_ids "$ID"
+    patch_ids "$ID" || exit 1       # refused or failed: never drain a main that was not restarted
     $PSQL "SELECT '    after patch: status='||coalesce(\"STATUS\",'-')
            FROM public.incoming_documents WHERE \"ID\"='$ID'"
     drain_ids "$ID"; sleep 80
@@ -195,7 +233,7 @@ case "${1:-list}" in
     CNT=$(echo "$IDS" | tr ',' '\n' | grep -c .)
     echo "  restarting $CNT blocked main(s)"
     [ "$CNT" -eq 0 ] && exit 0
-    patch_ids "$IDS"
+    patch_ids "$IDS" || exit 1      # refused or failed: never drain mains that were not restarted
     drain_ids "$IDS"
     ;;
   escalate)

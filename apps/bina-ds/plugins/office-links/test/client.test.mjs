@@ -24,10 +24,15 @@ const HERE = path.dirname(fileURLToPath(import.meta.url))
 const CLIENT = path.join(HERE, '..', 'lib', 'client.js')
 
 /** Load lib/client.js as the browser does, with one fake page under it, and return its module. */
-async function load({ hostname, origin, referrer = '', ancestors = [] }) {
+async function load({ hostname, origin, referrer = '', ancestors = [], shell = false }) {
   const listeners = new Map()
   let loaded = null
   const top = { location: { href: origin + '/' } }
+  if (shell) {                                    // the console's shell itself: its origin, and its own goTo (app.js)
+    top.location.origin = origin
+    top.went = []
+    top.goTo = (path) => top.went.push(path)
+  }
   const window = {
     location: { hostname, origin, href: origin + '/', ancestorOrigins: ancestors },
     top,
@@ -119,6 +124,50 @@ test('an office on another domain is left alone (the naming rule, said rather th
   const ev = clickOn('https://console.other-office.co.il/#/m/project-pln/projects/7')
   p.click(ev)
   assert.equal(ev.defaultPrevented, false, 'offices are named as siblings under one suffix, or *.localhost')
+})
+
+test('a person\'s /go/ link (DGO-1433) on the office\'s own console moves the desktop, no tab', async () => {
+  const p = await load({ ...OFFICE, referrer: EMBED, ancestors: [OFFICE.origin] })
+  const ev = clickOn(OFFICE.origin + '/go/DGO-1433')
+  p.click(ev)
+  assert.equal(ev.defaultPrevented, true, 'the hub link the builder gives is a link to this office')
+  assert.equal(ev.stopped, true)
+  assert.equal(p.top.location.href, OFFICE.origin + '/go/DGO-1433', 'the console resolves it — path and query kept')
+  const q = clickOn(OFFICE.origin + '/go/bina-claude.hp-laptop/sessions/4?tab=log')
+  p.click(q)
+  assert.equal(p.top.location.href, OFFICE.origin + '/go/bina-claude.hp-laptop/sessions/4?tab=log')
+})
+
+test('a sibling office\'s /go/ link is resolved by THIS console', async () => {
+  const p = await load({ ...OFFICE, referrer: EMBED, ancestors: [OFFICE.origin] })
+  const ev = clickOn('https://console.hp-laptop.staging.digital-office.co.il/go/meet/exu101')
+  p.click(ev)
+  assert.equal(ev.defaultPrevented, true)
+  assert.equal(p.top.location.href, OFFICE.origin + '/go/meet/exu101')
+})
+
+test('in the shell itself a /go/ link moves only its route — the shell is not loaded again', async () => {
+  const p = await load({ ...OFFICE, referrer: EMBED, ancestors: [OFFICE.origin], shell: true })
+  const ev = clickOn(OFFICE.origin + '/go/DGO-1433?tab=activity')
+  p.click(ev)
+  assert.equal(ev.defaultPrevented, true)
+  assert.deepEqual(p.top.went, ['/go/DGO-1433?tab=activity'], 'the shell\'s own goTo resolves it')
+  assert.equal(p.top.location.href, OFFICE.origin + '/', 'and nothing navigated: every live window stays')
+})
+
+test('/go/ on another host of the office is that app\'s own path, as written', async () => {
+  const p = await load({ ...OFFICE, referrer: EMBED, ancestors: [OFFICE.origin] })
+  const ev = clickOn('https://plane.staging.digital-office.co.il/go/x')
+  p.click(ev)
+  assert.equal(p.top.location.href, 'https://plane.staging.digital-office.co.il/go/x')
+})
+
+test('a path that only starts like /go is not a /go/ link', async () => {
+  const p = await load({ ...OFFICE, referrer: EMBED, ancestors: [OFFICE.origin] })
+  const ev = clickOn(OFFICE.origin + '/gopher/x')
+  p.click(ev)
+  assert.equal(ev.defaultPrevented, false)
+  assert.equal(p.top.location.href, OFFICE.origin + '/')
 })
 
 test('a click the person made into a new tab on purpose is not taken', async () => {

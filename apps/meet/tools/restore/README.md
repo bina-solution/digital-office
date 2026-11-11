@@ -7,7 +7,7 @@ A recording whose sound is **chopped into short bursts separated by exact digita
 filled the missing time with zeros (Jibri's command: `-f pulse -i default -acodec aac -b:a 128k -ar 44100
 -af aresample=async=1`). Symptoms: the meeting item's transcript is a handful of words and "תודה רבה" lines;
 in the waveform every word is a picket fence of 30–75 ms bursts with 30–50 ms holes, plus longer holes.
-Reference case: `fpg103_2026-10-26-13-10-48` and `fpg104allanwilliam_2026-10-26-13-26-15` on the FPG office
+Reference case: `exf103_2026-10-26-13-10-48` and `exf104allanwilliam_2026-10-26-13-26-15` on the EXF office
 (root cause and fix: `issues/meet-recorder-throttled-to-half-a-core-recordings-lose-sound-and-time.yaml`).
 
 Diagnose first (any machine with Python + numpy + soundfile):
@@ -15,9 +15,9 @@ Diagnose first (any machine with Python + numpy + soundfile):
     ffmpeg -i REC.mp4 -vn -ac 1 -ar 44100 -c:a pcm_s16le rec44.wav
     python restore.py rec44.wav /dev/null --mode none --stats stats.json && cat stats.json
 
-A healthy recording has a few zero runs (real silence). fpg103 had 1,326 bursts and 101 s of sound in 861 s;
-fpg104 7,596 bursts and 404 s in 2,860 s. In the speech stretches 45–55 % of every second was zeros
-(fpg103 235–424 s: 1,151 zero runs, hole median 38 ms, burst median 63 ms; fpg104 1–191 s: 1,305 runs).
+A healthy recording has a few zero runs (real silence). exf103 had 1,326 bursts and 101 s of sound in 861 s;
+exf104 7,596 bursts and 404 s in 2,860 s. In the speech stretches 45–55 % of every second was zeros
+(exf103 235–424 s: 1,151 zero runs, hole median 38 ms, burst median 63 ms; exf104 1–191 s: 1,305 runs).
 
 ## What can and cannot be recovered — measured, not guessed
 
@@ -25,7 +25,7 @@ The sound inside the holes never reached the file; nothing brings it back. The q
 spoken words the transcriber can still get, and which processing helps. This was measured on a ground-truth
 benchmark: **FLEURS Hebrew** (google/fleurs `he_il` test, CC-BY-4.0), 72 read sentences (all male — the set is
 787/792 male) joined into four streams of 146–179 s, **1,242 reference words**, damaged with the **exact zero
-masks extracted from fpg103 (235–424 s) and fpg104 (1–191 s)** and then passed through the recorder's own chain
+masks extracted from exf103 (235–424 s) and exf104 (1–191 s)** and then passed through the recorder's own chain
 (AAC 128 kbps, 44.1 kHz; the simulated burst edges match the real ones: fade-in −61/−56/−49/−8 dB per ms vs
 −62/−56/−52/−44/−14 dB in the recording). Scoring: Hebrew normalisation (niqqud/punctuation stripped) and word
 alignment (`score.py`, jiwer): **recall** = correctly recognised reference words / reference words; WER =
@@ -33,8 +33,8 @@ substitutions + deletions + insertions; **ins** = inserted (hallucinated) words;
 
 Three damage variants, because a long zero hole in the real recording may be lost speech or a real pause:
 *full* (every hole applied), *speech-holes* `_s` (holes > 0.3 s applied only where the real recording had
-speech-level sound next to them — the best estimate of what was actually lost; fpg103: 11 of 59 long holes,
-fpg104: 45 of 81), and *throttle-only* `_t` (holes > 0.3 s treated as pauses; upper bound).
+speech-level sound next to them — the best estimate of what was actually lost; exf103: 11 of 59 long holes,
+exf104: 45 of 81), and *throttle-only* `_t` (holes > 0.3 s treated as pauses; upper bound).
 
 Physical ceiling under the full masks (word spans from the clean transcription): 30–38 % of the words keep less
 than 30 % of their samples and 18–23 % are erased completely by mask103 → **≥ 80 % recall is impossible under the
@@ -141,7 +141,7 @@ sentence meets a different stretch of the mask and whisper decodes it in one win
 ### What this means
 
 * **Chosen chain** (restore_recording.sh + restore_transcript.sh): holes ≥ 0.4 s shortened to 0.3 s, everything shorter kept as it is (zeros included) — the trim is transparent for the recogniser (table D) and makes a 48-min recording 25 min; three ASR inputs (raw / +highpass-compressor-loudnorm / +LPC-noise fill −12 dB and a −55 dBFS floor); faster-whisper turbo int8, beam 5, temperature fallback 0→1.0; then the LLM layer choosing among the three hypotheses. On all 1,242 words it gives recall 0.492 / 0.461 (mask103 / mask104, full masks; precision 0.79 / 0.71) against 0.458 / 0.447 for the damaged audio as it is and 0.477 / 0.448 for the best single system; under the speech-holes variant 0.770 / 0.579 (precision 0.83 / 0.74) against 0.758 / 0.567 raw. No signal-processing method recovers words that whisper does not already get from the zero-gapped audio: Opus Deep PLC (0.397 / 0.453 on s0), LPC inpainting (0.463 / 0.492), the previous cut chain (0.518 / 0.430 vs 0.557 / 0.485 raw) are all worse or equal; the processing buys precision (fewer hallucinated words) and listenability.
-* **The 80 % target is not reached.** Best-estimate damage (`_s`): 77 % of the spoken words for fpg103's damage pattern (per stream 80 / 77 / 74 / 76 %), 58 % for fpg104's (its long holes sit in speech far more often); if every hole was lost speech: 49 % / 46 %. The limit is physical, not algorithmic: with fpg103's mask 30 % of the words keep less than 30 % of their samples and 18 % are erased completely; with the `_s` mask still 8 % (fpg103) and 16–21 % (fpg104). The clean upper bound of the same recogniser on this material is 0.899. The listening version keeps the original timeline; the long holes stay audible as holes.
+* **The 80 % target is not reached.** Best-estimate damage (`_s`): 77 % of the spoken words for exf103's damage pattern (per stream 80 / 77 / 74 / 76 %), 58 % for exf104's (its long holes sit in speech far more often); if every hole was lost speech: 49 % / 46 %. The limit is physical, not algorithmic: with exf103's mask 30 % of the words keep less than 30 % of their samples and 18 % are erased completely; with the `_s` mask still 8 % (exf103) and 16–21 % (exf104). The clean upper bound of the same recogniser on this material is 0.899. The listening version keeps the original timeline; the long holes stay audible as holes.
 * Spontaneous meeting speech (cross-talk, Opus microphones, Hebrew slang) recognises worse than read FLEURS even
   when undamaged, so the real recordings sit below the benchmark numbers; the benchmark's clean upper bound is
   0.899 recall (proper nouns dominate the errors).
@@ -175,17 +175,17 @@ Deep-PLC experiments libopus ≥ 1.5.2 built with `--enable-deep-plc` (`build_op
 the LLM layer (`~/.deepseek_key`), or use `--rover`.
 
     export VENV=/path/to/venv                      # optional
-    bash restore_recording.sh /path/fpg103_2026-10-26-13-10-48.mp4 /path/out
-    bash restore_transcript.sh /path/out fpg103-restored2_2026-10-26-13-10-48 "<method text>" "<benchmark text>"
+    bash restore_recording.sh /path/exf103_2026-10-26-13-10-48.mp4 /path/out
+    bash restore_transcript.sh /path/out exf103-restored2_2026-10-26-13-10-48 "<method text>" "<benchmark text>"
 
 `restore_recording.sh` writes the listening files `<room>-restored2_<stamp>.ogg/.mp4` (original timeline, original
 video, noise-filled holes, −22 LUFS), the ASR inputs, `transcript.json`, `trim.map.json` and `stats.json`;
 `restore_transcript.sh` writes `comment.html/.txt` with timestamps on the ORIGINAL clock. Memory: a 48-min
 recording needs ~2 GB for the trim step; the whisper process takes 1.3–1.6 GB; run one heavy step at a time
-in a 5 GB VM. Time: whisper turbo ≈ 0.3× real time per worker on 6 ARM cores (fpg104: 2 inputs × 1,473 s took 46 min).
+in a 5 GB VM. Time: whisper turbo ≈ 0.3× real time per worker on 6 ARM cores (exf104: 2 inputs × 1,473 s took 46 min).
 
 Upload next to the originals so the meet workflow files them as their own items (it did: MEET-31 for
-fpg103-restored2): `scp` to `/var/lib/docker/volumes/fireplace_meet_recordings/_data/recordings/<session>/`,
+exf103-restored2): `scp` to `/var/lib/docker/volumes/examplef_meet_recordings/_data/recordings/<session>/`,
 `chown 1000:1000`, `sha256sum` on both sides (`upload_restored.sh`). Post the comment from inside the
 project-pln container (`pl_post.sh` → `pl_comment.py`; the key comes from `plan.api_key()` and is never printed).
 

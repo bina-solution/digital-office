@@ -27,4 +27,8 @@ EXPOSE 8977
 # log prints the raw path — so the log of this container carried a bearer token to the host's sshd,
 # which breaks the one promise the door makes ("shown once"). The app logs what it needs itself
 # (`share <id>: open/closed`), by id and never by token.
-CMD ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "8977", "--proxy-headers", "--forwarded-allow-ips=*", "--no-access-log"]
+# --no-proxy-headers: WHO is asking is decided by the address the request came from (caller.py, DGO-1304) —
+# the door's, traefik's, the console's, loopback. With `--proxy-headers --forwarded-allow-ips=*` (as it was)
+# that address was `X-Forwarded-For`, i.e. whatever any container typed: `X-Forwarded-For: 127.0.0.1` was
+# loopback. Nothing here reads the forwarded scheme or host; the share door's address is COMPUTERS_PUBLIC_HOST.
+CMD ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "8977", "--no-proxy-headers", "--no-access-log"]

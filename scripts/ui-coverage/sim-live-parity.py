@@ -315,7 +315,8 @@ def main():
     if not url:
         raise SystemExit("no live console reachable — pass --url")
     panels = load_panels()
-    names = sorted(profiles) if a.all else [a.profile]
+    # `--all` leaves out a profile kept for one question (`on_request`, view-profiles.yaml): named, it runs
+    names = sorted(n for n, p in profiles.items() if not p.get("on_request")) if a.all else [a.profile]
 
     total_missing = 0
     for n in names:

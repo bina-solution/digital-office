@@ -3,7 +3,8 @@
  * Two pure functions, in their own file for the same reason `dock-budget.js` is: they are the part of
  * desktop.js that can be WRONG without anything looking wrong — a link that opens the app but not the
  * screen it names looks like a link that works — so they are the part a test can hold
- * (`platform-base/console/test_ext_route.mjs`, gate `console-deeplink-lint`).
+ * (`platform-base/console/test_ext_route.mjs`, run by gate G72 `plane-tests-lint`; the live half is
+ * `scripts/ui-coverage/desktop-links.py`).
  *
  * WHY THE ROUTE MATTERS. An app that lives on its own host (Plane, the forge) is framed by the
  * console on `plane.<console host>`, and a console URL is

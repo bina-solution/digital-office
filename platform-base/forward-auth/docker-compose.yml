@@ -30,7 +30,7 @@ services:
     # The image CI publishes for this commit (DGO-41). `pull_policy: missing` means it is fetched
     # only when it is not here already, so a checkout that has built it is untouched; the `build:`
     # below stays as the fallback.
-    image: ghcr.io/solomonboltin/digital-office/forward-auth:${IMAGE_TAG:-latest}
+    image: ghcr.io/bina-solution/digital-office/forward-auth:${IMAGE_TAG:-latest}
     pull_policy: missing
     build:
       context: .
@@ -74,6 +74,16 @@ services:
       timeout: 5s
       start_period: 5s
       retries: 3
+    # ITS CAP, MEASURED — not guessed (2026-11-05, container `forward-auth-staging`): cgroup
+    # memory.peak 19.6 MiB and 13.4 MiB current over two days of service, with memory.max = max, so
+    # the only limit this service had was the host's. 64M is 3.2x the peak and 44 MiB above it: an
+    # identity service that is OOM-killed takes the whole office's sign-in with it, so the figure has
+    # to absorb a busier day than the one it was measured on. app.json `resources` declares the SAME
+    # number, and gate G30 fails a manifest whose declared cap its compose does not enforce.
+    deploy:
+      resources:
+        limits:
+          memory: 64M
 
 volumes:
   forward_auth_data:

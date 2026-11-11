@@ -1,0 +1,17 @@
+#!/usr/bin/env bash
+# verb — run one «אלמנט» CLI verb (tools/cli.py) inside this office's element container: every hooks/<verb> is
+# one line that execs this. The code goes in as an ARGUMENT (python3 -c), so stdin stays free for a secret
+# (`login … --password-stdin`). Exit: the verb's (0/1/2/3); 3 when the app is not running here.
+set -uo pipefail
+HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "${HERE}/../../.." && pwd)"
+. "${REPO_ROOT}/scripts/lib.sh"
+CODE="$(cat "${HERE}/cli.py" 2>/dev/null)" && [ -n "${CODE}" ] || { echo "element: tools/cli.py could not be read" >&2; exit 3; }
+running "element-${DN}" || { echo "element is not running here (./bbox apps enable element && ./bbox run)" >&2; exit 3; }
+# A secret comes on stdin, and inside the container stdin is always a pipe — so the terminal is asked HERE:
+# typed at a prompt, a password would echo on the screen while the verb waited without a word.
+case " $* " in
+  *" --password-stdin "*|*" --token-stdin "*)
+    [ -t 0 ] && { echo "element: the secret is read from stdin, and stdin is a terminal — pipe it in (… < file)" >&2; exit 2; } ;;
+esac
+dcx exec -T element python3 -c "${CODE}" "$@"

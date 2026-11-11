@@ -107,15 +107,38 @@ The compiler emits **every** traefik label, the authentik proxy provider, the ou
 the console tile from this. Do not hand-write traefik labels; `emit_labels: false` exists only for
 apps whose labels have not been migrated yet.
 
-- `auth: "sso"` puts you behind Authentik forward-auth, on every router of the host.
+- `auth: "sso"` puts you behind Authentik forward-auth, on every router of the host. `auth: "none"`
+  is for a door whose callers are NOT the office's people (a webhook, a DSN, a customer's form) and
+  never for a screen: G96 refuses a `module` with `tile` not `false` on a host of its own that says
+  `none`, because that is what let n8n's editor answer the internet on every office (DGO-1594).
   `auth_exclude: ["/webhook", "/healthz"]` is where paths that must answer unauthenticated are
   LISTED — and today that is all it does on a host the compiler routes: the label emitter does not
   implement it, so a compiled app's excluded path is still behind sign-in (G21 prints it as a note;
   the decision to implement or withdraw it is hub sec-022). For a compose that writes its own
   labels it binds the other way: an open path the manifest does not list fails G21.
+- **A host that carries an API, not a screen** (DGO-1557, supabase): `"https_only": true` emits no
+  `-http` router on `web` at all — a browser gets the URL the app itself hands it, and on a server
+  office the edge's port-80 answer is already a 308 (DGO-1595) — and `"publish": "domain"` renders the
+  public routers **only where this office names a real host**: a `.localhost` value in the host
+  variable renders the `-local` twin and nothing else, which is how an office that publishes nothing
+  says so. It is also what keeps a certresolver off a name no authority can issue for.
 - `module` present = a tile in the shell. Absent = routed but not surfaced.
 - `module.embed: true` needs an `alias`; you are framed at `/a/<alias>/` with the navigation intact.
   `embed: false` means your UI lives on its own host and opens in a new tab.
+- **Two more fields, for the two things a chain cannot say by itself** (DGO-1594, the n8n editor):
+  - `middlewares: ["my-embed"]` — middlewares YOUR compose defines on your own service's labels,
+    attached to this entry's routers AFTER the platform's sign-in (emitted `<name>@docker`; the
+    provider is never yours to name, and G21 refuses a name it cannot find in your compose — traefik
+    drops a whole router whose middleware it cannot resolve, and the app then answers nothing at all
+    while the stack looks healthy). This is how an app keeps its own edge behaviour — headers, a
+    frame policy — now that the compiler owns the routers. It is NOT a way to put auth somewhere
+    else: the sign-in is first in the chain, always.
+  - `sub_routes: [{"name": "push", "path": "/rest/push", "priority": 200, "on": "host",
+    "middlewares": ["my-push-origin"]}]` — a PATH on this host that needs a chain of its own
+    (`on: "framed"` instead addresses the host the shell frames you at). Use it for an endpoint whose
+    headers or auth genuinely differ from the rest of the app, never for "this path should be open":
+    a path that must answer the whole internet is an entry with `auth: none` on its own service, and
+    G96 will ask you why (`/webhook/`, `/form/` and a DSN are the agreed reasons).
 - **Let the console frame you.** Framed apps (`embed`, `external`) must allow the console as a frame
   ancestor: answer `Content-Security-Policy: frame-ancestors 'self' https://console.<domain>` and send
   no `X-Frame-Options` (an embedded app also passes with `SAMEORIGIN`, being proxied under the
@@ -231,6 +254,14 @@ it is the only case the rule does not cover.
 
 ### Connections — the secrets you need
 
+**Where the herd's secrets live: in the MacBook's vault, «חיבורים ומפתחות».** The owner's standard (2026-11-03,
+DGO-1330): «סודות (שתמיד שומרים במק)». A secret that belongs to the business — a bot token, a provider key, an
+account — is kept in the Mac's vault, under the name the owner gave it; an agent looking for one looks there
+first. Every office has its own vault and none writes another's (hos-001), so another office does not get a
+secret by copying it: it is MADE there or PULLED from the Mac over the link, by that office's own process, into
+its own vault. Never paste a secret into a chat, a file of the repo or a terminal line. The mechanism and its
+state are on DGO-1330.
+
 ```jsonc
 "connections": [
   { "id": "supabase-service-key",  "required": true },
@@ -269,6 +300,16 @@ docker socket and grants only what this manifest declares.
 `keep` (default) or `purge`. Choose `keep` unless the data is genuinely worthless without the app;
 the store shows the operator which one you chose *before* they confirm, and `purge` is a red
 warning box.
+
+If a service of yours writes to your stores while it runs (a worker, a poller), name it in
+`"writers": ["myapp-worker"]` inside `data`: a quiesced export (`--quiesce`) stops exactly the declared writers
+and starts them again after. Each must be a service of your compose whose `container_name` is
+`<service>-${DEPLOYMENT_NAME:-bina-deployment}`, never a database (G26).
+
+If your compose mounts a volume ANOTHER app creates (any-concurrency reads n8n's `n8n_storage`), name it in
+`"shares": ["n8n_storage"]`, never in your `volumes`: a volume has one owner, the app it is backed up, restored and
+purged with. Your `--app` export and import skip it and say whose it is, and your `uninstall --purge` leaves it
+(G26 fails a volume in two apps' `volumes`, DGO-1510).
 
 ### Health and readiness
 
@@ -326,6 +367,71 @@ every other app's brief. A `context` path that does not exist is also a refusal 
 otherwise silent, and "the agent never learned this app" is a bug with no owner.
 
 Look at `apps/git/AGENT.md` and `apps/computers/AGENT.md` for two worked examples.
+
+## The four channels — screen, CLI, API, event stream
+
+Every app is reached four ways, and an app that has something to say offers all four (the owner,
+2026-11-03, DGO-1300). Three are a person or a program ASKING; the fourth is the app TELLING, so
+that agents and automations listen instead of polling.
+
+| Channel | What it is | Where it is declared |
+|---|---|---|
+| **Screen** | the console tile, `/a/<alias>/` | `routing[].module` (above) |
+| **CLI** | `./bbox <app> <verb>` and `dgo <app> <verb>` — both run `hooks/<verb>` | a file in `hooks/`, its first `#:` line is its help |
+| **API** | the service's HTTP ops: canonical ops answer `{"ok":true,"op":…,"data":…}` | `capabilities[].required_ops` |
+| **Event stream** | what happened, as it happens: `<app> flow` prints the last 10 events and stays live | `use: [{"capability": "kv", "strength": "wants"}]` + `hooks/flow` |
+
+The rule each channel keeps is in [app-cli-api-standard.md](app-cli-api-standard.md): «what the screen does,
+the API and the CLI do», with the grammar, `--json` on every verb, the exit codes 0/1/2/3, help, secrets and
+writes.
+
+### The event stream — flow.v1
+
+The stream is a platform contract on the redis every office already runs — its `kv` capability
+(`platform-base/redis`, which lists the stream ops); no broker and no capability of its own, because a
+capability of its own is "provided" by every app that runs a private redis (G25). One Redis stream per
+app, **`dgo:flow:<app-id>`**.
+
+- **Publish** — one `XADD` per event, with these fields (strings):
+  `type` (dotted, `<noun>.<verb>`: `message.new`, `account.lost`), `title` (ONE line a person reads,
+  Hebrew is fine), `at` (ISO-8601 UTC), `app` (your id), and optionally `link` (an address in the
+  console) and `data` (a JSON object: the facts a program needs, so nobody parses `title`).
+- **Cap it and keep it a window**: `XADD dgo:flow:<app> MAXLEN ~ 1000 * …` and `EXPIRE dgo:flow:<app>
+  2592000` in the same `MULTI`. Redis has 256 MB and refuses every write when full (noeviction), and
+  a key with no TTL fails the deployment export (`platform-base/redis/hooks/backup`): an event stream
+  is not the office's state. A stream quiet for 30 days is gone; that is the point.
+- **Never block on it**: a publish that fails is counted and shown on your screen, never raised —
+  your app keeps working while redis is away.
+- **What not to publish**: a secret, a token, a session — ever; and a person's private content only
+  when a person switched that source on (the stream is read by every agent of the office).
+- **Listen** — `./bbox redis flow [app…]` (every stream when none is named; `-n N`, `--once`,
+  `--json` for one JSON object per line), or your own verb: `hooks/flow` is two lines that exec
+  `platform-base/redis/hooks/flow <your-id> "$@"`, so `dgo <app> flow` works. A program on the office
+  network reads with `XREVRANGE` (the last N) and `XREAD BLOCK` (what comes next); a consumer that
+  must not miss an event between runs keeps its last id, or uses a consumer group.
+- The app needs `REDIS_PASSWORD` in its environment to publish; the reader takes it from `.env` and
+  hands it to `redis-cli` on stdin, never on a command line.
+
+**Publish through the ONE publisher, never a copy of your own** (DGO-1402):
+`platform-base/redis/flowpub.py` — standard library only, so any Python image can load it. Mount it
+read-only (`- ../../platform-base/redis/flowpub.py:/opt/dgo/flowpub.py:ro`, and `REDIS_PASSWORD` in the
+environment), then `sys.path.insert(0, "/opt/dgo"); import flowpub` and
+`flowpub.emit("<your-id>", "file.uploaded", "הועלה קובץ", data={...})`. Work that takes time is one bar:
+`with flowpub.span("<your-id>", "site.deploy", "פריסה"):` writes `site.deploy.started` and `.ended` (or
+`.failed`, and re-raises) with one `data.span`. It never blocks and never raises; `flowpub.stats()` says
+what it sent and what failed. `platform-base/redis/test_flow_publishers.py` refuses a new copy of the
+contract. Worked examples: `apps/sites/store.py` (one call in its event log covers the whole app),
+`apps/drive/app.py` (an upload as a bar), `platform-base/connections/app.py` (ids, never values),
+`apps/telegram` (`message.new` for every message in a watched chat, `account.connected` / `account.lost`).
+
+**A notice is already an event.** `platform-base/notifications` publishes every notice that is news as
+`notice.<level>`, with its answers (`meta.actions`, checked by its `flow.py`) — the relay to the owner's
+group offers them as buttons (DGO-1329). So an app that already posts a notice is on the stream without
+code of its own.
+
+**«כל מקביל» hears every stream by default**: its `flow` lane reads every `dgo:flow:*` it finds (a row
+per app, `apps/any-concurrency/flow_source.py`), so an app that publishes is on the office's timeline
+with nothing more to declare.
 
 ## Build it
 

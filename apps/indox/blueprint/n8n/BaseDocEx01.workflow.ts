@@ -449,7 +449,7 @@ select
     })
     CheckAiEnabledBase = {
         operation: 'executeQuery',
-        query: "=SELECT COALESCE((SELECT value FROM {{ (() => { const i = String($('Doc In').item.json.__instance || ''); if (!/^[a-z][a-z0-9_]*$/.test(i)) { throw new Error('BaseDocEx01: no valid __instance — public fallback removed at the 2026-08-31 cutover'); } return 'indox_' + i; })() }}.settings WHERE key='extraction_ai_enabled'), 'true') AS ai_enabled",
+        query: "=SELECT COALESCE((SELECT value FROM {{ (() => { const i = String($('Doc In').item.json.__instance || ''); if (!/^[a-z][a-z0-9_]*$/.test(i)) { throw new Error('BaseDocEx01: no valid __instance — public fallback removed at the 2026-08-31 cutover'); } return 'indox_' + i; })() }}.settings WHERE key='extraction_ai_enabled' AND lower(trim(value)) = 'true'), 'false') AS ai_enabled",
         options: {},
     };
 

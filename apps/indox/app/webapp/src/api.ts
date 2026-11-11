@@ -722,6 +722,21 @@ const CALL_TIMEOUT_MS = 12000;
    to a screen whose header they are not reading. */
 let CURRENT_INSTANCE: string | null = null;
 
+/** WHICH INSTANCE AN INSTANCE-LESS ADDRESS MEANS — the office's own default (apps/indox/hooks/_schema-lib.sh,
+ *  chat's indox_instance.js): the first enabled instance whose purpose is not 'test', else the first enabled one.
+ *  Every office carries the standing `test` tenant and /instances is ordered by id, so «the first enabled» alone
+ *  opened `test` wherever the office's own id sorts after it (exampleu, exw) — DGO-1815. One helper for every caller
+ *  (the front door, the bound instance, the switcher, the 404 page, the document browser's table list), so they
+ *  cannot drift apart. Takes the accounts or /instances' own rows. */
+export function defaultInstanceId<T extends { id: string; enabled?: boolean; purpose?: string }>(
+  accounts: T[],
+): string | undefined {
+  return (
+    accounts.find((a) => a.enabled !== false && a.purpose !== 'test') ??
+    accounts.find((a) => a.enabled !== false)
+  )?.id;
+}
+
 /** Set the instance every subsequent request is scoped to. Null clears it (reads become un-scoped,
  *  which after the compat views are dropped will fail loudly rather than answer for instance one). */
 export function setInstance(id: string | null): void {
@@ -733,11 +748,11 @@ export function setInstance(id: string | null): void {
  *
  *  READS AND WRITES BOTH, as of 2026-08-28. It was reads-only for a few hours, and the reason is
  *  worth keeping: PostgREST serves only the schemas in PGRST_DB_SCHEMAS, so a write to a instance
- *  schema went out as `Content-Profile: indox_hacohen` and came back 406 PGRST106 — scoping writes
+ *  schema went out as `Content-Profile: indox_example` and came back 406 PGRST106 — scoping writes
  *  then would not have written to the wrong instance, it would have failed every settings save in
  *  the console. The transport now routes upsert/update/insert/delete through `public.run_sql` the
  *  same way it already routed select/count, so both halves are scoped and the method check is
- *  gone. Verified end to end: an upsert against indox_levi lands in levi and not in hacohen. */
+ *  gone. Verified end to end: an upsert against indox_levi lands in levi and not in example. */
 
 function withInstance(path: string, init?: RequestInit): string {
   if (!CURRENT_INSTANCE) return path;
@@ -746,6 +761,14 @@ function withInstance(path: string, init?: RequestInit): string {
   if (params.has('instance')) return path;
   params.set('instance', CURRENT_INSTANCE);
   return `${p}?${params.toString()}`;
+}
+
+/** Append `table=` — the table the grid shows — to a path the BFF scopes by table. Reads and the export follow
+ *  it; a write names it so the BFF can refuse a table that is not the repo's own instead of writing the repo's
+ *  row that merely shares the id (DGO-1815). None → the repo's own table, as before. */
+export function withTable(path: string, table?: string | null): string {
+  if (!table) return path;
+  return `${path}${path.includes('?') ? '&' : '?'}table=${encodeURIComponent(table)}`;
 }
 
 /** the document assets the BFF serves as bytes: the page raster, the two overlays, the preview */
@@ -887,6 +910,9 @@ export interface InstanceAccount {
    *  instance" lookup therefore meant "first instance", and a disabled instance would have been
    *  chosen as the default. Absent on a BFF that predates the registry, hence optional. */
   enabled?: boolean;
+  /** The registry's `purpose` ('test' for the standing test tenant every office carries; '' otherwise).
+   *  Absent on a BFF from before /instances said it (DGO-1815). */
+  purpose?: string;
   docs: number;
   registry: number;
   settings_count: number;
@@ -959,7 +985,7 @@ export const api = {
      Nothing here reads or writes it — which instance you are looking at is view state, and it
      belongs in the URL, per user. */
   listInstances: () =>
-    call<{ instances: { id: string; schema_name: string; label?: string; enabled?: boolean }[] }>(
+    call<{ instances: { id: string; schema_name: string; label?: string; enabled?: boolean; purpose?: string }[] }>(
       '/instances',
     ),
   instanceTables: (id: string, counts = false) =>
@@ -977,8 +1003,8 @@ export const api = {
   /* createRepo / deleteRepo / patchRepo / repoStats / syncRepo are GONE (N14): the repo
      screens were removed with the instance switcher, and nothing in this tree called them. */
 
-  upsertRows: (repo: string, rows: Record<string, unknown>[]) =>
-    call<UpsertResult>(`/repos/${repo}/documents`, {
+  upsertRows: (repo: string, rows: Record<string, unknown>[], table?: string | null) =>
+    call<UpsertResult>(withTable(`/repos/${repo}/documents`, table), {
       method: 'PUT',
       body: JSON.stringify(rows),
     }),
@@ -1031,9 +1057,9 @@ export const api = {
   getDocument: (repo: string, id: string) =>
     call<{ row: Record<string, unknown> }>(`/repos/${repo}/documents/${id}`),
 
-  patchDocument: (repo: string, id: string, patch: Record<string, unknown>) =>
+  patchDocument: (repo: string, id: string, patch: Record<string, unknown>, table?: string | null) =>
     call<{ updated: unknown[]; created: unknown[]; events_published: number }>(
-      `/repos/${repo}/documents/${id}`,
+      withTable(`/repos/${repo}/documents/${id}`, table),
       { method: 'PATCH', body: JSON.stringify(patch) },
     ),
 
@@ -1330,9 +1356,9 @@ export const api = {
      2026-08-28; PostgREST answered 404, Flask's catch-all turned that into a bare
      500, and the viewer, seeing an image that would not decode, fell back to a
      preview and captioned the document "no extraction drawing was produced".
-     Measured live 2026-09-02 against doc_mtk56k1zbq1ws3 (console.hacohen):
+     Measured live 2026-09-02 against doc_mtk56k1zbq1ws3 (console.example):
 
-         draw   500 application/json  →  200 image/png  33 KB   with ?instance=hacohen
+         draw   500 application/json  →  200 image/png  33 KB   with ?instance=example
          file   500 application/json  →  200 image/png  30 KB
          tokens 500 application/json  →  200 image/png  43 KB
 
@@ -1372,7 +1398,8 @@ export const api = {
   uploadExtractionDoc: async (file: File): Promise<ExtractionResult> => {
     const fd = new FormData();
     fd.append('file', file);
-    const res = await fetch(`${API_PREFIX}/extraction/upload`, {
+    // scoped like every call() — a raw fetch is where the instance went missing (DGO-1815)
+    const res = await fetch(`${API_PREFIX}${withInstance('/extraction/upload')}`, {
       method: 'POST',
       body: fd,
     });
@@ -1435,8 +1462,8 @@ export const api = {
   pipelineStatus: () => call<PipelineStatus>('/pipeline/status'),
 
   /** Fire exactly ONE drainer. 409 `drain_running` carries the live execution id. */
-  startDrain: (body: DrainRequest) =>
-    call<DrainAccepted>('/pipeline/drain', {
+  startDrain: (body: DrainRequest, table?: string | null) =>
+    call<DrainAccepted>(withTable('/pipeline/drain', table), {
       method: 'POST',
       body: JSON.stringify(body),
     }),
@@ -1445,8 +1472,9 @@ export const api = {
       stays the only writer. [2026-08-24, owner order] ANY schema column (except the pk and
       the timestamps); the SELECTION is a selector — explicit ids or the view's own filter —
       resolved once, server-side, at execution time. */
-  bulkPatchDocuments: (repo: string, selection: SelectionPayload, patch: Record<string, unknown>) =>
-    call<BulkPatchResult>(`/repos/${encodeURIComponent(repo)}/documents/bulk`, {
+  bulkPatchDocuments: (repo: string, selection: SelectionPayload, patch: Record<string, unknown>,
+    table?: string | null) =>
+    call<BulkPatchResult>(withTable(`/repos/${encodeURIComponent(repo)}/documents/bulk`, table), {
       method: 'POST',
       body: JSON.stringify({ ...selection, patch }),
     }),
@@ -1454,9 +1482,9 @@ export const api = {
   /** Direct router dispatch on a selection — the console's face of the sanctioned manual
       dispatch (ACTION + full-row lines + TRIGGER 'console_manual'). Long call: the router
       runs the action inline per batch of 5, so give it room. */
-  dispatchDocuments: (repo: string, selection: SelectionPayload, action: DispatchAction) =>
+  dispatchDocuments: (repo: string, selection: SelectionPayload, action: DispatchAction, table?: string | null) =>
     call<DispatchResult>(
-      `/repos/${encodeURIComponent(repo)}/documents/dispatch`,
+      withTable(`/repos/${encodeURIComponent(repo)}/documents/dispatch`, table),
       { method: 'POST', body: JSON.stringify({ ...selection, action }) },
       600000,
     ),
@@ -1464,18 +1492,18 @@ export const api = {
   /** [archive 2026-08-24] Move a selection into the repo's `-archive` twin — one server
       transaction (insert+delete), conflicts skipped and reported, no size cap. Runs on
       the LIVE repo; the destination is implied. */
-  archiveDocuments: (repo: string, selection: SelectionPayload) =>
+  archiveDocuments: (repo: string, selection: SelectionPayload, table?: string | null) =>
     call<ArchiveMoveResult>(
-      `/repos/${encodeURIComponent(repo)}/documents/archive`,
+      withTable(`/repos/${encodeURIComponent(repo)}/documents/archive`, table),
       { method: 'POST', body: JSON.stringify({ ...selection }) },
       600000,
     ),
 
   /** The reverse move. Runs on the `-archive` repo; rows return to the live table
       (an id that meanwhile reappeared in the live table is skipped as a conflict). */
-  unarchiveDocuments: (repo: string, selection: SelectionPayload) =>
+  unarchiveDocuments: (repo: string, selection: SelectionPayload, table?: string | null) =>
     call<ArchiveMoveResult>(
-      `/repos/${encodeURIComponent(repo)}/documents/unarchive`,
+      withTable(`/repos/${encodeURIComponent(repo)}/documents/unarchive`, table),
       { method: 'POST', body: JSON.stringify({ ...selection }) },
       600000,
     ),
@@ -1488,8 +1516,12 @@ export const api = {
     repo: string,
     selection: SelectionPayload,
     columns?: string[],
+    table?: string | null,
   ): Promise<{ blob: Blob; filename: string; truncated: boolean }> => {
-    const res = await fetch(`${API_PREFIX}/repos/${encodeURIComponent(repo)}/documents/export`, {
+    // the instance on screen, not the default one: an unscoped export was the first client's documents (DGO-1815);
+    // and the TABLE on screen, the way queryDocuments sends it: without it the CSV was the default table's rows
+    const path = withTable(`/repos/${encodeURIComponent(repo)}/documents/export`, table);
+    const res = await fetch(`${API_PREFIX}${withInstance(path)}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(columns?.length ? { ...selection, columns } : { ...selection }),

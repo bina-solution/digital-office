@@ -1,0 +1,91 @@
+{{/*
+  pages.html — every page the sign-in app shows a person (DGO-1501): THE card, on the logo wall, with the
+  office's mark. Parsed once at start (ui.go); each page is one {{define}}. The mark between its two markers
+  is stamped by gate G27 from platform-base/bina-ui/brand/mark.html — edit it there. html/template drops the
+  markers themselves (they are comments), and escapes every value it is given, by where it stands.
+*/}}
+{{/* top takes (head <title> <base>): base is empty on this app's own host, and the sign-in host's address on
+     a page answered on ANOTHER host (a refusal traefik hands to the app's host), where /ui/… is not ours */}}
+{{define "top"}}<!doctype html>
+<html lang="he" dir="rtl" data-card><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>{{.Title}}</title>
+<link rel="stylesheet" href="{{.Base}}/ui/page.css?v={{css}}">
+</head><body><div class="xn"><main class="xn-card">{{end}}
+
+{{define "bottom"}}</main></div></body></html>
+{{end}}
+
+{{/* the mark's size is said on the element too: a page whose stylesheet did not arrive draws it at 52px, not
+     the width of the screen */}}
+{{define "mark"}}<span class="xn-mark" aria-hidden="true" style="display:block;width:52px;height:52px;margin:0 auto"><!-- @bina-brand:start --><svg viewBox="53.57 53.57 892.86 892.86" aria-hidden="true" focusable="false"><rect class="t" x="53.57" y="53.57" width="892.86" height="892.86" rx="196.43"/><rect x="267.32" y="276.79" width="71.25" height="71.25" rx="19.24" class="a"/><rect x="267.32" y="419.29" width="71.25" height="285" rx="19.24" class="m"/><path d="M429.06 276.79H675.59A19.24 19.24 0 0 1 694.82 296.02V685.05A19.24 19.24 0 0 1 675.59 704.29H429.06A19.24 19.24 0 0 1 409.82 685.05V296.02A19.24 19.24 0 0 1 429.06 276.79ZM500.31 348.04A19.24 19.24 0 0 0 481.07 367.27V613.8A19.24 19.24 0 0 0 500.31 633.04H604.34A19.24 19.24 0 0 0 623.57 613.8V367.27A19.24 19.24 0 0 0 604.34 348.04Z" class="m"/><rect x="516.7" y="419.29" width="71.25" height="142.5" rx="19.24" class="a"/></svg><!-- @bina-brand:end --></span>{{end}}
+
+{{define "login"}}{{template "top" (head "כניסה" "")}}{{template "mark"}}
+<h1>כניסה ללשכה</h1>
+{{if .Error}}<p class="xn-alert" role="alert">{{.Error}}</p>{{end}}
+<form class="xn-form" method="post" action="/login">
+<input type="hidden" name="rd" value="{{.ReturnTo}}">
+<input type="hidden" name="st" value="{{.State}}">
+<label class="xn-field">שם משתמש <input name="user" dir="ltr" autocomplete="username" autofocus required></label>
+<label class="xn-field">סיסמה <input type="password" name="password" dir="ltr" autocomplete="current-password" required></label>
+<button class="btn" type="submit">כניסה</button>
+</form>
+{{/* after the form, so the field is there when it runs: a deep link's `#…` goes back on the return-to (DGO-569) */}}
+<script src="/ui/return.js?v={{js}}"></script>
+{{template "bottom"}}{{end}}
+
+{{define "logout"}}{{template "top" (head "יציאה" "")}}{{template "mark"}}
+<h1>יציאה מהלשכה</h1>
+<p>היציאה מסיימת את הכניסה בכל המכשירים.</p>
+<form class="xn-form" method="post" action="/logout">
+<input type="hidden" name="rd" value="{{.}}">
+<button class="btn" type="submit" autofocus>יציאה</button>
+</form>
+{{template "bottom"}}{{end}}
+
+{{define "setup"}}{{template "top" (head "הלשכה החדשה" "")}}{{template "mark"}}
+<h1>ברוכים הבאים ללשכה</h1>
+{{if .Code}}
+<div class="xn-sub">בחרו שם משתמש וסיסמה לבעלים של הלשכה.</div>
+{{if .Error}}<p class="xn-alert" role="alert">{{.Error}}</p>{{end}}
+<form class="xn-form" method="post" action="/setup">
+<input type="hidden" name="code" value="{{.Code}}">
+<input type="hidden" name="rd" value="{{.ReturnTo}}">
+<label class="xn-field">שם משתמש <input name="user" dir="ltr" autocomplete="username" pattern="[a-z0-9][a-z0-9._\-]{0,31}" value="{{.User}}" required autofocus></label>
+<label class="xn-field"><span>אימייל <small>(לא חובה)</small></span><input type="email" name="email" dir="ltr" autocomplete="email" value="{{.Email}}"></label>
+<label class="xn-field">סיסמה <input type="password" name="password" dir="ltr" autocomplete="new-password" minlength="12" required></label>
+<label class="xn-field">שוב הסיסמה <input type="password" name="again" dir="ltr" autocomplete="new-password" minlength="12" required></label>
+<button class="btn" type="submit">יצירת הבעלים</button>
+</form>
+{{else}}
+<p>ללשכה הזאת עוד אין בעלים. פתחו את הקישור שהמכשיר שהפעיל אותה הציג.</p>
+{{end}}
+{{template "bottom"}}{{end}}
+
+{{/* a person the owner invited chooses their own password (invite.go, DGO-1751); without a live code, no form */}}
+{{define "invite"}}{{template "top" (head "הזמנה ללשכה" "")}}{{template "mark"}}
+{{if .Code}}
+<h1>ברוכים הבאים, {{.Display}}</h1>
+<div class="xn-sub">הוזמנתם ללשכה. בחרו סיסמה. שם המשתמש שלכם: <bdi dir="ltr">{{.User}}</bdi></div>
+{{if .Error}}<p class="xn-alert" role="alert">{{.Error}}</p>{{end}}
+<form class="xn-form" method="post" action="/invite">
+<input type="hidden" name="code" value="{{.Code}}">
+<input type="hidden" name="rd" value="{{.ReturnTo}}">
+<input type="text" name="user" value="{{.User}}" autocomplete="username" readonly hidden>
+<label class="xn-field">סיסמה <input type="password" name="password" dir="ltr" autocomplete="new-password" minlength="12" required autofocus></label>
+<label class="xn-field">שוב הסיסמה <input type="password" name="again" dir="ltr" autocomplete="new-password" minlength="12" required></label>
+<button class="btn" type="submit">כניסה ללשכה</button>
+</form>
+{{else}}
+<h1>הקישור לא בתוקף</h1>
+<p>קישור ההזמנה הזה כבר נוצל, פג תוקפו, או שלא הועתק במלואו. בקשו מבעלי הלשכה קישור חדש.</p>
+{{end}}
+{{template "bottom"}}{{end}}
+
+{{/* a failure a person can meet here: what it is, in one line, and what to do (problem in ui.go) */}}
+{{define "problem"}}{{template "top" (head .Title .Base)}}<span class="xn-ic"><svg class="ic-svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg></span>
+<h1>{{.Title}}</h1>
+<div class="xn-sub">{{.Sub}}</div>
+<p>{{.Text}}</p>
+{{if .Action}}<a class="btn" href="{{.Action}}">{{.ActionText}}</a>{{end}}
+{{template "bottom"}}{{end}}

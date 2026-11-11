@@ -1,0 +1,266 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>מריץ CI</title>
+<style>
+/* @bina-theme-tokens:start */
+/* OLIVE GROVE — the one palette of the office (the owner, 2026-10-07 · DGO-450). Four hues, sampled
+   from his mock-up, and the ground they stand on. A screen never writes a colour: it names one of
+   these. Each hue is the colour itself (a FILL — a button, a bar, a dot), «-d» for text and thin
+   lines on the ground (4.5:1 or more), «-soft» and «-line» for a tint and its hairline, and «-ink»
+   for what is written ON the fill. The role names every screen already uses point at them:
+   (no backtick in this block: one of its copies lives inside a script's template string)
+     olive  the brand and the main action · what is well, what is done
+     sky    what is in motion, what only informs · a link
+     lime   look here — a warning, something waiting
+     plum   a person must act — a failure, a removal, the one final action
+   Contrast, measured (WCAG): ink on the ground 13.7 · muted 4.65 · light text on olive 5.51 and on
+   plum 9.54 · ink on lime 6.88 · its ink on sky 6.32 · sky-d 4.61 · lime-d 4.70 · violet 5.32 ·
+   on the desk: its ink 6.32 (dark: 13.96), and 11.2 where the sky pales (dark: 5.12). */
+:root,:root[data-theme="light"]{
+  color-scheme:light;
+  accent-color:var(--accent);   /* the browser's OWN controls - a checkbox, a radio, a range, a progress bar - on both grounds: said once, here (it was said for eight single controls, and every other one was the browser's blue) */
+  --bg:#f3f5f7; --surface:#fff; --surface-2:#f9fafb; --ink:#1f2a17; --muted:#6a7068; --line:#dcdfde;
+  --olive:#56693f; --olive-d:#475734; --olive-soft:#e7eae4; --olive-line:#bfc6b6; --olive-ink:#f3f5f7;
+  --sky:#7baae3; --sky-d:#2a6fc4; --sky-soft:#edf3fb; --sky-line:#cddff4; --sky-ink:#13263f;
+  --lime:#a9b84c; --lime-d:#69732e; --lime-soft:#f3f5e6; --lime-line:#dee4bb; --lime-ink:#1f2a17;
+  --plum:#5b3349; --plum-d:#4a303b; --plum-soft:#e8e2e6; --plum-line:#c1b1ba; --plum-ink:#f3f5f7;
+  --accent:var(--olive); --accent-d:var(--olive-d); --accent-soft:var(--olive-soft); --accent-ink:var(--olive-ink);
+  --blue:var(--sky-d); --amber:var(--lime-d); --red:var(--plum);
+  --violet:#7c5c6d;   /* plum, lifted a fifth toward white: someone has to look — nothing has failed */
+  --ok:var(--olive); --warn:var(--lime-d); --danger:var(--plum); --info:var(--sky-d);
+  --ok-soft:var(--olive-soft); --warn-soft:var(--lime-soft); --danger-soft:var(--plum-soft); --info-soft:var(--sky-soft);
+  --red-soft:var(--plum-soft); --amber-soft:var(--lime-soft); --blue-soft:var(--sky-soft); --violet-soft:var(--plum-soft);
+  --side:var(--olive); --side-ink:#f3f5f7; --side-mut:#dce1da; --side-line:#788765;
+  --desk:var(--sky); --desk-ink:var(--sky-ink);   /* desktop mode's ground is the sky (the owner, DGO-452), and what is written straight on it */
+  --scrim:rgba(31,42,23,.5);                      /* what dims a screen behind a pop-up */
+  --shadow:0 1px 3px rgba(31,42,23,.08),0 6px 24px rgba(31,42,23,.06);
+  --shadow-lg:0 20px 60px rgba(31,42,23,.28);
+  /* ONE COLOUR AND ONE ANIMAL PER OFFICE (the owner, 2026-10-09 · flt-002). When offices are linked,
+     a person reads WHICH office a thing belongs to without opening it, so each office gets a hue of
+     its own. The hue is an IDENTITY and never a health state: an office that stopped answering keeps
+     its colour, and the quiet mark is the one that says "not answering". Each is an ALIAS of the
+     palette's own hue — no fourth value is invented, and because the ground re-points the hue, the
+     office mark follows the ground by itself. Each office's animal (elephant, deer, eagle) is a
+     glyph of bina-icons.js. */
+  --office-hp:var(--muted);   /* hp · elephant — grey: the heavy laptop at home, in the palette's own grey */
+  --office-mac:var(--lime);   /* macbook · deer — yellow: the palette has one yellow and it is lime. A FILL, so what is written ON it is --lime-ink, never this */
+  --office-vps:var(--sky-d);  /* vps · eagle — deep sky blue, «the eagle in the clouds». THE OWNER'S OWN CHOICE (2026-10-09, in writing: vps = נשר + כחול-שמיים) — this line is the colour he picked, not a default kept for him */
+}
+
+/* ── A LINKED OFFICE'S MARK, BY NAME (flt-004) ───────────────────────────────────────────────
+   The link carries a NAME — mark: {color, animal} in the catalog, from the office's own identity
+   — and never a value: the office that DRAWS a linked tile owns the pixels, so it paints the name
+   with its own palette. These seven rules are that translation, one per family above; a screen sets
+   data-office-hue="lime" and paints var(--office-hue).
+   A name this file does not know paints nothing, which is why the vocabulary in
+   apps/dgo-extend/identity.py may only name families that exist here — and why --red and --ok
+   are not among them: they mean «danger» and «it is well» on every screen in the office. */
+[data-office-hue="grey"]   { --office-hue:var(--muted); }
+[data-office-hue="lime"]   { --office-hue:var(--lime); }
+[data-office-hue="sky"]    { --office-hue:var(--sky-d); }
+[data-office-hue="olive"]  { --office-hue:var(--olive-d); }
+[data-office-hue="plum"]   { --office-hue:var(--plum); }
+[data-office-hue="blue"]   { --office-hue:var(--blue); }
+[data-office-hue="violet"] { --office-hue:var(--violet); }
+/* the dark ground is the same four hues on the palette's own ink, and the SAME legend. Olive on that
+   ink is 2.5:1, so its text step there is olive LIFTED — its own hue and saturation, lighter (7.14
+   on a card, 4.82 on its own tint) — and the brand, the main action and «it is well» take that step.
+   Lime stays «look here» and the sky «in motion», as on the light ground: were lime the accent here
+   (it was, for a day), a warning, a selection and «it is well» were one colour. Each «-d» on its
+   own «-soft» there, measured: olive 4.82 · sky 4.62 · lime 4.63 · plum 4.71. */
+@media (prefers-color-scheme:dark){
+  :root{ color-scheme:dark;
+         --bg:#141b0f; --surface:#1f2a17; --surface-2:#192213; --ink:#f3f5f7; --muted:#a2a8a2; --line:#414a3b;
+         --olive-d:#a5ba8c; --olive-soft:#384629; --olive-line:#56693f;
+         --sky-d:#7baae3; --sky-soft:#2e3f38; --sky-line:#4d6a8c;
+         --lime-d:#a9b84c; --lime-soft:#3b4622; --lime-line:#69732e;
+         --plum-d:#ad99a4; --plum-soft:#402f33; --plum-line:#7c5c6d;
+         --accent:var(--olive-d); --accent-ink:var(--surface);
+         --red:#ad99a4; --violet:#bdadb6; --danger:#ad99a4; --ok:var(--olive-d); --side:var(--surface);
+         --desk:var(--sky-ink); --desk-ink:var(--ink); --scrim:rgba(0,0,0,.6);
+         --shadow:0 1px 3px rgba(0,0,0,.4),0 6px 24px rgba(0,0,0,.3);
+         --shadow-lg:0 20px 60px rgba(0,0,0,.55); }
+}
+:root[data-theme="midnight"]{
+  color-scheme:dark;
+  --bg:#141b0f; --surface:#1f2a17; --surface-2:#192213; --ink:#f3f5f7; --muted:#a2a8a2; --line:#414a3b;
+  --olive-d:#a5ba8c; --olive-soft:#384629; --olive-line:#56693f;
+  --sky-d:#7baae3; --sky-soft:#2e3f38; --sky-line:#4d6a8c;
+  --lime-d:#a9b84c; --lime-soft:#3b4622; --lime-line:#69732e;
+  --plum-d:#ad99a4; --plum-soft:#402f33; --plum-line:#7c5c6d;
+  --accent:var(--olive-d); --accent-ink:var(--surface);
+  --red:#ad99a4; --violet:#bdadb6; --danger:#ad99a4; --ok:var(--olive-d); --side:var(--surface);
+  --desk:var(--sky-ink); --desk-ink:var(--ink); --scrim:rgba(0,0,0,.6);
+  --shadow:0 1px 3px rgba(0,0,0,.4),0 6px 24px rgba(0,0,0,.3);
+  --shadow-lg:0 20px 60px rgba(0,0,0,.55);
+}
+/* THE KEYBOARD'S RING - what the browser draws around the stop the keyboard is on, in the palette, wherever
+   a part draws none of its own. It has no specificity at all (:where), so any rule of a part wins. Two
+   screens said this for themselves; on the others nearly every stop wore the browser's ring (DGO-455).
+   A field keeps the offset it has - fourteen rules draw a field's own outline and say no offset. An area
+   (a scroll box, a table) takes the ring inside, where nothing clips it; a control takes it outside,
+   where a filled button does not hide it. */
+:where(:focus-visible){outline:2px solid var(--accent)}
+:where(:focus-visible:not(a,button,summary,[role=button],input,select,textarea)){outline-offset:-2px}
+:where(a,button,summary,[role=button]):focus-visible{outline-offset:2px}
+/* HEBREW AT A HEAVY WEIGHT - on Windows, where the first family of --font is installed. "Segoe UI" has its
+   Hebrew in Light, Regular, Semibold and Bold. Asked for 800 or 900 the browser takes the family's Black
+   face, which has none, and so has every family after it - so the Hebrew of every title at 800 was drawn in
+   the system's last-resort serif, thin, beside Latin in Black: «חשבונות ומראות» at 20px is 150px wide at 700
+   and 120px at 800 (Chrome 154; the screens ask for 800 in 167 places, the question's title among them).
+   These faces give the family's HEBREW RANGE the faces that have it. A family a sheet names is no longer the
+   system's for those characters, so every weight and both styles are named, each as the system resolves it:
+   measured, only upright 800 and 900 change. Any other character is not theirs and goes on to the next
+   family the screen names - system-ui in --font, on Windows the same faces, Black included - which is why
+   G27 asks that system-ui follows wherever a screen names this family itself. Where the family is not
+   installed nothing here resolves and nothing changes. */
+@font-face{font-family:"Segoe UI";src:local("Segoe UI Light");font-weight:100 300;unicode-range:U+0590-05FF,U+FB1D-FB4F}
+@font-face{font-family:"Segoe UI";src:local("Segoe UI");font-weight:400;unicode-range:U+0590-05FF,U+FB1D-FB4F}
+@font-face{font-family:"Segoe UI";src:local("Segoe UI Semibold");font-weight:500 600;unicode-range:U+0590-05FF,U+FB1D-FB4F}
+@font-face{font-family:"Segoe UI";src:local("Segoe UI Bold");font-weight:700 900;unicode-range:U+0590-05FF,U+FB1D-FB4F}
+@font-face{font-family:"Segoe UI";src:local("Segoe UI Light Italic");font-weight:100 300;font-style:italic;unicode-range:U+0590-05FF,U+FB1D-FB4F}
+@font-face{font-family:"Segoe UI";src:local("Segoe UI Italic");font-weight:400;font-style:italic;unicode-range:U+0590-05FF,U+FB1D-FB4F}
+@font-face{font-family:"Segoe UI";src:local("Segoe UI Semibold Italic");font-weight:500 600;font-style:italic;unicode-range:U+0590-05FF,U+FB1D-FB4F}
+@font-face{font-family:"Segoe UI";src:local("Segoe UI Bold Italic");font-weight:700 900;font-style:italic;unicode-range:U+0590-05FF,U+FB1D-FB4F}
+/* @bina-theme-tokens:end */
+/* «מריץ CI» (DGO-1797): what runs now and who asked, what waits at the door and why, the last jobs, the queue on
+   GitHub, and whether the runner takes work. Every colour is a token above; nothing here names one. */
+/* the office's one type stack, kept by G27 (theme-token-lint's FONT_TARGETS) */
+:root{ --font:"Segoe UI",system-ui,-apple-system,"Noto Sans Hebrew","Assistant",Arial,sans-serif }
+*{ box-sizing:border-box }
+body{ margin:0; background:var(--bg); color:var(--ink); font-family:var(--font); font-size:15px; line-height:1.5;
+  -webkit-font-smoothing:antialiased }
+.wrap{ max-width:1000px; margin:0 auto; padding:20px max(16px, env(safe-area-inset-left,0px)) 40px;
+  display:flex; flex-direction:column; gap:16px }
+header{ display:flex; flex-wrap:wrap; align-items:flex-end; justify-content:space-between; gap:8px 16px;
+  border-bottom:1px solid var(--line); padding-bottom:12px }
+h1{ margin:0; font-size:22px; font-weight:700 }
+.sub{ color:var(--muted); font-size:13px; margin-top:2px }
+.panel{ background:var(--surface); border:1px solid var(--line); border-radius:12px; overflow:hidden }
+.panel h2{ margin:0; font-size:16px; padding:12px 16px; border-bottom:1px solid var(--line); display:flex;
+  justify-content:space-between; gap:8px; flex-wrap:wrap }
+.panel h2 small{ color:var(--muted); font-weight:400; font-size:13px }
+.body{ padding:12px 16px }
+.state{ display:flex; flex-wrap:wrap; gap:8px; align-items:center }
+.pill{ display:inline-block; font-size:12px; padding:1px 10px; border-radius:999px; border:1px solid var(--line);
+  white-space:nowrap; background:var(--surface) }
+.pill.on{ background:var(--ok-soft); color:var(--accent-d); border-color:transparent }
+.pill.paused{ background:var(--warn-soft); border-color:transparent }
+.pill.off{ background:var(--plum); color:var(--plum-ink); border-color:transparent }
+table{ width:100%; border-collapse:collapse; font-variant-numeric:tabular-nums }
+th{ text-align:start; font-size:12px; font-weight:500; color:var(--muted); background:var(--surface-2); padding:8px 16px }
+td{ padding:8px 16px; border-top:1px solid var(--line); vertical-align:top }
+td.ltr{ direction:ltr; text-align:end; white-space:nowrap }
+/* the machine's state is the door's own English line: written left to right, in its own run */
+td.c-machine{ direction:ltr; text-align:left; unicode-bidi:isolate; font-size:13px }
+tr.mark td{ background:var(--info-soft) }
+code{ font-size:13px; background:var(--surface-2); border:1px solid var(--line); border-radius:6px; padding:1px 6px;
+  direction:ltr; unicode-bidi:isolate }
+.muted{ color:var(--muted) }
+.err{ color:var(--danger) }
+a{ color:var(--info) }
+@media (max-width:640px){
+  .wrap{ padding-top:12px }
+  td, th{ padding:8px 10px }
+  th.c-machine, td.c-machine{ display:none }
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div>
+      <h1>מריץ CI</h1>
+      <div class="sub" id="sub">המריץ של הלשכה ל־GitHub Actions</div>
+    </div>
+    <a id="flow" href="/#/m/concurrency" target="_top">פתח ב־כל מקביל</a>
+  </header>
+
+  <section class="panel">
+    <h2>עכשיו <small id="labels"></small></h2>
+    <div class="body">
+      <div class="state" id="state"><span class="muted">טוען…</span></div>
+      <p id="now" class="muted"></p>
+      <p class="muted">השהיה וחידוש — מהשורה, בינתיים: <code>./bbox ci-runner pause</code> · <code>./bbox ci-runner resume</code>
+        (העבודה שרצה מסיימת; הבאות נשארות בתור ב־GitHub, ומריץ אחר עם אותן תוויות יכול לקחת אותן)</p>
+    </div>
+  </section>
+
+  <section class="panel">
+    <h2>העבודות האחרונות <small>מה חיכה בדלת ולמה, מה התחיל ומה הסתיים</small></h2>
+    <table>
+      <thead><tr><th>מתי</th><th>מה</th><th>זרימה</th><th>קומיט</th><th>מי ביקש</th><th class="c-machine">המכונה</th></tr></thead>
+      <tbody id="jobs"><tr><td colspan="6" class="muted">טוען…</td></tr></tbody>
+    </table>
+  </section>
+
+  <section class="panel">
+    <h2>התור ב־GitHub <small>כל הריצות הממתינות של המאגר, לכל מריץ</small></h2>
+    <table>
+      <thead><tr><th>מאז</th><th>זרימה</th><th>קומיט</th><th>ענף</th><th>מי</th></tr></thead>
+      <tbody id="queue"><tr><td colspan="5" class="muted">טוען…</td></tr></tbody>
+    </table>
+  </section>
+</div>
+<script>
+// The address is the state (build-your-first-app.md): ?run=<id> marks that run's lines — a link a person or an agent
+// writes to point at one run; the timeline's own links open the screen as it is.
+const MARK = new URLSearchParams(location.search).get("run") || "";
+const KIND = { waiting: "ממתין בדלת", started: "התחיל", refused: "נדחה בדלת", ended: "הסתיים" };
+// the agent's heartbeat (agent.json): what it is now — a heartbeat older than a minute is «לא רץ»
+const AGENT = { running: ["פעיל", "on"], paused: ["מושהה — לא לוקח עבודות", "paused"],
+  pausing: ["נעצר אחרי העבודה שרצה (עוד עבודה אחת עשויה להתחיל, או להתבטל)", "paused"], failing: ["נופל — מנסה שוב כל חמש דקות", "off"],
+  unregistered: ["לא רשום ב־GitHub — רישום של מריץ צריך להיות על הכרך של האפליקציה", "off"],
+  "not-running": ["לא רץ", "off"], unknown: ["לא ידוע", "off"] };
+// relative to the page's own address: the console serves it under /a/ci-runner/ with a <base> of its own
+const api = (p) => fetch(new URL(p, location.href)).then((r) => r.json());
+const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const when = (iso) => (iso || "").replace("T", " ").replace("Z", "");
+
+async function load() {
+  try {
+    const st = (await api("api/status")).data;
+    const [word, cls] = AGENT[st.agent] || [st.agent, "off"];
+    document.getElementById("state").innerHTML =
+      `<span class="pill ${cls}">${esc(word)}</span>` +
+      (st.heartbeat ? ` <span class="muted">דופק אחרון ${esc(when(st.heartbeat))}</span>` : "");
+    document.getElementById("labels").textContent = st.labels
+      ? "התוויות שלו ב־GitHub: " + st.labels.join(", ") + (st.warning ? " — " + st.warning : "")
+      : "התוויות: לא ידוע" + (st.labels_why ? " (" + st.labels_why + ")" : "");
+    const n = st.now;
+    document.getElementById("now").textContent = n
+      ? `רץ עכשיו: ${n.workflow} · ${(n.sha || "").slice(0, 7)} · ${n.event_name} של ${n.actor} — מאז ${when(n.at)}`
+      : "אין עבודה שרצה עכשיו.";
+  } catch (e) {
+    document.getElementById("state").innerHTML = `<span class="err">המסך לא קיבל תשובה מהמריץ</span>`;
+  }
+  try {
+    const rows = (await api("api/jobs?n=20")).data || [];
+    document.getElementById("jobs").innerHTML = rows.length ? rows.map((r) =>
+      `<tr class="${MARK && r.run_id === MARK ? "mark" : ""}"><td class="ltr">${esc(when(r.at))}</td><td>${esc(KIND[r.kind] || r.kind)}` +
+      `${r.waited_s ? ` <span class="muted">(${esc(r.waited_s)} ש׳)</span>` : ""}</td><td>${esc(r.workflow)}</td>` +
+      `<td class="ltr">${esc((r.sha || "").slice(0, 7))}</td><td>${esc(r.event_name)} של ${esc(r.actor)}</td>` +
+      `<td class="c-machine muted">${esc(r.machine)}</td></tr>`).join("")
+      : `<tr><td colspan="6" class="muted">אין עבודות ברשומה עדיין.</td></tr>`;
+  } catch (e) {
+    document.getElementById("jobs").innerHTML = `<tr><td colspan="6" class="err">הרשומה לא נקראה</td></tr>`;
+  }
+  try {
+    const q = (await api("api/queue")).data || {};
+    document.getElementById("queue").innerHTML = !q.available
+      ? `<tr><td colspan="5" class="muted">התור לא זמין: ${esc(q.why)}</td></tr>`
+      : (q.runs || []).map((r) => `<tr><td class="ltr">${esc(when(r.queued_at))}</td><td>${esc(r.workflow)}</td>` +
+          `<td class="ltr">${esc(r.sha)}</td><td>${esc(r.branch)}</td><td>${esc(r.actor)}</td></tr>`).join("")
+        || `<tr><td colspan="5" class="muted">התור ריק.</td></tr>`;
+  } catch (e) {
+    document.getElementById("queue").innerHTML = `<tr><td colspan="5" class="err">התור לא נקרא</td></tr>`;
+  }
+}
+load();
+setInterval(load, 15000);
+</script>
+</body>
+</html>

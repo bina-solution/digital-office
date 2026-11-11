@@ -269,6 +269,7 @@ def main():
             app = make_app(repo / "apps", "demo-git", host="demo-git",
                            extra={"blueprints": {"n8n": "blueprint/n8n"}})
             for rel, body in {"tool.sh": "echo", "notes.txt": "n", hebrew: "x", "linked.txt": "x",
+                              "static/y.txt": "y",
                               "data": "../../.env", "blueprint/n8n/a.workflow.ts": "export {}",
                               "blueprint/n8n/b.workflow.ts": "export {}",
                               "blueprint/n8n/b.json": "{}", "blueprint/n8n/c.json": "{}",
@@ -279,7 +280,7 @@ def main():
             git(repo, "config", "core.quotepath", "true")   # the default, whatever ~/.gitconfig says
             git(repo, "add", "--", *(f"apps/demo-git/{r}" for r in (
                 "app.json", "docker-compose.yml", "tool.sh", "notes.txt", hebrew, "linked.txt",
-                "blueprint")))
+                "static/y.txt", "blueprint")))
             git(repo, "update-index", "--chmod=+x", "apps/demo-git/tool.sh")
             os.chmod(app / "notes.txt", 0o755)    # the disk says executable; git keeps 100644
             # a link as git tracks it (mode 120000), and as a checkout without symlinks leaves it
@@ -295,6 +296,27 @@ def main():
             except OSError as e:
                 no_link = f"no symlink without a privilege ({e.__class__.__name__})"
                 signing.write_lf(app / "linked.txt", "x")
+            # a folder git tracks a file in, swapped since for a link to a folder outside the app (DGO-639):
+            # the file's own lstat says a regular file, and its bytes are the outside ones
+            (work / "outside-dir").mkdir()
+            signing.write_lf(work / "outside-dir" / "y.txt", "TOKEN=2\n")
+            shutil.rmtree(app / "static")
+            try:
+                os.symlink(work / "outside-dir", app / "static", target_is_directory=True)
+                no_dir_link = None
+            except OSError as e:
+                no_dir_link = f"no symlink without a privilege ({e.__class__.__name__})"
+                (app / "static").mkdir()
+                signing.write_lf(app / "static" / "y.txt", "y")
+            # an app whose own folder is a link to one outside the repository (DGO-1735): git cannot list it, and
+            # the walk packed what was there
+            outside_app = make_app(work / "outside-apps", "demo-linked", host="demo-linked")
+            signing.write_lf(outside_app / "secret.txt", "TOKEN=3\n")
+            try:
+                os.symlink(outside_app, repo / "apps" / "demo-linked", target_is_directory=True)
+                no_app_link = None
+            except OSError as e:
+                no_app_link = f"no symlink without a privilege ({e.__class__.__name__})"
             said = io.StringIO()
             with contextlib.redirect_stderr(said):
                 out3, index3 = catalog.build(work / "cat3", sign_it=False, source_dir=repo / "apps")
@@ -317,6 +339,75 @@ def main():
                       ascii([sorted(got), said.getvalue()]))
             else:
                 cannot("a link on disk where git has a file is not followed either", no_link)
+            if no_dir_link is None:
+                check("a file under a folder swapped for a link is not packed, and is named (DGO-639)",
+                      "demo-git/static/y.txt" not in got and "demo-git/static/y.txt" in said.getvalue(),
+                      ascii([sorted(got), said.getvalue()]))
+            else:
+                cannot("a file under a folder swapped for a link is not packed", no_dir_link)
+            if no_app_link is None:
+                check("an app whose own folder is a link is left out of the index, and is named (DGO-1735)",
+                      all(e["id"] != "demo-linked" for e in index3["entries"]) and "demo-linked/" in said.getvalue(),
+                      ascii([[e["id"] for e in index3["entries"]], said.getvalue()]))
+            else:
+                cannot("an app whose own folder is a link is left out", no_app_link)
+            # DGO-1742 (1735's second reader): apps/ ITSELF a link out of the repository. Each app folder under it is
+            # a plain folder, git cannot list one, and the walk packed the untracked files there.
+            linked_repo = work / "repo-linked-apps"
+            linked_repo.mkdir()
+            subprocess.run(["git", "-C", str(linked_repo), "init", "-q"], check=True, capture_output=True)
+            outside_tree = work / "outside-tree"
+            signing.write_lf(make_app(outside_tree, "demo-out", host="demo-out") / ".env", "TOKEN=4\n")
+            try:
+                os.symlink(outside_tree, linked_repo / "apps", target_is_directory=True)
+                no_root_link = None
+            except OSError as e:
+                no_root_link = f"no symlink without a privilege ({e.__class__.__name__})"
+            if no_root_link is None:
+                refuses("apps/ itself a link: nothing is built, and the build says why (DGO-1742)",
+                        lambda: catalog.build(work / "cat5", sign_it=False, source_dir=linked_repo / "apps"),
+                        "apps/ is a link")
+                check("…and no artifact was written", not (work / "cat5").exists(),
+                      ascii(sorted(p.name for p in (work / "cat5").rglob("*"))))
+            else:
+                cannot("apps/ itself a link: nothing is built", no_root_link)
+            # The only app a link: what is left is nothing, and an empty index is never built (the Go twin's rule)
+            only_link = work / "only-link" / "apps"
+            only_link.mkdir(parents=True)
+            if no_app_link is None:
+                os.symlink(outside_app, only_link / "demo-linked", target_is_directory=True)
+                refuses("the only app a link: no empty index is built (DGO-1742)",
+                        lambda: catalog.build(work / "cat6", sign_it=False, source_dir=only_link),
+                        "an empty index is never built")
+            # An app folder that cannot be read is not a link, and the build stops on it: an index signed without it
+            # would be a store missing an app, said in a link's words (DGO-1742)
+            real_lstat = pathlib.Path.lstat
+
+            def failing_lstat(self):
+                if self.name == "demo-git" and self.parent.name == "apps":
+                    raise OSError(5, "Input/output error")
+                return real_lstat(self)
+            pathlib.Path.lstat = failing_lstat
+            try:
+                refuses("an app folder whose lstat fails stops the build, named as unreadable (DGO-1742)",
+                        lambda: catalog.build(work / "cat7", sign_it=False, source_dir=repo / "apps"),
+                        "demo-git/ cannot be read (input/output error)")
+            finally:
+                pathlib.Path.lstat = real_lstat
+            # …and one the glob cannot open at all (mode 000): the glob passed over it without a word, and the index
+            # was signed without the app (the second reader). Root opens it whatever its mode: not run as root.
+            if os.name == "nt" or os.geteuid() == 0:
+                cannot("an app folder that cannot be opened stops the build", "root, or Windows, opens it anyway")
+            else:
+                locked = make_app(repo / "apps", "demo-locked", host="demo-locked")
+                os.chmod(locked, 0)
+                try:
+                    refuses("an app folder that cannot be opened stops the build, named (DGO-1742)",
+                            lambda: catalog.build(work / "cat8", sign_it=False, source_dir=repo / "apps"),
+                            "demo-locked/ cannot be read (permission denied)")
+                finally:
+                    os.chmod(locked, 0o755)
+                    shutil.rmtree(locked)
             check("workflows are the blueprint's ids: *.workflow.ts and *.json, one per stem",
                   e3["automations"]["workflows"] == 3, ascii(e3["automations"]))
             check("…and the disclosure says how many it imports",

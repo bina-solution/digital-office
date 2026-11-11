@@ -1,0 +1,44 @@
+#!/bin/sh
+# /usr/local/bin/slack-open-link <link> — Slack's link handler, with the flags this container needs (DGO-1264;
+# bina-claude's desktop/claude-desktop is the pattern, DGO-1506).
+#
+# Slack's browser sign-in comes back as a slack:// link. The system hands it to the handler named in Slack's
+# .desktop file, which would start a second Slack WITHOUT --no-sandbox: in a container that instance dies before it
+# can pass the link on, so the sign-in never arrives. Dockerfile.desktop points the .desktop file's Exec here, and
+# this passes the link to the RUNNING Slack with the same flags as desktop/autostart. The log names the scheme, the
+# team and the kind of link only (slack://T…/magic-login), never the rest: a magic-login link carries its code in
+# the PATH, not the query.
+APP="${SLACK_APP_BIN:-/usr/lib/slack/slack}"
+LOG="${HOME:-/config}/.slack-open-url.log"
+TMP="${TMPDIR:-/tmp}"
+note() { printf '%s %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$*" >> "$LOG" 2>/dev/null || true; }
+
+link=""
+for a in "$@"; do
+  case "$a" in slack://*) link="$a" ;; esac
+done
+[ -n "$link" ] || exec "$APP" --no-sandbox --disable-gpu --password-store=gnome-libsecret "$@"
+
+# By ALLOWLIST, not by position: a team id (T…/E…) and one of Slack's own link words are kept, anything else is
+# «…», so a link of another shape (no team, an encoded slash, a code of letters) never puts its code in the log.
+rest="${link#slack://}"; rest="${rest%%[?#]*}"
+team="$(printf '%s' "${rest%%/*}" | grep -xE '[TE][A-Z0-9]{2,20}' | head -n 1)"; [ -n "$team" ] || team="…"
+what=""
+case "$rest" in
+  */*) k="${rest#*/}"; k="${k%%/*}"
+       case "$k" in magic-login|open|channel|user|file|app|signin|login) what="/$k" ;; *) what="/…" ;; esac ;;
+esac
+bare="slack://${team}${what}"
+if ! ps -u "$(id -u)" -o args= | grep -E "^${APP}( |\$)" | grep -v -e "--type=" | grep -q .; then
+  note "dropped sign-in answer ${bare}: Slack is not running (it starts again by itself; sign in again)"
+  exit 1
+fi
+"$APP" --no-sandbox --disable-gpu --password-store=gnome-libsecret "$@" >/dev/null 2>&1
+rc=$?
+if [ "$rc" -ne 0 ]; then
+  note "failed to deliver ${bare} (exit ${rc})"
+  exit "$rc"
+fi
+note "delivered ${bare} to Slack"
+pkill -f -- "--user-data-dir=${TMP}/slack-signin\." 2>/dev/null && note "closed the sign-in window"
+exit 0

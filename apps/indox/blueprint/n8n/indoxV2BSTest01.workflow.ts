@@ -244,7 +244,7 @@ return [{ json: {
   "__instance": "test",
   "collectionId": "indoxV2ActionsBS01",
   "decideId": "indoxV2Decide01",
-  "routerId": "indoxApiRouter01",
+  "routerId": "indoxApi01",
   "cacheTable": "ai_extraction_cache",
   "captureFlagKey": "n8n.indox.test_capture",
   "doc": {
@@ -253,10 +253,10 @@ return [{ json: {
     "COMPANY_ID": "C1",
     "COMPANY_NAME": "Acme",
     "NAME": "Acme-BSE2E",
-    "LINK": "https://drive.localhost/file/d/1REDACTEDdrivexxxxxxxxxxxxxxx0081/view?usp=drivesdk",
+    "LINK": "https://drive.localhost/file/d/1REDACTEDdrivexxxxxxxxxxxxxxx0082/view?usp=drivesdk",
     // [bs-fixture 2026-08-07] LINK points at a REAL client balance sheet, so without this
     // flag the base stage runs BaseDocEx01 and 'Select Base Values' overwrites the fixture's
-    // COMPANY_ID 'C1' with the company resolved from the actual PDF (500000682). The BS
+    // COMPANY_ID 'C1' with the company resolved from the actual PDF (500000427). The BS
     // line-linker then searches existing invoices by the RESOLVED id, so the seeded
     // ex_upd/ex_skp (still 'C1') can never match: matchCount=0 and the CREATE branch ran for
     // every line. That is why 'SKP03 duplicated (2)' fired -- and why the UPDATE and SKIP
@@ -427,7 +427,7 @@ return [{ json: {
     "NAME": "Acme-FAIL",
     "BASE_EXTRACTION_COMPLETED": true,
     "BASE_SELECTION_COMPLETED": true,
-    "LINK": "https://drive.localhost/file/d/1REDACTEDdrivexxxxxxxxxxxxxxx0082/view"
+    "LINK": "https://drive.localhost/file/d/1REDACTEDdrivexxxxxxxxxxxxxxx0083/view"
   },
   "failCacheFixture": {
     "success": false,

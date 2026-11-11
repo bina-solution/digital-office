@@ -12,6 +12,9 @@ It only reads. Its sources are:
 - docker events, and the log tails other apps declare (mail, drive, apitools);
 - the span addresses other apps serve (`SPAN_SOURCE_*` in their app.json: indox, project-pln,
   bina-ds, security);
+- every app's event stream (`dgo:flow:*` on the office redis, flow.v1) — the lane «זרם האירועים», a row
+  per app (sites, meet, drive, connections, notifications, telegram, …). Found by itself, nothing to
+  declare (flow_source.py, DGO-1402);
 - spans posted to it.
 
 Spans are kept in memory, not in a database.

@@ -28,6 +28,21 @@ PROBE_PATHS = re.compile(
     r"/backup\.(zip|tar|sql)|/dump\.sql|/shell\b|/eval-stdin\.php|/cgi-mod/|/remote/login|/sslvpn)")
 FAIL_STATUS = frozenset({400, 401, 403, 404, 405, 444})
 SCAN_KINDS = frozenset({"none", "public", "door"})
+#: A 404 on one of these is NOT a scan, and the list is deliberately this short (DGO-1597). A bare `/`
+#: and the favicon are what every browser, every uptime checker and every search engine asks for on a
+#: hostname it has never seen; nobody learned anything from the 404. Measured 2026-11-09 on Exampleu: four
+#: AWS Oregon addresses (93.184.216.26, 93.184.216.27, 93.184.216.28, 93.184.216.29) each collected 20-24
+#: `GET /` 404s on a name nobody routes, and the scan jail (12 failures in 10 minutes) would have banned
+#: all four for asking a question the internet asks by itself. A 404 on any other path still counts: that
+#: is somebody reading the answers.
+INNOCENT_404 = frozenset({"/", "/favicon.ico", "/favicon.png", "/favicon.svg", "/apple-touch-icon.png",
+                          "/apple-touch-icon-precomposed.png"})
+#: …and this one is not even the caller's doing: the edge answers Let's Encrypt's validation from its own
+#: router, and a 404 there is a certificate that has not been renewed yet. Only a 404 is forgiven, and a
+#: path that walks up (`/…/../.env`) is not an ACME path at all — the second reader's point: an exemption
+#: a scanner can hide behind is worse than none, and `edge.classify` already gives these their own kind,
+#: which the jail does not count anyway.
+NOT_OURS_PREFIXES = ("/.well-known/acme-challenge/",)
 
 DEFAULT_RULES = {
     "scan": {"window": 600, "fails": 12, "probes": 3},
@@ -61,7 +76,14 @@ class Jails:
         path = h.get("path") or ""
         if PROBE_PATHS.search(path):
             self._probes.setdefault(ip, deque(maxlen=64)).append((ts, path[:120]))
-        if h.get("kind") in SCAN_KINDS and int(h.get("status") or 0) in FAIL_STATUS:
+        status = int(h.get("status") or 0)
+        # A 404 that answers «is anything here?» on a host nobody routes is the internet asking, not a
+        # scan (DGO-1597); Let's Encrypt's validation is not even the caller's question. Everything else
+        # on those kinds is evidence, exactly as before.
+        bare = path.split("?", 1)[0]
+        innocent = (status == 404 and bare in INNOCENT_404) or (
+            status == 404 and bare.startswith(NOT_OURS_PREFIXES) and ".." not in bare)
+        if h.get("kind") in SCAN_KINDS and status in FAIL_STATUS and not innocent:
             self._fails.setdefault(ip, deque(maxlen=256)).append(ts)
 
     def feed_auth(self, e: dict) -> None:

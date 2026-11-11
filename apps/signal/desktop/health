@@ -1,0 +1,30 @@
+#!/bin/sh
+# /usr/local/bin/signal-health [--json] — is this desktop's Signal usable (DGO-1264). It is the container's own
+# healthcheck (docker-compose.yml), which is what the console's «ready» reads, and what `./bbox signal status`
+# asks. Exit 0 well, 1 not. POSIX sh.
+#   door     the front door answers on :3000 (asked from inside, where it admits the loopback; from outside
+#            it admits only the edge and the console, so a probe by URL would read its 403 as «down»)
+#   client   Signal Desktop's MAIN process runs: one of Electron's --type= helpers is not a running Signal
+#   expires  the deadline Signal compiled into this build (`buildExpiration`, Signal's release commit + 90 days;
+#            Dockerfile.desktop reads it out of the package at build time). Past it Signal refuses to run while
+#            its process stays up, so `client` alone would say «well». Signal subtracts 60 days more when
+#            «download updates automatically» is off in its settings, and can set an earlier date itself:
+#            those are said on its own screen only.
+EXP_FILE=/usr/local/share/signal-build-expiration
+door=false; client=false; expired=false; days=""
+curl -sf -m 5 -o /dev/null http://127.0.0.1:3000/ && door=true
+ps -eo args= | grep -E '^(/opt/Signal/|/usr/bin/)?signal-desktop( |$)' | grep -v -e '--type=' | grep -q . && client=true
+exp="$(cat "$EXP_FILE" 2>/dev/null)"
+case "$exp" in
+  ''|*[!0-9]*) ;;
+  *) now="$(date +%s)"; left=$(( exp / 1000 - now )); days=$(( left / 86400 )); [ "$left" -le 0 ] && expired=true ;;
+esac
+if [ "${1:-}" = --json ]; then
+  printf '{"up": %s, "client": %s, "expires_in_days": %s, "expired": %s}\n' "$door" "$client" "${days:-null}" "$expired"
+else
+  printf 'screen: %s · Signal: %s · build: %s\n' \
+    "$([ "$door" = true ] && echo up || echo 'not answering')" \
+    "$([ "$client" = true ] && echo running || echo 'not running')" \
+    "$(if [ -z "$days" ]; then echo 'expiry unknown'; elif [ "$expired" = true ]; then echo EXPIRED; else echo "expires in ${days} days"; fi)"
+fi
+[ "$door" = true ] && [ "$client" = true ] && [ "$expired" = false ]

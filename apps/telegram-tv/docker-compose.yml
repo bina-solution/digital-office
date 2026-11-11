@@ -13,7 +13,7 @@ services:
   telegram-tv:
     # The image CI publishes for this commit (DGO-41); `pull_policy: missing` fetches it only when
     # it is not here already, and the `build:` below stays the fallback.
-    image: ghcr.io/solomonboltin/digital-office/telegram-tv:${IMAGE_TAG:-latest}
+    image: ghcr.io/bina-solution/digital-office/telegram-tv:${IMAGE_TAG:-latest}
     pull_policy: missing
     build:
       context: .
@@ -53,7 +53,7 @@ services:
       - TV_CACHE_DIR=/data/cache
       - TV_ARTWORK_DIR=/data/artwork
       - TV_CACHE_BYTES=${TV_CACHE_BYTES:-3221225472}
-      - TV_CACHE_MAX_FILE=${TV_CACHE_MAX_FILE:-400001053}
+      - TV_CACHE_MAX_FILE=${TV_CACHE_MAX_FILE:-400000451}
       - TV_MAX_SESSIONS=${TV_MAX_SESSIONS:-3}
       - TV_SESSION_IDLE_SECONDS=${TV_SESSION_IDLE_SECONDS:-45}
       # how the app reaches itself for the ffmpeg path (it reads its own range endpoint)

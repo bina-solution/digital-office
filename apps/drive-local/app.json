@@ -1,0 +1,137 @@
+{
+  "id": "drive-local",
+  "title": {
+    "he": "אחסון הלשכה",
+    "en": "Office storage"
+  },
+  "layer": 3,
+  "kind": "service",
+  "page": "drive",
+  "version": "1.0.0",
+  "summary": {
+    "he": "המנוע של «קבצים» שמחזיק את הקבצים בשרת של הלשכה — אחסון, אינדקס, פרופילים וקישורי שיתוף; מוצג בתוך «קבצים»",
+    "en": "The engine of «Files» that keeps the files on the office's own server — storage, index, profiles and share links; shown inside «Files»"
+  },
+  "capabilities": [
+    {
+      "name": "drive-local",
+      "type": "service",
+      "interface": "drive-engine.v1",
+      "endpoint": "http://drive-local:8988",
+      "link": true,
+      "required_ops": [
+        "ops",
+        "accounts",
+        "describe",
+        "call",
+        "content",
+        "download",
+        "store",
+        "connect",
+        "disconnect"
+      ],
+      "optional_ops": [
+        "thumb",
+        "op_upload",
+        "profiles",
+        "share-links"
+      ]
+    }
+  ],
+  "engine": {
+    "id": "drive_local",
+    "profiles": [
+      {
+        "id": "admin",
+        "display_name": "מנהל",
+        "admin": true
+      },
+      {
+        "id": "user2",
+        "display_name": "משתמש 2"
+      }
+    ]
+  },
+  "use": [
+    {
+      "capability": "sql",
+      "strength": "requires",
+      "after": true
+    },
+    {
+      "capability": "secrets",
+      "strength": "requires",
+      "after": true
+    },
+    {
+      "capability": "object-storage",
+      "strength": "requires",
+      "after": true,
+      "ops": [
+        "put",
+        "get",
+        "list",
+        "delete"
+      ]
+    }
+  ],
+  "connections": [
+    {
+      "id": "supabase-service-key",
+      "required": true
+    },
+    {
+      "id": "supabase-db-password",
+      "required": true
+    }
+  ],
+  "compose": "docker-compose.yml",
+  "agent": {
+    "context": "AGENT.md",
+    "order": 16
+  },
+  "broker": {
+    "service": "drive-local",
+    "blank_env": [
+      "SUPABASE_DB_PASSWORD",
+      "SUPABASE_SERVICE_KEY"
+    ],
+    "entrypoint": [
+      "sh",
+      "/inject.sh",
+      "gunicorn",
+      "-c",
+      "gunicorn.conf.py",
+      "engine:app"
+    ]
+  },
+  "health": {
+    "structural": "auto",
+    "probe": {
+      "http": "http://drive-local:8988/healthz",
+      "interval": "30s"
+    }
+  },
+  "data": {
+    "volumes": [
+      "drive_local_data"
+    ],
+    "on_uninstall": "prompt",
+    "sql": [
+      {
+        "instance": "supabase-db",
+        "database": "postgres",
+        "tables": [
+          "drive_files",
+          "drive_folders",
+          "drive_profiles",
+          "drive_media"
+        ],
+        "note": "created by local.py, profiles.py and media_jobs.py; the bytes are in supabase storage, bucket `drive`"
+      }
+    ]
+  },
+  "observability": {
+    "sentry_platform": "python"
+  }
+}

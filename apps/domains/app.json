@@ -5,7 +5,9 @@
     "en": "Domains"
   },
   "layer": 3,
+  "people": "admins",
   "kind": "service",
+  "page": "services",
   "version": "0.1.0",
   "summary": {
     "he": "הדומיינים של העסק — תוקף מול הרישום, ספקי DNS ורשמים מאחורי ממשק אחד, ורשומות שהעולם באמת רואה",
@@ -32,12 +34,6 @@
     }
   ],
   "use": [
-    {
-      "capability": "browser",
-      "strength": "wants",
-      "after": false,
-      "dependency": "weak"
-    },
     {
       "capability": "secrets",
       "strength": "requires",
@@ -71,12 +67,7 @@
       "dependency": "weak"
     }
   ],
-  "connections": [
-    {
-      "id": "browser42-mcp-token",
-      "required": false
-    }
-  ],
+  "connections": [],
   "compose": "docker-compose.yml",
   "routing": [
     {

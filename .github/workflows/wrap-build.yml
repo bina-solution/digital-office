@@ -1,0 +1,123 @@
+name: wrap-build
+
+# A WRAPPED OFFICIAL APP's images, BUILT AND STARTED on GitHub's own runner, and nothing pushed (DGO-1264).
+#
+# A wrap (ai/context/wrapped-official-app.md) installs the vendor's client from the vendor's repository with
+# the key checked, behind the office's front door. None of that can be proven on the MacBook (no builds there,
+# the command centre) and the Dell's runner is the one the release gates wait on. So a push that changes a
+# wrap's files builds it here, on ubuntu-latest, and proves three things before any office spends a build:
+#   1. the desktop image builds: the vendor's repository answers, its key matches the fingerprint the
+#      Dockerfile names, and the vendor's package installs;
+#   2. the desktop starts: the front door (gate.mjs) answers on :3000 from inside the container, the
+#      launcher /defaults/autostart names is running, and the vendor's client under it stays up (the same
+#      pid 30 s apart: the launcher restarts a client that exits, so a crash would come and go unseen);
+#   3. the adapter image (the headless side, `Dockerfile`) builds and answers its health.
+# A wrap is an app whose app.json declares `wraps` and that has a Dockerfile.desktop. Only the wraps the push
+# changed are built. Nothing is logged in to, and no image leaves the runner.
+
+on:
+  push:
+    paths:
+      - 'apps/*/Dockerfile.desktop'
+      - 'apps/*/Dockerfile'
+      - 'apps/*/app.json'
+      - 'apps/*/desktop/**'
+      - 'apps/*/adapter/**'
+      - '.github/workflows/wrap-build.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: wrap-build-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  plan:
+    runs-on: ubuntu-latest
+    outputs:
+      apps: ${{ steps.set.outputs.apps }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - id: set
+        name: Which wraps this push changed
+        env:
+          BEFORE: ${{ github.event.before }}
+        run: |
+          set -euo pipefail
+          wraps=""
+          for d in apps/*/; do
+            id="$(basename "$d")"
+            [ -f "$d/Dockerfile.desktop" ] && [ -f "$d/app.json" ] || continue
+            python3 -c 'import json,sys; sys.exit(0 if "wraps" in json.load(open(sys.argv[1])) else 1)' "$d/app.json" || continue
+            wraps="$wraps $id"
+          done
+          # a new branch's `before` is all zeros: then the tip commit is what this push brought
+          case "${BEFORE:-}" in ""|0000000000000000000000000000000000000000) BEFORE=HEAD~1 ;; esac
+          changed="$(git diff --name-only "${BEFORE}" HEAD 2>/dev/null || git diff --name-only HEAD~1 HEAD)"
+          list=""
+          for id in $wraps; do
+            # only a wrap whose OWN files changed (a dispatch: every wrap). A change to this file alone builds
+            # nothing: the paths filter lets it run, and the plan says so.
+            if [ "${GITHUB_EVENT_NAME}" = workflow_dispatch ] || printf '%s\n' "$changed" | grep -q "^apps/$id/"; then
+              list="$list $id"
+            fi
+          done
+          echo "wraps here:${wraps:- none}; built by this push:${list:- none}"
+          echo "apps=$(python3 -c 'import json,sys; print(json.dumps(sys.argv[1:]))' $list)" >> "$GITHUB_OUTPUT"
+
+  build:
+    needs: plan
+    if: needs.plan.outputs.apps != '[]'
+    strategy:
+      fail-fast: false
+      matrix:
+        app: ${{ fromJson(needs.plan.outputs.apps) }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 1. The desktop image builds (the vendor's repository, its key, its package)
+        run: docker build --progress=plain -f "apps/${{ matrix.app }}/Dockerfile.desktop" -t "wrap-${{ matrix.app }}-desktop" "apps/${{ matrix.app }}"
+
+      - name: 2. The desktop starts behind its front door
+        run: |
+          set -euo pipefail
+          docker run -d --name desk --shm-size=1g -e PUID=1000 -e PGID=1000 -e CUSTOM_PORT=3100 -e CUSTOM_HTTPS_PORT=3101 \
+            -e PASSWORD= -e START_DOCKER=false -e SUBFOLDER=/ -e PIXELFLUX_WAYLAND=false "wrap-${{ matrix.app }}-desktop"
+          ok=""
+          for i in $(seq 1 60); do
+            if docker exec desk curl -sf -o /dev/null http://127.0.0.1:3000/; then ok=1; echo "the front door answered after $((i*5)) s"; break; fi
+            sleep 5
+          done
+          sleep 20
+          launcher="$(docker exec desk cat /defaults/autostart)"
+          echo "launcher: $launcher"
+          docker exec desk ps -eo pid,ppid,user,args --width 220 | grep -v ' ps ' || true
+          [ -n "$ok" ] || { docker logs desk | tail -80; echo "::error::the front door never answered on :3000"; exit 1; }
+          lpid="$(docker exec desk pgrep -o -f "$launcher" || true)"
+          [ -n "$lpid" ] || { docker logs desk | tail -80; echo "::error::the launcher $launcher is not running"; exit 1; }
+          # the vendor's client is the launcher's child, and it STAYS: the launcher restarts a client that exits,
+          # so a client that crashes at start would come and go — the same pid 30 s apart is a client that runs
+          c1="$(docker exec desk pgrep -P "$lpid" -n || true)"; sleep 30; c2="$(docker exec desk pgrep -P "$lpid" -n || true)"
+          echo "the client under the launcher: $c1 → $c2"
+          docker exec desk sh -c 'tail -40 /config/.*.log 2>/dev/null || true'
+          [ -n "$c1" ] && [ "$c1" = "$c2" ] || { echo "::error::the vendor's client did not stay up under the launcher ($c1 → $c2)"; exit 1; }
+
+      - name: 3. The adapter builds and answers its health
+        run: |
+          set -euo pipefail
+          [ -f "apps/${{ matrix.app }}/Dockerfile" ] || { echo "no adapter image in this wrap"; exit 0; }
+          docker build --progress=plain -f "apps/${{ matrix.app }}/Dockerfile" -t "wrap-${{ matrix.app }}" "apps/${{ matrix.app }}"
+          # the health the app declares (app.json health.probe.http), on its port, asked from this runner; the
+          # adapter must start with its own defaults and an empty /data
+          read -r port path < <(python3 -c 'import json,sys,urllib.parse as u; p=u.urlsplit(json.load(open(sys.argv[1]))["health"]["probe"]["http"]); print(p.port or 80, p.path or "/")' "apps/${{ matrix.app }}/app.json")
+          docker run -d --name adapter --tmpfs /data:uid=1000 -p "127.0.0.1:18080:${port}" "wrap-${{ matrix.app }}"
+          for i in $(seq 1 20); do curl -sf "http://127.0.0.1:18080${path}" && break; sleep 2; done
+          echo
+          docker logs adapter
+          curl -sf "http://127.0.0.1:18080${path}" >/dev/null || { echo "::error::the adapter's health ${path} did not answer on :${port}"; exit 1; }

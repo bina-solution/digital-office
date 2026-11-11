@@ -9,10 +9,10 @@
 /* (the facts below are drawn for THIS card width: in the fork's three-up grid a card was 349px in a 1366px
    laptop's frame, a mail fact's name had 130px, and «אינדוקס - חשבוניות - לטיפול» (156px) and «…- טופל» (145px)
    both read «אינדוקס - חשבוניות - …» — cut at the very word that tells them apart.
-   ONE number differs from the live sheet, on purpose: 520, the written standard's (platform-ui-ux, law 4: "two-up
-   at ≥1100px via auto-fill minmax(520px)"). The live sheet's 540 puts two cards side by side only from a 1146px
-   frame: a 1366px laptop's console frame is 1128, and there it draws every card ONE to a row, 1076px wide — the
-   ribbons this rule exists to prevent (measured in the simulation, DGO-525). The live sheet is to take 520 too.) */
+   520 is the written standard's (platform-ui-ux, law 4: "two-up at ≥1100px via auto-fill minmax(520px)"). The
+   live sheet's old 540 put two cards side by side only from a 1146px frame: a 1366px laptop's console frame is
+   1128, and there it drew every card ONE to a row, 1076px wide — the ribbons this rule exists to prevent
+   (measured in the simulation, DGO-525). The live sheet took 520 too (DGO-613); the two agree again.) */
 .pipes{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,520px),1fr));gap:14px;align-items:start}
 
 /* facts: where it reads from and where it files to — key over value, hairline grid, one line each */

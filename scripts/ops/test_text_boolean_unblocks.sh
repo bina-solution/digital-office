@@ -5,17 +5,17 @@
 # exactly these rows and the action was never chosen.
 set -u
 DK="docker -H unix:///run/bbox-docker.sock"
-ENVF=/mnt/c/Users/user/Desktop/personalWorkspace/AutomateOs/deployment-hacohen/.env
+ENVF=/mnt/c/Users/user/Desktop/personalWorkspace/AutomateOs/digital-office/.env
 WU=$(grep -E '^BS_WEBHOOK_USER=' "$ENVF" | head -1 | cut -d= -f2-)
 WP=$(grep -E '^BS_WEBHOOK_PASS=' "$ENVF" | head -1 | cut -d= -f2-)
 RP=$(grep -E '^REDIS_PASSWORD=' "$ENVF" | head -1 | cut -d= -f2-)
 L=/tmp/pu_locks_$$.txt
 
-$DK exec -e RP="$RP" redis-shlomo-laptop sh -lc \
+$DK exec -e RP="$RP" redis-owner-laptop sh -lc \
   'redis-cli -a "$RP" --no-auth-warning --scan --pattern "n8n.process_lock.doc_action.*" 2>/dev/null' \
   | sed -e 's/^n8n[.]process_lock[.]doc_action[.]//' -e 's/::.*$//' | tr -d '\r' | sort -u > "$L"
 
-CAND=$($DK exec -i supabase-db-shlomo-laptop psql -U postgres -tAc \
+CAND=$($DK exec -i supabase-db-owner-laptop psql -U postgres -tAc \
   "SELECT \"ID\" FROM public.incoming_documents
    WHERE \"STATUS\"='IN_PROGRESS' AND \"BASE_EXTRACTION_COMPLETED\"='false'
    ORDER BY updated_at ASC LIMIT 400" | tr -d '\r' | grep -v '^$')
@@ -24,13 +24,13 @@ rm -f "$L"
 if [ -z "$ID" ]; then echo "  no unlocked candidate right now"; exit 0; fi
 echo "  candidate: $ID"
 
-$DK exec -i supabase-db-shlomo-laptop psql -U postgres -tAc \
+$DK exec -i supabase-db-owner-laptop psql -U postgres -tAc \
  "SELECT '  before: status='||\"STATUS\"||'  base_extraction='||coalesce(\"BASE_EXTRACTION_COMPLETED\",'<null>')
   FROM public.incoming_documents WHERE \"ID\"='$ID'"
-BEFORE=$($DK exec -i supabase-db-shlomo-laptop psql -U postgres -tAc \
+BEFORE=$($DK exec -i supabase-db-owner-laptop psql -U postgres -tAc \
  "SELECT count(*) FROM public.indox_action_execution_log WHERE \"ID\"='$ID'" | tr -d '\r ')
 
-$DK exec -e I="$ID" -e U="$WU" -e P="$WP" n8n-shlomo-laptop node -e '
+$DK exec -e I="$ID" -e U="$WU" -e P="$WP" n8n-owner-laptop node -e '
 const auth=Buffer.from(process.env.U+":"+process.env.P).toString("base64");
 fetch("http://localhost:5678/webhook/indox-drain",{method:"POST",
  headers:{"Content-Type":"application/json",Authorization:"Basic "+auth},
@@ -39,13 +39,13 @@ fetch("http://localhost:5678/webhook/indox-drain",{method:"POST",
  .catch(e=>console.log("  ERR "+e.message));'
 sleep 150
 
-$DK exec -i supabase-db-shlomo-laptop psql -U postgres -tAc \
+$DK exec -i supabase-db-owner-laptop psql -U postgres -tAc \
  "SELECT '  dispatch: '||\"ACTION\"||'  end='||coalesce(\"ENDED_AT\"::text,'OPEN')
   FROM public.indox_action_execution_log WHERE \"ID\"='$ID' ORDER BY \"STARTED_AT\" DESC LIMIT 3"
-AFTER=$($DK exec -i supabase-db-shlomo-laptop psql -U postgres -tAc \
+AFTER=$($DK exec -i supabase-db-owner-laptop psql -U postgres -tAc \
  "SELECT count(*) FROM public.indox_action_execution_log WHERE \"ID\"='$ID'" | tr -d '\r ')
 echo "  dispatch rows: $BEFORE -> $AFTER"
-$DK exec -i supabase-db-shlomo-laptop psql -U postgres -tAc \
+$DK exec -i supabase-db-owner-laptop psql -U postgres -tAc \
  "SELECT '  after : status='||\"STATUS\"||'  base_extraction='||coalesce(\"BASE_EXTRACTION_COMPLETED\",'<null>')
   FROM public.incoming_documents WHERE \"ID\"='$ID'"
 if [ "${AFTER:-0}" -gt "${BEFORE:-0}" ]; then

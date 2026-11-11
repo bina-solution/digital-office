@@ -26,6 +26,7 @@ import requests
 from flask import Flask, request, jsonify, send_from_directory
 
 import push  # the office's notices on the owners' phones (Web Push) — push.py
+import flow  # the office's notices on its event stream (flow.v1) — flow.py
 
 # ── Sentry/GlitchTip error reporting (platform standard) ──────────────────────────
 # Wired declaratively: glitchtip-push mints this service's project + deterministic DSN into
@@ -53,7 +54,7 @@ DB_PATH = os.getenv("NOTIFICATIONS_DB", "/data/notifications.db")
 # GlitchTip on the shared traefik-network. Internal DNS `glitchtip:8000` is proven to
 # resolve (apps/connections/providers/40-apps.yaml probes http://glitchtip:8000/_health/).
 GLITCHTIP_URL = os.getenv("GLITCHTIP_URL", "http://glitchtip:8000").rstrip("/")
-# Slug of GLITCHTIP_ORG_NAME. The default was the literal "hacohen": on any other company the
+# Slug of GLITCHTIP_ORG_NAME. The default was the literal "example": on any other company the
 # poller asked GlitchTip for an org that does not exist, got 404 on every page, and rendered an
 # EMPTY alerts screen rather than a failing one. compose passes ${GLITCHTIP_ORG_SLUG}, which
 # derives from COMPANY_SLUG — the same slug that names every host.
@@ -280,7 +281,83 @@ def create_notification(source, title, *, source_id=None, body="", level="info",
     nid = row["id"] if row else None
     # after the write is committed (outside the `with`): the phones, on push.py's own thread
     push.notice_written(nid, source, source_id, title, body, level, link, meta, created, prev_level, bool(recurred))
+    # …and the office's event stream, for a notice that is NEW or came back — not for a poller's quiet refresh
+    if created or recurred:
+        _flow(nid, source, source_id, title, body, level, link, meta, created)
     return (nid, created)
+
+
+# ── the fourth channel: every notice, also on `dgo:flow:notifications` (flow.v1, DGO-1402) ────────
+# Through the office's ONE publisher, platform-base/redis/flowpub.py, mounted read-only at /opt/dgo
+# (docker-compose.yml) — «כל מקביל» draws it as the row «התראות», agents hear it (`./bbox notifications
+# flow`), and the control centre's relay to the owner's group reads it (apps/dashboard/group.py, DGO-1329).
+# The type carries the level (`notice.error` is drawn red). `data` carries the id, who raised it, its
+# source_id, its level, `new`, the audience (`to`) and its ANSWERS (`actions`, checked by flow.py) — the
+# relay's «חסום» — and the body as the relay prints it: cut, and scrubbed as the title is. A GlitchTip
+# notice carries no body at all (its text IS an exception's: a URL's query, a DSN — the second reader of
+# DGO-1402). An image run without the mount publishes nothing and works the same.
+import re
+import sys as _sys
+
+_sys.path.insert(0, "/opt/dgo")
+try:
+    import flowpub as _flowpub
+except ImportError:
+    _flowpub = None
+
+
+#: the notice's level → the event's verb («כל מקביל» draws `error` red): GlitchTip's fatal/critical are errors
+_FLOW_LEVEL = {"fatal": "error", "critical": "error", "error": "error", "warning": "warning", "warn": "warning",
+               "success": "success", "info": "info", "debug": "info"}
+#: a notice that keeps coming back (a noisy GlitchTip issue recurs on every poll) is told at most this often
+_FLOW_REPEAT_S = 15 * 60
+_flow_told: dict = {}
+#: what an error's own text may carry: a URL's query (tokens), a bot token in a path, a long key
+_FLOW_QUERY = re.compile(r"(https?://[^\s?#]+)\?[^\s]*")
+_FLOW_LONG = re.compile(r"[A-Za-z0-9_\-:+/=]{28,}")
+
+
+def _flow_title(source, title) -> str:
+    """The title as the stream may carry it. A GlitchTip issue's title IS an exception's text — an HTTPError
+    with its URL and query, a DSN — which was on the sign-in-gated notice board only; on the stream every agent
+    reads, it is named, not quoted (the second reader, DGO-1402). Any other title loses queries and long keys."""
+    if str(source or "").startswith("glitchtip"):
+        return "תקלה במעקב השגיאות (GlitchTip)"
+    t = _FLOW_QUERY.sub(r"\1?…", " ".join(str(title or "").split()))   # flow.v1: the title is ONE line
+    return _FLOW_LONG.sub("…", t)[:300]
+
+
+#: what of a notice's body the event carries — the relay prints at most 300 of it
+_FLOW_BODY_MAX = 600
+
+
+def _flow_body(source, body) -> str:
+    """The body as the stream may carry it: none for GlitchTip (see above), else scrubbed as the title is."""
+    if str(source or "").startswith("glitchtip"):
+        return ""
+    t = _FLOW_QUERY.sub(r"\1?…", " ".join(str(body or "").split()))
+    return _FLOW_LONG.sub("…", t)[:_FLOW_BODY_MAX]
+
+
+def _flow(nid, source, source_id, title, body, level, link, meta, created) -> None:
+    if _flowpub is None:
+        return
+    now = time.time()
+    if not created and now - _flow_told.get(nid, 0) < _FLOW_REPEAT_S:
+        return
+    _flow_told[nid] = now
+    if len(_flow_told) > 5000:
+        for k in sorted(_flow_told, key=_flow_told.get)[:1000]:
+            _flow_told.pop(k, None)
+    lvl = _FLOW_LEVEL.get(str(level or "info").lower(), "info")
+    actions, _ = flow.actions_of(meta)            # checked at the POST already: a bad list never got here
+    data = {"id": nid, "source": str(source or "")[:60], "new": bool(created),
+            "source_id": "" if source_id is None else str(source_id)[:200],
+            "level": str(level or "info").lower()[:20], "to": sorted(flow.audience(meta)), "actions": actions or []}
+    text = _flow_body(source, body)
+    if text:
+        data["body"] = text
+    _flowpub.emit("notifications", f"notice.{lvl}", _flow_title(source, title), data, str(link or "")[:300])
 
 
 # ── background poller: GlitchTip issues → notifications ───────────────────────────
@@ -304,7 +381,7 @@ def poll_glitchtip_once():
             _warned_no_token = True
         return 0
     # An empty org slug would build .../organizations//issues/ and 404 forever, which is exactly
-    # the silent-empty-screen failure the old literal "hacohen" default produced on every other
+    # the silent-empty-screen failure the old literal "example" default produced on every other
     # company. Say so once, then idle — the same contract as a missing token.
     if not GLITCHTIP_ORG:
         if not _warned_no_token:
@@ -427,10 +504,16 @@ def get_notification(nid):
 @app.post("/api/notifications")
 def post_notification():
     """Create a notification from ANY source (the extensibility hook). Body:
-    {source, title, [source_id, body, level, link, meta]}."""
+    {source, title, [source_id, body, level, link, meta]}. `meta.actions` are the notice's answers
+    ([{id, label, op, args}], flow.py): a list that is not one is refused, never trimmed."""
     b = request.get_json(silent=True) or {}
     if not b.get("source") or not b.get("title"):
         return jsonify(error="source and title required"), 400
+    if b.get("meta") and not isinstance(b.get("meta"), dict):   # a falsy meta was always read as {}
+        return jsonify(error="meta is an object"), 400
+    _, bad = flow.actions_of(b.get("meta"))
+    if bad:
+        return jsonify(error=bad), 400
     nid, created = create_notification(
         b["source"], b["title"], source_id=b.get("source_id"), body=b.get("body", ""),
         level=b.get("level", "info"), link=b.get("link", ""), meta=b.get("meta"),
@@ -549,6 +632,8 @@ def healthz():
         db=db_ok,
         poller=poll_ok,
         detail=poll_detail if not ok else "ok",
+        # the stream is said, not judged: notices keep working when redis is away (flowpub, DGO-1402)
+        flow={"on": _flowpub is not None, **(_flowpub.stats() if _flowpub is not None else {})},
     ), status
 
 

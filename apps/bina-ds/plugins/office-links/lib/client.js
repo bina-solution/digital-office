@@ -14,7 +14,7 @@ window.__ModuleLoader__.load({
 		//
 		// So: a click on a link to THIS office is turned into a navigation of the current tab, and
 		// every other link is left exactly as the harness drew it. The office is named by the page's
-		// OWN suffix — `bina.localhost` → `localhost`, `bina.hacohen.…` → `hacohen.…` — so any
+		// OWN suffix — `bina.localhost` → `localhost`, `bina.example.…` → `example.…` — so any
 		// sibling host of the office counts (console, plane, drive…) and nothing else does. A page
 		// reached by a bare name or an address from inside the office network (the container, an IP)
 		// has no suffix to compare, and there the `*.localhost` family is the office.
@@ -47,7 +47,7 @@ window.__ModuleLoader__.load({
 			// console tile: `#/m/machine` opened `about:blank` + a tab, the desktop never moved).
 			// What is the harness's own is its OWN paths (below its mount): a console route on the
 			// console's root is the desktop's, whoever wrote it.
-			const consoleRoute = /^#\/m\//.test(url.hash || "");
+			const consoleRoute = /^#\/m\//.test(url.hash || "") || goPath(url);
 			// …AND A LINK TO THIS PAGE'S OWN CONSOLE IS THE OFFICE WHATEVER ITS HOST IS CALLED. The
 			// hostname rules below are for links to OTHER hosts; the console this page is embedded in
 			// may be reached by a name with no suffix at all (`console:8000` inside the office
@@ -72,7 +72,17 @@ window.__ModuleLoader__.load({
 			// if the address had been pasted there. `href` (not `assign`) because the top may be
 			// another origin — setting it is allowed there, calling methods on it is not.
 			const win = (window.top && window.top !== window) ? window.top : window;
-			win.location.href = officeTarget(url);
+			const to = officeTarget(url);
+			// …but a /go/ link the shell in front of him resolves itself (its `goTo`, DGO-1433) moves only the shell's
+			// route: navigated, the whole shell loaded again — every live window of desktop mode, a call among them
+			// (second reader, DGO-1458). A top of another origin cannot be asked: it is navigated, as before.
+			if (goPath(url) && win !== window) {
+				try {
+					const t = new URL(to);
+					if (t.origin === win.location.origin && typeof win.goTo === "function") { win.goTo(t.pathname + t.search); return; }
+				} catch (e) { /* another origin's top: navigated below */ }
+			}
+			win.location.href = to;
 		}
 
 		// WHICH OFFICE A LINK MEANS. The link was written by the office that OWNS the work item, so
@@ -85,6 +95,9 @@ window.__ModuleLoader__.load({
 		// (Chromium's own, unaffected by any referrer policy) and `document.referrer`, which is
 		// trimmed to the origin when the embedder is another origin — the only part this needs.
 		function consoleOrigin() {
+			// a page that is the TOP window has no console in front of it: its referrer is the page it came from (drive,
+			// mail…), and a console route sent there was that app's 404 (second reader, DGO-1458)
+			if (window.top === window) return "";
 			try {
 				const a = location.ancestorOrigins;
 				if (a && a.length) return String(a[a.length - 1] || "");
@@ -96,9 +109,20 @@ window.__ModuleLoader__.load({
 			}
 		}
 
+		// A PERSON'S LINK (DGO-1433): `<console>/go/<ref>` — a work item, a meeting, an app on an office — is a path the
+		// console resolves into one of its own routes. It is the desktop's exactly as a `#/m/` route is: clicked in the
+		// agent's page it moves the desktop, never opens a tab.
+		function goPath(url) {
+			return /^\/go(\/|$)/.test(url.pathname || "");
+		}
+
 		function officeTarget(url) {
 			const here = consoleOrigin();
 			if (!here || !isOfficeHost(new URL(here).hostname.toLowerCase())) return url.href;
+			// a CONSOLE's /go/ — the same first label as the console in front of him — is resolved by that console; the
+			// path /go/ on any other host of an office is that app's own, and goes as written
+			const consoleGo = goPath(url) && url.hostname.split(".")[0].toLowerCase() === new URL(here).hostname.split(".")[0].toLowerCase();
+			if (consoleGo) return here + url.pathname + (url.search || "");   // resolved by the console in front of him
 			if (!/^#\/m\//.test(url.hash || "")) return url.href;   // not a console route: as written
 			return here + "/" + url.hash;
 		}

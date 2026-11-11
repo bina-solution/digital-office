@@ -102,6 +102,9 @@ SIGNED_IN_PATH = "/.dgo/signed-in"
 ENTER_PATH = "/.dgo/enter"
 #: What the tile of an app that keeps its own host names: the question and the way in.
 OWN_HOST = (("signed_in", SIGNED_IN_PATH), ("enter", ENTER_PATH))
+#: The sign-in in front of every form that reaches a linked office's app: its admins' (DGO-1755). A person the owner
+#: invited opens this office's work apps, never another office's through the link, which arrives as its owner.
+REMOTE_SIGN_IN = "authentik-admins@file"
 
 
 class ServeError(RuntimeError):
@@ -354,6 +357,12 @@ def plan(state: dict, cat: dict) -> tuple[list[dict], list[str]]:
             if not isinstance(title, dict):
                 title = {}
             name_he = str(app.get("name") or title.get("he") or aid)
+            # A number, or this place's default: the tiles and the app rows are SORTED by it, and a peer's
+            # null (or a word) beside numbers was a TypeError after half the files were written — one
+            # linked office stopped this office's render (DGO-627). Missing reads the same.
+            order = app.get("order")
+            if not isinstance(order, (int, float)):
+                order = 900
             clean.append({
                 "app": aid, "alias": label, "port": port,
                 "agent_api_port": api_port,
@@ -362,7 +371,7 @@ def plan(state: dict, cat: dict) -> tuple[list[dict], list[str]]:
                 "icon": str(app.get("icon") or "external"),
                 "group": str(app.get("group") or "מרוחק"),
                 "desc": str(app.get("desc") or f"אפליקציה של הלשכה {oid}"),
-                "order": app.get("order", 900),
+                "order": order,
                 "host": host,
                 "health": str(app.get("health") or "/healthz"),
                 "module_kind": str((app.get("module") or {}).get("kind") or "embedded"),
@@ -467,6 +476,20 @@ def _tileless(cat: dict, app_id) -> bool:
     return bool(mods) and all(m.get("tile") is False for m in mods)
 
 
+#: The path an app lists its hand-offs at (`handoffs`, the manifest schema's own pattern).
+HANDOFFS_PATH = re.compile(r"/[A-Za-z0-9/_.-]*")
+
+
+def handoffs_path(cat: dict, app_id) -> str:
+    """Where the app lists the people it is waiting for (`handoffs` in its manifest, DGO-1336), or "".
+
+    Read from THIS office's copy of the manifest, as `_tileless` is: the declaration is the app's, in
+    the one repository every office carries, so a linked office's app is asked at the path its own
+    manifest names. The console reads the address the tile carries and never names the app (G9)."""
+    path = ((cat or {}).get(app_id) or {}).get("handoffs")
+    return path if isinstance(path, str) and HANDOFFS_PATH.fullmatch(path) else ""
+
+
 def module_entries(entries: list[dict], cat: dict, taken=None) -> list[dict]:
     """The console tiles a `remote:` entry produces — ONE PER (OFFICE, ALIAS).
 
@@ -496,6 +519,12 @@ def module_entries(entries: list[dict], cat: dict, taken=None) -> list[dict]:
             if _tileless(cat, app.get("app")):
                 continue
             tile = f"{app['alias']}.{entry['office']}"
+            # …and the people it is waiting for (DGO-1336): an app that declares `handoffs` is asked on
+            # its agent door, which the link carries as `<alias>.<office>:<agent_api_port>` like every
+            # agent door — the console SERVER's address, stripped from `/api/modules` with `door`.
+            handoffs = handoffs_path(cat, app.get("app"))
+            asked = ([("handoffs", f"http://{tile}:{app['agent_api_port']}{handoffs}")]
+                     if handoffs and app.get("agent_api_port") else [])
             # THE SAME APP THROUGH THIS CONSOLE'S OWN ORIGIN. On a console whose identity provider
             # is another SITE — every `*.localhost` office: `auth.localhost` and `console.localhost`
             # are two sites — the nested host cannot authorize inside a frame (the provider's session
@@ -542,6 +571,7 @@ def module_entries(entries: list[dict], cat: dict, taken=None) -> list[dict]:
                             # name there (`alias`, what both offices call it) or by its module id
                             # (`module_id`, what `#/m/…` carries). Either lands on this tile.
                             "alias": app["alias"], "module_id": app.get("module_id") or ""}),
+                *asked,
             ]))
     return out
 
@@ -583,7 +613,8 @@ def render(entries: list[dict], cat: dict, domain: str = "localhost",
     is why `console_port` is asked for: the port a browser on the host reaches this edge on is part
     of every `Origin` it sends, exactly as it is part of the host `sso_hosts` registers.
 
-    Both carry `authentik@file`: the tile is under THIS office's SSO. That is the whole of the trust
+    Both carry this office's own sign-in — its admins' since DGO-1755 (`REMOTE_SIGN_IN`; on the LAN entry
+    `lan-auth-admins@docker`): the tile is under THIS office's SSO. That is the whole of the trust
     question on this side — what leaves for the serving office is this office's own authenticated
     user, rewritten to the mapped one by the identity middleware.
 
@@ -599,8 +630,9 @@ def render(entries: list[dict], cat: dict, domain: str = "localhost",
     on the office Wi-Fi, `console.<lan_domain>:<lan_port>`, apps/lan-console). An address cannot have a
     host nested under it, so a shared app that keeps its own host could not open there; under a name it
     can, exactly as on a real domain. Each app then gets one more form, `…-console-lan`, on the `lan`
-    entry, signed in by that entry's own door (`lan-auth@docker`, the LAN outpost) instead of
-    `authentik@file`, whose sign-in lives on a host the phone cannot reach.
+    entry, signed in by that entry's own door — its admins' (`lan-auth-admins@docker`, the LAN outpost;
+    DGO-1755) — instead of `REMOTE_SIGN_IN`, whose sign-in lives on a host the phone cannot reach. (Its
+    shell's question and way in, `-signed-in` and `-enter`, keep `lan-auth@docker`.)
     """
     if not entries and not framed:
         return None
@@ -619,6 +651,12 @@ def render(entries: list[dict], cat: dict, domain: str = "localhost",
     def door_of(entry_points):
         """The sign-in in front of a form: the LAN entry's own outpost there, authentik's elsewhere."""
         return lan_auth if list(entry_points) == ["lan"] else "authentik@file"
+
+    def remote_door_of(entry_points):
+        """The sign-in in front of a form that REACHES a linked office's app — its admins' (DGO-1755): the door
+        rewrites the caller to the far office's mapped user, so a linked office's app is the office's admins' alone,
+        as the console's own /a/<alias>.<office>/ door holds it. The question and the way in (own_host) stay."""
+        return "lan-auth-admins@docker" if list(entry_points) == ["lan"] else REMOTE_SIGN_IN
 
     def own_host(name, host, entry_points):
         """The two routers of a host whose sign-in a frame cannot show — answered HERE, both of them,
@@ -649,8 +687,8 @@ def render(entries: list[dict], cat: dict, domain: str = "localhost",
         # ── the identity the SERVING office's app will see (DGO-31) ───────────────────────────────
         # Rendered per office, not per app: it is one link, and two apps of the same office must not
         # be reachable under two identities. The header a CLIENT sends is not what makes this safe —
-        # `authentik@file` runs first in the chain and overwrites every `X-authentik-*` with the
-        # answer of THIS office's own outpost, so a forged `X-authentik-username` is already gone
+        # this office's own sign-in (`REMOTE_SIGN_IN`) runs first in the chain and replaces the identity
+        # headers with the answer of THIS office's own outpost, so a forged `X-authentik-username` is already gone
         # before the mapped one is written. The mapping is therefore about the SERVING office's
         # vocabulary (`akadmin` here, the owner there), not about trust.
         ident_users = {entry["identity"].get("to")} if entry["identity"].get("to") else set()
@@ -684,13 +722,13 @@ def render(entries: list[dict], cat: dict, domain: str = "localhost",
                 # answer under — and it is what its own SSO/redirects are built from.
                 ("passHostHeader", True),
             ]))])
-            base_mw = ["authentik@file"] + ([mw_name] if ident_users else [])
+            base_mw = [REMOTE_SIGN_IN] + ([mw_name] if ident_users else [])
             # ── and the name it expects to BE (DGO-32) ────────────────────────────────────────────
             # Passing the client's own Host is right up to the moment the app validates it: the
             # harness this office runs refuses every authority it was not told about (measured:
             # `Host: bina.console.staging…` answers nothing at all, `Host: bina.localhost` answers
             # 200), and the nested console host is not its name. The catalog carries the authority
-            # the serving app answers under, and it is written here — after `authentik@file`, so the
+            # the serving app answers under, and it is written here — after this office's sign-in, so the
             # identity this office establishes is what the app reads its user from.
             own_mw = ""
             if app.get("host"):
@@ -720,7 +758,13 @@ def render(entries: list[dict], cat: dict, domain: str = "localhost",
                 forms.append((f"{svc}-console-lan", f"{tile}.{console_host}.{lan_domain}",
                               ["lan"], lan_port))
             for name, host, entry_points, port in forms:
-                chain = [door_of(entry_points) if m == "authentik@file" else m for m in base_mw]
+                chain = [remote_door_of(entry_points) if m == REMOTE_SIGN_IN else m for m in base_mw]
+                # a served app's https host is a PUBLIC name of this office: it pins https like every
+                # other certificate (DGO-1595). `hsts` is defined by the compiler in zz-https.yaml on
+                # every office; adding it only where an https router exists keeps the other chains
+                # byte-identical.
+                if "websecure" in entry_points and "hsts@file" not in chain:
+                    chain = chain + ["hsts@file"]
                 def router(rule, chain):
                     r = dict([("rule", rule), ("entryPoints", list(entry_points)),
                               ("service", svc), ("middlewares", list(chain))])
@@ -996,7 +1040,7 @@ def selftest() -> list[str]:
                         f"{twins} for {nested}")
     kept = wide.get("dgo-remote-macbook-drive-console") or {}
     if kept.get("entryPoints") != ["web", "websecure"] or "tls" not in kept \
-            or kept.get("middlewares", [None])[0] != "authentik@file":
+            or kept.get("middlewares", [None])[0] != REMOTE_SIGN_IN:
         problems.append(f"the twin is an ADDITION: the `-console` router keeps its entry points, its TLS "
                         f"and its sign-in: {kept}")
     if any(r.get("service") == "noop@internal" for r in (local.get("routers") or {}).values()) \

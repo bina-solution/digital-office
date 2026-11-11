@@ -3,10 +3,10 @@
 set -eu
 cd /t
 cat > host.txt <<'EOF'
-This is the fireplace office recording check. The host is counting now: one, two, three, four, five, six, seven, eight, nine, ten. Fireplace host is done speaking.
+This is the examplef office recording check. The host is counting now: one, two, three, four, five, six, seven, eight, nine, ten. Examplef host is done speaking.
 EOF
 cat > guest.txt <<'EOF'
-Guest speaking now. Alpha, bravo, charlie, delta, echo, foxtrot, golf, hotel, india, juliet. Fireplace guest is done speaking.
+Guest speaking now. Alpha, bravo, charlie, delta, echo, foxtrot, golf, hotel, india, juliet. Examplef guest is done speaking.
 EOF
 # host: speech then 12 s of silence; guest: 12 s of silence then speech (so they mostly alternate)
 ffmpeg -nostdin -y -v error -f lavfi -i "flite=textfile=/t/host.txt:voice=slt" -af "apad=pad_dur=12" -ac 1 -ar 48000 -c:a pcm_s16le host.wav
@@ -19,5 +19,5 @@ mkdir -p /tmp/.X11-unix && chmod 1777 /tmp/.X11-unix
 nohup Xorg -noreset -nolisten tcp +extension RANDR +extension RENDER -logfile /tmp/xorg11.log -config /t/xorg-dummy.conf :11 >/tmp/xorg11.out 2>&1 &
 sleep 3
 ls -la /tmp/.X11-unix/
-curl -sS -o /dev/null -w "meet web: %{http_code}\n" --max-time 10 https://meet.fpg.digital-office.co.il/
+curl -sS -o /dev/null -w "meet web: %{http_code}\n" --max-time 10 https://meet.exf.digital-office.co.il/
 echo SETUP-OK

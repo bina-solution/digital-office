@@ -3,9 +3,9 @@
 # usage: methods.sh "NAME1 NAME2 ..." "METHOD1 METHOD2 ..."     (NAME = s0_mask103 etc.; input data/dmg/NAME.wav)
 # output: data/proc/<method>/<NAME>.wav  (16 kHz mono PCM16)
 set -e
-cd /root/fpgaudio/bench/data && source /root/fpgaudio/venv/bin/activate
-B=/mnt/c/Users/wbolo/AppData/Local/Temp/fpgaudio/bench
-R=/mnt/c/Users/wbolo/AppData/Local/Temp/fpgaudio/restore.py
+cd /root/exfaudio/bench/data && source /root/exfaudio/venv/bin/activate
+B=/mnt/c/Users/user/AppData/Local/Temp/exfaudio/bench
+R=/mnt/c/Users/user/AppData/Local/Temp/exfaudio/restore.py
 POST="highpass=f=80,acompressor=threshold=-28dB:ratio=3:attack=5:release=150:makeup=6,loudnorm=I=-18:TP=-2:LRA=11"
 LN="loudnorm=I=-18:TP=-2:LRA=11"
 F16="-ac 1 -ar 16000 -c:a pcm_s16le"

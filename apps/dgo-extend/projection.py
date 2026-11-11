@@ -51,6 +51,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import re
 import time
 from pathlib import Path
 
@@ -323,11 +324,48 @@ def _rendered(block: list[dict]) -> dict[tuple[str, str], str]:
     return out
 
 
+def _stamp(base: str) -> dict:
+    try:
+        d = json.loads((Path(base) / APPLY_STAMP).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+    return d if isinstance(d, dict) else {}
+
+
 def _last_apply(base: str) -> int:
     try:
-        return int(json.loads((Path(base) / APPLY_STAMP).read_text(encoding="utf-8")).get("at") or 0)
-    except (OSError, ValueError, AttributeError):
+        return int(_stamp(base).get("at") or 0)
+    except (TypeError, ValueError):
         return 0
+
+
+def pending_apply(base: str) -> list[str]:
+    """The apps (`office/alias`) a pass found new while the window held the apply back — or whose apply did
+    not succeed. They wait in the stamp and the first pass after the window applies them, though nothing in
+    the block has changed by then (DGO-1314: a second new app five minutes after the first was dropped, and
+    its tile waited for some later change or a hand-run converge)."""
+    p = _stamp(base).get("pending")
+    return sorted({str(x) for x in p}) if isinstance(p, list) else []
+
+
+#: Applies that failed in a row before what waits on them is held for the next change or a converge.
+APPLY_MAX_FAILED = 3
+
+
+def _failed_applies(base: str) -> int:
+    try:
+        return int(_stamp(base).get("failed") or 0)
+    except (TypeError, ValueError):
+        return 0
+
+
+def _keep_pending(base: str, apps: list[str]) -> None:
+    stamp = _stamp(base)
+    stamp["pending"] = sorted(set(apps))
+    try:
+        (Path(base) / APPLY_STAMP).write_text(json.dumps(stamp, ensure_ascii=False), encoding="utf-8")
+    except OSError:
+        pass
 
 
 def apply_new_remote_apps(cv, home: dict, before: list[dict], after: list[dict],
@@ -348,16 +386,27 @@ def apply_new_remote_apps(cv, home: dict, before: list[dict], after: list[dict],
     port, the block said so, nothing rendered, and the CLI went on dialling the old port from a
     stale registry record). Never because an app went AWAY: that is a tile that lingers until the
     next converge, a far better failure than an unattended loop restarting the office's edge every
-    time a laptop sleeps. And at most once per `APPLY_MIN_SECONDS`.
+    time a laptop sleeps. And at most once per `APPLY_MIN_SECONDS` — what the window holds back is KEPT
+    (`pending_apply`) and applied by the first pass after it.
     """
     was, now = _rendered(before), _rendered(after)
-    gained = sorted(k for k, row in now.items() if was.get(k) != row)
+    changed = {f"{o}/{a}" for (o, a), row in now.items() if was.get((o, a)) != row}
+    waiting = set(pending_apply(base))
+    gained = sorted(changed | waiting)
     if not gained:
         return {"ran": False, "reason": "no new or changed remote app"}
+    failed = _failed_applies(base)
+    if not changed and failed >= APPLY_MAX_FAILED:
+        # what waits only because the apply FAILED is not asked again for ever: every try recompiles and recreates
+        # the link's sidecar, and a failure that does not clear by itself became a restart of the link every ten
+        # minutes (the second reader, DGO-1314). The next change, or a converge, applies it.
+        return {"ran": False, "reason": f"held: the last {failed} applies failed — the next change or a converge "
+                                        f"applies it", "pending": gained}
     since = int(time.time()) - _last_apply(base)
     if since < APPLY_MIN_SECONDS:
-        return {"ran": False, "reason": f"applied {since}s ago", "pending": [f"{o}/{a}" for o, a in gained]}
-    return apply_now(cv, [f"{o}/{a}" for o, a in gained], base, timeout)
+        _keep_pending(base, gained)
+        return {"ran": False, "reason": f"applied {since}s ago", "pending": gained}
+    return apply_now(cv, gained, base, timeout)
 
 
 def apply_now(cv, new: list[str], base: str = DEFAULT_DIR, timeout: int = 420) -> dict:
@@ -373,6 +422,12 @@ def apply_now(cv, new: list[str], base: str = DEFAULT_DIR, timeout: int = 420) -
         r = {"error": f"the control plane did not answer ({type(e).__name__})"}
     report = {"ran": True, "at": int(time.time()), "new": new,
               "ok": bool(r.get("ok")), "tail": str(r.get("error") or "")[-400:]}
+    if not report["ok"]:
+        # an apply that failed is tried again after the window, not dropped — with whatever was already
+        # waiting (an unpairing's apply names no app) — up to APPLY_MAX_FAILED times in a row. One that succeeded
+        # compiled the whole block: nothing waits, and the count starts again.
+        report["pending"] = sorted(set(new) | set(pending_apply(base)))
+        report["failed"] = _failed_applies(base) + 1
     try:
         (Path(base) / APPLY_STAMP).write_text(json.dumps(report, ensure_ascii=False),
                                               encoding="utf-8")
@@ -617,6 +672,159 @@ def _pull_one(cv, links, base: str, a: dict, app: str, iid: str, me: str, oid: s
     return {"instance": iid, "ok": True, "changed": changed}
 
 
+SECRET_PULL_SECONDS = 600
+_secret_pulls: dict = {}
+#: a vault instance id, `<protocol>-<suffix>` — the holder's app.py checks the same shape
+_SECRET_ID_RE = re.compile(r"[a-z][a-z0-9_]{1,40}-[a-z0-9][a-z0-9_.\-]{0,62}")
+
+
+def taken_secrets(oid: str) -> list[str]:
+    """What THIS office takes from `oid` — named one by one in its own .env, `DGO_TAKE_SECRETS=<office>=<instance>`.
+
+    BOTH ends decide (the second reader, DGO-1330): the holder names what it gives (DGO_SERVE_SECRETS), and the
+    puller names what it lets into its vault. A holder alone must never choose what lands here — not an id, not
+    a protocol, not how many: a compromised peer could otherwise plant a link row or replace an agent's address."""
+    out = []
+    for word in re.split(r"[,\s]+", os.environ.get("DGO_TAKE_SECRETS") or ""):
+        who, _, iid = word.strip().partition("=")
+        iid = iid.strip()
+        if who.strip().lower() == oid.lower() and _SECRET_ID_RE.fullmatch(iid) and iid not in out:
+            out.append(iid)
+    return out
+
+
+def _is_copy_of(row: dict, oid: str) -> bool:
+    """A row this office holds AS A COPY from `oid`: its hint says so; never a link's own row."""
+    import links
+    return f"from:{oid}" in str(row.get("account_hint") or "") and row.get("protocol") != links.PROTOCOL \
+        and not str(row.get("id") or "").startswith(links.PROTOCOL)
+
+
+def pull_secrets(cv, home: dict, oid: str, url: str, now: float | None = None) -> dict:
+    """Take, over the link, every secret `oid` gives this office (its DGO_SERVE_SECRETS), into THIS vault
+    (DGO-1330, «סודות תמיד במק»). The holder answers through the pair's control listener with the same three
+    checks as an agent's credential (app.api_link_secret). A copy keeps its id, protocol and label — what an app
+    here looks it up by — and carries `office` in its secret, which is what marks it a copy: a row of this
+    office's own by that id is never replaced, and a copy the holder no longer gives is removed. `{id: {ok,
+    changed|reason}}`; never raises."""
+    import links
+    now = time.time() if now is None else now
+    if now < _secret_pulls.get(oid, 0):
+        return {}
+    _secret_pulls[oid] = now + SECRET_PULL_SECONDS
+    me = str(home.get("id") or "local")
+    try:
+        pair = links.pair_tokens(me, oid)
+    except links.LinkError as e:
+        return {"*": {"ok": False, "reason": str(e)}}
+    if not pair:
+        return {"*": {"ok": False, "reason": f"no secret for the pair with {oid} in this vault"}}
+    base = url.rsplit("/api/link/catalog", 1)[0]
+
+    def ask(path: str) -> dict:
+        doc = {}
+        for _name, secret in pair:                           # a stale pair secret is refused; try the next
+            doc = cv._http_auth("GET", f"{base}{path}", secret, timeout=FETCH_TIMEOUT * 3)
+            doc = doc if isinstance(doc, dict) else {}
+            if int(doc.get("_status", 200) or 0) != 403 or doc.get("code"):
+                break
+        return doc
+
+    try:
+        listed = ask("/api/link/secrets")
+    except Exception as e:                                   # noqa: BLE001 — a peer's failure is a state, never the pass
+        return {"*": {"ok": False, "reason": f"{type(e).__name__}: {e}"}}
+    if int(listed.get("_status", 200) or 0) != 200:
+        return {"*": {"ok": False, "reason": f"HTTP {listed.get('_status')}: {listed.get('error') or 'no list'}"}}
+    offered = {str(i) for i in (listed.get("secrets") or []) if isinstance(i, str)}
+    # only what BOTH ends name: the holder's list is an offer, this office's DGO_TAKE_SECRETS the acceptance
+    given = [iid for iid in taken_secrets(oid) if iid in offered]
+    out = {}
+    for iid in given:
+        try:
+            out[iid] = _take_secret(links, ask, iid, oid, me)
+        except Exception as e:                               # noqa: BLE001 — one secret is not the pass
+            out[iid] = {"ok": False, "reason": f"{type(e).__name__}: {e}"}
+    # what `oid` no longer gives (or this office no longer takes) goes: a copy marked as ITS, never a row of this office
+    try:
+        rows = links._call("GET", "/api/instances").get("instances") or []
+    except links.LinkError:
+        rows = []
+    for r in rows:
+        rid = str(r.get("id") or "")
+        if rid and rid not in given and _is_copy_of(r, oid):
+            try:
+                if links.forget(rid, oid):
+                    out[rid] = {"ok": True, "dropped": True}
+                    log.info("%s no longer gives %s: the copy here was removed", oid, rid)
+            except links.LinkError as e:
+                out[rid] = {"ok": False, "reason": str(e)}
+    return out
+
+
+def _take_secret(links, ask, iid: str, oid: str, me: str) -> dict:
+    doc = ask(f"/api/link/secret/{iid}")
+    status = int(doc.get("_status", 200) or 0)
+    secret = doc.get("secret") if status == 200 else None
+    protocol = str(doc.get("protocol") or "")
+    if not isinstance(secret, dict) or not secret or not protocol:
+        return {"ok": False, "reason": f"HTTP {status}: {doc.get('error') or 'no secret'}"}
+    # the holder does not choose what kind of row lands here: the id is the vault's shape and of its own protocol,
+    # and nothing link-shaped — a planted `dgo_link` row would steer this office's agents (the second reader, F1)
+    if not _SECRET_ID_RE.fullmatch(iid) or not iid.startswith(protocol + "-") \
+            or protocol == links.PROTOCOL or iid.startswith(links.PROTOCOL):
+        return {"ok": False, "reason": f"{iid} ({protocol}) is not a secret this office keeps a copy of"}
+    try:
+        rows = links._call("GET", "/api/instances").get("instances") or []
+        row = next((r for r in rows if r.get("id") == iid), None)
+        have = links._call("GET", f"/api/instances/{iid}/secret").get("secret") or {} if row else None
+    except links.LinkError as e:
+        if e.status != 404:
+            raise
+        row, have = None, None
+    if row is not None and (not _is_copy_of(row, oid) or str((have or {}).get("office") or "") != oid
+                            or row.get("protocol") != protocol):
+        # this office's OWN row by that id — its master, an agent credential, another office's copy: never
+        # replaced by a pull, whatever its secret says (the second reader, F2)
+        return {"ok": False, "reason": f"{iid} here is not a copy from {oid} — kept as it is"}
+    if not links.pair_tokens(me, oid):                       # unpaired while asking: keep nothing of it
+        return {"ok": False, "reason": f"the pair with {oid} is gone"}
+    copy = {**secret, "office": oid}
+    hint = f"{str(doc.get('account_hint') or '').strip()} · from:{oid}".strip(" ·")
+    if row is None:
+        links._call("POST", "/api/instances", {"id": iid, "protocol": protocol,
+                                               "label": doc.get("label") or iid, "account_hint": hint,
+                                               "secret": copy})
+        log.info("%s's secret %s is in this vault (a copy)", oid, iid)
+        return {"ok": True, "changed": True}
+    if {k: v for k, v in have.items()} == copy:
+        return {"ok": True, "changed": False}
+    links._call("PUT", f"/api/instances/{iid}/secret", {"secret": copy, "replace": True})
+    return {"ok": True, "changed": True}
+
+
+def forget_secrets(oid: str) -> list[str]:
+    """An unpaired office's copies go, and its pull is asked again at once on a new pair (the second reader, F3):
+    after an unpair `pull_secrets` is never called for it again, so its own sweep would never run."""
+    import links
+    _secret_pulls.pop(oid, None)
+    gone = []
+    try:
+        rows = links._call("GET", "/api/instances").get("instances") or []
+    except links.LinkError as e:
+        log.warning("the secret copies of %s were not listed: %s", oid, e)
+        return gone
+    for r in rows:
+        rid = str(r.get("id") or "")
+        if rid and _is_copy_of(r, oid):
+            try:
+                if links.forget(rid, oid):
+                    gone.append(rid)
+            except links.LinkError as e:
+                log.warning("the copy %s of %s was not removed: %s", rid, oid, e)
+    return gone
+
+
 def forget_agents(oid: str) -> None:
     """An unpaired office's pulls are forgotten, so a pair made again is asked on the next pass."""
     for key in [k for k in list(_agent_pulls) if k[0] == oid]:   # the projection thread may add keys meanwhile
@@ -690,7 +898,7 @@ def sync(cv, base: str = DEFAULT_DIR, replan=None) -> dict:
     offices = [o for o in cv.declarations() if o.get("id") != home.get("id")]
     plan = own_plan(home, base)
     hidden = load_exclude(base)
-    pulled, errors, agents = {}, {}, {}
+    pulled, errors, agents, secrets = {}, {}, {}, {}
     for peer in peers(home, offices):
         oid = peer["office"]
         # ONE LISTENER PER PAIR, so the URL is per PEER: `catalog_url` with the pair's own control port
@@ -711,6 +919,7 @@ def sync(cv, base: str = DEFAULT_DIR, replan=None) -> dict:
             catalog.store(base, got["catalog"])
             agents[oid] = pull_agents(cv, home, oid, got["catalog"], url,
                                       address=str((plan.get(oid) or {}).get("address") or ""))
+            secrets[oid] = pull_secrets(cv, home, oid, url)
         else:
             errors[peer["office"]] = got.get("error") or "לא התקבל קטלוג"
     proxy = None
@@ -759,7 +968,9 @@ def sync(cv, base: str = DEFAULT_DIR, replan=None) -> dict:
         written = write_state(cv, [])
     elif block:
         written = write_state(cv, block)
-    if written.get("written"):
+    if written.get("written") or pending_apply(base):
+        # …or an app an earlier pass found while the window held the apply back: the block is unchanged
+        # by now, so nothing else would ever apply it (DGO-1314)
         applied = apply_new_remote_apps(cv, home, have, block, base)
     return {"at": int(time.time()), "home": home.get("id"),
             "url": catalog_url(home, port=int((plan.get(mine[0]["office"]) or {}).get("control") or 0))
@@ -768,6 +979,7 @@ def sync(cv, base: str = DEFAULT_DIR, replan=None) -> dict:
             "peers": [p["office"] for p in mine],
             "pulled": sorted(pulled), "stored": sorted(stored), "errors": errors,
             "agents": {o: a for o, a in agents.items() if a},
+            "secrets": {o: s for o, s in secrets.items() if s},
             "hidden": hidden,
             "block": [{"office": e["office"], "apps": [a["alias"] for a in e["apps"]]} for e in block],
             # The block this pass WANTS declared, whole — beside what it managed to write. When the

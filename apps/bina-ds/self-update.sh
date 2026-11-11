@@ -20,13 +20,14 @@
 # It runs the image bina-ds is running NOW — the one known to work — never the new build, so a
 # broken build cannot break its own rollback.
 #
-# RESUMING CONVERSATIONS. Two changes after 2026-10-09, when an update applied on the MAX_WAIT
-# deadline cut a live turn and hours of work stopped there: (1) the wait is for a real free moment and
-# not for a clock — past MAX_WAIT the helper says it is waiting and keeps waiting, with ONE bound
+# CONVERSATIONS AN UPDATE CUTS. After 2026-10-09, when an update applied on the MAX_WAIT deadline cut
+# a live turn and hours of work stopped there: (1) the wait is for a real free moment and not for a
+# clock — past MAX_WAIT the helper says it is waiting and keeps waiting, with ONE bound
 # (BINA_DS_SELF_UPDATE_FORCE_AFTER, 10800 by the office's decision) so a goal that never idles cannot
-# hold an update for ever; (2) whoever WAS mid-turn is snapshotted before the recreate and told to
-# carry on (`bbox agent send`) once the new image is healthy — which is what makes that bound cost a
-# turn's tail and not its work. The owner no longer has to reopen anything.
+# hold an update for ever; (2) whoever WAS mid-turn is snapshotted before the recreate and NAMED, each
+# with its link, in a notice of its own once the new image is healthy. No conversation is told to
+# carry on: the owner's rule is that no session continues itself (DGO-1792), so a person reopens the
+# one he wants to go on. Telling them about the update is BINA_DS_SELF_UPDATE_RESUME=send, by name only.
 set -euo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -49,9 +50,9 @@ MAX_WAIT="${BINA_DS_SELF_UPDATE_MAX_WAIT:-3600}"
 # predicate above is honest but it is not a promise that a free moment arrives: measured over 115
 # turns of a live goal session, the gap between one round and the next is 0.0–1.2 s (median 0.1 s), so
 # an office whose goals keep producing rounds can hold an update for a day. Past this bound the update
-# LANDS, and `resume_sessions` is what brings the conversations back — the half that exists precisely
-# so the bound costs a turn's tail instead of its work. Between rounds nothing is cut; at the bound
-# the clock decides, loudly, and the log says so. 0 = never (a deployment that wants to wait).
+# LANDS and cuts the turns running then; `resume_sessions` names each of them, with its link, in a
+# notice — none is continued by itself. Between rounds nothing is cut; at the bound the clock
+# decides, loudly, and the log says so. 0 = never (a deployment that wants to wait).
 FORCE_AFTER="${BINA_DS_SELF_UPDATE_FORCE_AFTER:-10800}"
 # BBOX_UPDATE_NOW=1 — this is an EXPLICIT update (`bbox update bina-ds`, from the host or from inside),
 # so it does not hold for the deployment's own bound. It is PATIENT, not instant: the bound drops to
@@ -116,15 +117,18 @@ current_container() {
 }
 
 # One upsert-style notification (same source_id → the same row is updated, never piled up).
+# A notice is updated in place by (source, source_id), so the door's own progress notices share one
+# key and each replaces the last. A notice that must SURVIVE the next one (the list of conversations
+# an update cut) passes its own key as $4, and its own link as $5.
 notify() {
-  local level="$1" title="$2" body="$3"
+  local level="$1" title="$2" body="$3" key="${4:-self-update}" link="${5:-/go/bina}"
   command -v curl >/dev/null 2>&1 || return 0
-  python3 - "$level" "$title" "$body" <<'PY' | curl -fsS -m 10 -H 'Content-Type: application/json' \
+  python3 - "$level" "$title" "$body" "$key" "$link" <<'PY' | curl -fsS -m 10 -H 'Content-Type: application/json' \
       --data-binary @- http://notifications:8977/api/notifications >/dev/null 2>&1 || true
 import json, sys
-level, title, body = sys.argv[1:4]
-print(json.dumps({"source": "bina-ds", "source_id": "self-update", "level": level,
-                  "title": title, "body": body, "link": "/#/m/bina"}, ensure_ascii=False))
+level, title, body, key, link = sys.argv[1:6]
+print(json.dumps({"source": "bina-ds", "source_id": key, "level": level,
+                  "title": title, "body": body, "link": link}, ensure_ascii=False))
 PY
 }
 
@@ -308,7 +312,7 @@ agent_api_url() {   # $1 container id
 # between one round's turn and the next is 0.0–1.2 s, median 0.1 s. So a goal that keeps producing
 # rounds reads `running` on nearly every sample — that is the truth, not a bug in this predicate —
 # and the deliberate override (BINA_DS_SELF_UPDATE_FORCE_AFTER) remains the only way to land an
-# update through one; `resume_sessions` is what brings those turns back.
+# update through one; `resume_sessions` names the turns it cut.
 turns_running() {   # $1 container id → the number of conversations running a turn, or a failed status
   local cid="$1" t json url="${BINA_DS_SELF_UPDATE_API_URL:-}"
   t="$(cat "${API_TOKEN_FILE:-/data/dsh/api-token}" 2>/dev/null || true)"
@@ -344,20 +348,27 @@ busy_reason() {
 }
 
 # WHO WAS WORKING, snapshotted BEFORE the container goes: a session log written in the last few
-# seconds belongs to a conversation that is mid-turn. After the new image is healthy these are told to
-# carry on by themselves — the half this file used to leave to a person, and the reason an update can
-# no longer cost hours of work (measured 2026-10-09: one applied mid-turn and the work stopped there).
+# seconds belongs to a conversation that is mid-turn. After the new image is healthy these are NAMED,
+# each with its link, so a person can reopen the one he wants (measured 2026-10-09: one update applied
+# mid-turn and the work stopped there, and nobody knew which). They used to be told to carry on, and to
+# re-arm their goals, by themselves; the owner's rule is that no session continues itself (DGO-1792).
 #
-# A RESTART ALSO DISARMS EVERY GOAL, and nothing puts that back by itself: the goal service keeps the
-# continuation authority ("activation") in the PROCESS — `agent/created` sets it to `disarmed` and
-# only an explicit `resume` arms it again (apps/bina-ds/harness's own goal service, read 2026-10-09).
-# A conversation whose goal was armed therefore comes back able to do ONE turn and then sits still,
-# which is the office going quiet by another route — so the resume sentence names the command.
+# A RESTART ALSO DISARMS EVERY GOAL: the goal service keeps the continuation authority ("activation")
+# in the PROCESS — `agent/created` sets it to `disarmed` and only an explicit `resume` arms it again
+# (apps/bina-ds/harness's own goal service, read 2026-10-09). That is now the intended end state: a
+# goal comes back only when a person resumes it.
 #
-# IT IS SENT OVER THE NETWORK, not over loopback: `bbox agent` in here addresses the container's API
+# THE SEND (BINA_DS_SELF_UPDATE_RESUME=send only) GOES OVER THE NETWORK, not over loopback: `bbox agent` in here addresses the container's API
 # by `BBOX_AGENT_URL`, which cmd_launch passes (agent_api_url) — the helper's own 127.0.0.1 is its
 # own, and without that the send answered "provider unreachable" for every conversation (2026-10-09).
 LIVE_WINDOW="${BINA_DS_SELF_UPDATE_LIVE_WINDOW:-180}"
+# WHAT HAPPENS TO A CONVERSATION AN UPDATE CUT MID-TURN. The owner's rule: no session continues itself
+# (issues/after-every-bina-ds-update-the-harness-tells-recent-sessions-to-continue-and-re-arm-their-goals.yaml).
+#   notify (the default) — one notice names every conversation that was cut; none is sent a turn. A person who wants
+#                          one to go on writes to it.
+#   send   — an EXPLICIT setting only: each cut conversation is also told that the update happened and where its own
+#            log is. It is never told to continue without approval, and never to re-arm a goal.
+RESUME_MODE="${BINA_DS_SELF_UPDATE_RESUME:-notify}"
 
 live_sessions() {
   # The DIRECTORY name IS the session id (`session-<uuid>`) and it is passed through untouched.
@@ -370,29 +381,44 @@ live_sessions() {
 }
 
 resume_sessions() {
-  local ids="$1" id sent=0 total=0
-  if [ -z "${ids}" ]; then log "no conversation was mid-turn; nothing to resume"; return 0; fi
+  local ids="$1" id sent=0 total=0 first="" links=""
+  if [ -z "${ids}" ]; then log "no conversation was mid-turn; nothing was cut"; return 0; fi
+  for id in ${ids}; do
+    total=$(( total + 1 )); [ -n "${first}" ] || first="${id}"
+    links="${links}/go/bina?s=${id} "
+  done
+  # ITS OWN KEY, ONE PER UPDATE: the door's «updated and healthy» notice follows a second later on the
+  # door's key, and a notice on the same key is replaced — the list of cut conversations was the one
+  # thing the owner needed and it was gone before he could read it. Each item links to its conversation
+  # in the ONE form a person is given (G95, platform-base/console/links.py): `/go/bina?s=<id>`, which the
+  # console resolves at click time to the shell's route for that conversation and keeps past the sign-in.
+  local key="self-update-cut-$(date -u +%Y%m%dT%H%M%SZ)" link="/go/bina?s=${first}"
+  if [ "${RESUME_MODE}" != "send" ]; then
+    log "${total} conversation(s) were mid-turn; RESUME_MODE=${RESUME_MODE}: named in a notice, none sent a turn"
+    notify info "בינה עודכנה — ${total} שיחות נחתכו באמצע" \
+      "השיחות שהיו בעבודה כשהקונטיינר הוחלף: ${links}— אף אחת לא קיבלה הוראה להמשיך. מי שרוצה שאחת מהן תמשיך פותח אותה בקישור וכותב לה." \
+      "${key}" "${link}"
+    return 0
+  fi
   # WAIT FOR THE API, NOT FOR DOCKER. The container being healthy is Docker's opinion of the
   # healthcheck, and it lands BEFORE the harness starts listening on 3081 — measured 2026-10-09 on the
-  # first real recreate: two sends died with `[Errno 111] Connection refused`, and the sessions were
-  # only brought back later by the office pulse's wake queue. A resume that fails silently is worse
-  # than no resume, because it looks like the conversation was returned. Bounded: if the API never
-  # answers, say so and let the wake queue be the backstop.
+  # first real recreate: two sends died with `[Errno 111] Connection refused`. A send that fails
+  # silently is worse than none, because it reads as if the conversation was told. Bounded: if the
+  # API never answers, try anyway, and the notice below says how many were told.
   local waited=0
   until curl -s -o /dev/null --max-time 5 http://127.0.0.1:3081/v1/health 2>/dev/null; do
     if [ "${waited}" -ge 90 ]; then
-      log "the agent API did not answer within 90s — resuming anyway (the pulse's wake queue is the backstop)"
+      log "the agent API did not answer within 90s — sending anyway; the notice says how many were told"
       break
     fi
     sleep 5; waited=$(( waited + 5 ))
   done
   for id in ${ids}; do
-    total=$(( total + 1 ))
     if ( cd "${REPO}" && ./bbox agent send "${id}" \
-         "העדכון של בינה הוחל והקונטיינר הוחלף בזמן שעבדת — המשך מהנקודה שבה היית, ואל תמתין לאישור. אם הסבב שלך נחתך באמצע: יומן השיחה שלך, עם כל הצעד האחרון שנעשה, נמצא ב-\"/data/dsh/sessions/*/${id}/session.v3.jsonl.zstd\" (בפנים: zstd -dc <file> | tail -40) — קרא אותו לפני שאתה מניח מה כבר נעשה, ואל תחזור על עבודה שכבר נכתבה. אם הייתה לך מטרה פעילה (goal): ההפעלה מחדש שחררה את ההמשך האוטומטי שלה, וצריך לחמש אותה מחדש — bbox agent goal ${id} resume — ואז להמשיך בלולאה." ) >>"${LOG}" 2>&1; then
-      sent=$(( sent + 1 )); log "resumed conversation ${id} after the restart"
+         "העדכון של בינה הוחל והקונטיינר הוחלף בזמן שעבדת, והסבב שלך אולי נחתך באמצע. יומן השיחה שלך, עם הצעד האחרון שנעשה, נמצא ב-\"/data/dsh/sessions/*/${id}/session.v3.jsonl.zstd\" (בפנים: zstd -dc <file> | tail -40) — קרא אותו לפני שאתה מניח מה כבר נעשה. אל תמשיך בעבודה ואל תחמש מטרה (goal) מחדש בעצמך: חכה להוראה מאדם." ) >>"${LOG}" 2>&1; then
+      sent=$(( sent + 1 )); log "told conversation ${id} that the update cut it (it waits for a person)"
     else
-      log "could not resume conversation ${id} (bbox agent send failed)"
+      log "could not tell conversation ${id} (bbox agent send failed)"
     fi
   done
   # THE NOTICE SAYS WHAT ACTUALLY HAPPENED. It used to fire on `sent > 0` alone: one resumed
@@ -400,13 +426,17 @@ resume_sessions() {
   # nothing at all — a resume that fails quietly is worse than no resume, because it reads as if the
   # work came back (measured 2026-10-09, four sends refused and the owner told otherwise).
   if [ "${sent}" -eq 0 ]; then
-    notify error "בינה חזרה, אבל השיחות לא קיבלו הוראה להמשיך" \
-      "${total} שיחות היו בעבודה כשהקונטיינר הוחלף ואף אחת מהן לא קיבלה הודעה (bbox agent send נכשל). הן ימשיכו רק כשמישהו יכתוב להן. פרטים: ${LOG#"${REPO}/"}"
+    notify error "בינה חזרה, אבל השיחות לא קיבלו הודעה על העדכון" \
+      "${total} שיחות היו בעבודה כשהקונטיינר הוחלף ואף אחת מהן לא קיבלה הודעה (bbox agent send נכשל): ${links}— הן ימשיכו רק כשמישהו יכתוב להן. פרטים: ${LOG#"${REPO}/"}" \
+      "${key}" "${link}"
   elif [ "${sent}" -lt "${total}" ]; then
-    notify warn "בינה חזרה — ${sent} מתוך ${total} שיחות ממשיכות לבד" \
-      "השאר לא קיבלו הודעה (bbox agent send נכשל). פרטים: ${LOG#"${REPO}/"}"
+    notify warn "בינה חזרה — ${sent} מתוך ${total} שיחות קיבלו הודעה על העדכון" \
+      "השיחות שנחתכו: ${links}— השאר לא קיבלו הודעה (bbox agent send נכשל). פרטים: ${LOG#"${REPO}/"}" \
+      "${key}" "${link}"
   else
-    notify info "בינה חזרה — והשיחות ממשיכות לבד" "${sent} שיחות שהיו בעבודה קיבלו הוראה להמשיך מאליהן."
+    notify info "בינה חזרה — ${sent} שיחות קיבלו הודעה על העדכון" \
+      "השיחות שנחתכו: ${links}— כל אחת קיבלה הודעה שהעדכון הוחל, והיא מחכה להוראה (BINA_DS_SELF_UPDATE_RESUME=send)." \
+      "${key}" "${link}"
   fi
   return 0
 }
@@ -442,10 +472,10 @@ wait_quiet() {
     # `{"kind":"interrupted"}` — hours of work stopped there for no reason but the clock. Past
     # MAX_WAIT the update SAYS it is waiting and keeps waiting; the bound that may land it anyway is
     # FORCE_AFTER (10800 = three hours by the office's decision; 0 = never), and what it costs is
-    # paid back by resume_sessions.
+    # named: resume_sessions lists the cut conversations in a notice, each with its link.
     if [ "${FORCE_AFTER}" -gt 0 ] && [ "${waited}" -ge "${FORCE_AFTER}" ]; then
-      log "office still busy after ${waited}s (${reason}) — FORCE_AFTER=${FORCE_AFTER}s says apply now; the conversations that are mid-turn come back through resume_sessions"
-      # WHAT IT COSTS, NAMED IN THE LOG BEFORE IT IS PAID. `resume_sessions` reports what came BACK;
+      log "office still busy after ${waited}s (${reason}) — FORCE_AFTER=${FORCE_AFTER}s says apply now; the turns running now are cut and named in a notice (none is continued)"
+      # WHAT IT COSTS, NAMED IN THE LOG BEFORE IT IS PAID. `resume_sessions` names them after;
       # without this line nothing anywhere said which conversation a restart threw a turn away from —
       # 2026-10-14 09:23 was read out of the session logs after the fact, not off the door's own file.
       log "the apply will CUT the turns running now: $(live_sessions | tr '\n' ' ')"
@@ -453,7 +483,7 @@ wait_quiet() {
     fi
     if [ "${waited}" -ge "${MAX_WAIT}" ] && [ $(( waited - long_said )) -ge 1800 ]; then
       log "office still busy after ${waited}s (${reason}) — waiting for a free moment; if none comes, FORCE_AFTER=${FORCE_AFTER}s lands it (0 would wait for ever)"
-      notify warn "עדכון של בינה ממתין לעבודה" "העדכון נבנה ואינו מוחל כל עוד סוכן עובד (${reason}). הוא יוחל בחלון השקט הבא, ואם לא יגיע — עד ${FORCE_AFTER} שניות מההתחלה, והשיחות שעבדו חוזרות מעצמן."
+      notify warn "עדכון של בינה ממתין לעבודה" "העדכון נבנה ואינו מוחל כל עוד סוכן עובד (${reason}). הוא יוחל בחלון השקט הבא, ואם לא יגיע — עד ${FORCE_AFTER} שניות מההתחלה. שיחה שתיחתך באמצע תופיע ברשימה עם קישור אליה; אף אחת לא ממשיכה מעצמה."
       long_said="${waited}"
     fi
     if [ $(( waited - said )) -ge 600 ] && [ "${waited}" -lt "${MAX_WAIT}" ]; then
@@ -528,7 +558,7 @@ EOF
     -e TZ="${TZ:-Asia/Jerusalem}" -e BINA_DS_SELF_UPDATE_DELAY="${DELAY}" \
     -e BINA_DS_SELF_UPDATE_HEALTH_TIMEOUT="${HEALTH_TIMEOUT}" \
     -e BINA_DS_SELF_UPDATE_QUIET="${QUIET_S}" -e BINA_DS_SELF_UPDATE_MAX_WAIT="${MAX_WAIT}" \
-    -e BINA_DS_SELF_UPDATE_FORCE_AFTER="${FORCE_AFTER}" \
+    -e BINA_DS_SELF_UPDATE_FORCE_AFTER="${FORCE_AFTER}" -e BINA_DS_SELF_UPDATE_RESUME="${RESUME_MODE}" \
     --entrypoint bash "${prev}" "${REPO}/apps/bina-ds/self-update.sh" apply "${prev}" "${verb}" "$@" \
     >/dev/null
   log "handed off: '${verb} ${*}' of bina-ds to ${HELPER} (previous image ${prev:7:12})"
@@ -591,7 +621,7 @@ cmd_apply() {
   if wait_healthy; then
     # Healthy is not applied. When the dry run said Recreate (`nothing_to_apply` sets PLAN_RECREATE),
     # the container answering now must be a NEW one; the old id still answering is the replacement
-    # that did not happen (wbc-vps, 2026-10-07: two updates said «ok» while the office kept the old
+    # that did not happen (exw-vps, 2026-10-07: two updates said «ok» while the office kept the old
     # one). The container, not the image: a `.env` change recreates bina-ds on the same image. A plan
     # of Start or Restart keeps the id, and a dry run that failed promised nothing — neither is asked.
     if [ "${verb}" != restart ] && [ "${PLAN_RECREATE:-0}" = 1 ] && [ -n "${cid}" ] \
@@ -603,8 +633,8 @@ cmd_apply() {
     log "ok: bina-ds healthy on image $(docker inspect -f '{{.Image}}' "$(current_container)" | cut -c8-19)"
     wait_api_ready "$(current_container)" || true    # the agent API is a sibling that can be seconds
     resume_sessions "${live}"                        # behind the harness the health check probes
-    notify info "בינה עודכנה והופעלה מחדש" "העדכון הוחל ובינה תקינה."   # resume_sessions reports how
-    return 0                                                          # many conversations came back
+    notify info "בינה עודכנה והופעלה מחדש" "העדכון הוחל ובינה תקינה."   # the cut list keeps its own
+    return 0                                                          # notice (its own key)
   fi
   log_harness_tail
   [ "${verb}" = restart ] && { notify error "בינה לא חזרה אחרי הפעלה מחדש" "השורות האחרונות מיומן בינה:

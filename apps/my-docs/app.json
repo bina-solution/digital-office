@@ -6,6 +6,7 @@
   },
   "layer": 3,
   "kind": "service",
+  "page": "documents",
   "version": "1.0.0",
   "summary": {
     "he": "המסמכים העסקיים שלך — חשבוניות ומסמכים",

@@ -7,7 +7,7 @@ from urllib.parse import urlparse
 
 port, expr = int(sys.argv[1]), sys.argv[2]
 targets = json.load(urllib.request.urlopen(f"http://127.0.0.1:{port}/json", timeout=10))
-pages = [t for t in targets if t.get("type") == "page" and "meet.fpg" in t.get("url", "")]
+pages = [t for t in targets if t.get("type") == "page" and "meet.exf" in t.get("url", "")]
 if not pages:
     sys.exit("no meeting page: " + ", ".join(t.get("url", "")[:60] for t in targets))
 u = urlparse(pages[0]["webSocketDebuggerUrl"])

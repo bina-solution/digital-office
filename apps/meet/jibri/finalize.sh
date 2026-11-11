@@ -12,15 +12,15 @@
 # and 21 minutes were recorded silent with nobody in the room to notice). The workflow writes them on
 # the meeting's item. {"noise_db", "min_seconds", "duration", "stretches": [[start, end], …]}, seconds.
 #
-# …and <room>_<time>.holes.json: the damage fpg103/fpg104 had (fireplace, 2026-10-26: a recorder starved of CPU
+# …and <room>_<time>.holes.json: the damage exf103/exf104 had (examplef, 2026-10-26: a recorder starved of CPU
 # filled ~40 % of every second with digital zeros, 30-75 ms at a time, and the file looked whole). Real sound —
 # a quiet room included — is never exactly zero; a capture that missed its deadline is. So: every stretch of
 # 20 ms to 2 s below -91 dBFS (under one 16-bit step). Longer stretches are everyone muted, not damage (and the
-# silence.json above has the minute-long ones). Measured: a healthy 20-minute ten-person test 0 runs; fpg103
+# silence.json above has the minute-long ones). Measured: a healthy 20-minute ten-person test 0 runs; exf103
 # 471 runs, 414 s. {"noise_db", "min_seconds", "max_seconds", "duration", "runs", "seconds", "pct", "long_runs"}.
 # meet-start tells the owner when pct ≥ 1 (start/server.py, the meetings' watch).
 #
-# …and first, an mp4 with no index is rebuilt (MEET-48, fireplace 2026-11-01: the server froze on memory,
+# …and first, an mp4 with no index is rebuilt (MEET-48, examplef 2026-11-01: the server froze on memory,
 # Jibri's graceful stop timed out and killed ffmpeg, 137 — the file kept its media and no moov, and this
 # script found «moov atom not found» and wrote nothing). meet-rebuild-moov.py (tools/restore/rebuild_moov.py)
 # reads the media itself, with a healthy recording beside it for the codecs' configuration; the original

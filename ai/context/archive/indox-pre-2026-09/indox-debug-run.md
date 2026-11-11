@@ -15,11 +15,11 @@ One webhook entry, registry-driven, routed `indox api → sync api → sync sour
 Key ids: `SyncApi0000000001` (sync api), `SyncSource000001` (sync source), `indoxApiRouter01`, `IndoxResetFull01`(IndoxResetFull01)→`IndoxResetDrv001`/`IndoxResetGml001`, `driveApi01`, `gmailApiRouter01`. Registry: `settings.sync_registry` (5 syncs: drive-gdoc, drive-bs, gmail-doc, gmail-bs, gmail-link).
 
 ## The run
-All commands run from repo root. SB = `docker exec supabase-db-shlomo-laptop psql -U postgres -d postgres -tAc`. n8n DB = `docker exec n8n-postgres-shlomo-laptop sh -lc 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -tAc "…"'`. Redis needs `-a $REDIS_PASSWORD`.
+All commands run from repo root. SB = `docker exec supabase-db-owner-laptop psql -U postgres -d postgres -tAc`. n8n DB = `docker exec n8n-postgres-owner-laptop sh -lc 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -tAc "…"'`. Redis needs `-a $REDIS_PASSWORD`.
 
 ### 1. RESET (always start here)
 ```
-docker exec n8n-shlomo-laptop sh -lc 'wget -qO- --header="Content-Type: application/json" --post-data="{\"INLINE_ACTION\":\"RESET\"}" --timeout=600 http://localhost:5678/webhook/indox-manage'
+docker exec n8n-owner-laptop sh -lc 'wget -qO- --header="Content-Type: application/json" --post-data="{\"INLINE_ACTION\":\"RESET\"}" --timeout=600 http://localhost:5678/webhook/indox-manage'
 ```
 Verify reversal: table → ~0 (`SB "select count(*) from incoming_documents where \"ID\"<>'__bootstrap__'"`), locks → 0, no running INDOX execs. (Optional rich check: `STATUS` → all `synced`≈0, `to_sync` repopulated.)
 
@@ -29,7 +29,7 @@ Use existing scripts (source-mode api inject is pending): `bbox indox inject-dem
 ### 3. Trigger syncs
 ```
 # trigger the scanner (drive + gmail) — fans out per sync_registry unit
-docker exec n8n-shlomo-laptop sh -lc 'wget -qO- --post-data="" http://localhost:5678/<scanner trigger>'   # or bbox b42 / the scheduled run (every 15m)
+docker exec n8n-owner-laptop sh -lc 'wget -qO- --post-data="" http://localhost:5678/<scanner trigger>'   # or bbox b42 / the scheduled run (every 15m)
 ```
 (Scanner `SyncScanner00001` runs on a 15m schedule; trigger manually to start immediately.)
 

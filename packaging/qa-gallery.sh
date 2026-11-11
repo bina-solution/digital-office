@@ -18,7 +18,7 @@ echo "waiting for containers…"; sleep 90
 
 echo
 echo "=== Open targets, as the apps screen computes them ==="
-docker exec app-management-shlomo-laptop python3 -c '
+docker exec app-management-owner-laptop python3 -c '
 import json, urllib.request
 d = json.load(urllib.request.urlopen("http://localhost:8080/api/apps"))
 apps = d if isinstance(d, list) else d.get("apps", [])

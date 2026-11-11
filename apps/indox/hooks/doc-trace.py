@@ -20,7 +20,7 @@ Usage:
 """
 import sys, json, subprocess
 
-DN = 'shlomo-laptop'
+DN = 'owner-laptop'
 def sb(q):
     # direct exec args (no shell) -> column-name quotes are plain double-quotes
     r = subprocess.run(['docker','exec','supabase-db-'+DN,'psql','-U','postgres','-d','postgres','-t','-A','-F','|','-c',q.replace('\\"','"')],

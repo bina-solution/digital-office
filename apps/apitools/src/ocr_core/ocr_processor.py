@@ -20,8 +20,15 @@ logger = get_logger('apitools.ocr_processor')
 
 API_KEY = os.environ.get("GOOGLE_VISION_API_KEY", "")
 
-# OCR engine toggle: "local" for Tesseract, "google" for Vision API
-OCR_ENGINE = os.environ.get("OCR_ENGINE", "google")
+# OCR engine toggle: "local" for Tesseract, "google" for Vision API.
+# The fallback is local: a document leaves the office for an outside AI only when
+# the office says so in words (OCR_ENGINE=google, or ?ocr_engine=google per request).
+OCR_ENGINE = os.environ.get("OCR_ENGINE", "local")
+
+
+def resolve_engine(name):
+    """'google' only when it is asked for by name; anything else (unset, empty, a typo) is local."""
+    return "google" if str(name or "").strip().lower() == "google" else "local"
 
 # Google Cloud Vision rejects images above ~75 megapixels with "Bad image data"; local
 # Tesseract has no such ceiling. A multi-page PDF rasterized at 300 DPI (tuned for
@@ -40,7 +47,7 @@ class OcrProcessor:
     def __init__(self, api_key=API_KEY, ocr_engine=None):
         self.api_key = api_key
         self.api_url = f"https://vision.googleapis.com/v1/images:annotate?key={self.api_key}"
-        self.ocr_engine = ocr_engine or OCR_ENGINE
+        self.ocr_engine = resolve_engine(ocr_engine or OCR_ENGINE)
 
         self.cache_folder = ocr_cache_path()
         self.pdf_images_folder = ocr_pdf_images_path()
@@ -108,7 +115,13 @@ class OcrProcessor:
         return image_content, image_path
 
     def _ocr_request_vision_api(self, image_content):
-        """Prepare request for Vision API."""
+        """Prepare request for Vision API.
+
+        Nothing is sent without a key: with GOOGLE_VISION_API_KEY empty the request used to go out anyway — the
+        client's page reached Google, which refused it (issues/five-more-paths-reach-an-outside-ai-…, DGO-1792)."""
+        if not str(self.api_key or "").strip():
+            raise Exception("Vision API error: Google Vision is named (OCR_ENGINE or ?ocr_engine=google) but "
+                            "GOOGLE_VISION_API_KEY is empty — nothing was sent")
         request_payload = {
             "requests": [
                 {

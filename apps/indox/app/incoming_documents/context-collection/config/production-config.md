@@ -3,18 +3,18 @@
 > Snapshot of the currently running production config, to be used as the **first document-repo** in the new system.
 
 ## Document Repo (Google Sheet)
-- **Spreadsheet ID:** `1REDACTEDdrivexxxxxxxxxxxxxxxxxxxxxxxxxx0049`
+- **Spreadsheet ID:** `1REDACTEDdrivexxxxxxxxxxxxxxxxxxxxxxxxxx0047`
 - **Spreadsheet name:** `AutomationValues`
 - **Tab (sheet) name:** `מסמכים נכנסים` ("Incoming Documents")
 - **gid:** `542119184`
-- **URL:** https://docs.google.com/spreadsheets/d/1REDACTEDdrivexxxxxxxxxxxxxxxxxxxxxxxxxx0049/edit#gid=542119184
+- **URL:** https://docs.google.com/spreadsheets/d/1REDACTEDdrivexxxxxxxxxxxxxxxxxxxxxxxxxx0047/edit#gid=542119184
 - **Lookup column / primary key:** `ID`
 - **Header row:** row 1 (52 columns — see `sample-data/incoming-documents.csv`)
 
 ## Google credential (n8n)
 - Credential ID: `e2knIZpw8YF0QBAB`
-- Credential name: `Google Sheets person17.x@example.com`
-- Service account / OAuth2 user: `person17.x@example.com`
+- Credential name: `Google Sheets person18.x@example.com`
+- Service account / OAuth2 user: `person18.x@example.com`
 - **PLACEHOLDER:** `GOOGLE_SERVICE_ACCOUNT_JSON` — service-account JSON for the new Python API. To be provisioned; current n8n uses OAuth2 stored inside n8n.
 
 ## Workflows in scope for this migration
@@ -42,14 +42,14 @@
 - `Schedule Trigger` periodic sweep.
 - **Future (per plan):** replace GSheet trigger with a Kafka trigger on topic prefix `${config.document-repo}` (e.g. `incoming-documents.AutomationValues_main`).
 
-## Infra (deployment-hacohen)
+## Infra (digital-office)
 - Redis: `redis-${DEPLOYMENT_NAME}` (also exposed via Traefik TCP 6379)
 - n8n: queue mode + worker + task-runners
-- Postgres (Supabase) available at `supabase.hacohen.bina-solutions.co.il` — see `SUPABASE_*` env vars
+- Postgres (Supabase) available at `supabase.example.bina-solutions.co.il` — see `SUPABASE_*` env vars
 - **PLACEHOLDER:** `KAFKA_BROKERS` — no Kafka broker is currently deployed in the stack.
 - **PLACEHOLDER:** `INCOMING_DOCS_DEFAULT_REPO` — name of the first repo entry to seed (e.g. `prod_gsheet`).
 
 ## Sample data
-- `sample-data/incoming-documents.csv` — full export of the production sheet (39,582 data rows, 52 columns). Hebrew tab name preserved in source filename `AutomationValues - מסמכים נכנסים.csv`.
+- `sample-data/incoming-documents.csv` — full export of the production sheet (39,582 data rows, 52 columns); a client's data, not in the tree since DGO-1792 (one copy on the MacBook's checkout, outside git). Hebrew tab name preserved in source filename `AutomationValues - מסמכים נכנסים.csv`.
 - Example header columns:
   `NAME, COMPANY_ID, SHORT_DOC_ID, TYPE, STATUS, COMPANY_DOC_ID, LINK, DOC_DATE, DOC_TOTAL_AMOUNT, PURCHASE_ID, SHIPMENT_DOC_ID, LINKED_BS, BS_LINE_DATE, BS_LINE_AMOUNT, SOURCE_TYPE, SOURCE_ID, SOURCE_LINK, SIZE, HASH, TIMESTAMP, COMPANY_NAME, REQUIRED_ACTION, BS_EXTRACTED_LINES, TOTAL_AMOUNT, BS_EXTRACTION_VERIFIED, BS_LINE_NOTE, FROM_OFFICE, FROM_OFFICE_CHECK, BS_LINK_DOCUMENTS_COMPLETED, SEARCH_IN_DRIVE_COMPLETED, DOC_DATE_COMPLETED, DOC_TOTAL_AMOUNT_COMPLETED, PURCHASE_ID_COMPLETED, SHIPMENT_ID_COMPLETED, COMPANY_NAME_COMPLETED, API_TOOLS_ID_COMPLETED, API_TOOLS_ID, ID, EMPTY, סימון כרטסת עדכנית, BS_EXTRACTED_LINES_COMPLETED, BS_EXTRACTION_USE_CACHE, EX_INVOICE_ID, INVOICE_ID_COMPLETED, EX_IS_BS, EX_IS_BS_COMPLETED, FIGURE_TYPE_COMPLETED, DOUBLE_LINE_CONTEXT, FIGURE_COMPANY_COMPLETED`

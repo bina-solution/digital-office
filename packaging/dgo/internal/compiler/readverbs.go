@@ -12,8 +12,8 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	"github.com/solomonBoltin/deployment-hacohen/packaging/dgo/internal/pyval"
-	"github.com/solomonBoltin/deployment-hacohen/packaging/dgo/internal/yamlish"
+	"github.com/bina-solution/digital-office/packaging/dgo/internal/pyval"
+	"github.com/bina-solution/digital-office/packaging/dgo/internal/yamlish"
 )
 
 // ── the verbs that only read: answers about the catalog, the state file and .generated/ ───────────
@@ -389,8 +389,8 @@ func GenerationsCmd(repo string, args []string, stdout, stderr io.Writer) int {
 }
 
 // generationDirs is _gen_dirs(): the generations under dir, by number — the directories (or links to
-// one) named in digits, as archive_generation writes them (%04d). Python's isdigit() would also take
-// digits of other scripts, which nothing writes, so ASCII it is.
+// one) named in ASCII digits, as archive_generation writes them (%04d). _gen_dirs reads ASCII digits
+// too since DGO-632: «²» and «٣» are skipped on both sides.
 func generationDirs(dir string) []string {
 	var entries []os.DirEntry
 	if d, err := os.Open(dir); err == nil { // no such directory: no generations

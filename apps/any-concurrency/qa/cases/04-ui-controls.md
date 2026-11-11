@@ -1,6 +1,6 @@
 # QA — 04: Controls & Toggles
 
-URL: `https://any-concurrency.hacohen.bina-solutions.co.il/`
+URL: `https://any-concurrency.example.bina-solutions.co.il/`
 
 ---
 

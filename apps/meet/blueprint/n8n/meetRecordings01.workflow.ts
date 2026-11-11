@@ -293,20 +293,20 @@ function heard(s) {
   if (words >= 3 && secs > 5 && words / secs < MIN_WORDS_PER_S_OVER_5S) return false;
   return true;
 }
-// …and what both models write into a silent room even with good confidence (fireplace, 2026-10-26:
+// …and what both models write into a silent room even with good confidence (examplef, 2026-10-26:
 // three silent recordings came back «תודה רבה. תודה רבה. תודה רבה.» / «Thank you. You» and were filed
 // «תומלל»). A transcript made ONLY of these is no speech; one such line inside real talk is kept.
 const STOCK = new Set(['תודה רבה', 'תודה', 'תודה רבה לכם', 'thank you', 'thanks', 'thank you very much', 'you', 'bye', 'שלום']);
 const stock = (t) => STOCK.has(clean(t).toLowerCase().replace(/[.,!?…]+/g, ' ').replace(/ +/g, ' ').trim());
 // …and what Whisper writes into silence from its training subtitles, in any language — never said in a
-// meeting here (fireplace, 2026-10-27, MEET-35: «Продолжение следует...» = «to be continued» at the end of a
+// meeting here (examplef, 2026-10-27, MEET-35: «Продолжение следует...» = «to be continued» at the end of a
 // 46-s Hebrew test call). Always dropped, alone or among real talk.
 const NEVER_SAID = /^(продолжение следует|субтитры|редактор субтитров|subtitles by the amara\\.org community|thanks for watching|thank you for watching|sous-titrage|untertitel)/i;
 const linesOf = (result) => {
   let segs = ((result && result.segments) || []).filter(heard).filter((s) => !NEVER_SAID.test(clean(s.text)));
   if (segs.length && segs.every((s) => stock(s.text))) return '';
   // …and the same phrase repeated through a recording with real talk in it («Thank you.» every 30 s in
-  // fpg103, 2026-10-26) is the model filling gaps, not people: three or more stock lines are all dropped.
+  // exf103, 2026-10-26) is the model filling gaps, not people: three or more stock lines are all dropped.
   const stockLines = segs.filter((s) => stock(s.text)).length;
   if (stockLines >= 3) segs = segs.filter((s) => !stock(s.text));
   return segs.map((s) => '[' + mmss(s.start) + '] ' + clean(s.text)).join('\\n');

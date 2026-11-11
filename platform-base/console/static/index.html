@@ -7,6 +7,8 @@
 <link rel="icon" type="image/svg+xml" href="/favicon.svg"/>
 <link rel="stylesheet" href="/style.css"/>
 <link rel="stylesheet" href="/desktop.css"/>
+<!-- FIRST, and before any other script: the mount point and the fetch seam (see mount.js). -->
+<script src="/mount.js"></script>
 </head>
 <body>
 <!-- B6 a11y — the first tab stop, invisible until it has focus. Without it, reaching the content by
@@ -55,11 +57,6 @@
              and the chip's own target — the install screen — is the last tile in the rail, where
              boot() still lands a not-yet-onboarded first run. The theme switcher went with them;
              a theme already saved in localStorage is still applied on boot (app.js). -->
-        <!-- C3/C15 — the account switcher lives HERE, at the far end of the top bar (screen-left in
-             RTL), which is where every product a person has used keeps it. It replaces #acctBar: a
-             full-width band whose entire job was to hold one chip, costing every embedded app ~56px
-             of vertical space forever so that ~15% of one row could be used. -->
-        <div id="acctChip" class="tb-acct hidden"></div>
       </div>
     </header>
     <!-- The way back. Full screen hides every other door — the rail, the top bar, the tab bar, the
@@ -97,9 +94,15 @@
      else uses it (platform-base/console/test_dock_budget.mjs runs it without a browser) -->
 <script src="/dock-budget.js"></script>
 <script src="/ext-route.js"></script>
+<!-- a link inside an embedded app that names the CONSOLE belongs to the shell, not to the frame
+     (platform-base/console/test_frame_links.mjs runs the half that needs no browser) -->
+<script src="/frame-links.js"></script>
 <!-- which tile a link names, when the name is the app's alias or another office's module id
      (platform-base/console/test_module_ref.mjs runs it without a browser) -->
 <script src="/module-ref.js"></script>
+<!-- an app that needs a person in another app's screen (a sign-in in the office browser) gets him
+     there and back (DGO-1336; platform-base/console/test_handoffs.mjs runs its rule without a browser) -->
+<script src="/handoffs.js"></script>
 <script src="/desktop.js"></script>
 <script src="/desktop-memory.js"></script>
 <!-- the power & sleep card of the settings view (reads/writes the machine service) -->

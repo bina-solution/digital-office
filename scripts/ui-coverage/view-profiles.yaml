@@ -18,6 +18,8 @@
 #                passes it where it already passes the viewport: Playwright new_context(user_agent=…),
 #                CDP Emulation.setUserAgentOverride. WHY, below.
 #   note         why this profile exists — keep it honest, it drives what we design for
+#   on_request   true = captured only when a run NAMES it (`--profile <name>`): `ui-map.py --all` and the
+#                CI matrix leave it out, so a profile kept for one question never makes every map run longer
 #
 # The three below are deliberately the *breakpoint-defining* sizes, not a device catalogue:
 # 390 sits under the 820px mobile breakpoint, 834 sits between 820 and 1024 (the icon-rail
@@ -76,6 +78,22 @@ profiles:
     note: >-
       Above 1024: full sidebar, multi-pane layouts, hover affordances live. The reference
       profile every desktop layout is held pixel-stable against.
+
+  ultrawide:
+    label: "Ultrawide · 3440×1440"
+    width: 3440
+    height: 1440
+    dsf: 1
+    is_mobile: false
+    has_touch: false
+    user_agent: null
+    cols: 1
+    on_request: true
+    note: >-
+      A 34-inch ultrawide, the screen desktop mode's windows, stash rails and live-window budget were
+      designed for (ai/context/console-desktop-working-memory.md §7, phase 0; DGO-1789). On request
+      only: `flow-qa.py windows --profile ultrawide` looks at every screen in its window at this size, then
+      leaves eight open together and photographs the desktop whole (windows-ultrawide/together.png).
 
 # Profiles the CI generates. Keep desktop first — it is the one gated on, the others are
 # additive evidence. Trimming this list is how you make CI cheaper without deleting a profile.

@@ -18,7 +18,7 @@ ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.a
 BASE = 'http://localhost:5678'
 CK = os.path.join(ROOT, 'data', '_runs', 'accept_cookies.txt')
 SHEET = ''
-DN = 'shlomo-laptop'
+DN = 'owner-laptop'
 CRED_SHEETS = 'e2knIZpw8YF0QBAB'
 DATA_TAB = 'מסמכים נכנסים'
 os.makedirs(os.path.join(ROOT, 'data', '_runs'), exist_ok=True)
@@ -49,7 +49,7 @@ def rest(method, path, body=None):
 
 
 def psql(q):
-    return subprocess.run(['docker', 'exec', f'n8n-postgres-{DN}', 'psql', '-U', 'hacohen', '-d', 'n8n', '-tAc', q],
+    return subprocess.run(['docker', 'exec', f'n8n-postgres-{DN}', 'psql', '-U', 'example', '-d', 'n8n', '-tAc', q],
                           capture_output=True, text=True, encoding='utf-8', errors='replace').stdout.strip()
 
 

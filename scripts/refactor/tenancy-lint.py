@@ -167,7 +167,10 @@ def scan(path: pathlib.Path, tables: tuple[str, ...], discriminator: str) -> lis
 # without the predicate and reports the file that is correct.
 # ─────────────────────────────────────────────────────────────────────────────
 SOURCE_TABLES = {"drive_files": "profile"}
-SOURCE_ROOTS = ("apps/drive/**/*.py",)
+#: Since the split (DGO-1500) drive's SQL is its engine's: `apps/drive-local` holds every query of
+#: `drive_files`, and the generic `apps/drive` holds none — both are scanned, and a root that matches no
+#: file at all is a FINDING: a scan of nothing printed OK the day the queries moved.
+SOURCE_ROOTS = ("apps/drive/**/*.py", "apps/drive-local/**/*.py")
 
 #: DDL and catalogue reads are not tenant queries — they are about the table, not about rows in it.
 _DDL = re.compile(r"^\s*(create|alter|drop)\b", re.IGNORECASE)
@@ -264,15 +267,23 @@ def main() -> int:
             profile_findings.extend(scan(wf, N8N_TENANT_TABLES["profile"], "profile"))
 
     src_findings: list[tuple[str, str, str]] = []
+    scanned = 0
     for pattern in SOURCE_ROOTS:
-        for py in sorted(root.glob(pattern)):
+        hits = sorted(root.glob(pattern))
+        if not hits:
+            print(f"tenancy-lint: FAIL — the source root {pattern} matches no file: the queries it guarded "
+                  "moved, and a scan of nothing is not a pass. Point SOURCE_ROOTS at where they live.")
+            return 1
+        for py in hits:
+            scanned += 1
             src_findings.extend(scan_source(py))
 
     if not findings and not profile_findings and not src_findings:
         print("tenancy-lint: OK — every tenant-table access names its discriminator")
         print("  n8n workflows: %s -> `instance`" % ", ".join(TENANT_TABLES))
         print("  n8n workflows: %s -> `profile`" % ", ".join(N8N_TENANT_TABLES["profile"]))
-        print("  source:        %s" % ", ".join(f"{t} -> `{c}`" for t, c in SOURCE_TABLES.items()))
+        print("  source:        %s (%d files: %s)" % (", ".join(f"{t} -> `{c}`" for t, c in SOURCE_TABLES.items()),
+                                                    scanned, ", ".join(SOURCE_ROOTS)))
         return 0
 
     if findings:

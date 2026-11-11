@@ -1,0 +1,49 @@
+#!/bin/sh
+# /usr/local/bin/claude-desktop — the official app's command, with the flags this container needs (DGO-1506).
+#
+# The package's link handler (com.anthropic.Claude.desktop, `Exec=claude-desktop %U`, which the app makes
+# the default for claude:// at its first start) runs the app WITHOUT --no-sandbox. In a container that
+# second instance dies before it can pass the link to the running app ("Zygote process exited
+# prematurely", measured on Exampleu 2026-11-09), so claude.ai's answer to «Continue with Google»
+# (claude://login/google-auth?…) never arrived. This file is first on PATH (/usr/local/bin before
+# /usr/bin), so the handler, the app's own desktop actions and desktop/autostart all start the app the
+# same way: --no-sandbox (the container is the sandbox), no GPU, and the keyring that keeps its sign-in.
+# /usr/bin/claude-desktop is a plain link to the binary below (Dockerfile.desktop checks it), so nothing the
+# package's own command did is skipped.
+#
+# A claude:// link is noted in the same log as the sign-in window, by scheme, host and path only (the query
+# of a sign-in's answer holds its one-time code). A link is only ever handed to a RUNNING app: one started
+# from here would not be desktop/autostart's, which would then start a second one every 3 s. A sign-in's
+# answer that the app took closes the sign-in window it came from (desktop/signin-browser).
+APP="${BINA_CLAUDE_APP_BIN:-/usr/lib/claude-desktop/claude-desktop}"
+LOG="${HOME:-/config}/.claude-open-url.log"
+TMP="${TMPDIR:-/tmp}"
+note() { printf '%s %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$*" >> "$LOG" 2>/dev/null || true; }
+
+link=""
+for a in "$@"; do
+  case "$a" in claude://*) link="$a" ;; esac
+done
+[ -n "$link" ] || exec "$APP" --no-sandbox --disable-gpu --password-store=gnome-libsecret "$@"
+
+bare="$(printf '%s' "${link%%[?#]*}" | tr -d '\000-\037\177')"
+case "$link" in
+  claude://login/*) what="sign-in answer" ;;
+  *) what="link" ;;
+esac
+# The running app: the binary itself, not one of its --type= helpers (they outlive it for a moment).
+if ! ps -u "$(id -u)" -o args= | grep -E "^${APP}( |\$)" | grep -v -e "--type=" | grep -q .; then
+  note "dropped ${what} ${bare}: the app is not running (it starts again by itself; press the button again)"
+  exit 1
+fi
+"$APP" --no-sandbox --disable-gpu --password-store=gnome-libsecret "$@" >/dev/null 2>&1
+rc=$?
+if [ "$rc" -ne 0 ]; then
+  note "failed to deliver ${what} ${bare} (exit ${rc})"
+  exit "$rc"
+fi
+note "delivered ${what} ${bare} to the app"
+if [ "$what" = "sign-in answer" ] && pkill -f -- "--user-data-dir=${TMP}/bina-claude-signin\." 2>/dev/null; then
+  note "closed the sign-in window"
+fi
+exit 0

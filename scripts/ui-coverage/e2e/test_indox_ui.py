@@ -57,6 +57,7 @@ import re
 import sys
 import time
 from pathlib import Path
+from urllib.parse import quote
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
@@ -80,15 +81,37 @@ RAW_ENUM = re.compile(r"\b(COMPLETED|EXTRACTION_FAILED|API_TOOLS_FAILED|IRRELEVA
 
 
 # ── plumbing ────────────────────────────────────────────────────────────────
+#: The instance the UI shows — its front door's own rule (webapp/src/api.ts `defaultInstanceId`): the first enabled
+#: entry of GET /instances whose purpose is not 'test', else the first enabled. Every yardstick call below names it
+#: (DGO-1815): unscoped, INDOX answered on its DEFAULT instance, so on an office with two the screen's numbers were
+#: compared with another tenant's. Set in main().
+INSTANCE = ""
+
+
+def first_enabled(rows) -> str:
+    """The UI's default instance from /instances' rows — `defaultInstanceId`'s rule: the first enabled one whose
+    purpose is not 'test', else the first enabled one; '' when none is (the UI then names none either)."""
+    on = [r for r in (rows or []) if isinstance(r, dict) and r.get("id") and r.get("enabled") is not False]
+    prod = [r for r in on if str(r.get("purpose") or "") != "test"]
+    return str((prod or on)[0]["id"]) if on else ""
+
+
+def scoped(path: str) -> str:
+    """`path` naming INSTANCE, unless it names one already or none is known."""
+    if not INSTANCE or "instance=" in path:
+        return path
+    return path + ("&" if "?" in path else "?") + "instance=" + quote(INSTANCE, safe="")
+
+
 def api(base: str, path: str, method: str = "GET", body: dict | None = None):
     """`base` is the browser's URL; the API call goes to the same service by CONTAINER NAME,
     which is what container_request resolves. It returns (status, payload) — a non-2xx must not
     be handed on as if it were data, or every downstream assertion would compare against an
     error body and fail with a misleading message."""
     status, payload = container_request(
-        "incoming-documents", f"{API}{path}", method=method, body=body, port=8080)
+        "incoming-documents", f"{API}{scoped(path)}", method=method, body=body, port=8080)
     if status >= 400:
-        raise RuntimeError(f"{method} {path} → HTTP {status}: {str(payload)[:200]}")
+        raise RuntimeError(f"{method} {scoped(path)} → HTTP {status}: {str(payload)[:200]}")
     return payload or {}
 
 
@@ -492,6 +515,15 @@ def main() -> int:
     wanted = [a for a in sys.argv[1:] if a in SECTIONS] or list(SECTIONS)
     base = incoming_documents_base_url()
     print(f"[indox-ui] target {base}  sections={','.join(wanted)}", flush=True)
+
+    # the instance the UI's front door opens, so the yardsticks read the same tenant as the screen
+    global INSTANCE
+    try:
+        INSTANCE = first_enabled((api(base, "/instances") or {}).get("instances"))
+    except RuntimeError as e:          # an older INDOX with no /instances: the UI then names none either
+        print(f"[indox-ui] /instances did not answer ({e}) — calls name no instance", flush=True)
+        INSTANCE = ""
+    print(f"[indox-ui] instance {INSTANCE or '(none listed — calls name none)'}", flush=True)
 
     repos = api(base, "/repos") or {}
     repo = ((repos.get("repos") or [{}])[0] or {}).get("name")

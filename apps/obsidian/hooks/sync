@@ -1,0 +1,88 @@
+#!/usr/bin/env bash
+#: sync — carry the compiled vault into the office's one Obsidian vault folder (DGO-1642)
+# sync — `./bbox obsidian sync [--no-render]`
+#
+# The compiler renders `.generated/vault/` from `apps/obsidian/vault.yaml`; this puts it in the vault
+# an Obsidian (and an agent) actually opens. The rules that matter are in `apps/obsidian/vault-sync.sh`
+# (never overwrite a note a person edited, never delete, write only what changed) — this file only
+# answers "where is the vault" and "is this office even running one".
+#
+# WHERE THE VAULT IS, in order (never guessed from a literal: an office's compose project is not a
+# constant, and a hardcoded `<project>_obsidian_vault` is how the old seed would have written into the
+# wrong volume on every office but one):
+#   1. `OBSIDIAN_VAULT_HOST` in `.env` — an absolute host folder (an owner's synced vault);
+#   2. the source of `/vaults/vault` in the running obsidian container (a volume OR a bind, read from
+#      the container that is actually using it);
+#   3. this compose project's own `obsidian_vault` — created on first use, which is what a fresh
+#      office needs.
+#
+# It is a no-op on an office that does not run Obsidian, and it never fails a bring-up.
+set -uo pipefail
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
+. "${REPO_ROOT}/scripts/lib.sh"   # say, read_env, colors
+
+APP_DIR="$(dirname "${SCRIPT_DIR}")"
+RENDER=1
+[ "${1:-}" = "--no-render" ] && RENDER=0
+
+# ── is this office running a vault at all? ───────────────────────────────────────────────────────
+# The state file is the authority (two spellings live in it: `state: enabled` and `enabled: true`).
+enabled="$(python3 - "$(npath "${REPO_ROOT}")/platform.state.yaml" <<'PY' 2>/dev/null || echo 0
+import sys, yaml
+try:
+    st = yaml.safe_load(open(sys.argv[1], encoding="utf-8")) or {}
+except Exception:
+    print(0); raise SystemExit
+a = (st.get("apps") or {}).get("obsidian") or {}
+print(1 if (a.get("state") == "enabled" or a.get("enabled") is True) else 0)
+PY
+)"
+HOST_FOLDER="$(read_env OBSIDIAN_VAULT_HOST || true)"
+
+if [ "${enabled}" != "1" ]; then
+  say "obsidian: not enabled on this office — nothing to sync (./bbox apps enable obsidian)"
+  exit 0
+fi
+
+# ── the render this sync carries ────────────────────────────────────────────────────────────────
+if [ "${RENDER}" = 1 ]; then
+  ( cd "${REPO_ROOT}" && python3 platform/manager/reconcile.py render ) >/dev/null 2>&1 || true
+fi
+GEN="${REPO_ROOT}/.generated/vault"
+[ -f "${GEN}/.vault-manifest.json" ] \
+  || { say "obsidian: nothing was rendered into .generated/vault — check apps/obsidian/vault.yaml"; exit 0; }
+
+# ── where the vault is ──────────────────────────────────────────────────────────────────────────
+browser_container="obsidian-$(read_env DEPLOYMENT_NAME)"
+if [ -n "${HOST_FOLDER}" ]; then
+  MOUNT="${HOST_FOLDER}:/vault"
+  WHERE="the host folder ${HOST_FOLDER}"
+else
+  NAME="$(docker inspect -f '{{range .Mounts}}{{if eq .Destination "/vaults/vault"}}{{.Name}}{{end}}{{end}}' \
+            "${browser_container}" 2>/dev/null | head -1)"
+  if [ -z "${NAME}" ]; then
+    project="$(read_env COMPOSE_PROJECT_NAME || true)"
+    if [ -z "${project}" ]; then
+      project="$(basename "${REPO_ROOT}" | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9_-]//g; s/^[^a-z0-9]*//')"
+    fi
+    NAME="${project:-digital-office}_obsidian_vault"
+  fi
+  MOUNT="${NAME}:/vault"
+  WHERE="the volume ${NAME}"
+fi
+
+# ── one throwaway container, both folders mounted, the script read-only ────────────────────────
+# alpine: the same image the app's own seed used, so nothing new is pulled. No network, no daemon:
+# the script reads /gen, writes /vault, and prints one line per action plus a summary.
+docker run --rm --network none \
+  -v "${MOUNT}" \
+  -v "${GEN}:/gen:ro" \
+  -v "${APP_DIR}/vault-sync.sh:/vault-sync.sh:ro" \
+  alpine:3 sh /vault-sync.sh --generated /gen --vault /vault
+rc=$?
+if [ "${rc}" != 0 ]; then
+  say "${cr}obsidian: the vault sync failed (exit ${rc}) — the compiled notes are in .generated/vault${c0}"
+  exit "${rc}"
+fi
+say "obsidian: vault synced from .generated/vault into ${WHERE}"

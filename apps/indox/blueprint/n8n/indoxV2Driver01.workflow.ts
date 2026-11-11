@@ -708,7 +708,7 @@ for (const item of $input.all()) {
   // node downstream resolves its schema from $json.__instance. But this node does not forward the
   // body — it CONSTRUCTS a new item from four named fields, so any field not named here simply
   // ceases to exist from this point on. Traced 2026-08-28: 'When Called' and 'Normalize Request'
-  // in the drain both carried 'hacohen'/'levi' correctly, and 'Enrich Double Lines' one hop later
+  // in the drain both carried 'example'/'levi' correctly, and 'Enrich Double Lines' one hop later
   // saw nothing. A rebuild like this is a silent field filter.
   const inst = String(b.__instance || '');
   if (ids && ids.length) {
@@ -868,7 +868,7 @@ return out;`,
   -- item per enabled instance, and everything downstream is told which one it is acting for.
   --
   -- So the instance arrives on the request and is passed straight through as "__instance". It is
-  -- the instance IDENTITY ('hacohen'), never the storage location ('indox_hacohen'): indoxApi01 is
+  -- the instance IDENTITY ('example'), never the storage location ('indox_example'): indoxApi01 is
   -- the single place that maps identity to schema, so the indox_<id> convention lives in one file
   -- rather than in every producer.
   SELECT COALESCE((SELECT lower(value) = 'true' FROM {{ (() => { const i = String($json.__instance || ''); if (!/^[a-z][a-z0-9_]*$/.test(i)) { throw new Error('indoxV2Driver01: no valid __instance — public fallback removed at the 2026-08-31 cutover'); } return 'indox_' + i; })() }}.settings
@@ -915,7 +915,7 @@ return out;`,
      the next sweep. Five mains reached 146 action_merge_doubles dispatches this way.
      Every one of the last 10 duplicate groups on the table was this and only this. The worst
      offender, DOC_ID 500000088, is a company registration number appearing under FIFTEEN
-     companies across 68 rows; another, 02-0000011, is a phone number under 5. They are not
+     companies across 68 rows; another, 02-0000020, is a phone number under 5. They are not
      duplicates -- they are different documents whose id was mis-extracted.
      Table-wide: 49 such doc-ids, 258 rows.
      Quarantining at the KEY, not after grouping, is what gives them a terminal state: they simply
@@ -1059,7 +1059,7 @@ SELECT b.*,
        (SELECT priority_local FROM toggle)       AS "__priority_local",
        (SELECT old_months FROM toggle)           AS "__old_months",
        -- [fan-out landed 2026-08-28] The value the driver was HANDED, passed straight through.
-       -- It is the instance IDENTITY ('hacohen'), never the storage location ('indox_hacohen') —
+       -- It is the instance IDENTITY ('example'), never the storage location ('indox_example') —
        -- indoxApi01 stays the single place that maps identity to schema. Still empty when the
        -- caller supplies nothing (a manual webhook probe), which resolves to 'public' exactly as
        -- before; once the compatibility views are dropped that absence becomes a loud failure
@@ -1722,7 +1722,7 @@ for (const item of $input.all()) {
   // skipped on STATUS=IN_PROGRESS with NO age bound, so a doc whose driver died mid-action
   // (worker OOM/restart; bracket later closed by the 65-min reaper) was skipped FOREVER:
   // the drain's rescue clause re-selected it, decide re-answered the same action, and this
-  // guard called that a live collision. Measured on hacohen: 173 IN_PROGRESS rows frozen
+  // guard called that a live collision. Measured on example: 173 IN_PROGRESS rows frozen
   // 6-72h. Past 70 minutes (over the router's own 3600s executionTimeout and the reaper
   // horizon -- the same dead-owner doctrine as 'Poll Progress' and the drain clause) the
   // dispatch provably has no live owner, and the action DID NOT COMPLETE (a completed action

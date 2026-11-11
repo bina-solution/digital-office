@@ -50,8 +50,11 @@ def _instances() -> tuple[list[dict], str | None]:
 
 
 def list_instances() -> tuple[list[dict], str | None]:
+    """This app's accounts: Telegram USER logins only. `telegram_*` also brings the telegram app's bot tokens
+    (telegram_bot), which are no account to watch from — listed on the settings card they could be «switched to»
+    (an unauthorised client) or removed (that app's bot token gone) (DGO-1798, the second reader)."""
     insts, err = _instances()
-    return [i for i in insts if (i.get("protocol") or "").startswith("telegram_")], err
+    return [i for i in insts if (i.get("protocol") or "") == PROTOCOL], err
 
 
 def active_id() -> str | None:
@@ -138,7 +141,7 @@ def delete_instance(instance_id: str) -> tuple[bool, str | None]:
         if r.status_code == 404:
             return True, None
         if r.status_code >= 400:
-            return False, f"HTTP {r.status_code}"
+            return False, f"שירות החשבונות סירב למחיקה (קוד {r.status_code})"
         return True, None
     except requests.RequestException as e:
         log.warning("delete_instance: %r", e)

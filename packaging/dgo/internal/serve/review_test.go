@@ -17,7 +17,7 @@ import (
 )
 
 // A native answer is Flask's, or the native plane steps aside: state files PyYAML refuses, keys Python
-// makes one, escapes it keeps as half a character — and a state string Go and Python strip or lower
+// holds apart under one spelling, escapes it keeps as half a character — and a state string Go and Python strip or lower
 // apart, which must now be answered, and alike.
 func TestReviewNativeAnswersAgreeOrStepAside(t *testing.T) {
 	repo := fixture(t, office)

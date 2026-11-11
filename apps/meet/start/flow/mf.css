@@ -506,35 +506,77 @@ mark { background: var(--lime-soft); color: inherit; border-radius: 3px; box-sha
 .mf-t.static { cursor: default; color: var(--muted); }
 .mf-t.static:hover { background: var(--surface); border-color: var(--line); }
 
-/* ---------- the meeting: header, ribbon, the two panes and the axis ---------- */
-.mf-mtg { display: flex; flex-direction: column; height: 100dvh; min-height: 0; }
-.mf-mh { display: flex; align-items: center; gap: 14px; padding: 12px 20px 10px; flex-wrap: wrap; }
-.mf-back { display: inline-flex; align-items: center; gap: 4px; height: 32px; padding: 0 10px 0 6px; border-radius: 9px; color: var(--muted); font-size: 13px; font-weight: 600; text-decoration: none; }
+/* ---------- the meeting: one header row, the status line, two panes and the axis (DGO-1325) ---------- */
+.mf-mtg { display: flex; flex-direction: column; height: 100dvh; min-height: 0; position: relative; overflow: hidden; }
+.mf-mh { display: flex; align-items: center; gap: 12px; padding: 10px 20px 8px; flex: none; min-width: 0; }
+.mf-back { display: inline-flex; align-items: center; gap: 4px; height: 32px; padding: 0 10px 0 6px; border-radius: 9px; color: var(--muted); font-size: 13px; font-weight: 600; text-decoration: none; flex: none; }
 .mf-back:hover { background: var(--surface); color: var(--ink); text-decoration: none; }
-.mf-mh-t { flex: 1; min-width: 220px; }
-.mf-mh h1 { margin: 0; font-size: 22px; line-height: 30px; font-weight: 700; letter-spacing: -.01em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.mf-mh-meta { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-top: 2px; color: var(--muted); font-size: 12.5px; }
+.mf-mh-t { flex: 1; min-width: 0; }
+.mf-mh h1 { margin: 0; font-size: 20px; line-height: 28px; font-weight: 700; letter-spacing: -.01em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mf-mh-meta { display: flex; align-items: center; gap: 10px; margin-top: 1px; color: var(--muted); font-size: 12px; white-space: nowrap; overflow: hidden; }
+.mf-mh-meta:empty { display: none; }
 .mf-mh-meta > span + span:not(.mf-people)::before { content: "·"; margin-inline-end: 10px; color: var(--line); }
-.mf-mh-acts { display: flex; gap: 8px; flex-wrap: wrap; }
-.mf-ribbon { list-style: none; margin: 0 20px 10px; padding: 0; display: flex; gap: 0; overflow-x: auto; scrollbar-width: none; }
-.mf-ribbon li { display: inline-flex; align-items: center; gap: 7px; flex: none; font-size: 12px; color: var(--muted); padding-inline-end: 22px; position: relative; white-space: nowrap; }
-.mf-ribbon li:not(:last-child)::after { content: ""; position: absolute; inset-inline-end: 6px; top: 50%; width: 10px; height: 1px; background: var(--line); }
-.mf-ribbon i, .mf-stages i { width: 18px; height: 18px; border-radius: 50%; border: 1.5px solid var(--line); display: inline-flex; align-items: center; justify-content: center; flex: none; background: var(--surface); }
-.mf-ribbon i .ic, .mf-stages i .ic { width: 11px; height: 11px; stroke-width: 3; }
-.mf-ribbon [data-st="done"], .mf-stages [data-st="done"] b { color: var(--ink); }
-.mf-ribbon [data-st="done"] i, .mf-stages [data-st="done"] i { background: var(--olive); border-color: var(--olive); color: var(--olive-ink); }
-.mf-ribbon [data-st="running"], .mf-stages [data-st="running"] b { color: var(--sky-d); font-weight: 700; }
-.mf-ribbon [data-st="running"] i, .mf-stages [data-st="running"] i { border-color: var(--sky-line); }
-.mf-ribbon [data-st="failed"] i, .mf-stages [data-st="failed"] i { background: var(--plum); border-color: var(--plum); color: var(--plum-ink); }
-.mf-ribbon [data-st="off"] i, .mf-stages [data-st="off"] i { border-style: dashed; }
-.mf-firstnote { display: flex; gap: 10px; align-items: flex-start; margin: 0 20px 10px; padding: 10px 14px; background: var(--sky-soft); border-color: var(--sky-line); color: var(--ink); }
-.mf-firstnote .ic { color: var(--sky-d); margin-top: 2px; }
-.mf-body { flex: 1; min-height: 0; display: grid; gap: var(--mf-gap); padding: 0 20px 14px;
-  grid-template-columns: minmax(0, 1fr) clamp(370px, 32vw, 480px);
+.mf-mh-acts { display: flex; gap: 8px; flex: none; }
+
+/* the status line: what is being done to the meeting now, one sentence and one number; a tap lists every step */
+.mf-statusbox { position: relative; flex: none; margin: 0 20px 10px; z-index: 6; }
+.mf-status { position: relative; display: flex; align-items: center; gap: 10px; width: 100%; min-height: 40px; padding: 0 12px; border-radius: 12px; overflow: hidden;
+  border: 1px solid var(--line); background: var(--surface); color: var(--ink); font: inherit; font-size: 13px; text-align: start; cursor: pointer; }
+.mf-status:hover { border-color: var(--muted); }
+.mf-status:focus-visible { outline: 2px solid var(--sky-d); outline-offset: 2px; }
+.mf-status-ic { display: inline-flex; align-items: center; justify-content: center; width: 18px; flex: none; }
+.mf-status-ic .ic { width: 16px; height: 16px; }
+.mf-status-t { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
+.mf-status-sub { font-weight: 400; color: var(--muted); }
+.mf-status-n { flex: none; font-size: 13px; font-weight: 800; font-variant-numeric: tabular-nums; }
+.mf-status-caret { flex: none; color: var(--muted); transition: transform .15s; }
+.mf-status[aria-expanded="true"] .mf-status-caret { transform: rotate(180deg); }
+.mf-status-bar { position: absolute; inset-inline-start: 0; bottom: 0; height: 3px; width: var(--p); background: currentColor; opacity: .55; transition: width .4s; }
+.mf-status[data-tone="sky"] { background: var(--sky-soft); border-color: var(--sky-line); } .mf-status[data-tone="sky"] .mf-status-ic, .mf-status[data-tone="sky"] .mf-status-n { color: var(--sky-d); }
+.mf-status[data-tone="sky"] .mf-status-bar { color: var(--sky-d); }
+.mf-status[data-tone="lime"] { background: var(--lime-soft); border-color: var(--lime-line); } .mf-status[data-tone="lime"] .mf-status-ic, .mf-status[data-tone="lime"] .mf-status-n { color: var(--lime-d); }
+.mf-status[data-tone="olive"] { background: var(--olive-soft); border-color: var(--olive-line); } .mf-status[data-tone="olive"] .mf-status-ic, .mf-status[data-tone="olive"] .mf-status-n { color: var(--olive-d); }
+.mf-status[data-tone="violet"] { background: var(--surface); border-color: var(--violet); box-shadow: inset 0 0 0 1px var(--violet); } .mf-status[data-tone="violet"] .mf-status-ic, .mf-status[data-tone="violet"] .mf-status-n { color: var(--violet); }
+.mf-status[data-tone="plum"] { background: var(--plum); border-color: var(--plum); color: var(--plum-ink); } .mf-status[data-tone="plum"] .mf-status-sub, .mf-status[data-tone="plum"] .mf-status-caret { color: var(--plum-ink); opacity: .85; }
+.mf-steps { position: absolute; inset-inline: 0; top: calc(100% + 6px); max-height: min(70dvh, 520px); overflow: auto; padding: 14px 16px; border-radius: 14px;
+  background: var(--surface); border: 1px solid var(--line); box-shadow: var(--shadow-lg); overscroll-behavior: contain; }
+.mf-steps[hidden] { display: none; }
+.mf-stages { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 12px; }
+.mf-stages li { display: flex; gap: 10px; align-items: flex-start; }
+.mf-stages li > div { display: flex; flex-direction: column; gap: 2px; flex: 1; min-width: 0; }
+.mf-stages b { font-size: 13px; color: var(--muted); font-weight: 700; }
+.mf-stage-w { font-size: 12px; color: var(--muted); }
+.mf-stage-d { font-size: 12px; color: var(--ink); overflow-wrap: anywhere; }
+.mf-stage-why { font-size: 12px; color: var(--lime-d); font-weight: 600; }
+.mf-stages i { width: 18px; height: 18px; margin-top: 1px; border-radius: 50%; border: 1.5px solid var(--line); display: inline-flex; align-items: center; justify-content: center; flex: none; background: var(--surface); }
+.mf-stages i .ic { width: 11px; height: 11px; stroke-width: 3; }
+.mf-stages [data-st="done"] b { color: var(--ink); }
+.mf-stages [data-st="done"] i { background: var(--olive); border-color: var(--olive); color: var(--olive-ink); }
+.mf-stages [data-st="running"] b, .mf-stages [data-st="running"] .mf-stage-w { color: var(--sky-d); }
+.mf-stages [data-st="running"] i { border-color: var(--sky-line); }
+.mf-stages [data-st="failed"] i { background: var(--plum); border-color: var(--plum); color: var(--plum-ink); }
+.mf-stages [data-st="failed"] .mf-stage-w { color: var(--plum-d); font-weight: 700; }
+.mf-stages [data-st="off"] i { border-style: dashed; }
+.mf-stages .mf-bar { margin-top: 4px; }
+
+/* the two panes: the screen, its transport and the axis on the reading side; the parts of the meeting beside them,
+   as wide as the divider leaves them (320–720 px, kept per browser) */
+.mf-body { flex: 1; min-height: 0; display: grid; gap: var(--mf-gap) 0; padding: 0 20px 14px;
+  grid-template-columns: minmax(0, 1fr) 14px var(--side-w, clamp(370px, 32vw, 480px));
   grid-template-rows: minmax(0, 1fr) var(--tlh, 36%);
-  grid-template-areas: "stage side" "tl side"; }
+  grid-template-areas: "stage divide side" "tl divide side"; }
 .mf-stagecol { grid-area: stage; min-height: 0; display: flex; flex-direction: column; gap: 8px; }
+.mf-divide { grid-area: divide; position: relative; cursor: col-resize; touch-action: none; border-radius: 6px; }
+.mf-divide::after { content: ""; position: absolute; top: 50%; inset-inline-start: 5px; width: 4px; height: 44px; margin-top: -22px; border-radius: 2px; background: var(--line); transition: background .15s, height .15s; }
+.mf-divide:hover::after, .mf-divide.on::after { background: var(--sky-d); height: 72px; margin-top: -36px; }
+.mf-divide:focus-visible { outline: 2px solid var(--sky-d); outline-offset: -2px; }
 .mf-side { grid-area: side; min-height: 0; display: flex; flex-direction: column; background: var(--surface); border: 1px solid var(--line); border-radius: 16px; box-shadow: var(--shadow); overflow: hidden; }
+.mf-grab { display: none; }
+.mf-mini-t { display: none; }
+.mf-subnav { flex: none; padding: 8px 10px 0; }
+.mf-subnav[hidden] { display: none; }
+.mf-subnav .mf-seg { display: flex; flex-wrap: nowrap; }
+.mf-subnav .mf-seg button { flex: 1; justify-content: center; padding: 0 6px; }
 .mf-tlbox { grid-area: tl; min-height: 0; display: flex; flex-direction: column; background: var(--surface); border: 1px solid var(--line); border-radius: 16px; box-shadow: var(--shadow); overflow: hidden; position: relative; }
 .mf-tl-resize { height: 8px; cursor: ns-resize; flex: none; position: relative; touch-action: none; }
 .mf-tl-resize::after { content: ""; position: absolute; top: 3px; inset-inline: calc(50% - 22px); height: 3px; border-radius: 2px; background: var(--line); }
@@ -627,10 +669,10 @@ mark { background: var(--lime-soft); color: inherit; border-radius: 3px; box-sha
 .mf-tip { position: fixed; z-index: 60; max-width: min(460px, 90vw); padding: 7px 10px; border-radius: 9px; background: var(--surface); color: var(--ink); border: 1px solid var(--line); box-shadow: var(--shadow-lg);
   font-size: 12px; line-height: 1.5; white-space: pre-wrap; pointer-events: none; }
 
-/* ---------- the side: tabs and panes ---------- */
-.mf-tabs { display: flex; gap: 0; padding: 6px 6px 0; border-bottom: 1px solid var(--line); overflow-x: auto; scrollbar-width: none; flex: none; }
-.mf-tabs button { display: inline-flex; align-items: center; gap: 5px; height: var(--mf-tab); padding: 0 6px; border: 0; background: transparent; color: var(--muted); font: inherit; font-size: 13px; font-weight: 600;
-  cursor: pointer; white-space: nowrap; border-bottom: 2px solid transparent; flex: none; margin-bottom: -1px; border-radius: 8px 8px 0 0; }
+/* ---------- the side: five tabs that fit any width, a view chooser under two of them, and the panes ---------- */
+.mf-tabs { display: flex; gap: 0; padding: 6px 6px 0; border-bottom: 1px solid var(--line); flex: none; }
+.mf-tabs button { display: inline-flex; align-items: center; justify-content: center; gap: 5px; height: var(--mf-tab); padding: 0 4px; border: 0; background: transparent; color: var(--muted); font: inherit; font-size: 13px; font-weight: 600;
+  cursor: pointer; white-space: nowrap; border-bottom: 2px solid transparent; flex: 1 1 0; min-width: 0; margin-bottom: -1px; border-radius: 8px 8px 0 0; }
 .mf-tabs button:hover { color: var(--ink); background: var(--surface-2); }
 .mf-tabs button[aria-selected="true"] { color: var(--ink); border-bottom-color: var(--olive); }
 .mf-tabs button[aria-selected="true"] .ic { color: var(--olive-d); }
@@ -744,10 +786,6 @@ mark { background: var(--lime-soft); color: inherit; border-radius: 3px; box-sha
 .mf-activity { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
 .mf-activity li { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; font-size: 13px; padding-bottom: 10px; border-bottom: 1px solid var(--line); }
 .mf-act-d { flex-basis: 100%; color: var(--muted); font-size: 12.5px; }
-.mf-stages { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
-.mf-stages li { display: flex; gap: 10px; align-items: flex-start; }
-.mf-stages li > div { display: flex; flex-direction: column; }
-.mf-stages b { font-size: 13px; color: var(--muted); }
 
 /* files */
 .mf-file { display: flex; align-items: center; gap: 10px; width: 100%; padding: 9px 10px; margin-bottom: 6px; border-radius: 10px; border: 1px solid var(--line); background: var(--surface);
@@ -767,14 +805,20 @@ button.mf-file:hover, a.mf-file:hover { border-color: var(--muted); text-decorat
 .mf-drop .ic { width: 22px; height: 22px; color: var(--sky-d); }
 .mf-drop:hover, .mf-drop.over, .mf-drop:focus-visible { border-color: var(--sky-d); background: var(--sky-soft); outline: none; }
 
-/* a sheet: a screen's frame, a document */
-.mf-sheet { position: fixed; inset: 0; z-index: 50; background: var(--scrim); display: flex; align-items: center; justify-content: center; padding: 24px; }
-.mf-sheet[hidden] { display: none; }
-.mf-sheet-b { width: min(980px, 100%); max-height: 100%; display: flex; flex-direction: column; background: var(--surface); border-radius: 16px; box-shadow: var(--shadow-lg); overflow: hidden; }
-.mf-sheet-b > header { display: flex; align-items: center; gap: 8px; padding: 10px 12px 10px 8px; border-bottom: 1px solid var(--line); }
-.mf-sheet-t { flex: 1; font-size: 15px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.mf-sheet-c { overflow: auto; padding: 14px; min-height: 0; }
-.mf-sheet-c p { font-size: 13.5px; line-height: 1.7; }
+/* a modal: a screen's frame, a document */
+.mf-modal { position: fixed; inset: 0; z-index: 50; background: var(--scrim); display: flex; align-items: center; justify-content: center; padding: 24px; }
+.mf-modal[hidden] { display: none; }
+.mf-modal-b { width: min(980px, 100%); max-height: 100%; display: flex; flex-direction: column; background: var(--surface); border-radius: 16px; box-shadow: var(--shadow-lg); overflow: hidden; }
+.mf-modal-b > header { display: flex; align-items: center; gap: 8px; padding: 10px 12px 10px 8px; border-bottom: 1px solid var(--line); }
+.mf-modal-t { flex: 1; font-size: 15px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mf-modal-c { overflow: auto; padding: 14px; min-height: 0; }
+.mf-modal-c p { font-size: 13.5px; line-height: 1.7; }
+/* a transcript with no line yet: why, and when the lines come — at the top of the pane, readable at half a sheet */
+.mf-tr-none :is(.mf-tr-bar, .mf-who-filter) { display: none; }
+.mf-empty.mf-why { align-items: flex-start; text-align: start; gap: 4px; padding: 4px 2px 12px; }
+.mf-why .ic { width: 20px; height: 20px; color: var(--sky-d); opacity: 1; }
+.mf-why p { max-width: 60ch; line-height: 1.7; }
+.mf-why b { color: var(--ink); font-size: 14px; }
 .mf-frame { width: 100%; border-radius: 10px; display: block; }
 .mf-docframe { width: 100%; height: min(78vh, 900px); border: 0; display: block; background: var(--surface); }
 
@@ -839,10 +883,6 @@ button.mf-file:hover, a.mf-file:hover { border-color: var(--muted); text-decorat
 .mf-livecard-h { display: flex; align-items: center; gap: 8px; } .mf-livecard-h b { font-size: 15px; }
 .mf-livecard p { margin: 0; }
 .mf-livecard footer { display: flex; gap: 6px; margin-top: 4px; }
-.mf-nextcard { display: flex; flex-direction: column; gap: 4px; color: var(--ink); text-decoration: none; }
-.mf-nextcard:hover { border-color: var(--olive-line); text-decoration: none; }
-.mf-next-room { font-size: 17px; font-weight: 800; }
-.mf-next-go { display: inline-flex; align-items: center; gap: 4px; margin-top: 6px; color: var(--olive-d); font-size: 13px; font-weight: 700; }
 .mf-homeseg { margin-bottom: 14px; }
 .mf-day { margin-bottom: 16px; }
 .mf-day-h { margin: 0 4px 6px; font-size: 12px; font-weight: 700; color: var(--muted); }
@@ -879,32 +919,56 @@ button.mf-file:hover, a.mf-file:hover { border-color: var(--muted); text-decorat
 .mf-cards.live .mf-livecard { flex-direction: row; align-items: center; flex-wrap: wrap; gap: 10px 18px; background: var(--sky-soft); }
 .mf-cards.live .mf-livecard footer { margin-inline-start: auto; margin-top: 0; }
 
-/* ---------- a phone: one column, the screen on top, the tabs and their pane below — an app, not a page ---------- */
+/* ---------- a phone: one header row, the status line, the screen; the parts of the meeting in a bottom sheet over it
+   with three snaps (sheet.js) — peek (the tab bar), half (the default), full (all but a 56-px mini-player) ---------- */
 @media (max-width: 899px) {
-  .mf-mh { padding: 8px 12px 6px; gap: 8px; }
-  .mf-mh h1 { font-size: 17px; line-height: 24px; }
-  .mf-mh-t { min-width: 0; flex-basis: calc(100% - 120px); }
+  .mf-mh { padding: 4px 6px 4px 4px; gap: 2px; min-height: 52px; }
+  .mf-mh h1 { font-size: 16px; line-height: 22px; }
+  .mf-mh-meta { display: none; }
+  .mf-mh-acts { gap: 0; }
   .mf-mh-acts .btn span { display: none; }
-  .mf-mh-acts .btn { width: 36px; height: 36px; padding: 0; justify-content: center; }
-  .mf-mh-meta { gap: 8px; font-size: 12px; } .mf-mh-meta > span + span:not(.mf-people)::before { margin-inline-end: 8px; }
+  .mf-mh-acts .btn { width: 44px; height: 44px; padding: 0; justify-content: center; }
+  .mf-mh-acts .btn.ghost { border-color: transparent; background: transparent; box-shadow: none; }
   .mf-people-n { display: none; }
-  .mf-back span { display: none; } .mf-back { padding: 0 4px; }
-  .mf-ribbon { margin: 0 12px 6px; }
-  .mf-firstnote { margin: 0 12px 8px; font-size: 12.5px; }
-  .mf-body { display: flex; flex-direction: column; gap: 8px; padding: 0 0 0; }
-  .mf-stagecol { flex: none; padding: 0 12px; gap: 6px; }
-  .mf-player { flex: none; }
-  .mf-screen { aspect-ratio: 16 / 9; max-height: 34dvh; border-radius: 12px; }
+  .mf-back span { display: none; } .mf-back { width: 44px; height: 44px; padding: 0; justify-content: center; }
+  .mf-statusbox { margin: 0 12px 8px; }
+  .mf-status { padding: 0 10px; gap: 8px; }
+  .mf-status-sub { display: none; }
+  .mf-body:not(.mf-live) { display: flex; flex-direction: column; gap: 0; padding: 0 0 var(--sheet-h, 50%); }
+  .mf-body:not(.mf-live) .mf-stagecol { flex: 1; min-height: 0; padding: 0 12px 6px; gap: 4px; }
+  .mf-body:not(.mf-live) .mf-player { flex: 1; min-height: 0; container-type: size; }
+  .mf-body:not(.mf-live) .mf-screen { flex: none; margin: auto; width: min(100cqw, 100cqh * 16 / 9); height: min(100cqh, 100cqw * 9 / 16); border-radius: 12px; }
+  .mf-divide { display: none; }
   .mf-cap-line { font-size: 13.5px; padding: 5px 10px; }
-  .mf-transport { padding: 2px 4px; gap: 2px; box-shadow: none; }
+  .mf-transport { padding: 2px 4px; gap: 2px; box-shadow: none; flex-wrap: nowrap; }
   .mf-play { width: 36px; height: 36px; }
   .mf-tracks, .mf-zoombox, .mf-transport .mf-follow { display: none; }
   .mf-scrubbox { display: block; }
-  .mf-side { flex: 1; border-radius: 16px 16px 0 0; border-bottom: 0; box-shadow: var(--shadow-lg); }
+  .mf-body:not(.mf-live) .mf-side { position: absolute; z-index: 5; inset-inline: 0; bottom: 0; height: var(--sheet-h, 50%);
+    border-radius: 18px 18px 0 0; border-bottom: 0; box-shadow: var(--shadow-lg); transition: height .22s cubic-bezier(.2, .8, .2, 1); }
+  .mf-side.mf-dragging { transition: none; }
+  .mf-grab { display: flex; align-items: center; justify-content: center; flex: none; width: 100%; height: 22px; padding: 0; border: 0; background: transparent; cursor: grab; touch-action: none; }
+  .mf-grab i { width: 40px; height: 4px; border-radius: 2px; background: var(--muted); opacity: .45; }
+  .mf-grab:focus-visible { outline: 2px solid var(--sky-d); outline-offset: -2px; }
+  .mf-body:not(.mf-live) .mf-tabs { touch-action: none; padding-top: 0; }
   .mf-tlbox { display: none; }
-  .mf-tabs button { padding: 0 9px; font-size: 12.5px; height: 42px; }
+  .mf-tabs button { font-size: 13px; height: 44px; }
   .mf-tabs button .ic { display: none; }
   .mf-pane { padding: 10px 12px calc(20px + env(safe-area-inset-bottom, 0px)); }
+  /* full: the sheet over everything but a mini-player — the same video, still playing, its clock and the status */
+  .mf-mtg[data-snap="full"] .mf-mh, .mf-mtg[data-snap="full"] .mf-statusbox { visibility: hidden; }
+  .mf-mtg[data-snap="full"] .mf-stagecol { position: absolute; z-index: 6; top: 0; inset-inline: 0; height: 56px; padding: 6px 8px 6px 12px; flex-direction: row; align-items: center; gap: 10px;
+    background: var(--surface); border-bottom: 1px solid var(--line); }
+  .mf-mtg[data-snap="full"] .mf-player { flex: none; width: 80px; height: 44px; }
+  .mf-mtg[data-snap="full"] .mf-screen { border-radius: 8px; }
+  .mf-mtg[data-snap="full"] :is(.mf-cap, .mf-bigplay, .mf-after, .mf-novideo span, .mf-scrubbox) { display: none; }
+  .mf-mtg[data-snap="full"] .mf-mini-t { display: flex; flex-direction: column; flex: 1; min-width: 0; gap: 1px; }
+  .mf-mini-t b { font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .mf-mini-s { font-size: 12px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .mf-mtg[data-snap="full"] .mf-transport { border: 0; background: transparent; padding: 0; }
+  .mf-mtg[data-snap="full"] .mf-transport > :not(.mf-play):not(.mf-clock) { display: none; }
+  .mf-mtg[data-snap="full"] :is(.mf-clock .mf-sep, .mf-clock .mf-dur) { display: none; }
+  .mf-mtg[data-snap="full"] .mf-side { border-radius: 0; }
   .mf-pane[data-pane="tl"] .mf-tlmount { flex: 1; min-height: 0; }
   .mf-line-acts { opacity: 1; }
   .mf-tb.xs { min-width: 32px; height: 32px; }
@@ -914,10 +978,10 @@ button.mf-file:hover, a.mf-file:hover { border-color: var(--muted); text-decorat
   .mf-strip { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .mf-talk-row { grid-template-columns: 96px minmax(0, 1fr) 36px; }
   .mf-edit-row { grid-template-columns: 1fr; }
-  .mf-sheet { padding: 0; align-items: flex-end; }
-  .mf-sheet-b { max-height: 92dvh; border-radius: 16px 16px 0 0; }
+  .mf-modal { padding: 0; align-items: flex-end; }
+  .mf-modal-b { max-height: 92dvh; border-radius: 16px 16px 0 0; }
   .mf-docframe { height: 80dvh; }
-  .mf-live { display: flex; }
+  .mf-live { display: flex; flex-direction: column; gap: 8px; padding: 0 12px 12px; overflow: auto; }
   .mf-live .mf-stagecol { flex: none; max-height: 52dvh; }
   .mf-live .mf-side { min-height: 40dvh; }
   .mf-bigcap { min-height: 110px; }
@@ -933,23 +997,44 @@ button.mf-file:hover, a.mf-file:hover { border-color: var(--muted); text-decorat
   .mf-cards.live .mf-livecard footer { margin-inline-start: 0; }
 }
 @media (min-width: 900px) and (max-width: 1180px) {
-  .mf-body { grid-template-columns: minmax(0, 1fr) 360px; padding: 0 14px 12px; }
-  .mf-mh, .mf-ribbon { padding-inline: 14px; } .mf-ribbon { margin-inline: 14px; }
+  .mf-body { grid-template-columns: minmax(0, 1fr) 14px var(--side-w, 360px); padding: 0 14px 12px; }
+  .mf-mh { padding-inline: 14px; } .mf-statusbox { margin-inline: 14px; }
   .mf-tracks .mf-chip span { max-width: 9ch; overflow: hidden; text-overflow: ellipsis; }
 }
 @media (prefers-reduced-motion: reduce) {
   .mf *, .mf *::before, .mf *::after { animation-duration: .001ms !important; animation-iteration-count: 1 !important; transition: none !important; }
 }
 
-/* «פתיחה לפי שם» in the centre's head (CHAT-67, lane R2-L7): a room the office names, opened as host. 44-px targets. */
-.mf-roomform { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
-.mf-roomform input { height: 44px; width: 11rem; min-width: 0; padding: 0 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); color: var(--ink); font: inherit; font-variant-numeric: tabular-nums; }
-.mf-roomform input:focus-visible { outline: 2px solid var(--sky-d); outline-offset: 2px; }
-.mf-roomform input[aria-invalid="true"] { border-color: var(--plum-d, var(--plum)); }
-.mf-roomform .btn { min-height: 44px; }
-.mf-room-err { flex-basis: 100%; color: var(--plum-d, var(--plum)); font-size: 13px; }
+/* «פגישה חדשה» (DGO-1632, the owner 2026-11-09: «הפגישה החדשה הוא ממציא לבד … זה מבלבל מאוד»): one card, the
+   name in its field before anything opens, the series' next names to pick. It replaces the head's «פתיחה לפי שם» form
+   and the «הבאה בתור» cards (CHAT-67): one way in, at 44-px targets. */
+.mf-newmeet { display: grid; gap: 8px; margin: 0 0 14px; padding: 14px 16px; border: 1px solid var(--line); border-radius: 14px; background: var(--surface); box-shadow: var(--shadow); }
+.mf-newmeet-l { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; min-width: 0; }
+.mf-newmeet-l .ic { width: 18px; height: 18px; color: var(--olive-d); }
+.mf-newmeet-l b { font-size: 15px; }
+.mf-newmeet-row { display: flex; gap: 8px; min-width: 0; }
+.mf-newmeet-row input { flex: 1; min-width: 0; height: 44px; padding: 0 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface-2); color: var(--ink); font: inherit; font-size: 16px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.mf-newmeet-row input:focus-visible { outline: 2px solid var(--sky-d); outline-offset: 2px; }
+.mf-newmeet-row input[aria-invalid="true"] { border-color: var(--plum-d, var(--plum)); }
+.mf-newmeet-row .btn { min-height: 44px; flex: none; padding: 0 18px; }
+.mf-newmeet-pick { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; min-width: 0; }
+.mf-newmeet-pick:empty { display: none; }
+.mf-newmeet-pick .mf-chip { height: 32px; max-width: 100%; }
+.mf-newmeet-pick .mf-chip bdi { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mf-room-err { color: var(--plum-d, var(--plum)); font-size: 13px; margin: 0; }
 .mf-room-err:empty { display: none; }
-@media (max-width: 899px) { .mf-roomform { flex: 1 1 100%; } .mf-roomform input { flex: 1 1 8rem; width: auto; } }
+/* nothing runs out of its box (the owner: «טקסט יוצא מחוץ לכותרת … גם בפגישות ראיתי»): a long word wraps; a
+   meeting's name is one line, and two on a phone, then «…» */
+.mf-home .pg-head h1, .mf-home .pg-sub { overflow-wrap: anywhere; }
+.mf-home .mf-item :is(p, .mf-item-tx, .mf-item-meta) { overflow-wrap: anywhere; }
+.mf-waitsec { margin-top: -8px; }
+@media (max-width: 599px) {
+  .mf-row-main b { white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; line-height: 1.35; }
+  /* a phone: the name has the card's whole width, «פתיחה» and «הכנה» under it */
+  .mf-newmeet-row { flex-wrap: wrap; }
+  .mf-newmeet-row input { flex: 1 1 100%; }
+  .mf-newmeet-row .btn { flex: 1 1 0; justify-content: center; }
+}
 
 /* ── lane R4-MEET (2026-10-29): who said it, every version of a line, the transcript as a file, the screens ───────── */
 button.mf-who { display: inline-flex; align-items: center; gap: 4px; min-height: 24px; padding: 0 6px; margin-inline-start: -6px; border: 0; border-radius: 6px; background: transparent; color: inherit; font: inherit; font-size: 13px; font-weight: 700; cursor: pointer; }

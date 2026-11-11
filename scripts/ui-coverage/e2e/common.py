@@ -71,7 +71,7 @@ def env(key: str, default: str = "") -> str:
     return _ENV_CACHE.get(key, default)
 
 
-DEPLOYMENT_NAME = env("DEPLOYMENT_NAME", "shlomo-laptop")
+DEPLOYMENT_NAME = env("DEPLOYMENT_NAME", "owner-laptop")
 AK_USER = os.environ.get("AK_USER", "akadmin")
 AK_PASS = os.environ.get("AK_PASS") or env("AUTHENTIK_BOOTSTRAP_PASSWORD")
 
@@ -422,7 +422,7 @@ def n8n_wait_execution(execution_id: str, budget_s: int = 300, poll_s: int = 8) 
     while time.time() < deadline:
         out = psql_one(
             f"SELECT status FROM execution_entity WHERE id={int(execution_id)};",
-            container_base="n8n-postgres", user=env("POSTGRES_USER", "hacohen"), db="n8n",
+            container_base="n8n-postgres", user=env("POSTGRES_USER", "example"), db="n8n",
         )
         if out and out not in ("running", "new", "waiting"):
             return out

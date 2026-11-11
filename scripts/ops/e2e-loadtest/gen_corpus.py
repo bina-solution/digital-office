@@ -181,7 +181,7 @@ def main():
     ap.add_argument("--gdoc-ratio", type=float, default=0.96)
     ap.add_argument("--outdir", required=True)
     ap.add_argument("--provision", required=True)
-    ap.add_argument("--deployment-name", default="shlomo-laptop")
+    ap.add_argument("--deployment-name", default="owner-laptop")
     ap.add_argument("--seed", type=int, default=42)
     a = ap.parse_args()
     rnd = random.Random(a.seed)

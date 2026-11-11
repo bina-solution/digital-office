@@ -187,6 +187,8 @@
     .search input{width:100%;padding:10px 38px 10px 14px;border:1px solid var(--line);border-radius:12px;font:inherit;font-size:13px;background:var(--surface-2);color:var(--ink);transition:.15s}
     .search input:focus{outline:none;border-color:var(--accent);background:var(--surface);box-shadow:0 0 0 3px var(--accent-soft)}
     .search svg{position:absolute;inset-inline-start:12px;top:50%;transform:translateY(-50%);color:var(--muted)}
+    /* the console's bar searches this list (DGO-1507): the field is shown when that search is pressed */
+    html.shell-search:not(.searching) .conv-head .search{display:none}
     .segtabs{display:flex;gap:3px;padding:3px;margin:12px 18px 4px;background:var(--bg);border-radius:11px}
     .seg{flex:1;display:flex;align-items:center;justify-content:center;gap:5px;padding:7px 6px;border-radius:8px;font-size:12.5px;font-weight:700;color:var(--muted);cursor:pointer;transition:.15s;border:none;background:transparent}
     .seg:hover{color:var(--ink)}
@@ -399,11 +401,13 @@
     .acct-add-s{font-weight:500;font-size:11px;color:var(--muted);white-space:normal;line-height:1.35}
     .acct-warn{display:flex;align-items:flex-start;gap:6px;color:var(--amber);font-size:11px;font-weight:600;padding:7px 5px 2px;line-height:1.45;min-width:0}
     .acct-empty{padding:10px;font-size:11.5px;color:var(--muted)}
-    .mconn{display:none;align-items:center;gap:6px;margin-inline-start:auto;max-width:52%;
+    /* 30px under a finger (it was 29.25), and the head keeps its height: the margin gives the extra back (DGO-617) */
+    .mconn{display:none;align-items:center;gap:6px;margin-inline-start:auto;max-width:52%;min-height:30px;margin-block:-1px;
       background:var(--surface-2);border:1px solid var(--line);border-radius:999px;color:var(--ink);
       font:inherit;font-size:11.5px;font-weight:700;padding:5px 11px;cursor:pointer;
       white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
     .mconn .mdot{width:7px;height:7px;border-radius:50%;flex:none;background:var(--ok)}
+    .mconn #mConnName{min-width:0;overflow:hidden;text-overflow:ellipsis}   /* the pill's own ellipsis cannot reach a flex child */
     /* AFTER the base rule, not inside the layout media query further up: same specificity, so the
        later declaration wins — putting the override earlier left the chip hidden on every phone. */
     @media (max-width:820px){.mconn{display:inline-flex}}
@@ -437,16 +441,22 @@
     .btn:hover{border-color:var(--accent)}
     .btn.pri{background:var(--accent);border-color:transparent;color:var(--accent-ink)}
     .btn.pri:hover{background:var(--accent-d)}
-    .xbtn{background:transparent;border:none;color:var(--muted);cursor:pointer;display:inline-flex;padding:5px 8px;border-radius:8px}
+    .xbtn{background:transparent;border:none;color:var(--muted);cursor:pointer;display:inline-flex;align-items:center;justify-content:center;min-width:30px;min-height:30px;padding:5px 8px;border-radius:8px}
     .xbtn:hover{background:var(--surface-2);color:var(--ink)}
     .mlbl{font-size:10.5px;font-weight:800;letter-spacing:.08em;color:var(--muted);text-transform:uppercase;margin:2px 0 6px}
     .brow{display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--line)}
     .brow:last-of-type{border-bottom:none}
     .brow .bx{flex:1;min-width:0}
-    .brow .bn{display:block;font-weight:700;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .brow button.bx{display:block;padding:0;border:none;border-radius:8px;background:transparent;color:inherit;
+      font:inherit;text-align:start;cursor:pointer}
+    .brow button.bx:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+    .brow .bn{display:block;font-weight:700;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;text-align:-webkit-match-parent;text-align:match-parent}
     .brow .bs{display:block;font-size:11px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
     .brow select{padding:7px 10px;border:1px solid var(--line);border-radius:10px;font:inherit;font-size:12.5px;
       font-weight:600;background:var(--surface);color:var(--ink);max-width:190px;cursor:pointer}
+    /* In a narrow frame the select goes under its connection's name: beside it, at 390 and in desktop mode's smallest
+       window, it left the name 86px (DGO-617) */
+    @media (max-width:520px){.brow select{flex:1 1 100%;max-width:none;margin-inline-start:40px}}
     .bcard{margin-top:14px;padding:13px 14px;border:1px solid var(--line);border-radius:13px;background:var(--surface-2)}
     .bcard h4{margin:0 0 5px;font-size:13.5px;font-weight:800}
     .bcard p{margin:0 0 10px;font-size:12.5px;color:var(--muted);line-height:1.55}
@@ -462,6 +472,8 @@
        accent-soft the connection list uses for "this one", so "which row am I editing" is the same
        visual answer everywhere in the app. */
     .brow{border-radius:11px;padding-inline:8px;margin-inline:-8px;cursor:pointer}
+    .pickhint{display:block;margin-top:3px;font-size:11px;font-weight:600;color:var(--muted)}.pickhint[hidden]{display:none}
+    .brow{flex-wrap:wrap}.brow .pickhint{flex:1 0 100%}   /* the hint is a line of its own under the row, never a squeezed column */
     .brow.on{background:var(--accent-soft)}
     .brow:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
     .bset-row{display:flex;align-items:flex-start;gap:12px;padding:10px 0;border-bottom:1px solid var(--line)}
@@ -592,7 +604,7 @@
         <div class="r"><h2>שיחות</h2><span class="cnt" id="convCount"></span>
           <!-- phone-only twin of the sidebar's connection chip: under 820px aside.side is hidden, so
                without this the switcher and the bot controls would simply not exist on a phone. -->
-          <button class="mconn" id="mConn" type="button" title="חיבור פעיל · החלפה"><span class="mdot" id="mConnDot"></span><span id="mConnName">—</span><svg class="mk" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></button>
+          <button class="mconn" id="mConn" type="button" title="חיבור פעיל · החלפה"><span class="mdot" id="mConnDot"></span><span id="mConnName" dir="auto">—</span><svg class="mk" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></button>
           <!-- …and of «שיחה חדשה»: the sidebar's button is hidden with the sidebar, and it was the only way to
                start a conversation - so none could be started from a phone, or from the window desktop mode opens
                this screen in (580px on a laptop). Never disabled: newChat() says why where the connection cannot. -->
@@ -646,6 +658,7 @@ var binaAsk, binaTell;
     + "@media (pointer:coarse){.bask-btn{height:44px}.bask-field input{height:44px}}"
     + "@media (max-height:399px){.bask{padding:8px}.bask-card{padding:12px}.bask-acts{margin-top:10px}}"   // the side menu's own short frame
     + "#bina-tell{position:fixed;inset-block-end:16px;inset-inline-start:16px;z-index:2147483001;display:grid;gap:8px;max-width:min(420px,calc(100vw - 32px))}"
+    + "#bina-tell[data-at~=top]{inset-block-start:16px;inset-block-end:auto}#bina-tell[data-at~=end]{inset-inline-start:auto;inset-inline-end:16px}"   // where it covers nothing (place())
     + ".btell{--c:var(--ok);padding:10px 14px;border-radius:12px;background:color-mix(in srgb,var(--c) 14%,var(--surface));color:var(--ink);border:1px solid color-mix(in srgb,var(--c) 38%,var(--surface));border-inline-start:4px solid var(--c);font:13px/1.45 var(--font,system-ui,sans-serif);box-shadow:var(--shadow-lg);cursor:pointer;text-align:start}"
     + ".btell.warn{--c:var(--lime)}.btell.bad{--c:var(--red)}"   // --ok and --red, not the bare hues: they are the steps that are lifted on the dark ground
     + ".btell small{display:block;margin-top:2px;font-size:11.5px;color:var(--muted);overflow-wrap:anywhere;unicode-bidi:plaintext}"
@@ -750,6 +763,47 @@ var binaAsk, binaTell;
     });
   };
 
+  // The notice never sits on a control of the page (DGO-618): it keeps its corner while that covers nothing, and
+  // otherwise takes the first corner that does — at every frame size, a desktop window of 380 x 260 included,
+  // where the bottom corner is where a window keeps its buttons. With no corner free at its full width, the corners
+  // again at two thirds and at half of it (a narrower notice fits over a title, beside a window's ✕); with none
+  // free at all, the place that covers fewest.
+  var CONTROLS = "button,a[href],input:not([type=hidden]),select,textarea,summary,[role=button],[tabindex]:not([tabindex='-1'])";
+  function covered(box) {
+    var b = box.getBoundingClientRect(), n = 0;
+    if (b.width < 2 || b.height < 2) return 0;
+    doc.querySelectorAll(CONTROLS).forEach(function (c) {
+      var r = c.getBoundingClientRect();     // the cheap test first: on a screen of thousands of rows most are far away
+      if (Math.min(b.right, r.right) - Math.max(b.left, r.left) <= 1 || Math.min(b.bottom, r.bottom) - Math.max(b.top, r.top) <= 1) return;
+      // inside the notice, in a part of the page made inert (a window the page put over it), or not drawn: not a control here
+      if (box.contains(c) || c.closest("[inert]") || (c.checkVisibility && !c.checkVisibility({ checkVisibilityCSS: true }))) return;
+      n++;
+    });
+    return n;
+  }
+  function put(box, at, w) {
+    if (at) box.setAttribute("data-at", at); else box.removeAttribute("data-at");
+    box.style.maxWidth = w;
+    // a top spot lets go of the bottom, written on the element: a page's own rule that lifts the notice off its bar
+    // (`body:has(…) #bina-tell{inset-block-end:…}`) out-ranks the attribute, and the box stretched to the full height
+    box.style.insetBlockEnd = at.indexOf("top") < 0 ? "" : "auto";
+  }
+  function place(box) {
+    var best = null;
+    ["", "min(280px,calc((100vw - 32px) * .66))", "min(210px,calc((100vw - 32px) * .5))"].some(function (w) {
+      return ["", "end", "top", "top end"].some(function (at) {
+        put(box, at, w);
+        var n = covered(box);
+        if (!best || n < best.n) best = { at: at, w: w, n: n };
+        return n === 0;
+      });
+    });
+    put(box, best.at, best.w);
+  }
+  var placing = 0;
+  function replace() { var box = doc.getElementById("bina-tell"); if (box && box.firstChild) place(box); }
+  window.addEventListener("resize", function () { clearTimeout(placing); placing = setTimeout(replace, 120); });
+
   // The third word is how long the notice stays (ms) — or what more it carries: { ms, more, act, stay }.
   //   more  the service's own sentence, on a line of its own under the notice's words
   //   act   [label, fn] — one way on from the notice (an undo, a refresh): pressing it runs fn and takes the notice down
@@ -766,12 +820,13 @@ var binaAsk, binaTell;
     if (o.act) {
       var go = el("button", "", o.act[0]);
       go.setAttribute("type", "button");
-      go.addEventListener("click", function (e) { e.stopPropagation(); n.remove(); o.act[1](); });
+      go.addEventListener("click", function (e) { e.stopPropagation(); n.remove(); replace(); o.act[1](); });
       n.appendChild(go);
     }
-    n.addEventListener("click", function () { n.remove(); });
+    n.addEventListener("click", function () { n.remove(); replace(); });
     box.appendChild(n);
-    if (!o.stay) setTimeout(function () { n.remove(); }, o.ms || (kind === "bad" ? 9000 : 5200));
+    place(box);
+    if (!o.stay) setTimeout(function () { n.remove(); replace(); }, o.ms || (kind === "bad" ? 9000 : 5200));
     return n;
   };
 })();
@@ -804,6 +859,29 @@ var binaAsk, binaTell;
        `tell(msg, bad)` keeps the page's own yes/no — a failure is `bad`, anything else is good news;
        a step not taken yet is said as a warning where it happens. */
     function tell(msg,bad){ return binaTell(msg, bad?'bad':'ok'); }
+    // A closed select's arrows and letters move what it SHOWS — Chrome on Windows and Linux fires `change` on every
+    // press, and each one attached a bot to a live connection (DGO-618). Enter saves it; Esc or leaving it gives back
+    // what is saved. A pick from the open list saves at once: a `change` that does not come in the same tick as a key
+    // is a pick (on a Mac ↓ OPENS the list, and the pick comes later), and the list opens on what is saved.
+    function onPick(sel,commit){
+      var saved=sel.value, keyed=false, live=false, at=sel.closest('.selwrap')||sel,
+          hint=at.parentNode.querySelector('.pickhint');
+      if(!hint){ hint=document.createElement('small'); hint.className='pickhint'; hint.textContent='Enter לשמירה · Esc לביטול'; at.after(hint); }
+      function say(on){ hint.hidden=!on; }
+      function back(){ sel.value=saved; keyed=false; say(false); }
+      say(false);
+      sel.onpointerdown=function(){ if(keyed) back(); };
+      // (what is saved is what the select showed when the keys began — after a save, or a refusal the page drew back)
+      sel.onkeydown=function(e){
+        live=true; setTimeout(function(){ live=false; });
+        if(e.key==='Enter'){ if(keyed){ e.preventDefault(); keyed=false; say(false); if(sel.value!==saved) commit(); } return; }
+        if(e.key==='Escape'){ if(keyed){ if(sel.value!==saved){ e.preventDefault(); e.stopPropagation(); } back(); } return; }
+        if(e.key===' '||e.key==='F4'||(e.altKey&&/^Arrow(Up|Down)$/.test(e.key))){ if(keyed) back(); return; }
+        if(e.key.length===1||/^(Arrow|Page)|^(Home|End)$/.test(e.key)){ if(!keyed) saved=sel.value; keyed=true; }
+      };
+      sel.onchange=function(){ if(keyed&&live){ say(sel.value!==saved); return; } keyed=false; say(false); commit(); };
+      sel.onblur=function(){ if(keyed) back(); };
+    }
     /* What cannot be taken back - a removed connection or profile, a replaced key, every user deleted, a
        message to every conversation, a bot's saved settings - is asked through the office's question
        (`binaAsk`, the same block), and the question does it (`run`): its action is busy while the request
@@ -906,6 +984,7 @@ var binaAsk, binaTell;
       /* A modal whose header says «ההתנהגות בחיבור X» must not survive onto Y. */
       closeModal();
       var si=$('#convSearch'); if(si)si.value='';
+      document.documentElement.classList.remove('searching');   // (an emptied field under the console folds away with it)
       document.querySelectorAll('#segtabs .seg').forEach(function(x,i){ x.classList.toggle('on', i===0); });
       var ch=document.querySelector('.chat'); if(ch) ch.classList.remove('mob-thread');
     }
@@ -1059,19 +1138,23 @@ var binaAsk, binaTell;
       if(!a){ sel.innerHTML=''; $('#botDesc').textContent=''; return; }
       sel.innerHTML=S.bots.map(function(b){return '<option value="'+esc(b.id)+'"'+(b.id===a.activeBot?' selected':'')+'>'+esc(b.name)+'</option>';}).join('');
       var cur=botOf(a.activeBot); $('#botDesc').textContent=cur?cur.desc:'';
-      sel.onchange=function(){ setBot(a.id,sel.value); };
+      onPick(sel,function(){ setBot(a.id,sel.value); });
     }
-    /** Attach `bot` to `connId`, then re-read the truth. Returns a promise so the modal can await it. */
+    /** Attach `bot` to `connId`, then read the connections again: the service owns that mapping, not a select. A
+     *  refusal is said in its words; what IS attached is what is drawn — read again, or, where the list cannot be
+     *  read, what the service last took — so a select and the card under it never disagree (DGO-617). */
     function setBot(connId,bot){
       return post('/account/bot',{id:connId,bot:bot}).then(function(r){
-        if(!r.ok) { tell((r.d&&r.d.error)||'שיוך הבוט נכשל',true); return jf('/accounts'); }
-        return jf('/accounts');
-      }).then(function(d){
-        S.accounts=(d&&d.accounts)||S.accounts;
+        if(!r.ok){ tell((r.d&&r.d.error)||'שיוך הבוט נכשל',true); return; }
+        var c=S.accounts.filter(function(x){return x.id===connId;})[0]; if(c) c.activeBot=bot;   // (the service took it)
+      }).then(function(){ return jf('/accounts'); }).then(function(d){
+        if(d&&d.accounts){ S.accounts=d.accounts; return true; }
+        tell('החיבורים לא נטענו',true); return false;
+      }).then(function(read){
         S.activeAcct=S.accounts.filter(function(x){return x.id===S.active;})[0]||S.activeAcct;
         var target=S.accounts.filter(function(x){return x.id===connId;})[0];
         renderBotCard(); renderAcctMenu();
-        if(target&&target.activeBot===bot) tell('הבוט בחיבור «'+(target.label||connId)+'»: '+botNameOf(bot));
+        if(read&&target&&target.activeBot===bot) tell('הבוט בחיבור «'+(target.label||connId)+'»: '+botNameOf(bot));
         if(S.openId) renderBotnote();
       });
     }
@@ -1121,7 +1204,7 @@ var binaAsk, binaTell;
        mail's do, and since c80af853 chat's does as well (routing[0].module.service = "chat" in
        apps/chat/app.json). So showEmbed() lights #acctChip and there are TWO controls on screen.
        Both are legitimate and neither is going away: this app is also served at its own origin
-       (chat.hacohen.bina-solutions.co.il) where there is no console around it, and the shell owns
+       (chat.example.bina-solutions.co.il) where there is no console around it, and the shell owns
        "which account" for every embedded service by design. Making them agree is the fix; removing
        one is a different product.
 
@@ -1182,14 +1265,18 @@ var binaAsk, binaTell;
     /** The connection rows themselves — shared by the sidebar menu and the phone-sized picker, so the
      *  two can never disagree about what is connected or which bot answers on it. */
     function acctRows(host,after){
+      var inMenu=host.getAttribute('role')==='menu';
       if(!S.accounts.length) host.appendChild(node('div','acct-empty','אין חיבורים זמינים'));
       S.accounts.forEach(function(c){
         var item=node('div','acct-item','');
         var pick=document.createElement('button');
-        pick.className='acct-pick'; pick.type='button'; pick.setAttribute('role','menuitemradio');
-        pick.setAttribute('aria-checked',c.id===S.active?'true':'false');
+        // menuitemradio only inside the sidebar's menu (#acctMenu, role=menu); in the phone's window, buttons with the
+        // active one marked current — a menu item with no menu around it is wrong (DGO-617)
+        pick.className='acct-pick'; pick.type='button';
+        if(inMenu){ pick.setAttribute('role','menuitemradio'); pick.setAttribute('aria-checked',c.id===S.active?'true':'false'); }
+        else if(c.id===S.active) pick.setAttribute('aria-current','true');
         pick.innerHTML='<span class="acct-l1"><span class="acct-dot" style="background:'+(STCOL[c.status]||'var(--line)')+'"></span>'+
-          '<b class="acct-lbl">'+esc(c.label||c.id)+'</b>'+(c.id===S.active?'<span class="acct-on">'+mark('check','החיבור הפעיל')+'</span>':'')+'</span>'+
+          '<b class="acct-lbl" dir="auto">'+esc(c.label||c.id)+'</b>'+(c.id===S.active?'<span class="acct-on">'+mark('check','החיבור הפעיל')+'</span>':'')+'</span>'+
           (c.identity ? '<small class="acct-hint">'+esc(c.identity)+'</small>' : '')+
           '<small class="acct-proto">'+esc(provName(c))+' · בוט: '+esc(botNameOf(c.activeBot))+'</small>';
         pick.title=c.status==='ok'?'מצב אחרון מהשירות. בדיקה חיה מתבצעת על החיבור הפעיל בלבד.':(c.reason||STHE[c.status]||'');
@@ -1233,7 +1320,7 @@ var binaAsk, binaTell;
       if(canAdminEngine()) btns.push({label:'פרופילים במנוע הפנימי',onclick:function(){ closeModal(); openEngine(); }});
       btns.push({label:'כלים וייצוא',onclick:function(){ closeModal(); openTools(); }});
       btns.push({label:'סגירה',pri:true,onclick:closeModal});
-      modal('חיבור פעיל','<div id="connRows"></div>',btns);
+      modal('חיבור פעיל','<div id="connRows" role="group" aria-label="החיבורים"></div>',btns);
       acctRows($('#connRows'),closeModal);
     }
 
@@ -1244,22 +1331,39 @@ var binaAsk, binaTell;
         if(!r.ok) return tell((r.d&&r.d.error)||'החלפת החיבור נכשלה',true);
         // One door — the same one __chatReload() and the console's message go through, so all three
         // paths that mean "start over on a different connection" clear the same things.
+        // …and the shell is told: its chip names the connection, and re-reads it on the shell's own message, sent up
+        // (platform-base/console/static/app.js, DGO-617). Standalone, the page would only be telling itself.
+        if(window.parent!==window){ try{ window.parent.postMessage({type:'platform:connection-changed',service:'chat'},window.location.origin); }catch(e){} }
         resetForConnection(id);
         return boot().then(function(){ tell('החיבור הוחלף: '+(S.activeAcct?S.activeAcct.label:id)); });
       });
     }
 
     /* ── modal ─────────────────────────────────────────────────────────────────── */
+    /* The window takes the focus and gives it back, and what is behind it is inert while it is open (DGO-617).
+       A window drawn again over itself keeps the focus where it is. */
+    var OPENER=null;
     function modal(title,bodyHtml,buttons){
+      var ov=$('#ov'), wasHidden=ov.classList.contains('hidden');
+      if(wasHidden) OPENER=document.activeElement;
       $('#mTitle').textContent=title; $('#mBody').innerHTML=bodyHtml;
       var f=$('#mFoot'); f.innerHTML='';
       (buttons||[]).forEach(function(b){
         var el=document.createElement('button'); el.type='button'; el.className='btn'+(b.pri?' pri':'');
         el.textContent=b.label; el.onclick=b.onclick; f.appendChild(el);
       });
-      $('#ov').classList.remove('hidden');
+      ov.classList.remove('hidden'); $('.chat').inert=true;
+      if(wasHidden||!ov.contains(document.activeElement)) $('#mX').focus();
     }
-    function closeModal(){ $('#ov').classList.add('hidden'); }
+    function closeModal(){
+      var ov=$('#ov'); if(ov.classList.contains('hidden')) return;   // resetForConnection() calls it on every connection reset
+      ov.classList.add('hidden'); $('.chat').inert=false;
+      // back to what opened it — or, where that went away with the sidebar's menu, to the control it hangs from. Not
+      // <body>: Safari focuses no button that is clicked, so the opener it gives is the page itself. And only while
+      // this page has the keyboard: a switch made from the console's chip must not pull the focus into the frame.
+      var back=[OPENER,acctBtn(),$('#mConn')].filter(function(n){ return n&&n!==document.body&&n.isConnected&&n.getClientRects().length; })[0];
+      OPENER=null; if(back&&document.hasFocus()) back.focus();
+    }
 
     /* ── bots · the management surface ─────────────────────────────────────────────
        Two things live here and they are different questions. ATTACHMENT — which bot answers on which
@@ -1319,29 +1423,37 @@ var binaAsk, binaTell;
       if(!S.accounts.filter(function(x){return x.id===S.botConn;}).length)
         S.botConn=(S.activeAcct&&S.activeAcct.id)||(S.accounts[0]&&S.accounts[0].id)||null;
       host.innerHTML=S.accounts.map(function(c){
-        return '<div class="brow'+(c.id===S.botConn?' on':'')+'" data-conn="'+esc(c.id)+'" role="button" tabindex="0"'+
-          ' aria-pressed="'+(c.id===S.botConn?'true':'false')+'" title="עריכת ההגדרות בחיבור זה">'+
+        // A row is a connection: its name is the row's own button (pressed: its settings below), its select is its
+        // bot — two controls side by side, never a select inside a role=button (DGO-617). The name carries dir=auto
+        // and is cut at ITS end; the identity reads its own way («@BinaOfficeBot» stood «BinaOfficeBot@»).
+        return '<div class="brow'+(c.id===S.botConn?' on':'')+'" data-conn="'+esc(c.id)+'">'+
           '<span class="pic" style="background:'+esc(c.color||'var(--muted)')+'">'+
           provIco(c.provider)+'</span>'+
-          '<span class="bx"><span class="bn">'+esc(c.label||c.id)+'</span><span class="bs">'+
+          '<button class="bx" type="button" aria-pressed="'+(c.id===S.botConn?'true':'false')+'" title="עריכת ההגדרות בחיבור זה">'+
+            '<span class="bn" dir="auto">'+esc(c.label||c.id)+'</span><span class="bs">'+
             // the protocol name is the label of the built-in connection, and echoing it under itself
             // reads as a rendering fault rather than as a second fact
-            (provName(c)===(c.label||'')?'':esc(provName(c))+(c.identity?' · ':''))+esc(c.identity||'')+'</span></span>'+
-          '<select data-conn="'+esc(c.id)+'">'+S.bots.map(function(b){
+            (provName(c)===(c.label||'')?'':esc(provName(c))+(c.identity?' · ':''))+(c.identity?'<bdi>'+esc(c.identity)+'</bdi>':'')+'</span></button>'+
+          '<select data-conn="'+esc(c.id)+'" aria-label="הבוט בחיבור «'+esc(c.label||c.id)+'»">'+S.bots.map(function(b){
             return '<option value="'+esc(b.id)+'"'+(b.id===c.activeBot?' selected':'')+'>'+esc(b.name)+'</option>';
           }).join('')+'</select></div>';
       }).join('')||'<div class="acct-empty">אין חיבורים</div>';
       host.querySelectorAll('select').forEach(function(sel){
-        sel.onchange=function(){ sel.disabled=true; var cid=sel.getAttribute('data-conn');
-          setBot(cid,sel.value).then(function(){ sel.disabled=false; pickBotConn(cid,true); });
-        };
+        onPick(sel,function(){ sel.disabled=true; var cid=sel.getAttribute('data-conn');
+          // what the select shows afterwards is what IS attached — a refused choice does not stay in it — and the
+          // keyboard that changed it has it again (a select disabled under the focus gave the focus to the page)
+          var done=function(){ var c=S.accounts.filter(function(x){return x.id===cid;})[0];
+            if(c&&[].some.call(sel.options,function(o){return o.value===c.activeBot;})) sel.value=c.activeBot;
+            sel.disabled=false;
+            if(!document.activeElement||document.activeElement===document.body) sel.focus();
+            pickBotConn(cid,true); };
+          setBot(cid,sel.value).then(done,done);
+        });
       });
-      // The row is what selects the connection being configured; the select inside it is a different
-      // control and must keep its own click.
+      // The row's name is its button — the keyboard's way to a connection's settings; a press anywhere else on the
+      // row does the same. The select beside it is a different control and keeps its own click and keys.
       host.querySelectorAll('.brow').forEach(function(row){
-        var go=function(e){ if(e.target&&e.target.closest&&e.target.closest('select'))return; pickBotConn(row.getAttribute('data-conn')); };
-        row.onclick=go;
-        row.onkeydown=function(e){ if(e.key==='Enter'||e.key===' '){ e.preventDefault(); go(e); } };
+        row.onclick=function(e){ if(e.target&&e.target.closest&&e.target.closest('select'))return; pickBotConn(row.getAttribute('data-conn')); };
       });
       drawBotDetail(S.botConn);
     }
@@ -1352,7 +1464,7 @@ var binaAsk, binaTell;
       var host=$('#botMatrix');
       if(host) host.querySelectorAll('.brow').forEach(function(r){
         var on=r.getAttribute('data-conn')===connId;
-        r.classList.toggle('on',on); r.setAttribute('aria-pressed',on?'true':'false');
+        r.classList.toggle('on',on); var bx=r.querySelector('.bx'); if(bx) bx.setAttribute('aria-pressed',on?'true':'false');
       });
       drawBotDetail(connId);
     }
@@ -2577,6 +2689,17 @@ var binaAsk, binaTell;
     document.addEventListener('keydown',function(e){ if(e.key==='Escape'){ hideMenu(); closeModal(); } });
     $('#mX').onclick=closeModal;
     $('#ov').onclick=function(e){ if(e.target===$('#ov')) closeModal(); };
+    // The window keeps the keyboard, as binaAsk does: Tab and Shift+Tab go round its own controls (DGO-617). On the
+    // document, not #ov: a select disabled under the focus leaves it on <body>. A Tab already answered — binaAsk over
+    // the window takes its own in the capture phase — is not taken again.
+    document.addEventListener('keydown',function(e){
+      var ov=$('#ov'); if(e.key!=='Tab'||e.defaultPrevented||ov.classList.contains('hidden')) return;
+      var ring=[].slice.call(ov.querySelectorAll('button,select,input,textarea,a[href],[tabindex]:not([tabindex="-1"])'))
+        .filter(function(n){ return !n.disabled&&n.getClientRects().length; });
+      if(!ring.length) return;
+      var n=ring.length, i=ring.indexOf(document.activeElement); e.preventDefault();
+      ring[i<0?(e.shiftKey?n-1:0):(i+(e.shiftKey?n-1:1))%n].focus();
+    });
 
     /* ── the shell tells the frame the pointer moved ───────────────────────────────
        The console's top-bar chip and the connect wizard both POST /connections/select, which writes
@@ -2619,6 +2742,31 @@ var binaAsk, binaTell;
       resetForConnection(null);
       boot();
     });
+
+    /* ── ONE SEARCH ON THE SCREEN (DGO-1507) — the console's contract, as mail's and drive's ───────────
+       Embedded, this app offers its search to the console; while the console's bar stands over it
+       (`bina:search-taken`) the list's own search field steps aside — the bar's «חיפוש בצ׳אט» is this
+       search — and `bina:find` brings the field back, focused. `bina:search-released` (the console went
+       full screen) gives the field back for good. A console that never answers leaves the field where
+       it is. Same-origin and from the parent only, as the listener above. */
+    function shellSearch(on){ document.documentElement.classList.toggle('shell-search',on); if(!on) document.documentElement.classList.remove('searching'); }
+    window.addEventListener('message',function(ev){
+      if(ev.origin!==window.location.origin||ev.source!==window.parent) return;
+      var d=ev.data; if(!d||typeof d!=='object') return;
+      if(d.type==='bina:search-taken') shellSearch(true);
+      else if(d.type==='bina:search-released') shellSearch(false);
+      else if(d.type==='bina:find'){
+        var si=$('#convSearch');
+        document.documentElement.classList.add('searching');
+        mobBack();                                          // (a phone in a thread goes back to the list it searches)
+        if(si) setTimeout(function(){ si.focus(); },30);
+      }
+    });
+    // the field folds away again once it is left empty
+    $('#convSearch').addEventListener('blur',function(e){ if(!e.target.value.trim()) document.documentElement.classList.remove('searching'); });
+    if(window.parent!==window){
+      try{ window.parent.postMessage({type:'bina:search-offer',app:'chat',label:'חיפוש בצ׳אט'},window.location.origin); }catch(e){ /* the field stays */ }
+    }
 
     /* boot() ends in syncLive(), which is what starts the poll or the stream — so every path that
        re-boots (the connection switcher, __chatReload, the retry button) gets the right one for the

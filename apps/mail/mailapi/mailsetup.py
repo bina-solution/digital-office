@@ -70,6 +70,22 @@ PUBLIC_IP6_ENV = os.environ.get("MAIL_PUBLIC_IP6", "").strip()
 LOCAL_SUFFIXES = (".test", ".localhost", ".local", ".invalid", ".example")
 
 
+def served_domains():
+    """Every domain this deployment SERVES: MAIL_DOMAIN first, then whatever `MAIL_DOMAINS` adds.
+
+    The same set `mailboxd` accepts a mailbox at, and the same set `mailserver-init` generates a
+    DKIM key for — a deployment whose company domain arrives in `MAIL_DOMAINS` signs that domain's
+    mail too. Written here rather than imported: this module takes its mailbox list as an argument
+    on purpose, so the checks stay runnable with no backend behind them.
+    """
+    out = [MAIL_DOMAIN]
+    for d in re.split(r"[,;\s]+", os.environ.get("MAIL_DOMAINS") or ""):
+        d = d.strip().lower().rstrip(".")
+        if d and d not in out:
+            out.append(d)
+    return out
+
+
 def is_local_only(domain=None):
     d = (domain or MAIL_DOMAIN)
     return d.endswith(LOCAL_SUFFIXES) or "." not in d
@@ -206,7 +222,7 @@ _ZONE_NS = {}
 def _zone_nameservers(name):
     """Addresses of the nameservers authoritative for the closest zone at or above `name`.
 
-    Walks up the labels because the zone cut is not knowable in advance — `93.184.216.14.in-addr.arpa`
+    Walks up the labels because the zone cut is not knowable in advance — `93.184.216.18.in-addr.arpa`
     has no NS of its own, the delegation lives at `196.97.31.in-addr.arpa` (the VPS provider), and
     the same is true of `_dmarc.<domain>` versus `<domain>`."""
     parts = name.rstrip(".").split(".")
@@ -672,6 +688,51 @@ def status(imap_probe=None, mailbox_list=None):
             checks.append(_check("dkim", "פרסום מפתח DKIM", st, detail,
                                  expected=pub[:32] + "…", observed=con["observed"],
                                  record={"type": "TXT", "name": dkim_name, "value": want_val}))
+
+    # 6b. …and the SAME question for every other domain this deployment serves.
+    #     mailserver-init builds one key and one SigningTable line per served domain, so mail from
+    #     hello@<a company's own domain> is signed too. Until this check existed the checklist
+    #     described MAIL_DOMAIN alone and read green while the company's own address went out
+    #     UNSIGNED — nothing here ever asked about it (DGO-1389). "We serve it" and "we sign it" are
+    #     read from one place (`served_domains`), so this list cannot fall behind the mail server's.
+    for extra in served_domains()[1:]:
+        pub_x, txt_x, _path_x = dkim_public_record(extra)
+        name_x = "%s._domainkey.%s" % (DKIM_SELECTOR, extra)
+        title_x = "פרסום מפתח DKIM — %s" % extra
+        cid_x = "dkim:%s" % extra        # ONE id per domain, whether the row reads a missing key or
+                                         # a missing record: the key appears on the next bring-up, and
+                                         # a row that changes identity then loses its place on screen.
+        if not pub_x:
+            checks.append(_check(
+                cid_x, title_x, "bad",
+                "לא נוצר מפתח חתימה עבור %s, ולכן דואר שנשלח ממנו יוצא לא חתום." % extra,
+                fix="הרץ מחדש את האפליקציה (bbox update mail) — mailserver-init יוצר את המפתח "
+                    "באתחול, לכל דומיין שהלשכה משרתת."))
+            continue
+        want_x = txt_x or "v=DKIM1; h=sha256; k=rsa; p=%s" % pub_x
+
+        # The record's own p=, read the same way the primary-domain check reads it: the answer is
+        # "does the published key equal the key this server holds", never "does it look familiar".
+        def _p_in(recs):
+            return _p_of(next((t for t in recs if "p=" in t), None))
+
+        con_x = _consensus(name_x, "TXT", lambda recs: _p_in(recs) == pub_x, txt=True,
+                           render=lambda recs: [(_p_in(recs) or "—")[:32] + "…"])
+        if con_x["state"] == "unknown":
+            checks.append(_check(cid_x, title_x, "unknown",
+                                 "לא ניתן לבדוק: %s" % con_x["error"],
+                                 record={"type": "TXT", "name": name_x, "value": want_x}))
+            continue
+        st_x = _status_of(con_x, bool(_p_in(con_x["records"])))
+        detail = (_propagating_detail(con_x) if st_x == "propagating" else
+                  "המפתח שפורסם תואם למפתח שבו השרת חותם על דואר מ-%s." % extra if st_x == "ok" else
+                  "המפתח שפורסם אינו תואם למפתח של השרת — כל החתימות מדומיין זה ייכשלו." if st_x == "bad"
+                  else "המפתח קיים בשרת אך טרם פורסם ב-DNS, ולכן דואר מ-%s יוצא עם חתימה שאיש אינו "
+                       "יכול לאמת — וזה מה שדוחף אותו לספאם." % extra)
+        checks.append(_check(cid_x, title_x, st_x, detail,
+                             expected=pub_x[:32] + "…", observed=con_x["observed"],
+                             record={"type": "TXT", "name": name_x, "value": want_x}))
+
 
     # 7. DMARC — what a receiver should do when the above fail
     want_dmarc = "v=DMARC1; p=none; rua=mailto:postmaster@%s" % domain

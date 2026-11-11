@@ -61,6 +61,7 @@ import contextlib, re as _re, collections
 from flask import g as _g, has_request_context, request as _request
 
 import bodycache
+import snippets
 
 # ── IMAP command instrumentation ───────────────────────────────────────────────
 # Gmail OVERQUOTA = too many IMAP commands / bandwidth per window. We had ZERO visibility into how many
@@ -965,11 +966,13 @@ class GmailBackend:
         genuinely wants "0 when the label is absent" (probing whether a label exists at all). It is
         opt-IN because the failure it re-enables is exactly the one this guard exists to prevent.
 
-        NO `snippet` FIELD, DELIBERATELY (N11). The summary FETCH asks for BODY.PEEK[HEADER] +
-        BODYSTRUCTURE only; the first line of text/plain lives in a body part, so a snippet would
-        cost a second FETCH of one part per message on every page — a body fetch, which is the
-        exact cost this listing exists to avoid. The client drops snippets rather than this
-        service faking them from the subject.
+        NO `snippet` FIELD BY DEFAULT (N11). The summary FETCH asks for BODY.PEEK[HEADER] +
+        BODYSTRUCTURE only; the first line of text/plain lives in a body part, and the pipes that
+        page through this listing never need it. A caller that shows a list to a person passes
+        `snippets: true` (DGO-1507, the screen's preview line): then each summary carries `snippet`,
+        read by snippets.py in ONE more FETCH per page per text-part number (640 octets a message,
+        PEEK), and kept per (mailbox, folder, UIDVALIDITY, UID) so a page seen once costs nothing
+        again. A preview that cannot be read is simply absent; it never fails the page.
 
         `max_wait_s` bounds the wait for the mailbox's one connection (default LOCK_WAIT_S; 0 = wait
         as long as it takes); past it the answer is 503 "mailbox busy" (MailboxBusy).
@@ -1091,6 +1094,7 @@ class GmailBackend:
                 next_cursor = uids[0] if uids else 0
             out = []
             kept = []
+            want_snip, leaves_by_uid = bool(b.get("snippets")), {}
             if uids:
                 resp = c.fetch(uids, [b"BODY.PEEK[HEADER]", b"BODYSTRUCTURE", b"X-GM-LABELS", b"X-GM-MSGID", b"X-GM-THRID", b"FLAGS", b"INTERNALDATE"])
                 # ONLY THE UIDs WE ASKED FOR. An IMAP server may volunteer FETCH responses for
@@ -1124,6 +1128,13 @@ class GmailBackend:
                         data[b"BODY[HEADER]"] = data.get(b"BODY[HEADER]", b"")
                     out.append(_msg_summary(uid, data))
                     kept.append(uid)
+                    if want_snip and data.get(b"BODYSTRUCTURE"):
+                        leaves_by_uid[uid] = _bs_leaves(data[b"BODYSTRUCTURE"])
+                if want_snip and out:
+                    try:
+                        snippets.fill(c, out, leaves_by_uid, (self.user, folder, uidvalidity))
+                    except Exception:
+                        pass                    # the page without its previews, never without the page
             if since_ts is not None:
                 # `total` for a windowed call, WITHOUT paying for a second round trip.
                 #

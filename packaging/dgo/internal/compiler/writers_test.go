@@ -13,8 +13,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/solomonBoltin/deployment-hacohen/packaging/dgo/internal/pyval"
-	"github.com/solomonBoltin/deployment-hacohen/packaging/dgo/internal/yamlish"
+	"github.com/bina-solution/digital-office/packaging/dgo/internal/pyval"
+	"github.com/bina-solution/digital-office/packaging/dgo/internal/yamlish"
 )
 
 // ── the oracle for the writers: reconcile.py and dgo on two copies of one fixture tree ───────────
@@ -145,6 +145,8 @@ func runGo(dir string, c writerCase) outcome {
 		code = OfficeSetCmd(dir, c.args, strings.NewReader(c.stdin), &out, &errb)
 	case "remote-set":
 		code = RemoteSetCmd(dir, c.args, strings.NewReader(c.stdin), &out, &errb)
+	case "lang":
+		code = LangCmd(dir, c.args, &out, &errb)
 	}
 	return outcome{out.String(), errb.String(), code, stateOf(dir)}
 }
@@ -298,7 +300,73 @@ func runWriterCases(t *testing.T, cases []writerCase) {
 	}
 }
 
+// ── lang (DGO-971; native since DGO-1238) ─────────────────────────────────────────────────────────
+
+func TestLangMatchesPython(t *testing.T) {
+	const bare = "schema_version: 1\n# the office\n\napps:\n  traefik: { enabled: true }\n"
+	const declared = "schema_version: 1\n\nlanguage: en   # by cli\n\napps:\n  traefik: { enabled: true }\n"
+	cases := []writerCase{
+		{name: "say the language of this checkout", verb: "lang"},
+		{name: "say it when none is declared", verb: "lang", state: bare},
+		{name: "say it when one is declared", verb: "lang", state: declared},
+		{name: "say the default for a code no dictionary has", verb: "lang", state: "schema_version: 1\nlanguage: eng\napps: {}\n"},
+		{name: "declare one under schema_version", verb: "lang", args: []string{"--lang", "en"}, state: bare},
+		{name: "replace the declared line where it is", verb: "lang", args: []string{"--lang", "he", "--by", "app-management"}, state: declared},
+		{name: "already so", verb: "lang", args: []string{"--lang", "en"}, state: declared},
+		{name: "already so by someone else is a change", verb: "lang", args: []string{"--lang", "en", "--by", "wizard"}, state: declared},
+		{name: "a code with spaces and capitals", verb: "lang", args: []string{"--lang", " EN "}, state: bare},
+		{name: "a code no dictionary has", verb: "lang", args: []string{"--lang", "fr"}, state: bare},
+		{name: "an empty code is a code, and is refused", verb: "lang", args: []string{"--lang", ""}, state: bare},
+		{name: "a provenance that is not one word", verb: "lang", args: []string{"--lang", "en", "--by", "the owner #1 / שלום"}, state: bare},
+		{name: "a provenance longer than forty", verb: "lang", args: []string{"--lang", "en", "--by", strings.Repeat("x", 60)}, state: bare},
+		{name: "no schema_version line to put it under", verb: "lang", args: []string{"--lang", "en"}, state: "apps: {}\n"},
+		{name: "a second language line further down is refused", verb: "lang", args: []string{"--lang", "he"},
+			state: "schema_version: 1\nlanguage: en\napps: {}\nlanguage: en\n"},
+		{name: "CRLF file", verb: "lang", args: []string{"--lang", "he"}, state: strings.ReplaceAll(declared, "\n", "\r\n")},
+		{name: "values after =", verb: "lang", args: []string{"--lang=en", "--by=x=y"}, state: bare},
+		{name: "a flag without its value", verb: "lang", args: []string{"--lang"}},
+		{name: "help", verb: "lang", args: []string{"-h"}},
+		// the second reader's cases (DGO-1238): a value on the next line, no state file, a file that is not
+		// UTF-8, a construct only PyYAML reads, and arguments that are not UTF-8
+		{name: "a value on the next line: the change would not parse", verb: "lang", args: []string{"--lang", "he"},
+			state: "schema_version: 1\nlanguage:\n  en\napps: {}\n"},
+		{name: "a block value over two lines", verb: "lang", args: []string{"--lang", "he"},
+			state: "schema_version: 1\nlanguage: [en,\n  he]\napps: {}\n"},
+		{name: "no state file to write", verb: "lang", args: []string{"--lang", "en"}, state: noState},
+		{name: "a state file that is not UTF-8", verb: "lang", args: []string{"--lang", "en"}, state: "schema_version: 1\n# \xff\napps: {}\n"},
+		{name: "a tag only PyYAML reads", verb: "lang", args: []string{"--lang", "en"}, state: "schema_version: 1\nnote: !!str 5\napps: {}\n",
+			refused: "DGO_COMPILER=python answers", readerGap: true},
+		{name: "a code that is not UTF-8: unknown, said as Python holds it (\\udcff)", verb: "lang", args: []string{"--lang", "\xff"}, state: bare},
+		{name: "an unknown code beside a provenance that is not UTF-8", verb: "lang", args: []string{"--lang", "fr", "--by", "\xff"}, state: bare},
+		{name: "a provenance that is not UTF-8, nothing to change", verb: "lang", args: []string{"--lang", "en", "--by", "\xff"},
+			state: "schema_version: 1\nlanguage: en   # by _\napps: {}\n"},
+		// Python writes `# by _` and only then crashes, printing the provenance: dgo refuses before writing
+		{name: "a provenance that is not UTF-8, a change", verb: "lang", args: []string{"--lang", "en", "--by", "\xff"}, state: bare,
+			refused: "--by must be UTF-8 text"},
+		{name: "a state file that is a directory: Python's OSError, caught", verb: "lang", args: []string{"--lang", "en"}, state: noState,
+			setup: func(dir string) { os.Mkdir(filepath.Join(dir, stateName), 0o755) }},
+	}
+	if os.Geteuid() != 0 {
+		cases = append(cases, writerCase{name: "a read-only state file: Python's OSError, caught", verb: "lang",
+			args: []string{"--lang", "he"}, state: declared, setup: readOnly})
+	}
+	runWriterCases(t, cases)
+}
+
 // ── set-state ─────────────────────────────────────────────────────────────────────────────────────
+
+// hostApp writes apps/<id>/app.json declaring requires_host.devices as the given JSON (a setup of a writer case).
+func hostApp(id, devices string) func(dir string) {
+	return func(dir string) {
+		p := filepath.Join(dir, "apps", id, "app.json")
+		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+			panic(err)
+		}
+		if err := os.WriteFile(p, []byte(manifestJSON(id, `"requires_host":{"devices":`+devices+`}`)), 0o644); err != nil {
+			panic(err)
+		}
+	}
+}
 
 func TestSetStateMatchesPython(t *testing.T) {
 	const small = "schema_version: 1\n\napps:\n  # base\n  traefik:   { enabled: true }\n  ollama:    { enabled: false }   # gallery\n  axb:       { state: disabled, by: user }\n\ninstances:\n  drive:\n    active: x\n"
@@ -347,6 +415,19 @@ func TestSetStateMatchesPython(t *testing.T) {
 		{name: "help glued", verb: "set-state", args: []string{"-hx"}},
 		{name: "help after an error is too late", verb: "set-state", args: []string{"--state", "bogus", "--help"}},
 		{name: "help with a value", verb: "set-state", args: []string{"--help=1"}},
+		// requires_host (DGO-1797): an app that drives a device this machine lacks is not enabled, and says so;
+		// disabling it, or one whose devices are all here, writes as before
+		{name: "enable an app whose host device is missing: refused, nothing written", verb: "set-state",
+			args: []string{"--app", "zz-kvm", "--state", "enabled", "--create"}, setup: hostApp("zz-kvm", `["/dev/null","/dev/dgo-no-such-device"]`)},
+		{name: "enable it where it has an entry: refused before the state is read", verb: "set-state",
+			args: []string{"--app", "zz-kvm", "--state", "enabled"}, setup: hostApp("zz-kvm", `["/dev/dgo-no-such-device"]`),
+			state: "schema_version: 1\napps:\n  zz-kvm: { state: disabled, by: user }\n"},
+		{name: "disable an app whose host device is missing: written, nothing asked of the host", verb: "set-state",
+			args: []string{"--app", "zz-kvm", "--state", "disabled", "--create"}, setup: hostApp("zz-kvm", `["/dev/dgo-no-such-device"]`)},
+		{name: "enable an app whose host devices are all here", verb: "set-state",
+			args: []string{"--app", "zz-kvm", "--state", "enabled", "--create"}, setup: hostApp("zz-kvm", `["/dev/null"]`)},
+		{name: "devices that are no list declare nothing", verb: "set-state",
+			args: []string{"--app", "zz-kvm", "--state", "enabled", "--create"}, setup: hostApp("zz-kvm", `"/dev/dgo-no-such-device"`)},
 	}
 	// main() prints str(UnicodeDecodeError) for a state file that is not UTF-8: the bytes CPython's
 	// decoder blames — a lead byte and the good continuations after it, or all of a sequence the file's
@@ -357,7 +438,8 @@ func TestSetStateMatchesPython(t *testing.T) {
 			args: []string{"--app", "a", "--state", "enabled"}, state: "schema_version: 1\napps:\n  a: { enabled: true }   # " + bad})
 	}
 	cases = append(cases,
-		// reconcile.py takes no lock: one dgo cannot take stops nothing (it says so when it writes), and
+		// a lock neither side can take stops nothing (dgo says so when it writes; reconcile.py, which takes
+		// the same lock since DGO-616, says nothing), and
 		// a lock file it may not write is locked through a read handle
 		writerCase{name: "a lock file that is read-only", verb: "set-state", args: []string{"--app", "ollama", "--state", "enabled"},
 			setup: func(dir string) {
@@ -737,8 +819,9 @@ func toAny(v any) any {
 }
 
 // A byte that is not UTF-8 in a value the writers put in the file is refused before anything is
-// touched: on Linux Python takes such argv as surrogates and empties the file when it fails to encode
-// them (this host's argv cannot carry one, so the rule is held here against its own sentence).
+// touched: on Linux Python takes such argv as surrogates and fails to encode them (emptying the file
+// before DGO-616; leaving it whole since) — this host's argv cannot carry one, so the rule is held here
+// against its own sentence.
 func TestNonUTF8ArgumentsAreRefusedBeforeAnyWrite(t *testing.T) {
 	const state = "schema_version: 1\napps:\n  a: { enabled: true }\n"
 	for _, c := range []struct {

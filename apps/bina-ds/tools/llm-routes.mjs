@@ -18,7 +18,9 @@
 // call tools (`/api/show` → capabilities), because the agent cannot work without them.
 //
 // WHAT IT OWNS: routes whose name starts with `dgo-ollama-`. Every other route, and every other
-// section of settings.yaml, is the owner's, and it is never read for anything but to be kept.
+// section of settings.yaml, is the owner's, and it is never read for anything but to be kept — with one
+// exception, written only where it is absent: `agent-presets`, the local preset as the default while the
+// default model is one of these routes (`pairPreset`, DGO-1741), taken back only if this writer wrote it.
 // And one credential reference, DGO_OLLAMA_KEY: pi-ai refuses a route with no key ("No API key for
 // provider", measured on the Dell 2026-10-21) while Ollama ignores the one it is sent, so each route
 // names `apiKeyEnv: DGO_OLLAMA_KEY` and the harness's own credentials document gets that one
@@ -121,20 +123,85 @@ const upstream = new Map();          // route → its Ollama's base URL: from th
 // took 65 s and was killed (2026-10-21 10:42 UTC), and one such turn costs the owner minutes. So a call
 // to such a tool that names none gets TIMEOUT_MS (or the schema's own maximum, if lower), the same way.
 const TIMEOUT_MS = 180000;
+
+// A local session writes files only under WRITE_ROOTS (DGO-954). The harness hands a local model its file
+// tools under the session's policy, which is full access: asked to comment on DGO-908, qwen3:1.7b ran
+// `edit` with replace_all on plans/office.yaml (2026-10-21 13:06 UTC). A local session does errands, and
+// the office changes through its verbs, never by a small model rewriting its files.
+// - What is turned away: a `write` or an `edit`, and any other tool but bash and the reading tools that
+//   names a file (`file_path` or `path`), whose file is not under WRITE_ROOTS (/tmp/: the mail's JSON
+//   goes there). It is turned, before the harness sees it, into a bash call that fails and says why.
+//   Nothing is written, and the model reads the reason. Without a bash tool to say it with, the path is
+//   moved to a copy under /tmp.
+// - It fails closed: a write whose arguments do not read as an object is turned away too, and so are the
+//   later pieces of a call sent in several.
+// - bash itself is not confined here: an errand is a command.
+// - LLM_ROUTES_WRITE_ROOTS (comma-separated absolute paths) adds roots to /tmp/.
+// the harness's tools that name a file: these write, and these only read (a full preset's 26 tools,
+// 2026-10-21); another tool that names a file is turned away, as one not known to be safe
+const WRITE_TOOLS = new Set(["write", "edit"]);
+const READ_TOOLS = new Set(["read", "read_image", "glob", "grep", "present"]);
+const WRITE_ROOTS = ["/tmp/", ...String(process.env.LLM_ROUTES_WRITE_ROOTS || "").split(",").map((r) => r.trim())
+  .filter((r) => r.startsWith("/") && r.length > 1).map((r) => (r.endsWith("/") ? r : `${r}/`))];
+// it goes inside a single-quoted shell word, so it holds no quote of its own
+const NOT_WRITTEN = (`Not written: in a local session the file tools write only under ${WRITE_ROOTS.join(", ")} (DGO-954). `
+  + "The files of the office change through its verbs (./bbox ...), never through write or edit.").replace(/'/g, "");
+// a relative path is the session's cwd: the office's checkout
+const writable = (file) => typeof file === "string" && file.startsWith("/")
+  && WRITE_ROOTS.some((r) => path.posix.normalize(file).startsWith(r));
+
 function labeller(requestJson) {
   // Only where `description` is a label: the harness's bash tool. Another tool's required
   // `description` may be real content (an item's text), and inventing it would hide the refusal.
   const label = new Set(), timed = new Map();
+  const names = new Set();
   for (const t of (requestJson && requestJson.tools) || []) {
     const f = t && t.function, p = f && f.parameters;
+    if (f && typeof f.name === "string") names.add(f.name);
     if (!f || !LABELLED.has(f.name) || !p) continue;
     if (Array.isArray(p.required) && p.required.includes("description")) label.add(f.name);
     const most = p.properties && p.properties.timeoutMs && Number(p.properties.timeoutMs.maximum);
     if (p.properties && p.properties.timeoutMs) timed.set(f.name, most > 0 ? Math.min(TIMEOUT_MS, most) : TIMEOUT_MS);
   }
-  if (!label.size && !timed.size) return null;
+  const confine = names.size > 0;
+  const bash = names.has("bash") ? "bash" : null;
+  if (!label.size && !timed.size && !confine) return null;
+  // a call that writes a file outside WRITE_ROOTS → a bash call that refuses it (or, with no bash, a copy
+  // under /tmp); true when it was turned away
+  const refuse = (f) => {
+    const name = String(f.name || "").toLowerCase();
+    if (name === bash || READ_TOOLS.has(name)) return false;
+    let a = null;
+    if (typeof f.arguments === "string") { try { a = JSON.parse(f.arguments); } catch { a = null; } }
+    if (!a || typeof a !== "object" || Array.isArray(a)) a = null;
+    // the harness's fs tools name the file `file_path`; another tool may say `path`: every one named
+    // must be under the roots (a decoy `file_path` under /tmp does not let a `path` elsewhere through)
+    const keys = a ? ["file_path", "path"].filter((k) => a[k] !== undefined) : [];
+    // arguments that do not read as an object, of any tool, that mention a file: turned away (fails closed;
+    // a partial-JSON reader downstream could still find the path in them — second reader)
+    if (!a && !WRITE_TOOLS.has(name) && /"(?:file_)?path"\s*:/.test(String(f.arguments || ""))) keys.push("file_path");
+    if (!WRITE_TOOLS.has(name) && !keys.length) return false;         // names no file: not this guard's
+    if (a && keys.length && keys.every((k) => writable(a[k]))) return false;
+    if (bash) {
+      f.arguments = JSON.stringify({ command: `printf '%s\\n' '${NOT_WRITTEN}' >&2; exit 1`,
+        description: `Refused: ${name || "a file tool"} outside ${WRITE_ROOTS[0]}`, ...(timed.has(bash) ? { timeoutMs: Math.min(10000, timed.get(bash)) } : {}) });
+      f.name = bash;
+    } else {
+      const moved = { ...(a || {}) };
+      for (const k of keys.length ? keys : ["file_path"]) {
+        moved[k] = `/tmp/dgo-not-written/${String(moved[k] || "file").replace(/[^\w.-]+/g, "_").slice(-120)}`;
+      }
+      f.arguments = JSON.stringify(moved);
+    }
+    return true;
+  };
+  // a call sent in pieces: the later pieces (no name, the same index) of one turned away carry nothing
+  const turnedAway = new Set();
   const fix = (call) => {
     const f = call && call.function;
+    if (f && !f.name && turnedAway.has(call.index) && f.arguments) { f.arguments = ""; return true; }
+    if (f && f.name && refuse(f)) { turnedAway.add(call.index); return true; }
+    if (f && f.name) turnedAway.delete(call.index);                  // a new call at that index: its own pieces
     if (!f || !(label.has(f.name) || timed.has(f.name)) || typeof f.arguments !== "string") return false;
     let a; try { a = JSON.parse(f.arguments); } catch { return false; }
     if (!a || typeof a !== "object" || Array.isArray(a)) return false;
@@ -150,7 +217,8 @@ function labeller(requestJson) {
   };
   const fixDoc = (doc) => {
     let changed = false;
-    for (const c of (doc && doc.choices) || []) {
+    for (const c of (doc && Array.isArray(doc.choices) ? doc.choices : [])) {
+      if (!c) continue;
       for (const call of ((c.delta && c.delta.tool_calls) || []).concat((c.message && c.message.tool_calls) || [])) changed = fix(call) || changed;
     }
     return changed;
@@ -554,7 +622,12 @@ function sseLabeller(fixDoc, watch = null, asCall = null) {
   const release = (...more) => { deciding = false; still(); return held.splice(0).map((h) => h.out).concat(more); };
   const take = (l) => {                       // → the lines to send now
     let doc = null;
-    if (l.startsWith("data: ") && l !== "data: [DONE]") { try { doc = JSON.parse(l.slice(6)); } catch { doc = null; } }
+    // `data:` with or without its space (an SSE reader takes both)
+    const data = /^data: ?/.exec(l);
+    if (data && l.slice(data[0].length) !== "[DONE]") { try { doc = JSON.parse(l.slice(data[0].length)); } catch { doc = null; } }
+    // an event this could not read that carries a call naming a file may be a write it did not see: it is
+    // dropped, not passed (DGO-954; second reader: the parse failure is caught here, before `line`'s catch)
+    if (data && !doc && /tool_calls/.test(l) && /\\?"(?:file_)?path\\?"/.test(l)) return deciding ? release() : [];
     if (doc && watch) watch.see(doc);
     const out = doc && fixDoc(doc) ? `data: ${JSON.stringify(doc)}` : l;
     if (!deciding) return [out];
@@ -605,7 +678,12 @@ function sseLabeller(fixDoc, watch = null, asCall = null) {
     return kept.concat(`data: ${JSON.stringify(said)}`, "", `data: ${JSON.stringify(doc)}`);
   };
   const line = (l) => {
-    try { return take(l); } catch { return deciding ? release(l) : [l]; }
+    try { return take(l); } catch {
+      // a line this could not read that carries a call naming a file may be a write it did not see:
+      // it is dropped, not passed (DGO-954)
+      if (/tool_calls/.test(l) && /\\?"(?:file_)?path\\?"/.test(l)) return deciding ? release() : [];
+      return deciding ? release(l) : [l];
+    }
   };
   const t = new Transform({
     transform(chunk, _enc, done) {
@@ -666,7 +744,8 @@ function dropWatch(key, armed, report) {
   let saw = false, tokens = 0, finish = "";
   return {
     see(doc) {
-      for (const c of (doc && doc.choices) || []) {
+      for (const c of (doc && Array.isArray(doc.choices) ? doc.choices : [])) {
+        if (!c) continue;
         const d = c.delta || c.message || {};
         if ((typeof d.content === "string" && d.content.trim()) || (d.tool_calls && d.tool_calls.length)
             || d.reasoning || d.reasoning_content) saw = true;
@@ -714,12 +793,18 @@ function relay() {
       let asked = null;                  // kept for the read-ahead once the model has answered it (200)
       let watch = null;                  // an answer that comes back empty with thinking off (dropWatch)
       let asCall = null;                 // an answer that is a tool call written as text (textCall)
-      try {
-        const j = req.method === "POST" ? JSON.parse(body.toString("utf8") || "{}") : {};
+      let j = null;
+      try { j = req.method === "POST" ? JSON.parse(body.toString("utf8") || "{}") : {}; } catch { j = null; }
+      // the answer's guards first, each on its own: a transform below that throws must not leave the
+      // answer unguarded (DGO-954)
+      if (j) {
         streamed = j.stream === true;
+        try { lab = labeller(j); } catch (e) { log(`labeller: ${e.message} — this answer goes unlabelled and UNCONFINED`); }
+        try { asCall = textCall(j); } catch (e) { log(`textCall: ${e.message}`); }
+      }
+      try {
+        if (!j) throw new Error("not JSON");
         const persona = asSystem(j), trimmed = trimTools(j), routed = withRecipes(j), shortened = trimResults(j);
-        lab = labeller(j);
-        asCall = textCall(j);
         asked = j;
         // A request that names no temperature gets the model's own default, which for the small
         // local models is 1.0: gemma4:e2b then dropped the bash tool's required `description` and gave
@@ -786,12 +871,20 @@ function relay() {
             r.on("close", () => { if (!r.complete) res.destroy(); });
             r.on("end", () => {
               let out = Buffer.concat(got);
-              try {
-                const doc = JSON.parse(out.toString("utf8"));
-                if (watch) { watch.see(doc); watch.end(); }
-                const wrote = asCall ? wholeCall(doc, asCall) : false;
-                if (fix(doc) || wrote) out = Buffer.from(JSON.stringify(doc));
-              } catch { /* as it is */ }
+              let doc = null;
+              try { doc = JSON.parse(out.toString("utf8")); } catch { doc = null; }   // not JSON: as it is
+              if (doc) {
+                try {
+                  if (watch) { watch.see(doc); watch.end(); }
+                  const wrote = asCall ? wholeCall(doc, asCall) : false;
+                  if (fix(doc) || wrote) out = Buffer.from(JSON.stringify(doc));
+                } catch (e) {
+                  // an answer the relay could not check is not passed as it came: it may hold a write
+                  // that was never looked at (DGO-954)
+                  log(`answer not checked (${e.message}) — sent as an error`);
+                  out = Buffer.from(JSON.stringify({ error: { message: "the relay could not check this answer" } }));
+                }
+              }
               if (open()) res.end(out);
             });
             return;
@@ -962,6 +1055,7 @@ async function pass() {
     } catch (e) { log(`.credentials.yaml: ${e.message}`); }
     try { installPresets(); } catch (e) { log(`presets: ${e.code || e.message}`); }
   }
+  try { pairPreset(); } catch (e) { log(`preset pairing: ${e.code || e.message}`); }
   const changed = write(routes);
   fs.writeFileSync(STATE, JSON.stringify(state));
   if (changed) log(`routes: ${Object.keys(routes).join(", ") || "none"}`);
@@ -1001,6 +1095,63 @@ function installPresets() {
       log(`preset ${id}: ${f} installed`);
     }
   }
+}
+
+// ── the preset that goes with a LOCAL default model (DGO-1741, 2026-11-10) ─────────────────────────────
+// A new session starts on the office's default model AND its default preset, and the two were chosen apart:
+// on Exampleu the owner made the local qwen3.5:4b the default (2026-11-09) while the default preset stayed the
+// full Azaria — some 31.7k tokens of instructions and 26 tools before the first word, in a 32k window. On
+// four cores that read took 40+ minutes at 380% CPU, and the answer was ONE token (max-tokens: the prompt
+// left no room). The lean `azaria-local` (apps/bina-ds/presets/, ~2.5k tokens) answered the same office in
+// 47 s. So while the default model is one of OUR routes, the default preset is the local one — written into
+// the harness's own `agent-presets` section (the one its preset picker writes), and only when that section
+// is ABSENT: a default a person chose is theirs and is never touched. When the default model stops being
+// local, the pairing this writer made (PAIR_FILE says so) is taken back, unless a person has changed it
+// since. `modeSelectionEnabled` comes with it: without it the harness reads its built-in default instead.
+const PAIR_FILE = path.join(HOME, "llm-routes-preset.json");
+const LOCAL_PRESET = "azaria-local";
+
+/** Whether `section` is exactly what this writer writes — nothing a person added, nothing changed. Pure. */
+function presetIsOurs(section) {
+  return !!section && typeof section === "object" && !Array.isArray(section) && section.default === LOCAL_PRESET
+    && section.modeSelectionEnabled === true && Object.keys(section).length === 2;
+}
+
+/** What the pairing does to `agent-presets`, from the document's values: "set", "drop" or null. Pure. A section
+ *  that is not exactly ours is never dropped: a key a person put beside it would go with it. */
+function presetPairing(provider, section, mine, installed) {
+  const local = String(provider || "").startsWith(PREFIX);
+  if (local) return section === undefined && installed ? "set" : null;
+  return mine && presetIsOurs(section) ? "drop" : null;
+}
+
+function pairPreset() {
+  if (DRY) return;
+  const installed = fs.existsSync(path.join(HOME, ".agent-presets", LOCAL_PRESET, "agent.cordis.yml"));
+  const mine = readJson(PAIR_FILE, {}).written === true;
+  const record = (written) => fs.writeFileSync(PAIR_FILE, JSON.stringify({ written, at: Math.floor(Date.now() / 1000) }));
+  let did = null, before, provider, seen = false;
+  edit(SETTINGS, (doc) => {
+    if (!mapAt(doc, ["agent-presets"], true)) return false;              // somebody's own shape: theirs
+    const js = doc.toJS() || {};
+    seen = true;
+    before = js["agent-presets"];
+    provider = String((js["agent-default-model"] || {}).provider || "");
+    did = presetPairing(provider, before, mine, installed);
+    if (did === "set") {
+      // the record FIRST, under the lock: a change this writer made is never one it does not know it made
+      // (a record lost after the rename would leave the pairing for good — the second reader of DGO-1741)
+      record(true);
+      doc.set("agent-presets", doc.createNode({ default: LOCAL_PRESET, modeSelectionEnabled: true }));
+    } else if (did === "drop") doc.delete("agent-presets");
+    return did !== null;
+  });
+  if (did === "set") log(`agent-presets: default ${LOCAL_PRESET} — the default model is local`);
+  else if (did === "drop") { record(false); log("agent-presets: the local pairing taken back — the default model is not local"); }
+  // Nothing in the file is ours any more, so the record lets go: a person changed the section (theirs now), or the
+  // default model is not local and the section is gone (a write cut after the record, a person removed it) —
+  // else a person's later pick of the very same two keys would be taken for ours and dropped (the second reader).
+  else if (seen && mine && (before !== undefined ? !presetIsOurs(before) : !provider.startsWith(PREFIX))) record(false);
 }
 
 // The lock this process holds, if any: a stop (docker stop, a recreate) arriving inside the few

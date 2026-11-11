@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """memory-budget-lint — gate G30: declared memory limits must fit the machine they run on.
 
-    python3 scripts/refactor/memory-budget-lint.py [--profile prod] [--verbose]
+    python3 scripts/refactor/memory-budget-lint.py [--profile prod] [--verbose] [--strict]
 
 The enabled render declares far more memory than any host it targets has. Nobody chose that number
 and nobody could see it: every limit is a literal in one app's compose, and no view sums them.
@@ -21,7 +21,30 @@ cannot silently grow again.
 and are never counted. A service with no limit at all is reported, because an uncapped service is an
 undeclared decision, not a small one.
 
-Exit 0 = the sum is within budget. Exit 1 = over budget, or a profile has no declared envelope.
+TWO PLACES DECLARE A MEMORY BUDGET, AND NOTHING COMPARED THEM. An app's app.json carries
+`resources.memory` — the number every human-facing surface shows and `app-management`'s room check
+reads — while the number actually enforced is a literal in that app's docker-compose.yml under
+`deploy.resources.limits.memory`. Measured 2026-11-05: hello-bina declared 64M in its manifest and its
+compose declared nothing at all, so the enforced limit was the whole host (docker stats read
+`13.35MiB / 7.766GiB`); forward-auth — the office's sign-in — enforced nothing either and declared
+nothing; and four more enabled apps declare a figure their compose does not reach (`machine` 384M vs
+640M, which its own brief admits, `bina-ds` 1g vs 2g, `n8n` 2g vs the 20.5G its eight services sum to,
+`apitools` 4g vs 5.5G). The pair is compared
+HERE, per app: the app is the unit of declaration, and the figure counts as honoured when either the
+app's OWN service or the sum of its services enforces exactly it — both conventions are in the tree
+(`sites` declares its own container, `meet` its total) and neither is drift. A manifest declaring one
+figure beside a compose that reaches it no way is reported with both numbers.
+
+It REPORTS (like the uncapped list) and does not fail by default: the exit code stays the budget's,
+and the mismatches that predate the check are not retroactively made the gate's problem. `--strict`
+promotes them to failures — that is the switch for when the tree has been brought level.
+
+CPU caps are deliberately NOT compared: `cpu-budget-lint.py` (G65) OWNS them and scales the enforced
+figure to the machine at render time, so a static app.json-vs-compose equality there would fail on a
+correct tree.
+
+Exit 0 = the sum is within budget. Exit 1 = over budget, or a profile has no declared envelope
+(with `--strict`: also a declared memory its compose does not reach).
 """
 import sys, os, re, json, pathlib
 
@@ -91,8 +114,56 @@ def enabled_apps(state):
     return {k for k, v in (state.get("apps") or {}).items() if reconcile.disposition(v) == "enabled"}
 
 
+def human(b):
+    return f"{b / 1024 ** 3:.1f} GiB" if b >= 1024 ** 3 else f"{b / 1024 ** 2:.0f} MiB"
+
+
+def declared_mismatches(enabled, env):
+    """Enabled apps whose app.json `resources.memory` is not what their own compose enforces.
+
+    Returns [(app, declared_as_written, declared_bytes, own_service_bytes, all_services_bytes, n)].
+    TWO CONVENTIONS ARE IN THE TREE and neither is drift, so the declared figure counts as honoured
+    when EITHER reaches it exactly: the app's own service (the one named like the app — `sites`
+    declares 320M and its `sites` service enforces 320M, beside a renderer that is another service),
+    or the sum of every service in the app's compose (`meet` declares 3472M and its seven services
+    sum to exactly that — an app-level figure can only mean the app's total). A finding is therefore
+    a figure NEITHER reaches. An app whose manifest says nothing is not asked here: an uncapped
+    service is the list above's finding, not this one.
+    """
+    out = []
+    for root in ROOTS:
+        for app_dir in sorted((REPO / root).iterdir()):
+            if app_dir.name not in enabled:
+                continue
+            af, cf = app_dir / "app.json", app_dir / "docker-compose.yml"
+            if not af.exists() or not cf.exists():
+                continue
+            try:
+                app = json.loads(af.read_text(encoding="utf-8"))
+            except (OSError, ValueError):
+                continue  # a manifest that does not parse is manifest-lint.py's (G73) finding
+            raw = ((app.get("resources") or {}) if isinstance(app, dict) else {}).get("memory")
+            declared = to_bytes(raw, env)
+            if declared is None:
+                continue
+            cfg = yaml.safe_load(cf.read_text(encoding="utf-8")) or {}
+            limits = {}
+            for sname, svc in (cfg.get("services") or {}).items():
+                if not isinstance(svc, dict):
+                    continue
+                limits[sname] = to_bytes((((svc.get("deploy") or {}).get("resources") or {})
+                                          .get("limits") or {}).get("memory"), env) or 0
+            own = limits.get(app_dir.name, 0)
+            whole = sum(limits.values())
+            if declared in (own, whole):
+                continue
+            out.append((app_dir.name, str(raw).strip(), declared, own, whole, len(limits)))
+    return out
+
+
 def main():
     verbose = "--verbose" in sys.argv
+    strict = "--strict" in sys.argv
     env = read_env()
 
     state = reconcile.load_state()
@@ -159,6 +230,18 @@ def main():
             print(f"        {u}")
 
     rc = 0
+    drift = declared_mismatches(enabled, env)
+    if drift:
+        print(f"      {len(drift)} app(s) declare a memory budget their compose does not enforce "
+              f"(app.json `resources.memory` vs its own service, and vs all its services):")
+        for name, raw, declared, own, whole, n in drift:
+            own_s = human(own) if own else "NO limit"
+            whole_s = human(whole) if whole else "NO limit"
+            print(f"        {name:26} app.json {raw:>7} ({human(declared)}) · compose own service "
+                  f"{own_s}, all {n} service(s) {whole_s}")
+        if strict:
+            rc = 1
+            print("  -> --strict: a manifest's declared memory is not what its compose enforces.")
     if total > budget:
         print(f"G30 FAIL — declared limits exceed the budget by "
               f"{(total-budget)/gib:.1f} GiB.")
@@ -206,7 +289,7 @@ def peak_check():
 
     # WHOSE sample is it. The file is one deployment's high-water marks, and every container in it is
     # named `<service>-<DEPLOYMENT_NAME>`. The copy in git was taken on 2026-08-06 on a deployment
-    # called `shlomo-laptop`, and this check summed it against the memory of WHATEVER machine ran the
+    # called `owner-laptop`, and this check summed it against the memory of WHATEVER machine ran the
     # gate — a clean clone, a CI runner, another office — and failed all of them at "229%" for a
     # stack none of them runs. A sample says something only about the deployment it was taken on.
     name = read_env().get("DEPLOYMENT_NAME") or ""

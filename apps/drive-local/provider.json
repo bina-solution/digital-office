@@ -1,0 +1,14 @@
+{
+  "for": "drive",
+  "id": "local",
+  "kind": "engine",
+  "service": "supabase storage (bucket `drive`) + postgres (drive_files, drive_folders, drive_profiles), run by the office",
+  "why_engine": "the office's own storage is software the office runs (supabase's storage server and postgres, open source): the files and their index stay on the office's own server, and every profile gets a drive of its own",
+  "ladder": [
+    {
+      "rung": "official-api",
+      "state": "in-use",
+      "evidence": "supabase storage's REST API (POST/GET /object/<bucket>/<id> with the service key) for the bytes, and postgres for the index — the engine's own documented interfaces, reached inside the office network (local.py)"
+    }
+  ]
+}

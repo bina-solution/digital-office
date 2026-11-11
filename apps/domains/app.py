@@ -38,9 +38,10 @@ from fastapi.staticfiles import StaticFiles
 from starlette.concurrency import run_in_threadpool
 
 import accounts
-import browser_session
 import dnsq
-import portal as portal_mod
+# A provider whose only door is its website is its OWN app now (domain-internic): this app asks it
+# through provider_client, which keeps the names it used to call on the provider's code here.
+import provider_client as portal_mod
 import webengine
 import providers
 import registry
@@ -154,7 +155,7 @@ def providers_catalog():
                     "state": (connected.get(p["id"]) or {}).get("state"),
                     "account": (connected.get(p["id"]) or {}).get("id")})
     out.sort(key=lambda p: (p["access"] != "browser", not p["connected"], p["name"]))
-    return {"providers": out, "browser": browser_session.available()}
+    return {"providers": out, "browser": portal_mod.available()}
 
 
 def _decorate(d: dict) -> dict:
@@ -558,16 +559,15 @@ def _account_browser(body: dict):
         return res
     if res.get("step") != "connected":
         return JSONResponse(res, status_code=200)              # a state, not an error
-    origin = portal_mod.SCRIPTS[PORTAL_PROVIDERS[pid]]["origin"]
+    origin = portal_mod.origin(PORTAL_PROVIDERS[pid])
     existing = [i for i in (accounts.vault_list()[0] or [])
                 if i.get("protocol") == "domain_portal_session"]
     if existing:
         accounts.set_active(existing[0]["id"])
         return {**res, "stored": True, "id": existing[0]["id"], "already": True}
-    secret = {"auth": "browser", "portal": PORTAL_PROVIDERS[pid], "origin": origin,
-              "endpoint": browser_session.DEFAULT_ENDPOINT,
-              "token_connection": "browser42-mcp-token",
-              "note": "סשן בדפדפן הלשכה — אין כאן סיסמה ואין cookies"}
+    secret = {"auth": "provider-app", "portal": PORTAL_PROVIDERS[pid], "origin": origin,
+              "provider_app": f"{portal_mod.PREFIX}{PORTAL_PROVIDERS[pid]}",
+              "note": "החשבון חי באפליקציית הספק (domain-internic) — אין כאן סיסמה ואין cookies"}
     stored, status = accounts.vault_add("domain_portal_session",
                                         body.get("label") or f"פורטל {res.get('name') or pid}",
                                         secret, f"browser@{origin}")
@@ -1050,19 +1050,18 @@ def _portal_written(name: str, action: str, rec: dict, consented_by: str | None)
     """One panel write, by either door, and what follows it: the domain's history says what it DID, and a
     write a person watched succeed makes that action the office's own from now on (portal.verified)."""
     portal = PORTAL_PROVIDERS["portal"]
-    res = portal_mod.run_write(portal, action,
-                               {"domain": name, "type": rec.get("type"), "name": rec.get("name"),
-                                "value": rec.get("content"), "ttl": rec.get("ttl")},
-                               None, bool(consented_by))
+    # the provider app gates on the consent and, after a write it read back, marks the action the
+    # office's own (portal.verified / mark_verified live with the writer, in domain-internic)
+    res = portal_mod.write(portal, action,
+                           {"domain": name, "type": rec.get("type"), "name": rec.get("name"),
+                            "value": rec.get("content"), "ttl": rec.get("ttl")},
+                           consented_by)
     who = f" · באישור {consented_by}" if consented_by else ""
     if res.get("ok") and not res.get("unchanged"):
         registry.event(name, f"dns_{action}", f"{action} {rec.get('type')} {rec.get('name')}{who}",
                        {"provider": "portal", "before": None, "after": res.get("record") or rec,
                         "result": {k: res.get(k) for k in ("state", "note", "guard", "ttl_asked")},
                         "consented_by": consented_by, "revertible": False})
-        # only a write whose guard RAN vouches for the writer (the third reader: "unavailable" marked it)
-        if consented_by and res.get("guard") == "checked" and not portal_mod.verified(portal, action):
-            portal_mod.mark_verified(portal, action, consented_by, res.get("record") or {})
     elif not res.get("ok") and (res.get("saved") or res.get("state") == "unverified"):
         # a save went through and the zone is not what was written — or no one can tell: that is history
         # too, with its evidence (a save that lost records left no trace before)
@@ -1749,51 +1748,13 @@ def fixture_delete(domain: str = "example.co.il", content: str = ""):
 
 @app.post("/internal/browser/selftest")
 def api_browser_selftest():
-    """Run the whole translation layer against the fixture panel, through the REAL browser.
-
-    Steps: open the panel → read the table → add a record → verify it is in the table → delete it →
-    verify it is gone. Returns the intent trace and the locators the run LEARNED, which is exactly
-    what a real panel run produces.
-    """
-    import browser_ops
-    if not browser_session.available().get("available"):
-        return _err("הדפדפן של הלשכה אינו זמין", 503)
-    if not browser_session.available().get("available"):
-        return _err("הדפדפן של הלשכה אינו זמין כרגע", 503)
-    s = browser_session.shared()
-    origin = os.environ.get("DOMAINS_FIXTURE_URL", "http://domains:8980/internal/fixture/panel")
-    editor = browser_ops.ZoneEditor(s, origin, learned={})
-    stamp = str(int(time.time()))
-    out: dict = {"origin": origin, "steps": {}, "learned": {}, "plan": {}}
-    try:
-        out["plan"] = {op: browser_ops.ops_for(op, {"name": "www", "type": "TXT",
-                                                    "content": "x", "ttl": 300})
-                       for op in ("list_records", "write_record", "delete_record")}
-        s.open(origin)
-        before = editor.records("example.co.il")
-        out["steps"]["read"] = {"ok": True, "records": [r.get("content") for r in before]}
-        created = editor.add_record("example.co.il",
-                                    {"type": "TXT", "name": "bina-selftest", "content": f"ok-{stamp}",
-                                     "ttl": 300})
-        out["steps"]["write"] = {"ok": True, **{k: created.get(k) for k in ("rows", "added_rows")},
-                                 "record": created.get("record")}
-        deleted = editor.delete_record("example.co.il", {"type": "TXT", "content": f"ok-{stamp}"})
-        out["steps"]["delete"] = deleted
-        after = editor.records("example.co.il")
-        out["steps"]["verify_gone"] = {"ok": not any(r.get("content") == f"ok-{stamp}"
-                                                     for r in after)}
-        out["learned"] = editor.learned
-        out["ok"] = all(step.get("ok") for step in out["steps"].values())
-        out["trace"] = editor.trace
-        registry.event(None, "browser_selftest",
-                       "בדיקת שכבת ההמרה לדפדפן עברה" if out["ok"] else "בדיקת שכבת ההמרה נכשלה",
-                       {"ok": out["ok"]})
-    except browser_session.SessionError as e:
-        out.update({"ok": False, "state": e.state, "error": e.message, "detail": e.detail,
-                    "trace": editor.trace, "learned": editor.learned})
-    except Exception as e:                                   # noqa: BLE001
-        out.update({"ok": False, "state": "unknown_error", "error": f"{type(e).__name__}: {e}",
-                    "trace": editor.trace})
+    """The zone editor's selftest against this app's fixture panel — run BY the provider app, which is
+    where the browser-driving code lives now (domain-internic `POST /api/selftest`)."""
+    out = portal_mod._call(PORTAL_PROVIDERS["portal"], "POST", "/api/selftest", {},
+                           timeout=portal_mod.WRITE_TIMEOUT)
+    registry.event(None, "browser_selftest",
+                   "בדיקת שכבת ההמרה לדפדפן עברה" if out.get("ok") else "בדיקת שכבת ההמרה נכשלה",
+                   {"ok": bool(out.get("ok"))})
     return out
 
 

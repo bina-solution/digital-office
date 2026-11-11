@@ -59,7 +59,7 @@ They write straight into this directory. Progress is committed and pushed to `dg
 
 ## Continue from anywhere — a Claude cloud VM, or any machine
 
-1. **Check out** branch `dgo-pair` of `solomonBoltin/deployment-hacohen`, and pull it.
+1. **Check out** branch `dgo-pair` of `bina-solution/digital-office`, and pull it.
 2. **See what is left:**
    - `python3 apps/digital-assets/content/status.py`. It needs PyYAML (`pip install pyyaml`).
    - On an office, `./bbox digital-assets content-status` does the same inside the engine.

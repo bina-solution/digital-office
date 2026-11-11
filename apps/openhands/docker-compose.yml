@@ -12,11 +12,13 @@ services:
     - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY}
     - OPENAI_API_KEY=${OPENAI_API_KEY:-}
     - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
-    - GEMINI_API_KEY=${GEMINI_API_KEY:-${GOOGLE_API_KEY:-}}
+    # Gemini only on openhands' own line, never INDOX's GEMINI_API_KEY: a key here turns Gemini on (vision, the
+    # gateway's gemini/* models, the sandbox), and a yes for INDOX is not a yes for openhands (DGO-1792)
+    - GEMINI_API_KEY=${OPENHANDS_GEMINI_API_KEY:-}
     - LITELLM_PROXY_API_KEY=${DEEPSEEK_API_KEY}
     - WORKSPACE_BASE=/opt/workspace_base
     - WORKSPACE_MOUNT_PATH=/opt/workspace_base
-    - SANDBOX_VOLUMES=/root/deployment-hacohen:/workspace/project:rw,/root/deployment-hacohen:/root/deployment-hacohen:rw
+    - SANDBOX_VOLUMES=/root/digital-office:/workspace/project:rw,/root/digital-office:/root/digital-office:rw
     - SANDBOX_USER_ID=0
     - SANDBOX_LOCAL_RUNTIME_URL=http://host.docker.internal
     - AGENT_SERVER_USE_HOST_NETWORK=false
@@ -24,14 +26,14 @@ services:
     - AGENT_SERVER_IMAGE_TAG=latest
     - OH_ENABLE_VNC=true
     - ENABLE_BROWSER=true
-    - OH_AGENT_SERVER_ENV={"OH_ENABLE_VNC":"1","NOVNC_PORT":"8011","DEEPSEEK_API_KEY":"${DEEPSEEK_API_KEY}","OPENAI_API_KEY":"${OPENAI_API_KEY:-}","GEMINI_API_KEY":"${GEMINI_API_KEY:-${GOOGLE_API_KEY:-}}","LLM_API_KEY":"${DEEPSEEK_API_KEY}","LLM_BASE_URL":"${DEEPSEEK_BASE_URL:-https://api.deepseek.com}"}
+    - OH_AGENT_SERVER_ENV={"OH_ENABLE_VNC":"1","NOVNC_PORT":"8011","DEEPSEEK_API_KEY":"${DEEPSEEK_API_KEY}","OPENAI_API_KEY":"${OPENAI_API_KEY:-}","GEMINI_API_KEY":"${OPENHANDS_GEMINI_API_KEY:-}","LLM_API_KEY":"${DEEPSEEK_API_KEY}","LLM_BASE_URL":"${DEEPSEEK_BASE_URL:-https://api.deepseek.com}"}
     - SANDBOX_CONTAINER_URL_PATTERN=https://${OPENHANDS_BASE_URL:-openhands.${DEPLOYMENT_DOMAIN:-localhost}}/agent/{port}
     - MAX_NUM_SANDBOXES=3
     - SANDBOX_STARTUP_GRACE_SECONDS=300
     - INIT_GIT_IN_EMPTY_WORKSPACE=0
     - FILE_STORE=local
     - FILE_STORE_PATH=/.openhands-state
-    - JWT_SECRET=${OPENHANDS_JWT_SECRET:-CHANGE_ME}
+    - JWT_SECRET=${OPENHANDS_JWT_SECRET:?OPENHANDS_JWT_SECRET must be set in .env - bbox run mints it, scripts/env-secrets.py}
     - MAX_CONCURRENT_CONVERSATIONS=5
     - MAX_BUDGET_PER_TASK=5.0
     - MAX_ITERATIONS=500
@@ -40,7 +42,7 @@ services:
     - MCP_SHTTP_SERVERS=["http://host.docker.internal:8931/mcp/shttp","http://host.docker.internal:8932/mcp/shttp"]
     volumes:
     - /var/run/docker.sock:/var/run/docker.sock
-    - /root/deployment-hacohen:/opt/workspace_base:rw
+    - /root/digital-office:/opt/workspace_base:rw
     - openhands_state:/.openhands-state
     - openhands_config:/.openhands
     ports:
@@ -73,7 +75,7 @@ services:
     container_name: openhands-init-${DEPLOYMENT_NAME:-bina-deployment}
     environment:
     - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY:-}
-    - GEMINI_API_KEY=${GEMINI_API_KEY:-${GOOGLE_API_KEY:-}}
+    - GEMINI_API_KEY=${OPENHANDS_GEMINI_API_KEY:-}
     - OPENAI_API_KEY=${OPENAI_API_KEY:-}
     - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
     - LLM_GATEWAY_URL=${LLM_GATEWAY_URL:-http://llm-gateway:4000}
@@ -105,7 +107,7 @@ services:
     environment:
     - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY:-}
     - DEEPSEEK_BASE_URL=${DEEPSEEK_BASE_URL:-https://api.deepseek.com}
-    - GEMINI_API_KEY=${GEMINI_API_KEY:-${GOOGLE_API_KEY:-}}
+    - GEMINI_API_KEY=${OPENHANDS_GEMINI_API_KEY:-}
     - OPENAI_API_KEY=${OPENAI_API_KEY:-}
     - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
     - LITELLM_MASTER_KEY=${LITELLM_MASTER_KEY:-CHANGE_ME}
@@ -165,7 +167,7 @@ services:
     build:
       context: ./agent-proxy
       dockerfile: Dockerfile
-    image: deployment-hacohen-agent-proxy:latest
+    image: digital-office-agent-proxy:latest
     container_name: agent-proxy-${DEPLOYMENT_NAME:-bina-deployment}
     restart: unless-stopped
     environment:
@@ -189,7 +191,7 @@ services:
     build:
       context: ./docker-proxy
       dockerfile: Dockerfile
-    image: deployment-hacohen-docker-proxy:latest
+    image: digital-office-docker-proxy:latest
     container_name: docker-proxy-${DEPLOYMENT_NAME:-bina-deployment}
     restart: unless-stopped
     ports:
@@ -217,7 +219,7 @@ services:
     build:
       context: ./dispatcher
       dockerfile: Dockerfile
-    image: deployment-hacohen-dispatcher:latest
+    image: digital-office-dispatcher:latest
     container_name: dispatcher-${DEPLOYMENT_NAME:-bina-deployment}
     restart: unless-stopped
     depends_on:
@@ -233,7 +235,7 @@ services:
     - DISPATCHER_DEFAULT_MODEL=DeepSeek V4 Pro
     - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY}
     - DEEPSEEK_BASE_URL=${DEEPSEEK_BASE_URL:-https://api.deepseek.com}
-    - GEMINI_API_KEY=${GEMINI_API_KEY:-${GOOGLE_API_KEY:-}}
+    - GEMINI_API_KEY=${OPENHANDS_GEMINI_API_KEY:-}
     - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN:-}
     # The dispatcher's own public base. It used to exist nowhere but as a literal inside
     # eight .js files, so every link the Telegram bot handed out pointed at the ORIGINAL
@@ -246,9 +248,9 @@ services:
     volumes:
     - openhands_state:/.openhands-state
     - /var/run/docker.sock:/var/run/docker.sock:ro
-    - /root/deployment-hacohen/ai/obsidian:/root/deployment-hacohen/ai/obsidian:rw
-    - /root/deployment-hacohen/.github/skills:/root/deployment-hacohen/.github/skills:ro
-    - /root/deployment-hacohen/apps/openhands/downloads:/root/deployment-hacohen/apps/openhands/downloads:rw
+    - /root/digital-office/ai/obsidian:/root/digital-office/ai/obsidian:rw
+    - /root/digital-office/.github/skills:/root/digital-office/.github/skills:ro
+    - /root/digital-office/apps/openhands/downloads:/root/digital-office/apps/openhands/downloads:rw
     networks:
     - traefik-network
     deploy:

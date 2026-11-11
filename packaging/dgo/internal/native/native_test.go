@@ -18,7 +18,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/solomonBoltin/deployment-hacohen/packaging/dgo/internal/edge"
+	"github.com/bina-solution/digital-office/packaging/dgo/internal/edge"
 )
 
 // files writes each path under dir.
@@ -263,16 +263,18 @@ func TestTheShippedStateAddsWhatTheOfficeLacks(t *testing.T) {
 	}
 }
 
-// The apps the machine runs are the ones the core's state says it enabled (by: machine), and only their
-// hosts wake the machine: asked for, its step shown — or, while the app's refusal holds, the refusal shown
-// and nothing asked (a page that loads itself again must not restart what failed).
+// The apps the machine runs are the ones the core's state says it enabled (by: machine) and the enabled
+// ones that run in containers the core does not answer itself (DGO-1328: the core office's dgo-extend), and
+// only their hosts wake the machine: asked for, its step shown — or, while the app's refusal holds, the
+// refusal shown and nothing asked (a page that loads itself again must not restart what failed).
 func TestTheMachinesAppsWakeIt(t *testing.T) {
 	root, dir := t.TempDir(), t.TempDir()
 	files(t, root, map[string]string{
-		"platform-base/console/app.json": `{"id": "console", "layer": 2}`,
+		"platform-base/console/app.json": `{"id": "console", "layer": 2, "compose": "docker-compose.yml"}`,
 		"apps/n8n/app.json":              `{"id": "n8n", "layer": 3, "routing": [{"host": "n8n"}, {"host": "n8n-hooks"}]}`,
 		"apps/indox/app.json":            `{"id": "indox", "layer": 3, "routing": [{"host": "incoming-documents"}]}`,
 		"apps/notes/app.json":            `{"id": "notes", "layer": 3, "routing": [{"host": "notes"}]}`,
+		"apps/dgo-extend/app.json":       `{"id": "dgo-extend", "layer": 3, "compose": "docker-compose.yml", "routing": [{"host": "dgo-extend"}]}`,
 	})
 	m := coreMachine{wanted: filepath.Join(dir, MachineWanted), refused: filepath.Join(dir, MachineRefused)}
 	wake := m.wake(root, "localhost")
@@ -287,6 +289,15 @@ func TestTheMachinesAppsWakeIt(t *testing.T) {
 	}
 	if _, has := wake("notes.localhost", false); has {
 		t.Fatal("an app the machine does not run woke it")
+	}
+	// the core office's own dgo-extend runs in containers, which only the machine has: the machine's, and its
+	// host wakes it; the console, which the core answers itself, is not, compose or not
+	state("  console: { enabled: true }\n  dgo-extend: { enabled: true }\n  notes: { state: enabled, by: wizard }\n")
+	if on := machineApps(root); strings.Join(on, ",") != "dgo-extend" {
+		t.Fatalf("the machine's apps = %v, want dgo-extend", on)
+	}
+	if _, has := wake("dgo-extend.localhost", false); !has {
+		t.Fatal("the core office's dgo-extend does not wake the machine")
 	}
 	state("  console: { enabled: true }\n  n8n: { state: enabled, by: machine }\n  indox: { state: disabled, by: machine }\n")
 	if on := machineApps(root); strings.Join(on, ",") != "n8n" {
@@ -328,6 +339,158 @@ func TestTheMachinesAppsWakeIt(t *testing.T) {
 	}
 	if _, err := os.Stat(m.wanted); err != nil {
 		t.Fatalf("the machine was not asked for: %v", err)
+	}
+}
+
+// A container app opens on the phone from the machine's own console, as the console container serves it on
+// every other office (DGO-1328): before the machine is up, the page that waits for it; once it is up and has
+// proved its token, the machine's answer — the identity the edge wrote, the request signed with the token,
+// the core's own sign-in left out, a posted body whole. And the rail shows the machine's tiles — the apps it
+// runs, the offices it links — beside the core's own, none twice, kept for the next start.
+func TestContainerAppsOpenFromTheMachinesConsole(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("the native core is the phone's: its sockets' modes are Unix ones")
+	}
+	for _, k := range []string{"BBOX_CONTROL_PLANE", "DGO_CONSOLE", "BUILD_VERSION", "CONSOLE_OFFICE_TTL_S"} {
+		t.Setenv(k, "")
+		os.Unsetenv(k)
+	}
+	root := t.TempDir()
+	files(t, root, map[string]string{
+		".dgo-office-root":                         "dgo office root\n",
+		"platform.state.yaml":                      "schema_version: 1\napps:\n  console: { enabled: true }\n",
+		"platform-base/console/app.json":           `{"id": "console", "layer": 2}`,
+		".generated/registry/console.modules.yaml": "- {id: home, alias: home, name: the core's home, order: 1}\n",
+	})
+	shell := t.TempDir() // the console's own views beside its static/, as the image's /app holds modules.yaml
+	files(t, shell, map[string]string{"modules.yaml": "- {id: settings, view: settings, name: the core's settings view}\n"})
+	static := filepath.Join(shell, "static")
+	files(t, static, map[string]string{"index.html": "the console\n", "install.html": "the install wizard\n"})
+	dir, err := os.MkdirTemp("", "nat")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { os.RemoveAll(dir) })
+	ln, err := edge.ListenUnix(filepath.Join(dir, ForwardAuthSocket))
+	if err != nil {
+		t.Fatal(err)
+	}
+	fa := &http.Server{Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if c, err := r.Cookie("dgo_session"); err == nil && c.Value == "ok" && r.URL.Path == "/auth/traefik" {
+			w.Header().Set("X-authentik-username", "owner")
+			return
+		}
+		http.Redirect(w, r, "http://signin.localhost:8080/login", http.StatusFound)
+	})}
+	go fa.Serve(ln)
+	t.Cleanup(func() { fa.Close() })
+
+	token := strings.Repeat("k", 40)
+	type seen struct {
+		host, path, user, cookie, body string
+		signed                         bool
+	}
+	got := make(chan seen, 8)
+	machine := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/edge-proof" && r.Host == "signin.localhost" {
+			mac := hmac.New(sha256.New, []byte(token))
+			mac.Write([]byte(r.URL.Query().Get("nonce")))
+			_, _ = io.WriteString(w, hex.EncodeToString(mac.Sum(nil)))
+			return
+		}
+		// as the machine's forward-auth checks the core's identity (FORWARD_AUTH_EDGE_TOKEN)
+		signed := hmac.Equal([]byte(r.Header.Get(edge.EdgeSig)), []byte(edge.EdgeSigned(token,
+			r.Header.Get(edge.EdgeAt), r.Header.Get(edge.EdgeNonce), r.Method, r.Host, r.URL.RequestURI(), r.Header)))
+		if r.URL.Path == "/api/modules" {
+			if !signed || r.Header.Get("X-authentik-username") != "owner" {
+				http.Error(w, "nobody", http.StatusUnauthorized)
+				return
+			}
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = io.WriteString(w, `{"modules": [{"id": "home", "alias": "home", "name": "the machine's home"},`+
+				`{"id": "n8n", "alias": "n8n", "name": "n8n", "order": 5},`+
+				`{"id": "settings", "view": "settings", "name": "the machine's settings view"},`+
+				`{"id": "odd", "name": "an order that is no whole number", "order": "first"},`+
+				`{"id": "hp-laptop--bina", "alias": "bina", "name": "Bina", "remote": {"office": "hp-laptop", "ok": true}}]}`)
+			return
+		}
+		if strings.HasPrefix(r.URL.Path, "/a/notyet/") { // the machine's edge, before the app's container is up
+			w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+			w.WriteHeader(http.StatusNotFound)
+			_, _ = io.WriteString(w, "404 page not found\n")
+			return
+		}
+		b, _ := io.ReadAll(r.Body)
+		got <- seen{r.Host, r.URL.Path, r.Header.Get("X-authentik-username"), r.Header.Get("Cookie"), string(b), signed}
+		_, _ = io.WriteString(w, "the machine's dgo-extend\n")
+	}))
+	t.Cleanup(machine.Close)
+
+	c, err := Open(root, Options{Dir: dir, Domain: "localhost", Static: static, Console: "http://127.0.0.1:9", Apps: "http://127.0.0.1:9"},
+		log.New(io.Discard, "", 0))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { c.Close(context.Background()) })
+	do := func(method, path, body string) (int, string) {
+		t.Helper()
+		req, err := http.NewRequest(method, "http://console.localhost:8080"+path, strings.NewReader(body))
+		if err != nil {
+			t.Fatal(err)
+		}
+		req.Header.Set("Cookie", "dgo_session=ok; other=1")
+		req.Header.Set("Origin", "http://console.localhost:8080")
+		req.Header.Set("Accept", "text/html")
+		res, err := over(filepath.Join(dir, EdgeSocket)).Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer res.Body.Close()
+		b, _ := io.ReadAll(res.Body)
+		return res.StatusCode, string(b)
+	}
+
+	if code, body := do("GET", "/a/dgo-extend/", ""); code != http.StatusServiceUnavailable {
+		t.Fatalf("before the machine is up: %d %.200q, want the page that waits for it", code, body)
+	}
+	// the rail before the machine is up asks it nothing, and waits on nothing
+	if code, body := do("GET", "/api/modules", ""); code != http.StatusOK || strings.Contains(body, `"id":"n8n"`) {
+		t.Fatalf("the rail before the machine: %d %.200q", code, body)
+	}
+	port := machine.Listener.Addr().(*net.TCPAddr).Port
+	if err := os.WriteFile(filepath.Join(dir, MachineFile), []byte(fmt.Sprintf("%d %s\n", port, token)), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if code, body := do("POST", "/a/dgo-extend/api/pair", `{"code": "123"}`); code != http.StatusOK || body != "the machine's dgo-extend\n" {
+		t.Fatalf("the machine up: %d %q, want its dgo-extend's answer", code, body)
+	}
+	s := <-got
+	if s.host != "console.localhost:8080" || s.path != "/a/dgo-extend/api/pair" || s.user != "owner" || !s.signed ||
+		strings.Contains(s.cookie, "dgo_session") || !strings.Contains(s.cookie, "other=1") || s.body != `{"code": "123"}` {
+		t.Fatalf("what the machine was sent: %+v", s)
+	}
+	// an app whose container is not up yet: the page that waits, never the machine edge's bare 404
+	if code, body := do("GET", "/a/notyet/", ""); code != http.StatusServiceUnavailable || strings.Contains(body, "404 page not found") {
+		t.Fatalf("an app not up yet in the machine: %d %.200q, want the page that waits", code, body)
+	}
+
+	deadline := time.Now().Add(10 * time.Second)
+	for {
+		_, body := do("GET", "/api/modules", "")
+		if strings.Contains(body, `"id":"n8n"`) {
+			if !strings.Contains(body, `"id":"hp-laptop--bina"`) || strings.Contains(body, "the machine's home") || !strings.Contains(body, "the core's home") ||
+				strings.Contains(body, "the machine's settings view") || !strings.Contains(body, "the core's settings view") || strings.Contains(body, `"id":"odd"`) {
+				t.Fatalf("the rail: %s", body)
+			}
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("the machine's tiles never reached the rail: %s", body)
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	if b, err := os.ReadFile(filepath.Join(dir, MachineTiles)); err != nil || !strings.Contains(string(b), `"n8n"`) {
+		t.Fatalf("the machine's tiles were not kept: %v %q", err, b)
 	}
 }
 

@@ -13,7 +13,8 @@
 #   2. `up -d --dry-run` from here: the running containers a bring-up would re-create although
 #      nobody edited them;
 #   3. the CPU quota of every running container against the machine's budget (gate G65's plan).
-# Exit 1 when an answer is not "none". Values of secret-looking keys are never printed.
+# Exit 1 when answer 1 or 3 is not "none"; answer 2 is SAID only until its stage 2 (see the end). Values of
+# secret-looking keys are never printed.
 # Why it exists: issues/a-containers-configuration-depends-on-who-asks-and-on-who-else-runs.yaml
 set -uo pipefail
 . "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib.sh"
@@ -75,4 +76,8 @@ else echo "2. a bring-up from here would re-create: UNKNOWN — compose's dry ru
 off="$( cd "${REPO_ROOT}" && _dcx_run ps --format '{{.ID}} {{.Service}}' 2>/dev/null \
           | python3 scripts/refactor/cpu-budget-lint.py --apply .generated/cpu-budget.yml --dry-run 2>/dev/null | tr '\n' ';' )"
 echo "3. containers whose CPU quota is not the budget's: ${off:-none}"
-[ "${rc}" = 0 ] && [ "${again_known}" = 1 ] && [ -z "${again}" ] && [ -z "${off}" ]
+# Question 2 is SAID, not yet a verdict (AGENTS rule 8, stage 1 of 2 — from 2026-11-11): its answer was blind until
+# then (compose 2.40's «DRY-RUN MODE -» prefix, issues/compose-prefixes-its-dry-run-lines-…), so every office that
+# passed passed on «none» without measuring it. A week of the true lists first; then `[ -z "${again}" ]` joins the
+# verdict again.
+[ "${rc}" = 0 ] && [ "${again_known}" = 1 ] && [ -z "${off}" ]

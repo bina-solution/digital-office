@@ -1,5 +1,5 @@
-# Lifted from apps/domains/browser_session.py — ai/context/web-engine.md marks it "generic (lift as-is)". The only
-# edits are the logger name and (webengine) the env names of the DB path. Keep the two copies in step.
+# Lifted from apps/domain-internic/browser_session.py — ai/context/web-engine.md marks it "generic (lift as-is)". The
+# only edit is the logger name. Gate G110 keeps the copies in step (it moved from apps/domains in b5e30566).
 """domains.browser_session — the reference client for `browser_session.v1`
 (ai/context/browser-session-connection.md).
 

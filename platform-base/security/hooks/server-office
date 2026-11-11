@@ -1,0 +1,13 @@
+#!/usr/bin/env bash
+# platform-base/security/hooks/server-office — a SERVER office declares this app before its first
+# bring-up (DGO-1556). Called by scripts/onboarding, generically: the platform never names an app in
+# layer-0 tooling (gate G31) — an app that a server office needs says so with a hook of this name, in
+# its own folder, and onboarding runs every `*/hooks/server-office` it finds.
+set -uo pipefail
+say() { printf '%s\n' "$*"; }
+say "declaring the security app (who reaches this office, what it calls — the run after this brings it up)…"
+if ! bash "${REPO_ROOT}/bbox" apps enable security; then
+  say "✗ could not declare the security app — a server office is not installed without it."
+  say "  'bbox apps enable security' printed its reason above; re-run 'bbox onboarding' once it is cured."
+  exit 1
+fi

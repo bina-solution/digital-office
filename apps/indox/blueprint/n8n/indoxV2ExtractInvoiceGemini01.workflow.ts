@@ -2,7 +2,7 @@ import { workflow, node, links } from '@n8n-as-code/transformer';
 
 // <workflow-map>
 // Workflow : invoice Extractor - Gemini 3.1 pro
-// Nodes   : 59  |  Connections: 66
+// Nodes   : 62  |  Connections: 70
 //
 // NODE INDEX
 // ──────────────────────────────────────────────────────────────────
@@ -66,6 +66,9 @@ import { workflow, node, links } from '@n8n-as-code/transformer';
 // ReportUnusableDocument             code
 // ReportMissingLink                  code
 // DecodeCsvText                      code
+// CheckAiEnabledSettingNoCache       postgres                   [creds]
+// IfAiDisabledNoCache                if
+// ResumeItemNoCache                  code
 //
 // ROUTING MAP
 // ──────────────────────────────────────────────────────────────────
@@ -123,7 +126,11 @@ import { workflow, node, links } from '@n8n-as-code/transformer';
 //                             .out(5) → Start1 (↩ loop)
 //                             .out(6) → Start1 (↩ loop)
 //                             .out(7) → ResponseFormatUnsupportedFileError (↩ loop)
-//             .out(1) → Start (↩ loop)
+//             .out(1) → CheckAiEnabledSettingNoCache
+//                → IfAiDisabledNoCache
+//                  → ApiResponseAiDisabled (↩ loop)
+//                 .out(1) → ResumeItemNoCache
+//                    → Start (↩ loop)
 //       .out(1) → DownloadLink
 //          → IfBinary
 //            → BeforeStart (↩ loop)
@@ -149,7 +156,7 @@ import { workflow, node, links } from '@n8n-as-code/transformer';
 @workflow({
     /*__n8n__*/ description: null,
     /*__n8n__*/ isArchived: false,
-    /*__n8n__*/ connections: {"Webhook Trigger":{"main":[[{"node":"MAP LINK1","type":"main","index":0}]]},"File Type Router":{"main":[[{"node":"Extract from File1","type":"main","index":0}],[{"node":"Extract from File","type":"main","index":0}],[{"node":"Extract from File2","type":"main","index":0}],[{"node":"Extract from File2","type":"main","index":0}],[{"node":"Start1","type":"main","index":0}],[{"node":"Start1","type":"main","index":0}],[{"node":"Start1","type":"main","index":0}],[{"node":"Response Format: Unsupported File Error","type":"main","index":0}]]},"Textual Input":{"main":[[{"node":"Text Processor","type":"main","index":0}]]},"Extract from File":{"main":[[{"node":"Decode CSV Text","type":"main","index":0}]]},"Code":{"main":[[{"node":"Textual Input","type":"main","index":0}]]},"Extract from File1":{"main":[[{"node":"Textual Input","type":"main","index":0}]]},"Extract from File2":{"main":[[{"node":"Code","type":"main","index":0}],[{"node":"Response Format: Unsupported File Error","type":"main","index":0}]]},"Response Format: Unsupported File Error":{"main":[[{"node":"End","type":"main","index":0}]]},"Crypto":{"main":[[{"node":"KVStorage","type":"main","index":0}]]},"End":{"main":[[{"node":"API Response","type":"main","index":0},{"node":"If Success","type":"main","index":0},{"node":"End2","type":"main","index":0}]]},"Before Start":{"main":[[{"node":"Resolve Fields","type":"main","index":0}]]},"KVStorage":{"main":[[{"node":"If","type":"main","index":0}]]},"Start":{"main":[[{"node":"File Type Router","type":"main","index":0}]]},"If":{"main":[[{"node":"Code in JavaScript1","type":"main","index":0}],[{"node":"Check AI Enabled Setting","type":"main","index":0}]]},"Code2":{"main":[[{"node":"Start","type":"main","index":0}]]},"If1":{"main":[[{"node":"Crypto","type":"main","index":0}],[{"node":"Start","type":"main","index":0}]]},"When Executed by Another Workflow":{"main":[[{"node":"Switch","type":"main","index":0}]]},"Switch":{"main":[[{"node":"Before Start","type":"main","index":0}],[{"node":"Download LINK","type":"main","index":0}],[{"node":"Report Missing Link","type":"main","index":0}]]},"Download LINK":{"main":[[{"node":"If Binary","type":"main","index":0}]]},"If Binary":{"main":[[{"node":"Before Start","type":"main","index":0}],[{"node":"Code in JavaScript","type":"main","index":0}]]},"Code in JavaScript1":{"main":[[{"node":"API Response1","type":"main","index":0}]]},"MAP LINK":{"main":[[{"node":"Switch","type":"main","index":0}]]},"If Success":{"main":[[{"node":"KVStorage1","type":"main","index":0}]]},"Google Gemini Chat Model":{"ai_languageModel":[[]]},"Map Response":{"main":[[{"node":"End","type":"main","index":0}]]},"Extract Response":{"main":[[{"node":"Parse JSON Response","type":"main","index":0}]]},"Parse JSON Response":{"main":[[{"node":"Format Response","type":"main","index":0}]]},"Response Format: No LLM Output":{"main":[[{"node":"End","type":"main","index":0}]]},"MAP LINK1":{"main":[[{"node":"Switch","type":"main","index":0}]]},"When clicking ‘Execute workflow’":{"main":[[{"node":"Delete Cache","type":"main","index":0}]]},"Document Processor":{"main":[[{"node":"Extract Response","type":"main","index":0}],[{"node":"Response Format: No LLM Output","type":"main","index":0}]]},"Format Response":{"main":[[{"node":"Map Response","type":"main","index":0}]]},"Text Processor":{"main":[[{"node":"Extract Response","type":"main","index":0}]]},"HTTP Request":{"main":[[{"node":"Code in JavaScript2","type":"main","index":0}]]},"Code in JavaScript2":{"main":[[]]},"Code in JavaScript3":{"main":[[{"node":"HTTP Request","type":"main","index":0}]]},"Start1":{"main":[[{"node":"Check Doc Bytes","type":"main","index":0}]]},"Check AI Enabled Setting":{"main":[[{"node":"If AI Disabled","type":"main","index":0}]]},"If AI Disabled":{"main":[[{"node":"API Response - AI Disabled","type":"main","index":0}],[{"node":"Code2","type":"main","index":0}]]},"Load V3 Config (AI)":{"main":[[{"node":"Build Prompt From Queries","type":"main","index":0}]]},"Build Prompt From Queries":{"main":[[{"node":"CONFIG","type":"main","index":0}]]},"Config1":{"main":[[{"node":"Load V3 Config (AI)","type":"main","index":0}]]},"Check Doc Bytes":{"main":[[{"node":"Doc Bytes OK?","type":"main","index":0}]]},"Doc Bytes OK?":{"main":[[{"node":"Document Processor","type":"main","index":0}],[{"node":"Report Unusable Document","type":"main","index":0}]]},"Report Unusable Document":{"main":[[{"node":"End","type":"main","index":0}]]},"Resolve Fields":{"main":[[{"node":"Config1","type":"main","index":0},{"node":"If1","type":"main","index":0}]]},"Report Missing Link":{"main":[[{"node":"End","type":"main","index":0}]]},"Code in JavaScript":{"main":[[{"node":"End","type":"main","index":0}]]},"Decode CSV Text":{"main":[[{"node":"Code","type":"main","index":0}]]}},
+    /*__n8n__*/ connections: {"Webhook Trigger":{"main":[[{"node":"MAP LINK1","type":"main","index":0}]]},"File Type Router":{"main":[[{"node":"Extract from File1","type":"main","index":0}],[{"node":"Extract from File","type":"main","index":0}],[{"node":"Extract from File2","type":"main","index":0}],[{"node":"Extract from File2","type":"main","index":0}],[{"node":"Start1","type":"main","index":0}],[{"node":"Start1","type":"main","index":0}],[{"node":"Start1","type":"main","index":0}],[{"node":"Response Format: Unsupported File Error","type":"main","index":0}]]},"Textual Input":{"main":[[{"node":"Text Processor","type":"main","index":0}]]},"Extract from File":{"main":[[{"node":"Decode CSV Text","type":"main","index":0}]]},"Code":{"main":[[{"node":"Textual Input","type":"main","index":0}]]},"Extract from File1":{"main":[[{"node":"Textual Input","type":"main","index":0}]]},"Extract from File2":{"main":[[{"node":"Code","type":"main","index":0}],[{"node":"Response Format: Unsupported File Error","type":"main","index":0}]]},"Response Format: Unsupported File Error":{"main":[[{"node":"End","type":"main","index":0}]]},"Crypto":{"main":[[{"node":"KVStorage","type":"main","index":0}]]},"End":{"main":[[{"node":"API Response","type":"main","index":0},{"node":"If Success","type":"main","index":0},{"node":"End2","type":"main","index":0}]]},"Before Start":{"main":[[{"node":"Resolve Fields","type":"main","index":0}]]},"KVStorage":{"main":[[{"node":"If","type":"main","index":0}]]},"Start":{"main":[[{"node":"File Type Router","type":"main","index":0}]]},"If":{"main":[[{"node":"Code in JavaScript1","type":"main","index":0}],[{"node":"Check AI Enabled Setting","type":"main","index":0}]]},"Code2":{"main":[[{"node":"Start","type":"main","index":0}]]},"If1":{"main":[[{"node":"Crypto","type":"main","index":0}],[{"node":"Check AI Enabled Setting (no cache)","type":"main","index":0}]]},"Check AI Enabled Setting (no cache)":{"main":[[{"node":"If AI Disabled (no cache)","type":"main","index":0}]]},"If AI Disabled (no cache)":{"main":[[{"node":"API Response - AI Disabled","type":"main","index":0}],[{"node":"Resume Item (no cache)","type":"main","index":0}]]},"Resume Item (no cache)":{"main":[[{"node":"Start","type":"main","index":0}]]},"When Executed by Another Workflow":{"main":[[{"node":"Switch","type":"main","index":0}]]},"Switch":{"main":[[{"node":"Before Start","type":"main","index":0}],[{"node":"Download LINK","type":"main","index":0}],[{"node":"Report Missing Link","type":"main","index":0}]]},"Download LINK":{"main":[[{"node":"If Binary","type":"main","index":0}]]},"If Binary":{"main":[[{"node":"Before Start","type":"main","index":0}],[{"node":"Code in JavaScript","type":"main","index":0}]]},"Code in JavaScript1":{"main":[[{"node":"API Response1","type":"main","index":0}]]},"MAP LINK":{"main":[[{"node":"Switch","type":"main","index":0}]]},"If Success":{"main":[[{"node":"KVStorage1","type":"main","index":0}]]},"Google Gemini Chat Model":{"ai_languageModel":[[]]},"Map Response":{"main":[[{"node":"End","type":"main","index":0}]]},"Extract Response":{"main":[[{"node":"Parse JSON Response","type":"main","index":0}]]},"Parse JSON Response":{"main":[[{"node":"Format Response","type":"main","index":0}]]},"Response Format: No LLM Output":{"main":[[{"node":"End","type":"main","index":0}]]},"MAP LINK1":{"main":[[{"node":"Switch","type":"main","index":0}]]},"When clicking ‘Execute workflow’":{"main":[[{"node":"Delete Cache","type":"main","index":0}]]},"Document Processor":{"main":[[{"node":"Extract Response","type":"main","index":0}],[{"node":"Response Format: No LLM Output","type":"main","index":0}]]},"Format Response":{"main":[[{"node":"Map Response","type":"main","index":0}]]},"Text Processor":{"main":[[{"node":"Extract Response","type":"main","index":0}]]},"HTTP Request":{"main":[[{"node":"Code in JavaScript2","type":"main","index":0}]]},"Code in JavaScript2":{"main":[[]]},"Code in JavaScript3":{"main":[[{"node":"HTTP Request","type":"main","index":0}]]},"Start1":{"main":[[{"node":"Check Doc Bytes","type":"main","index":0}]]},"Check AI Enabled Setting":{"main":[[{"node":"If AI Disabled","type":"main","index":0}]]},"If AI Disabled":{"main":[[{"node":"API Response - AI Disabled","type":"main","index":0}],[{"node":"Code2","type":"main","index":0}]]},"Load V3 Config (AI)":{"main":[[{"node":"Build Prompt From Queries","type":"main","index":0}]]},"Build Prompt From Queries":{"main":[[{"node":"CONFIG","type":"main","index":0}]]},"Config1":{"main":[[{"node":"Load V3 Config (AI)","type":"main","index":0}]]},"Check Doc Bytes":{"main":[[{"node":"Doc Bytes OK?","type":"main","index":0}]]},"Doc Bytes OK?":{"main":[[{"node":"Document Processor","type":"main","index":0}],[{"node":"Report Unusable Document","type":"main","index":0}]]},"Report Unusable Document":{"main":[[{"node":"End","type":"main","index":0}]]},"Resolve Fields":{"main":[[{"node":"Config1","type":"main","index":0},{"node":"If1","type":"main","index":0}]]},"Report Missing Link":{"main":[[{"node":"End","type":"main","index":0}]]},"Code in JavaScript":{"main":[[{"node":"End","type":"main","index":0}]]},"Decode CSV Text":{"main":[[{"node":"Code","type":"main","index":0}]]}},
     /*__n8n__*/ tags: [{"updatedAt":"2026-08-05T22:56:59.007Z","createdAt":"2026-08-05T22:56:59.007Z","id":"22f1e71e-91bf-48db-811f-8d3bc4e55a3e","name":"sm-refactor-v2.1"},{"updatedAt":"2026-07-30T23:42:19.465Z","createdAt":"2026-07-30T23:42:19.465Z","id":"b3a3da17-1411-451c-8372-59d4c758937a","name":"ai-invoice"},{"updatedAt":"2026-08-05T22:56:59.007Z","createdAt":"2026-08-05T22:56:59.007Z","id":"edad0600-cc86-4f33-b016-311b555b8f4e","name":"indox-app"},{"updatedAt":"2026-08-05T22:56:59.007Z","createdAt":"2026-08-05T22:56:59.007Z","id":"f5d175fb-c738-4607-8ef0-bf03c48e8a0b","name":"role:extractor"},{"updatedAt":"2026-08-16T14:20:49.737Z","createdAt":"2026-08-16T14:20:49.737Z","id":"93ff3a3f-6b78-5d0a-a4de-2948ea161953","name":"app:indox"},{"updatedAt":"2026-07-30T23:42:19.465Z","createdAt":"2026-07-30T23:42:19.465Z","id":"d84b71a8-a6dd-4cc4-9ec4-44d6af9c8f76","name":"indox"},{"updatedAt":"2026-07-30T23:42:19.465Z","createdAt":"2026-07-30T23:42:19.465Z","id":"56de2cdd-1d32-4a04-b009-b7d1928bf34d","name":"extractors"},{"updatedAt":"2026-07-30T23:41:29.646Z","createdAt":"2026-07-30T23:41:29.646Z","id":"9c337cfe-7feb-4f3d-ab26-3de6439357ce","name":"sm-refactore-v2.1"}],
     /*__n8n__*/ versionMetadata: {"name":null,"description":null},
     /*__n8n__*/ meta: null,
@@ -643,6 +650,68 @@ return $input.all().map(it => ({
         position: [2544, 848],
     })
     Start = {};
+
+    // THE NO-CACHE PATH ASKS TOO (DGO-1792, 2026-11-11). If1's «use_cache is false» output went straight to Start
+    // and the model, past Check AI Enabled Setting, which sits only on the cache-miss path (after If). The same
+    // check, true-word only and falling back to 'false', now sits on this path as well; off answers through the
+    // existing API Response - AI Disabled, on hands Start the item If1 was given (Resolve Fields' json and file).
+    @node({
+        id: 'ai-kill-switch-check-nocache-01',
+        name: 'Check AI Enabled Setting (no cache)',
+        type: 'n8n-nodes-base.postgres',
+        version: 2.6,
+        position: [1680, 1040],
+        credentials: { postgres: { id: 'yY8FYvp6Kz86pt2t', name: 'INDOX Supabase Postgres' } },
+    })
+    CheckAiEnabledSettingNoCache = {
+        operation: 'executeQuery',
+        query: "=SELECT COALESCE((SELECT value FROM {{ (() => { let i = String($json.__instance || ''); if (!i) { try { i = String(($('When Executed by Another Workflow').first().json || {}).__instance || ''); } catch (e) { i = ''; } } if (!i) { try { i = String(($('MAP LINK1').first().json || {}).__instance || ''); } catch (e) { i = ''; } } if (!/^[a-z][a-z0-9_]*$/.test(i)) { throw new Error('indoxV2ExtractInvoiceGemini01: no valid __instance — public fallback removed at the 2026-08-31 cutover'); } return 'indox_' + i; })() }}.settings WHERE key='extraction_ai_enabled' AND lower(trim(value)) = 'true'), 'false') AS ai_enabled",
+        options: {},
+    };
+
+    @node({
+        id: 'ai-kill-switch-if-nocache-01',
+        name: 'If AI Disabled (no cache)',
+        type: 'n8n-nodes-base.if',
+        version: 2.2,
+        position: [1904, 1040],
+    })
+    IfAiDisabledNoCache = {
+        conditions: {
+            options: {
+                caseSensitive: true,
+                leftValue: '',
+                typeValidation: 'strict',
+                version: 2,
+            },
+            conditions: [
+                {
+                    id: 'ai-kill-switch-cond-nocache-01',
+                    leftValue: '={{ $json.ai_enabled }}',
+                    rightValue: 'false',
+                    operator: {
+                        type: 'string',
+                        operation: 'equals',
+                    },
+                },
+            ],
+            combinator: 'and',
+        },
+        options: {},
+    };
+
+    @node({
+        id: 'ai-kill-switch-resume-nocache-01',
+        name: 'Resume Item (no cache)',
+        type: 'n8n-nodes-base.code',
+        version: 2,
+        position: [2128, 1040],
+    })
+    ResumeItemNoCache = {
+        mode: 'runOnceForEachItem',
+        jsCode: `// the check answered with its own row; Start gets the item If1 was given: Resolve Fields' json and file
+return { json: $('Resolve Fields').item.json, binary: $('Resolve Fields').item.binary };`,
+    };
 
     @node({
         id: 'c0bd3725-4c0f-4153-853a-2e467d628dfb',
@@ -1159,7 +1228,7 @@ return $input.all();`,
     "properties": {
       "AI_COMPANY_ID": {
         "type": "string",
-        "description": "The company identification number or VAT number. Ignore 500000088 / הכהנים חומרי בניין בע\\"מ."
+        "description": "The company identification number or VAT number. Ignore 500000088 / הדוגמה חומרי בניין בע\\"מ."
       },
       "AI_DOC_AMOUNT": {
         "type": "string",
@@ -1566,7 +1635,7 @@ return items;`,
     })
     CheckAiEnabledSetting = {
         operation: 'executeQuery',
-        query: "=SELECT COALESCE((SELECT value FROM {{ (() => { let i = String($json.__instance || ''); if (!i) { try { i = String(($('When Executed by Another Workflow').first().json || {}).__instance || ''); } catch (e) { i = ''; } } if (!/^[a-z][a-z0-9_]*$/.test(i)) { throw new Error('indoxV2ExtractInvoiceGemini01: no valid __instance — public fallback removed at the 2026-08-31 cutover'); } return 'indox_' + i; })() }}.settings WHERE key='extraction_ai_enabled'), 'true') AS ai_enabled",
+        query: "=SELECT COALESCE((SELECT value FROM {{ (() => { let i = String($json.__instance || ''); if (!i) { try { i = String(($('When Executed by Another Workflow').first().json || {}).__instance || ''); } catch (e) { i = ''; } } if (!i) { try { i = String(($('MAP LINK1').first().json || {}).__instance || ''); } catch (e) { i = ''; } } if (!/^[a-z][a-z0-9_]*$/.test(i)) { throw new Error('indoxV2ExtractInvoiceGemini01: no valid __instance — public fallback removed at the 2026-08-31 cutover'); } return 'indox_' + i; })() }}.settings WHERE key='extraction_ai_enabled' AND lower(trim(value)) = 'true'), 'false') AS ai_enabled",
         options: {},
     };
 
@@ -2041,7 +2110,11 @@ return $input.all().map((item, i) => {
         this.If_.out(1).to(this.CheckAiEnabledSetting.in(0));
         this.Code2.out(0).to(this.Start.in(0));
         this.If1.out(0).to(this.Crypto.in(0));
-        this.If1.out(1).to(this.Start.in(0));
+        this.If1.out(1).to(this.CheckAiEnabledSettingNoCache.in(0));
+        this.CheckAiEnabledSettingNoCache.out(0).to(this.IfAiDisabledNoCache.in(0));
+        this.IfAiDisabledNoCache.out(0).to(this.ApiResponseAiDisabled.in(0));
+        this.IfAiDisabledNoCache.out(1).to(this.ResumeItemNoCache.in(0));
+        this.ResumeItemNoCache.out(0).to(this.Start.in(0));
         this.WhenExecutedByAnotherWorkflow.out(0).to(this.Switch_.in(0));
         this.Switch_.out(0).to(this.BeforeStart.in(0));
         this.Switch_.out(1).to(this.DownloadLink.in(0));

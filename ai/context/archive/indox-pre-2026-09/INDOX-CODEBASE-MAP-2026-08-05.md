@@ -765,7 +765,7 @@ applied).
 
 ## 1d. Data layer — FULLY VERIFIED (live query)
 
-**Live DB** (`supabase-db-shlomo-laptop`): 35 public tables total. Row counts:
+**Live DB** (`supabase-db-owner-laptop`): 35 public tables total. Row counts:
 `incoming_documents`=**6,196** (task's cited 6,207 is off by 11 — the table has moved slightly since
 that figure was quoted; not material), `sync_ledger`=**163**, `sync_cursor`=**0** (task's claim
 confirmed exactly), `settings`=**63**.

@@ -11,10 +11,31 @@
 // blocked lines over 1,180 documents, none of them a real loop, all of them a field that had
 // legitimately changed underneath a decision).
 //
-//   ./bbox app indox dup-guard-test
-// Exit 0 = every case behaves, 1 = any case does not.
+//   ./bbox app indox dup-guard-test [--instance <id>]     the DEPLOYED guard + live cases
+//   ./bbox app indox dup-guard-test --from-blueprint      the guard as it stands in this checkout, fixed
+//                                                          cases only; needs node and the n8n toolchain
+//                                                          (apps/n8n/tooling, installed on first use)
+// The instance: `--instance <id>`, `--instance=<id>`, `-i <id>` or INDOX_INSTANCE, validated against
+// public.indox_instances. With none, it is the single enabled instance whose purpose is not 'test'.
+// That is the rule of hooks/_schema-lib.sh, and the resolution is printed.
+// Exit 0 = every case behaves; 1 = a case does not, or a live run found no live case to run;
+// 2 = usage (a malformed or unregistered instance).
+//
+// [DGO-195, 2026-11-10] Two changes, both because the standing proof could no longer stand:
+// - The live cases read public.incoming_documents and public.indox_action_execution_log. Since the
+//   2026-08-31 cutover (0f8f3cfa) each instance keeps those tables in its own schema, indox_<id>.
+//   Where the operator-run migration dropped the public compat views
+//   (scripts/ops/migrations/2026-08-31_drop_public_compat_views.sql), the query failed. Where they
+//   remain, it read instance one through them without saying so. The tables are now named in the
+//   resolved instance's schema. The line hash stays public.indox_line_hash(d.*): schema.sql creates
+//   one overload per instance row type, and indoxV2Driver01 calls it the same way.
+//   A live run that finds no settled dispatch to judge FAILS. It used to print "(no live row…)" and
+//   pass at 12/12, with the live half silently gone.
+// - --from-blueprint judges the guard as it will be pushed, compiled by the one toolchain
+//   (apps/n8n/tooling/wrap.mjs), so the fixed cases run where there is no office at all.
 import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -29,8 +50,20 @@ const envFile = (k) => {
     return line ? line.slice(k.length + 1).trim() : '';
   } catch { return ''; }
 };
+const argv = process.argv.slice(2);
+const FROM_BLUEPRINT = argv.includes('--from-blueprint');
+const wantInstance = (() => {
+  for (let i = 0; i < argv.length; i++) {
+    if (argv[i] === '--instance' || argv[i] === '-i') return String(argv[i + 1] ?? '');
+    if (argv[i].startsWith('--instance=')) return argv[i].slice('--instance='.length);
+  }
+  return process.env.INDOX_INSTANCE || null;
+})();
+if (wantInstance !== null && !/^[a-z][a-z0-9_]*$/.test(wantInstance)) {
+  console.error(`FATAL: instance ${JSON.stringify(wantInstance)} is not an instance id`); process.exit(2);
+}
 const DN = process.env.DEPLOYMENT_NAME || envFile('DEPLOYMENT_NAME');
-if (!DN) { console.error('FATAL: DEPLOYMENT_NAME is not set and not in .env'); process.exit(1); }
+if (!DN && !FROM_BLUEPRINT) { console.error('FATAL: DEPLOYMENT_NAME is not set and not in .env'); process.exit(1); }
 const N8N_DB = `n8n-postgres-${DN}`;
 const SB_DB = `supabase-db-${DN}`;
 
@@ -46,11 +79,54 @@ const psql = (container, user, db, sql) =>
 const GUARD_SQL = `select n->'parameters'->>'jsCode'
   from workflow_entity w, lateral jsonb_array_elements(w.nodes::jsonb) n
  where w.id='indoxV2Driver01' and n->>'name'='Dup Guard: Double Action'`;
-const src = psql(N8N_DB, 'hacohen', 'n8n', GUARD_SQL);
+function guardFromBlueprint() {
+  // The one compiler, the same one `bbox n8n push` uses, on the repo file itself (wrap accepts a
+  // single file, so its file:line errors name the real blueprint), into a scratch dir it removes.
+  const outDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dup-guard-'));
+  try {
+    execFileSync(process.execPath, [path.join(ROOT, 'apps/n8n/tooling/wrap.mjs'), 'compile',
+                 path.join(ROOT, 'apps/indox/blueprint/n8n/indoxV2Driver01.workflow.ts'), outDir],
+                 { stdio: ['ignore', 'ignore', 'inherit'] });
+    const wf = JSON.parse(fs.readFileSync(path.join(outDir, 'indoxV2Driver01.json'), 'utf8'));
+    const node = (wf.nodes || []).find((n) => n.name === 'Dup Guard: Double Action');
+    return node && node.parameters && node.parameters.jsCode;
+  } catch (e) {
+    console.error(`FATAL: could not compile indoxV2Driver01 with apps/n8n/tooling/wrap.mjs: ${e.message.split('\n')[0]}`);
+    process.exit(1);
+  } finally {
+    fs.rmSync(outDir, { recursive: true, force: true });
+  }
+}
+
+// The instance whose history the live cases read: hooks/_schema-lib.sh's rule, from the registry.
+function resolveInstance() {
+  const rows = psql(SB_DB, 'postgres', 'postgres',
+    `select id, schema_name, coalesce(purpose,'') from public.indox_instances where enabled order by id`)
+    .split('\n').filter(Boolean).map((l) => l.split('|'));
+  if (!rows.length) { console.error('FATAL: no enabled instances in public.indox_instances'); process.exit(2); }
+  const have = rows.map((r) => r[0]).join(' ');
+  if (wantInstance !== null) {
+    const hit = rows.find((r) => r[0] === wantInstance);
+    if (!hit) { console.error(`FATAL: '${wantInstance}' is not an enabled registered instance (have: ${have})`); process.exit(2); }
+    return hit;
+  }
+  const prod = rows.filter((r) => r[2] !== 'test');
+  if (prod.length !== 1) {
+    console.error(`FATAL: ${prod.length} enabled non-test instances — name one with --instance (have: ${have})`);
+    process.exit(2);
+  }
+  return prod[0];
+}
+const [INSTANCE, SCHEMA] = FROM_BLUEPRINT ? [null, null] : resolveInstance();
+if (!FROM_BLUEPRINT) console.error(`dup-guard-test: instance ${INSTANCE} (schema ${SCHEMA})`);
+
+const src = FROM_BLUEPRINT ? guardFromBlueprint() : psql(N8N_DB, 'example', 'n8n', GUARD_SQL);
 if (!src || !src.trim()) {
-  console.error('FATAL: could not read the live Dup Guard code from n8n');
+  console.error(`FATAL: could not read the Dup Guard code from ${FROM_BLUEPRINT ? 'the blueprint' : 'n8n'}`);
   process.exit(1);
 }
+console.log(`guard under test: ${FROM_BLUEPRINT ? 'the blueprint in this checkout' : `deployed (${N8N_DB})`}` +
+            (FROM_BLUEPRINT ? '' : `; live cases from ${SCHEMA}`));
 // The guard must stay a pure function of its items — no node references, or this harness would
 // be testing something the real run does not do.
 for (const forbidden of ["$('", '$node[', '$workflow']) {
@@ -152,17 +228,17 @@ select coalesce(h.hist, '[]'::jsonb)
              'a', e."ACTION", 's', e."STARTED_AT", 'e', e."ENDED_AT", 'h', e."LINE_HASH")
              order by e."STARTED_AT" desc) as hist
       from (select x."ACTION", x."STARTED_AT", x."ENDED_AT", x."LINE_HASH"
-              from public.indox_action_execution_log x
+              from ${SCHEMA}.indox_action_execution_log x
              where x."ID" = i."ID" order by x."STARTED_AT" desc limit 16) e) h on true`;
 
 function liveCases() {
   const out = [];
   const q = (pred, label, expect) => {
     const sql = `select l."ID", l."ACTION", public.indox_line_hash(d.*)
-                   from public.indox_action_execution_log l
-                   join public.incoming_documents d on d."ID" = l."ID"
+                   from ${SCHEMA}.indox_action_execution_log l
+                   join ${SCHEMA}.incoming_documents d on d."ID" = l."ID"
                   where l."LINE_HASH" is not null and ${pred}
-                    and not exists (select 1 from public.indox_action_execution_log r
+                    and not exists (select 1 from ${SCHEMA}.indox_action_execution_log r
                                      where r."ID" = l."ID" and r."ACTION" like 'restart%'
                                        and r."STARTED_AT" > l."STARTED_AT")
                     -- The dispatch must be SETTLED, or the in-flight escape hatch answers first and
@@ -171,7 +247,7 @@ function liveCases() {
                     -- the 20-minute race window is only consulted for an OPEN bracket, so demanding
                     -- age here as well was over-constraint that made this case unfindable.
                     and l."ENDED_AT" is not null
-                    and not exists (select 1 from public.indox_action_execution_log o
+                    and not exists (select 1 from ${SCHEMA}.indox_action_execution_log o
                                      where o."ID" = l."ID" and o."ACTION" = l."ACTION"
                                        and o."ENDED_AT" is null)
                   order by l."STARTED_AT" desc limit 1`;
@@ -195,7 +271,8 @@ function liveCases() {
 const verdict = (j) => (j.__inflight_skip ? 'inflight' : (j.__dup_in_log ? 'blocked' : 'allowed'));
 
 let pass = 0, fail = 0;
-const all = [...CASES, ...liveCases()];
+const live = FROM_BLUEPRINT ? [] : liveCases();
+const all = [...CASES, ...live];
 for (const c of all) {
   const got = verdict(runGuard([{ json: c.item }])[0].json);
   const ok = got === c.expect;
@@ -203,4 +280,9 @@ for (const c of all) {
   console.log(`${ok ? 'PASS' : 'FAIL'}  ${c.name}` + (ok ? '' : `   [expected ${c.expect}, got ${got}]`));
 }
 console.log(`\n${pass}/${pass + fail} passed`);
+// A live run whose live half found nothing to judge has not proved what it exists to prove.
+if (!FROM_BLUEPRINT && live.length === 0) {
+  console.log(`FAIL  the live proof did not run: no settled dispatch with a LINE_HASH in ${SCHEMA}`);
+  process.exit(1);
+}
 process.exit(fail ? 1 : 0);

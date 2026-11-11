@@ -98,7 +98,7 @@ The declaration is **live** (created 2026-10-01 through `POST /api/office`; read
   "path": "/opt/digital-office/second-office",
   "engine": { "replace_docker": true },
   "source": {
-    "repo": "https://github.com/solomonBoltin/deployment-hacohen.git",
+    "repo": "https://github.com/bina-solution/digital-office.git",
     "branch": "dgo",
     "commit": "3363d802c10bb5ba114f1d6127ed0b8978fcab6b",
     "account": "git_github_token-1d2d52f4"

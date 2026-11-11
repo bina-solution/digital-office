@@ -28,7 +28,7 @@ services:
     # fetched only when it is not here already, so a checkout that has built it is untouched;
     # the `build:` below stays as the fallback. Needs the GHCR package readable — a package made
     # from a private repo is private, so `docker login ghcr.io` on a machine that must pull.
-    image: ghcr.io/solomonboltin/digital-office/project-pln:${IMAGE_TAG:-latest}
+    image: ghcr.io/bina-solution/digital-office/project-pln:${IMAGE_TAG:-latest}
     pull_policy: missing
     build:
       context: .
@@ -219,6 +219,11 @@ services:
     environment:
       MINIO_ROOT_USER: ${PLANE_S3_ACCESS_KEY:-CHANGE_ME}
       MINIO_ROOT_PASSWORD: ${PLANE_S3_SECRET_KEY:?set PLANE_S3_SECRET_KEY in .env — scripts/ci-env.sh mints it on a fresh machine}
+      # MinIO asks dl-1.min.io whether a newer build exists, on EVERY start (DGO-1596: measured from
+      # this office's own flow log, and it is a release feed nobody here consumes — Plane's attachments
+      # do not care). `off` is MinIO's own switch; the image is pinned by tag above, so an update this
+      # process could find is one it must never apply by itself.
+      MINIO_UPDATE: off
     volumes:
       - project_pln_minio:/export
     networks: [project-pln-net]

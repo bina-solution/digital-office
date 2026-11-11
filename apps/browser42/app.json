@@ -5,7 +5,9 @@
     "en": "Browser42"
   },
   "layer": 3,
+  "people": "admins",
   "kind": "tool",
+  "page": "browser",
   "version": "2.0.0",
   "summary": {
     "he": "דפדפן סטלת' שיתופי לאוטומציה ול-QA, עם לוח משותף למחשב של המשתמש ותצוגה חיה",
@@ -13,6 +15,7 @@
   },
   "agent_api_port": 8766,
   "agent_api_service": "browser42-task-runner",
+  "handoffs": "/v1/handoffs",
   "capabilities": [
     {
       "name": "browser",
@@ -23,6 +26,9 @@
         "screenshot",
         "evaluate",
         "cdp"
+      ],
+      "token_readers": [
+        "newsflow"
       ]
     }
   ],

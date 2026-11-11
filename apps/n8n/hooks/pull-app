@@ -23,6 +23,7 @@ REPO_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
 . "${REPO_ROOT}/scripts/lib.sh"
 N8N_DIR="${REPO_ROOT}/apps/n8n"
 WRAP="${N8N_DIR}/tooling/wrap.mjs"
+. "${N8N_DIR}/tooling/wrap.sh"   # wrap_run: here, or in n8n's own container on a host with no node (DGO-1746)
 log() { echo "[pull-app] $*"; }
 
 APP=""; WFS=""
@@ -64,7 +65,15 @@ else
   CACHE="${N8N_DIR}/.push-cache/${APP}.tsv"
   if [ -f "${CACHE}" ] && ls "${DIR}"/*.workflow.ts >/dev/null 2>&1; then
     _chk="$(mktemp -d)"
-    "$(bbox_node)" "${WRAP}" compile "${DIR}" "${_chk}" >/dev/null 2>&1 || true
+    # the check cannot be skipped by a compile that failed: with nothing compiled every id would look unedited, and
+    # the render below would overwrite the agent's unpushed work (more likely now that a host with no node compiles
+    # inside n8n's container, DGO-1746, the second reader). Refused, with the reason, before anything is written.
+    if ! wrap_run compile "${DIR}" "${_chk}" >/dev/null 2>"${_chk}.err" || ! ls "${_chk}"/*.json >/dev/null 2>&1; then
+      echo "[pull-app] cannot check '${APP}' for unpushed local edits: its .workflow.ts did not compile — nothing pulled." >&2
+      tail -5 "${_chk}.err" >&2 2>/dev/null || true
+      rm -rf "${_chk}" "${_chk}.err"; exit 1
+    fi
+    rm -f "${_chk}.err"
     # …as push SENDS it (the linked offices' doors applied, DGO-945): the cache holds that sha
     ( cd "${REPO_ROOT}" && python3 scripts/link-endpoints-apply --stage "${_chk}" ) >/dev/null 2>&1 || true
     _sha() { command -v sha256sum >/dev/null 2>&1 && sha256sum "$1" | awk '{print $1}' || shasum -a 256 "$1" | awk '{print $1}'; }
@@ -120,7 +129,10 @@ docker exec "${N8N_CONTAINER}" rm -rf "${C_TMP}"
 # addresses: the blueprint is shared, and another office's n8n must never be pointed at this one's.
 ( cd "${REPO_ROOT}" && python3 scripts/link-endpoints-apply --stage "${H_TMP}" --inverse ) \
   || { rm -rf "${H_TMP}"; echo "Error: '${APP}': the linked offices' addresses could not be turned back — nothing written." >&2; exit 1; }
-"$(bbox_node)" "${WRAP}" render "${H_TMP}" "${DIR}" >/dev/null
+# …and the commit a push stamped into each live workflow's meta (DGO-1603) is taken out, meta as it was
+python3 "$(npath "${N8N_DIR}")/tooling/push-guard.py" unstamp "$(npath "${H_TMP}")" >/dev/null \
+  || { rm -rf "${H_TMP}"; echo "Error: '${APP}': the push's commit stamp could not be taken out — nothing written." >&2; exit 1; }
+wrap_run render "${H_TMP}" "${DIR}" >/dev/null
 
 # Whole-app pull mirrors live: delete local .ts whose id is not in the FULL live set
 # (LIVE_IDS — not the post-skip pull list, or a guarded unpushed-edit file would be deleted
@@ -140,7 +152,7 @@ G_TMP="$(mktemp -d)"
 _pulled_ts=""
 for _id in ${IDS}; do _pulled_ts="${_pulled_ts} ${DIR}/${_id}.workflow.ts"; done
 # shellcheck disable=SC2086
-mkdir -p "${G_TMP}/in" && cp ${_pulled_ts} "${G_TMP}/in/" && "$(bbox_node)" "${WRAP}" compile "${G_TMP}/in" "${G_TMP}/out" >/dev/null
+mkdir -p "${G_TMP}/in" && cp ${_pulled_ts} "${G_TMP}/in/" && wrap_run compile "${G_TMP}/in" "${G_TMP}/out" >/dev/null
 # the sha push sends; a map that cannot be computed leaves the plain one (the next push says why)
 ( cd "${REPO_ROOT}" && python3 scripts/link-endpoints-apply --stage "${G_TMP}/out" ) >/dev/null 2>&1 || true
 sha() { command -v sha256sum >/dev/null 2>&1 && sha256sum "$1" | awk '{print $1}' || shasum -a 256 "$1" | awk '{print $1}'; }

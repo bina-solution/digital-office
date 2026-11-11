@@ -19,10 +19,14 @@ from PIL import Image, ImageDraw, ImageFont
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 def _pdf_dpi():
-    o = subprocess.run(['docker', 'exec', 'apitools', 'sh', '-c', 'echo -n "$APITOOLS_PDF_DPI"'],
-                       capture_output=True)
-    v = o.stdout.decode().strip()
-    return float(v) if v else 200.0   # apitools default (src/pdf_core/pdf_to_jpg.py)
+    """apitools' DPI is a product constant (DGO-216): read from its source, never from an env var or a container —
+    the old read fell back to 200 while apitools rasterized at 300, so every box mapped to the wrong place."""
+    import ast
+    src = os.path.join(ROOT, 'apps', 'apitools', 'src', 'pdf_core', 'pdf_to_jpg.py')
+    for node in ast.parse(open(src, encoding='utf-8').read()).body:
+        if isinstance(node, ast.Assign) and any(getattr(t, 'id', '') == 'PDF_OCR_DPI' for t in node.targets):
+            return float(ast.literal_eval(node.value))
+    raise SystemExit(f'{src} no longer names PDF_OCR_DPI')
 PDF_DPI = _pdf_dpi()
 # [2026-08-23] REPOINTED. This read production/n8n/demo-docs, a tree the platform-OS refactor
 # moved to apps/indox/blueprint/demo-docs. The script has therefore been unrunnable since

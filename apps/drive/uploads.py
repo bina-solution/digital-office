@@ -180,6 +180,7 @@ def finish_async(uid, profile, store):
         return meta
     meta["state"] = "finishing"
     meta.pop("error", None)
+    meta.pop("error_status", None)
     _save(meta)
 
     def run():
@@ -206,7 +207,11 @@ def finish_async(uid, profile, store):
                 except OSError:
                     pass
             print(f"[drive] finishing upload {uid} failed: {e}", flush=True)
-            meta.update(state="failed", error=str(getattr(e, "message", "") or e)[:300])
+            # the refusal's status too (413: the engine takes no file this big), so a client can tell «too big» from an
+            # outage without reading the words (meet-start's copier skips a too-big recording and goes on)
+            code = getattr(e, "status", None) or getattr(getattr(e, "response", None), "status_code", None)
+            meta.update(state="failed", error=str(getattr(e, "message", "") or e)[:300],
+                        error_status=code if isinstance(code, int) and not isinstance(code, bool) else None)
             _save(meta)
 
     threading.Thread(target=run, name=f"finish-{uid}", daemon=True).start()

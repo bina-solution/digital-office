@@ -1,6 +1,7 @@
-# deployment-hacohen → Central Business System: Master Map & Path to a Product
+# digital-office → Central Business System: Master Map & Path to a Product
 
-Status: **understanding + product map** (companion to `central-business-system-plan.md`). Branch:
+Status: **understanding + product map** (companion to `central-business-system-plan.md`, since 2026-11-10 in
+`legacy/ai-context-20261110/`). Branch:
 `claude/centralized-business-system-qs1edt`. Built from a full read of every service (both submodules
 cloned: `production/apitools`, `production/chat`) plus web research on how this class of
 product is shipped.
@@ -37,9 +38,9 @@ machine** that turns Gmail/Drive documents into rows in one `incoming_documents`
    `WHSP2_EVOLUTION_*` and `CHATBASE_*` keys in `.env` are **declared but unbuilt** (no container, no
    code) — a planned second WhatsApp account + multi-account layer, not current infrastructure.
    *(This corrects the `.env`-only impression that WhatsApp runs on Evolution.)*
-3. **The whole thing is single-business, and hardwired to "Hacohen."** The design was re-scoped
+3. **The whole thing is single-business, and hardwired to "Example."** The design was re-scoped
    (2026-07-08) from multi-tenant SaaS to **one deployment = one business**. But the "one business" is
-   still literally BINA/Hacohen: domain, org name, admin emails, Gmail address, allow-listed IPs, Google
+   still literally BINA/Example: domain, org name, admin emails, Gmail address, allow-listed IPs, Google
    Sheet/Drive/Label IDs are hardcoded across compose defaults, blueprints, and n8n nodes. Turning this
    into "install for ANY business" is mostly a **config-routing + secret-generation problem**, not a
    logic rewrite.
@@ -50,7 +51,7 @@ machine** that turns Gmail/Drive documents into rows in one `incoming_documents`
   ship. Back it with **Infisical** (text) + a **Nango-shaped OAuth broker** + a **QR pairing UI** for
   Baileys. Generalize the n8n `credential_overrides` `.env`-seed mechanism deployment-wide.
 - **(B) An install wizard** driven by a per-service **connections manifest** — auto-mints machine
-  secrets, asks only for the human/OAuth/QR gaps, parameterizes every "Hacohen" literal from one
+  secrets, asks only for the human/OAuth/QR gaps, parameterizes every "Example" literal from one
   "business name + domain" input.
 - **(C) A `console` shell** — one RTL portal that federates the existing BFFs behind the SSO + homepage
   registry that already exist. Plus finishing the **ledger backend** (the one genuinely missing engine).
@@ -95,8 +96,9 @@ A unified product does **not** start from scratch — four unifying layers are a
    (`morning /api/me`, `incoming-documents /auth/me`). Providers/apps are declarative
    (`authentik/blueprints/deployment-apps.yaml`).
    - *Gated (middleware=authentik):* homepage, machine, any-concurrency, redisinsight, ollama, traefik
-     dashboard, incoming-documents, browser42 (except `/mcp`), supabase-studio, morning/drive/mail.
-   - *Own auth (no ForwardAuth):* authentik (public for login), n8n, portainer, glitchtip, supabase kong
+     dashboard, incoming-documents, browser42 (except `/mcp`), supabase-studio, morning/drive/mail, portainer
+     (DGO-1762, its own login after the sign-in).
+   - *Own auth (no ForwardAuth):* authentik (public for login), n8n, glitchtip, supabase kong
      API. **Gap:** apitools and feature-validation are public with NO Traefik auth despite intent.
 2. **homepage = the module/apps registry via Docker labels.** `services.yaml` is empty; every container
    self-advertises with `homepage.group/name/icon/href/widget.*`. homepage reads `docker.sock:ro` and
@@ -262,7 +264,7 @@ cert, ITA allocation, gapless numbering, tamper chain, מבנה-אחיד) are de
 
 **What chat IS.** One Node.js process running two things (`src/main.js`): an **Express 5 + EJS admin
 panel** (server-rendered, `express-session` login) showing bot status/number/subscriber-count + quick
-actions; and a **Baileys WhatsApp bot** — a Hebrew chatbot for "חברת הכהנים" (numbered menu, referral/
+actions; and a **Baileys WhatsApp bot** — a Hebrew chatbot for "חברת הדוגמה" (numbered menu, referral/
 lottery, per-user daily limits, subscribers in NeDB `data/subscribers.db`, archive `data/wa_archive.db`).
 A business user logs into `chat.<domain>`, scans a QR to connect the org's number, then manages
 subscribers/broadcasts and **sends/receives financial documents**. Admin menu options drive intake
@@ -286,7 +288,7 @@ then **POST to the n8n "Incoming Documents" webhook** (`INCOMING_DOCS_WEBHOOK`) 
 WhatsApp-side **intake front-end** for the same INDOX pipeline. Outbound (all `isAuthenticated`):
 `/api/bot/broadcast`, `/api/bot/send-document` (PDF thumbnail via poppler), `/api/bot/send`,
 `/api/bot/send-image`, `/api/bot/create-group`. n8n's **"WhatsApp Send Document"** workflow
-(`whatsappSendDoc01`) HTTP-POSTs `https://chat.hacohen.bina-solutions.co.il/api/bot/send-document` with
+(`whatsappSendDoc01`) HTTP-POSTs `https://chat.example.bina-solutions.co.il/api/bot/send-document` with
 the `Chat Auth` basic-auth cred (`BmKlKWiEeZAxNWyi` = `${CHAT_AUTH_USER}`/`_PASS`).
 
 **Where it runs:** container `chat`, `chat.${DEPLOYMENT_DOMAIN}` + `chat.localhost`,
@@ -296,13 +298,13 @@ the `Chat Auth` basic-auth cred (`BmKlKWiEeZAxNWyi` = `${CHAT_AUTH_USER}`/`_PASS
 `CHAT_APP_BASE_URL`/`_PORT`, `AUTH_USERNAME`/`_PASSWORD` (= `CHAT_AUTH_USER`/`_PASS`, also the n8n
 cred), `SESSION_SECRET`/`_MAX_AGE`, `ADMIN_PHONE_*` (+ hardcoded numbers in `config.js`),
 `DAILY_MESSAGE_LIMIT`, `DEFAULT_COUNTRY_CODE`(972), `N8N_*_WEBHOOK`+`_USER`/`_PASS`,
-`DOCUMENT_OCR_ENDPOINT`, `WHATSAPP_HACOHANIM_SENTRY_DSN`, `AGENT_RUNNER_URL/TOKEN`, `DISPATCHER_URL/TOKEN`,
+`DOCUMENT_OCR_ENDPOINT`, `WHATSAPP_EXAMPLE_SENTRY_DSN`, `AGENT_RUNNER_URL/TOKEN`, `DISPATCHER_URL/TOKEN`,
 `DEV_GROUP_JID`. **Declared-but-unused:** `WHSP2_EVOLUTION_BASE_URL/API_KEY`, `WHSP2_APP_BASE_URL`,
 `CHATBASE_*`.
 
 **Productization gaps:** (1) QR pairing is manual + un-surfaced (no wizard step, no re-pair alert — it
 silently wipes `auth_info`). (2) session lives in a **hardcoded host bind mount**
-`/home/solomonboltin/chat/data` → must become a named volume / vault blob. (3) admin phone
+`/home/bina-solution/chat/data` → must become a named volume / vault blob. (3) admin phone
 numbers hardcoded in `config.js`. (4) insecure `.env.ex` defaults (`AUTH_PASSWORD=12345`, committed
 `SESSION_SECRET`). (5) Evolution/ChatBase are vaporware in-repo. (6) n8n workflow hardcodes the chat
 hostname → template to `${CHAT_APP_BASE_URL}`.
@@ -377,7 +379,7 @@ Per-service map (role · container · route · port · notes):
 - **glitchtip** — alerts / error tracking (Sentry-compatible). 5 containers (web :8000 + worker + migrate
   + postgres:16 + valkey), own `glitchtip-internal` net; `glitchtip.<dom>`, **own auth**. Deterministic
   DSNs `sha256(GLITCHTIP_SECRET_KEY:<project>)[:32]` (survive `down -v`). `glitchtip-push` seeds org
-  `Hacohen` + team `developers` + **one project per app** (n8n, apitools, whatsapp, librechat, traefik,
+  `Example` + team `developers` + **one project per app** (n8n, apitools, whatsapp, librechat, traefik,
   machine, any-concurrency, feature-validation) and writes each DSN back into `.env`. **REST API** (Bearer)
   exposes `/api/0/organizations|teams|projects|.../keys` — the read surface for a future notifications
   aggregator.
@@ -394,7 +396,7 @@ Per-service map (role · container · route · port · notes):
 - **authentik** — SSO/forward-auth (the unifying identity, Part 2). 4 containers + readiness sentinel;
   `auth.<dom>` public; declarative `deployment-apps.yaml`.
 - **supabase** — shared data layer (6 containers; Part 2). Studio gated; Kong API own JWT/anon-key auth.
-- **redis** — cache/queue (`--requirepass`, TCP via `HostSNI` + `ipallowlist DBS_ALLOWED_IPS`) +
+- **redis** — cache/queue (password in a config file written at start, never on a command line, DGO-1651; TCP via `HostSNI` + `ipallowlist DBS_ALLOWED_IPS`) +
   redisinsight (:5540, gated). Shared by authentik (DB1), any-concurrency; glitchtip uses its own valkey.
 - **portainer** — container mgmt, :9000, `docker.sock` rw, admin pw from `portainer_password.txt`, own
   auth.
@@ -416,7 +418,7 @@ cookie key, anon/service JWTs, dashboard basic-auth, storage bucket); `REDIS_*`;
 pw file; `BROWSER42_MCP_TOKEN`/`VNC_PASSWORD`/`STATE_PASSPHRASE`; `MACHINE_*`, `ANY_CONCURRENCY_BASE_URL`,
 `FV_*`, `HOMEPAGE_*`.
 
-**Productization gaps:** hardcoded org identity everywhere (domain, "Hacohen", admin emails, IPs, homepage
+**Productization gaps:** hardcoded org identity everywhere (domain, "Example", admin emails, IPs, homepage
 title); no secret generation on install (all `change_me…`); inconsistent auth coverage (apitools + fv
 public; n8n binds 0.0.0.0:5678); DNS/TLS assume a real public domain (no offline/self-signed/LAN path);
 manual/scripted post-up steps; host-root exposure (`machine`), `docker.sock` (portainer rw); literal
@@ -493,7 +495,7 @@ needs, layered on `bbox` + the manifest.
 
 ## Part 6 — The product: unified webapp + connections + install wizard
 
-(Full design in `central-business-system-plan.md`; summary here.)
+(Full design in `legacy/ai-context-20261110/central-business-system-plan.md`; summary here.)
 
 **Shape:** a thin **`console`** portal shell (one RTL SPA, one nav, one design system) over the existing
 BFFs, all behind the **Authentik SSO + homepage-label registry** that already exist. Federate first
@@ -519,7 +521,7 @@ Generalize the n8n `credential_overrides` `${VAR}`→PATCH→re-encrypt mechanis
 
 **Install wizard (מסך התקנה)** — driven by a per-service **connections manifest** (each service declares
 its required connections, like `credential_overrides` generalized). Flow: base settings (ONE "business
-name + domain" input drives every "Hacohen" literal) → **auto-detected-from-`.env`** (green, nothing to
+name + domain" input drives every "Example" literal) → **auto-detected-from-`.env`** (green, nothing to
 do) → **only the gaps** (text fields / "Connect" buttons / QR panels) → **verify** (health probes; done
 when required ones are green — mirrors the 25-check CI ethos).
 
@@ -537,7 +539,7 @@ when required ones are green — mirrors the 25-check CI ethos).
    `docker.sock` rw — safe only while Authentik is intact. Least-privilege defaults needed.
 5. **`DBS_ALLOWED_IPS` ships literal residential/operator IPs** — the TCP DB/redis exposure is allow-
    listed to the original operator, not the customer.
-6. **WhatsApp session in a hardcoded host path** (`/home/solomonboltin/chat/data`) — not
+6. **WhatsApp session in a hardcoded host path** (`/home/bina-solution/chat/data`) — not
    portable, and a full-mailbox-equivalent credential sitting on disk unmanaged.
 
 ---
@@ -546,7 +548,7 @@ when required ones are green — mirrors the 25-check CI ethos).
 
 **The four structural gaps** (everything else is config): (i) **the ledger backend doesn't exist**;
 (ii) **no central credential plane / secret generation** (`.env` hand-editing, OAuth dance, QR scan);
-(iii) **hardwired to "Hacohen"** (domain/org/emails/IPs/Sheet-Drive-Label IDs); (iv) **no GUI install
+(iii) **hardwired to "Example"** (domain/org/emails/IPs/Sheet-Drive-Label IDs); (iv) **no GUI install
 wizard** (CLI + hand-edit only).
 
 **Phased (each step additive, shippable, reversible — repo's "one perfect example → scale" rule):**
@@ -559,7 +561,7 @@ wizard** (CLI + hand-edit only).
 5. **Ledger backend** — build `doc_data`/`doc_gen`/`doc_models` against Supabase; point `morning`'s
    `APITOOLS_URL`/BFF at it; gate apitools.
 6. **`console` shell** — portal chrome + design tokens; fold homepage in; iframe legacy UIs under the nav.
-7. **De-Hacohen / tenant setup** — parameterize every literal from one input; finish the "Tenant Setup"
+7. **De-Example / tenant setup** — parameterize every literal from one input; finish the "Tenant Setup"
    workflow (`indoxSetupWF001`) that provisions Drive tree + sheets + labels and writes IDs back.
 8. **Install wizard** on top of the now-complete manifest; generate machine secrets; ask only the gaps.
 9. **Federate first-party SPAs**; **notifications aggregator** over the GlitchTip API + fv + machine.

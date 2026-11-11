@@ -24,7 +24,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/solomonBoltin/deployment-hacohen/packaging/trust"
+	"github.com/bina-solution/digital-office/packaging/trust"
 )
 
 // The two DER shapes an Ed25519 key has (RFC 8410), as fixed prefixes: what `relsign keygen` and

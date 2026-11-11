@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """LLM-assisted reconstruction layer (separate, clearly labelled): chooses among ASR hypotheses, never invents.
 
-usage: llm_layer.py OUT.json --sys LABEL=HYP.json:KEYREGEX[:MAPSUFFIX[:TEMPO]] ... [--window 40] [--provider deepseek]
+usage: llm_layer.py OUT.json --sys LABEL=HYP.json:KEYREGEX[:MAPSUFFIX[:TEMPO]] ... [--window 40] --provider deepseek
                     [--model deepseek-chat] [--dry-run] [--maps DIR] [--names s0_mask103,...]
 
 For every stream/mask name, the hypotheses of all systems are mapped to the original timeline (like rover.py),
@@ -25,11 +25,12 @@ from hebnorm import norm_str  # noqa: E402
 ap = argparse.ArgumentParser()
 ap.add_argument("out")
 ap.add_argument("--sys", nargs="+", required=True)
-ap.add_argument("--maps", default="/root/fpgaudio/bench/data/tmp")
+ap.add_argument("--maps", default="/root/exfaudio/bench/data/tmp")
 ap.add_argument("--window", type=float, default=40.0)
-ap.add_argument("--provider", default="deepseek")
+ap.add_argument("--provider", required=True, choices=["deepseek"],
+                help="the outside LLM, named by the operator: no default (no outside AI without the owner's word)")
 ap.add_argument("--model", default="deepseek-chat")
-ap.add_argument("--keyfile", default="/mnt/c/Users/wbolo/.claude/.deepseek_key")
+ap.add_argument("--keyfile", default="/mnt/c/Users/user/.claude/.deepseek_key")
 ap.add_argument("--dry-run", action="store_true")
 ap.add_argument("--names", default=None)
 ap.add_argument("--sleep", type=float, default=2.0)

@@ -125,6 +125,28 @@ class Batch(unittest.TestCase):
         self.assertEqual(batch('﻿{"verb":"start","ref":"DGO-12"}'), 0)
         self.assertEqual(batch('{"verb":"start","ref":"DGO-12\\n"}'), 1)
 
+    def test_an_unknown_flag_is_refused_by_name_and_nothing_is_posted(self):
+        # `--file r.html` used to be dropped and its value posted as the comment's text (2026-11-10)
+        reset()
+        err = io.StringIO()
+        with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(err):
+            with self.assertRaises(SystemExit) as cm:
+                t.main(["comment", "DGO-12", "--file", "r.html"])
+        self.assertIn("--file", str(cm.exception.code))
+        self.assertIn("--comment @<file>", str(cm.exception.code))
+        self.assertEqual(comments(), [])
+        with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
+            with self.assertRaises(SystemExit) as cm:
+                t.main(["comment", "DGO-12", "--comment"])
+        self.assertIn("needs a value", str(cm.exception.code))
+        self.assertEqual(comments(), [])
+
+    def test_the_known_flags_still_carry_their_values(self):
+        reset()
+        with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
+            self.assertEqual(t.main(["comment", "DGO-12", "--comment", "from a flag", "--as", "local"]), 0)
+        self.assertEqual(comments(), ["<p>from a flag</p>"])
+
     def test_a_later_run_in_the_same_process_finds_an_item_made_since(self):
         reset()
         with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):

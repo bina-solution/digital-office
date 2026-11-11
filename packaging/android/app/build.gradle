@@ -8,6 +8,13 @@ def machineManifest = System.getenv('DGO_MACHINE_MANIFEST') ?: ''
 if (!(machineManifest ==~ /([0-9a-f]{64})?/)) throw new GradleException('DGO_MACHINE_MANIFEST is not a SHA-256 in hex')
 if (!(machineUrl ==~ /(https:\/\/[A-Za-z0-9._~:\/%-]+)?/)) throw new GradleException('DGO_MACHINE_URL is not a plain https URL')
 if (machineUrl.isEmpty() != machineManifest.isEmpty()) throw new GradleException('DGO_MACHINE_URL and DGO_MACHINE_MANIFEST come together')
+// The business's door (DGO-1332): a phone whose APK carries no machine has every app answering «it runs on
+// the office's machine, which is not on this phone yet» with NOTHING to tap — measured 2026-11-04 on a clean
+// emulator, 0.1.82: /a/alerts/ and /a/app-management/ both answered 503 machine_absent and offered no door.
+// The core already knows how to offer one (serve.PhoneDoor reads DGO_PHONE_DOOR); nothing ever set it.
+// Compiled in here and handed to the core by NativeService; empty for a phone of no herd.
+def doorUrl = (System.getenv('DGO_PHONE_DOOR') ?: '').trim()
+if (!(doorUrl ==~ /(https:\/\/[A-Za-z0-9._~:\/%-]+)?/)) throw new GradleException('DGO_PHONE_DOOR is not a plain https URL')
 
 android {
     namespace 'il.co.digitaloffice.app'
@@ -20,14 +27,26 @@ android {
         // the workflow stamps its run: the store wants every upload's code higher than the last
         versionCode((System.getenv('DGO_APP_VERSION_CODE') ?: '1') as int)
         versionName System.getenv('DGO_APP_VERSION') ?: '0.1.0-dev'
+        // The phone is arm64. x86_64 is the emulator on an x86_64 host (android-install-check runs the core
+        // there, and packaging/android/build-local.sh builds for whichever host is at hand — DGO-1328); both
+        // are dgo built GOARCH-wise, no cgo. Anything else is a typo said loudly, not an APK of one ABI.
+        def abi = (System.getenv('DGO_ANDROID_ABI') ?: 'arm64-v8a').trim()
+        if (!(abi in ['arm64-v8a', 'x86_64'])) {
+            throw new GradleException("DGO_ANDROID_ABI is arm64-v8a or x86_64, not ${abi}")
+        }
         ndk {
-            abiFilters 'arm64-v8a'   // phones; dgo for android/amd64 would need cgo
+            // phones: arm64-v8a, the default; DGO_ABIS adds x86_64 for an x86_64 Android (the emulator, DGO-1723),
+            // whose dgo and forward-auth android-app.yml links with the NDK (android/amd64 needs its linker).
+            // Without DGO_ABIS: the one ABI DGO_ANDROID_ABI names, checked above (build-local.sh, DGO-1328).
+            abiFilters(*((System.getenv('DGO_ABIS') ?: abi).split(',').collect { it.trim() }.findAll { it }))
         }
         // The office's machine fetched in pieces (DGO-1089, Guest.fetch): where they are, and the SHA-256 of
         // the list that names them — compiled in, so the phone trusts no list and no piece it cannot hash
         // back to this APK. Both empty (the workflow sets them only where a machine is published): no fetch.
         buildConfigField 'String', 'MACHINE_URL', "\"${machineUrl}\""
         buildConfigField 'String', 'MACHINE_MANIFEST', "\"${machineManifest}\""
+        // the door an app a phone cannot run is opened through (DGO-1332, serve.PhoneDoor)
+        buildConfigField 'String', 'DOOR_URL', "\"${doorUrl}\""
     }
 
     buildFeatures {
@@ -52,7 +71,8 @@ android {
             useLegacyPackaging true
             // kept as built: dgo is built stripped (-s -w), and the engine's QEMU and libraries were edited by
             // patchelf, which a strip after it is known to break — whether AGP strips depends on an NDK found
-            keepDebugSymbols += ['**/libdgo.so', '**/libforward-auth.so', '**/libqemu-system-aarch64.so', '**/libdgoq-*.so']
+            // (the unpacker too: with an x86_64 build an NDK is installed, and AGP would strip the arm64 one — patchelf'd)
+            keepDebugSymbols += ['**/libdgo.so', '**/libforward-auth.so', '**/libqemu-system-aarch64.so', '**/libdgoq-*.so', '**/libzstd-cli.so']
         }
     }
 
@@ -63,4 +83,10 @@ android {
         sourceCompatibility JavaVersion.VERSION_17
         targetCompatibility JavaVersion.VERSION_17
     }
+}
+
+dependencies {
+    // AVF's custom machine is the platform's hidden API (DGO-1328, Avf): this lets the app see it. 15 KB,
+    // Apache-2.0, no dependency of its own — the app stays framework-only.
+    implementation 'org.lsposed.hiddenapibypass:hiddenapibypass:6.1'
 }

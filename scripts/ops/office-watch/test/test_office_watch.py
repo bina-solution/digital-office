@@ -67,10 +67,10 @@ class World:
         os.makedirs(os.path.join(self.d, "proc", "pressure"))
         self.now = ow.parse_ts("2026-01-15T05:00:00+00:00")
         self.busy, self.total = 1_000_000, 4_000_000
-        self.containers = [["console-fireplace", "running", "Up 3 hours (healthy)", "fireplace"],
-                           ["fireplace-mailserver-init-1", "exited", "Exited (0) 30 hours ago", "fireplace"],
+        self.containers = [["console-examplef", "running", "Up 3 hours (healthy)", "examplef"],
+                           ["examplef-mailserver-init-1", "exited", "Exited (0) 30 hours ago", "examplef"],
                            ["meet-test", "exited", "Exited (137) 2 days ago", ""],
-                           ["site-fireplace-guys", "running", "Up 3 hours", ""]]
+                           ["site-examplef-guys", "running", "Up 3 hours", ""]]
         self.docker = {"ps": self.containers, "fail": False, "ip": ""}
         self.disk = {"/": [100e9, 55e9, 50e9]}
         self.psi = 20.0
@@ -162,35 +162,35 @@ w = World()
 w.tick()
 w.containers[0][2] = "Up 3 hours (unhealthy)"
 w.tick()
-check("service: unhealthy on 1 check tells nothing (autoheal's minute)", len(posts("svc-console-fireplace")) == 0)
+check("service: unhealthy on 1 check tells nothing (autoheal's minute)", len(posts("svc-console-examplef")) == 0)
 w.tick()
-p = posts("svc-console-fireplace")
+p = posts("svc-console-examplef")
 check("service: unhealthy on 2 checks tells exactly one", len(p) == 1 and p[0]["level"] == "error", p)
-check("service: the notice names the service", p and "console-fireplace" in p[0]["title"])
+check("service: the notice names the service", p and "console-examplef" in p[0]["title"])
 w.tick(); w.tick()
-check("service: still unhealthy → no duplicate", len(posts("svc-console-fireplace")) == 1)
+check("service: still unhealthy → no duplicate", len(posts("svc-console-examplef")) == 1)
 w.containers[0][2] = "Up 4 hours (healthy)"
 w.tick()
-p = posts("svc-console-fireplace")
+p = posts("svc-console-examplef")
 check("service: healthy again → exactly one recovery", len(p) == 2 and p[1]["level"] == "info" and "is back" in p[1]["title"], p[-1:])
-check("service: an init container that exited 0 is never told", len(posts("svc-fireplace-mailserver-init-1")) == 0)
+check("service: an init container that exited 0 is never told", len(posts("svc-examplef-mailserver-init-1")) == 0)
 check("service: a container outside the office project is never told", len(posts("svc-meet-test")) == 0)
 w.containers[3][1:3] = ["exited", "Exited (137) 1 minute ago"]
 w.tick(); w.tick()
-check("service: a WATCH_EXTRA site container exited 137 is told once", len(posts("svc-site-fireplace-guys")) == 1)
+check("service: a WATCH_EXTRA site container exited 137 is told once", len(posts("svc-site-examplef-guys")) == 1)
 w.containers[0][1:3] = ["restarting", "Restarting (1) 5 seconds ago"]
 w.tick(); w.tick()
-check("service: restarting on 2 checks is told", len(posts("svc-console-fireplace")) == 3)
+check("service: restarting on 2 checks is told", len(posts("svc-console-examplef")) == 3)
 w.docker["fail"] = True
 w.tick(); w.tick()
-check("service: docker not answering → no false recovery, no crash", len(posts("svc-console-fireplace")) == 3)
+check("service: docker not answering → no false recovery, no crash", len(posts("svc-console-examplef")) == 3)
 w.docker["fail"] = False
 del w.containers[3]
 w.tick()
-p = posts("svc-site-fireplace-guys")
+p = posts("svc-site-examplef-guys")
 check("service: a told container that vanished closes once", len(p) == 2 and p[1]["level"] == "info", p[-1:])
 w.tick()
-check("service: …and is not told again", len(posts("svc-site-fireplace-guys")) == 2)
+check("service: …and is not told again", len(posts("svc-site-examplef-guys")) == 2)
 
 # ── 3. disk ──
 w = World()
@@ -302,10 +302,10 @@ os.environ["OFFSITE_LOG"] = ""
 os.environ["DISK_FAKE"] = os.path.join(w.d, "missing.json")
 w.containers[0][2] = "Up (unhealthy)"
 w.tick(); w.tick()
-check("isolation: a broken disk check never silences the service check", len(posts("svc-console-fireplace")) == 1)
+check("isolation: a broken disk check never silences the service check", len(posts("svc-console-examplef")) == 1)
 
 
-# ── 6. stale mounts (FPG-497): a container reading a replaced .generated folder is restarted and told once ──
+# ── 6. stale mounts (EXF-497): a container reading a replaced .generated folder is restarted and told once ──
 def mountinfo(w, pid, lines):
     d = os.path.join(w.d, "proc", str(pid))
     os.makedirs(d, exist_ok=True)
@@ -319,68 +319,68 @@ def restarted(w):
 
 
 OK_LINE = "100 90 8:1 / / rw,relatime - ext4 /dev/sda1 rw"
-STALE = "512 500 8:1 /opt/digital-office/fireplace/.generated/registry//deleted /app/generated ro,relatime - ext4 /dev/sda1 rw"
-FILE_STALE = "513 500 8:1 /opt/digital-office/fireplace/apps/browser42/handoff.py//deleted /handoff.py ro,relatime - ext4 /dev/sda1 rw"
+STALE = "512 500 8:1 /opt/digital-office/examplef/.generated/registry//deleted /app/generated ro,relatime - ext4 /dev/sda1 rw"
+FILE_STALE = "513 500 8:1 /opt/digital-office/examplef/apps/browser42/handoff.py//deleted /handoff.py ro,relatime - ext4 /dev/sda1 rw"
 w = World()
-w.containers[:] = [["console-fireplace", "running", "Up 3 hours (healthy)", "fireplace"],
-                   ["connections-fireplace", "running", "Up 9 hours (healthy)", "fireplace"],
+w.containers[:] = [["console-examplef", "running", "Up 3 hours (healthy)", "examplef"],
+                   ["connections-examplef", "running", "Up 9 hours (healthy)", "examplef"],
                    ["meet-test", "running", "Up 2 days", ""]]
-w.docker["pids"] = {"console-fireplace": 4101, "connections-fireplace": 4202, "meet-test": 4303}
+w.docker["pids"] = {"console-examplef": 4101, "connections-examplef": 4202, "meet-test": 4303}
 for pid in (4101, 4202, 4303):
     mountinfo(w, pid, [OK_LINE])
 w.tick()
-check("mounts: live folders → nothing told, nothing restarted", len(posts("mount-connections-fireplace")) == 0 and restarted(w) == [])
+check("mounts: live folders → nothing told, nothing restarted", len(posts("mount-connections-examplef")) == 0 and restarted(w) == [])
 mountinfo(w, 4202, [OK_LINE, STALE])
 mountinfo(w, 4303, [OK_LINE, STALE])
 w.tick()
-p = posts("mount-connections-fireplace")
-check("mounts: a replaced .generated folder → the container is restarted", restarted(w) == ["connections-fireplace"], restarted(w))
+p = posts("mount-connections-examplef")
+check("mounts: a replaced .generated folder → the container is restarted", restarted(w) == ["connections-examplef"], restarted(w))
 check("mounts: …and told once, level error, naming the mount and the restart",
       len(p) == 1 and p[0]["level"] == "error" and "/app/generated" in p[0]["body"] and "restarted it" in p[0]["body"], p)
 check("mounts: a container outside the office is left alone", "meet-test" not in restarted(w) and len(posts("mount-meet-test")) == 0)
 w.tick()
 check("mounts: still stale a minute later → no second restart within HEAL_MIN", restarted(w) == [], restarted(w))
-check("mounts: …and no duplicate notice", len(posts("mount-connections-fireplace")) == 1)
+check("mounts: …and no duplicate notice", len(posts("mount-connections-examplef")) == 1)
 w.tick(minutes=10)
-check("mounts: still stale after HEAL_MIN → restarted again", restarted(w) == ["connections-fireplace"], restarted(w))
+check("mounts: still stale after HEAL_MIN → restarted again", restarted(w) == ["connections-examplef"], restarted(w))
 mountinfo(w, 4202, [OK_LINE])
 w.tick()
-p = posts("mount-connections-fireplace")
+p = posts("mount-connections-examplef")
 check("mounts: live again → exactly one recovery", len(p) == 2 and p[1]["level"] == "info" and "live folder again" in p[1]["title"], p[-1:])
 mountinfo(w, 4101, [OK_LINE, FILE_STALE])
 w.tick()
-check("mounts: a replaced file outside MOUNT_WATCH is not touched", restarted(w) == [] and len(posts("mount-console-fireplace")) == 0)
+check("mounts: a replaced file outside MOUNT_WATCH is not touched", restarted(w) == [] and len(posts("mount-console-examplef")) == 0)
 w = World()
 os.environ["HEAL_MAX"] = "1"
-w.containers[:] = [["console-fireplace", "running", "Up (healthy)", "fireplace"], ["connections-fireplace", "running", "Up (healthy)", "fireplace"]]
-w.docker["pids"] = {"console-fireplace": 4101, "connections-fireplace": 4202}
+w.containers[:] = [["console-examplef", "running", "Up (healthy)", "examplef"], ["connections-examplef", "running", "Up (healthy)", "examplef"]]
+w.docker["pids"] = {"console-examplef": 4101, "connections-examplef": 4202}
 mountinfo(w, 4101, [OK_LINE, STALE])
 mountinfo(w, 4202, [OK_LINE, STALE])
 w.tick()
-check("mounts: the credential broker goes first; HEAL_MAX=1 → one restart this run", restarted(w) == ["connections-fireplace"], restarted(w))
+check("mounts: the credential broker goes first; HEAL_MAX=1 → one restart this run", restarted(w) == ["connections-examplef"], restarted(w))
 w.tick()
-check("mounts: …the next container on the next run", restarted(w) == ["console-fireplace"], restarted(w))
-check("mounts: both told, once each", len(posts("mount-console-fireplace")) == 1 and len(posts("mount-connections-fireplace")) == 1)
+check("mounts: …the next container on the next run", restarted(w) == ["console-examplef"], restarted(w))
+check("mounts: both told, once each", len(posts("mount-console-examplef")) == 1 and len(posts("mount-connections-examplef")) == 1)
 w = World()
 os.environ["HEAL_STALE"] = "0"
-w.containers[:] = [["connections-fireplace", "running", "Up (healthy)", "fireplace"]]
-w.docker["pids"] = {"connections-fireplace": 4202}
+w.containers[:] = [["connections-examplef", "running", "Up (healthy)", "examplef"]]
+w.docker["pids"] = {"connections-examplef": 4202}
 mountinfo(w, 4202, [STALE])
 w.tick()
-p = posts("mount-connections-fireplace")
+p = posts("mount-connections-examplef")
 check("mounts: HEAL_STALE=0 → told, not restarted", restarted(w) == [] and len(p) == 1 and "restarted it" not in p[0]["body"], p)
 w = World()
-w.containers[:] = [["connections-fireplace", "running", "Up (healthy)", "fireplace"]]
-w.docker["pids"] = {"connections-fireplace": 4202}
-w.docker["restart_fail"] = ["connections-fireplace"]
+w.containers[:] = [["connections-examplef", "running", "Up (healthy)", "examplef"]]
+w.docker["pids"] = {"connections-examplef": 4202}
+w.docker["restart_fail"] = ["connections-examplef"]
 mountinfo(w, 4202, [STALE])
 w.tick()
-p = posts("mount-connections-fireplace")
+p = posts("mount-connections-examplef")
 check("mounts: a restart that fails is told, with the command to run", p and "could not restart" in p[0]["body"]
-      and "docker restart connections-fireplace" in p[0]["body"], p)
+      and "docker restart connections-examplef" in p[0]["body"], p)
 w = World()
-w.containers[:] = [["connections-fireplace", "running", "Up (healthy)", "fireplace"]]
-w.docker["pids"] = {"connections-fireplace": 4202}
+w.containers[:] = [["connections-examplef", "running", "Up (healthy)", "examplef"]]
+w.docker["pids"] = {"connections-examplef": 4202}
 mountinfo(w, 4202, [STALE])
 rc = w.tick(argv=["--check"])
 check("mounts: --check looks and never restarts", rc == 0 and restarted(w) == [])

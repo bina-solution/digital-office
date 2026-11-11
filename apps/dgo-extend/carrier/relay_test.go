@@ -115,6 +115,29 @@ func TestTheDirectWayWinsThePairBackFromTheHub(t *testing.T) {
 	}
 }
 
+// A pair that waits at the hub says why it waits NOW, not why an earlier try failed. Measured 2026-11-05:
+// after a DNS outage the MacBook's pair with the Dell read «relay: … no such host» for hours, while the
+// hub answered every wait and the Dell was off the network: the end of a wait left the old error standing.
+func TestAPairThatWaitsAtTheHubSaysWhyNow(t *testing.T) {
+	hp, mac := newOffice(t), newOffice(t)
+	door := freeTCP(t)
+	macPair := pairOf(mac, hp, "wg5", "hp-laptop")
+	macPair.FallbackRelay = fmt.Sprintf("ws://127.0.0.1:%d/relay", door)
+	mac.plan(t, "", macPair)
+	mac.start(t) // the HP never starts: it is off the network
+	waitFor(t, "a first try that fails: no hub answers yet", func() bool {
+		e := mac.state(t).Pairs["wg5"].Error
+		return strings.HasPrefix(e, "relay: ") && !strings.Contains(e, errNobodyCame.Error())
+	})
+
+	hub := newOffice(t)
+	writePlanDoc(t, hub, planDoc{V: 1, Door: fmt.Sprintf("127.0.0.1:%d", door), RelayTags: []string{relayTag(hp, mac)}})
+	hub.start(t)
+	waitFor(t, "the reason to become the wait that ended", func() bool {
+		return mac.state(t).Pairs["wg5"].Error == "relay: "+errNobodyCame.Error()
+	})
+}
+
 func TestTheDoorJoinsOnlyTheDeclaredPairs(t *testing.T) {
 	hp, mac, stranger := newOffice(t), newOffice(t), newOffice(t)
 	hub, relay := hubDoor(t, relayTag(hp, mac))

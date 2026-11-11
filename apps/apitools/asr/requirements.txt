@@ -8,3 +8,4 @@ faster-whisper>=1.1.1,<2
 av>=11,<16
 numpy>=1.26
 huggingface_hub>=0.30
+speechbrain>=1.0,<2

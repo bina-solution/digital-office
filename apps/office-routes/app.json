@@ -1,0 +1,86 @@
+{
+  "id": "office-routes",
+  "title": {
+    "he": "ניהול רשת",
+    "en": "Network"
+  },
+  "layer": 3,
+  "kind": "service",
+  "page": "base",
+  "version": "1.0.0",
+  "summary": {
+    "he": "נתיבי הגישה של הלשכה — מה פתוח, למי, ובאיזו כתובת. סגור כברירת מחדל; נפתח מהמסך הזה.",
+    "en": "The office's own routes — what is reachable, from where, and at which address. Closed by default; opened from this screen."
+  },
+  "use": [
+    {
+      "capability": "control-plane",
+      "strength": "requires"
+    },
+    {
+      "capability": "identity",
+      "strength": "requires",
+      "after": true
+    },
+    {
+      "capability": "ui-kit",
+      "strength": "wants",
+      "dependency": "weak",
+      "after": false
+    }
+  ],
+  "connections": [],
+  "compose": "docker-compose.yml",
+  "health": {
+    "structural": "auto",
+    "probe": {
+      "http": "http://office-routes:8080/healthz",
+      "interval": "30s"
+    }
+  },
+  "data": {
+    "volumes": [
+      "office_routes_state"
+    ],
+    "on_uninstall": "prompt"
+  },
+  "resources": {
+    "cpus": "0.2",
+    "memory": "128M"
+  },
+  "observability": {
+    "sentry_platform": "python"
+  },
+  "agent": {
+    "context": "AGENT.md",
+    "order": 21
+  },
+  "routing": [
+    {
+      "host": "office-routes",
+      "port": 8080,
+      "auth": "sso",
+      "module": {
+        "group": "תשתית",
+        "icon": "link",
+        "embed": true,
+        "alias": "office-routes",
+        "id": "office-routes",
+        "name": "ניהול רשת",
+        "desc": "נתיבי הגישה של הלשכה — פתיחה, סגירה ומצב",
+        "order": 10,
+        "url_env": "NETWORK_URL",
+        "service": "office-routes",
+        "url": "http://office-routes:8080"
+      },
+      "sso": {
+        "slug": "network",
+        "display_name": "Network",
+        "default_host": "office-routes.localhost",
+        "base_url_env": "OFFICE_ROUTES_BASE_URL",
+        "local_twin": true
+      },
+      "service": "office-routes"
+    }
+  ]
+}

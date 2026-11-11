@@ -6,6 +6,7 @@
   },
   "layer": 3,
   "kind": "service",
+  "page": "mail",
   "version": "1.0.0",
   "summary": {
     "he": "שירות המייל המלא — תיבה מקומית, מתאמי ספקים חיצוניים, API אחיד וממשק",
@@ -81,6 +82,11 @@
       {
         "id": "user2",
         "display_name": "משתמש 2"
+      },
+      {
+        "id": "hello",
+        "display_name": "דואר החברה",
+        "domain": "digital-office.co.il"
       }
     ]
   },
@@ -115,6 +121,7 @@
         "name": "מייל",
         "desc": "תיבת דואר עסקית",
         "order": 3,
+        "tab": true,
         "service": "mail",
         "url_env": "MAILVIEW_URL",
         "url": "http://mailview:8976"
@@ -143,6 +150,10 @@
       "mail_config",
       "mail_logs"
     ],
+    "writers": [
+      "mailboxd",
+      "mailapi"
+    ],
     "on_uninstall": "prompt"
   },
   "observability": {
@@ -163,5 +174,8 @@
         "port": 143
       }
     }
+  },
+  "cli": {
+    "fallback": "cli"
   }
 }

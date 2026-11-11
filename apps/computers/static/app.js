@@ -28,6 +28,15 @@ const STATE = {
   unknown: { cls: "unset", he: "לא נבדק" },
 };
 const stateOf = (c) => STATE[c.state] || (c.ok ? STATE.ok : STATE.unknown);
+// A machine is read by its NAME; where it is reached (user@address:port) and what it calls itself are one
+// hover away (UI law 3, DGO-387). A machine added without a name was labelled `user@address`: its own
+// hostname reads better, once it has answered.
+const bareLabel = (c) => !c.label || c.label === `${c.user}@${c.host}`;
+const nameOf = (c) => (bareLabel(c) && c.hostname ? c.hostname : c.label || c.host);
+// …and the built-in machine has no address to give: its `host` is the engine network's gateway, which
+// local_computer() (app.py) keeps out of what a person reads
+const whereTip = (c) => [c.builtin ? "" : `${c.user}@${c.host}:${c.port}`,
+  c.hostname && c.hostname !== nameOf(c) ? "שם במחשב: " + c.hostname : ""].filter(Boolean).join(" · ");
 
 function bytes(n) {
   if (n == null) return "—";
@@ -131,6 +140,7 @@ var binaAsk, binaTell;
     + "@media (pointer:coarse){.bask-btn{height:44px}.bask-field input{height:44px}}"
     + "@media (max-height:399px){.bask{padding:8px}.bask-card{padding:12px}.bask-acts{margin-top:10px}}"   // the side menu's own short frame
     + "#bina-tell{position:fixed;inset-block-end:16px;inset-inline-start:16px;z-index:2147483001;display:grid;gap:8px;max-width:min(420px,calc(100vw - 32px))}"
+    + "#bina-tell[data-at~=top]{inset-block-start:16px;inset-block-end:auto}#bina-tell[data-at~=end]{inset-inline-start:auto;inset-inline-end:16px}"   // where it covers nothing (place())
     + ".btell{--c:var(--ok);padding:10px 14px;border-radius:12px;background:color-mix(in srgb,var(--c) 14%,var(--surface));color:var(--ink);border:1px solid color-mix(in srgb,var(--c) 38%,var(--surface));border-inline-start:4px solid var(--c);font:13px/1.45 var(--font,system-ui,sans-serif);box-shadow:var(--shadow-lg);cursor:pointer;text-align:start}"
     + ".btell.warn{--c:var(--lime)}.btell.bad{--c:var(--red)}"   // --ok and --red, not the bare hues: they are the steps that are lifted on the dark ground
     + ".btell small{display:block;margin-top:2px;font-size:11.5px;color:var(--muted);overflow-wrap:anywhere;unicode-bidi:plaintext}"
@@ -235,6 +245,47 @@ var binaAsk, binaTell;
     });
   };
 
+  // The notice never sits on a control of the page (DGO-618): it keeps its corner while that covers nothing, and
+  // otherwise takes the first corner that does — at every frame size, a desktop window of 380 x 260 included,
+  // where the bottom corner is where a window keeps its buttons. With no corner free at its full width, the corners
+  // again at two thirds and at half of it (a narrower notice fits over a title, beside a window's ✕); with none
+  // free at all, the place that covers fewest.
+  var CONTROLS = "button,a[href],input:not([type=hidden]),select,textarea,summary,[role=button],[tabindex]:not([tabindex='-1'])";
+  function covered(box) {
+    var b = box.getBoundingClientRect(), n = 0;
+    if (b.width < 2 || b.height < 2) return 0;
+    doc.querySelectorAll(CONTROLS).forEach(function (c) {
+      var r = c.getBoundingClientRect();     // the cheap test first: on a screen of thousands of rows most are far away
+      if (Math.min(b.right, r.right) - Math.max(b.left, r.left) <= 1 || Math.min(b.bottom, r.bottom) - Math.max(b.top, r.top) <= 1) return;
+      // inside the notice, in a part of the page made inert (a window the page put over it), or not drawn: not a control here
+      if (box.contains(c) || c.closest("[inert]") || (c.checkVisibility && !c.checkVisibility({ checkVisibilityCSS: true }))) return;
+      n++;
+    });
+    return n;
+  }
+  function put(box, at, w) {
+    if (at) box.setAttribute("data-at", at); else box.removeAttribute("data-at");
+    box.style.maxWidth = w;
+    // a top spot lets go of the bottom, written on the element: a page's own rule that lifts the notice off its bar
+    // (`body:has(…) #bina-tell{inset-block-end:…}`) out-ranks the attribute, and the box stretched to the full height
+    box.style.insetBlockEnd = at.indexOf("top") < 0 ? "" : "auto";
+  }
+  function place(box) {
+    var best = null;
+    ["", "min(280px,calc((100vw - 32px) * .66))", "min(210px,calc((100vw - 32px) * .5))"].some(function (w) {
+      return ["", "end", "top", "top end"].some(function (at) {
+        put(box, at, w);
+        var n = covered(box);
+        if (!best || n < best.n) best = { at: at, w: w, n: n };
+        return n === 0;
+      });
+    });
+    put(box, best.at, best.w);
+  }
+  var placing = 0;
+  function replace() { var box = doc.getElementById("bina-tell"); if (box && box.firstChild) place(box); }
+  window.addEventListener("resize", function () { clearTimeout(placing); placing = setTimeout(replace, 120); });
+
   // The third word is how long the notice stays (ms) — or what more it carries: { ms, more, act, stay }.
   //   more  the service's own sentence, on a line of its own under the notice's words
   //   act   [label, fn] — one way on from the notice (an undo, a refresh): pressing it runs fn and takes the notice down
@@ -251,12 +302,13 @@ var binaAsk, binaTell;
     if (o.act) {
       var go = el("button", "", o.act[0]);
       go.setAttribute("type", "button");
-      go.addEventListener("click", function (e) { e.stopPropagation(); n.remove(); o.act[1](); });
+      go.addEventListener("click", function (e) { e.stopPropagation(); n.remove(); replace(); o.act[1](); });
       n.appendChild(go);
     }
-    n.addEventListener("click", function () { n.remove(); });
+    n.addEventListener("click", function () { n.remove(); replace(); });
     box.appendChild(n);
-    if (!o.stay) setTimeout(function () { n.remove(); }, o.ms || (kind === "bad" ? 9000 : 5200));
+    place(box);
+    if (!o.stay) setTimeout(function () { n.remove(); replace(); }, o.ms || (kind === "bad" ? 9000 : 5200));
     return n;
   };
 })();
@@ -273,6 +325,8 @@ const postJson = (path, body) => api(path,
 // whose title says what will happen: four worded buttons stood in three lines beside one-line cells.
 const ACTS = {
   exec: { he: "הרצת פקודה", tip: "הרצת פקודה במחשב הזה ב־SSH" },
+  // the terminal screen, served by this app (DGO-1800): a live shell on this machine, as the person who opened it
+  term: { he: "טרמינל", tip: "שורת פקודה חיה על המחשב הזה — נפתחת במסך הטרמינל", d: "M4 6l5 6-5 6M12 18h7" },
   auth: { he: "אישור המפתח", tip: "הפקודה שמאשרת את מפתח הלשכה במחשב הזה",
           d: "M21 2l-2 2m-7.6 7.6a5.5 5.5 0 1 1-7.8 7.8 5.5 5.5 0 0 1 7.8-7.8zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4" },
   audit: { he: "אבטחה", tip: "בדיקת האבטחה של המחשב עצמו: SSH, חומת אש, עדכונים ופורטים פתוחים",
@@ -352,7 +406,7 @@ function herdRow(c) {
     ? `<span class="pill bad" title="${esc(h.err || "")}">לא עונה</span>` : '<span class="pill unset">בודק…</span>';
   return `<a class="hrow" href="c/${encodeURIComponent(c.where)}" data-where="${esc(c.where)}" title="פתיחת המחשב: משאבים, רשת, אחסון${ssh ? " וגישה" : ""}">
     <div class="hname"><div class="ht"><b>${esc(c.label)}</b>${c.local ? '<span class="pill ok">הלשכה הזאת</span>' : `<span class="pill unset" title="לשכה ${esc(c.office)}">לשכה מקושרת</span>`}${state}</div>
-      <div class="small muted">${d ? `<bdi>${esc(d.host.hostname)}</bdi> · <bdi>${esc(d.host.os)}</bdi>` : (c.local ? "המחשב שמריץ את הלשכה" : `לשכה ${esc(c.office)}`)}</div></div>
+      <div class="small muted"${d ? ` title="${esc(d.host.hostname)} · ${esc(d.host.os)}"` : ""}>${c.local ? "המחשב שמריץ את הלשכה" : `לשכה ${esc(c.office)}`}</div></div>
     ${meter("מעבד", d ? d.cpu.percent : null, d && d.cpu.cores ? `<span class="num">${d.cpu.cores}</span> ליבות` : "")}
     ${meter("זיכרון", d ? d.memory.percent : null, d ? `<span class="num">${bytes(d.memory.total)}</span>` : "")}
     ${meter("דיסק", disk ? disk.percent : null, disk ? `<span class="num">${bytes(disk.free)}</span> פנוי` : "")}
@@ -424,6 +478,7 @@ function paintView() {
     if (typeof Host !== "undefined") Host.close();
     $("viewTitle").textContent = "מחשבים";
     $("viewSub").textContent = FLEET_SUB;
+    $("viewSub").title = "";   // a computer's page left its hostname here
     render();
     pulse();
   }
@@ -435,7 +490,9 @@ function paintHeader() {
                                                           : { label: S.where, office: S.where });
   const h = S.hd[S.where] || {}, d = h.ov;
   $("viewTitle").textContent = c.label;
-  $("viewSub").textContent = [d && d.host.hostname, d && d.host.os, c.local ? "הלשכה הזאת" : "לשכה " + c.office].filter(Boolean).join(" · ");
+  // whose computer it is, in words; what it calls itself and its system are the line's hover (UI law 3, DGO-387)
+  $("viewSub").textContent = c.local ? "הלשכה הזאת" : "לשכה " + c.office;
+  $("viewSub").title = [d && d.host.hostname, d && d.host.os].filter(Boolean).join(" · ");
   document.querySelectorAll("#tabs [data-tab]").forEach((b) => {
     b.setAttribute("aria-selected", b.dataset.tab === S.tab ? "true" : "false");
     b.classList.toggle("hidden", b.dataset.tab === "ssh" && !sshOf(S.where));
@@ -509,7 +566,7 @@ function render() {
     const mem = c.memory || {}, disk = c.disk || {};
     const uptime = c.ok ? uptimeHe(c.uptime) : "—";
     const names = c.state === "no_ssh" ? ["probe"] : c.state === "needs_action" ? ["auth", "probe"]
-      : c.ok ? ["exec", "audit", "probe"] : ["probe", "auth"];
+      : c.ok ? ["exec", "term", "audit", "probe"] : ["probe", "auth"];
     if (c.removable) names.push("del");
     const acts = names.map((name, i) => {
       const a = ACTS[name], lead = !i, filled = lead && c.state === "needs_action";
@@ -524,10 +581,8 @@ function render() {
       : "—");
     return `<tr data-id="${esc(c.id)}">
       <td data-th="מצב"><div class="cell"><span class="pill ${st.cls}">${esc(st.he)}</span></div></td>
-      <td data-th="מחשב"><div class="cell"><span class="name">${esc(c.label || c.host)}</span>
-        ${c.builtin ? (c.note ? `<div class="small muted">${esc(c.note)}</div>` : "")
-          : `<div><span class="addr" title="${esc(c.user)}@${esc(c.host)}:${esc(c.port)}">${esc(c.host)}</span></div>`}
-        ${c.ok && c.hostname && c.hostname !== c.host ? `<div class="small muted"><bdi>${esc(c.hostname)}</bdi></div>` : ""}</div></td>
+      <td data-th="מחשב"><div class="cell"><span class="name" title="${esc(whereTip(c))}"><bdi>${esc(nameOf(c))}</bdi></span>
+        ${c.builtin && c.note ? `<div class="small muted">${esc(c.note)}</div>` : ""}</div></td>
       <td data-th="מערכת"><div class="cell">${c.ok && c.os ? `<bdi>${esc(c.os)}</bdi>` : "—"}
         ${c.ok ? `<div class="small muted">פועל ${uptime}</div>` : ""}</div></td>
       <td data-th="עומס"><div class="cell"><span class="num nw">${cpuCell}</span>
@@ -547,7 +602,7 @@ function render() {
   if (broken.length) {
     mount.insertAdjacentHTML("beforeend", broken.map((c) =>
       alertBox(c.state === "no_ssh" ? "" : c.state === "needs_action" ? "warn" : "bad",
-        `<b>${esc(c.label || c.host)}:</b> ${esc(c.reason)}` +
+        `<b title="${esc(whereTip(c))}">${esc(nameOf(c))}:</b> ${esc(c.reason)}` +
         (c.action ? `<div class="small">${esc(c.action)}</div>` : "") +
         (c.stderr ? `<details class="raw"><summary>הפלט של SSH</summary><pre class="out err">${esc(c.stderr)}</pre></details>` : ""))).join(""));
   }
@@ -556,7 +611,12 @@ function render() {
 function renderKey() {
   const k = S.key || {};
   $("pubKey").textContent = k.public_key || "—";
-  $("keyFp").innerHTML = k.fingerprint ? `טביעת אצבע: <span class="mono">${esc(k.fingerprint)}</span>` : "";
+  // the fingerprint is how a person checks the key on the other side: not body text, but one move away — a hover
+  // on the key and on its copy button, and a disclosure a touch screen can open
+  $("keyFp").innerHTML = k.fingerprint
+    ? `<details><summary>טביעת אצבע</summary><span class="mono">${esc(k.fingerprint)}</span></details>` : "";
+  $("pubKey").title = k.fingerprint ? "טביעת אצבע: " + k.fingerprint : "";
+  $("btnCopyKey").title = k.fingerprint ? "מעתיק את המפתח הציבורי · טביעת אצבע: " + k.fingerprint : "";
   $("btnCopyKey").disabled = !k.public_key;
   $("keyState").textContent = k.public_key ? "מוכן" : "טרם נוצר";
 }
@@ -608,7 +668,7 @@ async function del(id) {
   const c = findComputer(id) || {};
   if (!await binaAsk({ title: "להסיר את המחשב מהרשימה?", ok: "הסרה", danger: true,
                        body: "המחשב עצמו לא נגע — רק הרשומה נמחקת מכספת החיבורים. אפשר להוסיף אותו שוב בכל רגע.",
-                       facts: [["מחשב", c.label || c.host || id], ["כתובת", c.host || "—"]] })) return;
+                       facts: [["מחשב", nameOf(c) || id], ["כתובת", c.host || "—"]] })) return;
   const r = await api("api/computers/" + encodeURIComponent(id), { method: "DELETE" });
   if (!r.ok) { binaTell((r.d && r.d.error) || "המחיקה נכשלה", "bad"); return; }
   await load(true);
@@ -672,6 +732,8 @@ document.addEventListener("click", (e) => {
   if (!act) return;
   const id = act.dataset.id;
   if (act.dataset.act === "exec") openExec(id);
+  // relative to this app's base, as every path here: /a/computers/terminal under the console, /terminal alone
+  else if (act.dataset.act === "term") location.href = "terminal?machine=" + encodeURIComponent(id);
   else if (act.dataset.act === "auth") openAuth(id);
   else if (act.dataset.act === "del") del(id);
   else if (act.dataset.act === "probe") {
@@ -705,7 +767,7 @@ async function copyText(text, label, el) {
 function openExec(id) {
   const c = findComputer(id) || {};
   S.execId = id;
-  $("execTitle").textContent = "הרצת פקודה ב־" + (c.label || c.host);
+  $("execTitle").textContent = "הרצת פקודה ב־" + nameOf(c);
   $("execStatus").textContent = "";
   $("execResult").innerHTML = "";
   $("fCmd").value = "";
@@ -749,7 +811,7 @@ async function run() {
 async function openAuth(id) {
   const c = findComputer(id) || {};
   S.authId = id;
-  $("authTitle").textContent = "אישור המפתח ב־" + (c.label || c.host);
+  $("authTitle").textContent = "אישור המפתח ב־" + nameOf(c);
   $("authStatus").textContent = "";
   $("authKey").textContent = "טוען…";
   $("authCmd").textContent = "";
@@ -844,14 +906,14 @@ document.addEventListener("DOMContentLoaded", paintView);
  */
 async function openAudit(id) {
   const c = (S.computers || []).find((x) => x.id === id) || {};
-  $("auditTitle").textContent = "אבטחת המחשב — " + (c.label || c.host || id);
+  $("auditTitle").textContent = "אבטחת המחשב — " + (nameOf(c) || id);
   $("auditBody").innerHTML = '<div class="spin">בודק את המחשב… (סריקה של הגדרות, חומת אש, עדכונים ופורטים)</div>';
   openModal("auditModal");
   const r = await api("api/computers/" + encodeURIComponent(id) + "/audit");
   if (!r.ok) {
     $("auditBody").innerHTML = alertBox("bad", "<b>הבדיקה לא רצה.</b> " +
       esc((r.d && (r.d.error || r.d.reason)) || binaSaid(r.status)) +
-      (r.d && r.d.stderr ? `<pre class="out err">${esc(r.d.stderr)}</pre>` : ""));
+      (r.d && r.d.stderr ? `<details class="raw"><summary>הפלט של SSH</summary><pre class="out err">${esc(r.d.stderr)}</pre></details>` : ""));
     return;
   }
   const d = r.d;

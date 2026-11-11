@@ -45,7 +45,7 @@ mistakes in §4.
 | 10 | 11:33 | Keep working untill everything completed. Safe clean space and Report on the current status and full plan progress bar /compact |
 | 11 | 12:36 | Give me full progress bars and continue |
 | 12 | 13:26 | Make sure plan is fully outlined a-z for the azaria agents so at any point we can let them or any body else take the lead complete the work and scale up progress |
-| 13 | 15:20 | /compact and add reports from https://github.com/solomonBoltin/deployment-hacohen/tree/ccr-7412490e-ocnhhd into our plane. Suggest azaria deepseek api budget to complete full plan and become only monitor and director to save all the claude tokens (we cant use them any more cause its willis account and where approching 80% weekly usage) |
+| 13 | 15:20 | /compact and add reports from https://github.com/bina-solution/digital-office/tree/ccr-7412490e-ocnhhd into our plane. Suggest azaria deepseek api budget to complete full plan and become only monitor and director to save all the claude tokens (we cant use them any more cause its willis account and where approching 80% weekly usage) |
 | 14 | 15:24 | I want you also to collect full session (this) lifespwan every message i sent and the direction you took as a good behavior. Report into session-timline (with input, plan, tasks, changes, verafications, directions, etc) everything mixed a d orgensied around on a timline |
 | 15 | 15:38 | Also before steping down and letting azaria complete the plan, deep research on conetext engineering and make sure azaria session get only united pure good context and delete claude.md and fully cleanup. Dewpresearch on prooven context architectures for making azaria best possible performance |
 

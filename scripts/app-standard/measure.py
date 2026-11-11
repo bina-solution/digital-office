@@ -4,6 +4,8 @@
     python3 scripts/app-standard/measure.py            # measure; write inventory.json + INVENTORY.md here
     python3 scripts/app-standard/measure.py --print    # …and print the table
     python3 scripts/app-standard/measure.py --check    # fail when an app lost a cell the committed file has
+    python3 scripts/app-standard/measure.py --check --no-views   # …from a fresh clone (gate G114, DGO-1047)
+    python3 scripts/app-standard/measure.py --self-test          # prove the check can fail, on fixtures
 
 It imports the compiler, so it needs PyYAML. On the Mac it runs in the engine's guest:
     bash packaging/macos/engine.sh exec -- python3 scripts/app-standard/measure.py
@@ -25,7 +27,9 @@ answers, so a cell cannot turn green because someone remembered it:
          platform runs on every app — found from their callers, not listed here
   ops    operatives, the recipes an agent follows to act as a person does (`apps/operatives/ops.py`)
   share  what this office would publish on a link if it served everything: `publishable` and
-         `publishable_services` of `apps/dgo-extend/catalog.py` over the compiler's registry
+         `publishable_services` of `apps/dgo-extend/catalog.py` over the compiler's registry — or the
+         manifest's `share.local` (DGO-1055), a sentence of at least 20 characters saying why it stays
+         here; an app that is published AND says it stays local is a contradiction, and fails the cell
   brief  the AGENT.md the compiler injects into every agent session (`agent.context`), inside its
          budget (`reconcile.MAX_BRIEF_BYTES`)
   gate   a registered gate (`scripts/refactor/GATES.md`) whose runner is the app's own file or whose
@@ -37,8 +41,17 @@ answers, so a cell cannot turn green because someone remembered it:
 Every cell is read from source, not from a running office, so every office computes the same file.
 The one exception is the console's own view count, which the UI map takes from this office's
 compiled tiles — so a fresh clone runs `python3 platform/manager/reconcile.py render` first; without
-`.generated/` the UI map says so, and the run (and `--check`) fails rather than measure short.
+`.generated/` the UI map says so, and the run (and `--check`) fails rather than measure short. The view
+counts decide no cell, so `--check --no-views` (gate G114) holds every cell from a fresh clone, render or not.
 Each «קבץ קדמה» round closes cells; `--check` keeps a closed cell closed.
+
+THE PAGE. Each app names the page of the product it belongs to, `page` in its own app.json (DGO-1042).
+These are the owner's twelve, in the order platform/schema/app.schema.json gives them, and both compilers
+refuse any other value. The product apps are listed by page, every page shown, a page no app names
+included. A product app that names none is listed apart: its decision is still to write (DGO-1045), and it
+either joins a page or goes to the archive (G34). Like a cell, a page once declared is held: an app that named one
+in the committed inventory and names none now fails `--check`. Moving to another page is a decision, not
+a loss.
 """
 from __future__ import annotations
 
@@ -69,6 +82,11 @@ sys.path.insert(0, str(ROOT / "apps" / "operatives"))
 import reconcile  # noqa: E402  the compiler: the registry, the console's tiles, the brief budget
 import inventory as ui_map  # noqa: E402  the UI map's denominator
 import ops  # noqa: E402  the operatives
+
+
+def pages() -> list:
+    """The owner's pages of the product, in his order: the schema's `page` enum, the one list (DGO-1042)."""
+    return list(json.loads(reconcile.SCHEMA.read_text(encoding="utf-8"))["properties"]["page"]["enum"])
 
 
 def _module(name: str, rel: str):
@@ -115,7 +133,13 @@ class ReadError(RuntimeError):
 
 
 def is_test(path: Path) -> bool:
-    return bool(TEST_FILE.search(path.name)) or bool({"tests", "test"} & set(path.parts[:-1]))
+    # the folders inside the repo only: a checkout that itself sits under a `tests/` folder (a probe, a CI
+    # workspace) would otherwise make every file a test, and the lifecycle hooks unfindable (G114's reader)
+    try:
+        parts = path.resolve().relative_to(ROOT).parts[:-1]
+    except ValueError:
+        parts = path.parts[:-1]
+    return bool(TEST_FILE.search(path.name)) or bool({"tests", "test"} & set(parts))
 
 
 def files_of(app_dir: Path):
@@ -159,7 +183,8 @@ def console_tiles(cat: dict, order: list) -> dict:
         aid = owner.get(str(m.get("id")))
         if aid is None:
             raise ReadError(f"console tile {m.get('id')!r} belongs to no manifest — the render changed")
-        tiles[aid].append({"id": m["id"], "kind": "external" if m.get("external") else "embedded"})
+        tiles[aid].append({"id": m["id"], "kind": "external" if m.get("external") else "embedded",
+                           "embed": bool(m.get("embed"))})       # framed in the shell (G83 asks only these)
     if not tiles:
         raise ReadError("the compiler rendered no console tile")
     # …and the shell's OWN views, which no manifest declares: the file the console (and the UI map's
@@ -222,6 +247,90 @@ def ui_views() -> tuple[Counter, list[str]]:
     if not counts:
         raise ReadError("the UI map read no views")
     return counts, errors
+
+
+def _gate(name: str):
+    """A gate of scripts/refactor/ as a module — its own functions are what a ui part is read with, never a copy."""
+    spec = importlib.util.spec_from_file_location(f"gate_{name.replace('-', '_')}", ROOT / "scripts/refactor" / f"{name}.py")
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+def _owner(rel: str) -> str | None:
+    """apps/<id>/… or platform-base/<id>/… → <id>: the app whose directory holds the file."""
+    parts = rel.split("/")
+    return parts[1] if len(parts) > 2 and parts[0] in ("apps", "platform-base") else None
+
+
+def ui_parts(apps: dict, console: dict) -> dict:
+    """The ui column in parts (DGO-1053), each read by the gate that already holds it, per app:
+
+      palette  colours the app's files name of their own (G82 palette-lint `scan` over its `tracked` files — screens,
+               and the .py/.yaml that draw them): 0 is the office's one palette; None when G82 reads no file of it
+      menu     its pages' side menu (G107 menu-host-lint `check`): "grid" — every menu stands in the component's
+               grid; "own" — a page keeps a shell of its own (KNOWN ones included: counted, not excused);
+               "unread" — it has pages, and none holds a menu G107 reads (G107 reads the component's `bnv` menu: a
+               menu written another way, or built in script, is not seen); None when it has no page
+      address  a tile the shell frames (a module with `embed`, the only ones G83 asks) keeps its screen in its own
+               URL (G83 embed-route-lint `routes_its_url`, and its own ALLOWED / ALLOWED_WHILE_EXTERNAL, each a
+               reason): True, "allowed", False, or None when the app has no framed tile. Read for EVERY app as if
+               enabled — G83 reads only the modules this office compiled, so an app switched off here is not in its
+               verdict, and is here
+      phone    None: no gate reads a phone's width per app from the files — `bbox ui-map` at the 390 profile
+               (scripts/ui-coverage/view-profiles.yaml) is where it is seen, on an office
+
+    They decide no cell (the ui cell is the console's tiles, as before) and `--check --no-views` (G114) neither reads
+    nor holds them (a plain `--check` reads them, and fails on a ReadError like any read), so
+    G114 stays as fast as it was and needs no git; a section of them goes stale until measure.py runs again, as the
+    view counts do. A read that finds nothing is an error, never a column of «—»."""
+    pal, menu, route = _gate("palette-lint"), _gate("menu-host-lint"), _gate("embed-route-lint")
+    screens, colours = defaultdict(int), defaultdict(int)
+    files = pal.tracked()
+    if not files:
+        raise ReadError("G82's scan read no file (palette-lint `tracked`: is this a git checkout?)")
+    for rel in files:
+        if _owner(rel):
+            screens[_owner(rel)] += 1
+    for rel, hits in pal.scan().items():
+        if _owner(rel):
+            colours[_owner(rel)] += len(hits)
+    try:
+        pages = menu.pages()
+    except Exception as e:                                  # noqa: BLE001 — git missing or failing: said, not a traceback
+        raise ReadError(f"G107's pages could not be listed ({type(e).__name__})") from e
+    menus, read = {}, 0
+    for rel in pages:
+        aid = _owner(rel)
+        if not aid:
+            continue
+        menus.setdefault(aid, "unread")
+        try:
+            text = (ROOT / rel).read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError):
+            continue
+        n, problems = menu.check(text, menu.linked_css(ROOT / rel, text) if "bnv" in text else "")
+        read += n
+        if n:
+            menus[aid] = "own" if (problems or menus[aid] == "own") else "grid"
+    if not read:
+        raise ReadError("G107 read no menu in any page: the scan found nothing, which is not a measure")
+    out = {}
+    for aid, (root, _man) in apps.items():
+        framed = {t["kind"] for t in console.get(aid, []) if t.get("embed")} & {"embedded", "external"}
+        d, address = f"{root}/{aid}", None
+        if framed:
+            if route.routes_its_url(d):
+                address = True
+            elif d in route.ALLOWED or (d in route.ALLOWED_WHILE_EXTERNAL and "external" in framed):
+                address = "allowed"
+            else:
+                address = False
+        out[aid] = {"palette": colours[aid] if screens[aid] else None,
+                    "menu": menus.get(aid),
+                    "address": address,
+                    "phone": None}
+    return out
 
 
 def operatives_by_app() -> dict:
@@ -381,14 +490,26 @@ def tests_of(app_dir: Path) -> int:
 
 
 # ── the measure ──────────────────────────────────────────────────────────────────────────────────
-def measure() -> dict:
+def local_reason(man: dict) -> str:
+    """The manifest's `share.local`: why the app is never published on a link, or "" (DGO-1055)."""
+    share = man.get("share")
+    said = share.get("local") if isinstance(share, dict) else ""
+    said = said.strip() if isinstance(said, str) else ""
+    return said if len(said) >= 20 else ""
+
+
+def measure(views_too: bool = True) -> dict:
+    """views_too=False (`--no-views`, gate G114): the UI map's view counts are not read. They are the one reader
+    that needs this office's compiled `.generated/`, and they feed no verdict — the ui cell is the console's
+    tiles, rendered into a directory of this run — so a fresh clone (CI) holds every cell without a render."""
     cat, rows, console, published, doors = catalog()
     apps = {aid: (man["_dir"].parent.name, man) for aid, man in sorted(cat.items())}
-    views, notes = ui_views()
+    views, notes = ui_views() if views_too else (Counter(), [])
     op_ids = operatives_by_app()
     gates, runners = gates_by_app(apps)
     verbs = {aid: verbs_of(man["_dir"]) for aid, (_, man) in apps.items()}
     lifecycle = lifecycle_verbs({v for vs in verbs.values() for v in vs})
+    parts = ui_parts(apps, console) if views_too else {}       # --no-views (G114) neither reads nor holds them
 
     out = []
     for aid, (root, man) in apps.items():
@@ -408,15 +529,24 @@ def measure() -> dict:
             # A screen people use is the standard's subject: the platform's own internals (`system`)
             # and an app with no service of its own (a library, a blueprint) are counted apart.
             "product": not man.get("system") and man.get("kind") not in ("library", "blueprint"),
-            "ui": {"ok": bool(tiles), "views": views.get(aid, 0), "tiles": tiles},
+            "page": man.get("page"),
+            "ui": {"ok": bool(tiles), "views": views.get(aid, 0), "tiles": tiles, "parts": parts.get(aid)},
             "api": {"ok": bool(door or caps or routes), "door": door, "capabilities": caps,
                     "routes": routes},
             "cli": {"ok": bool(own), "token": (man.get("cli") or {}).get("alias") or aid, "verbs": own,
                     "lifecycle": [v for v in verbs[aid] if v in lifecycle]},
             "ops": {"ok": bool(op_ids.get(aid)), "ids": sorted(op_ids.get(aid, []))},
-            "share": {"ok": bool(shared or doors.get(aid)), "aliases": [r["alias"] for r in shared],
+            # …or the manifest says why it stays on this office (`share.local`, DGO-1055): a sentence of its own
+            # answers the column; an empty one, or a word, does not (the schema's minLength, which neither
+            # compiler's structural validator reads, is held here). Published or a door AND «stays local» is a
+            # manifest that says one thing while the catalog does another (portainer given a tile would hand a
+            # linked office Docker root): the cell fails and says so
+            "share": {"ok": bool(shared or doors.get(aid) or local_reason(man))
+                            and not ((shared or doors.get(aid)) and local_reason(man)),
+                      "aliases": [r["alias"] for r in shared],
                       "doors": sorted(d["alias"] for d in doors.get(aid, [])),
-                      "api_crosses": any(r.get("agent_api_port") for r in shared)},
+                      "api_crosses": any(r.get("agent_api_port") for r in shared),
+                      "local": local_reason(man)},
             "brief": {"ok": bool(brief_rel) and 0 < brief_bytes <= reconcile.MAX_BRIEF_BYTES,
                       "declared": bool(brief_rel), "bytes": brief_bytes,
                       "file": brief_file.relative_to(ROOT).as_posix() if brief_bytes else None},
@@ -435,8 +565,10 @@ def measure() -> dict:
         "standard": "DGO-1039 pillar 2: ui, api, cli, ops, share, brief, gate",
         "lifecycle_verbs": lifecycle,
         "gate_runners_read": runners,
+        "pages": pages(),
         "totals": {"product": totals(product), "all": totals(out),
-                   "complete": sum(1 for r in product if r["score"] == len(COLUMNS))},
+                   "complete": sum(1 for r in product if r["score"] == len(COLUMNS)),
+                   "paged": sum(1 for r in product if r["page"])},
         "notes": notes,
         "apps": out,
     }
@@ -454,7 +586,9 @@ def cell(row: dict, col: str) -> str:
         "cli": lambda: f"{len(c['verbs'])} verbs" if c["verbs"] else "",
         "ops": lambda: str(len(c["ids"])) if c["ids"] else "",
         "share": lambda: " ".join(c["aliases"] + [f"door:{d}" for d in c["doors"]])
-                         + (" +api" if c["api_crosses"] else ""),
+                         + (" +api" if c["api_crosses"] else "")
+                         + (" local (said why)" if c.get("local") and not (c["aliases"] or c["doors"])
+                            else " published, yet says local" if c.get("local") else ""),
         "brief": lambda: (f"{c['bytes']}B" + ("" if c["declared"] else " undeclared")) if c["bytes"] else "",
         "gate": lambda: " ".join(c["gates"]) + (f" · {c['tests']} tests" if c["tests"] else ""),
     }[col]().strip(" ·")
@@ -483,16 +617,63 @@ def markdown(inv: dict) -> str:
         f"Gate runners read: {inv['gate_runners_read']}.",
         "",
     ]
-    for title, sel in (("Product apps", [r for r in inv["apps"] if r["product"]]),
-                       ("Platform internals, libraries and blueprints", [r for r in inv["apps"] if not r["product"]])):
-        lines += [f"## {title}", "", head, "|---|---|" + "---|" * len(COLUMNS) + "---:|"]
+
+    def table(sel):
+        out = [head, "|---|---|" + "---|" * len(COLUMNS) + "---:|"]
         for r in sorted(sel, key=lambda r: (-r["score"], r["app"])):
-            lines.append(f"| `{r['app']}` | {r['kind']}{' · system' if r['system'] else ''} | "
-                         + " | ".join(cell(r, c) for c in COLUMNS) + f" | {r['score']}/{len(COLUMNS)} |")
-        lines.append("")
+            out.append(f"| `{r['app']}` | {r['kind']}{' · system' if r['system'] else ''} | "
+                       + " | ".join(cell(r, c) for c in COLUMNS) + f" | {r['score']}/{len(COLUMNS)} |")
+        return out + [""]
+
+    product = [r for r in inv["apps"] if r["product"]]
+    order = inv.get("pages") or pages()           # an inventory written before pages had none of its own
+    paged = sum(1 for r in product if r.get("page"))
+    lines += ["## Product apps, by the page of the product (DGO-1042)", "",
+              f"**{paged} of {len(product)} product apps name their page** — `page` in their own "
+              f"app.json, one of the owner's {len(order)}: {', '.join(order)}.", ""]
+    for page in order:
+        sel = [r for r in product if r.get("page") == page]
+        lines += [f"### {page}", ""] + (table(sel) if sel else ["No app names this page yet.", ""])
+    unpaged = [r for r in product if not r.get("page")]
+    if unpaged:
+        lines += (["### No page yet", "",
+                   "A decision still to write (DGO-1045): each one joins a page or goes to the archive (G34).", ""]
+                  + table(unpaged))
+    lines += ["## Platform internals, libraries and blueprints", ""] + table([r for r in inv["apps"] if not r["product"]])
+    lines += ui_parts_table(inv)
     if inv["notes"]:
         lines += ["## Notes", ""] + [f"- {n}" for n in inv["notes"]] + [""]
     return "\n".join(lines)
+
+
+def ui_parts_table(inv: dict) -> list:
+    """The ui column in parts (DGO-1053), for every app with a tile; `—` where a part does not apply."""
+    def say(kind, v):
+        if kind == "phone":
+            return "not read"
+        if v is None:
+            return "—"
+        if kind == "palette":
+            return "✓" if v == 0 else f"✗ {v} colours"
+        if kind == "menu":
+            return {"grid": "✓ grid", "own": "✗ a shell of its own"}.get(v, "not read")
+        if v == "allowed":
+            return "✓ allowed (G83 names why)"
+        return "✓" if v else "✗"
+    rows = sorted((r for r in inv["apps"] if r["ui"]["ok"]), key=lambda r: r["app"])
+    out = ["## The ui column in parts (DGO-1053)", "",
+           "Each part read by its gate's own function: **palette** G82 (colours the app's files name of their own), "
+           "**menu** G107 (the side menu stands in the component's grid; «not read»: pages whose menu is not the "
+           "component's `bnv`, which G107 cannot see), **address** G83 (a tile the shell frames keeps its screen in "
+           "its own URL), **phone** — not read: no gate reads it per app from the files; `bbox ui-map` at the 390 "
+           "profile does, on an office. «—»: the part does not apply. The parts decide no cell, and go stale until "
+           "measure.py runs again.", "",
+           "| app | palette | menu | address | phone |", "|---|---|---|---|---|"]
+    for r in rows:
+        p = r["ui"].get("parts") or {}
+        out.append(f"| `{r['app']}` | " + " | ".join(say(k, p.get(k)) for k in ("palette", "menu", "address", "phone"))
+                   + " |")
+    return out + [""]
 
 
 def dump(inv: dict) -> str:
@@ -500,6 +681,26 @@ def dump(inv: dict) -> str:
     head = [f" {json.dumps(k)}: {json.dumps(v, ensure_ascii=False)}," for k, v in inv.items() if k != "apps"]
     rows = [f"  {json.dumps(r, ensure_ascii=False)}" for r in inv["apps"]]
     return "\n".join(["{"] + head + [' "apps": [', ",\n".join(rows), " ]", "}"]) + "\n"
+
+
+def compare(old: dict, inv: dict) -> tuple[list, list]:
+    """(lost, closed): the cells the committed inventory `old` had met that `inv` does not, and the other way."""
+    now = {r["app"]: r for r in inv["apps"]}
+    lost, closed = [], []
+    for r in old["apps"]:
+        cur = now.get(r["app"])
+        if cur is None:
+            lost.append(f"{r['app']}: the app is gone")
+            continue
+        if r.get("page") and not cur.get("page"):     # a page once declared is held; another page is a decision
+            lost.append(f"{r['app']}: named the page {r['page']!r} and names none now")
+        for c in COLUMNS:
+            was = (r.get(c) or {}).get("ok")          # a column the committed file predates was not met
+            if was and not cur[c]["ok"]:
+                lost.append(f"{r['app']}: {c} was met and is not now")
+            elif cur[c]["ok"] and not was:
+                closed.append(f"{r['app']}: {c}")
+    return lost, closed
 
 
 def check(inv: dict) -> int:
@@ -512,33 +713,92 @@ def check(inv: dict) -> int:
     if not old.get("apps"):
         print("check: the committed inventory holds no app — nothing would be held", file=sys.stderr)
         return 1
-    now = {r["app"]: r for r in inv["apps"]}
-    lost, closed = [], []
-    for r in old["apps"]:
-        cur = now.get(r["app"])
-        if cur is None:
-            lost.append(f"{r['app']}: the app is gone")
-            continue
-        for c in COLUMNS:
-            was = (r.get(c) or {}).get("ok")          # a column the committed file predates was not met
-            if was and not cur[c]["ok"]:
-                lost.append(f"{r['app']}: {c} was met and is not now")
-            elif cur[c]["ok"] and not was:
-                closed.append(f"{r['app']}: {c}")
+    lost, closed = compare(old, inv)
     for line in closed:
         print(f"closed since the committed inventory: {line} — run measure.py to record it")
     for line in lost:
         print(f"LOST: {line}", file=sys.stderr)
+    print(f"check: {len(old['apps'])} app(s) of the committed inventory held against {len(inv['apps'])} measured, "
+          f"{len(COLUMNS)} cells each — {len(lost)} lost, {len(closed)} closed since")
     return 1 if lost else 0
+
+
+def self_test() -> int:
+    """Prove the check can fail (GATES.md, «Adding a gate», step 3), on fixtures, with one file read (the schema's
+    page list): a cell that was met and is not now fails; a cell newly met passes and says to record it; an app gone
+    fails; a column the committed file predates is not held against anyone; a page dropped fails, a page moved
+    passes, a file from before pages loses nothing against one with them; markdown() draws a file from before
+    pages."""
+    def row(app, **ok):
+        return {"app": app, **{c: {"ok": ok.get(c, False)} for c in COLUMNS}}
+    old = {"apps": [row("a", ui=True, api=True), row("b", cli=True)]}
+    cases = [
+        ("a cell reopened fails", {"apps": [row("a", ui=True), row("b", cli=True)]}, ["a: api was met and is not now"], []),
+        ("a cell newly closed passes, said", {"apps": [row("a", ui=True, api=True, ops=True), row("b", cli=True)]}, [], ["a: ops"]),
+        ("an app gone fails", {"apps": [row("a", ui=True, api=True)]}, ["b: the app is gone"], []),
+        ("nothing changed passes", {"apps": [row("a", ui=True, api=True), row("b", cli=True)]}, [], []),
+    ]
+    older = {"apps": [{"app": "a", "ui": {"ok": True}}]}   # a file from before the other columns
+    bad = 0
+    for name, inv, want_lost, want_closed in cases:
+        lost, closed = compare(old, inv)
+        ok = lost == want_lost and closed == want_closed
+        bad += not ok
+        print(f"{'PASS' if ok else 'FAIL'}  {name}" + ("" if ok else f"  (lost {lost}, closed {closed})"))
+    lost, _ = compare(older, {"apps": [row("a", ui=True)]})
+    bad += bool(lost)
+    print(f"{'PASS' if not lost else 'FAIL'}  a column the committed file predates is held against no one")
+    # the page (DGO-1042): held once declared, free to move, and a file from before pages holds none against an
+    # inventory that has them (the committed file the first run of this code is held against)
+    paged = {"apps": [row("a", ui=True) | {"page": "ai"}]}
+    before = {"apps": [row("a", ui=True), row("b", cli=True)]}
+    for name, was, now, want in (
+            ("a page dropped fails", paged, {"apps": [row("a", ui=True)]}, ["a: named the page 'ai' and names none now"]),
+            ("a page moved passes", paged, {"apps": [row("a", ui=True) | {"page": "base"}]}, []),
+            ("a file from before pages loses nothing against one with them", before,
+             {"apps": [row("a", ui=True) | {"page": "ai"}, row("b", cli=True)]}, [])):
+        lost, _ = compare(was, now)
+        ok = lost == want
+        bad += not ok
+        print(f"{'PASS' if ok else 'FAIL'}  {name}" + ("" if ok else f"  (lost {lost})"))
+    order = pages()
+    ok = order[0] == "meetings" and order[-1] == "base" and len(order) == len(set(order)) == 12
+    bad += not ok
+    print(f"{'PASS' if ok else 'FAIL'}  the pages are the schema's twelve, in the owner's order ({len(order)})")
+    # markdown() of an inventory written before pages (no `pages`, no `totals.paged`) draws, every page shown
+    full = {c: {"ok": False, "tiles": [], "views": 0, "door": None, "capabilities": [], "routes": 0, "verbs": [],
+                "ids": [], "aliases": [], "doors": [], "api_crosses": False, "local": None, "bytes": 0,
+                "declared": False, "gates": [], "tests": 0} for c in COLUMNS}
+    app = {"app": "a", "kind": "service", "system": False, "product": True, "score": 0, "page": None} | full
+    totals = {c: 0 for c in COLUMNS} | {"apps": 1}
+    try:
+        md = markdown({"totals": {"product": totals, "all": totals, "complete": 0}, "lifecycle_verbs": [],
+                       "gate_runners_read": 0, "notes": [], "apps": [app]})
+        ok = "### No page yet" in md and all(f"### {p}" in md for p in order)
+    except Exception as e:  # noqa: BLE001 — the case is that it does not raise
+        ok, md = False, repr(e)
+    bad += not ok
+    print(f"{'PASS' if ok else 'FAIL'}  markdown() draws an inventory from before pages" + ("" if ok else f"  ({md[:120]})"))
+    print(f"self-test: {10 - bad}/10")
+    return 1 if bad else 0
 
 
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     ap.add_argument("--print", action="store_true", help="print the table too")
     ap.add_argument("--check", action="store_true", help="hold the committed inventory; write nothing")
+    ap.add_argument("--no-views", action="store_true",
+                    help="skip the UI map's view counts (they need this office's .generated/ and decide no cell)")
+    ap.add_argument("--self-test", action="store_true", help="prove the check can fail, on fixtures")
     a = ap.parse_args()
+    if a.self_test:
+        return self_test()
+    if a.no_views and not a.check:
+        print("app-standard: --no-views is for --check: an inventory written without the view counts would "
+              "record them as zero", file=sys.stderr)
+        return 2
     try:
-        inv = measure()
+        inv = measure(views_too=not a.no_views)
     except ReadError as e:
         print(f"app-standard: {e}", file=sys.stderr)
         return 2

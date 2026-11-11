@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""call_inside.py — the meeting half of `./bbox meet verify --call` (apps/meet/qa/verify_call.py, FPG-87).
+"""call_inside.py — the meeting half of `./bbox meet verify --call` (apps/meet/qa/verify_call.py, EXF-87).
 
 Runs INSIDE the throwaway container verify_call.py starts from the recorder's own image (Chrome, Xorg's dummy
 driver, ffmpeg with flite, python3), as root. One synthetic meeting on the live office, its pages driven through
@@ -35,7 +35,7 @@ HOST_NAME, GUEST_NAME = "בדיקת שיחה", "Verify No Mic"
 
 # Installed before any page script (Page.addScriptToEvaluateOnNewDocument): (1) counts every SpeechRecognition the
 # page makes and starts — Chrome's Web Speech captions send the voice to Google, and the office's rule is that no
-# voice leaves it (FPG-359); (2) every 500 ms: the ICE servers the bridge's connection was given (STUN/TURN: whose?),
+# voice leaves it (EXF-359); (2) every 500 ms: the ICE servers the bridge's connection was given (STUN/TURN: whose?),
 # and from Jitsi's own store when the page joined, each chat line and each pop-up the first time it is there, the
 # recording's states, the captions overlay's text.
 HOOK = r"""

@@ -41,7 +41,7 @@ Read routes answer JSON; `GET …/events` and `GET /v1/watch` answer `text/event
 | `GET /v1/health[?deep=1]` | — | `{ok, provider, version, harness, harness_ms, uptime_s, stream, [sessions, list_ms]}` — no token needed |
 | `GET /v1/sessions[?fresh=1]` | — | `{sessions:[summary]}` (cached 3 s unless `fresh`) |
 | `POST /v1/sessions` | `{text?, title?, preset?, cwd?, files?}` | `{id, preset}` — a session on the office checkout; `text` sent as its first message |
-| `GET /v1/sessions/{id}` | — | summary: `{id, title, running, blank, updated_at, preset, permissions, model, goal, todos, turns, tokens, queue}` |
+| `GET /v1/sessions/{id}` | — | summary: `{id, title, running, blank, updated_at, preset, permissions, model, goal, todos, turns, tokens, queue}` — `model` is the one the NEXT turn runs on |
 | `POST /v1/sessions/{id}/messages` | `{text, steer?, files?}` | `202 {accepted}` — queued behind the running turn, or steered into it |
 | `GET /v1/sessions/{id}/messages?limit=N` | — | `{events:[…], has_more}` — the latest N messages as contract events, oldest first |
 | `GET /v1/sessions/{id}/events?history=N&since=SEQ&raw=1` | — | **SSE**, live: `open`, `snapshot`, then events (below); `id:` is the harness seq |
@@ -52,7 +52,7 @@ Read routes answer JSON; `GET …/events` and `GET /v1/watch` answer `text/event
 | `POST /v1/sessions/{id}/command` | `{line:"/…", receipts?}` | `{result}` — a slash command of the harness |
 | `GET /v1/sessions/{id}/commands` | — | `{commands:[{name, description, input}]}` |
 | `GET /v1/sessions/{id}/goal` · `POST …/goal {objective, max_rounds?}` · `POST …/goal/{pause,resume,clear,complete}` | | `{goal}` |
-| `POST /v1/sessions/{id}/model` | `{provider, model, effort?}` | — |
+| `POST /v1/sessions/{id}/model` | `{provider, model, effort?, default?}` | `{id, provider, model, effort, default: kept\|restored\|changed\|unknown, why?, office_default}` — for THIS session; the office's default model is put back unless `default: true` (DGO-1731) |
 | `POST /v1/sessions/{id}/preset` | `{preset}` | — |
 | `GET /v1/sessions/{id}/subagents` | — | `{subagents}` |
 | `GET /v1/models` · `GET /v1/presets` · `GET /v1/permissions` | — | the catalogs |

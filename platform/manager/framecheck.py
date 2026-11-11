@@ -4,7 +4,7 @@
 Why this exists
 ---------------
 A window on an app that forbids being framed stays EMPTY: the browser draws its own grey page and tells the
-page that framed it nothing (FPG, 2026-10-28: the services window). The console now asks at the click
+page that framed it nothing (EXF, 2026-10-28: the services window). The console now asks at the click
 (`/api/frame-check`, platform-base/console/app.py) and opens a tab instead of a dead window. This module asks
 the same question EARLIER — when an app is switched on (app-management `_apply`) and when a rebuilt image
 replaces a running one (`bbox update`, scripts/app-update.sh) — so the office learns it from the change that

@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+#: status — does the office storage's engine answer, and which drives (profiles) it holds:  ./bbox drive-local status
+# Pipes the engine's own status.py into its container. The files themselves are worked on through «קבצים»:
+# ./bbox drive -p <profile> ls / (apps/drive/hooks/cli).
+set -uo pipefail
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
+. "${REPO_ROOT}/scripts/lib.sh"
+case "${1:-}" in -h|--help) sed -n 's/^#: //p' "${BASH_SOURCE[0]}"; exit 0 ;; esac
+[ -n "$(cn drive-local)" ] || die "[drive-local] the engine does not run on this office — «קבצים» brings it up (./bbox run drive)"
+dcx exec -T drive-local python3 - 8988 < "$(npath "${REPO_ROOT}")/apps/drive-local/status.py"

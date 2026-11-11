@@ -12,6 +12,8 @@
 #   ./bbox engine forwards [status|--apply]   the pair tunnel's UDP forward: is this office dialable,
 #                              and apply the template's rule to an engine created without it
 #                              (STOPS the office and boots it again — run it from the Mac itself)
+#   ./bbox engine provision [--apply]   engine.yaml's provision blocks this engine was made without; --apply
+#                              runs the ones marked `# bbox: live-apply` in the running guest (start does too)
 #   ./bbox engine power [status|start|stop]   the Mac-side keep-awake agent (policy: console settings)
 #   ./bbox engine destroy --force   delete the guest and EVERYTHING in it (images, volumes)
 #
@@ -106,7 +108,7 @@ cmd_start() {
   ensure_runtime
   local st; st="$(state)"
   case "${st}" in
-    Running) ok "engine already running"; return 0 ;;
+    Running) ok "engine already running"; provision_converge || true; return 0 ;;
     "")
       say "creating the engine: Ubuntu 24.04 + Docker 28.5.2, $(vm_cpus) cpus / $(vm_mem) GiB / $(vm_disk) GiB disk (host has $(sysctl -n hw.ncpu) cores, $(host_mem_gib) GiB)"
       local rs; rs="$(rosetta_flags)"
@@ -131,6 +133,12 @@ cmd_start() {
   local v; v="$(lima shell "${INSTANCE}" sudo docker version --format '{{.Server.Version}}' 2>/dev/null || true)"
   [ -n "${v}" ] || die "engine is up but dockerd does not answer inside it"
   ok "project engine: Docker ${v}  socket: $(host_socket)"
+  # The template's blocks that this engine was made without, applied live (see provision_converge). Among them
+  # the guest's SSH host keys kept across restarts (DGO-1359: Lima boots every start as a new cloud-init
+  # instance, and cloud-init's ssh module regenerated the keys, so this office's Computers app read «the host
+  # key does not match» for its own machine) and the 11-02 memory floor (herd-407). Until 2026-11-09 the host
+  # keys had a line of their own here, and the memory floor had none.
+  provision_converge || say "the guest's SSH host keys or memory floor may be off until the next start: \`bbox engine provision\` says which"
   power_agent_start
   lan_door_start
   console_door_start
@@ -271,6 +279,14 @@ ports_yaml() {   # <file> <ports|json>
 import json, re, sys
 path, mode = sys.argv[1], sys.argv[2]
 rules, cur, inside = [], None, False
+
+def bare(v):
+    # a YAML comment — `#` at the start or after a space — is not part of the value: `hostIP: "127.0.0.1"  # loopback`
+    # read as a WILDCARD address and declared the tunnel reachable from the network (DGO-614). The Go twin
+    # (packaging/dgo/internal/engine/engine.go, commentRE) strips the same way: a space or a TAB before the `#`, as
+    # YAML has it — `\s` would also take a no-break space, which Go's `\s` does not (the second reader).
+    return re.sub(r"(?:^|[ \t]+)#.*$", "", v).strip()
+
 for line in open(path, encoding="utf-8"):
     line = line.rstrip("\n")
     if re.match(r"^[A-Za-z_]", line):              # a new top-level key ends the block
@@ -282,12 +298,12 @@ for line in open(path, encoding="utf-8"):
         continue
     m = re.match(r"^\s*-\s*([\w-]+):\s*(.*)$", line)          # a new rule
     if m:
-        cur = {m.group(1): m.group(2).strip()}
+        cur = {m.group(1): bare(m.group(2))}
         rules.append(cur)
         continue
     m = re.match(r"^\s+([\w-]+):\s*(.*)$", line)             # one more key on the current rule
     if m and cur is not None:
-        cur[m.group(1)] = m.group(2).strip()
+        cur[m.group(1)] = bare(m.group(2))
 
 def val(rule, key):
     return str(rule.get(key, "")).strip().strip('"').strip("'")
@@ -309,6 +325,152 @@ PY
 instance_ports()  { ports_yaml "${LIMA_HOME}/${INSTANCE}/lima.yaml" ports; }
 instance_udp_json() { ports_yaml "${LIMA_HOME}/${INSTANCE}/lima.yaml" json; }
 template_udp_json() { ports_yaml "${TEMPLATE}" json; }
+
+# ── provision blocks: what engine.yaml declares and an engine made before it never got ───────────
+# Lima copies the template into the instance's lima.yaml ONCE, when the engine is created, and runs that
+# copy's provision blocks at every boot. A block added to engine.yaml later reaches a NEW engine only: the
+# MacBook's engine, made 2026-09-17, ran without the 11-02 memory floor for a week, through two jams
+# (herd-407, DGO-1620). So the two lists are compared, block by block, by the block's first comment line.
+#   - `doctor` and `provision` report each template block that is MISSING from the engine or CHANGED since.
+#   - `provision --apply` and every `start` run each MISSING block in the running guest, but only a block
+#     that says it is safe live (a `# bbox: live-apply` line) and uses no Lima template variable (`{{…}}`,
+#     which only a boot renders). A block that restarts a service the office runs on (the Docker
+#     endpoint's `systemctl restart docker.service`) is never run live: it is reported, and it lands with
+#     the engine's next edit (stop → limactl edit → start, the owner's step at the machine).
+#   - A block applied live is stamped in the instance's own directory (APPLIED: its id, its version, when),
+#     so it runs once per version and not at every start, and a destroyed engine takes its stamps with it.
+#     It stays missing from lima.yaml, so a BOOT does not re-run it: what it wrote on the guest's disk does.
+#   - A CHANGED block is reported, never re-run: its old version already runs at every boot.
+# Every provision script is idempotent by Lima's own contract (it runs at every boot), so a run of a
+# missing live-apply block is what the next boot would have done anyway.
+APPLIED="${LIMA_HOME}/${INSTANCE}/bbox-provision-applied"
+provision_yaml() {   # <file> list | <file> script <id> → blocks as "id<TAB>sha<TAB>live", or one block's script
+  [ -f "${1:-}" ] || return 0
+  /usr/bin/python3 - "$@" <<'PY'
+import hashlib, re, sys
+path, mode = sys.argv[1], sys.argv[2]
+want = sys.argv[3] if len(sys.argv) > 3 else None
+blocks, inside, cur, body, ind = [], False, None, None, None
+for raw in open(path, encoding="utf-8"):
+    line = raw.rstrip("\n")
+    if re.match(r"^[A-Za-z_]", line):                      # a top-level key opens or closes the section
+        if inside:
+            break
+        inside = line.startswith("provision:")
+        continue
+    if not inside:
+        continue
+    if re.match(r"^\s*-\s+mode:\s*", line):                # a new block
+        cur = {"mode": line.split(":", 1)[1].strip(), "lines": []}
+        blocks.append(cur); body = False; ind = None
+        continue
+    if cur is None:
+        continue
+    if re.match(r"^\s+script:\s*\|[-+]?\s*$", line):        # the script's literal block begins
+        body = True
+        continue
+    if body:
+        if line.strip() == "":
+            cur["lines"].append("")
+            continue
+        n = len(line) - len(line.lstrip(" "))
+        if ind is None:
+            ind = n
+        if n < ind:                                          # back out of the literal block
+            body = False
+            continue
+        cur["lines"].append(line[ind:])
+out = []
+for b in blocks:
+    text = "\n".join(b["lines"]).rstrip("\n") + "\n"
+    rest = [l.strip() for l in b["lines"] if l.strip() and not l.startswith("#!")]
+    comments = [l for l in rest if l.startswith("#") and not l.startswith("# bbox:")]
+    ident = (comments or rest or [hashlib.sha256(text.encode()).hexdigest()[:12]])[0][:100].replace("\t", " ")
+    live = int(b["mode"] == "system" and "# bbox: live-apply" in text and "{{" not in text)
+    out.append((ident, hashlib.sha256(text.encode()).hexdigest()[:12], live, text))
+if mode == "list":
+    for ident, sha, live, _ in out:
+        print("%s\t%s\t%d" % (ident, sha, live))
+elif mode == "script":                                       # only ever a LIVE block: this is what converge runs
+    for ident, _, live, text in out:
+        if ident == want and live:
+            sys.stdout.write(text)
+            break
+PY
+}
+
+# → one line per template block the engine lacks or has in another version:
+#   "missing|applied|changed<TAB>live<TAB>sha<TAB>id<TAB>when applied"
+provision_drift() {
+  local inst="${LIMA_HOME}/${INSTANCE}/lima.yaml" have ident sha live when
+  [ -f "${inst}" ] || return 0
+  have="$(provision_yaml "${inst}" list)"
+  while IFS=$'\t' read -r ident sha live; do
+    [ -n "${ident}" ] || continue
+    # ENVIRON, not -v: awk would read a backslash in a comment line as an escape
+    if ! printf '%s\n' "${have}" | I="${ident}" awk -F'\t' '$1 == ENVIRON["I"] {f = 1} END {exit !f}'; then
+      when="$(I="${ident}" S="${sha}" awk -F'\t' '$1 == ENVIRON["I"] && $2 == ENVIRON["S"] {w = $3} END {print w}' "${APPLIED}" 2>/dev/null || true)"
+      if [ -n "${when}" ]; then
+        printf 'applied\t%s\t%s\t%s\t%s\n' "${live}" "${sha}" "${ident}" "${when}"
+      else
+        printf 'missing\t%s\t%s\t%s\t\n' "${live}" "${sha}" "${ident}"
+      fi
+    elif ! printf '%s\n' "${have}" | I="${ident}" S="${sha}" awk -F'\t' '$1 == ENVIRON["I"] && $2 == ENVIRON["S"] {f = 1} END {exit !f}'; then
+      printf 'changed\t%s\t%s\t%s\t\n' "${live}" "${sha}" "${ident}"
+    fi
+  done <<< "$(provision_yaml "${TEMPLATE}" list)"
+}
+
+provision_report() {   # for doctor and `provision`: the drift, one line a block (Go twin: engine.go provisionReport)
+  local drift kind live sha ident when
+  if [ ! -f "${LIMA_HOME}/${INSTANCE}/lima.yaml" ]; then
+    printf 'provision: no engine yet — the first `start` makes it from this engine.yaml\n'
+    return 0
+  fi
+  drift="$(provision_drift)"
+  if [ -z "${drift}" ]; then
+    printf 'provision: every block of engine.yaml is in this engine\n'
+    return 0
+  fi
+  printf 'provision: this engine was made from an older engine.yaml\n'
+  while IFS=$'\t' read -r kind live sha ident when; do
+    case "${kind}:${live}" in
+      applied:*) printf '  applied live %s (not in lima.yaml; its effect is on the guest'"'"'s disk): %s\n' "${when}" "${ident}" ;;
+      missing:1) printf '  missing, applied live by the next `start` or `provision --apply`: %s\n' "${ident}" ;;
+      missing:0) printf '  missing, lands only with the engine'"'"'s next edit (owner, at the machine): %s\n' "${ident}" ;;
+      changed:*) printf '  changed since this engine was made (its old version runs at boot): %s\n' "${ident}" ;;
+    esac
+  done <<< "${drift}"
+}
+
+provision_converge() {   # run each missing live-apply block in the RUNNING guest, stamp it; quiet when none
+  [ "$(state)" = Running ] || return 0
+  local kind live sha ident when script bad=0
+  while IFS=$'\t' read -r kind live sha ident when; do
+    [ "${kind}" = missing ] && [ "${live}" = 1 ] || continue
+    script="$(provision_yaml "${TEMPLATE}" script "${ident}")"
+    if [ -n "${script}" ] && printf '%s\n' "${script}" | lima shell "${INSTANCE}" sudo bash -s >/dev/null 2>&1; then
+      printf '%s\t%s\t%s\n' "${ident}" "${sha}" "$(date -u +%FT%TZ)" >> "${APPLIED}"
+      ok "provision applied live: ${ident:0:80}"
+    else
+      bad=$((bad + 1)); say "${cy}provision block failed in the guest (tried again at the next start): ${ident:0:80}${c0}"
+    fi
+  done <<< "$(provision_drift)"
+  [ "${bad}" = 0 ]
+}
+
+cmd_provision() {
+  ensure_runtime
+  local rc=0
+  case "${1:-}" in
+    --apply) [ "$(state)" = Running ] || die "the engine is not running — \`bbox engine start\` applies the missing blocks itself"
+             provision_converge || rc=1
+             provision_report
+             return "${rc}" ;;
+    ""|status) provision_report ;;
+    *) die "usage: bbox engine provision [--apply]" ;;
+  esac
+}
 
 # The chain is three links, owned by three places, and they close IN ORDER — this order is the whole
 # reason nothing here may gate on the last one:
@@ -370,9 +532,14 @@ handoff_env() {
 # cannot drift. `udp_env` is read from the caller's scope (bash scopes locals dynamically) — empty
 # whenever this engine has no UDP port to hand over.
 guest_shell() {   # shellcheck disable=SC2086
+  # `guest_limit` (cmd_exec's, from BBOX_GUEST_TIMEOUT; read like udp_env, by bash's dynamic scope): the guest ends
+  # the command itself — `timeout -k 5 <seconds>` in front of it. sshd keeps a hand-off's session for as long as the
+  # GUEST command runs, so a caller on this Mac that waits with a limit of its own sets it (DGO-1783), or its
+  # abandoned calls hold the guest's sessions until it refuses every new one. Digits only, so the split is safe.
+  case "${guest_limit:-}" in ''|*[!0-9]*) ;; *) set -- timeout -k 5 "${guest_limit}" "$@" ;; esac
   "${LIMACTL}" shell --workdir "${REPO_ROOT}" "${INSTANCE}" -- \
     sudo --preserve-env=OVERLAYS,BBOX_DOCKER_HOST,BBOX_WITH_BROWSER42,FORCE,PERFORMANCE_PROFILE \
-      env BBOX_IN_GUEST=1 ${udp_env} "$@"
+      env BBOX_IN_GUEST=1 ${udp_env} ${DGO_GIT_OVERRIDE:+DGO_GIT_OVERRIDE=${DGO_GIT_OVERRIDE}} "$@"
 }
 
 # After the one command that can DECLARE the tunnel's published port (.env, written inside the guest
@@ -398,6 +565,11 @@ post_run_udp_note() {
 cmd_exec() {
   [ "${1:-}" = "--" ] && shift
   [ $# -gt 0 ] || die "exec needs a command"
+  # BBOX_GUEST_TIMEOUT is THIS call's limit (guest_shell), read before the dispatch below and already out of the
+  # environment, so the office's host daemons this may start never carry one caller's limit for life (a door's LAN
+  # re-render cut mid-recreate); `bbox run` is never limited.
+  local guest_limit="${GUEST_LIMIT_ASKED:-}"
+  [ "${2:-}" = run ] && guest_limit=""
   ensure_runtime
   [ "$(state)" = Running ] || cmd_start >&2
   power_agent_start
@@ -444,6 +616,7 @@ cmd_doctor() {
   echo "rosetta:   $([ -n "$(rosetta_flags)" ] && echo present || echo absent)"
   echo "state:     $(state || true)"
   echo "socket:    $(host_socket)"
+  provision_report
   forward_report
   [ "$(state)" = Running ] && lima shell "${INSTANCE}" sudo docker version --format '  engine:    Docker {{.Server.Version}} (API {{.Server.APIVersion}}, min {{.Server.MinAPIVersion}})' 2>/dev/null || true
 }
@@ -530,6 +703,10 @@ cmd_forwards() {
   esac
 }
 
+# BBOX_GUEST_TIMEOUT is one hand-off's limit (cmd_exec, guest_shell): read once here and out of the environment for
+# every verb, so nothing this script starts — the office's host daemons, `engine start`, `doctor`'s `bbox run` —
+# carries a limit a caller set for one call (DGO-1783).
+GUEST_LIMIT_ASKED="${BBOX_GUEST_TIMEOUT:-}"; unset BBOX_GUEST_TIMEOUT
 cmd="${1:-}"; shift || true
 case "${cmd}" in
   start)   cmd_start "$@" ;;
@@ -540,6 +717,7 @@ case "${cmd}" in
   socket)  cmd_socket ;;
   doctor)  cmd_doctor ;;
   forwards) cmd_forwards "$@" ;;
+  provision) cmd_provision "$@" ;;
   power)   cmd_power "$@" ;;
   destroy) cmd_destroy "$@" ;;
   ""|-h|--help|help) sed -n '2,17p' "$0" ;;

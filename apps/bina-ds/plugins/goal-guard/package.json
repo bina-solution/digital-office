@@ -1,0 +1,16 @@
+{
+  "name": "@bina/dsh-goal-guard",
+  "description": "The office's fence around the automatic goal round loop: a round that produced no tool call gets no next round, the office's round ceiling applies to every goal (a goal cannot raise it), and a round is refused when the turn's every step was empty. Born of the 2026-11-01 runaway: 783 of 961 rounds in one hour, ₪19.10 on one session.",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "lib/index.js",
+  "exports": {
+    ".": "./lib/index.js",
+    "./package.json": "./package.json"
+  },
+  "scripts": {
+    "test": "node --test test/*.test.mjs"
+  },
+  "license": "MIT"
+}

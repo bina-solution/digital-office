@@ -1,0 +1,130 @@
+# apps/digital-assets/content/interfaces.yaml — the interfaces of companies and offices the library and the office
+# lean on (DGO-812, seo-1004). A change in a government, bank or retail site breaks a guide and a browser flow of the
+# office, so each one is checked every month by interfaces.py, and what changed is written down
+# (interfaces/<YYYY-MM>.md).
+#
+# Fields: id · name · owner · url (the official address) · kind: api | site | process · why (what in the library or the
+# office depends on it) · watch (what a change would break).
+# A site that refuses a robot (Cloudflare, Radware, its own block page) is reported as `blocked` and is opened in the
+# office's browser (browser42) instead: the refusal itself is recorded, never read as «the page is gone».
+
+interfaces:
+  - id: data-gov-il
+    name: data.gov.il — מאגרי המידע הממשלתיים
+    owner: מערך הדיגיטל הלאומי
+    url: https://data.gov.il/api/3/action/package_list?limit=1
+    kind: api
+    why: ה-API הפתוח (CKAN) של מאגרי הממשלה; מקור לנתונים במאמרים ולאוטומציות n8n
+    watch: מבנה התשובה (help, success, result) וכתובת ה-API
+
+  - id: boi-exchange-public-api
+    name: בנק ישראל — שערי חליפין (PublicApi)
+    owner: בנק ישראל
+    url: https://boi.org.il/PublicApi/GetExchangeRates?asXml=false
+    kind: api
+    why: חמש פיסות בספרייה מצטטות שער דולר משם (n8n, המשולש, המדריכים, החדשות)
+    watch: שהכתובת עונה ב-JSON ולא מפנה לדף שגיאה
+
+  - id: boi-exchange-sdmx
+    name: בנק ישראל — שערי חליפין (SDMX)
+    owner: בנק ישראל
+    url: https://edge.boi.gov.il/FusionEdgeServer/sdmx/v2/data/dataflow/BOI.STATISTICS/EXR/1.0/RER_USD_ILS?startperiod=2026-11-01
+    kind: api
+    why: ה-API הסטטיסטי החדש של בנק ישראל; החלופה ל-PublicApi
+    watch: שהסדרה RER_USD_ILS קיימת ועונה
+
+  - id: boi-open-banking
+    name: בנק ישראל — בנקאות פתוחה
+    owner: בנק ישראל
+    url: https://www.boi.org.il/en/economic-roles/supervision-and-regulation/open-banking/
+    kind: site
+    why: דף הפיקוח על הבנקאות הפתוחה; מקור לפרק הבנקים (seo-107) ולדפי חשבון ל-INDOX
+    watch: הכותרות (שלבי ההוראה, המשתתפים)
+
+  - id: btl
+    name: ביטוח לאומי
+    owner: המוסד לביטוח לאומי
+    url: https://www.btl.gov.il/
+    kind: site
+    why: השירותים המקוונים לעסקים ולמעסיקים; מדריכי התשלומים בדפדפן של הלשכה
+    watch: הכתובת שאליה הדף הראשי מפנה, והכותרות
+
+  - id: ica-corporations
+    name: רשם החברות — תאגידים ברשת
+    owner: רשות התאגידים, משרד המשפטים
+    url: https://ica.justice.gov.il/GenericCorporarionInfo/SearchCorporation?unit=8
+    kind: process
+    why: חיפוש חברה ומספר תאגיד; זיהוי ספק ולקוח באוטומציות
+    watch: שהחיפוש נפתח בלי הזדהות, והכותרת
+
+  - id: login-gov-il
+    name: הזדהות לאומית
+    owner: מערך הדיגיטל הלאומי
+    url: https://login.gov.il/
+    kind: process
+    why: ההזדהות לכל שירות ממשלתי; כל מדריך שעובר באזור אישי עובר כאן
+    watch: הכתובת שאליה הכניסה מפנה (היום /nidp/), והכותרות
+
+  - id: my-gov-il
+    name: האזור האישי — my.gov.il
+    owner: מערך הדיגיטל הלאומי
+    url: https://my.gov.il/
+    kind: site
+    why: האזור האישי של האזרח; נקודת הכניסה של המדריכים לשירותי הממשלה (seo-110)
+    watch: הכתובת שאליה הדף מפנה (היום /landing/)
+
+  - id: tax-authority
+    name: רשות המסים
+    owner: רשות המסים
+    url: https://www.gov.il/he/departments/israel_tax_authority
+    kind: site
+    why: מע״מ, מס הכנסה וניכויים; המקור לכל מאמר על חשבוניות ומסים
+    watch: הדף נחסם לרובוט — נפתח בדפדפן של הלשכה
+
+  - id: israel-invoices
+    name: חשבוניות ישראל — מספרי הקצאה
+    owner: רשות המסים
+    url: https://www.gov.il/he/departments/topics/israel-invoices
+    kind: process
+    why: "מספר הקצאה לחשבונית מעל הסף (מ-2026-06-01: מעל 5,000 ₪ לפני מע״מ); examplem-io מסמן חשבונית שצריכה מספר"
+    watch: הסף והמועד הבא; הדף נחסם לרובוט — נפתח בדפדפן של הלשכה
+
+  - id: whatsapp-pricing
+    name: WhatsApp Business — מחירון ה-API
+    owner: Meta
+    url: https://developers.facebook.com/documentation/business-messaging/whatsapp/pricing
+    kind: site            # the API's documentation page, not the API itself
+    why: אפליקציית WhatsApp של הלשכה והמאמרים עליה; הכתובת הישנה (/docs/whatsapp/pricing/) מפנה לכאן
+    watch: הכתובת, הכותרות (קטגוריות ההודעה ושיטת החיוב)
+
+  - id: morning-api
+    name: Morning (חשבונית ירוקה) — API
+    owner: Morning
+    url: https://www.greeninvoice.co.il/api-docs
+    kind: site            # the API's documentation page, not the API itself
+    why: הפקת חשבונית מרכזת דרך Morning (examplem-io, DGO-1550); הכתובת מפנה היום ל-developers.morning.co
+    watch: הכתובת שאליה התיעוד מפנה, והכותרות
+
+  - id: rami-levy-online
+    name: רמי לוי — קנייה אונליין
+    owner: רמי לוי שיווק השקמה
+    url: https://www.rami-levy.co.il/he
+    kind: site
+    why: המדריך לקנייה בסופר דרך הדפדפן של הלשכה (seo-606) וההדגמה המוקלטת (seo-902)
+    watch: הכותרות והכתובת; שינוי באתר שובר את התהליך בדפדפן
+
+  - id: shufersal-online
+    name: שופרסל אונליין
+    owner: שופרסל
+    url: https://www.shufersal.co.il/online/he/
+    kind: site
+    why: אותו מדריך (seo-606)
+    watch: הכותרות והכתובת
+
+  - id: israel-post
+    name: דואר ישראל
+    owner: דואר ישראל
+    url: https://www.israelpost.co.il/
+    kind: site
+    why: מעקב משלוחים ושירותי דואר לעסק; מפתח השירותים (seo-111)
+    watch: החסימה תלויה בלקוח (2026-11-10 — curl קיבל 403 «הגישה נחסמה», urllib קיבל 200); צפוי לעבור בין עובד לנחסם

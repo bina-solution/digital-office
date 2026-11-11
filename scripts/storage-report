@@ -5,7 +5,7 @@
 
 set -euo pipefail
 
-DEPLOY_DIR="/root/deployment-hacohen"
+DEPLOY_DIR="/root/digital-office"
 REPORT_DATE=$(date +%Y-%m-%d)
 HOSTNAME=$(hostname)
 SAVE=false

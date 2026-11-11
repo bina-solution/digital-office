@@ -1,4 +1,9 @@
-"""connections_client — the drive service's view of the credential plane (secret-base :8990).
+"""connections_client — «קבצים»'s view of the credential plane (secret-base :8990).
+
+SINCE THE SPLIT (DGO-1500, apps/drive/ENGINES.md): the vault's `drive_*` rows are still the one list of
+the office's drives, and the BINDING is still kept here; what a row MEANS (a profile's name, whether it
+can work, which one is the office's default) is said by the engine that serves its protocol
+(engines.accounts / engines.annotate). Nothing here reads the office storage's database any more.
 
 Per the platform service contract (§1/§2): connection instances live in secret-base's vault, and
 this service only ever holds a BINDING to the one it acts as (/data/active.json). Secrets are
@@ -19,17 +24,17 @@ import json
 import logging
 import os
 import tempfile
+import time
 
 import requests
 
-import profiles
+import engines
 
 log = logging.getLogger(__name__)
 
 CONNECTIONS_URL = os.environ.get("CONNECTIONS_URL", "http://connections:8990")
-PROTOCOL_GLOB = "drive_*"          # this service owns the drive_* protocols only
+PROTOCOL_GLOB = "drive_*"          # every drive engine's protocols are drive_* (engines.py)
 ACTIVE_PATH = os.environ.get("ACTIVE_PATH", "/data/active.json")
-LOCAL_PROTOCOL = "drive_local"
 
 #: The binding is a {scope -> instance id} MAP with exactly one scope today. Stored as a map from
 #: day one on purpose (app-engine-pattern §10): when per-user selection arrives, the scope key
@@ -66,36 +71,14 @@ def list_instances():
     resolution does not.
     """
     insts, _err = vault_instances()
-    return [annotate(i) for i in insts]
+    return engines.accounts(insts)
 
 
 def annotate(inst):
-    """Add the explicit fields the console and the UI used to derive by parsing the id
-    (`/-local$/`, `cid.rsplit("-",1)[0]`). An id is not a data structure."""
-    proto = (inst or {}).get("protocol") or ""
-    out = dict(inst or {})
-    out["engine"] = proto
-    out["is_private"] = proto == LOCAL_PROTOCOL
-    out["app"] = "drive"
-    if proto == LOCAL_PROTOCOL:
-        pid = inst.get("account_hint")
-        out["profile_id"] = pid
-        p = None
-        try:
-            p = profiles.get(pid) if pid else None
-        except Exception:            # the DB is not a dependency of LISTING connections
-            p = None
-        if p:
-            out["is_admin"] = p["is_admin"]
-            out["profile_status"] = p["status"]
-            out["label"] = p["display_name"] or out.get("label")
-        else:
-            # an instance whose profile row is gone is unusable — say so in the row rather than
-            # letting it look healthy in the bar (instance `status` is written once at creation)
-            out["profile_status"] = "missing"
-            out["status"] = "needs_action"
-            out["reason"] = "הפרופיל שהחיבור הזה מייצג אינו קיים יותר"
-    return out
+    """The explicit fields the console and the UI used to derive by parsing the id (`/-local$/`,
+    `cid.rsplit("-",1)[0]`) — said from the engines' own word on their protocols (engines.annotate).
+    The full account (a profile's name, a row that cannot work) is list_instances'."""
+    return engines.annotate(inst)
 
 
 def dangling_instance(cid, reason):
@@ -107,56 +90,24 @@ def dangling_instance(cid, reason):
     the UI already knows how to render (`needs_action`), and stays selectable-away-from.
     """
     proto = cid.rsplit("-", 1)[0] if "-" in cid else ""
-    return {"id": cid, "protocol": proto if proto in (LOCAL_PROTOCOL, "drive_google_oauth") else "",
+    known = proto in engines.protocols()
+    return {"id": cid, "protocol": proto if known else "",
             "label": "חיבור שאינו זמין", "account_hint": None, "engine": proto,
-            "is_private": proto == LOCAL_PROTOCOL, "app": "drive",
+            "is_private": known and proto in engines.private_protocols(), "app": "drive",
             "status": "needs_action", "reason": reason, "created_at": None}
 
 
 def get_instance(cid):
-    return next((i for i in list_instances() if i.get("id") == cid), None)
+    """One vault row, annotated lightly — what every op resolves (no engine is asked here). None means
+    the vault says there is no such drive; a vault that cannot answer is a 503 that says so."""
+    insts, err = vault_instances()
+    if err:
+        raise engines.AdapterError(f"{err} — לא ניתן לאמת את הכונן {cid}", 503)
+    hit = next((i for i in insts if i.get("id") == cid), None)
+    return annotate(hit) if hit else None
 
 
-def get_secret(cid):
-    """{protocol, secret} for a vault instance, or None when secret-base can't answer.
-
-    There is no longer a synthetic id to special-case: EVERY drive connection, private engine
-    included, has a secret here. That is what makes `Backend(credential)` uniform.
-    """
-    try:
-        r = requests.get(f"{CONNECTIONS_URL}/api/instances/{cid}/secret", timeout=_TIMEOUT)
-        r.raise_for_status()
-        return r.json()
-    except (requests.RequestException, ValueError):
-        return None
-
-
-def update_secret(cid, secret):
-    """Write a refreshed secret back to the vault (§1 `PUT /api/instances/<id>/secret`), so a token
-    this service renewed is the token the whole estate uses. Returns True when secret-base accepted it.
-
-    MERGE is the endpoint's default and we rely on it: we send the full merged grant anyway, but a
-    partial write must never be able to drop the refresh_token. `replace` is deliberately not passed —
-    a re-consent creates an instance, it does not patch one.
-
-    Best-effort ON PURPOSE: the refresh already succeeded and the caller holds the fresh token in
-    _CACHE, so a vault that is down/older-than-this-route costs us a re-refresh after a restart —
-    never a failed op. Hence: log the reason and return False, never raise into the op path.
-    """
-    if not cid:
-        return False
-    try:
-        r = requests.put(f"{CONNECTIONS_URL}/api/instances/{cid}/secret",
-                         json={"secret": secret}, timeout=_TIMEOUT)
-        if not r.ok:
-            log.warning("connections: token write-back for %s rejected: %s %s",
-                        cid, r.status_code, (r.text or "")[:200])
-        return r.ok
-    except requests.RequestException as e:
-        log.warning("connections: token write-back for %s failed: %s: %s", cid, type(e).__name__, e)
-        return False
-
-
+# No secret is read here: an account's credential is read by its own engine, per call (DGO-1500).
 def add_instance(protocol, label, secret, account_hint=None):
     """Proxy an add to secret-base. Returns (payload, status) so the route can pass the
     credential plane's own verdict through untouched."""
@@ -252,19 +203,28 @@ def default_instance(instances=None):
     """The instance a deployment that has selected NOTHING acts as: the first admin profile's.
 
     This is the zero-config guarantee, and it is the ONLY substitution left in this module. It is
-    not a fallback for a broken binding — see resolve_active.
+    not a fallback for a broken binding — see resolve_active. Which profile is the first admin is the
+    office storage's engine's word: it marks that row `default` (engines.accounts). Asked at most every
+    30 seconds — an office that never chose is asked this on every request.
     """
-    try:
-        admin = profiles.first_admin()
-    except Exception:
-        return None
-    if not admin:
-        return None
+    now = time.time()
+    if _default["at"] > now - 30 and instances is None and _default["row"]:
+        return _default["row"]
     if instances is None:
         instances, _err = vault_instances()
-    return next((i for i in instances
-                 if i.get("protocol") == LOCAL_PROTOCOL
-                 and i.get("account_hint") == admin["id"]), None)
+    private = set(engines.private_protocols())
+    rows = engines.accounts([i for i in instances if i.get("protocol") in private]) if private else []
+    hit = next((r for r in rows if r.get("default")), None)
+    if hit:                       # «none» is never kept: an engine that comes back is believed at once
+        _default.update(at=now, row=hit)
+    return hit
+
+
+_default = {"at": 0.0, "row": None}
+
+
+def forget_default():
+    _default.update(at=0.0, row=None)
 
 
 def resolve_active():
@@ -289,7 +249,7 @@ def resolve_active():
     if not cid:
         if err:
             return None, f"לא ניתן לקבוע את חשבון ברירת המחדל: {err}"
-        inst = default_instance(insts)
+        inst = default_instance()
         if inst:
             return annotate(inst), None
         return None, "הדרייב עדיין מאתחל — לא נוצר עדיין אף פרופיל. נסה שוב בעוד רגע."

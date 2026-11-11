@@ -1,0 +1,8 @@
+# actionlint's own config (`actionlint -config-file .github/actionlint.yaml`, or found automatically
+# from the repo root). The office's jobs run on ITS OWN runner — the Dell's `portable-ssd`, labels
+# [self-hosted, portable] — and those labels are declared here so the linter stops reporting them as
+# unknown hosted-runner names. Nothing else is configured: a rule is not relaxed, only a name learned.
+self-hosted-runner:
+  labels:
+    - portable
+    - ssd        # the same runner, addressed in ci-verify.yml's two jobs

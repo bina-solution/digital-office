@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # apply-schema — apply INDOX's schema INTO ONE INSTANCE SCHEMA.
 #
-#   apps/indox/hooks/apply-schema <instance-id>       # e.g. hacohen
+#   apps/indox/hooks/apply-schema <instance-id>       # e.g. example
 #   apps/indox/hooks/apply-schema --all               # every enabled instance
 #   apps/indox/hooks/apply-schema <id> --dry-run      # print the plan, touch nothing
 #
@@ -22,6 +22,9 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
 STATE="${ROOT}/platform.state.yaml"
+# The product default (DGO-1026): what an empty registry is seeded from when the office's own file declares no
+# INDOX instance — a fresh office, or one installed before the default carried a seed. The office's file wins.
+STATE_DEFAULT="${ROOT}/platform.state.default.yaml"
 SCHEMA_SQL="${ROOT}/apps/indox/blueprint/fixtures/schema.sql"
 # Container name + strip_public_views live in ONE place shared with schema-drift — the first
 # draft hand-parsed .env here (default `supabase-db-local`, diverging from everything lib.sh
@@ -59,20 +62,23 @@ db_instances() {
 }
 
 yaml_instances() {
-  [ -f "${STATE}" ] || return 0
+  # id|schema|enabled|purpose|label — four-field readers fold the label into their last, unused, field
+  local f="${1:-${STATE}}"
+  [ -f "${f}" ] || return 0
   awk '
     /^  indox:/            { in_indox = 1; next }
     in_indox && /^  [a-z]/ { in_indox = 0 }
     in_indox && /id:/ {
-      id = ""; schema = ""; enabled = "false"; purpose = ""
+      id = ""; schema = ""; enabled = "false"; purpose = ""; label = ""
       if (match($0, /id: *[A-Za-z0-9_-]+/))       { id      = substr($0, RSTART+4, RLENGTH-4) }
       if (match($0, /schema: *[A-Za-z0-9_]+/))    { schema  = substr($0, RSTART+8, RLENGTH-8) }
       if ($0 ~ /enabled: *true/)                  { enabled = "true" }
       if (match($0, /purpose: *[A-Za-z0-9_-]+/))  { purpose = substr($0, RSTART+9, RLENGTH-9) }
+      if (match($0, /label: *"[^"|]*"/))           { label = substr($0, RSTART, RLENGTH); sub(/^label: *"/, "", label); sub(/"$/, "", label) }
       gsub(/ /, "", id); gsub(/ /, "", schema); gsub(/ /, "", purpose)
-      if (id != "" && schema != "") { print id "|" schema "|" enabled "|" purpose }
+      if (id != "" && schema != "") { print id "|" schema "|" enabled "|" purpose "|" label }
     }
-  ' "${STATE}" 2>/dev/null
+  ' "${f}" 2>/dev/null
 }
 
 instances() {
@@ -170,13 +176,21 @@ SQL
   n="$(docker exec "${PG}" psql -U postgres -d postgres -tAc \
         "select count(*) from public.indox_instances" 2>/dev/null | tr -d ' \r')"
   if [ "${n:-0}" = "0" ]; then
-    echo "apply-schema: registry is empty — seeding from ${STATE}"
-    while IFS='|' read -r sid sschema sen spurpose; do
+    local seed from="${STATE}"
+    seed="$(yaml_instances)"
+    if [ -z "${seed}" ]; then
+      # DGO-1026: the office's file declares no INDOX instance (a fresh office, or one installed before the
+      # product default carried a seed) — the product default's seed, so `--all` has an instance to apply
+      seed="$(yaml_instances "${STATE_DEFAULT}")"
+      from="${STATE_DEFAULT} (the office's file declares no INDOX instance)"
+    fi
+    echo "apply-schema: registry is empty — seeding from ${from}"
+    while IFS='|' read -r sid sschema sen spurpose slabel; do
       [ -n "${sid}" ] || continue
       docker exec "${PG}" psql -U postgres -d postgres -v ON_ERROR_STOP=1 -q -c \
-        "insert into public.indox_instances(id, schema_name, enabled, purpose) values ('${sid}','${sschema}',${sen},$([ -n "${spurpose}" ] && printf "'%s'" "${spurpose}" || printf 'null')) on conflict (id) do nothing" \
+        "insert into public.indox_instances(id, schema_name, label, enabled, purpose) values ('${sid}','${sschema}',$([ -n "${slabel}" ] && printf "'%s'" "${slabel//\'/\'\'}" || printf 'null'),${sen},$([ -n "${spurpose}" ] && printf "'%s'" "${spurpose}" || printf 'null')) on conflict (id) do nothing" \
         || die "seeding instance '${sid}' failed"
-    done < <(yaml_instances)
+    done <<< "${seed}"
   fi
 }
 

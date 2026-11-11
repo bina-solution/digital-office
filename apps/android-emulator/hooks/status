@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+#: status — the emulator's state: off | waiting | booting | running | paused, who asked, the CPU's °C:  ./bbox android-emulator status
+# Asks the app's own door (server/server.py) from inside its container; the supervisor is the device's one owner.
+set -uo pipefail
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
+. "${REPO_ROOT}/scripts/lib.sh"
+case "${1:-}" in -h|--help) sed -n 's/^#: //p' "${BASH_SOURCE[0]}"; exit 0 ;; esac
+dcx exec -T android-emulator python3 -c '
+import json, urllib.request
+print(json.dumps(json.load(urllib.request.urlopen("http://127.0.0.1:8080/api/status", timeout=10)), ensure_ascii=False, indent=1))'

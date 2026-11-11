@@ -620,6 +620,19 @@ body.mapmode .listview,body.mapmode #joinCard{display:none!important}
       </select>
       <div class="hint" id="giveHint"></div></div>
     <div class="field" id="giveAppsBox"><label>אפליקציות</label><div class="apps" id="giveApps"></div></div>
+    <!-- THE MACHINES (DGO-553). «מחשבים» is one app but many machines, and a person sharing "the fleet"
+         usually means some of it: a server yes, the laptop that has the customer files no. Shown only
+         when computers is actually being given, because a machine list under an app that is not given
+         is a control that does nothing. -->
+    <div class="field hidden" id="giveMachinesBox"><label for="giveMachinesMode">מחשבים</label>
+      <select id="giveMachinesMode">
+        <option value="all">כל המחשבים של הלשכה</option>
+        <option value="some">רק המחשבים המסומנים</option>
+      </select>
+      <div class="hint">לשכה שקיבלה מכונה רואה אותה ברשימת «מחשבים» שלה, מריצה עליה פקודות ופותחת עליה טרמינל — עם המפתח של הלשכה הזאת, בלי שאף מפתח עובר בקישור.</div></div>
+    <div class="field hidden" id="giveMachinesList"><label>אילו מחשבים</label>
+      <div class="apps" id="giveMachines"><span class="muted small">טוען את רשימת המחשבים…</span></div>
+      <div class="hint" id="giveMachinesHint"></div></div>
     <div id="giveErr"></div>
     <div class="rowacts"><button class="btn" id="btnGiveSave" type="button">שמירה</button>
       <button class="btn ghost" data-close type="button">ביטול</button></div>
@@ -668,6 +681,7 @@ body.mapmode .listview,body.mapmode #joinCard{display:none!important}
     <pre class="out" id="runLog"></pre>
   </div>
 </div>
+<script src="static/readiness.js"></script>
 <script src="static/app.js"></script>
 </body>
 </html>

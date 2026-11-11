@@ -1,6 +1,6 @@
 # connections — the credential plane
 
-The single place for **every** secret/connection in deployment-hacohen. One declarative catalog
+The single place for **every** secret/connection in digital-office. One declarative catalog
 describes each; the service resolves values in a fixed order and verifies them with live probes:
 
 ```

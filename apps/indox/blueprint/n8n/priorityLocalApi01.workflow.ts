@@ -50,7 +50,7 @@ export class PriorityLocalApiShimReceiveSupdocStandInWorkflow {
         id: 'pla-webhook-01',
         webhookId: 'a7c1f2e4-5b83-4d9a-9e21-6f3c8b0d1a55',
         name: 'Priority Local Webhook',
-        /*__n8n__*/ notes: "authentication is NONE on purpose. The caller is our own Post Priority Table node, which carries ONE credential — the real Priority production basic auth, for msh.macomp.vip. Requiring auth here would either fail every local call or force that production secret to be a valid local credential too. The endpoint only accepts what our action lane posts, over the internal docker network. responseMode=lastNode so the caller gets the insert result and a failure to write is a failed POST, exactly as a rejected record would be.",
+        /*__n8n__*/ notes: "authentication is NONE on purpose. The caller is our own Post Priority Table node, which carries ONE credential — the real Priority production basic auth, for erp.example.com. Requiring auth here would either fail every local call or force that production secret to be a valid local credential too. The endpoint only accepts what our action lane posts, over the internal docker network. responseMode=lastNode so the caller gets the insert result and a failure to write is a failed POST, exactly as a rejected record would be.",
         type: 'n8n-nodes-base.webhook',
         version: 2,
         position: [0, 0],
@@ -59,7 +59,9 @@ export class PriorityLocalApiShimReceiveSupdocStandInWorkflow {
         httpMethod: 'POST',
         path: 'indox-priority-local',
         responseMode: 'lastNode',
-        options: {},
+        // DGO-1603 (G97): no caller in the product code reaches it from outside; the priority sync runs
+        // inside the office. The edge publishes /webhook/* publicly, so the office's own ranges answer.
+        options: { ipWhitelist: '10.0.0.0/8,172.16.0.0/12,192.168.0.0/16,127.0.0.1,::1' },
     };
 
     @node({
@@ -113,7 +115,7 @@ return out;
     InsertRecord = {
         operation: 'executeQuery',
         query: `=-- [multi-instance 2026-08-28] This is the ERP STAND-IN, so its rows are per-instance like any
--- other: hacohen's simulated Priority uploads must not land in levi's table. The instance rides
+-- other: example's simulated Priority uploads must not land in levi's table. The instance rides
 -- the webhook payload (the caller is indoxV2ActionsInv01, which carries it on the row); absent,
 -- it resolves to public exactly as before.
 insert into {{ (() => { const i = String($json.__instance || ''); if (!/^[a-z][a-z0-9_]*$/.test(i)) { throw new Error('priorityLocalApi01: no valid __instance — public fallback removed at the 2026-08-31 cutover'); } return 'indox_' + i; })() }}.indox_priority_local

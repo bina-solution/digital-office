@@ -1,0 +1,169 @@
+{
+  "_about": "What the leaderboard page says about each measured model and about the machine (DGO-1351). Licences are read from the model's own licence text as Ollama reports it (results.json env.model.licence_head) and from its maker's page; a licence not yet checked stays «?».",
+  "_machine": {
+    "name": "Dell Inspiron 7548 (2015)",
+    "cpu": "Intel Core i7-5500U · 2 cores / 4 threads",
+    "gpu": "AMD Radeon R7 M265 2GB · Vulkan",
+    "settings": "context 16,384 · KV cache q8_0 · 2 threads · flash attention · one model loaded",
+    "ram_gb": 15.0,
+    "ollama_version": "0.40.6"
+  },
+  "_office_n": 40,
+  "qwen3:1.7b": {
+    "name": "Qwen3 1.7B",
+    "publisher": "Alibaba (Qwen)",
+    "licence": "Apache-2.0",
+    "url": "https://ollama.com/library/qwen3"
+  },
+  "qwen3:4b-instruct-2507-q4_K_M": {
+    "name": "Qwen3 4B Instruct 2507",
+    "publisher": "Alibaba (Qwen)",
+    "licence": "Apache-2.0",
+    "url": "https://ollama.com/library/qwen3"
+  },
+  "qwen3.5:2b": {
+    "name": "Qwen3.5 2B",
+    "publisher": "Alibaba (Qwen)",
+    "licence": "?",
+    "url": "https://ollama.com/library/qwen3.5"
+  },
+  "qwen3.5:4b": {
+    "name": "Qwen3.5 4B",
+    "publisher": "Alibaba (Qwen)",
+    "licence": "?",
+    "url": "https://ollama.com/library/qwen3.5"
+  },
+  "gemma4:e2b": {
+    "name": "Gemma 4 E2B",
+    "publisher": "Google",
+    "licence": "Apache-2.0",
+    "url": "https://ollama.com/library/gemma4"
+  },
+  "gemma4:e4b": {
+    "name": "Gemma 4 E4B",
+    "publisher": "Google",
+    "licence": "Apache-2.0",
+    "url": "https://ollama.com/library/gemma4"
+  },
+  "lfm2.5:8b": {
+    "name": "LFM2.5 8B",
+    "publisher": "Liquid AI",
+    "licence": "?",
+    "url": "https://ollama.com/library/lfm2.5"
+  },
+  "_tiers": [
+    {
+      "label": "8GB",
+      "max_gb": 6,
+      "show_measured": true,
+      "fits_he": "מודלים עד כ-4 מיליארד פרמטרים בכימות 4 ביט. מספיק לניתוב פניות, חילוץ שדות מחשבונית ותרגום קצר. המודלים שמדדנו ונכנסים בזיכרון כזה:",
+      "fits_en": "Models up to about 4 billion parameters at 4-bit. Enough for routing messages, pulling fields from an invoice and short translation. The models we measured that fit:",
+      "min_gb": 0,
+      "hw_tiers": [
+        "8gb"
+      ]
+    },
+    {
+      "label": "16GB",
+      "max_gb": 12,
+      "show_measured": true,
+      "fits_he": "עד כ-14 מיליארד פרמטרים בכימות 4 ביט — בערך 9GB למודל — עם מקום להקשר ולמערכת ההפעלה.",
+      "fits_en": "Up to about 14 billion parameters at 4-bit — roughly 9 GB for the model — with room left for context and the operating system.",
+      "min_gb": 6,
+      "hw_tiers": [
+        "16gb"
+      ]
+    },
+    {
+      "label": "24–32GB",
+      "max_gb": 32,
+      "fits_he": "עד כ-30 מיליארד פרמטרים בכימות 4 ביט (כ-18GB), כולל מודלי MoE בגודל הזה. כאן נכנסים DictaLM-3.0-24B ו-Gemma 4 ‏31B, שהובילו בלוח העברי של דיקטה ומפא״ת.",
+      "fits_en": "Up to about 30 billion parameters at 4-bit (about 18 GB), MoE models of that size included — e.g. DictaLM-3.0-24B and Gemma 4 31B, leaders of the DICTA/MAFAT Hebrew board.",
+      "min_gb": 12,
+      "hw_tiers": [
+        "24gb",
+        "32gb"
+      ],
+      "show_measured": true
+    },
+    {
+      "label": "64GB",
+      "max_gb": 64,
+      "fits_he": "מודלים של כ-70 מיליארד פרמטרים בכימות 4 ביט (כ-42GB), או מודלים קטנים יותר בדיוק גבוה.",
+      "fits_en": "Models of about 70 billion parameters at 4-bit (about 42 GB), or smaller ones at higher precision.",
+      "min_gb": 32,
+      "hw_tiers": [
+        "64gb"
+      ],
+      "show_measured": true
+    },
+    {
+      "label": "128GB+",
+      "max_gb": 999,
+      "fits_he": "מודלי MoE גדולים של 100–120 מיליארד פרמטרים בכימות 4 ביט, על מחשבים עם זיכרון מאוחד גדול.",
+      "fits_en": "Large MoE models of 100–120 billion parameters at 4-bit, on machines with large unified memory.",
+      "min_gb": 64,
+      "hw_tiers": [
+        "128gb+"
+      ],
+      "show_measured": true
+    }
+  ],
+  "_tiers_rule_he": "חישוב שלנו: בכימות 4 ביט (Q4_K_M) מודל צורך כ-0.6GB לכל מיליארד פרמטרים, ועוד זיכרון להקשר.",
+  "_guides": [
+    {
+      "url": "/content/tutorials/ai/he/choose-hebrew-llm/",
+      "url_en": "/content/tutorials/ai/he/choose-hebrew-llm/",
+      "title_he": "איך בוחרים מודל שפה לעברית לעסק",
+      "title_en": "Choosing a language model for Hebrew (in Hebrew)",
+      "summary_he": "שלוש שאלות לפני שבוחרים, מה פורסם על מודלים בעברית, מה נכנס לכמה זיכרון, ותמלול, הקראה ו-OCR.",
+      "summary_en": "Three questions before choosing, what has been published about Hebrew models, what fits in how much memory, and speech, voice and OCR."
+    },
+    {
+      "url": "/content/tutorials/ai/he/run-hebrew-llm-locally/",
+      "url_en": "/content/tutorials/ai/he/run-hebrew-llm-locally/",
+      "title_he": "איך מריצים מודל שפה בעברית על המחשב שלכם",
+      "title_en": "Running a Hebrew language model on your own computer (in Hebrew)",
+      "summary_he": "התקנה, בחירת מודל לפי הזיכרון, שיחה בעברית וחיבור לתוכנות אחרות — והמידע לא יוצא מהמחשב.",
+      "summary_en": "Installing, choosing a model by memory, chatting in Hebrew and connecting other software — the data stays on the machine."
+    },
+    {
+      "url": "/content/tutorials/productivity/he/llm-evaluation/",
+      "title_he": "מדריך: הערכת מודל שפה",
+      "title_en": "Guide: evaluating a language model",
+      "summary_he": "מסגרות למדידת האיכות, העלות והביצועים של מודל.",
+      "summary_en": "Frameworks for measuring a model's quality, cost and performance.",
+      "url_en": "/content/tutorials/productivity/en/llm-evaluation/"
+    },
+    {
+      "url": "/content/news/he/2025-07-25-privacy-self-hosted/",
+      "title_he": "AI עצמי לארגונים שמעדיפים פרטיות",
+      "title_en": "Self-hosted AI for organisations that prefer privacy",
+      "summary_he": "שיקולים ודרכי עבודה לשימוש ב-AI כשהמידע נשאר אצלכם.",
+      "summary_en": "Considerations and ways of working with AI while the data stays with you.",
+      "url_en": "/content/news/en/2025-07-25-privacy-self-hosted/"
+    },
+    {
+      "url": "/content/tutorials/productivity/he/agents-in-operations/",
+      "title_he": "סוכנים חכמים בתפעול",
+      "title_en": "AI agents in operations",
+      "summary_he": "איך משלבים סוכני AI בתהליכי תפעול, מבוקר ובטוח.",
+      "summary_en": "Bringing AI agents into operations in a controlled, safe way.",
+      "url_en": "/content/tutorials/productivity/en/agents-in-operations/"
+    },
+    {
+      "url": "/content/tutorials/n8n/he/08-llm-agents/",
+      "title_he": "n8n: סוכני LLM",
+      "title_en": "n8n: LLM agents",
+      "summary_he": "בניית זרימות ב-n8n שמודל שפה מנחה.",
+      "summary_en": "Building n8n flows guided by a language model.",
+      "url_en": "/content/tutorials/n8n/en/08-llm-agents/"
+    }
+  ],
+  "_changelog": [
+    {
+      "date": "2026-11-05",
+      "he": "גרסה ראשונה: שבעה מודלים מקומיים נמדדו על Dell Inspiron 7548 (2015) ב-Ollama 0.40.6; לצדם מה שפורסם על מודלי שפה בעברית, דיבור לטקסט, הקראה, OCR והטמעות."
+    }
+  ]
+}

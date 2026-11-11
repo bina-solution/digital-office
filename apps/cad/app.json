@@ -10,7 +10,13 @@
   },
   "layer": 3,
   "kind": "service",
+  "page": "services",
   "version": "0.2.0",
+  "wraps": {
+    "client": "FreeCAD, linuxserver's image of the official release",
+    "headless": "freecadcmd",
+    "headless_app": "cad-api"
+  },
   "compose": "docker-compose.yml",
   "capabilities": [],
   "use": [],

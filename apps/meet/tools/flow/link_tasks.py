@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """Store a meeting's tasks as approved, each with the Plane item it already has — so the meeting page shows «ב-Plane ·
-FPG-622» on it and approving it again files nothing (approve_task answers the stored link). Plane stays the one place
+EXF-622» on it and approving it again files nothing (approve_task answers the stored link). Plane stays the one place
 tasks are managed; the page points at it.
 
     docker exec -i meet-start-<office> python - ROOM '<json>'|@<file> < link_tasks.py
-    json: [{"id": "T1", "key": "FPG-622", "url": "https://…", "text": "…", "t": 97}]
+    json: [{"id": "T1", "key": "EXF-622", "url": "https://…", "text": "…", "t": 97}]
 
 Runs inside meet-start: it uses that server's own store (Drive, or MEET_FLOW_DATA) and its own item_after(). It is a
 process of its own, so the running server's store lock does not cover it: run it while nobody is editing that meeting
@@ -13,6 +13,14 @@ meeting's data.js. A task already approved with a link is left as it is. Exit 0 
 """
 import json
 import sys
+
+# Before server.py is compiled — most of this helper's 28.8 MB — it asks to be the one the kernel takes if meet-start's
+# memory cap is passed, never the server it shares the cap with (EXU-20).
+try:
+    with open("/proc/self/oom_score_adj", "w") as _adj:
+        _adj.write("1000")
+except OSError:                                           # (no /proc: a Mac, Windows)
+    pass
 
 sys.path.insert(0, "/app")
 import server  # noqa: E402  (meet-start's own module)

@@ -5,7 +5,9 @@
     "en": "Security"
   },
   "layer": 2,
+  "people": "admins",
   "kind": "service",
+  "page": "base",
   "version": "0.1.0",
   "summary": {
     "he": "מי ניגש ללשכה ולאן הלשכה פונה — מפת כתובות, נכנס ויוצא, fail2ban מובנה, הנתב, המכונה והעדר",

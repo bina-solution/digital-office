@@ -429,6 +429,12 @@ func TestMarshalWritesKeysAsTheyWereTyped(t *testing.T) {
 		"order:\n  1: a\n  2.5: b\n  null: d\n  '3': e\n  0x10: f\n",
 		"80: http\n443: https\nyes: x\nOff: y\n",
 		"- {1: one, 'two': 2, ~: 3}\n",
+		// DGO-637: keys equal to Python are one key — the first one's place and type, the last value
+		"1: a\nyes: b\n",
+		"0: x\nfalse: y\n-0.0: z\n",
+		"1.0: p\n1: q\nTrue: r\n'1': s\n",
+		"- {1: one, yes: two}\n",
+		".nan: a\nb: c\n.NaN: d\n",
 	}
 	const pyTyped = `import sys, json, yaml
 sys.stdout.write(json.dumps([yaml.safe_dump(yaml.safe_load(d), default_flow_style=False, allow_unicode=True,
@@ -448,6 +454,56 @@ sys.stdout.write(json.dumps([yaml.safe_dump(yaml.safe_load(d), default_flow_styl
 		}
 	}
 	t.Logf("%d documents with typed keys written as safe_dump writes them", len(docs))
+}
+
+// DGO-636: sort_keys sorts as sorted(mapping.items()) does — numbers by value, strings by code point — and
+// writes as it is a mapping whose keys Python cannot order against each other.
+func TestMarshalSortsKeysAsSafeDumpDoes(t *testing.T) {
+	py := python(t)
+	if py == nil {
+		noPython(t)
+	}
+	docs := []string{
+		"10: a\n2: b\n-1: c\n",
+		"b: 1\n2: x\na: 3\n",
+		"~: 1\nz: 2\n",
+		"b: 1\na: 2\nä: 3\n",
+		".inf: a\n1: b\n-.inf: c\n",
+		"yes: a\n2: b\n0.5: c\n",
+		"x:\n  20: a\n  3: b\n",
+	}
+	const pySorted = `import sys, json, yaml
+sys.stdout.write(json.dumps([yaml.safe_dump(yaml.safe_load(d), default_flow_style=False, allow_unicode=True,
+                                            sort_keys=True) for d in json.load(sys.stdin)]))`
+	var want []string
+	if err := json.Unmarshal(pyRun(t, py, pySorted, docs), &want); err != nil {
+		t.Fatal(err)
+	}
+	for i, d := range docs {
+		v, err := Unmarshal([]byte(d))
+		if err != nil {
+			t.Fatalf("doc %d: %v", i, err)
+		}
+		got, err := Marshal(v, Options{SortKeys: true})
+		if err != nil || string(got) != want[i] {
+			t.Errorf("doc %d: %v\n--- go ---\n%s--- pyyaml ---\n%s", i, err, got, want[i])
+		}
+	}
+}
+
+// …and a NaN key among numbers, sorted, is refused: sorted() raises nothing there, and the order is timsort's
+// comparisons with NaN, which a writer that claims PyYAML's bytes must not guess.
+func TestMarshalRefusesToGuessANaNKeysPlace(t *testing.T) {
+	v, err := Unmarshal([]byte(".nan: a\n3: b\n1: c\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, err := Marshal(v, Options{SortKeys: true}); err == nil || !strings.HasPrefix(err.Error(), "unsupported") {
+		t.Errorf("sorted with a NaN key: %q, %v — want an unsupported refusal", got, err)
+	}
+	if _, err := Marshal(v, Options{}); err != nil {
+		t.Errorf("unsorted, the same mapping is written as it is: %v", err)
+	}
 }
 
 func TestMarshalRefusesWhatItCannotSpell(t *testing.T) {

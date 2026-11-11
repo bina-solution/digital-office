@@ -1,0 +1,12 @@
+{
+  "counts": {
+    "cli": 5972,
+    "cmd": 212,
+    "socket": 184,
+    "home": 32,
+    "func": 141,
+    "path": 99
+  },
+  "files_read": 4891,
+  "files_with_callers": 1320
+}

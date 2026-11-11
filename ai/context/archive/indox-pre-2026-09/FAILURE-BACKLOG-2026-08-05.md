@@ -1,7 +1,7 @@
 # Failure-folder backlog inventory — 2026-08-05
 
 Read-only survey. No file was moved, no DB row was written, no workflow was touched. Live checks run
-**2026-08-05, ~12:45–13:05 UTC** against the `shlomo-laptop` stack, connection
+**2026-08-05, ~12:45–13:05 UTC** against the `owner-laptop` stack, connection
 `drive_google_service_account-ea660043` (577 folders enumerated via `/api/folders`, confirmed via a
 fresh, unbounded `docker exec … curl` call during this sweep — not reused from an earlier report).
 Six other agents were editing code/config/DB concurrently; where my numbers disagree with the earlier
@@ -37,12 +37,12 @@ out to be the most important axis:
 
 | # | Folder name | Folder ID | Files | Wired into `sync_registry`? |
 |---|---|---|---|---|
-| A1 | סרוקות- נכשל (בוריס) | `1REDACTEDdrivexxxxxxxxxxxxxxx0009` | **2,001** | No |
-| A2 | טיפול מהמייל, נכשל (בוריס) | `1REDACTEDdrivexxxxxxxxxxxxxxx0010` | **1,447** | No |
-| A3 | סרוקות- שינוי ידני (בוריס) | `1REDACTEDdrivexxxxxxxxxxxxxxx0011` | **1,967** | No |
-| A4 | מייל - טופל ידנית (בוריס) | `1REDACTEDdrivexxxxxxxxxxxxxxx0012` | **124** | No |
-| A5 | סרוקות שבוריס לא הצליח לתת שם | `1REDACTEDdrivexxxxxxxxxxxxxxx0013` | **16** | No |
-| A6 | אחרי שמות, סרוקות בוריס נכשל | `1REDACTEDdrivexxxxxxxxxxxxxxx0014` | **0** | No |
+| A1 | סרוקות- נכשל (בוריס) | `1REDACTEDdrivexxxxxxxxxxxxxxx0007` | **2,001** | No |
+| A2 | טיפול מהמייל, נכשל (בוריס) | `1REDACTEDdrivexxxxxxxxxxxxxxx0008` | **1,447** | No |
+| A3 | סרוקות- שינוי ידני (בוריס) | `1REDACTEDdrivexxxxxxxxxxxxxxx0009` | **1,967** | No |
+| A4 | מייל - טופל ידנית (בוריס) | `1REDACTEDdrivexxxxxxxxxxxxxxx0010` | **124** | No |
+| A5 | סרוקות שבוריס לא הצליח לתת שם | `1REDACTEDdrivexxxxxxxxxxxxxxx0011` | **16** | No |
+| A6 | אחרי שמות, סרוקות בוריס נכשל | `1REDACTEDdrivexxxxxxxxxxxxxxx0012` | **0** | No |
 | | **Group A total** | | **5,555** | **0 of 6 wired** |
 
 All 6 have `parents=None` in the Drive API response — top-level items in the service account's shared
@@ -65,45 +65,45 @@ sync-v3 destination:
 
 | Folder name | Folder ID | Files | Registry status |
 |---|---|---|---|
-| **יצוא צט 2026 נכשל** | `1REDACTEDdrivexxxxxxxxxxxxxxx0015` | **713** | **LIVE** — `drive-gdoc-tzat` pipe's `failed` destination, confirmed via `sync_registry` JSON |
-| יצוא צט 12.25 - נכשל | `1REDACTEDdrivexxxxxxxxxxxxxxx0016` | 41 | not wired |
-| יצוא צט חודש 10 - נכשל | `1REDACTEDdrivexxxxxxxxxxxxxxx0017` | 31 | not wired |
-| יצוא צט 09.25 נכשל | `1REDACTEDdrivexxxxxxxxxxxxxxx0018` | 167 | not wired |
-| טיפול מהמייל, נכשל 2 | `1REDACTEDdrivexxxxxxxxxxxxxxx0019` | 179 | not wired |
-| צט נכשל 08.25 | `1REDACTEDdrivexxxxxxxxxxxxxxx0020` | 64 | not wired |
-| צט 07.25 נכשל | `1REDACTEDdrivexxxxxxxxxxxxxxx0021` | 42 | not wired |
-| יצוא צט יוני נכשל- שילה 26.25 | `1REDACTEDdrivexxxxxxxxxxxxxxx0022` | 35 | not wired |
-| יצוא צט יוני יצהר נכשל- 06.25 | `1REDACTEDdrivexxxxxxxxxxxxxxx0023` | 13 | not wired |
-| יוצא צט יוני- נכשל-קרית 06.25 | `1REDACTEDdrivexxxxxxxxxxxxxxx0024` | 33 | not wired |
-| יוצא צט מאי 05.25 - נכשל | `1REDACTEDdrivexxxxxxxxxxxxxxx0025` | 132 | not wired |
-| צט אפריל 04.25 נכשל | `1REDACTEDdrivexxxxxxxxxxxxxxx0026` | 97 | not wired |
-| יצוא צט 03.25 נכשלים | `1REDACTEDdrivexxxxxxxxxxxxxxx0027` | 107 | not wired |
-| יצוא צט 02.25 נכשל | `1REDACTEDdrivexxxxxxxxxxxxxxx0028` | 100 | not wired |
-| יוצא צט 01.25 נכשל | `1REDACTEDdrivexxxxxxxxxxxxxxx0029` | 99 | not wired |
-| נכשל- יצוא צט | `1REDACTEDdrivexxxxxxxxxxxxxxx0030` | 109 | not wired |
-| אחרי- יצוא צט פעם שניה עם בוריס עד 31.12.24 | `1REDACTEDdrivexxxxxxxxxxxxxxx0031` | 613 | not wired |
-| יצוא צט פעם שניה עם בוריס עד 31.12.24 | `1REDACTEDdrivexxxxxxxxxxxxxxx0032` | 0 | not wired |
-| נכשל- צט נחמן 1 | `1REDACTEDdrivexxxxxxxxxxxxxxx0033` | 78 | not wired |
-| נכשל- צט נחמן 2 | `1REDACTEDdrivexxxxxxxxxxxxxxx0034` | 191 | not wired |
-| נכשל- צט נחמן 3 | `1REDACTEDdrivexxxxxxxxxxxxxxx0035` | 194 | not wired |
-| נכשל- צט נחמן 4 | `1REDACTEDdrivexxxxxxxxxxxxxxx0036` | 194 | not wired |
-| נכשל- צט נחמן 5 | `1REDACTEDdrivexxxxxxxxxxxxxxx0037` | 83 | not wired |
-| יצא צט תעודות - נכשל | `1REDACTEDdrivexxxxxxxxxxxxxxx0038` | 635 | not wired |
-| יצוא צט תעודות- נכשל 2 | `1REDACTEDdrivexxxxxxxxxxxxxxx0039` | 205 | not wired |
-| יצא צט תעודות- מעורבב טובים ונכשלים | `1REDACTEDdrivexxxxxxxxxxxxxxx0040` | 0 | not wired |
-| נכשל פעם שלישית | `1REDACTEDdrivexxxxxxxxxxxxxxx0041` | 15 | not wired |
-| טמבור נכשל | `1REDACTEDdrivexxxxxxxxxxxxxxx0042` | 0 | not wired |
-| טמבור נכשל פעם שניה | `1REDACTEDdrivexxxxxxxxxxxxxxx0043` | 0 | not wired |
-| מוקלדות שירות- נתינת שמות נכשלה | `1REDACTEDdrivexxxxxxxxxxxxxxx0044` | 223 | not wired |
+| **יצוא צט 2026 נכשל** | `1REDACTEDdrivexxxxxxxxxxxxxxx0013` | **713** | **LIVE** — `drive-gdoc-tzat` pipe's `failed` destination, confirmed via `sync_registry` JSON |
+| יצוא צט 12.25 - נכשל | `1REDACTEDdrivexxxxxxxxxxxxxxx0014` | 41 | not wired |
+| יצוא צט חודש 10 - נכשל | `1REDACTEDdrivexxxxxxxxxxxxxxx0015` | 31 | not wired |
+| יצוא צט 09.25 נכשל | `1REDACTEDdrivexxxxxxxxxxxxxxx0016` | 167 | not wired |
+| טיפול מהמייל, נכשל 2 | `1REDACTEDdrivexxxxxxxxxxxxxxx0017` | 179 | not wired |
+| צט נכשל 08.25 | `1REDACTEDdrivexxxxxxxxxxxxxxx0018` | 64 | not wired |
+| צט 07.25 נכשל | `1REDACTEDdrivexxxxxxxxxxxxxxx0019` | 42 | not wired |
+| יצוא צט יוני נכשל- שילה 26.25 | `1REDACTEDdrivexxxxxxxxxxxxxxx0020` | 35 | not wired |
+| יצוא צט יוני יצהר נכשל- 06.25 | `1REDACTEDdrivexxxxxxxxxxxxxxx0021` | 13 | not wired |
+| יוצא צט יוני- נכשל-קרית 06.25 | `1REDACTEDdrivexxxxxxxxxxxxxxx0022` | 33 | not wired |
+| יוצא צט מאי 05.25 - נכשל | `1REDACTEDdrivexxxxxxxxxxxxxxx0023` | 132 | not wired |
+| צט אפריל 04.25 נכשל | `1REDACTEDdrivexxxxxxxxxxxxxxx0024` | 97 | not wired |
+| יצוא צט 03.25 נכשלים | `1REDACTEDdrivexxxxxxxxxxxxxxx0025` | 107 | not wired |
+| יצוא צט 02.25 נכשל | `1REDACTEDdrivexxxxxxxxxxxxxxx0026` | 100 | not wired |
+| יוצא צט 01.25 נכשל | `1REDACTEDdrivexxxxxxxxxxxxxxx0027` | 99 | not wired |
+| נכשל- יצוא צט | `1REDACTEDdrivexxxxxxxxxxxxxxx0028` | 109 | not wired |
+| אחרי- יצוא צט פעם שניה עם בוריס עד 31.12.24 | `1REDACTEDdrivexxxxxxxxxxxxxxx0029` | 613 | not wired |
+| יצוא צט פעם שניה עם בוריס עד 31.12.24 | `1REDACTEDdrivexxxxxxxxxxxxxxx0030` | 0 | not wired |
+| נכשל- צט נחמן 1 | `1REDACTEDdrivexxxxxxxxxxxxxxx0031` | 78 | not wired |
+| נכשל- צט נחמן 2 | `1REDACTEDdrivexxxxxxxxxxxxxxx0032` | 191 | not wired |
+| נכשל- צט נחמן 3 | `1REDACTEDdrivexxxxxxxxxxxxxxx0033` | 194 | not wired |
+| נכשל- צט נחמן 4 | `1REDACTEDdrivexxxxxxxxxxxxxxx0034` | 194 | not wired |
+| נכשל- צט נחמן 5 | `1REDACTEDdrivexxxxxxxxxxxxxxx0035` | 83 | not wired |
+| יצא צט תעודות - נכשל | `1REDACTEDdrivexxxxxxxxxxxxxxx0036` | 635 | not wired |
+| יצוא צט תעודות- נכשל 2 | `1REDACTEDdrivexxxxxxxxxxxxxxx0037` | 205 | not wired |
+| יצא צט תעודות- מעורבב טובים ונכשלים | `1REDACTEDdrivexxxxxxxxxxxxxxx0038` | 0 | not wired |
+| נכשל פעם שלישית | `1REDACTEDdrivexxxxxxxxxxxxxxx0039` | 15 | not wired |
+| טמבור נכשל | `1REDACTEDdrivexxxxxxxxxxxxxxx0040` | 0 | not wired |
+| טמבור נכשל פעם שניה | `1REDACTEDdrivexxxxxxxxxxxxxxx0041` | 0 | not wired |
+| מוקלדות שירות- נתינת שמות נכשלה | `1REDACTEDdrivexxxxxxxxxxxxxxx0042` | 223 | not wired |
 | | **Group B total (30 folders)** | | **4,393** | **1 of 30 wired** |
 
 ### Group C — dated historical Boris archives (explicitly pre-backlog)
 
 | Folder name | Folder ID | Files |
 |---|---|---|
-| בוריס חשבוניות 2023 | `1REDACTEDdrivexxxxxxxxxxxxxxx0045` | 15 |
-| חשבוניות בוריס 05.02.2024 | `1REDACTEDdrivexxxxxxxxxxxxxxx0046` | 67 |
-| בוריס חשבונית 30.1.24 | `1REDACTEDdrivexxxxxxxxxxxxxxx0047` | 120 |
+| בוריס חשבוניות 2023 | `1REDACTEDdrivexxxxxxxxxxxxxxx0043` | 15 |
+| חשבוניות בוריס 05.02.2024 | `1REDACTEDdrivexxxxxxxxxxxxxxx0044` | 67 |
+| בוריס חשבונית 30.1.24 | `1REDACTEDdrivexxxxxxxxxxxxxxx0045` | 120 |
 | **Group C total** | | **202** |
 
 ### Group D — the current live registry `failed` destinations (for completeness)
@@ -112,8 +112,8 @@ sync-v3 destination:
 
 | Pipe | `failed` folder ID | Resolves in `/api/folders`? | Files (via direct `/api/files`) |
 |---|---|---|---|
-| `drive-gdoc-tzat` | `1REDACTEDdrivexxxxxxxxxxxxxxx0015` | Yes — this is Group B's "יצוא צט 2026 נכשל" | **713** (already counted in Group B) |
-| `drive-gdoc` (×3 pairs), `drive-bs`, `drive-gdoc-warehouse` | `1REDACTEDdrivexxxxxxxxxxxxxxx0006` (all 5 share the **same** ID) | No — same "200-OK-but-absent-from-enumeration" quirk documented in the earlier sweep's O5/O7 | **0** — empty right now |
+| `drive-gdoc-tzat` | `1REDACTEDdrivexxxxxxxxxxxxxxx0013` | Yes — this is Group B's "יצוא צט 2026 נכשל" | **713** (already counted in Group B) |
+| `drive-gdoc` (×3 pairs), `drive-bs`, `drive-gdoc-warehouse` | `1REDACTEDdrivexxxxxxxxxxxxxxx0003` (all 5 share the **same** ID) | No — same "200-OK-but-absent-from-enumeration" quirk documented in the earlier sweep's O5/O7 | **0** — empty right now |
 
 **Grand total across everything name-matched: 41 folders, 10,150 files.** The owner's own earlier
 estimate of "~6,067" corresponds closely to Group A + the historical Group C (5,555 + 202 = 5,757) or to

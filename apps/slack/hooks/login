@@ -1,0 +1,3 @@
+#!/usr/bin/env bash
+#: login — keep the owner's user token, read from stdin and checked first: --token-stdin < token-file [--json]
+exec bash "$(dirname "${BASH_SOURCE[0]}")/../tools/verb" login "$@"

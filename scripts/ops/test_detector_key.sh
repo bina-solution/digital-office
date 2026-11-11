@@ -17,7 +17,7 @@ set -u
 DK="docker -H unix:///run/bbox-docker.sock"
 P=zzk$(date +%H%M%S)
 
-$DK exec -i supabase-db-shlomo-laptop psql -U postgres -v ON_ERROR_STOP=1 -tAf - <<SQL
+$DK exec -i supabase-db-owner-laptop psql -U postgres -v ON_ERROR_STOP=1 -tAf - <<SQL
 SET session_replication_role = replica;
 INSERT INTO public.incoming_documents ("ID","COMPANY_ID","DOC_ID","TYPE","STATUS",created_at) VALUES
  -- A: doc-id under THREE companies, two rows sharing one -> must NOT form a biz group

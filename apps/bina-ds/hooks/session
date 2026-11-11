@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+#: session — the office agent's sessions over agent.v1, the one door (`bbox agent` is the same): list|new|send|show|follow|log|wait|cancel|rename … [--json]:  ./bbox bina session list
+# DGO-1247 (cli-205): the agent verbs of an agent app live under the app (`dgo <app> <noun> <verb>`,
+# ai/context/app-cli-api-standard.md §5); `bbox agent` stays as their alias.
+set -uo pipefail
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
+. "${REPO_ROOT}/scripts/lib.sh"
+case "${1:-}" in -h|--help|"") sed -n 's/^#: //p' "${BASH_SOURCE[0]}"; [ -n "${1:-}" ]; exit $(( $? ? 2 : 0 )) ;; esac
+# no --app: bina-ds IS the agent `bbox agent` talks to by default — the same cached provider and token
+exec python3 "$(npath "${REPO_ROOT}/scripts/agent.py")" "$@"

@@ -2,7 +2,7 @@ const { join } = require('path');
 require('dotenv').config();
 
 const TEXTS = {
-    WELCOME_MESSAGE: 'ברוכים הבאים לבוט הכהנים, ובו כל הפעולות שניתן לבצע דרך בוט הזה  - בהצלחה ',
+    WELCOME_MESSAGE: 'ברוכים הבאים לבוט הדוגמה, ובו כל הפעולות שניתן לבצע דרך בוט הזה  - בהצלחה ',
     HELLO_BACK: 'הי {name}!\n\n',
 
     MENU_TEXT: 'איך אוכל לעזור לך היום? 🌟\n\n' +
@@ -13,7 +13,7 @@ const TEXTS = {
 
     INVALID_OPTION: 'לא הצלחתי להבין את הבחירה שלך \nאנא נסה/י שנית.',
 
-    ABOUT_BOT: 'הבוט הזה נוצר על ידי bina-solutions.co.il, ומיועד לעזור בניהול פניות של חברת הכהנים.\n',
+    ABOUT_BOT: 'הבוט הזה נוצר על ידי bina-solutions.co.il, ומיועד לעזור בניהול פניות של חברת הדוגמה.\n',
 
     DAILY_MESSAGE_LIMIT_REACHED: 'סליחה, הגעת למגבלת ההודעות היומית שלך. נשמח לעזור במה שתרצי מחר.',
 
@@ -147,14 +147,14 @@ const CONFIG = {
     DEFAULT_COUNTRY_CODE: process.env.DEFAULT_COUNTRY_CODE || '972',
     ADMINS: [
         // note: admins sorces: hardcoded, env, adds to admins from settings api
-        '16828167052', '972500000002', '972 50-000-0008',
+        '16825550110', '972500000002', '972 50-000-0009',
         process.env.ADMIN_PHONE_1  || 'env_admin_1',
         process.env.ADMIN_PHONE_2  || 'env_admin_2'
     ],
     CONTENT_MEDIA: join(__dirname, '../media/campaign-media.mp4'),
-    SHOPCONTACT_DISPLAY_NAME: process.env.SHOPCONTACT_DISPLAY_NAME || 'תמר יעקב',
-    SHOPCONTACT_PHONE: process.env.SHOPCONTACT_PHONE || '972500000007',
-    SHOPCONTACT_WID: process.env.SHOPCONTACT_WID || '972500000007',
+    SHOPCONTACT_DISPLAY_NAME: process.env.SHOPCONTACT_DISPLAY_NAME || 'ישראלה ישראלי',
+    SHOPCONTACT_PHONE: process.env.SHOPCONTACT_PHONE || '972500000008',
+    SHOPCONTACT_WID: process.env.SHOPCONTACT_WID || '972500000008',
     SHOPCONTACT_ORG: process.env.SHOPCONTACT_ORG || 'לנשום',
     PORT: parseInt(process.env.APP_PORT || '3000'),
     SUBSCRIBERS_DB_PATH: join(__dirname, '../data/subscribers.db'),
@@ -167,7 +167,7 @@ const CONFIG = {
     AUTH_ENABLED: process.env.AUTH_ENABLED !== 'false',
     AUTH_USERNAME: process.env.AUTH_USERNAME || 'admin',
     AUTH_PASSWORD: process.env.AUTH_PASSWORD || '1234',
-    SESSION_SECRET: process.env.SESSION_SECRET || 'hacohanim-secret-key',
+    SESSION_SECRET: process.env.SESSION_SECRET || 'example-secret-key',
     SESSION_MAX_AGE: parseInt(process.env.SESSION_MAX_AGE || '86400000'), // 24 hours
     IS_PRODUCTION: process.env.NODE_ENV === 'production',
     APP_VERSION: '0.7.4',
@@ -181,8 +181,8 @@ const CONFIG = {
             MAX: parseInt(process.env.LOGIN_RATE_LIMIT_MAX || '10')
         }
     }
-    // ── in-cluster by default, NOT the hacohen production domain ────────────────────────────────
-    // These four defaulted to https://n8n.hacohen.bina-solutions.co.il/webhook/…, which is one
+    // ── in-cluster by default, NOT the example production domain ────────────────────────────────
+    // These four defaulted to https://n8n.example.bina-solutions.co.il/webhook/…, which is one
     // specific customer's deployment. The platform ships one deployment per company, so on every
     // OTHER deployment that default is wrong in two ways at once: with no egress it times out
     // (observed here — "N8N Settings Webhook: timeout of 10000ms exceeded", the bot then starts with

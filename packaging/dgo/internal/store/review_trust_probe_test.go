@@ -22,7 +22,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/solomonBoltin/deployment-hacohen/packaging/trust"
+	"github.com/bina-solution/digital-office/packaging/trust"
 )
 
 // rvBuild is a signed index of one app at version, by key, with keys (keys.json) beside it.

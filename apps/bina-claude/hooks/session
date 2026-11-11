@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+#: session — this app's agent sessions over agent.v1, the one door (`bbox agent --app bina-claude` is the same): list|new|send|show|follow|log|wait|cancel|rename … [--json]:  ./bbox claude session list
+# DGO-1247 (cli-205): the same agent answered to two roots, `bbox agent --app bina-claude …` and this app's own
+# verbs. `session` is the agent.v1 door under the app (the grammar `dgo <app> <noun> <verb>`,
+# ai/context/app-cli-api-standard.md §5); `bbox agent` stays as its alias. `sessions` (plural) is different:
+# it reads every session the app's volume keeps, the desktop app's and the CLI's.
+set -uo pipefail
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
+. "${REPO_ROOT}/scripts/lib.sh"
+case "${1:-}" in -h|--help|"") sed -n 's/^#: //p' "${BASH_SOURCE[0]}"; [ -n "${1:-}" ]; exit $(( $? ? 2 : 0 )) ;; esac
+exec python3 "$(npath "${REPO_ROOT}/scripts/agent.py")" --app bina-claude "$@"

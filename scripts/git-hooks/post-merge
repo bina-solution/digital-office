@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+# post-merge — the files a merge (or a pull) wrote go back to the checkout's owner when root ran it
+# (scripts/checkout-owner.sh, DGO-1324).
+[ "$(id -u)" = 0 ] || exit 0
+git rev-parse -q --verify ORIG_HEAD >/dev/null || exit 0
+git diff --name-only --no-renames -z ORIG_HEAD HEAD 2>/dev/null \
+  | bash "$(git rev-parse --show-toplevel)/scripts/checkout-owner.sh" restore
+exit 0

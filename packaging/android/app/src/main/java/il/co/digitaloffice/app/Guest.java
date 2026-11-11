@@ -45,7 +45,12 @@ import java.util.function.LongConsumer;
  */
 final class Guest {
 
-    static final String ASSET = "guest/dgo-guest-arm64.img.xz";
+    /**
+     * The machine's architecture, Docker's name for it: the one this app runs as (os.arch, the ABI Android installed
+     * it for) — amd64 on an x86_64 Android (the emulator, DGO-1723), arm64 on a phone (guest-box.sh's GUEST_ARCH).
+     */
+    static final String ARCH = "x86_64".equals(System.getProperty("os.arch")) ? "amd64" : "arm64";
+    static final String ASSET = "guest/dgo-guest-" + ARCH + ".img.xz";
     /** What unpacks it: zstd, built with QEMU (it reads .xz too), from the native-library directory. */
     static final String UNPACKER = "libzstd-cli.so";
     /** Free room asked before the unpack: the machine holds ~7 GB, every image the office runs in it. */
@@ -54,6 +59,24 @@ final class Guest {
     private static final long ABOUT = 2L << 30;
 
     private static final AtomicBoolean BUSY = new AtomicBoolean();
+
+    // ── what it does now, for the status screen (DGO-1328): the stage, its bytes, since when ───────────
+
+    /** "fetch", "unpack", "boot" (the AVF kernel and initrd), or "" while nothing is under way. */
+    static volatile String stage = "";
+    static volatile long done, total, since;
+
+    private static void stage(String s, long t) {
+        stage = s;
+        total = t;
+        done = 0;
+        since = System.currentTimeMillis();
+    }
+
+    /** files/guest.list: the SHA-256 of the list the machine on this phone was fetched by — which machine it is. */
+    static File listRecord(Context c) {
+        return new File(c.getFilesDir(), "guest.list");
+    }
 
     /** The APK carries no machine (or carries it compressed, which is no machine this can read). */
     static final class Absent extends Exception {
@@ -137,11 +160,15 @@ final class Guest {
                 long free = c.getFilesDir().getUsableSpace();
                 if (free < ROOM) throw new NoRoom(free);
                 // the asset open before zstd starts: zstd waits on its input until that input is closed
+                stage("unpack", Math.max(1, afd.getLength()));
+                long from = System.currentTimeMillis();
                 try (InputStream in = afd.createInputStream()) {
                     unzstd(c, core, wanted, percent, in, Math.max(1, afd.getLength()));
                 }
+                EngineService.times(c, "unpack", (System.currentTimeMillis() - from) / 1000);
             }
         } finally {
+            stage = "";
             BUSY.set(false);
         }
     }
@@ -194,21 +221,99 @@ final class Guest {
             long free = c.getFilesDir().getUsableSpace();
             if (free < need + ROOM) throw new NoRoom(free, need + ROOM);
             if (need > 0 && net == null) net = network(c, need);
+            stage("fetch", list.total);
+            Guest.done = done;
+            long fetchFrom = System.currentTimeMillis();
             for (Piece p : list.pieces) {
                 if (p.file(dir).isFile()) continue;
                 long from = done;
-                piece(net, p, p.file(dir), wanted, got -> percent.accept((int) Math.min(49, (from + got) * 50 / list.total)));
+                piece(net, p, p.file(dir), wanted, got -> {
+                    Guest.done = from + got;
+                    percent.accept((int) Math.min(49, (from + got) * 50 / list.total));
+                });
                 done += p.size;
             }
+            if (need > 0) EngineService.times(c, "fetch", (System.currentTimeMillis() - fetchFrom) / 1000);
+            stage("unpack", list.total);
+            long unpackFrom = System.currentTimeMillis();
             try (InputStream in = new SequenceInputStream(new Pieces(list.pieces, dir))) {
                 unzstd(c, true, wanted, q -> percent.accept(50 + q / 2), in, list.total);
             }
+            EngineService.times(c, "unpack", (System.currentTimeMillis() - unpackFrom) / 1000);
+            // which machine this is: its AVF kernel must be its own (the disk's modules are that kernel's)
+            try (FileOutputStream o = new FileOutputStream(listRecord(c))) {
+                o.write(BuildConfig.MACHINE_MANIFEST.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+                o.getFD().sync();
+            }
             File[] all = dir.listFiles();   // the machine is whole: its pieces and its list are not needed
+            if (all != null) for (File f : all) if (!f.getName().equals(kept.getName())) f.delete();
+            if (list.boot != null) {
+                try {
+                    boot(c, net, list, wanted);
+                } catch (Cancelled e) {
+                    throw e;
+                } catch (Exception e) {   // the machine is whole and boots under QEMU: AVF waits for its kernel
+                    EngineService.say(c, "[the app] the machine's AVF kernel was not fetched (" + e.getMessage() + "): QEMU boots it");
+                }
+            }
+            all = dir.listFiles();
             if (all != null) for (File f : all) f.delete();
             dir.delete();
         } finally {
+            stage = "";
             BUSY.set(false);
         }
+    }
+
+    /**
+     * The machine's AVF kernel and initrd (DGO-1328), where its list names them: fetched as pieces are, each
+     * by its SHA-256, into files/boot — for the machine whose list this APK names and which this phone holds
+     * (listRecord): a kernel is the one whose modules the disk carries, never another machine's.
+     */
+    static void bootIfMissing(Context c, BooleanSupplier wanted) throws Exception {
+        if (!fetchable() || (Virt.kernel(c).isFile() && Virt.initrd(c).isFile())) return;
+        String had = "";
+        try {
+            had = new String(Files.readAllBytes(listRecord(c).toPath()), java.nio.charset.StandardCharsets.UTF_8).trim();
+        } catch (IOException ignored) {
+            // no record: a machine unpacked before there was one — its kernel is not known
+        }
+        if (!had.equals(BuildConfig.MACHINE_MANIFEST) || !EngineService.guest(c).isFile()) return;
+        if (!BUSY.compareAndSet(false, true)) throw new Busy();
+        try {
+            File dir = new File(c.getFilesDir(), "machine-pieces");
+            if (!dir.isDirectory() && !dir.mkdirs()) throw new IOException("could not make " + dir);
+            File kept = new File(dir, "list-" + BuildConfig.MACHINE_MANIFEST);
+            Manifest list = cached(kept);
+            Network net = network(c, 1L << 27);
+            if (list == null) list = list(net, kept, wanted);
+            if (list.boot == null) return;
+            boot(c, net, list, wanted);
+        } finally {
+            stage = "";
+            BUSY.set(false);
+        }
+    }
+
+    private static void boot(Context c, Network net, Manifest list, BooleanSupplier wanted) throws Exception {
+        File dir = new File(c.getFilesDir(), "boot");
+        if (!dir.isDirectory() && !dir.mkdirs()) throw new IOException("could not make " + dir);
+        long size = list.boot[0].size + list.boot[1].size;
+        stage("boot", size);
+        long from = System.currentTimeMillis();
+        long base = 0;
+        String[] names = {"kernel", "initrd"};
+        for (int i = 0; i < 2; i++) {
+            Piece p = list.boot[i];
+            File f = new File(dir, names[i]);
+            if (!(f.length() == p.size && p.sha.equals(sha(f)))) {
+                if (net == null) net = network(c, size);   // every piece was kept: the network is asked now
+                long at = base;
+                piece(net, p, f, wanted, got -> Guest.done = at + got);
+            }
+            base += p.size;
+        }
+        EngineService.times(c, "boot-files", (System.currentTimeMillis() - from) / 1000);
     }
 
     // ── the network ──────────────────────────────────────────────────────────────────────────────────
@@ -259,14 +364,16 @@ final class Guest {
         }
     }
 
-    /** The machine's list: its pieces in order, and their total. */
+    /** The machine's list: its pieces in order, and their total — and its AVF kernel and initrd, or null. */
     private static final class Manifest {
         final List<Piece> pieces;
         final long total;
+        final Piece[] boot;
 
-        Manifest(List<Piece> pieces, long total) {
+        Manifest(List<Piece> pieces, long total, Piece[] boot) {
             this.pieces = pieces;
             this.total = total;
+            this.boot = boot;
         }
     }
 
@@ -307,8 +414,10 @@ final class Guest {
     }
 
     /**
-     * {"version": 1, "total": <bytes>, "pieces": [{"sha256": "<hex>", "size": <bytes>}, …]} — every piece
-     * named by 64 hex characters, its size above 0 and at most 1 GiB, the sizes adding up to the total.
+     * {"version": 1, "total": <bytes>, "pieces": [{"sha256": "<hex>", "size": <bytes>}, …], "boot": {"kernel":
+     * {…}, "initrd": {…}}} — every piece named by 64 hex characters, its size above 0 and at most 1 GiB, the
+     * sizes adding up to the total; "boot", the machine's AVF kernel (a raw arm64 Image) and initrd, named the
+     * same way, is optional (DGO-1328: a machine made before it boots under QEMU alone).
      */
     private static Manifest parse(byte[] raw) throws IOException {
         try {
@@ -319,20 +428,27 @@ final class Guest {
             List<Piece> pieces = new ArrayList<>();
             long sum = 0;
             for (int i = 0; i < a.length(); i++) {
-                JSONObject p = a.getJSONObject(i);
-                String sha = p.getString("sha256");
-                long size = p.getLong("size");
-                if (!sha.matches("[0-9a-f]{64}") || size <= 0 || size > (1L << 30)) {
-                    throw new IOException("the machine's list holds a piece that is no piece: " + i);
-                }
-                pieces.add(new Piece(sha, size));
-                sum += size;
+                Piece p = piece(a.getJSONObject(i), "a piece " + i);
+                pieces.add(p);
+                sum += p.size;
             }
             if (sum != o.getLong("total")) throw new IOException("the machine's pieces do not add up to its total");
-            return new Manifest(pieces, sum);
+            Piece[] boot = null;
+            JSONObject b = o.optJSONObject("boot");
+            if (b != null) boot = new Piece[]{piece(b.getJSONObject("kernel"), "its kernel"), piece(b.getJSONObject("initrd"), "its initrd")};
+            return new Manifest(pieces, sum, boot);
         } catch (JSONException e) {
             throw new IOException("the machine's list does not read: " + e.getMessage(), e);
         }
+    }
+
+    private static Piece piece(JSONObject p, String what) throws IOException, JSONException {
+        String sha = p.getString("sha256");
+        long size = p.getLong("size");
+        if (!sha.matches("[0-9a-f]{64}") || size <= 0 || size > (1L << 30)) {
+            throw new IOException("the machine's list holds " + what + " that is no piece");
+        }
+        return new Piece(sha, size);
     }
 
     /** What an earlier list left that this one does not name (an update's new machine): not kept. */
@@ -529,6 +645,7 @@ final class Guest {
                     }
                     to.write(buf, 0, n);
                     read += n;
+                    done = read;
                     percent.accept((int) Math.min(99, read * 100 / total));
                 }
             } catch (IOException e) {   // its input could not be read, or it stopped reading: both are said
@@ -546,6 +663,13 @@ final class Guest {
             try (RandomAccessFile out = new RandomAccessFile(part, "rw")) {
                 out.getFD().sync();   // on the phone's storage before it is named the machine
             }
+            // a new disk is a new machine: the AVF kernel kept for the last one, its last AVF boot and the record
+            // of which list it came from are that machine's, never this one's (fetch writes the record anew)
+            File boot = Virt.kernel(c).getParentFile();
+            File[] old = boot == null ? null : boot.listFiles();
+            if (old != null) for (File f : old) f.delete();
+            Virt.bootResult(c).delete();
+            listRecord(c).delete();
             // whole and synced: placed even if nobody wants it now — the next ask starts the machine at once;
             // whose disk it is, before it is the machine: the core's marked, the machine's own office's not
             File marker = coreMarker(c);

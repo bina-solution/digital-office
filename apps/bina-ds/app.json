@@ -5,7 +5,9 @@
     "en": "Bina"
   },
   "layer": 3,
+  "people": "admins",
   "kind": "service",
+  "page": "ai",
   "version": "0.1.0",
   "summary": {
     "he": "הסוכן של הלשכה — DeepSeek Harness בעברית, עוקב אחרי כל האפליקציות ופועל בהן",
@@ -68,6 +70,11 @@
     {
       "id": "anthropic-key",
       "required": false
+    },
+    {
+      "id": "computers-exec-token",
+      "required": false,
+      "note": "the office agent runs commands on machines through computers (DGO-1304)"
     }
   ],
   "contributes": {
@@ -79,6 +86,7 @@
     }
   },
   "compose": "docker-compose.yml",
+  "cli": { "alias": "bina" },
   "agent": {
     "context": "AGENT.md",
     "order": 3
@@ -150,8 +158,8 @@
     "on_uninstall": "keep"
   },
   "resources": {
-    "cpus": "1",
-    "memory": "1g"
+    "cpus": "2",
+    "memory": "2g"
   },
   "blueprints": {
     "n8n": "blueprint/n8n"

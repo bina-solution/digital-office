@@ -4,15 +4,18 @@
   "description": "The `bina` harness profile: stock dsh-base + dsh-web-app, plus the Bina bundle (Hebrew language pack, Bina brand). Installed at image build; $DSH_HOME/profiles/bina points here at runtime. `pnpm.overrides` pins EVERY @deepseek-ai package to the set that dsh 0.1.6-alpha.1 was published against: the harness's own ranges (^0.1.6-alpha.1) drift onto newer prereleases the moment they appear on npm, and a mixed set fails at import time (measured 2026-09-17: dsh-app-boot 0.1.6-alpha.2 dropped an export the CLI imports).",
   "dependencies": {
     "@deepseek-ai/dsh": "0.1.6-alpha.1",
+    "@bina/dsh-vault-key": "file:../../plugins/vault-key",
     "@bina/dsh-client-locale-he": "file:../../plugins/locale-he",
     "@bina/dsh-client-ui-brand-bina": "file:../../plugins/brand-bina",
     "@bina/dsh-client-ui-nav-collapse": "file:../../plugins/nav-collapse",
     "@bina/dsh-client-session-link": "file:../../plugins/session-link",
     "@bina/dsh-office-workspace": "file:../../plugins/office-workspace",
     "@bina/dsh-office-context": "file:../../plugins/office-context",
+    "@bina/dsh-office-shell-env": "file:../../plugins/office-shell-env",
     "@bina/dsh-timeline-lanes": "file:../../plugins/timeline-lanes",
     "@bina/dsh-command-next": "file:../../plugins/command-next",
     "@bina/dsh-cost-meter": "file:../../plugins/cost-meter",
+    "@bina/dsh-goal-guard": "file:../../plugins/goal-guard",
     "@bina/dsh-client-office-links": "file:../../plugins/office-links",
     "@deepseek-ai/schemastery": "3.18.2",
     "zod": "^4"

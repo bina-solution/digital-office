@@ -50,16 +50,24 @@ services:
     # Empty = legacy source disabled; chat-owned botAdmins + ADMINS keep working.
     - INDOX_INSTANCE=${INDOX_INSTANCE:-}
     - TRUST_EDGE_AUTH=${TRUST_EDGE_AUTH:-false}
+    # Under edge trust a request is believed only from the edge's hops (traefik-/console-/dgo-net-/dgo-link-
+    # <DEPLOYMENT_NAME>), with the office's chat token (X-Chat-Office-Token), the office's Basic credential, or
+    # from loopback (src/api/middleware/edge_caller.js). warn names every other caller in the log and lets it
+    # through; enforce refuses it — after the offices' logs are read.
+    - DEPLOYMENT_NAME=${DEPLOYMENT_NAME:-bina-deployment}
+    - CHAT_CALLER_MODE=${CHAT_CALLER_MODE:-warn}
+    - CHAT_API_TOKEN=${CHAT_API_TOKEN:-}
+    - CHAT_READ_TOKEN=${CHAT_READ_TOKEN:-}
     # glitchtip-push provisions one project per APP ID and derives the env name from it
     # (init-projects.sh: <PROJECT_NAME>_SENTRY_DSN). The id became `chat`, so the project is `chat`
-    # and the DSN arrives as CHAT_SENTRY_DSN. Reading the old WHATSAPP_HACOHANIM_SENTRY_DSN — now
+    # and the DSN arrives as CHAT_SENTRY_DSN. Reading the old WHATSAPP_EXAMPLE_SENTRY_DSN — now
     # orphaned and empty — silently disabled error reporting for this service: Sentry initialises
     # with an empty DSN, reports nothing, and logs nothing about why.
     - SENTRY_DSN=${CHAT_SENTRY_DSN:-}
     - AGENT_RUNNER_URL=${AGENT_RUNNER_URL:-http://agent-runner:7700}
     - AGENT_RUNNER_TOKEN=${AGENT_RUNNER_TOKEN:-}
     - AGENT_RUNNER_TIMEOUT_MS=${AGENT_RUNNER_TIMEOUT_MS:-1800000}
-    - DEV_GROUP_JID=120363409728311191@g.us
+    - DEV_GROUP_JID=120363000000000001@g.us
     - DISPATCHER_URL=http://dispatcher:8800
     - DISPATCHER_TOKEN=${DISPATCHER_TOKEN:-}
     # ── local chat backend: the platform's own Postgres ──────────────────────────────────────
@@ -135,7 +143,7 @@ services:
     - traefik.http.routers.chat-https.tls=true
     - traefik.http.routers.chat-https.service=chat
     - traefik.http.routers.chat-https.tls.certresolver=${TRAEFIK_CERTRESOLVER-myresolver}
-    - traefik.http.routers.chat-https.middlewares=authentik@file
+    - traefik.http.routers.chat-https.middlewares=authentik@file,hsts@file
     - traefik.http.services.chat.loadbalancer.server.port=${CHAT_APP_PORT:-3000}
     depends_on:
       n8n:

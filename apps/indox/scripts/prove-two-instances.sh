@@ -26,7 +26,7 @@ PIPE="drive-gdoc"                    # SAME name in both instances — the whole
 KEEP="${1:-}"
 
 SB=$(docker ps --format '{{.Names}}' | grep -m1 supabase-db) || true
-N8N=$(docker ps --format '{{.Names}}' | grep -m1 '^n8n-shlomo' ) || true
+N8N=$(docker ps --format '{{.Names}}' | grep -m1 '^n8n-owner' ) || true
 : "${SB:?supabase-db container not found — is the stack up?}"
 
 q()  { docker exec "$SB" psql -U postgres -d postgres -tAqc "$1"; }

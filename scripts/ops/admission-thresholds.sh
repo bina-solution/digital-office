@@ -57,6 +57,18 @@
 # starts matched systemd inits 42:42 over 24h, exactly 1:1 — dockerd never died on its own once.
 : "${ADMISSION_MAX_RECENT_RESTARTS:=2}"
 
+# The start rule of ONE heavy job on a machine somebody may sit at (scripts/ops/heavy-ready.sh, DGO-1797).
+# The CPU package temperature a job starts under, °C — prejob_waitfree.sh's own figure (the Dell froze three
+# times at 93–96°C under a build; its CI_MAX_START_C still wins where it is set).
+: "${HEAVY_MAX_START_C:=${CI_MAX_START_C:-80}}"
+# Seconds after a boot before a heavy job starts — the office settles first; a caller that IS the office's
+# bring-up passes 0 (its CI_MIN_UPTIME_S still wins where it is set).
+: "${HEAVY_MIN_UPTIME_S:=${CI_MIN_UPTIME_S:-600}}"
+# A job this small (MiB, and at most one CPU) may run beside a person at the desk; anything larger waits.
+: "${DESK_SMALL_MB:=1536}"
+# A desk reading older than this (s) is unknown — and unknown is never «in use».
+: "${DESK_STALE_S:=60}"
+
 # Load average is DELIBERATELY ABSENT and must stay absent. This stack is CPU-oversubscribed by
 # owner decision (two n8n workers at --concurrency=8 = 16 slots on 6 processors, plus a 12-worker
 # gunicorn pool), so load above 8 is the NORMAL state of a machine doing its job. A load veto fires

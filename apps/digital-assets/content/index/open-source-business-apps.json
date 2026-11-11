@@ -1,0 +1,3228 @@
+{
+ "topic": "open-source-business-apps",
+ "checked": "2026-11-05",
+ "notes": "Built from the content library's project list (apps/digital-assets/content/assignments.yaml) plus automation and AI apps; licence read from each repository's own licence file (GitHub API + the file text where GitHub reports NOASSERTION).",
+ "rows": [
+  {
+   "id": "n8n",
+   "name_he": null,
+   "name_en": "n8n",
+   "url": "https://n8n.io",
+   "category": "automation",
+   "summary_he": "אוטומציית תהליכים בגרירה, עם מאות חיבורים וסוכני AI.",
+   "licence": "Sustainable Use · לא OSI",
+   "osi": false,
+   "github": {
+    "repo": "n8n-io/n8n",
+    "stars": 209607,
+    "pushed_at": "2026-11-05T11:59:31Z",
+    "archived": false,
+    "licence": "NOASSERTION"
+   },
+   "why_israeli": null,
+   "sources": [
+    {
+     "url": "https://github.com/n8n-io/n8n",
+     "date": "2026-11-05",
+     "what": "The project's own repository: licence file, stars and last push, read through the GitHub API on 2026-11-05.",
+     "grade": "C"
+    }
+   ],
+   "grade": "C",
+   "verified_at": "2026-11-05"
+  },
+  {
+   "id": "ollama",
+   "name_he": null,
+   "name_en": "Ollama",
+   "url": "https://ollama.com",
+   "category": "ai",
+   "summary_he": "הרצת מודלי שפה על המחשב, עם API פשוט.",
+   "licence": "MIT",
+   "osi": true,
+   "github": {
+    "repo": "ollama/ollama",
+    "stars": 185987,
+    "pushed_at": "2026-11-05T01:32:18Z",
+    "archived": false,
+    "licence": "MIT"
+   },
+   "why_israeli": null,
+   "sources": [
+    {
+     "url": "https://github.com/ollama/ollama",
+     "date": "2026-11-05",
+     "what": "The project's own repository: licence file, stars and last push, read through the GitHub API on 2026-11-05.",
+     "grade": "C"
+    }
+   ],
+   "grade": "C",
+   "verified_at": "2026-11-05"
+  },
+  {
+   "id": "dify",
+   "name_he": null,
+   "name_en": "Dify",
+   "url": "https://dify.ai",
+   "category": "ai",
+   "summary_he": "בניית אפליקציות וסוכני AI בגרירה, עם RAG.",
+   "licence": "Apache-2.0 עם תנאים · לא OSI",
+   "osi": false,
+   "github": {
+    "repo": "langgenius/dify",
+    "stars": 160452,
+    "pushed_at": "2026-11-05T12:25:37Z",
+    "archived": false,
+    "licence": "NOASSERTION"
+   },
+   "why_israeli": null,
+   "sources": [
+    {
+     "url": "https://github.com/langgenius/dify",
+     "date": "2026-11-05",
+     "what": "The project's own repository: licence file, stars and last push, read through the GitHub API on 2026-11-05.",
+     "grade": "C"
+    }
+   ],
+   "grade": "C",
+   "verified_at": "2026-11-05"
+  },
+  {
+   "id": "open-webui",
+   "name_he": null,
+   "name_en": "Open WebUI",
+   "url": "https://openwebui.com",
+   "category": "ai",
+   "summary_he": "ממשק צ׳אט למודלים מקומיים ובענן, עם מסמכים וכלים.",
+   "licence": "Open WebUI (BSD עם תנאי מיתוג) · לא OSI",
+   "osi": false,
+   "github": {
+    "repo": "open-webui/open-webui",
+    "stars": 157833,
+    "pushed_at": "2026-11-05T11:56:32Z",
+    "archived": false,
+    "licence": "NOASSERTION"
+   },
+   "why_israeli": null,
+   "sources": [
+    {
+     "url": "https://github.com/open-webui/open-webui",
+     "date": "2026-11-05",
+     "what": "The project's own repository: licence file, stars and last push, read through the GitHub API on 2026-11-05.",
+     "grade": "C"
+    }
+   ],
+   "grade": "C",
+   "verified_at": "2026-11-05"
+  },
+  {
+   "id": "excalidraw",
+   "name_he": null,
+   "name_en": "Excalidraw",
+   "url": "https://excalidraw.com",
+   "category": "office",
+   "summary_he": "לוח ציור משותף לשרטוטים ותרשימים בסגנון כתב יד.",
+   "licence": "MIT",
+   "osi": true,
+   "github": {
+    "repo": "excalidraw/excalidraw",
+    "stars": 135204,
+    "pushed_at": "2026-11-05T08:54:29Z",
+    "archived": false,
+    "licence": "MIT"
+   },
+   "why_israeli": null,
+   "sources": [
+    {
+     "url": "https://github.com/excalidraw/excalidraw",
+     "date": "2026-11-05",
+     "what": "The project's own repository: licence file, stars and last push, read through the GitHub API on 2026-11-05.",
+     "grade": "C"
+    }
+   ],
+   "grade": "C",
+   "verified_at": "2026-11-05"
+  },
+  {
+   "id": "immich",
+   "name_he": null,
+   "name_en": "Immich",
+   "url": "https://immich.app",
+   "category": "office",
+   "summary_he": "גיבוי וניהול תמונות וסרטונים, חלופה ל-Google Photos.",
+   "licence": "AGPL-3.0",
+   "osi": true,
+   "github": {
+    "repo": "immich-app/immich",
+    "stars": 118295,
+    "pushed_at": "2026-11-05T12:26:17Z",
+    "archived": false,
+    "licence": "AGPL-3.0"
+   },
+   "why_israeli": null,
+   "sources": [
+    {
+     "url": "https://github.com/immich-app/immich",
+     "date": "2026-11-05",
+     "what": "The project's own repository: licence file, stars and last push, read through the GitHub API on 2026-11-05.",
+     "grade": "C"
+    }
+   ],
+   "grade": "C",
+   "verified_at": "2026-11-05"
+  },
+  {
+   "id": "stirling-pdf",
+   "name_he": null,
+   "name_en": "Stirling-PDF",
+   "url": "https://stirling.com",
+   "category": "office",
+   "summary_he": "כל פעולות ה-PDF — מיזוג, פיצול, דחיסה, OCR וחתימה — בשרת משלכם.",
+   "licence": "MIT + חלקים סגורים",
+   "osi": true,
+   "github": {
+    "repo": "Stirling-Tools/Stirling-PDF",
+    "stars": 95785,
+    "pushed_at": "2026-11-05T12:21:03Z",
+    "archived": false,
+    "licence": "NOASSERTION"
+   },
+   "why_israeli": null,
+   "sources": [
+    {
+     "url": "https://github.com/Stirling-Tools/Stirling-PDF",
+     "date": "2026-11-05",
+     "what": "The project's own repository: licence file, stars and last push, read through the GitHub API on 2026-11-05.",
+     "grade": "C"
+    }
+   ],
+   "grade": "C",
+   "verified_at": "2026-11-05"
+  },
+  {
+   "id": "openhands",
+   "name_he": null,
+   "name_en": "OpenHands",
+   "url": "https://openhands.dev",
+   "category": "ai",
+   "summary_he": "סוכן תוכנה שכותב, מריץ ובודק קוד.",
+   "licence": "MIT",
+   "osi": true,
+   "github": {
+    "repo": "OpenHands/OpenHands",
+    "stars": 92707,
+    "pushed_at": "2026-11-05T12:33:55Z",
+    "archived": false,
+    "licence": "MIT"
+   },
+   "why_israeli": null,
+   "sources": [
+    {
+     "url": "https://github.com/OpenHands/OpenHands",
+     "date": "2026-11-05",
+     "what": "The project's own repository: licence file, stars and last push, read through the GitHub API on 2026-11-05.",
+     "grade": "C"
+    }
+   ],
+   "grade": "C",
+   "verified_at": "2026-11-05"
+  },
+  {
+   "id": "hugo",
+   "name_he": null,
+   "name_en": "Hugo",
+   "url": "https://gohugo.io",
+   "category": "websites",
+   "summary_he": "מחולל אתרים סטטיים מהיר מאוד.",
+   "licence": "Apache-2.0",
+   "osi": true,
+   "github": {
+    "repo": "gohugoio/hugo",
+    "stars": 90380,
+    "pushed_at": "2026-11-03T09:47:53Z",
+    "archived": false,
+    "licence": "Apache-2.0"
+   },
+   "why_israeli": null,
+   "sources": [
+    {
+     "url": "https://github.com/gohugoio/hugo",
+     "date": "2026-11-03",
+     "what": "The project's own repository: licence file, stars and last push, read through the GitHub API on 2026-11-05.",
+     "grade": "C"
+    }
+   ],
+   "grade": "C",
+   "verified_at": "2026-11-05"
+  },
+  {
+   "id": "appflowy",
+   "name_he": null,
+   "name_en": "AppFlowy",
+   "url": "https://appflowy.com",
+   "category": "knowledge",
+   "summary_he": "סביבת עבודה למסמכים, משימות ומאגרים, חלופה ל-Notion.",
+   "licence": "AGPL-3.0",
+   "osi": true,
+   "github": {
+    "repo": "AppFlowy-IO/AppFlowy",
+    "stars": 78228,
+    "pushed_at": "2026-11-02T23:40:52Z",
+    "archived": false,
+    "licence": "AGPL-3.0"
+   },
+   "why_israeli": null,
+   "sources": [
+    {
+     "url": "https://github.com/AppFlowy-IO/AppFlowy",
+     "date": "2026-11-02",
+     "what": "The project's own repository: licence file, stars and last push, read through the GitHub API on 2026-11-05.",
+     "grade": "C"
+    }
+   ],
+   "grade": "C",
+   "verified_at": "2026-11-05"
+  },
+  {
+   "id": "affine",
+   "name_he": null,
+   "name_en": "AFFiNE",
+   "url": "https://affine.pro",
+   "category": "knowledge",
+   "summary_he": "מסמכים, לוח לבן ומאגרים במקום אחד, חלופה ל-Notion ול-Miro.",
+   "licence": "MIT + חלק ארגוני",
+   "osi": true,
+   "github": {
+    "repo": "toeverything/AFFiNE",
+    "stars": 74236,
+    "pushed_at": "2026-11-04T15:20:39Z",
+    "archived": false,
+    "licence": "NOASSERTION"
+   },
+   "why_israeli": null,
+   "sources": [
+    {
+     "url": "https://github.com/toeverything/AFFiNE",
+     "date": "2026-11-04",
+     "what": "The project's own repository: licence file, stars and last push, read through the GitHub API on 2026-11-05.",
+     "grade": "C"
+    }
+   ],
+   "grade": "C",
+   "verified_at": "2026-11-05"
+  },
+  {
+   "id": "strapi",
+   "name_he": null,
+   "name_en": "Strapi",
+   "url": "https://strapi.io",
+   "category": "websites",
+   "summary_he": "מערכת ניהול תוכן Headless עם API מוכן.",
+   "licence": "MIT + חלק ארגוני",
+   "osi": true,
+   "github": {
+    "repo": "strapi/strapi",
+    "stars": 73435,
+    "pushed_at": "2026-11-05T11:30:00Z",
+    "archived": false,
+    "licence": "NOASSERTION"
+   },
+   "why_israeli": null,
+   "sources": [
+    {
+     "url": "https://github.com/strapi/strapi",
+     "date": "2026-11-05",
+     "what": "The project's own repository: licence file, stars and last push, read through the GitHub API on 2026-11-05.",
+     "grade": "C"
+    }
+   ],
+   "grade": "C",
+   "verified_at": "2026-11-05"
+  },
+  {
+   "id": "vaultwarden",
+   "name_he": null,
+   "name_en": "Vaultwarden",
+   "url": "https://github.com/dani-garcia/vaultwarden",
+   "category": "office",
+   "summary_he": "שרת סיסמאות תואם Bitwarden, לכל העובדים.",
+   "licence": "AGPL-3.0",
+   "osi": true,
+   "github": {
+    "repo": "dani-garcia/vaultwarden",
+    "stars": 70274,
+    "pushed_at": "2026-11-04T21:17:55Z",
+    "archived": false,
+    "licence": "AGPL-3.0"
+   },
+   "why_israeli": null,
+   "sources": [
+    {
+     "url": "https://github.com/dani-garcia/vaultwarden",
+     "date": "2026-11-04",
+     "what": "The project's own repository: licence file, stars and last push, read through the GitHub API on 2026-11-05.",
+     "grade": "C"
+    }
+   ],
+   "grade": "C",
+   "verified_at": "2026-11-05"
+  },
+  {
+   "id": "anythingllm",
+   "name_he": null,
+   "name_en": "AnythingLLM",
+   "url": "https://anythingllm.com",
+   "category": "ai",
+   "summary_he": "צ׳אט על המסמכים של העסק עם מודלים מקומיים או בענן.",
+   "licence": "MIT",
+   "osi": true,
+   "github": {
+    "repo": "Mintplex-Labs/anything-llm",
+    "stars": 67967,
+    "pushed_at": "2026-11-05T00:25:02Z",
+    "archived": false,
+    "licence": "MIT"
+   },
+   "why_israeli": null,
+   "sources": [
+    {
+     "url": "https://github.com/Mintplex-Labs/anything-llm",
+     "date": "2026-11-05",
+     "what": "The project's own repository: licence file, stars and last push, read through the GitHub API on 2026-11-05.",
+     "grade": "C"
+    }
+   ],
+   "grade": "C",
+   "verified_at": "2026-11-05"
+  },
+  {
+   "id": "nocodb",
+   "name_he": null,
+   "name_en": "NocoDB",
+   "url": "https://nocodb.com",
+   "category": "automation",
+   "summary_he": "טבלאות בסגנון Airtable מעל בסיס נתונים אמיתי.",
+   "licence": "Sustainable Use · לא OSI",
+   "osi": false,
+   "github": {
+    "repo": "nocodb/nocodb",
+    "stars": 65435,
+    "pushed_at": "2026-11-05T12:29:36Z",
+    "archived": false,
+    "licence": "NOASSERTION"
+   },
+   "why_israeli": null,
+   "sources": [
+    {
+     "url": "https://github.com/nocodb/nocodb",
+     "date": "2026-11-05",
+     "what": "The project's own repository: licence file, stars and last push, read through the GitHub API on 2026-11-05.",
+     "grade": "C"
+    }
+   ],
+   "grade": "C",
+   "verified_at": "2026-11-05"
+  },
+  {
+   "id": "astro",
+   "name_he": null,
+   "name_en": "Astro",
+   "url": "https://astro.build",
+   "category": "websites",
+   "summary_he": "פריימוורק לאתרי תוכן מהירים שמגישים מעט JavaScript.",
+   "licence": "MIT",
+   "osi": true,
+   "github": {
+    "repo": "withastro/astro",
+    "stars": 63742,
+    "pushed_at": "2026-11-05T12:25:24Z",
+    "archived": false,
+    "licence": "NOASSERTION"
+   },
+   "why_israeli": null,
+   "sources": [
+    {
+     "url": "https://github.com/withastro/astro",
+     "date": "2026-11-05",
+     "what": "The project's own repository: licence file, stars and last push, read through the GitHub API on 2026-11-05.",
+     "grade": "C"
+    }
+   ],
+   "grade": "C",
+   "verified_at": "2026-11-05"
+  },
+  {
+   "id": "plane",
+   "name_he": null,
+   "name_en": "Plane",
+   "url": "https://github.com/makeplane/plane",
+   "category": "knowledge",
+   "summary_he": "ניהול פרויקטים ומשימות, חלופה ל-Jira.",
+   "licence": "AGPL-3.0",
+   "osi": true,
+   "github": {
+    "repo": "makeplane/plane",
+    "stars": 62009,
+    "pushed_at": "2026-11-05T06:49:12Z",
+    "archived": false,
+    "licence": "AGPL-3.0"
+   },
+   "why_israeli": null,
+   "sources": [
+    {
+     "url": "https://github.com/makeplane/plane",
+     "date": "2026-11-05",
+     "what": "The project's own repository: licence file, stars and last push, read through the GitHub API on 2026-11-05.",
+     "grade": "C"
+    }
+   ],
+   "grade": "C",
+   "verified_at": "2026-11-05"
+  },
+  {
+   "id": "twenty",
+   "name_he": null,
+   "name_en": "Twenty",
+   "url": "https://twenty.com",
+   "category": "crm",
+   "summary_he": "CRM מודרני לניהול לקוחות, עסקאות וצנרת מכירות.",
+   "licence": "AGPL-3.0 + חלק ארגוני",
+   "osi": true,
+   "github": {
+    "repo": "twentyhq/twenty",
+    "stars": 60482,
+    "pushed_at": "2026-11-05T12:31:48Z",
+    "archived": false,
+    "licence": "NOASSERTION"
+   },
+   "why_israeli": null,
+   "sources": [
+    {
+     "url": "https://github.com/twentyhq/twenty",
+     "date": "2026-11-05",
+     "what": "The project's own repository: licence file, stars and last push, read through the GitHub API on 2026-11-05.",
+     "grade": "C"
+    }
+   ],
+   "grade": "C",
+   "verified_at": "2026-11-05"
+  },
+  {
+   "id": "joplin",
+   "name_he": null,
+   "name_en": "Joplin",
+   "url": "https://joplinapp.org",
+   "category": "office",
+   "summary_he": "פתקים ומשימות עם סנכרון והצפנה מקצה לקצה.",
+   "licence": "AGPL-3.0",
+   "osi": true,
+   "github": {
+    "repo": "laurent22/joplin",
+    "stars": 57047,
+    "pushed_at": "2026-11-05T12:33:00Z",
+    "archived": false,
+    "licence": "NOASSERTION"
+   },
+   "why_israeli": null,
+   "sources": [
+    {
+     "url": "https://github.com/laurent22/joplin",
+     "date": "2026-11-05",
+     "what": "The project's own repository: licence file, stars and last push, read through the GitHub API on 2026-11-05.",
+     "grade": "C"
+    }
+   ],
+   "grade": "C",
+   "verified_at": "2026-11-05"
+  },
+  {
+   "id": "ghost",
+   "name_he": null,
+   "name_en": "Ghost",
+   "url": "https://ghost.org",
+   "category": "websites",
+   "summary_he": "פלטפורמת תוכן לבלוג וניוזלטר, עם מנויים בתשלום.",
+   "licence": "MIT",
+   "osi": true,
+   "github": {
+    "repo": "TryGhost/Ghost",
+    "stars": 55684,
+    "pushed_at": "2026-11-05T12:30:50Z",
+    "archived": false,
+    "licence": "MIT"
+   },
+   "why_israeli": null,
+   "sources": [
+    {
+     "url": "https://github.com/TryGhost/Ghost",
+     "date": "2026-11-05",
+     "what": "The project's own repository: licence file, stars and last push, read through the GitHub API on 2026-11-05.",
+     "grade": "C"
+    }
+   ],
+   "grade": "C",
+   "verified_at": "2026-11-05"
+  },
+  {
+   "id": "odoo",
+   "name_he": null,
+   "name_en": "Odoo",
+   "url": "https://www.odoo.com",
+   "category": "accounting",
+   "summary_he": "חבילת אפליקציות עסקיות: CRM, מכירות, הנהלת חשבונות, מלאי ואתר.",
+   "licence": "LGPL-3.0",
+   "osi": true,
+   "github": {
+    "repo": "odoo/odoo",
+    "stars": 55562,
+    "pushed_at": "2026-11-05T12:25:45Z",
+    "archived": false,
+    "licence": "NOASSERTION"
+   },
+   "why_israeli": null,
+   "sources": [
+    {
+     "url": "https://github.com/odoo/odoo",
+     "date": "2026-11-05",
+     "what": "The project's own repository: licence file, stars and last push, read through the GitHub API on 2026-11-05.",
+     "grade": "C"
+    }
+   ],
+   "grade": "C",
+   "verified_at": "2026-11-05"
+  },
+  {
+   "id": "flowise",
+   "name_he": null,
+   "name_en": "Flowise",
+   "url": "https://flowiseai.com",
+   "category": "ai",
+   "summary_he": "בניית תהליכי LLM וסוכנים בגרירה. המאגר הועבר לארכיון.",
+   "licence": "Apache-2.0 + חלק ארגוני",
+   "osi": true,
+   "github": {
+    "repo": "FlowiseAI/Flowise",
+    "stars": 55555,
+    "pushed_at": "2026-08-13T12:38:19Z",
+    "archived": true,
+    "licence": "NOASSERTION"
+   },
+   "why_israeli": null,
+   "sources": [
+    {
+     "url": "https://github.com/FlowiseAI/Flowise",
+     "date": "2026-08-13",
+     "what": "The project's own repository: licence file, stars and last push, read through the GitHub API on 2026-11-05.",
+     "grade": "C"
+    }
+   ],
+   "grade": "C",
+   "verified_at": "2026-11-05"
+  },
+  {
+   "id": "metabase",
+   "name_he": null,
+   "name_en": "Metabase",
+   "url": "https://metabase.com",
+   "category": "automation",
+   "summary_he": "דשבורדים ושאלות על הנתונים של העסק, בלי לכתוב SQL.",
+   "licence": "AGPL-3.0 + חלק ארגוני",
+   "osi": true,
+   "github": {
+    "repo": "metabase/metabase",
+    "stars": 50180,
+    "pushed_at": "2026-11-05T12:33:30Z",
+    "archived": false,
+    "licence": "NOASSERTION"
+   },
+   "why_israeli": null,
+   "sources": [
+    {
+     "url": "https://github.com/metabase/metabase",
+     "date": "2026-11-05",
+     "what": "The project's own repository: licence file, stars and last push, read through the GitHub API on 2026-11-05.",
+     "grade": "C"
+    }
+   ],
+   "grade": "C",
+   "verified_at": "2026-11-05"
+  },
+  {
+   "id": "cal-com",
+   "name_he": null,
+   "name_en": "Cal.com",
+   "url": "https://cal.diy",
+   "category": "communication",
+   "summary_he": "זימון פגישות ותורים, חלופה ל-Calendly.",
+   "licence": "MIT",
+   "osi": true,
+   "github": {
+    "repo": "calcom/cal.diy",
+    "stars": 49706,
+    "pushed_at": "2026-11-03T21:35:09Z",
+    "archived": false,
+    "licence": "MIT"
+   },
+   "why_israeli": null,
+   "sources": [
+    {
+     "url": "https://github.com/calcom/cal.diy",
+     "date": "2026-11-03",
+     "what": "The project's own repository: licence file, stars and last push, read through the GitHub API on 2026-11-05.",
+     "grade": "C"
+    }
+   ],
+   "grade": "C",
+   "verified_at": "2026-11-05"
+  },
+  {
+   "id": "paperless-ngx",
+   "name_he": null,
+   "name_en": "Paperless-ngx",
+   "url": "https://github.com/paperless-ngx/paperless-ngx",
+   "category": "office",
+   "summary_he": "ארכיון מסמכים סרוקים עם OCR, תיוג וחיפוש.",
+   "licence": "GPL-3.0",
+   "osi": true,
+   "github": {
+    "repo": "paperless-ngx/paperless-ngx",
+    "stars": 47720,
+    "pushed_at": "2026-11-05T12:18:37Z",
+    "archived": false,
+    "licence": "GPL-3.0"
+   },
+   "why_israeli": null,
+   "sources": [
+    {
+     "url": "https://github.com/paperless-ngx/paperless-ngx",
+     "date": "2026-11-05",
+     "what": "The project's own repository: licence file, stars and last push, read through the GitHub API on 2026-11-05.",
+     "grade": "C"
+    }
+   ],
+   "grade": "C",
+   "verified_at": "2026-11-05"
+  },
+  {
+   "id": "librechat",
+   "name_he": null,
+   "name_en": "LibreChat",
+   "url": "https://librechat.ai/",
+   "category": "ai",
+   "summary_he": "צ׳אט אחד לכל המודלים — Claude, ‏GPT, ‏Gemini ומודלים מקומיים.",
+   "licence": "MIT",
+   "osi": true,
+   "github": {
+    "repo": "LibreChat-AI/LibreChat",
+    "stars": 46767,
+    "pushed_at": "2026-11-05T12:28:31Z",
+    "archived": false,
+    "licence": "MIT"
+   },
+   "why_israeli": null,
+   "sources": [
+    {
+     "url": "https://github.com/LibreChat-AI/LibreChat",
+     "date": "2026-11-05",
+     "what": "The project's own repository: licence file, stars and last push, read through the GitHub API on 2026-11-05.",
+     "grade": "C"
+    }
+   ],
+   "grade": "C",
+   "verified_at": "2026-11-05"
+  },
+  {
+   "id": "rocket-chat",
+   "name_he": null,
+   "name_en": "Rocket.Chat",
+   "url": "https://rocket.chat/",
+   "category": "communication",
+   "summary_he": "צ׳אט צוותי וערוצי שירות, חלופה ל-Slack.",
+   "licence": "MIT + חלק ארגוני",
+   "osi": true,
+   "github": {
+    "repo": "RocketChat/Rocket.Chat",
+    "stars": 46374,
+    "pushed_at": "2026-11-05T12:33:17Z",
+    "archived": false,
+    "licence": "NOASSERTION"
+   },
+   "why_israeli": null,
+   "sources": [
+    {
+     "url": "https://github.com/RocketChat/Rocket.Chat",
+     "date": "2026-11-05",
+     "what": "The project's own repository: licence file, stars and last push, read through the GitHub API on 2026-11-05.",
+     "grade": "C"
+    }
+   ],
+   "grade": "C",
+   "verified_at": "2026-11-05"
+  },
+  {
+   "id": "payload",
+   "name_he": null,
+   "name_en": "Payload",
+   "url": "https://payloadcms.com",
+   "category": "websites",
+   "summary_he": "מערכת ניהול תוכן ו-backend על TypeScript ו-Next.js.",
+   "licence": "MIT",
+   "osi": true,
+   "github": {
+    "repo": "payloadcms/payload",
+    "stars": 45679,
+    "pushed_at": "2026-11-05T11:49:27Z",
+    "archived": false,
+    "licence": "MIT"
+   },
+   "why_israeli": null,
+   "sources": [
+    {
+     "url": "https://github.com/payloadcms/payload",
+     "date": "2026-11-05",
+     "what": "The project's own repository: licence file, stars and last push, read through the GitHub API on 2026-11-05.",
+     "grade": "C"
+    }
+   ],
+   "grade": "C",
+   "verified_at": "2026-11-05"
+  },
+  {
+   "id": "logseq",
+   "name_he": null,
+   "name_en": "Logseq",
+   "url": "https://logseq.com",
+   "category": "office",
+   "summary_he": "פתקים וידע בצורת רשת של בלוקים וקישורים.",
+   "licence": "AGPL-3.0",
+   "osi": true,
+   "github": {
+    "repo": "logseq/logseq",
+    "stars": 45484,
+    "pushed_at": "2026-11-05T09:57:20Z",
+    "archived": false,
+    "licence": "AGPL-3.0"
+   },
+   "why_israeli": null,
+   "sources": [
+    {
+     "url": "https://github.com/logseq/logseq",
+     "date": "2026-11-05",
+     "what": "The project's own repository: licence file, stars and last push, read through the GitHub API on 2026-11-05.",
+     "grade": "C"
+    }
+   ],
+   "grade": "C",
+   "verified_at": "2026-11-05"
+  },
+  {
+   "id": "outline",
+   "name_he": null,
+   "name_en": "Outline",
+   "url": "https://www.getoutline.com",
+   "category": "knowledge",
+   "summary_he": "ויקי צוותי ומאגר ידע מהיר, עם עריכה משותפת.",
+   "licence": "BSL 1.1 · לא OSI",
+   "osi": false,
+   "github": {
+    "repo": "outline/outline",
+    "stars": 41181,
+    "pushed_at": "2026-11-05T02:30:31Z",
+    "archived": false,
+    "licence": "NOASSERTION"
+   },
+   "why_israeli": null,
+   "sources": [
+    {
+     "url": "https://github.com/outline/outline",
+     "date": "2026-11-05",
+     "what": "The project's own repository: licence file, stars and last push, read through the GitHub API on 2026-11-05.",
+     "grade": "C"
+    }
+   ],
+   "grade": "C",
+   "verified_at": "2026-11-05"
+  },
+  {
+   "id": "erpnext",
+   "name_he": null,
+   "name_en": "ERPNext",
+   "url": "https://frappe.io/erpnext",
+   "category": "accounting",
+   "summary_he": "מערכת ERP מלאה: הנהלת חשבונות, מלאי, רכש, מכירות, ייצור ומשאבי אנוש.",
+   "licence": "GPL-3.0",
+   "osi": true,
+   "github": {
+    "repo": "frappe/erpnext",
+    "stars": 40979,
+    "pushed_at": "2026-11-05T12:16:25Z",
+    "archived": false,
+    "licence": "GPL-3.0"
+   },
+   "why_israeli": null,
+   "sources": [
+    {
+     "url": "https://github.com/frappe/erpnext",
+     "date": "2026-11-05",
+     "what": "The project's own repository: licence file, stars and last push, read through the GitHub API on 2026-11-05.",
+     "grade": "C"
+    }
+   ],
+   "grade": "C",
+   "verified_at": "2026-11-05"
+  },
+  {
+   "id": "postiz",
+   "name_he": null,
+   "name_en": "Postiz",
+   "url": "https://postiz.com",
+   "category": "marketing",
+   "summary_he": "תזמון ופרסום פוסטים לרשתות חברתיות רבות ממקום אחד.",
+   "licence": "AGPL-3.0",
+   "osi": true,
+   "github": {
+    "repo": "gitroomhq/postiz-app",
+    "stars": 40951,
+    "pushed_at": "2026-11-05T11:35:10Z",
+    "archived": false,
+    "licence": "AGPL-3.0"
+   },
+   "why_israeli": null,
+   "sources": [
+    {
+     "url": "https://github.com/gitroomhq/postiz-app",
+     "date": "2026-11-05",
+     "what": "The project's own repository: licence file, stars and last push, read through the GitHub API on 2026-11-05.",
+     "grade": "C"
+    }
+   ],
+   "grade": "C",
+   "verified_at": "2026-11-05"
+  },
+  {
+   "id": "posthog",
+   "name_he": null,
+   "name_en": "PostHog",
+   "url": "https://posthog.com",
+   "category": "marketing",
+   "summary_he": "אנליטיקס מוצר: אירועים, הקלטות גלישה, ניסויים ודגלי פיצ׳רים.",
+   "licence": "MIT + חלק ארגוני",
+   "osi": true,
+   "github": {
+    "repo": "PostHog/posthog",
+    "stars": 40658,
+    "pushed_at": "2026-11-05T12:32:24Z",
+    "archived": false,
+    "licence": "NOASSERTION"
+   },
+   "why_israeli": null,
+   "sources": [
+    {
+     "url": "https://github.com/PostHog/posthog",
+     "date": "2026-11-05",
+     "what": "The project's own repository: licence file, stars and last push, read through the GitHub API on 2026-11-05.",
+     "grade": "C"
+    }
+   ],
+   "grade": "C",
+   "verified_at": "2026-11-05"
+  },
+  {
+   "id": "umami",
+   "name_he": null,
+   "name_en": "Umami",
+   "url": "https://umami.is",
+   "category": "marketing",
+   "summary_he": "אנליטיקס פשוט ופרטי לאתר, בלי עוגיות.",
+   "licence": "MIT",
+   "osi": true,
+   "github": {
+    "repo": "umami-software/umami",
+    "stars": 39931,
+    "pushed_at": "2026-11-04T20:46:57Z",
+    "archived": false,
+    "licence": "MIT"
+   },
+   "why_israeli": null,
+   "sources": [
+    {
+     "url": "https://github.com/umami-software/umami",
+     "date": "2026-11-04",
+     "what": "The project's own repository: licence file, stars and last push, read through the GitHub API on 2026-11-05.",
+     "grade": "C"
+    }
+   ],
+   "grade": "C",
+   "verified_at": "2026-11-05"
+  },
+  {
+   "id": "mattermost",
+   "name_he": null,
+   "name_en": "Mattermost",
+   "url": "https://mattermost.com",
+   "category": "communication",
+   "summary_he": "צ׳אט צוותי ותהליכים לצוותים טכניים.",
+   "licence": "AGPL-3.0 + חלק ארגוני",
+   "osi": true,
+   "github": {
+    "repo": "mattermost/mattermost",
+    "stars": 39537,
+    "pushed_at": "2026-11-05T12:29:45Z",
+    "archived": false,
+    "licence": "NOASSERTION"
+   },
+   "why_israeli": null,
+   "sources": [
+    {
+     "url": "https://github.com/mattermost/mattermost",
+     "date": "2026-11-05",
+     "what": "The project's own repository: licence file, stars and last push, read through the GitHub API on 2026-11-05.",
+     "grade": "C"
+    }
+   ],
+   "grade": "C",
+   "verified_at": "2026-11-05"
+  },
+  {
+   "id": "searxng",
+   "name_he": null,
+   "name_en": "SearXNG",
+   "url": "https://docs.searxng.org",
+   "category": "ai",
+   "summary_he": "מנוע חיפוש פרטי שמאחד תוצאות ממנועים רבים.",
+   "licence": "AGPL-3.0",
+   "osi": true,
+   "github": {
+    "repo": "searxng/searxng",
+    "stars": 39246,
+    "pushed_at": "2026-11-02T17:41:36Z",
+    "archived": false,
+    "licence": "AGPL-3.0"
+   },
+   "why_israeli": null,
+   "sources": [
+    {
+     "url": "https://github.com/searxng/searxng",
+     "date": "2026-11-02",
+     "what": "The project's own repository: licence file, stars and last push, read through the GitHub API on 2026-11-05.",
+     "grade": "C"
+    }
+   ],
+   "grade": "C",
+   "verified_at": "2026-11-05"
+  },
+  {
+   "id": "chatwoot",
+   "name_he": null,
+   "name_en": "Chatwoot",
+   "url": "https://www.chatwoot.com/help-center",
+   "category": "crm",
+   "summary_he": "שירות לקוחות בכל הערוצים — אתר, מייל, וואטסאפ ורשתות — בתיבה אחת.",
+   "licence": "MIT + חלק ארגוני",
+   "osi": true,
+   "github": {
+    "repo": "chatwoot/chatwoot",
+    "stars": 38916,
+    "pushed_at": "2026-11-05T12:30:30Z",
+    "archived": false,
+    "licence": "NOASSERTION"
+   },
+   "why_israeli": null,
+   "sources": [
+    {
+     "url": "https://github.com/chatwoot/chatwoot",
+     "date": "2026-11-05",
+     "what": "The project's own repository: licence file, stars and last push, read through the GitHub API on 2026-11-05.",
+     "grade": "C"
+    }
+   ],
+   "grade": "C",
+   "verified_at": "2026-11-05"
+  },
+  {
+   "id": "directus",
+   "name_he": null,
+   "name_en": "Directus",
+   "url": "https://directus.com",
+   "category": "websites",
+   "summary_he": "שכבת API וממשק ניהול מעל כל בסיס נתונים SQL.",
+   "licence": "MSCL-1.0 · לא OSI",
+   "osi": false,
+   "github": {
+    "repo": "directus/directus",
+    "stars": 38828,
+    "pushed_at": "2026-11-05T10:31:35Z",
+    "archived": false,
+    "licence": "NOASSERTION"
+   },
+   "why_israeli": null,
+   "sources": [
+    {
+     "url": "https://github.com/directus/directus",
+     "date": "2026-11-05",
+     "what": "The project's own repository: licence file, stars and last push, read through the GitHub API on 2026-11-05.",
+     "grade": "C"
+    }
+   ],
+   "grade": "C",
+   "verified_at": "2026-11-05"
+  },
+  {
+   "id": "nextcloud",
+   "name_he": null,
+   "name_en": "Nextcloud",
+   "url": "https://nextcloud.com",
+   "category": "office",
+   "summary_he": "קבצים, שיתוף, יומן ואנשי קשר בשרת משלכם, חלופה ל-Google Drive.",
+   "licence": "AGPL-3.0",
+   "osi": true,
+   "github": {
+    "repo": "nextcloud/server",
+    "stars": 37424,
+    "pushed_at": "2026-11-05T12:07:52Z",
+    "archived": false,
+    "licence": "AGPL-3.0"
+   },
+   "why_israeli": null,
+   "sources": [
+    {
+     "url": "https://github.com/nextcloud/server",
+     "date": "2026-11-05",
+     "what": "The project's own repository: licence file, stars and last push, read through the GitHub API on 2026-11-05.",
+     "grade": "C"
+    }
+   ],
+   "grade": "C",
+   "verified_at": "2026-11-05"
+  },
+  {
+   "id": "medusa",
+   "name_he": null,
+   "name_en": "Medusa",
+   "url": "https://medusajs.com",
+   "category": "ecommerce",
+   "summary_he": "מנוע מסחר אלקטרוני Headless לחנויות בהתאמה אישית.",
+   "licence": "MIT + חלק ארגוני",
+   "osi": true,
+   "github": {
+    "repo": "medusajs/medusa",
+    "stars": 37096,
+    "pushed_at": "2026-11-05T12:01:29Z",
+    "archived": false,
+    "licence": "NOASSERTION"
+   },
+   "why_israeli": null,
+   "sources": [
+    {
+     "url": "https://github.com/medusajs/medusa",
+     "date": "2026-11-05",
+     "what": "The project's own repository: licence file, stars and last push, read through the GitHub API on 2026-11-05.",
+     "grade": "C"
+    }
+   ],
+   "grade": "C",
+   "verified_at": "2026-11-05"
+  },
+  {
+   "id": "jitsi-meet",
+   "name_he": null,
+   "name_en": "Jitsi Meet",
+   "url": "https://jitsi.org/meet",
+   "category": "communication",
+   "summary_he": "שיחות וידאו בדפדפן, בלי התקנה.",
+   "licence": "Apache-2.0",
+   "osi": true,
+   "github": {
+    "repo": "jitsi/jitsi-meet",
+    "stars": 30201,
+    "pushed_at": "2026-11-05T12:12:17Z",
+    "archived": false,
+    "licence": "Apache-2.0"
+   },
+   "why_israeli": null,
+   "sources": [
+    {
+     "url": "https://github.com/jitsi/jitsi-meet",
+     "date": "2026-11-05",
+     "what": "The project's own repository: licence file, stars and last push, read through the GitHub API on 2026-11-05.",
+     "grade": "C"
+    }
+   ],
+   "grade": "C",
+   "verified_at": "2026-11-05"
+  },
+  {
+   "id": "actual-budget",
+   "name_he": null,
+   "name_en": "Actual Budget",
+   "url": "https://actualbudget.org",
+   "category": "accounting",
+   "summary_he": "תקציב אישי לפי שיטת המעטפות, עם סנכרון בין מכשירים.",
+   "licence": "MIT",
+   "osi": true,
+   "github": {
+    "repo": "actualbudget/actual",
+    "stars": 29994,
+    "pushed_at": "2026-11-05T08:53:26Z",
+    "archived": false,
+    "licence": "MIT"
+   },
+   "why_israeli": null,
+   "sources": [
+    {
+     "url": "https://github.com/actualbudget/actual",
+     "date": "2026-11-05",
+     "what": "The project's own repository: licence file, stars and last push, read through the GitHub API on 2026-11-05.",
+     "grade": "C"
+    }
+   ],
+   "grade": "C",
+   "verified_at": "2026-11-05"
+  },
+  {
+   "id": "plausible",
+   "name_he": null,
+   "name_en": "Plausible",
+   "url": "https://plausible.io",
+   "category": "marketing",
+   "summary_he": "אנליטיקס קל ופרטי לאתר, בלי עוגיות.",
+   "licence": "AGPL-3.0",
+   "osi": true,
+   "github": {
+    "repo": "plausible/analytics",
+    "stars": 29777,
+    "pushed_at": "2026-11-05T09:48:52Z",
+    "archived": false,
+    "licence": "AGPL-3.0"
+   },
+   "why_israeli": null,
+   "sources": [
+    {
+     "url": "https://github.com/plausible/analytics",
+     "date": "2026-11-05",
+     "what": "The project's own repository: licence file, stars and last push, read through the GitHub API on 2026-11-05.",
+     "grade": "C"
+    }
+   ],
+   "grade": "C",
+   "verified_at": "2026-11-05"
+  },
+  {
+   "id": "wiki-js",
+   "name_he": null,
+   "name_en": "Wiki.js",
+   "url": "https://beta.js.wiki",
+   "category": "knowledge",
+   "summary_he": "ויקי מודרני עם עורך Markdown וחיפוש.",
+   "licence": "AGPL-3.0",
+   "osi": true,
+   "github": {
+    "repo": "requarks/wiki",
+    "stars": 29171,
+    "pushed_at": "2026-11-05T08:58:02Z",
+    "archived": false,
+    "licence": "AGPL-3.0"
+   },
+   "why_israeli": null,
+   "sources": [
+    {
+     "url": "https://github.com/requarks/wiki",
+     "date": "2026-11-05",
+     "what": "The project's own repository: licence file, stars and last push, read through the GitHub API on 2026-11-05.",
+     "grade": "C"
+    }
+   ],
+   "grade": "C",
+   "verified_at": "2026-11-05"
+  },
+  {
+   "id": "bagisto",
+   "name_he": null,
+   "name_en": "Bagisto",
+   "url": "https://bagisto.com",
+   "category": "ecommerce",
+   "summary_he": "חנות אונליין על Laravel, כולל מרקטפלייס.",
+   "licence": "MIT",
+   "osi": true,
+   "github": {
+    "repo": "bagisto/bagisto",
+    "stars": 28335,
+    "pushed_at": "2026-11-05T09:41:33Z",
+    "archived": false,
+    "licence": "MIT"
+   },
+   "why_israeli": null,
+   "sources": [
+    {
+     "url": "https://github.com/bagisto/bagisto",
+     "date": "2026-11-05",
+     "what": "The project's own repository: licence file, stars and last push, read through the GitHub API on 2026-11-05.",
+     "grade": "C"
+    }
+   ],
+   "grade": "C",
+   "verified_at": "2026-11-05"
+  },
+  {
+   "id": "huly",
+   "name_he": null,
+   "name_en": "Huly",
+   "url": "https://huly.io",
+   "category": "knowledge",
+   "summary_he": "פלטפורמת צוות: משימות, צ׳אט, מסמכים ו-CRM.",
+   "licence": "EPL-2.0",
+   "osi": true,
+   "github": {
+    "repo": "hcengineering/platform",
+    "stars": 28052,
+    "pushed_at": "2026-11-05T04:38:04Z",
+    "archived": false,
+    "licence": "EPL-2.0"
+   },
+   "why_israeli": null,
+   "sources": [
+    {
+     "url": "https://github.com/hcengineering/platform",
+     "date": "2026-11-05",
+     "what": "The project's own repository: licence file, stars and last push, read through the GitHub API on 2026-11-05.",
+     "grade": "C"
+    }
+   ],
+   "grade": "C",
+   "verified_at": "2026-11-05"
+  },
+  {
+   "id": "focalboard",
+   "name_he": null,
+   "name_en": "Focalboard",
+   "url": "https://www.focalboard.com",
+   "category": "knowledge",
+   "summary_he": "לוח משימות בסגנון קנבן לצוותים.",
+   "licence": "AGPL-3.0 + חלק ארגוני",
+   "osi": true,
+   "github": {
+    "repo": "mattermost-community/focalboard",
+    "stars": 26544,
+    "pushed_at": "2026-05-18T16:05:00Z",
+    "archived": false,
+    "licence": "NOASSERTION"
+   },
+   "why_israeli": null,
+   "sources": [
+    {
+     "url": "https://github.com/mattermost-community/focalboard",
+     "date": "2026-05-18",
+     "what": "The project's own repository: licence file, stars and last push, read through the GitHub API on 2026-11-05.",
+     "grade": "C"
+    }
+   ],
+   "grade": "C",
+   "verified_at": "2026-11-05"
+  },
+  {
+   "id": "calibre",
+   "name_he": null,
+   "name_en": "calibre",
+   "url": "https://calibre-ebook.com",
+   "category": "office",
+   "summary_he": "ניהול ספרייה של ספרים אלקטרוניים והמרה בין פורמטים.",
+   "licence": "GPL-3.0",
+   "osi": true,
+   "github": {
+    "repo": "kovidgoyal/calibre",
+    "stars": 26353,
+    "pushed_at": "2026-11-05T09:14:28Z",
+    "archived": false,
+    "licence": "GPL-3.0"
+   },
+   "why_israeli": null,
+   "sources": [
+    {
+     "url": "https://github.com/kovidgoyal/calibre",
+     "date": "2026-11-05",
+     "what": "The project's own repository: licence file, stars and last push, read through the GitHub API on 2026-11-05.",
+     "grade": "C"
+    }
+   ],
+   "grade": "C",
+   "verified_at": "2026-11-05"
+  },
+  {
+   "id": "zulip",
+   "name_he": null,
+   "name_en": "Zulip",
+   "url": "https://zulip.com",
+   "category": "communication",
+   "summary_he": "צ׳אט צוותי מאורגן לפי נושאים.",
+   "licence": "Apache-2.0",
+   "osi": true,
+   "github": {
+    "repo": "zulip/zulip",
+    "stars": 26175,
+    "pushed_at": "2026-11-05T05:18:07Z",
+    "archived": false,
+    "licence": "Apache-2.0"
+   },
+   "why_israeli": null,
+   "sources": [
+    {
+     "url": "https://github.com/zulip/zulip",
+     "date": "2026-11-05",
+     "what": "The project's own repository: licence file, stars and last push, read through the GitHub API on 2026-11-05.",
+     "grade": "C"
+    }
+   ],
+   "grade": "C",
+   "verified_at": "2026-11-05"
+  },
+  {
+   "id": "monica",
+   "name_he": null,
+   "name_en": "Monica",
+   "url": "https://beta.monicahq.com",
+   "category": "crm",
+   "summary_he": "ניהול קשרים אישיים: אנשים, אירועים ותזכורות.",
+   "licence": "AGPL-3.0",
+   "osi": true,
+   "github": {
+    "repo": "monicahq/monica",
+    "stars": 25711,
+    "pushed_at": "2026-10-28T22:30:13Z",
+    "archived": false,
+    "licence": "AGPL-3.0"
+   },
+   "why_israeli": null,
+   "sources": [
+    {
+     "url": "https://github.com/monicahq/monica",
+     "date": "2026-10-28",
+     "what": "The project's own repository: licence file, stars and last push, read through the GitHub API on 2026-11-05.",
+     "grade": "C"
+    }
+   ],
+   "grade": "C",
+   "verified_at": "2026-11-05"
+  },
+  {
+   "id": "activepieces",
+   "name_he": null,
+   "name_en": "Activepieces",
+   "url": "https://www.activepieces.com",
+   "category": "automation",
+   "summary_he": "אוטומציית תהליכים בגרירה, חלופה ל-Zapier.",
+   "licence": "MIT + חלק ארגוני",
+   "osi": true,
+   "github": {
+    "repo": "activepieces/activepieces",
+    "stars": 25382,
+    "pushed_at": "2026-11-05T12:14:23Z",
+    "archived": false,
+    "licence": "NOASSERTION"
+   },
+   "why_israeli": null,
+   "sources": [
+    {
+     "url": "https://github.com/activepieces/activepieces",
+     "date": "2026-11-05",
+     "what": "The project's own repository: licence file, stars and last push, read through the GitHub API on 2026-11-05.",
+     "grade": "C"
+    }
+   ],
+   "grade": "C",
+   "verified_at": "2026-11-05"
+  },
+  {
+   "id": "dub",
+   "name_he": null,
+   "name_en": "Dub",
+   "url": "https://dub.link",
+   "category": "marketing",
+   "summary_he": "קיצור קישורים ומעקב קליקים לקמפיינים.",
+   "licence": "AGPL-3.0 + חלק ארגוני",
+   "osi": true,
+   "github": {
+    "repo": "dubinc/dub.link",
+    "stars": 25113,
+    "pushed_at": "2026-10-27T02:24:37Z",
+    "archived": false,
+    "licence": "NOASSERTION"
+   },
+   "why_israeli": null,
+   "sources": [
+    {
+     "url": "https://github.com/dubinc/dub.link",
+     "date": "2026-10-27",
+     "what": "The project's own repository: licence file, stars and last push, read through the GitHub API on 2026-11-05.",
+     "grade": "C"
+    }
+   ],
+   "grade": "C",
+   "verified_at": "2026-11-05"
+  },
+  {
+   "id": "firefly-iii",
+   "name_he": null,
+   "name_en": "Firefly III",
+   "url": "https://firefly-iii.org/",
+   "category": "accounting",
+   "summary_he": "ניהול כספים אישי: תקציב, הוצאות וחשבונות בנק.",
+   "licence": "AGPL-3.0",
+   "osi": true,
+   "github": {
+    "repo": "firefly-iii/firefly-iii",
+    "stars": 25077,
+    "pushed_at": "2026-11-03T08:13:33Z",
+    "archived": false,
+    "licence": "AGPL-3.0"
+   },
+   "why_israeli": null,
+   "sources": [
+    {
+     "url": "https://github.com/firefly-iii/firefly-iii",
+     "date": "2026-11-03",
+     "what": "The project's own repository: licence file, stars and last push, read through the GitHub API on 2026-11-05.",
+     "grade": "C"
+    }
+   ],
+   "grade": "C",
+   "verified_at": "2026-11-05"
+  },
+  {
+   "id": "listmonk",
+   "name_he": null,
+   "name_en": "listmonk",
+   "url": "https://listmonk.app",
+   "category": "marketing",
+   "summary_he": "מערכת ניוזלטר ודיוור המוני מהירה, עם ניהול רשימות.",
+   "licence": "AGPL-3.0",
+   "osi": true,
+   "github": {
+    "repo": "knadh/listmonk",
+    "stars": 24155,
+    "pushed_at": "2026-11-04T02:08:21Z",
+    "archived": false,
+    "licence": "AGPL-3.0"
+   },
+   "why_israeli": null,
+   "sources": [
+    {
+     "url": "https://github.com/knadh/listmonk",
+     "date": "2026-11-04",
+     "what": "The project's own repository: licence file, stars and last push, read through the GitHub API on 2026-11-05.",
+     "grade": "C"
+    }
+   ],
+   "grade": "C",
+   "verified_at": "2026-11-05"
+  },
+  {
+   "id": "krayin",
+   "name_he": null,
+   "name_en": "Krayin CRM",
+   "url": "https://krayincrm.com",
+   "category": "crm",
+   "summary_he": "CRM על Laravel לעסקים קטנים ובינוניים.",
+   "licence": "MIT",
+   "osi": true,
+   "github": {
+    "repo": "krayin/laravel-crm",
+    "stars": 24110,
+    "pushed_at": "2026-11-05T12:31:15Z",
+    "archived": false,
+    "licence": "MIT"
+   },
+   "why_israeli": null,
+   "sources": [
+    {
+     "url": "https://github.com/krayin/laravel-crm",
+     "date": "2026-11-05",
+     "what": "The project's own repository: licence file, stars and last push, read through the GitHub API on 2026-11-05.",
+     "grade": "C"
+    }
+   ],
+   "grade": "C",
+   "verified_at": "2026-11-05"
+  },
+  {
+   "id": "node-red",
+   "name_he": null,
+   "name_en": "Node-RED",
+   "url": "https://github.com/node-red/node-red",
+   "category": "automation",
+   "summary_he": "אוטומציה בחיבור קוביות, נפוצה במיוחד ב-IoT.",
+   "licence": "Apache-2.0",
+   "osi": true,
+   "github": {
+    "repo": "node-red/node-red",
+    "stars": 23818,
+    "pushed_at": "2026-11-05T11:26:43Z",
+    "archived": false,
+    "licence": "Apache-2.0"
+   },
+   "why_israeli": null,
+   "sources": [
+    {
+     "url": "https://github.com/node-red/node-red",
+     "date": "2026-11-05",
+     "what": "The project's own repository: licence file, stars and last push, read through the GitHub API on 2026-11-05.",
+     "grade": "C"
+    }
+   ],
+   "grade": "C",
+   "verified_at": "2026-11-05"
+  },
+  {
+   "id": "saleor",
+   "name_he": null,
+   "name_en": "Saleor",
+   "url": "https://saleor.io",
+   "category": "ecommerce",
+   "summary_he": "פלטפורמת מסחר Headless עם API של GraphQL.",
+   "licence": "BSD-3-Clause",
+   "osi": true,
+   "github": {
+    "repo": "saleor/saleor",
+    "stars": 23508,
+    "pushed_at": "2026-11-04T16:48:44Z",
+    "archived": false,
+    "licence": "BSD-3-Clause"
+   },
+   "why_israeli": null,
+   "sources": [
+    {
+     "url": "https://github.com/saleor/saleor",
+     "date": "2026-11-04",
+     "what": "The project's own repository: licence file, stars and last push, read through the GitHub API on 2026-11-05.",
+     "grade": "C"
+    }
+   ],
+   "grade": "C",
+   "verified_at": "2026-11-05"
+  },
+  {
+   "id": "docmost",
+   "name_he": null,
+   "name_en": "Docmost",
+   "url": "https://docmost.com",
+   "category": "knowledge",
+   "summary_he": "ויקי ומסמכים משותפים לצוותים, חלופה ל-Confluence.",
+   "licence": "AGPL-3.0",
+   "osi": true,
+   "github": {
+    "repo": "docmost/docmost",
+    "stars": 22230,
+    "pushed_at": "2026-11-05T12:22:02Z",
+    "archived": false,
+    "licence": "AGPL-3.0"
+   },
+   "why_israeli": null,
+   "sources": [
+    {
+     "url": "https://github.com/docmost/docmost",
+     "date": "2026-11-05",
+     "what": "The project's own repository: licence file, stars and last push, read through the GitHub API on 2026-11-05.",
+     "grade": "C"
+    }
+   ],
+   "grade": "C",
+   "verified_at": "2026-11-05"
+  },
+  {
+   "id": "matomo",
+   "name_he": null,
+   "name_en": "Matomo",
+   "url": "https://matomo.org/",
+   "category": "marketing",
+   "summary_he": "אנליטיקס מלא לאתר, חלופה ל-Google Analytics, עם שליטה בנתונים.",
+   "licence": "GPL-3.0",
+   "osi": true,
+   "github": {
+    "repo": "matomo-org/matomo",
+    "stars": 22006,
+    "pushed_at": "2026-11-05T10:06:28Z",
+    "archived": false,
+    "licence": "GPL-3.0"
+   },
+   "why_israeli": null,
+   "sources": [
+    {
+     "url": "https://github.com/matomo-org/matomo",
+     "date": "2026-11-05",
+     "what": "The project's own repository: licence file, stars and last push, read through the GitHub API on 2026-11-05.",
+     "grade": "C"
+    }
+   ],
+   "grade": "C",
+   "verified_at": "2026-11-05"
+  },
+  {
+   "id": "wordpress",
+   "name_he": null,
+   "name_en": "WordPress",
+   "url": "https://wordpress.org",
+   "category": "websites",
+   "summary_he": "מערכת ניהול התוכן הנפוצה בעולם לאתרים ובלוגים.",
+   "licence": "GPL-2.0+",
+   "osi": true,
+   "github": {
+    "repo": "WordPress/WordPress",
+    "stars": 21520,
+    "pushed_at": "2026-11-05T09:52:07Z",
+    "archived": false,
+    "licence": "NOASSERTION"
+   },
+   "why_israeli": null,
+   "sources": [
+    {
+     "url": "https://github.com/WordPress/WordPress",
+     "date": "2026-11-05",
+     "what": "The project's own repository: licence file, stars and last push, read through the GitHub API on 2026-11-05.",
+     "grade": "C"
+    }
+   ],
+   "grade": "C",
+   "verified_at": "2026-11-05"
+  },
+  {
+   "id": "wekan",
+   "name_he": null,
+   "name_en": "WeKan",
+   "url": "https://wekan.fi",
+   "category": "knowledge",
+   "summary_he": "לוח קנבן משותף, חלופה ל-Trello.",
+   "licence": "MIT",
+   "osi": true,
+   "github": {
+    "repo": "wekan/wekan",
+    "stars": 21154,
+    "pushed_at": "2026-11-04T18:59:00Z",
+    "archived": false,
+    "licence": "MIT"
+   },
+   "why_israeli": null,
+   "sources": [
+    {
+     "url": "https://github.com/wekan/wekan",
+     "date": "2026-11-04",
+     "what": "The project's own repository: licence file, stars and last push, read through the GitHub API on 2026-11-05.",
+     "grade": "C"
+    }
+   ],
+   "grade": "C",
+   "verified_at": "2026-11-05"
+  },
+  {
+   "id": "wagtail",
+   "name_he": null,
+   "name_en": "Wagtail",
+   "url": "https://wagtail.org",
+   "category": "websites",
+   "summary_he": "מערכת ניהול תוכן על Django לאתרים מורכבים.",
+   "licence": "BSD-3-Clause",
+   "osi": true,
+   "github": {
+    "repo": "wagtail/wagtail",
+    "stars": 20604,
+    "pushed_at": "2026-11-04T16:04:07Z",
+    "archived": false,
+    "licence": "BSD-3-Clause"
+   },
+   "why_israeli": null,
+   "sources": [
+    {
+     "url": "https://github.com/wagtail/wagtail",
+     "date": "2026-11-04",
+     "what": "The project's own repository: licence file, stars and last push, read through the GitHub API on 2026-11-05.",
+     "grade": "C"
+    }
+   ],
+   "grade": "C",
+   "verified_at": "2026-11-05"
+  },
+  {
+   "id": "eleventy",
+   "name_he": null,
+   "name_en": "Eleventy",
+   "url": "https://build.awesome.me/",
+   "category": "websites",
+   "summary_he": "מחולל אתרים סטטיים פשוט, שהאתר הזה בנוי בו.",
+   "licence": "MIT",
+   "osi": true,
+   "github": {
+    "repo": "11ty/buildawesome",
+    "stars": 20017,
+    "pushed_at": "2026-11-05T02:07:45Z",
+    "archived": false,
+    "licence": "MIT"
+   },
+   "why_israeli": null,
+   "sources": [
+    {
+     "url": "https://github.com/11ty/buildawesome",
+     "date": "2026-11-05",
+     "what": "The project's own repository: licence file, stars and last push, read through the GitHub API on 2026-11-05.",
+     "grade": "C"
+    }
+   ],
+   "grade": "C",
+   "verified_at": "2026-11-05"
+  },
+  {
+   "id": "decap-cms",
+   "name_he": null,
+   "name_en": "Decap CMS",
+   "url": "https://decapcms.org",
+   "category": "websites",
+   "summary_he": "ממשק עריכה לאתרים סטטיים שנשמרים ב-Git.",
+   "licence": "MIT",
+   "osi": true,
+   "github": {
+    "repo": "decaporg/decap-cms",
+    "stars": 19459,
+    "pushed_at": "2026-11-01T00:30:31Z",
+    "archived": false,
+    "licence": "MIT"
+   },
+   "why_israeli": null,
+   "sources": [
+    {
+     "url": "https://github.com/decaporg/decap-cms",
+     "date": "2026-11-01",
+     "what": "The project's own repository: licence file, stars and last push, read through the GitHub API on 2026-11-05.",
+     "grade": "C"
+    }
+   ],
+   "grade": "C",
+   "verified_at": "2026-11-05"
+  },
+  {
+   "id": "bookstack",
+   "name_he": null,
+   "name_en": "BookStack",
+   "url": "https://codeberg.org/bookstack/bookstack",
+   "category": "knowledge",
+   "summary_he": "ויקי מסודר לפי ספרים, פרקים ודפים.",
+   "licence": "MIT",
+   "osi": true,
+   "github": {
+    "repo": "BookStackApp/BookStack",
+    "stars": 19128,
+    "pushed_at": "2026-11-05T04:31:12Z",
+    "archived": false,
+    "licence": "MIT"
+   },
+   "why_israeli": null,
+   "sources": [
+    {
+     "url": "https://github.com/BookStackApp/BookStack",
+     "date": "2026-11-05",
+     "what": "The project's own repository: licence file, stars and last push, read through the GitHub API on 2026-11-05.",
+     "grade": "C"
+    }
+   ],
+   "grade": "C",
+   "verified_at": "2026-11-05"
+  },
+  {
+   "id": "docuseal",
+   "name_he": null,
+   "name_en": "DocuSeal",
+   "url": "https://www.docuseal.com",
+   "category": "office",
+   "summary_he": "חתימה דיגיטלית על מסמכים ומילוי טפסים, חלופה ל-DocuSign.",
+   "licence": "AGPL-3.0",
+   "osi": true,
+   "github": {
+    "repo": "docusealco/docuseal",
+    "stars": 18993,
+    "pushed_at": "2026-11-02T13:00:51Z",
+    "archived": false,
+    "licence": "AGPL-3.0"
+   },
+   "why_israeli": null,
+   "sources": [
+    {
+     "url": "https://github.com/docusealco/docuseal",
+     "date": "2026-11-02",
+     "what": "The project's own repository: licence file, stars and last push, read through the GitHub API on 2026-11-05.",
+     "grade": "C"
+    }
+   ],
+   "grade": "C",
+   "verified_at": "2026-11-05"
+  },
+  {
+   "id": "windmill",
+   "name_he": null,
+   "name_en": "Windmill",
+   "url": "https://windmill.dev",
+   "category": "automation",
+   "summary_he": "סקריפטים, תהליכים ואפליקציות פנימיות על תשתית אחת.",
+   "licence": "Apache-2.0 / AGPL-3.0 + חלק ארגוני",
+   "osi": true,
+   "github": {
+    "repo": "windmill-labs/windmill",
+    "stars": 18393,
+    "pushed_at": "2026-11-05T12:31:49Z",
+    "archived": false,
+    "licence": "NOASSERTION"
+   },
+   "why_israeli": null,
+   "sources": [
+    {
+     "url": "https://github.com/windmill-labs/windmill",
+     "date": "2026-11-05",
+     "what": "The project's own repository: licence file, stars and last push, read through the GitHub API on 2026-11-05.",
+     "grade": "C"
+    }
+   ],
+   "grade": "C",
+   "verified_at": "2026-11-05"
+  },
+  {
+   "id": "openproject",
+   "name_he": null,
+   "name_en": "OpenProject",
+   "url": "https://www.openproject.org",
+   "category": "knowledge",
+   "summary_he": "ניהול פרויקטים: גאנט, משימות, תקציב ואג׳ייל.",
+   "licence": "GPL-3.0",
+   "osi": true,
+   "github": {
+    "repo": "opf/openproject",
+    "stars": 17015,
+    "pushed_at": "2026-11-05T12:23:50Z",
+    "archived": false,
+    "licence": "GPL-3.0"
+   },
+   "why_israeli": null,
+   "sources": [
+    {
+     "url": "https://github.com/opf/openproject",
+     "date": "2026-11-05",
+     "what": "The project's own repository: licence file, stars and last push, read through the GitHub API on 2026-11-05.",
+     "grade": "C"
+    }
+   ],
+   "grade": "C",
+   "verified_at": "2026-11-05"
+  },
+  {
+   "id": "grav",
+   "name_he": null,
+   "name_en": "Grav",
+   "url": "https://getgrav.org",
+   "category": "websites",
+   "summary_he": "מערכת ניהול תוכן בלי בסיס נתונים, על קבצים.",
+   "licence": "MIT",
+   "osi": true,
+   "github": {
+    "repo": "getgrav/grav",
+    "stars": 15712,
+    "pushed_at": "2026-11-05T01:54:42Z",
+    "archived": false,
+    "licence": "MIT"
+   },
+   "why_israeli": null,
+   "sources": [
+    {
+     "url": "https://github.com/getgrav/grav",
+     "date": "2026-11-05",
+     "what": "The project's own repository: licence file, stars and last push, read through the GitHub API on 2026-11-05.",
+     "grade": "C"
+    }
+   ],
+   "grade": "C",
+   "verified_at": "2026-11-05"
+  },
+  {
+   "id": "documenso",
+   "name_he": null,
+   "name_en": "Documenso",
+   "url": "https://documenso.com",
+   "category": "office",
+   "summary_he": "חתימה דיגיטלית על מסמכים בשרת משלכם.",
+   "licence": "AGPL-3.0",
+   "osi": true,
+   "github": {
+    "repo": "documenso/documenso",
+    "stars": 15662,
+    "pushed_at": "2026-11-05T12:07:20Z",
+    "archived": false,
+    "licence": "AGPL-3.0"
+   },
+   "why_israeli": null,
+   "sources": [
+    {
+     "url": "https://github.com/documenso/documenso",
+     "date": "2026-11-05",
+     "what": "The project's own repository: licence file, stars and last push, read through the GitHub API on 2026-11-05.",
+     "grade": "C"
+    }
+   ],
+   "grade": "C",
+   "verified_at": "2026-11-05"
+  },
+  {
+   "id": "tinode",
+   "name_he": null,
+   "name_en": "Tinode",
+   "url": "https://github.com/tinode/chat",
+   "category": "communication",
+   "summary_he": "שרת מסרים מיידיים עם אפליקציות לנייד ולדפדפן.",
+   "licence": "GPL-3.0",
+   "osi": true,
+   "github": {
+    "repo": "tinode/chat",
+    "stars": 13553,
+    "pushed_at": "2026-10-25T16:34:54Z",
+    "archived": false,
+    "licence": "GPL-3.0"
+   },
+   "why_israeli": null,
+   "sources": [
+    {
+     "url": "https://github.com/tinode/chat",
+     "date": "2026-10-25",
+     "what": "The project's own repository: licence file, stars and last push, read through the GitHub API on 2026-11-05.",
+     "grade": "C"
+    }
+   ],
+   "grade": "C",
+   "verified_at": "2026-11-05"
+  },
+  {
+   "id": "formbricks",
+   "name_he": null,
+   "name_en": "Formbricks",
+   "url": "https://formbricks.com",
+   "category": "marketing",
+   "summary_he": "סקרים וטפסים לאתר ולאפליקציה, עם ניתוח תשובות.",
+   "licence": "AGPL-3.0 + חלק ארגוני",
+   "osi": true,
+   "github": {
+    "repo": "formbricks/formbricks",
+    "stars": 13216,
+    "pushed_at": "2026-11-05T12:27:37Z",
+    "archived": false,
+    "licence": "NOASSERTION"
+   },
+   "why_israeli": null,
+   "sources": [
+    {
+     "url": "https://github.com/formbricks/formbricks",
+     "date": "2026-11-05",
+     "what": "The project's own repository: licence file, stars and last push, read through the GitHub API on 2026-11-05.",
+     "grade": "C"
+    }
+   ],
+   "grade": "C",
+   "verified_at": "2026-11-05"
+  },
+  {
+   "id": "magento-open-source",
+   "name_he": null,
+   "name_en": "Magento Open Source",
+   "url": "https://github.com/magento/magento2",
+   "category": "ecommerce",
+   "summary_he": "פלטפורמת מסחר אלקטרוני גדולה (Adobe Commerce בקוד פתוח).",
+   "licence": "OSL-3.0",
+   "osi": true,
+   "github": {
+    "repo": "magento/magento2",
+    "stars": 12221,
+    "pushed_at": "2026-11-05T11:23:22Z",
+    "archived": false,
+    "licence": "OSL-3.0"
+   },
+   "why_israeli": null,
+   "sources": [
+    {
+     "url": "https://github.com/magento/magento2",
+     "date": "2026-11-05",
+     "what": "The project's own repository: licence file, stars and last push, read through the GitHub API on 2026-11-05.",
+     "grade": "C"
+    }
+   ],
+   "grade": "C",
+   "verified_at": "2026-11-05"
+  },
+  {
+   "id": "leantime",
+   "name_he": null,
+   "name_en": "Leantime",
+   "url": "https://leantime.io",
+   "category": "knowledge",
+   "summary_he": "ניהול פרויקטים לאנשים שאינם מנהלי פרויקטים.",
+   "licence": "AGPL-3.0",
+   "osi": true,
+   "github": {
+    "repo": "Leantime/leantime",
+    "stars": 11966,
+    "pushed_at": "2026-11-01T22:00:25Z",
+    "archived": false,
+    "licence": "AGPL-3.0"
+   },
+   "why_israeli": null,
+   "sources": [
+    {
+     "url": "https://github.com/Leantime/leantime",
+     "date": "2026-11-01",
+     "what": "The project's own repository: licence file, stars and last push, read through the GitHub API on 2026-11-05.",
+     "grade": "C"
+    }
+   ],
+   "grade": "C",
+   "verified_at": "2026-11-05"
+  },
+  {
+   "id": "mautic",
+   "name_he": null,
+   "name_en": "Mautic",
+   "url": "https://www.mautic.org",
+   "category": "marketing",
+   "summary_he": "אוטומציית שיווק: דיוור, דפי נחיתה, ניקוד לידים וקמפיינים.",
+   "licence": "GPL-3.0",
+   "osi": true,
+   "github": {
+    "repo": "mautic/mautic",
+    "stars": 10940,
+    "pushed_at": "2026-11-05T12:04:29Z",
+    "archived": false,
+    "licence": "NOASSERTION"
+   },
+   "why_israeli": null,
+   "sources": [
+    {
+     "url": "https://github.com/mautic/mautic",
+     "date": "2026-11-05",
+     "what": "The project's own repository: licence file, stars and last push, read through the GitHub API on 2026-11-05.",
+     "grade": "C"
+    }
+   ],
+   "grade": "C",
+   "verified_at": "2026-11-05"
+  },
+  {
+   "id": "typebot",
+   "name_he": null,
+   "name_en": "Typebot",
+   "url": "https://typebot.io",
+   "category": "marketing",
+   "summary_he": "בונה צ׳אטבוטים ושיחות טפסים בגרירה, עם הטמעה באתר.",
+   "licence": "FSL-1.1 · לא OSI",
+   "osi": false,
+   "github": {
+    "repo": "baptisteArno/typebot.io",
+    "stars": 10605,
+    "pushed_at": "2026-10-26T11:27:15Z",
+    "archived": false,
+    "licence": "NOASSERTION"
+   },
+   "why_israeli": null,
+   "sources": [
+    {
+     "url": "https://github.com/baptisteArno/typebot.io",
+     "date": "2026-10-26",
+     "what": "The project's own repository: licence file, stars and last push, read through the GitHub API on 2026-11-05.",
+     "grade": "C"
+    }
+   ],
+   "grade": "C",
+   "verified_at": "2026-11-05"
+  },
+  {
+   "id": "woocommerce",
+   "name_he": null,
+   "name_en": "WooCommerce",
+   "url": "https://woocommerce.com",
+   "category": "ecommerce",
+   "summary_he": "חנות אונליין על WordPress — הנפוצה מסוגה.",
+   "licence": "GPL-2.0",
+   "osi": true,
+   "github": {
+    "repo": "woocommerce/woocommerce",
+    "stars": 10583,
+    "pushed_at": "2026-11-05T12:19:20Z",
+    "archived": false,
+    "licence": "GPL-2.0"
+   },
+   "why_israeli": null,
+   "sources": [
+    {
+     "url": "https://github.com/woocommerce/woocommerce",
+     "date": "2026-11-05",
+     "what": "The project's own repository: licence file, stars and last push, read through the GitHub API on 2026-11-05.",
+     "grade": "C"
+    }
+   ],
+   "grade": "C",
+   "verified_at": "2026-11-05"
+  },
+  {
+   "id": "invoice-ninja",
+   "name_he": null,
+   "name_en": "Invoice Ninja",
+   "url": "https://invoiceninja.com",
+   "category": "accounting",
+   "summary_he": "חשבוניות, הצעות מחיר, תשלומים ומעקב שעות ללקוחות.",
+   "licence": "Elastic 2.0 · לא OSI",
+   "osi": false,
+   "github": {
+    "repo": "invoiceninja/invoiceninja",
+    "stars": 10500,
+    "pushed_at": "2026-11-05T07:47:03Z",
+    "archived": false,
+    "licence": "NOASSERTION"
+   },
+   "why_israeli": null,
+   "sources": [
+    {
+     "url": "https://github.com/invoiceninja/invoiceninja",
+     "date": "2026-11-05",
+     "what": "The project's own repository: licence file, stars and last push, read through the GitHub API on 2026-11-05.",
+     "grade": "C"
+    }
+   ],
+   "grade": "C",
+   "verified_at": "2026-11-05"
+  },
+  {
+   "id": "akaunting",
+   "name_he": null,
+   "name_en": "Akaunting",
+   "url": "https://akaunting.com",
+   "category": "accounting",
+   "summary_he": "הנהלת חשבונות מקוונת לעסקים קטנים: חשבוניות, הוצאות ודוחות.",
+   "licence": "BSL 1.1 · לא OSI",
+   "osi": false,
+   "github": {
+    "repo": "akaunting/akaunting",
+    "stars": 10280,
+    "pushed_at": "2026-11-05T00:19:17Z",
+    "archived": false,
+    "licence": "NOASSERTION"
+   },
+   "why_israeli": null,
+   "sources": [
+    {
+     "url": "https://github.com/akaunting/akaunting",
+     "date": "2026-11-05",
+     "what": "The project's own repository: licence file, stars and last push, read through the GitHub API on 2026-11-05.",
+     "grade": "C"
+    }
+   ],
+   "grade": "C",
+   "verified_at": "2026-11-05"
+  },
+  {
+   "id": "kanboard",
+   "name_he": null,
+   "name_en": "Kanboard",
+   "url": "https://kanboard.org",
+   "category": "knowledge",
+   "summary_he": "לוח קנבן מינימליסטי וקל.",
+   "licence": "MIT",
+   "osi": true,
+   "github": {
+    "repo": "kanboard/kanboard",
+    "stars": 9939,
+    "pushed_at": "2026-11-04T21:32:33Z",
+    "archived": false,
+    "licence": "MIT"
+   },
+   "why_israeli": null,
+   "sources": [
+    {
+     "url": "https://github.com/kanboard/kanboard",
+     "date": "2026-11-04",
+     "what": "The project's own repository: licence file, stars and last push, read through the GitHub API on 2026-11-05.",
+     "grade": "C"
+    }
+   ],
+   "grade": "C",
+   "verified_at": "2026-11-05"
+  },
+  {
+   "id": "bigbluebutton",
+   "name_he": null,
+   "name_en": "BigBlueButton",
+   "url": "https://bigbluebutton.org",
+   "category": "communication",
+   "summary_he": "כיתה וירטואלית ופגישות וידאו עם לוח ושיתוף מסך.",
+   "licence": "LGPL-3.0",
+   "osi": true,
+   "github": {
+    "repo": "bigbluebutton/bigbluebutton",
+    "stars": 9270,
+    "pushed_at": "2026-11-05T10:20:49Z",
+    "archived": false,
+    "licence": "LGPL-3.0"
+   },
+   "why_israeli": null,
+   "sources": [
+    {
+     "url": "https://github.com/bigbluebutton/bigbluebutton",
+     "date": "2026-11-05",
+     "what": "The project's own repository: licence file, stars and last push, read through the GitHub API on 2026-11-05.",
+     "grade": "C"
+    }
+   ],
+   "grade": "C",
+   "verified_at": "2026-11-05"
+  },
+  {
+   "id": "prestashop",
+   "name_he": null,
+   "name_en": "PrestaShop",
+   "url": "https://www.prestashop-project.org/",
+   "category": "ecommerce",
+   "summary_he": "פלטפורמת חנות אונליין מלאה עם מודולים רבים.",
+   "licence": "OSL-3.0",
+   "osi": true,
+   "github": {
+    "repo": "PrestaShop/PrestaShop",
+    "stars": 9244,
+    "pushed_at": "2026-11-05T11:54:13Z",
+    "archived": false,
+    "licence": "NOASSERTION"
+   },
+   "why_israeli": null,
+   "sources": [
+    {
+     "url": "https://github.com/PrestaShop/PrestaShop",
+     "date": "2026-11-05",
+     "what": "The project's own repository: licence file, stars and last push, read through the GitHub API on 2026-11-05.",
+     "grade": "C"
+    }
+   ],
+   "grade": "C",
+   "verified_at": "2026-11-05"
+  },
+  {
+   "id": "frappe-hr",
+   "name_he": null,
+   "name_en": "Frappe HR",
+   "url": "https://frappe.io/hr",
+   "category": "accounting",
+   "summary_he": "משאבי אנוש ושכר על בסיס Frappe: עובדים, חופשות, הוצאות ושכר.",
+   "licence": "GPL-3.0",
+   "osi": true,
+   "github": {
+    "repo": "frappe/hrms",
+    "stars": 9021,
+    "pushed_at": "2026-11-04T11:44:24Z",
+    "archived": false,
+    "licence": "GPL-3.0"
+   },
+   "why_israeli": null,
+   "sources": [
+    {
+     "url": "https://github.com/frappe/hrms",
+     "date": "2026-11-04",
+     "what": "The project's own repository: licence file, stars and last push, read through the GitHub API on 2026-11-05.",
+     "grade": "C"
+    }
+   ],
+   "grade": "C",
+   "verified_at": "2026-11-05"
+  },
+  {
+   "id": "sylius",
+   "name_he": null,
+   "name_en": "Sylius",
+   "url": "https://sylius.com",
+   "category": "ecommerce",
+   "summary_he": "פלטפורמת מסחר על Symfony לפרויקטים מותאמים.",
+   "licence": "MIT",
+   "osi": true,
+   "github": {
+    "repo": "Sylius/Sylius",
+    "stars": 8567,
+    "pushed_at": "2026-11-05T02:07:59Z",
+    "archived": false,
+    "licence": "MIT"
+   },
+   "why_israeli": null,
+   "sources": [
+    {
+     "url": "https://github.com/Sylius/Sylius",
+     "date": "2026-11-05",
+     "what": "The project's own repository: licence file, stars and last push, read through the GitHub API on 2026-11-05.",
+     "grade": "C"
+    }
+   ],
+   "grade": "C",
+   "verified_at": "2026-11-05"
+  },
+  {
+   "id": "vendure",
+   "name_he": null,
+   "name_en": "Vendure",
+   "url": "https://www.vendure.io",
+   "category": "ecommerce",
+   "summary_he": "מנוע מסחר Headless על TypeScript.",
+   "licence": "GPL-3.0 או מסחרי",
+   "osi": true,
+   "github": {
+    "repo": "vendurehq/vendure",
+    "stars": 8566,
+    "pushed_at": "2026-11-05T12:13:29Z",
+    "archived": false,
+    "licence": "NOASSERTION"
+   },
+   "why_israeli": null,
+   "sources": [
+    {
+     "url": "https://github.com/vendurehq/vendure",
+     "date": "2026-11-05",
+     "what": "The project's own repository: licence file, stars and last push, read through the GitHub API on 2026-11-05.",
+     "grade": "C"
+    }
+   ],
+   "grade": "C",
+   "verified_at": "2026-11-05"
+  },
+  {
+   "id": "mumble",
+   "name_he": null,
+   "name_en": "Mumble",
+   "url": "https://www.mumble.info",
+   "category": "communication",
+   "summary_he": "צ׳אט קולי באיכות גבוהה ובהשהיה נמוכה.",
+   "licence": "BSD-3-Clause",
+   "osi": true,
+   "github": {
+    "repo": "mumble-voip/mumble",
+    "stars": 8396,
+    "pushed_at": "2026-11-04T18:32:00Z",
+    "archived": false,
+    "licence": "NOASSERTION"
+   },
+   "why_israeli": null,
+   "sources": [
+    {
+     "url": "https://github.com/mumble-voip/mumble",
+     "date": "2026-11-04",
+     "what": "The project's own repository: licence file, stars and last push, read through the GitHub API on 2026-11-05.",
+     "grade": "C"
+    }
+   ],
+   "grade": "C",
+   "verified_at": "2026-11-05"
+  },
+  {
+   "id": "opencart",
+   "name_he": null,
+   "name_en": "OpenCart",
+   "url": "https://www.opencart.com",
+   "category": "ecommerce",
+   "summary_he": "חנות אונליין פשוטה וקלה להקמה.",
+   "licence": "GPL-3.0",
+   "osi": true,
+   "github": {
+    "repo": "opencart/opencart",
+    "stars": 8225,
+    "pushed_at": "2026-11-04T11:58:06Z",
+    "archived": false,
+    "licence": "NOASSERTION"
+   },
+   "why_israeli": null,
+   "sources": [
+    {
+     "url": "https://github.com/opencart/opencart",
+     "date": "2026-11-04",
+     "what": "The project's own repository: licence file, stars and last push, read through the GitHub API on 2026-11-05.",
+     "grade": "C"
+    }
+   ],
+   "grade": "C",
+   "verified_at": "2026-11-05"
+  },
+  {
+   "id": "dolibarr",
+   "name_he": null,
+   "name_en": "Dolibarr",
+   "url": "https://www.dolibarr.org",
+   "category": "accounting",
+   "summary_he": "ERP ו-CRM לעסק קטן ובינוני: הצעות מחיר, חשבוניות, מלאי ופרויקטים.",
+   "licence": "GPL-3.0",
+   "osi": true,
+   "github": {
+    "repo": "Dolibarr/dolibarr",
+    "stars": 7832,
+    "pushed_at": "2026-11-05T12:31:08Z",
+    "archived": false,
+    "licence": "GPL-3.0"
+   },
+   "why_israeli": null,
+   "sources": [
+    {
+     "url": "https://github.com/Dolibarr/dolibarr",
+     "date": "2026-11-05",
+     "what": "The project's own repository: licence file, stars and last push, read through the GitHub API on 2026-11-05.",
+     "grade": "C"
+    }
+   ],
+   "grade": "C",
+   "verified_at": "2026-11-05"
+  },
+  {
+   "id": "matterbridge",
+   "name_he": null,
+   "name_en": "Matterbridge",
+   "url": "https://github.com/42wim/matterbridge",
+   "category": "communication",
+   "summary_he": "גשר שמחבר בין צ׳אטים: Slack, Telegram, Discord ועוד.",
+   "licence": "Apache-2.0",
+   "osi": true,
+   "github": {
+    "repo": "42wim/matterbridge",
+    "stars": 7612,
+    "pushed_at": "2024-12-12T00:20:34Z",
+    "archived": false,
+    "licence": "Apache-2.0"
+   },
+   "why_israeli": null,
+   "sources": [
+    {
+     "url": "https://github.com/42wim/matterbridge",
+     "date": "2024-12-12",
+     "what": "The project's own repository: licence file, stars and last push, read through the GitHub API on 2026-11-05.",
+     "grade": "C"
+    }
+   ],
+   "grade": "C",
+   "verified_at": "2026-11-05"
+  },
+  {
+   "id": "onlyoffice",
+   "name_he": null,
+   "name_en": "ONLYOFFICE Docs",
+   "url": "https://www.onlyoffice.com/see-it-in-action",
+   "category": "office",
+   "summary_he": "עורכי מסמכים בדפדפן תואמי Office, לעבודה משותפת.",
+   "licence": "AGPL-3.0",
+   "osi": true,
+   "github": {
+    "repo": "ONLYOFFICE/DocumentServer",
+    "stars": 7090,
+    "pushed_at": "2026-10-26T09:12:03Z",
+    "archived": false,
+    "licence": "AGPL-3.0"
+   },
+   "why_israeli": null,
+   "sources": [
+    {
+     "url": "https://github.com/ONLYOFFICE/DocumentServer",
+     "date": "2026-10-26",
+     "what": "The project's own repository: licence file, stars and last push, read through the GitHub API on 2026-11-05.",
+     "grade": "C"
+    }
+   ],
+   "grade": "C",
+   "verified_at": "2026-11-05"
+  },
+  {
+   "id": "baserow",
+   "name_he": null,
+   "name_en": "Baserow",
+   "url": "https://baserow.io",
+   "category": "automation",
+   "summary_he": "בסיס נתונים בלי קוד בסגנון Airtable.",
+   "licence": "MIT + חלק ארגוני",
+   "osi": true,
+   "github": {
+    "repo": "baserow/baserow",
+    "stars": 6272,
+    "pushed_at": "2026-11-05T12:34:53Z",
+    "archived": false,
+    "licence": "NOASSERTION"
+   },
+   "why_israeli": null,
+   "sources": [
+    {
+     "url": "https://github.com/baserow/baserow",
+     "date": "2026-11-05",
+     "what": "The project's own repository: licence file, stars and last push, read through the GitHub API on 2026-11-05.",
+     "grade": "C"
+    }
+   ],
+   "grade": "C",
+   "verified_at": "2026-11-05"
+  },
+  {
+   "id": "zammad",
+   "name_he": null,
+   "name_en": "Zammad",
+   "url": "https://zammad.org",
+   "category": "crm",
+   "summary_he": "מערכת פניות לשירות לקוחות במייל, בטלפון, בצ׳אט וברשתות.",
+   "licence": "AGPL-3.0",
+   "osi": true,
+   "github": {
+    "repo": "zammad/zammad",
+    "stars": 6081,
+    "pushed_at": "2026-11-05T12:30:59Z",
+    "archived": false,
+    "licence": "AGPL-3.0"
+   },
+   "why_israeli": null,
+   "sources": [
+    {
+     "url": "https://github.com/zammad/zammad",
+     "date": "2026-11-05",
+     "what": "The project's own repository: licence file, stars and last push, read through the GitHub API on 2026-11-05.",
+     "grade": "C"
+    }
+   ],
+   "grade": "C",
+   "verified_at": "2026-11-05"
+  },
+  {
+   "id": "paperless-ai",
+   "name_he": null,
+   "name_en": "Paperless-AI",
+   "url": "https://clusterzx.github.io/paperless-ai/",
+   "category": "ai",
+   "summary_he": "תיוג וסיכום מסמכים ב-Paperless-ngx בעזרת מודל שפה.",
+   "licence": "MIT",
+   "osi": true,
+   "github": {
+    "repo": "clusterzx/paperless-ai",
+    "stars": 5992,
+    "pushed_at": "2026-10-16T01:31:17Z",
+    "archived": false,
+    "licence": "MIT"
+   },
+   "why_israeli": null,
+   "sources": [
+    {
+     "url": "https://github.com/clusterzx/paperless-ai",
+     "date": "2026-10-16",
+     "what": "The project's own repository: licence file, stars and last push, read through the GitHub API on 2026-11-05.",
+     "grade": "C"
+    }
+   ],
+   "grade": "C",
+   "verified_at": "2026-11-05"
+  },
+  {
+   "id": "vikunja",
+   "name_he": null,
+   "name_en": "Vikunja",
+   "url": "https://vikunja.io",
+   "category": "knowledge",
+   "summary_he": "רשימות משימות ופרויקטים לצוות קטן.",
+   "licence": "AGPL-3.0",
+   "osi": true,
+   "github": {
+    "repo": "go-vikunja/vikunja",
+    "stars": 5964,
+    "pushed_at": "2026-11-05T12:34:50Z",
+    "archived": false,
+    "licence": "AGPL-3.0"
+   },
+   "why_israeli": null,
+   "sources": [
+    {
+     "url": "https://github.com/go-vikunja/vikunja",
+     "date": "2026-11-05",
+     "what": "The project's own repository: licence file, stars and last push, read through the GitHub API on 2026-11-05.",
+     "grade": "C"
+    }
+   ],
+   "grade": "C",
+   "verified_at": "2026-11-05"
+  },
+  {
+   "id": "suitecrm",
+   "name_he": null,
+   "name_en": "SuiteCRM",
+   "url": "https://www.suitecrm.com",
+   "category": "crm",
+   "summary_he": "CRM ארגוני מלא, ממשיך של SugarCRM בקוד פתוח.",
+   "licence": "AGPL-3.0",
+   "osi": true,
+   "github": {
+    "repo": "SuiteCRM/SuiteCRM",
+    "stars": 5844,
+    "pushed_at": "2026-11-04T22:20:41Z",
+    "archived": false,
+    "licence": "AGPL-3.0"
+   },
+   "why_israeli": null,
+   "sources": [
+    {
+     "url": "https://github.com/SuiteCRM/SuiteCRM",
+     "date": "2026-11-04",
+     "what": "The project's own repository: licence file, stars and last push, read through the GitHub API on 2026-11-05.",
+     "grade": "C"
+    }
+   ],
+   "grade": "C",
+   "verified_at": "2026-11-05"
+  },
+  {
+   "id": "shlink",
+   "name_he": null,
+   "name_en": "Shlink",
+   "url": "https://shlink.io",
+   "category": "marketing",
+   "summary_he": "מקצר קישורים בשרת משלכם, עם סטטיסטיקות.",
+   "licence": "MIT",
+   "osi": true,
+   "github": {
+    "repo": "shlinkio/shlink",
+    "stars": 5404,
+    "pushed_at": "2026-11-02T13:04:51Z",
+    "archived": false,
+    "licence": "MIT"
+   },
+   "why_israeli": null,
+   "sources": [
+    {
+     "url": "https://github.com/shlinkio/shlink",
+     "date": "2026-11-02",
+     "what": "The project's own repository: licence file, stars and last push, read through the GitHub API on 2026-11-05.",
+     "grade": "C"
+    }
+   ],
+   "grade": "C",
+   "verified_at": "2026-11-05"
+  },
+  {
+   "id": "rallly",
+   "name_he": null,
+   "name_en": "Rallly",
+   "url": "https://rallly.co",
+   "category": "communication",
+   "summary_he": "תיאום מועד לפגישה בהצבעה, חלופה ל-Doodle.",
+   "licence": "AGPL-3.0",
+   "osi": true,
+   "github": {
+    "repo": "lukevella/rallly",
+    "stars": 5342,
+    "pushed_at": "2026-11-05T08:40:15Z",
+    "archived": false,
+    "licence": "AGPL-3.0"
+   },
+   "why_israeli": null,
+   "sources": [
+    {
+     "url": "https://github.com/lukevella/rallly",
+     "date": "2026-11-05",
+     "what": "The project's own repository: licence file, stars and last push, read through the GitHub API on 2026-11-05.",
+     "grade": "C"
+    }
+   ],
+   "grade": "C",
+   "verified_at": "2026-11-05"
+  },
+  {
+   "id": "joomla",
+   "name_he": null,
+   "name_en": "Joomla",
+   "url": "https://www.joomla.org",
+   "category": "websites",
+   "summary_he": "מערכת ניהול תוכן ותיקה לאתרים ופורטלים.",
+   "licence": "GPL-2.0",
+   "osi": true,
+   "github": {
+    "repo": "joomla/joomla-cms",
+    "stars": 5165,
+    "pushed_at": "2026-11-05T09:21:47Z",
+    "archived": false,
+    "licence": "GPL-2.0"
+   },
+   "why_israeli": null,
+   "sources": [
+    {
+     "url": "https://github.com/joomla/joomla-cms",
+     "date": "2026-11-05",
+     "what": "The project's own repository: licence file, stars and last push, read through the GitHub API on 2026-11-05.",
+     "grade": "C"
+    }
+   ],
+   "grade": "C",
+   "verified_at": "2026-11-05"
+  },
+  {
+   "id": "kimai",
+   "name_he": null,
+   "name_en": "Kimai",
+   "url": "https://www.kimai.org",
+   "category": "accounting",
+   "summary_he": "מעקב שעות עבודה לפי לקוח ופרויקט, עם דוחות לחיוב.",
+   "licence": "AGPL-3.0",
+   "osi": true,
+   "github": {
+    "repo": "kimai/kimai",
+    "stars": 5137,
+    "pushed_at": "2026-11-05T03:21:55Z",
+    "archived": false,
+    "licence": "AGPL-3.0"
+   },
+   "why_israeli": null,
+   "sources": [
+    {
+     "url": "https://github.com/kimai/kimai",
+     "date": "2026-11-05",
+     "what": "The project's own repository: licence file, stars and last push, read through the GitHub API on 2026-11-05.",
+     "grade": "C"
+    }
+   ],
+   "grade": "C",
+   "verified_at": "2026-11-05"
+  },
+  {
+   "id": "element-synapse",
+   "name_he": null,
+   "name_en": "Synapse (Matrix)",
+   "url": "https://element-hq.github.io/synapse",
+   "category": "communication",
+   "summary_he": "שרת Matrix לצ׳אט מוצפן ומבוזר.",
+   "licence": "AGPL-3.0",
+   "osi": true,
+   "github": {
+    "repo": "element-hq/synapse",
+    "stars": 4767,
+    "pushed_at": "2026-11-05T11:18:43Z",
+    "archived": false,
+    "licence": "AGPL-3.0"
+   },
+   "why_israeli": null,
+   "sources": [
+    {
+     "url": "https://github.com/element-hq/synapse",
+     "date": "2026-11-05",
+     "what": "The project's own repository: licence file, stars and last push, read through the GitHub API on 2026-11-05.",
+     "grade": "C"
+    }
+   ],
+   "grade": "C",
+   "verified_at": "2026-11-05"
+  },
+  {
+   "id": "freescout",
+   "name_he": null,
+   "name_en": "FreeScout",
+   "url": "https://freescout.net",
+   "category": "crm",
+   "summary_he": "תיבת שירות לקוחות משותפת במייל, חלופה ל-Help Scout.",
+   "licence": "AGPL-3.0",
+   "osi": true,
+   "github": {
+    "repo": "freescout-help-desk/freescout",
+    "stars": 4640,
+    "pushed_at": "2026-11-05T10:14:32Z",
+    "archived": false,
+    "licence": "AGPL-3.0"
+   },
+   "why_israeli": null,
+   "sources": [
+    {
+     "url": "https://github.com/freescout-help-desk/freescout",
+     "date": "2026-11-05",
+     "what": "The project's own repository: licence file, stars and last push, read through the GitHub API on 2026-11-05.",
+     "grade": "C"
+    }
+   ],
+   "grade": "C",
+   "verified_at": "2026-11-05"
+  },
+  {
+   "id": "libreoffice",
+   "name_he": null,
+   "name_en": "LibreOffice",
+   "url": "https://www.libreoffice.org/",
+   "category": "office",
+   "summary_he": "חבילת משרד מלאה: מעבד תמלילים, גיליון אלקטרוני ומצגות.",
+   "licence": "GPL-3.0",
+   "osi": true,
+   "github": {
+    "repo": "LibreOffice/core",
+    "stars": 4600,
+    "pushed_at": "2026-11-05T11:53:28Z",
+    "archived": false,
+    "licence": "GPL-3.0"
+   },
+   "why_israeli": null,
+   "sources": [
+    {
+     "url": "https://github.com/LibreOffice/core",
+     "date": "2026-11-05",
+     "what": "The project's own repository: licence file, stars and last push, read through the GitHub API on 2026-11-05.",
+     "grade": "C"
+    }
+   ],
+   "grade": "C",
+   "verified_at": "2026-11-05"
+  },
+  {
+   "id": "gnucash",
+   "name_he": null,
+   "name_en": "GnuCash",
+   "url": "https://github.com/Gnucash/gnucash",
+   "category": "accounting",
+   "summary_he": "הנהלת חשבונות בשיטה הכפולה לעסק קטן ולמשק בית, על המחשב.",
+   "licence": "GPL-2.0",
+   "osi": true,
+   "github": {
+    "repo": "Gnucash/gnucash",
+    "stars": 4398,
+    "pushed_at": "2026-11-03T02:12:30Z",
+    "archived": false,
+    "licence": "NOASSERTION"
+   },
+   "why_israeli": null,
+   "sources": [
+    {
+     "url": "https://github.com/Gnucash/gnucash",
+     "date": "2026-11-03",
+     "what": "The project's own repository: licence file, stars and last push, read through the GitHub API on 2026-11-05.",
+     "grade": "C"
+    }
+   ],
+   "grade": "C",
+   "verified_at": "2026-11-05"
+  },
+  {
+   "id": "erxes",
+   "name_he": null,
+   "name_en": "erxes",
+   "url": "https://erxes.io",
+   "category": "crm",
+   "summary_he": "פלטפורמת חוויית לקוח: CRM, צ׳אט, דיוור ושירות במקום אחד.",
+   "licence": "AGPL-3.0 + חלק ארגוני",
+   "osi": true,
+   "github": {
+    "repo": "erxes/erxes",
+    "stars": 4111,
+    "pushed_at": "2026-11-05T12:29:24Z",
+    "archived": false,
+    "licence": "NOASSERTION"
+   },
+   "why_israeli": null,
+   "sources": [
+    {
+     "url": "https://github.com/erxes/erxes",
+     "date": "2026-11-05",
+     "what": "The project's own repository: licence file, stars and last push, read through the GitHub API on 2026-11-05.",
+     "grade": "C"
+    }
+   ],
+   "grade": "C",
+   "verified_at": "2026-11-05"
+  },
+  {
+   "id": "osticket",
+   "name_he": null,
+   "name_en": "osTicket",
+   "url": "https://github.com/osTicket/osTicket",
+   "category": "crm",
+   "summary_he": "מערכת קריאות שירות ותמיכה ותיקה ופשוטה.",
+   "licence": "GPL-2.0",
+   "osi": true,
+   "github": {
+    "repo": "osTicket/osTicket",
+    "stars": 4002,
+    "pushed_at": "2026-06-17T22:06:29Z",
+    "archived": false,
+    "licence": "GPL-2.0"
+   },
+   "why_israeli": null,
+   "sources": [
+    {
+     "url": "https://github.com/osTicket/osTicket",
+     "date": "2026-06-17",
+     "what": "The project's own repository: licence file, stars and last push, read through the GitHub API on 2026-11-05.",
+     "grade": "C"
+    }
+   ],
+   "grade": "C",
+   "verified_at": "2026-11-05"
+  },
+  {
+   "id": "mixpost",
+   "name_he": null,
+   "name_en": "Mixpost",
+   "url": "https://mixpost.app",
+   "category": "marketing",
+   "summary_he": "ניהול ותזמון רשתות חברתיות לעסק ולסוכנות.",
+   "licence": "MIT",
+   "osi": true,
+   "github": {
+    "repo": "inovector/mixpost",
+    "stars": 3907,
+    "pushed_at": "2026-03-16T10:06:38Z",
+    "archived": false,
+    "licence": "MIT"
+   },
+   "why_israeli": null,
+   "sources": [
+    {
+     "url": "https://github.com/inovector/mixpost",
+     "date": "2026-03-16",
+     "what": "The project's own repository: licence file, stars and last push, read through the GitHub API on 2026-11-05.",
+     "grade": "C"
+    }
+   ],
+   "grade": "C",
+   "verified_at": "2026-11-05"
+  },
+  {
+   "id": "limesurvey",
+   "name_he": null,
+   "name_en": "LimeSurvey",
+   "url": "https://www.limesurvey.org",
+   "category": "marketing",
+   "summary_he": "סקרים מקצועיים עם לוגיקה, מכסות ושפות רבות.",
+   "licence": "GPL-2.0+",
+   "osi": true,
+   "github": {
+    "repo": "LimeSurvey/LimeSurvey",
+    "stars": 3791,
+    "pushed_at": "2026-11-05T12:32:06Z",
+    "archived": false,
+    "licence": "NOASSERTION"
+   },
+   "why_israeli": null,
+   "sources": [
+    {
+     "url": "https://github.com/LimeSurvey/LimeSurvey",
+     "date": "2026-11-05",
+     "what": "The project's own repository: licence file, stars and last push, read through the GitHub API on 2026-11-05.",
+     "grade": "C"
+    }
+   ],
+   "grade": "C",
+   "verified_at": "2026-11-05"
+  },
+  {
+   "id": "espocrm",
+   "name_he": null,
+   "name_en": "EspoCRM",
+   "url": "https://www.espocrm.com",
+   "category": "crm",
+   "summary_he": "CRM לניהול לקוחות, הזדמנויות, מיילים ויומנים.",
+   "licence": "AGPL-3.0",
+   "osi": true,
+   "github": {
+    "repo": "espocrm/espocrm",
+    "stars": 3550,
+    "pushed_at": "2026-11-05T07:30:55Z",
+    "archived": false,
+    "licence": "AGPL-3.0"
+   },
+   "why_israeli": null,
+   "sources": [
+    {
+     "url": "https://github.com/espocrm/espocrm",
+     "date": "2026-11-05",
+     "what": "The project's own repository: licence file, stars and last push, read through the GitHub API on 2026-11-05.",
+     "grade": "C"
+    }
+   ],
+   "grade": "C",
+   "verified_at": "2026-11-05"
+  },
+  {
+   "id": "shopware",
+   "name_he": null,
+   "name_en": "Shopware",
+   "url": "https://shopware.com",
+   "category": "ecommerce",
+   "summary_he": "פלטפורמת מסחר אלקטרוני גרמנית לחנויות בינוניות וגדולות.",
+   "licence": "MIT",
+   "osi": true,
+   "github": {
+    "repo": "shopware/shopware",
+    "stars": 3468,
+    "pushed_at": "2026-11-05T12:32:52Z",
+    "archived": false,
+    "licence": "MIT"
+   },
+   "why_israeli": null,
+   "sources": [
+    {
+     "url": "https://github.com/shopware/shopware",
+     "date": "2026-11-05",
+     "what": "The project's own repository: licence file, stars and last push, read through the GitHub API on 2026-11-05.",
+     "grade": "C"
+    }
+   ],
+   "grade": "C",
+   "verified_at": "2026-11-05"
+  },
+  {
+   "id": "collabora-online",
+   "name_he": null,
+   "name_en": "Collabora Online",
+   "url": "https://collaboraonline.com",
+   "category": "office",
+   "summary_he": "LibreOffice בדפדפן, לעריכה משותפת של מסמכים.",
+   "licence": "MPL-2.0",
+   "osi": true,
+   "github": {
+    "repo": "CollaboraOnline/online",
+    "stars": 3390,
+    "pushed_at": "2026-10-27T09:56:48Z",
+    "archived": false,
+    "licence": "NOASSERTION"
+   },
+   "why_israeli": null,
+   "sources": [
+    {
+     "url": "https://github.com/CollaboraOnline/online",
+     "date": "2026-10-27",
+     "what": "The project's own repository: licence file, stars and last push, read through the GitHub API on 2026-11-05.",
+     "grade": "C"
+    }
+   ],
+   "grade": "C",
+   "verified_at": "2026-11-05"
+  },
+  {
+   "id": "invoiceplane",
+   "name_he": null,
+   "name_en": "InvoicePlane",
+   "url": "https://www.invoiceplane.com",
+   "category": "accounting",
+   "summary_he": "חשבוניות והצעות מחיר פשוטות לעצמאים ולעסקים קטנים.",
+   "licence": "MIT",
+   "osi": true,
+   "github": {
+    "repo": "InvoicePlane/InvoicePlane",
+    "stars": 3277,
+    "pushed_at": "2026-11-03T04:33:05Z",
+    "archived": false,
+    "licence": "NOASSERTION"
+   },
+   "why_israeli": null,
+   "sources": [
+    {
+     "url": "https://github.com/InvoicePlane/InvoicePlane",
+     "date": "2026-11-03",
+     "what": "The project's own repository: licence file, stars and last push, read through the GitHub API on 2026-11-05.",
+     "grade": "C"
+    }
+   ],
+   "grade": "C",
+   "verified_at": "2026-11-05"
+  },
+  {
+   "id": "peppermint",
+   "name_he": null,
+   "name_en": "Peppermint",
+   "url": "https://peppermint.sh",
+   "category": "crm",
+   "summary_he": "מערכת קריאות שירות קלה לצוותי תמיכה. המאגר הועבר לארכיון.",
+   "licence": "AGPL-3.0 + חלק ארגוני",
+   "osi": true,
+   "github": {
+    "repo": "Peppermint-Lab/peppermint",
+    "stars": 3160,
+    "pushed_at": "2025-09-21T10:59:09Z",
+    "archived": true,
+    "licence": "NOASSERTION"
+   },
+   "why_israeli": null,
+   "sources": [
+    {
+     "url": "https://github.com/Peppermint-Lab/peppermint",
+     "date": "2025-09-21",
+     "what": "The project's own repository: licence file, stars and last push, read through the GitHub API on 2026-11-05.",
+     "grade": "C"
+    }
+   ],
+   "grade": "C",
+   "verified_at": "2026-11-05"
+  },
+  {
+   "id": "docspell",
+   "name_he": null,
+   "name_en": "Docspell",
+   "url": "https://docspell.org",
+   "category": "office",
+   "summary_he": "ארכיון מסמכים סרוקים עם זיהוי טקסט ותיוג אוטומטי.",
+   "licence": "AGPL-3.0",
+   "osi": true,
+   "github": {
+    "repo": "eikek/docspell",
+    "stars": 2344,
+    "pushed_at": "2026-11-02T22:41:09Z",
+    "archived": false,
+    "licence": "AGPL-3.0"
+   },
+   "why_israeli": null,
+   "sources": [
+    {
+     "url": "https://github.com/eikek/docspell",
+     "date": "2026-11-02",
+     "what": "The project's own repository: licence file, stars and last push, read through the GitHub API on 2026-11-05.",
+     "grade": "C"
+    }
+   ],
+   "grade": "C",
+   "verified_at": "2026-11-05"
+  },
+  {
+   "id": "nextcloud-talk",
+   "name_he": null,
+   "name_en": "Nextcloud Talk",
+   "url": "https://nextcloud.com/talk",
+   "category": "communication",
+   "summary_he": "צ׳אט ושיחות וידאו בתוך Nextcloud.",
+   "licence": "AGPL-3.0",
+   "osi": true,
+   "github": {
+    "repo": "nextcloud/spreed",
+    "stars": 2222,
+    "pushed_at": "2026-11-05T12:20:09Z",
+    "archived": false,
+    "licence": "AGPL-3.0"
+   },
+   "why_israeli": null,
+   "sources": [
+    {
+     "url": "https://github.com/nextcloud/spreed",
+     "date": "2026-11-05",
+     "what": "The project's own repository: licence file, stars and last push, read through the GitHub API on 2026-11-05.",
+     "grade": "C"
+    }
+   ],
+   "grade": "C",
+   "verified_at": "2026-11-05"
+  },
+  {
+   "id": "orangehrm",
+   "name_he": null,
+   "name_en": "OrangeHRM",
+   "url": "https://github.com/orangehrm/orangehrm",
+   "category": "accounting",
+   "summary_he": "משאבי אנוש: תיקי עובדים, חופשות, נוכחות וגיוס.",
+   "licence": "GPL-3.0",
+   "osi": true,
+   "github": {
+    "repo": "orangehrm/orangehrm",
+    "stars": 1160,
+    "pushed_at": "2026-06-28T23:52:36Z",
+    "archived": false,
+    "licence": "GPL-3.0"
+   },
+   "why_israeli": null,
+   "sources": [
+    {
+     "url": "https://github.com/orangehrm/orangehrm",
+     "date": "2026-06-28",
+     "what": "The project's own repository: licence file, stars and last push, read through the GitHub API on 2026-11-05.",
+     "grade": "C"
+    }
+   ],
+   "grade": "C",
+   "verified_at": "2026-11-05"
+  }
+ ],
+ "rejected": []
+}

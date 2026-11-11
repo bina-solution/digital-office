@@ -6,7 +6,7 @@
 # Says how long each stage took — the disk unpacked, the guest's boot, the office's bring-up, the edge's
 # first answer — and the console's last line every 10 minutes. Done when bbox run in
 # the guest said "up." AND the edge answers (the edge alone cannot tell: sign-in answers 302 for every host
-# before the console behind it is ready); failed when bbox came up with problems, the office's service
+# before the console behind it is ready); failed when bbox came up with problems or «NOT up», the office's service
 # fails, QEMU exits, or GUEST_WAIT seconds pass (default 4 h). A first boot every time: the disk is unpacked afresh (checked
 # against dgo-guest-arm64.img.xz.sha256 when it is there) unless GUEST_REUSE=1.
 # The guest's console is in <dir>/console.log; the disk is <dir>/guest.img (sparse, 24 GB apparent).
@@ -69,7 +69,7 @@ q=$!
 seen=""; code=""; up=""; edge=""; beat=0
 while kill -0 "${q}" 2>/dev/null && [ $(( $(date +%s) - t0 )) -lt "${WAIT}" ]; do
   for mark in "Kernel command line" "login:" "Starting dgo-office.service" "Finished dgo-office.service" \
-              "up. check health" "up, with problems"; do
+              "up. check health" "up, with problems" "NOT up:"; do
     case "${seen}" in *"|${mark}|"*) continue ;; esac
     if line="$(grep -a -m1 "${mark}" /g/console.log 2>/dev/null)"; then
       say "console: $(printf "%s" "${line}" | tr -d "\r" | sed "s/\x1b\[[0-9;]*m//g" | cut -c1-200)"; seen="${seen}|${mark}|"
@@ -80,6 +80,19 @@ while kill -0 "${q}" 2>/dev/null && [ $(( $(date +%s) - t0 )) -lt "${WAIT}" ]; d
   if grep -aqs "up, with problems" /g/console.log; then
     say "THE OFFICE CAME UP WITH PROBLEMS — what the office service said in the guest:"
     reported; office_said; kill "${q}" 2>/dev/null || true; exit 1
+  fi
+  # the ending bbox run gives a fatal problem (DGO-995): exit 3, «NOT up:» — and the office unit in the guest fails
+  if grep -aqs "NOT up:" /g/console.log; then
+    say "THE OFFICE IS NOT UP (a fatal problem, DGO-995) — what the office service said in the guest:"
+    reported; office_said; kill "${q}" 2>/dev/null || true; exit 1
+  fi
+  # an emergency boot never reaches the normal target that docker and the office hang off (DGO-1818: the owner s
+  # phone under TCG, 2026-11-11): failed here, with the lines that name the unit, never waited out
+  if grep -aqs "You are in emergency mode" /g/console.log; then
+    say "THE MACHINE BOOTED INTO EMERGENCY MODE (DGO-1818) — what failed on the way:"
+    grep -a -E "Timed out waiting for device|Dependency failed for|Failed to mount|Failed to start" /g/console.log \
+      | tr -d "\r" | sed "s/\x1b\[[0-9;]*m//g" | cut -c1-200 | head -20 || true
+    kill "${q}" 2>/dev/null || true; exit 1
   fi
   if grep -aqs -e "Failed to start dgo-office.service" -e "Dependency failed for dgo-office.service" /g/console.log; then
     say "THE OFFICE FAILED TO START: dgo-office.service failed in the guest — what it said:"
@@ -101,6 +114,16 @@ while kill -0 "${q}" 2>/dev/null && [ $(( $(date +%s) - t0 )) -lt "${WAIT}" ]; d
             *) say "THE FIRST-RUN LINK DOES NOT OPEN THE OWNER FORM (${link%%code=*}code=…): $(printf %s "${page}" | head -c 300)"
                kill "${q}" 2>/dev/null || true; exit 1 ;;
           esac
+        fi
+        # the machine s boot, stage by stage, as it measured itself (dgo-boot-report.service, DGO-1818): it prints
+        # once the boot has ended, after the office s unit — up to 2 minutes for it
+        r=0
+        while [ "${r}" -lt 120 ] && ! grep -aqs "dgo-boot: blame" /g/console.log; do sleep 5; r=$(( r + 5 )); done
+        if grep -aqs "dgo-boot:" /g/console.log; then
+          say "the machine s boot, as it measured itself:"
+          grep -a "dgo-boot:" /g/console.log | tr -d "\r" | sed "s/\x1b\[[0-9;]*m//g" | cut -c1-200 | sed "s/^/  /"
+        else
+          say "the machine s boot report was not on the console yet (dgo-boot-report.service)"
         fi
         kill "${q}" 2>/dev/null || true; exit 0
       fi ;;

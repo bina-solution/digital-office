@@ -2,11 +2,15 @@
    one palette, G27); this file names tokens only and writes no colour of its own (G82).
    It works in the window it opens in and in the smallest one (380×260, the desktop-mode rule): one
    column, the step row wraps, the view scrolls, the two actions stay in reach at the bottom. */
-.wiz-body{margin:0;height:100vh;display:flex;justify-content:center;background:var(--bg);color:var(--ink);overflow:hidden}
+/* `dvh`, the height the browser SHOWS: on a phone `100vh` is the height with the address bar hidden, so
+   the page was taller than the screen by that bar, the body hides overflow, and the footer with «הבא»
+   sat under it — the owner's phone, Exampleu's first install: «No btn critical bug» (DGO-1493). `100vh`
+   stays first as the fallback for a browser that has no `dvh`. */
+.wiz-body{margin:0;height:100vh;height:100dvh;display:flex;justify-content:center;background:var(--bg);color:var(--ink);overflow:hidden}
 /* EXACTLY the viewport's height, never more: the view is the one part that scrolls, so the two
    actions are on screen at every size (measured 2026-10-09 at 380×260: with min-height they sat
    below the fold on every step). */
-.wiz{width:min(760px,100%);height:100vh;display:flex;flex-direction:column;gap:12px;padding:16px;box-sizing:border-box}
+.wiz{width:min(760px,100%);height:100vh;height:100dvh;display:flex;flex-direction:column;gap:12px;padding:16px;box-sizing:border-box}
 .wiz-head{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:10px}
 .wiz-head .brand-text b{display:block;font-size:18px}
 .wiz-head .brand-text small{display:block;color:var(--muted);font-size:11px;font-weight:600}

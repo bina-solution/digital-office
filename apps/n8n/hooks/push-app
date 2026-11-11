@@ -26,6 +26,7 @@ REPO_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
 . "${REPO_ROOT}/scripts/lib.sh"
 N8N_DIR="${REPO_ROOT}/apps/n8n"
 WRAP="${N8N_DIR}/tooling/wrap.mjs"
+. "${N8N_DIR}/tooling/wrap.sh"   # wrap_run: here, or in n8n's own container on a host with no node (DGO-1746)
 log() { echo "[push-app] $*"; }
 
 # Compile writes .generated/n8n/<app>/*.json, and .push-cache/<app>.tsv records the shas. Both are
@@ -106,6 +107,21 @@ elif not w and isinstance(e, dict) and (str(e.get("state") or "").strip().lower(
   esac
 fi
 
+# A checkout that lacks what is LIVE, or is behind its office's branch, does not push (DGO-1603): the same
+# questions hooks/push asks, here before anything is compiled or minted. On 2026-11-09 a push from a checkout
+# that lacked newer work put twelve webhooks on vps1 back open to the internet. A dry run says what it would be
+# refused and goes on: it changes nothing.
+_gc=0
+python3 "$(npath "${N8N_DIR}")/tooling/push-guard.py" behind "$(npath "${REPO_ROOT}")" || _gc=$?
+case "${_gc}" in
+  0) ;;
+  3) [ "${DRY}" = "1" ] && log "dry run: a real push would be REFUSED (above)" \
+       || { echo "Error: ${APP}: push refused (above). Nothing was pushed." >&2; exit 1; } ;;
+  *) [ "${DRY}" = "1" ] && log "dry run: the push guard could not answer (exit ${_gc}, above)" \
+       || { echo "Error: ${APP}: push refused — the push guard could not answer (exit ${_gc}, above). Nothing was pushed." >&2
+            exit 1; } ;;
+esac
+
 docker ps --format '{{.Names}}' | grep -Fxq "${N8N_CONTAINER}" || { echo "Error: '${N8N_CONTAINER}' not running — per-app push needs the live API. For instance birth use 'bbox n8n push all'." >&2; exit 1; }
 
 # Resolve the app's blueprint dir from its manifest (same resolver push uses).
@@ -178,7 +194,7 @@ ensure_api_key
 GEN="${REPO_ROOT}/.generated/n8n/${APP}"
 rm -rf "${GEN}" && mkdir -p "${GEN}"
 if ls "${DIR}"/*.workflow.ts >/dev/null 2>&1; then
-  "$(bbox_node)" "${WRAP}" compile "${DIR}" "${GEN}" >/dev/null
+  wrap_run compile "${DIR}" "${GEN}" >/dev/null
 fi
 for _f in "${DIR}"/*.json; do [ -e "${_f}" ] && cp -n "${_f}" "${GEN}/"; done
 ls "${GEN}"/*.json >/dev/null 2>&1 || { echo "Error: '${APP}' blueprint compiled to nothing (${_rel})." >&2; exit 1; }
@@ -246,6 +262,27 @@ if [ -z "${CHANGED}" ]; then
 fi
 if [ "${DRY}" = "1" ]; then
   log "${APP}: would push:$(printf '%s' "${CHANGED}") — dry run, nothing sent."
+  # …and what the push guard would answer for that set (DGO-1603), said, never stopping a dry run
+  _dry="$(mktemp -d)"
+  for _id in ${CHANGED}; do
+    cp "${GEN}/${_id}.json" "${_dry}/" || log "dry run: ${_id} could not be staged for the guard — not asked about"
+  done
+  for _q in live reopen; do
+    _gc=0
+    if [ "${_q}" = live ]; then
+      python3 "$(npath "${N8N_DIR}")/tooling/push-guard.py" live "$(npath "${REPO_ROOT}")" --pg "${PG_CONTAINER}" \
+        --ids-from "$(npath "${_dry}")" || _gc=$?
+    else
+      python3 "$(npath "${N8N_DIR}")/tooling/push-guard.py" reopen "$(npath "${_dry}")" "$(npath "${REPO_ROOT}")" \
+        --pg "${PG_CONTAINER}" || _gc=$?
+    fi
+    case "${_gc}" in
+      0) ;;
+      3) log "dry run: a real push would be REFUSED (${_q}, above)" ;;
+      *) log "dry run: the push guard could not answer (${_q}, exit ${_gc}, above) — a real push would stop" ;;
+    esac
+  done
+  rm -rf "${_dry}"
   exit 0
 fi
 
@@ -284,8 +321,35 @@ fi
 # (API key already ensured above, before any early exit.)
 
 # Ship the changed set into the container and run one node pass: update-or-create + activate.
+# The set as shipped names the commit it was rendered from (`meta.dgoCommit`, DGO-1603). It is a stamped COPY:
+# the compiled files stay as compiled, or every commit would change every sha and push the whole app. The API's
+# update sends name/nodes/connections/settings only; a brand-new workflow's import keeps the stamp.
+_ship="$(mktemp -d)"
+for _id in ${CHANGED}; do cp "${GEN}/${_id}.json" "${_ship}/"; done
+# What this push would overwrite is asked before it is sent (DGO-1603): a live row of these workflows that came
+# from work this checkout lacks, and a webhook live has closed that this push would open again (G97's rule, both
+# sides). 3 is the refusal; anything else is an unanswered question, which is not a yes either.
+for _q in live reopen; do
+  _gc=0
+  if [ "${_q}" = live ]; then
+    python3 "$(npath "${N8N_DIR}")/tooling/push-guard.py" live "$(npath "${REPO_ROOT}")" --pg "${PG_CONTAINER}" \
+      --ids-from "$(npath "${_ship}")" || _gc=$?
+  else
+    python3 "$(npath "${N8N_DIR}")/tooling/push-guard.py" reopen "$(npath "${_ship}")" "$(npath "${REPO_ROOT}")" \
+      --pg "${PG_CONTAINER}" || _gc=$?
+  fi
+  [ "${_gc}" = 0 ] || { rm -rf "${_ship}"
+    echo "Error: ${APP}: push refused before anything was sent (push guard '${_q}', exit ${_gc}, above)." >&2; exit 1; }
+done
+python3 "$(npath "${N8N_DIR}")/tooling/push-guard.py" stamp "$(npath "${_ship}")" "$(npath "${REPO_ROOT}")" >/dev/null || {
+  echo "Error: ${APP}: the workflows could not be stamped with their commit — nothing pushed." >&2
+  rm -rf "${_ship}"; exit 1; }
 docker exec "${N8N_CONTAINER}" sh -c 'rm -rf /tmp/push-app && mkdir -p /tmp/push-app'
-for _id in ${CHANGED}; do docker cp "${GEN}/${_id}.json" "${N8N_CONTAINER}:/tmp/push-app/${_id}.json" >/dev/null; done
+for _id in ${CHANGED}; do
+  docker cp "${_ship}/${_id}.json" "${N8N_CONTAINER}:/tmp/push-app/${_id}.json" >/dev/null \
+    || { rm -rf "${_ship}"; echo "Error: ${APP}: ${_id} could not be copied into ${N8N_CONTAINER} — nothing pushed." >&2; exit 1; }
+done
+rm -rf "${_ship}"
 RESULT="$(docker exec -e N8N_API_KEY="${API_KEY}" "${N8N_CONTAINER}" node -e '
 const fs=require("fs"), http=require("http");
 const H={"X-N8N-API-KEY":process.env.N8N_API_KEY,"Content-Type":"application/json"};

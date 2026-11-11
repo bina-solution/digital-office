@@ -5,7 +5,9 @@
     "en": "Version control"
   },
   "layer": 3,
+  "people": "admins",
   "kind": "service",
+  "page": "base",
   "version": "0.2.0",
   "summary": {
     "he": "שכבת אבסטרקציה מעל VCS — חשבונות GitHub/GitLab, פורג' מקומי (Forgejo) לכל המאגרים, מראות של מאגרים חיצוניים, ודחיפת קוד בשם הבעלים",

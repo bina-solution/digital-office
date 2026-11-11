@@ -60,7 +60,7 @@ read_env() {
 
 # read_env_value KEY — read_env, then the value as the other readers of .env take it: a trailing ` # …`
 # comment and one pair of surrounding quotes dropped (the env step and compose do; read_env keeps both, so
-# `KEY="admin@old"` never compared equal to admin@old — FPG-34's third reader).
+# `KEY="admin@old"` never compared equal to admin@old — EXF-34's third reader).
 read_env_value() {
   local v q
   v="$(read_env "$1")"
@@ -77,7 +77,7 @@ read_env_value() {
 # on the new domain now, `behind` = still on the old one, `failed` = the app could not be asked (down, an
 # error), `any` = the key has no account behind it (a sender, a contact) and simply follows, `changed` =
 # something was really written. A vault override of KEY then follows from that app's STATE, never from
-# equality with .env, and never on a half-written ledger (FPG-34's third and fourth readers). A no-op when
+# equality with .env, and never on a half-written ledger (EXF-34's third and fourth readers). A no-op when
 # the verb did not start the ledger (a hook run on its own).
 rename_note() {
   local key="${1:-}" what="${2:-}" list="${3:-}" one
@@ -97,7 +97,7 @@ rename_note() {
 # env_set KEY VALUE — every `KEY=` line of the office's .env becomes KEY=VALUE (one appended if none).
 # Written to the REAL file: a packaged office links .env to /etc/binaos/binaos.env, and `sed -i` replaced
 # the link with a plain copy — the real file, which the next upgrade links back, kept the old value
-# (FPG-34's second reader). Replaced whole (a temp file in the same directory, 0600 from its first byte,
+# (EXF-34's second reader). Replaced whole (a temp file in the same directory, 0600 from its first byte,
 # the original's mode copied, then one rename), and the value travels in the environment, never through a
 # sed pattern or anybody's command line. Returns non-zero, having changed nothing, on a bad key or value.
 env_set() {
@@ -184,8 +184,8 @@ die()  { echo "${cr}[${LOG_TAG:-bbox}] error:${c0} $*" >&2; exit 1; }
 # A FIXED path under /tmp is a trap on any host where bbox is run by more than one user, and it
 # fails in the most confusing way available.
 #
-# Measured 2026-07-30. Someone ran bbox as `shlomo`, which left /tmp/bbox-glitchtip-push.log owned
-# by shlomo, mode 644. Every later run as root then died on the REDIRECT:
+# Measured 2026-07-30. Someone ran bbox as `owner`, which left /tmp/bbox-glitchtip-push.log owned
+# by owner, mode 644. Every later run as root then died on the REDIRECT:
 #
 #   ./bbox: line 268: /tmp/bbox-glitchtip-push.log: Permission denied
 #
@@ -230,7 +230,7 @@ esac
 # file has been replaced underneath it, so `docker` answers from the other daemon and nothing says so.
 #
 # Measured on this laptop 2026-07-30, two engines up at once:
-#   distro's dockerd   60 images  39 running  32 volumes   ← every deployment-hacohen_* volume
+#   distro's dockerd   60 images  39 running  32 volumes   ← every digital-office_* volume
 #                                                            (n8n_storage, supabase_db_data,
 #                                                             postgres_storage, connections_vault)
 #   Docker Desktop's    7 images   8 running   8 volumes   ← a half-built duplicate of
@@ -241,7 +241,7 @@ esac
 #
 # It is not merely confusing. Desktop's daemon is not started with DOCKER_MIN_API_VERSION=1.24, so
 # traefik v3.3's docker provider discovers ZERO routers there and every *.localhost 404s while
-# traefik reports healthy — precisely the silent failure CLAUDE.md's Docker-29 note describes.
+# traefik reports healthy — the silent failure running-the-stack.md's «Docker and traefik» describes.
 #
 # So the project owns its own endpoint, one Docker Desktop has no reason to touch, and pins
 # DOCKER_HOST to it. Desktop may be installed, running, or absent; it is simply irrelevant. bbox's
@@ -279,7 +279,8 @@ bbox_endpoint_kind() {
 # BBOX_DOCKER_SOCK kept pointing at /run/bbox-docker.sock, which did not exist. Docker creates a
 # missing bind-mount source as a DIRECTORY, so traefik mounted a directory over
 # /var/run/docker.sock, its docker provider could not connect, and it served 404 for every host
-# while reporting healthy — the exact symptom CLAUDE.md attributes to Docker 29. Measured
+# while reporting healthy — the exact symptom once blamed on Docker 29 (running-the-stack.md, «Docker and
+# traefik»). Measured
 # 2026-08-21 on portable-ubuntu; see issues/bbox-engine-split-cli-vs-containers.yaml.
 # ── node, found rather than assumed ──────────────────────────────────────────────────────────
 # Blueprints are TypeScript, so every push/pull shells out to the HOST's node to run wrap.mjs
@@ -372,7 +373,7 @@ bbox_select_engine || true
 #
 # The fix sets a name ONLY when compose's own derivation would be empty. A Latin basename keeps
 # compose's derivation byte-for-byte — this must never re-point an existing deployment (the VPS's
-# `deployment-hacohen_*` volumes are owned by the name compose derived from its directory), so on
+# `digital-office_*` volumes are owned by the name compose derived from its directory), so on
 # every host that worked before, nothing changes. An explicit COMPOSE_PROJECT_NAME still wins.
 #
 # The PHYSICAL path decides, not the spelling the caller used to get here: inside bina-ds the
@@ -398,6 +399,41 @@ if [ -z "${COMPOSE_PROJECT_NAME:-}" ]; then
   [ -n "${_bbox_pn}" ] || export COMPOSE_PROJECT_NAME="digital-office"
   unset _bbox_pn _bbox_real
 fi
+
+# office_project — the compose project this checkout's office runs under: COMPOSE_PROJECT_NAME when .env or the
+# block above set it, else the folder's own name as compose normalises it. The variable is EMPTY in the usual case
+# (a folder whose name normalises to something: vps1's digital-office, a stranger's digital-office), so a check
+# that reads only the variable checks nothing there.
+office_project() {
+  local pn="${COMPOSE_PROJECT_NAME:-}"
+  [ -n "${pn}" ] || pn="$(basename "$(cd "${REPO_ROOT}" 2>/dev/null && pwd -P)" | tr '[:upper:]' '[:lower:]' \
+                           | sed 's/[^a-z0-9_-]//g; s/^[^a-z0-9]*//')"
+  printf '%s' "${pn:-digital-office}"
+}
+
+# office_holds_data — 0: this checkout's office has containers or volumes on the engine; 1: it has none; 2: the
+# engine did not say (a caller about to write secrets or wipe data takes 2 as «it may»).
+office_holds_data() {
+  local pn c v; pn="$(office_project)"
+  c="$(docker ps -aq --filter "label=com.docker.compose.project=${pn}" 2>/dev/null)" || return 2
+  v="$(docker volume ls -q --filter "label=com.docker.compose.project=${pn}" 2>/dev/null)" || return 2
+  [ -n "${c}${v}" ] && return 0
+  return 1
+}
+
+# office_unnamed — 0 when .env names no office: BUSINESS_NAME is empty AND the office's domain resolves to nothing
+# before its first dot (`.digital-office.co.il` — an unedited copy of .env.ex, whose name is empty on purpose since
+# DGO-1802). An office that wrote its slug, or a literal domain, by hand is named, and so is a name the render has
+# not turned into a slug yet. The refusal is about addresses that cannot exist, never about how an office named itself.
+office_unnamed() {
+  local n d
+  n="$(read_env_value BUSINESS_NAME)"; n="${n//[[:space:]]/}"   # `BUSINESS_NAME=   # note` names nothing
+  [ -z "${n}" ] || return 1
+  # quotes out, as compose reads them: `COMPANY_SLUG=""` resolves here to `"".digital-office.co.il` (the third reader)
+  d="$(read_env DEPLOYMENT_DOMAIN)"; d="${d//\"/}"; d="${d//\'/}"
+  case "${d}" in .*) return 0 ;; esac
+  return 1
+}
 
 compose_args() {
   [ -f "${REPO_ROOT}/.generated/compose.yml" ] \
@@ -529,25 +565,123 @@ export_apex_host() {
   return 0
 }
 
+# ── THIS HOST: a laptop, or a door? (DGO-1556) ──────────────────────────────────────────────────
+# One question, asked in one place: does this machine hold a PUBLIC address on an interface? It is
+# what separates the two installs the owner named (2026-11-01) —
+#   · a LAPTOP, a phone, a WSL VM, a cloud sandbox: private addresses only, the «very light» core
+#     (platform.state.core.yaml), nothing exposed, nothing to lock down at the host;
+#   · a SERVER: it answers on the internet, so at install it also gets the security app and
+#     scripts/ops/host-baseline.sh (sshd keys-only, no LLMNR/mDNS, and on that interface only the
+#     office's own doors). scripts/onboarding runs both and refuses to report a finished install
+#     when the baseline script is absent — a server is not a laptop that happens to be far away.
+# A container cannot answer this for its host (its /proc is its own network namespace, measured
+# 2026-10-12 in apps/office-routes' brief), so this test is the HOST's to run, and only a host-side
+# caller (`bbox`, `scripts/onboarding`, `debian-install.sh`) may use it.
+# BBOX_HOST_SERVER=1|0 is the deliberate override, and it is the answer to both edges of the test:
+# a server behind a NAT that no address can show (=1), and a WSL2 VM in `networkingMode=mirrored`,
+# which sees the Windows host's public address and would otherwise be judged a server (=0).
+# macOS has no `ip`; there `ifconfig` is read, and a Mac is a laptop until .env says otherwise.
+is_public_address() {  # is $1 a globally routable address? (the ranges that are NOT, by RFC/list)
+  case "$1" in
+    ''|0.*|10.*|127.*|169.254.*|192.168.*|100.6[4-9].*|100.[7-9][0-9].*|100.1[0-2][0-9].*) return 1 ;;
+    172.1[6-9].*|172.2[0-9].*|172.3[01].*) return 1 ;;
+    192.0.0.*|192.0.2.*|192.88.99.*|198.1[89].*|198.51.100.*|203.0.113.*|2[2-5][0-9].*|255.*) return 1 ;;
+    ::1|::|fe80:*|fc*|fd*|ff*|2001:db8:*|*%*) return 1 ;;   # loopback, link-local, ULA, multicast, documentation, scoped
+    *:*) return 0 ;;                                        # a global IPv6 (2000::/3) IS the internet
+    *.*) return 0 ;;                                        # any other IPv4
+  esac
+  return 1
+}
+
+_host_all_addresses() {  # every address of THIS host, one per line (Linux: ip; macOS: ifconfig)
+  if command -v ip >/dev/null 2>&1; then
+    ip -o addr show 2>/dev/null \
+      | awk '{for (i = 2; i < NF; i++) if ($i == "inet" || $i == "inet6") print $(i + 1)}' \
+      | sed 's#/.*##'
+  elif command -v ifconfig >/dev/null 2>&1; then
+    ifconfig 2>/dev/null | awk '$1 == "inet" || $1 == "inet6" {print $2}' | sed 's#/.*##'
+  fi
+  return 0
+}
+
+host_public_addresses() {  # every PUBLIC address on this host, one per line ('' when there is none)
+  local a
+  while read -r a; do
+    [ -n "${a}" ] || continue
+    # `if`, not `cmd && printf`: a `while` body's last command decides the loop's status, and on a
+    # real server the LAST address read is private (docker0, wg0 after eth0) — so the `&&` form made
+    # this function exit 1 in the normal case, and `a="$(host_public_addresses)"` under `set -e`
+    # then killed the caller with no message (found in review, 2026-11-10).
+    if is_public_address "${a}"; then printf '%s\n' "${a}"; fi
+  done < <(_host_all_addresses)
+  return 0
+}
+
+host_is_server() {  # 0 = this host answers on the internet; 1 = a laptop/phone/sandbox
+  case "${BBOX_HOST_SERVER:-}" in
+    1|yes|true|on)  return 0 ;;
+    0|no|false|off) return 1 ;;
+  esac
+  [ -n "$(host_public_addresses)" ]
+}
+
+# _dcx_exec_direct <exec args…>: `dcx exec`, the short way (DGO-1148). `exec -T [-e K=V|--env K=V|-u U|--user U|
+# -w D|--workdir D]… <service> <command…>` becomes `docker exec -i` in the ONE running container that compose's own
+# labels name (this project, that service), set in DCX_DIRECT for dcx to run. Every `dcx exec` used to run
+# reconcile.py compose-files and parse the whole office's compose (~60 apps) just to find that container, and a
+# Plane call made two or three of them (measured 2026-11-02 on the Mac: the engine at load 60–110). Anything else
+# returns 1 and dcx goes the long way, through compose, as before: a TTY (no -T), any other option, `-e KEY` with
+# no value (compose reads it from .env too, docker exec only from this shell), no running container or more than
+# one, a docker CLI that does not answer, or no COMPOSE_PROJECT_NAME to look the labels up by.
+_dcx_exec_direct() {
+  local tty=1 svc="" ids
+  local -a opts=()
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      -T) tty=0; shift ;;
+      -e|--env) case "${2-}" in *=*) opts+=("$1" "$2"); shift 2 ;; *) return 1 ;; esac ;;
+      -u|--user|-w|--workdir) [ $# -ge 2 ] || return 1; opts+=("$1" "$2"); shift 2 ;;
+      --env=*=*|--user=*|--workdir=*) opts+=("$1"); shift ;;
+      -*) return 1 ;;
+      *) svc="$1"; shift; break ;;
+    esac
+  done
+  [ "${tty}" = 0 ] && [ -n "${svc}" ] && [ $# -gt 0 ] && [ -n "${COMPOSE_PROJECT_NAME:-}" ] || return 1
+  ids="$(docker ps -q --filter "label=com.docker.compose.project=${COMPOSE_PROJECT_NAME}" \
+           --filter "label=com.docker.compose.service=${svc}" 2>/dev/null)" || return 1
+  [ -n "${ids}" ] && [ "$(printf '%s\n' "${ids}" | grep -c .)" = 1 ] || return 1
+  DCX_DIRECT=(docker exec -i ${opts[@]+"${opts[@]}"} "${ids}" "$@")
+}
+
 dcx() {
+  if [ "${1:-}" = exec ] && _dcx_exec_direct "${@:2}"; then
+    "${DCX_DIRECT[@]}"; return $?
+  fi
   [ -x "${BBOX_COMPOSE}" ] \
     || die "compose plugin missing at ${BBOX_COMPOSE} — run: bbox install debian (installs docker-compose-plugin)"
   export_host_tz
   export_cert_resolver
+  # n8n-postgres's nofile request, capped to this host's hard limit for THIS process (DGO-125): every caller
+  # that creates a container gets it — app-management's `scripts/dc up`, a hook's own `dcx up` — and not only
+  # `bbox run` and the baseline, which used to leave the cap in .env for the others. Only for a command that
+  # creates containers: `scripts/dc config` is what packaging ships (make-runtime-compose.py), and it must
+  # not depend on the build host. A no-op where the limit already meets the request; a `[bbox]` notice on
+  # stderr, which a caller reading compose's own error skips (converge.py).
+  if compose_is_recreate "$@"; then ccr_clamp_nofile --notice; fi
   # What must be refused is handing a CONTAINER something that is not a socket — so it is asked of
   # the commands that create one. `config` needs no engine at all, and a lane without one runs it
   # (`scripts/dc config`, which comes through here now).
   if compose_is_recreate "$@"; then bbox_assert_engine_socket; fi
   deploy_ledger_gate "$@" || return 1      # never a build or recreate that drops what runs here
-  compose_admit "$@"
+  compose_admit "$@" || return 1     # a build on a disk under its floor, where the office enforces it (DGO-1393)
   local rc=0
   if compose_self_guard _dcx_run "$@"; then rc="${COMPOSE_GUARD_RC}"; else _dcx_run "$@" || rc=$?; fi
   # What `up` created holds its declared cap; the machine's budget is told to the kernel here
   # (never by a dry run, which is a question) — after whatever lives in a replaced container's
   # network has been put back in the one that replaced it.
   # Asked of the COMPOSE SUBCOMMAND (compose_is_up), never of the whole argument string: `dcx exec … tasks.py
-  # comment FPG-1 "…backed up both files…"` used to read as an `up`, so a task comment that said "up" put every
-  # container's CPU cap back to the budget and ran netns_rejoin (FPG-262, 2026-10-30).
+  # comment EXF-1 "…backed up both files…"` used to read as an `up`, so a task comment that said "up" put every
+  # container's CPU cap back to the budget and ran netns_rejoin (EXF-262, 2026-10-30).
   if [ "${rc}" -eq 0 ] && compose_is_up "$@"; then filemount_refresh "$@"; netns_rejoin || rc=$?; cpu_caps_apply; fi
   [ "${rc}" -ne 0 ] || deploy_ledger_record "$@"
   return "${rc}"
@@ -580,15 +714,28 @@ dcx() {
 # so `bbox baseline`'s one-identity check) read an empty answer as "would re-create: none" (its reader).
 stale_containers() {
   local out rc
-  out="$( ( export_host_tz; export_cert_resolver
+  out="$( ( export_host_tz; export_cert_resolver; ccr_clamp_nofile --notice
             _dcx_run_for 60 --dry-run up -d --no-build 2>&1; echo "__stale_rc=$?" ) )"
   rc="$(printf '%s\n' "${out}" | sed -n 's/^__stale_rc=//p' | tail -1)"
+  # «Container <name> Recreate» wherever it sits in the line: compose 2.40 prefixes every dry-run line with
+  # «DRY-RUN MODE -», and a parser that wanted «Container» first read EVERY dry run as nothing to recreate (measured
+  # 2026-11-11 on the MacBook: 22 containers to recreate, this function said none — issues/compose-prefixes-its-…)
   printf '%s\n' "${out}" | sed 's/\x1b\[[0-9;]*[A-Za-z]//g' \
-    | awk '$1 == "Container" && $NF == "Recreate" {print $2}' | sort -u || true
+    | awk '{ for (i = 1; i < NF - 1; i++) if ($i == "Container" && $NF == "Recreate") { print $(i + 1); break } }' \
+    | sort -u || true
   case "${rc}" in
     124|137)   # timeout's TERM (124), or its KILL 5 s later for a compose that ignored the TERM (137)
       echo "[bbox] stale check: compose's dry run did not answer in 60 s — what is stale is unknown" >&2
       return 3 ;;
+    0|"") ;;
+    *)         # compose STOPPED partway (measured 2026-11-11: «No such image» under --no-build, exit 1) — the names
+               # above are what it reached, not all. SAID, rc unchanged: rule 8, stage 1 (issues/compose-prefixes-…)
+      local why
+      why="$(printf '%s\n' "${out}" | sed 's/\x1b\[[0-9;]*[A-Za-z]//g' | grep -v '__stale_rc=' | grep -iE 'error|no such' \
+             | head -1 | cut -c1-200)"
+      [ -n "${why}" ] || why="$(printf '%s\n' "${out}" | sed 's/\x1b\[[0-9;]*[A-Za-z]//g' | grep -v '__stale_rc=' \
+             | grep -v '^[[:space:]]*$' | tail -1 | cut -c1-200)"
+      echo "[bbox] stale check: compose's dry run exited ${rc} — the list may be partial: ${why:-(it said nothing)}" >&2 ;;
   esac
   return 0
 }
@@ -621,6 +768,81 @@ for line in ps.splitlines():
     name, _, project = line.partition("\t")
     if name in names and project != mine:
         print(name, project or "(no-compose-project)")' 2>/dev/null || true
+}
+
+# off_services — the compose services this office's DECLARED state says must NOT be running:
+# `service<TAB>app<TAB>disposition`, one per line. Empty when every declared service is on.
+#
+# WHY THIS EXISTS. `bbox status` and `scripts/baseline.sh` called any container that was not Up a
+# problem, and a container's NAME cannot tell whether its app is supposed to run at all. Measured on
+# hp-laptop, 2026-11-01: `authentik` is `{state: disabled, by: cli}` (this office's identity moved to
+# `forward-auth`), its four containers sit exactly where `bbox apps disable` left them, and every
+# daily health read opened with two permanent `DOWN:` lines. A warning that is always there is a
+# warning nobody reads — and DOWN is the one line meant to catch a real failure. `bbox baseline`'s
+# P3 census had the same two containers inside its "problems" list, for the same reason.
+#
+# The answer is NOT a second mapping: it is the COMPILER's own, through the module that renders the
+# stack. `resolve()` is the enabled closure, so a service is "declared on" when an enabled app — or
+# an app an enabled app REQUIRES — names it; that is why a disabled `n8n` (held up by its dependents
+# for `workflow`) is not reported as off, and it is the same rule that keeps its services compiled.
+# `compose_services()` is each app's own `services:` keys, parsed from that app's compose file only,
+# so nothing here is hand-kept and a new app is covered the day it is declared.
+#
+# SILENT WHEN IT CANNOT ANSWER (`[]`, exit non-zero): a guard that cannot read the state must never
+# suppress a real DOWN, so callers fall back to counting every container.
+off_services() {
+  ( cd "${REPO_ROOT}" && python3 - <<'PY' 2>/dev/null
+import sys
+sys.path.insert(0, 'platform/manager')
+try:
+    import reconcile as R
+    cat, state = R.load_catalog(), R.load_state()
+    order, _diags = R.resolve(cat, state)
+    must = set(R.lane_services(cat, order))
+except Exception:
+    raise SystemExit(1)
+for aid in sorted(cat):
+    dispo = R.disposition(state.get(aid))
+    if dispo == 'enabled':
+        continue
+    for svc in R.compose_services(cat[aid]):
+        if svc not in must:
+            print(f"{svc}\t{aid}\t{dispo}")
+PY
+  )
+}
+
+# stop_off_apps <app>… — an app switched off stops (DGO-995): its running containers in THIS compose project,
+# for the services off_services names — so never one an enabled app still requires (the apps screen's rule:
+# switched off is not stopped while another app needs it). Stopped, not removed: its volumes and its container
+# stay, and `bbox apps enable` + `bbox run` bring it back. Prints one line per app; non-zero when a stop failed.
+stop_off_apps() {
+  local off app svcs svc ids stopped failed=0 project
+  # The project's name as compose itself resolves it (what `bbox status` prints): lib.sh exports COMPOSE_PROJECT_NAME
+  # only when .env pins it or the folder gives compose no name — on a Latin-named checkout (vps1's
+  # digital-office) it is empty, and an empty label filter matches no container (the second reader).
+  project="${COMPOSE_PROJECT_NAME:-}"
+  [ -n "${project}" ] || project="$(dcx config --format json 2>/dev/null | python3 -c 'import json,sys; print(json.load(sys.stdin).get("name") or "")' 2>/dev/null)"
+  [ -n "${project}" ] || { say "${cr}could not tell this office's compose project — nothing stopped; \`bbox status\` says what runs${c0}"; return 1; }
+  off="$(off_services)" || { say "${cy}could not read which services are off (the compiler did not answer) — nothing stopped; \`bbox run\` and \`bbox status\` say what runs${c0}"; return 1; }
+  for app in "$@"; do
+    svcs="$(printf '%s\n' "${off}" | awk -F'\t' -v a="${app}" '$2 == a { print $1 }')"
+    if [ -z "${svcs}" ]; then
+      say "${app}: switched off — its containers stay up while an enabled app requires it (or it has none)"
+      continue
+    fi
+    stopped=""
+    for svc in ${svcs}; do
+      ids="$(docker ps -q --filter "label=com.docker.compose.project=${project}" \
+                          --filter "label=com.docker.compose.service=${svc}")" || { failed=1; continue; }
+      [ -n "${ids}" ] || continue
+      # shellcheck disable=SC2086
+      if docker stop -t 20 ${ids} >/dev/null; then stopped="${stopped:+${stopped} }${svc}"; else failed=1; say "${cr}${app}: could not stop ${svc}${c0}"; fi
+    done
+    if [ -n "${stopped}" ]; then say "${app}: switched off — stopped: ${stopped} (volumes kept)"
+    else say "${app}: switched off — nothing of it was running"; fi
+  done
+  return "${failed}"
 }
 
 # netns_rejoin — a container that lives in ANOTHER's network namespace follows it when it is replaced.
@@ -781,9 +1003,40 @@ heavy_admit() {
     if [ "${waited}" -ge "${limit}" ]; then say "starting '${label}' with ${avail} MB available (waited ${limit}s)" >&2; break; fi
     sleep 10; waited=$(( waited + 10 ))
   done
+  # The one readiness rule (scripts/ops/heavy-ready.sh, DGO-1797) is ASKED what it would hold this job for — the
+  # desk, the heat, a fresh boot — and what it says is said. WARN ONLY (stage 2 of 3): nothing waits on it yet,
+  # so each caller's answers are seen before the rule enforces (AGENTS rule 8). `need` is already an absolute
+  # floor (no reserve on top); a job admitted here is not «small» unless its caller says so (BBOX_HEAVY_CPUS).
+  local would=""
+  if [ -r "${_LIB_DIR:-}/ops/heavy-ready.sh" ]; then
+    would="$( . "${_LIB_DIR}/ops/heavy-ready.sh" 2>/dev/null \
+              && HEAVY_RESERVE_MB=0 heavy_ready_why "${need}" "${BBOX_HEAVY_CPUS:-2}" 2>/dev/null )" || would=""
+  fi
+  [ -z "${would}" ] || say "'${label}' would wait under the readiness rule (warn only — it starts now): ${would}" >&2 || true
+  heavy_would_note "${dir}" "${label}" "${would}"
   printf '%s | pid %s on %s | since %s\n' "${label}" "${BASHPID:-$$}" "$(hostname 2>/dev/null)" "$(date -u '+%F %T UTC')" > "${dir}/heavy.holder" 2>/dev/null || true
   # BBOX_HEAVY_PID: the process that ADMITTED — the only one whose heavy_release may unlock (below)
   export BBOX_HEAVY_HELD=1 BBOX_HEAVY_FD="${fd}" BBOX_HEAVY_PID="${BASHPID:-$$}"
+}
+
+# heavy_would_note <locks dir> <label> <would> — ONE line per admission in data/.locks/heavy.would: when, which job,
+# and what the readiness rule would have held it for («-» when nothing). Stage 3 (the rule enforcing) is decided from
+# a week of these lines, never from memory (AGENTS rule 8): the warning above goes to a terminal and is gone.
+# Bounded: past 4000 lines the newest 2000 stay — rewritten IN PLACE (every writer holds the slot), so the file keeps
+# its owner and mode whoever trims (a root container's `mv` once took it from the office's user, whose lines then
+# stopped), needs no temporary file on a full disk, and works in a read-only directory. Made world-writable when
+# missing, for the same reason; a regular file only (a FIFO would hang the admission). A line that cannot be written
+# is not a reason to stop the job.
+heavy_would_note() {
+  local f="$1/heavy.would" n keep
+  [ ! -e "${f}" ] || [ -f "${f}" ] || return 0
+  [ -e "${f}" ] || ( umask 000; : >> "${f}" ) 2>/dev/null || true
+  { printf '%s\t%s\t%s\n' "$(date -u '+%FT%TZ')" "$(printf '%s' "$2" | tr '\t\n' '  ' | head -c 120)" \
+      "$(printf '%s' "${3:--}" | tr '\t\n' '  ' | head -c 300)" >> "${f}"; } 2>/dev/null || return 0
+  n="$(wc -l < "${f}" 2>/dev/null)" || return 0
+  [ "${n:-0}" -le 4000 ] || { keep="$(tail -n 2000 "${f}")" && [ -n "${keep}" ] && printf '%s\n' "${keep}" > "${f}"; } \
+    2>/dev/null || true
+  return 0
 }
 
 # heavy_detach — call this at the TOP of any child that will outlive its heavy job (a watchdog, a
@@ -850,6 +1103,148 @@ heavy_slot_status() {
   else cat "${REPO_ROOT}/data/.locks/heavy.holder" 2>/dev/null || echo "held (holder unknown)"; fi
 }
 
+# ── THE DISK FLOOR: no heavy job starts on a disk that is nearly full (DGO-1393) ─────────────────
+# Measured 2026-11-05 on the HP: its Windows drive C: at 100% (3.2 GB free of 476 GB), and every build, image pull
+# and recording of five parallel sessions stopped there. On 2026-10-15 the same drive at 2.3 GB free had the WSL VM
+# stopped from outside, the whole office down for three hours (DGO-625): WSL's ext4.vhdx lives on that drive and
+# grows into it, and builds are what make it grow. Nothing looked before starting one — and inside the VM the
+# engine's ext4 reads 865 GB free while the drive that holds it is full.
+#
+# disk_free_gb — the free GiB of the emptier of the two filesystems a heavy job writes into: the checkout's
+# (ci-artifacts, recordings, data/) and the engine's (images, layers, the build cache). Under WSL the checkout's is
+# the Windows drive itself (/mnt/c), so it is the number that tells the truth there. Empty when neither reads.
+disk_free_gb() {
+  local root="" a="" b=""
+  a="$(df -Pk "${REPO_ROOT}" 2>/dev/null | awk 'NR == 2 {print int($4 / 1048576)}')"
+  root="$(docker info --format '{{.DockerRootDir}}' 2>/dev/null)" || root=""
+  # In a container the engine's directory is not there, and the container's own root is a layer on its filesystem.
+  # On the Mac host neither is the guest's disk: that one is read inside the guest (machine).
+  if [ -n "${root}" ] && [ -d "${root}" ]; then b="$(df -Pk "${root}" 2>/dev/null | awk 'NR == 2 {print int($4 / 1048576)}')"
+  elif [ -f /.dockerenv ]; then b="$(df -Pk / 2>/dev/null | awk 'NR == 2 {print int($4 / 1048576)}')"; fi
+  if [ -n "${a}" ] && [ -n "${b}" ]; then [ "${a}" -le "${b}" ] && echo "${a}" || echo "${b}"; else echo "${a}${b}"; fi
+}
+
+# disk_reclaim [--cache] — give back what can always be built or pulled again, and nothing else: dangling images (a
+# rebuild leaves the image it replaced untagged) and, with --cache, the build cache above BBOX_BUILD_CACHE_GB (default
+# 10) — only when the disk is short: a cache emptied after every build stops being a cache (scripts/dc prunes it
+# weekly). Never a volume, a tagged image (a `:previous` is somebody's rollback) or a container. Says what came back.
+disk_reclaim() {
+  local before after keep="${BBOX_BUILD_CACHE_GB:-$(read_env_value BBOX_BUILD_CACHE_GB)}"
+  case "${keep}" in ''|*[!0-9]*) keep=10 ;; esac
+  before="$(disk_free_gb)"
+  docker image prune -f >/dev/null 2>&1 || true
+  # --keep-storage is Docker 28's word for the cap (the office's engine is 28.x, running-the-stack.md); an engine that
+  # refuses it still prunes what is dangling
+  if [ "${1:-}" = --cache ]; then
+    docker builder prune -f --keep-storage "${keep}GB" >/dev/null 2>&1 || docker builder prune -f >/dev/null 2>&1 || true
+  fi
+  after="$(disk_free_gb)"
+  [ -n "${before}" ] && [ -n "${after}" ] \
+    && say "reclaimed $(( after - before )) GiB (dangling images$( [ "${1:-}" = --cache ] && echo ", build cache above ${keep} GB")) — ${after} GiB free" >&2
+  return 0
+}
+
+# disk_floor_gb — the free GiB a heavy job needs: BBOX_DISK_MIN_GB from the environment or .env; else 20 when the
+# checkout is on a Windows drive under WSL (/mnt/<drive>/…) — that drive also holds the growing .vhdx, 20 GB is the rule
+# since DGO-625 and the floor platform-keepalive.ps1's health check calls unhealthy — and 5 anywhere else (vps1 builds
+# with 10 GB free of 99; a build needs a few GB, and none should start with less).
+disk_floor_gb() {
+  local floor="${BBOX_DISK_MIN_GB:-$(read_env_value BBOX_DISK_MIN_GB)}"
+  case "${floor}" in
+    ''|*[!0-9]*) case "${REPO_ROOT}" in /mnt/[a-z]/*) floor=20 ;; *) floor=5 ;; esac ;;
+  esac
+  echo "${floor}"
+}
+
+# disk_admit <label> — before a heavy job: when the disk is under its floor (disk_floor_gb), the rebuildable is given
+# back first (disk_reclaim --cache); still under it, the job is REFUSED (1, said) on an office that declares
+# BBOX_DISK_ENFORCE=1 — a build on a full disk fails half-way at best, and under WSL stops the whole office — and on
+# any other it starts with a warning. Warn first, then refuse (AGENTS.md, «tightening a contract»): `bbox run` is
+# what every office, installer and phone guest boots with, and an office already under its floor would otherwise roll
+# back the very take that brings this. Once per job: a nested heavy step (bbox baseline → bbox run → its builds)
+# passes on BBOX_DISK_ADMITTED, as on BBOX_HEAVY_HELD — a check that refused in the middle of a run would leave half
+# an office. BBOX_DISK_MIN_GB=0 turns it off for one command; a disk that cannot be read admits (the check is not the job).
+disk_admit() {
+  [ "${BBOX_DISK_ADMITTED:-}" = 1 ] && return 0
+  local label="${1:-heavy job}" floor free
+  floor="$(disk_floor_gb)"
+  [ "${floor}" -gt 0 ] || return 0
+  free="$(disk_free_gb)"
+  if [ -n "${free}" ] && [ "${free}" -lt "${floor}" ]; then
+    say "${cy}only ${free} GiB free before '${label}' (the floor is ${floor} GiB) — giving back dangling images and build cache first${c0}" >&2
+    disk_reclaim --cache
+    free="$(disk_free_gb)"
+  fi
+  if [ -n "${free}" ] && [ "${free}" -lt "${floor}" ]; then
+    if [ "${BBOX_DISK_ENFORCE:-$(read_env_value BBOX_DISK_ENFORCE)}" = 1 ]; then
+      say "${cr}'${label}' is not started: ${free} GiB free, under the floor of ${floor} GiB (BBOX_DISK_MIN_GB; this office declares BBOX_DISK_ENFORCE=1). What holds the space: \`./bbox machine storage\`; under WSL the distro's sparse .vhdx gives back what it trims (scripts/windows/platform-disk-trim.ps1). To run it anyway: BBOX_DISK_MIN_GB=0 ./bbox … (DGO-1393).${c0}" >&2
+      return 1
+    fi
+    say "${cy}'${label}' starts with only ${free} GiB free, under the floor of ${floor} GiB: free space (\`./bbox machine storage\`) — an office that declares BBOX_DISK_ENFORCE=1 refuses it (DGO-1393).${c0}" >&2
+  fi
+  export BBOX_DISK_ADMITTED=1
+  return 0
+}
+
+# office_branch_value <KEY> — a key of the office's branch rule as its guard reads it (.claude/hooks/office-branch.py):
+# the environment first, else the LAST line of .env that sets it, `export` allowed. A trailing comment, quotes and
+# blanks (a tab, a CR) are not part of a branch name or a 1. Not read_env_value: that one takes the first line and
+# keeps the blanks before an aligned ` # comment`.
+office_branch_value() {
+  local v="${!1:-}"
+  if [ -z "${v}" ] && [ -f "${REPO_ROOT}/.env" ]; then
+    v="$(sed -n -E "s/^[[:space:]]*(export[[:space:]]+)?$1=//p" "${REPO_ROOT}/.env" 2>/dev/null | tail -1)"
+  fi
+  v="${v%%#*}"
+  v=${v//[[:space:]\"\']/}
+  printf '%s' "${v}"
+}
+
+# office_branch_admit <label> — before a heavy job: the checkout is on the branch this office declares (DGO_BRANCH in
+# .env, AGENTS.md rule 6), or the job is said to run from another office's line. .claude/hooks/office-branch.py holds
+# the rule for a Claude session's git; Azaria, Copilot and a person at the shell reach `bbox run` without it, and a
+# fix landed on whatever branch the checkout happened to be on (S8, S20; DGO-850). Warn first, then refuse (AGENTS.md,
+# «tightening a contract»): an office that declares DGO_BRANCH_ENFORCE=1 refuses the job (1, said); every other one
+# warns and starts it. An office with no DGO_BRANCH, or a folder that is not its own git checkout (no git, or a
+# folder inside some other repository), admits silently. DGO_GIT_OVERRIDE=1 passes, said, as it does at the guard.
+# Once per job, as disk_admit: a nested step (the sandbox's re-exec of `bbox run`, `bbox baseline` → `bbox run`)
+# passes on BBOX_BRANCH_ADMITTED. A detached checkout, as a converge deploys a declared commit or a rebase leaves
+# one, is said and never refused.
+office_branch_admit() {
+  [ "${BBOX_BRANCH_ADMITTED:-}" = 1 ] && return 0
+  local label="${1:-heavy job}" want top head enforce
+  want="$(office_branch_value DGO_BRANCH)"
+  [ -n "${want}" ] || return 0
+  # this folder's OWN checkout, not a repository it happens to sit inside; asked as whoever runs it (root under
+  # WSL included, where git would otherwise call the checkout dubious and say nothing)
+  top="$(git -c safe.directory='*' -C "${REPO_ROOT}" rev-parse --show-toplevel 2>/dev/null)" || return 0
+  [ "$(cd "${top}" 2>/dev/null && pwd -P)" = "$(cd "${REPO_ROOT}" 2>/dev/null && pwd -P)" ] || return 0
+  head="$(git -c safe.directory='*' -C "${REPO_ROOT}" rev-parse --abbrev-ref HEAD 2>/dev/null)" || return 0
+  [ -n "${head}" ] && [ "${head}" != "${want}" ] || return 0
+  if [ "${head}" = HEAD ]; then
+    # detached exactly at the office branch's tip runs that branch's code: nothing to say
+    [ "$(git -c safe.directory='*' -C "${REPO_ROOT}" rev-parse -q --verify HEAD 2>/dev/null)" = \
+      "$(git -c safe.directory='*' -C "${REPO_ROOT}" rev-parse -q --verify "refs/heads/${want}" 2>/dev/null)" ] && return 0
+    head="a detached HEAD ($(git -c safe.directory='*' -C "${REPO_ROOT}" rev-parse --short HEAD 2>/dev/null))"
+    say "${cy}'${label}' runs from ${head}, and this office's branch is ${want} (DGO_BRANCH): what runs here is not ${want}'s tip (AGENTS.md rule 6, DGO-850). A detached checkout is said, never refused.${c0}" >&2
+    export BBOX_BRANCH_ADMITTED=1
+    return 0
+  fi
+  if [ "${DGO_GIT_OVERRIDE:-}" = 1 ]; then
+    say "${cy}'${label}' runs from ${head}, not from this office's ${want} — DGO_GIT_OVERRIDE=1 passes it (DGO-850).${c0}" >&2
+    export BBOX_BRANCH_ADMITTED=1
+    return 0
+  fi
+  enforce="$(office_branch_value DGO_BRANCH_ENFORCE)"
+  if [ "${enforce}" = 1 ]; then
+    say "${cr}'${label}' is not started: this office runs from ${want} (DGO_BRANCH), and the checkout is on ${head}. A fix made on ${head} is not on ${want}, and the other offices take ${want}'s work (AGENTS.md rule 6). Go back with \`git switch ${want}\`, or run it anyway with DGO_GIT_OVERRIDE=1 ./bbox … and the reason (DGO-850).${c0}" >&2
+    return 1
+  fi
+  say "${cy}'${label}' runs from ${head}, and this office's branch is ${want} (DGO_BRANCH): a fix made here is not on ${want} (AGENTS.md rule 6) — an office that declares DGO_BRANCH_ENFORCE=1 refuses it (DGO-850).${c0}" >&2
+  export BBOX_BRANCH_ADMITTED=1
+  return 0
+}
+
 # compose_is_build ARGS… — true when a compose invocation builds images: the `build` subcommand, or
 # `up`/`create`/`run` with --build. Global flags before the subcommand (-f, -p …) are skipped.
 compose_is_build() {
@@ -911,8 +1306,9 @@ compose_is_up() {
 # a build takes the slot with the build memory floor, a recreate with the recreate floor
 # (BBOX_RECREATE_MIN_MB, default 400 MiB), anything else passes. Nested calls pass through on
 # BBOX_HEAVY_HELD, so `bbox run` (build, then up) holds the slot once for its whole life.
+# A build also needs the disk floor (disk_admit, DGO-1393); a recreate writes too little to be refused for it.
 compose_admit() {
-  if compose_is_build "$@"; then heavy_admit "compose $*"
+  if compose_is_build "$@"; then heavy_admit "compose $*"; disk_admit "compose $*" || return 1
   elif compose_is_recreate "$@"; then heavy_admit "compose $*" "${BBOX_RECREATE_MIN_MB:-400}"
   fi
   return 0
@@ -1163,6 +1559,10 @@ npath() {
 ensure_generated_writable() {
   local dir="${1:-${REPO_ROOT}/.generated}"
   [ -d "$dir" ] || return 0
+  # Root can write every file there, so there is nothing to repair — and "not mine" would be the OWNER's files,
+  # which the `chown -R` below would hand to root: exactly the debris this exists to clear (DGO-121; an agent's
+  # container runs `bbox n8n push` as root). The compiler hands root's files back after its commands (hand_back).
+  [ "$(id -u)" = 0 ] && return 0
   # The check must look at the whole TREE, not just $dir. A write-probe on the top directory
   # passes while .generated/n8n/<app>/*.json underneath is root-owned — which is precisely the
   # failing case, since compileDir writes the per-app files, not the parent. `find -print -quit`
@@ -1265,8 +1665,9 @@ ensure_network() {
 #                       is a string contract between two files, and it silently becomes a lie the
 #                       first time someone rewords the message or a hook writes to stderr.
 #
-# Callers therefore choose. Bring-up verbs (`prepare`, `onboard`, `refresh`) do not fail the run: a
-# failed bootstrap is loud, and `bbox run` says it again at its end (DGO-995). `bbox baseline` does NOT,
+# Callers therefore choose. Bring-up verbs (`prepare`, `refresh`) do not fail the run: a failed bootstrap is
+# loud, and `bbox run` says it again at its end. A failed `onboard` ends a whole-stack run «NOT up», exit 3
+# (DGO-995: an app whose onboard refused is not up); a targeted run says it. `bbox baseline` does NOT,
 # because reporting a green baseline over a failing app is the exact disease this repo is curing.
 run_app_hooks() {
   local verb="${1:?usage: run_app_hooks <verb>}" root aid hook rc=0 apps="${BBOX_APPS_SNAPSHOT:-}"
@@ -1301,7 +1702,7 @@ $1
 "*) return 0 ;; esac; return 1; }
 
 # rename_address_passes <old> <new> <dry 0|1> — the office's people's addresses follow it to another domain
-# (FPG-34): every ENABLED app's hooks/rename-address, TWICE — every hook decides from state and is
+# (EXF-34): every ENABLED app's hooks/rename-address, TWICE — every hook decides from state and is
 # idempotent, and one may need another's facts (a vault override follows only a person an app moved), so
 # the second pass is the one that counts. The facts go in a ledger (rename_note) that lives as long as this
 # call. Returns the second pass's count of apps that failed or refused; sets RENAME_CHANGED=1 when anything
@@ -1318,7 +1719,7 @@ rename_address_passes() {
   export DGO_RENAME_PASS=1
   run_app_hooks rename-address || true
   say "rename-address: second pass (what is still to do, and the verdict)"
-  export DGO_RENAME_PASS=CHANGE_ME
+  export DGO_RENAME_PASS=2
   run_app_hooks rename-address || rc=$?
   grep -q '^- changed' "${DGO_RENAME_LEDGER}" 2>/dev/null && RENAME_CHANGED=1
   rm -f "${DGO_RENAME_LEDGER}"
@@ -1638,6 +2039,33 @@ ccr_egress_hint() {
   bad "registries, then re-run. Docs: ${CCR_WEB_DOCS}   (Windows/VPS are unaffected.)"
 }
 
+# ccr_pull_base <image> — pull one base image and, when the pull fails, say WHY in docker's own words (DGO-1017).
+# The pull's stderr used to go to /dev/null and every failure was read as the network policy (ccr_egress_hint), so
+# «no space left on device» sent the reader to recreate a cloud environment. Now a full disk is the disk, with its
+# free space and the path (and sets CCR_DISK_FULL so `bbox run` stops with that); a network or registry error is the
+# egress hint, as before; anything else is docker's own last line. Returns the pull's status.
+ccr_pull_base() {
+  local b="$1" err rc=0 root free last
+  err="$(docker pull "$b" 2>&1 >/dev/null)" || rc=$?      # `|| rc=$?`: a bare call under `set -e` must not exit here
+  [ "${rc}" -eq 0 ] && return 0
+  last="$(printf '%s\n' "${err}" | grep . | tail -1 | cut -c1-200)" || true
+  if printf '%s' "${err}" | grep -qiE 'no space left on device|ENOSPC'; then
+    CCR_DISK_FULL=1
+    root="$(docker info --format '{{.DockerRootDir}}' 2>/dev/null)" || true; root="${root:-/var/lib/docker}"
+    free="$(df -Ph "${root}" 2>/dev/null | awk 'NR == 2 {print $4}')" || true
+    bad "cannot fetch base $b: the disk is full — ${free:-?} free at ${root} (docker: no space left on device)"
+  elif printf '%s' "${err}" | grep -qiE 'repository does not exist|manifest unknown|permission denied'; then
+    # neither the disk nor the network: a mistyped FROM, a missing tag, a socket this user may not use
+    warn "cannot fetch base $b: ${last}"
+  elif printf '%s' "${err}" | grep -qiE 'dial tcp|i/o timeout|timed? ?out|connection (refused|reset)|no such host|x509|certificate|tls|proxyconnect|unexpected EOF|net/http|toomanyrequests|unauthorized|denied|forbidden|(^|[^0-9])403([^0-9]|$)'; then
+    warn "cannot fetch base $b: ${last}"
+    ccr_egress_hint
+  else
+    warn "cannot fetch base $b: ${last:-docker pull failed (exit ${rc})}"
+  fi
+  return "${rc}"
+}
+
 # The base images this office builds from, one per line: every FROM of every Dockerfile the RENDERED
 # compose project builds (it names each build's context and file, so no list of directories can go
 # stale — the old one globbed production/ and development/, which the platform-OS refactor removed,
@@ -1676,7 +2104,7 @@ ccr_shadow_bases() {
   [ "$(printf '%s\n' "${bases}" | grep -c .)" -gt 1 ] \
     || warn "could not derive the base images from the compose project — only n8n's base will trust the proxy CA, and every other build will fail on TLS"
   for b in $bases; do
-    docker image inspect "$b" >/dev/null 2>&1 || docker pull "$b" >/dev/null 2>&1 || { warn "cannot fetch base $b — skipping shadow"; ccr_egress_hint; continue; }
+    docker image inspect "$b" >/dev/null 2>&1 || ccr_pull_base "$b" || { warn "skipping the shadow of $b"; continue; }
     if printf '%s' "$b" | grep -qiE 'alpine'; then
       printf 'FROM %s\nCOPY ccr-ca.crt %s\nRUN cat %s >> %s 2>/dev/null || true\nENV NODE_EXTRA_CA_CERTS=%s npm_config_cafile=%s SSL_CERT_FILE=%s GIT_SSL_CAINFO=%s\n' "$b" "$RAW" "$RAW" "$CAP" "$RAW" "$RAW" "$RAW" "$RAW" > "${sdir}/Dockerfile"
     elif printf '%s' "$b" | grep -qiE 'n8nio/n8n'; then
@@ -1708,7 +2136,10 @@ ccr_shadow_bases() {
 # setting rlimit"), which aborts the whole `up`. When the host hard limit is below the request,
 # export a capped PG_NOFILE_* for this process so compose asks for something the kernel allows.
 # NO-OP when the host limit already meets the request or reports "unlimited" (normal laptop/VPS).
+# `--notice`: said as a `[bbox]` line on stderr (dcx's callers parse its stdout and its first other stderr line),
+# where `bbox run` and the baseline keep their warning in the run's own log.
 ccr_clamp_nofile() {
+  local notice=""; [ "${1:-}" = --notice ] && notice=1
   local hard; hard="$(ulimit -Hn 2>/dev/null)"
   case "${hard}" in ''|unlimited|*[!0-9]*) return 0 ;; esac
   local want="${PG_NOFILE_HARD:-262144}"; case "${want}" in *[!0-9]*) want=262144 ;; esac
@@ -1716,7 +2147,11 @@ ccr_clamp_nofile() {
     export PG_NOFILE_HARD="${hard}"
     local soft="${PG_NOFILE_SOFT:-1024}"; [ "${soft}" -gt "${hard}" ] && soft="${hard}"
     export PG_NOFILE_SOFT="${soft}"
-    warn "host nofile hard limit ${hard} < requested ${want} → PG_NOFILE_HARD=${hard} for this run (else n8n-postgres won't start)"
+    if [ -n "${notice}" ]; then
+      echo "[bbox] host nofile hard limit ${hard} < requested ${want} → PG_NOFILE_HARD=${hard} for this command" >&2
+    else
+      warn "host nofile hard limit ${hard} < requested ${want} → PG_NOFILE_HARD=${hard} for this run (else n8n-postgres won't start)"
+    fi
   fi
   return 0
 }
@@ -1786,8 +2221,14 @@ for s in sel:
         ctx = b.get("context", "."); df = b.get("dockerfile", "Dockerfile"); args = b.get("args", {}) or {}
     if isinstance(args, list):
         args = {k: v for a in args for k, _, v in [a.partition("=")]}
-    img = svc.get("image") or ("deployment-hacohen-" + s)
+    img = svc.get("image") or ("digital-office-" + s)
     argflags = " ".join("--build-arg " + shlex.quote("%s=%s" % (k, v)) for k, v in args.items())
+    # a second build context (compose `additional_contexts`: a platform file an app builds in, e.g. the office's
+    # one door for a Python app) goes with it, or `COPY --from=<name>` finds nothing
+    ctxs = (b.get("additional_contexts") or {}) if isinstance(b, dict) else {}
+    if isinstance(ctxs, list):
+        ctxs = {k: v for a in ctxs for k, _, v in [a.partition("=")]}
+    argflags += "".join(" --build-context " + shlex.quote("%s=%s" % (k, v)) for k, v in ctxs.items())
     print("\t".join([s, img, ctx, df, argflags]))
 PY
   local specs; specs="$( dcx config --format json 2>/dev/null | python3 "${pyf}" "$svcs" 2>/dev/null || true)"
@@ -1831,6 +2272,9 @@ EOF
 # 32.6h behind its sources, bina-ds 26.6h, computers 11.5h). Build contexts are read from the APP
 # composes, because the compiled .generated/compose.yml does not carry them (measured: 0 services
 # there, 36 in the apps).
+# It is the IMAGE's time that is compared, never the container's (DGO-1356): a container re-created today
+# from an image of last week is new, and comparing it hid exactly the case this exists for — measured
+# 2026-11-05 on the Dell, dgo-carry created 11-04 from an image of 10-31, before the relay its checkout had.
 stale_images() {
   ( cd "${REPO_ROOT}" && python3 - <<'PY'
 import datetime, os, pathlib, subprocess, glob
@@ -1872,8 +2316,10 @@ for svc, ctx in sorted(ctx_by_svc.items()):
                            '--format', '{{.Names}}'], capture_output=True, text=True).stdout.split()
     if not name:
         continue
-    created = subprocess.run(['docker', 'inspect', '-f', '{{.Created}}', name[0]],
-                             capture_output=True, text=True).stdout.strip()
+    image = subprocess.run(['docker', 'inspect', '-f', '{{.Image}}', name[0]],
+                           capture_output=True, text=True).stdout.strip()
+    created = subprocess.run(['docker', 'image', 'inspect', '-f', '{{.Created}}', image],
+                             capture_output=True, text=True).stdout.strip() if image else ''
     if not created:
         continue
     try:
@@ -1886,4 +2332,198 @@ if rows:
     print(' '.join(rows))
 PY
   )
+}
+
+# stale_image_services — the same, the service names alone (what `bbox run <svc…>` takes).
+stale_image_services() {
+  stale_images | sed -E 's/ \([0-9]+h\)//g'
+}
+
+# image_drift — the RUNNING containers whose image is NOT the one their tag points at now, one
+# "<container><TAB><tag>" per line (a tab, because a tag carries '/' and ':' and a space would split
+# it). The third way a container runs what the files no longer are, and the one neither sibling sees:
+# stale_containers reads compose's own dry run (a changed DECLARATION) and stale_images reads the build
+# contexts' mtimes (SOURCES newer than the container) — while a rebuild nobody replaced is invisible to
+# both, because the tag moved to a new image id and the container kept running the old one. Every file
+# on disk then says the fix is in and the browser is served the old code (eng-013 instance 3, the shape
+# that hit this office 2026-11-02: the bring-up moved the tags and nothing re-created the consumers).
+# The engine holds both halves, so nothing here is a list: a container's `.Image` is the id it was
+# CREATED from and `.Config.Image` is the reference it asked for — resolve that reference now, and a
+# difference IS "the tag moved and no re-create followed it".
+#
+# Silent, on purpose, about the two shapes that are NOT this drift:
+#   - a reference pinned to a DIGEST (`…@sha256:…`, a `Config.Image` carrying the '@'): a pinned image
+#     has no moving tag, so a difference means the digest was re-pulled and whatever DECLARED it is
+#     what gets re-created — reported here it would be a permanent false alarm on a healthy container;
+#   - an UNTAGGED local image (`Config.Image` is `<none>`): a build nobody named has nothing to have
+#     moved away from, and every re-create of it would report forever.
+# A reference the engine no longer holds answers nothing and is skipped: that is an image GONE (the
+# container still runs it, which `docker ps` shows), not a tag that moved. Reads only — no restart, no
+# prune, no write; `bbox status` prints what this finds and nothing acts on it by itself.
+image_drift() {
+  local ids
+  ids="$(docker ps -q 2>/dev/null || true)"
+  [ -n "${ids}" ] || return 0
+  # shellcheck disable=SC2086  # container ids are hex from the engine, never a word needing quotes
+  docker inspect --format '{{.Name}}|{{.Image}}|{{.Config.Image}}' ${ids} 2>/dev/null | python3 -c '
+import subprocess, sys
+tags = {}
+for line in sys.stdin:
+    name, _, rest = line.strip().partition("|")
+    running, _, ref = rest.partition("|")
+    if not name or not running or not ref:
+        continue
+    if "@" in ref or ref.startswith("<none>") or ref.endswith(":<none>"):
+        continue
+    if ref not in tags:
+        tags[ref] = subprocess.run(["docker", "image", "inspect", "-f", "{{.Id}}", ref],
+                                   capture_output=True, text=True).stdout.strip()
+    now = tags[ref]
+    if now and now != running:
+        print(name.lstrip("/") + "\t" + ref)
+' 2>/dev/null || true
+}
+
+# _dbx_containers — every RUNNING container as one JSON line: its name, its labels, and the networks it
+# is attached to with each network's aliases/DNS names. The engine's own answer to "what talks, and
+# where", and the one input the two readers below share. `.Config.Env` is deliberately NOT asked for:
+# labels and network membership are all this needs, and an environment is where the secrets are — so a
+# fixture of this output can be kept, read and handed to a test without redacting anything.
+_dbx_containers() {
+  local ids
+  ids="$(docker ps -q 2>/dev/null || true)"
+  [ -n "${ids}" ] || return 0
+  # shellcheck disable=SC2086  # container ids are hex from the engine, never a word needing quotes
+  docker inspect --format '{"name":{{json .Name}},"labels":{{json .Config.Labels}},"networks":{{json .NetworkSettings.Networks}}}' \
+    ${ids} 2>/dev/null || true
+}
+
+# shared_hosts — a Host(…) that a container of ANOTHER compose project claims while this office's
+# containers claim it too, one "<host><TAB><container> <container>…" per line.
+#
+# The edge reads every container on the engine that sits on a network THE EDGE ITSELF is on, so a
+# hostname is not owned by whoever declared it: two stacks answering one host means traefik picks the
+# winner by router priority, and half the requests go somewhere nobody meant (measured on this office:
+# a neighbouring stack's `network` container claimed `Host(network.localhost)` that way, apps/office-
+# routes/AGENT.md). Nothing here is a list of hosts — the claims are the containers' own
+# `traefik.http.routers.<name>.rule` labels, which is the compiled form of every app.json's routing.
+#
+# WHY ONLY A FOREIGN PROJECT (do not "fix" this back into "one host, two containers"). Two containers
+# of THIS office on one host is the office's own design, measured here on 2026-11-04, and every
+# host-only rule below would fire on all of it:
+#   - `console-hp` owns `Host(console.localhost)` outright, and bina-ds, bina-claude, browser42,
+#     project-pln each add `Host(console.localhost) && PathPrefix(/a/<alias>/…)` — that IS how the
+#     console frames an app in a tile. Traefik's priority is the rule's length, so the prefix wins
+#     where it applies; nothing is ambiguous, and the old advice ("give this office's app a host of its
+#     own") would be wrong.
+#   - `n8n-hp` holds `Host(n8n.localhost)` and `n8n-webhook-hp` holds
+#     `Host(n8n.localhost) && (PathPrefix(/webhook/…) || …)` — the deliberate split in
+#     apps/n8n/AGENT.md ("/webhook/ is answered by n8n-webhook").
+# The finding is the one the note in `bbox status` describes: ANOTHER STACK's router owning a host this
+# office also serves. The compose project is the engine's own answer to "whose container is this", so
+# the office's own project (derived from the deployment, never a list) is simply the majority answer,
+# and only a claim from a different one is reported.
+#
+# Precise about three more things, each one measured:
+#   - only containers on a network the edge is ALSO on count; a container elsewhere is never read by
+#     traefik, so its Host(…) is not a routing rule at all and reporting it is a false alarm;
+#   - `traefik.enable=false` means "not this edge's", so its routers do not exist even on the edge's
+#     network;
+#   - only `traefik.http.routers.*.rule` — the legacy `traefik.frontend.rule` format is not a router
+#     this traefik builds, and a `!Host(…)` EXCLUDES a host rather than claiming it.
+# No edge container at all means nothing routes: the answer is empty, exit 0 — a check that cannot run
+# must not accuse anybody. Reads only.
+shared_hosts() {
+  _dbx_containers | python3 -c '
+import json, re, sys
+
+rows = []
+for line in sys.stdin:
+    try:
+        d = json.loads(line)
+    except ValueError:
+        continue
+    rows.append((str(d.get("name") or "").lstrip("/"), d.get("labels") or {}, d.get("networks") or {}))
+
+EDGE = re.compile(r"^traefik(-[A-Za-z0-9_]+)?$")
+edge_nets = set()
+for name, labels, nets in rows:
+    svc = labels.get("com.docker.compose.service") or ""
+    if svc == "traefik" or EDGE.match(name):
+        edge_nets |= set(nets)
+if not edge_nets:
+    sys.exit(0)
+
+QUOTES = "`" + chr(39) + chr(34)
+HOST = re.compile(r"(?<!!)Host\(\s*[" + QUOTES + r"]([^" + QUOTES + r"]+)[" + QUOTES + r"]\s*\)")
+
+claims = {}
+project_of = {}
+for name, labels, nets in rows:
+    project_of[name] = labels.get("com.docker.compose.project") or "(no-compose-project)"
+    if not (set(nets) & edge_nets):
+        continue
+    if str(labels.get("traefik.enable", "true")).strip().lower() == "false":
+        continue
+    for key, val in labels.items():
+        if not (key.startswith("traefik.http.routers.") and key.endswith(".rule")):
+            continue
+        for host in HOST.findall(str(val)):
+            host = host.strip()
+            if host:
+                claims.setdefault(host.lower(), set()).add(name)
+
+for host in sorted(claims):
+    who = claims[host]
+    if len(who) > 1 and len({project_of[n] for n in who}) > 1:
+        print(host + "\t" + " ".join(sorted(who)))
+' 2>/dev/null || true
+}
+
+# shared_names — a NAME more than one container answers to on the SAME network, when at least one of
+# them belongs to ANOTHER compose project, one "<name><TAB><container> <container>…" per line.
+#
+# Docker's DNS does not refuse a duplicate: two containers registered under one name on one network are
+# round-robined, so every other call lands in the other office. It is the sharp end of the fleet's own
+# naming: this engine carries a second stack with containers of its own, and a container name two
+# containers answer to is a docker name, not a thing anybody declared twice.
+# The names are the engine's: the container's own name, its per-network ALIASES and docker's DNSNames.
+#
+# WHY A FOREIGN PROJECT ONLY, same reason as shared_hosts above: inside one stack a shared name is
+# usually deliberate — a webhook worker and its web process, a service and the stand-in that takes one
+# path — and the round-robin is then the design. What is never a design is this office's app answering
+# a name another stack's container also holds: that is a call landing in someone else's office.
+# A name held in two DIFFERENT networks is not a finding at all — DNS never crosses that boundary —
+# so the comparison is per network, always. Reads only.
+shared_names() {
+  _dbx_containers | python3 -c '
+import json, sys
+
+per_net = {}
+project_of = {}
+for line in sys.stdin:
+    try:
+        d = json.loads(line)
+    except ValueError:
+        continue
+    name = str(d.get("name") or "").lstrip("/")
+    if not name:
+        continue
+    labels = d.get("labels") or {}
+    project_of[name] = labels.get("com.docker.compose.project") or "(no-compose-project)"
+    for net, cfg in (d.get("networks") or {}).items():
+        cfg = cfg or {}
+        names = {name}
+        names |= set(cfg.get("Aliases") or [])
+        names |= set(cfg.get("DNSNames") or [])
+        for n in names:
+            if n:
+                per_net.setdefault(net, {}).setdefault(n, set()).add(name)
+
+for net in sorted(per_net):
+    for n in sorted(per_net[net]):
+        who = per_net[net][n]
+        if len(who) > 1 and len({project_of[c] for c in who}) > 1:
+            print(n + "\t" + " ".join(sorted(who)))
+' 2>/dev/null || true
 }

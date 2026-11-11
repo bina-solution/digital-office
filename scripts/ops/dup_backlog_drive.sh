@@ -25,8 +25,8 @@
 # feedable, and let the rounds where nothing is feedable simply wait the lock out.
 set -u
 DK="docker -H unix:///run/bbox-docker.sock"
-PSQL="$DK exec -i supabase-db-shlomo-laptop psql -U postgres -tAc"
-ENVF=/mnt/c/Users/user/Desktop/personalWorkspace/AutomateOs/deployment-hacohen/.env
+PSQL="$DK exec -i supabase-db-owner-laptop psql -U postgres -tAc"
+ENVF=/mnt/c/Users/user/Desktop/personalWorkspace/AutomateOs/digital-office/.env
 
 # --- the one definition of a duplicate group -----------------------------------------------
 # Mirrors groupKeyOf() in indoxV2ActionsGlobal01 'Adjudicate Merge' and the driver's dbl CTE:
@@ -192,7 +192,7 @@ SQL
 locked_ids () {
   local rp
   rp=$(grep -E '^REDIS_PASSWORD=' "$ENVF" | head -1 | cut -d= -f2-)
-  $DK exec -e RP="$rp" redis-shlomo-laptop sh -lc \
+  $DK exec -e RP="$rp" redis-owner-laptop sh -lc \
     'redis-cli -a "$RP" --no-auth-warning --scan --pattern "n8n.process_lock.doc_action.*::action_merge_doubles" 2>/dev/null' \
     | sed -e 's/^n8n[.]process_lock[.]doc_action[.]//' -e 's/::action_merge_doubles$//' | tr -d '\r'
 }
@@ -234,7 +234,7 @@ feed () {
   cnt=$(echo "$ids" | tr ',' '\n' | grep -c .)
   echo "    mains fed: $cnt   (candidates $ncand, merge locks held $nlock)"
   [ "$cnt" -eq 0 ] && return 0
-  $DK exec -e I="$ids" -e U="$wu" -e P="$wp" n8n-shlomo-laptop node -e '
+  $DK exec -e I="$ids" -e U="$wu" -e P="$wp" n8n-owner-laptop node -e '
 const auth=Buffer.from(process.env.U+":"+process.env.P).toString("base64");
 fetch("http://localhost:5678/webhook/indox-drain",{method:"POST",
  headers:{"Content-Type":"application/json",Authorization:"Basic "+auth},

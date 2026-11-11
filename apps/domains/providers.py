@@ -581,7 +581,7 @@ class PortalAdapter(BaseAdapter):
     portal_id = "internic"
 
     def whoami(self) -> dict:
-        import portal as portal_mod
+        import provider_client as portal_mod      # the provider's own app (domain-internic) answers
         st = portal_mod.state(self.portal_id)
         return {"login": st.get("title") or "פורטל הרשם",
                 "capabilities": {"write_dns": False, "list_zones": True, "registrar": True,

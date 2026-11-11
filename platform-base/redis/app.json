@@ -24,7 +24,10 @@
         "incr",
         "expire",
         "publish",
-        "subscribe"
+        "subscribe",
+        "xadd",
+        "xrevrange",
+        "xread"
       ]
     }
   ],

@@ -55,7 +55,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/solomonBoltin/deployment-hacohen/packaging/trust"
+	"github.com/bina-solution/digital-office/packaging/trust"
 )
 
 const usage = `usage:

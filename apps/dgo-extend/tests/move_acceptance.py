@@ -41,7 +41,7 @@ LOCAL = "computer_local-local"
 STEPS = ["preflight", "backup", "stop", "transfer", "enable", "verify"]
 #: Where the checkout is on the machine that runs THIS office. `reconcile.py compose-services` is
 #: asked from inside that directory, so a wrong value here reports "the app does not run here".
-HOME_REPO = "/Users/shlomobolotin/הלשכה הדיגיטלית שלי"
+HOME_REPO = "/Users/owner/הלשכה הדיגיטלית שלי"
 
 
 def api(base: str, path: str, body: dict | None = None, timeout: int = 120) -> dict:

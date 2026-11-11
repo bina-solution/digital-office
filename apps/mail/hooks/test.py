@@ -43,7 +43,7 @@ def _require_test_instance():
     can be asked to do. Duplicated from apps/indox/hooks/test.py on purpose — an app never
     reaches into another app (G9), same as the rest of this file's shared mechanics.
     """
-    dn = env("DEPLOYMENT_NAME", "shlomo-laptop")
+    dn = env("DEPLOYMENT_NAME", "owner-laptop")
     r = subprocess.run(["docker", "exec", f"supabase-db-{dn}", "psql", "-U", "postgres",
                         "-d", "postgres", "-t", "-A", "-c",
                         "select 1 from public.indox_instances where id='test' and enabled;"],
@@ -134,7 +134,7 @@ def ensure_labels():
     """
     if env("GMAIL_IMAP_MODE", "gmail") != "local":
         return
-    dn = env("DEPLOYMENT_NAME", "shlomo-laptop")
+    dn = env("DEPLOYMENT_NAME", "owner-laptop")
     # /labels/create is a canonical op: it REFUSES a call that names no connection, so the labels
     # are seeded into the resolved LOCAL test mailbox explicitly. They used to be seeded into
     # whatever /data/active.json pointed at — the client's Gmail — which is where the label names
@@ -192,14 +192,14 @@ def test_mail_connection():
     mailapi now refuses a canonical op that names no connection. Before that guard, this suite's
     `append`/`search`/`listLabels` calls carried no `connection_id` and resolved to
     `/data/active.json` — the CLIENT's real Gmail — which is how two `mailorg_*` fixture messages
-    (and 146 sync-v3 ones from the INDOX battery) landed in person9@example.com.
+    (and 146 sync-v3 ones from the INDOX battery) landed in person10@example.com.
 
     A non-local id is REFUSED rather than used: seeding unlabelled fixture mail into a real account
     is the incident this closes. Returns "" if the engine is unreachable, so the suite fails loudly
     instead of falling back. Duplicated from apps/indox/hooks/test.py on purpose — an app never
     reaches into another app (G9), same as the rest of this file's shared mechanics.
     """
-    dn = env("DEPLOYMENT_NAME", "shlomo-laptop")
+    dn = env("DEPLOYMENT_NAME", "owner-laptop")
     code = ("import json,urllib.request\n"
             "d=json.load(urllib.request.urlopen('http://localhost:8970/engine/profiles',timeout=15))\n"
             "ps=d.get('profiles') or []\n"
@@ -220,9 +220,9 @@ def test_mail_connection():
 
 
 def fetch_summary(eid):
-    dn = env("DEPLOYMENT_NAME", "shlomo-laptop")
+    dn = env("DEPLOYMENT_NAME", "owner-laptop")
     o = subprocess.run(["docker", "exec", f"n8n-postgres-{dn}", "psql", "-U",
-                        env("POSTGRES_USER", "hacohen"), "-d", "n8n", "-t", "-A", "-c",
+                        env("POSTGRES_USER", "example"), "-d", "n8n", "-t", "-A", "-c",
                         f'SELECT data FROM execution_data WHERE "executionId"={int(eid)};'],
                        capture_output=True)
     raw = o.stdout.decode("utf-8", errors="replace").strip()

@@ -43,7 +43,9 @@ import { workflow, node, links } from '@n8n-as-code/transformer';
     /*__n8n__*/ staticData: null,
     id: 'binaDayRun00001',
     name: 'Bina — one-off day cycle (2026-10-14)',
-    active: true,
+    // DGO-1294: off. Its clocks are pinned to 14 October and cron has no year, so this «one-off» would open three
+    // cycles again on 2027-10-14 and every year after — self-activated spend the owner's ₪1/day rule forbids.
+    active: false,
     isArchived: false,
     tags: ['app:bina-ds', 'role:infra'],
     settings: { errorWorkflow: 'errorHandler01', executionOrder: 'v1' },

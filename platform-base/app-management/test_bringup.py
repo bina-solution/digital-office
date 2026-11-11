@@ -52,6 +52,9 @@ def plane(monkeypatch):
     monkeypatch.setattr(app, "_held_volumes", lambda m: [])
     monkeypatch.setattr(app, "_required_by", lambda aid: [])        # nobody needs it, unless a test says so
     monkeypatch.setattr(app, "_closure_services", lambda aid: [])   # no providers pulled in, unless a test says so
+    # whose services they are (the plan's `provider` rows), and what compose runs here: none, unless a test says so
+    monkeypatch.setattr(app, "_providers_of", lambda aid: [], raising=False)
+    monkeypatch.setattr(app, "_compiled_services", lambda: set(), raising=False)
     # the compiler's own parser is not importable from a bare copy of this file; its rule is tested there
     monkeypatch.setattr(app, "_disposition", lambda entry: (entry or {}).get("state", "disabled"))
     monkeypatch.setattr(app, "_signin_refresh", lambda: calls.append("signin") or {"ran": True, "rc": 0, "out": ""})
@@ -626,8 +629,9 @@ def test_switching_off_an_app_that_another_needs_writes_the_line_and_leaves_it_r
 
 def test_enabling_a_dependent_starts_its_providers_stopped_containers_and_names_the_absent(plane, monkeypatch):
     """Install INDOX, and n8n comes up: enabling an app START()s the compiled-but-stopped containers
-    of the providers it pulls in, and NAMES any provider still wholly down — without ever failing the
-    dependent's own enable (a provider up from nothing is its own bring-up, own-031)."""
+    of the providers it pulls in, and NAMES a service still wholly down that no provider row claims
+    (the fixture's plan knows none) — without failing the dependent's own enable. One the plan claims
+    is brought up instead: the tests after `SUPABASE` below (DGO-1496)."""
     monkeypatch.setattr(app, "_closure_services", lambda aid: ["notes", "n8n", "n8n-worker"])
     stopped = _Box("n8n", plane); stopped.status = "exited"
     monkeypatch.setattr(app, "_app_containers", lambda services: [stopped] if "n8n" in services else [])
@@ -635,6 +639,395 @@ def test_enabling_a_dependent_starts_its_providers_stopped_containers_and_names_
     assert code == 200 and payload["ok"]
     assert "start:n8n" in plane and payload["acted"] == ["n8n"]               # the stopped provider was started
     assert payload["providers_down"] == ["n8n-worker"]                       # the absent one is named, enable still ok
+
+
+def test_a_dependent_waits_for_its_providers_after_they_are_started_and_its_failure_names_the_absent(plane, monkeypatch):
+    """Exampleu, 2026-11-08: the wizard enabled drive, which requires supabase's database. Supabase had
+    never been created. Drive waited its 600 s, failed its health check, and the job said only «did
+    not all answer»: providers_down was empty because the providers were looked at only after a
+    healthy wait. The providers come BEFORE the wait: a stopped one is started first, so the app can
+    answer, and a failed wait names every provider that is wholly down."""
+    monkeypatch.setattr(app, "_closure_services", lambda aid: ["notes", "db", "storage", "kong"])
+    stopped = _Box("kong", plane); stopped.status = "exited"
+    monkeypatch.setattr(app, "_app_containers", lambda services: [stopped] if "kong" in services else [])
+    monkeypatch.setattr(app, "_wait_ready", lambda services, s: plane.append(f"answer:{s}") or False)
+    payload, code = app._apply("notes", APP, True)
+    assert plane.index("start:kong") < plane.index("answer:77")            # started before the wait
+    assert code == 500 and payload["providers_down"] == ["db", "storage"]
+    assert payload["create_errors"] == ["the app's containers did not all answer within 77s"
+                                        " — the providers it needs are not up: db, storage"]
+    assert "hook:onboard" not in plane
+
+
+def test_a_compiler_that_hangs_never_strands_the_apps_own_bring_up(monkeypatch):
+    """`_closure_services` is asked before the health wait now, so a compiler that times out must
+    answer «no providers» (its docstring's promise), not end the bring-up as a 500 TimeoutExpired."""
+    def hang(*args, **kw):
+        raise app.subprocess.TimeoutExpired(cmd="reconcile.py", timeout=120)
+    monkeypatch.setattr(app, "_compiler", hang)
+    assert app._closure_services("notes") == []
+
+
+# ── a provider the app needs and that has NO container is brought up, by `bbox update`'s own bring-up ──
+# DGO-1496: the wizard enabled drive on Exampleu's core office, supabase had never been created, and the enable could
+# only NAME it. `bbox update` (43ed7457) learned to bring a provider up as a bring-up does: its prepare, its images,
+# its containers alone, a wait as long as its first start may take, its onboard — scripts/provider-up.sh. The enable
+# brings up an absent provider through that same file, before the app's own prepare, as `bbox run` orders them.
+SUPABASE = ("platform-base", "supabase", 600, ["db", "storage", "kong"])
+
+
+def _needs_supabase(plane, monkeypatch, rc=0, out="  ok — supabase is up: db storage"):
+    """notes needs supabase: kong runs, db and storage have no container. `_provider_up` is recorded, answers rc;
+    automations are recorded per app (`automations:<id>`), and only notes declares any."""
+    kong = _Box("kong", plane)
+    monkeypatch.setattr(app, "_closure_services", lambda aid: ["db", "storage", "kong", "notes"])
+    monkeypatch.setattr(app, "_app_containers", lambda services: [kong] if "kong" in services else [])
+    monkeypatch.setattr(app, "_providers_of", lambda aid: [SUPABASE], raising=False)
+    monkeypatch.setattr(app, "_compiled_services", lambda: {"db", "storage", "kong", "notes"}, raising=False)
+    monkeypatch.setattr(app, "_provider_up",
+                        lambda root, pid, seconds, svcs: plane.append(f"provider-up:{root}/{pid}:{seconds}:{','.join(svcs)}")
+                        or {"ran": True, "rc": rc, "out": out}, raising=False)
+    monkeypatch.setattr(app, "_blueprint_apply",
+                        lambda aid, on: plane.append(f"automations:{aid}") or ({"ok": True} if aid == "notes" else None))
+
+
+def test_an_enable_brings_up_a_provider_that_has_no_container_before_the_apps_own_prepare(plane, monkeypatch):
+    _needs_supabase(plane, monkeypatch)
+    steps = []
+    payload, code = app._apply("notes", APP, True, steps.append)
+    assert code == 200 and payload["ok"]
+    # only what has no container (kong runs, and is not recreated), before anything of the app's own; its
+    # automations are asked for as it comes up (it declares none here)
+    assert plane == ["state:enabled", "render", "provider-up:platform-base/supabase:600:db,storage",
+                     "automations:supabase", "hook:prepare", "create", "answer:77", "hook:onboard", "automations:notes"]
+    assert steps[:3] == ["state", "providers", "prepare"]
+    assert payload["providers_up"] == ["supabase"] and payload["providers_down"] == []
+    assert payload["hooks"]["provider:supabase"] == {"ran": True, "rc": 0, "out": "  ok — supabase is up: db storage"}
+    assert "provider_blueprints" not in payload
+
+
+def test_the_lock_is_not_held_while_a_provider_comes_up_and_is_for_the_apps_own_containers(plane, monkeypatch):
+    """A provider's bring-up is as long as its first start: held under the lock, every other change waited (a
+    switch-off answered 409, `bbox run`'s converge timed out). The app's own prepare and containers keep it."""
+    _needs_supabase(plane, monkeypatch)
+    seen = {}
+    locks = lambda aid: (app._LIFECYCLE.locked(), app._app_lock(aid).locked())   # noqa: E731
+    monkeypatch.setattr(app, "_provider_up",
+                        lambda root, pid, *a: seen.setdefault("provider", locks(pid)) and {"ran": True, "rc": 0, "out": ""})
+    monkeypatch.setattr(app, "_run_hook",
+                        lambda m, verb, t: seen.setdefault(verb, locks("notes")) and {"ran": True, "rc": 0, "out": ""})
+    monkeypatch.setattr(app, "_install", lambda aid: (seen.setdefault("create", locks("notes")), ([], []))[1])
+    payload, code = app._apply("notes", APP, True)
+    # (lifecycle lock, the app's own lock): the provider's bring-up holds ITS lock only; the app's prepare and
+    # containers hold both; its onboard neither
+    assert code == 200 and seen == {"provider": (False, True), "prepare": (True, True), "create": (True, True),
+                                    "onboard": (False, False)}
+    assert not app._LIFECYCLE.locked() and not app._app_lock("notes").locked() and not app._app_lock("supabase").locked()
+
+
+def test_a_provider_another_enable_brought_up_meanwhile_is_not_brought_up_again(plane, monkeypatch):
+    """Two enables that need the same absent provider: the second asks again once it holds that provider's lock,
+    and finds it there — its hooks and its `up` do not run a second time."""
+    _needs_supabase(plane, monkeypatch)
+    calls = []
+
+    def containers(services):
+        calls.append(list(services))
+        if len(calls) == 1:                           # the first look: db and storage have no container
+            return [] if "kong" not in services else [_Box("kong", plane)]
+        return [_Box(s, plane) for s in services]     # under the lock: the other enable made them
+    monkeypatch.setattr(app, "_app_containers", containers)
+    payload, code = app._apply("notes", APP, True)
+    assert code == 200 and not any(c.startswith("provider-up") for c in plane)
+    assert payload["providers_up"] == [] and payload["providers_down"] == []
+
+
+def test_a_provider_with_an_empty_key_of_its_own_is_refused_and_named(plane, monkeypatch):
+    """`bbox run` and `bbox update` make an empty key (scripts/env-secrets.py) before a bring-up. This plane runs
+    as root and does not write the owner's .env: a provider whose compose reads a key .env has no value for is
+    refused, its keys named, and what makes them said."""
+    _needs_supabase(plane, monkeypatch)
+    monkeypatch.setattr(app, "_empty_keys_of", lambda m: ["SUPABASE_DB_PASSWORD", "SUPABASE_JWT_SECRET"]
+                        if m.get("id") == "supabase" else [])
+    payload, code = app._apply("notes", APP, True)
+    assert code == 500 and not any(c.startswith(("provider-up", "hook:prepare", "create")) for c in plane)
+    assert payload["create_errors"] == [
+        "supabase, which notes needs, has no value yet in this office's .env for SUPABASE_DB_PASSWORD, "
+        "SUPABASE_JWT_SECRET — `bbox run` makes them (scripts/env-secrets.py, which names any it cannot); "
+        "switch notes on again after it"]
+    assert payload["providers_down"] == ["db", "storage"]
+
+
+def test_the_empty_keys_are_the_office_secrets_its_compose_reads_that_env_lacks(monkeypatch, tmp_path):
+    app_dir, repo = tmp_path / "supabase", tmp_path / "repo"
+    app_dir.mkdir(); repo.mkdir()
+    (app_dir / "docker-compose.yml").write_text(
+        "services:\n  db:\n    environment:\n      POSTGRES_PASSWORD: ${SUPABASE_DB_PASSWORD}\n"
+        "      JWT: ${SUPABASE_JWT_SECRET:?the jwt}\n      SITE: ${SITE_URL:-x}\n      HOOK: ${N8N_WEBHOOK_PASS:-}\n"
+        "      KEY: ${SUPABASE_ANON_KEY}\n")
+    # as compose reads it: the LAST line for a key wins (SUPABASE_DB_PASSWORD ends empty)
+    (repo / ".env").write_text("SUPABASE_DB_PASSWORD=old\nSUPABASE_JWT_SECRET='set'\n# SUPABASE_ANON_KEY=x\n"
+                               "SUPABASE_DB_PASSWORD=\n")
+    m = {"id": "supabase", "_dir": str(app_dir), "compose": "docker-compose.yml"}
+    monkeypatch.setattr(app, "REPO", str(repo))
+    monkeypatch.setattr(app, "_secret_names",
+                        lambda: {"SUPABASE_DB_PASSWORD", "SUPABASE_JWT_SECRET", "SUPABASE_ANON_KEY", "N8N_WEBHOOK_PASS", "OTHER"})
+    # SITE_URL is no office secret; N8N_WEBHOOK_PASS has compose's own fallback; OTHER is not read; a comment is no value
+    assert app._empty_keys_of(m) == ["SUPABASE_ANON_KEY", "SUPABASE_DB_PASSWORD"]
+    assert app._empty_keys_of({"id": "x"}) == [] and app._empty_keys_of(dict(m, compose="gone.yml")) == []
+    (repo / ".env").unlink()          # a .env this container cannot read (a packaged office's /etc/binaos link)
+    assert app._empty_keys_of(m) == []
+
+
+def test_the_converge_leaves_an_app_that_is_being_brought_up_to_its_bring_up(plane, monkeypatch):
+    """`bbox run`'s converge between an enable's two locks would create the app before its prepare."""
+    made = []
+    monkeypatch.setattr(app, "_load_state", lambda: {"notes": {"state": "enabled"}})
+    monkeypatch.setattr(app, "_load_manifests", lambda: [dict(APP)])
+    monkeypatch.setattr(app, "_install", lambda aid: made.append(aid) or ([aid], []))
+    monkeypatch.setattr(app, "_workflow_apps", lambda: ([], None))
+    for busy in ("job", "lock"):
+        made.clear()
+        ev = threading.Event()
+        app._JOBS["notes"] = {"finished": ev} if busy == "job" else {"finished": threading.Event()}
+        if busy == "lock":
+            app._JOBS["notes"]["finished"].set()
+            app._app_lock("notes").acquire()
+        try:
+            rep = app.reconcile_once()
+        finally:
+            if busy == "lock":
+                app._app_lock("notes").release()
+        assert made == [] and {"app": "notes", "why": "being brought up"} in rep["skipped"], busy
+    app._JOBS["notes"]["finished"].set()
+    seen = []
+    monkeypatch.setattr(app, "_install", lambda aid: seen.append(app._app_lock(aid).locked()) or made.append(aid) or ([aid], []))
+    rep = app.reconcile_once()
+    # nobody is: the converge makes it, as before — holding the app's lock while it does, and giving it back
+    assert made == ["notes"] and seen == [True] and not app._app_lock("notes").locked()
+
+
+def test_a_provider_whose_workflows_another_office_holds_is_not_given_them_here(plane, monkeypatch):
+    _needs_supabase(plane, monkeypatch)
+    monkeypatch.setattr(app, "_workflow_apps", lambda: (["notes"], None))
+    payload, code = app._apply("notes", APP, True)
+    assert "automations:supabase" not in plane and "automations:notes" in plane
+
+
+def test_a_sign_in_refresh_that_failed_for_a_provider_is_asked_again_for_the_app(plane, monkeypatch):
+    _needs_supabase(plane, monkeypatch)
+    sso = {"id": "supabase", "_dir": "/nowhere", "routing": [{"host": "studio", "auth": "sso"}]}
+    monkeypatch.setattr(app, "_manifest", lambda aid: sso if aid == "supabase" else dict(APP, id=aid))
+    answers = iter([{"ran": True, "rc": 1, "out": "the sign-in server did not answer"}, {"ran": True, "rc": 0, "out": ""}])
+    monkeypatch.setattr(app, "_signin_refresh", lambda: plane.append("signin") or next(answers))
+    payload, code = app._apply("notes", dict(APP, routing=[{"host": "notes", "auth": "sso"}]), True)
+    assert plane.count("signin") == 2 and payload["hooks"]["signin"]["rc"] == 0
+
+
+def test_a_provider_brought_up_gets_its_automations(plane, monkeypatch):
+    """`reconcile_once` imports what is missing only when `bbox run` asks: a provider brought up by the enable gets
+    its workflows with it, as the app gets its own."""
+    _needs_supabase(plane, monkeypatch)
+    monkeypatch.setattr(app, "_blueprint_apply",
+                        lambda aid, on: plane.append(f"automations:{aid}") or {"hook": "push", "ok": True, "detail": aid})
+    payload, code = app._apply("notes", APP, True)
+    assert code == 200 and payload["provider_blueprints"] == {"supabase": {"hook": "push", "ok": True, "detail": "supabase"}}
+    assert plane.index("automations:supabase") < plane.index("hook:prepare")
+
+
+def test_an_enable_whose_providers_all_have_containers_brings_up_nothing(plane, monkeypatch):
+    """Nothing new: a running provider is left alone, and the plan is not even asked."""
+    n8n = _Box("n8n", plane)
+    asked = []
+    monkeypatch.setattr(app, "_closure_services", lambda aid: ["n8n", "notes"])
+    monkeypatch.setattr(app, "_app_containers", lambda services: [n8n] if "n8n" in services else [])
+    monkeypatch.setattr(app, "_providers_of", lambda aid: asked.append(aid) or [("apps", "n8n", 600, ["n8n"])],
+                        raising=False)
+    monkeypatch.setattr(app, "_provider_up", lambda *a: plane.append("provider-up") or {"rc": 0, "out": ""},
+                        raising=False)
+    payload, code = app._apply("notes", APP, True)
+    assert code == 200 and payload["ok"]
+    assert "provider-up" not in plane and asked == [] and payload["acted"] == []
+    assert payload["providers_up"] == [] and payload["providers_down"] == []
+    assert plane == ["state:enabled", "render", "hook:prepare", "create", "answer:77", "hook:onboard", "automations"]
+
+
+def test_a_provider_that_does_not_come_up_fails_the_enable_with_its_words_and_the_app_is_not_started(plane, monkeypatch):
+    _needs_supabase(plane, monkeypatch, rc=1, out="  build FAILED — last lines:\n    no space left on device")
+    payload, code = app._apply("notes", APP, True)
+    assert code == 500 and not payload["ok"]
+    assert payload["create_errors"] == ["supabase, which notes needs, did not come up: no space left on device"]
+    assert payload["providers_up"] == [] and payload["providers_down"] == ["db", "storage"]
+    # it cannot answer without it: no prepare, no containers, no wait, no onboard — and no automations either: an
+    # active schedule would fire at an app that is not there (Exampleu's first run: INDOX's, 46 times)
+    assert not any(c.startswith(("hook:prepare", "create", "answer", "hook:onboard", "automations")) for c in plane), plane
+    assert payload["blueprint"] == {"held": "the app was not started"}
+
+
+def test_after_a_provider_that_failed_the_next_is_not_brought_up(plane, monkeypatch):
+    """Two absent providers in order: the first comes up, the second fails — named, and nothing after it is tried."""
+    rows = [("apps", "drive-local", 600, ["drive-local"]), SUPABASE, ("apps", "drive-google", 600, ["drive-google"])]
+    monkeypatch.setattr(app, "_closure_services", lambda aid: ["drive-local", "db", "storage", "kong", "drive-google", "notes"])
+    monkeypatch.setattr(app, "_app_containers", lambda services: [])
+    monkeypatch.setattr(app, "_providers_of", lambda aid: rows)
+    monkeypatch.setattr(app, "_compiled_services", lambda: {"drive-local", "db", "storage", "kong", "drive-google", "notes"})
+    monkeypatch.setattr(app, "_provider_up", lambda root, pid, s, svcs: plane.append(f"provider-up:{pid}")
+                        or {"ran": True, "rc": 1 if pid == "supabase" else 0, "out": "  db: exited  1"})
+    payload, code = app._apply("notes", APP, True)
+    assert [c for c in plane if c.startswith("provider-up")] == ["provider-up:drive-local", "provider-up:supabase"]
+    assert payload["providers_up"] == ["drive-local"]
+    assert payload["create_errors"] == ["supabase, which notes needs, did not come up: db: exited  1"]
+    assert payload["providers_down"] == ["db", "storage", "kong", "drive-google"] and code == 500
+    # held: not even the provider that came up gets its automations (they may call the one that did not)
+    assert "automations" not in plane
+
+
+def test_a_provider_with_a_stopped_and_an_absent_service_is_brought_up_whole_in_the_plans_order(plane, monkeypatch):
+    """The stopped one goes to the same bring-up as its absent sibling (compose starts them in their own order),
+    and a provider earlier in the plan whose services all exist is started BEFORE it — never storage before db."""
+    db = _Box("db", plane); db.status = "exited"
+    conn = _Box("connections", plane); conn.status = "exited"
+    monkeypatch.setattr(app, "_closure_services", lambda aid: ["connections", "db", "storage", "kong", "notes"])
+    monkeypatch.setattr(app, "_app_containers", lambda services: [c for c in (db, conn) if c.name in services])
+    monkeypatch.setattr(app, "_providers_of", lambda aid: [("platform-base", "connections", 600, ["connections"]), SUPABASE])
+    monkeypatch.setattr(app, "_compiled_services", lambda: {"connections", "db", "storage", "kong", "notes"})
+    monkeypatch.setattr(app, "_provider_up", lambda root, pid, s, svcs: plane.append(f"provider-up:{pid}:{','.join(svcs)}")
+                        or {"ran": True, "rc": 0, "out": ""})
+    payload, code = app._apply("notes", APP, True)
+    assert plane.index("start:connections") < plane.index("provider-up:supabase:db,storage,kong")
+    assert "start:db" not in plane                                   # compose starts it, with storage
+    assert payload["acted"] == ["connections"] and payload["providers_up"] == ["supabase"]
+
+
+def test_a_checkout_without_the_bring_up_names_the_provider_and_fails_nothing(plane, monkeypatch):
+    """app.py is the image's, scripts/provider-up.sh the mounted checkout's: an image newer than its checkout finds
+    no such file. Then the provider is named, as before, and what is stopped is still started."""
+    _needs_supabase(plane, monkeypatch)
+    kong_stopped = _Box("kong", plane); kong_stopped.status = "exited"
+    monkeypatch.setattr(app, "_app_containers", lambda services: [kong_stopped] if "kong" in services else [])
+    monkeypatch.setattr(app, "_provider_up", lambda *a: plane.append("provider-up")
+                        or {"ran": False, "rc": None, "out": "scripts/provider-up.sh is not in this office's checkout"})
+    payload, code = app._apply("notes", APP, True)
+    assert code == 200 and payload["ok"] and payload["create_errors"] == []      # not a failure of the enable
+    assert "start:kong" in plane and payload["providers_down"] == ["db", "storage"] and payload["providers_up"] == []
+    monkeypatch.setattr(app, "REPO", "/no/such/checkout")
+    assert app._provider_up("platform-base", "supabase", 600, ["db"])["rc"] is None
+
+
+def test_a_provider_whose_hook_failed_is_up_and_the_enable_goes_on_saying_so(plane, monkeypatch):
+    """A hook that fails is said, and never fatal (as the app's own hooks): exit 3 is «up, a hook failed»."""
+    _needs_supabase(plane, monkeypatch, rc=3, out="  supabase: its onboard hook FAILED (exit 1)\n  ok — supabase is up: db storage")
+    payload, code = app._apply("notes", APP, True)
+    assert code == 200 and payload["ok"] and payload["providers_up"] == ["supabase"]
+    assert payload["hooks"]["provider:supabase"]["rc"] == 3
+    assert "its onboard hook FAILED" in payload["hooks"]["provider:supabase"]["out"]
+
+
+def test_a_provider_brought_up_that_serves_a_signed_in_host_gets_the_sign_in_refresh(plane, monkeypatch):
+    _needs_supabase(plane, monkeypatch)
+    sso = {"id": "supabase", "_dir": "/nowhere", "routing": [{"host": "studio", "auth": "sso"}]}
+    monkeypatch.setattr(app, "_manifest", lambda aid: sso if aid == "supabase" else dict(APP, id=aid))
+    payload, code = app._apply("notes", APP, True)
+    # right after it comes up, whatever becomes of the app (notes itself gates no host), and once
+    assert code == 200 and plane.count("signin") == 1
+    assert plane.index("provider-up:platform-base/supabase:600:db,storage") < plane.index("signin") < plane.index("hook:prepare")
+    sso_app = dict(APP, routing=[{"host": "notes", "auth": "sso"}])
+    plane.clear()
+    payload, code = app._apply("notes", sso_app, True)
+    assert plane.count("signin") == 1                            # one refresh serves every compiled host
+
+
+def test_absent_services_no_plan_row_claims_are_named_and_nothing_is_brought_up(plane, monkeypatch):
+    """The plan could not be asked (or names no app for them): named in providers_down, as before."""
+    _needs_supabase(plane, monkeypatch)
+    monkeypatch.setattr(app, "_providers_of", lambda aid: [])
+    payload, code = app._apply("notes", APP, True)
+    assert not any(c.startswith("provider-up") for c in plane)
+    assert payload["providers_down"] == ["db", "storage"] and payload["providers_up"] == []
+
+
+def test_a_provider_this_office_does_not_compile_is_not_brought_up(plane, monkeypatch):
+    """It runs on a linked office, or not at all: compose here has no such service (the question `bbox update` asks
+    too). Named, never brought up; and when compose cannot say what it runs, nothing is."""
+    for compiled in ({"kong", "notes"}, None):
+        plane.clear()
+        _needs_supabase(plane, monkeypatch)
+        monkeypatch.setattr(app, "_compiled_services", lambda c=compiled: c)
+        payload, code = app._apply("notes", APP, True)
+        assert not any(c.startswith("provider-up") for c in plane), compiled
+        assert payload["providers_down"] == ["db", "storage"] and payload["providers_up"] == [], compiled
+
+
+class _Proc:
+    """subprocess.Popen, as far as `_provider_up` uses it; `hang` makes communicate() time out once."""
+    seen, hang, killed = {}, False, []
+
+    def __init__(self, argv, **kw):
+        _Proc.seen = dict(argv=argv, cwd=kw.get("cwd"), env=kw.get("env") or {}, group=kw.get("start_new_session"))
+        self.pid, self.returncode, self.waited = 4242, 0, False
+
+    def communicate(self, timeout=None):
+        if _Proc.hang and not self.waited:
+            self.waited = True
+            _Proc.seen["timeout"] = timeout
+            raise app.subprocess.TimeoutExpired(cmd="provider-up.sh", timeout=timeout)
+        _Proc.seen.setdefault("timeout", timeout)
+        return "  ok — supabase is up: db storage\n", None
+
+
+def test_a_provider_is_brought_up_by_the_file_bbox_update_sources(monkeypatch):
+    """ONE bring-up: the enable runs scripts/provider-up.sh, the file app-update.sh sources for its own providers —
+    in its own process group, building only what is missing (as `_install` does)."""
+    monkeypatch.setattr(app, "REPO", str(HERE.parents[1]))          # where scripts/provider-up.sh is
+    monkeypatch.setattr(_Proc, "hang", False)
+    monkeypatch.setattr(app.subprocess, "Popen", _Proc)
+    r = app._provider_up("platform-base", "supabase", 600, ["db", "storage"])
+    seen = _Proc.seen
+    assert seen["argv"] == ["bash", "scripts/provider-up.sh", "platform-base", "supabase", "600", "db", "storage"]
+    assert seen["cwd"] == app.REPO and seen["env"].get("COMPOSE_PROJECT_NAME") == app.PROJECT
+    assert seen["env"].get("PROVIDER_UP_BUILD") == "missing" and seen["group"] is True
+    assert seen["timeout"] > 600                                  # longer than its own first start
+    assert r == {"ran": True, "rc": 0, "out": "  ok — supabase is up: db storage"}
+    update = (HERE.parents[1] / "scripts" / "app-update.sh").read_text()
+    assert '. "${HERE}/provider-up.sh"' in update
+
+
+def test_what_this_office_runs_is_composes_own_answer(monkeypatch):
+    class Services:
+        returncode, stdout, stderr = 0, "db\nstorage\n", ""
+    seen = {}
+    monkeypatch.setattr(app.subprocess, "run",
+                        lambda argv, **kw: seen.update(argv=argv, cwd=kw.get("cwd"), env=kw.get("env") or {}) or Services())
+    assert app._compiled_services() == {"db", "storage"}
+    assert seen["argv"] == ["bash", "scripts/dc", "config", "--services"] and seen["cwd"] == app.REPO
+    assert seen["env"].get("COMPOSE_PROJECT_NAME") == app.PROJECT
+    Services.returncode = 1
+    assert app._compiled_services() is None                        # cannot say: nothing is brought up
+
+
+def test_a_bring_up_that_never_ends_is_ended_whole_and_did_not_come_up(monkeypatch):
+    monkeypatch.setattr(app, "REPO", str(HERE.parents[1]))
+    monkeypatch.setattr(_Proc, "hang", True)
+    monkeypatch.setattr(app.subprocess, "Popen", _Proc)
+    killed = []
+    monkeypatch.setattr(app.os, "killpg", lambda pid, sig: killed.append((pid, sig)))
+    r = app._provider_up("platform-base", "supabase", 600, ["db"])
+    assert r["rc"] == 1 and "did not finish" in r["out"]
+    assert killed == [(4242, app.signal.SIGKILL)]                  # its group: compose and a hook too, not only bash
+
+
+def test_the_providers_are_the_plans_provider_rows_in_its_order(monkeypatch):
+    class Plan:
+        returncode, stderr = 0, ""
+        stdout = ("named drive drive apps drive\nprovider platform-base connections 600 connections\n"
+                  "later connections sign-in\nprovider apps supabase 900 db rest storage\n")
+    seen = {}
+    monkeypatch.setattr(app.subprocess, "run", lambda argv, **kw: seen.update(argv=argv) or Plan())
+    assert app._providers_of("drive") == [("platform-base", "connections", 600, ["connections"]),
+                                          ("apps", "supabase", 900, ["db", "rest", "storage"])]
+    assert seen["argv"][-2:] == [app.os.path.join(app.REPO, "scripts", "app-update-plan.py"), "drive"]
+    Plan.returncode = 1
+    assert app._providers_of("drive") == []                        # a plan that cannot be had brings up nothing
 
 
 def test_an_app_that_is_required_is_not_archived_removed_or_moved(plane, linked, monkeypatch):

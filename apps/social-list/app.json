@@ -5,7 +5,9 @@
     "en": "Social networks"
   },
   "layer": 3,
+  "people": "admins",
   "kind": "service",
+  "page": "services",
   "version": "0.1.0",
   "summary": {
     "he": "כל רשת חברתית שהעסק נמצא בה מאחורי ממשק אחד — פרופיל, פוסטים, תגובות ולייקים, דרך הדפדפן של הלשכה (browser42) או דרך ה-API של הרשת",

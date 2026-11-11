@@ -1,0 +1,1313 @@
+{
+ "topic": "israel-invoice-ready-software",
+ "checked": "2026-11-05",
+ "notes": "OFFICIAL THRESHOLD TIMELINE (all grade A, read 2026-11-05 on gov.il): the Tax Authority FAQ (published 11.09.2023, updated 27.05.2026) https://www.gov.il/he/pages/faq_israel_invoice states: 2024 = 25,000; 2025 = 20,000; from 1.1.2026 = 10,000; from 1.6.2026 = 5,000 (NIS before VAT, invoice to a licensed dealer with non-zero VAT, as a condition for deducting input VAT). The service page https://www.gov.il/he/service/request-assignment-number-for-tax-invoice says the same and \"updated for 2026: above 5,000\". The user-supplied timeline is therefore right except the first step: the model began 1.1.2024 and the deduction condition effectively started 5.5.2024 because invoices dated 1.1-4.5.2024 were recognised without a number (FAQ Q22). The July-2024 API document printed a slower statutory path (15,000 for 2026, 10,000 for 2027, 5,000 for 2028); the official pages now show it was accelerated. Hyp (vendor guide, 2026-08-06) says a full cancellation of the amount threshold is being promoted subject to legislation - unverified vendor statement. OFFICIAL LIST OF CONNECTED SOFTWARE: none found. The Tax Authority publishes the API services page https://www.gov.il/he/pages/apinew (updated 14.10.2026; service \"מספרי הקצאה לחשבוניות\" and \"החזרת סכום מינימום להקצאת חשבונית\" that returns the minimum amount by invoice date), the software-house connection page https://www.gov.il/he/service/connect-to-shaam and a developer portal with sandbox https://openapi-portal.taxes.gov.il/sandbox/support ; but no list of software houses that completed the interface. The nearest official register is the lookup \"מרשם תוכנות לניהול מערכת חשבונות ממוחשבת\" https://www.gov.il/he/service/itc-software-registry-for-computerized-accounting-systems (registration certificates for accounting software, searchable at secapp.taxes.gov.il/mm-find-tochna/main/rashi, which rendered blank in our browser) - it certifies registration, not allocation-API integration. Hence on_tax_authority_list is null on every row. DEVELOPER DOCUMENTATION: API description v2.0 (July 2024) https://www.gov.il/BlobFolder/generalpage/hor-software-other/he/vat_software-houses-180724.pdf (Approval/MultiApproval v2, sandbox https://ita-api.taxes.gov.il/shaam/tsandbox/Invoices/v2/Approval and production .../production/Invoices/v2/Approval); portal user guide https://secapp.taxes.gov.il/OpenApiUserGuide/OpenApiUserGuide.pdf ; FAQ Q15 sends sandbox registration to the software-maker document. MANUAL ROUTE: free online request for businesses using paper books or unconnected software: https://www.gov.il/he/service/request-assignment-number-for-tax-invoice ; FAQ Q22 also allows intermediary (\"תווך\") companies acting with the business authorization (Chamber table lists Ness Technologies, Almog Software Industries, Soft-Talk as of 2023-12). MARKET NOTES: the ISA register of financial-information (open-banking) licensees https://www.new.isa.gov.il/nav-index/supervised-api/informationapi lists invoicing vendors Green Invoice, iCount and SUMIT - a licence unrelated to allocation numbers but a useful official existence check. Foreign ERP vendors (SAP, Oracle, Odoo) are not rows because no vendor evidence was opened; see rejected. ROW COUNT: 17 rows, below the 25 target - the search tool budget ran out mid-session and many vendor sites blocked or reset our fetcher; the rejected list says what was tried. Prices: vendor pages read 2026-11-05, in NIS, mostly before VAT, promotional and annual-billing figures are marked.\n\nTop-up 2026-11-05: Searches used: 18 of the shared 35 (including 1 for the government-services file). Sources were fetched with WebFetch, curl against the wordpress.org plugin API, and the built-in browser (Chamber of Commerce and Linet pages needed a browser). The Comax guide is an image-heavy PDF whose text layer was read locally with macOS PDFKit. Result: 9 new rows (5 Israeli vendors: Comax, Invoice Maven, Popay POS, CAV Systems, Slate; 4 foreign ERPs with Israeli localisation: SAP Business One, NetSuite, Oracle Fusion, Infor LN, all flagged foreign) so the file would reach 26 rows. Prices: only Invoice Maven (35 NIS/month before VAT, page undated) and Slate (free) have public prices; Comax, Popay, CAV and the foreign ERPs have none on the pages read. Also: a dated Rivhit Online price list (update, not a new row). Thresholds quoted inside vendor pages are the 2024 figures and are outdated; the official timeline is in the existing file. gov.il/Tax Authority: no official list of connected software exists (see the existing file's notes), so on_tax_authority_list stays null.",
+ "rows": [
+  {
+   "id": "morning-green-invoice",
+   "name_he": "מורנינג (חשבונית ירוקה)",
+   "name_en": "morning (Green Invoice)",
+   "url": "https://www.greeninvoice.co.il/",
+   "category": "invoicing",
+   "summary_he": "תוכנת חשבוניות וקבלות בענן לעצמאים ועסקים קטנים; בכל המסלולים שולחת אוטומטית בקשה למספר הקצאה על כל חשבונית רלוונטית.",
+   "why_israeli": "חשבונית ירוקה בע\"מ (GREEN INVOICE LTD) רשומה במרשם נותני שירות מידע פיננסי של רשות ניירות ערך (רישיון מ-2022-09-28); האתר והמוצר בעברית",
+   "allocation_numbers": {
+    "supported": true,
+    "how": "automatic",
+    "source_url": "https://www.greeninvoice.co.il/pricing/",
+    "date": null,
+    "note": "Pricing page lists, for the Basic/Best/Extra plans: connection to the Tax Authority digital services and automatic sending of an allocation-number request for every relevant invoice; page undated"
+   },
+   "price_from_ils": {
+    "amount": 29,
+    "period": "month (billed as one yearly payment of 348)",
+    "per": "Basic plan",
+    "source_url": "https://www.greeninvoice.co.il/pricing/",
+    "date": null,
+    "excl_vat": true,
+    "note": "Best plan 54/month on monthly billing; free trial, no free plan"
+   },
+   "users": {
+    "low": 170000,
+    "high": 170000,
+    "unit": "self-employed business owners (בעלי עסקים עצמאיים)",
+    "grade": "C",
+    "source_url": "https://www.greeninvoice.co.il/",
+    "source_date": null,
+    "note": "Homepage claim \"170,000 בעלי עסקים עצמאיים\"; undated; scope not stated",
+    "scope": null
+   },
+   "integrations": [
+    "Wix",
+    "WooCommerce",
+    "Shopify",
+    "additional external systems"
+   ],
+   "sources": [
+    {
+     "url": "https://www.greeninvoice.co.il/pricing/",
+     "date": null,
+     "what": "Plans, prices (before VAT) and the automatic allocation-number request line",
+     "grade": "C"
+    },
+    {
+     "url": "https://www.greeninvoice.co.il/",
+     "date": null,
+     "what": "Homepage: 170,000 claim, integrations Wix/WooCommerce/Shopify, link to allocation page",
+     "grade": "C"
+    },
+    {
+     "url": "https://www.new.isa.gov.il/nav-index/supervised-api/informationapi",
+     "date": null,
+     "what": "ISA register of financial-information licensees lists Green Invoice Ltd. (licence 28.09.2022)",
+     "grade": "A"
+    }
+   ],
+   "grade": "C",
+   "verified_at": "2026-11-05",
+   "on_tax_authority_list": null
+  },
+  {
+   "id": "icount",
+   "name_he": "אייקאונט (iCount)",
+   "name_en": "iCount",
+   "url": "https://www.icount.co.il/",
+   "category": "invoicing",
+   "summary_he": "מערכת חשבוניות והנהלת חשבונות עם מסלולי מסמכים לפי נפח; מסלול הבסיס כולל \"תמיכה בחשבונית ישראל\" לפי עמוד המחירים.",
+   "why_israeli": "ICOUNT SYSTEMS LTD (אייקאונט מערכות בע\"מ) רשומה במרשם נותני שירות מידע פיננסי של רשות ניירות ערך (רישיון מ-2023-12-27); שירות לקוחות בעברית",
+   "allocation_numbers": {
+    "supported": true,
+    "how": null,
+    "source_url": "https://www.icount.co.il/plans/",
+    "date": null,
+    "note": "Express plan lists \"Israeli invoice support\"; homepage footer links to an allocation-number page (https://www.icount.co.il/blog/invoice-israel/, not opened); mechanism (automatic/manual) not stated on the pages read"
+   },
+   "price_from_ils": {
+    "amount": 276,
+    "period": "year (annual commitment, about 23/month)",
+    "per": "Express plan: 1 company, 1 user, unlimited documents",
+    "source_url": "https://www.icount.co.il/plans/",
+    "date": null,
+    "excl_vat": true,
+    "note": "Advanced plan from 32/month by document volume; all excl. VAT; 45-day trial"
+   },
+   "users": {
+    "low": 60000,
+    "high": 60000,
+    "unit": "self-employed people (עצמאיים ועצמאיות)",
+    "grade": "C",
+    "source_url": "https://www.icount.co.il/",
+    "source_date": null,
+    "note": "Homepage: \"60,000 עצמאיים ועצמאיות כבר עובדים איתנו\"; undated",
+    "scope": null
+   },
+   "integrations": [
+    "Shopify",
+    "Magento",
+    "Wix",
+    "Etsy",
+    "WooCommerce",
+    "public API",
+    "Make"
+   ],
+   "sources": [
+    {
+     "url": "https://www.icount.co.il/plans/",
+     "date": null,
+     "what": "Plans and prices, \"Israeli invoice support\" in Express",
+     "grade": "C"
+    },
+    {
+     "url": "https://www.icount.co.il/",
+     "date": null,
+     "what": "Homepage: 60,000 claim, integrations, allocation-number link",
+     "grade": "C"
+    },
+    {
+     "url": "https://www.new.isa.gov.il/nav-index/supervised-api/informationapi",
+     "date": null,
+     "what": "ISA register of financial-information licensees lists ICOUNT SYSTEMS LTD (licence 27.12.2023)",
+     "grade": "A"
+    }
+   ],
+   "grade": "C",
+   "verified_at": "2026-11-05",
+   "on_tax_authority_list": null
+  },
+  {
+   "id": "rivhit",
+   "name_he": "ריווחית",
+   "name_en": "Rivhit",
+   "url": "https://www.rivhit.co.il/",
+   "category": "invoicing",
+   "summary_he": "תוכנת חשבוניות והנהלת חשבונות ותיקה שהתממשקה לרשות המסים; מספר ההקצאה מונפק אוטומטית על כל חשבונית מס שנדרשת לו.",
+   "why_israeli": "אתר ומוצר בעברית; החברה מציינת פעילות של מעל 20 שנה",
+   "allocation_numbers": {
+    "supported": true,
+    "how": "automatic",
+    "source_url": "https://www.rivhit.co.il/%d7%9e%d7%95%d7%93%d7%95%d7%9c-%d7%97%d7%a9%d7%91%d7%95%d7%a0%d7%99%d7%95%d7%aa-%d7%99%d7%a9%d7%a8%d7%90%d7%9c/",
+    "date": null,
+    "note": "Module page: number issued automatically per qualifying tax invoice; one-time registration with the Tax Authority, then the module is enabled; page states the 5,000 NIS threshold \"as of 2026\"; no date on page"
+   },
+   "price_from_ils": null,
+   "integrations": [
+    "Shopify",
+    "WooCommerce",
+    "Wix",
+    "iCredit payments",
+    "API"
+   ],
+   "sources": [
+    {
+     "url": "https://www.rivhit.co.il/%d7%9e%d7%95%d7%93%d7%95%d7%9c-%d7%97%d7%a9%d7%91%d7%95%d7%a0%d7%99%d7%95%d7%aa-%d7%99%d7%a9%d7%a8%d7%90%d7%9c/",
+     "date": null,
+     "what": "Israel Invoices module page",
+     "grade": "C"
+    },
+    {
+     "url": "https://www.rivhit.co.il/",
+     "date": null,
+     "what": "Homepage: pricing \"varies by product and business size\" (no amounts), 12-for-10-months promotion, over 20 years",
+     "grade": "C"
+    }
+   ],
+   "grade": "C",
+   "note": "No price amounts on the pages read; homepage customer counters showed placeholders (0), so users is null.",
+   "verified_at": "2026-11-05",
+   "on_tax_authority_list": null,
+   "users": null
+  },
+  {
+   "id": "ezcount-hyp",
+   "name_he": "איזיקאונט (EZcount) של Hyp",
+   "name_en": "EZcount (Hyp digital invoice)",
+   "url": "https://www.ezcount.co.il/",
+   "category": "invoicing",
+   "summary_he": "מערכת חשבוניות דיגיטליות בבעלות חברת התשלומים Hyp; לפי המדריך של Hyp מספר ההקצאה נשלח אוטומטית אחרי חיבור לרשות המסים.",
+   "why_israeli": "הדף ezcount.co.il/pricing מפנה לעמוד של Hyp (חברת תשלומים ישראלית); תמחור בשקלים; אתר בעברית",
+   "allocation_numbers": {
+    "supported": true,
+    "how": "automatic",
+    "source_url": "https://hyp.co.il/blog/israel-invoices/",
+    "date": "2026-08-06",
+    "note": "Hyp guide: after linking the account to Tax Authority services the request is forwarded automatically; the link is valid for three months (vendor statement)"
+   },
+   "price_from_ils": {
+    "amount": 21,
+    "period": "month (annual billing, 252/year; 24 on monthly billing)",
+    "per": "Givol plan: up to 50 documents/month",
+    "source_url": "https://hyp.co.il/digital-invoice-pricing/",
+    "date": null,
+    "excl_vat": true,
+    "note": "Prices before VAT; every plan has a free trial"
+   },
+   "users": {
+    "low": 5000,
+    "high": 5000,
+    "unit": "satisfied customers (לקוחות מרוצים)",
+    "grade": "C",
+    "source_url": "https://www.ezcount.co.il/",
+    "source_date": null,
+    "note": "EZcount homepage counter \"5000 לקוחות מרוצים\" (also 150,000 invoices per month); Hyp homepage separately claims 62,524+ customers for the whole group; undated",
+    "scope": null
+   },
+   "integrations": [
+    "Pelecard (logo)",
+    "Max Business (logo)",
+    "API",
+    "Hyp payments"
+   ],
+   "sources": [
+    {
+     "url": "https://hyp.co.il/blog/israel-invoices/",
+     "date": "2026-08-06",
+     "what": "Hyp guide to Israel Invoices 2026: automatic allocation request, 3-month connection, thresholds with dates",
+     "grade": "C"
+    },
+    {
+     "url": "https://hyp.co.il/digital-invoice-pricing/",
+     "date": null,
+     "what": "Digital-invoice plans (Hyp brand, sign-up links go to EZcount)",
+     "grade": "C"
+    },
+    {
+     "url": "https://www.ezcount.co.il/",
+     "date": null,
+     "what": "EZcount homepage: customer counter, partner logos",
+     "grade": "C"
+    }
+   ],
+   "grade": "C",
+   "verified_at": "2026-11-05",
+   "on_tax_authority_list": null
+  },
+  {
+   "id": "invoice4u",
+   "name_he": "אינבויס פור יו (Invoice4U)",
+   "name_en": "Invoice4U",
+   "url": "https://www.invoice4u.co.il/",
+   "category": "invoicing",
+   "summary_he": "מערכת חשבוניות דיגיטליות עם מסלולים לפי כמות מסמכים וסליקת אשראי; באתר מדריך להגדרת המערכת וקבלת מספרי הקצאה מרשות המסים.",
+   "why_israeli": "אתר בעברית ותמחור בשקלים; אתר AccountBox (מבית Invoice4U) מציין שהחברה החלה ב-2004 כחלוצת חשבונית דיגיטלית בישראל",
+   "allocation_numbers": {
+    "supported": true,
+    "how": null,
+    "source_url": "https://www.invoice4u.co.il/",
+    "date": null,
+    "note": "Homepage links a guide \"setting up the system, receiving allocation numbers from the Tax Authority and issuing invoices by law\" and a post \"allocation number for invoices 2026\"; mechanism not stated on pages read"
+   },
+   "price_from_ils": {
+    "amount": 21,
+    "period": "month (annual billing, 252/year; 24 on monthly billing)",
+    "per": "Pink plan: 50 documents/month",
+    "source_url": "https://www.invoice4u.co.il/pricelist-invoice/",
+    "date": null,
+    "excl_vat": true,
+    "note": "Excl. VAT; a pay-per-use option 1.4% + 1.20 per transaction; two months free on sign-up promotion"
+   },
+   "integrations": [
+    "e-commerce sites",
+    "Hashavshevet export",
+    "Bit",
+    "PayPal",
+    "Google Pay",
+    "Apple Pay",
+    "WhatsApp via HalloApp"
+   ],
+   "sources": [
+    {
+     "url": "https://www.invoice4u.co.il/pricelist-invoice/",
+     "date": null,
+     "what": "Plans and prices (excl. VAT)",
+     "grade": "C"
+    },
+    {
+     "url": "https://www.invoice4u.co.il/",
+     "date": null,
+     "what": "Homepage: allocation-number guide link, integrations; counter showed 0 (placeholder)",
+     "grade": "C"
+    },
+    {
+     "url": "https://www.accountbox.co.il",
+     "date": null,
+     "what": "AccountBox page says it is \"מבית Invoice4u\" and that the company began in 2004",
+     "grade": "C"
+    }
+   ],
+   "grade": "C",
+   "note": "users null: the homepage registered-customers counter showed 0 (placeholder).",
+   "verified_at": "2026-11-05",
+   "on_tax_authority_list": null,
+   "users": null
+  },
+  {
+   "id": "sumit",
+   "name_he": "סאמיט (SUMIT)",
+   "name_en": "SUMIT",
+   "url": "https://www.sumit.co.il/",
+   "category": "invoicing",
+   "summary_he": "מערכת הנהלת חשבונות, חשבוניות ו-CRM עם מסלול חינמי מוגבל; תמיכה במספר הקצאה מופיעה רק במקור צד שלישי ולא בדפים שקראנו באתר.",
+   "why_israeli": "\"סאמיט תמיד על זה בע\"מ\" רשומה במרשם נותני שירות מידע פיננסי של רשות ניירות ערך (רישיון מ-2024-09-18); האתר בעברית",
+   "allocation_numbers": {
+    "supported": true,
+    "how": null,
+    "source_url": "https://adircpa.com/guides/invoicing-software-israel",
+    "date": "2026-08-01",
+    "note": "Only a third-party comparison (Adir Israel CPA, updated August 2026) lists SUMIT as supporting allocation numbers; the SUMIT pages we opened (homepage, pricing) say nothing about it, so treat as unverified at the vendor"
+   },
+   "price_from_ils": {
+    "amount": 19,
+    "period": "month",
+    "per": "lowest paid plan shown as \"from 19 + VAT\"; a free plan allows up to 10 actions/month",
+    "source_url": "https://www.sumit.co.il/",
+    "date": null,
+    "excl_vat": true,
+    "note": "Excl. VAT; third-party comparison quotes a different figure (25)"
+   },
+   "users": {
+    "low": 35000,
+    "high": null,
+    "unit": "businesses in Israel (עסקים בישראל)",
+    "grade": "C",
+    "source_url": "https://www.sumit.co.il/",
+    "source_date": null,
+    "note": "Homepage: \"מעל 35,000 עסקים בישראל\"; undated; low bound only",
+    "scope": "israel"
+   },
+   "integrations": [
+    "API",
+    "WooCommerce",
+    "Zapier",
+    "\"all clearing and payment companies\" (unnamed)"
+   ],
+   "sources": [
+    {
+     "url": "https://www.sumit.co.il/",
+     "date": null,
+     "what": "Homepage: free plan, from 19 NIS + VAT, 35,000 businesses, integrations",
+     "grade": "C"
+    },
+    {
+     "url": "https://adircpa.com/guides/invoicing-software-israel",
+     "date": "2026-08-01",
+     "what": "Third-party 2026 comparison table lists SUMIT with allocation-number support (date: \"updated August 2026\", day not shown)",
+     "grade": "D"
+    },
+    {
+     "url": "https://www.new.isa.gov.il/nav-index/supervised-api/informationapi",
+     "date": null,
+     "what": "ISA register of financial-information licensees lists SUMIT (licence 18.9.2024)",
+     "grade": "A"
+    }
+   ],
+   "grade": "C",
+   "note": "allocation support is grade D (third-party only).",
+   "verified_at": "2026-11-05",
+   "on_tax_authority_list": null
+  },
+  {
+   "id": "yesh-invoice",
+   "name_he": "יש חשבונית",
+   "name_en": "Yesh Invoice",
+   "url": "https://www.yeshinvoice.co.il/",
+   "category": "invoicing",
+   "summary_he": "מערכת חשבונית ירוקה אונליין עם מסמכים ללא הגבלה בכל המסלולים; עמוד המחירים מציין תמיכה במודל חשבונית ישראל.",
+   "why_israeli": "אתר בעברית; תמיכה בעברית בוואטסאפ ובדוא\"ל; מציין \"תעודה מאושרת ברשות המיסים\"",
+   "allocation_numbers": {
+    "supported": true,
+    "how": null,
+    "source_url": "https://www.yeshinvoice.co.il/pricing",
+    "date": null,
+    "note": "Each plan lists \"תמיכה במודל חשבונית ישראל\" (support for the Israel Invoices model); no sentence on automatic vs manual; page undated and client-rendered (read in a browser)"
+   },
+   "price_from_ils": {
+    "amount": 24,
+    "period": "month (one yearly payment of 288)",
+    "per": "Yesh Hatchala plan: unlimited documents, 1 business",
+    "source_url": "https://www.yeshinvoice.co.il/pricing",
+    "date": null,
+    "excl_vat": true,
+    "note": "Excl. VAT; 30-day trial; API usage 0.25 per extra document after 40 free/month"
+   },
+   "users": {
+    "low": 20000,
+    "high": 90000,
+    "unit": "satisfied customers (self-employed; לקוחות מרוצים)",
+    "grade": "C",
+    "source_url": "https://www.yeshinvoice.co.il/pricing",
+    "source_date": null,
+    "note": "Wording \"עשרות אלפי לקוחות מרוצים\" (tens of thousands); the numeric range is our reading of the phrase; undated",
+    "scope": null
+   },
+   "integrations": [
+    "WooCommerce",
+    "Shopify",
+    "Make",
+    "Zapier",
+    "API",
+    "standing orders (הוראות קבע)"
+   ],
+   "sources": [
+    {
+     "url": "https://www.yeshinvoice.co.il/pricing",
+     "date": null,
+     "what": "Plans, prices, Israel-Invoices support line, \"tens of thousands\" claim",
+     "grade": "C"
+    },
+    {
+     "url": "https://www.yeshinvoice.co.il/",
+     "date": null,
+     "what": "Homepage (client-rendered): unlimited documents, credit-card clearing with 12 companies, certificate approved by the Tax Authority",
+     "grade": "C"
+    }
+   ],
+   "grade": "C",
+   "verified_at": "2026-11-05",
+   "on_tax_authority_list": null
+  },
+  {
+   "id": "hashavshevet",
+   "name_he": "חשבשבת (H-ERP)",
+   "name_en": "Hashavshevet H-ERP",
+   "url": "https://www.h-erp.co.il/",
+   "category": "erp",
+   "summary_he": "תוכנת הנהלת חשבונות ו-ERP; בקשת מספר ההקצאה נשלחת אוטומטית מהתוכנה בזמן הפקת חשבונית, מגרסת 2023 SP1 ומעלה.",
+   "why_israeli": "אתר ו-UI בעברית (he-IL) והנחיות הפעלה בעברית; פונה לעסקים בישראל",
+   "allocation_numbers": {
+    "supported": true,
+    "how": "automatic",
+    "source_url": "https://www.h-erp.co.il/israel-invoice/",
+    "date": "2026-09-17",
+    "note": "Page: online real-time request from the software; version 2026 SP2.1 or later required by 31/8/2026 because of a token change; manually issued invoices only via the Tax Authority site; date = page metadata modified (published 2023-12-26), no visible date; service free for customers with a service contract"
+   },
+   "price_from_ils": null,
+   "sources": [
+    {
+     "url": "https://www.h-erp.co.il/israel-invoice/",
+     "date": "2026-09-17",
+     "what": "Vendor page on allocation numbers (metadata dates)",
+     "grade": "C"
+    },
+    {
+     "url": "https://adircpa.com/guides/invoicing-software-israel",
+     "date": "2026-08-01",
+     "what": "Third-party table: \"full support\"",
+     "grade": "D"
+    }
+   ],
+   "grade": "C",
+   "verified_at": "2026-11-05",
+   "on_tax_authority_list": null,
+   "users": null,
+   "integrations": null
+  },
+  {
+   "id": "priority",
+   "name_he": "פריוריטי",
+   "name_en": "Priority ERP",
+   "url": "https://www.priority-software.com/il/",
+   "category": "erp",
+   "summary_he": "מערכת ERP; מסמך ההפעלה של Priority מסביר איך להגדיר קבלת מספר הקצאה מרשות המסים, כולל קבלה אוטומטית וסכום מינימום לפי תקרה.",
+   "why_israeli": "לחברה אתר בעברית (priority-software.com/il) ומסמך הפעלה בעברית; מטה החברה לא מופיע בעמוד שקראנו",
+   "allocation_numbers": {
+    "supported": true,
+    "how": "automatic",
+    "source_url": "https://cdn.priority-software.com/docs/SOP_Tax_Authorities_IL_25_0_H.pdf",
+    "date": "2026-07-21",
+    "note": "SOP document (12 pages, header dated Jul. 21, 26): customer sets constants for the minimum amount and \"AutoAllocation\" so numbers are requested automatically; manual flows also described"
+   },
+   "price_from_ils": null,
+   "sources": [
+    {
+     "url": "https://cdn.priority-software.com/docs/SOP_Tax_Authorities_IL_25_0_H.pdf",
+     "date": "2026-07-21",
+     "what": "Priority SOP \"receiving an allocation number from the Tax Authority\"",
+     "grade": "C"
+    },
+    {
+     "url": "https://adircpa.com/guides/invoicing-software-israel",
+     "date": "2026-08-01",
+     "what": "Third-party table: \"full support\"",
+     "grade": "D"
+    },
+    {
+     "url": "https://www.priority-software.com/",
+     "date": null,
+     "what": "Vendor homepage: \"thousands of companies\"; no price shown",
+     "grade": "C"
+    }
+   ],
+   "grade": "C",
+   "verified_at": "2026-11-05",
+   "on_tax_authority_list": null,
+   "users": null,
+   "integrations": null
+  },
+  {
+   "id": "cardcom-invoices",
+   "name_he": "קארדקום - חשבוניות דיגיטליות",
+   "name_en": "Cardcom digital invoices",
+   "url": "https://www.cardcom.solutions/invoices/",
+   "category": "invoicing",
+   "summary_he": "מודול חשבוניות של סולק וספק תשלומים; לפי הדף המערכת מחוברת ב-API לשרתי רשות המסים ומשתילה את מספר ההקצאה בחשבונית בזמן ההפקה.",
+   "why_israeli": "Cardcom Acquiring Ltd. רשומה במרשם חברות התשלומים של רשות ניירות ערך (חולון) ומחזיקה רישיון סולק",
+   "allocation_numbers": {
+    "supported": true,
+    "how": "automatic",
+    "source_url": "https://www.cardcom.solutions/invoices/",
+    "date": null,
+    "note": "Page: system pulls the number and places it on the invoice at issue; connected by API to the Tax Authority; page undated"
+   },
+   "price_from_ils": null,
+   "users": {
+    "low": 20000,
+    "high": 90000,
+    "unit": "businesses",
+    "grade": "C",
+    "source_url": "https://www.cardcom.solutions/",
+    "source_date": null,
+    "note": "Homepage \"עשרות אלפי עסקים\" refers to Cardcom as a whole (payments), not the invoice module; numeric range is our reading; undated",
+    "scope": null
+   },
+   "integrations": [
+    "WooCommerce",
+    "WordPress",
+    "Zapier",
+    "Shopify",
+    "Rav Messer",
+    "Smoove"
+   ],
+   "sources": [
+    {
+     "url": "https://www.cardcom.solutions/invoices/",
+     "date": null,
+     "what": "Invoices page with automatic allocation-number text",
+     "grade": "C"
+    },
+    {
+     "url": "https://www.cardcom.solutions/",
+     "date": null,
+     "what": "Homepage: integrations, scale claim",
+     "grade": "C"
+    }
+   ],
+   "grade": "C",
+   "verified_at": "2026-11-05",
+   "on_tax_authority_list": null
+  },
+  {
+   "id": "grow-invoices",
+   "name_he": "גרואו (משולם) - חשבוניות",
+   "name_en": "Grow invoices",
+   "url": "https://grow.business/invoice-page/",
+   "category": "invoicing",
+   "summary_he": "מודול חשבוניות של פלטפורמת התשלומים Grow; הדף אומר שאפשר להפיק מספרי הקצאה אוטומטית, עם חידוש הרשאה אחת לשלושה חודשים.",
+   "why_israeli": "Grow Payments Ltd. רשומה במרשם חברות התשלומים של רשות ניירות ערך; אתר בעברית",
+   "allocation_numbers": {
+    "supported": true,
+    "how": "automatic",
+    "source_url": "https://grow.business/invoice-page/",
+    "date": null,
+    "note": "Page: allocation numbers issued automatically for Israeli invoices after connection and authorization with the Tax Authority; authorization renewed every three months; page undated"
+   },
+   "price_from_ils": null,
+   "users": {
+    "low": 100000,
+    "high": 100000,
+    "unit": "businesses",
+    "grade": "C",
+    "source_url": "https://grow.business/",
+    "source_date": null,
+    "note": "Homepage \"+100,000 עסקים משתמשים בפתרונות של Grow\" (payments platform as a whole); undated",
+    "scope": null
+   },
+   "integrations": [
+    "WordPress plugin",
+    "Shopify",
+    "Wix",
+    "Magento"
+   ],
+   "sources": [
+    {
+     "url": "https://grow.business/invoice-page/",
+     "date": null,
+     "what": "Invoice page: documents issued, automatic allocation numbers, 3-month renewal",
+     "grade": "C"
+    },
+    {
+     "url": "https://grow.business/",
+     "date": null,
+     "what": "Homepage: payments pricing (0.75% + 59/month), 100,000 businesses, plugins",
+     "grade": "C"
+    }
+   ],
+   "grade": "C",
+   "note": "The invoice module has no separate price on the page; 0.75% + 59 NIS/month is the payments plan.",
+   "verified_at": "2026-11-05",
+   "on_tax_authority_list": null
+  },
+  {
+   "id": "base-crm-invoicing",
+   "name_he": "Base CRM - חשבונית דיגיטלית",
+   "name_en": "Base CRM digital invoicing",
+   "url": "https://basecrm.co.il/pro/digital-invoicing/",
+   "category": "invoicing",
+   "summary_he": "מוצר חשבוניות ל-CRM ישראלי מירושלים; מקבל מספר הקצאה אוטומטית מעל 5,000 ש\"ח, אחרי חיבור חד-פעמי לרשות המסים.",
+   "why_israeli": "הדף מציין חברה בירושלים וממשק ותמיכה בעברית",
+   "allocation_numbers": {
+    "supported": true,
+    "how": "automatic",
+    "source_url": "https://basecrm.co.il/pro/digital-invoicing/",
+    "date": null,
+    "note": "Page: automatic allocation number (required above 5,000 before VAT from 1.6.2026) after a one-time connection to the Tax Authority; competitor prices on the page noted as of October 2026"
+   },
+   "price_from_ils": {
+    "amount": 29,
+    "period": "month (after a free first month)",
+    "per": "whole business",
+    "source_url": "https://basecrm.co.il/pro/digital-invoicing/",
+    "date": null,
+    "note": "Page says the price is final, no VAT added; card-payment plan 89/month excluding processor fees"
+   },
+   "integrations": [
+    "Israel Tax Authority (direct)",
+    "WhatsApp",
+    "email"
+   ],
+   "sources": [
+    {
+     "url": "https://basecrm.co.il/pro/digital-invoicing/",
+     "date": null,
+     "what": "Product page with price, allocation text, Jerusalem",
+     "grade": "C"
+    }
+   ],
+   "grade": "C",
+   "verified_at": "2026-11-05",
+   "on_tax_authority_list": null,
+   "users": null
+  },
+  {
+   "id": "linet",
+   "name_he": "לינט",
+   "name_en": "Linet",
+   "url": "https://www.linet.org.il/",
+   "category": "erp",
+   "summary_he": "תוכנה מודולרית לניהול עסק (חשבוניות, הנהלת חשבונות, קופה, מלאי, ממשק לחנות); בדפי הבית והמחירון שקראנו אין אזכור למספר הקצאה.",
+   "why_israeli": "אתר בעברית עם טלפון ישראלי 070-000-0012 ומחירון בשקלים",
+   "allocation_numbers": {
+    "supported": null,
+    "how": null,
+    "source_url": "https://www.linet.org.il/pricelist/",
+    "date": null,
+    "note": "Not verified: the homepage and price list do not mention allocation numbers; ask the vendor"
+   },
+   "price_from_ils": {
+    "amount": 9,
+    "period": "month",
+    "per": "Basic plan (30-day free trial)",
+    "source_url": "https://www.linet.org.il/pricelist/",
+    "date": null,
+    "note": "Pro 29, Gold 59; add-ons e.g. card terminal 59/month + 270 one-off; VAT status not stated"
+   },
+   "integrations": [
+    "e-commerce plugin",
+    "credit-card clearing terminal",
+    "cash register",
+    "PayPal connection"
+   ],
+   "sources": [
+    {
+     "url": "https://www.linet.org.il/pricelist/",
+     "date": null,
+     "what": "Price list",
+     "grade": "C"
+    },
+    {
+     "url": "https://www.linet.org.il/",
+     "date": null,
+     "what": "Homepage (read in a browser; plain fetch returned 403)",
+     "grade": "C"
+    }
+   ],
+   "grade": "C",
+   "note": "Kept as a seed row from the brief; allocation_numbers.supported is null on purpose.",
+   "verified_at": "2026-11-05",
+   "on_tax_authority_list": null,
+   "users": null
+  },
+  {
+   "id": "sni-israel-einvoicing",
+   "name_he": "SNI Israel e-Invoicing (ל-SAP)",
+   "name_en": "SNI Israel e-Invoicing (SoftwareOne marketplace)",
+   "url": "https://platform.softwareone.com/product/sni-israel-e-invoicing/PCP-8725-0060",
+   "category": "erp",
+   "summary_he": "תוסף למערכות SAP שמביא ומשלב את מספר ההקצאה של רשות המסים בחשבונית; תומך בשליחה דרך API או בהעלאה ידנית.",
+   "why_israeli": "מוצר ייעודי לשוק הישראלי; מדינת הספק לא מצוינת בדף (כתובת בשוויץ שייכת למפעיל השוק SoftwareOne)",
+   "allocation_numbers": {
+    "supported": true,
+    "how": "plugin",
+    "source_url": "https://platform.softwareone.com/product/sni-israel-e-invoicing/PCP-8725-0060",
+    "date": null,
+    "note": "Page: \"automatically fetches and embeds the allocation number from ITA\"; API or manual upload; SAP ECC 4.7+, BTP, R3, S/4HANA; no date on page (footer 2026)"
+   },
+   "price_from_ils": null,
+   "sources": [
+    {
+     "url": "https://platform.softwareone.com/product/sni-israel-e-invoicing/PCP-8725-0060",
+     "date": null,
+     "what": "Marketplace product page",
+     "grade": "C"
+    }
+   ],
+   "grade": "C",
+   "note": "Foreign-ERP add-on: shows how SAP shops (including SAP Business One users via partners) comply; SAP Business One itself was not verified.",
+   "verified_at": "2026-11-05",
+   "on_tax_authority_list": null,
+   "users": null,
+   "integrations": null
+  },
+  {
+   "id": "ness-technologies",
+   "name_he": "נס טכנולוגיות",
+   "name_en": "Ness Technologies",
+   "url": null,
+   "category": "erp",
+   "summary_he": "נרשמה בעמוד לשכת המסחר כספקית \"מערכות להקצאת חשבוניות\" (ממשק מתווך) לארגונים שעובדים עם SAP ו-Oracle.",
+   "why_israeli": "מופיעה בטבלה של לשכת המסחר תל אביב והמרכז כספקית ישראלית; המטה לא מצוין",
+   "allocation_numbers": {
+    "supported": true,
+    "how": "plugin",
+    "source_url": "https://www.chamber.org.il/serviceslobby/finance/1427/143069/",
+    "date": "2023-12-06",
+    "note": "Chamber table: works with SAP and Oracle; intermediary allocation system; 2023 listing, current status unknown"
+   },
+   "price_from_ils": null,
+   "sources": [
+    {
+     "url": "https://www.chamber.org.il/serviceslobby/finance/1427/143069/",
+     "date": "2023-12-06",
+     "what": "Tel Aviv & Center Chamber of Commerce page, table \"מערכות להקצאת חשבוניות\"",
+     "grade": "D"
+    }
+   ],
+   "grade": "D",
+   "note": "No vendor page opened; existence only.",
+   "verified_at": "2026-11-05",
+   "on_tax_authority_list": null,
+   "users": null,
+   "integrations": null
+  },
+  {
+   "id": "almog-software",
+   "name_he": "אלמוג תעשיות תוכנה",
+   "name_en": "Almog Software Industries",
+   "url": null,
+   "category": "erp",
+   "summary_he": "נרשמה בעמוד לשכת המסחר כספקית \"מערכות להקצאת חשבוניות\" שעובדת, לפי העמוד, עם כל בתי התוכנה.",
+   "why_israeli": "מופיעה בטבלה של לשכת המסחר תל אביב והמרכז; המטה לא מצוין",
+   "allocation_numbers": {
+    "supported": true,
+    "how": "plugin",
+    "source_url": "https://www.chamber.org.il/serviceslobby/finance/1427/143069/",
+    "date": "2023-12-06",
+    "note": "Chamber table: works with all software houses; intermediary allocation system; 2023 listing, current status unknown"
+   },
+   "price_from_ils": null,
+   "sources": [
+    {
+     "url": "https://www.chamber.org.il/serviceslobby/finance/1427/143069/",
+     "date": "2023-12-06",
+     "what": "Tel Aviv & Center Chamber of Commerce page, table \"מערכות להקצאת חשבוניות\"",
+     "grade": "D"
+    }
+   ],
+   "grade": "D",
+   "note": "No vendor page opened; existence only.",
+   "verified_at": "2026-11-05",
+   "on_tax_authority_list": null,
+   "users": null,
+   "integrations": null
+  },
+  {
+   "id": "soft-talk",
+   "name_he": "Soft-Talk",
+   "name_en": "Soft-Talk",
+   "url": null,
+   "category": "erp",
+   "summary_he": "נרשמה בעמוד לשכת המסחר כספקית \"מערכות להקצאת חשבוניות\" עבור סביבות Oracle.",
+   "why_israeli": "מופיעה בטבלה של לשכת המסחר תל אביב והמרכז; המטה לא מצוין",
+   "allocation_numbers": {
+    "supported": true,
+    "how": "plugin",
+    "source_url": "https://www.chamber.org.il/serviceslobby/finance/1427/143069/",
+    "date": "2023-12-06",
+    "note": "Chamber table: works with Oracle; intermediary allocation system; 2023 listing, current status unknown"
+   },
+   "price_from_ils": null,
+   "sources": [
+    {
+     "url": "https://www.chamber.org.il/serviceslobby/finance/1427/143069/",
+     "date": "2023-12-06",
+     "what": "Tel Aviv & Center Chamber of Commerce page, table \"מערכות להקצאת חשבוניות\"",
+     "grade": "D"
+    }
+   ],
+   "grade": "D",
+   "note": "No vendor page opened; existence only.",
+   "verified_at": "2026-11-05",
+   "on_tax_authority_list": null,
+   "users": null,
+   "integrations": null
+  },
+  {
+   "id": "comax",
+   "name_he": "קומקס",
+   "name_en": "Comax ERP",
+   "url": "https://comaxerp.com/en",
+   "category": "erp",
+   "summary_he": "מערכת ERP וקופות; לפי מדריך החברה חשבונית מעל הרף מבקשת מספר הקצאה אוטומטית מול רשות המסים, אפשר להקליד מספר ידנית, והקופות תומכות מגרסה 244.",
+   "why_israeli": "מדריך הלקוחות של החברה כתוב בעברית ומפרט את החיבור לרשות המסים בישראל; מיקום המשרדים לא נבדק בסשן הזה",
+   "allocation_numbers": {
+    "supported": true,
+    "how": "automatic",
+    "source_url": "https://comaxerp.com/wp-content/uploads/2024/04/חשבונית-ישראל-מדריך-מפורט.pdf",
+    "date": null,
+    "note": "Comax's 16-page customer guide: an invoice above the VAT-able threshold triggers an automatic request to the Tax Authority; the number can also be typed by hand; for supplier invoices Comax checks a typed number against the Tax Authority; POS supported from version 244 (document types 650/652/654); the Comax2Go Android app requests the number in the background. The PDF shows no document date (upload folder 2024/04) and is written for the 25,000 NIS threshold of 2024, so the threshold in it is outdated."
+   },
+   "price_from_ils": null,
+   "users": null,
+   "integrations": [
+    "Comax POS (version 244 and up)",
+    "Comax2Go (Android)"
+   ],
+   "sources": [
+    {
+     "url": "https://comaxerp.com/wp-content/uploads/2024/04/חשבונית-ישראל-מדריך-מפורט.pdf",
+     "date": null,
+     "what": "Customer guide 'Israel Invoice – detailed guide' (text layer read locally): automatic and manual allocation, POS version 244, purchase-invoice check",
+     "grade": "C"
+    }
+   ],
+   "grade": "C",
+   "verified_at": "2026-11-05",
+   "on_tax_authority_list": null,
+   "note": "No public price found on the pages read."
+  },
+  {
+   "id": "invoice-maven",
+   "name_he": "אינוויס מייבן",
+   "name_en": "Invoice Maven",
+   "url": "https://www.invoice-maven.co.il/",
+   "category": "invoicing",
+   "summary_he": "תוכנת חשבוניות אונליין של מייבן פתרונות לעסקים בע״מ עם תוסף ל-WooCommerce; אחרי חיבור לרשות המסים מספר ההקצאה מתקבל אוטומטית, והחיבור מתחדש אחת לשלושה חודשים.",
+   "why_israeli": "מייבן פתרונות לעסקים בע״מ, ח.פ. 500000229, כתובת בהרצליה (לפי כותרת האתר); האתר בעברית ומחירים בשקלים; מוצג כמאושר על ידי מס הכנסה",
+   "allocation_numbers": {
+    "supported": true,
+    "how": "automatic",
+    "source_url": "https://www.invoice-maven.co.il/%D7%97%D7%A9%D7%91%D7%95%D7%A0%D7%99%D7%95%D7%AA-%D7%99%D7%A9%D7%A8%D7%90%D7%9C/",
+    "date": "2024-11-15",
+    "note": "Vendor article (published 15.11.2024): after connecting Invoice Maven to the Tax Authority the number is assigned automatically; initial threshold printed as 20,000 NIS (outdated); reconnect every three months; the user must be registered under the company or partnership. The WooCommerce plugin readme (updated 2026-10-15) says the number is requested automatically for business invoices above the threshold."
+   },
+   "price_from_ils": {
+    "amount": 35,
+    "period": "month (31.5 per month on annual billing)",
+    "per": "BASIC plan, up to 100 documents per month",
+    "source_url": "https://www.invoice-maven.co.il/pricing/",
+    "date": null,
+    "excl_vat": true,
+    "note": "Prices shown without VAT; no free plan, only a trial (the page shows both '30 free days' and 'first month free'); CLASIC 59, COMMERCE 69, COMMERCE PLUS 119 per month. The page does not say which plans include allocation numbers. Page shows no date."
+   },
+   "users": null,
+   "integrations": [
+    "WooCommerce (official plugin, v1.0.0, added 2026-10-14)"
+   ],
+   "sources": [
+    {
+     "url": "https://www.invoice-maven.co.il/%D7%97%D7%A9%D7%91%D7%95%D7%A0%D7%99%D7%95%D7%AA-%D7%99%D7%A9%D7%A8%D7%90%D7%9C/",
+     "date": "2024-11-15",
+     "what": "Vendor article on the Israel Invoice model: automatic allocation number, setup steps, quarterly reconnect",
+     "grade": "C"
+    },
+    {
+     "url": "https://www.invoice-maven.co.il/pricing/",
+     "date": null,
+     "what": "Price list: four plans, prices before VAT, document limits",
+     "grade": "C"
+    },
+    {
+     "url": "https://www.invoice-maven.co.il/",
+     "date": null,
+     "what": "Home page: company name and number in the footer, 'approved by the Tax Authority' badge",
+     "grade": "C"
+    },
+    {
+     "url": "https://wordpress.org/plugins/invoice-maven-for-woocommerce/",
+     "date": "2026-10-15",
+     "what": "WooCommerce plugin readme (read via the wordpress.org plugin API): allocation number requested automatically above the threshold; 0+ active installs, added 2026-10-14",
+     "grade": "D"
+    }
+   ],
+   "grade": "C",
+   "verified_at": "2026-11-05",
+   "on_tax_authority_list": null
+  },
+  {
+   "id": "popay-pos",
+   "name_he": "פופאי POS",
+   "name_en": "Popay POS",
+   "url": "https://popaypos.com/",
+   "category": "pos",
+   "summary_he": "קופה ומערכת חשבוניות; לפי האתר מספרי הקצאה, חשבונית מס קבלה ומבנה אחיד מובנים בקופה, והתוסף ל-WooCommerce מוסיף מספר הקצאה למסמכים כשהחוק דורש.",
+   "why_israeli": "האתר בעברית עם מספר וואטסאפ ישראלי, ומציג מספר רישום תוכנה ברשות המסים (270501); התוסף ל-WooCommerce של Matat Technologies",
+   "allocation_numbers": {
+    "supported": true,
+    "how": "automatic",
+    "source_url": "https://popaypos.com/",
+    "date": null,
+    "note": "Home page says invoice-receipts, allocation numbers and the uniform-structure file are built into the register; its FAQ says Popay receives allocation numbers from the Tax Authority. The WooCommerce plugin readme (updated 2026-11-01) says Popay Invoice documents 'carry a SHAAM allocation number when the law requires one'. Home page shows only a 2026 copyright."
+   },
+   "price_from_ils": null,
+   "users": null,
+   "integrations": [
+    "WooCommerce (PoPayPOS Reports plugin with optional Popay Invoice)"
+   ],
+   "sources": [
+    {
+     "url": "https://popaypos.com/",
+     "date": null,
+     "what": "Home page: allocation numbers built into the POS, Tax Authority software registration no. 270501, flexible monthly plans without a price",
+     "grade": "C"
+    },
+    {
+     "url": "https://wordpress.org/plugins/popaypos-reports/",
+     "date": "2026-11-01",
+     "what": "WooCommerce plugin readme (via the wordpress.org plugin API): optional Popay Invoice documents carry a SHAAM allocation number; 0+ active installs, added 2025-08-27",
+     "grade": "D"
+    }
+   ],
+   "grade": "C",
+   "verified_at": "2026-11-05",
+   "on_tax_authority_list": null,
+   "note": "No public price: the site mentions flexible monthly plans with no long-term commitment and a demo booking."
+  },
+  {
+   "id": "cav-systems",
+   "name_he": "CAV Systems",
+   "name_en": "CAV Systems ERP",
+   "url": "https://cav.co.il/",
+   "category": "erp",
+   "summary_he": "חברת מערכות ERP מקיסריה; דף האינטגרציה מתאר בקשת מספר הקצאה אוטומטית ללקוחות מסומנים, וכפתור לבקשה ידנית, בעיקר בהזנת חשבוניות ספק.",
+   "why_israeli": "המשרדים בפארק התעשייה קיסריה ובפארק המדע רחובות, והחברה מציינת מעל 45 שנות פעילות (לפי האתר)",
+   "allocation_numbers": {
+    "supported": true,
+    "how": "automatic",
+    "source_url": "https://cav.co.il/en/integrations/tax-allocation-number",
+    "date": null,
+    "note": "Page 'Israel Tax Authority – ERP Integration': the number is requested automatically for customers flagged as requiring it, and manually with an 'Invoice Allocation Number' button; stated mainly for vendor invoices as they are entered; details go to SHAAM and the number is stored in the ERP and on the invoice record. No threshold stated. Page shows no date."
+   },
+   "price_from_ils": null,
+   "users": null,
+   "integrations": [],
+   "sources": [
+    {
+     "url": "https://cav.co.il/en/integrations/tax-allocation-number",
+     "date": null,
+     "what": "Integration page: automatic and manual requests, storage in the ERP; company profile (offices, 45 years)",
+     "grade": "C"
+    }
+   ],
+   "grade": "C",
+   "verified_at": "2026-11-05",
+   "on_tax_authority_list": null,
+   "note": "No pricing page found on the page read."
+  },
+  {
+   "id": "slate",
+   "name_he": "Slate",
+   "name_en": "Slate (slate.co.il)",
+   "url": "https://slate.co.il/en",
+   "category": "invoicing",
+   "summary_he": "שירות חשבוניות ישראלי חינמי ללא הגבלת מסמכים; מבקש מספר הקצאה אוטומטית מיד אחרי ההפקה לחשבוניות מעל 5,000 ₪ לפני מע״מ, אחרי חיבור חד־פעמי מההגדרות.",
+   "why_israeli": "האתר מפנה לרשות המסים, למחירים בשקלים ולמעמד עוסק פטור/מורשה, ומציג רישום תוכנה ברשות המסים (רישיון 270001); המייסד טומר דמארי לפי פוסט ב-Product Hunt",
+   "allocation_numbers": {
+    "supported": true,
+    "how": "automatic",
+    "source_url": "https://slate.co.il/en",
+    "date": null,
+    "note": "Home page: after one connection from the settings the request goes out by itself right after issuing; applies from 5,000 NIS before VAT (2026 rule); if the Tax Authority rejects or does not answer the invoice is still issued and the user can retry, continue without a number or file an objection, each logged on the document. Page content dated 2026 (copyright, November 2026 news items)."
+   },
+   "price_from_ils": {
+    "amount": 0,
+    "period": "month",
+    "per": "the only plan listed: unlimited documents, no credit card, Israel Invoice connection included",
+    "source_url": "https://slate.co.il/en",
+    "date": null,
+    "excl_vat": null,
+    "note": "Free use is 'subject to the terms' (/en/terms). No paid tier shown. Product Hunt post by the founder repeats 'no cost, no document cap'."
+   },
+   "users": null,
+   "integrations": [],
+   "sources": [
+    {
+     "url": "https://slate.co.il/en",
+     "date": null,
+     "what": "Home page: automatic allocation request, 5,000 NIS threshold, free plan, software registration licence 270001",
+     "grade": "C"
+    },
+    {
+     "url": "https://www.producthunt.com/p/slate-16/why-i-decided-to-create-a-free-and-unlimited-israeli-invoicing-service",
+     "date": null,
+     "what": "Founder post on Product Hunt (shown as '2 months ago'): free and unlimited Israeli invoicing, Israel Invoice connection",
+     "grade": "D"
+    }
+   ],
+   "grade": "C",
+   "verified_at": "2026-11-05",
+   "on_tax_authority_list": null,
+   "note": "Very new product: claims are the vendor's own and were not cross-checked against the Tax Authority's software registry."
+  },
+  {
+   "id": "sap-business-one-israel",
+   "name_he": "SAP Business One (ישראל)",
+   "name_en": "SAP Business One (Israel e-invoice field)",
+   "url": "https://help.sap.com/doc/089315d8d0f8475a9fc84fb919b501a3/10.0/en-US/SDKHelp/SAPbobsCOM~Documents~AllocationNumberIL.html",
+   "category": "erp",
+   "summary_he": "מוצר ה-ERP של SAP לעסקים קטנים ובינוניים; ב-SDK קיים שדה AllocationNumberIL לחשבונית אלקטרונית לישראל. לא אימתנו שהשליפה מהרשות אוטומטית ב-Business One עצמו.",
+   "why_israeli": "לא חברה ישראלית: מוצר של SAP SE; לפי מדריך האינטגרציות של Apideck (דרגה D) נוצר בישראל בשם TopManage; השדה הישראלי מתועד בעזרה של SAP",
+   "allocation_numbers": {
+    "supported": true,
+    "how": null,
+    "source_url": "https://help.sap.com/doc/089315d8d0f8475a9fc84fb919b501a3/10.0/en-US/SDKHelp/SAPbobsCOM~Documents~AllocationNumberIL.html",
+    "date": null,
+    "note": "SDK help for property AllocationNumberIL (read/write string): 'Allocation Number (used in Electronic Invoice for Israel)'. A search result lists an SAP knowledge-base article on adding the allocation number to the e-invoice layout (not opened). Automatic retrieval by partner add-ons is documented for other SAP products (see the SNI row), not verified for Business One. Page shows only '© 2026 SAP SE'."
+   },
+   "price_from_ils": null,
+   "users": null,
+   "integrations": [],
+   "sources": [
+    {
+     "url": "https://help.sap.com/doc/089315d8d0f8475a9fc84fb919b501a3/10.0/en-US/SDKHelp/SAPbobsCOM~Documents~AllocationNumberIL.html",
+     "date": null,
+     "what": "SDK help page for AllocationNumberIL",
+     "grade": "C"
+    },
+    {
+     "url": "https://userapps.support.sap.com/sap/support/knowledge/en/3411528",
+     "date": null,
+     "what": "SAP knowledge-base article about the allocation number on the e-invoice layout; title seen in search results, not opened",
+     "grade": "C"
+    },
+    {
+     "url": "https://www.apideck.com/integrations/country/israel.md",
+     "date": null,
+     "what": "Directory of accounting software for Israel: lists SAP Business One and says it originated in Israel as TopManage",
+     "grade": "D"
+    }
+   ],
+   "grade": "C",
+   "verified_at": "2026-11-05",
+   "on_tax_authority_list": null,
+   "foreign": true,
+   "origin": "SAP SE (Germany)",
+   "note": "Sold through partners; no public price found. Brief asked for SAP B1 Israeli partners as foreign: SNI is already a row (sni-israel-einvoicing)."
+  },
+  {
+   "id": "netsuite-israel-einvoicing",
+   "name_he": "NetSuite (חבילת חשבוניות אלקטרוניות לישראל)",
+   "name_en": "Oracle NetSuite – Israel Electronic Invoicing SuiteApp",
+   "url": "https://docs.oracle.com/en/cloud/saas/netsuite/ns-online-help/article_0305045126.html",
+   "category": "erp",
+   "summary_he": "ה-SuiteApp של NetSuite מפיק מסמכים אלקטרוניים ושולח אותם לאישור רשות המסים, ואחרי האישור מוסיף לחשבונית ולעסקה את מספר ההקצאה.",
+   "why_israeli": "לא חברה ישראלית: מוצר של Oracle; האפליקציה והתיעוד מיועדים לדרישות רשות המסים בישראל",
+   "allocation_numbers": {
+    "supported": true,
+    "how": "plugin",
+    "source_url": "https://docs.oracle.com/en/cloud/saas/netsuite/ns-online-help/article_0305045126.html",
+    "date": null,
+    "note": "Overview page: the SuiteApp generates e-documents and sends them for certification; after Israel Tax Authority certification it adds the Allocation Number to the e-document and the transaction. The page does not say whether the request is automatic and gives no threshold or date. A search result for 'Israel Electronic Invoicing Features' (article_0313033254) says a completed e-document has an Allocation Number field; not opened."
+   },
+   "price_from_ils": null,
+   "users": null,
+   "integrations": [],
+   "sources": [
+    {
+     "url": "https://docs.oracle.com/en/cloud/saas/netsuite/ns-online-help/article_0305045126.html",
+     "date": null,
+     "what": "NetSuite help: Israel Electronic Invoicing overview",
+     "grade": "C"
+    },
+    {
+     "url": "https://docs.oracle.com/en/cloud/saas/netsuite/ns-online-help/article_0313033254.html",
+     "date": null,
+     "what": "NetSuite help: Israel Electronic Invoicing Features; title and snippet seen in search results, not opened",
+     "grade": "C"
+    }
+   ],
+   "grade": "C",
+   "verified_at": "2026-11-05",
+   "on_tax_authority_list": null,
+   "foreign": true,
+   "origin": "Oracle (United States)",
+   "note": "No public price found."
+  },
+  {
+   "id": "infor-ln-israel",
+   "name_he": "Infor LN (לוקליזציה לישראל)",
+   "name_en": "Infor LN – Israel e-invoicing localisation",
+   "url": "https://docs.infor.com/ln/2025.x/en-us/lnloca/lpisreinvlocug/mcr1710233758875.html",
+   "category": "erp",
+   "summary_he": "ב-Infor LN חשבונית שמסומנת למערכת חיצונית נשלחת דרך Infor ION ו-LSP לרשות המסים; מספר ההקצאה חוזר, נשמר ומודפס על החשבונית.",
+   "why_israeli": "לא חברה ישראלית: מוצר של Infor; מדריך הלוקליזציה לישראל מפרט את החיבור לרשות המסים",
+   "allocation_numbers": {
+    "supported": true,
+    "how": "plugin",
+    "source_url": "https://docs.infor.com/ln/2025.x/en-us/lnloca/lpisreinvlocug/mcr1710233758875.html",
+    "date": null,
+    "note": "Israel e-Invoicing process: invoices flagged 'Use External Invoicing System' need ITA authorization; the submit action sends the invoice to Infor LSP, which connects to the ITA portal; the number is stored in the External UUID field (last 9 characters printed) and appears in the Invoice BOD; an emergency allocation number function is referenced. The page says nothing about automatic requests or thresholds and shows no version or date."
+   },
+   "price_from_ils": null,
+   "users": null,
+   "integrations": [],
+   "sources": [
+    {
+     "url": "https://docs.infor.com/ln/2025.x/en-us/lnloca/lpisreinvlocug/mcr1710233758875.html",
+     "date": null,
+     "what": "Infor LN Israel localisation guide: e-invoicing process",
+     "grade": "C"
+    },
+    {
+     "url": "https://docs.infor.com/ln/2024.x/en-us/lnloca/lpisreinvlocug/mqg1710232681515.html",
+     "date": null,
+     "what": "Same guide, 2024.x version; seen in search results, not opened",
+     "grade": "C"
+    }
+   ],
+   "grade": "C",
+   "verified_at": "2026-11-05",
+   "on_tax_authority_list": null,
+   "foreign": true,
+   "origin": "Infor (United States)",
+   "note": "No public price found."
+  }
+ ],
+ "rejected": [
+  {
+   "name": "SAP Business One (as a product)",
+   "reason": "Foreign vendor; only a third-party comparison says support comes \"via add-ons or localization\" through partners; no vendor/partner page opened. See the SNI Israel e-Invoicing row for an SAP add-on."
+  },
+  {
+   "name": "Odoo Israeli localisation (open source)",
+   "reason": "Documentation path tried (odoo.com/documentation/latest/.../israel.html) returned HTTP 404; nothing verified, so no row."
+  },
+  {
+   "name": "Oracle Fusion Cloud Financials",
+   "reason": "A doc titled \"Tax Authority Allocation Numbers in VAT Reports for Israel\" appeared in a search result, but the page we opened (25c URL) showed a generic Financials landing page with no Israel text; unverified."
+  },
+  {
+   "name": "Comax (קומקס) ERP/POS",
+   "reason": "Homepage (comaxerp.com, Bnei Brak address) does not mention allocation numbers; no other Comax page opened."
+  },
+  {
+   "name": "Tabit (טאביט)",
+   "reason": "Global and Israel homepages opened; no mention of allocation numbers or invoices."
+  },
+  {
+   "name": "Beecomm",
+   "reason": "beecomm.co.il reset the connection twice; no source."
+  },
+  {
+   "name": "Nayax",
+   "reason": "Payments/device vendor; nayax.com returned 403; no evidence it issues tax invoices with allocation numbers."
+  },
+  {
+   "name": "Tranzila invoices / PayPlus invoices / Pelecard invoices",
+   "reason": "Gateway homepages opened (Tranzila, PayPlus, Pelecard) did not mention allocation numbers or an invoice module."
+  },
+  {
+   "name": "AccountBox (Invoice4U for accountants)",
+   "reason": "Page says the software is registered with the Tax Authority but does not mention allocation numbers."
+  },
+  {
+   "name": "Summa",
+   "reason": "Page says \"approved by the Tax Authority\" (registry) but not allocation numbers; it is an accountants automation tool."
+  },
+  {
+   "name": "Connectiv",
+   "reason": "Only a form-field label \"מספר הקצאה\" visible; no feature statement."
+  },
+  {
+   "name": "Paperless, Dokka, Menahel 4 You, Silvernet (Malam Team)",
+   "reason": "Pages empty, redirected or unreachable in our fetcher; nothing verified."
+  },
+  {
+   "name": "WooCommerce / Wix / Shopify invoice plugins",
+   "reason": "No plugin directory page opened in this session. Vendor pages show the relevant plugins: morning, iCount, Yesh Invoice, Invoice4U, Grow, Cardcom, EasyCard, Pelecard, Tranzila."
+  },
+  {
+   "name": "BookedUp invoices",
+   "reason": "Issues invoices as registered software but its 2026 guide never says it requests allocation numbers."
+  },
+  {
+   "name": "Heshbonit Online (חשבונית אונליין)",
+   "reason": "Two searches (Hebrew and English) found no vendor page by that name; results were generic guides and sponsored articles."
+  },
+  {
+   "name": "Tabit (טאביט)",
+   "reason": "Search and an earlier home-page read found no statement about allocation numbers; results were generic guides."
+  },
+  {
+   "name": "Beecomm",
+   "reason": "Search returned only generic profiles and a ynet article on the 5,000 NIS rule; nothing ties Beecomm's product to allocation numbers."
+  },
+  {
+   "name": "Wix (Wix Invoices / Wix Israel)",
+   "reason": "Wix support pages found cover Wix's own service invoices and PEPPOL export only; no Israeli allocation-number article. Israeli merchants use third-party invoicing apps already listed."
+  },
+  {
+   "name": "Odoo Israeli localisation",
+   "reason": "Odoo documentation pages for Israel (18.0 and 19.0 paths) returned HTTP 404; two searches found no module or doc mentioning allocation numbers."
+  },
+  {
+   "name": "Microsoft Dynamics 365 Business Central / Finance",
+   "reason": "Only a directory (Apideck) lists Business Central as 'Supported' for Israel; no Microsoft or partner document found."
+  },
+  {
+   "name": "Easy Count",
+   "reason": "Same product as EZcount (existing row ezcount-hyp); not duplicated."
+  },
+  {
+   "name": "SmartPay (smartpay.co.il) digital invoices",
+   "reason": "Its own site never mentions allocation numbers; only the WooCommerce plugin readme refers to an 'allocation threshold synced from your SmartPay account'. Kept out until the vendor states it; plugin recorded in plugin_findings."
+  },
+  {
+   "name": "PayPlus (Invoice Connect on Shopify; WooCommerce gateway)",
+   "reason": "Shopify listing (PayPlus LTD, based in Israel, free app) and the plugin readme say nothing about allocation numbers."
+  },
+  {
+   "name": "WooCommerce plugins of iCount, Yesh Invoice, SUMIT, Cardcom, Pelecard, Allpay, EasyCard, Linet",
+   "reason": "Readmes read via the wordpress.org API contain no allocation-number text, so they are not rows; they are connectors of existing rows (see plugin_findings)."
+  },
+  {
+   "name": "Invoice Generator For Plando",
+   "reason": "Readme has no allocation text; vendor not identified."
+  },
+  {
+   "name": "ActiveTrail 'Cheshbonit Yisrael' page",
+   "reason": "An accounting firms' newsletter (about Nov 2023), not a product page."
+  },
+  {
+   "name": "Avalara, Sovos, Storecove, Comarch, Banqup, ecosio, Fonoa, Voxel",
+   "reason": "Foreign e-invoicing/compliance providers that appeared as articles or glossary pages about the mandate; no product page showing an Israeli allocation-number feature was opened."
+  },
+  {
+   "name": "Chamber of Commerce table of intermediaries",
+   "reason": "Re-read in the browser: still only Ness Technologies, Almog Software Industries and Soft-Talk, all already rows."
+  },
+  {
+   "name": "Shopify App Store search for Israeli invoice apps",
+   "reason": "Search results failed to load for our fetcher."
+  },
+  {
+   "name": "Hashavshevet, Priority",
+   "reason": "Already rows (hashavshevet, priority); search results again showed their Israel-invoice guides (h-erp.co.il PDFs, Priority SOP PDF) but nothing new was needed."
+  }
+ ],
+ "timeline": [
+  {
+   "from": "2024-01-01",
+   "threshold_ils": 25000,
+   "source_url": "https://www.gov.il/he/pages/faq_israel_invoice",
+   "grade": "A",
+   "note": "Model live; 2024 threshold 25,000; in 2024 every request is approved automatically (FAQ Q1/Q2). Same figure in the Tax Authority letter of 11.9.2023: https://www.gov.il/BlobFolder/policy/procedures-110923-2/he/vat_procedures-110923-2.pdf"
+  },
+  {
+   "from": "2024-05-05",
+   "threshold_ils": 25000,
+   "source_url": "https://www.gov.il/he/pages/faq_israel_invoice",
+   "grade": "A",
+   "note": "FAQ Q22: because of the war, invoices dated 1.1.2024-4.5.2024 are recognised as input VAT even without an allocation number, so the number is a deduction condition from 5.5.2024. Hyp guide of 2026-08-06 and an Apideck page also print 5 May 2024 (vendor/third-party)."
+  },
+  {
+   "from": "2025-01-01",
+   "threshold_ils": 20000,
+   "source_url": "https://www.gov.il/he/pages/faq_israel_invoice",
+   "grade": "A",
+   "note": "FAQ Q2: \"לשנת 2025 (עודכן 25/12/24)\" 20,000; press: ice.co.il 2024-11-20 (grade B) https://www.ice.co.il/law/news/article/1038974"
+  },
+  {
+   "from": "2026-01-01",
+   "threshold_ils": 10000,
+   "source_url": "https://www.gov.il/he/service/request-assignment-number-for-tax-invoice",
+   "grade": "A",
+   "note": "Official service page and FAQ Q1/Q2. Accelerated: the Tax Authority API document of July 2024 still printed 15,000 for 2026, 10,000 for 2027 and 5,000 for 2028: https://www.gov.il/BlobFolder/generalpage/hor-software-other/he/vat_software-houses-180724.pdf"
+  },
+  {
+   "from": "2026-06-01",
+   "threshold_ils": 5000,
+   "source_url": "https://www.gov.il/he/service/request-assignment-number-for-tax-invoice",
+   "grade": "A",
+   "note": "Official service page: \"מעל 5,000 ש\"ח לפני מע\"מ (מעודכן לשנת 2026)\"; FAQ Q1/Q2 give 1.6.2026. Vendor guides (Hyp 2026-08-06, Base CRM) repeat it."
+  }
+ ]
+}

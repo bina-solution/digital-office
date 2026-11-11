@@ -18,24 +18,47 @@ and the only owner of it:
       3. compact presentation (F11) left, so the tab strip — and the group's name on it — is visible;
       4. 302 to the live view: /view/ at this origin, the console mount behind the console; a tab that
          could not be brought to the front is SAID (`?lost=<slug>`, shown by the viewer), never pretended.
+  GET /handoff/           the hand-offs that are news (below), for a console in this office — the same door.
+  GET /gate               Caddy's question before /view/*, /websockify and /handoff/* (the `gate` snippet):
+                          the LINK is admitted by its address, everyone else is asked of the office's
+                          identity provider with their own cookie (DGO-1336; see `gate_answer`).
   handoff_link(slug)      the absolute address of that route as the OWNER's browser types it: a console
                           deep link (CONSOLE_BASE_URL + AUTH_PROTOCOL), the way apps/project-pln reports
                           a work item — framed inside the office, signed in by the office's own SSO.
   view_link()             the live view's address, for a notice that promises no tab (a released one).
   notify_human(...)       one notice per episode in the office's notice centre (platform-base/notifications).
 
+THE RECORD OF A HAND-OFF (DGO-1336). A link in a notice reaches a person who reads notices; an app's
+«Continue with Google» is pressed by a person who is LOOKING AT THE APP, and nothing told the screen in
+front of him that the office browser now needed him — the owner pressed it on his phone, Google's
+account chooser opened in this browser's own display, and he kept seeing «Sign In» (2026-11-04: «זה
+לא עובד לא פותח לי שום דפדפן»). So a hand-off is also a RECORD, /data/handoffs/<slug>.json: who asked
+(`for`, the app), where it stands (`needed` → `done` | `failed`), one sentence for the person, and an
+episode id. Never an address: a sign-in's query carries its state on the way out and its one-time code
+on the way back. `bbox b42 open <app> <url>` writes `needed`; whoever finishes the errand writes the end
+(`bbox b42 handoff <slug> --done | --failed <sentence>`); every console that shows this browser reads
+the list (here, or the task runner's GET /v1/handoffs across a link) and brings the browser to the
+person while it is `needed`, and the app back to him when it is `done`.
+
 The limit, stated once: noVNC shows a whole SCREEN, not a tab. The promise this route makes is "the
 right tab in front, with its group's name on the strip" — never "only that page".
 
 CLI (inside browser42-browser; `bbox b42 handoff <slug>` is the host-side hand):
     python3 /handoff.py link <slug>     → {"ok": true, "slug", "url", "tab_id", "group_id", "page"}
+    python3 /handoff.py record <slug> needed|done|failed [--for <app>] [--sentence <text>]
+                                        → {"ok": true, "handoff": {slug, for, state, sentence, id, …}}
+    python3 /handoff.py list            → {"ok": true, "handoffs": [the records that are news]}
     python3 /handoff.py serve           → the route server (started by start-browser.sh §4f-bis)
 """
 
 import hmac
+import http.client
 import json
+from contextlib import contextmanager
 import os
 import re
+import secrets
+import socket
 import subprocess
 import sys
 import threading
@@ -45,6 +68,7 @@ from html import escape
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.error import HTTPError, URLError
+from urllib.parse import urlsplit
 from urllib.request import Request, urlopen
 
 DATA = Path(os.environ.get("DATA", "/data"))
@@ -86,6 +110,66 @@ SLUG = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
 #: Broker answers that mean "not yet" rather than "no": the extension is still reconnecting.
 TRANSIENT = {"extension_unavailable", "broker_unreachable"}
 
+#: The records (module docstring, DGO-1336): /data/handoffs/<slug>.json, one per slug.
+HANDOFFS_DIR = "handoffs"
+STATES = ("needed", "done", "failed")
+#: A `needed` record older than this is nobody's errand any more: an app's sign-in lives 30 minutes
+#: (claude.ai's hop_nonce), and a watcher that died with its container would leave the record standing,
+#: so the list stops naming it rather than have every console send a person to a tab that waits for
+#: nothing.
+NEEDED_TTL_S = float(os.environ.get("BROWSER42_HANDOFF_NEEDED_SECONDS", "1800"))
+#: An ended record is news for this long: a console asks every few seconds, so a console that sent a
+#: person to the browser learns the end at its next look and takes him back (or says why not).
+ENDED_TTL_S = float(os.environ.get("BROWSER42_HANDOFF_ENDED_SECONDS", "600"))
+#: What a record may say — and all a list ever shows. No address is among them.
+RECORD_KEYS = ("slug", "for", "state", "sentence", "id", "opened_at", "updated_at")
+SENTENCE_MAX = 300
+#: What an ended record says when its writer said nothing: a console shows `failed` as a card, and a card
+#: with no sentence is the dead end this record exists to remove.
+ENDED_SENTENCE = {"done": "הושלם — חוזרים לאפליקציה.",
+                  "failed": "דפדפן הלשכה לא השלים את מה שהאפליקציה ביקשה — נסו שוב מתוך האפליקציה."}
+#: A sentence is for a person; one that carries a sign-in's query is a leak, refused by name.
+SECRET_SHAPED = re.compile(r"(?:^|[?&#\s])(?:code|state|hop_nonce|access_token|id_token)=", re.IGNORECASE)
+
+#: THE LINK'S OWN ADDRESS (DGO-1336). A LINKED office's console reaches this app through the link proxy
+#: (`dgo-net`, the namespace dgo-link runs in), after THAT office's edge signed the person in — the owner
+#: opening the HP's office browser from vps1's console on his phone. Such a request carries the other
+#: office's cookie, which this office's provider cannot read, so the gate refused it: 400 «refusing a
+#: return-to outside this office», measured 2026-11-05 from vps1 with exactly the headers its edge sends,
+#: for /view/vnc.html and /handoff/. The one browser every office of ours uses (the owner, EXF-29) was
+#: visible from none of them. The link is admitted by ADDRESS, as bina-claude's door admits it
+#: (apps/bina-claude/adapter/gate.mjs): a container on the network can write any header, but it cannot
+#: answer from another container's address. Which offices reach this app over the link at all is the
+#: serving office's own declaration (`serve.only.<office>`; browser42 is an admin app, given by name).
+LINK_PEERS = tuple((os.environ.get("BROWSER42_LINK_PEERS") or "dgo-net").split())
+#: Caddy writes the TCP peer here (`header_up X-Browser42-Peer {http.request.remote.host}`), replacing
+#: whatever a client sent: the one value on a gate request that no caller chooses.
+PEER_HEADER = "X-Browser42-Peer"
+#: The peers' addresses are asked again every PEER_TTL_S, and a miss forces a fresh look at most every
+#: PEER_MISS_S — a recreated link proxy gets a new address, and a flood of strangers must not turn
+#: into a flood of DNS questions (the same two numbers as gate.mjs).
+PEER_TTL_S, PEER_MISS_S = 10.0, 3.0
+#: Everyone else is asked of the office's OWN identity provider, with the request's own cookie — the
+#: question the edge's forwardAuth asks. WHICH provider is the platform's one switch, DGO_IDENTITY (the
+#: value the edge's middleware reads); one this file does not know refuses the door, never opens it.
+PROVIDERS = {
+    "authentik": "http://authentik-server:9000/outpost.goauthentik.io/auth/traefik",
+    # the office's browser is its admins' (app.json `people: admins`, DGO-1755): the admins' question, as the edge
+    # asks it. A linked office's person arrives by the link proxy, already checked by THAT office's own form.
+    "forward-auth": "http://forward-auth:9078/auth/traefik/admins",
+}
+#: …which Caddy also says on every gate request (`header_up X-Browser42-Identity {$DGO_IDENTITY:authentik}`, from
+#: ITS environment): a browser container started from a config older than this file's has no
+#: DGO_IDENTITY of its own, and would otherwise ask a provider the office does not run, refusing
+#: everybody but the link. This container's own value wins; the header only names one of PROVIDERS,
+#: each of which checks the cookie itself, so a header can choose a question, never an answer.
+IDENTITY_HEADER = "X-Browser42-Identity"
+PROVIDER_TIMEOUT_S = float(os.environ.get("BROWSER42_GATE_PROVIDER_SECONDS", "15"))
+#: Never carried from one hop to the next: they describe a connection, not a request (RFC 9110 §7.6.1),
+#: and Upgrade would turn the provider's GET into a websocket handshake.
+HOP_BY_HOP = {"connection", "keep-alive", "proxy-authenticate", "proxy-authorization", "te", "trailer",
+              "trailers", "transfer-encoding", "upgrade", "host", "content-length"}
+
 
 def slug_from_path(path: str):
     """`/handoff/<slug>` → the slug; None for anything else (a traversal, a second segment, a typo)."""
@@ -120,6 +204,149 @@ def group_id_of(record: dict):
 def group_color_of(record: dict):
     """A session manifest says `color`; a task record says `native_group.color`."""
     return record.get("color") or (record.get("native_group") or {}).get("color")
+
+
+def bare_url(url: str) -> str:
+    """An address without what may carry a secret: scheme, host, port and path — no query, no fragment.
+
+    A sign-in's query carries its state on the way out and its one-time code on the way back (DGO-1336),
+    so this is what a record, a manifest or a log line is given in place of the address."""
+    try:
+        parts = urlsplit(str(url or ""))
+    except ValueError:
+        return ""
+    if not parts.scheme or not parts.netloc:
+        return ""
+    return f"{parts.scheme}://{parts.netloc}{parts.path}"
+
+
+class RecordError(ValueError):
+    """A record that cannot be written as asked; the message is the sentence the caller prints."""
+
+
+def _record_path(slug: str, data: Path | None = None) -> Path:
+    return (DATA if data is None else data) / HANDOFFS_DIR / f"{slug}.json"
+
+
+def _read_record(slug: str, data: Path | None = None):
+    try:
+        record = json.loads(_record_path(slug, data).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    return record if isinstance(record, dict) else None
+
+
+class Superseded(RecordError):
+    """An end for an episode that is no longer the open one: a newer attempt owns the hand-off."""
+
+
+def current_episode(slug: str, data: Path | None = None) -> str:
+    """The id of the slug's current episode ("" when it has none) — how an attempt learns a newer one began."""
+    return str((_read_record(slug, data) or {}).get("id") or "")
+
+
+def write_record(slug: str, state: str, app: str | None = None, sentence: str | None = None,
+                 data: Path | None = None, now: float | None = None, episode: str | None = None) -> dict:
+    """Write a hand-off's record and return it as a list shows it.
+
+    `needed` opens an EPISODE: `opened_at`, and `for` (the app) is required — a person is brought to the
+    browser for SOMEBODY. Its id is the `episode` the caller minted when it gives one (so an opener knows
+    its episode even when the open itself never answers), else a new one. `done` and `failed` end the
+    episode that is open and keep its id and its app, so a console that switched a person for that
+    episode knows this end is its end. An end that names its `episode` is refused (Superseded) when that
+    episode is no longer the open one — a watcher that outlived its attempt must never end the new
+    attempt with the old one's outcome. Read, checked and written under the slug's record lock, and
+    written whole (a temporary file renamed over the old one): a console reading mid-write sees the old
+    record or the new one, never half of either."""
+    if not SLUG.match(slug or ""):
+        raise RecordError(f"'{slug}' is not a slug — lowercase kebab-case, as `bbox b42 groups` lists them")
+    if state not in STATES:
+        raise RecordError(f"'{state}' is not a state; a hand-off is {', '.join(STATES)}")
+    if app is not None and not SLUG.match(app):
+        raise RecordError(f"'{app}' is not an app id — the app's id or alias, lowercase kebab-case")
+    if episode is not None and not SLUG.match(episode):
+        raise RecordError(f"'{episode}' is not an episode id — lowercase letters, digits and hyphens")
+    sentence = " ".join(str(sentence or "").split())[:SENTENCE_MAX] or ENDED_SENTENCE.get(state, "")
+    if SECRET_SHAPED.search(sentence):
+        raise RecordError("the sentence carries what looks like a sign-in's query (code=, state=, …); a "
+                          "record never holds an address — say what happened in words")
+    if state == "needed" and not app:
+        raise RecordError("a `needed` hand-off names the app it is for (--for <app>)")
+    stamp = time.time() if now is None else now
+    path = _record_path(slug, data)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with _record_lock(path):
+        previous = _read_record(slug, data) or {}
+        if state == "needed":
+            record = {"slug": slug, "for": app, "state": state, "sentence": sentence,
+                      "id": episode or secrets.token_hex(6), "opened_at": int(stamp), "updated_at": int(stamp)}
+        else:
+            if episode is not None and str(previous.get("id") or "") != episode:
+                raise Superseded(f"'{slug}' is no longer episode {episode} — a newer attempt owns the hand-off; "
+                                 f"nothing was written")
+            record = {"slug": slug, "for": app or str(previous.get("for") or ""), "state": state,
+                      "sentence": sentence, "id": str(previous.get("id") or secrets.token_hex(6)),
+                      "opened_at": int(previous.get("opened_at") or stamp), "updated_at": int(stamp)}
+        temporary = path.with_name(f".{path.name}.{os.getpid()}.tmp")
+        temporary.write_text(json.dumps(record, ensure_ascii=False, sort_keys=True) + "\n", encoding="utf-8")
+        os.chmod(temporary, 0o644)
+        os.replace(temporary, path)
+    return {key: record[key] for key in RECORD_KEYS}
+
+
+@contextmanager
+def _record_lock(path: Path):
+    """The record's own lock (`.<slug>.json.lock` beside it): the check of an end's episode and the write
+    are one step, so an end can never overwrite a `needed` written a moment after it was checked."""
+    try:
+        import fcntl
+    except ImportError:                                  # pragma: no cover — no flock on this platform
+        yield
+        return
+    with path.with_name(f".{path.name}.lock").open("a+") as handle:
+        fcntl.flock(handle.fileno(), fcntl.LOCK_EX)
+        try:
+            yield
+        finally:
+            fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
+
+
+def waiting(slug: str, data: Path | None = None, now: float | None = None) -> bool:
+    """Is a person waited for on this slug — a `needed` record that is still news (NEEDED_TTL_S)? A stale
+    one, left by a watcher that died with its container, must not hold a bookmark in a reload loop."""
+    record = _read_record(slug, data) or {}
+    try:
+        age = (time.time() if now is None else now) - float(record.get("updated_at") or 0)
+    except (TypeError, ValueError):
+        return False
+    return record.get("state") == "needed" and age <= NEEDED_TTL_S
+
+
+def read_records(data: Path | None = None, now: float | None = None) -> list:
+    """The hand-offs that are news, newest first: a `needed` one younger than NEEDED_TTL_S, an ended one
+    younger than ENDED_TTL_S. Only RECORD_KEYS leave this function — whatever else a file holds stays."""
+    stamp = time.time() if now is None else now
+    folder = (DATA if data is None else data) / HANDOFFS_DIR
+    out = []
+    try:
+        files = sorted(folder.glob("*.json"))
+    except OSError:
+        return out
+    for path in files:
+        try:
+            record = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            continue
+        if not isinstance(record, dict) or record.get("state") not in STATES or not SLUG.match(str(record.get("slug") or "")):
+            continue
+        try:
+            age = stamp - float(record.get("updated_at") or 0)
+        except (TypeError, ValueError):
+            continue
+        if age > (NEEDED_TTL_S if record["state"] == "needed" else ENDED_TTL_S):
+            continue
+        out.append({key: record.get(key) for key in RECORD_KEYS})
+    return sorted(out, key=lambda r: (-(r.get("updated_at") or 0), r.get("slug") or ""))
 
 
 def _console(env=None) -> str:
@@ -360,9 +587,129 @@ def notify_human(slug: str, body: str, link: str, url: str | None = None, title:
         return False
 
 
+#: The resolver's "this name does not exist" — an office with no link. Any other failure is "not known now".
+_NO_SUCH_NAME = {getattr(socket, n) for n in ("EAI_NONAME", "EAI_NODATA") if hasattr(socket, n)}
+
+
+def _resolve(name: str):
+    """The name's addresses; an empty set when the name does not exist (no link here), and None when the
+    answer is not known now (a transient failure: the last good answer stands, as in gate.mjs)."""
+    try:
+        return {info[4][0] for info in socket.getaddrinfo(name, None)}
+    except socket.gaierror as error:
+        return set() if error.errno in _NO_SUCH_NAME else None
+    except (OSError, UnicodeError):
+        return None
+
+
+def _address(value: str) -> str:
+    """`::ffff:10.0.0.5` (an IPv4 peer on a dual-stack socket) and `10.0.0.5` are one address."""
+    value = str(value or "").strip()
+    return value[7:] if value.lower().startswith("::ffff:") and "." in value else value
+
+
+class Peers:
+    """The link's addresses (LINK_PEERS), asked of Docker's resolver and asked again every PEER_TTL_S;
+    an address not among them asks again at most every PEER_MISS_S (a link proxy recreated a moment
+    ago). A name that does not exist — an office with no link — admits nobody; a failure that only means
+    "not known now" keeps the last good answer. ONE look at a time, outside the lock, and only the very
+    first is waited for (every request then waits for it, as gate.mjs awaits its refresh): after that a
+    look runs beside the requests, because every file of the live view passes this gate and a slow
+    resolver must hold none of them."""
+
+    def __init__(self, names=LINK_PEERS, resolve=_resolve, clock=time.monotonic, spawn=None):
+        self._names, self._resolve, self._clock = tuple(names), resolve, clock
+        self._spawn = spawn or (lambda look: threading.Thread(target=look, name="browser42-peers", daemon=True).start())
+        self._lock = threading.Lock()
+        self._first = threading.Event()
+        self._by_name, self._known, self._at, self._looking = {}, frozenset(), None, False
+
+    def _look(self) -> None:
+        try:
+            found = {}
+            for name in self._names:
+                answer = self._resolve(name)
+                found[name] = (self._by_name.get(name, frozenset()) if answer is None
+                               else frozenset(_address(a) for a in answer))
+            with self._lock:
+                self._by_name, self._known, self._at = found, frozenset().union(*found.values()), self._clock()
+        finally:
+            with self._lock:
+                self._looking = False
+            self._first.set()
+
+    def admits(self, address: str) -> bool:
+        address = _address(address)
+        if not address:
+            return False
+        with self._lock:
+            first = self._at is None
+            age = None if first else self._clock() - self._at
+            look = not self._looking and (first or age > PEER_TTL_S
+                                          or (address not in self._known and age > PEER_MISS_S))
+            if look:
+                self._looking = True
+        if look and first:
+            self._look()
+        elif look:
+            self._spawn(self._look)
+        elif first:
+            self._first.wait(PROVIDER_TIMEOUT_S)          # another request is making the first look
+        with self._lock:
+            return address in self._known
+
+
+PEERS = Peers()
+
+
+def provider_ask(endpoint: str, headers) -> tuple:
+    """Ask the identity provider what Caddy would have asked it — the request's own headers (its cookie,
+    its Host, the X-Forwarded-* the gate writes), minus the ones that describe a connection and the
+    gate's own — and return its answer whole: (status, headers, body). A 302 to the sign-in, with the
+    state cookie it sets, reaches the person exactly as it did when Caddy asked the provider itself
+    (Caddy's forward_auth passed the request's own Host through, and so does this)."""
+    parts = urlsplit(endpoint)
+    sent = {name: value for name, value in headers.items()
+            if (name.lower() == "host" or name.lower() not in HOP_BY_HOP)
+            and not name.lower().startswith("x-browser42-")}
+    connection = http.client.HTTPConnection(parts.hostname, parts.port or 80, timeout=PROVIDER_TIMEOUT_S)
+    try:
+        connection.request("GET", parts.path + (f"?{parts.query}" if parts.query else ""), headers=sent)
+        response = connection.getresponse()
+        body = response.read()
+        return response.status, [(k, v) for k, v in response.getheaders()
+                                 if k.lower() not in HOP_BY_HOP and "\r" not in v and "\n" not in v], body
+    except (OSError, http.client.HTTPException, ValueError) as error:
+        # ValueError: a header http.client will not send (a CR or LF in it) — refused, and never quoted
+        said = type(error).__name__ if isinstance(error, ValueError) else str(error)
+        print(f"[handoff] gate: the identity provider at {parts.netloc} did not answer ({said})",
+              file=sys.stderr, flush=True)
+        return 502, [("Content-Type", "text/plain; charset=utf-8")], (
+            f"browser42: the office's identity provider ({parts.netloc}) did not answer — this door "
+            f"stays shut until it does\n").encode("utf-8")
+    finally:
+        connection.close()
+
+
+def gate_answer(headers, peers=None, ask=provider_ask, env=None) -> tuple:
+    """The gate's one decision: the link, by its address, is in (it was signed in at its own office's
+    edge); anybody else is the provider's question, asked with their own cookie. (status, headers, body)."""
+    if (PEERS if peers is None else peers).admits(headers.get(PEER_HEADER, "")):
+        return 200, [("Cache-Control", "no-store")], b""
+    identity = ((os.environ if env is None else env).get("DGO_IDENTITY")
+                or headers.get(IDENTITY_HEADER, "") or "authentik").strip()
+    endpoint = PROVIDERS.get(identity)
+    if not endpoint:
+        return 502, [("Content-Type", "text/plain; charset=utf-8")], (
+            f"browser42: DGO_IDENTITY={identity!r} names no identity provider this door knows "
+            f"({', '.join(sorted(PROVIDERS))}) — it stays shut rather than open\n").encode("utf-8")
+    return ask(endpoint, headers)
+
+
 class Handler(BaseHTTPRequestHandler):
     def do_GET(self) -> None:  # noqa: N802 - HTTP handler API
-        if self.path.split("?", 1)[0] == "/healthz":
+        route = self.path.split("?", 1)[0]
+        if route == "/healthz":
             self._json(200, {"ok": True, "service": "browser42-handoff"})
             return
         if not TOKEN or not hmac.compare_digest(self.headers.get(TOKEN_HEADER, ""), TOKEN):
@@ -370,11 +717,31 @@ class Handler(BaseHTTPRequestHandler):
                 "code": "forbidden",
                 "message": "the hand-off is reached through the office's edge (Caddy /handoff/*), which carries its token"}})
             return
+        if route == "/gate":
+            status, headers, body = gate_answer(self.headers)
+            self.send_response(status)
+            for name, value in headers:
+                self.send_header(name, value)
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+            return
+        if route in ("/handoff", "/handoff/"):
+            self._json(200, {"ok": True, "handoffs": read_records()})
+            return
         slug = slug_from_path(self.path)
         if not slug:
             self._json(404, {"ok": False, "error": {"code": "not_found", "message": "GET /handoff/<slug>"}})
             return
         record = group_record(slug)
+        if record is None and waiting(slug):
+            # `bbox b42 open` records the hand-off BEFORE it wakes the browser and opens the tab, so the
+            # person is brought here at once (a cold browser takes up to 69 s): until the tab is there,
+            # the page says so and reloads itself into it — never a 404 in front of him (DGO-1336). It
+            # does NOT wake the browser itself: the opener is waking it, and two get_or_launch calls at
+            # once are two Chromes (Waker). The manifest appears once the browser is up and the tab open.
+            self._html(200, waking_page(slug), refresh=5)
+            return
         if record is None:
             self._json(404, {"ok": False, "error": {
                 "code": "no_such_group",
@@ -435,10 +802,41 @@ def cmd_link(slug: str) -> int:
     return 0
 
 
+def cmd_record(args: list) -> int:
+    """`bbox b42 handoff <slug> --done | --failed <sentence> [--episode <id>]` (and `bbox b42 open`, which
+    writes `needed`). Exit 3 = superseded: the episode named is no longer the open one."""
+    slug, state = (args + ["", ""])[:2]
+    given = {"--for": None, "--sentence": None, "--episode": None}
+    rest = args[2:]
+    while rest:
+        flag = rest.pop(0)
+        if flag in given and rest:
+            given[flag] = rest.pop(0)
+        else:
+            print(json.dumps({"ok": False, "error": {"code": "usage", "message":
+                  "record <slug> needed|done|failed [--for <app>] [--sentence <text>] [--episode <id>]"}}))
+            return 2
+    try:
+        record = write_record(slug, state, app=given["--for"], sentence=given["--sentence"], episode=given["--episode"])
+    except Superseded as error:
+        print(json.dumps({"ok": False, "error": {"code": "superseded", "message": str(error)}}, ensure_ascii=False))
+        return 3
+    except RecordError as error:
+        print(json.dumps({"ok": False, "error": {"code": "usage", "message": str(error)}}, ensure_ascii=False))
+        return 2
+    print(json.dumps({"ok": True, "handoff": record}, ensure_ascii=False, sort_keys=True))
+    return 0
+
+
 def main(argv: list) -> int:
     verb = argv[1] if len(argv) > 1 else ""
     if verb == "link":
         return cmd_link(argv[2] if len(argv) > 2 else "")
+    if verb == "record":
+        return cmd_record(list(argv[2:]))
+    if verb == "list":
+        print(json.dumps({"ok": True, "handoffs": read_records()}, ensure_ascii=False, sort_keys=True))
+        return 0
     if verb == "serve":
         server = ThreadingHTTPServer((HOST, PORT), Handler)
         print(f"browser42 handoff listening on :{PORT} ({'token set' if TOKEN else 'NO TOKEN — every hand-off refused'})", flush=True)

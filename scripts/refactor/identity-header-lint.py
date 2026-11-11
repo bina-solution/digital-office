@@ -268,6 +268,11 @@ CHECKER_DIRS: dict[str, str] = {
         "a QA driver — it opens the running office from OUTSIDE in a real browser and injects a "
         "synthetic identity so it can reach every declared route without a human login; it serves "
         "nothing, is routed nowhere, and no manifest can declare it",
+    # one FILE, not its directory: scripts/ops/ also holds host tools that are code paths
+    "scripts/ops/edge-bypass-probe.sh":
+        "a security probe (DGO-1656, `bbox security probe`) — sent from a PEER office, it forges the family "
+        "on purpose to prove this office's edge strips or refuses every copy; it serves nothing, is routed "
+        "nowhere, and no manifest can declare it",
 }
 
 
@@ -381,6 +386,8 @@ def has_write_sign(texts: list[str]) -> bool:
 TWINS = {
     "packaging/dgo/internal/console/": "platform-base/console",
     "packaging/dgo/internal/serve/": "platform-base/app-management",
+    # the phone's core (`dgo be-child native`): what it reads, it reads as the console's hooks (Config.More)
+    "packaging/dgo/internal/native/": "platform-base/console",
 }
 
 
@@ -414,7 +421,7 @@ def sso_hosts(manifest: dict) -> list[str]:
     middleware from. A reader behind one of these receives the family today."""
     out: list[str] = []
     for r in (manifest.get("routing") or []):
-        if not isinstance(r, dict) or r.get("auth") != "sso":
+        if not isinstance(r, dict) or r.get("auth", "sso") != "sso":     # the routers' default (DGO-630)
             continue
         hosts = r.get("hosts") or r.get("host") or []
         if isinstance(hosts, str):

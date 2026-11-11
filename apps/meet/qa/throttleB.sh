@@ -5,7 +5,7 @@
 #   throttleB.sh <tag> <room>
 set -u
 tag="$1"; room="$2"; T=/root/meet-test; out=$T/out/$tag; mkdir -p "$out"
-JIB=meet-jibri-fireplace
+JIB=meet-jibri-examplef
 cg() { echo /sys/fs/cgroup/system.slice/docker-$(docker inspect -f '{{.Id}}' "$1").scope; }
 CG=$(cg $JIB)
 log() { echo "$(date -u +%T)Z +$(( $(date +%s) - T0 ))s $*" | tee -a "$out/timeline.log"; }
@@ -14,7 +14,7 @@ K() { docker exec meet-test pkill -f "prof-$1" >/dev/null 2>&1; }
 J() { docker exec meet-test python3 /t/cdp.py "$1" "$2" 2>/dev/null; }
 CHAT='(function(){var s=APP.store.getState();var m=(s["features/chat"]||{}).messages||[];return JSON.stringify({n:m.length,joined:APP.conference.isJoined(),muted:APP.conference.isLocalAudioMuted(),msgs:m.map(function(x){return (x.displayName||"?")+": "+String(x.message).slice(0,90)})})})()'
 unmute() { J "$1" 'APP.conference.isJoined() && APP.conference.isLocalAudioMuted() ? (APP.conference.muteAudio(false), "unmuted") : "ok"'; }
-conferences() { docker exec meet-jvb-fireplace curl -s localhost:8080/colibri/stats | python3 -c 'import json,sys;print(json.load(sys.stdin)["conferences"])'; }
+conferences() { docker exec meet-jvb-examplef curl -s localhost:8080/colibri/stats | python3 -c 'import json,sys;print(json.load(sys.stdin)["conferences"])'; }
 busy() { docker exec $JIB python3 -c 'import urllib.request,json;print(json.load(urllib.request.urlopen("http://localhost:2222/jibri/api/v1.0/health"))["status"]["busyStatus"])' 2>/dev/null; }
 cgvals() { echo "cpu.max=$(cat $CG/cpu.max | tr ' ' '/') weight=$(cat $CG/cpu.weight) memory.low=$(cat $CG/memory.low) nr_throttled=$(awk '$1=="nr_throttled"{print $2}' $CG/cpu.stat) nanocpus=$(docker inspect -f '{{.HostConfig.NanoCpus}}' $JIB) shares=$(docker inspect -f '{{.HostConfig.CpuShares}}' $JIB)"; }
 seen=""
@@ -51,7 +51,7 @@ now=$(docker exec $JIB sh -c 'ls /storage/recordings' | sort); new=$(comm -13 <(
 docker exec $JIB sh -c "ls -la /storage/recordings/$new; cat /storage/recordings/$new/*.capture.json" 2>&1 | tee -a "$out/timeline.log"
 docker logs $JIB --since 12m 2>&1 | grep meet-watch | cut -c1-300 | tee -a "$out/timeline.log"
 # the notice centre's row for this recording (one per recording: warning, then info when it recovered)
-docker exec notifications-fireplace python3 -c '
+docker exec notifications-examplef python3 -c '
 import urllib.request, json
 d = json.load(urllib.request.urlopen("http://localhost:8977/api/notifications?source=meet-recorder&limit=5"))
 for n in d.get("notifications", []):

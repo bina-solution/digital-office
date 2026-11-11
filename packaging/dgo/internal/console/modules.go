@@ -14,9 +14,9 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	"github.com/solomonBoltin/deployment-hacohen/packaging/dgo/internal/compiler"
-	"github.com/solomonBoltin/deployment-hacohen/packaging/dgo/internal/pyval"
-	"github.com/solomonBoltin/deployment-hacohen/packaging/dgo/internal/yamlish"
+	"github.com/bina-solution/digital-office/packaging/dgo/internal/compiler"
+	"github.com/bina-solution/digital-office/packaging/dgo/internal/pyval"
+	"github.com/bina-solution/digital-office/packaging/dgo/internal/yamlish"
 )
 
 // The tiles are read from what the compiler wrote — .generated/registry/console.modules.yaml — through
@@ -26,7 +26,7 @@ import (
 
 // modulesRoute is GET /api/modules: jsonify(modules=_tiles()).
 func (s *Server) modulesRoute(w http.ResponseWriter, r *http.Request) bool {
-	tiles, ok := s.tiles()
+	tiles, ok := s.tiles(r)
 	if !ok {
 		return false
 	}
@@ -36,7 +36,7 @@ func (s *Server) modulesRoute(w http.ResponseWriter, r *http.Request) bool {
 // versionRoute is GET /api/version: the build, the shell's digest, and the digest of the tiles as
 // json.dumps(sort_keys=True, ensure_ascii=False) spells them — what an open page compares itself with.
 func (s *Server) versionRoute(w http.ResponseWriter, r *http.Request) bool {
-	tiles, ok := s.tiles()
+	tiles, ok := s.tiles(r)
 	if !ok {
 		return false
 	}
@@ -73,11 +73,12 @@ func writeJSON(w http.ResponseWriter, r *http.Request, v any) bool {
 	return true
 }
 
-// tiles is _tiles(): every module without its `door` — how THIS server reaches a remote app is not
-// the browser's business. ok is false when an input is outside what this port reads exactly as
-// app.py does (including every input on which app.py itself raises and answers 500).
-func (s *Server) tiles() ([]any, bool) {
-	mods, ok := s.modules()
+// tiles is _tiles(): every module without what is THIS server's alone (app.py SERVER_ONLY) — `door`, how
+// it reaches a remote app, and `handoffs`, where it asks an app which people it is waiting for
+// (DGO-1336): not the browser's business. ok is false when an input is outside what this port reads
+// exactly as app.py does (including every input on which app.py itself raises and answers 500).
+func (s *Server) tiles(r *http.Request) ([]any, bool) {
+	mods, ok := s.modules(r)
 	if !ok {
 		return nil, false
 	}
@@ -85,7 +86,7 @@ func (s *Server) tiles() ([]any, bool) {
 	for i, m := range mods {
 		t := yamlish.NewMap()
 		for _, k := range m.Keys() {
-			if k != "door" {
+			if k != "door" && k != "handoffs" {
 				t.Set(k, get(m, k))
 			}
 		}
@@ -97,8 +98,10 @@ func (s *Server) tiles() ([]any, bool) {
 // modules is _modules(): the compiled registry's tiles, then each peer tile whose id the registry does
 // not already hold, every linked office's tile judged by the link's last measurement, then the
 // console's own views — sorted by `order` (999 when absent), stably. Without a compiled registry it is
-// modules.yaml exactly as written: no peers, no judging, no sorting.
-func (s *Server) modules() ([]*yamlish.Map, bool) {
+// modules.yaml exactly as written: no peers, no judging, no sorting. On the phone's core (More) the
+// machine's tiles come after the peers', on the same terms: the apps the machine runs and the offices it
+// links, which no registry built into the APK can hold.
+func (s *Server) modules(r *http.Request) ([]*yamlish.Map, bool) {
 	peers, ok := s.peerTiles()
 	if !ok {
 		return nil, false
@@ -132,15 +135,78 @@ func (s *Server) modules() ([]*yamlish.Map, bool) {
 			all = append(all, m)
 		}
 	}
-	if !s.judge(all) {
-		return nil, false
-	}
 	views, ok := s.ownViews()
 	if !ok {
 		return nil, false
 	}
+	if more := s.moreTiles(r); len(more) > 0 {
+		// the machine's, once each: never one the rail already holds — the console's own views among them,
+		// which the machine's console lists too — nor one whose id this port cannot key (the other console's
+		// oddity costs that tile, not the rail)
+		held := map[string]bool{}
+		for _, t := range append(append([]*yamlish.Map{}, all...), views...) {
+			if k, ok := setKey(get(t, "id")); ok {
+				held[k] = true
+			}
+		}
+		for _, m := range more {
+			if k, ok := setKey(get(m, "id")); ok && !held[k] {
+				held[k] = true
+				all = append(all, m)
+			}
+		}
+	}
+	if !s.judge(all) {
+		return nil, false
+	}
 	all = append(all, views...)
 	return all, sortByOrder(all)
+}
+
+// moreTiles is Config.More's answer read as an /api/modules document: its modules that are mappings with
+// an id, an `order` that is a whole number or none, and a `remote` that names its office in text or is
+// none — what judge and sortByOrder read without failing the whole rail. None without More, when it
+// answers nothing, or when what it answers does not read (the other console's answer costs its own tiles,
+// never the rail).
+func (s *Server) moreTiles(r *http.Request) []*yamlish.Map {
+	if s.more == nil {
+		return nil
+	}
+	raw := s.more(r)
+	if len(raw) == 0 {
+		return nil
+	}
+	v, err := loadJSON(raw)
+	doc, isMap := v.(*yamlish.Map)
+	if err != nil || !isMap {
+		return nil
+	}
+	list, _ := get(doc, "modules").([]any)
+	var out []*yamlish.Map
+	for _, e := range list {
+		m, isMap := e.(*yamlish.Map)
+		if !isMap || !compiler.Truthy(get(m, "id")) {
+			continue
+		}
+		if o := get(m, "order"); o != nil {
+			if _, whole := o.(int64); !whole {
+				continue
+			}
+		}
+		if rm := get(m, "remote"); rm != nil {
+			rem, isMap := rm.(*yamlish.Map)
+			if !isMap {
+				continue
+			}
+			if office := get(rem, "office"); office != nil {
+				if _, isText := office.(string); !isText {
+					continue
+				}
+			}
+		}
+		out = append(out, m)
+	}
+	return out
 }
 
 // ownViews is _own_views(): modules.yaml's entries without a truthy `embed` — none when the file
@@ -201,7 +267,7 @@ func parseMaps(raw []byte) ([]*yamlish.Map, bool) {
 
 // peerTiles is [_peer_module(e) for e in _peer_entries()]: each *.json of the peer directory, in name
 // order, that is an object with a truthy alias and module — as its tile, marked `remote` from the
-// record's own fields unless the tile already carries the mark.
+// record's own fields unless the tile already carries the mark. A file that is not an object is skipped.
 func (s *Server) peerTiles() ([]*yamlish.Map, bool) {
 	entries, err := os.ReadDir(s.peers)
 	if err != nil {
@@ -225,7 +291,7 @@ func (s *Server) peerTiles() ([]*yamlish.Map, bool) {
 		}
 		doc, isMap := v.(*yamlish.Map)
 		if !isMap {
-			return nil, false // `.get` on a list or a scalar raises in app.py
+			continue // a list or a scalar is not a placement: app.py skips it by name (DGO-611; it raised, and /api/modules was a 500)
 		}
 		if !compiler.Truthy(get(doc, "alias")) || !compiler.Truthy(get(doc, "module")) {
 			continue

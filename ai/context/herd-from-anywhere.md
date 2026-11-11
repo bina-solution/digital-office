@@ -16,7 +16,7 @@ link itself (its parts, how it dies and the mesh's shape) is [dgo-link-lifetime.
   from one peer to another is dropped by design (`apps/dgo-extend/firewall.py`, "Relaying is phase 5").
 - **Which pairs held:**
   - Mac ⇄ vps1: up.
-  - Mac ⇄ fireplace: up.
+  - Mac ⇄ examplef: up.
   - vps1 ⇄ hp-laptop: up. The HP dials vps1's door, so this pair never needed the Mac.
   - Mac ⇄ hp-laptop and Mac ⇄ Dell: down. Both are found by a LAN scan, and there is no LAN.
   - Dell ⇄ vps1: never paired. `plans/dgo-herd.yaml` decided that the public server keeps no path to

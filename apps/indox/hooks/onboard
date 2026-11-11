@@ -197,11 +197,17 @@ converge_sync_registry
 # Demo inject: default No. INDOX_DEMO=y|n skips the prompt (CI, unattended installs). run_app_hooks
 # feeds this loop from a process substitution, so stdin is NOT the terminal — read /dev/tty directly
 # and only offer the prompt when there is one to read.
+# [DGO-1026] `[ -r /dev/tty ]` was not that test: the device node is readable by mode on every box,
+# terminal or not. With no controlling terminal the open failed, and with a pseudo-terminal that
+# nobody watches (a cloud sandbox, a runner) the read waited forever, so `bbox run` never finished.
+# Now: ask only when the prompt is SEEN (stderr is a terminal) and /dev/tty actually OPENS, and wait
+# 60 s at most. Silence is No, exactly as INDOX_DEMO unset always meant.
 ans="${INDOX_DEMO:-}"
-if [ -z "${ans}" ] && [ -r /dev/tty ]; then
-  printf "%s" "[indox] Inject the 'welcome' demo now (1 company, 5 docs — one per sync)? [y/N] "
-  read -r ans </dev/tty 2>/dev/null || ans=""
-  echo
+if [ -z "${ans}" ] && [ -t 2 ] && { exec 3</dev/tty; } 2>/dev/null; then
+  printf "%s" "[indox] Inject the 'welcome' demo now (1 company, 5 docs — one per sync)? [y/N] " >&2
+  read -r -t 60 ans <&3 2>/dev/null || ans=""
+  exec 3<&-
+  echo >&2
 fi
 
 case "${ans}" in

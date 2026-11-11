@@ -1,0 +1,84 @@
+#!/usr/bin/env bash
+# `bbox test computers` — this app's own tests, the one way this platform runs them.
+#
+# Three suites, and each holds a different promise the office depends on (DGO-553):
+#   · tests/test_link_identity.py  — who may ask: a door's signature, its window, and the address a
+#                                    request really came from. A claim is not a fact.
+#   · tests/test_remote_fleet.py   — `<machine>.<office>` rows, the sharing declaration read as the
+#                                    owner wrote it, and the refusal a peer gets.
+#   · tests/test_shell.py          — the terminal's session manager: a pty, a cursor, the caps.
+# …plus the screen's own self-check when node is here (the actions a row offers).
+#
+#   bbox test computers          the three suites
+#   bbox test computers --live   also asks THIS office: is the fleet answering, is the gate refusing a
+#                                forged office by name, does the terminal advertise `shell`?
+#
+# Exit 0 only when everything that ran said yes. A suite that cannot run says so and fails — a test
+# that silently skips is a test that reports green about nothing.
+set -uo pipefail
+export PYTHONIOENCODING=utf-8
+HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+APP="$(dirname "${HERE}")"
+LIVE=0
+#: forwarded to tests/cross_office_acceptance.py under `--live`, e.g.
+#:   bbox test computers --live --cross=--office=vps1
+CROSS_ARGS=()
+for a in "$@"; do
+  [ "${a}" = "--live" ] && LIVE=1
+  case "${a}" in --cross=*) CROSS_ARGS+=("${a#--cross=}") ;; esac
+done
+
+fails=0
+run() {                     # run <what> <command…>
+  local what="$1"; shift
+  echo "── ${what}"
+  if "$@"; then echo "   ok"; else echo "   FAILED"; fails=$((fails + 1)); fi
+}
+
+for t in test_link_identity test_remote_fleet test_shell; do
+  run "${t}" python3 "${APP}/tests/${t}.py"
+done
+if command -v node >/dev/null 2>&1; then
+  run "ui-selfcheck (the screen's actions)" node "${APP}/tools/ui-selfcheck.mjs"
+else
+  echo "── ui-selfcheck: skipped (node is not on this machine)"
+fi
+
+if [ "${LIVE}" = "1" ]; then
+  base="${COMPUTERS_URL:-http://computers:8977}"
+  echo "── live: ${base}"
+  # 1. it answers at all
+  if curl -fsS -m 20 "${base}/manifest" >/dev/null 2>&1; then echo "   manifest ok"
+  else echo "   manifest FAILED (is the app up? bbox status)"; fails=$((fails + 1)); fi
+  # 2. a request that only CLAIMS an office is refused BY NAME — the whole gate in one line.
+  #    ONE request, the code appended after a newline: a temp file here is a host path handed to a
+  #    native binary (G10), and `/tmp` is not the same place on Windows.
+  out="$(curl -s -m 20 -w '\n%{http_code}' -H 'x-dgo-office: no-such-office' \
+              "${base}/api/computers" 2>/dev/null)"
+  code="${out##*$'\n'}"; body="${out%$'\n'*}"
+  if [ "${code}" = "403" ]; then echo "   a forged office is refused (403)"
+  else echo "   a forged office answered ${code}, expected 403"; fails=$((fails + 1)); fi
+  printf '%s' "${body}" | grep -q 'אינה מקושרת' \
+    && echo "   …by name" || { echo "   …but not by name"; fails=$((fails + 1)); }
+  # 3. the terminal is an op this office serves
+  if curl -fsS -m 20 "${base}/manifest" 2>/dev/null | grep -q '"shell"'; then
+    echo "   shell is in the manifest"
+  else echo "   shell is NOT in the manifest"; fails=$((fails + 1)); fi
+  # 4. the CROSS-OFFICE half, against a real peer: every per-machine op answered by the office that
+  #    holds the machine, the key offered being THEIRS, and delete/transfer refusing by name. Exit 2
+  #    from that script means "no peer machine is in the fleet" — not applicable here, not a failure.
+  echo "── cross-office (a machine of a linked office)"
+  python3 "${APP}/tests/cross_office_acceptance.py" ${CROSS_ARGS[@]+"${CROSS_ARGS[@]}"} >/tmp/dgo-cross.$$
+  rc=$?
+  sed 's/^/   /' /tmp/dgo-cross.$$ | tail -12
+  rm -f /tmp/dgo-cross.$$
+  case "${rc}" in
+    0) : ;;
+    2) echo "   (skipped: no machine of a linked office is in the fleet)" ;;
+    *) echo "   FAILED — cross-office acceptance"; fails=$((fails + 1)) ;;
+  esac
+fi
+
+echo
+if [ "${fails}" -gt 0 ]; then echo "computers test — ${fails} failing"; exit 1; fi
+echo "computers test — all good"

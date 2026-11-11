@@ -40,8 +40,9 @@ An app reports through its DSN, which `prepare` writes into `.env` as `<PROJECT>
 
 ## Traps
 
-- **No SSO, and sign-up is open by default** (`GLITCHTIP_ENABLE_REGISTRATION`, true): anyone who
-  reaches the host can make an account. Don't publish its host.
+- **Its screen is behind the office's sign-in, and its own sign-up is off** (`GLITCHTIP_ENABLE_REGISTRATION`,
+  false by default; DGO-1729). Reporters never pass the router: every DSN is the internal `glitchtip:8000`. An office
+  whose `.env` still says `true` keeps sign-up open behind the sign-in until that line changes.
 - **The admin password's one source is `.env`.** Every `bbox run` sets it back from there, so change
   it in `.env`, not on GlitchTip's own screen.
 - A DSN is derived from `SECRET_KEY` and the project. Rotating the secret changes every DSN, and

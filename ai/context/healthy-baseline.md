@@ -69,8 +69,8 @@ It reuses the existing lane machinery (`ci-env.sh`, `bbox reset/run`, `ci-verify
 
 ## Environment caveats
 
-- **Small-disk / cloud hosts (≤ ~30 GB):** browser42 is dropped (`COMPOSE_PROFILES=`) — its patched-Chromium
-  image is huge and pulls from a non-docker.io base. Its 3 ci-verify checks become N/A. Pass
+- **Small-disk / cloud hosts (≤ ~30 GB):** browser42 is left out of the bring-up set (`BASELINE_SERVICES`; the
+  baseline never edits `.env`, DGO-125) — its patched-Chromium image is huge and pulls from a non-docker.io base. Its 3 ci-verify checks become N/A. Pass
   `BASELINE_WITH_BROWSER42=1` on a big host for a true 25/25. Prune build cache between phases (baseline.sh
   does `docker builder prune -f` after building).
 - **TLS-terminating egress proxy (Claude Code web / cloud sandboxes):** `pip`/`npm` inside `docker build`
@@ -93,11 +93,12 @@ It reuses the existing lane machinery (`ci-env.sh`, `bbox reset/run`, `ci-verify
   **network policy picked at creation**. `bbox run` builds from source, so the policy must allow image
   registries / layer CDNs (Docker Hub + GHCR). If they're blocked, `bbox run` stops fast with a hint to
   recreate the environment with a registry-allowing policy — bbox cannot pull through a blocked CDN.
-- **New Docker daemon (29.x+):** Traefik v3.3's docker client speaks API 1.24, but Docker 29 rejects clients
-  below API 1.40 — traefik then discovers **zero routers** and every `*.localhost` host 404s (breaks the
-  n8n active-state + webhook checks and the whole UI). Start the daemon with **`DOCKER_MIN_API_VERSION=1.24`**
-  (`DOCKER_MIN_API_VERSION=1.24 dockerd`) so it accepts the old client. baseline.sh P0 detects a too-high
-  daemon min-API and prints this hint; it can't restart an already-running daemon itself. **In the
+- **New Docker daemon (29.x+):** Traefik v3.3's docker client speaks API 1.24; a daemon that refuses a client
+  that old leaves traefik with **zero routers**, and every `*.localhost` host 404s (breaks the n8n active-state +
+  webhook checks and the whole UI). Start the daemon with **`DOCKER_MIN_API_VERSION=1.24`**
+  (`DOCKER_MIN_API_VERSION=1.24 dockerd`) so it accepts the old client — 29.3.1 started so passed the baseline
+  (running-the-stack.md, «Docker and traefik»). baseline.sh P0 asks the daemon whether a v1.24 client can list
+  containers and marks P0 red when it cannot; it can't restart an already-running daemon itself. **In the
   cloud sandbox `bbox`'s `need_docker` starts `dockerd` with this flag automatically** (there's no
   daemon at boot), so any `bbox` command already has a Traefik-compatible daemon.
 - **WhatsApp** will not pair without a residential/VPS IP (anti-abuse blocks datacenter IPs) — the bot still
@@ -109,6 +110,7 @@ It reuses the existing lane machinery (`ci-env.sh`, `bbox reset/run`, `ci-verify
 
 Baseline never touches `.env` — it uses yours as-is, so credentials are stable across runs.
 
-`BASELINE_SKIP_BUILD=1` · `BASELINE_SKIP_RESET=1` ·
+`BASELINE_SKIP_BUILD=1` · `BASELINE_SKIP_RESET=1` · `BASELINE_RESET=wipe` (on an office that already holds
+containers or volumes the run refuses in P0, before the gates, unless one of these two names the choice) ·
 `BASELINE_NO_INDOX=1` · `BASELINE_NO_UIMAP=1` · `BASELINE_WITH_BROWSER42=1` · `BASELINE_SERVICES="…"` ·
 `BASELINE_PROXY_CA=<path>`.

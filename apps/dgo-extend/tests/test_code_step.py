@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-"""test_code_step — a fresh clone of a release copy ends with a platform.state.yaml (FPG-8).
+"""test_code_step — a fresh clone of a release copy ends with a platform.state.yaml (EXF-8).
 
 The public release carries no platform.state.yaml: a new office starts from platform.state.default.yaml.
 step_code's fallback copied the default BEFORE the commit was checked out, so on a fresh
 `clone --no-checkout` it ran on an empty tree, and the state step then had no file to write — measured
-on fireplace, 2026-10-22. This runs the script step_code sends to the machine, against a scratch repo
+on examplef, 2026-10-22. This runs the script step_code sends to the machine, against a scratch repo
 shaped like the release.
 
 Run: python3 apps/dgo-extend/tests/test_code_step.py  (inside the app's image, or with its deps + git)

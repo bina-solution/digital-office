@@ -97,6 +97,9 @@ services:
     - ./volumes/api/kong-entrypoint.sh:/home/kong/kong-entrypoint.sh:ro,z
     environment:
       KONG_DATABASE: 'off'
+      # Kong reports anonymous usage to Kong Inc. (kong-hf.konghq.com:61833) unless told not to — measured on
+      # Exampleu's server by the security app's egress view, 2026-11-09 (DGO-1561).
+      KONG_ANONYMOUS_REPORTS: 'off'
       KONG_DECLARATIVE_CONFIG: /usr/local/kong/kong.yml
       KONG_DNS_ORDER: LAST,A,CNAME
       KONG_DNS_NOT_FOUND_TTL: 1
@@ -113,19 +116,17 @@ services:
       supabase-net: { aliases: [api-gw] }
       traefik-network: { aliases: [supabase-kong] }
     labels:
+    # THE ROUTERS ARE COMPILED, not written here (DGO-1557). They used to be two hand-written ones on
+    # the `web` entrypoint — `supabase-api` for the public host and `supabase-local` — with no TLS
+    # twin at all: the API (rest, storage, and `/pg/` SQL through postgres-meta) answered the whole
+    # internet in plain HTTP on a server office (measured on Exampleu 2026-11-09: `/rest/v1/` and
+    # `/pg/` answered 401 to a keyless request from outside, i.e. they were ASKED), while the https
+    # addresses the app hands to browsers (`STORAGE_PUBLIC_URL`) answered 404 for want of a router.
+    # What `routing[0]` in app.json declares now: `https_only` (no plain-http twin), `publish:
+    # "domain"` (the public routers exist only where the office names a real host — Exampleu's
+    # `supabase.localhost` publishes nothing), and the compiler emits local/https from it.
     - traefik.enable=true
-    # supabase API gateway (storage/rest/auth) ג€” own JWT auth, no authentik middleware.
-    - traefik.http.routers.supabase-api.rule=Host(`${SUPABASE_BASE_URL}`)
-    - traefik.http.routers.supabase-api.entrypoints=web
-    - traefik.http.routers.supabase-api.service=supabase-api
-    # The port-less twin every other host has. On a Mac SUPABASE_BASE_URL is `supabase.localhost:8080`
-    # and traefik v3 matches Host() without the request port, so the router above never matches
-    # there; STORAGE_PUBLIC_URL / SUPABASE_PUBLIC_URL still point browsers at that host (gate G21,
-    # invariant 3, 2026-09-30). Same service, same (absent) middleware: kong's own JWT auth applies.
-    - traefik.http.routers.supabase-local.rule=Host(`supabase.localhost`)
-    - traefik.http.routers.supabase-local.entrypoints=web
-    - traefik.http.routers.supabase-local.service=supabase-api
-    - traefik.http.services.supabase-api.loadbalancer.server.port=8000
+    # the service is on two networks, so the provider needs to be told which one the edge lives on
     - traefik.docker.network=traefik-network
   meta:
     # 512M -> 256M, 2026-08-06. The pre-fix sample said 199MiB; the post-converge sample on the
@@ -195,17 +196,17 @@ services:
     - traefik.http.routers.supabase-studio-local.rule=Host(`supabase-studio.localhost`)
     - traefik.http.routers.supabase-studio-local.entrypoints=web
     - traefik.http.routers.supabase-studio-local.service=supabase-studio
-    - traefik.http.routers.supabase-studio-local.middlewares=authentik@file
+    - traefik.http.routers.supabase-studio-local.middlewares=authentik-admins@file
     - traefik.http.routers.supabase-studio-http.rule=Host(`${SUPABASE_STUDIO_BASE_URL}`)
     - traefik.http.routers.supabase-studio-http.entrypoints=web
     - traefik.http.routers.supabase-studio-http.service=supabase-studio
-    - traefik.http.routers.supabase-studio-http.middlewares=authentik@file
+    - traefik.http.routers.supabase-studio-http.middlewares=authentik-admins@file
     - traefik.http.routers.supabase-studio-https.rule=Host(`${SUPABASE_STUDIO_BASE_URL}`)
     - traefik.http.routers.supabase-studio-https.entrypoints=websecure
     - traefik.http.routers.supabase-studio-https.tls=true
     - traefik.http.routers.supabase-studio-https.tls.certresolver=${TRAEFIK_CERTRESOLVER-myresolver}
     - traefik.http.routers.supabase-studio-https.service=supabase-studio
-    - traefik.http.routers.supabase-studio-https.middlewares=authentik@file
+    - traefik.http.routers.supabase-studio-https.middlewares=authentik-admins@file,hsts@file
     - traefik.http.services.supabase-studio.loadbalancer.server.port=3000
 volumes:
   supabase_storage_data: null

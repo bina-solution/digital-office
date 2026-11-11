@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+#: collect [category …] — one collection pass through the office browser, and what it added:  ./bbox newsflow collect [category …]
+set -uo pipefail
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+body='{"categories":[]}'
+if [ "$#" -gt 0 ]; then body="{\"categories\":[$(printf '"%s",' "$@" | sed 's/,$//')]}"; fi
+out="$("${SCRIPT_DIR}/_call" POST /api/collect "${body}")" || exit $?
+printf '%s' "${out}" | python3 -c '
+import json,sys
+d=json.load(sys.stdin)
+print("run %s · added %s · sources %s/%s · flow %s" % (d["run"], d["added"], d["sources_ok"], d["sources_tried"], d.get("flow")))
+for k,v in (d.get("report") or {}).items(): print("  %-20s %s" % (k, v))'

@@ -118,7 +118,9 @@ class Page(HTMLParser):
                 self.hreflang.append(a["hreflang"])
         elif tag == "img":
             self.imgs += 1
-            if not a.get("alt"):
+            # no alt AT ALL is the defect; `alt=""` is how an image says it is decoration (WCAG H67) — the icon of a
+            # link that has its own name. Counting it gave bina-solutions.co.il 98 false warnings (2026-11-10).
+            if "alt" not in a:
                 self.imgs_no_alt += 1
         elif tag == "a" and a.get("href"):
             self.links.append(a["href"])
@@ -379,14 +381,24 @@ def run(site: dict, max_pages: int = MAX_PAGES, deep: bool = True) -> dict:
                                   "הסר את החסימה הגורפת."))
     bare = host[4:] if host.startswith("www.") else host
     own = (bare, f"www.{bare}")                  # both spellings are THIS site, never an external link
-    sitemap = H.fetch(f"{base}/sitemap.xml", timeout=15)
-    sm_text = sitemap.get("text", "") if sitemap.get("status") == 200 else ""
+    # where the site keeps it: the first sitemap its robots.txt names on its own host, else the protocol's name,
+    # else Astro's (the docs site, DGO-1788) — the same order the IndexNow announcement reads (indexnow.sitemaps_of)
+    # — and only a file that IS a sitemap ends the search: a catch-all server answers any address with its HTML page
+    named = [u for u in re.findall(r"(?im)^\s*sitemap:\s*(\S+)", robots_text) if urlparse(u).netloc.lower() in own]
+    sm_text, sm_url, sitemap = "", "", {}
+    for url in dict.fromkeys(named[:1] + [f"{base}/sitemap.xml", f"{base}/sitemap-index.xml"]):
+        sitemap = H.fetch(url, timeout=15)
+        text = sitemap.get("text", "") if sitemap.get("status") == 200 else ""
+        if re.search(r"<(?:urlset|sitemapindex)\b", text):
+            sm_text, sm_url = text, url
+            break
     urls, sm_files, sm_capped = _read_sitemap(sm_text, own) if sm_text else ([], 0, False)
     summary["sitemap"] = {"present": bool(sm_text), "urls": len(urls), "files": sm_files,
-                          "status": sitemap.get("status")}
+                          "url": sm_url, "status": sitemap.get("status")}
     if not sm_text:
         findings.append(H.finding("no_sitemap", "warn", "אין sitemap.xml",
-                                  f"{base}/sitemap.xml אינו קיים או אינו XML.",
+                                  f"{base}/sitemap.xml ו-sitemap-index.xml אינם קיימים או אינם XML, "
+                                  "ו-robots.txt אינו מפנה ל-sitemap אחר.",
                                   "ייצר sitemap.xml (Eleventy/Vite יודעים לעשות זאת) והפנה אליו "
                                   "מ-robots.txt."))
     elif not urls:

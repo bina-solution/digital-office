@@ -44,6 +44,7 @@ import pathlib
 import re
 import subprocess
 import sys
+import urllib.parse
 
 REPO = pathlib.Path(__file__).resolve().parents[2]
 
@@ -68,6 +69,45 @@ REPO = pathlib.Path(__file__).resolve().parents[2]
 # router serves IS a real finding. That is a bigger change than this gate needs today, and doing it
 # by key-suffix instead is what produced the seventeen.
 CHECKED_KEYS = ("CONSOLE_BASE_URL", "AUTH_EXTERNAL_URL")
+# …and the sign-in host is the one of the identity the edge ASKS. On a forward-auth office (DGO_IDENTITY,
+# the product default since 0.3.0) authentik is not running and AUTH_EXTERNAL_URL is read by nothing; sign-in
+# is forward-auth's own host, resolved the way its compose resolves it (signin_host). Asking about
+# auth.<domain> there failed every clean install of the public copy on a real domain while sign-in worked (a
+# client's VPS, 2026-11-08, DGO-1470); the Mac passed only because a file route happens to serve auth.localhost.
+# On that office the sign-in half is never skipped: a value it cannot read a host from is a FAIL, or an unrouted
+# signin.<domain> would pass on the console's host alone (the second reader of DGO-1470).
+SIGNIN_UNREADABLE = "<no host can be read from %s>"
+
+
+def forward_auth(env):
+    return env.get("DGO_IDENTITY", "").strip() == "forward-auth"
+
+
+def checked_keys(env):
+    """The keys consumed at login on THIS office: the console's host, and the identity's sign-in host."""
+    if not forward_auth(env):
+        return CHECKED_KEYS
+    return ("CONSOLE_BASE_URL", "FORWARD_AUTH_EXTERNAL_URL", "FORWARD_AUTH_BASE_URL")
+
+
+def signin_host(env):
+    """(host or None, the key it came from): forward-auth's sign-in host, as its compose resolves it —
+    ${FORWARD_AUTH_EXTERNAL_URL:-${AUTH_PROTOCOL:-http}://${FORWARD_AUTH_BASE_URL:-signin.${DEPLOYMENT_DOMAIN:-localhost}}}
+    (platform-base/forward-auth/docker-compose.yml). The external URL may carry a port or a path (main.go
+    checks only its scheme); the host is what a browser is sent to."""
+    ext = env.get("FORWARD_AUTH_EXTERNAL_URL", "").strip()
+    if ext:
+        try:
+            host = urllib.parse.urlsplit(ext).hostname
+        except ValueError:
+            host = None
+        return (host if host and HOSTNAME.match(host) else None), "FORWARD_AUTH_EXTERNAL_URL"
+    base, key = env.get("FORWARD_AUTH_BASE_URL", "").strip(), "FORWARD_AUTH_BASE_URL"
+    if not base:
+        base = "signin." + (env.get("DEPLOYMENT_DOMAIN", "").strip() or "localhost")
+        key = "FORWARD_AUTH_BASE_URL (unset: forward-auth's default)"
+    m = HOSTNAME.match(base)
+    return (m.group(1) if m else None), key
 
 # A hostname - letters/digits/dots/dashes, at least one dot - with or without the edge's port.
 # Excludes scheme://... and anything with a path.
@@ -77,36 +117,53 @@ HOST_RULE = re.compile(r"Host\(`([^`]+)`\)")
 
 
 def parse_env(text):
-    """KEY=VALUE pairs, with ${VAR} expanded from the same file. Later definitions win, matching
-    how compose reads it."""
+    """KEY=VALUE pairs, with ${VAR} (and ${VAR:-default}, ${VAR-default}) expanded from the same file.
+    Later definitions win, a quoted value loses its quotes, and an unquoted value loses an inline
+    ` # comment` — matching how compose reads it (`DGO_IDENTITY=forward-auth # 0.3.0` is forward-auth)."""
     raw = {}
     for line in text.replace("\r\n", "\n").split("\n"):
         line = line.strip()
         if not line or line.startswith("#") or "=" not in line:
             continue
         k, v = line.split("=", 1)
-        raw[k.strip()] = v.strip()
+        v = v.strip()
+        if len(v) >= 2 and v[0] in "\"'" and v[-1] == v[0]:
+            v = v[1:-1]
+        else:
+            v = re.sub(r"\s+#.*$", "", v)
+        raw[k.strip()] = v
 
     def expand(v, depth=0):
         if depth > 8:
             return v
         def sub(m):
-            return expand(raw.get(m.group(1) or m.group(2), ""), depth + 1)
-        return re.sub(r"\$\{([A-Za-z_][A-Za-z0-9_]*)\}|\$([A-Za-z_][A-Za-z0-9_]*)", sub, v)
+            name = m.group(1) or m.group(4)
+            val = expand(raw.get(name, ""), depth + 1)
+            if m.group(2) == ":-" and not val or m.group(2) == "-" and name not in raw:
+                return expand(m.group(3), depth + 1)
+            return val
+        return re.sub(r"\$\{([A-Za-z_][A-Za-z0-9_]*)(?:(:?-)([^}]*))?\}|\$([A-Za-z_][A-Za-z0-9_]*)", sub, v)
 
     return {k: expand(v) for k, v in raw.items()}
 
 
 def declared_hosts(env):
-    """(host -> the key that declared it) for values that are hostnames; a port is dropped."""
+    """(host -> the key that declared it) for values that are hostnames; a port is dropped. On a
+    forward-auth office the sign-in host is always there: the one signin_host resolves, or a marker
+    no router serves, so an unreadable value FAILS instead of leaving the console's host to pass alone."""
     out = {}
+    fa = forward_auth(env)
+    keys = ("CONSOLE_BASE_URL",) if fa else CHECKED_KEYS
     for k, v in sorted(env.items()):
-        if k not in CHECKED_KEYS:
+        if k not in keys:
             continue
         m = HOSTNAME.match(v.strip().strip('"').strip("'"))
         if not m:
             continue                      # scheme, path, or empty -> not a routed hostname
         out.setdefault(m.group(1), k)
+    if fa:
+        host, key = signin_host(env)
+        out.setdefault(host or SIGNIN_UNREADABLE % key, key)
     return out
 
 
@@ -155,12 +212,13 @@ def main(argv=None):
         print("[declared-host-routing-lint] FAIL - found ZERO served hostnames. Nothing was "
               "compared, which is not a pass.")
         return 1
-    declared, missing = run(envf.read_text(encoding="utf-8", errors="replace"), served)
+    env_text = envf.read_text(encoding="utf-8", errors="replace")
+    declared, missing = run(env_text, served)
     if not declared:
         # The other empty side: a .env that declares no hostname under these keys was not
         # checked, and saying PASS over it is how a ported office went unasked.
         print("[declared-host-routing-lint] FAIL - .env declares no hostname under %s. Nothing "
-              "was compared, which is not a pass." % " / ".join(CHECKED_KEYS))
+              "was compared, which is not a pass." % " / ".join(checked_keys(parse_env(env_text))))
         return 1
 
     if missing or not a.quiet:
@@ -174,10 +232,12 @@ def main(argv=None):
         print("")
         print("  This is the failure that comes up GREEN: every container healthy, and sign-in")
         print("  lands on a host nobody routes - a bare 404 at the first login. A router's host is")
-        print("  not free text: the console's is compiled from CONSOLE_BASE_URL, and authentik's")
-        print("  follows AUTHENTIK_BASE_URL plus the fixed auth.localhost - so AUTH_EXTERNAL_URL has")
-        print("  to name one of those. When it does, the container that carries the router is not")
-        print("  running, or is older than the .env it should follow: `bbox status`, then `bbox run`.")
+        print("  not free text: the console's is compiled from CONSOLE_BASE_URL; forward-auth's")
+        print("  (DGO_IDENTITY=forward-auth) from FORWARD_AUTH_BASE_URL, or the host of")
+        print("  FORWARD_AUTH_EXTERNAL_URL; authentik's follows AUTHENTIK_BASE_URL plus the fixed")
+        print("  auth.localhost - so AUTH_EXTERNAL_URL has to name one of those. When it does, the")
+        print("  container that carries the router is not running, or is older than the .env it")
+        print("  should follow: `bbox status`, then `bbox run`.")
         return 1
     if not a.quiet:
         print("[declared-host-routing-lint] PASS - every declared hostname has a router")
@@ -205,6 +265,20 @@ def self_test():
     # ...and values that are not hostnames at all
     urls, _ = run("CONSOLE_BASE_URL=http://drive.localhost\nAUTH_EXTERNAL_URL=auth.localhost/x",
                   served)
+    # a forward-auth office (DGO-1470): sign-in is forward-auth's host, and authentik's is read by nothing
+    fa = "DGO_IDENTITY=forward-auth\nCONSOLE_BASE_URL=drive.localhost\nAUTH_EXTERNAL_URL=auth3.localhost\n"
+    fa_ok, fa_ok_missing = run(fa + "FORWARD_AUTH_BASE_URL=console3.localhost:8080", served)
+    _, fa_missing = run(fa + "FORWARD_AUTH_BASE_URL=signin9.localhost", served)
+    fa_ext, fa_ext_missing = run(fa + "FORWARD_AUTH_BASE_URL=console3.localhost\n"
+                                 "FORWARD_AUTH_EXTERNAL_URL=https://signin7.localhost/", served)
+    # the second reader's shapes: none of them may leave the console's host to pass alone
+    _, fa_path = run(fa + "FORWARD_AUTH_EXTERNAL_URL=https://signin8.localhost:8443/auth", served)
+    _, fa_quoted_empty = run(fa + 'FORWARD_AUTH_EXTERNAL_URL=""\nFORWARD_AUTH_BASE_URL=signin9.localhost', served)
+    _, fa_unset = run(fa + "DEPLOYMENT_DOMAIN=x.localhost", served)
+    _, fa_unreadable = run(fa + "FORWARD_AUTH_BASE_URL=http://signin.localhost/x", served)
+    _, fa_default = run(fa + "FORWARD_AUTH_BASE_URL=signin.${NOPE:-y.localhost}", served)
+    _, fa_comment = run("DGO_IDENTITY=forward-auth # 0.3.0\nCONSOLE_BASE_URL=drive.localhost\n"
+                        "AUTH_EXTERNAL_URL=auth3.localhost\nFORWARD_AUTH_BASE_URL=console3.localhost", served)
 
     cases = [
         ("a ported value is asked about by its hostname", sorted(ported),
@@ -227,6 +301,23 @@ def self_test():
         ("an UNSERVED declared host IS reported", "auth3.localhost" in miss, True),
         ("the finding names the key that declared it",
          dict(missing).get("auth3.localhost"), "AUTH_EXTERNAL_URL"),
+        ("on a forward-auth office an unrouted AUTH_EXTERNAL_URL is not a finding",
+         (fa_ok_missing, sorted(fa_ok.values())), ([], ["CONSOLE_BASE_URL", "FORWARD_AUTH_BASE_URL"])),
+        ("...and an unrouted FORWARD_AUTH_BASE_URL is", fa_missing,
+         [("signin9.localhost", "FORWARD_AUTH_BASE_URL")]),
+        ("...and FORWARD_AUTH_EXTERNAL_URL, a URL, wins by its host, as forward-auth's compose has it",
+         (sorted(fa_ext), fa_ext_missing),
+         (["drive.localhost", "signin7.localhost"], [("signin7.localhost", "FORWARD_AUTH_EXTERNAL_URL")])),
+        ("...a port and a path in FORWARD_AUTH_EXTERNAL_URL still give its host", fa_path,
+         [("signin8.localhost", "FORWARD_AUTH_EXTERNAL_URL")]),
+        ('...FORWARD_AUTH_EXTERNAL_URL="" is unset, as compose reads it', fa_quoted_empty,
+         [("signin9.localhost", "FORWARD_AUTH_BASE_URL")]),
+        ("...an unset FORWARD_AUTH_BASE_URL is forward-auth's default, signin.<domain>", fa_unset,
+         [("signin.x.localhost", "FORWARD_AUTH_BASE_URL (unset: forward-auth's default)")]),
+        ("...a value no host can be read from FAILS, never passes on the console alone", fa_unreadable,
+         [(SIGNIN_UNREADABLE % "FORWARD_AUTH_BASE_URL", "FORWARD_AUTH_BASE_URL")]),
+        ("...${VAR:-default} is expanded", fa_default, [("signin.y.localhost", "FORWARD_AUTH_BASE_URL")]),
+        ("...and an inline comment does not hide forward-auth", fa_comment, []),
     ]
     bad = 0
     for name, got, want in cases:

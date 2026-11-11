@@ -1,0 +1,3 @@
+#!/usr/bin/env bash
+#: rooms — the joined rooms, newest first: [N] [--json]   (id · name · encrypted|plain · unread)
+exec bash "$(dirname "${BASH_SOURCE[0]}")/../tools/verb" rooms "$@"

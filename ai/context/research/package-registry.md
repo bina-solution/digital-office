@@ -4,7 +4,7 @@ Research note, 2026-10-14. Scope: `dgo install <app>` on a clean machine, a cons
 
 ## 0. Two facts measured today (curl against ghcr.io, 2026-10-14)
 
-1. **The project's GHCR packages are private.** The anonymous token endpoint (`/token?scope=repository:solomonboltin/digital-office/<app>:pull`) returned no token for `any-concurrency`, `console`, `bina-ds`; a public image (`sigstore/cosign/cosign`) returned one. GitHub: "When you first publish a package, the default visibility is private" and "You can also access public container images anonymously" ([docs][ghcr]). First blocker for any clean-machine install.
+1. **The project's GHCR packages are private.** The anonymous token endpoint (`/token?scope=repository:bina-solution/digital-office/<app>:pull`) returned no token for `any-concurrency`, `console`, `bina-ds`; a public image (`sigstore/cosign/cosign`) returned one. GitHub: "When you first publish a package, the default visibility is private" and "You can also access public container images anonymously" ([docs][ghcr]). First blocker for any clean-machine install.
 2. **GHCR does not serve the OCI 1.1 referrers API.** `GET /v2/sigstore/cosign/cosign/referrers/<digest>` returned `404 MANIFEST_UNKNOWN`; the spec requires 200 even when empty, so clients fall back to `sha256-<digest>.sig` tags ([OCI, 2024-03-13][oci11]) — visible in that repo's `tags/list`. Signatures on GHCR live as tags.
 
 ## 1. Format and registry — comparison
@@ -19,7 +19,7 @@ Research note, 2026-10-14. Scope: `dgo install <app>` on a clean machine, a cons
 | **winget-pkgs / tap-style git repo** — manifest-per-version PR repo, `ManifestVersion 1.12.0` ([winget], 2026-09-14) | git + PR review | `PackageDependencies` "from the same source" ([winget-inst]) | git clone | signatures by sha256 only | good *authoring* flow for the index |
 | **Custom HTTP registry** | whatever you build | whatever you build | you run it | stdlib | no: a second service to operate alone |
 
-**Recommendation (2026):** a **hybrid** — the catalog is a static, Ed25519-signed JSON index built from a git repo (`dgo-index`, winget-style one directory per app/version), served from GitHub (Release asset + raw) *and* pushed as an OCI artifact; each package is an OCI artifact on GHCR (`ghcr.io/solomonboltin/dgo/<app>:<ver>` = tar of the app directory + `package.yaml`), images referenced **by digest**. `dgo install` needs `net/http`, `encoding/json`, `crypto/ed25519`, `archive/tar`. Air-gap: `dgo bundle <blueprint>` writes an ORAS-compatible OCI layout dir/tar; an office may run zot as a pull-through mirror. The index names blob URLs, so a mirror or a plain directory is a valid registry.
+**Recommendation (2026):** a **hybrid** — the catalog is a static, Ed25519-signed JSON index built from a git repo (`dgo-index`, winget-style one directory per app/version), served from GitHub (Release asset + raw) *and* pushed as an OCI artifact; each package is an OCI artifact on GHCR (`ghcr.io/bina-solution/dgo/<app>:<ver>` = tar of the app directory + `package.yaml`), images referenced **by digest**. `dgo install` needs `net/http`, `encoding/json`, `crypto/ed25519`, `archive/tar`. Air-gap: `dgo bundle <blueprint>` writes an ORAS-compatible OCI layout dir/tar; an office may run zot as a pull-through mirror. The index names blob URLs, so a mirror or a plain directory is a valid registry.
 
 ## 2. `package.yaml` — fields and their precedents
 

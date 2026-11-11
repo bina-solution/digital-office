@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="he" dir="rtl" data-card>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>דפדפן הלשכה</title>
+<!-- DGO-437. What /view/ answers when the office's browser does not answer at all (its container is stopped,
+     restarting or recreated): Caddy's `handle_errors` serves this page, with the error's own status, in place of
+     an empty 502. The card is THE card (card.css, included below by Caddy's templates), and the page asks for the
+     screen again by itself: the moment the screen answers, it reloads into it. Behind the console it stands in the
+     tile's frame (the console passes a page through as it is); at the app's own address it is the whole window. -->
+<style>{{include "/card.css"}}</style>
+</head>
+<body class="b42">
+<div class="xn"><div class="xn-card">
+  <span class="xn-ic"><svg class="ic-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg></span>
+  <h2>המסך של דפדפן הלשכה לא מתחבר</h2>
+  <div class="xn-sub" id="b42-sub">מנסה שוב בעוד רגע</div>
+  <p>הדפדפן של הלשכה לא עונה כרגע. ייתכן שהוא עולה מחדש. המסך יחזור לבד ברגע שהוא יענה.</p>
+  <div class="xn-acts"><button class="btn" id="b42-now" type="button" title="מבקש את המסך מהדפדפן עכשיו, בלי לחכות לניסיון הבא">נסה עכשיו</button></div>
+  <details><summary>מה ענה המסך</summary><pre>{{placeholder "http.error.status_code"}} {{placeholder "http.error.status_text"}} · browser42: the browser's screen (noVNC) did not answer</pre></details>
+</div></div>
+<script>
+// Ask for the screen again — after 5, 10, 20, then every 30 seconds — and reload into it only when the answer is no
+// longer this card: a page (2xx), or the sign-in sending the person elsewhere (a redirect, a refusal), which is the
+// reload's to follow. The question is the same address this page stands at — the screen's own, behind the console
+// or not — asked WITHOUT following a redirect: followed, a lapsed sign-in leads to the identity provider's origin,
+// the fetch fails there, and the card would read it as «nothing answered» forever (the second reader).
+(() => {
+  const sub = document.getElementById("b42-sub"), now = document.getElementById("b42-now");
+  const wait = (n) => 1000 * Math.min(30, 5 * 2 ** Math.min(n - 1, 3));
+  let tries = 1, next = Date.now() + wait(tries), busy = false;
+  const say = () => {
+    const left = Math.max(1, Math.ceil((next - Date.now()) / 1000));
+    sub.textContent = busy ? `מנסה עכשיו · ניסיון ${tries}`
+      : `מנסה שוב ${left === 1 ? "בעוד שנייה" : `בעוד ${left} שניות`} · ניסיון ${tries}`;
+    if (busy) sub.insertAdjacentHTML("afterbegin", '<span class="b42-spin" aria-hidden="true"></span>');
+    now.disabled = busy;
+  };
+  const ask = async () => {
+    busy = true; say();
+    try {
+      const r = await fetch(location.href, { cache: "no-store", credentials: "same-origin", redirect: "manual" });
+      if (r.ok || r.type === "opaqueredirect" || r.status === 401 || r.status === 403) { location.reload(); return; }
+    } catch (e) { /* nothing answered: the same as a 5xx */ }
+    busy = false; tries += 1; next = Date.now() + wait(tries); say();
+  };
+  now.addEventListener("click", () => { if (!busy) ask(); });
+  setInterval(() => { if (!busy && Date.now() >= next) ask(); else if (!busy) say(); }, 1000);
+  say();
+})();
+</script>
+</body>
+</html>

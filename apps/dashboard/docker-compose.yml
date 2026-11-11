@@ -45,6 +45,10 @@ services:
       - DASHBOARD_EVERY=${DASHBOARD_EVERY:-30}
       - DASHBOARD_HERD=/computers/herd.yaml
       - LAN_DOMAIN=${LAN_DOMAIN:-}
+      # the owner's group, live on the page (groupfeed.py): only on the offices named — the group is his, and the
+      # file is served to the office network as the page's state is — and the group the relay pins, when it pins one
+      - DASHBOARD_GROUP_LIVE_ON=${DASHBOARD_GROUP_LIVE_ON:-macbook}
+      - DASHBOARD_GROUP_CHAT=${DASHBOARD_GROUP_CHAT:-}
     volumes:
       - .:/app:ro
       - ../computers:/computers:ro
@@ -53,6 +57,9 @@ services:
       # the console door's policy (written here, the screen's switch) and status (written by the host's
       # door, packaging/macos/lan-door.py) — DGO-1125
       - ../../data/lan:/lan
+      # the power agent's own record (packaging/macos/power-agent.py): this laptop's last word before it sleeps waits in
+      # data/power.json, so the office that posts to the group says a sleep, not an outage (DGO-1357); absent elsewhere
+      - ../../data/power:/power:ro
       - dashboard_lan_sock:/run/lan
     networks:
       - traefik-network
@@ -68,6 +75,55 @@ services:
         limits:
           cpus: '0.1'
           memory: 64M
+    logging:
+      driver: ${LOGGING_DRIVER:-json-file}
+      options:
+        max-size: 2m
+        max-file: '2'
+
+  # The relay to the owner's Telegram group (DGO-1329, DGO-1326): follows the office's event stream and posts
+  # what group-events.json calls important, as the bot. The same stock image and read-only mount as the feed.
+  dashboard-group:
+    image: python:3.12-alpine
+    container_name: dashboard-group-${DEPLOYMENT_NAME:-bina-deployment}
+    restart: unless-stopped
+    command: ["python3", "/app/group.py"]
+    environment:
+      - DGO_OFFICE_ID=${DGO_OFFICE_ID:-}
+      - DEPLOYMENT_NAME=${DEPLOYMENT_NAME:-bina-deployment}
+      # the office's event stream (flow.v1): read-only, XREAD
+      - REDIS_PASSWORD=${REDIS_PASSWORD}
+      # 0 keeps this office's relay quiet; the group chat and the bot's vault instance are found by themselves
+      - DASHBOARD_GROUP_RELAY=${DASHBOARD_GROUP_RELAY:-auto}
+      - DASHBOARD_GROUP_CHAT=${DASHBOARD_GROUP_CHAT:-}
+      - DASHBOARD_BOT_INSTANCE=${DASHBOARD_BOT_INSTANCE:-}
+      - DASHBOARD_GROUP_STATE=/data/group.json
+      # the work items are the herd's: posted by the office herd.yaml runs Plane on (auto), or as said here
+      - DASHBOARD_GROUP_ITEMS=${DASHBOARD_GROUP_ITEMS:-auto}
+      # the linked offices' notices (their «התראות» over the link): posted by the office herd.yaml runs telegram on
+      - DASHBOARD_GROUP_FAR=${DASHBOARD_GROUP_FAR:-auto}
+      - DASHBOARD_HERD=/computers/herd.yaml
+      - DASHBOARD_REGISTRY=/registry
+    volumes:
+      - .:/app:ro
+      - ../computers:/computers:ro
+      # which linked office's notice centre is routed here, and at what port — the compiler's own records
+      - ../../.generated/registry:/registry:ro
+      - dashboard_state:/data
+    networks:
+      - traefik-network
+    healthcheck:
+      # the loop writes its state at least every 15 s (XREAD blocks 15 s); older than two minutes = stopped
+      test: ["CMD", "python3", "-c", "import os,sys,time; sys.exit(0 if time.time() - os.path.getmtime('/data/group.json') < 120 else 1)"]
+      interval: ${HEALTHCHECK_INTERVAL:-30s}
+      timeout: ${HEALTHCHECK_TIMEOUT:-10s}
+      retries: 3
+      start_period: 60s
+    deploy:
+      resources:
+        limits:
+          cpus: '0.05'
+          memory: 32M
     logging:
       driver: ${LOGGING_DRIVER:-json-file}
       options:

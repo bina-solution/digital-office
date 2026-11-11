@@ -1,0 +1,58 @@
+{
+  "id": "element",
+  "title": { "he": "אלמנט", "en": "Element" },
+  "layer": 3,
+  "people": "admins",
+  "kind": "service",
+  "page": "base",
+  "version": "0.1.0",
+  "summary": {
+    "he": "Element, הלקוח הרשמי של Matrix, בתוך הלשכה: המסך שלו בקונסול, ו-CLI ו-API על החשבון של הבעלים (chat.v1).",
+    "en": "Element, the official Matrix client, inside the office: its screen in the console, and the CLI and the API on the owner's account (chat.v1)."
+  },
+  "wraps": {
+    "client": "Element Desktop for Linux, from packages.element.io (Dockerfile.desktop)",
+    "headless": "the Matrix client-server API (adapter/server.py), on a device of its own"
+  },
+  "capabilities": [
+    {
+      "name": "chat-matrix",
+      "type": "protocol",
+      "interface": "chat.v1",
+      "endpoint": "http://element:3093",
+      "required_ops": ["probe", "listConversations", "getConversation", "sendMessage", "markRead"]
+    }
+  ],
+  "use": [
+    { "capability": "identity", "strength": "requires", "after": true },
+    { "capability": "kv", "strength": "wants", "after": false, "dependency": "weak" }
+  ],
+  "compose": "docker-compose.yml",
+  "cli": { "alias": "element" },
+  "agent": { "context": "AGENT.md" },
+  "routing": [
+    {
+      "host": "element",
+      "port": 3000,
+      "auth": "sso",
+      "service": "element-desktop",
+      "emit_labels": true,
+      "module": {
+        "group": "עסק", "icon": "message", "embed": true, "alias": "element", "id": "element",
+        "name": "אלמנט", "desc": "Matrix: החדרים והשיחות, בלקוח הרשמי",
+        "url": "http://element-desktop:3000/",
+        "passthrough": [{ "path": "/api", "transport": "websocket", "match": "prefix", "strip_mount_prefix": true }]
+      },
+      "sso": {
+        "slug": "element",
+        "display_name": "Element",
+        "default_host": "element.localhost",
+        "base_url_env": "ELEMENT_BASE_URL",
+        "local_twin": true
+      }
+    }
+  ],
+  "health": { "structural": "auto", "probe": { "http": "http://element:3093/v1/health", "interval": "30s" } },
+  "data": { "volumes": ["element_home"], "on_uninstall": "keep" },
+  "resources": { "cpus": "1.35", "memory": "1664m" }
+}

@@ -1,0 +1,1819 @@
+{
+ "topic": "israeli-ai-companies-and-rounds",
+ "checked": "2026-11-05",
+ "notes": "Checked 2026-11-05 (WebFetch/WebSearch only). Search budget ran out at ~140 tool calls, so these were NOT re-checked for newer rounds: Hailo, NeuReality, Tabnine, Noma, AI21 (deal outcome), Mentee (closing), Verbit, Pliops. Grades: B = dated press (Globes, Calcalist, TechCrunch, TNW, SecurityWeek, SiliconANGLE, Verdict, kr-asia...), C = company/org own site or paper, D = tracker/Wikipedia/Dealroom. Values in last_round.date use the announcement date when the source shows it, else YYYY-MM. 'growth' = a later-stage round the source does not label A-D. Conflicts kept visible: Wonderful valuation $5B vs $5.5B (Globes headline vs body); Cyera June 2026 $600M (Globes, SecurityWeek) vs $300M (SiliconANGLE); Lasso Series A date rests on one Dealroom page. 'url' = official domain from general knowledge (not fetched); null where unsure. Several 403 pages (BusinessWire, techleap, Bloomberg) were not opened - their URLs appear only as seen in search results. Caution: securityweek.com/zenity-raises-125-million/ (Zenity Series C) was opened successfully, but its slug was inferred before opening rather than taken from a search result; the SecurityWeek topic page is listed beside it. Pages actually opened (numbers read from the page): Wonderful, Decart, Lightricks (Wikipedia), Dream, Zenity, Verbit, Qodo, Cyera, Bria, Prompt Security, Aim Security, NextSilicon, Lasso (Dealroom), Dicta-LM 3.0, D-ID, Gong, AI21 talks (Yahoo). For the other rows (AI21 Series C, Hailo, NeuReality, Speedata, Run:ai, Deci, Qwak, Tabnine, Base44, Hour One, Noma, Irregular, Torq, Vast Data, Aidoc, Lumana, Mentee, Hirundo, Pliops) the figures come from search-result titles and summaries of the cited outlets - the headline amount is in the result title, investor lists and totals are from summaries and may be incomplete. Search-result summaries proved unreliable on prices in the hardware file, so treat summary-only details (investors, totals) as lower confidence.",
+ "rows": [
+  {
+   "id": "ai21-labs",
+   "name_he": "AI21 Labs",
+   "name_en": "AI21 Labs",
+   "url": "https://www.ai21.com",
+   "category": "models",
+   "focus": "models",
+   "summary_he": "חברת מודלי שפה ישראלית שמכוונת לארגונים (משפחת Jamba). בסוף 2025 דווח על מגעים מתקדמים לרכישה בידי אנבידיה; עסקה לא אושרה במקורות שראינו.",
+   "why_israeli": "Yahoo Finance/Verdict (2025-12-31) calls it an 'Israeli AI start-up' with ~200 employees (city not named); co-founder Amnon Shashua is quoted by Bloomberg (2026-01-07).",
+   "last_round": {
+    "type": "C",
+    "amount_usd": 208000000,
+    "date": "2023-11-21",
+    "investors": [
+     "Intel Capital (new)",
+     "Comcast Ventures (new)",
+     "Google",
+     "Nvidia",
+     "b2venture",
+     "Pitango",
+     "Samsung Next",
+     "SCB10X",
+     "Walden Catalyst"
+    ],
+    "source_url": "https://siliconangle.com/2023/11/21/generative-ai-startup-ai21-labs-finds-additional-backers-close-series-c-funding-round-208m/",
+    "source_date": "2023-11-21",
+    "grade": "B",
+    "note": "Series C extension: $155M (Aug 2023) + $53M; valuation $1.4B reported. Investor list as summarised from Verdict/SiliconANGLE search results."
+   },
+   "total_raised_usd": {
+    "amount": 336000000,
+    "source_url": "https://www.verdict.co.uk/newsletters/ai21-labs-extends-series-c-round",
+    "date": "2023-11",
+    "grade": "B"
+   },
+   "status": "private; Nvidia reported in advanced talks to buy it for $2-3B (Calcalist via Yahoo/Verdict, 2025-12-31); co-founder said talks were early and no deal imminent (Bloomberg, 2026-01-07). No completed deal or newer round seen in the sources opened (search budget ran out before a re-check).",
+   "hebrew_relevance": "Jamba 1.5 model card lists Hebrew and Arabic among its supported languages; AI21's CEO told Calcalist the models support Hebrew and Arabic as core languages.",
+   "sources": [
+    {
+     "url": "https://siliconangle.com/2023/11/21/generative-ai-startup-ai21-labs-finds-additional-backers-close-series-c-funding-round-208m/",
+     "date": "2023-11-21",
+     "what": "Series C $208M, $1.4B valuation",
+     "grade": "B"
+    },
+    {
+     "url": "https://www.verdict.co.uk/newsletters/ai21-labs-extends-series-c-round",
+     "date": "2023-11",
+     "what": "Series C extension to $208M; $336M total (figure from search-result summary)",
+     "grade": "B"
+    },
+    {
+     "url": "https://finance.yahoo.com/news/nvidia-talks-buy-israel-ai21-111146958.html",
+     "date": "2025-12-31",
+     "what": "Nvidia advanced talks, up to $3B, ~200 staff, acquihire (Calcalist report)",
+     "grade": "B"
+    },
+    {
+     "url": "https://www.bloomberg.com/news/articles/2026-01-07/ai21-co-founder-says-firm-held-early-talks-with-nvidia-others",
+     "date": "2026-01-07",
+     "what": "Headline only seen: co-founder says early talks with Nvidia and others",
+     "grade": "B"
+    },
+    {
+     "url": "https://huggingface.co/ai21labs/AI21-Jamba-Mini-1.5/blob/refs%2Fpr%2F8/README.md",
+     "date": null,
+     "what": "Model card supported languages incl. Hebrew (seen in search-result summary)",
+     "grade": "C"
+    }
+   ],
+   "grade": "B",
+   "verified_at": "2026-11-05"
+  },
+  {
+   "id": "dicta",
+   "name_he": "דיקטה (DICTA)",
+   "name_en": "DICTA - Israel Center for Text Analysis",
+   "url": "https://dicta.org.il",
+   "category": "models",
+   "focus": "models",
+   "summary_he": "מרכז מחקר בירושלים וברמת גן שמפרסם מודלי שפה פתוחים לעברית. Dicta-LM 3.0 יצא בשלושה גדלים ומאומן על עברית ואנגלית.",
+   "why_israeli": "Dicta-LM 3.0 technical report lists affiliations DICTA (Jerusalem), Bar-Ilan University (Ramat Gan) and OriginAI (Ramat Gan).",
+   "last_round": null,
+   "total_raised_usd": null,
+   "status": "research centre; described as non-profit in our brief (non-profit status not confirmed from a source opened this session); no funding round found",
+   "hebrew_relevance": "Hebrew-first open-weight LLMs: DictaLM (7B, 2023) and Dicta-LM 3.0 (~24B/12B/1.7B; ~100B Hebrew + 30B English pretraining tokens; adds a Hebrew chat benchmark suite).",
+   "sources": [
+    {
+     "url": "https://www.alphaxiv.org/abs/2602.02104.md",
+     "date": "2026-02-02",
+     "what": "Dicta-LM 3.0 technical report (arXiv v1 date): sizes, base models, languages, affiliations",
+     "grade": "C"
+    },
+    {
+     "url": "https://arxiv.org/abs/2309.14568v1",
+     "date": "2023-09",
+     "what": "Original DictaLM 7B paper",
+     "grade": "C"
+    },
+    {
+     "url": "https://huggingface.co/dicta-il/dictalm-7b",
+     "date": null,
+     "what": "DictaLM 7B model card (alpha release)",
+     "grade": "C"
+    }
+   ],
+   "grade": "C",
+   "verified_at": "2026-11-05"
+  },
+  {
+   "id": "ivrit-ai",
+   "name_he": "ivrit.ai",
+   "name_en": "ivrit.ai",
+   "url": "https://www.ivrit.ai",
+   "category": "speech",
+   "focus": "speech",
+   "summary_he": "יוזמה ללא מטרת רווח שאוספת דיבור עברי ומפרסמת מאגרים ומודלי Whisper מכווננים לעברית בקוד פתוח.",
+   "why_israeli": "Hebrew-speech non-profit effort (Hugging Face org page); PyData Tel Aviv 2025 talk bio lists the speaker as an ivrit.ai co-founder (non-profit).",
+   "last_round": null,
+   "total_raised_usd": null,
+   "status": "non-profit open project; no funding round",
+   "hebrew_relevance": "Core Hebrew ASR resource: ~3,300 h Hebrew speech dataset (2023 paper), Whisper large-v3 / turbo Hebrew fine-tunes, and a Knesset-based 8,825 h dataset with ~10% WER reduction reported at PyData Tel Aviv 2025.",
+   "sources": [
+    {
+     "url": "https://huggingface.co/ivrit-ai",
+     "date": null,
+     "what": "Hugging Face org: Hebrew datasets and Whisper fine-tunes",
+     "grade": "C"
+    },
+    {
+     "url": "https://arxiv.org/abs/2307.08720",
+     "date": "2023-07",
+     "what": "ivrit.ai dataset paper (~3,300 h)",
+     "grade": "C"
+    },
+    {
+     "url": "https://cfp.pydata.org/pydata-tel-aviv-2025/talk/P9AKQD",
+     "date": "2025",
+     "what": "PyData Tel Aviv 2025 talk: Knesset dataset, Whisper fine-tune results",
+     "grade": "C"
+    },
+    {
+     "url": "https://www.isca-archive.org/interspeech_2025/marmor25_interspeech.pdf",
+     "date": "2025",
+     "what": "Interspeech 2025 paper: crowd-transcribed subset",
+     "grade": "C"
+    }
+   ],
+   "grade": "C",
+   "verified_at": "2026-11-05"
+  },
+  {
+   "id": "decart",
+   "name_he": "דקארט",
+   "name_en": "Decart",
+   "url": "https://decart.ai",
+   "category": "models",
+   "focus": "models",
+   "summary_he": "מעבדת מחקר שמפתחת מודלי וידאו ו'עולמות' אינטראקטיביים בזמן אמת. גייסה 300 מיליון דולר במאי 2026 בהובלת Radical Ventures.",
+   "why_israeli": "Calcalist describes Decart as Tel Aviv-based; Globes covers it as 'Israeli AI co Decart'.",
+   "last_round": {
+    "type": "growth",
+    "amount_usd": 300000000,
+    "date": "2026-05-18",
+    "investors": [
+     "Radical Ventures (lead)",
+     "Nvidia",
+     "Atreides Management",
+     "Valor Equity Partners",
+     "Adobe Ventures",
+     "Toyota Ventures",
+     "eBay Ventures",
+     "Sequoia Capital",
+     "Benchmark",
+     "Zeev Ventures"
+    ],
+    "source_url": "https://thenextweb.com/news/decart-300-million-radical-ventures-world-models",
+    "source_date": "2026-05-18",
+    "grade": "B",
+    "note": "TNW does not name the round or the valuation; Investgame/Calcalist summaries report ~$4B valuation. Previous: $100M at $3.1B valuation (Fortune, 2025-08-07)."
+   },
+   "total_raised_usd": {
+    "amount": 450000000,
+    "source_url": "https://thenextweb.com/news/decart-300-million-radical-ventures-world-models",
+    "date": "2026-05-18",
+    "grade": "B"
+   },
+   "status": "private",
+   "hebrew_relevance": null,
+   "sources": [
+    {
+     "url": "https://thenextweb.com/news/decart-300-million-radical-ventures-world-models",
+     "date": "2026-05-18",
+     "what": "$300M round, investors, total raised over $450M",
+     "grade": "B"
+    },
+    {
+     "url": "https://fortune.com/2025/08/07/exclusive-decart-raises-100-million-at-a-3-1-billion-valuation-chasing-the-future-of-real-time-creative-ai",
+     "date": "2025-08-07",
+     "what": "Earlier $100M at $3.1B valuation",
+     "grade": "B"
+    },
+    {
+     "url": "https://en.globes.co.il/en/article-1001518392",
+     "date": "2025-08",
+     "what": "Globes: Israeli AI co Decart raises $100m at $3.1b valuation",
+     "grade": "B"
+    }
+   ],
+   "grade": "B",
+   "verified_at": "2026-11-05"
+  },
+  {
+   "id": "hailo",
+   "name_he": "היילו",
+   "name_en": "Hailo",
+   "url": "https://hailo.ai",
+   "category": "chips",
+   "focus": "chips",
+   "summary_he": "יצרנית שבבי AI לקצה (מצלמות, רכב, תעשייה). ב-2024 גייסה 120 מיליון דולר והציגה את Hailo-10 להרצת בינה גנרטיבית על המכשיר.",
+   "why_israeli": "btw.media/Reuters-style headline: 'Israel-based artificial intelligence chipmaker startup Hailo raised $340 million to date and is valued at $1.2 billion'.",
+   "last_round": {
+    "type": "C",
+    "amount_usd": 120000000,
+    "date": "2024-04",
+    "investors": [
+     "Alfred Akirov",
+     "OurCrowd",
+     "Talcar",
+     "Comasco",
+     "Poalim Equity",
+     "Gil Agmon",
+     "Delek Motors",
+     "Zisapel family"
+    ],
+    "source_url": "https://www.sdxcentral.com/news/edge-ai-chip-company-hailo-raises-120m-launches-hailo-10-genai-accelerator/",
+    "source_date": "2024-04",
+    "grade": "B",
+    "note": "Series C extension; valuation reported above $1B ($1.2B in one report). Day of month not confirmed."
+   },
+   "total_raised_usd": {
+    "amount": 340000000,
+    "source_url": "https://btw.media/en/hailo-raises-us120-million-to-design-more-efficient-ai-chips",
+    "date": "2024-04",
+    "grade": "B"
+   },
+   "status": "private; no later round seen in the results (search budget ran out before a re-check)",
+   "hebrew_relevance": null,
+   "sources": [
+    {
+     "url": "https://www.sdxcentral.com/news/edge-ai-chip-company-hailo-raises-120m-launches-hailo-10-genai-accelerator/",
+     "date": "2024-04",
+     "what": "$120M Series C extension + Hailo-10 launch",
+     "grade": "B"
+    },
+    {
+     "url": "https://datacenterdynamics.com/en/news/edge-ai-chip-company-hailo-raises-120m-launches-hailo-10-genai-accelerator/",
+     "date": "2024-04",
+     "what": "Same round, trade press",
+     "grade": "B"
+    },
+    {
+     "url": "https://btw.media/en/hailo-raises-us120-million-to-design-more-efficient-ai-chips",
+     "date": "2024-04",
+     "what": "Total $340M, valuation $1.2B, 'Israel-based'",
+     "grade": "B"
+    }
+   ],
+   "grade": "B",
+   "verified_at": "2026-11-05"
+  },
+  {
+   "id": "neureality",
+   "name_he": "נוריאליטי",
+   "name_en": "NeuReality",
+   "url": "https://www.neureality.ai",
+   "category": "chips",
+   "focus": "chips",
+   "summary_he": "מפתחת שבב ושרת הסקה (inference) לדאטה סנטר שנועדו להוזיל הרצת מודלים. גייסה 20 מיליון דולר בסדרה B במרץ 2024.",
+   "why_israeli": "Search-result coverage places the company in Caesarea, Israel (NR1 server-on-chip); page itself not opened.",
+   "last_round": {
+    "type": "B",
+    "amount_usd": 20000000,
+    "date": "2024-03-19",
+    "investors": [
+     "European Innovation Council (EIC Fund)",
+     "Alumni Ventures Group"
+    ],
+    "source_url": "https://datacenterdynamics.com/en/news/ai-inferencing-startup-neureality-raises-20m-in-latest-funding-round",
+    "source_date": "2024-03",
+    "grade": "B",
+    "note": "Lead investors as summarised in search results; the BusinessWire release id (20240319442956) suggests 2024-03-19. Earlier Series A $35M (Dec 2022, Samsung Ventures lead)."
+   },
+   "total_raised_usd": null,
+   "status": "private; a cumulative ~$70M was cited in one report (not verified); no later round seen",
+   "hebrew_relevance": null,
+   "sources": [
+    {
+     "url": "https://datacenterdynamics.com/en/news/ai-inferencing-startup-neureality-raises-20m-in-latest-funding-round",
+     "date": "2024-03",
+     "what": "$20M Series B (trade press, seen in search results)",
+     "grade": "B"
+    },
+    {
+     "url": "https://www.businesswire.com/news/home/20240319442956/en/",
+     "date": "2024-03-19",
+     "what": "Company release (date from URL id), not opened",
+     "grade": "C"
+    }
+   ],
+   "grade": "B",
+   "verified_at": "2026-11-05"
+  },
+  {
+   "id": "nextsilicon",
+   "name_he": "נקסטסיליקון",
+   "name_en": "NextSilicon",
+   "url": "https://www.nextsilicon.com",
+   "category": "chips",
+   "focus": "chips",
+   "summary_he": "מפתחת מאיץ חישוב 'מוגדר תוכנה' (Maverick-2) ל-HPC ו-AI. לפי כלכליסט צברה 303 מיליון דולר ושווי 1.6 מיליארד דולר באוקטובר 2024.",
+   "why_israeli": "Calcalist calls it an 'Israeli chip unicorn'; founded 2018 by CEO Elad Raz; 300+ employees in Israel, the US, Serbia and elsewhere.",
+   "last_round": {
+    "type": "growth",
+    "amount_usd": 100000000,
+    "date": "2024-10",
+    "investors": [
+     "Amiti Ventures",
+     "Aleph",
+     "Liberty Technology VC",
+     "Playground Global",
+     "Standard Investments",
+     "StepStone",
+     "Third Point Ventures"
+    ],
+    "source_url": "https://www.calcalistech.com/ctechnews/article/bk5eooyz1g",
+    "source_date": "2024-10-30",
+    "grade": "B",
+    "note": "Calcalist: 'an additional $100 million over the past year', valuation $1.6B; round not named. Investor list is the company's investors overall, not necessarily this round."
+   },
+   "total_raised_usd": {
+    "amount": 303000000,
+    "source_url": "https://www.calcalistech.com/ctechnews/article/bk5eooyz1g",
+    "date": "2024-10-30",
+    "grade": "B"
+   },
+   "status": "private; Reuters (Oct 2025) reported a new processor chip - no newer round seen",
+   "hebrew_relevance": null,
+   "sources": [
+    {
+     "url": "https://www.calcalistech.com/ctechnews/article/bk5eooyz1g",
+     "date": "2024-10-30",
+     "what": "Total $303M, +$100M last year, $1.6B valuation, Israeli unicorn",
+     "grade": "B"
+    },
+    {
+     "url": "https://www.streetinsider.com/Reuters/NextSilicon+reveals+new+processor+chip+in+challenge+to+Intel%2C+AMD%C2%A0/25489826.html",
+     "date": "2025-10",
+     "what": "Reuters headline: NextSilicon reveals new processor chip (seen in search results)",
+     "grade": "B"
+    }
+   ],
+   "grade": "B",
+   "verified_at": "2026-11-05"
+  },
+  {
+   "id": "speedata",
+   "name_he": "ספידטה",
+   "name_en": "Speedata",
+   "url": "https://speedata.io",
+   "category": "chips",
+   "focus": "chips",
+   "summary_he": "מפתחת מעבד ייעודי להאצת ניתוח נתונים ועומסי AI. גייסה 44 מיליון דולר בסדרה B ביוני 2025.",
+   "why_israeli": "Benzinga headline: 'Israeli chip startup Speedata raises $44M'.",
+   "last_round": {
+    "type": "B",
+    "amount_usd": 44000000,
+    "date": "2025-06",
+    "investors": [],
+    "source_url": "https://www.benzinga.com/news/topics/25/06/45841314/israeli-chip-startup-speedata-raises-44m-to-challenge-nvidias-ai-dominance-with-280x-faster-analytics",
+    "source_date": "2025-06",
+    "grade": "B",
+    "note": "Investors not seen in the result summary; month from URL path."
+   },
+   "total_raised_usd": {
+    "amount": 114000000,
+    "source_url": "https://www.benzinga.com/news/topics/25/06/45841314/israeli-chip-startup-speedata-raises-44m-to-challenge-nvidias-ai-dominance-with-280x-faster-analytics",
+    "date": "2025-06",
+    "grade": "B"
+   },
+   "status": "private",
+   "hebrew_relevance": null,
+   "sources": [
+    {
+     "url": "https://www.benzinga.com/news/topics/25/06/45841314/israeli-chip-startup-speedata-raises-44m-to-challenge-nvidias-ai-dominance-with-280x-faster-analytics",
+     "date": "2025-06",
+     "what": "$44M Series B, total $114M",
+     "grade": "B"
+    }
+   ],
+   "grade": "B",
+   "verified_at": "2026-11-05"
+  },
+  {
+   "id": "run-ai",
+   "name_he": "רן:איי (Run:ai)",
+   "name_en": "Run:ai",
+   "url": "https://www.run.ai",
+   "category": "infrastructure",
+   "focus": "infrastructure",
+   "summary_he": "פלטפורמה לניהול והקצאת GPU לעומסי AI. נרכשה בידי אנבידיה בסכום מדווח של כ-700 מיליון דולר; העסקה הושלמה בסוף 2024.",
+   "why_israeli": "Business Standard/Bloomberg headline: 'Nvidia Corp completes acquisition of Israeli software startup Run:ai'.",
+   "last_round": {
+    "type": "acquired",
+    "amount_usd": 700000000,
+    "date": "2024-12-30",
+    "investors": [],
+    "source_url": "https://www.thestar.com.my/news/world/2024/12/31/nvidia-completes-acquisition-of-ai-startup-runai",
+    "source_date": "2024-12-31",
+    "grade": "B",
+    "note": "Price is reported (about $700M; one outlet says $800M), not confirmed by Nvidia. Announced April 2024."
+   },
+   "total_raised_usd": null,
+   "status": "acquired by NVIDIA (completed 2024-12-30)",
+   "hebrew_relevance": null,
+   "sources": [
+    {
+     "url": "https://www.thestar.com.my/news/world/2024/12/31/nvidia-completes-acquisition-of-ai-startup-runai",
+     "date": "2024-12-31",
+     "what": "Completion of acquisition",
+     "grade": "B"
+    },
+    {
+     "url": "https://business-standard.com/companies/news/nvidia-corp-completes-acquisition-of-israeli-software-startup-run-ai-124123001029_1.html",
+     "date": "2024-12-30",
+     "what": "Completion; 'Israeli software startup'",
+     "grade": "B"
+    }
+   ],
+   "grade": "B",
+   "verified_at": "2026-11-05"
+  },
+  {
+   "id": "deci",
+   "name_he": "דצ'י (Deci)",
+   "name_en": "Deci AI",
+   "url": "https://deci.ai",
+   "category": "infrastructure",
+   "focus": "infrastructure",
+   "summary_he": "חברת כלים לאופטימיזציה והרצה יעילה של מודלי למידה עמוקה. דווח על הסכם עם אנבידיה בהיקף משוער של 300 מיליון דולר.",
+   "why_israeli": "Ynet and Calcalist (Israeli outlets) cover the Nvidia deal as an Israeli acquisition.",
+   "last_round": {
+    "type": "acquired",
+    "amount_usd": 300000000,
+    "date": null,
+    "investors": [],
+    "source_url": "https://ynetnews.com/business/article/bk5j2kwz0",
+    "source_date": null,
+    "grade": "B",
+    "note": "Ynet estimate ($300M); Calcalist says the valuation was undisclosed. Month of announcement and completion not seen in the sources opened."
+   },
+   "total_raised_usd": null,
+   "status": "acquired by NVIDIA (definitive agreement reported 2024; completion not confirmed in the sources seen)",
+   "hebrew_relevance": null,
+   "sources": [
+    {
+     "url": "https://ynetnews.com/business/article/bk5j2kwz0",
+     "date": null,
+     "what": "Nvidia signs definitive agreement for Deci, ~$300M estimate",
+     "grade": "B"
+    },
+    {
+     "url": "https://www.calcalistech.com/ctechnews/article/bjwcwvp11r",
+     "date": null,
+     "what": "Calcalist: Deci valuation undisclosed, below Run:ai",
+     "grade": "B"
+    }
+   ],
+   "grade": "B",
+   "verified_at": "2026-11-05"
+  },
+  {
+   "id": "qwak",
+   "name_he": "קוואק (Qwak)",
+   "name_en": "Qwak AI",
+   "url": "https://www.qwak.com",
+   "category": "infrastructure",
+   "focus": "infrastructure",
+   "summary_he": "פלטפורמת MLOps להפעלת מודלים וניהולם. נרכשה על ידי JFrog בכ-230 מיליון דולר ביוני 2024.",
+   "why_israeli": "Globes headline: 'JFrog buys Israeli AI co Qwak for $230m'.",
+   "last_round": {
+    "type": "acquired",
+    "amount_usd": 230000000,
+    "date": "2024-06-25",
+    "investors": [],
+    "source_url": "https://en.globes.co.il/en/article-jfrog-buys-israeli-ai-co-qwak-for-230m-1001482621",
+    "source_date": "2024-06",
+    "grade": "B",
+    "note": "Cash and shares; date from the MergerLinks record (2024-06-25)."
+   },
+   "total_raised_usd": {
+    "amount": 31000000,
+    "source_url": "https://en.globes.co.il/en/article-jfrog-buys-israeli-ai-co-qwak-for-230m-1001482621",
+    "date": "2024-06",
+    "grade": "B"
+   },
+   "status": "acquired by JFrog (June 2024)",
+   "hebrew_relevance": null,
+   "sources": [
+    {
+     "url": "https://en.globes.co.il/en/article-jfrog-buys-israeli-ai-co-qwak-for-230m-1001482621",
+     "date": "2024-06",
+     "what": "$230M; Qwak raised over $31M, $64M valuation at last round (PitchBook)",
+     "grade": "B"
+    },
+    {
+     "url": "https://itpro.com/business/acquisition/jfrog-to-acquire-ai-platform-qwak-for-dollar230-million",
+     "date": "2024-06",
+     "what": "Acquisition announced",
+     "grade": "B"
+    },
+    {
+     "url": "https://app.mergerlinks.com/transactions/2024-06-25-qwak-ai",
+     "date": "2024-06-25",
+     "what": "Transaction record (date from URL)",
+     "grade": "D"
+    }
+   ],
+   "grade": "B",
+   "verified_at": "2026-11-05"
+  },
+  {
+   "id": "tabnine",
+   "name_he": "טאבנין (Tabnine)",
+   "name_en": "Tabnine",
+   "url": "https://www.tabnine.com",
+   "category": "apps",
+   "focus": "apps",
+   "summary_he": "עוזר קוד מבוסס AI למפתחים. הסבב האחרון שראינו: 25 מיליון דולר בסדרה B בנובמבר 2023 בהובלת Telstra Ventures.",
+   "why_israeli": "Search coverage: Tel Aviv headquarters (formerly Codota); Jewish Business News and Calcalist cover it as an Israeli startup.",
+   "last_round": {
+    "type": "B",
+    "amount_usd": 25000000,
+    "date": "2023-11-10",
+    "investors": [
+     "Telstra Ventures (lead)",
+     "Atlassian Ventures",
+     "Elaia",
+     "Headline",
+     "Hetz Ventures",
+     "Khosla Ventures",
+     "TPY Capital",
+     "Qualcomm Ventures"
+    ],
+    "source_url": "https://jewishbusinessnews.com/2023/11/10/tabnine-raises-25-million-for-ai-assistant-for-developers/",
+    "source_date": "2023-11-10",
+    "grade": "B",
+    "note": "Totals disagree between sources ($42.5M vs $55M), so total_raised is left null. Earlier: $15.5M (2022), $12M Series A (2020)."
+   },
+   "total_raised_usd": null,
+   "status": "private; no later round seen (search budget ran out before a re-check)",
+   "hebrew_relevance": null,
+   "sources": [
+    {
+     "url": "https://jewishbusinessnews.com/2023/11/10/tabnine-raises-25-million-for-ai-assistant-for-developers/",
+     "date": "2023-11-10",
+     "what": "$25M Series B",
+     "grade": "B"
+    },
+    {
+     "url": "https://www.verdict.co.uk/tabnine-raises-25m/",
+     "date": "2023-11",
+     "what": "Investor list",
+     "grade": "B"
+    },
+    {
+     "url": "https://www.calcalistech.com/ctechnews/article/hkrughwkq",
+     "date": null,
+     "what": "Calcalist coverage (seen in search results)",
+     "grade": "B"
+    }
+   ],
+   "grade": "B",
+   "verified_at": "2026-11-05"
+  },
+  {
+   "id": "qodo",
+   "name_he": "קודו (Qodo)",
+   "name_en": "Qodo (formerly CodiumAI)",
+   "url": "https://www.qodo.ai",
+   "category": "apps",
+   "focus": "apps",
+   "summary_he": "פלטפורמת AI לבדיקת קוד, בדיקות וממשל קוד. גייסה 70 מיליון דולר בסדרה B במרץ 2026 בהובלת Qumra Capital.",
+   "why_israeli": "Globes (2026-03-30) calls it an Israeli company; founders Itamar Friedman and Dedy Kredo; city not named in the article.",
+   "last_round": {
+    "type": "B",
+    "amount_usd": 70000000,
+    "date": "2026-03-30",
+    "investors": [
+     "Qumra Capital (lead)",
+     "Maor Ventures",
+     "Phoenix Venture Partners",
+     "S Ventures",
+     "Square Peg",
+     "Susa Ventures",
+     "TLV Partners",
+     "Vine Ventures",
+     "Peter Welender (angel)",
+     "Clara Shih (angel)"
+    ],
+    "source_url": "https://en.globes.co.il/en/article-1001538970",
+    "source_date": "2026-03-30",
+    "grade": "B",
+    "note": "Valuation not mentioned. Customers listed by Globes include Walmart, Nvidia, Red Hat, Box, Intuit, Ford, monday.com."
+   },
+   "total_raised_usd": {
+    "amount": 120000000,
+    "source_url": "https://en.globes.co.il/en/article-1001538970",
+    "date": "2026-03-30",
+    "grade": "B"
+   },
+   "status": "private",
+   "hebrew_relevance": null,
+   "sources": [
+    {
+     "url": "https://en.globes.co.il/en/article-1001538970",
+     "date": "2026-03-30",
+     "what": "$70M Series B, $120M total",
+     "grade": "B"
+    },
+    {
+     "url": "https://www.calcalistech.com/ctechnews/article/r1qdnboswx",
+     "date": null,
+     "what": "Calcalist coverage (seen in search results)",
+     "grade": "B"
+    }
+   ],
+   "grade": "B",
+   "verified_at": "2026-11-05"
+  },
+  {
+   "id": "lightricks",
+   "name_he": "לייטריקס",
+   "name_en": "Lightricks",
+   "url": "https://www.lightricks.com",
+   "category": "apps",
+   "focus": "apps",
+   "summary_he": "מאחורי אפליקציית Facetune ומשפחת מודלי הווידאו הפתוחים LTX. הגיוס האחרון שנמצא הוא סדרה D ב-2021; ב-2026 דווח על פיצול לשתי חברות.",
+   "why_israeli": "Wikipedia: headquartered in Jerusalem on the Hebrew University campus; founded 2013 by Zeev Farbman and colleagues.",
+   "last_round": {
+    "type": "D",
+    "amount_usd": 130000000,
+    "date": "2021-09",
+    "investors": [
+     "Insight Partners (co-lead)",
+     "Hanaco Venture Capital (co-lead)",
+     "Goldman Sachs",
+     "ClalTech",
+     "Migdal Insurance",
+     "Altshuler Shaham",
+     "Shavit Capital"
+    ],
+    "source_url": "https://en.wikipedia.org/wiki/Lightricks",
+    "source_date": null,
+    "grade": "D",
+    "note": "Valuation $1.8B. The $130M figure appears only in reference titles (e.g. trysignalbase) - not in the article body; Wikipedia flags promotional tone. No 2025-2026 round found."
+   },
+   "total_raised_usd": {
+    "amount": 335000000,
+    "source_url": "https://en.wikipedia.org/wiki/Lightricks",
+    "date": null,
+    "grade": "D"
+   },
+   "status": "private; ARR ~$250M reported by Jul 2025 (Wikipedia); LTX-2 open-sourced Jan 2026; June 2026 reports (CTech via a secondary summary) of a split into Facetune and LTX companies with 75 job cuts",
+   "hebrew_relevance": null,
+   "sources": [
+    {
+     "url": "https://en.wikipedia.org/wiki/Lightricks",
+     "date": null,
+     "what": "Funding history, HQ, 2025-26 notes",
+     "grade": "D"
+    },
+    {
+     "url": "https://www.trysignalbase.com/news/funding/lightricks-raises-130m-series-d",
+     "date": null,
+     "what": "Series D $130M headline (seen in search results)",
+     "grade": "D"
+    },
+    {
+     "url": "https://news.lavx.hu/article/lightricks-splits-consumer-apps-from-generative-ai-unit-ltx-amid-industry-restructuring-trend",
+     "date": "2026-06",
+     "what": "Secondary summary of CTech report on the split",
+     "grade": "D"
+    }
+   ],
+   "grade": "D",
+   "verified_at": "2026-11-05"
+  },
+  {
+   "id": "base44",
+   "name_he": "Base44",
+   "name_en": "Base44",
+   "url": "https://base44.com",
+   "category": "apps",
+   "focus": "apps",
+   "summary_he": "פלטפורמת vibe coding שבונה אפליקציות משיחה. נרכשה בידי Wix ביוני 2025 ב-80 מיליון דולר מראש, ועוד תשלומים מותנים.",
+   "why_israeli": "Globes headline: 'Wix acquires Israeli vibe coding co Base44'; founder Maor Owner.",
+   "last_round": {
+    "type": "acquired",
+    "amount_usd": 80000000,
+    "date": "2025-06-18",
+    "investors": [],
+    "source_url": "https://en.globes.co.il/en/article-1001513267",
+    "source_date": "2025-06-18",
+    "grade": "B",
+    "note": "$80M initial payment plus performance-linked payments through 2029; reports differ on staff count (6-8) and say the company had no outside funding."
+   },
+   "total_raised_usd": null,
+   "status": "acquired by Wix (announced 2025-06-18)",
+   "hebrew_relevance": null,
+   "sources": [
+    {
+     "url": "https://en.globes.co.il/en/article-1001513267",
+     "date": "2025-06-18",
+     "what": "Wix acquires Base44",
+     "grade": "B"
+    },
+    {
+     "url": "https://www.ynetnews.com/business/article/sjgftlx4ex",
+     "date": "2025-06",
+     "what": "Ynet coverage",
+     "grade": "B"
+    }
+   ],
+   "grade": "B",
+   "verified_at": "2026-11-05"
+  },
+  {
+   "id": "hour-one",
+   "name_he": "האוור ואן (Hour One)",
+   "name_en": "Hour One",
+   "url": null,
+   "category": "apps",
+   "focus": "apps",
+   "summary_he": "פלטפורמת דמויות וידאו מונעות AI להדרכה ושיווק. לפי כותרת בכלכליסט נרכשה בידי Wix במאי 2025; תנאי העסקה לא נראו.",
+   "why_israeli": "Calcalist (Israeli outlet) tags and covers it; earlier funding via Insight Partners Series A (~$20M, undated in the results).",
+   "last_round": {
+    "type": "acquired",
+    "amount_usd": null,
+    "date": "2025-05-23",
+    "investors": [],
+    "source_url": "https://www.calcalistech.com/tags/Hour_One",
+    "source_date": "2025-05-23",
+    "grade": "B",
+    "note": "Seen only as a Calcalist headline in search results ('Wix acquires Hour One'); price and terms not seen. Low confidence on details."
+   },
+   "total_raised_usd": null,
+   "status": "acquired by Wix (May 2025, per Calcalist headline)",
+   "hebrew_relevance": null,
+   "sources": [
+    {
+     "url": "https://www.calcalistech.com/tags/Hour_One",
+     "date": "2025-05-23",
+     "what": "Headline: Wix acquires Hour One (search-result summary)",
+     "grade": "B"
+    }
+   ],
+   "grade": "B",
+   "verified_at": "2026-11-05"
+  },
+  {
+   "id": "d-id",
+   "name_he": "D-ID",
+   "name_en": "D-ID",
+   "url": "https://www.d-id.com",
+   "category": "apps",
+   "focus": "apps",
+   "summary_he": "טכנולוגיית אווטארים ווידאו דיגיטליים מדברים. סבב אחרון שנמצא: 25 מיליון דולר בסדרה B במרץ 2022; ב-2025 דווח על רכישת simpleshow הגרמנית.",
+   "why_israeli": "PR Newswire release describes D-ID as a 'Tel Aviv-based' startup.",
+   "last_round": {
+    "type": "B",
+    "amount_usd": 25000000,
+    "date": "2022-03-22",
+    "investors": [
+     "Macquarie Capital (lead)",
+     "Pitango",
+     "AXA Venture Partners",
+     "OurCrowd",
+     "OIF",
+     "Maverick",
+     "Marubeni"
+    ],
+    "source_url": "https://prnewswire.com/news-releases/d-id-closes-25-million-funding-round-bringing-total-funding-for-the-creative-reality-company-to-48-million-301507986.html",
+    "source_date": "2022-03-22",
+    "grade": "B",
+    "note": "Company press release on a wire service."
+   },
+   "total_raised_usd": {
+    "amount": 48000000,
+    "source_url": "https://prnewswire.com/news-releases/d-id-closes-25-million-funding-round-bringing-total-funding-for-the-creative-reality-company-to-48-million-301507986.html",
+    "date": "2022-03-22",
+    "grade": "B"
+   },
+   "status": "private; acquiring simpleshow (Germany), closing expected Q4 2025 per a search-result summary (Dealroom lists the Sep 2025 activity as an acquisition)",
+   "hebrew_relevance": null,
+   "sources": [
+    {
+     "url": "https://prnewswire.com/news-releases/d-id-closes-25-million-funding-round-bringing-total-funding-for-the-creative-reality-company-to-48-million-301507986.html",
+     "date": "2022-03-22",
+     "what": "$25M Series B, $48M total",
+     "grade": "B"
+    },
+    {
+     "url": "https://dealroom.co/companies/d-id-com/",
+     "date": null,
+     "what": "Dealroom profile (latest activity Sep 2025: acquisition)",
+     "grade": "D"
+    }
+   ],
+   "grade": "B",
+   "verified_at": "2026-11-05"
+  },
+  {
+   "id": "bria",
+   "name_he": "בריה (Bria)",
+   "name_en": "Bria AI",
+   "url": "https://bria.ai",
+   "category": "models",
+   "focus": "models",
+   "summary_he": "פלטפורמת יצירת תמונות שמתבססת על נתוני אימון מורשים ומתגמלת בעלי תוכן. גייסה 40 מיליון דולר בסדרה B במרץ 2025.",
+   "why_israeli": "Globes (2025-03-13): 'Israeli visual generative AI co'; HQ city not stated in the article (other results say Tel Aviv).",
+   "last_round": {
+    "type": "B",
+    "amount_usd": 40000000,
+    "date": "2025-03-13",
+    "investors": [
+     "Red Dot Capital (lead)",
+     "Maor Investment",
+     "Entree Capital",
+     "GFT Ventures",
+     "Intel Capital",
+     "In-Venture"
+    ],
+    "source_url": "https://en.globes.co.il/en/article-1001504651",
+    "source_date": "2025-03-13",
+    "grade": "B",
+    "note": ""
+   },
+   "total_raised_usd": {
+    "amount": 65000000,
+    "source_url": "https://en.globes.co.il/en/article-1001504651",
+    "date": "2025-03-13",
+    "grade": "B"
+   },
+   "status": "private",
+   "hebrew_relevance": null,
+   "sources": [
+    {
+     "url": "https://en.globes.co.il/en/article-1001504651",
+     "date": "2025-03-13",
+     "what": "$40M Series B, $65M total",
+     "grade": "B"
+    },
+    {
+     "url": "https://en.globes.co.il/en/article-1001471733",
+     "date": "2024-02",
+     "what": "Earlier $24M Series A (Getty Images, Publicis participated)",
+     "grade": "B"
+    }
+   ],
+   "grade": "B",
+   "verified_at": "2026-11-05"
+  },
+  {
+   "id": "wonderful",
+   "name_he": "וונדרפול (Wonderful)",
+   "name_en": "Wonderful",
+   "url": "https://www.wonderful.ai",
+   "category": "agents",
+   "focus": "agents",
+   "summary_he": "סוכני AI שירותיים (קול, צ'אט, דוא״ל) שמותאמים לשפה ולרגולציה של כל שוק. גייסה 550 מיליון דולר בספטמבר 2026 בהובלת Insight Partners.",
+   "why_israeli": "Globes (2026-09-02): an Israeli company headquartered in Tel Aviv, founded by CEO Bar Winkler and CTO Roey Lalazar.",
+   "last_round": {
+    "type": "C",
+    "amount_usd": 550000000,
+    "date": "2026-09-02",
+    "investors": [
+     "Insight Partners (lead)",
+     "Salesforce (new)",
+     "Bessemer Venture Partners",
+     "Index Ventures",
+     "Vine Ventures",
+     "IVP",
+     "9Yards Capital"
+    ],
+    "source_url": "https://en.globes.co.il/en/article-1001554223",
+    "source_date": "2026-09-02",
+    "grade": "B",
+    "note": "Valuation conflict inside Globes: headline $5.5B, body $5B; Jewish News says $5B and names it Series C. Earlier: $150M Series B at $2B (TechCrunch, 2026-03-12), $100M Series A (Nov 2025)."
+   },
+   "total_raised_usd": {
+    "amount": 800000000,
+    "source_url": "https://www.jewishnews.co.uk/israeli-founded-wonderful-hits-5bn-valuation-less-than-two-years-after-launch/",
+    "date": "2026-09-02",
+    "grade": "B"
+   },
+   "status": "private",
+   "hebrew_relevance": "Israeli-founded; sources say it localises agents per market (language, culture, regulation) but do not state Hebrew support - unverified for Hebrew.",
+   "sources": [
+    {
+     "url": "https://en.globes.co.il/en/article-1001554223",
+     "date": "2026-09-02",
+     "what": "$550M round, Insight lead, Salesforce joins; ~$290M raised before",
+     "grade": "B"
+    },
+    {
+     "url": "https://www.jewishnews.co.uk/israeli-founded-wonderful-hits-5bn-valuation-less-than-two-years-after-launch/",
+     "date": "2026-09-02",
+     "what": "Series C $550M at $5B; over $800M raised",
+     "grade": "B"
+    },
+    {
+     "url": "https://techcrunch.com/2026/03/12/wonderful-raises-150m-series-b-at-2b-valuation/",
+     "date": "2026-03-12",
+     "what": "$150M Series B at $2B; $286M total then; operates in 30 countries",
+     "grade": "B"
+    }
+   ],
+   "grade": "B",
+   "verified_at": "2026-11-05"
+  },
+  {
+   "id": "lasso-security",
+   "name_he": "לאסו סקיוריטי",
+   "name_en": "Lasso Security",
+   "url": "https://www.lasso.security",
+   "category": "security",
+   "focus": "security",
+   "summary_he": "אבטחת יישומי AI וסוכנים: מעקות בטיחות שרצים על מעבדים רגילים. סדרה A של 30 מיליון דולר בהובלת ClearSky לפי Dealroom.",
+   "why_israeli": "Dealroom news page: Israeli, offices in Tel Aviv and New York; founded 2023 by Elad Schulman and Ophir Dror.",
+   "last_round": {
+    "type": "A",
+    "amount_usd": 30000000,
+    "date": "2026-09",
+    "investors": [
+     "ClearSky Advisors (lead)",
+     "Entree Capital",
+     "iAngels",
+     "Singtel Innov8",
+     "Mindset",
+     "Swish Data"
+    ],
+    "source_url": "https://dealroom.co/news/148347-lasso-security-raises-30m-series-a-to-run-ai-guardrails-without-gpus/",
+    "source_date": "2026-09-02",
+    "grade": "D",
+    "note": "Single tracker source; date as shown on the Dealroom news page. A BusinessWire release id (20250717533011) could not be opened (403) and may be a different announcement."
+   },
+   "total_raised_usd": {
+    "amount": 37000000,
+    "source_url": "https://dealroom.co/news/148347-lasso-security-raises-30m-series-a-to-run-ai-guardrails-without-gpus/",
+    "date": "2026-09-02",
+    "grade": "D"
+   },
+   "status": "private",
+   "hebrew_relevance": null,
+   "sources": [
+    {
+     "url": "https://dealroom.co/news/148347-lasso-security-raises-30m-series-a-to-run-ai-guardrails-without-gpus/",
+     "date": "2026-09-02",
+     "what": "$30M Series A, total over $37M",
+     "grade": "D"
+    },
+    {
+     "url": "https://www.calcalistech.com/ctechnews/article/juvg3gpmt",
+     "date": null,
+     "what": "Earlier $6M seed (Calcalist, seen in search results)",
+     "grade": "B"
+    }
+   ],
+   "grade": "D",
+   "verified_at": "2026-11-05"
+  },
+  {
+   "id": "noma-security",
+   "name_he": "נומה סקיוריטי",
+   "name_en": "Noma Security",
+   "url": "https://noma.security",
+   "category": "security",
+   "focus": "security",
+   "summary_he": "אבטחת סוכני AI: גילוי, ניהול סיכונים, red teaming והגנה בזמן ריצה. סדרה B של 100 מיליון דולר ביולי 2025.",
+   "why_israeli": "Globes headline 'AI and agent security co Noma raises $100m'; Calcalist and Reuters-syndicated coverage describe an Israeli cyber startup.",
+   "last_round": {
+    "type": "B",
+    "amount_usd": 100000000,
+    "date": "2025-07-31",
+    "investors": [
+     "Evolution Equity Partners (lead)",
+     "Ballistic Ventures",
+     "Glilot Capital",
+     "Databricks Ventures",
+     "Cyber Club London"
+    ],
+    "source_url": "https://en.globes.co.il/en/article-1001517758",
+    "source_date": "2025-07-31",
+    "grade": "B",
+    "note": "Valuation not disclosed (Globes: sources say ~$400M)."
+   },
+   "total_raised_usd": {
+    "amount": 132000000,
+    "source_url": "https://en.globes.co.il/en/article-1001517758",
+    "date": "2025-07-31",
+    "grade": "B"
+   },
+   "status": "private; no later round seen (search budget ran out before a re-check)",
+   "hebrew_relevance": null,
+   "sources": [
+    {
+     "url": "https://en.globes.co.il/en/article-1001517758",
+     "date": "2025-07-31",
+     "what": "$100M Series B; $32M before",
+     "grade": "B"
+    },
+    {
+     "url": "https://www.calcalistech.com/ctechnews/article/s19xaaudxl",
+     "date": "2025-07-31",
+     "what": "Calcalist coverage",
+     "grade": "B"
+    },
+    {
+     "url": "https://siliconangle.com/2025/07/31/ai-security-startup-noma-security-closes-100m-funding-round/",
+     "date": "2025-07-31",
+     "what": "Trade press",
+     "grade": "B"
+    }
+   ],
+   "grade": "B",
+   "verified_at": "2026-11-05"
+  },
+  {
+   "id": "zenity",
+   "name_he": "זניטי (Zenity)",
+   "name_en": "Zenity",
+   "url": "https://zenity.io",
+   "category": "security",
+   "focus": "security",
+   "summary_he": "אבטחת סוכני AI ויישומי low-code בארגונים. סדרה C של 125 מיליון דולר באוגוסט 2026 בהובלת Norwest.",
+   "why_israeli": "SecurityWeek (2026-08-04): Tel Aviv-based with R&D centre in Tel Aviv, go-to-market run from New York, founded 2021.",
+   "last_round": {
+    "type": "C",
+    "amount_usd": 125000000,
+    "date": "2026-08-04",
+    "investors": [
+     "Norwest (lead)",
+     "Qumra Capital",
+     "SoftBank Vision Fund 2",
+     "Hitachi Ventures",
+     "LG Technology Ventures",
+     "Vertex Ventures",
+     "Third Point Ventures",
+     "DTCP",
+     "Intel Capital"
+    ],
+    "source_url": "https://www.securityweek.com/zenity-raises-125-million/",
+    "source_date": "2026-08-04",
+    "grade": "B",
+    "note": "Previous: $38M Series B, Oct 2024 (Third Point Ventures and DTCP)."
+   },
+   "total_raised_usd": {
+    "amount": 180000000,
+    "source_url": "https://www.securityweek.com/zenity-raises-125-million/",
+    "date": "2026-08-04",
+    "grade": "B"
+   },
+   "status": "private",
+   "hebrew_relevance": null,
+   "sources": [
+    {
+     "url": "https://www.securityweek.com/zenity-raises-125-million/",
+     "date": "2026-08-04",
+     "what": "$125M Series C, $180M total",
+     "grade": "B"
+    },
+    {
+     "url": "https://www.darkreading.com/application-security/zenity-raises-38m-series-b-funding-round-to-secure-agentic-ai",
+     "date": "2024-10",
+     "what": "Earlier $38M Series B",
+     "grade": "B"
+    },
+    {
+     "url": "https://www.securityweek.com/topics/zenity/",
+     "date": null,
+     "what": "SecurityWeek topic page for Zenity (seen in search results)",
+     "grade": "B"
+    }
+   ],
+   "grade": "B",
+   "verified_at": "2026-11-05"
+  },
+  {
+   "id": "irregular",
+   "name_he": "אירגולר (Irregular)",
+   "name_en": "Irregular (formerly Pattern Labs)",
+   "url": null,
+   "category": "security",
+   "focus": "security",
+   "summary_he": "מעבדת אבטחה למודלי חזית (לשעבר Pattern Labs) שבודקת יכולות תקיפה והגנה של מודלים. גייסה 80 מיליון דולר בספטמבר 2025.",
+   "why_israeli": "Globes headline: 'Israeli AI security lab Irregular raises $80m'; founders Dan Lahav and Omer Nevo.",
+   "last_round": {
+    "type": "A",
+    "amount_usd": 80000000,
+    "date": "2025-09-17",
+    "investors": [
+     "Sequoia Capital (co-lead)",
+     "Redpoint Ventures (co-lead)",
+     "Swish Ventures",
+     "Assaf Rappaport (angel)",
+     "Ofir Ehrlich (angel)"
+    ],
+    "source_url": "https://en.globes.co.il/en/article-1001522079",
+    "source_date": "2025-09-17",
+    "grade": "B",
+    "note": "TechCrunch (citing a source) reported a $450M valuation - not confirmed by the company. Round label 'Series A' from a funding tracker."
+   },
+   "total_raised_usd": null,
+   "status": "private",
+   "hebrew_relevance": null,
+   "sources": [
+    {
+     "url": "https://en.globes.co.il/en/article-1001522079",
+     "date": "2025-09-17",
+     "what": "Israeli AI security lab raises $80m",
+     "grade": "B"
+    },
+    {
+     "url": "https://techcrunch.com/2025/09/17/irregular-raises-80-million-to-secure-frontier-ai-models",
+     "date": "2025-09-17",
+     "what": "Valuation per a source",
+     "grade": "B"
+    },
+    {
+     "url": "https://siliconangle.com/2025/09/17/irregular-raises-80m-set-ai-security-standards-frontier-models/",
+     "date": "2025-09-17",
+     "what": "Investors",
+     "grade": "B"
+    }
+   ],
+   "grade": "B",
+   "verified_at": "2026-11-05"
+  },
+  {
+   "id": "prompt-security",
+   "name_he": "פרומפט סקיוריטי",
+   "name_en": "Prompt Security",
+   "url": "https://www.prompt.security",
+   "category": "security",
+   "focus": "security",
+   "summary_he": "אבטחת שימוש בבינה גנרטיבית בארגון. נרכשה בידי SentinelOne באוגוסט 2025 בסכום שדווח (לא רשמי) של 250 מיליון דולר.",
+   "why_israeli": "Techzine (2025-08-05): 'Israeli company Prompt Security', two years old; city not named.",
+   "last_round": {
+    "type": "acquired",
+    "amount_usd": 250000000,
+    "date": "2025-08-05",
+    "investors": [],
+    "source_url": "https://techzine.eu/news/security/133547/sentinelone-strengthens-ai-protection-with-prompt-security-deal/",
+    "source_date": "2025-08-05",
+    "grade": "B",
+    "note": "No official price; $250M is CTech's reported figure."
+   },
+   "total_raised_usd": null,
+   "status": "acquired by SentinelOne (announced 2025-08-05)",
+   "hebrew_relevance": null,
+   "sources": [
+    {
+     "url": "https://techzine.eu/news/security/133547/sentinelone-strengthens-ai-protection-with-prompt-security-deal/",
+     "date": "2025-08-05",
+     "what": "Acquisition; price reported by CTech",
+     "grade": "B"
+    }
+   ],
+   "grade": "B",
+   "verified_at": "2026-11-05"
+  },
+  {
+   "id": "aim-security",
+   "name_he": "איים סקיוריטי",
+   "name_en": "Aim Security",
+   "url": "https://www.aim.security",
+   "category": "security",
+   "focus": "security",
+   "summary_he": "אבטחת שימוש ביישומי AI וסוכנים בארגון. נרכשה בידי Cato Networks בספטמבר 2025; המחיר לא פורסם.",
+   "why_israeli": "ITPro (2025-09-05): 'Aim Security is an Israeli startup, founded in 2022'.",
+   "last_round": {
+    "type": "acquired",
+    "amount_usd": null,
+    "date": "2025-09-05",
+    "investors": [],
+    "source_url": "https://www.itpro.com/business/business-strategy/cato-networks-buys-ai-security-startup-aim-security-in-debut-acquisition",
+    "source_date": "2025-09-05",
+    "grade": "B",
+    "note": "Undisclosed fee. Press estimates seen in search results: $300-350M (Calcalist), $375M (PitchBook via Globes)."
+   },
+   "total_raised_usd": null,
+   "status": "acquired by Cato Networks (2025-09-05)",
+   "hebrew_relevance": null,
+   "sources": [
+    {
+     "url": "https://www.itpro.com/business/business-strategy/cato-networks-buys-ai-security-startup-aim-security-in-debut-acquisition",
+     "date": "2025-09-05",
+     "what": "Cato's first acquisition, undisclosed fee",
+     "grade": "B"
+    },
+    {
+     "url": "https://www.startuphub.ai/news/cato-networks-acquires-aim-security-surpassed-300m-arr-and-expanded-financing-round-to-409m",
+     "date": "2025-09",
+     "what": "Headline: Cato acquires Aim, ARR over $300M, financing expanded to $409M",
+     "grade": "B"
+    }
+   ],
+   "grade": "B",
+   "verified_at": "2026-11-05"
+  },
+  {
+   "id": "dream-security",
+   "name_he": "דרים (Dream)",
+   "name_en": "Dream (Dream Security)",
+   "url": null,
+   "category": "security",
+   "focus": "security",
+   "summary_he": "חברת AI וסייבר להגנת מדינות ותשתיות קריטיות. גייסה 260 מיליון דולר בשווי 3 מיליארד דולר ביוני 2026.",
+   "why_israeli": "TNW (2026-06-18): 'Israeli AI and cybersecurity firm'; founders Shalev Hulio, Sebastian Kurz and Gil Dolev; HQ not stated.",
+   "last_round": {
+    "type": "growth",
+    "amount_usd": 260000000,
+    "date": "2026-06-18",
+    "investors": [
+     "Bicycle Capital (lead)",
+     "Group 11 (lead)",
+     "Bain Capital Ventures",
+     "Antler",
+     "Tru Arrow Partners"
+    ],
+    "source_url": "https://thenextweb.com/news/dream-raises-260m-at-3bn-tripling-its-value-in-16-months",
+    "source_date": "2026-06-18",
+    "grade": "B",
+    "note": "Valuation $3B (was $1.1B in Feb 2025). Round not named in the article."
+   },
+   "total_raised_usd": {
+    "amount": 155000000,
+    "source_url": "https://www.securityweek.com/ex-nso-group-ceos-security-firm-dream-raises-100m-at-1-1b-valuation/",
+    "date": "2025-02-17",
+    "grade": "B"
+   },
+   "status": "private; total_raised is as of the Feb 2025 round (new total not disclosed)",
+   "hebrew_relevance": null,
+   "sources": [
+    {
+     "url": "https://thenextweb.com/news/dream-raises-260m-at-3bn-tripling-its-value-in-16-months",
+     "date": "2026-06-18",
+     "what": "$260M at $3B",
+     "grade": "B"
+    },
+    {
+     "url": "https://www.securityweek.com/ex-nso-group-ceos-security-firm-dream-raises-100m-at-1-1b-valuation/",
+     "date": "2025-02-17",
+     "what": "$100M Series B at $1.1B; $155M total (from search summary)",
+     "grade": "B"
+    }
+   ],
+   "grade": "B",
+   "verified_at": "2026-11-05"
+  },
+  {
+   "id": "torq",
+   "name_he": "טורק (Torq)",
+   "name_en": "Torq",
+   "url": "https://torq.io",
+   "category": "security",
+   "focus": "security",
+   "summary_he": "פלטפורמת אוטומציה ו-SOC מבוסס סוכני AI. סדרה D של 140 מיליון דולר בשווי 1.2 מיליארד דולר בינואר 2026.",
+   "why_israeli": "Search coverage (SecurityWeek/JPost/TechRepublic): Tel Aviv-based, described as Israel's latest unicorn.",
+   "last_round": {
+    "type": "D",
+    "amount_usd": 140000000,
+    "date": "2026-01-12",
+    "investors": [
+     "Merlin Ventures (lead)",
+     "Evolution Equity Partners (earlier round)"
+    ],
+    "source_url": "https://www.securityweek.com/torq-raises-140-million-at-1-2-billion-valuation/",
+    "source_date": "2026-01-12",
+    "grade": "B",
+    "note": "Valuation $1.2B. Date as dated in the coverage summarised by search results (page not opened)."
+   },
+   "total_raised_usd": {
+    "amount": 332000000,
+    "source_url": "https://www.securityweek.com/torq-raises-140-million-at-1-2-billion-valuation/",
+    "date": "2026-01-12",
+    "grade": "B"
+   },
+   "status": "private",
+   "hebrew_relevance": null,
+   "sources": [
+    {
+     "url": "https://www.securityweek.com/torq-raises-140-million-at-1-2-billion-valuation/",
+     "date": "2026-01-12",
+     "what": "Series D $140M, $332M total",
+     "grade": "B"
+    },
+    {
+     "url": "https://techrepublic.com/article/news-torq-funding/",
+     "date": "2026-01",
+     "what": "Coverage",
+     "grade": "B"
+    },
+    {
+     "url": "https://www.jpost.com/business-and-innovation/tech-and-start-ups/article-884326",
+     "date": "2026-01",
+     "what": "Coverage",
+     "grade": "B"
+    }
+   ],
+   "grade": "B",
+   "verified_at": "2026-11-05"
+  },
+  {
+   "id": "cyera",
+   "name_he": "סיירה (Cyera)",
+   "name_en": "Cyera",
+   "url": null,
+   "category": "security",
+   "focus": "security",
+   "summary_he": "אבטחת נתונים ו-AI: גילוי וסיווג נתונים והגנה עליהם. גייסה 600 מיליון דולר בשווי 12 מיליארד דולר ביוני 2026.",
+   "why_israeli": "Globes (2026-06-10) calls it an 'Israeli AI and data security company'; founders Yotam Segev and Tamar Bar-Ilan; HQ/R&D location not stated in the article.",
+   "last_round": {
+    "type": "growth",
+    "amount_usd": 600000000,
+    "date": "2026-06-10",
+    "investors": [
+     "Evolution Equity Partners (lead)",
+     "Cyberstarts",
+     "Temasek",
+     "Accel",
+     "AT&T Ventures",
+     "Blackstone",
+     "Coatue",
+     "Spark Capital"
+    ],
+    "source_url": "https://en.globes.co.il/en/article-1001545507",
+    "source_date": "2026-06-10",
+    "grade": "B",
+    "note": "Valuation $12B. SiliconANGLE reported $300M for the same round; $600M appears in Globes, SecurityWeek and others. Previous: $400M Series F at $9B (Blackstone lead, Jan 2026)."
+   },
+   "total_raised_usd": {
+    "amount": 2300000000,
+    "source_url": "https://en.globes.co.il/en/article-1001545507",
+    "date": "2026-06-10",
+    "grade": "B"
+   },
+   "status": "private",
+   "hebrew_relevance": null,
+   "sources": [
+    {
+     "url": "https://en.globes.co.il/en/article-1001545507",
+     "date": "2026-06-10",
+     "what": "$600M at $12B",
+     "grade": "B"
+    },
+    {
+     "url": "https://en.globes.co.il/en/article-1001531473",
+     "date": "2026-01",
+     "what": "$400M at $9B (Series F)",
+     "grade": "B"
+    },
+    {
+     "url": "https://www.securityweek.com/cyera-raises-600-million-at-12-billion-valuation/",
+     "date": "2026-06",
+     "what": "Coverage",
+     "grade": "B"
+    }
+   ],
+   "grade": "B",
+   "verified_at": "2026-11-05"
+  },
+  {
+   "id": "vast-data",
+   "name_he": "ואסט דאטה (VAST Data)",
+   "name_en": "VAST Data",
+   "url": "https://www.vastdata.com",
+   "category": "infrastructure",
+   "focus": "infrastructure",
+   "summary_he": "תשתית נתונים ואחסון לעומסי AI, שנוסדה בידי ישראלים. גייסה כמיליארד דולר בשווי 30 מיליארד דולר באפריל 2026.",
+   "why_israeli": "Calcalist (search summary): 'Israeli-founded AI infrastructure company', the most valuable private high-tech company in Israel; other outlets describe it as New York-based.",
+   "last_round": {
+    "type": "growth",
+    "amount_usd": 1000000000,
+    "date": "2026-04-22",
+    "investors": [
+     "Drive Capital (lead)",
+     "Access Industries (co-lead)",
+     "Nvidia",
+     "Fidelity",
+     "NEA"
+    ],
+    "source_url": "https://www.calcalistech.com/ctechnews/article/byoqzk2ybx",
+    "source_date": "2026-04-22",
+    "grade": "B",
+    "note": "Series F, $30B valuation; Calcalist says over $500M of the amount is secondary (does not go to the company). Previous: $118M Series E at $9.1B (2023). Details from search-result summaries; Calcalist page not opened."
+   },
+   "total_raised_usd": null,
+   "status": "private; IPO mulled per Bloomberg headline",
+   "hebrew_relevance": null,
+   "sources": [
+    {
+     "url": "https://www.calcalistech.com/ctechnews/article/byoqzk2ybx",
+     "date": "2026-04-22",
+     "what": "Israeli-founded, $30B valuation",
+     "grade": "B"
+    },
+    {
+     "url": "https://www.bloomberg.com/news/articles/2026-04-22/nvidia-backed-vast-data-raises-1-billion-triples-valuation-to-30-billion",
+     "date": "2026-04-22",
+     "what": "Bloomberg headline: raises $1B, triples valuation to $30B",
+     "grade": "B"
+    },
+    {
+     "url": "https://builtin.com/articles/vast-data-raises-1b-series-f-30b-valuation-20260423",
+     "date": "2026-04-23",
+     "what": "Series F $1B at $30B",
+     "grade": "D"
+    }
+   ],
+   "grade": "B",
+   "verified_at": "2026-11-05"
+  },
+  {
+   "id": "verbit",
+   "name_he": "ורביט (Verbit)",
+   "name_en": "Verbit",
+   "url": "https://verbit.ai",
+   "category": "speech",
+   "focus": "speech",
+   "summary_he": "תמלול וכתוביות משולבי AI ואדם. סדרה E של 250 מיליון דולר (150 ראשוני + 100 משני) בשווי 2 מיליארד דולר, נובמבר 2021.",
+   "why_israeli": "kr-asia calls it 'Israel's Verbit' and a US-Israeli company; Calcalist headlines: 'Tel Aviv-Based Transcription Startup Verbit'.",
+   "last_round": {
+    "type": "growth",
+    "amount_usd": 250000000,
+    "date": "2021-11-23",
+    "investors": [
+     "Third Point Ventures (lead)",
+     "Sapphire Ventures",
+     "More Capital",
+     "Disruptive AI",
+     "Vertex Growth",
+     "40North",
+     "Samsung Next",
+     "TCP"
+    ],
+    "source_url": "https://kr-asia.com/israels-verbit-raises-usd-250-million-series-e-funding",
+    "source_date": "2021-11-24",
+    "grade": "B",
+    "note": "$150M primary + $100M secondary; valuation $2B. Date: article of 2021-11-24 says it was announced 'on Tuesday'. No later round seen."
+   },
+   "total_raised_usd": {
+    "amount": 550000000,
+    "source_url": "https://kr-asia.com/israels-verbit-raises-usd-250-million-series-e-funding",
+    "date": "2021-11-24",
+    "grade": "B"
+   },
+   "status": "private; no round after Series E seen (search budget ran out before a re-check)",
+   "hebrew_relevance": null,
+   "sources": [
+    {
+     "url": "https://kr-asia.com/israels-verbit-raises-usd-250-million-series-e-funding",
+     "date": "2021-11-24",
+     "what": "Series E $250M at $2B; >$550M total incl. secondary; 2,000+ customers",
+     "grade": "B"
+    },
+    {
+     "url": "https://en.globes.co.il/en/article-1001373783",
+     "date": "2021",
+     "what": "Globes: earlier $157M round at >$1B valuation",
+     "grade": "B"
+    }
+   ],
+   "grade": "B",
+   "verified_at": "2026-11-05"
+  },
+  {
+   "id": "gong",
+   "name_he": "גונג (Gong)",
+   "name_en": "Gong",
+   "url": "https://www.gong.io",
+   "category": "speech",
+   "focus": "speech",
+   "summary_he": "פלטפורמת ניתוח שיחות מכירה ומודיעין הכנסות. סדרה E ב-2021 בשווי 7.25 מיליארד דולר; ARR של כ-500 מיליון דולר לפי כלכליסט (מאי 2026).",
+   "why_israeli": "Calcalist (2026-05-12) says Gong employs ~1,700 people 'in Israel and worldwide'; the pages opened do not state Israeli founding or R&D location - Israeli link only partly confirmed.",
+   "last_round": {
+    "type": "growth",
+    "amount_usd": 250000000,
+    "date": "2021-06-03",
+    "investors": [
+     "Franklin Templeton (lead)",
+     "Coatue",
+     "Salesforce Ventures",
+     "Sequoia",
+     "Thrive Capital",
+     "Tiger Global"
+    ],
+    "source_url": "https://www.gong.io/blog/growing-the-revenue-intelligence-category-gongs-series-e-funding",
+    "source_date": "2021-06-03",
+    "grade": "C",
+    "note": "Series E at $7.25B, from the company's own announcement. Calcalist (2026-05-12): secondary transactions at end of 2025 valued it at $4.5B (not approved by the company)."
+   },
+   "total_raised_usd": {
+    "amount": 584000000,
+    "source_url": "https://www.calcalistech.com/ctechnews/article/hj4rgjgkzg",
+    "date": "2026-05-12",
+    "grade": "B"
+   },
+   "status": "private; ARR ~$500M announced May 2026 (Calcalist)",
+   "hebrew_relevance": null,
+   "sources": [
+    {
+     "url": "https://www.gong.io/blog/growing-the-revenue-intelligence-category-gongs-series-e-funding",
+     "date": "2021-06-03",
+     "what": "Series E announcement",
+     "grade": "C"
+    },
+    {
+     "url": "https://www.calcalistech.com/ctechnews/article/hj4rgjgkzg",
+     "date": "2026-05-12",
+     "what": "$500M run rate, ~$584M raised, $4.5B secondary",
+     "grade": "B"
+    },
+    {
+     "url": "https://techcrunch.com/2025/03/05/revenue-prediction-startup-gong-surpasses-300m-arr-indicating-potential-ipo-path",
+     "date": "2025-03-05",
+     "what": "Earlier ARR milestone (headline seen)",
+     "grade": "B"
+    }
+   ],
+   "grade": "B",
+   "verified_at": "2026-11-05"
+  },
+  {
+   "id": "aidoc",
+   "name_he": "אידוק (Aidoc)",
+   "name_en": "Aidoc",
+   "url": "https://www.aidoc.com",
+   "category": "vision",
+   "focus": "vision",
+   "summary_he": "בינה מלאכותית לדימות רפואי וזרימות עבודה קליניות. סדרה E של 150 מיליון דולר באפריל 2026 בהובלת Goldman Sachs Alternatives.",
+   "why_israeli": "Wikipedia and search coverage describe a Tel Aviv-founded company (one outlet says New York-based).",
+   "last_round": {
+    "type": "E",
+    "amount_usd": 150000000,
+    "date": "2026-04-29",
+    "investors": [
+     "Growth Equity at Goldman Sachs Alternatives (lead)",
+     "General Catalyst",
+     "NVentures (Nvidia)",
+     "SoftBank (per some reports)"
+    ],
+    "source_url": "https://siliconangle.com/?p=743814",
+    "source_date": "2026-04-29",
+    "grade": "B",
+    "note": "ZoomInfo names General Catalyst as lead; most outlets name Goldman. A separate $150M round was reported in July 2025 (HIT Consultant)."
+   },
+   "total_raised_usd": {
+    "amount": 500000000,
+    "source_url": "https://hlth.com/insights/news/aidoc-raises-150m-series-e-led-by-goldman-sachs-alternatives-with-support-from-nvidia-and-softbank",
+    "date": "2026-04-30",
+    "grade": "D"
+   },
+   "status": "private; IPO reportedly considered",
+   "hebrew_relevance": null,
+   "sources": [
+    {
+     "url": "https://siliconangle.com/?p=743814",
+     "date": "2026-04-29",
+     "what": "Series E $150M",
+     "grade": "B"
+    },
+    {
+     "url": "https://hlth.com/insights/news/aidoc-raises-150m-series-e-led-by-goldman-sachs-alternatives-with-support-from-nvidia-and-softbank",
+     "date": "2026-04-30",
+     "what": "Series E, investors",
+     "grade": "B"
+    },
+    {
+     "url": "https://en.wikipedia.org/wiki/Aidoc",
+     "date": null,
+     "what": "Company profile",
+     "grade": "D"
+    },
+    {
+     "url": "https://hitconsultant.net/2025/07/23/aidoc-secures-150m-to-accelerate-care-foundation-model-and-clinical-ai-deployment",
+     "date": "2025-07-23",
+     "what": "Earlier $150M",
+     "grade": "B"
+    }
+   ],
+   "grade": "B",
+   "verified_at": "2026-11-05"
+  },
+  {
+   "id": "lumana",
+   "name_he": "לומנה (Lumana)",
+   "name_en": "Lumana",
+   "url": "https://www.lumana.ai",
+   "category": "vision",
+   "focus": "vision",
+   "summary_he": "אנליטיקת וידאו מבוססת AI למצלמות אבטחה. סדרה A של 40 מיליון דולר ביולי 2025 בהובלת Wing Venture Capital.",
+   "why_israeli": "Search coverage: offices in Los Gatos (California) and Tel Aviv; CEO Sagi Ben Moshe, formerly a senior Israeli Intel executive; Calcalist and Jewish Business News cover it as an Israeli startup. HQ may be US-based.",
+   "last_round": {
+    "type": "A",
+    "amount_usd": 40000000,
+    "date": "2025-07",
+    "investors": [
+     "Wing Venture Capital (lead)",
+     "Norwest",
+     "S Capital"
+    ],
+    "source_url": "https://pulse2.com/lumana-40-million-series-a-raised-for-transforming-video-security-with-ai",
+    "source_date": "2025-07",
+    "grade": "B",
+    "note": "Month from search-result summaries; the company's own post is also listed."
+   },
+   "total_raised_usd": {
+    "amount": 64000000,
+    "source_url": "https://pulse2.com/lumana-40-million-series-a-raised-for-transforming-video-security-with-ai",
+    "date": "2025-07",
+    "grade": "B"
+   },
+   "status": "private",
+   "hebrew_relevance": null,
+   "sources": [
+    {
+     "url": "https://pulse2.com/lumana-40-million-series-a-raised-for-transforming-video-security-with-ai",
+     "date": "2025-07",
+     "what": "$40M Series A",
+     "grade": "B"
+    },
+    {
+     "url": "https://www.lumana.ai/blog/lumana-secures-40-million-to-lead-the-next-era-of-ai-powered-video-intelligence",
+     "date": "2025-07",
+     "what": "Company post",
+     "grade": "C"
+    },
+    {
+     "url": "https://www.calcalistech.com/ctechnews/article/kc2yk610e",
+     "date": null,
+     "what": "Calcalist coverage (seen in search results)",
+     "grade": "B"
+    }
+   ],
+   "grade": "B",
+   "verified_at": "2026-11-05"
+  },
+  {
+   "id": "mentee-robotics",
+   "name_he": "מנטי רובוטיקס",
+   "name_en": "Mentee Robotics",
+   "url": null,
+   "category": "robotics",
+   "focus": "apps",
+   "summary_he": "חברת רובוטים הומנואידיים מונעי AI. מובילאיי הסכימה לרכוש אותה בינואר 2026 ב-900 מיליון דולר (מזומן ומניות).",
+   "why_israeli": "Globes headline: 'Mobileye buys Shashua's Mentee Robotics for $900m'; co-founded by Prof. Amnon Shashua (Mobileye CEO).",
+   "last_round": {
+    "type": "acquired",
+    "amount_usd": 900000000,
+    "date": "2026-01-06",
+    "investors": [],
+    "source_url": "https://en.globes.co.il/en/article-1001531330",
+    "source_date": "2026-01-06",
+    "grade": "B",
+    "note": "$612M cash + up to 26.2M Mobileye shares; closing expected Q1 2026 - closing not confirmed in the sources seen. Focus value 'apps' used because the brief's list has no robotics value."
+   },
+   "total_raised_usd": null,
+   "status": "acquisition by Mobileye announced 2026-01-06; closing not confirmed in the sources seen",
+   "hebrew_relevance": null,
+   "sources": [
+    {
+     "url": "https://en.globes.co.il/en/article-1001531330",
+     "date": "2026-01-06",
+     "what": "Mobileye buys Mentee for $900M",
+     "grade": "B"
+    },
+    {
+     "url": "https://siliconangle.com/2026/01/06/mobileye-acquire-ai-humanoid-robotics-startup-mentee-robotics-900m-deal/",
+     "date": "2026-01-06",
+     "what": "Deal terms",
+     "grade": "B"
+    }
+   ],
+   "grade": "B",
+   "verified_at": "2026-11-05"
+  },
+  {
+   "id": "hirundo",
+   "name_he": "הירונדו (Hirundo)",
+   "name_en": "Hirundo",
+   "url": "https://www.hirundo.io",
+   "category": "models",
+   "focus": "models",
+   "summary_he": "טכנולוגיית 'שכחה' במודלים (machine unlearning) להסרת הטיות והזיות. סיד של 8 מיליון דולר ביוני 2025.",
+   "why_israeli": "PR Newswire dateline 'TEL AVIV, Israel, June 9, 2025'; founded 2023 by Oded Shmueli, Ben Luria and Michael Leybovich.",
+   "last_round": {
+    "type": "Seed",
+    "amount_usd": 8000000,
+    "date": "2025-06-09",
+    "investors": [
+     "Maverick Ventures Israel (lead)",
+     "SuperSeed",
+     "Alpha Intelligence Capital",
+     "Tachles VC",
+     "AI.FUND",
+     "Plug and Play (per other outlets)"
+    ],
+    "source_url": "https://prnewswire.com/il/news-releases/hirundo-raises-8m-seed-to-make-ai-forget-hallucinations-biases-and-vulnerabilities-302476302.html",
+    "source_date": "2025-06-09",
+    "grade": "B",
+    "note": "Company press release on a wire; investor lists differ between outlets."
+   },
+   "total_raised_usd": null,
+   "status": "private",
+   "hebrew_relevance": null,
+   "sources": [
+    {
+     "url": "https://prnewswire.com/il/news-releases/hirundo-raises-8m-seed-to-make-ai-forget-hallucinations-biases-and-vulnerabilities-302476302.html",
+     "date": "2025-06-09",
+     "what": "$8M seed",
+     "grade": "B"
+    },
+    {
+     "url": "https://siliconangle.com/2025/06/09/hirundo-raises-8m-try-make-ai-forget-bad-data-causing-hallucinations",
+     "date": "2025-06-09",
+     "what": "Trade press",
+     "grade": "B"
+    }
+   ],
+   "grade": "B",
+   "verified_at": "2026-11-05"
+  },
+  {
+   "id": "pliops",
+   "name_he": "פליאופס (Pliops)",
+   "name_en": "Pliops",
+   "url": "https://www.pliops.com",
+   "category": "infrastructure",
+   "focus": "infrastructure",
+   "summary_he": "מעבד אחסון והאצת נתונים לדאטה סנטר ולעומסי AI. סדרה D של 100 מיליון דולר ב-2022; סבב מאוחר יותר לא נמצא.",
+   "why_israeli": "Search coverage: Israeli storage-processor startup headquartered in Ramat Gan (one source lists a San Jose base).",
+   "last_round": {
+    "type": "D",
+    "amount_usd": 100000000,
+    "date": null,
+    "investors": [],
+    "source_url": "https://www.datacenterdynamics.com/en/news/data-processing-company-pliops-raises-100-million-in-series-d-funding-round",
+    "source_date": null,
+    "grade": "B",
+    "note": "Older round: year 2022 per search summaries, month not seen (a SiliconANGLE item of 2022-08-16 appeared in the same results). Total over $200M since 2017 per search summaries."
+   },
+   "total_raised_usd": {
+    "amount": 200000000,
+    "source_url": "https://www.datacenterdynamics.com/en/news/data-processing-company-pliops-raises-100-million-in-series-d-funding-round",
+    "date": null,
+    "grade": "B"
+   },
+   "status": "private; no round after 2022 seen",
+   "hebrew_relevance": null,
+   "sources": [
+    {
+     "url": "https://www.datacenterdynamics.com/en/news/data-processing-company-pliops-raises-100-million-in-series-d-funding-round",
+     "date": null,
+     "what": "Series D $100M",
+     "grade": "B"
+    },
+    {
+     "url": "https://www.design-reuse.com/news/news52512.html",
+     "date": null,
+     "what": "Series D release",
+     "grade": "C"
+    }
+   ],
+   "grade": "B",
+   "verified_at": "2026-11-05"
+  }
+ ],
+ "rejected": [
+  {
+   "name": "Engram",
+   "reason": "HQ San Francisco; only the CEO/co-founder is Israeli. Calcalist itself calls it an American startup ($98M, June 2026).",
+   "sources": [
+    "https://www.calcalistech.com/ctechnews/article/skoqbrumze"
+   ]
+  },
+  {
+   "name": "Wand AI",
+   "reason": "Only an aggregator (Clay) with a $10M 2022 seed. The Sept 2026 groundcover acquisition ('Wand') appears to be Wand Cloud (Kubernetes optimisation), a different company; no usable source for Wand AI itself.",
+   "sources": [
+    "https://www.clay.com/dossier/wand-ai-funding",
+    "https://www.trysignalbase.com/news/acquisitions/wand-acquired-by-groundcover-acquisition-r1-1"
+   ]
+  },
+  {
+   "name": "Mobileye",
+   "reason": "Public (Nasdaq) with Israeli R&D, but no source for IPO date or listing was opened this session."
+  },
+  {
+   "name": "Oasis Security / RAAAM / Limitless Labs / AutonomyAI",
+   "reason": "Seen only as passing headlines in search results; not AI-company-focused or no round details opened."
+  }
+ ]
+}

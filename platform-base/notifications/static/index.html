@@ -687,8 +687,15 @@ button.pg-live{cursor:pointer}
   overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
   direction:ltr;unicode-bidi:plaintext;
 }
-/* trailing slot: a badge, a dot, a chevron. `nowrap` so it can never wrap into a second line. */
-.bnv-tail{flex:none;display:inline-flex;align-items:center;gap:6px;white-space:nowrap;color:var(--bnv-ink-2);font-size:12px}
+/* trailing slot: a badge, a dot, a chevron. `nowrap` so it can never wrap into a second line.
+   In a RAIL it is the one thing a row still says beside its icon (a count, a dot), so it stays — pinned to
+   the icon's corner and small (`--bnv-tail-pos`, set by the two rail states in §3/§4). As a second column it
+   overflowed a 36px row: social-list's count, domains' (DGO-1591); connections had pinned its own, in every
+   state, so its drawer drew the count on the row's corner. The whole menu and the drawer keep it in line. */
+.bnv-item{position:relative}
+.bnv-tail{flex:none;display:inline-flex;align-items:center;gap:6px;white-space:nowrap;color:var(--bnv-ink-2);
+  font-size:var(--bnv-tail-fs,12px);line-height:var(--bnv-tail-lh,normal);
+  position:var(--bnv-tail-pos,static);inset-block-start:2px;inset-inline-end:2px}
 .bnv-item:hover .bnv-tail,.bnv-item.is-active .bnv-tail{color:inherit}
 .bnv-badge{
   flex:none;min-width:18px;height:18px;padding:0 5px;border-radius:999px;
@@ -751,6 +758,9 @@ button.pg-live{cursor:pointer}
   --bnv-rest:flex;
   --bnv-head-dir:column;
   --bnv-turn:rotate(180deg);
+  --bnv-tail-pos:absolute;
+  --bnv-tail-fs:10px;
+  --bnv-tail-lh:1;
 }
 /* An OPENED rail: the whole menu, standing over the page until a row is picked or it is shut — the
    way to a rail's search, and to the names of its rows. (The rail by width says the same in §4.) */
@@ -847,6 +857,9 @@ button.pg-live{cursor:pointer}
     --bnv-rest:flex;
     --bnv-head-dir:column;
     --bnv-turn:rotate(180deg);
+    --bnv-tail-pos:absolute;
+    --bnv-tail-fs:10px;
+    --bnv-tail-lh:1;
   }
   .bnv.is-open{position:fixed;inset-block:0;inset-inline-start:0;z-index:60;width:min(84vw,320px);box-shadow:var(--shadow-lg)}
 }
@@ -889,6 +902,9 @@ button.pg-live{cursor:pointer}
     --bnv-rest:none;
     --bnv-head-dir:row;
     --bnv-turn:none;
+    --bnv-tail-pos:static;
+    --bnv-tail-fs:12px;
+    --bnv-tail-lh:normal;
   }
   /* The shadow is the OPEN drawer's. On the parked one it still painted: a 40px grey band down the
      screen edge, over the page, in every app that carries this menu (seen in five, 2026-10-06). */
@@ -1668,8 +1684,11 @@ var BinaNav = (function () {
   // the same in every app.
   function adoptStatic(doc) {
     var menus = doc.querySelectorAll(".bnv:not([data-bnv-mounted])");
-    for (var i = 0; i < menus.length; i++) {
-      var menu = menus[i];
+    // one call per menu, so each control and each shut holds ITS menu (a loop's `var` would hand every
+    // handler the last one)
+    for (var i = 0; i < menus.length; i++) adoptOne(doc, menus[i]);
+  }
+  function adoptOne(doc, menu) {
       try {
         var parent = menu.parentElement;
         if (parent && parent.classList && typeof parent.closest === "function" && !parent.closest(".bnv-host")) {
@@ -1692,6 +1711,38 @@ var BinaNav = (function () {
         });
         doc.addEventListener("keydown", function (ev) { if (ev.key === "Escape") shut(); });
         menu.setAttribute("data-bnv-mounted", "static");
+        // …and the rail's way in, which a mounted menu has in its brand row (DGO-1591, the owner: «חצי תפריט …
+        // לא נפתח, לא נסגר» — a static menu at a rail's width showed its icons and no way to their names). Its
+        // head gets the same one control, where the menu stands in the component's grid (`.appgrid`: its column
+        // is the grid's, so a rail is a rail's width): open → shut; a chosen rail → the whole menu again; names
+        // hidden (a rail by width) → the whole menu over the page; the whole menu → a chosen rail. The same
+        // steps as the mounted control's (`build()`), and a chosen rail is remembered the same way — per page,
+        // since a static menu has no id of the app's: under the console every app shares one origin.
+        var mhead = menu.querySelector(".bnv-head");
+        if (mhead && !mhead.querySelector(".bnv-collapse") && parent && parent.classList.contains("appgrid")) {
+          var railKey = "bnav:rail:static:" + ((doc.location && doc.location.pathname) || "") + "#" + (menu.id || "");
+          var setRail = function (on) {
+            menu.classList.toggle("is-rail", !!on);
+            try { localStorage.setItem(railKey, on ? "1" : "0"); } catch (e) { /* private mode */ }
+          };
+          try { if (localStorage.getItem(railKey) === "1") menu.classList.add("is-rail"); } catch (e) { /* private mode */ }
+          // the head's own text is THE sign of names on screen: it is there from the first paint (the rows'
+          // labels come when the app renders them, and a missing node reads as "hidden")
+          var nameShown = function () {
+            return shown(mhead.querySelector(".bnv-head-text") || menu.querySelector(".bnv-label"));
+          };
+          var cbtn = el("button", "bnv-collapse", svg("chevron-end"));
+          cbtn.type = "button";
+          cbtn.title = LABELS.rail;
+          cbtn.setAttribute("aria-label", LABELS.rail);
+          cbtn.addEventListener("click", function () {
+            if (menu.classList.contains("is-open")) { shut(); return; }
+            if (nameShown()) { setRail(true); return; }
+            if (menu.classList.contains("is-rail")) setRail(false);
+            if (!nameShown()) { menu.classList.add("is-open"); scrim.classList.add("is-open"); }
+          });
+          mhead.appendChild(cbtn);
+        }
         // …and the way in: the component's own 48px button, exactly as a page that placed none
         if (typeof doc.querySelector === "function" && !doc.querySelector("[data-nav-toggle]")) {
           var b = el("button", "bnv-burger is-float");
@@ -1709,7 +1760,6 @@ var BinaNav = (function () {
           if (doc.documentElement && doc.documentElement.classList) doc.documentElement.classList.add("bnv-float");
         }
       } catch (e) { /* one menu that cannot be adopted is not the other menus' problem */ }
-    }
   }
   if (typeof document !== "undefined" && typeof document.querySelectorAll === "function") {
     if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", function () { adoptStatic(document); });
@@ -1750,6 +1800,7 @@ var binaAsk, binaTell;
     + "@media (pointer:coarse){.bask-btn{height:44px}.bask-field input{height:44px}}"
     + "@media (max-height:399px){.bask{padding:8px}.bask-card{padding:12px}.bask-acts{margin-top:10px}}"   // the side menu's own short frame
     + "#bina-tell{position:fixed;inset-block-end:16px;inset-inline-start:16px;z-index:2147483001;display:grid;gap:8px;max-width:min(420px,calc(100vw - 32px))}"
+    + "#bina-tell[data-at~=top]{inset-block-start:16px;inset-block-end:auto}#bina-tell[data-at~=end]{inset-inline-start:auto;inset-inline-end:16px}"   // where it covers nothing (place())
     + ".btell{--c:var(--ok);padding:10px 14px;border-radius:12px;background:color-mix(in srgb,var(--c) 14%,var(--surface));color:var(--ink);border:1px solid color-mix(in srgb,var(--c) 38%,var(--surface));border-inline-start:4px solid var(--c);font:13px/1.45 var(--font,system-ui,sans-serif);box-shadow:var(--shadow-lg);cursor:pointer;text-align:start}"
     + ".btell.warn{--c:var(--lime)}.btell.bad{--c:var(--red)}"   // --ok and --red, not the bare hues: they are the steps that are lifted on the dark ground
     + ".btell small{display:block;margin-top:2px;font-size:11.5px;color:var(--muted);overflow-wrap:anywhere;unicode-bidi:plaintext}"
@@ -1854,6 +1905,47 @@ var binaAsk, binaTell;
     });
   };
 
+  // The notice never sits on a control of the page (DGO-618): it keeps its corner while that covers nothing, and
+  // otherwise takes the first corner that does — at every frame size, a desktop window of 380 x 260 included,
+  // where the bottom corner is where a window keeps its buttons. With no corner free at its full width, the corners
+  // again at two thirds and at half of it (a narrower notice fits over a title, beside a window's ✕); with none
+  // free at all, the place that covers fewest.
+  var CONTROLS = "button,a[href],input:not([type=hidden]),select,textarea,summary,[role=button],[tabindex]:not([tabindex='-1'])";
+  function covered(box) {
+    var b = box.getBoundingClientRect(), n = 0;
+    if (b.width < 2 || b.height < 2) return 0;
+    doc.querySelectorAll(CONTROLS).forEach(function (c) {
+      var r = c.getBoundingClientRect();     // the cheap test first: on a screen of thousands of rows most are far away
+      if (Math.min(b.right, r.right) - Math.max(b.left, r.left) <= 1 || Math.min(b.bottom, r.bottom) - Math.max(b.top, r.top) <= 1) return;
+      // inside the notice, in a part of the page made inert (a window the page put over it), or not drawn: not a control here
+      if (box.contains(c) || c.closest("[inert]") || (c.checkVisibility && !c.checkVisibility({ checkVisibilityCSS: true }))) return;
+      n++;
+    });
+    return n;
+  }
+  function put(box, at, w) {
+    if (at) box.setAttribute("data-at", at); else box.removeAttribute("data-at");
+    box.style.maxWidth = w;
+    // a top spot lets go of the bottom, written on the element: a page's own rule that lifts the notice off its bar
+    // (`body:has(…) #bina-tell{inset-block-end:…}`) out-ranks the attribute, and the box stretched to the full height
+    box.style.insetBlockEnd = at.indexOf("top") < 0 ? "" : "auto";
+  }
+  function place(box) {
+    var best = null;
+    ["", "min(280px,calc((100vw - 32px) * .66))", "min(210px,calc((100vw - 32px) * .5))"].some(function (w) {
+      return ["", "end", "top", "top end"].some(function (at) {
+        put(box, at, w);
+        var n = covered(box);
+        if (!best || n < best.n) best = { at: at, w: w, n: n };
+        return n === 0;
+      });
+    });
+    put(box, best.at, best.w);
+  }
+  var placing = 0;
+  function replace() { var box = doc.getElementById("bina-tell"); if (box && box.firstChild) place(box); }
+  window.addEventListener("resize", function () { clearTimeout(placing); placing = setTimeout(replace, 120); });
+
   // The third word is how long the notice stays (ms) — or what more it carries: { ms, more, act, stay }.
   //   more  the service's own sentence, on a line of its own under the notice's words
   //   act   [label, fn] — one way on from the notice (an undo, a refresh): pressing it runs fn and takes the notice down
@@ -1870,12 +1962,13 @@ var binaAsk, binaTell;
     if (o.act) {
       var go = el("button", "", o.act[0]);
       go.setAttribute("type", "button");
-      go.addEventListener("click", function (e) { e.stopPropagation(); n.remove(); o.act[1](); });
+      go.addEventListener("click", function (e) { e.stopPropagation(); n.remove(); replace(); o.act[1](); });
       n.appendChild(go);
     }
-    n.addEventListener("click", function () { n.remove(); });
+    n.addEventListener("click", function () { n.remove(); replace(); });
     box.appendChild(n);
-    if (!o.stay) setTimeout(function () { n.remove(); }, o.ms || (kind === "bad" ? 9000 : 5200));
+    place(box);
+    if (!o.stay) setTimeout(function () { n.remove(); replace(); }, o.ms || (kind === "bad" ? 9000 : 5200));
     return n;
   };
 })();
@@ -1980,13 +2073,17 @@ function bucket(level){var l=(level||"info").toLowerCase();
 
 // Names in the shared menu's vocabulary (BinaNav.icons): one drawing per thing, in the menu row
 // and in the list alike.
-var SRC_ICON={"glitchtip-issue":"error","indox":"file","incoming-documents":"file","whatsapp":"chat","my-docs":"files","system":"gear","sync":"refresh","drive":"folder","gmail":"mail","autoheal":"activity"};
+var SRC_ICON={"glitchtip-issue":"error","indox":"file","incoming-documents":"file","whatsapp":"chat","my-docs":"files","system":"gear","sync":"refresh","drive":"folder","gmail":"mail","autoheal":"activity","security":"lock","meet":"monitor","meet-recorder":"monitor","meet-health":"monitor","sites":"globe","domains":"globe","dgo-extend":"share","links":"share"};
 function srcIcon(s){return SRC_ICON[s]||"bell";}
 function ic(name){return typeof BinaNav==="undefined"?"":BinaNav.svg(name);}
 function srcLabel(s){
   if(s==="glitchtip-issue")return"GlitchTip";
   if(!s)return"מערכת";
-  var m={"indox":"מסמכים נכנסים","incoming-documents":"מסמכים נכנסים","whatsapp":"וואטסאפ","my-docs":"מסמכים שלי","system":"מערכת","sync":"סנכרון","autoheal":"ריפוי עצמי"};
+  // the sources that post alerts, each by its app's own Hebrew name: «Security» and «Meet» were the English id with a
+  // capital letter, on 37 of 37 alerts of Exampleu's office (DGO-1593). A source not here still shows its id.
+  var m={"indox":"מסמכים נכנסים","incoming-documents":"מסמכים נכנסים","whatsapp":"וואטסאפ","my-docs":"מסמכים שלי","system":"מערכת","sync":"סנכרון","autoheal":"ריפוי עצמי",
+         "security":"אבטחה","meet":"פגישות וידאו","meet-recorder":"הקלטת פגישות","meet-health":"פגישות וידאו","drive":"קבצים","gmail":"Gmail",
+         "sites":"אתרים","domains":"דומיינים","dgo-extend":"הרחבת הלשכה","links":"לשכות מחוברות"};
   return m[s]||(s.charAt(0).toUpperCase()+s.slice(1));
 }
 var LVL_HE={error:"שגיאה",warning:"אזהרה",info:"מידע"};
@@ -2292,7 +2389,7 @@ async function dismiss(id){
 }
 async function readAll(){
   if(busy)return;busy=true;
-  try{var r=await fetch("api/notifications/read-all",{method:"POST"});var d=await r.json().catch(function(){return {};});
+  try{var r=await fetch("api/notifications/read-all",{method:"POST",headers:{"Content-Type":"application/json"},body:"{}"});var d=await r.json().catch(function(){return {};});
       if(r.ok)binaTell(d.updated===1?"סומנה אחת כנקראה":"סומנו "+(d.updated||0)+" כנקראו");else binaTell("הסימון נכשל","bad");}   // (it said «סומנו 1 כנקראו»)
   catch(e){binaTell("הסימון נכשל — השירות לא ענה","bad");}
   finally{busy=false;load();}
@@ -2312,7 +2409,7 @@ async function clearRead(){
   var at=document.activeElement;b.disabled=n<=0;if(!b.disabled&&(!at||at===document.body||at===b))b.focus();
   if(n<=0||!(await binaAsk({danger:true,ok:"מחיקה",body:"פעולה זו אינה הפיכה.",
         title:n===1?"למחוק את ההתראה שנקראה?":"למחוק את "+(n>1?n+" ":"")+"ההתראות שנקראו?"}))){busy=false;if(n<=0)load();return;}
-  try{var r=await fetch("api/notifications/clear-read",{method:"POST"});var d=await r.json().catch(function(){return {};});
+  try{var r=await fetch("api/notifications/clear-read",{method:"POST",headers:{"Content-Type":"application/json"},body:"{}"});var d=await r.json().catch(function(){return {};});
       if(r.ok)binaTell(d.deleted===1?"נוקתה התראה אחת":"נוקו "+(d.deleted||0)+" התראות");else binaTell("הניקוי נכשל","bad");}   // (and «נוקו 1 התראות»)
   catch(e){binaTell("הניקוי נכשל — השירות לא ענה","bad");}
   finally{busy=false;load();}

@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>טרמינל</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%2356693f'/%3E%3Cpath d='M8 11l5 5-5 5' stroke='%23f3f5f7' stroke-width='2.4' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3Cpath d='M16 21h8' stroke='%23f3f5f7' stroke-width='2.4' stroke-linecap='round'/%3E%3C/svg%3E">
+<!-- served by computers at `terminal` (DGO-1800): every path is relative to the APP's root — the console points the
+     page's base at /a/computers/, and served alone the page sits at /terminal, whose relatives resolve from / too.
+     The design system is computers' own copy; gate G27 keeps its token block identical to the source -->
+<link rel="stylesheet" href="static/vendor/bina-table.css">
+<link rel="stylesheet" href="static/terminal/vendor/xterm.css">
+<link rel="stylesheet" href="static/terminal/style.css">
+</head>
+<body class="tt">
+<header class="tt-bar">
+  <div class="tt-title">
+    <!-- the way back: computers' own fleet page, relative to the app's root like every path here -->
+    <a class="tt-back" href="./" title="חזרה לרשימת המחשבים">‹ מחשבים</a>
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 6l5 6-5 6"/><path d="M12 18h7"/></svg>
+    <h1>טרמינל</h1>
+    <span class="tt-sub" id="ttSub">שורת פקודה על מחשבי הלשכה</span>
+  </div>
+  <div class="tt-pick">
+    <label for="mSel" class="sr">מחשב</label>
+    <select id="mSel" aria-label="בחירת מחשב"></select>
+    <button type="button" class="btn" id="btnConn">התחברות</button>
+    <button type="button" class="btn ghost" id="btnDisc" disabled>ניתוק</button>
+  </div>
+</header>
+
+<div class="tt-alert hidden" id="mAlert" role="status"></div>
+
+<main class="tt-main">
+  <section class="tt-card">
+    <div class="tt-head">
+      <span class="pill muted" id="mState">לא מחובר</span>
+      <span class="tt-host" id="mHost"></span>
+      <span class="tt-spring"></span>
+      <span class="tt-hint" id="mHint">בחר מחשב ולחץ «התחברות»</span>
+    </div>
+    <div id="termMount" class="tt-term" dir="ltr"></div>
+  </section>
+</main>
+
+<script src="static/terminal/vendor/xterm.js"></script>
+<script src="static/terminal/vendor/addon-fit.js"></script>
+<script src="static/terminal/term.js"></script>
+</body>
+</html>

@@ -6,6 +6,10 @@
 # runs every phase that has a test file.
 set -euo pipefail
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
+# `npath` — a path handed to a native binary (python3) must be converted on Windows; G10 asks for it,
+# and this file hands one to python3 in the `readiness` target below.
+# shellcheck source=/dev/null
+. "${REPO_ROOT}/scripts/lib.sh"
 N="${1:-}"
 if [ -z "${N}" ]; then
   echo "usage: bbox dgo test <phase> | fresh | pair" >&2
@@ -26,6 +30,21 @@ fi
 if [ "${N}" = "fresh" ]; then
   shift || true
   exec bash "${REPO_ROOT}/apps/dgo-extend/tests/fresh-offices.sh" "$@"
+fi
+# `readiness` — the two checkers that say what a linked office can OPEN of what this one gives it
+# (DGO-553): the words on its card (`static/readiness.js`), and the acceptance verdicts themselves
+# (`./bbox dgo accept --self-test`, which proves the judge both ways against canned facts).
+if [ "${N}" = "readiness" ]; then
+  shift || true
+  rc=0
+  if command -v node >/dev/null 2>&1; then
+    node "${REPO_ROOT}/apps/dgo-extend/tests/readiness-selftest.mjs" || rc=1
+  else
+    echo "readiness: node is not on this machine — the words were not run" >&2
+    rc=1
+  fi
+  python3 "$(npath "${REPO_ROOT}/apps/dgo-extend/hooks/accept.py")" --self-test || rc=1
+  exit "${rc}"
 fi
 # The RUNNER is tests/phase0.py: it owns the frame (helpers + main) and imports phase<N>.py for that
 # phase's checks, so a new phase is one file and never a copy of the runner.

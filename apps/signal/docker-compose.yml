@@ -1,0 +1,100 @@
+# signal — Signal Desktop wrapped as an app of the office (DGO-1264; ai/context/wrapped-official-app.md).
+# The SCREEN only: Signal has no official headless side (signal-cli is third-party), so there is no adapter
+# (G108 KNOWN). Two services and one volume, from apps/_template-wrapped:
+#   signal-desktop       Signal Desktop under Selkies: the screen (routing.service in app.json). amd64 only
+#   signal-desktop-home  one shot that makes the desktop's folder in the volume before the desktop mounts it
+#   signal_home          the ONE volume (data.volumes): `desktop` is the desktop's home — its database, its key in
+#                        the keyring, the phone's link
+services:
+  signal-desktop:
+    image: ghcr.io/bina-solution/digital-office/signal-desktop:${IMAGE_TAG:-latest}
+    pull_policy: missing
+    build:
+      context: .
+      dockerfile: Dockerfile.desktop
+    container_name: signal-desktop-${DEPLOYMENT_NAME:-bina-deployment}
+    restart: unless-stopped
+    environment:
+      - PUID=1000
+      - PGID=1000
+      # nginx on the container's loopback (Dockerfile.desktop); the front door, desktop/gate.mjs, holds :3000.
+      - CUSTOM_PORT=3100
+      - CUSTOM_HTTPS_PORT=3101
+      - TZ=${TZ:-Asia/Jerusalem}
+      - TITLE=Signal
+      - SELKIES_UI_TITLE=Signal
+      - SELKIES_UI_SHOW_LOGO=false
+      - PIXELFLUX_WAYLAND=false     # X11 (Xvfb + Openbox): the road Electron clients are known to walk
+      - NO_DECOR=true
+      - SUBFOLDER=/                 # at the root: this console's /a/signal/ and a linked office's shared host
+      # Who may frame it: this console, plus each linked office's console that shows the tile (per office in
+      # .env, the whole value in DOUBLE quotes — bina-claude's compose says why).
+      - SELKIES_FRAME_ANCESTORS=${SIGNAL_FRAME_ANCESTORS:-'self'}
+      - SELKIES_ENABLE_RESIZE=true
+      - SELKIES_ENABLE_CLIPBOARD=true
+      - PASSWORD=                   # the office's sign-in is the door; never a second password
+      - START_DOCKER=false
+      - DEPLOYMENT_NAME=${DEPLOYMENT_NAME:-bina-deployment}
+    volumes:
+      - type: volume
+        source: signal_home
+        target: /config
+        volume:
+          subpath: desktop
+    depends_on:
+      signal-desktop-home:
+        condition: service_completed_successfully
+    shm_size: 1gb                   # Chromium and Electron renderers share memory through /dev/shm
+    networks: [traefik-network]
+    # desktop/health: the door answers, Signal's main process runs, and the build is not past the deadline Signal
+    # compiled into it (an expired Signal keeps its process up, so a door check alone would stay green)
+    healthcheck:
+      test: ["CMD", "/usr/local/bin/signal-health"]
+      interval: ${HEALTHCHECK_INTERVAL:-30s}
+      timeout: ${HEALTHCHECK_TIMEOUT:-8s}
+      retries: 5
+      start_period: 60s
+    deploy:
+      resources:
+        limits:
+          cpus: '${SIGNAL_DESKTOP_CPUS:-1}'
+          memory: ${SIGNAL_DESKTOP_MEMORY:-1536m}
+    logging:
+      driver: ${LOGGING_DRIVER:-json-file}
+      options:
+        max-size: 5m
+        max-file: '3'
+
+  # The desktop's home, made before it is mounted: Docker refuses a subpath that does not exist, and a container
+  # whose start failed stays Created for good. No container_name: a fixed name collides on a re-run.
+  signal-desktop-home:
+    image: ghcr.io/bina-solution/digital-office/signal-desktop:${IMAGE_TAG:-latest}
+    pull_policy: missing
+    restart: "no"
+    entrypoint: ["/bin/sh", "-c"]
+    command: ["mkdir -p /config/desktop && chown 1000:1000 /config/desktop"]
+    # nocopy: this can be the volume's first mount, and Docker would copy the image's own /config into its root
+    volumes:
+      - type: volume
+        source: signal_home
+        target: /config
+        volume:
+          nocopy: true
+    network_mode: none
+    deploy:
+      resources:
+        limits:
+          cpus: '0.1'
+          memory: 32m
+    logging:
+      driver: ${LOGGING_DRIVER:-json-file}
+      options:
+        max-size: 1m
+        max-file: '2'
+
+volumes:
+  signal_home:
+
+networks:
+  traefik-network:
+    external: true

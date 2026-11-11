@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+# post-checkout <prev> <new> <branch-flag> — the files a branch checkout wrote go back to the checkout's owner when root
+# ran it (scripts/checkout-owner.sh, DGO-1324). A file checkout (flag 0) names no paths here, and a clone (prev = 0…)
+# is the owner's own.
+[ "$(id -u)" = 0 ] || exit 0
+[ "${3:-0}" = 1 ] && [ "${1:-}" != "${2:-}" ] || exit 0
+case "${1:-}" in *[!0]*) ;; *) exit 0 ;; esac
+git diff --name-only --no-renames -z "$1" "$2" 2>/dev/null \
+  | bash "$(git rev-parse --show-toplevel)/scripts/checkout-owner.sh" restore
+exit 0

@@ -18,12 +18,14 @@ Everything this DOES diff is matched by exact name, so it is comparable by const
 """
 
 VOL_PREFIX, BIND_PREFIX, SEC_PREFIX, APP_PREFIX = "volumes/", "binds/", "secrets/", "apps/"
+DECL_PREFIX = "declarations/"     # the office's state file and outbox (deployment-archive.py DECLARATION_PATHS)
 
 
 def _vol_short(rel):
-    """volumes/<short>.tar.gz and volumes/<short>.HANDLED both name the same volume."""
+    """volumes/<short>.tar.gz, volumes/<short>.HANDLED and volumes/<short>.SHARED (another app's volume, DGO-1510)
+    all name the same volume."""
     base = rel[len(VOL_PREFIX):]
-    for suffix in (".tar.gz", ".HANDLED", ".tar"):
+    for suffix in (".tar.gz", ".HANDLED", ".SHARED", ".tar"):
         if base.endswith(suffix):
             return base[: -len(suffix)]
     return base
@@ -36,6 +38,7 @@ def build_plan(man, live):
     live_short = {v.get("short"): v for v in live_vols if v.get("short")}
 
     overwrite, create, handled, binds, secrets, app_backups = [], [], [], [], [], []
+    declarations = []
     for rel in sorted(arts):
         e = arts[rel] or {}
         kind, size = e.get("kind"), e.get("bytes") or 0
@@ -56,6 +59,9 @@ def build_plan(man, live):
             binds.append(row)
         elif rel.startswith(SEC_PREFIX):
             secrets.append(row)
+        elif rel.startswith(DECL_PREFIX):
+            row["path"] = e.get("note") or ""
+            declarations.append(row)
         elif rel.startswith(APP_PREFIX):
             row["app"] = rel.split("/")[1] if "/" in rel[len(APP_PREFIX):] + "/" else None
             parts = rel.split("/")
@@ -95,6 +101,17 @@ def build_plan(man, live):
             "%d live volume(s) are NOT in this archive. A restore does not delete them - they "
             "SURVIVE - so the result is the archive's data plus this leftover state, which is not "
             "a faithful clone of the source." % len(target_only))
+    undeclared = man.get("undeclared_volumes") or []
+    if man.get("undeclared_volumes_error"):
+        warnings.append(
+            "THE SOURCE'S VOLUMES COULD NOT BE LISTED at export (%s): whether it held volumes no app "
+            "declares, and so are not in this archive, is NOT KNOWN." % man["undeclared_volumes_error"])
+    if undeclared or man.get("anonymous_volumes"):
+        warnings.append(
+            "THE SOURCE HELD %d VOLUME(S) NO APP DECLARES (%s) and %d anonymous: none of them is in "
+            "this archive, so a restore cannot bring them back."
+            % (len(undeclared), ", ".join(sorted(v.get("name") or "?" for v in undeclared))[:200],
+               man.get("anonymous_volumes") or 0))
     empty = [r for r in (overwrite + create + binds + app_backups) if not r["bytes"]]
     if empty:
         warnings.append(
@@ -109,12 +126,15 @@ def build_plan(man, live):
         "same_deployment": same_deployment,
         "counts": {"overwrite": len(overwrite), "create": len(create), "handled": len(handled),
                    "binds": len(binds), "secrets": len(secrets), "app_backups": len(app_backups),
-                   "target_only": len(target_only)},
+                   "declarations": len(declarations), "target_only": len(target_only),
+                   "undeclared_at_source": len(undeclared)},
         "volumes": {"overwrite": overwrite, "create": create, "handled_by_app_hook": handled,
                     "target_only": target_only},
         "app_backups": app_backups,
         "binds": binds,
         "secrets": secrets,
+        "declarations": declarations,
+        "undeclared_at_source": undeclared,
         # Verbatim, and never diffed. See the module docstring.
         "facts_at_export": man.get("facts") or {},
         "warnings": warnings,
@@ -135,7 +155,12 @@ def self_test():
             "binds/empty__path.tar.gz": {"kind": "bind", "bytes": 0, "sha256": ""},
             "secrets/.env": {"kind": "secret", "bytes": 9, "sha256": "d"},
             "apps/n8n/n8n.dump": {"kind": "app-backup", "bytes": 11, "sha256": "e"},
+            "declarations/platform.state.yaml": {"kind": "declaration", "bytes": 4, "sha256": "f",
+                                                 "note": "platform.state.yaml"},
         },
+        "undeclared_volumes": [{"name": "exampleu-meets-import", "project": None, "ours": False,
+                                "size": "448MB"}],
+        "anonymous_volumes": 2,
     }
     live = {"deployment": "posnet", "project": "p",
             "volumes": [{"short": "keep", "size": "1KB", "bytes": 1024},
@@ -152,15 +177,24 @@ def self_test():
          p["volumes"]["overwrite"][0]["live_size"], "1KB"),
         ("app backups are attributed", p["app_backups"][0]["app"], "n8n"),
         ("binds and secrets are separated", (p["counts"]["binds"], p["counts"]["secrets"]), (2, 1)),
+        ("a declaration is its own bucket, named by its path",
+         [r["path"] for r in p["declarations"]], ["platform.state.yaml"]),
+        ("a declaration is not counted as a secret", p["counts"]["secrets"], 1),
+        ("the source's undeclared volumes are carried into the plan",
+         [v["name"] for v in p["undeclared_at_source"]], ["exampleu-meets-import"]),
         ("same deployment is detected", p["same_deployment"], True),
         ("facts are carried verbatim, not diffed",
          p["facts_at_export"], {"indox": {"incoming_documents": "1"}}),
     ]
     # Every warning below is one a reviewer must see before approving a write.
     joined = " | ".join(p["warnings"])
+    unlisted = build_plan(dict(man, undeclared_volumes_error="TimeoutExpired: docker system df"), live)
+    cases.append(("a listing that failed at export is said, never read as 'none'",
+                  any("COULD NOT BE LISTED" in w for w in unlisted["warnings"]), True))
     for label, needle in (("same-deployment", "SAME DEPLOYMENT"), ("partial mode", "MODE="),
                           ("not quiesced", "NOT QUIESCED"), ("secrets", "SECRET ARTIFACT"),
-                          ("survivors", "SURVIVE"), ("zero-byte", "ZERO BYTES")):
+                          ("survivors", "SURVIVE"), ("zero-byte", "ZERO BYTES"),
+                          ("undeclared at the source", "NO APP DECLARES")):
         cases.append(("warns about %s" % label, needle in joined, True))
 
     bad = 0

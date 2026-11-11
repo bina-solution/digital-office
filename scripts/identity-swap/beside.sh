@@ -8,7 +8,7 @@ set -uo pipefail
 cd "$(dirname "$0")/../.."
 OUT=ci-artifacts/identity-swap; mkdir -p "${OUT}"
 D="$(sed -n 's/^DEPLOYMENT_NAME=//p' .env | tail -1)"; D="${D:-bina-deployment}"
-IMG=ghcr.io/solomonboltin/digital-office/forward-auth:latest
+IMG=ghcr.io/bina-solution/digital-office/forward-auth:latest
 say() { printf '%s %s\n' "$(date -u +%T)" "$*"; }
 die() { say "STOP: $*"; exit 1; }
 say "load $(cut -d' ' -f1-3 /proc/loadavg); deployment ${D}"

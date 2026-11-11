@@ -34,7 +34,7 @@ hosts:
   browser42:          {env: BROWSER42_BASE_URL,        local: browser42.localhost,         auth: authentik, tier: first_party}
   n8n:                {env: N8N_BASE_URL,              local: n8n.localhost,               auth: own,       tier: third_party}
   portainer:          {env: PORTAINER_BASE_URL,        local: portainer.localhost,         auth: own,       tier: third_party}
-  glitchtip:          {env: GLITCHTIP_BASE_URL,        local: glitchtip.localhost,         auth: own,       tier: third_party}
+  glitchtip:          {env: GLITCHTIP_BASE_URL,        local: glitchtip.localhost,         auth: authentik, tier: third_party}
   authentik:          {env: AUTH_BASE_URL,             local: auth.localhost,              auth: none,      tier: third_party}
   supabase-studio:    {env: SUPABASE_STUDIO_BASE_URL,  local: supabase-studio.localhost,   auth: authentik, tier: third_party}
   redisinsight:       {env: REDISINSIGHT_BASE_URL,     local: redisinsight.localhost,      auth: authentik, tier: third_party}
@@ -50,9 +50,13 @@ hosts:
   # the console shell and the standalone host is never visited while it is embedded).
   bina:               {env: BINA_DS_BASE_URL,          local: bina.localhost,              auth: authentik, tier: first_party}
   telegram-tv:        {env: TELEGRAM_TV_BASE_URL,      local: telegram-tv.localhost,       auth: authentik, tier: first_party}
+  # [2026-11-03] the office's Telegram (DGO-1300): one page, three places (account, chats, flow)
+  telegram:           {env: TELEGRAM_BASE_URL,         local: telegram.localhost,          auth: authentik, tier: first_party}
   git:                {env: GIT_BASE_URL,              local: git.localhost,               auth: authentik, tier: first_party}
   sites:              {env: SITES_BASE_URL,            local: sites.localhost,             auth: authentik, tier: first_party}
   domains:            {env: DOMAINS_BASE_URL,          local: domains.localhost,           auth: authentik, tier: first_party}
+  # [2026-11-08] the InterNIC provider of domains (DGO-1473): the session, the account's domains, a zone
+  domain-internic:    {env: DOMAIN_INTERNIC_BASE_URL,  local: domain-internic.localhost,   auth: authentik, tier: first_party}
   computers:          {env: COMPUTERS_BASE_URL,        local: computers.localhost,         auth: authentik, tier: first_party}
   # [2026-10-21] the security app (DGO-890): who comes in, what goes out, the bans — embedded at /a/security/
   security:           {env: SECURITY_BASE_URL,         local: security.localhost,          auth: authentik, tier: first_party}
@@ -86,10 +90,35 @@ hosts:
   # [2026-10-21] Ollama (DGO-825): a framed tile since it got one, so linked offices see it. Embedded
   # like Plane (/a/ollama/), so first_party for the same reason; `auth` is its app.json's `sso`.
   ollama:             {env: OLLAMA_BASE_URL,           local: ollama.localhost,            auth: authentik, tier: first_party}
-  # [2026-10-31] Bina Claude (DGO-1074): the official Claude Desktop app streamed by Selkies (/a/bina-claude/)
-  # and Claude Code's terminal (/a/claude-terminal/) — both embedded, so first_party like Plane.
+  # [2026-10-31] Bina Claude (DGO-1074): the official Claude Desktop app streamed by Selkies (/a/bina-claude/),
+  # embedded, so first_party like Plane. ONLY the app, with ONE sign-in: there is no terminal (DGO-1684, G105).
   claude:             {env: BINA_CLAUDE_BASE_URL,      local: claude.localhost,            auth: authentik, tier: first_party}
-  claude-terminal:    {env: BINA_CLAUDE_TERMINAL_BASE_URL, local: claude-terminal.localhost, auth: authentik, tier: first_party}
+  # [2026-11-10] the chat platforms' own clients, wrapped (DGO-1264): each is ONE stream of the vendor's desktop
+  # app (/a/element/, /a/signal/, /a/slack/), embedded like Bina Claude, so first_party; `auth` is their `sso`.
+  element:            {env: ELEMENT_BASE_URL,          local: element.localhost,           auth: authentik, tier: first_party}
+  signal:             {env: SIGNAL_BASE_URL,           local: signal.localhost,            auth: authentik, tier: first_party}
+  slack:              {env: SLACK_BASE_URL,            local: slack.localhost,             auth: authentik, tier: first_party}
+  # [2026-11-10] a client's own system (Exampleu, DGO-1548): the tile «דוגמה» (/a/examplem-io/), Examplem's cash flow by
+  # date, embedded, so first_party like Plane; `auth` is its app.json's `sso`.
+  examplem:             {env: EXAMPLEM_BASE_URL,           local: examplem.localhost,            auth: authentik, tier: first_party}
+  # [2026-11-10] a client's own system (Exampleu, DGO-1529/1534): the tile «נכסים» (/a/assets/), «מסך אחד» and the
+  # property's file, embedded, so first_party like Plane; `auth` is its app.json's `sso`.
+  assets:             {env: ASSETS_BASE_URL,           local: assets.localhost,            auth: authentik, tier: first_party}
+  # [2026-11-11] the third app of Exampleu's group (DGO-1782): the tile «הלוואות» (/a/loans/), the loans on a day and
+  # who owes whom, embedded, so first_party like Plane; `auth` is its app.json's `sso`.
+  loans:              {env: LOANS_BASE_URL,            local: loans.localhost,             auth: authentik, tier: first_party}
+  # [2026-11-10] hp-dgo's tiles, met at the release that took batch 33 (DGO-969): each embedded in the shell,
+  # behind the office's sign-in (`sso` in its app.json), so first_party like the rest.
+  calculator:         {env: CALCULATOR_BASE_URL,       local: calculator.localhost,        auth: authentik, tier: first_party}
+  esign:              {env: ESIGN_BASE_URL,            local: esign.localhost,             auth: authentik, tier: first_party}
+  newsflow:           {env: NEWSFLOW_BASE_URL,         local: newsflow.localhost,          auth: authentik, tier: first_party}
+  office-routes:      {env: OFFICE_ROUTES_BASE_URL,    local: office-routes.localhost,     auth: authentik, tier: first_party}
+  terminal:           {env: TERMINAL_BASE_URL,         local: terminal.localhost,          auth: authentik, tier: first_party}
+  # [2026-11-10] the office's GitHub runner as an app, «מריץ CI» (DGO-1797, 903c7bfbe)
+  ci-runner:          {env: CI_RUNNER_BASE_URL,        local: ci-runner.localhost,         auth: authentik, tier: first_party}
+  # [2026-11-11] the office's Android phone as an app (DGO-1797 pkg 11, b158826e8): noVNC's page, embedded in
+  # the shell behind the office's sign-in (`sso` in its app.json)
+  android-emulator:   {env: ANDROID_EMULATOR_BASE_URL, local: android-emulator.localhost,  auth: authentik, tier: first_party}
 
 # ── apps that live INSIDE the console shell ─────────────────────────────────
 # The console is the product. A user never visits my-docs.localhost — they open the console and
@@ -135,7 +164,18 @@ single_view:
   # [2026-10-31] Bina Claude (DGO-1074): one stream each — the Claude Desktop app's pixels, and a TTY. Their
   # screens are inside the software they stream; the sessions are addressed by `./bbox bina-claude sessions`.
   claude:             {path: "/", title: "בינה קלוד — אפליקציית Claude"}
-  claude-terminal:    {path: "/", title: "בינה קלוד — מסוף"}
+  # [2026-11-11] the office's Android phone (DGO-1797 pkg 11): one stream, noVNC's page of the device. Its
+  # screens are the phone's own; its apps and installs are addressed by apps/android-emulator/device.py
+  android-emulator:   {path: "/", title: "אמולטור אנדרואיד — הטלפון של הלשכה"}
+  # [2026-11-11] the InterNIC provider (b5e30566a): framed in the rail with a hosts row and NO view, so G78
+  # refused on every office that runs it (masked on the MacBook behind android-emulator's missing row).
+  # One page, no router: the smell probe over its own index.html is empty, and its probe in inventory.py
+  # keeps it so
+  domain-internic:    {path: "/", title: "אינטרניק — הדומיינים והרשומות ב-InterNIC"}
+  # [2026-11-10] the wrapped chat clients (DGO-1264): one stream each; their screens are the vendor's own.
+  element:            {path: "/", title: "אלמנט — הלקוח הרשמי של Element"}
+  signal:             {path: "/", title: "סיגנל — הלקוח הרשמי של Signal"}
+  slack:              {path: "/", title: "סלאק — הלקוח הרשמי של Slack"}
   # [2026-09-27] classified by running the router-smell probe over each app's own source:
   # these three serve ONE screen (cards/sections, no router, no tabs). They get a probe
   # below, so the moment one grows navigation the inventory fails instead of hiding it.
@@ -217,10 +257,10 @@ states:
     - {id: switcher,       of: "#/m/drive", title: "מסך בית — אפליקציות פתוחות",
        steps: [{js: "location.hash='#/'"}, {js: "var b=document.getElementById('bnOpen'); if(b&&b.offsetParent) b.click();"}]}
     - {id: palette,        of: "#/",        title: "המרכז — חיפוש מהיר", steps: [{click: "#paletteBtn"}]}
-    - {id: rail-collapsed, of: "#/",        title: "המרכז — תפריט מכווץ", steps: [{click: "#railToggle"}]}
-    # the connect wizard opens from the account bar, which the shell renders only for
-    # modules that own accounts (service: drive|mail in modules.yaml) — hence #/m/drive
-    - {id: wizard-provider, of: "#/m/drive", title: "אשף חיבור — בחירת ספק", steps: [{click: "#acctChip button"}]}
+    # folds the rail when it is not folded: `#/` opens the first app, where the rail is folded by default since
+    # DGO-160, and a press there would OPEN it (and pin it open)
+    - {id: rail-collapsed, of: "#/",        title: "המרכז — תפריט מכווץ",
+       steps: [{js: "document.getElementById('app').classList.contains('rail-collapsed')||document.getElementById('railToggle').click()"}]}
   # NOTE: these belong to drive, not console. A line-range edit once dropped this
   # key, which silently re-attributed both states to the console and navigated to
   # console/trash — not a console route, so the tiles showed the SPA fallback while

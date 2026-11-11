@@ -117,7 +117,7 @@ const rowKeyOf = (r: ActionEntry) => `${r.ts}:${r.id}:${r.label}:${r.exec ?? ''}
  *  to stream 430,000 rows through 860 round trips would hang the tab. So it takes the newest
  *  `EXPORT_MAX` matching actions, and says exactly that before it starts. */
 const EXPORT_MAX = 5000;
-const EXPORT_PAGE = 500; // the endpoint's own per-request ceiling
+const EXPORT_PAGE = 500; // rows a request: ten at most for EXPORT_MAX (the endpoint allows 1000 since 2026-08-16)
 
 const he = (n: number) => n.toLocaleString('he-IL');
 
@@ -897,14 +897,14 @@ export default function ActionLogPage() {
       title: 'ייצוא יומן הפעולות',
       consequence: (
         <>
-          ייווצר קובץ CSV עם <b className="num">{he(take)}</b> שיגורים
+          ייווצר קובץ CSV עם <b className="num">{he(take)}</b> פעולות
           {matched > take ? (
             <>
-              {' '}— <b className="num">{he(EXPORT_MAX)}</b> החדשים ביותר מתוך{' '}
-              <b className="num">{he(matched)}</b> התואמים לסינון הנוכחי
+              {' '}— <b className="num">{he(EXPORT_MAX)}</b> החדשות ביותר מתוך{' '}
+              <b className="num">{he(matched)}</b> התואמות לסינון הנוכחי
             </>
           ) : (
-            ' — כל התואמים לסינון הנוכחי'
+            ' — כל התואמות לסינון הנוכחי'
           )}
           , בטווח <b>{winLabel(win)}</b>.
         </>
@@ -960,7 +960,7 @@ export default function ActionLogPage() {
       a.download = `action-log-${win}-${new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-')}.csv`;
       a.click();
       URL.revokeObjectURL(a.href);
-      push('ok', `יוצאו ${out.length === 1 ? 'שיגור אחד' : `${he(out.length)} שיגורים`} לקובץ CSV`);
+      push('ok', `נוצר קובץ CSV עם ${out.length === 1 ? 'פעולה אחת' : `${he(out.length)} פעולות`}`);
     } catch (e: unknown) {
       push('bad', `הייצוא נכשל: ${e instanceof Error ? e.message : String(e)}`);
     } finally {
@@ -983,7 +983,7 @@ export default function ActionLogPage() {
         consequence: (
           <>
             הסטטוס של המסמך ישונה ל־<b className="mono">ACTION_RESTART</b>, ומכונת המצבים תיקח אותו
-            במחזור הבא. זו הבקשה היחידה המאושרת להרצה חוזרת — הראוטר לא משוגר ישירות מכאן.
+            במחזור הבא. זו הבקשה היחידה המאושרת להרצה חוזרת — הראוטר לא מופעל ישירות מכאן.
           </>
         ),
         facts: [
@@ -1019,13 +1019,13 @@ export default function ActionLogPage() {
   const purgeWindow = useCallback(async () => {
     if (purging) return;
     const ok = await ask({
-      title: 'מחיקת שורות מיומן השיגורים',
+      title: 'מחיקת שורות מיומן הפעולות',
       danger: true,
       consequence: (
         <>
           יימחקו <b className="num">{he(windowTotal)}</b> שורות מטבלת{' '}
           <span className="mono">indox_action_execution_log</span>
-          {win === 'all' ? ' — כלומר כל הטבלה' : <> — כל השיגורים בטווח <b>{winLabel(win)}</b></>}.
+          {win === 'all' ? ' — כלומר כל הטבלה' : <> — כל הפעולות בטווח <b>{winLabel(win)}</b></>}.
           המסמכים עצמם לא נוגעים; מה שנמחק הוא העדות למה שרץ עליהם. בלתי הפיך.
         </>
       ),
@@ -1053,7 +1053,7 @@ export default function ActionLogPage() {
         tz: Intl.DateTimeFormat().resolvedOptions().timeZone,
       });
       // the result goes to the one notice channel — with the number the server actually deleted
-      if (r.ok) push('ok', `נמחקו ${r.deleted != null ? he(r.deleted) : 'כל'} שורות השיגור בטווח ${winLabel(win)}`);
+      if (r.ok) push('ok', `נמחקו ${r.deleted == null ? 'כל השורות' : r.deleted === 1 ? 'שורה אחת' : `${he(r.deleted)} שורות`} מיומן הפעולות בטווח ${winLabel(win)}`);
       else push('bad', `המחיקה נכשלה: ${r.error || 'ללא פירוט'}`);
       await load();
     } catch (e) {
@@ -1080,8 +1080,8 @@ export default function ActionLogPage() {
               live table holds 308,956 rows going back to 2026-08-17 — six days, measured
               2026-08-23, not one. */}
           <div className="sub">
-            שיגורי פעולות אמיתיים של הראוטר — שורה אחת לכל (מסמך · פעולה · ריצה), נפתחת לפני
-            השיגור ונסגרת אחריו. «רץ…» = שיגור שטרם נסגר; משך של{' '}
+            פעולות אמיתיות של הראוטר — שורה אחת לכל (מסמך · פעולה · ריצה), נפתחת לפני
+            הפעולה ונסגרת אחריה. «רץ…» = פעולה שטרם נסגרה; משך של{' '}
             {REAPED_MIN} דק׳ ומעלה = סוגריים שנסגרו בכפייה, לא עבודה שארכה שעה.
           </div>
         </div>
@@ -1091,7 +1091,7 @@ export default function ActionLogPage() {
             <span
               className="muted small"
               title={
-                'הטווח המשותף שנשמר הוא "הכל". במסך הזה "הכל" סורק את כל טבלת השיגורים לפני ' +
+                'הטווח המשותף שנשמר הוא "הכל". במסך הזה "הכל" סורק את כל טבלת הפעולות לפני ' +
                 'שמוצג מספר אחד — נמדד חי: 25.9 שניות, ועצירה בתקרת 250,000 שורות (סריקה ' +
                 'חלקית), מול 6.7 שניות ו-35,867 שורות מלאות ב"היום". לכן הוא נבחר בלחיצה ' +
                 'ולא נפתח מעצמו. לחיצה על "הכל" תפעל כרגיל.'
@@ -1149,8 +1149,8 @@ export default function ActionLogPage() {
             disabled={!answered || ((d?.dup_pairs ?? 0) === 0 && !dupOnly)}
             onClick={() => setDupOnly(!dupOnly)}
             title={
-              'כפילות = אותו (מסמך + פעולה) ששוגר ביותר מהרצה אחת אחת בטווח הזה. ' +
-              'מזהה ההרצה נמצא במפתח הראשי של טבלת השיגורים, ולכן שורה שנייה לאותו צמד היא ' +
+              'כפילות = אותו צמד (מסמך + פעולה) שרץ ביותר מהרצה אחת של הראוטר בטווח הזה. ' +
+              'מזהה ההרצה נמצא במפתח הראשי של טבלת הפעולות, ולכן שורה שנייה לאותו צמד היא ' +
               'הרצה כפולה אמיתית ולא רישום כפול.\n' +
               (answered
                 ? `בטווח ${winLabel(win)}: ${(d?.dup_pairs ?? 0) === 1 ? 'צמד אחד' : `${he(d?.dup_pairs ?? 0)} צמדים`}, ${(d?.dup_rows ?? 0) === 1 ? 'שורה אחת' : `${he(d?.dup_rows ?? 0)} שורות`}.\n`
@@ -1170,8 +1170,8 @@ export default function ActionLogPage() {
             onClick={() => setFocus(focus === 'open' ? null : 'open')}
             aria-pressed={focus === 'open'}
             title={
-              'שיגורים שנפתחו ולא נסגרו — ENDED_AT ריק — מעל מספר הדקות שמימין. ' +
-              'או שהם רצים כרגע, או שההרצה מתה בין הסוגריים ואף אחד כבר לא יסגור אותם.'
+              'פעולות שנפתחו ולא נסגרו — ENDED_AT ריק — מעל מספר הדקות שמימין. ' +
+              'או שהן רצות כרגע, או שההרצה מתה בין הסוגריים ואף אחד כבר לא יסגור אותן.'
             }
           >
             פתוחות מעל {openMin} דק׳
@@ -1186,15 +1186,15 @@ export default function ActionLogPage() {
             value={openMin}
             onChange={(e) => setOpenMin(Math.max(1, Math.min(720, Number(e.target.value) || 1)))}
             style={{ width: 62 }}
-            aria-label="דקות לסינון שיגורים פתוחים"
-            title="מעל כמה דקות שיגור פתוח נחשב חריג"
+            aria-label="דקות לסינון פעולות פתוחות"
+            title="מעל כמה דקות פעולה פתוחה נחשבת חריגה"
           />
           <button
             className={`chip${focus === 'reaped' ? ' active' : ''}`}
             onClick={() => setFocus(focus === 'reaped' ? null : 'reaped')}
             aria-pressed={focus === 'reaped'}
             title={
-              `שיגורים שנסגרו ${REAPED_MIN} דקות או יותר אחרי שנפתחו. זו לא עבודה שארכה שעה — ` +
+              `פעולות שנסגרו ${REAPED_MIN} דקות או יותר אחרי שנפתחו. זו לא עבודה שארכה שעה — ` +
               'זו סגירה קבוצתית של סוגריים שהרצת הראוטר שלהם כבר מתה. נמדד בטבלה החיה: ' +
               '120 שורות בדיוק בטווח 65.1–65.2 דקות, ועוד 56,146 בין 4.5 ל-94 שעות.'
             }
@@ -1223,7 +1223,7 @@ export default function ActionLogPage() {
               printed the same number twice under two names, one of which named the wrong unit.
               Shown now only when the pre-filter genuinely read more than it kept. */}
           {answered && d?.scanned_rows != null && d.scanned_rows !== windowTotal && (
-            <span className="muted small" title="שורות שיגור שנקראו כדי לבנות את הטווח הזה">
+            <span className="muted small" title="שורות מיומן הפעולות שנקראו כדי לבנות את הטווח הזה">
               נקראו {d.scanned_rows === 1 ? 'שורה אחת' : `${he(d.scanned_rows)} שורות`}
             </span>
           )}
@@ -1265,7 +1265,7 @@ export default function ActionLogPage() {
             <span
               className="pill bad"
               title={
-                'שורות בטבלת השיגורים שלא ניתן היה לקרוא — חותמת זמן פגומה או שם פעולה חסר. ' +
+                'שורות בטבלת הפעולות שלא ניתן היה לקרוא — חותמת זמן פגומה או שם פעולה חסר. ' +
                 'הן אינן מופיעות בשום מספר על המסך הזה. זו תקלת כתיבה בצינור, לא מגבלת תצוגה.'
               }
             >
@@ -1281,8 +1281,8 @@ export default function ActionLogPage() {
       {/* what the duplicates chip actually opened, in words, beside the rows it opened */}
       {dupOnly && (
         <div className="callout warn">
-          <b>מוצגות רק כפילויות.</b> כל שורה כאן היא שיגור של צמד (מסמך + פעולה) שכבר שוגר בהרצה
-          אחרת באותו טווח, והשורות מקובצות כך שכל צמד יושב יחד. בטווח {winLabel(win)}:{' '}
+          <b>מוצגות רק כפילויות.</b> כל שורה כאן שייכת לצמד (מסמך + פעולה) שרץ ביותר
+          מהרצת n8n אחת באותו טווח, והשורות מקובצות כך שכל צמד יושב יחד. בטווח {winLabel(win)}:{' '}
           <b className="num">{meas(d?.dup_pairs)}</b> צמדים על פני{' '}
           <b className="num">{meas(d?.dup_rows)}</b> שורות. השוו את עמודת «הרצה n8n» בין השורות של
           אותו צמד — שתי הרצות שונות על אותה פעולה הן ריצה כפולה אמיתית.{' '}
@@ -1306,8 +1306,8 @@ export default function ActionLogPage() {
             <>
               <b>
                 {scan.lens === 'open'
-                  ? `${scan.rows.length === 1 ? 'שיגור אחד פתוח' : `${he(scan.rows.length)} שיגורים פתוחים`} מעל ${scan.minutes} דק׳`
-                  : `${scan.rows.length === 1 ? 'שיגור אחד שנסגר' : `${he(scan.rows.length)} שיגורים שנסגרו`} ${REAPED_MIN} דק׳ או יותר אחרי הפתיחה`}
+                  ? `${scan.rows.length === 1 ? 'פעולה אחת פתוחה' : `${he(scan.rows.length)} פעולות פתוחות`} מעל ${scan.minutes} דק׳`
+                  : `${scan.rows.length === 1 ? 'פעולה אחת שנסגרה' : `${he(scan.rows.length)} פעולות שנסגרו`} ${REAPED_MIN} דק׳ או יותר אחרי הפתיחה`}
               </b>{' '}
               {scan.lens === 'open'
                 ? 'שורה כזו היא או עבודה שרצה עכשיו, או הרצת ראוטר שמתה בין «Log Action Start» ל-«Log Action End» — אף אחד כבר לא יסגור אותה.'
@@ -1315,17 +1315,17 @@ export default function ActionLogPage() {
               <div className="muted small" style={{ marginTop: 6 }}>
                 {scan.complete ? (
                   <>
-                    סריקה מלאה: נבדקו כל <b className="num">{he(scan.read)}</b> השיגורים בטווח{' '}
+                    סריקה מלאה: נבדקו כל <b className="num">{he(scan.read)}</b> הפעולות בטווח{' '}
                     {winLabel(win)}. המספר מדויק.
                   </>
                 ) : (
                   <>
-                    סריקה תחומה: נבדקו <b className="num">{he(scan.read)}</b> שיגורים —{' '}
+                    סריקה תחומה: נבדקו <b className="num">{he(scan.read)}</b> פעולות —{' '}
                     {/* under ?dup=1 the server orders rows GROUPED by (doc, action), not by time,
                         so "oldest / newest" would be the wrong description of the same two ends */}
                     {dupOnly
                       ? `${he(SCAN_END)} מכל קצה של הרשימה המקובצת`
-                      : `${he(SCAN_END)} הישנים ביותר ו-${he(SCAN_END)} החדשים ביותר`}{' '}
+                      : `${he(SCAN_END)} הישנות ביותר ו-${he(SCAN_END)} החדשות ביותר`}{' '}
                     — מתוך <b className="num">{he(scan.windowTotal)}</b> בטווח. המספר הוא רצפה, לא
                     ספירה מלאה; לתשובה מדויקת צמצמו את הטווח.
                   </>
@@ -1367,6 +1367,9 @@ export default function ActionLogPage() {
         rowCount={lensRows ? lensRows.length : matched}
         loading={focus ? scanning : loading}
         initialPageSize={DEFAULT_PAGE}
+        /* 500 and 1000 are the owner's (2026-08-16, DGO-234); /dashboard/actions returns up to
+           _ACTIONS_LIMIT_MAX = 1000. tests/test_page_sizes.py keeps every size within that cap. */
+        pageSizeOptions={[25, 50, 100, 200, 500, 1000]}
         height={620}
         label="יומן פעולות"
         searchPlaceholder="חיפוש בפעולה, במזהה השורה או בשם המסמך…"
@@ -1376,7 +1379,7 @@ export default function ActionLogPage() {
            a lie the file cannot correct. `exportCsv` walks the same filtered query server-side. */
         toolbarEnd={
           <button type="button" className="btn" onClick={exportCsv} disabled={exporting}
-                  title={`ייצוא עד ${he(EXPORT_MAX)} השיגורים החדשים התואמים לסינון — אחרי אישור עם המספרים`}>
+                  title={`ייצוא עד ${he(EXPORT_MAX)} הפעולות החדשות התואמות לסינון — אחרי אישור עם המספרים`}>
             {exporting ? <><span className="spinner" /> מייצא…</> : 'ייצוא'}
           </button>
         }

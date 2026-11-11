@@ -1,5 +1,5 @@
 #!/bin/bash
-# Runs on the HOST: orchestrates a synthetic multi-participant call against the live FPG Meet and
+# Runs on the HOST: orchestrates a synthetic multi-participant call against the live EXF Meet and
 # samples the recorder's cgroup while it runs.   calltest.sh <tag> <room> [guest video height]
 # Timeline (s): 0 host joins (auto-record) · 25 guest joins · 60 sharer joins (screen share on)
 # · 150 sharer leaves · 180 guest leaves · 210 guest rejoins · 240 sharer rejoins · 330 sharer leaves
@@ -10,7 +10,7 @@
 set -u
 tag="$1"; room="$2"; res="${3:-180}"; T=/root/meet-test; out=$T/out/$tag; mkdir -p "$out"
 cg() { find /sys/fs/cgroup/system.slice -maxdepth 1 -name "docker-$(docker inspect -f '{{.Id}}' "$1").scope"; }
-JIB=$(cg meet-jibri-fireplace); JVB=$(cg meet-jvb-fireplace); ASR=$(cg apitools-asr-fireplace)
+JIB=$(cg meet-jibri-examplef); JVB=$(cg meet-jvb-examplef); ASR=$(cg apitools-asr-examplef)
 stat() { awk -v k="$2" '$1==k{print $2}' "$1/cpu.stat"; }
 log() { echo "$(date -u +%T)Z +$(( $(date +%s) - T0 ))s $*" | tee -a "$out/timeline.log"; }
 sampler() {
@@ -42,7 +42,7 @@ babysit() {   # unmute host/guest, and start the share, whenever a page is joine
 }
 at() { local want=$1; shift; local now=$(( $(date +%s) - T0 )); [ $now -lt $want ] && sleep $(( want - now )); log "$*"; }
 
-before=$(docker exec meet-jibri-fireplace sh -c 'ls /storage/recordings' | sort)
+before=$(docker exec meet-jibri-examplef sh -c 'ls /storage/recordings' | sort)
 T0=$(date +%s); log "start tag=$tag room=$room guest_res=$res jibri cpu.max=$(cat $JIB/cpu.max) jibri weight=$(cat $JIB/cpu.weight) asr weight=$(cat $ASR/cpu.weight)"
 sampler & SP=$!
 babysit & BS=$!
@@ -62,17 +62,17 @@ kill $BS 2>/dev/null
 sleep 5; docker exec meet-test pkill -f google-chrome >/dev/null 2>&1
 log "waiting for the recording to be finalized"
 for i in $(seq 1 60); do
-  now=$(docker exec meet-jibri-fireplace sh -c 'ls /storage/recordings' | sort)
+  now=$(docker exec meet-jibri-examplef sh -c 'ls /storage/recordings' | sort)
   new=$(comm -13 <(echo "$before") <(echo "$now") | tail -1)
-  [ -n "$new" ] && docker exec meet-jibri-fireplace sh -c "ls /storage/recordings/$new/*.ogg" >/dev/null 2>&1 && break
+  [ -n "$new" ] && docker exec meet-jibri-examplef sh -c "ls /storage/recordings/$new/*.ogg" >/dev/null 2>&1 && break
   sleep 5
 done
 kill $SP 2>/dev/null
 log "recording session: $new"
 echo "$new" > "$out/session.txt"
-docker exec meet-jibri-fireplace sh -c "ls -la /storage/recordings/$new; cat /storage/recordings/$new/metadata.json; echo; cat /storage/recordings/$new/*.silence.json" | tee -a "$out/timeline.log"
-docker exec meet-jibri-fireplace sh -c "grep -E 'session_id=$new' /var/log/jitsi/jibri/log.0.txt | grep -E 'Starting ffmpeg|Stopping ffmpeg' | sed -E 's/^Jibri //' | cut -c1-120; grep -E 'Lsize=' /var/log/jitsi/jibri/ffmpeg.0.txt | tail -1 | sed -E 's/^.*#61: //'" | tee -a "$out/timeline.log"
-docker logs meet-jicofo-fireplace --since 20m 2>&1 | grep "room=$room" | grep -E "Member joined|Member left|status on|status off|Room destroyed|Accepted initial sources" | sed -E 's/ INFO: \[[0-9]+\] \[room=[^]]*\]//; s/features=.*//; s/stats-id=([A-Za-z0-9-]+).*isJibri=(true|false).*/\1 jibri=\2/; s/(Accepted initial sources from [0-9a-f]+).*/\1/' | cut -c1-150 | tee -a "$out/timeline.log"
+docker exec meet-jibri-examplef sh -c "ls -la /storage/recordings/$new; cat /storage/recordings/$new/metadata.json; echo; cat /storage/recordings/$new/*.silence.json" | tee -a "$out/timeline.log"
+docker exec meet-jibri-examplef sh -c "grep -E 'session_id=$new' /var/log/jitsi/jibri/log.0.txt | grep -E 'Starting ffmpeg|Stopping ffmpeg' | sed -E 's/^Jibri //' | cut -c1-120; grep -E 'Lsize=' /var/log/jitsi/jibri/ffmpeg.0.txt | tail -1 | sed -E 's/^.*#61: //'" | tee -a "$out/timeline.log"
+docker logs meet-jicofo-examplef --since 20m 2>&1 | grep "room=$room" | grep -E "Member joined|Member left|status on|status off|Room destroyed|Accepted initial sources" | sed -E 's/ INFO: \[[0-9]+\] \[room=[^]]*\]//; s/features=.*//; s/stats-id=([A-Za-z0-9-]+).*isJibri=(true|false).*/\1 jibri=\2/; s/(Accepted initial sources from [0-9a-f]+).*/\1/' | cut -c1-150 | tee -a "$out/timeline.log"
 python3 - "$out/samples.csv" <<'EOF' | tee -a "$out/timeline.log"
 import csv, sys
 rows = list(csv.DictReader(open(sys.argv[1])))

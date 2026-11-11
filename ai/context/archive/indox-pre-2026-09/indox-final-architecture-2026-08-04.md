@@ -13,7 +13,7 @@
 | Plane | Entry | Backend | Match rules (source of truth now shared) |
 |---|---|---|---|
 | **Workflow API** | `indoxApiRouter01` (5 nodes) | `indoxApiSupabase01` (27 nodes, 11 postgres nodes, credential `yY8FYvp6Kz86pt2t`) | 3 rules: `COMPANY_ID+COMPANY_DOC_ID`, `COMPANY_ID+SHORT_DOC_ID`, `HASH` |
-| **Code API** | `apps/indox` FastAPI BFF (`incoming-documents-shlomo-laptop`) | Supabase PostgREST + direct postgres, registry `apps/indox/storage/incoming_documents/repos.json` | same 3 rules (repos.json aligned 2026-08-04) |
+| **Code API** | `apps/indox` FastAPI BFF (`incoming-documents-owner-laptop`) | Supabase PostgREST + direct postgres, registry `apps/indox/storage/incoming_documents/repos.json` | same 3 rules (repos.json aligned 2026-08-04) |
 
 - **Router** (`indoxApiRouter01`): `When Called` → `If Management`
   (`INLINE_ACTION ∈ RESET/STATUS/INJECT/SCAN` ?). Management → `SyncApi0000000001`;

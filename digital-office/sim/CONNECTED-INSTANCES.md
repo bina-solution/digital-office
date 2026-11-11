@@ -28,7 +28,11 @@ Provider registries per app:
 
 ## The switcher UI (Google-style, Hebrew RTL)
 
-**Placement (updated by C15):** the chip lives in the **console's own top bar** (`.topbar .tb-right`,
+**Placement (since DGO-1624, 2026-11-11 in the simulation):** the chip lives in the **app's own side**
+(`aside.side`), as the live apps keep their accounts in their own screen; the office's bar carries no app's account
+(0ef50561b), and an app with no side (INDOX) gets no chip, as live. What follows is the C15 history:
+
+**Placement (C15, superseded):** the chip lived in the **console's own top bar** (`.topbar .tb-right`,
 as the last child = the far end of the line, which in RTL is screen-left — where Gmail and Drive keep
 the account). It used to sit in `#acctBar`, a full-width band between the console header and the app
 frame; that band cost every app ~56px of height to hold one chip and is now collapsed. The app's own

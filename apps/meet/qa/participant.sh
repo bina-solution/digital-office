@@ -4,7 +4,7 @@
 # The host reads its token from /t/host.jwt (minted in meet-start, never printed).
 set -u
 id="$1"; name="$2"; room="$3"; wav="$4"; x="$5"; y="$6"; kind="$7"; res="${8:-180}"; port="${9:-9222}"
-base="https://meet.fpg.digital-office.co.il/$room"
+base="https://meet.exf.digital-office.co.il/$room"
 q=""
 [ "$kind" = host ] && q="?jwt=$(cat /t/host.jwt)"
 enc=$(printf '%s' "$name" | sed 's/ /%20/g')

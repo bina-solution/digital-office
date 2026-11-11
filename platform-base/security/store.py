@@ -37,6 +37,7 @@ CREATE TABLE IF NOT EXISTS flow(day TEXT, dir TEXT, src TEXT, dst TEXT, port INT
   n INT, bytes_out INT, bytes_in INT, PRIMARY KEY(day, dir, src, dst, port, proto));
 CREATE INDEX IF NOT EXISTS flow_last ON flow(last);
 CREATE INDEX IF NOT EXISTS flow_dst ON flow(dst);
+CREATE INDEX IF NOT EXISTS flow_src ON flow(src);      -- an address's detail counts src=? OR dst=? (DGO-1597)
 CREATE TABLE IF NOT EXISTS name(ip TEXT, name TEXT, via TEXT, first REAL, last REAL, n INT, PRIMARY KEY(ip, name));
 CREATE TABLE IF NOT EXISTS vol(day TEXT, ip TEXT, bout INT, bin INT, pout INT, pin INT, last REAL, PRIMARY KEY(day, ip));
 CREATE INDEX IF NOT EXISTS vol_last ON vol(last);
@@ -46,13 +47,20 @@ CREATE INDEX IF NOT EXISTS signin_ip ON signin(ip, ts);
 CREATE TABLE IF NOT EXISTS ban(ip TEXT PRIMARY KEY, jail TEXT, reason TEXT, since REAL, until REAL, offences INT,
   mode TEXT, by TEXT, active INT);
 CREATE TABLE IF NOT EXISTS ban_log(ts REAL, ip TEXT, jail TEXT, action TEXT, reason TEXT, until REAL, mode TEXT, by TEXT);
+CREATE INDEX IF NOT EXISTS ban_log_ip ON ban_log(ip, ts);
 CREATE TABLE IF NOT EXISTS rule(kind TEXT, value TEXT, note TEXT, since REAL, until REAL, by TEXT, PRIMARY KEY(kind, value));
 CREATE TABLE IF NOT EXISTS event(ts REAL, kind TEXT, level TEXT, title TEXT, detail TEXT, ip TEXT, ref TEXT);
 CREATE INDEX IF NOT EXISTS event_ts ON event(ts);
 CREATE TABLE IF NOT EXISTS kv(k TEXT PRIMARY KEY, v TEXT);
+CREATE TABLE IF NOT EXISTS host_event(ts REAL, kind TEXT, op TEXT, detail TEXT);
+CREATE INDEX IF NOT EXISTS host_event_ts ON host_event(ts);
 """
 
-RETENTION = {"hit": 3, "hit_day": 120, "flow": 60, "vol": 60, "name": 60, "signin": 120, "event": 120, "ban_log": 365}
+#: host_event — what reached the machine without crossing its network (DGO-1646): the hosting provider's
+#: guest agent (kind 'provider': exec, file-write, file-read, password, keys, freeze) and a sign-in at
+#: the provider's console (kind 'console'). The sensor reads both from the host's journal.
+RETENTION = {"hit": 3, "hit_day": 120, "flow": 60, "vol": 60, "name": 60, "signin": 120, "event": 120, "ban_log": 365,
+             "host_event": 120}
 
 
 def day_of(ts: float) -> str:
@@ -186,6 +194,62 @@ class Store:
         rows = self.q("SELECT DISTINCT ip FROM signin WHERE verdict='ok' AND ts > ?", (time.time() - days * 86400,))
         return {r["ip"] for r in rows}
 
+    # ── what a page shows, and what it really holds ───────────────────────────────────────────────
+    # A per-address detail is CAPPED so the screen stays quick (300 requests, 100 sign-ins, 100 flows,
+    # 50 bans). Measured 2026-11-09 (DGO-1590/1597): a reading built from that page took the cap for the
+    # truth, and eight addresses were reported with fewer requests than they made. So the page always
+    # says HOW MANY it holds beside what it shows: a cap must never read as a total.
+    _DETAIL_COUNTS = (("hits", "SELECT COUNT(*) n FROM hit WHERE ip=?"),
+                      ("days", "SELECT COUNT(*) n FROM hit_day WHERE ip=?"),
+                      ("signins", "SELECT COUNT(*) n FROM signin WHERE ip=?"),
+                      ("flows", "SELECT COUNT(*) n FROM flow WHERE src=? OR dst=?"),
+                      ("ban_log", "SELECT COUNT(*) n FROM ban_log WHERE ip=?"))
+
+    def detail_totals(self, ip: str) -> dict:
+        out = {}
+        for key, sql in self._DETAIL_COUNTS:
+            args = (ip, ip) if key == "flows" else (ip,)
+            out[key] = int((self.one(sql, args) or {}).get("n") or 0)
+        return out
+
+    def failed_signins(self, since: float, ip: str = "", limit: int = 2000) -> dict:
+        """EVERY failed sign-in of the window, one row each — up to `limit`, and the number kept (DGO-1597).
+
+        The row carries `src` (where it came from: `sso` the identity provider, `ssh` the machine's sshd)
+        and `how` (why it failed: `invalid-user`, the method it tried, `preauth`, or the provider's
+        `auth_method`) — the item's own words: «itemize them all, with source and reason». «All» is
+        bounded on purpose: an address under attack can fail thousands of times, and a page that builds
+        a megabyte of JSON is the same defect in the other direction. `total` says how many there
+        really are, so a hundred shown of six thousand is never read as six thousand.
+        """
+        where = "verdict='fail' AND ts>=?" + (" AND ip=?" if ip else "")
+        args = (since, ip) if ip else (since,)
+        total = int((self.one("SELECT COUNT(*) n FROM signin WHERE " + where, args) or {}).get("n") or 0)
+        rows = self.q("SELECT ts, ip, src, user, how, fp FROM signin WHERE " + where +
+                      " ORDER BY ts DESC LIMIT ?", args + (max(1, int(limit)),))
+        return {"rows": rows, "total": total, "limit": max(1, int(limit))}
+
+    def ssh_sources(self, since: float, limit: int = 500) -> dict:
+        """Every ADDRESS that reached the machine (DGO-1597) — not only the keys it used.
+
+        The sign-in list was grouped by key fingerprint, so five keys read as «five sources» while fifteen
+        addresses had connected (measured 2026-11-09 on Exampleu). A source is an address: its attempts, how
+        many were let in, and the keys and names it tried.
+
+        ONE query: the keys and the names are aggregated with the address (a query per address took 19.7 s
+        on a 62 500-address table, measured by the second reader — the page opens with every visit).
+        """
+        rows = self.q("SELECT ip, COUNT(*) n, SUM(verdict='ok') ok, SUM(verdict='fail') fail, "
+                      "MIN(ts) first, MAX(ts) last, "
+                      "GROUP_CONCAT(DISTINCT NULLIF(fp,'')) fps, GROUP_CONCAT(DISTINCT NULLIF(user,'')) users "
+                      "FROM signin WHERE src='ssh' AND ts>=? GROUP BY ip ORDER BY last DESC LIMIT ?",
+                      (since, max(1, int(limit))))
+        for r in rows:
+            r["keys"] = sorted({k for k in (r.pop("fps", "") or "").split(",") if k})
+            r["users"] = sorted({u for u in (r.pop("users", "") or "").split(",") if u})[:8]
+        total = int((self.one("SELECT COUNT(DISTINCT ip) n FROM signin WHERE src='ssh' AND ts>=?", (since,)) or {}).get("n") or 0)
+        return {"rows": rows, "total": total, "limit": max(1, int(limit))}
+
     # ── outbound ─────────────────────────────────────────────────────────────────────────────────
     def add_flows(self, flows: list, geo=None) -> None:
         if not flows:
@@ -238,18 +302,32 @@ class Store:
         with self.lock:
             cur = self.db.cursor()
             for n in names:
+                # a resolver's answer upgrades a name first seen as a TLS server name or a PTR: egress judges by
+                # `via = 'dns'`, and the first sighting's way would otherwise keep a real answer out (DGO-1561)
                 cur.execute(
                     "INSERT INTO name(ip,name,via,first,last,n) VALUES(?,?,?,?,?,?) ON CONFLICT(ip,name) DO UPDATE SET "
-                    "last=MAX(last,excluded.last), n=n+excluded.n",
+                    "last=MAX(last,excluded.last), n=n+excluded.n, "
+                    "via=CASE WHEN excluded.via='dns' THEN 'dns' ELSE via END",
                     (n["ip"], n["name"], n.get("via") or "dns", n["first"], n["last"], int(n.get("n") or 1)))
             self.db.commit()
 
-    def names_for(self, ips) -> dict:
+    def names_for(self, ips, via: tuple | None = None, since: float | None = None) -> dict:
+        """Every name each address had — or, with `via`/`since`, only those learned that way inside the window
+        (egress judges by the resolver's own answers: a TLS server name is the client's choice, a PTR the
+        address owner's, and a name from two months ago may belong to someone else now)."""
         ips = [i for i in set(ips) if i]
         out: dict = {}
+        extra, args = "", []
+        if via:
+            extra += f" AND via IN ({','.join('?' * len(via))})"
+            args += list(via)
+        if since is not None:
+            extra += " AND last >= ?"
+            args.append(since)
         for i in range(0, len(ips), 400):
             chunk = ips[i:i + 400]
-            rows = self.q(f"SELECT ip, name, n, via FROM name WHERE ip IN ({','.join('?' * len(chunk))}) ORDER BY n DESC", chunk)
+            rows = self.q(f"SELECT ip, name, n, via FROM name WHERE ip IN ({','.join('?' * len(chunk))}){extra} ORDER BY n DESC",
+                          [*chunk, *args])
             for r in rows:
                 out.setdefault(r["ip"], []).append(r["name"])
         return out
@@ -324,6 +402,16 @@ class Store:
         with self.lock:
             self.db.execute("INSERT INTO event(ts,kind,level,title,detail,ip,ref) VALUES(?,?,?,?,?,?,?)",
                             (time.time(), kind, level, title, detail[:600], ip, ref))
+            self.db.commit()
+
+    # ── the host itself ──────────────────────────────────────────────────────────────────────────
+    def add_host_events(self, rows: list) -> None:
+        if not rows:
+            return
+        with self.lock:
+            self.db.executemany("INSERT INTO host_event(ts,kind,op,detail) VALUES(?,?,?,?)",
+                                [(float(r.get("ts") or time.time()), str(r.get("kind") or "")[:20],
+                                  str(r.get("op") or "")[:20], str(r.get("detail") or "")[:300]) for r in rows])
             self.db.commit()
 
     # ── retention ────────────────────────────────────────────────────────────────────────────────

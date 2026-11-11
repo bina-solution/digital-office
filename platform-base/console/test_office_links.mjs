@@ -28,6 +28,14 @@ const officeTarget = new Function(
   `${body[0]}\nreturn officeTarget(href, base, modules, here);`,
 );
 
+// a person's link (DGO-1433): `/go/<ref>` on this console is handed to its own resolver (app.js goTo), never
+// navigated inside the frame — and only on THIS console, only the /go path itself
+const goCases = [
+  ["/go/DGO-1433", { go: "/go/DGO-1433" }],
+  ["http://console.localhost:8080/go/meet/exu101?x=1", { go: "/go/meet/exu101?x=1" }],
+  ["http://console.localhost:8080/gopher/x", null],
+  ["https://example.com/go/DGO-1433", null],
+];
 const MODULES = [
   { id: "plane.hp-laptop", host: "plane.hp-laptop", external: true },
   { id: "drive.hp-laptop", host: "drive.hp-laptop", external: true },
@@ -66,6 +74,9 @@ check("a same-origin page of the app itself belongs to the app",
   officeTarget("/a/bina/healthz", CONSOLE, MODULES, CONSOLE), null);
 check("something that is not a URL at all",
   officeTarget("mailto:x@example.com", CONSOLE, MODULES, CONSOLE), null);
+for (const [href, want] of goCases) {
+  check(`a /go/ link: ${href}`, officeTarget(href, CONSOLE, MODULES, CONSOLE), want);
+}
 
 console.log(bad === 0 ? "\nok — the office's own links open in the office" : `\n${bad} failing`);
 process.exit(bad === 0 ? 0 : 1);

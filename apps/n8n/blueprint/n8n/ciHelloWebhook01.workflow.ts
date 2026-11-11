@@ -32,7 +32,14 @@ import { workflow, node, links } from '@n8n-as-code/transformer';
     /*__n8n__*/ shared: [{"updatedAt":"2026-07-30T23:44:23.439Z","createdAt":"2026-07-30T23:44:23.439Z","role":"workflow:owner","workflowId":"ciHelloWebhook01","projectId":"2xKn4WH08LyAOk2y","project":{"updatedAt":"2026-07-30T23:40:17.073Z","createdAt":"2026-07-30T23:33:30.049Z","id":"2xKn4WH08LyAOk2y","name":"Admin User <person2@example.com>","type":"personal","icon":null,"description":null,"creatorId":"544b7ec6-5907-4ee2-a94b-c5676e56835c"}}],
     id: 'ciHelloWebhook01',
     name: '[CI] Active-state webhook probe',
-    active: true,
+    // COMMITTED OFF, ACTIVATED ONLY WHERE CI RUNS (DGO-1574). The probe exists for one caller —
+    // scripts/ci-verify.sh — and on an office no CI pokes (Exampleu, measured 2026-11-09) it left a
+    // public webhook registered for nobody. `apps/n8n/hooks/push` (gate_ci_hello) sets this to the
+    // office's answer: active on a CI runner (GITHUB_ACTIONS or CI in the pushing shell) or where
+    // .env declares CI_HELLO_ENABLED=true, inactive everywhere else. A committed `true` here is a finding of
+    // scripts/refactor/reporter-target-lint.py (G98), because it would hand the probe to every
+    // office that never asked for it.
+    active: false,
     description:
         "Self-contained webhook CI pokes to prove >=1 workflow is REALLY active (trigger registered + responding). Secured with HTTP Basic auth via the env-managed 'CICD AUTH' credential (blueprint credential_overrides re-seeds it from $N8N_WEBHOOK_USER/PASS and re-encrypts under the current key, so it decrypts even under key drift). GET /webhook/ci-hello with the cicd basic-auth -> 'hello-from-n8n-ci'. See ai/context/archive/indox-pre-2026-09/workflow-state-sync.md.",
     isArchived: false,

@@ -18,6 +18,8 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/bina-solution/digital-office/packaging/dgo/internal/pyoracle"
 )
 
 // ── the oracle: app.py itself ─────────────────────────────────────────────────────────────────────
@@ -41,11 +43,12 @@ func checkout(t *testing.T) string {
 // python finds an interpreter that imports the given modules, the way each OS has one, or the test skips.
 func python(t *testing.T, modules string) []string {
 	t.Helper()
-	for _, c := range [][]string{{"python3"}, {"python"}, {"py", "-3"}} {
+	for _, c := range pyoracle.Candidates { // 3.12 first (DGO-1108)
 		if _, err := exec.LookPath(c[0]); err != nil {
 			continue
 		}
 		if exec.Command(c[0], append(c[1:], "-c", "import "+modules)...).Run() == nil {
+			t.Log(pyoracle.Pinned(c))
 			return c
 		}
 	}
@@ -552,7 +555,7 @@ func TestWhatTheGuardCannotDecideIsTheContainers(t *testing.T) {
 	for _, b := range []string{
 		`{"restore": {"archive": "a.tgz"}}`, // a move placing an app here
 		`{"restore": {}}`,                   // app.py itself refuses it, in its own words (400)
-		`[1]`, `"x"`, `NaN`,                 // truthy and not an object: app.py fails on it
+		`[1]`, `"x"`, `NaN`,                 // truthy and not an object: app.py refuses it by name (400, DGO-607)
 		`{not json`,                       // Go cannot read it; what Python makes of it is Python's answer
 		"\xef\xbb\xbf" + `{"restore": 1}`, // a BOM, which Python reads past
 		`{"restore": 1}` + strings.Repeat(" ", maxGuardBody), // more than the guard reads
@@ -565,7 +568,9 @@ func TestWhatTheGuardCannotDecideIsTheContainers(t *testing.T) {
 	reach("a caller that did not come over a link", exchange{Method: "POST", Path: "/api/reconcile", Body: []byte(`{}`), ContentType: "application/json"})
 	reach("one empty header, which is none to Flask", exchange{Method: "POST", Path: "/api/reconcile",
 		Headers: [][2]string{{"X-DGO-Office", ""}, {"X-DGO-Request", "dgo-test"}}})
-	reach("a route whose refusal the container makes", exchange{Method: "POST", Path: "/api/catalog/preview", Headers: door, Body: []byte(`{}`)})
+	// No POST route refuses nobody since DGO-604 (catalog/preview refuses a linked caller too), so the
+	// door-header case that reaches the container is a GET: a read the container answers itself.
+	reach("a read over the link, which the container answers", exchange{Method: "GET", Path: "/api/catalog", Headers: door})
 }
 
 // ── the container: unchanged, and the whole of the rollback ───────────────────────────────────────
@@ -583,17 +588,19 @@ func TestTheProxyChangesNothing(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// a `;` and a bad escape too: Go's proxy drops a parameter it cannot parse unless told otherwise
-	const uri = "/api/catalog/preview?ref=a%2Fb&q=??@scope/pkg/client.js,@x/y.js&rev=1&t=a;b&p=%zz"
+	// a `;` and a bad escape too: Go's proxy drops a parameter it cannot parse unless told otherwise. A GET
+	// with a body: every POST refuses a linked caller natively since DGO-604 (c7127ca3: catalog/preview too),
+	// and the caller here comes over a link — the stamp is part of what must reach the container unchanged
+	const uri = "/api/catalog?ref=a%2Fb&q=??@scope/pkg/client.js,@x/y.js&rev=1&t=a;b&p=%zz"
 	sent := [][2]string{{"X-DGO-Office", "macbook"}, {"X-Authentik-Username", "owner"}, {"X-Forwarded-Prefix", "/a/app-management"},
 		{"X-Forwarded-For", "10.0.0.1"}, {"Cookie", "a=b"}}
 	// …and what is not handed on: names with `_` (gunicorn takes SCRIPT_NAME and PATH_INFO from a trusted
 	// forwarder), while a Connection naming the link's stamp leaves the stamp in place
 	withheld := [][2]string{{"SCRIPT_NAME", "/zz"}, {"PATH_INFO", "/api/reconcile"}, {"X_DGO_Office", "x"}, {"Connection", "X-DGO-Office"}}
-	a := ask(s, exchange{Method: "POST", Path: uri, Headers: append(append([][2]string{}, sent...), withheld...),
+	a := ask(s, exchange{Method: "GET", Path: uri, Headers: append(append([][2]string{}, sent...), withheld...),
 		Body: []byte(`{"ref": "x"}`), ContentType: "application/json"})
 	got := h.last()
-	if got.method != "POST" || got.uri != uri || string(got.body) != `{"ref": "x"}` {
+	if got.method != "GET" || got.uri != uri || string(got.body) != `{"ref": "x"}` {
 		t.Errorf("the container got %s %s %q", got.method, got.uri, got.body)
 	}
 	for _, kv := range append(sent, [2]string{"Content-Type", "application/json"}) {
@@ -743,7 +750,7 @@ func TestThroughTheProcessAnswersAreTheContainers(t *testing.T) {
 		{exchange{Method: "POST", Path: "/api/apps/drive/enable", Headers: door, Body: restore, ContentType: "application/json"}, false},
 		{exchange{Method: "POST", Path: "/api/apps/drive/enable", Headers: door, Body: []byte(`[1]`), ContentType: "application/json"}, false},
 		{exchange{Method: "POST", Path: "/api/apps/drive/enable", Headers: door, Body: []byte(`{not json`), ContentType: "application/json"}, false},
-		{exchange{Method: "POST", Path: "/api/catalog/preview", Headers: door, Body: []byte(`{}`), ContentType: "application/json"}, false},
+		{exchange{Method: "POST", Path: "/api/catalog/preview", Headers: door, Body: []byte(`{}`), ContentType: "application/json"}, true}, // refused natively since DGO-604
 		{exchange{Method: "GET", Path: "/"}, false},
 		{exchange{Method: "GET", Path: "/app.js"}, false},
 		{exchange{Method: "GET", Path: "/nope"}, false},

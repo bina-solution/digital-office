@@ -1,0 +1,39 @@
+#!/bin/sh
+# /usr/local/bin/element-desktop-session — the Selkies session's one application: Element Desktop (DGO-1264).
+# openbox runs it (through ~/.config/openbox/autostart, which names only this file) as the image's user `abc`,
+# with HOME=/config, the volume's `desktop` folder. POSIX sh: that is how the session runs it. Taken from
+# apps/_template-wrapped/desktop/autostart.template.
+
+# The keyring Element keeps its Matrix session in. Its password is minted once into HOME and unlocks it at
+# every start, so the sign-in survives a recreate (without an unlocked keyring the client asks again).
+[ -n "${DBUS_SESSION_BUS_ADDRESS:-}" ] || eval "$(dbus-launch --sh-syntax)"
+KEYPW="${HOME}/.keyring-pass"
+[ -s "${KEYPW}" ] || ( umask 077; head -c 24 /dev/urandom | od -An -tx1 | tr -d ' \n' > "${KEYPW}" )
+eval "$(gnome-keyring-daemon --replace --unlock --components=secrets < "${KEYPW}" | sed 's/^/export /')"
+
+# Electron picks its secret store from the desktop it sees; under openbox it sees none and keeps its keys in
+# plain text, so every recreate signs out (DGO-1335). Name the keyring.
+export XDG_CURRENT_DESKTOP="${XDG_CURRENT_DESKTOP:-GNOME}"
+
+# No updater to turn off: Element's own updater does not run on Linux (the deb is updated by apt), and the
+# image is the version — an update is a rebuild.
+
+# THE SIGN-IN'S BROWSER AND ITS WAY BACK (Dockerfile.desktop says why). The desktop user's mimeapps.list names
+# the sign-in browser for http and https, and Element's own .desktop file (now running element-open-link) for
+# its schemes; a build cannot write into this volume, so it is said at every start. $BROWSER is the same
+# answer for an xdg-open that finds no handler. A window's profile left by a stop is cleared.
+rm -rf "${TMPDIR:-/tmp}"/element-signin.* 2>/dev/null
+if command -v xdg-mime >/dev/null 2>&1; then
+  xdg-mime default element-web.desktop x-scheme-handler/https x-scheme-handler/http 2>/dev/null
+  xdg-mime default element-desktop.desktop x-scheme-handler/element x-scheme-handler/io.element.desktop 2>/dev/null
+fi
+BROWSER=/usr/local/bin/element-signin-browser
+export BROWSER
+
+# Brought back whenever it exits (a sign-out, a crash, the window closed): this display has one purpose.
+# --no-sandbox: Chromium's sandbox needs user namespaces that docker's default seccomp denies; the container
+# is the sandbox. No GPU here.
+while :; do
+  /opt/Element/element-desktop --no-sandbox --disable-gpu --password-store=gnome-libsecret >>"${HOME}/.element-desktop.log" 2>&1
+  sleep 3
+done

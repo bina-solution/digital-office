@@ -80,7 +80,7 @@ Cost: it is L3 only (fine — all our traffic is TCP/UDP over IP), and it needs 
 
 ### L0 — Node identity
 Every platform install generates on first boot:
-- `node_id` (stable ULID), `node_name` (human, e.g. `shlomo-laptop`, `portable`)
+- `node_id` (stable ULID), `node_name` (human, e.g. `owner-laptop`, `portable`)
 - a WireGuard keypair; private key in the platform secret store, never in git
 
 ### L1 — Transport: the `Network` app
@@ -259,8 +259,8 @@ UI: apps > n8n > management > scaling > remote
 
 1. `POST /scaling/n8n/workers { node_id: portable, desired: 3 }`
 2. main node resolves the worker's dependencies **to overlay addresses**, not tunnels:
-   - `QUEUE_BULL_REDIS_HOST = redis.shlomo-laptop.pos`
-   - `DB_POSTGRESDB_HOST    = n8n-postgres.shlomo-laptop.pos`
+   - `QUEUE_BULL_REDIS_HOST = redis.owner-laptop.pos`
+   - `DB_POSTGRESDB_HOST    = n8n-postgres.owner-laptop.pos`
    - `N8N_ENCRYPTION_KEY`   ← delivered at enrollment, scoped to `n8n-workers`
    - apitools ← resolved **local-first** on the portable, so a worker there uses the apitools on its
      own box (the 38.4ms → 4.8ms win) with peer fallback through the LB

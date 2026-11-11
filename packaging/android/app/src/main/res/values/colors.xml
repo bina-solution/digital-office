@@ -1,8 +1,28 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- The mark's colourway for an app icon and the light surfaces around it:
-     digital-office/brand/io/final/logo-1.svg (README "The chosen mark": green tile, white i0, mint). -->
 <resources>
+    <!-- The mark's colourway for an app icon and the light surfaces around it:
+         digital-office/brand/io/final/logo-1.svg (README "The chosen mark": green tile, white i0, mint). -->
     <color name="tile">#1b5e4a</color>
     <color name="ink">#fbfcfc</color>
     <color name="mint">#7ecfad</color>
+
+    <!-- The app's screens (DGO-1723): «Olive Grove», the one palette — these are platform-base/bina-ui/
+         theme-tokens.css's own values, named after its tokens, light here and dark in values-night. Android cannot
+         read the CSS, so they are its copy: a token that changes there changes here too. -->
+    <color name="bg">#f3f5f7</color>
+    <color name="surface">#ffffff</color>
+    <color name="surface_2">#f9fafb</color>
+    <color name="text">#1f2a17</color>
+    <color name="muted">#6a7068</color>
+    <color name="line">#dcdfde</color>
+    <color name="accent">#56693f</color>
+    <color name="accent_ink">#f3f5f7</color>
+    <color name="ok">#56693f</color>
+    <color name="ok_soft">#e7eae4</color>
+    <color name="info">#2a6fc4</color>
+    <color name="info_soft">#edf3fb</color>
+    <color name="warn">#69732e</color>
+    <color name="warn_soft">#f3f5e6</color>
+    <color name="danger">#5b3349</color>
+    <color name="danger_soft">#e8e2e6</color>
 </resources>

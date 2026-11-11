@@ -1,6 +1,7 @@
 package serve
 
 import (
+	"encoding/json"
 	"io"
 	"log"
 	"net"
@@ -14,7 +15,7 @@ import (
 	"sync/atomic"
 	"testing"
 
-	"github.com/solomonBoltin/deployment-hacohen/packaging/dgo/internal/edge"
+	"github.com/bina-solution/digital-office/packaging/dgo/internal/edge"
 )
 
 // fakeMachine is the phone's machine as the core sees it: down (port 0) until the test brings it up.
@@ -101,6 +102,17 @@ func TestAContainerAppIsEnabledInTheMachine(t *testing.T) {
 	m.refused = "the machine is not on this phone yet"
 	if a := ask(s, job); a.Status != http.StatusServiceUnavailable || !strings.Contains(string(a.Body), "not on this phone") {
 		t.Fatalf("the job, the app refusing the machine: %d %s", a.Status, a.Body)
+	}
+	// DGO-1723: «מכולות» not installed is said in Hebrew, with where to install them — never the app's English
+	m.refused = "containers are not installed: the owner installs them from the status screen"
+	if a := ask(s, job); a.Status != http.StatusServiceUnavailable {
+		t.Fatalf("the job, «מכולות» not installed: %d %s", a.Status, a.Body)
+	} else {
+		var said struct{ Error string }
+		if err := json.Unmarshal(a.Body, &said); err != nil || !strings.Contains(said.Error, "«מכולות»") ||
+			!strings.Contains(said.Error, "dgo://status") || strings.Contains(said.Error, "containers are not installed") {
+			t.Fatalf("the job, «מכולות» not installed, says %q (%v)", said.Error, err)
+		}
 	}
 	// the owner asks again: the reason is the app's to give again, not a refusal for good
 	if a := ask(s, enable); a.Status != http.StatusAccepted || m.refused != "" || m.wanted != 3 {
@@ -284,5 +296,53 @@ func TestTheMirrorFollowsTheMachine(t *testing.T) {
 	if b, _ := os.ReadFile(filepath.Join(repo, "platform.state.yaml")); !strings.Contains(strings.Join(strings.Fields(string(b)), " "),
 		"drive: { state: disabled, by: machine }") {
 		t.Errorf("an earlier boot's switch still kept drive from the mirror:\n%s", b)
+	}
+}
+
+// «אפליקציות» on the phone (DGO-1328): app-management's screen is served from the office root where there is
+// no container — index.html for "/", its files by name — and nothing else is: a `..`, a hidden name, a
+// directory, a file the root does not carry, or a root with no screen at all stay the container's (on the
+// phone, Absent). An office with an engine serves none of it here.
+func TestThePhonesCoreServesTheAppsScreen(t *testing.T) {
+	repo := t.TempDir()
+	write(t, repo, map[string]string{
+		"platform.state.yaml":                            "schema_version: 1\napps:\n  console: { enabled: true }\n",
+		"platform-base/console/app.json":                 `{"id": "console", "layer": 2}`,
+		"platform-base/app-management/static/index.html": "<!doctype html><title>אפליקציות</title>",
+		"platform-base/app-management/static/app.js":     "console.log(1)",
+		"platform-base/app-management/static/.env":       "SECRET=1",
+		"platform-base/app-management/app.py":            "# the container's",
+	})
+	h, err := NewNative(repo, "http://127.0.0.1:9", log.New(io.Discard, "", 0), &fakeMachine{}, "localhost")
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := h.(*server)
+	containers := 0
+	s.upstream = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { containers++; w.WriteHeader(299) })
+	for path, want := range map[string]string{"/": "<title>אפליקציות</title>", "/index.html": "<title>אפליקציות</title>", "/app.js": "console.log(1)"} {
+		if a := ask(s, exchange{Method: "GET", Path: path}); a.Status != http.StatusOK || !strings.Contains(string(a.Body), want) {
+			t.Errorf("GET %s: %d %q — want the screen's file", path, a.Status, a.Body)
+		}
+	}
+	// a link on the way — to a file outside the screen, or a directory of links — is not followed
+	static := filepath.Join(repo, "platform-base", "app-management", "static")
+	if err := os.Symlink(filepath.Join(repo, "platform-base", "app-management", "app.py"), filepath.Join(static, "linked.js")); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(filepath.Join(repo, "platform-base", "app-management"), filepath.Join(static, "up")); err != nil {
+		t.Fatal(err)
+	}
+	for _, path := range []string{"/.env", "/../app.py", "/missing.js", "/static/", "/linked.js", "/up/app.py", `/a\..\..\app.py`, "/a/../index.html"} {
+		before := containers
+		if a := ask(s, exchange{Method: "GET", Path: path}); a.Status != 299 || containers != before+1 {
+			t.Errorf("GET %s: %d %q — the container's to answer, not the root's", path, a.Status, a.Body)
+		}
+	}
+	if err := os.RemoveAll(filepath.Join(repo, "platform-base", "app-management", "static")); err != nil {
+		t.Fatal(err)
+	}
+	if a := ask(s, exchange{Method: "GET", Path: "/"}); a.Status != 299 {
+		t.Errorf("a root with no screen: %d — the container's (Absent on the phone)", a.Status)
 	}
 }

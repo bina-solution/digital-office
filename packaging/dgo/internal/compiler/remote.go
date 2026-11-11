@@ -11,8 +11,8 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/solomonBoltin/deployment-hacohen/packaging/dgo/internal/pyval"
-	"github.com/solomonBoltin/deployment-hacohen/packaging/dgo/internal/yamlish"
+	"github.com/bina-solution/digital-office/packaging/dgo/internal/pyval"
+	"github.com/bina-solution/digital-office/packaging/dgo/internal/yamlish"
 )
 
 // serve.plan(): the `remote:` block — what linked offices give this one — checked and turned into the
@@ -40,7 +40,7 @@ type remoteApp struct {
 	port                             int64
 	apiPort                          any // its agent's second door, an int64 — nil when it publishes none
 	name, nameEn, icon, group, desc  string
-	order                            any // as the block has it (900 when it has none)
+	order                            any // a number: the block's, or 900 (tileOrder)
 	host, health                     string
 	moduleKind, modulePath, moduleID string
 	identity                         *yamlish.Map // `to` and `from`, each only where set
@@ -51,6 +51,16 @@ type remoteApp struct {
 type remoteDoor struct {
 	app, alias string
 	port       int64
+}
+
+// tileOrder is a linked office's `order` as the sorts can use it: a number (a bool is one) as it is,
+// anything else — a null, a word — 900, as a missing one. The tiles and the app rows are sorted by it,
+// and a peer's null beside numbers was a TypeError after half the files were written (DGO-627).
+func tileOrder(v any) any {
+	if _, ok := toNumber(v); ok {
+		return v
+	}
+	return int64(900)
 }
 
 // remoteEntry is one linked office as plan() accepts it.
@@ -247,7 +257,7 @@ func planRemote(repo, name string, block []any) ([]remoteEntry, []string, error)
 				icon:       pyval.Str(either(field("icon"), "external")),
 				group:      pyval.Str(either(field("group"), "מרוחק")),
 				desc:       pyval.Str(either(field("desc"), "אפליקציה של הלשכה "+oid)),
-				order:      getOr(app, "order", int64(900)),
+				order:      tileOrder(get(app, "order")),
 				host:       host,
 				health:     pyval.Str(either(field("health"), "/healthz")),
 				moduleKind: pyval.Str(either(get(module, "kind"), "embedded")),

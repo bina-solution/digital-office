@@ -11,7 +11,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/solomonBoltin/deployment-hacohen/packaging/dgo/internal/yamlish"
+	"github.com/bina-solution/digital-office/packaging/dgo/internal/pyoracle"
+	"github.com/bina-solution/digital-office/packaging/dgo/internal/yamlish"
 )
 
 // ── the oracle: reconcile.py on the real checkout ─────────────────────────────────────────────────
@@ -56,14 +57,16 @@ func officeRoot(t *testing.T) string {
 
 func isFile(p string) bool { fi, err := os.Stat(p); return err == nil && !fi.IsDir() }
 
-// python is the interpreter the oracle runs, with PyYAML: python3, python, then the Windows launcher.
+// python is the interpreter the oracle runs, with PyYAML: CPython 3.12 by its own name first (DGO-1108),
+// then python3, python and the Windows launcher — and the test log says which one answered.
 func python(t *testing.T) []string {
 	t.Helper()
-	for _, c := range [][]string{{"python3"}, {"python"}, {"py", "-3"}} {
+	for _, c := range pyoracle.Candidates {
 		if _, err := exec.LookPath(c[0]); err != nil {
 			continue
 		}
 		if exec.Command(c[0], append(c[1:], "-c", "import yaml")...).Run() == nil {
+			t.Log(pyoracle.Pinned(c))
 			return c
 		}
 	}
@@ -135,7 +138,20 @@ func fixture(t *testing.T, manifests map[string]string, state string) string {
 	if err := os.WriteFile(filepath.Join(repo, "platform", "schema", "app.schema.json"), schema, 0o644); err != nil {
 		t.Fatal(err)
 	}
+	// «מכולות» (DGO-1723): every app that declares compose requires the container runtime, so a fixture with
+	// such an app carries its provider as the office's catalog does — unless the test names that manifest
+	// itself, with "" for a catalog that has none (the refusal's own test)
+	if _, named := manifests[runtimeManifest]; !named && strings.Contains(fmt.Sprint(manifests), `"compose":"`) {
+		all := map[string]string{runtimeManifest: manifest("containers", 1, `"capabilities":[{"name":"container-runtime","type":"protocol"}]`)}
+		for rel, body := range manifests {
+			all[rel] = body
+		}
+		manifests = all
+	}
 	for rel, body := range manifests {
+		if rel == runtimeManifest && body == "" {
+			continue
+		}
 		full := filepath.Join(repo, filepath.FromSlash(rel))
 		if err := os.MkdirAll(filepath.Dir(full), 0o755); err != nil {
 			t.Fatal(err)
@@ -151,6 +167,9 @@ func fixture(t *testing.T, manifests map[string]string, state string) string {
 	}
 	return repo
 }
+
+// runtimeManifest is where «מכולות», the container runtime's one provider, lives (platform-base/containers).
+const runtimeManifest = "platform-base/containers/app.json"
 
 // manifest is a VALID minimal manifest (id, layer, a Hebrew title, kind service) plus extra JSON.
 func manifest(id string, layer int, extra string) string {
@@ -177,6 +196,62 @@ func TestPullsInProviderAndOrdersIt(t *testing.T) {
 	out, errb, code := run(t, repo)
 	if code != 0 || out != "platform-base p\napps a\n" {
 		t.Fatalf("code %d out %q err %q", code, out, errb)
+	}
+}
+
+// TestAContainerAppPullsInTheRuntime: uses_of's rule (DGO-1723, native-plan.md D2) — an app that declares
+// `compose` requires the container runtime, whose provider is pulled in and ordered first; the provider
+// itself, and an app that declares its own use of it (a `wants` here), are read as written.
+func TestAContainerAppPullsInTheRuntime(t *testing.T) {
+	provider := manifest("containers", 1, `"capabilities":[{"name":"container-runtime"}]`)
+	repo := fixture(t, map[string]string{
+		"apps/a/app.json":                   manifest("a", 3, `"compose":"docker-compose.yml"`),
+		"apps/a/docker-compose.yml":         "services: {}\n",
+		"apps/b/app.json":                   manifest("b", 3, ""),
+		"platform-base/containers/app.json": provider,
+	}, stateHead+"  a: { enabled: true }\n  b: { enabled: true }\n")
+	out, errb, code := run(t, repo)
+	if code != 0 || out != "platform-base containers\napps a\napps b\n" {
+		t.Fatalf("code %d out %q err %q", code, out, errb)
+	}
+
+	// two runtimes, each with a compose of its own and both on: neither requires the runtime (were they read as
+	// requiring it, each would have two eligible providers and no rule to choose); a's own `wants` pulls nothing
+	repo = fixture(t, map[string]string{
+		"apps/a/app.json":                    manifest("a", 3, `"compose":"docker-compose.yml","use":[{"capability":"container-runtime","strength":"wants"}]`),
+		"apps/a/docker-compose.yml":          "services: {}\n",
+		"platform-base/containers/app.json":  manifest("containers", 1, `"capabilities":[{"name":"container-runtime"}],"compose":"c.yml"`),
+		"platform-base/containers/c.yml":     "services: {}\n",
+		"platform-base/containers2/app.json": manifest("containers2", 1, `"capabilities":[{"name":"container-runtime"}],"compose":"c.yml"`),
+		"platform-base/containers2/c.yml":    "services: {}\n",
+	}, stateHead+"  a: { enabled: true }\n  containers: { enabled: true }\n  containers2: { enabled: true }\n")
+	if out, errb, code := run(t, repo); code != 0 || strings.Count(out, "\n") != 3 || strings.Contains(errb, "eligible providers") {
+		t.Fatalf("the providers and a declared use are read as written: code %d out %q err %q", code, out, errb)
+	}
+	// an office that names «מכולות» off is read as written; one that does not name it runs it (ON_UNLESS_SAID)
+	repo = fixture(t, map[string]string{
+		"apps/b/app.json":                   manifest("b", 3, ""),
+		"platform-base/containers/app.json": provider,
+	}, stateHead+"  b: { enabled: true }\n  containers: { enabled: false }\n")
+	if out, errb, code := run(t, repo); code != 0 || out != "apps b\n" {
+		t.Fatalf("containers named off: code %d out %q err %q", code, out, errb)
+	}
+	repo = fixture(t, map[string]string{
+		"apps/b/app.json":                   manifest("b", 3, ""),
+		"platform-base/containers/app.json": provider,
+	}, stateHead+"  b: { enabled: true }\n")
+	// (b runs no container, so nothing orders it after the runtime: sorted, b first)
+	if out, errb, code := run(t, repo); code != 0 || out != "apps b\nplatform-base containers\n" {
+		t.Fatalf("containers not named: code %d out %q err %q", code, out, errb)
+	}
+
+	repo = fixture(t, map[string]string{
+		"apps/a/app.json":           manifest("a", 3, `"compose":"docker-compose.yml"`),
+		"apps/a/docker-compose.yml": "services: {}\n",
+		runtimeManifest:             "",
+	}, stateHead+"  a: { enabled: true }\n")
+	if _, errb, code := run(t, repo); code == 0 || !strings.Contains(errb, "a: requires capability 'container-runtime' — no provider in catalog") {
+		t.Fatalf("no runtime in the catalog is an error: code %d err %q", code, errb)
 	}
 }
 

@@ -302,7 +302,7 @@ def env(key, default=''):
 
 def psql(sql):
     global DEPLOYMENT
-    DEPLOYMENT = DEPLOYMENT or env('DEPLOYMENT_NAME', 'shlomo-laptop')
+    DEPLOYMENT = DEPLOYMENT or env('DEPLOYMENT_NAME', 'owner-laptop')
     o = docker('exec', 'supabase-db-' + DEPLOYMENT, 'psql', '-U', 'postgres', '-d',
                'postgres', '-t', '-A', '-c', sql)
     if o.returncode != 0:

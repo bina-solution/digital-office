@@ -52,6 +52,7 @@ var binaAsk, binaTell;
     + "@media (pointer:coarse){.bask-btn{height:44px}.bask-field input{height:44px}}"
     + "@media (max-height:399px){.bask{padding:8px}.bask-card{padding:12px}.bask-acts{margin-top:10px}}"   // the side menu's own short frame
     + "#bina-tell{position:fixed;inset-block-end:16px;inset-inline-start:16px;z-index:2147483001;display:grid;gap:8px;max-width:min(420px,calc(100vw - 32px))}"
+    + "#bina-tell[data-at~=top]{inset-block-start:16px;inset-block-end:auto}#bina-tell[data-at~=end]{inset-inline-start:auto;inset-inline-end:16px}"   // where it covers nothing (place())
     + ".btell{--c:var(--ok);padding:10px 14px;border-radius:12px;background:color-mix(in srgb,var(--c) 14%,var(--surface));color:var(--ink);border:1px solid color-mix(in srgb,var(--c) 38%,var(--surface));border-inline-start:4px solid var(--c);font:13px/1.45 var(--font,system-ui,sans-serif);box-shadow:var(--shadow-lg);cursor:pointer;text-align:start}"
     + ".btell.warn{--c:var(--lime)}.btell.bad{--c:var(--red)}"   // --ok and --red, not the bare hues: they are the steps that are lifted on the dark ground
     + ".btell small{display:block;margin-top:2px;font-size:11.5px;color:var(--muted);overflow-wrap:anywhere;unicode-bidi:plaintext}"
@@ -156,6 +157,47 @@ var binaAsk, binaTell;
     });
   };
 
+  // The notice never sits on a control of the page (DGO-618): it keeps its corner while that covers nothing, and
+  // otherwise takes the first corner that does — at every frame size, a desktop window of 380 x 260 included,
+  // where the bottom corner is where a window keeps its buttons. With no corner free at its full width, the corners
+  // again at two thirds and at half of it (a narrower notice fits over a title, beside a window's ✕); with none
+  // free at all, the place that covers fewest.
+  var CONTROLS = "button,a[href],input:not([type=hidden]),select,textarea,summary,[role=button],[tabindex]:not([tabindex='-1'])";
+  function covered(box) {
+    var b = box.getBoundingClientRect(), n = 0;
+    if (b.width < 2 || b.height < 2) return 0;
+    doc.querySelectorAll(CONTROLS).forEach(function (c) {
+      var r = c.getBoundingClientRect();     // the cheap test first: on a screen of thousands of rows most are far away
+      if (Math.min(b.right, r.right) - Math.max(b.left, r.left) <= 1 || Math.min(b.bottom, r.bottom) - Math.max(b.top, r.top) <= 1) return;
+      // inside the notice, in a part of the page made inert (a window the page put over it), or not drawn: not a control here
+      if (box.contains(c) || c.closest("[inert]") || (c.checkVisibility && !c.checkVisibility({ checkVisibilityCSS: true }))) return;
+      n++;
+    });
+    return n;
+  }
+  function put(box, at, w) {
+    if (at) box.setAttribute("data-at", at); else box.removeAttribute("data-at");
+    box.style.maxWidth = w;
+    // a top spot lets go of the bottom, written on the element: a page's own rule that lifts the notice off its bar
+    // (`body:has(…) #bina-tell{inset-block-end:…}`) out-ranks the attribute, and the box stretched to the full height
+    box.style.insetBlockEnd = at.indexOf("top") < 0 ? "" : "auto";
+  }
+  function place(box) {
+    var best = null;
+    ["", "min(280px,calc((100vw - 32px) * .66))", "min(210px,calc((100vw - 32px) * .5))"].some(function (w) {
+      return ["", "end", "top", "top end"].some(function (at) {
+        put(box, at, w);
+        var n = covered(box);
+        if (!best || n < best.n) best = { at: at, w: w, n: n };
+        return n === 0;
+      });
+    });
+    put(box, best.at, best.w);
+  }
+  var placing = 0;
+  function replace() { var box = doc.getElementById("bina-tell"); if (box && box.firstChild) place(box); }
+  window.addEventListener("resize", function () { clearTimeout(placing); placing = setTimeout(replace, 120); });
+
   // The third word is how long the notice stays (ms) — or what more it carries: { ms, more, act, stay }.
   //   more  the service's own sentence, on a line of its own under the notice's words
   //   act   [label, fn] — one way on from the notice (an undo, a refresh): pressing it runs fn and takes the notice down
@@ -172,12 +214,13 @@ var binaAsk, binaTell;
     if (o.act) {
       var go = el("button", "", o.act[0]);
       go.setAttribute("type", "button");
-      go.addEventListener("click", function (e) { e.stopPropagation(); n.remove(); o.act[1](); });
+      go.addEventListener("click", function (e) { e.stopPropagation(); n.remove(); replace(); o.act[1](); });
       n.appendChild(go);
     }
-    n.addEventListener("click", function () { n.remove(); });
+    n.addEventListener("click", function () { n.remove(); replace(); });
     box.appendChild(n);
-    if (!o.stay) setTimeout(function () { n.remove(); }, o.ms || (kind === "bad" ? 9000 : 5200));
+    place(box);
+    if (!o.stay) setTimeout(function () { n.remove(); replace(); }, o.ms || (kind === "bad" ? 9000 : 5200));
     return n;
   };
 })();
@@ -904,13 +947,71 @@ function renderChip() {
 /* ── settings ─────────────────────────────────────────────────────────────────────────────── */
 function renderAccount() {
   const st = state.status || {};
+  // the account's id is its hover, not a line of its own (UI law 3)
   $("account-box").innerHTML = [
-    ["חשבון", st.ok ? ((st.user && (st.user.name || st.user.username)) || st.label || "מחובר") : "לא מחובר"],
-    ["מזהה", st.instance || "—"],
+    ["חשבון", st.ok ? ((st.user && (st.user.name || st.user.username)) || st.label || "מחובר") : "לא מחובר", st.instance || ""],
     ["טלפון", st.account_hint || "—"],
     ["ספרייה", ((st.counts || {}).movies || 0) + " סרטים"],
-  ].map((kv) => '<div class="k">' + esc(kv[0]) + '</div><div class="num">' + esc(kv[1]) + "</div>").join("");
+  ].map((kv) => '<div class="k">' + esc(kv[0]) + '</div><div class="num"' + (kv[2] ? ' title="' + esc(kv[2]) + '"' : "") + ">" +
+    esc(kv[1]) + "</div>").join("");
+  // EVERY account of this app, here in its own screen (DGO-1798): the office's bar no longer shows an app's account
+  // (DGO-1624), so listing, switching and removing them is this card's. The service's own routes: GET connections,
+  // POST connections/select, DELETE connections/<id>.
+  const c = state.conns || {}, list = c.connections || [];
+  const box = $("account-list");
+  // the service's own reason when it could not list them (it answers 200 with `reason` and an empty list)
+  box.hidden = !list.length && !c.reason;
+  box.innerHTML = !list.length ? (c.reason ? '<div class="acct-row muted small">' + esc(c.reason) + "</div>" : "")
+    : list.map((a) => {
+      const on = a.id === c.active, name = a.label || a.account_hint || "חשבון";
+      return '<div class="acct-row' + (on ? " on" : "") + '" data-id="' + esc(a.id) + '" title="' + esc(a.id) + '">' +
+        '<span class="acct-name"><b>' + esc(name) + "</b>" +
+        (a.account_hint && a.account_hint !== name ? '<span class="muted small num" dir="ltr">' + esc(a.account_hint) + "</span>" : "") + "</span>" +
+        (on ? '<span class="acct-on">פעיל</span>'
+            : '<button class="btn sm" type="button" data-use aria-label="' + esc("החלפה לחשבון " + name) + '" ' +
+              'title="להפוך את החשבון הזה לפעיל: ממנו מנגנים ומסנכרנים">החלפה</button>') +
+        '<button class="btn ghost sm" type="button" data-drop aria-label="' + esc("הסרת החשבון " + name) + '" ' +
+        'title="הסרת החשבון מהלשכה">הסרה</button></div>';
+    }).join("");
+  $("btn-relogin").textContent = list.length ? "חיבור חשבון נוסף" : "חיבור חשבון";
 }
+$("account-list").addEventListener("click", async (e) => {
+  const row = e.target.closest(".acct-row"), c = state.conns || {};
+  const a = row && (c.connections || []).find((x) => x.id === row.dataset.id);
+  if (!a) return;
+  const name = a.label || a.account_hint || "חשבון";
+  const use = e.target.closest("[data-use]"), drop = e.target.closest("[data-drop]");
+  // the change is said once the service took it; reading everything again after it is its own step, so a slow
+  // or failed re-read never turns a done change into «לא הצליחה»
+  const after = async (done) => {
+    say(done);
+    try { await refreshAll(); } catch (err) { say("השינוי נעשה, אבל הקריאה מחדש לא הצליחה: " + err.message, "bad"); }
+  };
+  if (use) {
+    use.disabled = true;
+    try { await api("connections/select", { method: "POST", body: { id: a.id } }); }
+    catch (err) { say("ההחלפה לא הצליחה: " + err.message, "bad"); use.disabled = false; if (err.status === 404) refreshAll().catch(() => {}); return; }
+    await after("החשבון הפעיל עכשיו: " + name);
+  } else if (drop) {
+    const on = a.id === c.active;
+    // what removing it does, as the service does it: the login leaves the office's vault — and with it the טלגרם
+    // app, which uses the same login (apps/telegram) — while the films already in the library stay (the library is
+    // one, not per account); without an active account nothing plays until one is chosen or connected
+    const ok = await binaAsk({ title: "להסיר את החשבון?", ok: "הסרה", danger: true,
+      body: "ההתחברות הזו יוצאת מהלשכה — וגם מאפליקציית טלגרם, אם היא משתמשת בה. הסרטים שכבר בספרייה נשארים." +
+            (on ? " זה החשבון הפעיל: עד שתבחרו חשבון אחר או תתחברו, אי אפשר לנגן ולסנכרן." : ""),
+      facts: [["חשבון", name], ["טלפון", a.account_hint || "—"], ["מצב", on ? "פעיל" : "לא פעיל"]] });
+    if (!ok) return;
+    drop.disabled = true;
+    try { await api("connections/" + encodeURIComponent(a.id), { method: "DELETE" }); }
+    catch (err) {
+      // not on the list any more (removed in another window): what was asked is already so
+      if (err.status === 404) { await after("החשבון " + name + " כבר הוסר"); return; }
+      say("ההסרה לא הצליחה: " + err.message, "bad"); drop.disabled = false; return;
+    }
+    await after("החשבון " + name + " הוסר");
+  }
+});
 async function renderCache() {
   try {
     const c = await api("api/cache");
@@ -1044,7 +1145,10 @@ async function startLogin(mode) {
 
 /* ── boot ─────────────────────────────────────────────────────────────────────────────────── */
 async function refreshAll() {
-  state.status = await api("api/status");
+  // the accounts the settings card lists, read beside the status; a read that fails keeps the last list
+  const [status, conns] = await Promise.all([api("api/status"), api("connections").catch(() => undefined)]);
+  state.status = status;
+  if (conns !== undefined) state.conns = conns;
   const chats = await api("api/chats");
   state.chats = chats.chats || [];
   state.scrapers = chats.scrapers || [];
@@ -1128,7 +1232,10 @@ $("btn-full-sync").addEventListener("click", async () => {
   catch (e) { say("הסנכרון לא התחיל: " + e.message, "bad"); }
 });
 $("btn-relogin").addEventListener("click", () => {
+  $("drawer-close").click();   // the wizard is on the page, under the drawer (full width on a phone)
   $("connect").classList.remove("hidden");
+  const first = $("connect").querySelector("button:not([hidden]), input:not([hidden])");
+  if (first) first.focus({ preventScroll: true });   // the keyboard follows: the button it was on is hidden now
   $("connect").scrollIntoView({ block: "start" });
 });
 $("empty-sync").addEventListener("click", () => $("btn-sync").click());

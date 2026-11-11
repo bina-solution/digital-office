@@ -67,6 +67,8 @@ Where it runs is computed, never written:
   prefix («הלשכה», «לשכה») is still one word;
 - a phrase counts only when the request shares at least two of its words (one shared word is chance:
   "שלח לי את זה" is not a mail);
+- the one exception is a one-word command: in an operative that declares `command: true`, a one-word
+  `when` phrase counts when the request is that word and nothing else («קדימה», DGO-1301);
 - a long request is also measured by its first six words, against a `when` phrase that is there whole
   and that the request opens with: a report says what to do first, and its own words would dilute the
   measure;

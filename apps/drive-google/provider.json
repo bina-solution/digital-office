@@ -1,0 +1,24 @@
+{
+  "for": "drive",
+  "id": "google",
+  "kind": "external",
+  "service": "https://www.googleapis.com/drive/v3",
+  "why_external": "Google Drive is Google's service, not software the office can run: the engine bridges its API for the accounts the office connects",
+  "ladder": [
+    {
+      "rung": "official-api",
+      "state": "in-use",
+      "evidence": "Drive API v3 (gdrive.py) with two credentials. (1) A person's OAuth grant, scope https://www.googleapis.com/auth/drive (restricted), opened by connections' google-workspace-grant and returned through the herd's ONE redirect URI, https://connections.staging.digital-office.co.il/oauth/relay. Measured 2026-11-09: the herd's OAuth client answers invalid_client at accounts.google.com (deleted at Google), and the relay itself answers 302 to vps1's sign-in — so this door is closed until the owner makes a new Web client (DGO-1392) and the relay is served without sign-in. (2) A service account's JSON key (a signed JWT, scope drive): open today, needs no client; it sees only what was shared with its address and cannot create files (no storage quota of its own, https://developers.google.com/workspace/drive/api/guides/handle-errors)"
+    },
+    {
+      "rung": "webapp-api",
+      "state": "none",
+      "evidence": "not needed: drive.google.com's own calls are the same Drive API behind the person's session; the official API covers every op the generic drive asks"
+    },
+    {
+      "rung": "browser",
+      "state": "available",
+      "evidence": "the office browser (browser42) can sign in to drive.google.com and download/upload by hand — the last resort if both credentials are closed; not built"
+    }
+  ]
+}

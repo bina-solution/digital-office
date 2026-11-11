@@ -1,0 +1,61 @@
+# terminal — a command line on any machine of the office (DGO-553, see app.py's docstring).
+#
+# Three things about this compose are load-bearing:
+#
+#  * NO KEY, NO VOLUME, NO PRIVILEGE. The office's SSH key lives in `computers_state` and this app
+#    never sees it: every byte goes through `computers.v1` over traefik-network. A terminal that
+#    minted its own key would be a second door to every machine, and the audit that checks a
+#    machine's posture would have nothing to say about it.
+#
+#  * NO HOST MOUNT and NO ENGINE SOCKET. A shell here is a shell ON the far machine, over SSH —
+#    not a docker exec on this box. Mounting the socket into a browser-facing container is the
+#    finding `apps/computers` /audit reports against other machines.
+#
+#  * THE IMAGE NAME IS THE APP'S ID — `terminal`, the name CI publishes for this app directory
+#    (one image per app that carries a Dockerfile, .github/workflows/images.yml).
+services:
+  terminal:
+    image: ghcr.io/bina-solution/digital-office/terminal:${IMAGE_TAG:-latest}
+    pull_policy: missing
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: terminal-${DEPLOYMENT_NAME:-bina-deployment}
+    hostname: terminal
+    restart: unless-stopped
+    environment:
+      - SENTRY_DSN=${TERMINAL_SENTRY_DSN:-}
+      - DEPLOYMENT_NAME=${DEPLOYMENT_NAME:-bina-deployment}
+      # the ONE app that holds the office key and opens machines; this screen only asks it
+      - COMPUTERS_URL=${COMPUTERS_URL:-http://computers:8977}
+      # a shell that has to reach a machine waits on ssh — the browser must not look dead meanwhile
+      - TERMINAL_HTTP_TIMEOUT=${TERMINAL_HTTP_TIMEOUT:-25}
+      # this app's own host, in the platform's own words (app.json routing[].sso.base_url_env)
+      - TERMINAL_BASE_URL=${TERMINAL_BASE_URL:-terminal.${DEPLOYMENT_DOMAIN:-localhost}}
+    networks:
+      - traefik-network
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request,sys;sys.exit(0 if urllib.request.urlopen('http://localhost:8080/healthz',timeout=8).status==200 else 1)"]
+      interval: ${HEALTHCHECK_INTERVAL:-30s}
+      timeout: ${HEALTHCHECK_TIMEOUT:-10s}
+      retries: 3
+      start_period: 10s
+    deploy:
+      resources:
+        limits:
+          # It copies bytes between two hops and runs no shell of its own; the ceiling is set by the
+          # number of open terminals a person keeps, not by work done here.
+          cpus: '0.2'
+          memory: 128M
+        reservations:
+          cpus: '0.01'
+          memory: 24M
+    logging:
+      driver: ${LOGGING_DRIVER:-json-file}
+      options:
+        max-size: 5m
+        max-file: '3'
+
+networks:
+  traefik-network:
+    external: true

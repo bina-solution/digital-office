@@ -124,21 +124,21 @@ function register(app, isAuthenticated, appProperties, controller) {
         reason: connected ? '' : 'הבוט אינו מחובר — נדרש סריקת QR מחדש',
         checked: new Date().toISOString(),
         log: [],
-        activeBot: 'hacohanim',
+        activeBot: 'example',
       }],
       active: 'wa-bot',
     });
   });
 
   app.get('/api/bots', isAuthenticated, (req, res) => {
-    res.json({ bots: [{ id: 'hacohanim', name: 'בוט הכהנים', desc: 'מענה אוטומטי ללקוחות ולספקים' }] });
+    res.json({ bots: [{ id: 'example', name: 'בוט הדוגמה', desc: 'מענה אוטומטי ללקוחות ולספקים' }] });
   });
 
   app.post('/api/account/bot', isAuthenticated, (req, res) => {
     // Choosing which bot answers for a connection. There is exactly one bot today, so this records
     // the choice and confirms it rather than pretending to switch between options that do not exist
     // — the endpoint has to answer because the client asks, and answering honestly is cheap.
-    const bot = (req.body && req.body.bot) || 'hacohanim';
+    const bot = (req.body && req.body.bot) || 'example';
     res.json({ ok: true, activeBot: bot });
   });
 

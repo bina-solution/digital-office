@@ -50,7 +50,7 @@ local function recording_status(room)
 end
 
 
--- THE RECORDER TAKES ~13 s TO ARRIVE (Chrome starts, joins): measured on fireplace 2026-10-26, a 15 s
+-- THE RECORDER TAKES ~13 s TO ARRIVE (Chrome starts, joins): measured on examplef 2026-10-26, a 15 s
 -- call kept 2 s. So the room is told the recording is starting, and told again when it is on — people
 -- wait for the second line instead of talking into nothing (issues/meet-recording-misses-the-first-13-seconds…).
 local SENDER = "הקלטה";

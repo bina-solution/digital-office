@@ -15,11 +15,11 @@
 #   AT ITERATION CAP  ITERATION_COUNT >= max_iterations_per_doc
 set -u
 DK="docker -H unix:///run/bbox-docker.sock"
-ENVF=/mnt/c/Users/user/Desktop/personalWorkspace/AutomateOs/deployment-hacohen/.env
+ENVF=/mnt/c/Users/user/Desktop/personalWorkspace/AutomateOs/digital-office/.env
 RP=$(grep -E '^REDIS_PASSWORD=' "$ENVF" | head -1 | cut -d= -f2-)
 LOCKS=/tmp/ear_locks_$$.txt
 
-$DK exec -e RP="$RP" redis-shlomo-laptop sh -lc \
+$DK exec -e RP="$RP" redis-owner-laptop sh -lc \
   'redis-cli -a "$RP" --no-auth-warning --scan --pattern "n8n.process_lock.doc_action.*" 2>/dev/null' \
   | sed -e 's/^n8n[.]process_lock[.]doc_action[.]//' -e 's/::.*$//' | tr -d '\r' | sort -u > "$LOCKS"
 echo "  live doc_action locks: $(grep -c . "$LOCKS")"
@@ -86,5 +86,5 @@ LIMIT 20;
 EOS
 } > /tmp/ear_$$.sql
 
-$DK exec -i supabase-db-shlomo-laptop psql -U postgres -tAf - < /tmp/ear_$$.sql
+$DK exec -i supabase-db-owner-laptop psql -U postgres -tAf - < /tmp/ear_$$.sql
 rm -f "$LOCKS" /tmp/ear_$$.sql

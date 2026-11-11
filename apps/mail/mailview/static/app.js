@@ -35,6 +35,7 @@ var binaAsk, binaTell;
     + "@media (pointer:coarse){.bask-btn{height:44px}.bask-field input{height:44px}}"
     + "@media (max-height:399px){.bask{padding:8px}.bask-card{padding:12px}.bask-acts{margin-top:10px}}"   // the side menu's own short frame
     + "#bina-tell{position:fixed;inset-block-end:16px;inset-inline-start:16px;z-index:2147483001;display:grid;gap:8px;max-width:min(420px,calc(100vw - 32px))}"
+    + "#bina-tell[data-at~=top]{inset-block-start:16px;inset-block-end:auto}#bina-tell[data-at~=end]{inset-inline-start:auto;inset-inline-end:16px}"   // where it covers nothing (place())
     + ".btell{--c:var(--ok);padding:10px 14px;border-radius:12px;background:color-mix(in srgb,var(--c) 14%,var(--surface));color:var(--ink);border:1px solid color-mix(in srgb,var(--c) 38%,var(--surface));border-inline-start:4px solid var(--c);font:13px/1.45 var(--font,system-ui,sans-serif);box-shadow:var(--shadow-lg);cursor:pointer;text-align:start}"
     + ".btell.warn{--c:var(--lime)}.btell.bad{--c:var(--red)}"   // --ok and --red, not the bare hues: they are the steps that are lifted on the dark ground
     + ".btell small{display:block;margin-top:2px;font-size:11.5px;color:var(--muted);overflow-wrap:anywhere;unicode-bidi:plaintext}"
@@ -139,6 +140,47 @@ var binaAsk, binaTell;
     });
   };
 
+  // The notice never sits on a control of the page (DGO-618): it keeps its corner while that covers nothing, and
+  // otherwise takes the first corner that does — at every frame size, a desktop window of 380 x 260 included,
+  // where the bottom corner is where a window keeps its buttons. With no corner free at its full width, the corners
+  // again at two thirds and at half of it (a narrower notice fits over a title, beside a window's ✕); with none
+  // free at all, the place that covers fewest.
+  var CONTROLS = "button,a[href],input:not([type=hidden]),select,textarea,summary,[role=button],[tabindex]:not([tabindex='-1'])";
+  function covered(box) {
+    var b = box.getBoundingClientRect(), n = 0;
+    if (b.width < 2 || b.height < 2) return 0;
+    doc.querySelectorAll(CONTROLS).forEach(function (c) {
+      var r = c.getBoundingClientRect();     // the cheap test first: on a screen of thousands of rows most are far away
+      if (Math.min(b.right, r.right) - Math.max(b.left, r.left) <= 1 || Math.min(b.bottom, r.bottom) - Math.max(b.top, r.top) <= 1) return;
+      // inside the notice, in a part of the page made inert (a window the page put over it), or not drawn: not a control here
+      if (box.contains(c) || c.closest("[inert]") || (c.checkVisibility && !c.checkVisibility({ checkVisibilityCSS: true }))) return;
+      n++;
+    });
+    return n;
+  }
+  function put(box, at, w) {
+    if (at) box.setAttribute("data-at", at); else box.removeAttribute("data-at");
+    box.style.maxWidth = w;
+    // a top spot lets go of the bottom, written on the element: a page's own rule that lifts the notice off its bar
+    // (`body:has(…) #bina-tell{inset-block-end:…}`) out-ranks the attribute, and the box stretched to the full height
+    box.style.insetBlockEnd = at.indexOf("top") < 0 ? "" : "auto";
+  }
+  function place(box) {
+    var best = null;
+    ["", "min(280px,calc((100vw - 32px) * .66))", "min(210px,calc((100vw - 32px) * .5))"].some(function (w) {
+      return ["", "end", "top", "top end"].some(function (at) {
+        put(box, at, w);
+        var n = covered(box);
+        if (!best || n < best.n) best = { at: at, w: w, n: n };
+        return n === 0;
+      });
+    });
+    put(box, best.at, best.w);
+  }
+  var placing = 0;
+  function replace() { var box = doc.getElementById("bina-tell"); if (box && box.firstChild) place(box); }
+  window.addEventListener("resize", function () { clearTimeout(placing); placing = setTimeout(replace, 120); });
+
   // The third word is how long the notice stays (ms) — or what more it carries: { ms, more, act, stay }.
   //   more  the service's own sentence, on a line of its own under the notice's words
   //   act   [label, fn] — one way on from the notice (an undo, a refresh): pressing it runs fn and takes the notice down
@@ -155,12 +197,13 @@ var binaAsk, binaTell;
     if (o.act) {
       var go = el("button", "", o.act[0]);
       go.setAttribute("type", "button");
-      go.addEventListener("click", function (e) { e.stopPropagation(); n.remove(); o.act[1](); });
+      go.addEventListener("click", function (e) { e.stopPropagation(); n.remove(); replace(); o.act[1](); });
       n.appendChild(go);
     }
-    n.addEventListener("click", function () { n.remove(); });
+    n.addEventListener("click", function () { n.remove(); replace(); });
     box.appendChild(n);
-    if (!o.stay) setTimeout(function () { n.remove(); }, o.ms || (kind === "bad" ? 9000 : 5200));
+    place(box);
+    if (!o.stay) setTimeout(function () { n.remove(); replace(); }, o.ms || (kind === "bad" ? 9000 : 5200));
     return n;
   };
 })();
@@ -189,7 +232,18 @@ const MOUNT = (() => {
   } catch (e) { return "/"; }
 })();
 const EMBEDDED = (() => { try { return window.parent !== window; } catch (e) { return false; } })();
-const href = inner => MOUNT + String(inner || "/").replace(/^\//, "");
+/* WHICH MAILBOX this window shows (DGO-1390): every mailbox of the office is in the menu, and choosing one
+   shows it HERE — the address names it (`?mailbox=`, absent for the office's default) and every call about
+   mail carries it (`connection_id`, which mailview takes as the screen's own choice). Nothing moves on the
+   server: the default the agents and automations use is its own act (selectConn, with a question). */
+let MAILBOX = new URLSearchParams(location.search).get("mailbox") || "";
+const href = inner => {
+  const u = MOUNT + String(inner || "/").replace(/^\//, "");
+  return MAILBOX ? u + (u.includes("?") ? "&" : "?") + "mailbox=" + encodeURIComponent(MAILBOX) : u;
+};
+const MB_SCOPED = /^api\/(messages|message\/|thread\/|attachment\/|labels|tag|mark|send|account|doc-context\/)/;
+const mbUrl = u => (MAILBOX && MB_SCOPED.test(u) && !/[?&]connection_id=/.test(u)
+  ? u + (u.includes("?") ? "&" : "?") + "connection_id=" + encodeURIComponent(MAILBOX) : u);
 function innerPath() {
   let p = location.pathname;
   if (p === MOUNT.replace(/\/$/, "")) return "/";
@@ -259,7 +313,7 @@ function errDetail(body, status) {
 async function jf(u, opt) {
   opt = opt || {};
   let r;
-  try { r = await fetch(u, opt); }
+  try { r = await fetch(mbUrl(u), opt); }
   catch (e) {
     const err = new Error(binaSaid(0)); err.network = true;        // the office's one name for it (it said «שגיאת רשת — …»)
     if (!opt.silent) fail(err.message);
@@ -340,6 +394,19 @@ const fmtDate = s => {
     return d.toLocaleDateString("he-IL", { day: "numeric", month: "short", year: "numeric" });
   return d.toLocaleDateString("he-IL", { day: "numeric", month: "short" }) + " " + hm;
 };
+/* a ROW's date is the short one (Gmail's): today the hour, this year the day and month, else the day as
+   a number; the full one is the row's title. «7 בנוב׳ 07:37» on every row cost a phone its date line. */
+const fmtShort = s => {
+  if (!s) return "";
+  const d = new Date(s);
+  if (isNaN(d)) return esc(String(s).slice(0, 10));      // (it goes into the row's markup as it is)
+  const today = new Date();
+  if (d.toDateString() === today.toDateString())
+    return d.toLocaleTimeString("he-IL", { hour: "2-digit", minute: "2-digit" });
+  if (d.getFullYear() === today.getFullYear())
+    return d.toLocaleDateString("he-IL", { day: "numeric", month: "short" });
+  return d.toLocaleDateString("he-IL", { day: "numeric", month: "numeric", year: "2-digit" });
+};
 const HE_MONTHS = ["ינואר","פברואר","מרץ","אפריל","מאי","יוני","יולי","אוגוסט","ספטמבר","אוקטובר","נובמבר","דצמבר"];
 function dayKey(s) {
   const d = new Date(s);
@@ -355,6 +422,18 @@ function dayKey(s) {
 }
 const fromName = f => (f || "").replace(/<[^>]*>/, "").replace(/^["']|["']$/g, "").trim() || (f || "");
 const addrOf = f => (String(f || "").match(/<([^>]+)>/) || [null, String(f || "").trim()])[1];
+/* A DELIVERY FAILURE is the mail system's answer to a message of ours, not a letter: by its sender
+   (MAILER-DAEMON, postmaster, «Mail Delivery System/Subsystem») or by the subject every server gives it.
+   On the owner's phone two of the first three rows were these (staging, 2026-11-09). */
+const BOUNCE_FROM = /mailer-daemon|postmaster@|mail delivery (system|subsystem)/i;
+const BOUNCE_SUBJ = /^(undelivered mail returned to sender|undeliverable|delivery status notification \((failure|delay)\)|mail delivery failed|returned mail|failure notice|delivery failure)/i;
+const isBounce = m => BOUNCE_FROM.test(m.from || "") || BOUNCE_SUBJ.test(String(m.subject || "").trim());
+/* the first address of a To: line, by its name — a quoted name may hold a comma («"Cohen, Dana" <d@x>») */
+function firstRecipient(to) {
+  const t = String(to || "").trim();
+  const first = (t.match(/^\s*(?:"[^"]*"\s*<[^>]*>|[^,]+)/) || [t])[0];
+  return fromName(first.trim()).replace(/^"|"$/g, "");
+}
 
 /* ── icons (Lucide line paths, never emoji) ── */
 const ICONS = {
@@ -487,6 +566,8 @@ window.addEventListener("beforeunload", e => {
 });
 window.addEventListener("popstate", async () => {
   if (!(await leaveGuard())) { history.pushState({}, "", href("/organizer")); return; }
+  const mb = new URLSearchParams(location.search).get("mailbox") || "";
+  if (mb !== MAILBOX) { MAILBOX = mb; rebootData(); return; }   // back to another mailbox: its whole world
   applyUrl();
 });
 async function applyUrl() {
@@ -520,6 +601,7 @@ async function applyUrl() {
 }
 function showScreen(s) {
   SCREEN = s;
+  document.body.dataset.screen = s;          // a phone shows the list's header on the list only (index.html)
   $("#msgTable").classList.toggle("hidden", s !== "list");
   $("#reader").classList.toggle("hidden", s !== "reader");
   $("#orgPane").classList.toggle("hidden", s !== "organizer");
@@ -622,6 +704,7 @@ function mountSide() {
       onInput: q => { QUERY = q.trim(); },
     },
     sections: [
+      { id: "boxes",  title: "חשבונות", items: boxItems() },
       { id: "views",  title: "תיבות", items: viewItems(),  showMore: SYS_TAIL },
       { id: "labels", title: "תוויות", items: labelItems(), showMore: 8,
         actions: [{ icon: ic("refresh"), label: "רענון תוויות", onClick: () => loadLabels() }] },
@@ -649,6 +732,34 @@ function mountSide() {
      stub next to the title, and it can be a whole drawer instead. The page only places them
      (`data-nav-toggle`, `data-nav-find`); the component draws and wires them. */
   return NAV;
+}
+
+/* every mailbox of the office — Gmail accounts and the office's own addresses — then «חיבור חשבון». The one
+   shown here carries the check; the agents' default is said in its title (DGO-1390). */
+function boxItems() {
+  const cur = MAILBOX || CONN.active;
+  const rows = CONN.list.map(c => ({
+    id: "mb:" + c.id,
+    label: c.account_hint || connName(c),
+    icon: ic(isLocalConn(c) ? "server" : "mail"),
+    title: [isLocalConn(c) ? "תיבה של הלשכה" : "Gmail", c.id === CONN.active ? "ברירת המחדל של הסוכנים" : ""].filter(Boolean).join(" · "),
+    tail: c.id === cur ? `<span class="mb-on" aria-label="מוצגת עכשיו">${ic("check")}</span>` : "",
+    onClick: e => { e.preventDefault(); openMailbox(c); },
+  }));
+  rows.push({ id: "mb:connect", label: "חיבור חשבון", icon: ic("plus"), title: "Gmail, או תיבה של הלשכה",
+              onClick: e => { e.preventDefault(); if (NAV && NAV.isOpen()) NAV.close(); openSettings("connect", true); } });
+  return rows;
+}
+/* show another mailbox in this window: its account line, its labels, its inbox */
+async function openMailbox(c) {
+  if (!(await leaveGuard())) return;
+  if (NAV && NAV.isOpen()) NAV.close();
+  const want = c.id === CONN.active ? "" : c.id;
+  if (want === MAILBOX && SCREEN === "list") return;
+  MAILBOX = want;
+  OPEN = null; VIEW = ""; CURLABEL = ""; QUERY = "";
+  history.pushState({}, "", href("/"));
+  rebootData();
 }
 
 /* where mail can be — a fixed, frequency-ordered list, the tail kept behind "הצג עוד". No counts:
@@ -683,6 +794,7 @@ function labelItems() {
 function renderSide() {
   const nav = mountSide(); if (!nav) return;
   nav.setBrand({ sub: ACCOUNT_LINE });
+  nav.setItems("boxes", boxItems());
   nav.setItems("views", viewItems(), SYS_TAIL);
   nav.setItems("labels", labelItems(), 8);
   markActive();
@@ -753,7 +865,10 @@ function listQuery(limit, cursor) {
     + (cursor ? "&before_uid=" + cursor : "")
     /* `tz` rides along only WITH a window: the calendar windows are cut in the reader's own day */
     + (WIN !== "all" ? "&win=" + WIN + "&tz=" + new Date().getTimezoneOffset() : "")
-    + (TESTSHOW === null ? "" : "&test=" + (TESTSHOW ? "1" : "0"));
+    + (TESTSHOW === null ? "" : "&test=" + (TESTSHOW ? "1" : "0"))
+    /* the row's preview line (DGO-1507): the mail service reads the start of each text part in one
+       FETCH per page and keeps it; a service that does not know the word answers without one */
+    + "&snippets=1";
 }
 let LIST_SEQ = 0;
 async function fetchPage(seq) {
@@ -828,27 +943,39 @@ function avatarColor(name) {
   for (let i = 0; i < t.length; i++) h = (h * 31 + t.charCodeAt(i)) >>> 0;
   return P[h % P.length];
 }
-/* Row: checkbox · star · important · sender · subject+snippet · attachment · triage dot · date, and
-   on hover the date is REPLACED by the quick actions that the backend can actually perform. */
-function rowHtml(m, cls) {
+/* Row: checkbox · star · important · avatar · sender · subject — preview · attachment · triage dot ·
+   date, and on hover the date is REPLACED by the quick actions that the backend can actually perform.
+   On a phone the same cells are a three-line grid (index.html, «THE PHONE ROW»). A message of OURS
+   (a sent copy in the box) is «אני», and with no preview of its own says whom it went to — the
+   office's own address as the sender read as a stranger's letter on his phone. */
+function rowHtml(m, cls, threadKey, threadN) {
   const chips = nonSys(m.labels).filter(l => !isMachineLabel(l) && !TRIAGE_ALL_NAMES.has(l));
   const chipHtml = SHOWCHIPS.has(m.id)
     ? chips.map(l => `<span class="chip"><bdi>${esc(l)}</bdi></span>`).join("")
     : (chips.length ? `<span class="plusn" data-chips="${esc(m.id)}">+${chips.length}</span>` : "");
   const unread = isUnread(m);
   const triage = triageState(m);
-  const who = fromName(m.from);
-  const snip = m.snippet ? ` <span class="gm-snip">— ${esc(m.snippet)}</span>` : "";
+  const mine = hasLbl(m, "SENT");
+  const to = mine ? firstRecipient(m.to) : "";
+  /* (in «נשלח» every row is ours, so the row names whom it went to — Gmail's «אל:»; elsewhere it is «אני») */
+  const who = !mine ? fromName(m.from) : VIEW === "sent" && to ? "אל: " + to : "אני";
+  const preview = m.snippet || (mine && to && VIEW !== "sent" ? "אל: " + to : "");
+  const snip = preview ? `<span class="gm-dash"> — </span><bdi class="gm-snip">${esc(preview)}</bdi>` : "";
   const picked = SELECTED.has(m.id);
   const rowBusy = BUSY_IDS.has(m.id);
+  const av = picked ? `<span class="gm-av" data-pick="${esc(m.id)}" title="ביטול הבחירה">${ic("check")}</span>`
+    : mine ? `<span class="gm-av me" data-pick="${esc(m.id)}" title="בחירה">${ic("send")}</span>`
+    : `<span class="gm-av" data-pick="${esc(m.id)}" title="בחירה" style="background:${avatarColor(who)}">${esc(initials(who))}</span>`;
+  const thx = threadN > 1
+    ? `<span class="thx" data-th="${esc(threadKey)}" title="הודעות בשיחה">${EXPTHREADS.has(threadKey) ? ic("chevron") : num(threadN)}</span>` : "";
   return `<div class="gm-row ${cls || ""} ${unread ? "unread" : ""} ${picked ? "sel" : ""} ${rowBusy ? "busy" : ""}"
                data-id="${esc(m.id)}" role="listitem" tabindex="0" aria-selected="${picked}" ${rowBusy ? 'aria-busy="true"' : ""}>
     <span class="gm-cb ${picked ? "on" : ""}" data-cb="${esc(m.id)}" role="checkbox"
           aria-checked="${picked}" aria-label="בחירה"></span>
     <button class="gm-star ${isStarred(m) ? "on" : ""}" data-star="${esc(m.id)}" type="button" aria-label="סימון בכוכב" title="סימון בכוכב">${ic("star")}</button>
     <button class="gm-imp ${isImportant(m) ? "on" : ""}" data-imp="${esc(m.id)}" type="button" aria-label="סימון כחשוב" title="סימון כחשוב">${ic("flag")}</button>
-    <span class="gm-av" style="background:${avatarColor(who)}">${esc(initials(who))}</span>
-    <span class="gm-from"><bdi>${esc(who)}</bdi></span>
+    ${av}
+    <span class="gm-from"><bdi>${esc(who)}</bdi>${thx}</span>
     <span class="gm-main">
       <bdi class="gm-sub">${esc(m.subject || "(ללא נושא)")}</bdi>${snip}
       ${chipHtml}
@@ -857,7 +984,7 @@ function rowHtml(m, cls) {
     ${triage
       ? `<span class="gm-triage ${triage}" role="img" aria-label="${TRIAGE_TITLE[triage]}" title="${TRIAGE_TITLE[triage]}"></span>`
       : `<span class="gm-triage"></span>`}
-    <span class="gm-when">${fmtDate(m.date)}</span>
+    <span class="gm-when" title="${esc(fmtDate(m.date))}">${fmtShort(m.date)}</span>
     <span class="gm-acts">
       <button class="gm-act" data-act="archive" data-id="${esc(m.id)}" type="button" title="העברה לארכיון" aria-label="העברה לארכיון">${ic("archive")}</button>
       ${canReadState() ? `<button class="gm-act" data-act="read" data-id="${esc(m.id)}" type="button" title="${unread ? "סימון כנקרא" : "סימון כלא נקרא"}" aria-label="${unread ? "סימון כנקרא" : "סימון כלא נקרא"}">${ic(unread ? "mail-open" : "mail")}</button>` : ""}
@@ -898,10 +1025,38 @@ async function setWin(id) {
 }
 
 let REFRESHING = false;
+/* DELIVERY FAILURES ARE ONE ROW. In the inbox (and «כל הדואר"), with no search and no label, two or more
+   of them are gathered into one row where the newest stands — «לא נמסרו · 2» in the palette's «failed» —
+   and a tap opens them under it. A search for them, a label, any other view: each is its own row, as
+   asked. Nothing is hidden: the row says how many, and the status line counts them with the rest. */
+const BUNDLE_KEY = "bounces";
+function bundlesOn() { return !QUERY && !CURLABEL && (!VIEW || VIEW === "inbox" || VIEW === "all"); }
+function bundleHtml(items) {
+  const head = items[0], open = EXPTHREADS.has(BUNDLE_KEY);
+  const unread = items.some(isUnread);
+  return `<div class="gm-row gm-bundle ${unread ? "unread" : ""}" data-bundle="${BUNDLE_KEY}" role="listitem" tabindex="0"
+               aria-expanded="${open}" title="${open ? "סגירה" : "הצגת ההודעות שלא נמסרו"}">
+    <span class="gm-cb" aria-hidden="true"></span><span class="gm-star" aria-hidden="true"></span><span class="gm-imp" aria-hidden="true"></span>
+    <span class="gm-av" aria-hidden="true">${ic("alert")}</span>
+    <span class="gm-from"><bdi>לא נמסרו</bdi><span class="gm-n">${num(items.length)}</span></span>
+    <span class="gm-main"><bdi class="gm-sub">${one(items.length, "הודעה אחת חזרה לשולח", "הודעות חזרו לשולח")}</bdi><span class="gm-dash"> — </span><bdi class="gm-snip">${esc(fromName(head.from))}</bdi></span>
+    <span class="gm-att"></span><span class="gm-triage"></span>
+    <span class="gm-when" title="${esc(fmtDate(head.date))}">${fmtShort(head.date)}</span>
+    <span class="gm-chev" aria-hidden="true">${ic("chevron")}</span>
+  </div>`;
+}
 function renderList() {
   if (SCREEN !== "list") return;
   const order = [], byThread = new Map();
-  for (const m of visibleMsgs()) {
+  const vis = visibleMsgs();
+  const bounces = bundlesOn() ? vis.filter(isBounce) : [];
+  const bundled = bounces.length >= 2 ? new Set(bounces.map(m => m.id)) : new Set();
+  for (const m of vis) {
+    if (bundled.has(m.id)) {
+      if (!byThread.has(BUNDLE_KEY)) { byThread.set(BUNDLE_KEY, []); order.push(BUNDLE_KEY); }
+      byThread.get(BUNDLE_KEY).push(m);
+      continue;
+    }
     const k = m.threadId || m.id;
     if (byThread.has(k)) byThread.get(k).push(m);
     else { byThread.set(k, [m]); order.push(k); }
@@ -911,12 +1066,12 @@ function renderList() {
     const items = byThread.get(k), head = items[0];
     const day = dayKey(head.date);
     if (day !== lastDay) { html += `<div class="gm-day">${day}</div>`; lastDay = day; }
-    let row = rowHtml(head, "");
-    if (items.length > 1) {
-      const pill = `<span class="thx" data-th="${esc(k)}" title="הודעות בשיחה">${EXPTHREADS.has(k) ? ic("chevron") : items.length}</span>`;
-      row = row.replace('</span>\n    <span class="gm-att"', pill + '</span>\n    <span class="gm-att"');
+    if (k === BUNDLE_KEY) {
+      html += bundleHtml(items);
+      if (EXPTHREADS.has(BUNDLE_KEY)) for (const b of items) html += rowHtml(b, "subrow inbundle");
+      continue;
     }
-    html += row;
+    html += rowHtml(head, "", k, items.length);
     if (items.length > 1 && EXPTHREADS.has(k))
       for (const sub of items.slice(1)) html += rowHtml(sub, "subrow");
   }
@@ -937,37 +1092,67 @@ function renderList() {
       </span>
       ${nSel ? `<span class="gm-selinfo">${nSel === 1 ? "נבחרה" : "נבחרו"} ${num(nSel)}</span>
            <span class="gm-bulk">
-           <button class="gm-tbtn" data-bulk="archive" type="button">${ic("archive")} ארכיון</button>
-           ${canReadState() ? `<button class="gm-tbtn" data-bulk="read" type="button">${ic("mail-open")} סימון כנקרא</button>
-           <button class="gm-tbtn" data-bulk="unread" type="button">${ic("mail")} סימון כלא נקרא</button>` : ""}
-           <button class="gm-tbtn" data-bulk="clear" type="button">${ic("x")} ביטול הבחירה</button></span>` : ""}
+           <button class="gm-tbtn" data-bulk="archive" type="button" title="העברה לארכיון">${ic("archive")}<span class="tl">ארכיון</span></button>
+           ${canReadState() ? `<button class="gm-tbtn" data-bulk="read" type="button" title="סימון כנקרא">${ic("mail-open")}<span class="tl">סימון כנקרא</span></button>
+           <button class="gm-tbtn" data-bulk="unread" type="button" title="סימון כלא נקרא">${ic("mail")}<span class="tl">סימון כלא נקרא</span></button>` : ""}
+           <button class="gm-tbtn" data-bulk="clear" type="button" title="ביטול הבחירה">${ic("x")}<span class="tl">ביטול הבחירה</span></button></span>` : ""}
       <button class="gm-tbtn" id="gmRefresh" type="button" title="רענון" aria-label="רענון" ${REFRESHING ? 'disabled aria-busy="true"' : ""}>${ic("refresh")}</button>
       <button class="gm-tbtn" id="gmDensity" type="button" title="צפיפות התצוגה" aria-label="צפיפות התצוגה">${ic("menu")}</button>
       ${winSeg()}
       <span class="gm-count">${shown ? `${num(shown)} מתוך ${num(TOTAL)}` : ""}</span>
     </div>`;
+  const convs = order.filter(k => k !== BUNDLE_KEY).length + (byThread.get(BUNDLE_KEY) || []).length;
+  const status = LIST_ERR ? "" :
+    (TOTAL > shown ? `מציג ${num(shown)} מתוך ${num(TOTAL)}` : one(shown, "הודעה אחת", "הודעות"))
+    + (convs !== shown ? ` · ${one(convs, "שיחה אחת", "שיחות")}` : "")
+    + (HASMORE ? ` · <a class="testline" data-foot="more" role="button" tabindex="0">טען עוד</a>` : "")
+    + (TESTTOTAL
+      ? ` · <a class="testline" data-foot="test" role="button" tabindex="0">${TESTHIDDEN ? `דואר בדיקה מוסתר (${num(TESTTOTAL)}) — הצג` : `הסתר דואר בדיקה (${num(TESTTOTAL)})`}</a>` : "");
   let body;
   if (LIST_ERR) {
     body = `<div class="failbox">${ic("alert")}<b>לא ניתן לטעון את ההודעות</b>
       <span class="why"><bdi>${esc(LIST_ERR.message)}</bdi>${LIST_ERR.detail ? ` · <bdi>${esc(LIST_ERR.detail)}</bdi>` : ""}</span>
       <button class="btn" id="listRetry" type="button">${ic("refresh")} נסה שוב</button></div>`;
   } else {
-    body = order.length ? `<div class="gm-list" role="list">${html}</div>` : `<div class="empty">${emptyText()}</div>`;
+    /* (a phone has no status bar under the list: its words are the list's last row) */
+    body = order.length ? `<div class="gm-list" role="list">${html}</div><div class="gm-foot">${status}</div>`
+      : `<div class="empty">${emptyText()}</div>`;
   }
   $("#msgTable").innerHTML = toolbar + body;
+  $("#msgTable").classList.toggle("selecting", nSel > 0);
   const retry = $("#listRetry"); if (retry) retry.onclick = () => busy(retry, refreshView);
-  $("#statusbar").innerHTML = LIST_ERR ? "" :
-    (TOTAL > shown ? `מציג ${num(shown)} מתוך ${num(TOTAL)}` : one(shown, "הודעה אחת", "הודעות"))
-    + (order.length !== shown ? ` · ${one(order.length, "שיחה אחת", "שיחות")}` : "")
-    + (HASMORE ? ` · <a class="testline" id="moreBtn">טען עוד</a>` : "")
-    + (TESTTOTAL
-      ? ` · <a class="testline" id="testTog">${TESTHIDDEN ? `דואר בדיקה מוסתר (${TESTTOTAL}) — הצג` : `הסתר דואר בדיקה (${TESTTOTAL})`}</a>` : "");
-  const tog = $("#testTog");
-  if (tog) tog.onclick = () => { TESTSHOW = TESTHIDDEN; loadList(); };
-  const mb = $("#moreBtn");
-  if (mb) mb.onclick = () => digMore();
+  $("#statusbar").innerHTML = status;
+  syncTopTools();
   reportWidget();
 }
+/* the status line's two links, wherever they are drawn (the bar on a wide screen, the list's end on a phone) */
+function footAct(e) {
+  const a = e.target.closest("[data-foot]");
+  if (!a || (e.type === "keydown" && e.key !== "Enter" && e.key !== " ")) return false;
+  e.preventDefault();
+  if (a.dataset.foot === "more") digMore();
+  else if (a.dataset.foot === "test") { TESTSHOW = TESTHIDDEN; loadList(); }
+  return true;
+}
+$("#statusbar").addEventListener("click", footAct);
+$("#statusbar").addEventListener("keydown", footAct);
+/* The phone's top-bar tools mirror the list's: the window as a select, the refresh with its busy state. */
+function syncTopTools() {
+  const sel = $("#winSel");
+  if (sel) {
+    if (!sel.options.length) sel.innerHTML = WINDOWS.map(w => `<option value="${w.id}">${w.he}</option>`).join("");
+    sel.value = WIN;
+    sel.closest(".top-win").classList.toggle("busy", WINBUSY);
+  }
+  const rb = $("#topRefresh");
+  if (rb) {
+    if (!rb.firstChild) rb.innerHTML = ic("refresh");
+    rb.disabled = REFRESHING;
+    if (REFRESHING) rb.setAttribute("aria-busy", "true"); else rb.removeAttribute("aria-busy");
+  }
+}
+$("#winSel").addEventListener("change", e => setWin(e.target.value));
+$("#topRefresh").addEventListener("click", () => refreshView());
 /* The console's desktop mode draws a window pushed far to the side as a small widget; this is what
    that widget says about the list on screen. A label only — no action — and nothing if not embedded. */
 function reportWidget() {
@@ -1038,10 +1223,21 @@ async function applyMark(ids, mark, on, o) {
 }
 
 $("#msgTable").addEventListener("click", e => {
+  if (Date.now() < SUPPRESS_UNTIL) { SUPPRESS_UNTIL = 0; e.preventDefault(); return; }   // the click that ends a long-press or a swipe
+  if (footAct(e)) return;
   const pn = e.target.closest(".plusn");
   if (pn) { SHOWCHIPS.add(pn.dataset.chips); renderList(); return; }
   const th = e.target.closest(".thx");
   if (th) { EXPTHREADS.has(th.dataset.th) ? EXPTHREADS.delete(th.dataset.th) : EXPTHREADS.add(th.dataset.th); renderList(); return; }
+  const bundle = e.target.closest("[data-bundle]");
+  if (bundle) { toggleSet(EXPTHREADS, bundle.dataset.bundle); renderList(); return; }
+  /* the avatar is the row's checkbox (Gmail's): a tap on it picks the row, and while anything is
+     picked a tap anywhere on a row picks or drops it instead of opening it */
+  const pick = e.target.closest("[data-pick]");
+  const pickRow = e.target.closest(".gm-row[data-id]");
+  if (pick || (SELECTED.size && NARROW() && pickRow && !e.target.closest(".gm-star,.gm-imp,.gm-act,.gm-cb"))) {
+    toggleSet(SELECTED, pick ? pick.dataset.pick : pickRow.dataset.id); renderList(); return;
+  }
 
   const star = e.target.closest("[data-star]");
   if (star) { const m = MSGS.find(x => x.id === star.dataset.star); if (m) applyMark([m.id], "starred", !isStarred(m)); return; }
@@ -1062,7 +1258,9 @@ $("#msgTable").addEventListener("click", e => {
   const all = e.target.closest("#gmAll");
   if (all) {
     const vis = visibleMsgs();
-    if (SELECTED.size) SELECTED.clear(); else vis.forEach(m => SELECTED.add(m.id));
+    /* (on a phone the box is in the selection's own bar, so something is always picked there: it fills
+       the selection, and clears it only once everything is picked; a wide screen clears a partial one) */
+    if (SELECTED.size && (!NARROW() || SELECTED.size >= vis.length)) SELECTED.clear(); else vis.forEach(m => SELECTED.add(m.id));
     SELMENU = false; renderList(); return;
   }
   if (e.target.closest("#gmAllCaret")) { SELMENU = !SELMENU; renderList(); return; }
@@ -1100,10 +1298,96 @@ $("#msgTable").addEventListener("click", e => {
   if (row) openMessage(row.dataset.id);
 });
 $("#msgTable").addEventListener("keydown", e => {
+  if (footAct(e)) return;
   if (e.key !== "Enter") return;
+  const bundle = e.target.closest("[data-bundle]");
+  if (bundle) { toggleSet(EXPTHREADS, bundle.dataset.bundle); renderList(); return; }
   const row = e.target.closest(".gm-row[data-id]");
   if (row) openMessage(row.dataset.id);
 });
+
+/* ── a finger on a row (DGO-1507): a long press picks it, a sideways swipe archives it ───────────
+   Gmail's two gestures, on touch only (a mouse has the hover actions and the checkbox). The swipe
+   engages only once the finger has gone clearly sideways (12 px, and 1.4× more than down), so the
+   list still scrolls under a thumb; the row's `touch-action:pan-y` hands vertical moves to the page.
+   Past a third of the row the archive is the same request as the button's, with its undo; short of
+   that the row springs back. A long press is 480 ms without moving. Both swallow the click that ends
+   them. In a view where archiving does not remove a row (the archive itself) the swipe is not offered. */
+const NARROW = () => window.matchMedia("(max-width:820px)").matches;
+/* The click a browser may send when the finger lifts is not a tap: it is swallowed — only within a
+   moment of that lift, because after a long press a browser may send no click at all, and a flag left
+   standing ate the next real tap (the selection bar's «×», found by the mock, 2026-11-09). */
+let SUPPRESS_UNTIL = 0;
+const SWIPE = { row: null, id: "", x: 0, y: 0, dx: 0, on: false, pressed: false, timer: 0, pointer: -1 };
+function swipeReset(row) {
+  if (!row) return;
+  row.classList.remove("swiping");
+  row.style.removeProperty("--dx");
+  const bg = row.querySelector(".gm-swipe-bg"); if (bg) bg.remove();
+}
+/* only where an archive takes the row out of the list being shown (the inbox) — anywhere else the row
+   would slide away and come straight back */
+function swipeAllowed() { return leavesScope("archived", true); }
+$("#msgTable").addEventListener("pointerdown", e => {
+  /* a phone's gesture: its row is the grid that gives the swipe its layer and the page its pan (≤820) */
+  if (e.pointerType === "mouse" || !e.isPrimary || !NARROW()) return;
+  const row = e.target.closest(".gm-row[data-id]");
+  if (!row || row.classList.contains("busy") || e.target.closest(".gm-star,[data-pick]")) return;
+  clearTimeout(SWIPE.timer);
+  Object.assign(SWIPE, { row, id: row.dataset.id, x: e.clientX, y: e.clientY, dx: 0, on: false, pressed: false, pointer: e.pointerId });
+  SWIPE.timer = setTimeout(() => {
+    if (!SWIPE.row || SWIPE.on) return;
+    try { if (navigator.vibrate) navigator.vibrate(12); } catch (err) { /* no vibration here */ }
+    SWIPE.pressed = true;
+    SUPPRESS_UNTIL = Date.now() + 10000;     // held: whatever click the lift brings is not a tap (the lift shortens this)
+    toggleSet(SELECTED, SWIPE.id); SWIPE.row = null; renderList();
+  }, 480);
+}, { passive: true });
+$("#msgTable").addEventListener("pointermove", e => {
+  const s = SWIPE;
+  if (!s.row || e.pointerId !== s.pointer) return;
+  const dx = e.clientX - s.x, dy = e.clientY - s.y;
+  if (!s.on) {
+    if (Math.abs(dx) > 8 || Math.abs(dy) > 8) clearTimeout(s.timer);
+    if (Math.abs(dx) < 12 || Math.abs(dx) < Math.abs(dy) * 1.4 || SELECTED.size || !swipeAllowed()) {
+      if (Math.abs(dy) > 12) s.row = null;            // a scroll: this finger is the page's
+      return;
+    }
+    s.on = true;
+    s.row.classList.add("swiping");
+    s.row.insertAdjacentHTML("afterbegin", `<span class="gm-swipe-bg" aria-hidden="true">${ic("archive")} ארכיון</span>`);
+  }
+  s.dx = dx;
+  s.row.style.setProperty("--dx", dx + "px");
+  /* the action's mark sits on the side the row uncovers */
+  const bg = s.row.querySelector(".gm-swipe-bg");
+  if (bg) bg.classList.toggle("end", (dx < 0) === (document.dir !== "rtl"));
+}, { passive: true });
+function swipeEnd(e) {
+  const s = SWIPE;
+  if (e && e.pointerId !== s.pointer) return;     // (another finger's lift ends nothing of this one's)
+  clearTimeout(s.timer);
+  if (s.pressed) { s.pressed = false; SUPPRESS_UNTIL = Date.now() + 450; return; }   // the long press's lift
+  if (!s.row) return;
+  const row = s.row, id = s.id, dx = s.dx, was = s.on;
+  s.row = null; s.on = false;
+  if (!was) return;
+  SUPPRESS_UNTIL = Date.now() + 450;
+  if (e && e.type === "pointerup" && Math.abs(dx) > row.offsetWidth / 3) {
+    row.classList.add("swiped");
+    row.style.setProperty("--dx", (dx > 0 ? 1 : -1) * row.offsetWidth + "px");
+    setTimeout(() => applyMark([id], "archived", true), 160);
+    return;
+  }
+  row.classList.add("swiped");
+  row.style.setProperty("--dx", "0px");
+  setTimeout(() => { row.classList.remove("swiped"); swipeReset(row); }, 190);
+}
+/* (on the document: a long press re-draws the list under the finger, and the lift may reach no row) */
+document.addEventListener("pointerup", swipeEnd);
+document.addEventListener("pointercancel", swipeEnd);
+/* (the press-and-hold menu of the browser itself would cover the row a long press picks) */
+$("#msgTable").addEventListener("contextmenu", e => { if (e.target.closest(".gm-row[data-id]") && NARROW()) e.preventDefault(); });
 
 async function refreshView() {
   if (REFRESHING) return;
@@ -1304,7 +1588,7 @@ function attCards(m, id) {
   return `<div class="att-h">${list.length === 1 ? "קובץ מצורף אחד" : list.length + " קבצים מצורפים"}</div>`
     + list.map((a, i) => {
       const [, color, word] = ATT_KIND(a.mimeType || a.mime || a.filename || "");
-      return `<a class="attcard" href="api/attachment/${enc(id)}/${i}" target="_blank" rel="noopener"
+      return `<a class="attcard" href="${esc(mbUrl("api/attachment/" + enc(id) + "/" + i))}" target="_blank" rel="noopener"
                  title="${esc(a.filename)}">
         <span class="attic" style="background:color-mix(in srgb,${color} 10%,transparent);color:${color}">${ic("paperclip")}</span>
         <span class="attx"><b><bdi>${esc(a.filename)}</bdi></b>
@@ -2252,12 +2536,15 @@ async function renderSetup(seq) {
 
 /* ── guided connect: provider → method → provide → VERIFY → activate. A connection is never
    "added", it is verified; every step is a visible state with a way back. ── */
-const STEPS = ["ספק", "אופן החיבור", "פרטי גישה", "בדיקה", "הפעלה"];
+const STEPS = ["ספק", "אופן החיבור", "פרטי גישה", "בדיקה", "פתיחה"];
 const stepsHtml = n => `<div class="cw-steps">` + STEPS.map((l, i) =>
   `<span class="cw-step ${i + 1 === n ? "cur" : i + 1 < n ? "done" : ""}">${i + 1 < n ? ic("check") : ""} ${esc(l)}</span>`).join("") + `</div>`;
 const NEEDLBL = { username: "כתובת המייל", password: "סיסמת האפליקציה" };
-let CW_TIMER = 0;
-function cwStop() { if (CW_TIMER) { clearInterval(CW_TIMER); CW_TIMER = 0; } }
+let CW_TIMER = 0, CW_MSG = null;   // the consent's poll, and its return page's message (waitOauth)
+function cwStop() {
+  if (CW_TIMER) { clearInterval(CW_TIMER); CW_TIMER = 0; }
+  if (CW_MSG) { window.removeEventListener("message", CW_MSG); CW_MSG = null; }
+}
 function connectFrame(inner) {
   cwStop();
   $("#setBody").innerHTML = `<div class="set-h">חיבור חשבון דואר</div>
@@ -2273,12 +2560,14 @@ function renderConnList() {
         <span class="dot ${c.id === CONN.active ? "healthy" : "muted"}"></span>
         <span class="nm"><bdi>${esc(connName(c))}</bdi></span>
         ${c.account_hint ? `<span class="hint"><bdi class="ltr">${esc(c.account_hint)}</bdi></span>` : ""}
-        ${c.id === CONN.active ? `<span class="chip healthy">פעיל</span>` : ""}
+        ${c.id === CONN.active ? `<span class="chip healthy" title="תיבה שלא צוינה — לסוכנים, לאוטומציות ולפקודות — היא זו">ברירת מחדל</span>` : ""}
         <span class="sp">
-          ${c.id !== CONN.active ? `<button class="btn ghost" data-sel="${esc(c.id)}" type="button">הפעלה</button>` : ""}
+          <button class="btn ghost" data-open="${esc(c.id)}" type="button" title="להציג את התיבה בחלון הזה">פתיחה</button>
+          ${c.id !== CONN.active ? `<button class="btn ghost" data-sel="${esc(c.id)}" type="button" title="התיבה שסוכנים ואוטומציות עובדים מולה כשלא ציינו תיבה">ברירת מחדל</button>` : ""}
           <button class="btn ghost" data-probe="${esc(c.id)}" type="button">בדיקה</button>
           ${!/-env$/.test(c.id) && !isLocalConn(c) ? `<button class="btn ghost" data-rm="${esc(c.id)}" type="button">${ic("trash")} הסרה</button>` : ""}
         </span></div>`).join("") + `</div>`;
+  box.querySelectorAll("[data-open]").forEach(b => b.onclick = () => openMailbox(CONN.list.find(x => x.id === b.dataset.open)));
   box.querySelectorAll("[data-sel]").forEach(b => b.onclick = () => busy(b, () => selectConn(b.dataset.sel)));
   box.querySelectorAll("[data-probe]").forEach(b => b.onclick = () => busy(b, async () => {
     let r; try { r = await jf("api/connections/" + enc(b.dataset.probe) + "/probe"); } catch (e) { return; }
@@ -2296,15 +2585,25 @@ function renderConnList() {
     binaTell("החיבור הוסר");
     try { await loadConnections(); } catch (e) { /* the list re-renders with what it has */ }
     renderConnList();
-    if (c.id === CONN.active) rebootData();
+    if (c.id === MAILBOX) { MAILBOX = ""; history.replaceState({}, "", href("/settings/connect")); }
+    renderSide();
+    if (c.id === CONN.active || !MAILBOX) rebootData();
   });
 }
+/* the agents' default: what an agent, an automation or a command that names no mailbox works on. A shared,
+   lasting choice — asked, with what it was and what it becomes; this window keeps showing what it showed. */
 async function selectConn(id) {
-  try { await jf("api/connections/select", post({ id })); } catch (e) { return false; }
-  binaTell("החשבון הוחלף");
+  const c = CONN.list.find(x => x.id === id), was = activeConn();
+  if (!(await binaAsk({ title: "ברירת המחדל של הסוכנים?", ok: "הגדרה",
+    body: "סוכן, אוטומציה או פקודה שלא ציינו תיבה יעבדו מול התיבה הזו. מה שמוצג בחלון הזה לא משתנה.",
+    facts: [["תיבה", connName(c)], ...(was ? [["עד עכשיו", connName(was)]] : [])],
+    run: () => jf("api/connections/select", Object.assign(post({ id }), { silent: true })) }))) return false;
+  const shown = MAILBOX || (was && was.id) || "";
+  binaTell("ברירת המחדל של הסוכנים: " + connName(c));
   try { await loadConnections(); } catch (e) { /* shown on the next open */ }
-  renderConnList();
-  rebootData();
+  MAILBOX = shown === CONN.active ? "" : shown;              // the same mailbox stays on screen
+  history.replaceState({}, "", href(innerPath()));
+  renderConnList(); renderSide();
   return true;
 }
 async function renderConnect(seq) {
@@ -2356,7 +2655,7 @@ function stepBuiltin(provs, prov) {
              <span class="cw-m-d ltr"><bdi>${esc(c.account_hint || c.id)}</bdi></span></button>`).join("") + `</div>`
       : `<div class="cw-msg">${ic("alert")}<div>עדיין אין תיבה מקומית.</div></div>`)
     + `<div class="set-acts"><button class="btn ghost" data-mb type="button">${ic("plus")} הוספת כתובת בחברה</button><button class="btn ghost" data-back type="button">חזרה</button></div>`;
-  $("#cwBody").querySelectorAll(".cw-m").forEach(b => b.onclick = () => busy(b, () => selectConn(locals[+b.dataset.i].id)));
+  $("#cwBody").querySelectorAll(".cw-m").forEach(b => b.onclick = () => openMailbox(locals[+b.dataset.i]));
   $("#cwBody").querySelector("[data-back]").onclick = () => stepMethod(provs, prov);
   $("#cwBody").querySelector("[data-mb]").onclick = () => openSettings("mailboxes", true);
 }
@@ -2368,10 +2667,43 @@ function stepOauth(provs, prov, m) {
      <div class="cw-msg soft">החלון נפתח אצל ספק הזהות, לא כאן — הסיסמה שלך לעולם אינה עוברת דרך המערכת הזו.</div>
      <div class="set-acts"><button class="btn" data-open type="button">${ic("external")} פתיחת חלון האישור</button><button class="btn ghost" data-back type="button">חזרה</button></div>`;
   $("#cwBody").querySelector("[data-back]").onclick = () => stepMethod(provs, prov);
-  $("#cwBody").querySelector("[data-open]").onclick = () => {
-    window.open(m.start_url, "_blank", "noopener,width=560,height=720");
-    waitOauth(provs, prov, m, before);
-  };
+  $("#cwBody").querySelector("[data-open]").onclick = () => openOauth(provs, prov, m, before);
+}
+/* Google's window (DGO-1390): opened by the click itself (a window opened later is a blocked pop-up), then
+   sent to the address the office's credential plane signed — or closed, when Google would refuse it, and
+   the refusal is said here, in Hebrew. It comes back to this screen's return page, which tells this window
+   (a message); the list is asked too, in case the window could not say it. */
+function openOauth(provs, prov, m, before) {
+  const ret = new URL("oauth/google/return", document.baseURI).href;
+  const w = window.open("", "dgo-google", "popup,width=520,height=720");
+  waitOauth(provs, prov, m, before);
+  jf(m.start_url + "?check=1&ret=" + enc(ret), { silent: true }).then(r => {
+    // the consent is this browser's (DGO-1418): the return page — this origin — hands this back to finish it.
+    // One slot per consent (its state), so a second one at once — the drive's, another tab — never takes this one.
+    try {
+      for (let i = localStorage.length - 1; i >= 0; i--) {   // an abandoned consent's slot goes once its state expired
+        const k = localStorage.key(i) || "";
+        if (k.indexOf("dgo-oauth-bind:") !== 0) continue;
+        try {
+          const p = (k.slice(15).split(".")[1] || "").replace(/-/g, "+").replace(/_/g, "/");
+          const t = JSON.parse(atob(p + "===".slice(0, (4 - p.length % 4) % 4))).t;
+          if (!(t * 1000 > Date.now())) localStorage.removeItem(k);
+        } catch (e) { localStorage.removeItem(k); }
+      }
+      if (r.bind) localStorage.setItem("dgo-oauth-bind:" + (new URL(r.authorize_url, location.href).searchParams.get("state") || ""), r.bind);
+    } catch (e) { /* the return page says it then */ }
+    if (w && !w.closed) w.location.href = r.authorize_url;
+    else {
+      const box = $("#cwBody").querySelector(".cw-msg.wait");
+      if (box) box.insertAdjacentHTML("afterend", `<div class="cw-msg">${ic("external")}<div><b>הדפדפן חסם את החלון</b><span class="sub"><a class="link" href="${esc(r.authorize_url)}" target="_blank" rel="opener">פתיחת החלון של Google</a></span></div></div>`);
+    }
+  }).catch(e => {
+    if (w && !w.closed) w.close();
+    cwStop();
+    $("#cwBody").innerHTML = stepsHtml(3) + `<div class="cw-msg err">${ic("alert")}<div><b>ההתחברות ל־Google לא נפתחה</b><span class="sub"><bdi>${esc(e.message)}</bdi></span></div></div>
+      <div class="set-acts"><button class="btn ghost" data-back type="button">חזרה</button></div>`;
+    $("#cwBody").querySelector("[data-back]").onclick = () => stepMethod(provs, prov);
+  });
 }
 function waitOauth(provs, prov, m, before) {
   cwStop();
@@ -2379,8 +2711,27 @@ function waitOauth(provs, prov, m, before) {
   $("#cwBody").innerHTML = stepsHtml(3) +
     `<div class="cw-msg wait"><span class="spin">${ic("clock")}</span><div><b>ממתין לאישור בחלון של ${esc(prov.name)}…</b><span class="sub">אם סגרת את החלון או ביטלת — לא נוצר חיבור, אפשר לנסות שוב.</span></div></div>
      <div class="set-acts"><button class="btn ghost" data-again type="button">${ic("external")} פתיחה מחדש</button><button class="btn ghost" data-cancel type="button">ביטול</button></div>`;
-  $("#cwBody").querySelector("[data-again]").onclick = () => window.open(m.start_url, "_blank", "noopener,width=560,height=720");
-  $("#cwBody").querySelector("[data-cancel]").onclick = () => stepMethod(provs, prov);
+  $("#cwBody").querySelector("[data-again]").onclick = () => openOauth(provs, prov, m, before);
+  $("#cwBody").querySelector("[data-cancel]").onclick = () => { cwStop(); stepMethod(provs, prov); };
+  /* the mailbox the consent made — or, for an account connected again, the one it refreshed (the return
+     page names it: `made`, with `again`); the list's newcomer is the fallback when no message came */
+  const done = async made => {
+    let d; try { d = await jf("api/connections", { silent: true }); } catch (e) { return; }
+    const list = d.connections || [];
+    const ids = new Set((made || []).map(x => x.id));
+    const fresh = list.find(c => ids.has(c.id)) || list.find(c => !before.has(c.id) && c.protocol === m.protocol);
+    if (fresh) { cwStop(); CONN.list = list; CONN.active = d.active || CONN.active; renderConnList(); renderSide(); stepVerify(provs, prov, m, fresh); }
+  };
+  CW_MSG = ev => {
+    if (ev.origin !== location.origin || !ev.data || ev.data.type !== "dgo:oauth") return;
+    if (ev.data.ok) return done(ev.data.made);
+    cwStop();
+    $("#cwBody").innerHTML = stepsHtml(3) + `<div class="cw-msg err">${ic("alert")}<div><b>החשבון לא חובר</b><span class="sub"><bdi>${esc(ev.data.error || "")}</bdi></span></div></div>
+      <div class="set-acts"><button class="btn" data-retry type="button">ניסיון נוסף</button><button class="btn ghost" data-back type="button">חזרה</button></div>`;
+    $("#cwBody").querySelector("[data-retry]").onclick = () => stepOauth(provs, prov, m);
+    $("#cwBody").querySelector("[data-back]").onclick = () => stepMethod(provs, prov);
+  };
+  window.addEventListener("message", CW_MSG);
   CW_TIMER = setInterval(async () => {
     tries++;
     let d; try { d = await jf("api/connections", { silent: true }); } catch (e) { return; }
@@ -2441,10 +2792,10 @@ async function stepVerify(provs, prov, m, conn) {
     return;
   }
   $("#cwBody").innerHTML = stepsHtml(5) + `<div class="cw-msg ok">${ic("check-circle")}<div><b>הבדיקה עברה</b><span class="sub">${esc(conn.label || prov.name)}${hint ? " · " : ""}${hint ? `<bdi class="ltr">${esc(hint)}</bdi>` : ""}</span></div></div>
-    <div class="cw-msg soft">אפשר להפעיל את החשבון עכשיו — כל הפעולות (כולל האוטומציות) יעברו לעבוד מולו.</div>
-    <div class="set-acts"><button class="btn" data-act type="button">הפעלה כחשבון פעיל</button><button class="btn ghost" data-keep type="button">שמירה בלי להפעיל</button></div>`;
-  const act = $("#cwBody").querySelector("[data-act]");
-  act.onclick = () => busy(act, async () => { if (await selectConn(conn.id)) stepProvider(provs); });
+    <div class="cw-msg soft">התיבה בתפריט עכשיו, עם כל התיבות של הלשכה — ובשורת הפקודה, לסוכנים ולאוטומציות שיציינו אותה.</div>
+    <div class="set-acts"><button class="btn" data-act type="button">${ic("mail")} פתיחת התיבה</button><button class="btn ghost" data-keep type="button">חיבור חשבון נוסף</button></div>`;
+  renderSide();
+  $("#cwBody").querySelector("[data-act]").onclick = () => openMailbox(CONN.list.find(c => c.id === conn.id) || conn);
   $("#cwBody").querySelector("[data-keep]").onclick = () => stepProvider(provs);
 }
 
@@ -2475,22 +2826,40 @@ async function rebootData() {
 async function boot() {
   renderGear();
   document.body.dataset.density = DENSITY;
+  loadConnections().then(renderSide).catch(() => { /* the menu lists none; the settings screen says why */ });
   try { await loadAccount(); } catch (e) { bootFailed(e); return; }
   await Promise.all([loadLabels(), loadLabelMap()]);
   await applyUrl();
 }
-/* THE CONTRACT with the console shell (platform-base/console/static/app.js reloadEmbeddedApp):
-     in   { type: 'platform:connection-changed' | 'platform:reload', service?: 'mail' }
-     out  { type: 'platform:reload-ack', service: 'mail' }
-   An app that answers is re-read in place; one that does not is reloaded by the shell. No
-   connection id is taken from the message — the service owns the pointer and is re-asked. */
+/* (THE SHELL'S ACCOUNT CONTRACT is gone: since DGO-1624 the console's bar carries no app's account and sends no
+   «platform:connection-changed» / «platform:reload» — this screen's own mailbox menu switches mailboxes, and an older
+   console that still sends one reloads the frame when no ack comes. The listener that answered it was removed —
+   issues/apps-still-answer-the-shells-account-switch-message-nobody-sends.yaml.) */
+/* ONE SEARCH ON THE SCREEN (DGO-1507). Under the console the shell's bar has a search of its own; this
+   app offers its search to it, and a shell that takes it answers — from then on the shell's search IS
+   this one («חיפוש בדואר» there opens the menu on its search here) and the page's magnifier steps aside.
+   A shell that does not answer (an office on an older console) leaves the magnifier where it is.
+     out  { type: 'bina:search-offer', app: 'mail', label }
+     in   { type: 'bina:search-taken' }  ·  { type: 'bina:search-released' }  ·  { type: 'bina:find', q? } */
+function openFind(q) {
+  if (!NAV) return;
+  if (NAV.open) NAV.open();
+  const si = document.querySelector("#sideNav .bnv-search input");
+  if (!si) return;
+  if (typeof q === "string" && q) { si.value = q; QUERY = q.trim(); }
+  si.focus({ preventScroll: true });
+}
 window.addEventListener("message", ev => {
-  if (ev.origin !== location.origin) return;
+  if (ev.origin !== location.origin || ev.source !== window.parent) return;
   const d = ev.data;
   if (!d || typeof d !== "object") return;
-  if (d.type !== "platform:connection-changed" && d.type !== "platform:reload") return;
-  if (d.service && d.service !== "mail" && d.service !== "mailview") return;
-  try { if (ev.source && ev.source.postMessage) ev.source.postMessage({ type: "platform:reload-ack", service: "mail" }, location.origin); } catch (e) { /* opaque */ }
-  rebootData();
+  if (d.type === "bina:search-taken") document.documentElement.classList.add("shell-search");
+  /* the console went full screen: its bar, and the search on it, are gone — the magnifier comes back */
+  else if (d.type === "bina:search-released") document.documentElement.classList.remove("shell-search");
+  else if (d.type === "bina:find") openFind(d.q);
 });
+if (EMBEDDED) {
+  try { window.parent.postMessage({ type: "bina:search-offer", app: "mail", label: "חיפוש בדואר" }, location.origin); }
+  catch (e) { /* an opaque parent: the page keeps its own search */ }
+}
 boot();

@@ -3,7 +3,7 @@ package console
 import (
 	"testing"
 
-	"github.com/solomonBoltin/deployment-hacohen/packaging/dgo/internal/edge"
+	"github.com/bina-solution/digital-office/packaging/dgo/internal/edge"
 )
 
 // Behind the native edge (`dgo be-child native`, DGO-1090) the console trusts its caller, so the edge's

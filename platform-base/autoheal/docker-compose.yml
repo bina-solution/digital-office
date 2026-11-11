@@ -45,13 +45,13 @@ services:
       - AUTOHEAL_REVIVE_MAX=${AUTOHEAL_REVIVE_MAX:-4}
       # The overdue one-off (DGO-1231): a HAND-RUN container (no compose container number) with restart
       # policy no, still running past its `binaos.max-age` label (seconds) or this default, is stopped
-      # and the owner told — a hung probe ran 8 h at a full core on FPG's 2-vCPU server. Only this
+      # and the owner told — a hung probe ran 8 h at a full core on EXF's 2-vCPU server. Only this
       # office's project's ones, or ones that opted in with binaos.max-age; any other unlabelled one is
       # only reported, another office's is left alone; `binaos.keep=true` keeps one.
       - AUTOHEAL_ONEOFF_MAX_AGE=${AUTOHEAL_ONEOFF_MAX_AGE:-21600}
       - AUTOHEAL_ONEOFF_EVERY=${AUTOHEAL_ONEOFF_EVERY:-300}
       # Files left in a RAM-backed /tmp (DGO-1271): where the machine's /tmp is a tmpfs (Debian 13), what
-      # hand-run work leaves there sits in RAM and swap until it ages out after 10 days — 1.1 GB on FPG,
+      # hand-run work leaves there sits in RAM and swap until it ages out after 10 days — 1.1 GB on EXF,
       # 2026-11-02. Past this many MiB the owner is told once per episode, with the largest entries;
       # nothing is deleted from here.
       - AUTOHEAL_TMP_LIMIT_MB=${AUTOHEAL_TMP_LIMIT_MB:-512}

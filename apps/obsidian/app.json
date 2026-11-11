@@ -5,7 +5,9 @@
     "en": "Obsidian"
   },
   "layer": 3,
+  "people": "admins",
   "kind": "service",
+  "page": "notes",
   "version": "0.1.0",
   "summary": {
     "he": "הכספת של הלשכה — Obsidian אמיתי בדפדפן, על תיקיית הכספת של הלשכה",

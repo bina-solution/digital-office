@@ -1,4 +1,4 @@
-/* «פגישות» — screens.js: the moments a screen was pointed at (M5-T44, fireplace 2026-10-29). Shlomo, call 5 [1:41:39]:
+/* «פגישות» — screens.js: the moments a screen was pointed at (M5-T44, examplef 2026-10-29). Owner, call 5 [1:41:39]:
    whenever someone says «here», the shared screen's frame from that second belongs with the meeting; C1 [35:53]: every
    «צילום מסך», automatically. The transcript knows when each word was said, so the moments are found in it («צילום
    מסך» / screenshot: asked for; «פה», «הנה», «כאן»: pointed at), one per 15 s — the server's rule (screen_moments),

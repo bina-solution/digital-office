@@ -337,6 +337,8 @@ throw new Error(\`whatsapp api: unknown op '\${op}'. Known: send, sendDocument, 
     })
     WSend = {
         method: 'POST',
+        authentication: 'genericCredentialType',
+        genericAuthType: 'httpBasicAuth',
         url: 'http://chat:3000/api/bot/send',
         options: {
             timeout: 120000,
@@ -365,6 +367,8 @@ throw new Error(\`whatsapp api: unknown op '\${op}'. Known: send, sendDocument, 
     })
     WSenddocument = {
         method: 'POST',
+        authentication: 'genericCredentialType',
+        genericAuthType: 'httpBasicAuth',
         url: 'http://chat:3000/api/bot/send-document',
         options: {
             timeout: 120000,
@@ -393,6 +397,8 @@ throw new Error(\`whatsapp api: unknown op '\${op}'. Known: send, sendDocument, 
     })
     WSendimage = {
         method: 'POST',
+        authentication: 'genericCredentialType',
+        genericAuthType: 'httpBasicAuth',
         url: 'http://chat:3000/api/bot/send-image',
         options: {
             timeout: 120000,
@@ -421,6 +427,8 @@ throw new Error(\`whatsapp api: unknown op '\${op}'. Known: send, sendDocument, 
     })
     WState = {
         method: 'GET',
+        authentication: 'genericCredentialType',
+        genericAuthType: 'httpBasicAuth',
         url: 'http://chat:3000/api/bot/state',
         options: {
             timeout: 120000,
@@ -449,6 +457,8 @@ throw new Error(\`whatsapp api: unknown op '\${op}'. Known: send, sendDocument, 
     })
     WQr = {
         method: 'GET',
+        authentication: 'genericCredentialType',
+        genericAuthType: 'httpBasicAuth',
         url: 'http://chat:3000/api/bot/qr',
         options: {
             timeout: 120000,
@@ -477,6 +487,8 @@ throw new Error(\`whatsapp api: unknown op '\${op}'. Known: send, sendDocument, 
     })
     WDisconnect = {
         method: 'POST',
+        authentication: 'genericCredentialType',
+        genericAuthType: 'httpBasicAuth',
         url: 'http://chat:3000/api/bot/disconnect',
         options: {
             timeout: 120000,
@@ -493,7 +505,7 @@ throw new Error(\`whatsapp api: unknown op '\${op}'. Known: send, sendDocument, 
     };
 
     @node({
-        id: 'wbcast',
+        id: 'exwast',
         name: 'w:broadcast',
         type: 'n8n-nodes-base.httpRequest',
         version: 4.2,
@@ -505,6 +517,8 @@ throw new Error(\`whatsapp api: unknown op '\${op}'. Known: send, sendDocument, 
     })
     WBroadcast = {
         method: 'POST',
+        authentication: 'genericCredentialType',
+        genericAuthType: 'httpBasicAuth',
         url: 'http://chat:3000/api/bot/broadcast',
         options: {
             timeout: 120000,
@@ -533,6 +547,8 @@ throw new Error(\`whatsapp api: unknown op '\${op}'. Known: send, sendDocument, 
     })
     WCreategroup = {
         method: 'POST',
+        authentication: 'genericCredentialType',
+        genericAuthType: 'httpBasicAuth',
         url: 'http://chat:3000/api/bot/create-group',
         options: {
             timeout: 120000,
@@ -560,7 +576,9 @@ throw new Error(\`whatsapp api: unknown op '\${op}'. Known: send, sendDocument, 
         waitBetweenTries: 2000,
     })
     WGroupparticipants = {
-        method: 'GET',
+        method: 'POST',
+        authentication: 'genericCredentialType',
+        genericAuthType: 'httpBasicAuth',
         url: 'http://chat:3000/api/bot/group-participants',
         options: {
             timeout: 120000,
@@ -571,9 +589,11 @@ throw new Error(\`whatsapp api: unknown op '\${op}'. Known: send, sendDocument, 
                 },
             },
         },
-        sendQuery: true,
-        specifyQuery: 'json',
-        jsonQuery: '={{ JSON.stringify($json.params || {}) }}',
+        // chat serves only POST and reads groupJid, participants and action from the body (controller.js
+        // groupParticipants); a GET with a query answered 404 whatever its credentials
+        sendBody: true,
+        specifyBody: 'json',
+        jsonBody: '={{ JSON.stringify($json.params || {}) }}',
     };
 
     @node({

@@ -6,6 +6,9 @@ export MSYS_NO_PATHCONV=1 MSYS2_ARG_CONV_EXCL='*'
 # app's own first-run seeding — is `bbox run`'s job now (ensure_converged + run_app_hooks onboard,
 # both idempotent and safe to call unconditionally). This script does no seeding of its own: it
 # calls `bbox run`, waits for n8n to actually answer, and prints a readiness report.
+# The one thing it adds to the bring-up is the SERVER half (DGO-1556): a machine that answers on a
+# public address declares the security app before the run and applies scripts/ops/host-baseline.sh
+# after it. A laptop, a phone and a WSL VM are untouched by both.
 # With --auth-state: SKIP bring-up; just re-run the verify (cred/key readiness) report.
 # Usage: scripts/onboarding [--auth-state]
 
@@ -18,6 +21,110 @@ dc(){ dcx "$@"; }   # compiled .generated/ file list (scripts/lib.sh)
 # "healthy" before /rest fully serves, and n8n-push RESTARTS it. Returns non-zero on timeout.
 wait_n8n_rest(){ local t="${1:-60}" i; for i in $(seq 1 "$t"); do docker exec "${N8N}" wget -q -O /dev/null http://127.0.0.1:5678/rest/settings 2>/dev/null && return 0; sleep 3; done; return 1; }
 
+# ── A SERVER IS A DOOR (DGO-1556) ────────────────────────────────────────────────────────────────
+# `host_is_server` (scripts/lib.sh) asks one question — does this machine hold a PUBLIC address on an
+# interface? — and the answer decides two things at install, neither of them optional on a server:
+#   · the security app (platform-base/security): who reaches the office, what it calls out to, and the
+#     fail2ban that goes with it. Enabled here so the `bbox run` below starts it, in this same install;
+#   · scripts/ops/host-baseline.sh: the HOST's own posture — sshd keys-only, no LLMNR/mDNS, and on
+#     that interface only the office's own doors (DGO-1495; live on Exampleu as
+#     /usr/local/sbin/dgo-host-baseline). It is a DEPENDENCY and is called by its own interface
+#     (check|apply|confirm) — never copied, never re-implemented here — and this script REFUSES to
+#     report a finished install when it is absent: a server office without it is exactly the exposure
+#     the item names. A laptop, a phone and a WSL VM hold private addresses only and skip both — the
+#     owner's «very light» core (2026-11-01). BBOX_HOST_SERVER=1|0 overrides the test.
+# The Ubuntu 26.04 AppArmor condition that hangs every postgres-backed app (DGO-1604) is named by
+# `bbox run` itself, before it starts anything — one implementation, at the door every install walks
+# through, so it is not repeated here.
+HOST_BASELINE="${REPO_ROOT}/scripts/ops/host-baseline.sh"
+
+_host_addrs_text(){  # the public addresses as one line, for a sentence ('…' when there are none)
+  local a=""; a="$(host_public_addresses)"
+  printf '%s' "${a//$'\n'/ }"
+}
+
+server_office_declare(){  # apps a SERVER office needs declare it themselves: <app>/hooks/server-office
+  host_is_server || return 0
+  local addrs=""; addrs="$(_host_addrs_text)"
+  if [ -n "${addrs}" ]; then
+    say "${c1}this machine answers on a public address (${addrs}) — a server office${c0}"
+  else
+    say "${c1}BBOX_HOST_SERVER=${BBOX_HOST_SERVER:-} declares this a server office (no public address was read here)${c0}"
+  fi
+  # NO APP IS NAMED HERE. Gate G31: layer-0 tooling carries no app's knowledge. An app a server office
+  # needs ships `hooks/server-office` in its OWN folder (the security app: DGO-1556; the port-80 answer:
+  # DGO-1595) and this loop runs every one it finds, before the bring-up, in name order. `apps enable`
+  # is the single writer of platform.state.yaml — on a fresh checkout it is also what CREATES that file
+  # from platform.state.default.yaml, so the hooks run even when nothing was declared yet.
+  export REPO_ROOT
+  local h rc=0
+  for h in "${REPO_ROOT}"/apps/*/hooks/server-office "${REPO_ROOT}"/platform-base/*/hooks/server-office; do
+    [ -f "${h}" ] || continue
+    bash "${h}" || rc=1
+  done
+  return "${rc}"
+}
+
+server_host_baseline(){  # LAST: after the stack answers, so the revert window is not spent on a cold boot
+  host_is_server || return 0
+  local addrs=""; addrs="$(_host_addrs_text)"
+  if [ ! -f "${HOST_BASELINE}" ]; then
+    say "${cr}✗ SERVER, and scripts/ops/host-baseline.sh is MISSING — the install is NOT done.${c0}"
+    say "  A server office without it answers on the internet with sshd's defaults, LLMNR and mDNS on,"
+    say "  and every docker-published port open on that interface (DGO-1495 / DGO-1556)."
+    say "  It is a dependency of this install, not a copy: bring the commit that carries"
+    say "  scripts/ops/host-baseline.sh onto this office's branch, then re-run 'bbox onboarding'."
+    say "  Everything else in the office is up; only the host's own posture is missing."
+    exit 1
+  fi
+  local SUDO=""
+  if [ "$(id -u)" != 0 ] && command -v sudo >/dev/null 2>&1 && sudo -n true 2>/dev/null; then SUDO="sudo"; fi
+  if [ "$(id -u)" != 0 ] && [ -z "${SUDO}" ]; then
+    say "${cr}✗ the host baseline runs as root, and this user has no password-less sudo.${c0}"
+    say "  The office is up; the HOST is not baselined. Two commands, in this order:"
+    say "    1. sudo bash '${HOST_BASELINE}' apply"
+    say "    2. log in again over SSH (a NEW connection), then: sudo bash '${HOST_BASELINE}' confirm"
+    say "  then re-run 'bbox onboarding' — it reports the end state without changing it."
+    exit 1
+  fi
+  local rc=0 out=""
+  out="$(${SUDO} bash "${HOST_BASELINE}" check 2>&1)" || rc=$?
+  case "${rc}" in
+    0) say "host baseline already in place — nothing to do" ; return 0 ;;
+    1|3) : ;;   # 1 = drift, 3 = ok but an earlier revert is still armed: both are an `apply` away
+    2) say "${cr}✗ host-baseline refused this host:${c0}"
+       printf '%s\n' "${out}" | tail -3 | sed 's/^/    /'
+       say "  This install read ${addrs:-BBOX_HOST_SERVER=${BBOX_HOST_SERVER:-}} as this host's public"
+       say "  address; the script reads the default route's interface and disagrees. A disagreement about"
+       say "  WHICH interface is the internet is not something to average out."
+       say "  Nothing else is missing — only the host's own posture. Cured, re-run 'bbox onboarding'."
+       exit 1 ;;
+    *) say "${cr}✗ host-baseline check could not run (exit ${rc}):${c0}"
+       printf '%s\n' "${out}" | tail -3 | sed 's/^/    /'
+       exit 1 ;;
+  esac
+  say "applying the host baseline (sshd keys-only, no LLMNR/mDNS, only the office's doors on that interface)…"
+  rc=0; out="$(${SUDO} bash "${HOST_BASELINE}" apply 2>&1)" || rc=$?
+  if [ "${rc}" != 0 ]; then
+    say "${cr}✗ host-baseline apply failed (exit ${rc}):${c0}"
+    printf '%s\n' "${out}" | tail -5 | sed 's/^/    /'
+    say "  It refuses rather than locks you out, and it puts back what it replaced when a check fails —"
+    say "  so the host is unchanged or already restored. Read: sudo bash '${HOST_BASELINE}' check"
+    exit 1
+  fi
+  local secs=""; secs="$(read_env HOST_BASELINE_REVERT_S)" || true
+  case "${secs}" in ''|*[!0-9]*) secs=600 ;; esac   # a value from .env is a user's; never trust its shape
+  say "${cg}host baseline applied.${c0} ${cy}ONE STEP IS YOURS, and the host reverts itself without it:${c0}"
+  say "  1. log in again over SSH, in a NEW connection — that is what proves the key really opens it"
+  say "  2. then, within $((secs / 60)) min: ${SUDO:+${SUDO} }bash '${HOST_BASELINE}' confirm"
+  say "  Until you do, the revert timer fires and the host goes back to exactly what it was."
+  # A RECORD IS NOT LEFT HERE ON PURPOSE (DGO-1556). This used to POST to http://notifications:8977 from
+  # the HOST — where that name does not resolve: the notice board publishes no port and lives only on the
+  # office's own network, so the call could never answer and `|| true` hid it. The instruction above is
+  # the record until the office has a door a host-side script may post through.
+  return 0
+}
+
 if [ "${1:-}" = "--auth-state" ]; then
   say "auth-state check only"; exec bash "${REPO_ROOT}/bbox" app n8n verify
 fi
@@ -25,12 +132,33 @@ fi
 # 1) prereqs
 command -v docker >/dev/null 2>&1 || { echo "docker not found — 'bbox install <debian|windows>'"; exit 1; }
 docker info >/dev/null 2>&1 || { echo "docker daemon not reachable — start Docker"; exit 1; }
-[ -f "${REPO_ROOT}/.env" ] || { [ -f "${REPO_ROOT}/.env.ex" ] && cp "${REPO_ROOT}/.env.ex" "${REPO_ROOT}/.env" && say "created .env from .env.ex — review secrets" || { echo "no .env / .env.ex"; exit 1; }; }
+# No .env: NOT a copy of the template any more — `bbox run` below makes the local office itself (no .env → scripts/
+# ci-env.sh, never over data), and a copy here named no office and blocked exactly that (the third reader,
+# DGO-1782). An office with a domain brings its own .env.
+[ -f "${REPO_ROOT}/.env" ] || [ -f "${REPO_ROOT}/.env.ex" ] || { echo "no .env / .env.ex"; exit 1; }
+if [ ! -f "${REPO_ROOT}/.env" ]; then
+  # …but never over data, and said HERE: `bbox run` refuses it too, but its failure is only a warning below, and a
+  # server office would first declare its apps and apply its host baseline (the fourth reader, DGO-1782)
+  _held=0; office_holds_data || _held=$?   # the form that survives `set -e`, as in bbox
+  if [ "${_held}" != 1 ]; then
+    echo "no .env, and this checkout's office ($(office_project)) $([ "${_held}" = 0 ] && echo "already has containers or volumes — its .env is missing, not new: restore it (a backup's .env, or the office's vault)" || echo "may have data — the engine did not say"). Nothing is generated over it."
+    exit 1
+  fi
+  say "no .env — 'bbox run' below makes a LOCAL office (every app at <name>.localhost); an office with a domain brings its own .env"
+fi
+# A .env whose name is empty (a copy of the template, BUSINESS_NAME empty since DGO-1802) is refused by `bbox run`
+# below. Said HERE, before the run: the run's failure is only a warning further down, so this used to end, minutes
+# later, at «n8n REST not ready» with the reason scrolled away (the second reader, DGO-1782).
+if [ -f "${REPO_ROOT}/.env" ] && office_unnamed; then
+  echo "no office name in .env — write your business's name there (BUSINESS_NAME=…, one line), then run 'bbox onboarding' again. No domain? Move .env aside and run 'bbox run': a local office makes itself."
+  exit 1
+fi
 ensure_network   # scripts/lib.sh — one implementation, shared with `bbox run`
 
 # 2) bring up — delegate to `bbox run`, the single canonical bring-up (authentik head start,
 #    `up --wait` gating on the SSO sentinel, blueprint convergence, per-app first-run seeding).
 #    One mechanism, no duplication; generous timeout for a cold first boot.
+server_office_declare   # every app a server needs declares itself (hooks/server-office)
 say "bringing up the stack (cold/first-run boot — authentik migrations + blueprint restore can take a few min)…"
 BBOX_WAIT_TIMEOUT="${BBOX_WAIT_TIMEOUT:-600}" bash "${REPO_ROOT}/bbox" run \
   || say "${cy}⚠ bring-up reported issues — continuing; check 'bbox status' / 'bbox logs authentik-bootstrap'${c0}"
@@ -83,3 +211,7 @@ else
   #    file was absent, so every `bbox n8n push` since commit 16b92ecd staged workflows at their
   #    defaults. Both are fixed in perf-profile-apply; neither belongs in onboarding.
 fi
+
+# 6) the host's own posture — LAST, after the stack answers, so the baseline's revert window (10 min
+#    unless a person confirms from a new SSH login) is not spent on a cold boot. A server only.
+server_host_baseline

@@ -28,7 +28,19 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 WORKDIR /app
 
 COPY asr/requirements.txt ./asr/requirements.txt
+# The diarizer's runtime (DGO-1627). torch comes from the CPU index on purpose: PyPI's default
+# `torch` wheel is the CUDA build (some 2 GB) for a box that has no GPU. The ECAPA model is fetched
+# HERE, once, at a pinned revision, into /opt/diarize — the same discipline as the pinned ASR model,
+# and the reason a job needs no network and no account at run time (the repo is public and ungated).
+RUN pip install --no-cache-dir --index-url https://download.pytorch.org/whl/cpu torch torchaudio
 RUN pip install --no-cache-dir -r asr/requirements.txt
+RUN python -c "from huggingface_hub import snapshot_download; snapshot_download('speechbrain/spkrec-ecapa-voxceleb', revision='0f99f2d0ebe89ac095bcc5903c4dd8f72b367286', local_dir='/opt/diarize')"
+# …and point the model at its own files, so loading it never asks the Hub anything: the pretrainer's
+# `pretrained_path` is a repo id in the published hyperparams, and speechbrain would fetch each of the
+# four files over the network even when the directory is right there (measured 2026-11-09: offline
+# mode then fails with LocalEntryNotFoundError). A path, and the office's inference is offline.
+RUN sed -i 's#^pretrained_path: .*#pretrained_path: /opt/diarize#' /opt/diarize/hyperparams.yaml \
+ && grep -q '^pretrained_path: /opt/diarize$' /opt/diarize/hyperparams.yaml
 
 COPY asr ./asr
 

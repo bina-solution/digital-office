@@ -5,7 +5,7 @@
 set -uo pipefail
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
 . "${REPO_ROOT}/scripts/lib.sh"   # npath() for host paths, and PYTHONIOENCODING=utf-8 for the Hebrew printed below
-# `--call` (FPG-87): a synthetic host joins a new room with a known recording as its microphone, a guest with no
+# `--call` (EXF-87): a synthetic host joins a new room with a known recording as its microphone, a guest with no
 # microphone beside it, and the recording, both transcripts, the MEET item, meet-flow, Drive «פגישות», the captions,
 # the silent-mic guard and «no voice leaves the office» are checked against what really happened.
 # apps/meet/qa/verify_call.py --help says how; it never runs beside a real meeting.
@@ -27,13 +27,14 @@ check meet         http://localhost:8000/               "web — the meeting pag
 check meet-prosody http://localhost:5280/health         "prosody — signalling"
 check meet-jicofo  http://localhost:8888/about/health   "jicofo — the focus"
 check meet-jvb     http://localhost:8080/about/health   "jvb — the video bridge"
-if docker exec "meet-start-${NAME}" python -c "import urllib.request; urllib.request.urlopen('http://localhost:8080/healthz', timeout=5)" 2>/dev/null; then
+# the same probe as its healthcheck: busybox wget, never a second Python inside its memory cap (EXU-20)
+if docker exec "meet-start-${NAME}" wget -q -T 5 -O /dev/null http://127.0.0.1:8080/healthz 2>/dev/null; then
   echo "  ok    meet-start — the host's door (signing secret present)"
 else
   echo "  FAIL  meet-start — /healthz (is MEET_JWT_SECRET in .env?)"; fail=1
 fi
 echo "[meet] the recorder"
-# A recorder under 1.5 CPUs loses sound and time (fireplace 2026-10-26: capped at 0.48, ffmpeg ran at
+# A recorder under 1.5 CPUs loses sound and time (examplef 2026-10-26: capped at 0.48, ffmpeg ran at
 # 0.97x and 2.6 % of a call never reached the file). 0 = no cap, which is fine.
 caps="$(docker inspect -f '{{.HostConfig.NanoCpus}} {{.HostConfig.CpuShares}}' "meet-jibri-${NAME}" 2>/dev/null)"
 nano="${caps%% *}"; shares="${caps##* }"

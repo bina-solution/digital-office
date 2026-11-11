@@ -1,0 +1,339 @@
+# apps/obsidian/vault.yaml — what a fresh office's Obsidian vault holds, and where each note comes from.
+#
+# THE ONE PLACE that says it (DGO-1642). `platform/manager/reconcile.py render` compiles this into
+# `.generated/vault/`, and `apps/obsidian/hooks/prepare` carries the changed notes into the vault
+# volume. The gate `scripts/refactor/vault-sources-lint.py` fails when a document under `ai/context/`
+# is neither published here nor excluded here with a reason — so adding a doc is a decision a person
+# makes once, in this file, and never a silent leak or a silent gap.
+#
+# WHY A DECLARATION AND NOT A COPY. The vault is what an agent and a person read first in a session,
+# so it is believed. `ai/context` is 151 files and 28 MB: publishing all of it is noise, publishing a
+# hand-maintained copy is a second truth that goes stale. A declared subset, recompiled on every
+# `bbox run`, is the only shape that stays true.
+#
+# SCOPE — THE CLIENT BOUNDARY. A note is `office` (default) or `herd`:
+#   * `office` — this office's own facts: how the platform works, its apps, its architecture.
+#   * `herd`   — the BUSINESS's offices together: their machines, addresses, links and every security
+#                finding. Rendered ONLY where `DGO_OFFICE_ID` is one of `apps/computers/herd.yaml`'s
+#                `offices:`. Absent, unmatched, or an unreadable herd file all mean OFFICE ONLY —
+#                it fails closed, because a client office must never hold another office's posture.
+#
+# WHAT IS NEVER PUBLISHED, whatever the scope: any value from `.env` (the compiler reads only the
+# deployment's public identity), another app's data or volume, and the documents excluded below.
+version: 1
+
+# ── published verbatim, in the order a newcomer needs them ────────────────────────────────────────
+notes:
+  - to: "Office/מה זו הלשכה הדיגיטלית.md"
+    from: ai/context/dgo-architecture-2026.md
+    scope: office
+    title: "מה זו הלשכה, ולאן היא הולכת"
+
+  - to: "Office/מפת התיעוד.md"
+    from: ai/context/README.md
+    scope: office
+    title: "מפת התיעוד — איפה כל דבר כתוב"
+
+  - to: "Office/איך מרימים ותופעלים.md"
+    from: ai/context/running-the-stack.md
+    scope: office
+    title: "איך מרימים את הלשכה ומתפעלים אותה"
+
+  - to: "Office/מצב בריא.md"
+    from: ai/context/healthy-baseline.md
+    scope: office
+    title: "מה זה 'בריא' — קו הבסיס של הלשכה"
+
+  - to: "Office/השירותים, הדומיינים והפורטים.md"
+    from: ai/context/deployment-context.txt
+    scope: office
+    title: "השירותים, הדומיינים והפורטים של הלשכה"
+
+  - to: "Office/לשכה חדשה — פלייבוק.md"
+    from: ai/context/new-company-office-playbook.md
+    scope: office
+    title: "לשכה של חברה חדשה — מה עושים ואיך"
+
+  - to: "Architecture/דפוס המנוע והפרופילים.md"
+    from: ai/context/app-engine-pattern.md
+    scope: office
+    title: "הדפוס שכל אפליקציה מממשת — מנוע, פרופיל, איגוד"
+
+  - to: "Architecture/אפליקציה ראשונה.md"
+    from: ai/context/build-your-first-app.md
+    scope: office
+    title: "איך בונים אפליקציה של הלשכה"
+
+  - to: "Architecture/חוזה השירות.md"
+    from: ai/context/platform-service-contract.md
+    scope: office
+    title: "חוזה השירות — איך אפליקציות מדברות זו עם זו"
+
+  - to: "Architecture/הקונטקסט של הסוכן.md"
+    from: ai/context/azaria-context-architecture.md
+    scope: office
+    title: "איך נבנה הקונטקסט של הסוכן, ומה התקציב"
+
+
+  - to: "Office/איך מובילים את הלשכה.md"
+    from: ai/context/platform-operating.md
+    scope: office
+    title: "תפעול הפלטפורמה — איך היא מנוהלת ביום־יום"
+
+  - to: "Office/מי ומי — אנשים ובעלי אפליקציה.md"
+    from: ai/context/identity-and-people.md
+    scope: office
+    title: "מי ומי: אנשים, משתמשים ומנועים פרטיים"
+
+  - to: "Office/וינדוס — הלשכה על WSL.md"
+    from: ai/context/running-on-wsl.md
+    scope: office
+    title: "לשכה על Windows (WSL) — הדרך היחידה"
+
+  - to: "Office/מכונה קטנה — מצב זיכרון נמוך.md"
+    from: ai/context/low-memory-mode.md
+    scope: office
+    title: "כשהמכונה קטנה: מה מכבים, ומה נשאר"
+
+  - to: "Office/להריץ dc מתוך הקונטיינר של הסוכן.md"
+    from: ai/context/running-dc-from-the-agent-container.md
+    scope: office
+    title: "להריץ ./scripts/dc מתוך הקונטיינר של הסוכן"
+
+  - to: "Office/קטלוג האפליקציות.md"
+    from: ai/context/app-catalog.md
+    scope: office
+    title: "קטלוג האפליקציות — איך אפליקציה עוברת בין לשכות"
+
+  - to: "Architecture/מפת הארכיטקטורה.md"
+    from: ai/context/architecture-map.md
+    scope: office
+    title: "מפת הארכיטקטורה — כל שכבה ומה יש בה"
+
+  - to: "Architecture/חוזה הסוכן.md"
+    from: ai/context/agent-contract.md
+    scope: office
+    title: "חוזה הסוכן — מה סוכן בלשכה עושה ומקבל"
+
+  - to: "Architecture/ערכת העיצוב.md"
+    from: ai/context/bina-ui-recipe.md
+    scope: office
+    title: "ערכת העיצוב של הלשכה (Olive Grove)"
+
+# ── the business's own offices — never on a client's machine ──────────────────────────────────────
+herd_docs:
+  - to: "Herd/העדר — מה רץ על כל מחשב.md"
+    from: ai/context/dgo-herd.md
+    title: "העדר: אפליקציה אחת לכל מחשב"
+  - to: "Herd/קדימה — הנוהל.md"
+    from: ai/context/kadima.md
+    title: "«קדימה»: שישה שלבים, לכל אחד בעלים ושעון"
+  - to: "Herd/אבטחה — מצב העדר.md"
+    from: ai/context/dgo-security.md
+    title: "האבטחה של העדר: הממצאים והפתרונות"
+  - to: "Herd/העדר מכל מקום.md"
+    from: ai/context/herd-from-anywhere.md
+    title: "לעבוד על העדר מכל מקום"
+# ── the business as one thing: these describe the offices together ──
+  - to: "Herd/איך מובילים את הלשכה — העדר.md"
+    from: ai/context/take-the-lead.md
+    scope: herd
+    title: "איך מובילים את העדר מצב למצב"
+  - to: "Herd/מדריך הבעלים.md"
+    from: ai/context/digital-office-owner-guide.md
+    scope: herd
+    title: "המדריך לבעל העסק — מה הלשכה נותנת ואיך מנהלים ממנה"
+  - to: "Herd/העברת לשכה בין מחשבים.md"
+    from: ai/context/moving-an-office.md
+    scope: herd
+    title: "העברת אפליקציה ולשכה שלמה בין מחשבים"
+
+# ── what the compiler writes itself ───────────────────────────────────────────────────────────────
+# `index`     — "00 - START HERE": the office's identity, what is installed, the reading order, and
+#               which folders belong to a person and which to the compiler.
+# `inventory` — every enabled app: its capability, its door, its tile. From the compiled registry.
+# `apps`      — one note per enabled app, from its own AGENT.md (the contract it already writes).
+# `diagrams`  — one note per archify source, linking the office's own /a/archify/ tile.
+generated: [index, inventory, apps, diagrams]
+
+# ── deliberately not published, each with a reason ────────────────────────────────────────────────
+# An exclusion with a `why` is a decision; a document nobody declared is a gate failure. That is the
+# whole point of the division.
+excluded:
+  - path: ai/context/research
+    why: "research drafts; their conclusions live in the docs that cite them"
+  - path: ai/context/archive
+    why: "superseded docs, kept for the record"
+  - path: ai/context/diagrams
+    why: "SVG topology pictures; the archify app renders the live ones"
+  - path: ai/context/seo
+    why: "website content and style guides, not the office"
+  - path: "ai/context/*-2026-*.md"
+    why: "one-off session / QA / post-mortem reports, dated by name"
+  - path: "ai/context/*-2026-*.txt"
+    why: "one-off session reports, dated by name"
+  - path: "ai/context/THE-PLAN*.md"
+    why: "historical plans"
+  - path: "ai/context/MASTER-PLAN*.md"
+    why: "historical plans"
+  - path: "ai/context/*-plan.md"
+    why: "plans and roadmaps — the work items carry these, a vault does not"
+  - path: "ai/context/*-plan-*"
+    why: "plans and roadmaps"
+  - path: ai/context/platform-os-release-plan.md
+    why: "the release plan; the items carry it"
+  - path: ai/context/release.md
+    why: "release procedure, kept with the release items"
+  - path: ai/context/release-endgame-backlog.md
+    why: "backlog"
+  - path: ai/context/OWNER-MESSAGES-FULL.md
+    why: "the owner's own messages, verbatim — personal, and not an office fact"
+  - path: ai/context/dgo-security-session.md
+    why: "a session's security working notes; the posture is dgo-security.md (herd scope)"
+  - path: ai/context/security-plan-2026.md
+    why: "a plan; its findings live in dgo-security.md"
+  - path: ai/context/secret-base-design.md
+    why: "the vault's internal design and procedures — the app's AGENT.md says how to use it"
+  - path: ai/context/dgo-pairing-contract.md
+    why: "pairing internals; the dgo-extend brief is what a user of it needs"
+  - path: "ai/context/central-business-system-*"
+    why: "a neighbouring product's design set"
+  - path: "ai/context/setup-*-login.md"
+    why: "per-site sign-in procedures — they belong with the credentials, not in a vault"
+  - path: "ai/context/indox-*"
+    why: "deep reference for one app; that app's own brief is published under Apps/"
+  - path: "ai/context/mail-*"
+    why: "deep reference for one app; that app's own brief is published under Apps/"
+  - path: "ai/context/browser42-*"
+    why: "deep reference for one app; that app's own brief is published under Apps/"
+  - path: "ai/context/chat-*"
+    why: "deep reference for one app; that app's own brief is published under Apps/"
+  - path: "ai/context/console-*"
+    why: "deep reference for one app; that app's own brief is published under Apps/"
+  - path: "ai/context/n8n-*"
+    why: "deep reference for one app; that app's own brief is published under Apps/"
+  - path: "ai/context/core-*"
+    why: "the native-core work stream, in progress"
+  - path: "ai/context/central-*"
+    why: "a neighbouring product's design set"
+  - path: "ai/context/local-*"
+    why: "local-setup notes and research"
+  - path: "ai/context/session-*"
+    why: "session post-mortems"
+  - path: "ai/context/*post-mortem*"
+    why: "post-mortems: history, not orientation"
+  - path: "ai/context/*-research.md"
+    why: "research"
+  - path: "ai/context/*-review*"
+    why: "a point-in-time review"
+  - path: "ai/context/*-audit*"
+    why: "a point-in-time audit"
+  - path: "ai/context/*-report*"
+    why: "a point-in-time report"
+  - path: "ai/context/*-findings*"
+    why: "a point-in-time findings list"
+  - path: "ai/context/*-analysis*"
+    why: "an analysis"
+  - path: "ai/context/*-runbook*"
+    why: "an operational runbook — the operative's own home is the vault's Operatives/, not here"
+  - path: "ai/context/*-notes*"
+    why: "working notes"
+  - path: "ai/context/*-assessment*"
+    why: "an assessment"
+  - path: "ai/context/*-verdicts*"
+    why: "an assessment"
+  - path: "ai/context/*-proof*"
+    why: "a proof record"
+  - path: "ai/context/*-results*"
+    why: "a results record"
+  - path: "ai/context/*-project*"
+    why: "a project's own pages"
+  - path: "ai/context/*-draft*"
+    why: "a draft"
+
+  # ── the platform's own development record: history, not orientation ──
+  - path: "ai/context/*PLAN*.md"
+    why: "historical plans under upper-case names"
+  - path: "ai/context/*PLAN*"
+    why: "historical plans under upper-case names"
+  - path: ai/context/lessons-platform-os-refactor.md
+    why: "lessons from one refactor"
+  - path: ai/context/platform-os-consolidation.md
+    why: "a refactor's plan"
+  - path: ai/context/platform-os-refactor.md
+    why: "a refactor's plan"
+  - path: ai/context/platform-service-connection-architecture.md
+    why: "the older connection design; platform-service-contract.md is published instead"
+  - path: ai/context/platform-apps.md
+    why: "per-app detail; the compiled inventory note is what a newcomer needs"
+  - path: ai/context/platform-navigation-design.md
+    why: "a UI design note"
+  - path: ai/context/agent-deployment-investigator.md
+    why: "an investigation"
+  - path: ai/context/agent-economics.md
+    why: "the agent's cost model — an operating decision, not orientation"
+  - path: ai/context/agent-routine-budget.md
+    why: "the agent's budget mechanics"
+  - path: ai/context/profiles-and-engines.md
+    why: "a per-app work list for the engine pattern"
+  - path: ai/context/dgo-herd-os.md
+    why: "a design plan for the herd"
+  - path: ai/context/dgo-link-lifetime.md
+    why: "link internals"
+  - path: ai/context/dgo-remote-apps.md
+    why: "the retired placement model"
+  - path: ai/context/digital-office-network-architecture.md
+    why: "a point-in-time network design"
+  - path: ai/context/digital-office-story.md
+    why: "the product's story"
+  - path: "ai/context/incoming-documents-*"
+    why: "INDOX deep reference; its own brief is published under Apps/"
+  - path: ai/context/web-engine.md
+    why: "one component's design note"
+  - path: ai/context/automation-iac.md
+    why: "one component's design note"
+  - path: ai/context/bbox-verification-loops.md
+    why: "a verification cookbook for the repo's own work"
+  - path: ai/context/browser-session-connection.md
+    why: "browser internals"
+  - path: ai/context/office-browser-in-hp-and-the-human-handoff.md
+    why: "browser internals"
+  - path: ai/context/connection-status-standard.md
+    why: "names the offices; the standard lives in the app briefs it governs"
+  - path: ai/context/gmail-onboardin-imap-stmp.md
+    why: "one provider's setup detail"
+  - path: ai/context/captcha.md
+    why: "an operational detail of driving a page"
+  - path: ai/context/fleet-colours-and-animals.md
+    why: "a naming convention"
+  - path: ai/context/sites-content-mapping.md
+    why: "website content"
+  - path: ai/context/symlinked-repo-root-empty-bind-mount.md
+    why: "one mount investigation, kept for its diagnostics"
+  # ── written on mac-dgo while this declaration lived on hp-dgo only; met at the release that took both (DGO-969,
+  # 2026-11-10). Excluded is the choice that leaks nothing; a product doc below moves to notes: when someone places it.
+  - path: ai/context/exampleu
+    why: "a client's (Exampleu's) business models and their sources — never in another office's vault"
+  # met again at batch 34 (2026-11-10, the Mac's 37 commits):
+  - path: ai/context/dgo-net.md
+    why: "the business's own plan for its public DGO net (DGO-1757) — the herd's, not a client's to read"
+  - path: ai/context/platform-language.md
+    why: "a product doc (the office's language contract, DGO-971); excluded until someone places it under notes:"
+  - path: ai/context/dgo-herd-design.md
+    why: "the herd's own machines and design, like dgo-herd.md — not a client's to read"
+  - path: ai/context/office-backup.md
+    why: "the herd's backup stores and paths — not a client's to read"
+  - path: ai/context/facility/facility-model.md
+    why: "one business's facility model, not office context"
+  - path: ai/context/automatic-progress.md
+    why: "the development lanes' practice, not an office's"
+  - path: ai/context/app-cli-api-standard.md
+    why: "a product doc not yet placed under notes: (for whoever writes an app, not for running an office)"
+  - path: ai/context/code-config-state-data.md
+    why: "a product doc not yet placed under notes: (the repository's layout of code, config, state and data)"
+  - path: ai/context/official-apps-bar.md
+    why: "a product doc not yet placed under notes: (the bar a wrapped official app must meet)"
+  - path: ai/context/provider-apps.md
+    why: "a product doc not yet placed under notes: (how a provider app is built)"
+  - path: ai/context/wrapped-official-app.md
+    why: "a product doc not yet placed under notes: (how a vendor's app is wrapped)"

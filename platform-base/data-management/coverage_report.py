@@ -33,7 +33,8 @@ import urllib.request
 URL = 'http://127.0.0.1:8080/api/inventory?wait=true&timeout=300'
 SHORT = {'covered (hook)': 'hook', 'covered (generic tar)': 'tar', 'covered (volume tar)': 'tar',
          'covered (bind tar)': 'bind-tar', 'covered (sql dump)': 'sql-dump',
-         'covered (dormant tar)': 'dormant', 'covered (secrets)': 'secrets'}
+         'covered (dormant tar)': 'dormant', 'covered (secrets)': 'secrets',
+         'covered (declarations)': 'declarations'}
 
 
 def main():
@@ -66,7 +67,10 @@ def main():
         tally = {}
         for s in stores:
             c = s.get('coverage')
-            tally[SHORT.get(c, c or 'UNCOVERED')] = tally.get(SHORT.get(c, c or 'UNCOVERED'), 0) + 1
+            # A NOT BACKED UP verdict is a store the archive does not keep: it counts as uncovered,
+            # never as a coverage kind of its own that reads like a pass.
+            k = 'UNCOVERED' if str(c or '').startswith('NOT BACKED UP') else SHORT.get(c, c or 'UNCOVERED')
+            tally[k] = tally.get(k, 0) + 1
         bad = tally.get('UNCOVERED', 0)
         print('%s%-24s %-4s %-5s %-6d %s' % (
             '!!' if bad else '  ', a.get('id'), 'yes' if a.get('enabled') else 'no',

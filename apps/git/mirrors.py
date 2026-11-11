@@ -56,7 +56,7 @@ _LOCK = threading.Lock()
 
 INTERVAL = int(os.environ.get("GIT_MIRROR_INTERVAL", "3600") or 3600)
 # 2 GiB per mirror, and the number is MEASURED rather than chosen: the office's OWN repository
-# (solomonBoltin/deployment-hacohen) is a 1.3 GB mirror clone, so a 1 GiB default silently refused
+# (bina-solution/digital-office) is a 1.3 GB mirror clone, so a 1 GiB default silently refused
 # the one repository most likely to be mirrored — a guard that excludes the intended use is not a
 # guard. The engine has ~15 GB free with ~40 containers on it, and the check runs BEFORE the push, so
 # an oversized mirror costs a clone and never a permanent byte.
@@ -68,6 +68,10 @@ MIN_FREE_MB = int(os.environ.get("GIT_MIRROR_MIN_FREE_MB", "2048") or 2048)
 # again. 0 turns it off (every sync re-downloads, and the disk never holds two copies).
 KEEP_SCRATCH = int(os.environ.get("GIT_MIRROR_KEEP_SCRATCH", "1") or 0)
 GIT_TIMEOUT = int(os.environ.get("GIT_MIRROR_TIMEOUT", "1800") or 1800)
+# A failing mirror is retried on a widening clock, not on its interval forever (herd-408): 1x, 2x, 4x
+# … the interval, capped here at a day. Measured 2026-11-09: a row whose run ended in a 30-minute full
+# clone was scheduled again an hour later, by which time nothing had changed.
+BACKOFF_MAX = int(os.environ.get("GIT_MIRROR_BACKOFF_MAX", "86400") or 86400)
 
 
 class MirrorError(Exception):
@@ -179,6 +183,11 @@ def create(source_account: str, repo: str, *, target_owner: str = "", target_rep
         "last_error": None,
         "last_seconds": None,
         "bytes": None,
+        # the schedule's own state (herd-408): a pause a person can see and toggle, and the count of
+        # consecutive failures that widens the retry clock.
+        "paused": False,
+        "consecutive_failures": 0,
+        "next_due": None,
     }
     rows.append(row)
     _save(rows)
@@ -254,6 +263,34 @@ def _git(args: list[str], cwd: Path | None = None, timeout: int = GIT_TIMEOUT) -
                           capture_output=True, text=True, timeout=timeout)
 
 
+def _scratch_usable(path: Path) -> bool:
+    """Is `path` a repository git can CONTINUE from?
+
+    Two checks, and it is worth being exact about what each one does NOT catch (measured 2026-11-10):
+      * `config` + `git rev-parse --git-dir` — is anything there at all. A failed run that never
+        reached git (a 507 free-space refusal, a 409 account) leaves no directory, and this answers
+        that without spawning a scan.
+      * `git fsck --connectivity-only` — are the objects the refs point at present. It walks refs and
+        commits and skips blob contents, so it is seconds on a 1.35 GB mirror.
+    `fsck` is VACUOUS on a repository with no refs (it exits 0), so it does not by itself prove a copy
+    is complete — and it is not relied on for that: an interrupted `git clone` deletes its own
+    directory (measured: exit 128, no directory left), which is why the "drop it" branch exists for the
+    empty case rather than for a corrupt one. What this function decides is the useful question: is
+    there a usable repository here to fetch into?
+    """
+    if not (path / "config").exists():
+        return False
+    try:
+        probe = _git(["--git-dir", str(path), "rev-parse", "--git-dir"], timeout=60)
+        if probe.returncode != 0:
+            return False
+        cp = _git(["--git-dir", str(path), "fsck", "--connectivity-only", "--no-progress"],
+                  timeout=min(GIT_TIMEOUT, 600))
+    except subprocess.TimeoutExpired:
+        return False
+    return cp.returncode == 0
+
+
 def _free_mb() -> int:
     try:
         return shutil.disk_usage(str(STATE_DIR)).free // (1024 * 1024)
@@ -312,17 +349,51 @@ def sync(mid: str, *, wait: bool = False) -> dict:
         #    spends 25 minutes moving 1.26 GB, and doing that again every `GIT_MIRROR_INTERVAL` for
         #    data that did not change is what makes a mirror feature nobody leaves switched on.
         tmp.parent.mkdir(parents=True, exist_ok=True)
+        seeded_from_forge = False
+        seed_note = ""                        # the forge-side reason, when the seed could not run
+        touched = False                       # did this run actually start touching the scratch?
         if (tmp / "config").exists():
+            touched = True
             cp = _git(["--git-dir", str(tmp), "fetch", "--prune", "--quiet", src_remote,
                        "+refs/heads/*:refs/heads/*", "+refs/tags/*:refs/tags/*"])
             action = "fetch"
         else:
             shutil.rmtree(tmp, ignore_errors=True)
-            cp = _git(["clone", "--mirror", "--quiet", src_remote, str(tmp)], cwd=tmp.parent)
-            action = "clone"
+            # SEED FROM THE TARGET FORGE FIRST (herd-408). Measured 2026-11-09 on the MacBook: after
+            # any failure the scratch was dropped, so recovery was always ANOTHER full clone of
+            # 1.35 GB, which on a loaded engine timed out at 1800 s — and the next run started from
+            # zero again. The forge already holds every branch and tag the last successful sync
+            # pushed, and its remote is this machine's own proxy, so cloning from it is local; the
+            # source fetch after it is then incremental. A first-ever mirror has no repository in the
+            # forge: that clone fails at once and the source clone below is what it always was.
+            #    The seed gets its OWN short timeout: it is a copy from this machine's proxy, and a run
+            #    that spent the full GIT_TIMEOUT on a seed would leave nothing of the budget for the
+            #    source fetch that the row's message talks about.
+            touched = True
+            seed = _git(["clone", "--mirror", "--quiet", tgt_remote, str(tmp)], cwd=tmp.parent,
+                        timeout=min(60, GIT_TIMEOUT))
+            if seed.returncode == 0:
+                #    An empty forge repository clones successfully and brings NOTHING (measured: exit 0,
+                #    no refs), so "seeded" is claimed only when the copy actually carries refs — a row
+                #    that says it was seeded from the forge should mean it.
+                refs = _git(["--git-dir", str(tmp), "for-each-ref", "--count=1"], timeout=60)
+                seeded_from_forge = refs.returncode == 0 and bool((refs.stdout or "").strip())
+                cp = _git(["--git-dir", str(tmp), "fetch", "--prune", "--quiet", src_remote,
+                           "+refs/heads/*:refs/heads/*", "+refs/tags/*:refs/tags/*"])
+                action = ("seed-from-forge + fetch" if seeded_from_forge
+                          else "clone-from-empty-forge + fetch")
+            else:
+                seed_note = _git_error(seed)
+                shutil.rmtree(tmp, ignore_errors=True)
+                cp = _git(["clone", "--mirror", "--quiet", src_remote, str(tmp)], cwd=tmp.parent)
+                action = "clone"
         if cp.returncode != 0:
-            shutil.rmtree(tmp, ignore_errors=True)      # a half-written copy must not be reused
-            raise MirrorError(f"המשיכה מהמקור נכשלה ({action}): {_git_error(cp)}", status=502)
+            # NOT removed here: whether a failed copy is worth keeping is ONE decision, in the
+            # `finally` below and by `_scratch_usable` (herd-408) — a failed FETCH over a good older
+            # copy is a scratch worth retrying from, a failed CLONE is not.
+            raise MirrorError(f"המשיכה מהמקור נכשלה ({action}): {_git_error(cp)}"
+                              + (f" · ההעתקה מהפורג' לא הייתה זמינה: {seed_note}" if seed_note else ""),
+                              status=502)
         size = _dir_bytes(tmp)
         if size > MAX_BYTES:
             raise MirrorError(f"המאגר גדול מהתקרה ({size // (1024*1024)}MB מול "
@@ -349,28 +420,49 @@ def sync(mid: str, *, wait: bool = False) -> dict:
         _update(mid, status="ok", error=None, seconds=round(time.time() - started, 1), size=size)
         ok = True
         return {**_row_out(_find(mid) or row), "ok": True, "id": mid, "status": "ok",
-                "bytes": size, "seconds": round(time.time() - started, 1)}
+                "bytes": size, "seconds": round(time.time() - started, 1),
+                "seeded_from_forge": seeded_from_forge}
     except MirrorError as e:
         _update(mid, status="error", error=e.he_message, seconds=round(time.time() - started, 1))
+        _backoff(mid)
         return {"ok": False, "id": mid, "status": "error", "error": e.he_message,
                 "status_code": e.status}
     except subprocess.TimeoutExpired:
         msg = f"הסנכרון חרג מהזמן שהוקצב ({GIT_TIMEOUT}s) — המאגר כנראה גדול מדי למכונה הזו."
         _update(mid, status="error", error=msg, seconds=round(time.time() - started, 1))
+        _backoff(mid)
         return {"ok": False, "id": mid, "status": "error", "error": msg}
     except Exception as e:                          # noqa: BLE001 — an unexpected failure is reported
         msg = "כשל לא צפוי בסנכרון."
         _update(mid, status="error", error=msg, seconds=round(time.time() - started, 1))
+        _backoff(mid)
         log.exception("mirror %s failed", mid)
         return {"ok": False, "id": mid, "status": "error", "error": msg}
     finally:
-        # The scratch copy is KEPT after a successful sync — that is what makes the next run an
-        # incremental fetch instead of another 1.26 GB — and dropped after a failure (a half-written
-        # repository is never reused) or when keeping it would eat the free-space floor the next sync
-        # needs. Two copies of every mirror is the price; the guards around it cap it.
-        if not (ok and KEEP_SCRATCH and _free_mb() >= MIN_FREE_MB * 2):
-            shutil.rmtree(tmp, ignore_errors=True)
-        _SYNC_LOCK.release()
+        # WHAT TO KEEP IS ONE DECISION, AND A FAILED RUN KEEPS ITS SCRATCH (herd-408). A successful
+        # sync keeps the copy — that is what makes the next run an incremental fetch instead of
+        # another 1.35 GB — and a FAILED one keeps it too, unless the copy is not a usable repository
+        # or the free-space floor needs the room. The failure that costs most is a TIMEOUT on a big
+        # clone (measured: 1830.8 s against a 1800 s budget, MacBook 2026-11-09); dropping the copy
+        # there guarantees the next attempt pays it again from zero. `_scratch_usable` is the line
+        # between "a FETCH that failed over a good older copy" (keep, retry incrementally) and "a
+        # CLONE that died halfway" (drop — its refs point at objects that never arrived).
+        try:
+            room = _free_mb() >= MIN_FREE_MB * 2
+            keep = bool(ok and KEEP_SCRATCH and room)
+            #    `touched` guards the only expensive part: if this run never ran git (a free-space
+            #    refusal, an account that would not resolve), there is nothing to inspect and no scan
+            #    is worth holding the lock for.
+            if not keep and not ok and KEEP_SCRATCH and room and touched and _scratch_usable(tmp):
+                keep = True
+            if not keep:
+                shutil.rmtree(tmp, ignore_errors=True)
+        finally:
+            #    The lock is released on EVERY path — including an unexpected error from the keeper
+            #    itself. Releasing it after a call that shells out to git means one unexpected throw
+            #    wedges every later sync into `busy` until the container restarts, which is the same
+            #    class of silent stop this whole change exists to remove (found in review).
+            _SYNC_LOCK.release()
 
 
 def sync_in_background(mid: str) -> None:
@@ -392,6 +484,7 @@ def sync_in_background(mid: str) -> None:
             try:
                 _update(mid, status="error",
                         error="הסנכרון נכשל לפני שדיווח — הפרטים בלוג של השירות.")
+                _backoff(mid)                       # a thread that died is a failure like any other
             except Exception:                       # noqa: BLE001 — never raise on a daemon thread
                 log.exception("could not even record the failure of %s", mid)
 
@@ -447,6 +540,10 @@ def _update(mid: str, *, status: str, error: str | None, seconds: float | None =
                 r["last_status"] = status
                 r["last_error"] = error
                 r["last_run"] = int(time.time())
+                if status == "ok":
+                    # a success resets the widening clock — the next run is due on the interval again
+                    r["consecutive_failures"] = 0
+                    r.pop("next_due", None)
                 if seconds is not None:
                     r["last_seconds"] = seconds
                 if size is not None:
@@ -454,13 +551,59 @@ def _update(mid: str, *, status: str, error: str | None, seconds: float | None =
         _save(rows)
 
 
+def _backoff(mid: str) -> None:
+    """Widen the clock after a failure: wait 1x, 2x, 4x … the interval, capped at BACKOFF_MAX.
+
+    Called after the row already says `error`, so the operator sees the failure AND the pause in one
+    read. Counting on the ROW (not in memory) matters: the app restarts, and a count that lives in a
+    process resets on every restart — which is the same as no backoff at all on a container that
+    restarts more often than it syncs.
+    """
+    with _LOCK:
+        rows = load()
+        for r in rows:
+            if r.get("id") == mid:
+                n = int(r.get("consecutive_failures") or 0) + 1
+                r["consecutive_failures"] = n
+                step = min(int(r.get("interval") or INTERVAL) * (2 ** min(n - 1, 8)), BACKOFF_MAX)
+                r["next_due"] = int(time.time()) + step
+                log.info("mirror %s failed %d time(s) in a row — next attempt in %ds", mid, n, step)
+        _save(rows)
+
+
+def set_paused(mid: str, paused: bool) -> dict:
+    """Stop or restart the SCHEDULE for one mirror — the state the row was missing.
+
+    Before this, an operator paused a mirror by setting its interval to ten years (the MacBook,
+    2026-11-09T15:45Z) — a number standing in for a state, invisible in the row's own vocabulary and
+    one careless edit away from a surprise. A pause stops the SCHEDULER only: the scratch, the forge
+    copy and a manual `sync` all survive it, because a pause means "do not run by itself", never
+    "forget this mirror". Resuming starts the clock from now instead of firing on the next tick of a
+    backoff that was paused for a day.
+    """
+    with _LOCK:
+        rows = load()
+        for r in rows:
+            if r.get("id") == mid:
+                r["paused"] = bool(paused)
+                r.pop("next_due", None)
+                if not paused:
+                    r["next_due"] = int(time.time()) + int(r.get("interval") or INTERVAL)
+                _save(rows)
+                return _row_out(r)
+    raise MirrorError("מראה כזו אינה רשומה.", status=404)
+
+
 # ── the scheduler ────────────────────────────────────────────────────────────────────────────────
 def due(now: float | None = None) -> list[dict]:
     now = now or time.time()
     out = []
     for r in load():
+        if r.get("paused"):
+            continue                     # a paused row is a decision, not a delay
         last = r.get("last_run") or 0
-        if now - last >= int(r.get("interval") or INTERVAL):
+        nxt = r.get("next_due") or 0
+        if now - last >= int(r.get("interval") or INTERVAL) and now >= nxt:
             out.append(r)
     return out
 

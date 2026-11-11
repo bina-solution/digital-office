@@ -1,0 +1,45 @@
+## A `.localhost` name is the machine's own: the edge never serves one to a client outside the machine's
+## private networks (DGO-1633).
+##
+## Every app has a local twin, `<app>.localhost`. A browser resolves such a name only to its own loopback, and a
+## container resolves it to its own `::1`, so on an office the twin is reached by the machine itself (the Mac's
+## and the HP's own browser, through the engine's port forward). An outsider gets to it anyway: the edge routes
+## by the Host header alone, so `curl -H 'Host: supabase.localhost' http://<the office's public address>/`
+## reached Supabase's gateway from the internet on Exampleu and on vps1 (storage answered without a key), and
+## `glitchtip.localhost` answered on vps1 — apps that declare NO public host (`auth: none`, routed only under
+## their twin), reached past the declaration. A meeting's guest, or a scanner, needs no sign-in for that.
+## Measured from outside 2026-11-09; in the 12 hours of Exampleu's log before it, the twins served nobody else.
+##
+## So the twin is refused to every source outside loopback and the private ranges, on both public entrypoints
+## (plain HTTP on :443 too: a label router that names no entrypoint is on both), above every router the offices
+## compile (the highest elsewhere is 1000000, hp-dgo's port-80 router). Nothing changes for the machine: its own
+## browser, its engine's port forward (bound to 127.0.0.1) and its containers all arrive from these ranges. The
+## herd's link door hands a carried request straight to the app's service, not to this edge. By design still
+## admitted: a LAN peer of a LAN office (the HP's, the Mac's) and 100.64/10 (a tailnet).
+## platform-base/traefik/test_local_names.py enumerates every `.localhost` router in the repo against it.
+##
+## Not closed here: on a host that publishes the edge on IPv6 too, docker's proxy hands an IPv6 client to
+## traefik from the bridge's own address (172.18.0.1 on Exampleu and on vps1, measured), so it looks private. That
+## masks the source of every address rule on such an office, not only this one (an n8n webhook's IP allow-list
+## too): dgo-security, from DGO-1633.
+http:
+  routers:
+    local-names-outside:
+      entryPoints: [web, websecure]
+      rule: '(HostRegexp(`(?i)^(.+\.)?localhost\.?$`)) && !(ClientIP(`127.0.0.0/8`) || ClientIP(`10.0.0.0/8`) || ClientIP(`172.16.0.0/12`) || ClientIP(`192.168.0.0/16`) || ClientIP(`100.64.0.0/10`) || ClientIP(`::1/128`) || ClientIP(`fc00::/7`) || ClientIP(`fe80::/10`))'
+      priority: 2000000000
+      middlewares: [local-names-refused]
+      service: noop@internal
+    local-names-outside-tls:
+      entryPoints: [websecure]
+      rule: '(HostRegexp(`(?i)^(.+\.)?localhost\.?$`)) && !(ClientIP(`127.0.0.0/8`) || ClientIP(`10.0.0.0/8`) || ClientIP(`172.16.0.0/12`) || ClientIP(`192.168.0.0/16`) || ClientIP(`100.64.0.0/10`) || ClientIP(`::1/128`) || ClientIP(`fc00::/7`) || ClientIP(`fe80::/10`))'
+      priority: 2000000000
+      middlewares: [local-names-refused]
+      service: noop@internal
+      # no certResolver: a `.localhost` name never asks Let's Encrypt for anything
+      tls: {}
+  middlewares:
+    # 403 to every source: the router above has already chosen the requests that reach it
+    local-names-refused:
+      ipAllowList:
+        sourceRange: ["255.255.255.255/32"]

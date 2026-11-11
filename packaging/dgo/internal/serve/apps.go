@@ -8,14 +8,16 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
 	"unicode/utf8"
 
-	"github.com/solomonBoltin/deployment-hacohen/packaging/dgo/internal/compiler"
-	"github.com/solomonBoltin/deployment-hacohen/packaging/dgo/internal/pyval"
-	"github.com/solomonBoltin/deployment-hacohen/packaging/dgo/internal/yamlish"
+	"github.com/bina-solution/digital-office/packaging/dgo/internal/compiler"
+	"github.com/bina-solution/digital-office/packaging/dgo/internal/pyval"
+	"github.com/bina-solution/digital-office/packaging/dgo/internal/screen"
+	"github.com/bina-solution/digital-office/packaging/dgo/internal/yamlish"
 )
 
 // apps is api_apps() where this office has no container engine at all — the phone's native core
@@ -40,6 +42,21 @@ func (s *server) apps(w http.ResponseWriter, r *http.Request) bool {
 	}
 	reply(w, http.StatusOK, doc)
 	return true
+}
+
+// screenDir is where an office root carries app-management's screen (office-root.sh): its static/ as the
+// container's image does.
+var screenDir = filepath.Join("platform-base", "app-management", "static")
+
+// screen is app.py's index() and static_files() where this office has no container engine — the phone's core
+// (DGO-1328): «אפליקציות» is app-management's screen, and on a phone there is no container to serve it, so the
+// tile answered «the machine is not on this phone» though the calls it opens with (api/apps, enable, job,
+// office) are answered here; its other verbs (catalog, room, archive, apply, uninstall, move) are still the
+// container's, so on the phone they answer Absent. send_from_directory's files, from the office root: a
+// regular file under screenDir, reached through no link, no `..`, no backslash, no hidden name (screen.Serve);
+// anything else — or a root that carries no screen — is the container's (on the phone, Absent), as before.
+func (s *server) screen(w http.ResponseWriter, r *http.Request) bool {
+	return s.engineless && screen.Serve(w, r, filepath.Join(s.repo, screenDir))
 }
 
 // catalog is _catalog() with `cidx` None, wrapped as api_apps() answers it.
@@ -173,8 +190,9 @@ func stateApps(repo string) (*yamlish.Map, error) {
 	return m, nil
 }
 
-// generation is _generation(): the highest number among .generated/generations' names, 0 for none —
-// what app.py reads as Unicode digits is the container's.
+// generation is _generation(): the highest number among .generated/generations' names, 0 for none — a
+// name that is not ASCII is left to the container (app.py skips it too since DGO-632's rule: stepping
+// aside stays right).
 func generation(repo string) (int, error) {
 	des, err := os.ReadDir(filepath.Join(repo, ".generated", "generations"))
 	if err != nil {
@@ -291,6 +309,26 @@ func mapOr(v any, what string) (*yamlish.Map, error) {
 // get is a mapping's value, nil where it has none (dict.get).
 func get(m *yamlish.Map, k string) any { v, _ := m.Get(k); return v }
 
+// opensInside is app-management's opens_inside (11d4b258, DGO-1502): «פתיחה» opens the app INSIDE the
+// console exactly when the console has a tile for it. `tile: false` never does (a door with no tile);
+// an app on its own host (`external`) always does; any other module does when it has an alias and is
+// not `embed: false`. Python's `is False` is identity with the boolean, so a 0 or an empty text is not
+// False there, and is not here.
+func opensInside(module *yamlish.Map) bool {
+	isFalse := func(k string) bool {
+		v, ok := module.Get(k)
+		b, isBool := v.(bool)
+		return ok && isBool && !b
+	}
+	if isFalse("tile") {
+		return false
+	}
+	if compiler.Truthy(get(module, "external")) {
+		return true
+	}
+	return compiler.Truthy(get(module, "alias")) && !isFalse("embed")
+}
+
 // or is Python's `a or b`.
 func or(vs ...any) any {
 	for _, v := range vs[:len(vs)-1] {
@@ -304,7 +342,7 @@ func or(vs ...any) any {
 // entry is one app of _catalog(), as app.py builds it with no docker view.
 func (s *server) entry(app *compiler.App, entries *yamlish.Map, gen int, pending map[[2]string][2]string) (*yamlish.Map, error) {
 	aid, m := app.ID, app.Doc()
-	raw, _ := entries.Get(aid) // state.get(aid) — every key a string (stateApps)
+	raw, said := entries.Get(aid) // state.get(aid) — every key a string (stateApps)
 	entry, err := mapOr(raw, "its state entry")
 	if err != nil {
 		return nil, err
@@ -312,6 +350,10 @@ func (s *server) entry(app *compiler.App, entries *yamlish.Map, gen int, pending
 	dispo, err := compiler.Disposition(raw)
 	if err != nil {
 		return nil, err
+	}
+	// …an app the office runs unless its state says otherwise («מכולות», compiler.OnUnlessSaid)
+	if !said && slices.Contains(compiler.OnUnlessSaid, aid) {
+		dispo = "enabled"
 	}
 	by := get(entry, "by")
 	if !hashable(by) {
@@ -381,7 +423,13 @@ func (s *server) entry(app *compiler.App, entries *yamlish.Map, gen int, pending
 		if !utf8.ValidString(url) { // an environment value os.environ reads with surrogateescape
 			return nil, errors.New("its launch URL is not UTF-8")
 		}
-		launch = object("url", url, "embed", compiler.Truthy(get(module, "embed")), "module", or(get(module, "id"), aid))
+		// screen: the app declared one of its own (a routing entry with a module, and not `tile: false`, whose
+		// screen lives in another app) — what the console's screen search offers (DGO-1760); app.py's
+		// `bool(r_ui.get("module")) and module.get("tile") is not False`
+		tile, said := module.Get("tile")
+		noTile, isBool := tile.(bool)
+		launch = object("url", url, "embed", opensInside(module), "module", or(get(module, "id"), aid),
+			"screen", compiler.Truthy(get(ui, "module")) && !(said && isBool && !noTile))
 	}
 	services := []any{}
 	if c := get(m, "compose"); compiler.Truthy(c) {

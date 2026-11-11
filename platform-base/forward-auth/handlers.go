@@ -5,7 +5,6 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
-	"html/template"
 	"io"
 	"log"
 	"net"
@@ -28,7 +27,7 @@ type server struct {
 	external     string
 	secureCookie bool
 	cookieDomain string
-	// suffixes is the office's own host allowlist (`-localhost`, `.hacohen.bina-solutions.co.il`).
+	// suffixes is the office's own host allowlist (`-localhost`, `.example.bina-solutions.co.il`).
 	// It is what bounds a return-to URL to hosts this office actually serves.
 	suffixes []string
 	// legacy (and the key that verifies it) is authentik's session cookie, read during a migration.
@@ -47,6 +46,8 @@ type server struct {
 	// firstRun is the pending first-run setup (setup.go); nil, or not pending, on every office that
 	// has its owner.
 	firstRun *setup
+	// invites is the owner's pending invitations (invite.go, DGO-1751); nil: `/invite` is not served.
+	invites *invites
 }
 
 // store is the users as they stand now: the file re-read when it changed, or the fixed set a test
@@ -61,9 +62,12 @@ func (s *server) store() *userStore {
 // session resolves the caller: THIS service's cookie first, then authentik's, so a browser that was
 // signed in before the swap is not asked again. Both paths end in the same `*session` and the same
 // five headers — an app cannot tell which cookie carried its caller, and that is the point.
-func (s *server) session(r *http.Request) (*session, error) {
+func (s *server) session(r *http.Request) (*session, error) { return s.sessionIn(r, s.store()) }
+
+// sessionIn is session against one snapshot of the users file — the one its caller also asks who is an admin
+// (effective), so a reload between the two never mixes an old line with a new rule (DGO-1755, the reader).
+func (s *server) sessionIn(r *http.Request, users *userStore) (*session, error) {
 	now := time.Now()
-	users := s.store()
 	sess, err := s.sign.read(r, now, users)
 	if err == nil || s.legacy == nil {
 		return sess, err
@@ -106,15 +110,30 @@ func identityHeaders(u *user) map[string]string {
 // So 200 + the identity headers says "you are in", and 302 + Location says "go and sign in".
 //
 // It answers for EVERY method, because a gate that only guards GET is not a gate.
-func (s *server) forwardAuth(w http.ResponseWriter, r *http.Request) {
+func (s *server) forwardAuth(w http.ResponseWriter, r *http.Request) { s.gate(w, r, false) }
+
+// forwardAuthAdmins is the gate of an app whose app.json declares `people: admins` (DGO-1755): the office's
+// root apps — computers (a terminal on the host), app-management, connections and keys, n8n, the agents … —
+// and those that act as the owner's own accounts. Both compilers put the middleware that dials it
+// (`authentik-admins@file`) on every signed-in route of such an app, and on every form of a linked office's. Everything is as at /auth/traefik, and then a signed-in person who is not
+// an admin (users.go: effective) is answered 403 with the card that says whose app it is.
+func (s *server) forwardAuthAdmins(w http.ResponseWriter, r *http.Request) { s.gate(w, r, true) }
+
+func (s *server) gate(w http.ResponseWriter, r *http.Request, admins bool) {
 	if ids, ok := s.fromCore(r); ok {
+		// the core's own forward-auth wrote this person's groups as its office sees them (effective)
+		if admins && !headerNames(ids["X-authentik-groups"], adminGroups...) {
+			s.refuseAdmins(w, r, ids["X-authentik-username"])
+			return
+		}
 		for k, v := range ids {
 			w.Header().Set(k, v)
 		}
 		w.WriteHeader(http.StatusOK)
 		return
 	}
-	sess, err := s.session(r)
+	users := s.store() // one snapshot: who the cookie names, and whether that person is an admin
+	sess, err := s.sessionIn(r, users)
 	if err != nil {
 		if s.redeemCode(w, r) {
 			return
@@ -133,10 +152,42 @@ func (s *server) forwardAuth(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	for k, v := range identityHeaders(sess.User) {
+	who := users.effective(sess.User)
+	if admins && !who.admin() {
+		s.refuseAdmins(w, r, who.Name)
+		return
+	}
+	for k, v := range identityHeaders(who) {
 		w.Header().Set(k, v)
 	}
 	w.WriteHeader(http.StatusOK)
+}
+
+// headerNames reports whether a `|`-joined X-authentik-groups value names any of the groups.
+func headerNames(header string, groups ...string) bool {
+	for _, g := range strings.Split(header, "|") {
+		for _, want := range groups {
+			if g == want {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// refuseAdmins is the answer to a signed-in person who opened an app of the office's admins (DGO-1755). 403,
+// the card, on the APP's host (traefik hands this response to the browser verbatim, often inside the
+// console's frame), so its files come from the sign-in host. The person stays signed in; nothing is said
+// about who the admins are or what the app holds.
+func (s *server) refuseAdmins(w http.ResponseWriter, r *http.Request, name string) {
+	log.Printf("forward-auth: refused user=%q host=%q: an app of the office's admins (people: admins)",
+		s.logName(name), r.Header.Get("X-Forwarded-Host"))
+	renderProblem(w, http.StatusForbidden, problem{
+		Title: "האפליקציה הזאת למנהלי הלשכה בלבד", Sub: "אין לך גישה אליה",
+		Text: "האפליקציה הזאת פותחת את המחשבים, החיבורים והמפתחות של הלשכה, ולכן רק מנהלי הלשכה נכנסים אליה. " +
+			"אם היא נחוצה לך, פנו לבעל הלשכה.",
+		Base: s.external,
+	})
 }
 
 // The phone's native core signs each request it sends this machine (fromCore): when, and the signature.
@@ -251,8 +302,14 @@ func (s *server) challenge(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		// Refuse rather than guess. A host this office does not serve is either a misconfigured
 		// proxy or somebody trying to make our login page redirect to a foreign site; both want the
-		// same answer, and neither wants a 302.
-		http.Error(w, "forward-auth: refusing a return-to outside this office", http.StatusBadRequest)
+		// same answer, and neither wants a 302. A person who meets it reads why, and the address that
+		// was refused is not written back to them (ui.go: problem).
+		// Traefik hands this answer to the APP's host, where /ui/… is not ours: its look comes from here.
+		renderProblem(w, http.StatusBadRequest, problem{
+			Title: "הכתובת הזאת אינה של הלשכה", Sub: "הכניסה לא תחזיר אליה",
+			Text: "הבקשה הגיעה מכתובת שאינה אחת מהכתובות של הלשכה הזאת, ולכן הכניסה לא תפנה אליה. פתחו את הלשכה בכתובת שלה.",
+			Base: s.external,
+		})
 		return
 	}
 	// a code that did not redeem (stale, used, another host's) does not ride along to the next round
@@ -420,26 +477,8 @@ func (s *server) okReturnTo(raw string) bool {
 
 // ── sign-in ──────────────────────────────────────────────────────────────────────────────────────
 
-// loginPage is one template with no colour of its own: the palette lives in ONE place in this
-// repository (platform-base/bina-ui/theme-tokens.css, gates G27/G82), and a sign-in page rendered by
-// a service that cannot read it must not invent a second one. Default browser styling, in Hebrew,
-// and nothing else.
-var loginPage = template.Must(template.New("login").Parse(`<!doctype html>
-<html lang="he" dir="rtl"><head><meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<title>כניסה</title></head><body>
-<main>
-<h1>כניסה</h1>
-{{if .Error}}<p role="alert">{{.Error}}</p>{{end}}
-<form method="post" action="/login">
-<input type="hidden" name="rd" value="{{.ReturnTo}}">
-<input type="hidden" name="st" value="{{.State}}">
-<p><label>שם משתמש <input name="user" autocomplete="username" autofocus required></label></p>
-<p><label>סיסמה <input type="password" name="password" autocomplete="current-password" required></label></p>
-<p><button type="submit">כניסה</button></p>
-</form>
-</main></body></html>
-`))
+// The sign-in page is ui/pages.html `login`: THE card on the logo wall, in the office's palette, from
+// the kept copies in ui/ (ui.go says how they are kept). It names no colour of its own (G27/G82).
 
 // loginForm carries nothing but the return-to, the app host's state hash (handoff.go) and, on a
 // retry, one sentence.
@@ -450,13 +489,8 @@ type loginForm struct {
 }
 
 func (s *server) renderLogin(w http.ResponseWriter, status int, f loginForm) {
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	// This page is the one screen an anonymous caller reaches. It must not be framed by anybody,
-	// and it must not be cached by a shared proxy.
-	w.Header().Set("X-Frame-Options", "DENY")
-	w.Header().Set("Cache-Control", "no-store")
-	w.WriteHeader(status)
-	_ = loginPage.Execute(w, f)
+	// The one screen an anonymous caller reaches: never framed, never kept by a shared proxy (renderPage).
+	renderPage(w, status, "login", f)
 }
 
 func (s *server) login(w http.ResponseWriter, r *http.Request) {
@@ -588,10 +622,7 @@ func (s *server) logout(w http.ResponseWriter, r *http.Request) {
 	}
 	switch r.Method {
 	case http.MethodGet, http.MethodHead:
-		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		w.Header().Set("X-Frame-Options", "DENY")
-		w.Header().Set("Cache-Control", "no-store")
-		_ = logoutPage.Execute(w, rd)
+		renderPage(w, http.StatusOK, "logout", rd)
 	case http.MethodPost:
 		sess, err := s.session(r)
 		if err == nil {
@@ -606,27 +637,14 @@ func (s *server) logout(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-var logoutPage = template.Must(template.New("logout").Parse(`<!doctype html>
-<html lang="he" dir="rtl"><head><meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<title>יציאה</title></head><body>
-<main>
-<h1>יציאה מהלשכה</h1>
-<p>היציאה מסיימת את הכניסה בכל המכשירים.</p>
-<form method="post" action="/logout">
-<input type="hidden" name="rd" value="{{.}}">
-<p><button type="submit" autofocus>יציאה</button></p>
-</form>
-</main></body></html>
-`))
-
 // whoami is the whole admin surface: it says who the caller IS, and it cannot say anything else.
 //
 // Not an accident. Listing, adding or removing users over HTTP would mean a second writer for the
 // fact "who may sign in", and the office already has exactly one (the credential plane). The sign-in
 // page is the browser's way to ask; this is the console's and the agent's.
 func (s *server) whoami(w http.ResponseWriter, r *http.Request) {
-	sess, err := s.session(r)
+	users := s.store()
+	sess, err := s.sessionIn(r, users)
 	w.Header().Set("Cache-Control", "no-store")
 	if err != nil {
 		w.Header().Set("Content-Type", "application/json; charset=utf-8")
@@ -634,14 +652,15 @@ func (s *server) whoami(w http.ResponseWriter, r *http.Request) {
 		_ = json.NewEncoder(w).Encode(map[string]any{"signed_in": false})
 		return
 	}
+	who := users.effective(sess.User) // the groups every gate and app is told (users.go)
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	_ = json.NewEncoder(w).Encode(map[string]any{
 		"signed_in": true,
-		"username":  sess.User.Name,
-		"email":     sess.User.Email,
-		"name":      sess.User.Display,
-		"uid":       sess.User.UID,
-		"groups":    sess.User.Groups,
+		"username":  who.Name,
+		"email":     who.Email,
+		"name":      who.Display,
+		"uid":       who.UID,
+		"groups":    who.Groups,
 		"expires":   sess.Exp.UTC().Format(time.RFC3339),
 	})
 }
@@ -661,18 +680,25 @@ func (s *server) routes() *http.ServeMux {
 	// design note: the new middleware dials `/auth/traefik`, because a path that names the product
 	// we removed is a lie future readers have to un-learn.
 	m.HandleFunc("/auth/traefik", s.forwardAuth)
+	// an app of the office's admins (DGO-1755)
+	m.HandleFunc("/auth/traefik/admins", s.forwardAuthAdmins)
+
 	m.HandleFunc("/edge-proof", s.edgeProof) // the phone's machine, to its native core (fromCore)
 	m.HandleFunc("/healthz", s.healthz)
 	m.HandleFunc("/whoami", s.whoami)
 	m.HandleFunc("/login", s.login)
 	m.HandleFunc("/setup", s.setupHandler)
+	m.HandleFunc("/invite", s.inviteHandler) // a person the owner invited chooses their password (invite.go)
 	m.HandleFunc("/logout", s.logout)
+	m.HandleFunc("/ui/page.css", serveUI)   // the pages' look (ui.go)
+	m.HandleFunc("/ui/return.js", serveUI)  // the sign-in form keeps a deep link's `#…` (ui/return.js, DGO-569)
+	m.HandleFunc("/bina-wall.svg", serveUI) // the logo wall, at the path THE card asks for on every surface
 	m.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/" {
 			http.Redirect(w, r, s.external+"/login", http.StatusFound)
 			return
 		}
-		http.NotFound(w, r)
+		notFound(w, r)
 	})
 	return m
 }

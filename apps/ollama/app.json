@@ -6,6 +6,7 @@
   },
   "layer": 3,
   "kind": "service",
+  "page": "ai",
   "version": "1.0.0",
   "summary": {
     "he": "הרצת מודלי שפה מקומית",
@@ -23,6 +24,22 @@
         "pull"
       ]
     }
+  ],
+  "ops": [
+    {"id": "models", "method": "GET", "path": "/api/tags", "access": "read", "verb": "models",
+     "summary": {"he": "המודלים שהלשכה מחזיקה, וגודלם", "en": "the models this office holds, with their sizes"}},
+    {"id": "loaded", "method": "GET", "path": "/api/ps", "access": "read", "verb": "loaded",
+     "summary": {"he": "המודלים שבזיכרון עכשיו", "en": "the models in memory now"}},
+    {"id": "show", "method": "POST", "path": "/api/show", "access": "read", "verb": "show",
+     "summary": {"he": "מה מודל הוא: משפחה, גודל, קוונטיזציה, הקשר", "en": "what a model is: family, size, quantization, context"}},
+    {"id": "generate", "method": "POST", "path": "/api/generate", "access": "read", "verb": "generate",
+     "summary": {"he": "תשובה אחת לבקשה אחת", "en": "one answer to one prompt"}},
+    {"id": "chat", "method": "POST", "path": "/api/chat", "access": "read", "verb": "chat",
+     "summary": {"he": "תור אחד של שיחה", "en": "one turn of a chat"}},
+    {"id": "embed", "method": "POST", "path": "/api/embed", "access": "read", "verb": "embed",
+     "summary": {"he": "הווקטור של טקסט", "en": "the vector of a text"}},
+    {"id": "unload", "method": "POST", "path": "/api/generate", "access": "write", "verb": "unload",
+     "summary": {"he": "להוציא מודל מהזיכרון (הקבצים נשארים)", "en": "take a model out of memory (its files stay)"}}
   ],
   "use": [],
   "connections": [],
@@ -68,7 +85,12 @@
   },
   "data": {
     "volumes": [
-      "ollama_data"
+      "ollama_data",
+      "ollama_front_log"
+    ],
+    "cache": [
+      "ollama_data",
+      "ollama_front_log"
     ],
     "on_uninstall": "prompt"
   },

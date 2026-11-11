@@ -248,6 +248,56 @@ check("an unidentified grant is marked as such",
 check("no secret VALUE is ever written to the audit log",
       not any("sk-live" in json.dumps(g) or "pw-live" in json.dumps(g) for g in grants), "")
 
+print("\nidentity's transport (DGO-1794): a read-only proxy over tcp, so connections need hold no socket")
+import http.server  # noqa: E402
+import socketserver  # noqa: E402
+import threading  # noqa: E402
+
+ASKED = []
+
+
+class _Engine(http.server.BaseHTTPRequestHandler):
+    def do_GET(self):                                   # an engine (or its proxy) that answers two reads
+        ASKED.append(("GET", self.path))
+        body = b"[]" if self.path.endswith("/containers/json") else b"OK"
+        self.send_response(200 if self.path.endswith(("/containers/json", "/_ping")) else 404)
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+    def log_message(self, *_):
+        pass
+
+
+_srv = socketserver.TCPServer(("127.0.0.1", 0), _Engine)
+threading.Thread(target=_srv.serve_forever, daemon=True).start()
+_saved_sock = identity.DOCKER_SOCK
+try:
+    identity.DOCKER_SOCK = f"tcp://127.0.0.1:{_srv.server_address[1]}"
+    check("tcp://host:port reaches the engine's API (a list answers)", REAL_DOCKER_GET("/containers/json") == [],
+          str(ASKED))
+    check("…GET only, under the API version", ASKED and all(m == "GET" and p.startswith(f"/{identity.API_VERSION}/")
+                                                          for m, p in ASKED), str(ASKED))
+    check("…and the raw read too", identity._docker_get_raw("/_ping") == b"OK")
+    for bad in ("tcp://127.0.0.1", "tcp://user:pw@127.0.0.1:1", "tcp://h:1/path", "relative/docker.sock", "http://h:1",
+                "tcp://127.0.0.1:99999", "tcp://127.0.0.1:abc", "tcp://[::1", "tcp:// 127.0.0.1:2375",
+                "tcp://127.0.0.1:23\t75"):
+        identity.DOCKER_SOCK = bad
+        n = len(ASKED)
+        try:
+            refused = REAL_DOCKER_GET("/containers/json") is None and identity._docker_get_raw("/_ping") is None
+        except Exception as e:                          # a crash is not a refusal
+            refused = False
+            print(f"        raised {type(e).__name__}")
+        check(f"a malformed DOCKER_SOCK ({bad.split('@')[-1]!r}) is refused, never guessed, never a crash",
+              refused and len(ASKED) == n)
+    identity.DOCKER_SOCK = "unix:///nonexistent/docker.sock"
+    check("unix:///path is a socket path (absent here: no answer, no crash)", REAL_DOCKER_GET("/_ping") is None)
+finally:
+    identity.DOCKER_SOCK = _saved_sock
+    _srv.shutdown()
+    _srv.server_close()
+
 print()
 if FAILED:
     print(f"BROKER TESTS FAILED ({len(FAILED)}): " + ", ".join(FAILED))

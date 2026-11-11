@@ -9,8 +9,8 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/solomonBoltin/deployment-hacohen/packaging/dgo/internal/pyval"
-	"github.com/solomonBoltin/deployment-hacohen/packaging/dgo/internal/yamlish"
+	"github.com/bina-solution/digital-office/packaging/dgo/internal/pyval"
+	"github.com/bina-solution/digital-office/packaging/dgo/internal/yamlish"
 )
 
 const (
@@ -140,6 +140,7 @@ func ensureState(repo, path string, stdout io.Writer) error {
 		return nil
 	}
 	var restored []byte
+	said := fmt.Sprintf("  info  %s: restored from the commit this checkout was on (ORIG_HEAD)\n", stateName)
 	if out, err := exec.Command("git", "-C", repo, "rev-parse", "--verify", "--quiet", "ORIG_HEAD").Output(); err == nil && strings.TrimSpace(string(out)) != "" {
 		show, err := exec.Command("git", "-C", repo, "show", strings.TrimSpace(string(out))+":"+stateName).Output()
 		if err == nil && strings.TrimSpace(string(show)) != "" {
@@ -156,10 +157,18 @@ func ensureState(repo, path string, stdout io.Writer) error {
 			return fmt.Errorf("FATAL %s is missing and there is no %s to create it from", stateName, defaultName)
 		}
 		restored = def
-		fmt.Fprintf(stdout, "  info  %s: created from %s (this checkout's first run)\n", stateName, defaultName)
-	} else {
-		fmt.Fprintf(stdout, "  info  %s: restored from the commit this checkout was on (ORIG_HEAD)\n", stateName)
+		said = fmt.Sprintf("  info  %s: created from %s (this checkout's first run)\n", stateName, defaultName)
 	}
+	// under the state lock, as reconcile.py's ensure_state() since DGO-616 (its _state_lock): data/.locks/
+	// platform.state is made and held, the file is looked at again — another first run may have created it
+	// while this one looked: never replace it, nor say so — and only then said and written. A lock that
+	// cannot be had stops nothing and, as on Python's side, says nothing here.
+	lock := lockState(repo)
+	defer lock.release()
+	if _, err := os.Stat(path); err == nil {
+		return nil
+	}
+	fmt.Fprint(stdout, said)
 	// written as Python writes text it read in text mode: every \r\n and lone \r is a \n — and with the
 	// mode Python's open() gives a new file, 0666 less the umask, as every other writer here: a fixed 0644
 	// read 0664 against reconcile.py's for a user whose umask is 002 (DGO-1038)
@@ -199,13 +208,20 @@ func namesDisposition(s string) (string, bool) {
 }
 
 // EnabledIDs mirrors enabled_ids(): the apps the platform should RUN — in the state, in the
-// catalog, disposition enabled. Archived is deliberately not running.
+// catalog, disposition enabled — and each of OnUnlessSaid that the catalog has and the state does not
+// name. Archived is deliberately not running.
 func EnabledIDs(st *State, cat *Catalog) (map[string]bool, error) {
 	if st.appsNot != nil {
 		return nil, died("%s: apps is %s, not a mapping", stateName, pyval.Repr(st.appsNot))
 	}
 	out := map[string]bool{}
 	for _, aid := range st.Apps.Keys() {
+		// a key YAML did not type as text (`true:`, `null:`) is True or None to Python, never an app id in the
+		// catalog — even where an app of that spelling exists (DGO-612's second reader: required-by, which does
+		// not validate, answered ["true"] here and [] there)
+		if _, isText := st.Apps.TypedKey(aid).(string); !isText {
+			continue
+		}
 		if _, inCat := cat.Apps[aid]; !inCat {
 			continue
 		}
@@ -218,5 +234,16 @@ func EnabledIDs(st *State, cat *Catalog) (map[string]bool, error) {
 			out[aid] = true
 		}
 	}
+	for _, aid := range OnUnlessSaid {
+		_, inCat := cat.Apps[aid]
+		if _, said := st.Apps.Get(aid); inCat && !said {
+			out[aid] = true
+		}
+	}
 	return out, nil
 }
+
+// OnUnlessSaid mirrors ON_UNLESS_SAID: apps an office runs unless its state says otherwise — «מכולות»
+// (DGO-1723), the engine every office's own containers run on already. An office that names it is read as
+// written.
+var OnUnlessSaid = []string{"containers"}

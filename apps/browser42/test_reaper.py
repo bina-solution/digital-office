@@ -1,6 +1,7 @@
 import importlib.util
 import json
 import tempfile
+import types
 import unittest
 from pathlib import Path
 from unittest.mock import patch
@@ -96,6 +97,74 @@ class ReaperLaneReconciliationTests(unittest.TestCase):
             MODULE.reconcile_lanes(set())
             MODULE.reconcile_lanes(set())
         self.assertEqual(closed, ["done"])
+
+
+class SavedTabsTests(unittest.TestCase):
+    """The tabs a sleep writes down (DGO-1336): a sign-in's state or one-time code never reaches the volume."""
+
+    def test_a_sign_in_tab_is_saved_by_host_and_path_and_every_other_tab_whole(self):
+        pages = [types.SimpleNamespace(url=u) for u in (
+            "https://accounts.google.com/o/oauth2/v2/auth?client_id=x&state=desktop:u.n",
+            "https://claude.ai/login/popup-google-auth?code=4/abc&scope=email",
+            "https://claude.com/cai/login/app-google-auth?open_in_browser=1&hop_nonce=n",
+            "https://docs.example/guide?page=2", "about:blank", "https://docs.example/guide?page=2")]
+        browser = types.SimpleNamespace(contexts=[types.SimpleNamespace(pages=pages)])
+        with tempfile.TemporaryDirectory() as tmp, patch.object(MODULE, "LAST_TABS", Path(tmp) / "last-tabs.json"):
+            self.assertEqual(MODULE.save_tabs(browser), 4)
+            saved = json.loads((Path(tmp) / "last-tabs.json").read_text())["urls"]
+        self.assertEqual(saved, ["https://accounts.google.com/o/oauth2/v2/auth", "https://claude.ai/login/popup-google-auth",
+                                 "https://claude.com/cai/login/app-google-auth", "https://docs.example/guide?page=2"])
+        self.assertNotRegex(json.dumps(saved), r"code=|state=|hop_nonce=")
+
+
+class SurvivingTests(unittest.TestCase):
+    """What failed on 2026-11-06 and cost three days (the office browser's own item).
+
+    The reaper's driver grew into its container's ceiling and was killed; the python half then sat
+    on a call that never returned, wrote no tab list, and every other playwright caller hung 30 s.
+    These are the parts that make that impossible to repeat silently."""
+
+    def test_an_empty_set_never_overwrites_the_saved_tabs(self):
+        """A browser that has just started holds nothing but its own new tab. Writing that over the
+        list is how six tab addresses were lost at 06:01:48 on 2026-11-09."""
+        browser = types.SimpleNamespace(contexts=[types.SimpleNamespace(
+            pages=[types.SimpleNamespace(url="chrome://newtab/"), types.SimpleNamespace(url="about:blank")])])
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "last-tabs.json"
+            path.write_text(json.dumps({"saved_at": 1, "urls": ["https://example.com/kept"]}))
+            with patch.object(MODULE, "LAST_TABS", path):
+                self.assertEqual(MODULE.save_tabs(browser), 0)
+            self.assertEqual(json.loads(path.read_text())["urls"], ["https://example.com/kept"])
+
+    def test_a_tab_a_restore_could_not_open_stays_in_the_list(self):
+        """A restore that fails on one address must not lose it: `goto` may time out with the tab
+        open (kept, and counted) or with no tab at all (kept in the file for next time)."""
+        opened = []
+
+        class Context:
+            def new_page(self):
+                if len(opened) == 1:
+                    raise RuntimeError("no tab for this one")
+                page = types.SimpleNamespace(url="about:blank", goto=lambda u, **k: opened.append(u))
+                return page
+
+        browser = types.SimpleNamespace(contexts=[types.SimpleNamespace(pages=[], new_page=None)], pages=[])
+        browser.contexts[0].new_page = Context().new_page
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "last-tabs.json"
+            path.write_text(json.dumps({"saved_at": 1, "urls": ["https://one.example/", "https://two.example/"]}))
+            with patch.object(MODULE, "LAST_TABS", path):
+                self.assertEqual(MODULE.restore_tabs(browser), 1)
+            self.assertEqual(json.loads(path.read_text())["urls"], ["https://two.example/"])
+
+    def test_the_watchdog_clock_is_armed_only_while_driver_work_runs(self):
+        """A sweep in flight past SWEEP_TIMEOUT is a dead driver; the idle-sleep wait must never look
+        like one (that wait is hours long and legitimate)."""
+        MODULE._SWEEPING["since"] = 0.0
+        seen = {}
+        MODULE._under_deadline(lambda: seen.update(since=MODULE._SWEEPING["since"]))
+        self.assertEqual(MODULE._SWEEPING["since"], 0.0)
+        self.assertGreater(seen["since"], 0.0)
 
 
 if __name__ == "__main__":

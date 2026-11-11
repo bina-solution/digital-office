@@ -1,23 +1,24 @@
-// apps/bina-claude/adapter/gate.mjs — the terminal's front door: only the edge and the console get in.
+// apps/bina-claude/adapter/gate.mjs — the desktop app's front door: only the edge and the console get in.
 //
-// The terminal is a root shell with the engine's socket. ttyd's own check (--auth-header) asks only that
-// the identity header is PRESENT, and any container on traefik-network can send one it made up (the
-// second reader of DGO-1074; the forged-header finding in ai/context/dgo-security.md). So ttyd listens on
-// the container's loopback, and this door, on :7681, admits a connection only from an address that the
-// office's own DNS gives to the two hops a person's browser really comes through: traefik (the edge,
-// which carries the websocket) and the console (which proxies the page). A container cannot answer
-// from another container's address on the bridge; a header it can write, an address it cannot.
+// Run by bina-claude-desktop (Dockerfile.desktop, desktop/svc-bina-gate) in front of its stream, a screen
+// with the engine's socket behind it. An identity header proves nothing — any container on traefik-network
+// can send one it made up (the second reader of DGO-1074; the forged-header finding in
+// ai/context/dgo-security.md). So the stream listens on the container's loopback, and this door admits a
+// connection only from an address that the office's own DNS gives to the two hops a person's browser
+// really comes through: traefik (the edge, which carries the websocket) and the console (which proxies the
+// page). A container cannot answer from another container's address on the bridge; a header it can write,
+// an address it cannot. (Bina Claude has no terminal, DGO-1684. The `_TERMINAL_`/`_TTYD_` names below are the
+// ones the desktop image's run file sets today; the `_GATE_` names take over with its next build.)
 import http from "node:http";
 import net from "node:net";
 import dns from "node:dns/promises";
 
-const PORT = Number(process.env.BINA_CLAUDE_TERMINAL_PORT || 7681);
-const TTYD = Number(process.env.BINA_CLAUDE_TTYD_PORT || 7682);
+const PORT = Number(process.env.BINA_CLAUDE_GATE_PORT || process.env.BINA_CLAUDE_TERMINAL_PORT || 3000);
+const UPSTREAM = Number(process.env.BINA_CLAUDE_GATE_UPSTREAM_PORT || process.env.BINA_CLAUDE_TTYD_PORT || 3100);
 // …and the link proxy (`dgo-net`, whose namespace dgo-link runs in): a LINKED office's console reaches
 // this office's tile through it, after the consuming office's own edge has signed the person in — the
-// owner opening the HP's Claude from vps1 (DGO-1074). It strips every identity header on the way, so the
-// terminal (ttyd -H) stays this office's own; the desktop stream needs none.
-const PEERS = (process.env.BINA_CLAUDE_TERMINAL_PEERS ||
+// owner opening the HP's Claude from vps1 (DGO-1074). It strips every identity header on the way.
+const PEERS = (process.env.BINA_CLAUDE_GATE_PEERS || process.env.BINA_CLAUDE_TERMINAL_PEERS ||
   `console traefik-deployment traefik-${process.env.DEPLOYMENT_NAME || "bina-deployment"} dgo-net`).split(/\s+/).filter(Boolean);
 
 // The peers' addresses, re-asked every 10 s (a recreated console's old address is admitted at most that
@@ -58,7 +59,7 @@ const server = http.createServer(async (req, res) => {
     res.writeHead(403, { "content-type": "text/plain" });
     return res.end("this opens through the office console only\n");
   }
-  const up = http.request({ host: "127.0.0.1", port: TTYD, method: req.method, path: req.url, headers: req.headers }, (r) => {
+  const up = http.request({ host: "127.0.0.1", port: UPSTREAM, method: req.method, path: req.url, headers: req.headers }, (r) => {
     res.writeHead(r.statusCode, r.headers);
     r.pipe(res);
   });
@@ -69,7 +70,7 @@ const server = http.createServer(async (req, res) => {
 server.on("upgrade", async (req, sock, head) => {
   sock.on("error", () => sock.destroy());
   if (!(await admitted(sock))) { sock.end("HTTP/1.1 403 Forbidden\r\nconnection: close\r\n\r\n"); return; }
-  const up = net.connect(TTYD, "127.0.0.1", () => {
+  const up = net.connect(UPSTREAM, "127.0.0.1", () => {
     let lines = `${req.method} ${req.url} HTTP/1.1\r\n`;
     for (let i = 0; i < req.rawHeaders.length; i += 2) lines += `${req.rawHeaders[i]}: ${req.rawHeaders[i + 1]}\r\n`;
     up.write(lines + "\r\n");
@@ -80,4 +81,4 @@ server.on("upgrade", async (req, sock, head) => {
   up.on("error", drop); sock.on("error", drop);
 });
 
-server.listen(PORT, "0.0.0.0", () => console.log(`[bina-claude] gate on :${PORT} → ttyd 127.0.0.1:${TTYD} · peers: ${PEERS.join(" ")}`));
+server.listen(PORT, "0.0.0.0", () => console.log(`[bina-claude] gate on :${PORT} → 127.0.0.1:${UPSTREAM} · peers: ${PEERS.join(" ")}`));

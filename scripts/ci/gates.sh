@@ -146,11 +146,82 @@ GATES=(
   # found an OpenSSH private key in ai/context/, its public half still trusted on the Dell (DGO-1223).
   # The export's own definition of a secret, over every tracked text file — ~35 s for 4,300 files.
   tracked-secret-lint       # G92  no tracked file carries a private key or a provider's token
+  # ── Every install that copies the template ran on its secrets: the offices shared their database
+  # passwords and vault key with each other and with whoever holds the template (DGO-1220). The template
+  # carries them empty now and scripts/env-secrets.py makes each one; this keeps it so.
+  env-template-secret-lint  # G93  the template carries no secret; the generator's lists name every secret key
+  # ── What root writes in an office checkout stays its owner's (DGO-1324): a tree with one owner (CI, a fresh
+  # clone) passes by construction, so here it proves the gate runs and its self-test can fail; on an office
+  # it is the measure.
+  checkout-owner-lint       # G94  the checkout's owner can write every path a session writes
+  # ── The owner's links (DGO-1433): eleven forms built by hand in seven places, none opened past the sign-in —
+  # `/a/bina-claude.hp-laptop/` answered unknown_app on his phone twice. One form now (`<hub console>/go/<ref>`)
+  # and one builder (`bbox console link`); this keeps a new hand-built one out. Static, office-free, ~2 s.
+  office-link-lint          # G95  a link a person is given is built by the one builder, never by hand
+  # ── The gate this whole class of defect asked for: a host that shows a PERSON a screen must not
+  # declare itself `auth: none`. n8n did exactly that with hand-written labels that carried no
+  # middleware, so its editor, its own sign-in page and /rest/settings answered the internet on every
+  # office — measured from outside 2026-11-09, two scanners loading the editor minutes after an edge
+  # restart (DGO-1594). Static, office-free, ~0.2 s; the three exemptions (authentik, chimney-services,
+  # glitchtip) are decisions with their reasons in the file, and one that stops matching FAILS.
+  # G96, not G95: dgo-stable already spent G95 on office-link-lint (DGO-1433), which landed first.
+  human-ui-auth-lint        # G96  a host that shows a person a screen is not open to the world
+  # ── An office that asks its vendors for news on every start (DGO-1596): the edge checked
+  # update.traefik.io and MinIO asked dl.min.io, both vendor defaults, neither answer used here.
+  # The image is a commit (G15); the two switches are read from the compose files alone.
+  # G99, not G96: on this branch G96 is human-ui-auth-lint (above) and G97/G98 are the webhook and
+  # error-reporter gates (DGO-1603, DGO-1574), which land in the same batch.
+  no-phone-home-lint        # G99  the edge and every MinIO start without asking a vendor for news
+  reporter-target-lint      # G98  an error reporter runs only when its target is configured
+  webhook-auth-lint         # G97  an active webhook the edge publishes authenticates or is closed to the internet
+  # ── Bina Claude is ONLY the official Claude Desktop app, with ONE login (DGO-1684): no terminal tile, no
+  # terminal in its build, no page that sends anyone to one. Static, office-free.
+  one-claude-lint           # G105 one Claude: the desktop app's one tile, no terminal
+  # ── A tile opens a screen, never an API (EXU-21, Exampleu 2026-11-09: «מודלים מקומיים» showed only «Ollama is
+  # running»). Asked through THIS checkout's console, as a browser comes in; no such console = nothing to ask.
+  # Known to fail on an office whose Ollama tile has no screen yet (EXU-21's screen waits on the owner's pick).
+  tile-screen-lint          # G106 every framed tile answers a page
+  # ── The side menu stands in the component's grid (`.appgrid`), sized by it alone (DGO-1591, the owner's product
+  # review: «חצי תפריט … לא נפתח, לא נסגר»). Static, office-free.
+  menu-host-lint            # G107 the menu's column is the component's, never an app's own
+  # ── A wrapped official app (app.json `wraps`) keeps the four channels: screen, CLI, API, event stream
+  # (DGO-1266, cli-502). Static, office-free.
+  wrapped-app-lint          # G108 a wrap is an app of the office, not a remote desktop
+  # ── What a migration creates, a fresh office's INDOX schema creates too (DGO-235): LINK_CONNECTION (a
+  # column) and sync_item_reasons (a view) each lived in migrations only, so new offices broke. Static.
+  schema-migration-drift-lint # G109 every object and column a migration creates is in schema.sql
+  # ── A lifted file stays its original (DGO-320): an app never reaches into another, so a generic engine
+  # (webengine.py, browser_session.py) is lifted with a «Lifted from <path>» header; a fix in one copy is drift. Static.
+  lifted-copy-lint          # G110 every lifted copy is its original, apart from its declared names
+  # ── A closed cell of the app standard stays closed (DGO-1047): measure.py --check, from source, with no
+  # .generated/ needed (the view counts it skips decide no cell). Prints the apps it held.
+  app-standard-lint         # G114 the app standard's inventory: no cell that was met is lost
+  # ── A variable an office's compose may pass EMPTY is read as unset (DGO-1797; the MacBook's link app crash-looped
+  # 36 minutes on `float("")`, 2026-11-10). Static: the manifest's compose and the app's own code.
+  empty-env-lint            # G115 `NAME=${NAME:-}` is read `getenv(NAME) or default`, never with a default «» defeats
+  # ── An office says which routes it serves with no sign-in (DGO-1177): platform.state.yaml `public:` against every
+  # auth:none route of the apps it runs. Stage 1 warns (exit 0) and fails only on a broken declaration.
+  public-route-lint         # G116 every route an office serves open is one it says is public
+  # ── An app's operations, declared once (DGO-1244), each with its faces (DGO-1246): a verb with its hook file, a
+  # screen action. Stage 1 warns (exit 0) with the counts; --strict is the next stage.
+  ops-faces-lint            # G117 every op an app declares has a verb with its hook, and a screen action
+  # ── From hp-dgo (DGO-1393, DGO-1619, DGO-1642), taken by the release (DGO-969). G100 and G101 kept the numbers
+  # hp-dgo gave them, free here; hp-dgo's G99 and G102 were spent on this line (no-phone-home-lint, app-coupling-lint),
+  # so those two are G111 and G112 now.
+  log-rotation-lint         # G111 no container's log is unbounded (the compiler fills the gap)
+  blueprint-tmp-test        # G100 a killed run sweeps its n8n-bp-* extraction dir
+  gates-marker-lint         # G101 the gates' trigger: a trailer, not a substring
+  # ── The office's vault is what an agent and a person read FIRST in a session, so a document that
+  # reaches it unseen is a leak (a client's vault carrying the business's own herd) and one that
+  # silently fails to reach it is a gap nobody notices. Declared in apps/obsidian/vault.yaml, checked
+  # by name: every ai/context document is published or excluded, each exclusion with a reason
+  # (DGO-1642). Static, office-free, ~0.1 s.
+  vault-sources-lint        # G112 every ai/context document is published to the vault or excluded by name
 )
 
 #: Gates that also ship a --self-test. Proving a gate CAN fail is part of running it: a gate only
 #: ever observed passing has not been tested (GATES.md, "Adding a gate", step 3).
-SELF_TESTED=(image-pin-lint capability-use-lint stalled-pagination-lint unread-error-lint undefined-name-lint desktop-windows-lint palette-lint embed-coverage-lint embed-route-lint route-claim-lint screen-words-lint registry-drift-lint raw-exception-lint issue-file-lint manifest-lint layer0-lint engine-bypass-lint state-writer-lint legacy-ref-lint browser42-site-neutrality-lint paginated-list-lint source-id-lint dangling-workflow-ref-lint trigger-schema-drift-lint fixture-live-key-lint switch-fallback-lint dead-activation-lint n8n-loop-order-lint drive-connection-lint app-tag-lint noop-success-lint dropped-signal-lint node-credential-lint swallowed-subcall-lint fixture-delete-scope-lint credential-blank-lint plane-tests-lint compose-pin-lint endpoint-credential-lint open-destructive-webhook-lint identity-header-lint exposure-lint link-write-guard-lint counted-plural-lint pinned-credential-lint heredoc-substitution-lint cpu-budget-lint tracked-secret-lint)
+SELF_TESTED=(image-pin-lint capability-use-lint stalled-pagination-lint unread-error-lint undefined-name-lint desktop-windows-lint palette-lint embed-coverage-lint embed-route-lint route-claim-lint screen-words-lint registry-drift-lint raw-exception-lint issue-file-lint manifest-lint layer0-lint engine-bypass-lint state-writer-lint legacy-ref-lint browser42-site-neutrality-lint paginated-list-lint source-id-lint dangling-workflow-ref-lint trigger-schema-drift-lint fixture-live-key-lint switch-fallback-lint dead-activation-lint n8n-loop-order-lint drive-connection-lint app-tag-lint noop-success-lint dropped-signal-lint node-credential-lint swallowed-subcall-lint fixture-delete-scope-lint credential-blank-lint plane-tests-lint compose-pin-lint endpoint-credential-lint open-destructive-webhook-lint identity-header-lint exposure-lint link-write-guard-lint counted-plural-lint pinned-credential-lint heredoc-substitution-lint cpu-budget-lint tracked-secret-lint env-template-secret-lint checkout-owner-lint office-link-lint human-ui-auth-lint no-phone-home-lint reporter-target-lint webhook-auth-lint one-claude-lint tile-screen-lint menu-host-lint wrapped-app-lint schema-migration-drift-lint lifted-copy-lint app-standard-lint empty-env-lint log-rotation-lint public-route-lint ops-faces-lint)
 
 #: Gates CI runs with --strict: the end state, not the scoreboard a migration reads. This runner
 #: called every gate bare, so for as long as they had findings G9 (layering) and G25 (capability

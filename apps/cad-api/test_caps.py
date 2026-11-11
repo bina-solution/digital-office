@@ -34,7 +34,7 @@ def test_sheets_charged_by_metal_as_the_services_app_does():
     assert g["cost_cents"] == sum(x["cents"] for x in g["lines"])
     cu = caps.quote("pan", {"params": {"L": 30, "W": 24}, "material": "copper"})["cost"]
     assert cu["sheet_charge"] == "whole" and cu["cost_cents"] == cu["cost_whole_sheets_cents"]
-    old = caps.quote("pan", {"params": {"L": 30, "W": 24}}, costing.load("fpg-2026-11-01"))["cost"]
+    old = caps.quote("pan", {"params": {"L": 30, "W": 24}}, costing.load("exf-2026-11-01"))["cost"]
     assert old["sheet_charge"] == "whole"                                         # a dated list never changes
     forced = caps.quote("pan", {"params": {"L": 30, "W": 24}}, {**costing.load(), "sheet_charge": "whole"})["cost"]
     assert forced["sheet_charge"] == "whole"
@@ -69,14 +69,14 @@ def test_a_real_job_record_prices_end_to_end():
     assert ("top flashing", 35.5, 23.5) in blanks(q)                  # Alan's T-top L + 5
 
 
-def test_the_fpg_turtle_job_fg_1007():
+def test_the_exf_turtle_job_fg_1007():
     # FG-1007 (the owners' Telegram, 2026-11-01): Turtle Top 30 × 20, 3 in skirt, standard 18 in legs
     q = caps.quote("turtle", {"params": {"L": 30, "W": 20, "skirt": 3, "legs": 18}, "material": "prepainted"})
     assert q["bom"]["sheets"] == 1 and ("bottom flashing", 37, 27) in blanks(q)
 
 
 def test_the_cap_is_held_down_and_its_anchors_are_priced():
-    # FPG-604: the FreeCAD library's rule — ≤ 12 in apart, two a side at least: 14 at 30 × 24
+    # EXF-604: the FreeCAD library's rule — ≤ 12 in apart, two a side at least: 14 at 30 × 24
     q = caps.quote("standard", {"params": {"L": 30, "W": 24, "base": "masonry"}})
     assert (q["bom"]["tapcons"], q["bom"]["screws"]) == (14, 0) and "Tapcons" in q["bom"]["anchors_why"]
     line = next(x for x in q["cost"]["lines"] if x["item"].startswith("Tapcon"))
@@ -84,13 +84,13 @@ def test_the_cap_is_held_down_and_its_anchors_are_priced():
     f = caps.quote("chase", {"params": {"L": 48, "W": 36}})               # a chase: screws into the wood, not Tapcons
     assert (f["bom"]["tapcons"], f["bom"]["screws"]) == (0, 2 * 5 + 2 * 4)
     assert any(x["item"].startswith("#10") for x in f["cost"]["lines"])
-    assert q["cost"]["price_list"] == "fpg-2026-11-02"          # the anchors stay priced in the list after it
+    assert q["cost"]["price_list"] == "exf-2026-11-02"          # the anchors stay priced in the list after it
 
 
 def test_a_price_list_from_before_the_anchors_prices_as_it_did():
     import caps.cost as costing
-    old = caps.quote("standard", {"params": {"L": 30, "W": 24}}, costing.load("fpg-2026-10-30"))["cost"]
-    assert old["price_list"] == "fpg-2026-10-30" and not any(x["item"].startswith(("Tapcon", "#10")) for x in old["lines"])
+    old = caps.quote("standard", {"params": {"L": 30, "W": 24}}, costing.load("exf-2026-10-30"))["cost"]
+    assert old["price_list"] == "exf-2026-10-30" and not any(x["item"].startswith(("Tapcon", "#10")) for x in old["lines"])
 
 
 def test_copper_that_does_not_fit_its_sheet_is_an_error():

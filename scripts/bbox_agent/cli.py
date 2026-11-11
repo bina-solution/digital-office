@@ -11,7 +11,8 @@ Everything the office UI can do with a session is a verb here, with the same wor
   bbox agent cancel <id> · rename <id> <title> · fork <id> [--at-seq N]
   bbox agent cmd <id> "/command …" · commands <id>          the harness's slash commands
   bbox agent goal <id> [get|set <objective> [--rounds N]|pause|resume|clear|complete]
-  bbox agent model <id> [--set provider/model[@effort]] · models · presets · preset <id> <name>
+  bbox agent model <id> [--set provider/model[@effort] [--default]] · models · presets · preset <id> <name>
+      --set is for that session; the office's default model (new sessions, the seder) stays, unless --default
   bbox agent upload <id> <file> · subagents <id> · search <query>
   bbox agent login [--force] · whoami · doctor    the connection, and a hop-by-hop trace with timings
 
@@ -21,9 +22,12 @@ drives the other exactly as the local one does:
   bbox agent --office macbook send <id> "…"       …every verb below, with the same semantics
   The office must appear in this office's `remote:`/`serve:` block (`platform.state.yaml`, written by
   dgo-extend on converge) and the credential comes from the vault; `--url`/`--token` still win.
+  An office with NO link here, one of this office's computers (`bbox computers ssh list`): the same
+  command runs on its machine over ssh, in its own checkout, with its own token (DGO-1684):
+  bbox agent --office exampleu --app bina-claude list   Exampleu's Claude, until its link exists
 
 ANOTHER agent app of this office, by id (DGO-1074) — every verb, the same contract:
-  bbox agent --app bina-claude list               Claude Code's sessions (apps/bina-claude)
+  bbox agent --app bina-claude list               the Claude desktop app's sessions (apps/bina-claude)
   bbox agent --app bina-claude new -F "…"         a question to Claude, followed to the end of the turn
 
 The agent's work items live in the office's project tool (Plane, apps/project-pln) and are his:
@@ -52,7 +56,8 @@ import time
 from pathlib import Path
 from typing import Optional
 
-from .client import CONFIG_PATH, REPO, AgentError, Client, provider
+from .client import CONFIG_PATH, REPO, AgentError, Client, provider, remote_provider
+from .over_computer import run_there
 from .render import TTY, Renderer, bold, cyan, dim, fmt_dur, green, one_line, red, yellow
 
 
@@ -187,7 +192,10 @@ def cmd_new(c: Client, a) -> int:
     r = c.call("POST", "/v1/sessions", body)
     sid = r["id"]
     files = _upload_all(c, sid, a.file)
-    c.call("POST", f"/v1/sessions/{sid}/messages", {"text": text, "files": files})
+    sent = c.call("POST", f"/v1/sessions/{sid}/messages", {"text": text, "files": files})
+    # A provider whose sessions only exist once they have a message (bina-claude: the desktop app's
+    # sessions, DGO-1298) answers the first one with the session's real id.
+    sid = (sent.get("id") if isinstance(sent, dict) else None) or sid
     if a.json:
         jout({"id": sid, "preset": r.get("preset")})
     else:
@@ -424,14 +432,46 @@ def cmd_model(c: Client, a) -> int:
         if "/" not in spec:
             raise AgentError("--set takes provider/model[@effort]", 2)
         prov, model = spec.split("/", 1)
-        r = c.call("POST", f"/v1/sessions/{sid}/model", {"provider": prov, "model": model, **({"effort": effort} if effort else {})})
-        out(f"{sid}: {r['provider']}/{r['model']}{'@' + r['effort'] if r.get('effort') else ''}"); return 0
+        # The harness's selection also rewrites the office's default model; a current adapter puts it back unless
+        # --default, and says so. An older adapter says nothing, so the default is read before and after (DGO-1731).
+        was = _office_default(c)
+        r = c.call("POST", f"/v1/sessions/{sid}/model", {"provider": prov, "model": model,
+                                                          **({"effort": effort} if effort else {}),
+                                                          **({"default": True} if a.default else {})})
+        out(f"{sid}: {r['provider']}/{r['model']}{'@' + r['effort'] if r.get('effort') else ''}")
+        said, why, od = r.get("default"), r.get("why"), r.get("office_default")
+        now = f"{od.get('provider')}/{od.get('model')}" if isinstance(od, dict) and od.get("provider") else _office_default(c)
+        if said == "kept":
+            out(dim(f"  the office's default model stays {now or was or '(none)'}"))
+        elif said == "restored":
+            out(dim(f"  the office's default model stays {now or was or '(none)'} (the harness moved it to this selection; put back)"))
+        elif said == "changed" and why == "asked":
+            out(f"  the office's default model is now {now or '(unread)'} too (--default)")
+        elif said == "changed":
+            out(yellow(f"  the office's default model is {now or '(unread)'} (was {was or '(unread)'}): {why}"))
+        elif said == "unknown":
+            out(yellow(f"  the office's default model could not be checked: {why}"))
+        elif was is not None and now is not None and now != was:
+            out(yellow(f"  this office's agent door is older: the office's default model moved too, {was} → {now} "
+                       "(new sessions start on it; take dgo-stable there)"))
+        return 0
+    if a.default:
+        raise AgentError("--default goes with --set provider/model[@effort]", 2)
     s = c.session(sid, fresh=True)
     m = s.get("model") or {}
     if a.json:
         jout(m); return 0
     out(f"{m.get('provider')}/{m.get('model')}{'@' + m['reasoningEffort'] if m.get('reasoningEffort') else ''}" if m else dim("default model"))
     return 0
+
+
+def _office_default(c: Client):
+    """The office's default model as provider/model, or None when it cannot be read."""
+    try:
+        d = (c.call("GET", "/v1/models") or {}).get("default") or {}
+    except AgentError:
+        return None
+    return f"{d.get('provider')}/{d.get('model')}" if d.get("provider") and d.get("model") else None
 
 
 def cmd_models(c: Client, a) -> int:
@@ -447,6 +487,31 @@ def cmd_models(c: Client, a) -> int:
             out(f"  {g.get('id')}/{m['id']:<32} {dim(m.get('name', ''))}{dim('  efforts: ' + efforts) if efforts else ''}")
     for f in r.get("failures") or []:
         out(red(f"  ✗ {f.get('id')}: {f.get('message')}"))
+    return 0
+
+
+def cmd_timeline(c: Client, a) -> int:
+    """The agent's spans as «כל מקביל» draws them (GET /v1/timeline/spans, DGO-1250): the last --hours, the
+    newest --tail of them, one line each — its state, how long, its row and its name."""
+    # the route answers the newest `limit` (it sorts by start): in text mode the --tail shown is all it asks for
+    limit = max(1, a.limit if a.json else min(a.limit, a.tail))
+    q = f"?limit={limit}" + (f"&hours={a.hours}" if a.hours else "")
+    r = c.call("GET", "/v1/timeline/spans" + q)
+    if a.json:
+        jout(r); return 0
+    spans = (r.get("spans") if isinstance(r, dict) else r) or []
+    for s in spans[-max(1, a.tail):]:
+        if s.get("e") is None:
+            took = "running"
+        else:
+            try:
+                took = fmt_dur((float(s["e"]) - float(s.get("s") or 0)) / 1000)
+            except (TypeError, ValueError):
+                took = "?"
+        name = s.get("title") or s.get("name") or s.get("label") or s.get("id") or ""
+        out(f"  {str(s.get('status') or ''):<9} {took:>8}  {dim(str(s.get('svc') or ''))}  {name}")
+    total = r.get("total") if isinstance(r, dict) else None
+    out(dim(f"  {len(spans)} span(s) shown" + (f" of {total}" if total is not None else "")))
     return 0
 
 
@@ -683,9 +748,14 @@ def build_parser() -> argparse.ArgumentParser:
     p = sub.add_parser("cmd", aliases=["slash"], help="run a slash command in a session"); sid(p); p.add_argument("-f", "--file", action="append", default=[]); p.add_argument("line", nargs="+"); p.set_defaults(fn=cmd_cmd)
     p = sub.add_parser("commands", help="the slash commands a session offers"); sid(p); p.set_defaults(fn=cmd_commands)
     p = sub.add_parser("goal", help="a session's goal"); sid(p); p.add_argument("action", nargs="?", choices=["get", "set", "pause", "resume", "clear", "complete"]); p.add_argument("--rounds", type=int); p.add_argument("objective", nargs="*"); p.set_defaults(fn=cmd_goal)
-    p = sub.add_parser("model", help="a session's model (--set provider/model[@effort])"); sid(p); p.add_argument("--set"); p.set_defaults(fn=cmd_model)
+    p = sub.add_parser("model", help="a session's model (--set provider/model[@effort]; --default makes it the office's too)"); sid(p)
+    p.add_argument("--set"); p.add_argument("--default", action="store_true", help="with --set: the office's default model too"); p.set_defaults(fn=cmd_model)
     p = sub.add_parser("models", help="the model catalog"); p.set_defaults(fn=cmd_models)
     p = sub.add_parser("presets", help="the agent presets"); p.set_defaults(fn=cmd_presets)
+    p = sub.add_parser("timeline", help="the agent's spans, as «כל מקביל» draws them (DGO-1250)")
+    p.add_argument("--hours", type=float, default=0, help="the last H hours (0: the route's own default window)")
+    p.add_argument("--limit", type=int, default=20000, help="with --json: how many spans to ask for")
+    p.add_argument("--tail", type=int, default=30); p.set_defaults(fn=cmd_timeline)
     p = sub.add_parser("preset", help="switch a session's agent preset"); sid(p); p.add_argument("preset"); p.set_defaults(fn=cmd_preset)
     p = sub.add_parser("upload", help="upload a file into a session (returns a receipt)"); sid(p); p.add_argument("file"); p.set_defaults(fn=cmd_upload)
     p = sub.add_parser("subagents", help="a session's subagents"); sid(p); p.set_defaults(fn=cmd_subagents)
@@ -706,6 +776,7 @@ def build_parser() -> argparse.ArgumentParser:
 def main(argv=None) -> int:
     ap = build_parser()
     argv = list(sys.argv[1:] if argv is None else argv)
+    typed = list(argv)
     # `bbox agent azaria tasks list`: the agent's name first selects whose tasks these are
     agent = DEFAULT_AGENT
     if argv and argv[0].lower() in AGENT_NAMES:
@@ -716,6 +787,11 @@ def main(argv=None) -> int:
     if getattr(a, "agent", None) in (None, DEFAULT_AGENT):
         a.agent = agent
     try:
+        # An office with NO link to this one at all (a client's server before its pair exists): the same command
+        # on its own machine, through this office's Computers app (over_computer.py, DGO-1684). A linked office
+        # keeps its link — and its refusal, when it serves no such app — and an explicit `--url` still wins.
+        if a.office and not a.url and not remote_provider(a.office) and not remote_provider(a.office, a.app or ""):
+            return run_there(a.office, typed)
         c = Client(url=a.url, token=a.token, timeout=a.timeout or 240.0, office=a.office or "", app=a.app or "")
         c.quiet = a.quiet
         return a.fn(c, a)

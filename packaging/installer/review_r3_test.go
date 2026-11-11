@@ -12,8 +12,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/solomonBoltin/deployment-hacohen/packaging/trust"
-	"github.com/solomonBoltin/deployment-hacohen/packaging/trust/trusttest"
+	"github.com/bina-solution/digital-office/packaging/trust"
+	"github.com/bina-solution/digital-office/packaging/trust/trusttest"
 )
 
 // R3-1 — "a key that list adds" is free of the revoked key's floor, and a RE-added key is added too.

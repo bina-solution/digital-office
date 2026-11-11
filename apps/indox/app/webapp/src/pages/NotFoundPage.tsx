@@ -1,6 +1,7 @@
 import { Link, useLocation } from 'react-router-dom';
 import { useContext } from 'react';
 import { InstancesContext } from '../instancesContext';
+import { defaultInstanceId } from '../api';
 
 /** The 404 route. Every unknown path used to render an EMPTY outlet under the tab strip — a screen
  *  with no words on it, indistinguishable from a page that was still loading. This one names the
@@ -8,7 +9,7 @@ import { InstancesContext } from '../instancesContext';
 export default function NotFoundPage() {
   const { pathname } = useLocation();
   const { accounts } = useContext(InstancesContext);
-  const inst = accounts.find((a) => a.enabled !== false)?.id;
+  const inst = defaultInstanceId(accounts);
   const home = inst ? `/i/${encodeURIComponent(inst)}/dashboard` : '/';
   return (
     <div className="callout" role="status" style={{ marginTop: 18 }}>

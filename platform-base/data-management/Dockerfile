@@ -49,7 +49,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 # crashes on startup. Caught 2026-08-24 with a build already in flight: plan.py had been added
 # and imported, this line had not been updated, and the resulting image would have failed to
 # boot the moment it was deployed.
-COPY app.py inventory.py plan.py pull.py coverage_report.py ./
+COPY app.py inventory.py plan.py pull.py coverage_report.py restic_store.py backup_run.py link_proof.py ./
 COPY static/ ./static/
 
 EXPOSE 8080

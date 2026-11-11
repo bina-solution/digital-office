@@ -656,6 +656,9 @@ func main() {
 	c := NewCarrier(filepath.Join(*dir, "carry.json"), filepath.Join(*dir, "wg-private.key"), *statePath)
 	c.app = appURL
 	log.Printf("started; plan %s", c.planPath)
+	// A carrier left in a namespace dgo-net no longer holds ends, so its restart joins the live one (netns.go).
+	go watchNamespace(ctx, &stranded{start: time.Now(), grace: 30 * time.Second, after: 20 * time.Second},
+		5*time.Second, lookRoutes, os.Exit)
 	c.Run(ctx)
 	c.writeState()
 	log.Print("stopped")

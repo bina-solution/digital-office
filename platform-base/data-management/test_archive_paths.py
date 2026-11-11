@@ -55,6 +55,12 @@ def stand_ins() -> bool:
         def mount(self, *args, **kwargs):
             pass
 
+        def include_router(self, *args, **kwargs):   # restic_store's router (DGO-1513), included by app.py
+            pass
+
+    class APIRouter(App):
+        pass
+
     class HTTPException(Exception):
         def __init__(self, status_code, detail=None, **kwargs):
             super().__init__(detail)
@@ -66,15 +72,23 @@ def stand_ins() -> bool:
 
     fastapi = types.ModuleType("fastapi")
     fastapi.FastAPI, fastapi.HTTPException, fastapi.Query = App, HTTPException, lambda *a, **k: None
+    # what restic_store.py (imported by app.py since DGO-1513/1523) asks the framework for
+    fastapi.APIRouter, fastapi.Request = APIRouter, object
+    concurrency = types.ModuleType("fastapi.concurrency")
+
+    async def run_in_threadpool(fn, *args, **kwargs):
+        return fn(*args, **kwargs)
+    concurrency.run_in_threadpool = run_in_threadpool
     gzip = types.ModuleType("fastapi.middleware.gzip")
     gzip.GZipMiddleware = object
     responses = types.ModuleType("fastapi.responses")
     responses.FileResponse, responses.JSONResponse = FileResponse, dict
+    responses.Response, responses.StreamingResponse = dict, dict
     static = types.ModuleType("fastapi.staticfiles")
     static.StaticFiles = lambda *a, **k: None
     sys.modules.update({"fastapi": fastapi, "fastapi.middleware": types.ModuleType("fastapi.middleware"),
                         "fastapi.middleware.gzip": gzip, "fastapi.responses": responses,
-                        "fastapi.staticfiles": static})
+                        "fastapi.staticfiles": static, "fastapi.concurrency": concurrency})
     return True
 
 

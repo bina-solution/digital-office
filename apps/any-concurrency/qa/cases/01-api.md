@@ -1,6 +1,6 @@
 # QA — 01: REST API
 
-Base URL: `https://any-concurrency.hacohen.bina-solutions.co.il`
+Base URL: `https://any-concurrency.example.bina-solutions.co.il`
 
 ---
 

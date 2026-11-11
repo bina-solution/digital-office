@@ -103,14 +103,20 @@ ALLOWED: list[tuple[str, str, str, str]] = [
      "The zero-config guarantee: which instance a deployment that has selected nothing acts as. "
      "Every failure path here already returns None (no admin profile, no match), so a vault error "
      "and an absent default are the same answer to this question — 'nothing is selected'."),
-    ("apps/drive/bootstrap.py", "instance_for", "_err<-cx.vault_instances()",
+    # the two below moved with the office storage's engine (DGO-1500): apps/drive → apps/drive-local
+    ("apps/drive-local/bootstrap.py", "instance_for", "_err<-cx.vault_instances()",
      "Recovery path: re-finds a profile's instance by id, falling back to the vault's account_hint. "
      "An unreachable vault and an unknown instance both mean 'cannot resolve it right now', and the "
      "caller repairs rather than believes the row either way."),
-    ("apps/drive/app.py", "engine_profiles_list", "_err<-cx.vault_instances()",
+    ("apps/drive-local/engine.py", "engine_profiles_list", "_err<-cx.vault_instances()",
      "Admin LISTING screen for profiles; the instance id is an annotation on each row, not the "
      "subject. Same degrade-while-listing rule `list_instances` documents — a profile with an "
      "unresolved connection still has to appear, or it cannot be repaired from the UI."),
+    ("apps/assets/portfolio.py", "calendar", "[0]<-unit_state()",
+     "Not a diagnostic: unit_state returns (state, the lease that DECIDES it), and the calendar asks only "
+     "«is this unit vacant today?». A vacant unit has no deciding lease by construction (`return ... "
+     "(\"vacant\", None)`), so the second value is None whenever the test is true — nothing is dropped. "
+     "property_file, which shows the lease, unpacks and uses both (DGO-1539)."),
     # The n8n-layout-lint.py exemption was removed 2026-08-21: gates.sh's own comments record
     # that file as deleted on 2026-08-06, so the entry excused nothing and was itself the
     # "ALLOWED entry matches nothing" this gate was failing on.

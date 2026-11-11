@@ -1,0 +1,3 @@
+#!/usr/bin/env bash
+#: status — is Element's adapter up, and which Matrix account is this device signed in as: [--json]
+exec bash "$(dirname "${BASH_SOURCE[0]}")/../tools/verb" status "$@"

@@ -13,7 +13,7 @@ and pixel-diffing it against the real screenshots.
   Copies of both are in `reference/` for parity.
 
 ## Architecture of the mockup
-- One self-contained HTML file. `index.base.html` holds the design system (CSS vars, shell, router,
+- One self-contained HTML file. `tooling/index.html` holds the design system (CSS vars, shell, router,
   floating screen-navigator) with a `<!--TEMPLATES-->` marker.
 - Every screen is a `<section class="screen" data-screen="ID">…full viewport…</section>` in `frag/ID.html`.
 - `assemble.js` concatenates all frags into the marker → `dist.html` (the deliverable).

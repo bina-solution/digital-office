@@ -9,13 +9,18 @@
 # (Radeon R7 M265, GCN 1.0, 4 GiB): see apps/ollama/README.md.
 # The archive is streamed through zstd into tar, so it is never stored. On the way it is hashed and
 # checked against the release's own sha256sum.txt: a build of anything else fails.
-# The version is HERE and only here (compose passes no build arg), so `bbox` and CI build the same.
+# The version's DEFAULT is here and only here, so `bbox` and CI build the same. An office that needs another
+# declares it in its own .env (OLLAMA_VERSION — a model that needs a newer release, DGO-1819): compose passes that, or
+# an empty value, and an empty one means this default — never a second copy of the number in compose.
 FROM ubuntu:24.04 AS fetch
-ARG OLLAMA_VERSION=0.40.6
+ARG OLLAMA_VERSION=
+ARG OLLAMA_DEFAULT=0.40.6
 SHELL ["/bin/bash", "-euo", "pipefail", "-c"]
 RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates curl zstd \
  && rm -rf /var/lib/apt/lists/*
-RUN base="https://github.com/ollama/ollama/releases/download/v${OLLAMA_VERSION}" \
+RUN v="${OLLAMA_VERSION:-${OLLAMA_DEFAULT}}" \
+ && { [[ "${v}" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-rc[0-9]+)?$ ]] || { echo "OLLAMA_VERSION «${v}» is not a release number (0.40.15, 0.41.0-rc1)" >&2; exit 1; }; } \
+ && base="https://github.com/ollama/ollama/releases/download/v${v}" \
  && want="$(curl -fsSL "${base}/sha256sum.txt" | awk '$2 ~ /(^|\/)ollama-linux-amd64\.tar\.zst$/ {print $1}')" \
  && test -n "${want}" \
  && mkdir -p /out \

@@ -5,6 +5,7 @@
     "en": "Telegram TV"
   },
   "layer": 3,
+  "people": "admins",
   "kind": "service",
   "version": "0.1.0",
   "summary": {

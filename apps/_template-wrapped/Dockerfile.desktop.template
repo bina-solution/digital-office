@@ -1,0 +1,54 @@
+# <id>-desktop — <Vendor client> for Linux, streamed into the console with Selkies
+# (ai/context/wrapped-official-app.md «The screen»; the worked example is apps/bina-claude/Dockerfile.desktop).
+#
+# The base is linuxserver's Selkies image, PINNED BY DIGEST. No gate checks that a Dockerfile's FROM line is
+# pinned (G15 reads compose files only), so the pin is this line's own discipline: linuxserver publishes no
+# `latest` and breaks between versions, and a bump is a deliberate edit of this line.
+FROM ghcr.io/linuxserver/baseimage-selkies:<tag>@sha256:<digest>
+
+# The keyring and the session bus keep the client's sign-in (without an unlocked keyring it asks again on every
+# launch). Fonts that render Hebrew and emoji. node runs the front door (desktop/gate.mjs, below).
+RUN apt-get update && apt-get install -y --no-install-recommends \
+      ca-certificates curl gnupg dbus-x11 gnome-keyring libsecret-1-0 libsecret-tools \
+      fonts-noto-core fonts-noto-color-emoji culmus nodejs \
+ && rm -rf /var/lib/apt/lists/*
+
+# The vendor's OWN repository, its signing key checked against the fingerprint the VENDOR publishes, and
+# the vendor's package. Never a copied binary or a third-party build of it. `--no-install-recommends`: a
+# client's Recommends can pull what a container cannot run (say which, and why, here).
+RUN curl -fsSLo /usr/share/keyrings/<vendor>-archive-keyring.asc <VENDOR KEY URL> \
+ && gpg --show-keys --with-colons /usr/share/keyrings/<vendor>-archive-keyring.asc \
+      | grep -q '^fpr:::::::::<VENDOR KEY FINGERPRINT>:$' \
+ && echo "deb [signed-by=/usr/share/keyrings/<vendor>-archive-keyring.asc] <VENDOR APT URL> <suite> main" \
+      > /etc/apt/sources.list.d/<vendor>.list \
+ && apt-get update && apt-get install -y --no-install-recommends <vendor-package> \
+ && rm -rf /var/lib/apt/lists/* \
+ && command -v <vendor-binary>
+
+# What the session runs. openbox runs ~/.config/openbox/autostart, which linuxserver copies from
+# /defaults/autostart on the FIRST start only, and that copy stays in the volume. So the autostart only names
+# the launcher, and the launcher lives in the image: a new image changes what runs, even on a home that keeps
+# the first start's copy. The client's own updater is turned off in the launcher (desktop/autostart): the
+# image is the version, and an update is a rebuild.
+COPY desktop/autostart /usr/local/bin/<id>-desktop
+RUN chmod 755 /usr/local/bin/<id>-desktop \
+ && printf '/usr/local/bin/<id>-desktop\n' > /defaults/autostart
+
+# THE FRONT DOOR (wrapped-official-app.md «A front door»). The image's nginx listens on every interface, where
+# any container of traefik-network could reach a signed-in client. So nginx moves to the container's loopback
+# (CUSTOM_PORT=3100 in docker-compose.yml; init-nginx writes the port into this template), and gate.mjs takes
+# :3000 and admits the edge, the console and the link proxy only. The checks fail the build if linuxserver
+# changes the lines the sed edits.
+RUN sed -i -e 's/^\(\s*\)listen 3000 default_server;/\1listen 127.0.0.1:3000 default_server;/' \
+           -e 's/^\(\s*\)listen 3001 ssl;/\1listen 127.0.0.1:3001 ssl;/' \
+           -e '/listen \[::\]/d' /defaults/default.conf \
+ && grep -q 'listen 127.0.0.1:3000 default_server;' /defaults/default.conf \
+ && grep -q 'listen 127.0.0.1:3001 ssl;' /defaults/default.conf \
+ && ! grep -qE 'listen (\[::\]:)?300[01]' /defaults/default.conf
+COPY desktop/gate.mjs /opt/<id>/gate.mjs
+COPY desktop/svc-gate /etc/s6-overlay/s6-rc.d/svc-<id>-gate
+RUN echo longrun > /etc/s6-overlay/s6-rc.d/svc-<id>-gate/type \
+ && mkdir -p /etc/s6-overlay/s6-rc.d/svc-<id>-gate/dependencies.d \
+ && touch /etc/s6-overlay/s6-rc.d/svc-<id>-gate/dependencies.d/init-services \
+ && touch /etc/s6-overlay/s6-rc.d/user/contents.d/svc-<id>-gate \
+ && chmod 755 /etc/s6-overlay/s6-rc.d/svc-<id>-gate/run

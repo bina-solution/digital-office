@@ -1,0 +1,490 @@
+{
+ "watchlist": [
+  {
+   "id": "morning",
+   "names": [
+    "חשבונית ירוקה",
+    "מורנינג",
+    "מורנינג של חשבונית ירוקה",
+    "morning",
+    "Green Invoice",
+    "greeninvoice",
+    "morning by Green Invoice"
+   ],
+   "domains": [
+    "greeninvoice.co.il"
+   ],
+   "keywords": [
+    "חשבונית ירוקה",
+    "morning חשבוניות",
+    "TeamSystem morning",
+    "חשבוניות ישראל",
+    "מספר הקצאה"
+   ],
+   "news_pages": [
+    "https://www.greeninvoice.co.il/magazine/"
+   ]
+  },
+  {
+   "id": "monday-com",
+   "names": [
+    "monday.com",
+    "מאנדיי",
+    "mondaycom",
+    "monday work management",
+    "MNDY"
+   ],
+   "domains": [
+    "monday.com",
+    "ir.monday.com",
+    "support.monday.com"
+   ],
+   "keywords": [
+    "monday CRM",
+    "monday dev",
+    "monday service",
+    "monday Harmony",
+    "monday Frontier",
+    "monday AI agents",
+    "MNDY earnings"
+   ],
+   "news_pages": [
+    "https://ir.monday.com/news-and-events/news-releases/default.aspx",
+    "https://monday.com/blog"
+   ]
+  },
+  {
+   "id": "priority-software",
+   "names": [
+    "Priority Software",
+    "פריוריטי",
+    "פריוריטי תוכנה",
+    "Priority ERP",
+    "פריוריטי ERP"
+   ],
+   "domains": [
+    "priority-software.com"
+   ],
+   "keywords": [
+    "Priority Cloud ERP",
+    "aiERP",
+    "Optima PMS",
+    "Obol Priority",
+    "Blackstone Priority"
+   ],
+   "news_pages": [
+    "https://www.priority-software.com/news/",
+    "https://www.priority-software.com/blog/"
+   ]
+  },
+  {
+   "id": "tabit",
+   "names": [
+    "Tabit",
+    "טאביט",
+    "Tabit Technologies"
+   ],
+   "domains": [
+    "tabit.cloud"
+   ],
+   "keywords": [
+    "Tabit PAD",
+    "Tabit Pay",
+    "Tabit Order",
+    "Tabit Guest",
+    "Clover Reserve"
+   ],
+   "news_pages": [
+    "https://tabit.cloud/il/"
+   ]
+  },
+  {
+   "id": "beecomm",
+   "names": [
+    "Beecomm",
+    "ביקום",
+    "ביקום קופות",
+    "ביקום מערכות"
+   ],
+   "domains": [
+    "beecomm.com"
+   ],
+   "keywords": [
+    "ביקום קופת ענן",
+    "Beecomm POS",
+    "קופה למסעדות ביקום"
+   ],
+   "news_pages": []
+  },
+  {
+   "id": "nayax",
+   "names": [
+    "Nayax",
+    "נאייקס",
+    "נאיקס",
+    "Nayax Ltd",
+    "Nayax Israel"
+   ],
+   "domains": [
+    "nayax.com",
+    "ir.nayax.com"
+   ],
+   "keywords": [
+    "NYAX",
+    "Nayax IPS Group",
+    "Nayax Getnet",
+    "Nayax Allied Electronics",
+    "VPOS Media 5"
+   ],
+   "news_pages": [
+    "https://ir.nayax.com/news/default.aspx",
+    "https://www.nayax.com/news"
+   ]
+  },
+  {
+   "id": "tranzila",
+   "names": [
+    "Tranzila",
+    "טרנזילה",
+    "טרנזילה פייטק",
+    "Interspace",
+    "אינטרספייס",
+    "Interspace-Tranzila"
+   ],
+   "domains": [
+    "tranzila.com"
+   ],
+   "keywords": [
+    "מיכפל טרנזילה",
+    "Michpal Tranzila",
+    "סליקה מהנייד טרנזילה"
+   ],
+   "news_pages": [
+    "https://www.tranzila.com/announcement.html"
+   ]
+  },
+  {
+   "id": "cardcom",
+   "names": [
+    "Cardcom",
+    "קארדקום",
+    "קארדקום סליקה",
+    "Cardcom Acquiring"
+   ],
+   "domains": [
+    "cardcom.solutions"
+   ],
+   "keywords": [
+    "קארדקום ארנק",
+    "קארדקום דיינרס",
+    "אודי בורנשטיין קארדקום"
+   ],
+   "news_pages": [
+    "https://www.cardcom.solutions/media/",
+    "https://www.cardcom.solutions/blog/"
+   ]
+  },
+  {
+   "id": "payplus",
+   "names": [
+    "PayPlus",
+    "פיי פלוס",
+    "פייפלוס"
+   ],
+   "domains": [
+    "payplus.co.il"
+   ],
+   "keywords": [
+    "PayPlus סליקה",
+    "פיי פלוס Tap on Phone"
+   ],
+   "news_pages": []
+  },
+  {
+   "id": "grow-meshulam",
+   "names": [
+    "Grow",
+    "גרואו",
+    "Grow Payments",
+    "גרואו פיימנטס",
+    "משולם",
+    "Meshulam"
+   ],
+   "domains": [
+    "grow.business"
+   ],
+   "keywords": [
+    "Grow Light",
+    "Grow Payout",
+    "Grow ניאו-בנק",
+    "גרואו סליקה"
+   ],
+   "news_pages": [
+    "https://grow.business/magazine/"
+   ]
+  },
+  {
+   "id": "hyp-ezcount",
+   "names": [
+    "Hyp",
+    "הייפ",
+    "היפ",
+    "Hyp Payment Solutions",
+    "הייפ פתרונות תשלום",
+    "EZcount",
+    "איזיקאונט",
+    "CreditGuard",
+    "קרדיטגארד"
+   ],
+   "domains": [
+    "hyp.co.il",
+    "ezcount.co.il"
+   ],
+   "keywords": [
+    "Hyp סליקה",
+    "EZcount חשבונית דיגיטלית",
+    "כספיט פרו"
+   ],
+   "news_pages": [
+    "https://hyp.co.il/blog/",
+    "https://www.ezcount.co.il/blog"
+   ]
+  },
+  {
+   "id": "shopify",
+   "names": [
+    "Shopify",
+    "שופיפיי",
+    "שופיפיי ישראל"
+   ],
+   "domains": [
+    "shopify.com"
+   ],
+   "keywords": [
+    "Shopify Israel",
+    "Shopify Plus",
+    "Shop Pay",
+    "Shopify Editions",
+    "Shopify Partner Program",
+    "Shopify GMV"
+   ],
+   "news_pages": [
+    "https://www.shopify.com/news",
+    "https://www.shopify.com/partners/blog"
+   ]
+  },
+  {
+   "id": "wix-base44",
+   "names": [
+    "Wix",
+    "וויקס",
+    "Wix.com",
+    "Wix Studio",
+    "Base44",
+    "בייס44",
+    "בייס 44"
+   ],
+   "domains": [
+    "wix.com",
+    "base44.com",
+    "investors.wix.com"
+   ],
+   "keywords": [
+    "Wix Studio Two",
+    "Base Code",
+    "Wix Symphony",
+    "Base44 ARR",
+    "WIX earnings"
+   ],
+   "news_pages": [
+    "https://www.wix.com/press-room/home",
+    "https://investors.wix.com/",
+    "https://base44.com/blog",
+    "https://www.wix.com/blog"
+   ]
+  },
+  {
+   "id": "konimbo",
+   "names": [
+    "Konimbo",
+    "קונימבו"
+   ],
+   "domains": [
+    "konimbo.co.il"
+   ],
+   "keywords": [
+    "קונימבו חנות אינטרנטית",
+    "מאגר קונימבו",
+    "קונימבו RetailOS"
+   ],
+   "news_pages": [
+    "https://konimbo.co.il/pages/338-posts"
+   ]
+  },
+  {
+   "id": "make",
+   "names": [
+    "Make",
+    "Make.com",
+    "Integromat",
+    "Celonis Make"
+   ],
+   "domains": [
+    "make.com"
+   ],
+   "keywords": [
+    "Make Waves",
+    "MakeOS",
+    "Maia by Make",
+    "Make Process Intelligence",
+    "Make Celonis"
+   ],
+   "news_pages": [
+    "https://www.make.com/en/blog"
+   ]
+  },
+  {
+   "id": "zapier",
+   "names": [
+    "Zapier",
+    "זאפייר"
+   ],
+   "domains": [
+    "zapier.com"
+   ],
+   "keywords": [
+    "Zapier MCP",
+    "Zapier AI agents",
+    "Zapier tasks pricing"
+   ],
+   "news_pages": [
+    "https://zapier.com/blog/"
+   ]
+  },
+  {
+   "id": "n8n",
+   "names": [
+    "n8n",
+    "n8n.io",
+    "n8n GmbH"
+   ],
+   "domains": [
+    "n8n.io",
+    "blog.n8n.io"
+   ],
+   "keywords": [
+    "n8n 3.0",
+    "n8n SAP",
+    "n8n Sustainable Use License",
+    "n8n fair-code",
+    "n8n valuation"
+   ],
+   "news_pages": [
+    "https://blog.n8n.io/",
+    "https://n8n.io/press/"
+   ]
+  },
+  {
+   "id": "bizibox",
+   "names": [
+    "bizibox",
+    "ביזיבוקס",
+    "iFact",
+    "I Fact"
+   ],
+   "domains": [
+    "bizibox.biz"
+   ],
+   "keywords": [
+    "ביזיבוקס תזרים",
+    "ביזיבוקס רואי חשבון"
+   ],
+   "news_pages": []
+  },
+  {
+   "id": "dokka",
+   "names": [
+    "DOKKA",
+    "Dokka",
+    "Dokka AI"
+   ],
+   "domains": [
+    "dokka.com"
+   ],
+   "keywords": [
+    "DOKKA AP",
+    "DOKKA Close"
+   ],
+   "news_pages": [
+    "https://dokka.com/blog/"
+   ]
+  },
+  {
+   "id": "virtuac",
+   "names": [
+    "VirtuAc"
+   ],
+   "domains": [
+    "virtuac-site.pages.dev"
+   ],
+   "keywords": [
+    "VirtuAc invoices",
+    "קליטת חשבוניות וואטסאפ חשבשבת"
+   ],
+   "news_pages": []
+  },
+  {
+   "id": "automationil-callbox",
+   "names": [
+    "AutomationIL",
+    "Automation IL",
+    "Callbox",
+    "קולבוקס"
+   ],
+   "domains": [
+    "automationil.co.il",
+    "automationil.com"
+   ],
+   "keywords": [
+    "מקצועני האוטומציה",
+    "Make Enterprise ישראל",
+    "Callbox Make"
+   ],
+   "news_pages": []
+  },
+  {
+   "id": "cadmon-systems",
+   "names": [
+    "Cadmon Systems",
+    "קדמון סיסטמס",
+    "Cadmon"
+   ],
+   "domains": [
+    "cadmonsystems.com"
+   ],
+   "keywords": [
+    "Cadmon Priority Make",
+    "קדמון אינטגרציה Priority"
+   ],
+   "news_pages": []
+  },
+  {
+   "id": "achiya-automation",
+   "names": [
+    "Achiya Automation",
+    "אחיה אוטומציה",
+    "achiya-automation"
+   ],
+   "domains": [
+    "achiya-automation.com"
+   ],
+   "keywords": [
+    "בוט וואטסאפ n8n",
+    "אחיה אוטומציה n8n"
+   ],
+   "news_pages": [
+    "https://achiya-automation.com/blog"
+   ]
+  }
+ ]
+}

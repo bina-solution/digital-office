@@ -5,8 +5,10 @@
     "en": "Computers"
   },
   "layer": 3,
+  "people": "admins",
   "core": true,
   "kind": "service",
+  "page": "base",
   "version": "1.0.0",
   "summary": {
     "he": "כל מחשבי הלשכות — משאבים ורשת בזמן אמת של המחשב הזה ושל כל לשכה מקושרת, ושרתים שמחוברים ב־SSH",
@@ -25,12 +27,19 @@
         "delete",
         "status",
         "exec",
+        "shell",
         "stream",
         "transfer"
       ]
     }
   ],
   "use": [
+    {
+      "capability": "kv",
+      "strength": "wants",
+      "after": false,
+      "dependency": "weak"
+    },
     {
       "capability": "secrets",
       "strength": "requires",
@@ -53,6 +62,11 @@
       "strength": "wants",
       "after": false,
       "dependency": "weak"
+    },
+    {
+      "capability": "identity",
+      "strength": "requires",
+      "after": true
     }
   ],
   "connections": [],
@@ -136,6 +150,23 @@
           "url": "http://computers:8977/healthz"
         },
         "wizard": "the computers screen shows the public key and the exact command that approves it on a machine"
+      },
+      {
+        "id": "computers-exec-token",
+        "automint": {
+          "type": "hex",
+          "bytes": 32
+        },
+        "title": "Computers — the office services' token for running commands",
+        "title_he": "מחשבים — הטוקן של שירותי הלשכה להרצת פקודות",
+        "kind": "token",
+        "env": "COMPUTERS_EXEC_TOKEN",
+        "group": "מחשבים",
+        "now": "env -> COMPUTERS_EXEC_TOKEN on computers (what it checks) and on every app whose app.json declares this connection (what it sends as `Authorization: Bearer`). Every write of computers — a command run as root on a machine, a transfer, a share — answers only a known caller: the screen, a linked office it shares with, this token, or its own container (DGO-1304). Auto-minted once; rotating it means the declaring apps are recreated with the new value.",
+        "probe": {
+          "type": "present"
+        },
+        "wizard": "auto-mint (the owner never types it)"
       }
     ]
   }

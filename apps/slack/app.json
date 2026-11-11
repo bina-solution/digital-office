@@ -1,0 +1,58 @@
+{
+  "id": "slack",
+  "title": { "he": "סלאק", "en": "Slack" },
+  "layer": 3,
+  "people": "admins",
+  "kind": "service",
+  "page": "base",
+  "version": "0.1.0",
+  "summary": {
+    "he": "Slack, הלקוח הרשמי שלו ל-Linux, בתוך הלשכה: המסך שלו בקונסול, ו-CLI ו-API על החשבון של הבעלים (chat.v1).",
+    "en": "Slack's own Linux client inside the office: its screen in the console, and the CLI and the API on the owner's account (chat.v1)."
+  },
+  "wraps": {
+    "client": "Slack for Linux, Slack's own .deb pinned by version and sha256 (Dockerfile.desktop)",
+    "headless": "Slack's Web API (adapter/server.py), with the owner's user token"
+  },
+  "capabilities": [
+    {
+      "name": "chat-slack",
+      "type": "protocol",
+      "interface": "chat.v1",
+      "endpoint": "http://slack:3094",
+      "required_ops": ["probe", "listConversations", "getConversation", "sendMessage", "markRead"]
+    }
+  ],
+  "use": [
+    { "capability": "identity", "strength": "requires", "after": true },
+    { "capability": "kv", "strength": "wants", "after": false, "dependency": "weak" }
+  ],
+  "compose": "docker-compose.yml",
+  "cli": { "alias": "slack" },
+  "agent": { "context": "AGENT.md" },
+  "routing": [
+    {
+      "host": "slack",
+      "port": 3000,
+      "auth": "sso",
+      "service": "slack-desktop",
+      "emit_labels": true,
+      "module": {
+        "group": "עסק", "icon": "message", "embed": true, "alias": "slack", "id": "slack",
+        "name": "סלאק", "desc": "הערוצים וההודעות של Slack, בלקוח הרשמי",
+        "url": "http://slack-desktop:3000/",
+        "passthrough": [{ "path": "/api", "transport": "websocket", "match": "prefix", "strip_mount_prefix": true }]
+      },
+      "sso": {
+        "slug": "slack",
+        "display_name": "Slack",
+        "default_host": "slack.localhost",
+        "base_url_env": "SLACK_BASE_URL",
+        "local_twin": true
+      }
+    }
+  ],
+  "health": { "structural": "auto", "probe": { "http": "http://slack:3094/v1/health", "interval": "30s" } },
+  "data": { "volumes": ["slack_home"], "on_uninstall": "keep" },
+  "resources": { "cpus": "1.35", "memory": "2176m" }
+}

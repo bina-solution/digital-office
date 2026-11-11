@@ -1,0 +1,26 @@
+%% DGO-357: the OS in one picture. The directory is the layer (gate G9, AGENTS.md "Layout"): what an office
+%% declares (in git, plus its own .env) is compiled by layer 0 into .generated/, and only bbox / scripts/dc run it.
+%% platform-base/ is read from each app.json's "layer" (1 or 2); n8n is a layer-3 app, apps/n8n.
+flowchart TB
+    subgraph DECL["What an office declares"]
+      APPJ["apps/*/<br/>layer 3: one directory per app, its app.json and AGENT.md (n8n is one of them)"]
+      BASE["platform-base/*<br/>layers 1-2, what the platform offers: traefik, forward-auth, postgres, redis,<br/>connections, console, app-management, notifications, security, ..."]
+      STATE["platform.state.yaml<br/>which apps are on"]
+      ENVF[".env<br/>config and secrets, on the machine (never in git)"]
+    end
+    REC["layer 0, the compiler<br/>platform/manager/reconcile.py (its Go twin: packaging/dgo)"]
+    GEN[".generated/<br/>compose files, the registry and the other compiled outputs; never edited or committed by hand"]
+    CLI["bbox, bbox.cmd, scripts/dc<br/>the only way to run compose (a bare docker compose runs nothing, G7)"]
+    ENG["the project's own engine (Docker 28.x expected)<br/>a WSL distro, a Lima guest, systemd on Linux, or dockerd started by bbox in a cloud sandbox"]
+    RUN["the running office<br/>containers on the shared network (compose.yml) and each app's own private networks"]
+    GATES["the gates, scripts/refactor/GATES.md<br/>check the declarations and the compile before a commit lands"]
+    APPJ --> REC
+    BASE --> REC
+    STATE --> REC
+    ENVF --> REC
+    REC --> GEN
+    GEN --> CLI
+    CLI --> ENG
+    ENG --> RUN
+    GATES -.-> DECL
+    GATES -.-> GEN

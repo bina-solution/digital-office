@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex, nofollow">
+  <title>{{ env.doc_name }} — לחתימה</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='esign.css') }}">
+</head>
+<body>
+<div class="wrap">
+  <div class="top">
+    <h1>לחתימה</h1>
+    <span class="sub">בינה סלושנס · הלשכה הדיגיטלית</span>
+  </div>
+
+  {% if error %}<div class="err">{{ error }}</div>{% endif %}
+
+  <div class="card">
+    <h2>{{ env.doc_name }}</h2>
+    <p class="note">נשלח אליך על ידי {{ env.sender }} · הקישור בתוקף עד {{ env.expires_at[:16].replace('T', ' ') }}</p>
+
+    {% if mode == "password" %}
+      <form method="post" action="/s/{{ request.view_args['token'] }}/unlock">
+        <label for="password">המסמך מוגן בסיסמה — הוזן אותה כדי לפתוח אותו</label>
+        <input type="password" id="password" name="password" autocomplete="one-time-code" required autofocus>
+        <p><button type="submit">פתח את המסמך</button></p>
+      </form>
+      <p class="note">הסיסמה נשלחה אליך בנפרד מהקישור, בדרך שסיכמתם.</p>
+    {% else %}
+      <iframe class="doc" src="/s/{{ request.view_args['token'] }}/doc#toolbar=0" title="המסמך"></iframe>
+      <form class="sign" method="post" action="/s/{{ request.view_args['token'] }}/sign">
+        <label for="name">שם החותם, כפי שיופיע על המסמך</label>
+        <input type="text" id="name" name="name" value="{{ env.signer_name }}" required>
+        <div class="consent">
+          <input type="checkbox" id="consent" name="consent" value="1" required>
+          <label for="consent">קראתי את המסמך ואני מאשר/ת לחתום עליו אלקטרונית. החתימה תיצמד למסמך,
+            והעותק החתום יישמר בלשכה עם מועד החתימה, כתובת הרשת וסוג הדפדפן שמהם נחתם.</label>
+        </div>
+        <p><button type="submit">חתום על המסמך</button></p>
+      </form>
+      <p class="note">החתימה נמשכת שניות אחדות. אין צורך בחשבון, ואין בדף הזה דבר מלבד המסמך הזה.</p>
+    {% endif %}
+  </div>
+  <p class="foot">הקישור פותח את המסמך הזה בלבד. אין ממנו כניסה לשום מערכת אחרת של הלשכה.</p>
+</div>
+</body>
+</html>

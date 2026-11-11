@@ -1,17 +1,18 @@
 # drive — THE drive platform service at drive.localhost (ai/context/platform-service-contract.md).
-# Owns its connections (built-in local storage + any Google Drive accounts), an ACTIVE pointer, and
-# every drive op through the active connection's adapter. The UI is domain-native — folders, files,
-# upload, move, trash, search — and apps extend it through /extensions; it knows nothing about them.
-# The built-in local connection keeps the on-disk semantics unchanged (storage object + drive_files
-# row), so anything that already reads those artifacts keeps working.
-# /file/d/* stays with the storage router (higher priority); this UI takes every other path.
+# The GENERIC «קבצים» (DGO-1500, ENGINES.md): its screen, every route callers use, the ACTIVE pointer,
+# and every drive op through the account's ENGINE — drive-local (the office's own storage) and
+# drive-google (Google Drive), found by name in the compiled registry mounted below. No database, no
+# storage client and no Google credential here. The UI is domain-native — folders, files, upload,
+# move, trash, search — and apps extend it through /extensions; it knows nothing about them.
+# /file/d/* (the share links) keeps its own router (higher priority, no sign-in); this app hands it
+# to drive-local, which serves it as before.
 services:
   drive:
     # The image CI publishes for this commit (DGO-41). `pull_policy: missing` means it is
     # fetched only when it is not here already, so a checkout that has built it is untouched;
     # the `build:` below stays as the fallback. Needs the GHCR package readable — a package made
     # from a private repo is private, so `docker login ghcr.io` on a machine that must pull.
-    image: ghcr.io/solomonboltin/digital-office/drive:${IMAGE_TAG:-latest}
+    image: ghcr.io/bina-solution/digital-office/drive:${IMAGE_TAG:-latest}
     pull_policy: missing
     build:
       context: .
@@ -22,30 +23,28 @@ services:
     environment:
       - SENTRY_DSN=${DRIVE_SENTRY_DSN:-}
       - DEPLOYMENT_NAME=${DEPLOYMENT_NAME:-bina-deployment}
-      - SUPABASE_DB_PASSWORD=${SUPABASE_DB_PASSWORD:-}
-      - SUPABASE_SERVICE_KEY=${SUPABASE_SERVICE_KEY:-}
-      - PGHOST=supabase-db
-      - STORAGE_URL=http://storage:5000
       # the drive's ceiling is the store's: one setting, so the two can never disagree about a file
       - DRIVE_MAX_UPLOAD=${SUPABASE_FILE_SIZE_LIMIT:-2147483648}
       # resumable upload sessions live on the drive's own volume (the bytes so far + who/where)
       - DRIVE_UPLOAD_DIR=/data/uploads
-      - DRIVE_PUBLIC_HOST=drive.${DEV_DOMAIN:-localhost}
       # credential plane (secret-base): drive connections live there, only the pointer lives here
       - CONNECTIONS_URL=${CONNECTIONS_URL:-http://connections:8990}
       # public base of the credential plane — the guided connect flow sends the browser to ITS
       # consent broker (never to a provider directly), and it returns there too
       - CONNECTIONS_PUBLIC_URL=${CONNECTIONS_PUBLIC_URL:-https://${CONNECTIONS_BASE_URL:-connections.localhost}}
-      # OAuth CLIENT (not a grant): the google adapter needs it to REFRESH an access token. The
-      # grant itself never lands here — it is fetched from secret-base per call (§5a).
-      - N8N_GOOGLE_OAUTH_CLIENT_ID=${N8N_GOOGLE_OAUTH_CLIENT_ID:-}
-      - N8N_GOOGLE_OAUTH_CLIENT_SECRET=${N8N_GOOGLE_OAUTH_CLIENT_SECRET:-}
+      # the engines are found BY NAME (drive-*) in the compiled registries mounted below (engines.py);
+      # DRIVE_ENGINE_<ID>_OFFICE picks the office when two linked offices give the same engine
+      - DRIVE_REGISTRY_DIR=/registry
+      # the event stream (flow.v1, DGO-1402) rides the office redis: `dgo:flow:drive`
+      - REDIS_PASSWORD=${REDIS_PASSWORD:-}
     volumes:
-      # the active-connection pointer (active.json) and the extension registry must survive restarts
+      # the active-connection pointer (active.json), the extension registry and the upload sessions
       - localdrive_data:/data
+      - ../../.generated/registry:/registry:ro   # compiled registries: which drive-* engine apps exist (G9)
+      # the office's ONE flow.v1 publisher (DGO-1402) — the platform's file, never a copy of it here
+      - ../../platform-base/redis/flowpub.py:/opt/dgo/flowpub.py:ro
     networks:
       - traefik-network
-      - supabase-net
     labels:
       - traefik.enable=true
       - traefik.docker.network=traefik-network
@@ -69,7 +68,7 @@ services:
       - traefik.http.routers.drive-ui-https.tls=true
       - traefik.http.routers.drive-ui-https.tls.certresolver=${TRAEFIK_CERTRESOLVER-myresolver}
       - traefik.http.routers.drive-ui-https.priority=1
-      - traefik.http.routers.drive-ui-https.middlewares=authentik@file
+      - traefik.http.routers.drive-ui-https.middlewares=authentik@file,hsts@file
       - traefik.http.routers.drive-ui-https.service=drive-ui
       # …and the public /file/d/ share links, which must keep their higher priority and stay
       # UNAUTHENTICATED (that is the point of a share link) on https too.
@@ -79,6 +78,9 @@ services:
       - traefik.http.routers.drive-file-https.tls.certresolver=${TRAEFIK_CERTRESOLVER-myresolver}
       - traefik.http.routers.drive-file-https.priority=200
       - traefik.http.routers.drive-file-https.service=drive-ui
+      # a share link is public, but HSTS is about the HOST, not the visitor: the same certificate pins
+      # the whole origin to https (DGO-1595)
+      - traefik.http.routers.drive-file-https.middlewares=hsts@file
       - traefik.http.services.drive-ui.loadbalancer.server.port=8975
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request,sys;sys.exit(0 if urllib.request.urlopen('http://localhost:8975/healthz',timeout=8).status==200 else 1)"]
@@ -94,10 +96,9 @@ services:
           # 2 workers were fully occupied streaming downloads. Threads (Dockerfile) fix the concurrency
           # model; this gives the process enough CPU/memory headroom to actually use them.
           cpus: '1.0'
-          # 384M -> 768M, 2026-10-28: the drive now draws its own thumbnails (Pillow, pdfium) and runs
-          # ffmpeg for frames, covers and waveforms — one job at a time, but a decoded photo plus an
-          # ffmpeg process does not fit beside two workers in 384M. A ceiling, not a reservation.
-          memory: 768M
+          # 768M -> 384M, 2026-11-09 (DGO-1500): the pictures, frames and waveforms are drawn by the
+          # engine that holds the bytes (drive-local); this process streams and remuxes a recording.
+          memory: 384M
     logging:
       driver: ${LOGGING_DRIVER:-json-file}
       options:
@@ -106,7 +107,7 @@ services:
 
 volumes:
   # NAME DELIBERATELY UNCHANGED. The service is `drive` now, but renaming this volume
-  # would orphan every byte already in deployment-hacohen_localdrive_data.
+  # would orphan every byte already in digital-office_localdrive_data.
   localdrive_data:
 
 networks:

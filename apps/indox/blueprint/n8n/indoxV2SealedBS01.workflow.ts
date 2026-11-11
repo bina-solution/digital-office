@@ -60,7 +60,9 @@ export class IndoxV2SealedActionsBalanceSheetWorkflow {
         httpMethod: 'POST',
         path: 'sealed-bs-e2e-lane',
         responseMode: 'responseNode',
-        options: {},
+        // DGO-1603 (G97): a suite runner fired from inside the office (incoming_documents/api →
+        // http://n8n-webhook:5678). Public /webhook/* must not reach a lane that writes.
+        options: { ipWhitelist: '10.0.0.0/8,172.16.0.0/12,192.168.0.0/16,127.0.0.1,::1' },
     };
 
     @node({

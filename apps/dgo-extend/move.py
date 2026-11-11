@@ -122,7 +122,7 @@ def _dest_project(machine: str, path: str) -> str:
                 "grep -v '^$' | sort | uniq -c | sort -rn | head -1 | awk '{print $2}'", 60).strip()
     if out:
         return out
-    return re.sub(r"[^a-z0-9-]", "", os.path.basename(path).lower()) or "deployment-hacohen"
+    return re.sub(r"[^a-z0-9-]", "", os.path.basename(path).lower()) or "digital-office"
 
 
 def _services(machine: str, app: str, path: str) -> list[str]:
@@ -336,8 +336,9 @@ def _transfer_one(ctx: dict, machine: str, src_vol: str, dest_vol: str, emit) ->
     import urllib.request
     body = json.dumps({"to": machine, "volume": src_vol, "dest_volume": dest_vol,
                        "restart": bool(ctx.get("re_transfer"))}).encode()
-    req = urllib.request.Request(cv.COMPUTERS_URL + f"/api/computers/{LOCAL_MACHINE}/stream",
-                                 data=body, headers={"content-type": "application/json"}, method="POST")
+    url = cv.COMPUTERS_URL + f"/api/computers/{LOCAL_MACHINE}/stream"
+    req = urllib.request.Request(url, data=body, method="POST",
+                                 headers={"content-type": "application/json", **cv.computers_headers(url)})
     try:
         with urllib.request.urlopen(req, timeout=60) as r:
             res = json.loads(r.read() or b"{}")

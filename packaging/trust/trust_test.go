@@ -15,8 +15,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/solomonBoltin/deployment-hacohen/packaging/trust"
-	"github.com/solomonBoltin/deployment-hacohen/packaging/trust/trusttest"
+	"github.com/bina-solution/digital-office/packaging/trust"
+	"github.com/bina-solution/digital-office/packaging/trust/trusttest"
 )
 
 func TestPAEIsDSSEv1(t *testing.T) {

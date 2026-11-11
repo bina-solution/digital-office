@@ -1,4 +1,4 @@
-"""`reconcile.py rollback` restores a generation IN PLACE (FPG-497).
+"""`reconcile.py rollback` restores a generation IN PLACE (EXF-497).
 
 A running container bind-mounts folders of .generated/ (connections, the console, security, dgo-extend and computers
 mount .generated/registry), and a bind mount follows the folder it was given. The old rollback deleted every folder of

@@ -123,13 +123,16 @@ def _sources(app_dir):
                 if f in SKIP_NAMES or f.endswith(SKIP_SUFFIX):
                     continue
                 rels.append(p.relative_to(app_dir).as_posix())
-    keep, links = [], []
+    keep, links, seen = [], [], {}
     for r in sorted(set(rels)):
         if (set(r.split("/")) & SKIP_PARTS or r.rsplit("/", 1)[-1] in SKIP_NAMES
                 or r.endswith(SKIP_SUFFIX)):
             continue
         if modes.get(r) == "120000":
             links.append(r)
+            continue
+        if _through_a_link(app_dir, r, seen):
+            links.append(r)                 # a folder on the way is a link: the bytes are outside the app
             continue
         try:
             st = (app_dir / r).lstat()
@@ -152,6 +155,84 @@ def _sources(app_dir):
             executable = os.name != "nt" and bool(st.st_mode & 0o111)
         keep.append((r, executable or r.startswith("hooks/")))
     return keep, links
+
+
+#: IO_REPARSE_TAG_MOUNT_POINT, a junction's reparse tag (in `stat` on Windows since Python 3.8).
+_MOUNT_POINT = getattr(stat, "IO_REPARSE_TAG_MOUNT_POINT", 0xA0000003)
+
+
+def _through_a_link(app_dir, rel, seen):
+    """True when a folder on the way to `rel` is a link on disk (DGO-639). Take a file git tracks under a folder
+    the working tree has since swapped for a link to somewhere else: the file's own lstat says a regular file,
+    and it resolves through the link, so its bytes come from outside the app. A link here is a symlink or a
+    junction, exactly as the store's Go twin reads it (throughALink in build.go). A cloud placeholder (OneDrive)
+    is a reparse point too, and is not a link. A folder that is missing, or is a plain file, is not a link
+    either: the file's own lstat decides, as before. Any other error is never trusted: the file is named and
+    left out. `seen` keeps each folder's answer for one build."""
+    parts = rel.split("/")[:-1]
+    for i in range(1, len(parts) + 1):
+        p = "/".join(parts[:i])
+        if p not in seen:
+            seen[p] = _link_on_disk(app_dir / p)
+        if seen[p]:
+            return True
+    return False
+
+
+def _link_on_disk(path):
+    """A symlink, or a junction (Windows' mount point), read with lstat. A cloud placeholder's reparse tag is not a
+    link. A missing path, or one under a plain file, is not a link; its own read decides. Any other error (EIO on
+    a 9p mount) is never trusted, so it counts as a link: named and left out. The Go twin is linkOnDisk."""
+    try:
+        st = path.lstat()
+    except (FileNotFoundError, NotADirectoryError):
+        return False
+    except OSError:
+        return True
+    return stat.S_ISLNK(st.st_mode) or getattr(st, "st_reparse_tag", 0) == _MOUNT_POINT
+
+
+def _folder_is_link(path):
+    """_link_on_disk for a folder the build stands on: the source's apps/ itself, and each app's own folder. A read
+    error is not a link here and is never passed over: the build stops on it and names the folder, so an index is
+    never signed without an app that only failed to read (EIO on a 9p mount, EACCES). DGO-1742. The Go twin is
+    folderIsLink."""
+    try:
+        st = path.lstat()
+    except (FileNotFoundError, NotADirectoryError):
+        return False
+    except OSError as e:
+        raise _unreadable(path, e) from None
+    return stat.S_ISLNK(st.st_mode) or getattr(st, "st_reparse_tag", 0) == _MOUNT_POINT
+
+
+def _unreadable(path, e):
+    # strerror in the Go twin's words (syscall.Errno: "permission denied", "input/output error")
+    return IndexError_(f"{path.name}/ cannot be read ({(e.strerror or e.__class__.__name__).lower()}) — nothing "
+                       f"was built")
+
+
+def _readable_apps(src):
+    """Every app folder under `src` can be asked whether it holds a manifest, or the build stops naming the one that
+    cannot. The glob that lists the apps passes over a folder it cannot open without a word (mode 000, EIO on a 9p
+    mount), so an index would be signed without that app (DGO-1742's second reader). A link is not opened here: it
+    is left out and named by the build. The Go twin is readableApps."""
+    try:
+        entries = sorted(os.scandir(src), key=lambda e: e.name)
+    except FileNotFoundError:
+        return
+    except OSError as e:
+        raise _unreadable(src, e) from None
+    for entry in entries:
+        folder = src / entry.name
+        try:
+            if entry.is_symlink() or not entry.is_dir(follow_symlinks=False):
+                continue
+            (folder / "app.json").stat()
+        except (FileNotFoundError, NotADirectoryError):
+            continue                            # a folder that is not an app
+        except OSError as e:
+            raise _unreadable(folder, e) from None
 
 
 def _portable(rel):
@@ -387,9 +468,20 @@ def build(out_dir=None, repo_name=None, base_url=None, sign_it=True,
     out = pathlib.Path(out_dir or DEFAULT_OUT)
     art_dir = out / "artifacts"
     src = pathlib.Path(source_dir or APPS)
+    # apps/ itself a link (DGO-1742): each app folder under it is a plain folder, git cannot list one outside the
+    # repository, and the walk packed what was there. Every app is behind the link, so nothing is built.
+    if _folder_is_link(src):
+        raise IndexError_(f"{src.name}/ is a link — links are never followed, so nothing was built")
+    _readable_apps(src)
 
     apps = []
     for m in sorted(src.glob("*/app.json")):
+        if _folder_is_link(m.parent):
+            # The app's own folder is a link (DGO-1735). Nothing in it is read or packed, and the build names it.
+            # Before, git could not list a folder outside the repository, so the walk packed what was there
+            # (an untracked .env included).
+            print(f"  left out, links are never followed: {m.parent.name}/", file=sys.stderr)
+            continue
         manifest = json.loads(m.read_text(encoding="utf-8"))
         if manifest.get("layer") != 3:
             continue
@@ -405,6 +497,10 @@ def build(out_dir=None, repo_name=None, base_url=None, sign_it=True,
             raise IndexError_(f"{aid}: version {ver!r} is not SemVer — it names the artifact's "
                               f"file, so nothing was written")
         apps.append((m, manifest, aid, ver))
+    if not apps:
+        # The Go twin's rule: an empty index would be signed and served as the store (the only app a link, a typo'd
+        # --source). DGO-1742.
+        raise IndexError_(f"{src} holds no app — an empty index is never built")
 
     art_dir.mkdir(parents=True, exist_ok=True)
     entries = []
@@ -558,6 +654,8 @@ def disclose(entry, cat=None, state=None, manifest=None, app_dir=None):
         for lvl, msg in diags:
             if lvl == "error":
                 conflicts.append(msg)
+            elif "pulled in as provider" in msg and msg.split(":", 1)[0] in already:
+                continue   # a provider this office already runs («מכולות», for every container app): nothing to say
             elif "pulled in as provider" in msg or "bound to" in msg:
                 notes.append(msg)
 

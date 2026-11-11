@@ -11,6 +11,11 @@
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <!-- whether the network is metered: the machine (~1 GB) is fetched on Wi-Fi, never on the owner's data plan -->
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <!-- the phone's own virtualization (DGO-1328): AVF's two permissions are development ones, which the app
+         grants itself once through the phone's Wireless debugging (Pairing); the phone keeps them -->
+    <uses-permission android:name="android.permission.MANAGE_VIRTUAL_MACHINE" />
+    <uses-permission android:name="android.permission.USE_CUSTOM_VIRTUAL_MACHINE" />
+    <uses-feature android:name="android.software.virtualization_framework" android:required="false" />
 
     <!-- usesCleartextTraffic: an office on this phone or on the local network answers on http
          (console.localhost:8080); the herd's public doors are https. -->
@@ -40,6 +45,37 @@
             android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|keyboardHidden|uiMode"
             android:exported="false"
             android:windowSoftInputMode="adjustResize" />
+
+        <!-- «מצב הלשכה» (DGO-1328): from the notification, the first screen, and a page of the office that
+             waits for its machine (dgo://status, which the console's WebView hands to the phone) -->
+        <activity
+            android:name=".StatusActivity"
+            android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|keyboardHidden|uiMode"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="dgo" android:host="status" />
+            </intent-filter>
+        </activity>
+
+        <activity
+            android:name=".PairingActivity"
+            android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|keyboardHidden|uiMode"
+            android:exported="false" />
+
+        <!-- the pairing code, typed into the notification while Settings' dialog stays open -->
+        <receiver
+            android:name=".Pairing$Code"
+            android:exported="false" />
+
+        <!-- the status screen's «שיתוף לוג»: one file of the app's cache, read through a one-time grant -->
+        <provider
+            android:name=".LogProvider"
+            android:authorities="il.co.digitaloffice.app.logs"
+            android:exported="false"
+            android:grantUriPermissions="true" />
 
         <service
             android:name=".EngineService"

@@ -10,7 +10,7 @@
 #   GLITCHTIP_FROM_EMAIL — the address alerts are sent FROM: no account stands behind it, and the office's
 #     mail answers on the new domain now, so it simply follows.
 # The domains come from the environment (DGO_RENAME_FROM, DGO_RENAME_TO, DGO_RENAME_DRY_RUN), set by
-# `bbox rename-address [--dry-run]` (FPG-34). One transaction; a new address that is someone else's is
+# `bbox rename-address [--dry-run]` (EXF-34). One transaction; a new address that is someone else's is
 # refused and named; GlitchTip being DOWN is a failure, not "nothing to move"; the dry run rolls back and
 # exits non-zero when the real run would refuse. No password is read or printed.
 set -uo pipefail

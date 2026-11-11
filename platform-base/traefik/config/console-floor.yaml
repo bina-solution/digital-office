@@ -1,0 +1,44 @@
+# THE FLOOR UNDER THE CONSOLE'S ROUTE — the console is reached while Docker's health lags behind it.
+#
+# Traefik's docker provider gives a container no route while its health is «starting» or «unhealthy»: keepContainer
+# filters it, and even with allowEmptyServices buildServiceConfiguration leaves its service empty (traefik v3.3,
+# pkg/provider/docker/config.go — read 2026-11-11). The console's health is a python process Docker has to START
+# inside the container, and on an engine at load 66–163 it could not («timed out starting health check»). So on the
+# MacBook, during a take on 2026-11-11, a console whose gunicorn had started at 09:20:24Z and whose /healthz answered
+# 200 from inside lost its route, and console.localhost said 404 until 09:36:50Z. vps1's take the night before showed
+# the same face. A status that depends on starting a process in a loaded engine is not the app's health.
+#
+# These two routers sit under the console's own (its docker labels, the same middlewares) at the LOWEST priority:
+# whenever the docker routers exist they win, as before; when traefik has dropped them, a request for the console
+# still reaches it, by its network alias on traefik-network. A console that is really gone answers 502, never 404.
+# Every app's screen is the console's /a/<alias>/, which the console proxies straight to the app's container, so the
+# screens come with it. The port-80 answer of a server office (zz-https.yaml, priority 1000000) is untouched.
+# issues/a-take-on-the-public-server-leaves-its-console-answering-404-and-loads-two-cpus-to-twenty.yaml
+#
+# THE CONSOLE'S OWN NAMES ONLY, each on the entry its labels name it (platform-base/console/docker-compose.yml): on
+# web console.localhost and CONSOLE_BASE_URL, on websecure CONSOLE_BASE_URL alone. The edge is given CONSOLE_BASE_URL
+# by the same expression as the console (platform-base/traefik/docker-compose.yml). Never `console.<anything>`, which
+# on an office with the sign-in off would hand any such host the console as admin (the second reader). An edge not
+# yet recreated with the variable reads the default, console.localhost. A CONSOLE_BASE_URL that carries a port (the
+# MacBook's console.localhost:8080) never matches a Host rule, as with the labels today; there the first clause on web
+# is the one that holds.
+http:
+  routers:
+    console-floor-web:
+      rule: Host(`console.localhost`) || Host(`{{ env "CONSOLE_BASE_URL" | default "console.localhost" }}`)
+      entryPoints: [web]
+      priority: 1
+      middlewares: [authentik@file]
+      service: console-floor
+    console-floor-websecure:
+      rule: Host(`{{ env "CONSOLE_BASE_URL" | default "console.localhost" }}`)
+      entryPoints: [websecure]
+      priority: 1
+      middlewares: [authentik@file, hsts@file]
+      service: console-floor
+      tls: {}
+  services:
+    console-floor:
+      loadBalancer:
+        servers:
+          - url: http://console:8000

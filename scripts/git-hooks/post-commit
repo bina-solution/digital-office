@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+# post-commit — the files a commit made by root carries go back to the checkout's owner (scripts/checkout-owner.sh,
+# DGO-1324). A MERGE commit (follow.sh finishes a conflicted take with `git commit`) is diffed against its first parent:
+# diff-tree prints nothing for a commit with two parents (the second reader).
+[ "$(id -u)" = 0 ] || exit 0
+if git rev-parse -q --verify HEAD^2 >/dev/null; then
+  git diff --name-only --no-renames -z HEAD^1 HEAD 2>/dev/null
+else
+  git diff-tree --no-commit-id --name-only --no-renames -r -z --root HEAD 2>/dev/null
+fi | bash "$(git rev-parse --show-toplevel)/scripts/checkout-owner.sh" restore
+exit 0

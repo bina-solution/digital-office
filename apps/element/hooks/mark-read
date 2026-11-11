@@ -1,0 +1,3 @@
+#!/usr/bin/env bash
+#: mark-read — the read receipt up to a message: <room id> <event id> [--json]
+exec bash "$(dirname "${BASH_SOURCE[0]}")/../tools/verb" mark-read "$@"

@@ -59,6 +59,21 @@ func (m *Map) keyed(k, raw string) {
 	}
 }
 
+// SetFrom is m[k] = src[k] with the key as src typed it: a copy that keeps `80:` the int 80, never the
+// string '80' (DGO-636).
+func (m *Map) SetFrom(src *Map, k string) {
+	v, _ := src.Get(k)
+	m.Set(k, v)
+	if t, ok := src.typed[k]; ok {
+		if m.typed == nil {
+			m.typed = map[string]any{}
+		}
+		m.typed[k] = t
+	} else {
+		delete(m.typed, k) // a string key in src: no type left over from a key m held before
+	}
+}
+
 func NewMap() *Map { return &Map{vals: map[string]any{}} }
 
 // Set keeps the position of an existing key (a duplicate key keeps its first place and takes the
@@ -229,7 +244,8 @@ func (p *parser) tabUpTo(lines []line, last int) error {
 }
 
 // OutsideSubset reports whether Unmarshal refused a document by this reader's design — one PyYAML
-// reads (an anchor, a tag, a merge key, keys Python's dict makes one, an integer past 64 bits) — and
+// reads (an anchor, a tag, a merge key, two keys Python holds apart under one spelling — 1 and '1' —, an
+// integer past 64 bits) — and
 // not one PyYAML refuses too. A caller answering as Python does needs the difference: on the first it
 // cannot know Python's answer and must stop; the second is the YAMLError Python's own code handles.
 // The reader words the first kind, and only it, "unsupported…" (TestEdgesAgreeWithPyYAML holds every
@@ -665,8 +681,9 @@ func (p *parser) mapping(i, indent int) (any, int, error) {
 			}
 		}
 		k, id, err := keyString(key)
+		var stored string
 		if err == nil {
-			err = oneKey(ids, id, k)
+			stored, err = firstSpelling(ids, id, k)
 		}
 		if err != nil {
 			return nil, i, p.errAt(i, err.Error())
@@ -684,8 +701,10 @@ func (p *parser) mapping(i, indent int) (any, int, error) {
 		if err != nil {
 			return nil, i, err
 		}
-		m.Set(k, v)
-		m.keyed(k, key)
+		m.Set(stored, v)
+		if stored == k { // an equal key spelled otherwise keeps the first one's type
+			m.keyed(k, key)
+		}
 		i = next
 	}
 	return m, i, nil
@@ -794,14 +813,21 @@ func keyString(key string) (string, string, error) {
 	}
 }
 
-// oneKey refuses a key Python's dict holds as one with an earlier key spelled otherwise (1 and true):
-// PyYAML keeps the first spelling and the last value, which this reader does not model.
-func oneKey(ids map[string]string, id, spelling string) error {
-	if seen, ok := ids[id]; ok && seen != spelling {
-		return fmt.Errorf("unsupported: keys %s and %s are one key to Python (PyYAML keeps one; this reader will not guess which)", seen, spelling)
+// firstSpelling is the key a value is stored under: a key Python's dict holds as one with an earlier key
+// spelled otherwise (1 and true, 0 and false and -0.0, every NaN) is that earlier key — PyYAML keeps the first
+// spelling, its place and its type, and the last value (DGO-637; this reader refused them before). The other
+// way round is refused: keys Python holds apart that a Map would hold under one spelling — the int 1 and the
+// string '1', null and 'null' — would silently be one here. `ids` maps an id to its spelling, and "#"+spelling
+// to its id (no id starts with "#").
+func firstSpelling(ids map[string]string, id, spelling string) (string, error) {
+	if seen, ok := ids[id]; ok {
+		return seen, nil
 	}
-	ids[id] = spelling
-	return nil
+	if other, ok := ids["#"+spelling]; ok && other != id {
+		return "", fmt.Errorf("unsupported: two keys spelled %s that Python holds apart (%s and %s); this reader holds one per spelling", spelling, other, id)
+	}
+	ids[id], ids["#"+spelling] = spelling, id
+	return spelling, nil
 }
 
 // value parses what follows `key: ` on line i: a flow collection (possibly spanning lines), a block
@@ -1189,8 +1215,9 @@ func (f *flowParser) value() (any, error) {
 				return nil, errors.New("unsupported: merge key `<<`")
 			}
 			k, id, err := keyString(kv)
+			var stored string
 			if err == nil {
-				err = oneKey(ids, id, k)
+				stored, err = firstSpelling(ids, id, k)
 			}
 			if err != nil {
 				return nil, err
@@ -1209,8 +1236,10 @@ func (f *flowParser) value() (any, error) {
 					}
 				}
 			}
-			m.Set(k, v)
-			m.keyed(k, kv)
+			m.Set(stored, v)
+			if stored == k { // an equal key spelled otherwise keeps the first one's type
+				m.keyed(k, kv)
+			}
 			f.skipSpace()
 			if f.pos < len(f.s) && f.s[f.pos] == ',' {
 				f.pos++

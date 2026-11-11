@@ -1,0 +1,105 @@
+{
+  "_": "What reaches the owner's Telegram group, read by group.py (DGO-1329 step 2, DGO-1326). DATA, not code: a rule is tried in order and the first that matches decides. A rule says `post: false` to keep a kind off the group, `hold_seconds` + `pair` to wait for its other half (a link that drops and is back in two minutes is a flicker, not news), `repeat_minutes` for how soon the same notice may come again. The owner (2026-11-03, group msg 87): «כל פעם שיש עדכון חשוב בכללי זה צריך לקפוץ פה».",
+  "offices": {
+    "hp-laptop": "🐘 HP",
+    "macbook": "🦌 MacBook",
+    "vps1": "🦅 vps1",
+    "dell": "Dell",
+    "claude-cloud": "claude-cloud"
+  },
+  "levels": {
+    "error": "🔴",
+    "fatal": "🔴",
+    "critical": "🔴",
+    "warning": "🟡",
+    "warn": "🟡",
+    "info": "🟢"
+  },
+  "rules": [
+    {
+      "id": "answers",
+      "why": "a notice that offers an answer («חסום») is asking the owner — always",
+      "when": {"has_actions": true},
+      "post": true,
+      "uncapped": true,
+      "repeat_minutes": 0
+    },
+    {
+      "id": "deploy",
+      "why": "a take of dgo-stable: done, rolled back, failed, back to normal (scripts/follow.sh notices)",
+      "when": {"source": "follow"},
+      "post": true,
+      "uncapped": true,
+      "repeat_minutes": 0
+    },
+    {
+      "id": "self-update",
+      "why": "an agent rebuilt and restarted itself",
+      "when": {"source": "bina-ds", "source_id": "self-update"},
+      "post": true,
+      "repeat_minutes": 60
+    },
+    {
+      "id": "link",
+      "why": "an office or a link down / back up — held 3 minutes so a flicker stays off the group",
+      "when": {"source": "dgo-extend", "source_id_prefix": ["link-down-", "link-up-"]},
+      "pair": {"down": "link-down-", "up": "link-up-"},
+      "hold_seconds": 180,
+      "post": true,
+      "uncapped": true,
+      "repeat_minutes": 0
+    },
+    {
+      "id": "security",
+      "why": "what the security app tells the owner — a country never seen in the sign-in, its sensor stopped: rare, and his to know (DGO-1329). Not a ban per address (`ban:<ip>`): a scan in enforce mode would fill the hour's cap and hold real errors back (the second reader); a notice that offers «חסום» is the `answers` rule's",
+      "when": {"source": "security", "source_id_prefix": ["country:", "sensor-down"]},
+      "post": true,
+      "repeat_minutes": 60
+    },
+    {
+      "id": "needs-a-person",
+      "why": "the office's browser stopped and waits for a person",
+      "when": {"source": "browser42"},
+      "post": true,
+      "repeat_minutes": 240
+    },
+    {
+      "id": "restarted",
+      "why": "autoheal restarted a container and it came up — the board has it, the group does not need it",
+      "when": {"source": "autoheal", "level": ["warning", "warn", "info"]},
+      "post": false
+    },
+    {
+      "id": "app-exceptions",
+      "why": "GlitchTip's issues are error level by default, one per exception, and a fresh board's first poll is a burst — they stay on the board («התראות»), where they are triaged",
+      "when": {"source": "glitchtip-issue"},
+      "post": false
+    },
+    {
+      "id": "bina-claude-signout",
+      "why": "the office's Claude lost its account: the sessions in it have STOPPED and a person must sign it in again (DGO-1430) — the red line AND «Claude מחובר שוב» when it comes back are one episode's pair, so they post with no window between them (repeat_minutes must be 0: both carry the same source_id, and a window would swallow the close), and neither counts against the hour: in a burst of other errors the one line that says the office's agent is stopped must not be the one held back. The adapter keeps its own grace before it says the first line, so nothing is held here",
+      "when": {"source": "bina-claude"},
+      "post": true,
+      "uncapped": true,
+      "repeat_minutes": 0
+    },
+    {
+      "id": "errors",
+      "why": "anything at error level, from any app: a person must act",
+      "when": {"level": ["error", "fatal", "critical"]},
+      "post": true,
+      "repeat_minutes": 240
+    },
+    {
+      "id": "rest",
+      "why": "warnings and information stay on the board («התראות»)",
+      "when": {},
+      "post": false
+    }
+  ],
+  "items": {
+    "why": "every work item that opens, closes or is cancelled — read from the control centre's own «היום» (feed.py), so Plane is read once. Who did it is not said yet: a Claude session writes with the owner's own Plane account, so an agent's act and his are one name (DGO-1329, a follow-up)",
+    "kinds": {"open": "📌", "done": "✅", "cancel": "✖️"}
+  },
+  "per_hour": 20
+}

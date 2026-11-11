@@ -46,13 +46,28 @@ public class EngineService extends Service {
     private static volatile boolean behindCore;   // this start's: the machine of the native core
     private static final Object LOCK = new Object();
     private static Process qemu;          // the one QEMU; null while none runs
-    private static boolean starting;      // between a start being asked and QEMU running
+    private static Avf avf;               // or the machine on the phone's own virtualization (DGO-1328)
+    private static boolean starting;      // between a start being asked and the machine running
     private static boolean stopping;      // a stop was asked: the start in progress launches nothing
 
     static boolean running() {
         synchronized (LOCK) {
-            return starting || (qemu != null && qemu.isAlive());
+            return starting || (qemu != null && qemu.isAlive()) || (avf != null && avf.alive());
         }
+    }
+
+    /**
+     * files/run/engine: which engine runs the machine and why — "avf", "kvm" or "tcg", or "none" (an APK with no
+     * QEMU where AVF did not come up, DGO-1723) — the reason, then the four
+     * checks, "1 <line>" or "0 <line>" each (Virt) — written at every start, read by the status screen.
+     */
+    static File engineFile(Context c) {
+        return new File(new File(c.getFilesDir(), "run"), "engine");
+    }
+
+    /** files/run/times: what each stage of this start took, "<stage> <seconds>" a line (the status screen). */
+    static File timesFile(Context c) {
+        return new File(new File(c.getFilesDir(), "run"), "times");
     }
 
     /** The machine running (or starting) now was started behind the native core — not its own office. */
@@ -68,8 +83,23 @@ public class EngineService extends Service {
         return new File(c.getFilesDir(), "console.log");
     }
 
-    static boolean installed(Context c) {
+    /** The APK carries QEMU (the arm64 ones do; an x86_64 APK carries none, DGO-1723). */
+    static boolean hasQemu(Context c) {
         return new File(c.getApplicationInfo().nativeLibraryDir, "libqemu-system-aarch64.so").exists();
+    }
+
+    /**
+     * Does this app have an engine for its machine? QEMU, where the APK carries it. An x86_64 Android (the
+     * emulator, DGO-1723) has no QEMU in its APK, and its engine is the phone's own virtualization: the app has one
+     * there when the phone has AVF for a machine that is not protected (or does not say, until the grant). The
+     * grant and the machine's kernel come later, each with its own line on the status screen; a phone with no
+     * AVF says so here, as an arm64 APK without QEMU did.
+     */
+    static boolean installed(Context c) {
+        if (hasQemu(c)) return true;
+        if (!"amd64".equals(Guest.ARCH)) return false;
+        Virt.Choice v = Virt.choose(c);
+        return v.avf.ok && (v.unprotected.ok || v.unknown);
     }
 
     @Override
@@ -85,6 +115,7 @@ public class EngineService extends Service {
                 PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT);
         Notification n = new Notification.Builder(this, CHANNEL).setSmallIcon(R.drawable.ic_launcher_foreground)
                 .setContentTitle(getString(R.string.engine_running)).setOngoing(true).setContentIntent(open)
+                .addAction(new Notification.Action.Builder(null, getString(R.string.status), status(this)).build())
                 .addAction(new Notification.Action.Builder(null, getString(R.string.engine_stop), stop).build())
                 .build();
         if (Build.VERSION.SDK_INT >= 34) startForeground(1, n, ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE);
@@ -98,7 +129,8 @@ public class EngineService extends Service {
             return START_NOT_STICKY;
         }
         synchronized (LOCK) {
-            if (starting || (qemu != null && qemu.isAlive())) return START_NOT_STICKY;   // one engine
+            // one engine: a second start while either machine runs would boot QEMU over the disk AVF holds
+            if (starting || (qemu != null && qemu.isAlive()) || (avf != null && avf.alive())) return START_NOT_STICKY;
             starting = true;
             stopping = false;
             behindCore = intent != null && intent.getBooleanExtra(BEHIND_CORE, false);
@@ -111,9 +143,12 @@ public class EngineService extends Service {
     /** The guest powers itself off (its journal and its databases closed), then QEMU is ended if it has not. */
     private void shutdown() {
         Process p;
+        Avf a;
         synchronized (LOCK) {
             p = qemu;
+            a = avf;
         }
+        if (a != null && a.alive()) a.powerDown(180_000);
         if (p != null && p.isAlive()) {
             try {
                 OutputStream mon = p.getOutputStream();   // -nographic: the monitor is on stdio after Ctrl-A c
@@ -139,6 +174,7 @@ public class EngineService extends Service {
 
     private void run() {
         Process mine = null;
+        Avf myAvf = null;
         // the CPU stays on while the office runs: with the screen off a phone sleeps its CPU, and the office
         // (its first start most of all) would stand still. Released when QEMU ends.
         PowerManager.WakeLock awake = getSystemService(PowerManager.class)
@@ -187,6 +223,93 @@ public class EngineService extends Service {
             getSystemService(ActivityManager.class).getMemoryInfo(mem);
             long mb = Math.max(2048, Math.min(6144, mem.totalMem / 2 / (1 << 20)));   // half the phone, 2–6 GiB
             int cpus = Math.max(2, Math.min(4, Runtime.getRuntime().availableProcessors() / 2));
+            long began = System.currentTimeMillis();
+
+            // THE ENGINE (DGO-1328): the phone's own virtualization where its four checks pass (Virt) — behind
+            // the core, whose token for this boot has a disk of its own there — else QEMU's emulation; which,
+            // and why, kept for the status screen. AVF that does not boot the machine says why and hands this
+            // very start to QEMU: the office comes up either way.
+            Virt.Choice choice = Virt.choose(this);
+            // an APK with no QEMU (x86_64, DGO-1723) has AVF alone: /dev/kvm is no reason to pass it by there
+            boolean qemuHere = hasQemu(this);
+            boolean hardware = behind && choice.hardware && (!kvm || !qemuHere);
+            engine(hardware ? "avf" : kvm ? "kvm" : "tcg", hardware ? choice.why
+                    : kvm ? "הטלפון פותח /dev/kvm לאפליקציה: QEMU רץ בהאצת חומרה"
+                    : behind ? choice.why : "המשרד של המכונה עצמה (לא מאחורי הליבה) רץ ב-QEMU", choice);
+            Avf a = null;
+            if (hardware) {
+                a = new Avf(this, console(this));
+                synchronized (LOCK) {
+                    if (stopping) return;   // stopped while preparing: nothing is launched (finally ends the service)
+                    myAvf = a;
+                    avf = a;
+                }
+                String failed = null;
+                try {
+                    a.start(port, token, mb << 20, new File(run, "avf-cpu").exists());
+                    boolean stop;
+                    synchronized (LOCK) {
+                        starting = false;
+                        stop = stopping;   // a Stop asked while AVF was starting: shutdown() found no machine yet
+                    }
+                    if (stop) {
+                        a.powerDown(180_000);
+                        return;
+                    }
+                    Avf on = a;
+                    if (behind) report(on::alive, port, token, reported);
+                    watchOffice(on::alive, began);
+                    boolean booted = false;
+                    while (a.alive()) {
+                        if (!booted && a.reached()) {
+                            booted = true;
+                            long s = (System.currentTimeMillis() - began) / 1000;
+                            times("avf-edge", s);
+                            place(Virt.bootResult(this), "ok " + s + " s");
+                        }
+                        Thread.sleep(1000);
+                    }
+                    if (booted || stopping) return;   // it ran, and ended (a Stop, a power-off): the office's end
+                    if (a.resetEarly()) {
+                        // the phone reset a guest that matched its CPUs (Tensor G3/G4, measured by others): one CPU
+                        // next, and AVF tried again — not a failure that shuts it out
+                        place(new File(run, "avf-cpu"), "one");
+                        place(Virt.bootResult(this), "retry " + Avf.stopReason(5) + " at boot — the next start asks for one CPU");
+                        failed = Avf.stopReason(5) + " at boot";
+                    } else {
+                        failed = a.why().isEmpty() ? "it ended before its edge answered" : a.why();
+                        place(Virt.bootResult(this), "failed " + BuildConfig.VERSION_CODE + " " + failed);
+                    }
+                } catch (Exception e) {
+                    Throwable root = e instanceof java.lang.reflect.InvocationTargetException && e.getCause() != null ? e.getCause() : e;
+                    failed = root.getClass().getSimpleName() + ": " + root.getMessage();
+                    place(Virt.bootResult(this), "failed " + BuildConfig.VERSION_CODE + " " + root);
+                }
+                // AVF did not bring the machine up: QEMU does, in this same start — the office comes up either way
+                a.kill();
+                synchronized (LOCK) {
+                    if (avf == a) avf = null;
+                    myAvf = null;
+                    starting = true;   // QEMU is this start's machine now
+                }
+                if (qemuHere) {
+                    engine("tcg", "AVF לא העלה את המכונה (" + failed + ") — QEMU מעלה אותה", choice);
+                    say(this, "[the app] AVF did not bring the machine up: " + failed + " — QEMU boots it");
+                } else {
+                    engine("none", "AVF לא העלה את המכונה (" + failed + "), ובאפליקציה הזו אין QEMU", choice);
+                    say(this, "[the app] AVF did not bring the machine up: " + failed + " — and this APK carries no QEMU");
+                    return;   // nothing launched: finally ends this start
+                }
+            }
+            if (!qemuHere) {
+                // no QEMU in this APK, and AVF was not this start's engine: behind the core, the first check that is
+                // not green says why; the machine's own office (no core in front of it) runs under QEMU alone
+                String why = behind ? "באפליקציה הזו אין QEMU, ו-AVF עוד לא יכול להריץ את המכונה: " + choice.why
+                        : "באפליקציה הזו אין QEMU, והמשרד של המכונה עצמה (לא מאחורי הליבה) רץ רק ב-QEMU";
+                engine("none", why, choice);
+                say(this, "[the app] this APK carries no QEMU and AVF is not this start's engine: " + why);
+                return;
+            }
             List<String> cmd = new ArrayList<>(Arrays.asList(lib + "/libqemu-system-aarch64.so",
                     // QEMU is relocatable: it looks for its ROMs beside its own binary unless told where
                     "-L", share.getAbsolutePath(),
@@ -213,7 +336,9 @@ public class EngineService extends Service {
                 qemu = mine;
                 starting = false;
             }
-            if (behind) report(mine, port, token, reported);
+            Process q = mine;
+            if (behind) report(q::isAlive, port, token, reported);
+            watchOffice(q::isAlive, began);
             mine.waitFor();
         } catch (Exception e) {
             try (OutputStream o = new FileOutputStream(console(this), true)) {
@@ -225,9 +350,11 @@ public class EngineService extends Service {
             awake.release();
             boolean last;
             synchronized (LOCK) {
-                if (mine == null) starting = false;   // this run never launched: its own start is over
-                last = qemu == mine && !starting;     // a newer start (even one still preparing) keeps its service
+                if (mine == null && myAvf == null) starting = false;   // this run never launched: its own start is over
+                // a newer start (even one still preparing) keeps its service
+                last = qemu == mine && avf == myAvf && !starting;
                 if (qemu == mine) qemu = null;
+                if (avf == myAvf) avf = null;
                 if (last) stopping = false;
             }
             if (last) {
@@ -241,13 +368,88 @@ public class EngineService extends Service {
         }
     }
 
+    /** The engine and why (engineFile), with the four checks, written whole. */
+    private void engine(String which, String why, Virt.Choice c) {
+        StringBuilder s = new StringBuilder(which).append('\n').append(why.replace('\n', ' ')).append('\n');
+        for (Virt.Check k : new Virt.Check[]{c.avf, c.unprotected, c.granted, c.boots}) {
+            s.append(k.ok ? "1 " : "0 ").append(k.said.replace('\n', ' ')).append('\n');
+        }
+        try {
+            place(engineFile(this), s.toString());
+        } catch (Exception ignored) {
+            // the status screen says what it can without it
+        }
+    }
+
     /**
-     * Once QEMU answers on its port, the machine is reported to the core — "<port> <token>", written whole
-     * (a .part, synced, renamed) — from a thread of its own while QEMU runs.
+     * The office in the machine up — bbox run's "up." on its console — measured from the machine's start
+     * (timesFile's office-up), once, while the machine runs.
      */
-    private static void report(Process q, int port, String token, File to) {
+    private void watchOffice(java.util.function.BooleanSupplier alive, long began) {
+        Thread t = new Thread(() -> {
+            while (alive.getAsBoolean()) {
+                String said = MainActivity.tail(console(this), 1 << 16);
+                if (MainActivity.runEnded(said)) {
+                    times(MainActivity.runFatal(said) ? "office-not-up" : "office-up",
+                            (System.currentTimeMillis() - began) / 1000);
+                    return;
+                }
+                try {
+                    Thread.sleep(5000);
+                } catch (InterruptedException e) {
+                    return;
+                }
+            }
+        }, "office-up");
+        t.setDaemon(true);
+        t.start();
+    }
+
+    /** The status screen, as a notification's action opens it (DGO-1328). */
+    static PendingIntent status(Context c) {
+        return PendingIntent.getActivity(c, 5, new Intent(c, StatusActivity.class),
+                PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT);
+    }
+
+    /** A line of the app's own on the machine's console, where the status screen and the log show it. */
+    static void say(Context c, String line) {
+        try (OutputStream o = new FileOutputStream(console(c), true)) {
+            o.write(("\n" + line + "\n").getBytes(java.nio.charset.StandardCharsets.UTF_8));
+        } catch (Exception ignored) {
+            // the console is the only place to say it
+        }
+    }
+
+    /** One stage's time, appended to timesFile (NativeService empties it as the office starts). */
+    static void times(Context c, String stage, long seconds) {
+        try (OutputStream o = new FileOutputStream(timesFile(c), true)) {
+            o.write((stage + " " + seconds + "\n").getBytes(java.nio.charset.StandardCharsets.UTF_8));
+        } catch (Exception ignored) {
+            // a time not kept is a time not shown
+        }
+    }
+
+    private void times(String stage, long seconds) {
+        times(this, stage, seconds);
+    }
+
+    /** text at f, whole: a .part, synced, renamed. */
+    private static void place(File f, String text) throws java.io.IOException {
+        File part = new File(f.getPath() + ".part");
+        try (FileOutputStream o = new FileOutputStream(part)) {
+            o.write(text.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            o.getFD().sync();
+        }
+        if (!part.renameTo(f)) throw new java.io.IOException("could not place " + f);
+    }
+
+    /**
+     * Once the machine answers on its port, it is reported to the core — "<port> <token>", written whole
+     * (a .part, synced, renamed) — from a thread of its own while the machine runs.
+     */
+    private static void report(java.util.function.BooleanSupplier alive, int port, String token, File to) {
         new Thread(() -> {
-            while (q.isAlive()) {
+            while (alive.getAsBoolean()) {
                 try (java.net.Socket s = new java.net.Socket()) {
                     s.connect(new java.net.InetSocketAddress("127.0.0.1", port), 500);
                     File part = new File(to.getPath() + ".part");
@@ -255,7 +457,7 @@ public class EngineService extends Service {
                         o.write((port + " " + token + "\n").getBytes(java.nio.charset.StandardCharsets.UTF_8));
                         o.getFD().sync();
                     }
-                    if (q.isAlive()) part.renameTo(to);
+                    if (alive.getAsBoolean()) part.renameTo(to);
                     else part.delete();
                     return;
                 } catch (java.io.IOException e) {

@@ -1,0 +1,72 @@
+# ai/context/seo/names.yaml — the one table of names (DGO-678, seo-112): every name the business uses for itself,
+# in Hebrew and English, with where it is published and the sameAs each site declares. A page, an article, a
+# repository file or a profile that names one of these uses exactly the form here; a new name is added here first.
+# The source of truth for the product's own words is apps/digital-assets/content/FACTS.md («Names»); this table
+# adds the addresses, the accounts and the measured sameAs. Checked 2026-11-10.
+#
+# NOT DONE HERE, the owner's: the check at the Israel Patent Office's trademark register (and abroad) before any
+# name is fixed for good — a registration is a legal act in the company's name (the work item says so).
+
+checked: 2026-11-10
+sources:
+  - https://github.com/bina-solution/digital-office/blob/main/apps/digital-assets/content/FACTS.md
+  - https://digital-office.co.il/          # its JSON-LD, read 2026-11-10
+  - https://bina-solutions.co.il/          # its JSON-LD, read 2026-11-10
+
+names:
+  product:
+    he: הלשכה הדיגיטלית
+    en: Digital Office
+    short: DGO                              # the same in both languages
+    first_mention_he: «הלשכה הדיגיטלית (DGO)»
+    grammar_he: feminine — «DGO חינמית», «הלשכה עלתה»
+  installation:
+    he: לשכה                                # plural לשכות; never «משרד» (a physical office only)
+    en: an office
+    several: «ה-DGO שלכם» / "your DGO"      # several linked offices
+  instance:
+    he: מופע                                # never "tenancy"
+  company:
+    he: בינה סולושנס
+    en: Bina Solutions
+    role: develops and provides DGO
+  agent:
+    he: עזריה                               # masculine
+    en: Azaria
+    lives_in: the agent app «בינה» (DeepSeek Harness, in Hebrew)
+  apps:                                     # as FACTS.md names them
+    - { he: «מסמכים», en: INDOX, what: incoming documents end to end }
+    - { he: «מסמכים שלי», en: my-docs, what: the business's own documents }
+    - { he: «כלי מסמכים», en: apitools, what: OCR and value extraction }
+    - { he: «דרייב», en: drive }
+    - { he: «מייל», en: mail }
+    - { he: «צ׳אט», en: chat }
+    - { he: «דפדפן», en: browser42, what: the office's shared browser }
+    - { he: «ניהול גרסאות», en: git }
+    - { he: «הרחבת הלשכה», en: dgo-extend, what: links offices together }
+    - { he: «מחשבים», en: computers }
+    - { he: «נכסים דיגיטליים», en: digital-assets }
+    - { he: «דומיינים», en: domains }
+    - { he: «ניהול אפליקציות», en: app-management }
+    - { he: «חיבורים ומפתחות», en: connections, what: the vault of keys, passwords and OAuth logins }
+    - { he: «ניהול נתונים», en: data-management, what: backup and restore }
+
+addresses:
+  product_site: https://digital-office.co.il
+  company_site: https://bina-solutions.co.il      # its sitemap lists www.…, which answers 301 to the bare host
+  source_code: https://github.com/bina-solution/digital-office
+  github_account: https://github.com/bina-solution
+  never: https://github.com/bina-solution/digital-office   # the old private address: 404 to everyone else
+
+same_as:                                    # measured: what each site's JSON-LD declares, 2026-11-10
+  digital-office.co.il:
+    - https://github.com/bina-solution/digital-office
+  bina-solutions.co.il:
+    - https://www.facebook.com/profile.php?id=61557788151355
+    - https://twitter.com/SolutionsBina
+    - https://www.linkedin.com/company/Bina-solutions
+    - https://maps.app.goo.gl/FXyY7FmaXY2EybSd6
+  gaps:
+    - digital-office.co.il names Bina Solutions as its parent organisation, but its sameAs carries only the
+      repository; the company's own profiles belong on the Organization (publisher) node, DGO-792.
+    - the repository's README links to neither site (linkmap/LINKS.md, 2026-11-10), seo-803.

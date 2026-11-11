@@ -10,8 +10,8 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/solomonBoltin/deployment-hacohen/packaging/dgo/internal/pyval"
-	"github.com/solomonBoltin/deployment-hacohen/packaging/dgo/internal/yamlish"
+	"github.com/bina-solution/digital-office/packaging/dgo/internal/pyval"
+	"github.com/bina-solution/digital-office/packaging/dgo/internal/yamlish"
 )
 
 // ── .generated/registry/: the lists base apps read but must not author ────────────────────────────
@@ -21,8 +21,18 @@ import (
 // connections' consumers, probes and owned providers, and the agent's brief of every enabled app —
 // each derived from the manifests, so an app uninstalled is gone from every list in the same render.
 
-// renderRegistries is render_registries(cat, order, served), file by file in its order.
-func renderRegistries(repo, gen string, cat *Catalog, order []string, served []remoteEntry, framed map[string]string, env *dotenv) error {
+// appBase is reconcile.py's app_base: one entry of console.app_bases.json — where the console's door sends
+// /a/<alias>/, and `people: admins` for an admins' app, which the door refuses to anyone else (DGO-1755).
+func appBase(m, doc *yamlish.Map) *yamlish.Map {
+	e := ordered("env", get(m, "url_env"), "default", get(m, "url"))
+	if appAdmins(doc) {
+		e.Set("people", "admins")
+	}
+	return e
+}
+
+// renderRegistries is render_registries(cat, order, served, state), file by file in its order.
+func renderRegistries(repo, gen string, cat *Catalog, order []string, served []remoteEntry, framed map[string]string, env *dotenv, st *State) error {
 	reg := filepath.Join(gen, "registry")
 	if err := mkdir(reg); err != nil {
 		return err
@@ -50,7 +60,7 @@ func renderRegistries(repo, gen string, cat *Catalog, order []string, served []r
 			// API is what the console's power card calls), the launcher shows nothing — as reconcile.py
 			if getOr(m, "tile", true) == false {
 				if embedded && truthy(get(m, "url")) {
-					bases.Set(pyval.Str(alias), ordered("env", get(m, "url_env"), "default", get(m, "url")))
+					bases.Set(pyval.Str(alias), appBase(m, doc))
 				}
 				continue
 			}
@@ -93,9 +103,20 @@ func renderRegistries(repo, gen string, cat *Catalog, order []string, served []r
 					e.Set("service", get(m, "service"))
 				}
 			}
+			// `tab: true`: the app asks for a place in the console's bar on a phone — declared by the app, never
+			// named by the console (DGO-1800); only a true bool, as reconcile.py's `is True`
+			if get(m, "tab") == true {
+				e.Set("tab", true)
+			}
+			// the people the app is waiting for (DGO-1336): the console server's address, as reconcile.py
+			if h, err := handoffsAddress(aid, doc, r); err != nil {
+				return err
+			} else if h != "" {
+				e.Set("handoffs", h)
+			}
 			tiles = append(tiles, tile{getOr(m, "order", int64(999)), e})
 			if embedded && truthy(get(m, "url")) {
-				bases.Set(pyval.Str(alias), ordered("env", get(m, "url_env"), "default", get(m, "url")))
+				bases.Set(pyval.Str(alias), appBase(m, doc))
 			}
 		}
 	}
@@ -121,6 +142,14 @@ func renderRegistries(repo, gen string, cat *Catalog, order []string, served []r
 		return err
 	}
 	if err := write(filepath.Join(reg, "console.app_bases.json"), yamlish.IndentJSON(bases)+"\n"); err != nil {
+		return err
+	}
+	// the language artifact (DGO-971): the ONE file every UI reads its language from
+	var doc *yamlish.Map
+	if st != nil {
+		doc = st.Doc
+	}
+	if err := write(filepath.Join(reg, "locale.json"), yamlish.IndentJSON(localeDoc(doc))+"\n"); err != nil {
 		return err
 	}
 
@@ -197,7 +226,7 @@ func renderRegistries(repo, gen string, cat *Catalog, order []string, served []r
 			return err
 		}
 		for _, k := range p.Keys() {
-			probes.Set(k, get(p, k))
+			probes.SetFrom(p, k)
 		}
 	}
 	owned := []any{}
@@ -211,7 +240,7 @@ func renderRegistries(repo, gen string, cat *Catalog, order []string, served []r
 		for _, p := range provs {
 			entry := yamlish.NewMap() // {**p, "_app": aid}
 			for _, k := range p.Keys() {
-				entry.Set(k, get(p, k))
+				entry.SetFrom(p, k)
 			}
 			entry.Set("_app", aid)
 			owned = append(owned, entry)
@@ -387,7 +416,20 @@ func isNotInt(err error) bool { return err == errNotInt }
 // ownHostOnly is _own_host_only(module): may a peer frame this app only on a host of its own? When it
 // is framed on its own host at home, not framed at all, or embedded only because this edge answers
 // paths of the console's origin for it.
+//
+// …UNLESS THE APP SAYS IT CAN BE MOUNTED UNDER A PATH (`path_mount`, DGO-553). The console is the case
+// this exists for: `embed: false` because one office has one console and it is the one you look at —
+// yet that whole shell is exactly what a linked office's «המרכז» tile is for, and the Python compiler
+// has answered false for it since the feature landed. This function is the port's mirror of
+// `platform/manager/reconcile.py::_own_host_only`, and without the clause the port would render the
+// console as own-host-only: the tile of a linked office would carry no `door`, and the full-console
+// half of DGO-553 would stop working the day an office moves to the native compiler — silently.
+// It overrides only the `embed: false` half, exactly as the Python rule does (`external` and
+// `passthrough` were measured failing under a path: 2026-10-05, 2026-10-09).
 func ownHostOnly(m *yamlish.Map) bool {
+	if truthy(get(m, "path_mount")) && !truthy(get(m, "external")) && !truthy(get(m, "passthrough")) {
+		return false
+	}
 	return truthy(get(m, "external")) || getOr(m, "embed", true) == false || truthy(get(m, "passthrough"))
 }
 
@@ -448,6 +490,41 @@ func agentAPIService(man *yamlish.Map) string {
 	return ""
 }
 
+// handoffsPattern is serve.HANDOFFS_PATH: the path an app lists its hand-offs at (the schema's pattern).
+var handoffsPattern = regexp.MustCompile(`^/[A-Za-z0-9/_.-]*$`)
+
+// handoffsPathOf is serve.handoffs_path() on one manifest: where the app lists the people it is waiting
+// for (`handoffs`, DGO-1336), or "".
+func handoffsPathOf(man *yamlish.Map) string {
+	if s, ok := get(man, "handoffs").(string); ok && handoffsPattern.MatchString(s) {
+		return s
+	}
+	return ""
+}
+
+// handoffsAddress is handoffs_address(): where THIS office's console asks the app which people it is
+// waiting for (DGO-1336) — its declared path on its agent door, answered by `agent_api_service` (else the
+// route's own service) on `agent_api_port` — or "". The console never names the app (G9).
+func handoffsAddress(aid string, man, r *yamlish.Map) (string, error) {
+	path := handoffsPathOf(man)
+	if path == "" {
+		return "", nil
+	}
+	ui := pyval.IntegerOf(0)
+	if p, ok := get(r, "port").(int64); ok {
+		ui = pyval.IntegerOf(p)
+	}
+	port, err := agentAPIPort(man, ui)
+	if err != nil || port == 0 {
+		return "", err
+	}
+	service := agentAPIService(man)
+	if service == "" {
+		service = pyval.Str(either(get(r, "service"), aid))
+	}
+	return fmt.Sprintf("http://%s:%d%s", service, port, path), nil
+}
+
 // remoteRecords is remote_records(served): {"remote.<office>.<alias>.json": record} — the one per-app
 // record of a remote app, in the plan's order.
 func remoteRecords(served []remoteEntry) ([]string, map[string]*yamlish.Map) {
@@ -465,6 +542,17 @@ func remoteRecords(served []remoteEntry) ([]string, map[string]*yamlish.Map) {
 				"order", a.order, "module", ordered("kind", "external", "host", tile, "path", either(a.modulePath, "/")),
 				"health", either(a.health, "/healthz"), "port", a.port, "link_port", e.linkPort,
 				"agent_api_port", a.apiPort,
+				// HOW TO REACH IT (DGO-553) — the door's base and the authority that office's app
+				// answers under. The console has them in its tile either way; a per-app record that
+				// leaves them out makes every OTHER reader of this file reconstruct them (the
+				// computers app merging a linked office's machines, the CLI, an agent asking "where
+				// is bina.macbook"), and a second derivation is what drifts. Without it
+				// `remote.apps()` skips every peer record and the shared fleet is silently empty —
+				// half of DGO-553 (ב), with nothing anywhere saying why. reconcile.py's record carries
+				// it too since 2026-11-10: this side had it alone after batch 33, and the render
+				// oracle found the two apart.
+				"door", ordered("base", fmt.Sprintf("http://%s:%d", tile, door(e, a)), "host", either(a.host, ""),
+					"user", either(e.identTo, "")),
 				"remote", ordered("office", e.office, "label", e.label, "link", e.link, "address", e.address, "commit", e.commit))
 		}
 	}

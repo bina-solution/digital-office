@@ -429,7 +429,7 @@ def revive_cycle(project, st):
 # ── the overdue one-off (DGO-1231) ───────────────────────────────────────────────────────────────
 # A container somebody ran BY HAND (`docker run`, not compose) that declares no restart is a one-off
 # job. One that is still running long after any job should have ended is a leak, and nothing else in
-# the office ever looks at it. Measured on The Fireplace Guys' server, 2026-11-02: a WebGL probe run
+# the office ever looks at it. Measured on The Examplef Guys' server, 2026-11-02: a WebGL probe run
 # under `timeout 150 docker run …` ran 8 hours at a full core (its PID 1, python3, ignores the
 # SIGTERM `timeout` sends; there was no --init), and a `meet verify --call` box (`sleep infinity`)
 # had outlived its run by 93 hours. On a 2-vCPU server the provider then throttled the whole office
@@ -528,7 +528,7 @@ def overdue_cycle(project, st):
 # (IDLE_LABEL), and gives its address to the waker (app-management) while it is stopped, so opening it
 # starts it again. This stops it once its network has been quiet for that window: every IDLE_EVERY the
 # container's own counters (rx + tx, every interface) are read, and a look in which it moved less than
-# IDLE_BYTES is a quiet one. Measured on The Fireplace Guys' CAD desktop, 2026-11-03: ~336 bytes a minute
+# IDLE_BYTES is a quiet one. Measured on The Examplef Guys' CAD desktop, 2026-11-03: ~336 bytes a minute
 # with nobody connected, megabytes a minute while a person has it open — its health probe runs on its own
 # loopback and is not counted. The clock starts at the first look (a restarted autoheal gives a full
 # window again), and a container whose counters went back (it was restarted) is in use. Only this
@@ -635,7 +635,7 @@ def idle_cycle(project, st):
 # ── files left in a RAM-backed /tmp (DGO-1271) ────────────────────────────────────────────────────
 # Where the machine's /tmp is a tmpfs (Debian 13 makes it one), every file hand-run work leaves there is
 # RAM — and swap, once memory runs short — until systemd-tmpfiles ages it out after 10 days. On The
-# Fireplace Guys' server, 2026-11-02, 1,103 MB of it: four `meet verify` runs (689 MB of wav) and 164
+# Examplef Guys' server, 2026-11-02, 1,103 MB of it: four `meet verify` runs (689 MB of wav) and 164
 # copies of chimney-services from a deploy's preflight (276 MB, a dozen more each day), on a server whose
 # swap was full. Nothing saw it. This looks every TMP_EVERY at the machine's /tmp (mounted read-only at
 # HOST_TMP): when it is a tmpfs holding more than TMP_LIMIT, the owner is told ONCE per episode, with the
@@ -820,7 +820,7 @@ def opted_in(project):
     this service could restart a NEIGHBOUR OFFICE's containers on an engine carrying two stacks
     (DGO-428). The old line called that "as it always did"; it is not a scope at all, it is the
     absence of one, and a restart it performs lands in somebody else's office. So: no project, no
-    list. `own_project()` is asked once at start and a cycle without an answer refuses to act."""
+    list. `wait_for_project()` asks `own_project()` until it answers, and refuses to act until then."""
     if not project:
         raise ValueError("no compose project: this service will not act on an engine it cannot scope")
     return {"label": [f"{LABEL}=true", f"com.docker.compose.project={project}"],
@@ -895,35 +895,61 @@ def _heartbeat(watching, refused=""):
         log(f"could not write heartbeat: {e}")
 
 
+def wait_for_project(sleep=time.sleep, alarm_after=5):
+    """This service's compose project, asked until it answers.
+
+    FAIL CLOSED (DGO-428). The scope of this service is its compose project; an engine can carry a
+    neighbour office's stack, and without a project there is no way to tell the two apart — so while
+    it is unknown this service acts on NOTHING and says so, once a minute. The container stays healthy
+    on purpose: its heartbeat is how a person sees that the watchdog is up while its scope is not, and
+    an unhealthy supervisor would be restarted by nothing (it carries no autoheal label itself).
+
+    ASKED AGAIN EVERY MINUTE (DGO-1761). It used to be asked once, at start, and a refusal lasted for
+    the life of the container. On the HP the whole stack came up at once on 2026-11-05 15:02Z; the one
+    inspect of `autoheal-hp` failed in that minute, and the office had no self-heal for five days while
+    the container carried its project label (`mydgo`) and DEPLOYMENT_NAME was right the whole time —
+    the alarm told the owner to fix two things that were not broken, 23 times. A busy daemon at boot is
+    the ordinary case, not the rare one: so the owner hears of it only after `alarm_after` minutes without
+    an answer, and hears once more, when it answers, that the self-heal works again (second reader)."""
+    project = own_project()
+    if project:
+        return project
+    me = f"autoheal-{os.environ.get('DEPLOYMENT_NAME') or 'bina-deployment'}"
+    log(f"REFUSING TO ACT: cannot tell which compose project this is — no answer for a container named "
+        f"{me} carrying a com.docker.compose.project label. An engine can carry another office's stack "
+        "(DGO-428), so no container will be restarted and none will be reported until this answers; "
+        "it is asked again every minute. If it never answers: set DEPLOYMENT_NAME to this office's "
+        "deployment name, or start this service from its compose file.")
+    misses, told = 1, False
+    while True:
+        _heartbeat(0, refused="no-project")
+        if misses >= alarm_after:
+            notify("error", "הריפוי העצמי לא פועל — הפרויקט שלו לא ידוע",
+                   f"כבר {misses} דקות השירות אינו יודע איזו לשכה הוא משרת, ולכן אינו מפעיל מחדש ואינו "
+                   "מדווח על אף מכולה: במנוע אחד יכולות לשבת שתי לשכות, ופעולה על מכולה של השכן היא נזק "
+                   "אמיתי. הוא שואל שוב כל דקה. אם זה לא עובר: לוודא ש-DEPLOYMENT_NAME מתאים לשם הלשכה "
+                   f"({os.environ.get('DEPLOYMENT_NAME') or 'bina-deployment'}) ולקום מהקומפוז שלה.",
+                   "autoheal", f"no-project:{int(time.time())}")
+            told = True
+        sleep(60)
+        project = own_project()
+        if project:
+            log(f"the compose project answered now: {project!r} — acting from here on")
+            if told:
+                notify("info", "הריפוי העצמי פועל שוב",
+                       f"הפרויקט שלו ענה אחרי {misses} דקות ({project}): מעכשיו הוא מפעיל מחדש ומדווח כרגיל.",
+                       "autoheal", f"project-back:{int(time.time())}")
+            return project
+        misses += 1
+
+
 def main():
     log(f"starting — label={LABEL}=true interval={INTERVAL}s streak={STREAK} "
         f"cooldown={int(COOLDOWN)}s max_restarts={MAX_RESTARTS}/{int(WINDOW / 3600)}h "
         f"dry_run={DRY_RUN}")
     log(f"never restarts services matching: {', '.join(NEVER_RESTART)}")
 
-    project = own_project()
-    if not project:
-        # FAIL CLOSED (DGO-428). The scope of this service is its compose project; an engine can
-        # carry a neighbour office's stack, and without a project there is no way to tell the two
-        # apart — so it acts on NOTHING and says so, once here and once a minute after that. The
-        # container stays healthy on purpose: its heartbeat is how a person sees that the watchdog
-        # is up while its scope is not, and an unhealthy supervisor would be restarted by nothing
-        # (it carries no autoheal label itself).
-        log("REFUSING TO ACT: cannot tell which compose project this is — no container named "
-            f"autoheal-{os.environ.get('DEPLOYMENT_NAME') or 'bina-deployment'} carrying a "
-            "com.docker.compose.project label. An engine can carry another office's stack "
-            "(DGO-428), so no container will be restarted and none will be reported until this "
-            "answers. Set DEPLOYMENT_NAME to this office's deployment name, or start this service "
-            "from its compose file.")
-        while True:
-            _heartbeat(0, refused="no-project")
-            notify("error", "הריפוי העצמי לא פועל — הפרויקט שלו לא ידוע",
-                   "השירות אינו יודע איזו לשכה הוא משרת, ולכן אינו מפעיל מחדש ואינו מדווח על אף "
-                   "מכולה: במנוע אחד יכולות לשבת שתי לשכות, ופעולה על מכולה של השכן היא נזק אמיתי. "
-                   f"כדי לסדר: לוודא ש-DEPLOYMENT_NAME מתאים לשם הלשכה "
-                   f"({os.environ.get('DEPLOYMENT_NAME') or 'bina-deployment'}) ולקום מהקומפוז שלה.",
-                   "autoheal", f"no-project:{int(time.time())}")
-            time.sleep(60)
+    project = wait_for_project()
     log(f"this deployment is compose project {project!r}: restarting only its labelled "
         f"containers, and reporting (never restarting) any of its containers held unhealthy "
         f"for {int(WATCH_AFTER)}s")
@@ -1219,9 +1245,9 @@ def selftest():
           "breaker")
     check("a Docker timestamp is read as UTC", int(_ago("2026-11-02T16:16:50.123456789Z", 1793636210.0)), 0)
 
-    # The overdue one-off (DGO-1231), from The Fireplace Guys' server on 2026-11-02.
+    # The overdue one-off (DGO-1231), from The Examplef Guys' server on 2026-11-02.
     od = lambda **k: decide_overdue(**{**dict(compose_made=False, policy="no", running_for=8 * 3600,  # noqa: E731
-                                              labels={}, project="fireplace", own_project="fireplace",
+                                              labels={}, project="examplef", own_project="examplef",
                                               max_age=6 * 3600), **k})[0]
     check("frosty_mendel (hand-run, this office's browser42 image, 8 h, restart no) -> STOP", od(), "stop")
     check("the old meet-verify box (pulled jibri image, no project, no label, 93 h) -> REPORT only",
@@ -1233,7 +1259,7 @@ def selftest():
     check("a hand-run one-off of ANOTHER office's project -> SKIP (not ours to report)", od(project="staging"), "skip")
     check("a `compose run` job (oneoff=True, no container number), 8 h -> SKIP",
           od(labels={"com.docker.compose.oneoff": "True"}), "skip")
-    check("site-fireplace-guys (hand-run, restart unless-stopped) -> SKIP", od(policy="unless-stopped"), "skip")
+    check("site-examplef-guys (hand-run, restart unless-stopped) -> SKIP", od(policy="unless-stopped"), "skip")
     check("a compose service, however old -> SKIP", od(compose_made=True, running_for=900 * 3600), "skip")
     check("a 60-minute call test, 70 min in -> SKIP", od(running_for=70 * 60), "skip")
     check("binaos.max-age=36000 at 8 h -> SKIP", od(labels={ONEOFF_AGE_LABEL: "36000"}), "skip")
@@ -1244,7 +1270,7 @@ def selftest():
               od(labels={ONEOFF_AGE_LABEL: bad}, running_for=3600), "skip")
 
     print("\n=== on demand: an app that runs only while it is used (DGO-1270) ===")
-    # The CAD desktop on The Fireplace Guys' server, 2026-11-03: ~336 bytes a minute with nobody
+    # The CAD desktop on The Examplef Guys' server, 2026-11-03: ~336 bytes a minute with nobody
     # connected (≈1.7 KB a 5-minute look), megabytes while a person has it open; a 2 h window.
     idl = lambda **k: decide_idle(**{**dict(window=7200, quiet_for=7300, moved=1700,  # noqa: E731
                                             threshold=64 * 1024), **k})[0]
@@ -1264,7 +1290,7 @@ def selftest():
     def engine(method, path, timeout=15.0):
         if path.startswith("/containers/json"):
             if urllib.parse.quote(IDLE_LABEL) in path:
-                return 200, [{"Id": "c1", "Names": ["/cad-fireplace"],
+                return 200, [{"Id": "c1", "Names": ["/cad-examplef"],
                               "Labels": {IDLE_LABEL: "7200", IDLE_APP_LABEL: "cad"}}]
             return 200, [{"Id": "w", "Labels": {f"traefik.http.middlewares.{a}-wake{WAKE_HEADER_LABEL}": a
                                                 for a in waker["routes"]}}]
@@ -1278,7 +1304,7 @@ def selftest():
         if quiet is not None:
             st["seen"]["c1"]["quiet_since"] = time.time() - quiet
         st["next"] = 0
-        idle_cycle("fireplace", st)
+        idle_cycle("examplef", st)
 
     real = globals()["_docker"]
     globals()["_docker"] = engine
@@ -1313,7 +1339,7 @@ def selftest():
     mib = 2 ** 20
     dt = lambda **k: decide_tmp(**{**dict(fstype="tmpfs", used=1103 * mib, limit=512 * mib,  # noqa: E731
                                           told=False), **k})[0]
-    check("FPG 2026-11-02: 1,103 MB in a tmpfs /tmp, limit 512 MB -> REPORT", dt(), "report")
+    check("EXF 2026-11-02: 1,103 MB in a tmpfs /tmp, limit 512 MB -> REPORT", dt(), "report")
     check("the same, already told in this episode -> SKIP (once per episode)", dt(told=True), "skip")
     check("41 MB after the leftovers were moved, told before -> CLEAR", dt(used=41 * mib, told=True), "clear")
     check("450 MB, told before (under the limit, over 80%) -> SKIP (no flapping)", dt(used=450 * mib, told=True), "skip")
@@ -1327,8 +1353,8 @@ def selftest():
           ("tmpfs", "ext4", None))
     check("a leftover's group: mktemp and run-stamp tails dropped, a plain name kept",
           [tmp_group(n) for n in ("chimney-r2-4J0yHQ", "meet-verify-47ilv6ic", "meet-verify-261030-0118",
-                                  "chat81-r2f7oP", "fpg-verify-shots", "r6meet", "bad\nname\udcff")],
-          ["chimney", "meet-verify", "meet-verify", "chat81", "fpg-verify-shots", "r6meet", "badname�"])
+                                  "chat81-r2f7oP", "exf-verify-shots", "r6meet", "bad\nname\udcff")],
+          ["chimney", "meet-verify", "meet-verify", "chat81", "exf-verify-shots", "r6meet", "badname�"])
     import tempfile
     import types
     told, g = [], globals()
@@ -1367,6 +1393,47 @@ def selftest():
                    "1103 MB" in (told[0][1] if told else "")), (1, "warning", True, True))
         finally:
             g["HOST_TMP"], g["mount_type"], g["notify"], g["TMP_LIMIT"], os.statvfs = saved
+
+    print("\n=== a project that does not answer at start is asked again (DGO-1761) ===")
+    # The HP, 2026-11-05 15:02Z: the one inspect at start failed while 70 containers came up, and the
+    # refusal lasted five days. Here: no answer, none a minute later, then the label's `mydgo`.
+    g = globals()
+    saved = (g["own_project"], g["notify"], g["_heartbeat"])
+    answers = [None, None, "mydgo"]
+    told, slept, beats = [], [], []
+
+    def nap(s):                      # a wait that never asks again ends here, not in an endless test
+        slept.append(s)
+        if len(slept) > 12:
+            raise TimeoutError("still refusing after twelve minutes of answers")
+
+    def ask():
+        return answers.pop(0) if answers else "mydgo"
+
+    try:
+        g["own_project"] = ask
+        g["notify"] = lambda level, title, body, name, event_id: told.append(level)
+        g["_heartbeat"] = lambda watching, refused="": beats.append(refused)
+        try:
+            got = wait_for_project(sleep=nap)
+        except TimeoutError as e:
+            got = str(e)
+        check("no answer at start, none a minute later, then «mydgo» -> acts on mydgo, and a boot this short "
+              "rings no one", (got, told, slept, beats), ("mydgo", [], [60, 60], ["no-project", "no-project"]))
+        answers[:] = [None] * 6 + ["mydgo"]
+        told.clear(), slept.clear(), beats.clear()
+        try:
+            got = wait_for_project(sleep=nap)
+        except TimeoutError as e:
+            got = str(e)
+        check("six minutes without an answer -> the alarm from the fifth minute, then once «works again»",
+              (got, told, len(slept)), ("mydgo", ["error", "error", "info"], 6))
+        answers[:] = ["mydgo"]
+        told.clear(), slept.clear(), beats.clear()
+        check("an answer at start -> no refusal, no wait, no alarm",
+              (wait_for_project(sleep=slept.append), told, slept, beats), ("mydgo", [], [], []))
+    finally:
+        g["own_project"], g["notify"], g["_heartbeat"] = saved
 
     print()
     if fails:

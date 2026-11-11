@@ -1,0 +1,27 @@
+#!/bin/sh
+# /usr/local/bin/<id>-desktop — the Selkies session's one application: <Vendor client>. openbox runs it (through
+# ~/.config/openbox/autostart, which names only this file) as the image's user `abc`, with HOME=/config, the
+# volume's `desktop` folder. POSIX sh: that is how the session runs it. The worked example is
+# apps/bina-claude/desktop/autostart.
+
+# The keyring the client keeps its sign-in in. Its password is minted once into HOME and unlocks it at every
+# start, so the sign-in survives a recreate (without an unlocked keyring the client asks again every launch).
+[ -n "${DBUS_SESSION_BUS_ADDRESS:-}" ] || eval "$(dbus-launch --sh-syntax)"
+KEYPW="${HOME}/.keyring-pass"
+[ -s "${KEYPW}" ] || ( umask 077; head -c 24 /dev/urandom | od -An -tx1 | tr -d ' \n' > "${KEYPW}" )
+eval "$(gnome-keyring-daemon --replace --unlock --components=secrets < "${KEYPW}" | sed 's/^/export /')"
+
+# An Electron client picks its secret store from the desktop it sees; under openbox it sees none and keeps its
+# tokens in plain text, so every recreate signs out (DGO-1335). Name the keyring.
+export XDG_CURRENT_DESKTOP="${XDG_CURRENT_DESKTOP:-GNOME}"
+
+# The client's own updater stays off: the image is the version, and an update is a rebuild. Say here how this
+# client is told so (a flag, a setting in HOME, an environment variable), or that it has no updater.
+
+# Brought back whenever it exits (a sign-out, a crash, the window closed): this display has one purpose.
+# --no-sandbox: Chromium's sandbox needs user namespaces that docker's default seccomp denies; the container
+# is the sandbox. No GPU here. Drop the flags a client that is not Electron does not take.
+while :; do
+  <vendor-binary> --no-sandbox --disable-gpu --password-store=gnome-libsecret >>"${HOME}/.<id>.log" 2>&1
+  sleep 3
+done

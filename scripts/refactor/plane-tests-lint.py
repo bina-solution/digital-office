@@ -150,6 +150,18 @@ def run(test: pathlib.Path, repo: pathlib.Path) -> tuple[str, str]:
     # reader of DGO-1040); such a server now prints why it died, and the rule above reads a missing package.
     if re.search(NO_NAME, out):
         return "NOT RUN", "it asks a live office's service by name, and that name does not resolve here"
+    # A test that could not run HERE may say so itself, with the reason, on one line: `NOT RUN <why>`.
+    # It ran nothing, so it is not a pass; what it would have checked was never checked, so it is not a
+    # failure either — and --strict still counts it (computers' test_door.sh, whose throwaway containers
+    # need the docker daemon to see the directory they bind: 2026-11-05).
+    # The marker is the WORD, followed by a space and the reason. `NOT RUN:` with a colon is a note
+    # printed INSIDE a test that means to fail: platform-base/traefik's test_forward_auth_trust.py prints
+    # one on a machine with no visible edge, and those are a failure both before and after today — a new
+    # declaration may not quietly turn an existing failure into "did not run" (GATES.md, "Tightening a
+    # contract": enumerate the callers first, and this one is the only NOT RUN: in the tree).
+    claim = [ln.strip() for ln in out.splitlines() if ln.strip().startswith("NOT RUN ")]
+    if claim:
+        return "NOT RUN", claim[-1][len("NOT RUN"):].strip(" —:-")[:110]
     return "FAIL", said_failure(out, last)[:110]
 
 
@@ -397,6 +409,10 @@ def self_test() -> int:
         (plane / "test_no_runner.py").write_text(
             'import sys\nif __name__ == "__main__":\n'
             '    sys.exit(sys.executable + ": No module named pytest")\n', encoding="utf-8")
+        # a test that runs nothing here and says why is NOT RUN, not a FAIL (it needs the docker daemon)
+        (plane / "test_cannot_run.sh").write_text(
+            '#!/usr/bin/env bash\necho "NOT RUN its containers need the docker daemon, and there is none here"\n'
+            'exit 3\n', encoding="utf-8")
         (plane / "helper.py").write_text("raise SystemExit(9)\n", encoding="utf-8")   # not a test: never run
         # an app's: beside it, one directory below it, and the self-check in its tools/
         app = tmp / "apps" / "thing"
@@ -418,7 +434,7 @@ def self_test() -> int:
             (tmp / "scripts" / where / name).write_text(body, encoding="utf-8")
         got = {t.name: run(t, tmp)[0] for t in discover(tmp)}
         want = {"test_fails.py": "FAIL", "test_needs.py": "NOT RUN", "test_no_runner.py": "NOT RUN",
-                "test_live_name.py": "NOT RUN", "test_loopback.py": "FAIL",
+                "test_live_name.py": "NOT RUN", "test_loopback.py": "FAIL", "test_cannot_run.sh": "NOT RUN",
                 "test_passes.py": "PASS", "test_beside.py": "PASS", "test_below.py": "PASS", "ui-selfcheck.py": "PASS",
                 "catalog_selftest.py": "PASS", "connect-selftest.py": "PASS", "test_map_tool.py": "PASS"}
         ok = got == want and check(tmp, strict=False) == 1
@@ -455,7 +471,7 @@ def self_test() -> int:
     ]
     ok = ok and all(image)
     print("\nplane-tests-lint self-test: "
-          + ("12/12 outcomes told apart (planes, apps, self-tests, the map's tools, a live name, a refused loopback); a failing test fails the gate, an unrunnable one "
+          + ("13/13 outcomes told apart (planes, apps, self-tests, the map's tools, a live name, a refused loopback, a test that says it could not run); a failing test fails the gate, an unrunnable one "
              f"only under --strict; {sum(image)}/{len(image)} about a test's own image"
              if ok else "FAILED — got " + str(got) + " · image cases " + str(image)))
     return 0 if ok else 1

@@ -7,7 +7,7 @@ the engine actually wrote — not merely that a dot rendered.
 
 Uses ONLY the local mail engine (admin@local.test / user2@local.test, both provisioned by
 apps/mail/docker-compose.yml's mailserver-init) — never the real client mailbox
-(mail_imap_app_password-51185288 / person9@example.com). See ai/context and the repo's own
+(mail_imap_app_password-51185288 / person10@example.com). See ai/context and the repo's own
 memory: real-mailbox injection is forbidden for exactly this kind of test.
 
 User stories covered

@@ -136,7 +136,8 @@ export default function App() {
           {/* (who this is was not READ — yet, or the service did not answer: that is not «לא מאומת») */}
           {!me ? null : me.authenticated ? (
             <span>
-              {me.username}
+              {/* [DGO-257] no login name, as on the live side menu; the console's user chip says who */}
+              מחובר/ת
               {me.is_admin && (
                 <span className="pill healthy" style={{ marginInlineStart: 6 }}>
                   מנהל

@@ -253,7 +253,8 @@ NGINX_HEADERS = """  # security headers live in the SITE, not only in the edge: 
   add_header Referrer-Policy strict-origin-when-cross-origin always;
   add_header X-Frame-Options SAMEORIGIN always;
   add_header Permissions-Policy "geolocation=(), microphone=(), camera=()" always;
-  add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;"""
+  # HSTS for the site's own host only: a subdomain may be another office on another server (DGO-687).
+  add_header Strict-Transport-Security "max-age=31536000" always;"""
 
 NGINX_LOG_FORMAT = """# THE one log the office reads. JSON, one object per line, written under ./logs so the office
 # collects visits by reading a file — no script in the page, no third party, nothing to block.
@@ -481,21 +482,31 @@ def probe_edge(machine_id: str) -> dict:
 
 
 def _middlewares_from(text: str) -> list[str]:
-    """`name:` keys under a top-level `middlewares:` mapping — a deliberately small parser, because
-    the only question asked here is 'does this name exist', and a YAML library in this container
-    for that would be a dependency with a CVE feed."""
-    out, inside = [], False
+    """The names a `middlewares:` MAPPING defines (traefik's `http: middlewares:`): its direct child keys, nothing
+    deeper — a deliberately small parser, because the only question asked here is 'does this name exist', and a YAML
+    library in this container for that would be a dependency with a CVE feed. A router's own `middlewares:` is a list
+    (or `&anchor`), so it defines nothing. The first version took every indented key until the next top-level line:
+    on vps1's edge 246 «names» (`Host`, `customFrameOptionsValue`, every router after the first router list) for 53
+    real ones — so a stale name in a site's record passed as defined, and traefik drops a router that names a
+    middleware it cannot resolve (2026-11-10)."""
+    out: list[str] = []
+    level = child = None
     for raw in (text or "").splitlines():
-        if re.match(r"^\s*middlewares:\s*$", raw):
-            inside = True
+        # a comment, and a line of traefik's own Go templating (`{{- if … }}`, often at column 0), are not structure
+        if not raw.strip() or raw.lstrip().startswith(("#", "{{")):
             continue
-        if inside:
-            if raw.strip() and not raw.startswith((" ", "\t")):
-                inside = False
-                continue
-            m = re.match(r"^\s{2,}([A-Za-z0-9_.-]+):", raw)
-            if m:
-                out.append(m.group(1))
+        indent = len(raw) - len(raw.lstrip(" \t"))
+        if level is not None and indent <= level:
+            level = child = None
+        opened = re.match(r"^(\s*)middlewares:\s*(#.*)?$", raw)
+        if opened and level is None:
+            level = len(opened.group(1))
+            continue
+        if level is not None:
+            child = indent if child is None else child
+            key = re.match(r"""^\s*["']?([A-Za-z0-9_.-]+)["']?:""", raw) if indent == child else None
+            if key:
+                out.append(key.group(1))
     return out
 
 

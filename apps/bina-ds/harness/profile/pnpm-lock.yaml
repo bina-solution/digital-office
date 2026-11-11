@@ -274,6 +274,9 @@ importers:
       '@bina/dsh-office-context':
         specifier: file:../../plugins/office-context
         version: file:../../plugins/office-context
+      '@bina/dsh-office-shell-env':
+        specifier: file:../../plugins/office-shell-env
+        version: file:../../plugins/office-shell-env
       '@bina/dsh-office-workspace':
         specifier: file:../../plugins/office-workspace
         version: file:../../plugins/office-workspace
@@ -432,6 +435,9 @@ packages:
 
   '@bina/dsh-office-context@file:../../plugins/office-context':
     resolution: {directory: ../../plugins/office-context, type: directory}
+
+  '@bina/dsh-office-shell-env@file:../../plugins/office-shell-env':
+    resolution: {directory: ../../plugins/office-shell-env, type: directory}
 
   '@bina/dsh-office-workspace@file:../../plugins/office-workspace':
     resolution: {directory: ../../plugins/office-workspace, type: directory}
@@ -3727,6 +3733,8 @@ snapshots:
       zod: 4.6.6
 
   '@bina/dsh-office-context@file:../../plugins/office-context': {}
+
+  '@bina/dsh-office-shell-env@file:../../plugins/office-shell-env': {}
 
   '@bina/dsh-office-workspace@file:../../plugins/office-workspace': {}
 

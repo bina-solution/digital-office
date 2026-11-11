@@ -11,7 +11,7 @@ services:
     # fetched only when it is not here already, so a checkout that has built it is untouched;
     # the `build:` below stays as the fallback. Needs the GHCR package readable — a package made
     # from a private repo is private, so `docker login ghcr.io` on a machine that must pull.
-    image: ghcr.io/solomonboltin/digital-office/dgo-extend:${IMAGE_TAG:-latest}
+    image: ghcr.io/bina-solution/digital-office/dgo-extend:${IMAGE_TAG:-latest}
     pull_policy: missing
     build:
       context: .
@@ -24,6 +24,8 @@ services:
       - DEPLOYMENT_NAME=${DEPLOYMENT_NAME:-bina-deployment}
       - CONNECTIONS_URL=${CONNECTIONS_URL:-http://connections:8990}
       - COMPUTERS_URL=${COMPUTERS_URL:-http://computers:8977}
+      # who this app is to `computers`, whose writes answer only a known caller (DGO-1304)
+      - COMPUTERS_EXEC_TOKEN=${COMPUTERS_EXEC_TOKEN:-}
       - GIT_URL=${GIT_URL:-http://git:8978}
       - DOMAINS_URL=${DOMAINS_URL:-http://domains:8980}
       # Where THIS office's checkout lives on the machine that runs it. `bbox` exports it
@@ -71,9 +73,27 @@ services:
       # DGO_RELAY_FOR, on the hub only: the offices whose pairs its door joins, `id` or `id=<public key>`.
       - DGO_RELAY=${DGO_RELAY:-}
       - DGO_RELAY_FOR=${DGO_RELAY_FOR:-}
+      # seconds a pair may be down before the owner is told; empty = the herd file's `alert_after_s` for that
+      # office, else 600 (DGO-922)
+      - DGO_LINK_ALERT_AFTER=${DGO_LINK_ALERT_AFTER:-}
       # THE AGENTS THIS OFFICE HANDS ITS TOKEN FOR to a linked office it gives them (DGO-1127): app ids or
       # aliases, comma-separated, beside what `serve:` names by hand. `*` alone never hands a token over.
       - DGO_SERVE_AGENTS=${DGO_SERVE_AGENTS:-}
+      # THE SECRETS THIS OFFICE GIVES a linked office (DGO-1330, «סודות תמיד במק»): `<office>=<vault instance>`,
+      # comma-separated, one by one — never a pattern. That office's own dgo-extend pulls each over the link
+      # into its own vault (app.api_link_secret, projection.pull_secrets); none is ever written into another's.
+      - DGO_SERVE_SECRETS=${DGO_SERVE_SECRETS:-}
+      # …and THE SECRETS THIS OFFICE TAKES from one (`<office>=<vault instance>`): both ends name each, so a
+      # holder alone never decides what lands in this vault
+      - DGO_TAKE_SECRETS=${DGO_TAKE_SECRETS:-}
+      # WHERE THE OFF-SERVER COPIES of the offices this one backs up are kept (converge.offsite_home/offsite_dir):
+      # the store's computers-app id, and a directory on its own disk (empty = this machine, docker's volumes)
+      - DGO_OFFSITE_TO=${DGO_OFFSITE_TO:-}
+      - DGO_OFFSITE_DIR=${DGO_OFFSITE_DIR:-}
+      # how many verified copies a store keeps per office, and the image that reads a store reached as a
+      # non-root docker user — the code's own defaults; set to hold a small store (the Mac's engine, DGO-1799)
+      - DGO_OFFSITE_KEEP=${DGO_OFFSITE_KEEP:-7}
+      - DGO_OFFSITE_HELPER=${DGO_OFFSITE_HELPER:-alpine:3.20}
       # WHO a request arriving over a link BECOMES on this office, when the app it reaches declared no
       # mapping of its own: the account `bbox run` creates at this office's edge. A NAME, not a
       # credential. Declared here because the other way to learn it is reading `.env` on the machine
@@ -116,6 +136,10 @@ services:
       # what the DOOR recorded, read-only: one line per request another office made through it
       # (link-proxy.py's access record, DGO-890), which `GET /api/link/access` serves to the security app
       - dgo_doorlog:/doorlog:ro
+      # the herd's own declaration, read-only (DGO-1355): its offices, its hub and the hub's door, so the hub's
+      # relay is every office's by being in the herd — not by a line in each office's `.env`. A directory, not
+      # the file: a take replaces herd.yaml with a new inode, which a file mount would never see.
+      - ../computers:/herd:ro
       # THIS OFFICE's OWN compiled registry, read-only (DGO-37). The catalog this office publishes
       # on a link is a PROJECTION of `.generated/registry/office.apps.json`, so there is exactly one
       # list of which apps this office has — the compiler's — and never a second one maintained here.
@@ -163,7 +187,7 @@ services:
     # bring-up does, a missing image is built once from the app's service and all three are created
     # from it (compose 5.3.1, measured in a throwaway project); a sidecar started ALONE on a machine
     # that has never held the image has nothing to build from, and says so.
-    image: ghcr.io/solomonboltin/digital-office/dgo-extend:${IMAGE_TAG:-latest}
+    image: ghcr.io/bina-solution/digital-office/dgo-extend:${IMAGE_TAG:-latest}
     pull_policy: missing
     container_name: dgo-net-${DEPLOYMENT_NAME:-bina-deployment}
     hostname: dgo-net
@@ -212,7 +236,7 @@ services:
     # route is a PATH of a host and lives on the tunnel's container, which the compiler does not emit.
     # An office that declares no DGO_LINK_HOST routes `link.localhost`, where nothing answers — and asks no
     # certificate for it: the resolver is named only with a declared host. Before, every edge start asked
-    # Let's Encrypt for link.localhost and was refused (fireplace, 2026-10-23; an empty resolver is what a
+    # Let's Encrypt for link.localhost and was refused (examplef, 2026-10-23; an empty resolver is what a
     # local office's routers already carry — scripts/lib.sh export_cert_resolver).
     labels:
       - traefik.enable=true
@@ -221,6 +245,9 @@ services:
       - traefik.http.routers.dgo-extend-link-door.tls=true
       - traefik.http.routers.dgo-extend-link-door.tls.certresolver=${DGO_LINK_HOST:+${TRAEFIK_CERTRESOLVER-myresolver}}
       - traefik.http.routers.dgo-extend-link-door.service=dgo-extend-link-door
+      # a machine-to-machine door, and the pin costs it nothing: a certificate on this host is a
+      # certificate (DGO-1595; every websecure router in the tree carries it — test_https.py asks)
+      - traefik.http.routers.dgo-extend-link-door.middlewares=hsts@file
       - traefik.http.services.dgo-extend-link-door.loadbalancer.server.port=51445
     deploy:
       resources:
@@ -255,7 +282,7 @@ services:
   # It mounts the plan read-only: the app has the opinion (linkproxy.py), this only applies it.
   dgo-link:
     # the app's own image, built by the app's service (see dgo-net)
-    image: ghcr.io/solomonboltin/digital-office/dgo-extend:${IMAGE_TAG:-latest}
+    image: ghcr.io/bina-solution/digital-office/dgo-extend:${IMAGE_TAG:-latest}
     pull_policy: missing
     container_name: dgo-link-${DEPLOYMENT_NAME:-bina-deployment}
     restart: unless-stopped
@@ -307,7 +334,7 @@ services:
   # It reads the office's WireGuard private key (`wg-private.key`, root's, 600) — which is why it
   # runs as root, with every capability dropped, no new privileges and a read-only root filesystem.
   dgo-carry:
-    image: ghcr.io/solomonboltin/digital-office/dgo-carry:${IMAGE_TAG:-latest}
+    image: ghcr.io/bina-solution/digital-office/dgo-carry:${IMAGE_TAG:-latest}
     pull_policy: missing
     build:
       context: ./carrier

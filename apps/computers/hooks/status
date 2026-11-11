@@ -1,0 +1,3 @@
+#!/usr/bin/env bash
+#: status — one computer's live state (hostname, os, load, memory, disk): <id|local> [--fresh] [--json]
+exec bash "$(dirname "${BASH_SOURCE[0]}")/../tools/verb" status "$@"

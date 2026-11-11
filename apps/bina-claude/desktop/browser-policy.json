@@ -1,0 +1,14 @@
+{
+  "AutoLaunchProtocolsFromOrigins": [
+    {"protocol": "claude", "allowed_origins": ["https://claude.ai", "https://claude.com"]}
+  ],
+  "CommandLineFlagSecurityWarningsEnabled": false,
+  "DownloadRestrictions": 3,
+  "BackgroundModeEnabled": false,
+  "BrowserSignin": 0,
+  "SyncDisabled": true,
+  "PasswordManagerEnabled": false,
+  "MetricsReportingEnabled": false,
+  "DefaultBrowserSettingEnabled": false,
+  "PromotionalTabsEnabled": false
+}

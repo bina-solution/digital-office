@@ -46,6 +46,64 @@ synthesis is in `reports/Digital Office positioning and debate.md`.
 - Then the story is told at the level of an art piece ("Hollywood level"): the whole digital presence of
   Bina Solutions and the Digital Office, "a respectful and respected front".
 
+## What the founder's briefing decided (bs101, 2026-11-03)
+
+The briefing was a 95-minute meeting, carried into the office as DGO-1307…1312. What it decided about
+the story is below, drawn from the transcript. This file is copied into the public repository, so it
+holds only what may be published. Everything else stays private in the office drive, at
+`/פגישות/2026-11-03 · bs101/`:
+- the transcript;
+- «בינה סולושנס והלשכה — ההקשר המסודר.md», the ordered context with the minute of each point;
+- `מחקר/`, the research, with 42 sourced facts on the Israeli market.
+
+Points 1, 2, 4 and 5 are in `apps/digital-assets/content/FACTS.md` since 2026-11-10, as the founder's
+words rather than measurements. Points 3, 6 and 7 are the story's own; an article may not cite them
+until they are in FACTS.
+
+1. **The name of the thing:** «מערכת הפעלה לעידן המודרני», an operating system for the modern era.
+   One install on any device runs every app in a container, and gives a business a ready collection in
+   Hebrew. This confirms the concept above.
+2. **Four values** (the founder's words; DGO aims for them):
+   - **patterns:** a person reaches every app the same ways: its screen, the `dgo` command line, and an
+     agent;
+   - **one interface:** one screen for the whole office;
+   - **a collection:** apps chosen and tested by us, some of them translated into Hebrew;
+   - **integration:** «הכול יודע על הכול», everything knows about everything.
+3. **The problem it answers:** a business runs on about nine systems, with a subscription for each, its
+   information scattered among them, and weeks of setup.
+4. **How the company earns: «הקניון», the mall.**
+   - The software is free and open (AGPL v3).
+   - The money comes from brokering what costs money physically:
+     - servers, including servers in Israel;
+     - compute and GPU;
+     - storage;
+     - domains;
+     - remote access;
+     - an AI model that runs in Israel, paid ahead in credit.
+   - No one is locked in: an office may use outside AI or run local models.
+   - The open source is the engine of the traffic.
+   - The briefing's research (in the drive's `מחקר/`) found that cloud referral programmes pay in
+     credit, not cash. So the income may have to come from resale or a partnership with a provider.
+   - This replaces the earlier model on the site's pages (a managed cloud as the main income, and paid
+     apps in a store). The site's correction waits for the founder's approval, in the roadmap mock on
+     DGO-1310.
+5. **Who it is for:** businesses first, Israel first among them. The segments are real estate, retail,
+   development, service companies and content creators. Personal use belongs to the Digital Office, but
+   not necessarily to the business plan.
+6. **The proof:** a customer runs INDOX in production on its own server, for the cost of the server: about
+   3,000 payment requests a month from more than 250 suppliers. Neither the customer nor its trade is
+   written anywhere public without the customer's approval.
+7. **The challenges it names openly:**
+   - security, which is also where the potential is;
+   - quality, which needs a tester;
+   - legal: ownership, patents, and the licences of the open-source apps it runs;
+   - the company itself: a registered company in Israel, a network of our own, and a domain;
+   - profit and marketing.
+8. **The goal for the next three months** (three months from the briefing, by **3.2.2027**): a stable version
+   for iPhone, Android, Mac, Windows and Linux. It ships as a download from the site and in the stores,
+   and its offices link to each other securely. Where it stands is measured, not assumed: see the drive's
+   «מפת דרכים — נמדדת 2026-11-10.md», and the roadmap page's mock on DGO-1310.
+
 ## Verbatim
 
 ### 2026-11-02, Hebrew (spoken)

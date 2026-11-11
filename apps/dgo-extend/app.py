@@ -29,6 +29,7 @@ from __future__ import annotations
 
 import json
 import logging
+import math
 import os
 import re
 import socket
@@ -198,7 +199,7 @@ def validate(body: dict, existing: dict | None) -> tuple[dict | None, str | None
             d[k] = (body.get(k) or "").strip()
     if existing and existing.get("domain") and d.get("domain") != existing["domain"]:
         # a domain change keeps the domain the MACHINE is on: the env step moves its .env from that name
-        # to the new one, and from no other (FPG-33). That is the one before this change, unless an
+        # to the new one, and from no other (EXF-33). That is the one before this change, unless an
         # earlier change was not converged yet (a typo corrected before the run): then it is still that
         # earlier one, which the env step clears once the machine has moved. Changed back to it: nothing to do.
         was = existing.get("renamed_from") or existing["domain"]
@@ -247,7 +248,7 @@ def validate(body: dict, existing: dict | None) -> tuple[dict | None, str | None
         d["placement"] = sorted({str(x).strip() for x in want if str(x).strip()})
     if "engine" in body:
         d["engine"] = {"replace_docker": bool((body.get("engine") or {}).get("replace_docker"))}
-    if "watch" in body:                       # the daily checks (FPG-26): {health: daily, backup: daily}, or none
+    if "watch" in body:                       # the daily checks (EXF-26): {health: daily, backup: daily}, or none
         w = body.get("watch") or {}
         if (not isinstance(w, dict) or set(w) - set(WATCH_KINDS)
                 or any((v or "daily") not in WATCH_EVERY for v in w.values())):
@@ -257,6 +258,18 @@ def validate(body: dict, existing: dict | None) -> tuple[dict | None, str | None
             d["watch"] = kept
         else:
             d.pop("watch", None)
+    # where the off-server copies go (EXF-92, DGO-1508): the store's computers-app id, and a directory on its own disk
+    # (converge.offsite_home / offsite_dir). Empty = this office's machine, docker's own volumes.
+    for key, shape, say in (("offsite_to", r"[a-z][a-z0-9_]{1,40}-[a-z0-9][a-z0-9_.\-]{0,62}", "מזהה מחשב (computer_…)"),
+                            ("offsite_dir", r"/[A-Za-z0-9._/-]{1,200}", "נתיב מלא במחסן")):
+        if key in body:
+            v = str(body.get(key) or "").strip().rstrip("/") if key == "offsite_dir" else str(body.get(key) or "").strip()
+            if v and (not re.fullmatch(shape, v) or ".." in v.split("/")):
+                return None, f"{key}: {say}"
+            if v:
+                d[key] = v
+            else:
+                d.pop(key, None)
     # the link plane's rules live in declaration.py: pure stdlib, so the gate can exercise them
     # without importing this module's web stack (measured: `import app` outside a container needs
     # `requests`, and a gate that cannot run is not a gate).
@@ -294,7 +307,7 @@ _runs_lock = threading.Lock()
 
 
 def _run_file(oid: str, kind: str = "") -> Path:
-    """The office's last run — and, in a file of its own, its last off-server backup (FPG-26): a daily
+    """The office's last run — and, in a file of its own, its last off-server backup (EXF-26): a daily
     backup written over the converge's run left the card without its health check every day, its status
     the backup's, and a failed upgrade masked by the next morning's backup."""
     return RUN_DIR / (f"{oid}.{kind}.json" if kind in ("backup", "repair") else f"{oid}.json")
@@ -567,7 +580,7 @@ def _dial_endpoint(office: dict) -> str:
 # other flow from the same machine crosses normally. Measured TWICE on this office, the same way both
 # times: 2026-10-04 on port 51820 and 2026-10-06 on 51832 — the tunnel counted its handshake
 # initiations as sent, `tcpdump` on the office's own machine showed every 148-byte initiation leaving
-# (`192.168.5.15.<port> > 31.97.196.82.51820`), the server's `tcpdump` saw NONE of them while 13-byte
+# (`192.168.5.15.<port> > 93.184.216.5.51820`), the server's `tcpdump` saw NONE of them while 13-byte
 # control packets on other source ports arrived, and `wg set wg0 listen-port 51830` (respectively
 # `wg set wg2 listen-port 51900`) handshook within seconds.
 #
@@ -1126,6 +1139,7 @@ def _link_pairs(home: dict, records: dict) -> list[dict]:
         direction = netmod.link_direction(link)
         mirror = cv._mirror(direction)
         slot = int(tun.get("slot") or 0)
+        withheld = _admin_withheld(pid)
         out.append({
             "office": pid, "record": d, "link": link, "slot": slot,
             "peer_side": peer_side, "side": our_side,
@@ -1158,8 +1172,11 @@ def _link_pairs(home: dict, records: dict) -> list[dict]:
             # too: a reader that tests for `serve` alone renders a firewall with no accept for any
             # served port (measured 2026-10-01: a `serve:` declaration re-rendered this office's tunnel
             # and vps1's Bina stopped answering).
-            "ports": (cv._served_ports_local(home, slot, registry, peer=pid)
+            "ports": (cv._served_ports_local(home, slot, registry, peer=pid, withheld=withheld)
                       if mirror in ("serve", "both") else {}),
+            # the admin surfaces this peer is never given by `*` (DGO-1360): read by the firewall's ports above
+            # and by the link proxy's agent doors — a catalog that hides an app must not leave its port open
+            "withheld": withheld,
         })
     return out
 
@@ -1570,13 +1587,14 @@ def build_catalog(now: int | None = None, office: str = "") -> dict:
     home = cv.home_office()
     serve = catalog.app_specs(home.get("serve"))
     registry = catalog.load_registry(REGISTRY_DIR)
-    reg = catalog.publishable(registry, home.get("serve"), office)
+    withheld = _admin_withheld(office)
+    reg = catalog.publishable(registry, home.get("serve"), office, withheld)
     # The agent door each served app DECLARES — the very map the delivery plan opens its second door
     # from (`catalog.serve_with_agents`), so the port a peer reads is a port a door answers on. A
     # wildcard office used to publish no adapter at all (the number was popped below and only an
     # explicit `serve:` entry put it back), and a peer that cannot read the port cannot address it:
     # `bbox b42 task --office hp-laptop` died on `no_agent_door` (DGO-570).
-    doors = catalog.serve_with_agents(registry, home.get("serve"), office)
+    doors = catalog.serve_with_agents(registry, home.get("serve"), office, withheld)
     rows = []
     for row in (reg.get("apps") or []):
         if not isinstance(row, dict):
@@ -1640,6 +1658,78 @@ def build_catalog(now: int | None = None, office: str = "") -> dict:
     return {**out, "dials": dials} if dials else out
 
 
+_WITHHOLD_SAID: set = set()      # "no herd file, nothing withheld" is logged once, not on every catalog request
+
+
+def _admin_withheld(office: str) -> frozenset:
+    """What `*` never gives `office`: the herd file's `admin_apps` — the vault, root commands and terminals, app
+    management, git, security, the console, the full-access agents, the office browser — to ANY office: the herd's
+    hub, an office marked `public: true`, an office that is not the herd's own (a client's, a sandbox) (DGO-1360),
+    and since DGO-863 the home offices too — from an office the herd file lists in `admin_by_name` (staged: an
+    office whose own door was measured; one not listed keeps `*` for the home offices). An office gets one of them
+    only BY NAME: in `serve.only.<office>` (the
+    serving office's screen) or in the herd file's `give:` (one reviewed line). A read with no office (this office
+    reading its own list) and an office that is not itself the herd's (a client's herd runs this checkout, and our
+    rules are not its rules) see no change.
+
+    DGO-863 (2026-11-11): the home offices kept `*`, so an office of the herd held every other's vault and root
+    commands without anyone naming them. Measured before the flip — every door's served requests for 72 h, read
+    through each office's security app — every admin app a home office really opened at another is named in
+    `give:` (apps/computers/herd.yaml), and apps/dgo-extend/tests/test_admin_withheld.py holds those pairs open.
+
+    Measured 2026-11-05: the MacBook's fresh join with vps1 inherited `*`, and for 15 minutes the public server
+    could reach the MacBook's vault, its root commands on every machine it holds keys for, and its GitHub proxy."""
+    import net as netmod
+    who = str(office or "").strip().lower()
+    if not who:
+        return frozenset()
+    doc = _herd_doc()
+    if not doc:
+        if not _WITHHOLD_SAID:
+            _WITHHOLD_SAID.add(1)
+            log.warning("the herd file %s is not here — no admin surface is withheld from a public office", HERD_FILE)
+        return frozenset()
+    # FAILS CLOSED (second reader): this office applies the rule when its NAME is one of the herd's. Its key is not
+    # asked here, as it is for the relay: a key that changed (a reinstall) must never quietly turn the protection off.
+    if not _herd_entry(doc, str(cv.home_office().get("id") or "")):
+        return frozenset()
+    listed = doc.get("admin_apps") if isinstance(doc.get("admin_apps"), list) else []
+    admin = frozenset(str(a).strip().lower() for a in listed if str(a).strip())
+    if not admin:
+        return frozenset()
+    entry = _herd_entry(doc, who)
+    if not entry:
+        return admin
+    # BY KEY, NOT BY NAME: the office asking is the herd's office its name points at only when this office's own
+    # record of it — the pair the door belongs to — holds the key the herd file gives that office. A client's
+    # machine that happens to be called `portable` is not our Dell.
+    rec = next((d for d in all_declarations()
+                if isinstance(d, dict) and str(d.get("id") or "").strip().lower() == who), None)
+    key = netmod._key((rec or {}).get("identity"))
+    if not key or key != _herd_key(doc, entry):
+        return admin
+    o = doc["offices"].get(entry)
+    public = entry == _herd_hub(doc) or (isinstance(o, dict)
+                                         and str(o.get("public")).strip().lower() in ("true", "yes", "1"))
+    # STAGED (DGO-863): a home office is withheld from only by an office the herd file lists in `admin_by_name` — one
+    # whose door was measured and whose `give:` lines name what its peers use; an office not listed keeps `*` for
+    # the home offices, as before
+    listed_by_name = doc.get("admin_by_name") if isinstance(doc.get("admin_by_name"), list) else []
+    me = _herd_entry(doc, str(cv.home_office().get("id") or ""))
+    by_name = me in {_herd_entry(doc, str(x)) for x in listed_by_name if str(x).strip()}
+    if not public and not by_name:
+        return frozenset()
+    # The hub, a public office — and, from an office in admin_by_name, a home office too: nothing of admin_apps by
+    # `*` — except what the herd file itself gives that office BY NAME (`give:`, DGO-1433): a name in the herd's own
+    # declaration is a name, exactly as one in `serve.only.<office>` is. Each name is the ONE tile it designates
+    # (give.tile): `bina-claude` is the desktop, and the terminal (`claude-terminal`) stays withheld under `*`. Where
+    # `serve.only.<office>` names the app's id — by hand, or the floor's own entry under a named map — every tile of
+    # the app passes by that list (catalog.publishable), as it always has.
+    import give
+    named = give.names_for(cv.given_by_herd(), who, catalog.load_registry(REGISTRY_DIR))
+    return frozenset(a for a in admin if a not in named) if named else admin
+
+
 def _reshared(home: dict, office: str) -> list[dict]:
     """The `shared` sections for `office`: from the catalogs this office pulled (what each origin gave
     it), through this office's own door to each origin (its plan), minus what it hides itself. A read
@@ -1650,7 +1740,7 @@ def _reshared(home: dict, office: str) -> list[dict]:
     try:
         doors = {oid: p.get("door") for oid, p in projection.own_plan(home, str(STATE_DIR)).items()}
         return catalog.reshare(serve, office, str(home.get("id") or ""), catalog.load_all(STATE_DIR),
-                               doors, projection.load_exclude(STATE_DIR))
+                               doors, projection.load_exclude(STATE_DIR), _admin_withheld(office))
     except Exception as e:                              # noqa: BLE001 — the catalog itself must answer
         # …for EVERY linked office: one origin's stored catalog is another machine's output, and a
         # raise here was `/api/link/catalog` failing for all of them (second reader, 2026-10-19).
@@ -1726,8 +1816,15 @@ def _named_agents(home: dict, office: str = "") -> set[str]:
     the king's rule). Read here, not written into `serve:`: an entry `bina-ds: {}` would reach readers
     that take every key for a door with a port of its own."""
     serve = home.get("serve")
-    named = {str(k).strip().lower() for k in catalog.app_specs(serve) if str(k) != catalog.WILDCARD}
+    # office-wide names are what home.json HOLDS (`serve_written`, converge.with_give): a key the herd's floor added
+    # (give.py) is a name only for the office the herd file gives it to — never a token for every office the map does
+    # not narrow (second reader, DGO-1433)
+    written = home.get("serve_written") if isinstance(home.get("serve_written"), dict) else serve
+    named = {str(k).strip().lower() for k in catalog.app_specs(written) if str(k) != catalog.WILDCARD}
     named |= {str(n).strip().lower() for n in (catalog.only_for(serve, office) or set())}
+    if office:
+        import give
+        named |= give.names_for(cv.given_by_herd(), office, catalog.load_registry(REGISTRY_DIR))
     for word in re.split(r"[,\s]+", os.environ.get("DGO_SERVE_AGENTS") or ""):
         word = word.strip().lower()
         if word and _AGENT_NAME_RE.fullmatch(word):
@@ -1798,6 +1895,89 @@ def api_link_agent(alias: str, request: Request):
             "alias": row.get("alias") or row["app"], "port": int(row["api"]["port"]), "token": token}
 
 
+# ── a named secret, shared with one linked office (DGO-1330) ────────────────────────────────────────
+# «סודות תמיד במק»: a secret of the business lives in ONE office's vault (the Mac's), and no office writes
+# another's (hos-001). So another office gets it the way it gets an agent's credential: its OWN process pulls it
+# over the link (projection.pull_secrets) and keeps it in its own vault. What is given, to whom, is declared by
+# the office that HOLDS it, in its .env — `DGO_SERVE_SECRETS=<office>=<instance>[,<office>=<instance>…]` — and
+# nothing else is: not `*`, not a protocol, not a pattern. The same three checks as an agent's credential.
+#: a vault instance id: `<protocol>-<suffix>`
+_SECRET_ID_RE = re.compile(r"[a-z][a-z0-9_]{1,40}-[a-z0-9][a-z0-9_.\-]{0,62}")
+
+
+def _shared_secrets(office: str) -> list[str]:
+    """The vault instances this office gives `office` — named one by one in DGO_SERVE_SECRETS."""
+    out = []
+    for word in re.split(r"[,\s]+", os.environ.get("DGO_SERVE_SECRETS") or ""):
+        who, _, iid = word.strip().partition("=")
+        iid = iid.strip()
+        if who.strip().lower() == office.lower() and _SECRET_ID_RE.fullmatch(iid) and iid not in out:
+            out.append(iid)
+    return out
+
+
+def _link_peer(request: Request) -> tuple[str, JSONResponse | None]:
+    """(the linked office asking, or the refusal) — api_link_agent's three checks, for a secret: the
+    connection comes from the link proxy, the office is the door's `x-dgo-office`, and the caller presents
+    the secret this office shares with THAT office."""
+    import hmac
+    import links
+    came = str(getattr(getattr(request, "client", None), "host", "") or "").replace("::ffff:", "")
+    proxy = _link_proxy_addresses()
+    if not proxy or came not in proxy:
+        log.warning("link secret: refused a caller at %s — only the link proxy asks here", came or "?")
+        return "", _err("רק דלת הקישור שואלת כאן", 403)
+    office = (request.headers.get("x-dgo-office") or "").strip()
+    presented = (request.headers.get("authorization") or "")
+    presented = presented[7:].strip() if presented.lower().startswith("bearer ") else ""
+    if not office or not presented:
+        return "", _err("נדרשים הלשכה של הדלת וסוד הזוג", 403)
+    try:
+        held = links.pair_tokens(str(cv.home_office().get("id") or "local"), office)
+    except links.LinkError as e:
+        return "", _err(str(e), 503)
+    if not any(hmac.compare_digest(presented.encode(), tok.encode()) for _n, tok in held):
+        log.warning("link secret: %s presented a secret this office does not share with it", office)
+        return "", _err(f"הסוד שהוצג אינו הסוד של הזוג עם {office}", 403)
+    return office, None
+
+
+@link_app.get("/api/link/secrets")
+def api_link_secrets(request: Request):
+    """The ids of the secrets this office gives the asking office — what its pull asks for, and what it may keep."""
+    office, refused = _link_peer(request)
+    if refused is not None:
+        return refused
+    return {"office": cv.home_office().get("id") or "local", "secrets": _shared_secrets(office)}
+
+
+@link_app.get("/api/link/secret/{iid}")
+def api_link_secret(iid: str, request: Request):
+    """One secret this office gives the asking office: its protocol, label and value, read from this vault."""
+    import links
+    office, refused = _link_peer(request)
+    if refused is not None:
+        return refused
+    if iid not in _shared_secrets(office):
+        return _err(f"{iid} אינו ניתן ל-{office} (DGO_SERVE_SECRETS)", 403, code="not_shared")
+    try:
+        rows = links._call("GET", "/api/instances").get("instances") or []
+        row = next((r for r in rows if r.get("id") == iid), None)
+        secret = links._call("GET", f"/api/instances/{iid}/secret").get("secret") or {} if row else {}
+    except links.LinkError as e:
+        return _err(f"הכספת לא ענתה על {iid}: {e}", 503)
+    if not row or not secret:
+        return _err(f"{iid} אינו בכספת של הלשכה הזו", 404)
+    if str(row.get("protocol") or "") == links.PROTOCOL:
+        return _err("סוד של קישור אינו ניתן דרך קישור", 403, code="not_shareable")
+    if str(secret.get("office") or ""):
+        # a copy this office itself PULLED from another: it is that office's to give, never passed on (one hop)
+        return _err(f"{iid} הוא עותק שהלשכה הזו משכה מ-{secret['office']} — מבקשים אותו משם", 403, code="not_ours")
+    log.info("link secret: %s took %s", office, iid)
+    return {"office": cv.home_office().get("id") or "local", "id": iid, "protocol": row.get("protocol") or "",
+            "label": row.get("label") or "", "account_hint": row.get("account_hint") or "", "secret": secret}
+
+
 def _serve_link() -> None:
     import uvicorn
 
@@ -1825,7 +2005,8 @@ def _project_once() -> dict:
         log.warning("link heal failed: %s: %s", type(e).__name__, e)
     _projection_state.clear()
     _projection_state.update(result)
-    items = api_link()["items"]
+    link_doc = api_link()
+    items = link_doc["items"]
     verdicts = {it["office"]: it["verdict"] for it in items}
     # An office reached THROUGH another (a `remote:` entry with `via`, catalog.shared_sections) is as
     # reachable as the link it rides — its tiles carry that link's verdict, never a blank.
@@ -1836,7 +2017,7 @@ def _project_once() -> dict:
     peers.publish_link(verdicts)
     _record_link_history(items, result.get("healed"))
     try:
-        _alert_link_drops(items)
+        _alert_link_drops(items, home=str((link_doc.get("home") or {}).get("id") or ""))
     except Exception as e:                              # noqa: BLE001 — telling is not the plan
         log.warning("link alert failed: %s: %s", type(e).__name__, e)
     try:
@@ -1962,7 +2143,36 @@ def _record_link_history(items: list[dict], healed: list[dict] | None = None) ->
 #: long is told to the office, once per outage, through the office's own notifications (the bell in
 #: the console), and its return is told too. Ten minutes: a laptop restarting is not news, a laptop
 #: that is gone over lunch is.
-LINK_ALERT_AFTER = float(os.environ.get("DGO_LINK_ALERT_AFTER", "600"))
+try:                                                    # a bad value is the default, never an app that cannot start
+    LINK_ALERT_AFTER = float(os.environ.get("DGO_LINK_ALERT_AFTER") or "600")
+    _LINK_ALERT_ENV = bool(os.environ.get("DGO_LINK_ALERT_AFTER")) and LINK_ALERT_AFTER > 0
+except ValueError:
+    LINK_ALERT_AFTER, _LINK_ALERT_ENV = 600.0, False
+LINK_ALERT_AFTER = LINK_ALERT_AFTER if LINK_ALERT_AFTER > 0 else 600.0
+
+
+def _link_alert_after(oid: str, doc: dict | None = None, home: str = "") -> float:
+    """How long the pair with `oid` may be down before the owner is told (DGO-922). The office's own
+    DGO_LINK_ALERT_AFTER where it declares one; else the herd file's `alert_after_s` — an always-on member (the
+    HP, vps1) is missed sooner than a laptop that sleeps and roams — taken as the LARGER of the two ends of the
+    pair (`home` is this office), so a link that has a laptop at either end keeps ten minutes and a laptop's own
+    network does not reach the owner's phone (the second reader); else LINK_ALERT_AFTER (600 s).
+    Measured 2026-11-10: vps1 told the group 14 minutes after the HP fell, twice."""
+    if _LINK_ALERT_ENV:
+        return LINK_ALERT_AFTER
+    doc = _herd_doc() if doc is None else doc
+    offices = doc.get("offices") if isinstance(doc.get("offices"), dict) else {}
+
+    def declared(name: str) -> float:
+        entry = _herd_entry(doc, name) if name else ""
+        o = offices.get(entry) if entry else None
+        try:
+            v = float((o if isinstance(o, dict) else {}).get("alert_after_s"))
+        except (TypeError, ValueError):
+            return LINK_ALERT_AFTER
+        return v if v > 0 else LINK_ALERT_AFTER
+
+    return max(declared(oid), declared(home)) if home else declared(oid)
 LINK_ALERTS_FILE = "link-alerts.json"
 NOTIFICATIONS_URL = os.environ.get("NOTIFICATIONS_URL", "http://notifications:8977").rstrip("/")
 
@@ -1979,8 +2189,8 @@ def _notify(source_id: str, title: str, body: str, level: str) -> bool:
         return False
 
 
-def _alert_link_drops(items: list[dict], now: int | None = None, notify=_notify) -> list[str]:
-    """Tell the office when a pair has been down `LINK_ALERT_AFTER` seconds, and when it is back.
+def _alert_link_drops(items: list[dict], now: int | None = None, notify=_notify, home: str = "") -> list[str]:
+    """Tell the office when a pair has been down its alert time (`_link_alert_after`), and when it is back.
 
     The clock is kept in `link-alerts.json` (office → when its outage began, and whether it was told),
     so a restart of this app neither forgets an outage nor tells it twice. An office that is not
@@ -1993,6 +2203,7 @@ def _alert_link_drops(items: list[dict], now: int | None = None, notify=_notify)
         state = {}
     now = int(time.time()) if now is None else int(now)
     told, changed = [], False
+    herd = {} if _LINK_ALERT_ENV else _herd_doc()
     for it in items:
         oid = str(it.get("office") or "")
         v = it.get("verdict") or {}
@@ -2006,7 +2217,10 @@ def _alert_link_drops(items: list[dict], now: int | None = None, notify=_notify)
                 if rec.get("alerted"):
                     minutes = max(1, round((now - int(rec["down_since"])) / 60))
                     sid = f"link-up-{oid}-{int(rec['down_since'])}"
-                    if notify(sid, f"הקישור ל{label} חזר", f"אחרי {minutes} דקות שבהן לא ענתה.", "info"):
+                    said = ((f"הבדיקה של {label} עונה שוב", f"אחרי {minutes} דקות שבהן הייתה מחוברת אבל לא ענתה לבדיקה.")
+                            if rec.get("kind") == "slow" else
+                            (f"הקישור ל{label} חזר", f"אחרי {minutes} דקות שבהן לא ענתה."))
+                    if notify(sid, said[0], said[1], "info"):
                         told.append(sid)
                 state.pop(oid, None)
                 changed = True
@@ -2015,11 +2229,44 @@ def _alert_link_drops(items: list[dict], now: int | None = None, notify=_notify)
             state[oid] = {"down_since": now, "hop": v.get("hop") or ""}
             changed = True
             continue
-        if not rec.get("alerted") and now - int(rec["down_since"]) >= LINK_ALERT_AFTER:
-            since = time.strftime("%H:%M", time.localtime(int(rec["down_since"])))
+        if rec.get("alerted") and rec.get("kind") == "slow":
+            # told «connected, the check did not answer», and now the tunnel is gone too: a real fall, told as one
+            # once it has lasted the alert time like any fall — one stale pass is not news (second readers; a busy
+            # office that answers late and then dies is the usual order, the Dell's heat)
+            if (v.get("hop") or "") == "office":
+                if rec.pop("hop_since", None) is not None:
+                    state[oid], changed = rec, True
+                continue
+            if not rec.get("hop_since"):
+                rec["hop_since"] = now
+                state[oid], changed = rec, True
+                continue
+            if now - int(rec["hop_since"]) < _link_alert_after(oid, herd, home):
+                continue
+            since = time.strftime("%H:%M", time.localtime(int(rec["hop_since"])))
             sid = f"link-down-{oid}-{int(rec['down_since'])}"
             if notify(sid, f"הקישור ל{label} נפל", f"מאז {since}. {v.get('why') or ''}".strip(), "error"):
+                rec["kind"] = "down"
+                state[oid] = rec
+                changed = True
+                told.append(sid)
+            continue
+        if not rec.get("alerted") and now - int(rec["down_since"]) >= _link_alert_after(oid, herd, home):
+            since = time.strftime("%H:%M", time.localtime(int(rec["down_since"])))
+            # «נפל» is an office that is OFF to the owner (2026-11-10). The tunnel answering while the office's
+            # catalog check does not (`hop: office`) is a connected office that answered slowly or is restarting:
+            # a warning in those words, never a disconnect (DGO-1782). Every other hop is a real one.
+            if (v.get("hop") or "") == "office":
+                sid = f"link-slow-{oid}-{int(rec['down_since'])}"
+                title, body, level = (f"{label} מחוברת, אבל הבדיקה לא ענתה",
+                                      f"מאז {since}: המנהרה אליה חיה, והלשכה לא ענתה לבדיקת הקטלוג בזמן. זה לא ניתוק.",
+                                      "warning")
+            else:
+                sid = f"link-down-{oid}-{int(rec['down_since'])}"
+                title, body, level = (f"הקישור ל{label} נפל", f"מאז {since}. {v.get('why') or ''}".strip(), "error")
+            if notify(sid, title, body, level):
                 rec["alerted"] = True
+                rec["kind"] = "slow" if level == "warning" else "down"
                 state[oid] = rec
                 changed = True
                 told.append(sid)
@@ -2034,7 +2281,7 @@ def _alert_link_drops(items: list[dict], now: int | None = None, notify=_notify)
 
 
 # ── a far office that stops serving is given its plan again, by its home ─────────────────────────────
-#: fireplace, 2026-10-30 (DGO-1037): the tunnel to it handshook every two minutes while its dgo-link
+#: examplef, 2026-10-30 (DGO-1037): the tunnel to it handshook every two minutes while its dgo-link
 #: applied `0 listener(s) for 0 rule(s)` for 13 hours. Its own dgo-extend had rendered an empty
 #: delivery plan at a restart, because the plan this office ships into its `link-proxy.d/` was not
 #: there. Only this office's link step writes that plan (`converge._remote_delivery`), and nothing ran
@@ -2161,7 +2408,7 @@ def _start_projection() -> None:
     threading.Thread(target=_project_loop, daemon=True, name="dgo-projection").start()
 
 
-# ── an office that declares a daily check gets one, and its record (FPG-26) ─────────────────────────
+# ── an office that declares a daily check gets one, and its record (EXF-26) ─────────────────────────
 #: A client's office in its first month is checked every day, kept as a history the weekly report is
 #: made from, and a failure is told the way a fallen link is — once, through the office's bell — with
 #: its return told too. Declared on the office's record, `watch: {health: daily}`; nothing is watched
@@ -2366,7 +2613,7 @@ def _check_en(r: dict) -> str:
 
 
 def watch_report(oid: str, days: int = 7, now: int | None = None) -> dict:
-    """The office's daily checks over `days`, counted, and the text of the weekly report (FPG-26: William and
+    """The office's daily checks over `days`, counted, and the text of the weekly report (EXF-26: William and
     Alan read English). Read from the history the checks keep; nothing is measured here. The text is written
     from the checks' facts, in fixed English sentences — never from their Hebrew summaries or reasons."""
     now = int(time.time()) if now is None else int(now)
@@ -2545,21 +2792,146 @@ def _carry_facts() -> dict:
     door = netmod.DOOR_LISTEN if join_api.link_host() else ""
     # THE HERD'S HUB (DGO-1097): `DGO_RELAY` is where this office's tcp pairs meet their peers when their
     # own way stays silent (`wss://link.<the hub's domain>/relay`); on the hub, `DGO_RELAY_FOR` names the
-    # offices whose pairs its door joins.
-    relay = (os.environ.get("DGO_RELAY") or "").strip()
+    # offices whose pairs its door joins. Both are the HERD's facts, so with nothing in `.env` they come from
+    # the herd's own file (DGO-1355, `_herd_relay`); a value in `.env` is an office overriding its herd.
+    relay = (os.environ.get("DGO_RELAY") or "").strip() or _herd_relay()
     if relay and not netmod.RELAY_URL_RE.match(relay):
-        log.warning("DGO_RELAY=%r is not wss://host/path — no pair takes the hub's relay", relay)
+        log.warning("the hub's relay %r (DGO_RELAY, or the herd file's link_host) is not wss://host/path — "
+                    "no pair takes it", relay)
     return {"accept": accept, "own_address": own, "door": door, "relay": relay,
             "relay_tags": _relay_tags() if door else []}
 
 
+#: The herd's own declaration (DGO-1355): its offices (each with its aliases and its WireGuard public key), the
+#: hub, and the hub's link host. Mounted read-only (apps/dgo-extend/docker-compose.yml); read at every render,
+#: because a take changes it under a running container.
+HERD_FILE = Path(os.environ.get("DGO_HERD_FILE", "/herd/herd.yaml"))
+
+
+def _herd_doc() -> dict:
+    """The herd file, or {} — when there is none, and when it cannot be read for ANY reason: it is read inside
+    every tunnel render and every catalog answer, and one bad commit to it (a date YAML refuses, bytes that are
+    not UTF-8, nesting too deep) must cost the herd's relay, never every render (second reader, DGO-1355)."""
+    try:
+        doc = yaml.safe_load(HERD_FILE.read_text(encoding="utf-8")) or {}
+    except FileNotFoundError:
+        return {}
+    except Exception as e:                              # noqa: BLE001 — see the docstring
+        log.warning("the herd file %s cannot be read (%s: %s) — nothing is derived from it",
+                    HERD_FILE, type(e).__name__, str(e)[:200])
+        return {}
+    return doc if isinstance(doc, dict) and isinstance(doc.get("offices"), dict) else {}
+
+
+def _herd_entry(doc: dict, oid: str) -> str:
+    """The herd file's name for the office called `oid` — its key under `offices:` or one of that key's
+    `aliases` (the Dell declares `portable-ubuntu`) — or ""."""
+    who = str(oid or "").strip().lower()
+    offices = doc.get("offices") if isinstance(doc.get("offices"), dict) else {}
+    if not who:
+        return ""
+    for name, o in offices.items():
+        aliases = o.get("aliases") if isinstance(o, dict) else None
+        names = {str(name).strip().lower()} | ({str(a).strip().lower() for a in aliases}
+                                               if isinstance(aliases, list) else set())
+        if who in names:
+            return str(name)
+    return ""
+
+
+def _herd_key(doc: dict, entry: str) -> str:
+    """The WireGuard PUBLIC key the herd file gives an office (`wg_public_key`)."""
+    o = (doc.get("offices") or {}).get(entry)
+    return str((o if isinstance(o, dict) else {}).get("wg_public_key") or "").strip()
+
+
+def _record_key(doc: dict, entry: str) -> str:
+    """The WireGuard public key THIS office's own record holds for a herd office, found by its herd name or an
+    alias — the key its pair really uses, fresher than any file (an office re-minted after a reinstall)."""
+    import net as netmod
+    for d in all_declarations():
+        if isinstance(d, dict) and d.get("id") and _herd_entry(doc, str(d["id"])) == entry:
+            return netmod._key(d.get("identity"))
+    return ""
+
+
+def _herd_hub(doc: dict) -> str:
+    """The herd file's name for its hub — `hub:` read the way every office name is (case, aliases)."""
+    return _herd_entry(doc, str(doc.get("hub") or ""))
+
+
+def _herd() -> tuple[dict, str]:
+    """(the herd file, THIS office's name in it) — ({}, "") when there is no file, and (doc, "") when this office
+    is not one of its offices: a client's office runs the same checkout, and our hub is never its relay.
+
+    BY KEY, NOT BY NAME (second reader, DGO-1355): an office with no `DGO_OFFICE_ID` is called by its hostname,
+    so a client's machine called `portable` or `vps1` would have been taken for ours. An office is the herd's
+    only when its own WireGuard public key is the one the file gives the entry its name points at."""
+    import net as netmod
+    doc = _herd_doc()
+    if not doc:
+        return {}, ""
+    home = cv.home_office()
+    entry = _herd_entry(doc, str(home.get("id") or ""))
+    if not entry:
+        return doc, ""
+    mine, want = netmod._key(home.get("identity")), _herd_key(doc, entry)
+    if not mine or mine != want:
+        if want and mine:
+            log.warning("this office is called %s, but its WireGuard key is not the one the herd file gives %s — "
+                        "it is not taken as the herd's", home.get("id"), entry)
+        return doc, ""
+    return doc, entry
+
+
+def _herd_relay() -> str:
+    """`wss://<the hub's link host>/relay` for an office of the herd that is not its hub; "" otherwise.
+
+    Measured 2026-11-05: the relay was built on 11-01 and ran for nobody until the owner's offices were red
+    with the MacBook away from home — it waited for a `DGO_RELAY` line in each office's `.env`, and none had
+    one. Being in a herd that has a hub is now enough."""
+    doc, me = _herd()
+    hub = _herd_hub(doc) if me else ""
+    if not me or not hub or me == hub:
+        return ""
+    entry = doc["offices"].get(hub)
+    host = str((entry if isinstance(entry, dict) else {}).get("link_host") or "").strip().lower()
+    if not host:
+        log.warning("the herd's hub %s declares no link_host in %s — no pair takes its relay", hub, HERD_FILE)
+        return ""
+    return f"wss://{host}/relay"
+
+
+def _herd_relay_for() -> list[str]:
+    """On the herd's hub: every OTHER office of the herd as `name=<WireGuard public key>` (the `DGO_RELAY_FOR`
+    form) — no key pasted by hand. The key is the one this office's own record of it holds when there is one
+    (the pair's real key, found by name or alias), else the herd file's; two that differ are said."""
+    doc, me = _herd()
+    if not me or me != _herd_hub(doc):
+        return []
+    out = []
+    for name in doc["offices"]:
+        if str(name) == me:
+            continue
+        file_key, record_key = _herd_key(doc, str(name)), _record_key(doc, str(name))
+        if file_key and record_key and file_key != record_key:
+            log.warning("the herd file's key for %s is not the one its pair uses here — the pair's is relayed; "
+                        "correct wg_public_key in %s", name, HERD_FILE)
+        key = record_key or file_key
+        out.append(f"{name}={key}" if key else str(name))
+    return out
+
+
 def _relay_tags() -> list[str]:
     """The pairs of OTHER offices this office's door may join (`DGO_RELAY_FOR`, carrier/relay.go): the
-    herd's hub's declaration, a comma-separated list of office ids. A peer's WireGuard public key is the
-    one this office's own record of it holds; an office it holds no pair with is given as `id=<public
+    herd's hub's declaration, a comma-separated list of office ids — or, with nothing in `.env`, every other
+    office of the herd file when this office is its hub (`_herd_relay_for`). A peer's WireGuard public key is
+    the one this office's own record of it holds; an office it holds no pair with is given as `id=<public
     key>` (a public key is no secret: it is what every pairing shows)."""
     import net as netmod
     items = [x.strip() for x in (os.environ.get("DGO_RELAY_FOR") or "").split(",") if x.strip()]
+    if not items:
+        items = _herd_relay_for()
     if not items:
         return []
     keys = {d["id"]: netmod._key(d.get("identity")) for d in all_declarations() if d.get("id")}
@@ -2572,9 +2944,14 @@ def _relay_tags() -> list[str]:
         offices.append(oid)
     unknown = [o for o in offices if not keys.get(o)]
     if unknown:
-        log.warning("DGO_RELAY_FOR: no WireGuard key known for %s — their pairs are not relayed here "
-                    "(give it as id=<public key>)", ", ".join(unknown))
-    return netmod.relay_tags(keys, offices)
+        log.warning("the hub's relay: no WireGuard key known for %s — their pairs are not relayed here "
+                    "(DGO_RELAY_FOR: id=<public key>; the herd file: wg_public_key)", ", ".join(unknown))
+    tags = netmod.relay_tags(keys, offices)
+    known = [o for o in offices if keys.get(o)]
+    if len(known) >= 2 and len(tags) < len(known) * (len(known) - 1):
+        log.warning("the hub's relay: a key given for %s is not a WireGuard public key (base64 of 32 bytes) — "
+                    "some pairs are not relayed here", ", ".join(known))
+    return tags
 
 
 def _carry_measured() -> dict:
@@ -2602,7 +2979,8 @@ _HOP_HE = {
              "הלשכה שלו לא מריצה את dgo-carry, או שרק לשכה אחת עברה ל-TCP — `bbox dgo link transport "
              "<לשכה> tcp` נאמר בשתיהן.",
     "tunnel": "המנהרה אליה לא מעבירה תנועה: היא כבויה, מנותקת מהרשת, או שהקישור נפל.",
-    "office": "המנהרה אליה פעילה, אבל הלשכה עצמה לא עונה — ייתכן שהיא מופעלת מחדש.",
+    # connected: the tunnel answers and the office's catalog check did not, in time — never said as a disconnect
+    "office": "מחוברת: המנהרה אליה חיה, אבל הלשכה לא ענתה לבדיקה בזמן (עמוסה או מופעלת מחדש). זה לא ניתוק.",
     "door": "הדלת של הקישור בלשכה הזאת לא עונה, ולכן אף אפליקציה שלה לא נפתחת מכאן.",
     # Not a hop that fell but a pair that never could carry anything: this office dials a private
     # address that is not on any network of ours. Nothing here can be repaired — the pair is written
@@ -2708,6 +3086,130 @@ def _verdict(state: dict, tunnel: dict | None, door: dict, mispaired: bool = Fal
 
 DOOR_ACCESS_LOG = Path(os.environ.get("DGO_DOOR_ACCESS_LOG", "/doorlog/door-access.jsonl"))
 
+#: How far before `since` the read starts, in seconds. The door appends a record when its connection
+#: CLOSES, with `ts` = when the request STARTED (link-proxy.py `Door._serve`, `access_record`): the file is in
+#: order of close time, give or take the milliseconds between two threads closing at once. A minute covers
+#: that many times over; `ts > since` still decides what is returned.
+_DOOR_SEEK_SLACK_S = 60.0
+
+
+def _door_num(value) -> float:
+    """A record's number, or 0 when it is missing, not a number, or not finite — never an exception: a line
+    with a bad field is still a record."""
+    try:
+        f = float(value)
+    except (TypeError, ValueError, OverflowError):
+        return 0.0
+    return f if math.isfinite(f) else 0.0
+
+
+def _door_end(rec) -> float:
+    """When a door record's connection closed, the order the log is written in: the wall clock the door
+    wrote at close (`end`, since DGO-1769), else `ts + ms` for a line written before it — `ms` is monotonic,
+    so that one drifts by a clock step taken while the connection was open, and by the time the request's
+    head took to arrive. 0 for no usable time."""
+    end = _door_num(rec.get("end"))
+    if end > 0:
+        return end
+    ts = _door_num(rec.get("ts"))
+    return ts + max(0.0, _door_num(rec.get("ms"))) / 1000.0 if ts > 0 else 0.0
+
+
+def _door_line_at(fh, pos: int) -> tuple[float | None, int]:
+    """The end time (`_door_end`) of the first whole line that starts at or after byte `pos`, and where that
+    line starts — (None, end of file) past the last line. A line that is not a record, or carries no time, is
+    stepped over: a time of 0 in the middle of the log would send the search past every record before it."""
+    if pos > 0:
+        fh.seek(pos - 1)
+        fh.readline()                   # to the end of the line that holds byte pos-1: the next line start
+    else:
+        fh.seek(0)
+    while True:
+        start = fh.tell()
+        line = fh.readline()
+        if not line:
+            return None, start
+        try:
+            end = _door_end(json.loads(line.decode("utf-8", "replace")))
+        except (ValueError, AttributeError, TypeError):
+            continue
+        if end > 0:
+            return end, start
+
+
+def _door_access(paths, since: float, limit: int) -> tuple[list, bool]:
+    """The door's records with `ts > since`, oldest first: at most `limit`, and whether more remain.
+
+    The log is append-only, up to 20 MB plus its rotated copy (link-proxy.py `ACCESS_MAX_BYTES`). It used
+    to be parsed whole, every line of both files, on every call, and every record after `since` kept in
+    memory before the slice. The security app asks every 10 s (`ingest_door`, 5 s timeout). Measured
+    2026-11-10 on the HP, whose door carries the herd's traffic: the read outlasted the timeout, so the
+    security app's cursor never moved and each poll asked for the whole backlog again; the container sat
+    at its 160 MB / 0.3 CPU limits, `unhealthy`, 933 restarts, and its link catalog took 4–52 s against the
+    8 s its peers wait, so every peer read the HP as «answers: down» over a live tunnel.
+
+    Now a binary search over byte offsets, by close time (the file's own order, `_door_end`), finds the
+    first record that closed after `since` less the slack — every record that STARTED after `since` lies at
+    or after it — and the read goes forward from there. While fewer than `limit` records are found it reads
+    to the end of the file: the answer is exactly the old one, and in the steady state (a cursor ten
+    seconds old) that is a few lines. When `limit` cuts, the read stops at the first record that started
+    more than the slack after the newest start it holds, so a lagging cursor holds `limit` records plus up
+    to a minute of traffic, never the backlog. What that cut leaves out: a connection that started inside
+    the batch and was still open past that point (an event stream held for hours). The old read handed it
+    over only while the cursor lagged — in the steady state such a record is written after the cursor has
+    passed its start, and no read returns it. Assumed: the wall clock never steps BACK by more than the
+    slack. On lines written before the door wrote `end`, `ms` is monotonic and stops while a machine
+    sleeps, so one connection open across a sleep or a forward clock step can mislead the search there
+    (the second reader measured 3 of 198 placements); such lines leave the log within one rotation."""
+    items: list = []
+    # Once `limit` records are in hand, the read goes on to `edge`: a record written later in the file can
+    # still have STARTED before the newest of them (a connection that closed later), and the cursor the
+    # caller keeps is the newest start it was given — an older one cut off here would never be asked for.
+    edge: float | None = None
+    more = False
+    for path in paths:
+        try:
+            fh = open(path, "rb")
+        except OSError:
+            continue
+        with fh:
+            size = os.fstat(fh.fileno()).st_size
+            start = 0
+            if since > 0:
+                target = since - _DOOR_SEEK_SLACK_S
+                lo, hi = 0, size
+                while lo < hi:
+                    mid = (lo + hi) // 2
+                    end, _ = _door_line_at(fh, mid)
+                    if end is None or end > target:
+                        hi = mid
+                    else:
+                        lo = mid + 1
+                _, start = _door_line_at(fh, lo)
+            fh.seek(start)
+            for line in fh:
+                try:
+                    rec = json.loads(line.decode("utf-8", "replace"))
+                    ts = float(rec.get("ts") or 0)
+                except (ValueError, AttributeError, TypeError, OverflowError):
+                    continue
+                if not ts > since:                  # as the old read: a NaN is never after anything
+                    continue
+                # Stopped by the START: a connection always closes after it starts, so every record written
+                # after this one closed after `edge` too, and one that STARTED before the batch's newest was
+                # open more than the slack. (The close time would let a client that sends its head slowly
+                # push its own record past the cut, second reader, DGO-1769.)
+                if edge is not None and ts > edge:
+                    more = True
+                    break
+                items.append(rec)
+                if edge is None and len(items) >= limit:
+                    edge = max(float(r.get("ts") or 0) for r in items) + _DOOR_SEEK_SLACK_S
+        if more:
+            break
+    items.sort(key=lambda r: r.get("ts") or 0)
+    return items[:limit], more or len(items) > limit
+
 
 @app.get("/api/link/access")
 def api_link_access(since: float = 0, limit: int = 2000):
@@ -2721,21 +3223,9 @@ def api_link_access(since: float = 0, limit: int = 2000):
     of the pair that proves it (`api_link_agent`) and nothing else, so no peer can read another peer's
     record here."""
     limit = max(1, min(int(limit or 2000), 10000))
-    items: list = []
-    for path in (DOOR_ACCESS_LOG.with_name(DOOR_ACCESS_LOG.name + ".1"), DOOR_ACCESS_LOG):
-        try:
-            with open(path, encoding="utf-8", errors="replace") as fh:
-                for line in fh:
-                    try:
-                        rec = json.loads(line)
-                    except ValueError:
-                        continue
-                    if float(rec.get("ts") or 0) > since:
-                        items.append(rec)
-        except OSError:
-            continue
-    items.sort(key=lambda r: r.get("ts") or 0)
-    return {"items": items[:limit], "more": len(items) > limit,
+    items, more = _door_access((DOOR_ACCESS_LOG.with_name(DOOR_ACCESS_LOG.name + ".1"), DOOR_ACCESS_LOG),
+                               float(since or 0), limit)
+    return {"items": items, "more": more,
             "source": str(DOOR_ACCESS_LOG), "present": DOOR_ACCESS_LOG.exists()}
 
 
@@ -2753,7 +3243,7 @@ def _peer_herd(decl: dict, cat: dict) -> str:
 
 @app.post("/api/link/herd")
 async def api_link_herd(request: Request):
-    """Mark the herd a linked office belongs to — `{"office": "wbc-vps", "herd": "WBC"}`; empty clears.
+    """Mark the herd a linked office belongs to — `{"office": "exw-vps", "herd": "EXW"}`; empty clears.
 
     For a peer whose code publishes no herd of its own (DGO-1003): the owner, 2026-10-22, «mark the
     connection as an external herd, not part of our Bina Solutions herd». Any record, paired or
@@ -2857,7 +3347,7 @@ def api_link():
                       # what the office published about itself in its catalog, then the id.
                       "label": str(d.get("label") or (cat.get("label") or {}).get("he") or oid),
                       # The HERD it belongs to (DGO-1003), by the same order: the owner's mark on this
-                      # record (an office whose code publishes none — WBC's), then what the office says
+                      # record (an office whose code publishes none — EXW's), then what the office says
                       # about itself, else none — the screen groups an office with no herd with its own.
                       "herd": _peer_herd(d, cat),
                       "state": "up" if up else ("down" if state else "unknown"),
@@ -2882,7 +3372,9 @@ def api_link():
                      "herd": _home_herd(),
                      # where this office is dialed now — `moved_from` when its declaration is stale
                      "listen": PAIRING.ports.listen() or None},
-            "serve": home.get("serve") or {},
+            # what home.json HOLDS — a caller edits this and writes it back whole, so never the effective map —
+            # and, beside it, what the herd file gives by name on top of it (give.py, DGO-1433)
+            "serve": cv.home_serve_written(), "given_by_herd": cv.given_by_herd(),
             "items": items, "tunnel": api_tunnel(), "proxy": api_link_proxy()}
 
 
@@ -3195,6 +3687,7 @@ async def api_link_serve(request: Request):
         if not 1 <= len(label) <= 60:
             return _err("ה-label של הלשכה חייב להיות באורך 1–60 תווים", 400)
         cv.set_home_label(label)
+    before = await run_in_threadpool(_given_now)
     saved = cv.set_home_serve(serve)
     # A port is a door, and declaring one re-renders BOTH halves of it here rather than at the next
     # converge: the tunnel's rules (which is where the delivered connection is accepted) and the
@@ -3208,8 +3701,42 @@ async def api_link_serve(request: Request):
         withheld = {}
     if withheld:
         log.info("serve: not given by serve.only — %s", "; ".join(f"{o}: {', '.join(a)}" for o, a in withheld.items()))
+    # …and what this write TOOK AWAY, from whom (DGO-1433): the 12:56 «declaration» of seven apps withdrew three from
+    # every office and its answer said nothing of it. Said in the answer and in the log; what the herd file gives by
+    # name (`give:`) stays given whatever was written, and the answer names it.
+    report = await run_in_threadpool(_withdrawal, before)
     return {"serve": saved, "tunnel": tunnel.get("rendered"),
-            "proxy": tunnel.get("proxy"), **({"withheld": withheld} if withheld else {})}
+            "proxy": tunnel.get("proxy"), **({"withheld": withheld} if withheld else {}), **report}
+
+
+def _given_now() -> dict:
+    """{peer id: {alias…}} — what each linked office is given at this moment, read through the very catalog its door
+    pulls (`build_catalog(office=…)`). A peer whose answer cannot be built is left out: a report, never a refusal."""
+    out: dict = {}
+    for d in all_declarations():
+        oid = str((d or {}).get("id") or "").strip().lower() if isinstance(d, dict) else ""
+        if not oid:
+            continue
+        try:
+            out[oid] = {str(a.get("alias") or a.get("app")) for a in (build_catalog(office=oid).get("apps") or [])
+                        if isinstance(a, dict)}
+        except Exception:                               # noqa: BLE001 — see the docstring
+            continue
+    return out
+
+
+def _withdrawal(before: dict) -> dict:
+    """The answer's report of a write of `serve:`: `withdrawn` — {peer: [alias…]} this write took away — and
+    `given_by_herd` — what the herd file keeps given, by name, whatever is written (give.py). Each is absent when
+    empty. A withdrawal is logged as a warning: a link handed out for that app no longer opens."""
+    after = _given_now()
+    # only a peer answered for both times: one whose answer could not be built after the write is not "everything
+    # withdrawn" (second reader)
+    gone = {o: sorted(a - after[o]) for o, a in sorted(before.items()) if o in after and a - after[o]}
+    if gone:
+        log.warning("serve: this write withdraws — %s", "; ".join(f"{o}: {', '.join(a)}" for o, a in gone.items()))
+    herd = cv.given_by_herd()
+    return {**({"withdrawn": gone} if gone else {}), **({"given_by_herd": herd} if herd else {})}
 
 
 @app.get("/api/tunnel")
@@ -3278,7 +3805,13 @@ def render_link_proxy() -> dict:
     records = {o["id"]: o for o in all_declarations() if o.get("id") != home.get("id")}
     # EVERY pair, each with its own slot and side (`_link_pairs`): one plan, one file, one namespace —
     # and a door per pair, because two pairs on one port refuse the whole plan (linkproxy.build_multi).
-    pairs = [{"office": p["record"], "slot": p["slot"], "side": p["side"], "link": p["link"]}
+    # …and whether each peer is the HERD's, by key (give.herd_peer): the one fact a request's door alone can state
+    # to an app behind it (link-proxy's x-dgo-herd), decided here where both records are, never by a name
+    import give
+    herd = give.load_herd()
+    pairs = [{"office": p["record"], "slot": p["slot"], "side": p["side"], "link": p["link"],
+              "withheld": p.get("withheld") or frozenset(),
+              "herd": give.herd_peer(herd, home, p["record"])}
              for p in _link_pairs(home, records)]
     # The `use` half needed the peer's own list of served apps, "which today only the serving office
     # knows" (linkproxy's own docstring). It knows it now: the peer PUBLISHES its catalog on the link
@@ -3345,12 +3878,14 @@ def _render_link_proxy_on_start() -> None:
     # than in a converge step so a restarted container re-derives the picture instead of waiting for
     # the next converge of this office.
     _start_projection()
-    # the daily checks offices declared (`watch: {health: daily}`, FPG-26)
+    # the daily checks offices declared (`watch: {health: daily}`, EXF-26)
     _start_watch()
     # An office that DECLARED a join (`DGO_JOIN`) carries it out by itself, and keeps it carried
     # out: a sandbox reborn with new keys asks again the moment it is up (join_api.py).
     if join_api.declared():
         threading.Thread(target=JOINER.run_forever, daemon=True, name="dgo-join").start()
+    # …and the client offices the herd file gives this office to join one way (clients.py)
+    threading.Thread(target=_clients_loop, daemon=True, name="dgo-join-clients").start()
 
 
 @app.get("/api/identity")
@@ -3399,7 +3934,7 @@ def api_list():
         r = last_run(o["id"])
         if r and _run_kind(r) in ("backup", "repair"):
             # the daily backup (or a link repair) in progress is not the office's state: the card keeps its
-            # last converge and health check (FPG-26); the backup is the office's own page's to show
+            # last converge and health check (EXF-26); the backup is the office's own page's to show
             p = _run_file(o["id"])
             try:
                 r = json.loads(p.read_text()) if p.exists() else r
@@ -3467,6 +4002,10 @@ def api_delete(oid: str):
     _run_file(oid).unlink(missing_ok=True)
     _run_file(oid, "backup").unlink(missing_ok=True)
     _run_file(oid, "repair").unlink(missing_ok=True)
+    try:
+        projection.forget_secrets(oid)                # the secrets it gave go with it (DGO-1330)
+    except Exception as e:                            # noqa: BLE001 — a copy left is said, not the delete
+        log.warning("the secret copies of %s were not removed: %s", oid, e)
     return {"deleted": oid}
 
 
@@ -3486,7 +4025,7 @@ async def api_converge(oid: str, request: Request):
 
 @app.get("/api/office/{oid}/watch")
 def api_watch(oid: str, days: int = 7):
-    """The office's daily checks and the weekly report's text (FPG-26)."""
+    """The office's daily checks and the weekly report's text (EXF-26)."""
     if not load(oid):
         return _err("אין לשכה כזו", 404)
     return watch_report(oid, max(1, min(int(days), 90)))
@@ -3600,7 +4139,7 @@ async def peer_proxy(request: Request, oid: str, alias: str, sub: str = ""):
     # In pieces of a BOUNDED size: with `chunk_size=None`, urllib3 reads a body that has a
     # Content-Length with ONE `read(None)`, the whole file in memory, and a meeting's recording opened
     # as a remote tile is hundreds of MB in a 160M container. The console was OOM-killed that way five
-    # times on FPG (DGO-1231). An event-stream is chunked, so it keeps None: each event passes on as
+    # times on EXF (DGO-1231). An event-stream is chunked, so it keeps None: each event passes on as
     # it arrives.
     stream = "text/event-stream" in (r.headers.get("Content-Type") or "").lower()
     if stream:
@@ -3781,6 +4320,12 @@ class _PairPorts:
         except Exception as e:                          # noqa: BLE001 — a memo is not the unpair
             log.warning("the agent pulls of %s were not forgotten: %s", oid, e)
         try:
+            gone = projection.forget_secrets(oid)       # the secrets it gave go with the pair (DGO-1330)
+            if gone:
+                log.info("unpaired %s: its secret copies %s were removed", oid, ", ".join(gone))
+        except Exception as e:                          # noqa: BLE001 — a copy left is said, not the unpair
+            log.warning("the secret copies of %s were not removed: %s", oid, e)
+        try:
             rows = links._call("GET", f"/api/instances?protocol={links.PROTOCOL}").get("instances") or []
         except links.LinkError as e:
             log.warning("the agent credentials of %s were not listed: %s", oid, e)
@@ -3803,7 +4348,9 @@ class _PairPorts:
         cv.set_home_label(label)
 
     def serve(self) -> dict:
-        return dict(cv.home_office().get("serve") or {})
+        # what home.json HOLDS: `give()` copies an app's entry from it and writes the whole map back, so the
+        # effective map (the herd's floor on top, give.py) would be stored in the volume (DGO-1433)
+        return cv.home_serve_written()
 
     def publishable(self) -> list[dict]:
         """This office's own apps — the compiled registry, the one list of "our apps"."""
@@ -3815,7 +4362,10 @@ class _PairPorts:
                 and catalog.SELF not in (r.get("app"), r.get("alias"))]   # DGO-624: never given — see catalog.publishable
 
     def set_serve(self, serve: dict) -> dict:
-        return cv.set_home_serve(serve)
+        before = _given_now()
+        saved = cv.set_home_serve(serve)
+        _withdrawal(before)          # logged: what this give took away, from whom (DGO-1433)
+        return saved
 
     def chose_giving(self) -> bool:
         return (Path(STATE_DIR) / "giving-chosen").exists()
@@ -3863,8 +4413,55 @@ app.include_router(pair_api.build_router(PAIRING))
 # half carries out this office's own `DGO_JOIN`. Both run the pairing above — one engine, one record.
 JOIN_HUB = join_api.Hub(PAIRING, Path(STATE_DIR) / "join.json", notify=_notify)
 JOINER = join_api.Joiner(PAIRING, Path(STATE_DIR) / "join-self.json")
+# …and the client offices this office joins ONE WAY (clients.py, DGO-1636, DGO-964): one joiner each, beside its own
+# DGO_JOIN, kept to what the herd file says now — a client added or removed there is joined or let go within a minute.
+CLIENT_JOINERS: dict = {}
+_CLIENT_STOPS: dict = {}
+_CLIENTS_EVERY = 60.0
+
+
+def _clients_tick() -> list[str]:
+    """One pass: start a joiner for each client the herd file gives this office, stop the ones it no longer does (or
+    whose declaration changed). Returns the clients joined now, for the test."""
+    import clients
+    import give
+    try:
+        herd = give.load_herd()
+        if not herd and CLIENT_JOINERS:
+            # load_herd answers {} for a file it cannot read (a bad commit, a take mid-replace) as well as for none at
+            # all: a pass that cannot read the herd keeps the joiners that run, never stops them on a broken file
+            return sorted(CLIENT_JOINERS)
+        want = {cid: clients.declaration(spec) for cid, spec in clients.mine(herd, cv.home_office()).items()}
+    except Exception as e:                              # noqa: BLE001 — a pass that fails keeps what runs
+        log.warning("clients: the herd's clients were not read (%s: %s)", type(e).__name__, str(e)[:200])
+        return sorted(CLIENT_JOINERS)
+    for cid in [c for c, j in CLIENT_JOINERS.items() if want.get(c) != j.env]:
+        stop, thread = _CLIENT_STOPS.pop(cid)
+        stop.set()
+        # the one it replaces may be inside a pass (an HTTP call of up to half a minute) on the same state file
+        thread.join(timeout=45)
+        CLIENT_JOINERS.pop(cid)
+    for cid, env in want.items():
+        if cid not in CLIENT_JOINERS:
+            j = join_api.ClientJoiner(PAIRING, Path(STATE_DIR) / f"join-client-{cid}.json", cid, env=env)
+            stop = threading.Event()
+            thread = threading.Thread(target=j.run_forever, args=(stop,), daemon=True, name=f"dgo-join-{cid}")
+            CLIENT_JOINERS[cid], _CLIENT_STOPS[cid] = j, (stop, thread)
+            thread.start()
+    return sorted(CLIENT_JOINERS)
+
+
+def _clients_loop() -> None:
+    while True:
+        try:
+            _clients_tick()
+        except Exception as e:                          # noqa: BLE001 — the loop outlives any one pass
+            log.warning("clients pass failed: %s: %s", type(e).__name__, e)
+        time.sleep(_CLIENTS_EVERY)
+
+
 app.include_router(join_api.build_public_router(JOIN_HUB))
-app.include_router(join_api.build_admin_router(JOIN_HUB, JOINER))
+app.include_router(join_api.build_admin_router(JOIN_HUB, JOINER, clients=lambda: dict(CLIENT_JOINERS)))
 
 
 def _page(name: str, script: str):

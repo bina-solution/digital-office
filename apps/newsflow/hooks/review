@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+#: review <url> approved|rejected <section> "<summary in our own words>" ["<why it matters>"] [--reviewer NAME] [--reason TEXT]
+#:   one story, reviewed: ./bbox newsflow review https://… approved funding "…" "…" --reviewer azaria
+set -uo pipefail
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+[ $# -ge 2 ] || { sed -n 's/^#: \{0,1\}//p' "$0"; exit 2; }
+url="$1"; st="$2"; shift 2
+sec="${1:-}"; [ $# -gt 0 ] && shift; sum="${1:-}"; [ $# -gt 0 ] && shift; why=""
+case "${1:-}" in --*|"") ;; *) why="$1"; shift ;; esac
+rev="${USER:-agent}"; reason=""
+while [ $# -gt 0 ]; do case "$1" in --reviewer) rev="$2"; shift 2 ;; --reason) reason="$2"; shift 2 ;; *) shift ;; esac; done
+body="$(U="$url" S="$st" C="$sec" M="$sum" W="$why" R="$rev" E="$reason" python3 -c '
+import json,os
+print(json.dumps({"url":os.environ["U"],"status":os.environ["S"],"section":os.environ["C"],"summary_he":os.environ["M"],
+                  "why_he":os.environ["W"],"reviewer":os.environ["R"],"reason":os.environ["E"]}, ensure_ascii=False))')"
+exec "${SCRIPT_DIR}/_call" POST "/api/review" "${body}"

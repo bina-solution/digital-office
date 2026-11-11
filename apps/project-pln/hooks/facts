@@ -18,7 +18,7 @@ DB="$(archive_require plane-db)" || exit 1
 q() { docker exec "${DB}" psql -U plane -d plane -tAc "$1" 2>/dev/null | tr -d '\r' | tr -d ' '; }
 
 # A table this Plane does not have is the fact `absent` (factq, scripts/archive-lib.sh), never an
-# empty value the archiver refuses: an office that cannot be backed up is the worse failure (wbc-vps).
+# empty value the archiver refuses: an office that cannot be backed up is the worse failure (exw-vps).
 factq plane_users "$(q 'select count(*) from users;')"
 factq plane_workspaces "$(q 'select count(*) from workspaces;')"
 factq plane_projects "$(q 'select count(*) from projects;')"

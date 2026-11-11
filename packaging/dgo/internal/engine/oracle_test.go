@@ -54,6 +54,8 @@ func bash(t *testing.T) string {
 
 func python(t *testing.T) []string {
 	t.Helper()
+	// python3 FIRST, not pyoracle's 3.12: engine.sh runs /usr/bin/python3 — macOS's own, 3.9 — so the faithful
+	// oracle here is the system python3, not the compiler's pinned 3.12 (DGO-1108's second reader)
 	for _, c := range [][]string{{"python3"}, {"python"}, {"py", "-3"}} {
 		if _, err := exec.LookPath(c[0]); err != nil {
 			continue
@@ -321,9 +323,9 @@ func TestProfileMatchesSelectProfilePy(t *testing.T) {
 // ── ensure_perf_profile (bbox) ─────────────────────────────────────────────────────────────────────
 
 // TestPerfProfileMatchesBbox runs bbox's ensure_perf_profile — with the selector's answer, the core
-// count and uname as stubs — beside pickProfile: the same lines said, the same line appended to
-// .env, and the same stop when the selector has no answer and .env names nothing (bbox's `set -e`
-// ends the run on that assignment; the floor fallback after it is never reached).
+// count and uname as stubs — beside pickProfile: the same lines said and the same line appended to
+// .env, the selector's answer or, when it has none and .env names nothing, the floor (since DGO-605
+// bbox falls back to ci-small and says so; until then `set -e` ended the run on that assignment).
 func TestPerfProfileMatchesBbox(t *testing.T) {
 	funcs := shFunc(t, "bbox", "say", "ensure_perf_profile") + shFunc(t, "scripts/lib.sh", "ncores", "npath", "bbox_clamp_cpus_to_host")
 	cases := []struct {
@@ -370,10 +372,6 @@ func TestPerfProfileMatchesBbox(t *testing.T) {
 			t.Errorf("%s: said\n go   %q\n bash %q", c.name, got, want)
 		}
 		switch {
-		case p.stop != nil:
-			if code == 0 || !bytes.Equal(after, env) {
-				t.Errorf("%s: go says bbox stops here; bash exit %d, .env %q (stderr %s)", c.name, code, after, stderr)
-			}
 		case code != 0:
 			t.Errorf("%s: bash exit %d: %s", c.name, code, stderr)
 		case p.set && !bytes.Equal(after, env):
@@ -682,7 +680,8 @@ func macFuncs(t *testing.T) string {
 	src := shFunc(t, "packaging/macos/engine.sh", "cmd_doctor", "lima", "env_value", "declared_num", "declared_mem",
 		"declared_cpus", "host_mem_gib", "vm_mem", "vm_cpus", "vm_disk",
 		"rosetta_flags", "state", "host_socket", "forward_report", "lan_addr", "ports_yaml", "instance_ports",
-		"template_udp_json", "udp_listening", "guest_udp_bound", "guest_udp_handoff")
+		"template_udp_json", "udp_listening", "guest_udp_bound", "guest_udp_handoff",
+		"provision_yaml", "provision_drift", "provision_report")
 	for _, p := range []string{"/usr/bin/python3", rosettaBin} {
 		if !strings.Contains(src, p) {
 			t.Fatalf("engine.sh no longer names %s — the oracle's rewrite must follow it", p)
@@ -745,7 +744,7 @@ func TestMacDoctorTellsEverythingEngineShTold(t *testing.T) {
 		{"Docker 29 in the guest", "Running", false, true, template, ok(ssOut), ok(lsofOut), "29.0.1", "1.52", "1.44"},
 	}
 	labels := map[string]string{"": "mac", "lima": "lima", "LIMA_HOME": "lima", "template": "template", "sizing": "sizing",
-		"rosetta": "rosetta", "state": "guest", "socket": "macsock", "lan": "lan", "udp": "udp", "guest": "handoff", "engine": "docker"}
+		"rosetta": "rosetta", "state": "guest", "socket": "macsock", "lan": "lan", "udp": "udp", "guest": "handoff", "engine": "docker", "provision": "provision"}
 	labelRE := regexp.MustCompile(`^\s*([A-Za-z_]+):\s+(.*)$`)
 	collapse := func(s string) string { return strings.Join(strings.Fields(s), " ") }
 	for _, c := range cases {
@@ -796,7 +795,8 @@ func TestMacDoctorTellsEverythingEngineShTold(t *testing.T) {
 			stubs[tool] = stub(tool, answers)
 		}
 		setup := "HOME=" + sq(home) + "; BBOX_MACOS_HOME=\"$HOME/.bbox/macos\"; LIMA_HOME=\"$BBOX_MACOS_HOME/lima\"; INSTANCE=bbox\n" +
-			"REPO_ROOT=\"$HOME/MyDGO\"; HERE=\"$REPO_ROOT/packaging/macos\"; TEMPLATE=\"$HERE/engine.yaml\"; LIMACTL=" + sq(ctl) + "; ROSETTA=\"$HOME/rosetta\""
+			"REPO_ROOT=\"$HOME/MyDGO\"; HERE=\"$REPO_ROOT/packaging/macos\"; TEMPLATE=\"$HERE/engine.yaml\"; LIMACTL=" + sq(ctl) + "; ROSETTA=\"$HOME/rosetta\"\n" +
+			"APPLIED=\"${LIMA_HOME}/${INSTANCE}/bbox-provision-applied\"" // engine.sh's own top-level line
 		stdout, stderr, code := shell(t, setup, funcs, "cmd_doctor", stubs)
 		if code != 0 {
 			t.Fatalf("%s: engine.sh's doctor exit %d: %s", c.name, code, stderr)
@@ -898,12 +898,114 @@ func TestUDPForwardsMatchEngineSh(t *testing.T) {
 	if code != 0 || len(got) != len(names) {
 		t.Fatalf("engine.sh: exit %d, %d answers for %d files: %s", code, len(got), len(names), stderr)
 	}
+	// what each file MEANS, not only that the two readers agree: before DGO-614 both read the comment as
+	// part of the value, agreed with each other, and were both wrong
+	want := map[string]string{"missing.yaml": "", "tcp-only.yaml": "", "loopback.yaml": "", "inline-comment.yaml": "",
+		"template.yaml": "51830", "any-quoted.yaml": "51830", "commented-port.yaml": "51830", "crlf.yaml": "51830",
+		"two.yaml": "51830 51831"}
 	for i, n := range names {
 		ports, json, _ := strings.Cut(got[i], "|")
 		goPorts := udpForwards(os.ReadFile(filepath.Join(dir, n)))
 		if strings.Join(goPorts, " ") != ports || (len(goPorts) > 0) != (json != "" && json != "[]") {
 			t.Errorf("%s: go %q, engine.sh %q / %s", n, goPorts, ports, json)
 		}
+		if w, ok := want[n]; !ok || ports != w {
+			t.Errorf("%s: engine.sh reads %q, the file declares %q", n, ports, w)
+		}
+	}
+}
+
+// TestProvisionDriftMatchesEngineSh runs engine.sh's provision_report — provision_yaml on python3,
+// provision_drift and the stamp file `start` writes — beside the native doctor's provisionSaid on the
+// shapes an engine takes against its template, word for word (DGO-1620). The doctor's own oracle only
+// ever sees an engine made from the current template, so the drift lines are proven here. It also
+// lists the real engine.yaml through both readers: the same ids, hashes and live flags.
+func TestProvisionDriftMatchesEngineSh(t *testing.T) {
+	funcs := macFuncs(t)
+	stubs := map[string]string{"python3": pythonStub(t)}
+	const live = "- mode: system\n  script: |\n    #!/bin/bash\n    # bbox: live-apply\n    # the swap file — 2 GiB, at every boot\n    fallocate -l 2G /swapfile || true\n"
+	const plain = "- mode: system\n  script: |\n    #!/bin/bash\n    # the docker pin\n    apt-get install -y docker-ce={{.Param.DOCKER}}\n"
+	const user = "- mode: user\n  script: |\n    #!/bin/bash\n    echo hi\n"
+	tmpl := "images: []\nprovision:\n" + live + plain + user + "mounts: []\n"
+	var lb provBlock
+	for _, b := range provisionBlocks([]byte(tmpl)) {
+		if b.live {
+			lb = b
+		}
+	}
+	if lb.ident != "# the swap file — 2 GiB, at every boot" {
+		t.Fatalf("the synthetic template's live block reads as %+v", lb)
+	}
+	lacksLive := strings.Replace(tmpl, live, "", 1)
+	cases := []struct{ name, inst, stamps string }{
+		{"no engine yet", "", ""},
+		{"up to date", tmpl, ""},
+		{"lacks the live block", lacksLive, ""},
+		{"lacks a template block", strings.Replace(tmpl, plain, "", 1), ""},
+		{"the live block applied live", lacksLive, lb.ident + "\t" + lb.sha + "\t2026-11-09T15:51:00Z\n"},
+		{"a stamp of another hash", lacksLive, lb.ident + "\tabcdef012345\t2026-11-01T00:00:00Z\n"},
+		{"a block changed", strings.Replace(tmpl, "echo hi", "echo hello", 1), ""},
+		{"crlf", strings.ReplaceAll(tmpl, "\n", "\r\n"), ""},
+	}
+	for _, c := range cases {
+		dir := t.TempDir()
+		write := func(rel, body string) {
+			p := filepath.Join(dir, filepath.FromSlash(rel))
+			if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(p, []byte(body), 0o644); err != nil {
+				t.Fatal(err)
+			}
+		}
+		write("engine.yaml", tmpl)
+		if c.inst != "" {
+			write("lima/bbox/lima.yaml", c.inst)
+		}
+		if c.stamps != "" {
+			write("lima/bbox/bbox-provision-applied", c.stamps)
+		}
+		setup := "D=\"$(P " + sq(dir) + ")\"; LIMA_HOME=\"$D/lima\"; INSTANCE=bbox; TEMPLATE=\"$D/engine.yaml\"\n" +
+			"APPLIED=\"${LIMA_HOME}/${INSTANCE}/bbox-provision-applied\""
+		stdout, stderr, code := shell(t, setup, funcs, "provision_report", stubs)
+		if code != 0 {
+			t.Fatalf("%s: engine.sh's provision_report exit %d: %s", c.name, code, stderr)
+		}
+		inst, err := os.ReadFile(filepath.Join(dir, "lima", "bbox", "lima.yaml"))
+		stamps, _ := os.ReadFile(filepath.Join(dir, "lima", "bbox", "bbox-provision-applied"))
+		said, more := provisionSaid(inst, err, []byte(tmpl), stamps)
+		want := "provision: " + said + "\n"
+		for _, l := range more {
+			want += "  " + l + "\n"
+		}
+		if got := strings.ReplaceAll(stdout, "\r", ""); got != want {
+			t.Errorf("%s:\nengine.sh:\n%s\nnative:\n%s", c.name, got, want)
+		}
+	}
+
+	tpl := repoFile(t, "packaging/macos/engine.yaml")
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "engine.yaml"), []byte(tpl), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	stdout, stderr, code := shell(t, "F=\"$(P "+sq(filepath.Join(dir, "engine.yaml"))+")\"", funcs, "provision_yaml \"$F\" list", stubs)
+	if code != 0 {
+		t.Fatalf("engine.sh's provision_yaml on engine.yaml: exit %d: %s", code, stderr)
+	}
+	var want []string
+	nLive := 0
+	for _, b := range provisionBlocks([]byte(tpl)) {
+		flag := "0"
+		if b.live {
+			flag, nLive = "1", nLive+1
+		}
+		want = append(want, b.ident+"\t"+b.sha+"\t"+flag)
+	}
+	if got := lines(strings.ReplaceAll(stdout, "\r", "")); strings.Join(got, "\n") != strings.Join(want, "\n") {
+		t.Errorf("engine.yaml's blocks:\nengine.sh:\n%s\nnative:\n%s", strings.Join(got, "\n"), strings.Join(want, "\n"))
+	}
+	if len(want) == 0 || nLive == 0 {
+		t.Errorf("engine.yaml reads as %d block(s), %d live — the template declares live-apply blocks (DGO-1620)", len(want), nLive)
 	}
 }
 
@@ -920,7 +1022,13 @@ func everyOutput(t *testing.T) string {
 			r.cmds["test -f "+rosettaBin] = ok("")
 			r.cmds["arch -x86_64 /usr/bin/true"] = ok("")
 		}, nil},
-		broken{"a VPS with no .env", linuxBox, func(r *rec) { delete(r.files, linRoot+"/.env") }, nil})
+		broken{"a VPS with no .env", linuxBox, func(r *rec) { delete(r.files, linRoot+"/.env") }, nil},
+		// no selector answer and nothing in .env: bbox falls back to the floor and says so (DGO-605) — not broken
+		broken{"a VPS whose selector has no answer", linuxBox, func(r *rec) {
+			delete(r.files, "/proc/meminfo")
+			// a .env with no profile: the selector is asked (with none, bbox run writes ci-env.sh's floor itself, DGO-1782)
+			r.files[linRoot+"/.env"] = "BUSINESS_NAME=x\n"
+		}, nil})
 	var b strings.Builder
 	for _, c := range cases {
 		for _, verb := range []string{"doctor", "plan"} {
@@ -969,6 +1077,7 @@ var quotes = []quote{
 	{"bbox", "CI_DEPLOYMENT_NAME=local CI_EDGE_PORT=8080 bash scripts/ci-env.sh", "cd /Users/u/MyDGO && CI_DEPLOYMENT_NAME=local CI_EDGE_PORT=8080 bash scripts/ci-env.sh"},
 	{"bbox", `( cd "${REPO_ROOT}" && bash scripts/ci-env.sh )`, "cd /srv/office && bash scripts/ci-env.sh"},
 	{"bbox", `exec "${REPO_ROOT}/bbox" run "$@"`, "exec ./bbox run"},
+	{"bbox", "python3 scripts/env-secrets.py --env .env --if-fresh", "python3 scripts/env-secrets.py --env .env --if-fresh"},
 	{"bbox", "ensure_rendered; ensure_network; ensure_perf_profile", "ensure_rendered (the compiler renders .generated/), ensure_network"},
 	{"bbox", `held="$(foreign_containers)"`, "foreign_containers (a name this stack needs, held by another compose project, stops the run)"},
 	{"bbox", "run_app_hooks prepare || true", "run_app_hooks prepare"},
@@ -977,6 +1086,9 @@ var quotes = []quote{
 	{"bbox", `[ "${CCR_BASES_READY:-0}" != 1 ]`, "CCR_BASES_READY not 1"},
 	{"bbox", "base images unavailable — fix the environment's network policy (see hint above), then re-run 'bbox run'",
 		"base images unavailable — fix the environment's network policy (see hint above), then re-run 'bbox run'"},
+	{"bbox", "base images unavailable — the disk is full (see above): free space, then re-run 'bbox run'",
+		"base images unavailable — the disk is full (see above): free space, then re-run 'bbox run'"},
+	{"scripts/lib.sh", "ccr_pull_base() {", "said by docker's own words (ccr_pull_base)"},
 	{"bbox", "profile selector unavailable — falling back to the floor profile (${prof}).", "profile selector unavailable — falling back to the floor profile (ci-small)."},
 	{"bbox", "profile: ${cur} (set in .env) — this machine ($(ncores) cores) would be sized ${fit}; PERFORMANCE_PROFILE=${fit} in .env adopts it",
 		"profile: ci-small (set in .env) — this machine (8 cores) would be sized prod; PERFORMANCE_PROFILE=prod in .env adopts it"},
@@ -1019,7 +1131,8 @@ var quotes = []quote{
 	{"packaging/macos/engine.sh", `"${LIMACTL}" shell --workdir "${REPO_ROOT}" "${INSTANCE}" -- \`, " shell --workdir /Users/u/MyDGO bbox -- sudo"},
 	{"packaging/macos/engine.sh", "sudo --preserve-env=OVERLAYS,BBOX_DOCKER_HOST,BBOX_WITH_BROWSER42,FORCE,PERFORMANCE_PROFILE",
 		"sudo --preserve-env=OVERLAYS,BBOX_DOCKER_HOST,BBOX_WITH_BROWSER42,FORCE,PERFORMANCE_PROFILE env BBOX_IN_GUEST=1 "},
-	{"packaging/macos/engine.sh", `env BBOX_IN_GUEST=1 ${udp_env} "$@"`, "env BBOX_IN_GUEST=1 BBOX_HOST_LAN_ADDR=192.168.1.20 BBOX_HOST_UDP_PORT=51830 ./bbox run"},
+	// DGO_GIT_OVERRIDE rides along only when it is set (1c4a0d4b, DGO-850): unset, the line dgo prints is the same
+	{"packaging/macos/engine.sh", `env BBOX_IN_GUEST=1 ${udp_env} ${DGO_GIT_OVERRIDE:+DGO_GIT_OVERRIDE=${DGO_GIT_OVERRIDE}} "$@"`, "env BBOX_IN_GUEST=1 BBOX_HOST_LAN_ADDR=192.168.1.20 BBOX_HOST_UDP_PORT=51830 ./bbox run"},
 	{"packaging/macos/engine.sh", "boot the engine (first run: fetch Lima, download the guest image,",
 		"boot the engine (first run: fetch Lima, download the guest image, install Docker CE 28.5.2 pinned — ~5 min on a normal line)"},
 	{"packaging/macos/engine.sh", "install Docker CE 28.5.2 pinned — ~5 min on a normal line)", "install Docker CE 28.5.2 pinned — ~5 min on a normal line)"},
@@ -1036,10 +1149,20 @@ var quotes = []quote{
 	{"debian-install.sh", `echo "Error: Docker ${have} is installed; this platform needs Docker ${DOCKER_MAJOR}.x." >&2`, "Docker 29.1.3 is installed; this platform needs Docker 28.x."},
 	{"debian-install.sh", "Re-run with BBOX_REPLACE_DOCKER=1 to replace it (containers stop; volumes are kept).", "Re-run with BBOX_REPLACE_DOCKER=1 to replace it (containers stop; volumes are kept)"},
 	{"scripts/ci-env.sh", `[ -n "${OFFICE_DOMAIN:-}" ] || echo "PERFORMANCE_PROFILE=ci-small"`, "PERFORMANCE_PROFILE=ci-small comes with the .env scripts/ci-env.sh writes"},
-	{"platform/manager/select-profile.py", `FLOOR = "ci-small"`, "PERFORMANCE_PROFILE=ci-small in .env — the floor bbox means to fall back to"},
-	{"ai/context/healthy-baseline.md", "Traefik v3.3's docker client speaks API 1.24, but Docker 29 rejects clients", "traefik v3.3 speaks docker API 1.24, Docker 29 refuses clients"},
+	{"platform/manager/select-profile.py", `FLOOR = "ci-small"`, "falling back to the floor profile (ci-small)"},
+	{"ai/context/healthy-baseline.md", "Traefik v3.3's docker client speaks API 1.24", "traefik v3.3 speaks docker API 1.24"},
 	{"ai/context/running-on-wsl.md", "Error code: Wsl/Service/0x8007274c", "WSL did not answer (Wsl/Service/0x8007274c)"},
 	{"ai/context/running-on-wsl.md", `should treat that as "unknown, retry"`, "unknown, not missing"},
+	// bbox run's .env step (DGO-1782, DGO-1802): a local office on any machine, never over data, never unnamed
+	{"bbox", "( cd \"${REPO_ROOT}\" && CI_DEPLOYMENT_NAME=local bash scripts/ci-env.sh )", "cd /srv/office && CI_DEPLOYMENT_NAME=local bash scripts/ci-env.sh"},
+	{"bbox", "every app at <name>.localhost", "a LOCAL office (DEPLOYMENT_NAME=local, every app at <name>.localhost)"},
+	{"bbox", "its .env is missing, not new. " + heldFix, "its .env is missing, not new. " + heldFix},
+	{"bbox", unnamedSaid, unnamedSaid},
+	{"bbox", unsaidTail, unsaidTail},
+	{"scripts/lib.sh", `c="$(docker ps -aq --filter "label=com.docker.compose.project=${pn}" 2>/dev/null)" || return 2`,
+		"docker ps -aq --filter label=com.docker.compose.project=office"},
+	{"scripts/lib.sh", `v="$(docker volume ls -q --filter "label=com.docker.compose.project=${pn}" 2>/dev/null)" || return 2`,
+		"docker volume ls -q --filter label=com.docker.compose.project=office"},
 }
 
 // TestPlanQuotesBbox holds every copy both ways: the bash it copies must still say it, and dgo must

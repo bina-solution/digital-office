@@ -6,6 +6,7 @@
   },
   "layer": 3,
   "kind": "service",
+  "page": "meetings",
   "version": "0.1.0",
   "summary": {
     "he": "שיחות וידאו של המשרד — Jitsi Meet בעברית, מהדפדפן ומהנייד; מארחים נכנסים בחשבון המשרד, אורחים בקישור",
@@ -25,6 +26,12 @@
     }
   ],
   "use": [
+    {
+      "capability": "kv",
+      "strength": "wants",
+      "after": false,
+      "dependency": "weak"
+    },
     {
       "capability": "identity",
       "strength": "requires",
@@ -72,7 +79,6 @@
         "embed": true,
         "alias": "meet",
         "id": "meet",
-        "external": true,
         "name": "פגישות וידאו",
         "desc": "פגישה חדשה, קישור לאורחים, Jitsi Meet",
         "order": 36,
@@ -105,8 +111,8 @@
     "note": "meet_recordings is the office's record of its meetings: recordings/<session>/<room>_<time>.mp4 and metadata.json (the room, who was there), written by the recorder and listed in the tile. meet_prosody_data is the XMPP server's accounts (re-registered from .env on every start)."
   },
   "resources": {
-    "cpus": "4.35",
-    "memory": "3472M"
+    "cpus": "4.85",
+    "memory": "3520M"
   },
   "agent": {
     "context": "AGENT.md",

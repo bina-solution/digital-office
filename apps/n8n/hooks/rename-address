@@ -7,7 +7,7 @@
 # itself uses (connections injecting OAuth grants, the vault's login, the dump scripts) — decided from
 # STATE: it follows whenever no account holds the old address any more (moved now, by an earlier run cut
 # short before the key, or never created). The domains come from the environment (DGO_RENAME_FROM,
-# DGO_RENAME_TO, DGO_RENAME_DRY_RUN): `bbox rename-address [--dry-run] <old> <new>` (FPG-34).
+# DGO_RENAME_TO, DGO_RENAME_DRY_RUN): `bbox rename-address [--dry-run] <old> <new>` (EXF-34).
 #
 # One transaction in n8n's own database. An address whose new form already belongs to ANOTHER user is
 # refused and named — two people never become one. n8n's database being DOWN is a failure, not "nothing to

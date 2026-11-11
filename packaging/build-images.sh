@@ -64,7 +64,7 @@ for name, svc in sorted((data.get("services") or {}).items()):
         ctx = b.get("context", "."); df = b.get("dockerfile", "Dockerfile"); args = b.get("args") or {}
     if isinstance(args, list):
         args = {k: v for a in args for k, _, v in [a.partition("=")]}
-    img = svc.get("image") or ("deployment-hacohen-" + name)
+    img = svc.get("image") or ("digital-office-" + name)
     # compose resolves context to an absolute host path; make it repo-relative so the command is
     # portable and readable, and so it works the same on a Linux runner as on a Windows dev box.
     try:
@@ -72,6 +72,17 @@ for name, svc in sorted((data.get("services") or {}).items()):
     except ValueError:
         pass
     argflags = " ".join("--build-arg " + shlex.quote(f"{k}={v}") for k, v in sorted(args.items()))
+    # a second build context (compose `additional_contexts`: a platform file an app builds in) goes with it — in
+    # the flags, so it is part of what makes two builds the same build below
+    ctxs = (b.get("additional_contexts") or {}) if isinstance(b, dict) else {}
+    if isinstance(ctxs, list):
+        ctxs = {k: v for a in ctxs for k, _, v in [a.partition("=")]}
+    for k, v in sorted(ctxs.items()):
+        try:
+            v = os.path.relpath(os.path.abspath(v), root).replace(os.sep, "/")
+        except ValueError:
+            pass
+        argflags += " --build-context " + shlex.quote(f"{k}={v}")
     specs.append((name, img, ctx, df, argflags))
 
 # Collapse specs that are byte-for-byte the same build. n8n, n8n-worker-1 and n8n-worker-2 share

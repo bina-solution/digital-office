@@ -1,0 +1,3 @@
+#!/usr/bin/env bash
+#: send — a text message, as the owner, into a room that is not encrypted: <room id> <text…> [--json]
+exec bash "$(dirname "${BASH_SOURCE[0]}")/../tools/verb" send "$@"

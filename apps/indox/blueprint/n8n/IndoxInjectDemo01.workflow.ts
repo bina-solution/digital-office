@@ -305,7 +305,7 @@ for(const r of wi){
   const buf=await this.helpers.getBinaryDataBuffer(r.i,'data');
   const _co=_coById[String(_idByName[r.fn])]||{}; const _from=(_co.name||'Demo Supplier')+' <'+(_co.email||('demo+'+r.i+'@example.com'))+'>';
   const cn=r.fn.replace(/\\.[^.]+$/,'');
-  const mime=buildMime({from:_from,to:'person3@example.com',subject:'חשבונית '+cn,body:'חשבונית (demo inject).',filename:r.fn,contentB64:buf.toString('base64')});
+  const mime=buildMime({from:_from,to:'person4@example.com',subject:'חשבונית '+cn,body:'חשבונית (demo inject).',filename:r.fn,contentB64:buf.toString('base64')});
   out.push({json:{op:'append',params:{raw_base64:mime,labels:[labelName],folder:'INBOX',connection_id:connId}}});
 }
 return out;`,
@@ -379,7 +379,7 @@ for(const r of wi){
   const buf=await this.helpers.getBinaryDataBuffer(r.i,'data');
   const _co=_coById[String(_idByName[r.fn])]||{}; const _from=(_co.name||'Demo Supplier')+' <'+(_co.email||('demo+'+r.i+'@example.com'))+'>';
   const cn=r.fn.replace(/\\.[^.]+$/,'');
-  const mime=buildMime({from:_from,to:'person3@example.com',subject:'דוח גיול '+cn,body:'דוח גיול (demo inject).',filename:r.fn,contentB64:buf.toString('base64')});
+  const mime=buildMime({from:_from,to:'person4@example.com',subject:'דוח גיול '+cn,body:'דוח גיול (demo inject).',filename:r.fn,contentB64:buf.toString('base64')});
   out.push({json:{op:'append',params:{raw_base64:mime,labels:[labelName],folder:'INBOX',connection_id:connId}}});
 }
 return out;`,
@@ -597,7 +597,7 @@ for (const r of wi) {
   const body = ['שלום,', 'מצורף קישור למסמך לטיפול אוטומציה:', url, 'תודה.'].join(NL);
   const L = [
     'From: Demo Link <demolink+' + r.i + '@example.com>',
-    'To: person3@example.com',
+    'To: person4@example.com',
     'Date: ' + new Date().toUTCString(),
     'Subject: ' + enchdr('קישור למסמך - ' + stem),
     'MIME-Version: 1.0',

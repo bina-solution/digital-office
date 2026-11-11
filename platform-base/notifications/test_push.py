@@ -193,19 +193,19 @@ class PushTest(unittest.TestCase):
 
     def test_devices_are_each_persons_own(self):
         a = self.subscribe("william", "/w1")
-        self.subscribe("shlomo", "/s1")
+        self.subscribe("owner", "/s1")
         j = self.c.get("api/push/devices?endpoint=" + a.endpoint, headers=as_("william")).get_json()
         self.assertEqual(len(j["devices"]), 1)
         self.assertTrue(j["devices"][0]["this"])
         self.assertIn("Samsung Internet", j["devices"][0]["label"])
-        r = self.c.post("api/push/unsubscribe", json={"endpoint": a.endpoint}, headers=as_("shlomo")).get_json()
+        r = self.c.post("api/push/unsubscribe", json={"endpoint": a.endpoint}, headers=as_("owner")).get_json()
         self.assertEqual(r["removed"], 0, "one person removed another's phone")
         self.assertEqual(self.c.get("api/push/devices", headers={}).status_code, 401)
 
     # 3 ─ the fan-out, decrypted
     def test_error_notice_rings_every_phone_decrypted(self):
         w = self.subscribe("william", "/w1")
-        s = self.subscribe("shlomo", "/s1")
+        s = self.subscribe("owner", "/s1")
         self.notice(link="/#/m/meet")
         got = self.got()
         self.assertEqual(sorted(g["path"] for g in got), ["/s1", "/w1"])
@@ -291,8 +291,8 @@ class PushTest(unittest.TestCase):
 
     def test_meta_to_addresses_one_person(self):
         self.subscribe("william", "/w1")
-        self.subscribe("shlomo", "/s1")
-        self.notice(meta={"to": "shlomo"})
+        self.subscribe("owner", "/s1")
+        self.notice(meta={"to": "owner"})
         self.assertEqual([g["path"] for g in self.got()], ["/s1"])
 
     def test_the_post_answers_at_once_whatever_the_push_service_does(self):
@@ -309,7 +309,7 @@ class PushTest(unittest.TestCase):
         # R4 08:45Z: deliver() used to hold ONE write transaction across every device, so after the first phone's
         # row was updated, a slow second push service kept the database locked and a notice POSTed meanwhile waited
         self.subscribe("william", "/a1")        # answers at once -> its row is written
-        self.subscribe("shlomo", "/slow2")      # the push service takes 3 s
+        self.subscribe("owner", "/slow2")      # the push service takes 3 s
         self.c.post("api/notifications", json={"source": "office-watch", "source_id": "cpu", "title": "CPU", "level": "error"})
         time.sleep(1.0)                          # the worker is now inside the slow push of the second phone
         t = time.time()

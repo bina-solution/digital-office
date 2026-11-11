@@ -1,0 +1,61 @@
+{
+  "id": "ci-runner",
+  "title": { "he": "מריץ CI", "en": "CI runner" },
+  "summary": {
+    "he": "מריץ ה־GitHub Actions של הלשכה: מה רץ עכשיו ומי ביקש, מה ממתין בדלת ולמה, העבודות האחרונות, והשהיה וחידוש",
+    "en": "The office's GitHub Actions runner: what runs now and who asked, what waits at the door and why, the last jobs, pause and resume"
+  },
+  "layer": 3,
+  "kind": "service",
+  "page": "base",
+  "version": "0.1.0",
+  "people": "admins",
+  "compose": "docker-compose.yml",
+  "capabilities": [
+    {
+      "name": "ci-runner",
+      "type": "service",
+      "endpoint": "http://ci-runner:8988",
+      "required_ops": ["status", "jobs", "queue", "pause", "resume"]
+    }
+  ],
+  "use": [
+    { "capability": "kv", "strength": "wants", "after": false, "dependency": "weak" }
+  ],
+  "connections": [],
+  "routing": [
+    {
+      "host": "ci-runner",
+      "port": 8988,
+      "auth": "sso",
+      "module": {
+        "group": "תשתית",
+        "icon": "activity",
+        "embed": true,
+        "alias": "ci-runner",
+        "id": "ci-runner",
+        "name": "מריץ CI",
+        "desc": "מה רץ עכשיו ומי ביקש, מה ממתין בדלת ולמה, והשהיה",
+        "service": "ci-runner",
+        "url": "http://ci-runner:8988"
+      },
+      "sso": {
+        "slug": "ci-runner",
+        "display_name": "CI runner",
+        "default_host": "ci-runner.localhost",
+        "base_url_env": "CI_RUNNER_BASE_URL",
+        "local_twin": true
+      }
+    }
+  ],
+  "health": { "structural": "auto", "probe": { "http": "http://ci-runner:8988/healthz", "interval": "30s" } },
+  "resources": { "cpus": "2.1", "memory": "4192M" },
+  "data": {
+    "volumes": ["ci_runner_state"],
+    "on_uninstall": "prompt",
+    "note": "The runner's registration on GitHub (its identity — carried, never printed), its tool cache (rebuildable), the job records the screen reads and the pause flag. The work folder (each job's checkout) is not state: platform/data-volumes-waivers.yaml says why."
+  },
+  "share": { "local": "a machine's own runner: a linked office sees its jobs on «כל מקביל» and asks for named jobs through the job door (DGO-1797, its own package)" },
+  "cli": { "fallback": "cli" },
+  "agent": { "context": "AGENT.md", "order": 88 }
+}

@@ -1,0 +1,47 @@
+{
+  "id": "signal",
+  "title": { "he": "סיגנל", "en": "Signal" },
+  "layer": 3,
+  "people": "admins",
+  "kind": "service",
+  "page": "base",
+  "version": "0.1.0",
+  "summary": {
+    "he": "Signal Desktop, הלקוח הרשמי, בתוך הלשכה: המסך שלו בקונסול, מקושר לטלפון של הבעלים. בלי API: ל-Signal אין צד headless רשמי.",
+    "en": "Signal Desktop, the official client, inside the office: its screen in the console, linked to the owner's phone. No API: Signal has no official headless side."
+  },
+  "wraps": {
+    "client": "Signal Desktop for Linux, from Signal's own repository (updates.signal.org, Dockerfile.desktop)",
+    "headless": "none: Signal publishes no headless client or API (signal-cli is third-party)"
+  },
+  "capabilities": [],
+  "use": [{ "capability": "identity", "strength": "requires", "after": true }],
+  "compose": "docker-compose.yml",
+  "cli": { "alias": "signal" },
+  "agent": { "context": "AGENT.md" },
+  "routing": [
+    {
+      "host": "signal",
+      "port": 3000,
+      "auth": "sso",
+      "service": "signal-desktop",
+      "emit_labels": true,
+      "module": {
+        "group": "עסק", "icon": "message", "embed": true, "alias": "signal", "id": "signal",
+        "name": "סיגנל", "desc": "השיחות של Signal, בלקוח הרשמי",
+        "url": "http://signal-desktop:3000/",
+        "passthrough": [{ "path": "/api", "transport": "websocket", "match": "prefix", "strip_mount_prefix": true }]
+      },
+      "sso": {
+        "slug": "signal",
+        "display_name": "Signal",
+        "default_host": "signal.localhost",
+        "base_url_env": "SIGNAL_BASE_URL",
+        "local_twin": true
+      }
+    }
+  ],
+  "health": { "structural": "auto" },
+  "data": { "volumes": ["signal_home"], "on_uninstall": "keep" },
+  "resources": { "cpus": "1.1", "memory": "1568m" }
+}

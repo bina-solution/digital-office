@@ -65,7 +65,7 @@ beforeAll(() => {
     };
   `);
 
-  // opts in to everything — the hacohen-bot posture
+  // opts in to everything — the example-bot posture
   writeBot('loud-bot', `
     module.exports = {
       id: 'loud-bot', name: 'Loud', desc: 'accepts groups and chatter',

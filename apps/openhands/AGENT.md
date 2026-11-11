@@ -12,7 +12,7 @@ ships off. It has no console tile.
 - Its dispatcher (`dispatcher:8800`, `POST /dispatch`) wants a bearer token, but a header from the
   dashboard skips it. Never rely on that door.
 - Its own `*.md` files (PRODUCT.md, current.md, next.md) describe the June 2026 deployment on the
-  VPS. The compose names that machine's paths (`/var/run/docker.sock`, `/root/deployment-hacohen`).
+  VPS. The compose names that machine's paths (`/var/run/docker.sock`, `/root/digital-office`).
   On another office it would reach the wrong engine.
 - Coding work in this office goes through bina-ds (`bbox agent`), not here.
 

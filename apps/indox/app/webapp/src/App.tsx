@@ -3,7 +3,7 @@ import {
 } from 'react-router-dom';
 import { useCallback, useContext, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { api, AuthMe, InstanceAccount } from './api';
+import { api, AuthMe, defaultInstanceId, InstanceAccount } from './api';
 import { InstancesContext, pageOf } from './instancesContext';
 import InstanceSwitcher from './components/InstanceSwitcher';
 import PipelineBar from './components/PipelineBar';
@@ -69,7 +69,7 @@ function RouteReporter() {
 // /repos and /repos/:repo redirect rather than 404 so old links still land somewhere sensible.
 //
 // EVERY TAB CARRIES THE INSTANCE. They used to be bare (`/sync`, `/settings`, …), and a bare path
-// resolves to the FIRST ENABLED instance — so selecting לוי and clicking הגדרות put you on הכהן's
+// resolves to the FIRST ENABLED instance — so selecting לוי and clicking הגדרות put you on הדוגמה's
 // settings with לוי still showing in the chip. Only the documents tab was scoped, and it was scoped
 // with `active`, the REPO, which is what produced `/i/incoming-documents-main/documents` in the nav.
 // The argument here is the INSTANCE; `match` compares against `pageOf(p)` so a tab still highlights
@@ -149,17 +149,17 @@ function ActiveDocsRedirect({ active, resolved }: { active: string | null; resol
 }
 
 /** `/i/<instance>/documents`, with the instance taken from the link's own `?instance=` or the
- *  first enabled entry of the registry — and never from the repo. One helper so the three
- *  redirects that need this answer cannot drift apart. */
-/** WHICH INSTANCE DOES AN INSTANCE-LESS URL MEAN? The link's own `?instance=`, else the first
- *  enabled entry of the registry — and NEVER `active`, which is the REPO name and is what produced
+ *  office's default (`defaultInstanceId`: the first enabled non-test instance) — and never from the repo.
+ *  One helper so the three redirects that need this answer cannot drift apart. */
+/** WHICH INSTANCE DOES AN INSTANCE-LESS URL MEAN? The link's own `?instance=`, else the office's default
+ *  (`defaultInstanceId`) — and NEVER `active`, which is the REPO name and is what produced
  *  `/i/incoming-documents-main/documents`, a repo sitting in the instance slot. `accounts` holds
  *  INSTANCES; `active` holds a repo. Empty string when the registry has not arrived yet, which
  *  every caller must treat as "do not navigate", not as "no instance". */
 function resolveInstance(search: string, accounts: InstanceAccount[]): string {
   return (
     new URLSearchParams(search).get('instance') ||
-    accounts.find((a) => a.enabled !== false)?.id ||
+    defaultInstanceId(accounts) ||
     ''
   );
 }
@@ -266,9 +266,9 @@ export default function App() {
     (opts?: { resetView?: boolean }) =>
       /* TWO DIFFERENT THINGS, AND CONFLATING THEM BROKE THE APP.
          `active` is a REPO NAME — every route is /repos/:repo/documents and the redirect below
-         builds one from it. The INSTANCE is a different identifier entirely (`hacohen`), lives in
+         builds one from it. The INSTANCE is a different identifier entirely (`example`), lives in
          `public.indox_instances`, and rides in `?instance=`. Setting `active` to a instance id made
-         the app navigate to /repos/hacohen/documents, which is not a repo and 404s.
+         the app navigate to /repos/example/documents, which is not a repo and 404s.
 
          So: the repo registry still answers "which table am I routed at", and the instance registry
          answers "whose data is in it". The top-bar switcher shows INSTANCES; the switcher inside
@@ -298,6 +298,7 @@ export default function App() {
                 reason: x.enabled === false ? 'מושבת' : undefined,
                 backend: 'supabase',
                 enabled: x.enabled !== false,
+                purpose: x.purpose,
                 docs: 0,
                 registry: 0,
                 settings_count: 0,
@@ -365,7 +366,7 @@ export default function App() {
   /* READ THE PARENT'S HASH WHEN EMBEDDED — this app runs in an iframe at /a/incoming/ inside the
      console shell, and the SHELL owns the address bar. Reading only `window.location.hash` meant
      `?instance=` never arrived: every request went out unscoped and answered for instance one, which
-     is exactly how the action log showed הכהן's 71 rows while לוי was selected. Same-origin, so
+     is exactly how the action log showed הדוגמה's 71 rows while לוי was selected. Same-origin, so
      the parent's hash is readable; wrapped because a cross-origin parent must degrade to the
      app's own URL rather than throw on every render. */
   const instanceInUrl = (() => {
@@ -388,13 +389,12 @@ export default function App() {
     }
     return fromUrl(window.location.hash) || fromUrl(window.location.pathname + window.location.search);
   })();
-  const firstEnabledInstance =
-    accounts.find((a) => a.enabled !== false)?.id ?? null;
+  const firstEnabledInstance = defaultInstanceId(accounts) ?? null;
   const boundInstance = instanceInUrl || firstEnabledInstance;
   /* BOUND DURING RENDER, NOT IN AN EFFECT — and that ordering is the whole point.
      React runs CHILD effects before PARENT effects, so a screen's first fetch fires before this
      component's effect would have run. Bound in an effect, the very first request of every page
-     load went out with no instance and answered for instance one: the action log showed hacohen's 71
+     load went out with no instance and answered for instance one: the action log showed example's 71
      rows while `לוי` was selected and its own log holds none. `setInstance` is a module-level
      assignment, not React state, so calling it during render is safe and happens early enough. */
   api.setInstance(boundInstance);
@@ -485,16 +485,18 @@ export default function App() {
             accounts={accounts}
             active={
               instanceInUrl ||
-              (accounts.find((a) => a.enabled !== false)?.id ?? null)
+              (defaultInstanceId(accounts) ?? null)
             }
             onSwitched={() => refreshActive({ resetView: false })}
           />
           <div className="bnv-foot-text">
             <div className="me">
               {/* (who this is was not READ — yet, or the service did not answer: that is not «לא מאומת») */}
+              {/* [DGO-257, owner 2026-09-03] «remove akadmin from near the הדוגמה indox instance picker».
+                  The login name is not shown here; the console's own user chip says who is signed in. */}
               {!me ? null : me.authenticated ? (
                 <span>
-                  {me.username}
+                  מחובר/ת
                   {me.is_admin && <span className="pill healthy">מנהל</span>}
                 </span>
               ) : (
@@ -535,7 +537,7 @@ export default function App() {
           />
           {/* THE BARE PAGE PATHS ARE REDIRECTS NOW, not pages.
               An instance-less path has to guess which instance it means, and it guessed "the first
-              enabled one" — so every screen except the grid answered for הכהן no matter which
+              enabled one" — so every screen except the grid answered for הדוגמה no matter which
               instance was selected, while the chip went on saying לוי. These keep old links and
               bookmarks working by resolving the instance ONCE and sending you to the scoped URL. */}
           <Route path="/sync" element={<ScopedRedirect to="/sync" />} />

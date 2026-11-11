@@ -1,0 +1,3 @@
+#!/usr/bin/env bash
+#: add — add a computer to the fleet (a secret only from a file, never an argument): <host> [--user U] [--port P] [--label L] [--key @file | --door @file] [--json]
+exec bash "$(dirname "${BASH_SOURCE[0]}")/../tools/verb" add "$@"

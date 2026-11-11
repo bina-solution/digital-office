@@ -1,0 +1,68 @@
+{
+  "id": "drive-google",
+  "title": {
+    "he": "Google Drive",
+    "en": "Google Drive"
+  },
+  "layer": 3,
+  "kind": "service",
+  "page": "drive",
+  "version": "1.0.0",
+  "summary": {
+    "he": "המנוע של «קבצים» שמחבר חשבונות Google Drive — חשבון שמתחבר עם Google, או חשבון שירות שמשתפים איתו תיקיות; מוצג בתוך «קבצים»",
+    "en": "The engine of «Files» that connects Google Drive accounts — signed in with Google, or a service account folders are shared with; shown inside «Files»"
+  },
+  "capabilities": [
+    {
+      "name": "drive-google",
+      "type": "service",
+      "interface": "drive-engine.v1",
+      "endpoint": "http://drive-google:8989",
+      "link": true,
+      "required_ops": [
+        "ops",
+        "accounts",
+        "describe",
+        "call",
+        "content",
+        "download",
+        "store",
+        "connect",
+        "disconnect"
+      ],
+      "optional_ops": [
+        "thumb",
+        "op_upload",
+        "oauth"
+      ]
+    }
+  ],
+  "use": [
+    {
+      "capability": "secrets",
+      "strength": "requires",
+      "after": true
+    }
+  ],
+  "compose": "docker-compose.yml",
+  "agent": {
+    "context": "AGENT.md",
+    "order": 17
+  },
+  "health": {
+    "structural": "auto",
+    "probe": {
+      "http": "http://drive-google:8989/healthz",
+      "interval": "30s"
+    }
+  },
+  "data": {
+    "volumes": [
+      "drive_google_data"
+    ],
+    "on_uninstall": "purge"
+  },
+  "observability": {
+    "sentry_platform": "python"
+  }
+}

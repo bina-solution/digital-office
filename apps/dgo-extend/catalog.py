@@ -587,7 +587,7 @@ def shared_host(alias: str, origin: str) -> str:
 
 
 def reshare(serve_map, office: str, home_id: str, fetched: dict, doors: dict,
-            hidden: dict | None = None) -> list[dict]:
+            hidden: dict | None = None, withheld=frozenset()) -> list[dict]:
     """The `shared` sections this office publishes to `office`. Pure.
 
     `fetched` — `{origin: catalog}` as this office pulled them (what each origin GAVE it); `doors` —
@@ -644,6 +644,8 @@ def reshare(serve_map, office: str, home_id: str, fetched: dict, doors: dict,
             host = shared_host(alias, oid)
             if only is not None and host not in only:
                 continue
+            if only is None and given_by_name({alias, aid}, None, withheld):
+                continue             # another office's admin surface: handed on only by name (DGO-1360)
             row = {k: app[k] for k in ("app", "title", "icon", "group", "desc", "order", "module",
                                        "health") if k in app}
             row.update({"alias": alias, "port": port, "host": host,
@@ -777,9 +779,19 @@ def wildcard(serve_map) -> bool:
     return bool(isinstance(serve_map, dict) and WILDCARD in serve_map)
 
 
-def publishable(registry: dict, serve_map, office: str = "") -> dict:
+def given_by_name(row_names: set, only: set | None, withheld) -> bool:
+    """May an app reach this office only if it is NAMED for it? `withheld` (DGO-1360) is the set of apps
+    the asking office is never given by `*`: the herd's admin surfaces, when the office asking is a public
+    one or not the herd's own — or a home office, when this office is in the herd file's `admin_by_name`
+    (DGO-863) — minus what the herd file's `give:` names for it. Such an app passes otherwise only when
+    `serve.only.<office>` names it (a sibling tile too: its app's own id is withheld with it)."""
+    return bool(withheld and (set(withheld) & row_names)) and not (only is not None and only & row_names)
+
+
+def publishable(registry: dict, serve_map, office: str = "", withheld=frozenset()) -> dict:
     """The part of the compiled registry this office actually PUBLISHES on a link (DGO-32) — to
-    `office` when one is named: `only_for` narrows it for that office alone.
+    `office` when one is named: `only_for` narrows it for that office alone, and `withheld` takes the
+    admin surfaces out of `*` for it (`given_by_name`).
 
     The catalog used to be every enabled app in the registry, while the delivery plan opened a door
     only for the served ones — so a linked office rendered tiles that could not open. Measured on vps1
@@ -823,6 +835,8 @@ def publishable(registry: dict, serve_map, office: str = "") -> dict:
             continue
         if only is not None and not (only & {app, alias}):
             continue                 # served by this office, and not to THIS one
+        if given_by_name({app, alias}, only, withheld):
+            continue                 # an admin surface, and this office is public or not the herd's (DGO-1360)
         rows.append(dict(row))
     return {k: v for k, v in (registry or {}).items() if k != "apps"} | {"apps": rows}
 
@@ -931,7 +945,7 @@ def published_agent(row: dict, door) -> dict:
     return out
 
 
-def serve_with_agents(registry: dict, serve_map, office: str = "") -> dict:
+def serve_with_agents(registry: dict, serve_map, office: str = "", withheld=frozenset()) -> dict:
     """This office's `serve:` map, ENRICHED with the agent door every served app declares (DGO-570).
 
     The adapter's port is a fact of the APP, not of the link: `reconcile` compiles `agent_api_port`
@@ -966,7 +980,7 @@ def serve_with_agents(registry: dict, serve_map, office: str = "") -> dict:
                     opened.add(int(number))
                 except (TypeError, ValueError):
                     continue
-    for row in (publishable(registry, serve_map, office).get("apps") or []):
+    for row in (publishable(registry, serve_map, office, withheld).get("apps") or []):
         if not isinstance(row, dict):
             continue
         app = str(row.get("app") or "").strip().lower()
@@ -1195,10 +1209,10 @@ def selftest() -> list[str]:
     # An office narrowed by `serve.only` is told nothing of an app served after its list (DGO-1269):
     # the answer that serves the app names the offices it does not reach.
     hp = {"bina-ds": {"port": 3080}, "bina-claude": {"port": 3000}, "plane": {"port": 80},
-          "only": {"vps1": ["bina", "plane"], "fireplace": []}}
+          "only": {"vps1": ["bina", "plane"], "examplef": []}}
     rows = one + two + [{"app": "plane", "alias": "plane", "port": 80}]
     got = withheld_by_only(hp, rows)
-    if got != {"vps1": ["bina-claude"], "fireplace": ["bina-claude", "bina-ds", "plane"]}:
+    if got != {"vps1": ["bina-claude"], "examplef": ["bina-claude", "bina-ds", "plane"]}:
         problems.append(f"withheld_by_only names, per narrowed office, each served app it is not given, got {got}")
     if withheld_by_only({"bina-claude": {"port": 3000}, "only": {"vps1": ["claude-terminal"]}}, rows):
         problems.append("an app is given when any of its tiles' aliases is on the list")

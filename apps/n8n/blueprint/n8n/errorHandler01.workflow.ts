@@ -2,7 +2,7 @@ import { workflow, node, links } from '@n8n-as-code/transformer';
 
 // <workflow-map>
 // Workflow : Error Handler
-// Nodes   : 16  |  Connections: 15
+// Nodes   : 18  |  Connections: 17
 //
 // NODE INDEX
 // ──────────────────────────────────────────────────────────────────
@@ -17,6 +17,8 @@ import { workflow, node, links } from '@n8n-as-code/transformer';
 // ClassifyError                      code
 // IsCrashDebris                      if
 // RecordCrashNoCascade               postgres                   [onError→regular] [creds]
+// NoticeBuild                        code
+// LocalNotice                        httpRequest                [onError→regular]
 // BuildSentryEvent                   code
 // SendToGlitchtip                    httpRequest                [onError→out(1)] [retry]
 // SinkUnreachableSuppressed          code
@@ -33,6 +35,7 @@ import { workflow, node, links } from '@n8n-as-code/transformer';
 //       .out(1) → BuildSentryEvent
 //          → SendToGlitchtip
 //           .out(1) → SinkUnreachableSuppressed
+//       .out(1) → NoticeBuild → LocalNotice   (the office's own התראות — always on, never a third party)
 //       .out(1) → Telegram
 //    → GetLockMap
 //      → IfHasLock
@@ -51,7 +54,7 @@ import { workflow, node, links } from '@n8n-as-code/transformer';
 @workflow({
     /*__n8n__*/ description: null,
     /*__n8n__*/ isArchived: false,
-    /*__n8n__*/ connections: {"Error Trigger":{"main":[[{"node":"Classify Error","type":"main","index":0},{"node":"Get Lock Map","type":"main","index":0},{"node":"EH Scan Action Keys","type":"main","index":0}]]},"Get Lock Map":{"main":[[{"node":"If Has Lock","type":"main","index":0}]]},"If Has Lock":{"main":[[{"node":"Record ERROR (no backoff, no status)","type":"main","index":0}],[]]},"EH Unlock Doc":{"main":[[{"node":"EH Del Map","type":"main","index":0}]]},"Classify Error":{"main":[[{"node":"Is Crash Debris?","type":"main","index":0}]]},"Is Crash Debris?":{"main":[[{"node":"Record Crash (no cascade)","type":"main","index":0}],[{"node":"Build Sentry Event","type":"main","index":0},{"node":"Telegram","type":"main","index":0}]]},"Build Sentry Event":{"main":[[{"node":"Send To GlitchTip","type":"main","index":0}]]},"Send To GlitchTip":{"main":[[],[{"node":"Sink Unreachable (suppressed)","type":"main","index":0}]]},"EH Scan Action Keys":{"main":[[{"node":"EH Map Lock Keys","type":"main","index":0}]]},"EH Map Lock Keys":{"main":[[{"node":"EH Unlock Doc Action","type":"main","index":0}]]},"Record ERROR (no backoff, no status)":{"main":[[{"node":"EH Unlock Doc","type":"main","index":0}]]}},
+    /*__n8n__*/ connections: {"Error Trigger":{"main":[[{"node":"Classify Error","type":"main","index":0},{"node":"Get Lock Map","type":"main","index":0},{"node":"EH Scan Action Keys","type":"main","index":0}]]},"Get Lock Map":{"main":[[{"node":"If Has Lock","type":"main","index":0}]]},"If Has Lock":{"main":[[{"node":"Record ERROR (no backoff, no status)","type":"main","index":0}],[]]},"EH Unlock Doc":{"main":[[{"node":"EH Del Map","type":"main","index":0}]]},"Classify Error":{"main":[[{"node":"Is Crash Debris?","type":"main","index":0}]]},"Is Crash Debris?":{"main":[[{"node":"Record Crash (no cascade)","type":"main","index":0}],[{"node":"Build Sentry Event","type":"main","index":0},{"node":"Build Local Notice","type":"main","index":0},{"node":"Telegram","type":"main","index":0}]]},"Build Local Notice":{"main":[[{"node":"Local Notice","type":"main","index":0}]]},"Build Sentry Event":{"main":[[{"node":"Send To GlitchTip","type":"main","index":0}]]},"Send To GlitchTip":{"main":[[],[{"node":"Sink Unreachable (suppressed)","type":"main","index":0}]]},"EH Scan Action Keys":{"main":[[{"node":"EH Map Lock Keys","type":"main","index":0}]]},"EH Map Lock Keys":{"main":[[{"node":"EH Unlock Doc Action","type":"main","index":0}]]},"Record ERROR (no backoff, no status)":{"main":[[{"node":"EH Unlock Doc","type":"main","index":0}]]}},
     /*__n8n__*/ tags: [{"updatedAt":"2026-07-30T23:44:12.933Z","createdAt":"2026-07-30T23:44:12.933Z","id":"12d9b7a3-e589-4bf5-aaa1-26a013cd0175","name":"shared"},{"updatedAt":"2026-08-05T22:56:59.007Z","createdAt":"2026-08-05T22:56:59.007Z","id":"536fb995-3c38-4ed4-9683-ae8d07edb41e","name":"n8n-app"},{"updatedAt":"2026-08-05T22:56:59.007Z","createdAt":"2026-08-05T22:56:59.007Z","id":"de8accc1-f4e8-4a42-887e-4545f489893f","name":"role:infra"},{"updatedAt":"2026-08-16T14:20:49.737Z","createdAt":"2026-08-16T14:20:49.737Z","id":"7e527add-9b38-577f-82e2-2d04f0c4d9db","name":"app:n8n"}],
     /*__n8n__*/ versionMetadata: {"name":null,"description":null},
     /*__n8n__*/ meta: {"templateCredsSetupCompleted":true},
@@ -349,6 +352,75 @@ return [{ json: {
             ],
             combinator: 'and',
         },
+        options: {},
+    };
+
+    @node({
+        id: 'eh-notice-build',
+        name: 'Build Local Notice',
+        /*__n8n__*/ notes: "Builds the office's own notice, and RETURNS NOTHING for the class of error the GlitchTip branch also filters: n8n fires its error workflow on every restart for leftover or triggerless workflows (mode=internal / WorkflowActivationError). BuildSentryEvent already drops those so they cannot bury the actionable ones; a second sink that forwarded them would bury the board the same way, so the same guards are here, deliberately as a filter and not as a truncation.",
+        /*__n8n__*/ notesInFlow: true,
+        type: 'n8n-nodes-base.code',
+        version: 2,
+        position: [1400, 460],
+    })
+    NoticeBuild = {
+        jsCode: `// DGO-1574 — the office's OWN notice board (apps/notifications). This is the only error sink that
+// is on for every office: Telegram needs a real bot token (a placeholder still SENDS the text to
+// Telegram's servers before it is refused — measured on Exampleu), and GlitchTip is an app a client
+// office does not run. Neither is the office's own. notifications is a base app everywhere.
+const d = $input.first().json || {};
+const wf = d.workflow || {};
+const ex = d.execution || {};
+const trg = d.trigger || {};
+const err = ex.error || trg.error || {};
+const msg = String(err.message || err.description || '');
+const errType = String(err.name || err.type || '');
+
+// The same two guards BuildSentryEvent applies, for the same measured reason: restart noise is not
+// an incident, and it arrives in hundreds per restart.
+if (errType === 'WorkflowActivationError' || (trg.mode === 'internal' && /has no node to start|problem activating/i.test(msg))) {
+  return [];
+}
+
+const nodeName = (err.node && err.node.name) || ex.lastNodeExecuted || 'workflow';
+return [{ json: {
+  source: 'n8n',
+  // stable per workflow+node: the notifications app UPDATES this one notice instead of stacking a
+  // new row for every failed execution of the same node.
+  source_id: 'n8n:' + String(wf.id || 'unknown') + ':' + nodeName,
+  level: 'warning',   // never 'error': that rings every subscribed phone, and one failed run is news
+  title: String(wf.name || 'workflow') + ' — ' + (msg || 'execution failed').slice(0, 140),
+  body: String(err.stack || msg || '').slice(0, 2000),
+  link: String(ex.url || ''),
+}}];`,
+    };
+
+    @node({
+        id: 'eh-local-notice',
+        name: 'Local Notice',
+        /*__n8n__*/ notes: "THE OFFICE'S OWN NOTICE BOARD, AND THE ONLY ERROR SINK THAT IS ALWAYS ON (DGO-1574). Before this node a client office's failures landed in exactly two places: Telegram (a third party, reached with whatever TELEGRAM_BOT_TOKEN held — on Exampleu with a placeholder, so the text left the office before the token was refused) and GlitchTip (an app that office does not run). `notifications` is a base app on every office, so this node needs no flag, no token and no destination: one POST to http://notifications:8977/api/notifications. onError=continueRegularOutput: an error reporter must never be able to emit an error (RCA 2026-08-06 — a reporter failing into the handler that called it produced a measured 1,205-to-1,481 cycle).",
+        /*__n8n__*/ notesInFlow: true,
+        type: 'n8n-nodes-base.httpRequest',
+        version: 4.3,
+        position: [1620, 460],
+        onError: 'continueRegularOutput',
+    })
+    LocalNotice = {
+        method: 'POST',
+        url: 'http://notifications:8977/api/notifications',
+        sendHeaders: true,
+        headerParameters: {
+            parameters: [
+                {
+                    name: 'Content-Type',
+                    value: 'application/json',
+                },
+            ],
+        },
+        sendBody: true,
+        specifyBody: 'json',
+        jsonBody: '={{ JSON.stringify($json) }}',
         options: {},
     };
 
@@ -652,6 +724,8 @@ return out;`,
         this.ClassifyError.out(0).to(this.IsCrashDebris.in(0));
         this.IsCrashDebris.out(0).to(this.RecordCrashNoCascade.in(0));
         this.IsCrashDebris.out(1).to(this.BuildSentryEvent.in(0));
+        this.IsCrashDebris.out(1).to(this.NoticeBuild.in(0));
+        this.NoticeBuild.out(0).to(this.LocalNotice.in(0));
         this.IsCrashDebris.out(1).to(this.Telegram.in(0));
         this.BuildSentryEvent.out(0).to(this.SendToGlitchtip.in(0));
         this.SendToGlitchtip.out(1).to(this.SinkUnreachableSuppressed.in(0));

@@ -180,7 +180,7 @@ ul.ask li.assumed::marker { color: var(--warn); }
 .sheet rect.piece { fill: var(--olive-soft); stroke: var(--olive-d); stroke-width: .4; }
 .sheet text { font-size: 3px; fill: var(--ink); }
 
-/* the FreeCAD models (FPG-621): a card's picture, the renders under the 3D, the steps, the file's path */
+/* the FreeCAD models (EXF-621): a card's picture, the renders under the 3D, the steps, the file's path */
 a.card.model img.thumb { display: block; width: 100%; aspect-ratio: 16 / 11; object-fit: contain; background: var(--surface-2);
   border-radius: 8px; margin-bottom: 10px; }
 #view img.still { display: block; width: 100%; height: 100%; object-fit: contain; }

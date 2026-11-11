@@ -153,7 +153,7 @@ def _supabase_sql(sql, timeout=60):
     """One statement against the platform Postgres, via the supabase-db container — the same
     convention every other DB touch in this file uses. Returns stripped stdout; raises on a
     non-zero psql exit so callers cannot mistake a broken query for an empty result."""
-    dn = env("DEPLOYMENT_NAME", "shlomo-laptop")
+    dn = env("DEPLOYMENT_NAME", "owner-laptop")
     r = subprocess.run(["docker", "exec", f"supabase-db-{dn}", "psql", "-U", "postgres",
                         "-d", "postgres", "-t", "-A", "-c", sql],
                        capture_output=True, timeout=timeout)
@@ -217,9 +217,9 @@ LEGACY_RETIRED = ("indoxProcessDocument01", "SyncProcGDoc0001", "SyncProcBS00000
 
 def _max_exec_id():
     """Highest n8n execution id right now — the battery-window fence for the legacy guard."""
-    dn = env("DEPLOYMENT_NAME", "shlomo-laptop")
+    dn = env("DEPLOYMENT_NAME", "owner-laptop")
     o = subprocess.run(["docker", "exec", f"n8n-postgres-{dn}", "psql", "-U",
-                        env("POSTGRES_USER", "hacohen"), "-d", "n8n", "-t", "-A", "-c",
+                        env("POSTGRES_USER", "example"), "-d", "n8n", "-t", "-A", "-c",
                         "SELECT coalesce(max(id),0) FROM execution_entity;"],
                        capture_output=True)
     try:
@@ -230,10 +230,10 @@ def _max_exec_id():
 
 def _legacy_runs_since(start_id):
     """[(workflowId, count)] of retired-processor executions after the fence. Empty = proof."""
-    dn = env("DEPLOYMENT_NAME", "shlomo-laptop")
+    dn = env("DEPLOYMENT_NAME", "owner-laptop")
     wfs = ",".join("'%s'" % w for w in LEGACY_RETIRED)
     o = subprocess.run(["docker", "exec", f"n8n-postgres-{dn}", "psql", "-U",
-                        env("POSTGRES_USER", "hacohen"), "-d", "n8n", "-t", "-A", "-c",
+                        env("POSTGRES_USER", "example"), "-d", "n8n", "-t", "-A", "-c",
                         'SELECT "workflowId"||\'|\'||count(*) FROM execution_entity '
                         f'WHERE id>{int(start_id)} AND "workflowId" IN ({wfs}) GROUP BY 1;'],
                        capture_output=True)
@@ -247,9 +247,9 @@ def _legacy_runs_since(start_id):
 
 def fetch_summary(eid):
     """Read the 🏁 Test Summary output (or the failure detail) straight from the n8n DB."""
-    dn = env("DEPLOYMENT_NAME", "shlomo-laptop")
+    dn = env("DEPLOYMENT_NAME", "owner-laptop")
     o = subprocess.run(["docker", "exec", f"n8n-postgres-{dn}", "psql", "-U",
-                        env("POSTGRES_USER", "hacohen"), "-d", "n8n", "-t", "-A", "-c",
+                        env("POSTGRES_USER", "example"), "-d", "n8n", "-t", "-A", "-c",
                         f'SELECT data FROM execution_data WHERE "executionId"={int(eid)};'],
                        capture_output=True)
     raw = o.stdout.decode("utf-8", errors="replace").strip()
@@ -281,10 +281,10 @@ def fetch_summary(eid):
 def dump_state(reason):
     """Self-diagnosis when a suite hangs or dies without a summary: queued/running executions,
     redis queue depth, worker log tail. Works locally and in CI (docker exec; no SSH needed)."""
-    dn = env("DEPLOYMENT_NAME", "shlomo-laptop")
+    dn = env("DEPLOYMENT_NAME", "owner-laptop")
     print(f"[indox-test] ── state dump ({reason}) ──", flush=True)
     o = subprocess.run(["docker", "exec", f"n8n-postgres-{dn}", "psql", "-U",
-                        env("POSTGRES_USER", "hacohen"), "-d", "n8n", "-t", "-A", "-F", " | ", "-c",
+                        env("POSTGRES_USER", "example"), "-d", "n8n", "-t", "-A", "-F", " | ", "-c",
                         'SELECT e.id, w.name, e.status, e."startedAt" FROM execution_entity e '
                         'JOIN workflow_entity w ON w.id=e."workflowId" ORDER BY e.id DESC LIMIT 25;'],
                        capture_output=True)
@@ -335,7 +335,7 @@ def bootstrap_localmail():
     if env("GMAIL_IMAP_MODE", "gmail") != "local":
         _LOCALMAIL_DONE = True
         return
-    dn = env("DEPLOYMENT_NAME", "shlomo-laptop")
+    dn = env("DEPLOYMENT_NAME", "owner-laptop")
     # [one rules store 2026-09-03, owner Decision N1] the label vocabulary is the mail app's
     # organizer settings — the same store the engine evaluates and mailapi's search resolves
     # through. Read it from inside the mailapi container (the harness has no network edge of its own).
@@ -407,7 +407,7 @@ def test_mail_connection():
     (`_explicit_connection_required`). Before that guard, a suite mail op with no `connection_id`
     fell through to mailapi's ambient pointer `/data/active.json`, which on this deployment is the
     CLIENT's real Gmail: that is how 148 fixture messages (`sv3s_`/`sv3f_`/`mailorg`, all addressed
-    to @demo.indox) ended up in person9@example.com between 2026-08-05 and 2026-08-09.
+    to @demo.indox) ended up in person10@example.com between 2026-08-05 and 2026-08-09.
 
     So the id is resolved from the LOCAL mail engine's own profiles — the same source
     scripts/ops/e2e-loadtest/provision.py already uses — and anything that is not a
@@ -424,7 +424,7 @@ def test_mail_connection():
     if _TEST_MAIL_CID is not None:
         return _TEST_MAIL_CID
     _TEST_MAIL_CID = ""
-    dn = env("DEPLOYMENT_NAME", "shlomo-laptop")
+    dn = env("DEPLOYMENT_NAME", "owner-laptop")
     code = ("import json,urllib.request\n"
             "d=json.load(urllib.request.urlopen('http://localhost:8970/engine/profiles',timeout=15))\n"
             "ps=d.get('profiles') or []\n"
@@ -454,11 +454,11 @@ def wait_for_webhooks():
     need = {"bs_ex_2_dev", "invoice_extractor"}
     if LANES_ON:
         need |= {p for k in LANES for p in [LANE_PATHS[k]]}
-    dn = env("DEPLOYMENT_NAME", "shlomo-laptop")
+    dn = env("DEPLOYMENT_NAME", "owner-laptop")
     deadline = time.time() + 300
     while time.time() < deadline:
         o = subprocess.run(["docker", "exec", f"n8n-postgres-{dn}", "psql", "-U",
-                            env("POSTGRES_USER", "hacohen"), "-d", "n8n", "-t", "-A", "-c",
+                            env("POSTGRES_USER", "example"), "-d", "n8n", "-t", "-A", "-c",
                             'SELECT "webhookPath" FROM webhook_entity;'], capture_output=True)
         have = set(o.stdout.decode(errors="replace").split())
         missing = need - have
@@ -548,7 +548,7 @@ def run_suite(ck, key):
                 "elapsed": 0, "detail": rb[:200]}
     print(f"[indox-test] {key}: execution {eid} running…", flush=True)
     status = "timeout"
-    dn = env("DEPLOYMENT_NAME", "shlomo-laptop")
+    dn = env("DEPLOYMENT_NAME", "owner-laptop")
     beats = 0
     last_max, last_progress = "", time.time()
     last_err = -1
@@ -569,7 +569,7 @@ def run_suite(ck, key):
         # execution id hasn't moved in 120s, the environment is wedged (e.g. task-runner
         # broker not dispatching) — fail LOUDLY now instead of burning the whole budget.
         o = subprocess.run(["docker", "exec", f"n8n-postgres-{dn}", "psql", "-U",
-                            env("POSTGRES_USER", "hacohen"), "-d", "n8n", "-t", "-A", "-c",
+                            env("POSTGRES_USER", "example"), "-d", "n8n", "-t", "-A", "-c",
                             "SELECT max(id) FROM execution_entity;"], capture_output=True)
         cur_max = o.stdout.decode(errors="replace").strip()
         if cur_max != last_max:
@@ -584,14 +584,14 @@ def run_suite(ck, key):
         if beats % 3 == 0:  # live heartbeat every ~30s: shows WHERE the run is, so hangs are visible
             # (cur_max vs the previous heartbeat = sub-executions completed since — movement =健)
             o = subprocess.run(["docker", "exec", f"n8n-postgres-{dn}", "psql", "-U",
-                                env("POSTGRES_USER", "hacohen"), "-d", "n8n", "-t", "-A", "-F", "|", "-c",
+                                env("POSTGRES_USER", "example"), "-d", "n8n", "-t", "-A", "-F", "|", "-c",
                                 "SELECT status||' '||count(*)||'x '||string_agg(DISTINCT w.name, ',') "
                                 "FROM execution_entity e JOIN workflow_entity w ON w.id=e.\"workflowId\" "
                                 "WHERE e.status IN ('running','new') GROUP BY status;"],
                                capture_output=True)
             act = " ; ".join(x for x in o.stdout.decode(errors="replace").splitlines() if x.strip()) if o.stdout else ""
             oe = subprocess.run(["docker", "exec", f"n8n-postgres-{dn}", "psql", "-U",
-                                 env("POSTGRES_USER", "hacohen"), "-d", "n8n", "-t", "-A", "-c",
+                                 env("POSTGRES_USER", "example"), "-d", "n8n", "-t", "-A", "-c",
                                  "SELECT count(*) FROM execution_entity WHERE status='error';"],
                                 capture_output=True)
             try:
@@ -792,12 +792,12 @@ def _reset_test_instance():
         sys.exit("[indox-test] REFUSING TO RUN: IndoxResetFull01 did not start (see above) — "
                  "the battery must not run on an un-reset test tenant.")
     eid = int(m.group(1))
-    dn = env("DEPLOYMENT_NAME", "shlomo-laptop")
+    dn = env("DEPLOYMENT_NAME", "owner-laptop")
     deadline = time.time() + 600
     while time.time() < deadline:
         time.sleep(5)
         o = subprocess.run(["docker", "exec", f"n8n-postgres-{dn}", "psql", "-U",
-                            env("POSTGRES_USER", "hacohen"), "-d", "n8n", "-t", "-A", "-c",
+                            env("POSTGRES_USER", "example"), "-d", "n8n", "-t", "-A", "-c",
                             f"SELECT status FROM execution_entity WHERE id={eid};"],
                            capture_output=True)
         st = o.stdout.decode("utf-8", errors="replace").strip()
@@ -823,7 +823,7 @@ def _seed_test_connections():
       * settings.sync_registry    — '[]', insert-only, so the scheduled per-instance sync pass
         over the test tenant is a loud no-op instead of an error (suites install their own).
     """
-    dn = env("DEPLOYMENT_NAME", "shlomo-laptop")
+    dn = env("DEPLOYMENT_NAME", "owner-laptop")
     # (a) drive: admin profile's connection — read from the drive service the same way this
     # file reaches mailapi: python/urllib INSIDE the container (no curl there), localhost port.
     code = ("import json,urllib.request\n"
@@ -984,7 +984,7 @@ def _run_battery():
     try:
         hrs = max(0.2, round((time.time() - t_batt0) / 3600 + 0.02, 2))
         subprocess.run([sys.executable, os.path.join(ROOT, "scripts", "ci-concurrency-report"),
-                        env("DEPLOYMENT_NAME", "shlomo-laptop"), "ci-artifacts", str(hrs)], timeout=300)
+                        env("DEPLOYMENT_NAME", "owner-laptop"), "ci-artifacts", str(hrs)], timeout=300)
     except Exception as ex:
         print(f"[indox-test] concurrency report skipped: {ex}")
 

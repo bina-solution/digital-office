@@ -1,0 +1,104 @@
+#!/usr/bin/env bash
+# gates-asked — does THIS commit ask for the gates? One question, one answer, no substring.
+#
+#   git log -1 --format=%B | scripts/ci/gates-asked --branch mac-dgo     # -> prints true|false
+#
+# The answer is printed as `true`/`false` — the value a workflow `if:` compares — and the REASON it
+# answered goes to stderr, because a run that skipped has to be able to say which path answered
+# (the trailer? the one-release legacy marker?) and not just what it decided.
+#
+# WHY IT IS NOT A GREP. gates-hosted.yml used to ask `contains(head_commit.message, '[gates]')` — a
+# substring anywhere in the message. On 2026-11-09 a commit that merely QUOTED the marker in its
+# subject (7bb4397b, the record of this very defect) started a full gates run on the office's one
+# runner, behind which a dgo-stable batch's gates were already waiting (DGO-1619). A marker that a
+# quotation can fire is not a marker.
+#
+# THE MARKER is a git TRAILER — `Gates: run` on its own line, in the trailer block at the end of the
+# commit message — parsed by git itself (`git interpret-trailers --parse`), never by a pattern this
+# script invents. `Gates: no`, `Gates: run` inside a body paragraph, or `[gates]` written into prose
+# are all NOT a request.
+#
+# THE ONE EXCEPTION, for one release: every batch pushed to dgo-stable so far ends its subject with
+# `[gates]`, and a batch that silently stops waking the gates on the office's stable branch is worse
+# than the ambiguity being removed. So `[gates]` still counts — on dgo-stable AND, staged the same way,
+# on an office branch (below): a subject that ENDS with it, never a quotation.
+set -uo pipefail
+
+branch=""
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --branch) branch="${2:-}"; shift 2 ;;
+    *) echo "usage: git log -1 --format=%B | $0 --branch <branch>" >&2; exit 2 ;;
+  esac
+done
+
+msg="$(cat)"
+
+# The trailer block, as git parses it. A message with no trailers yields nothing.
+trailer="$(printf '%s\n' "${msg}" | git interpret-trailers --parse 2>/dev/null \
+           | sed -n 's/^[[:space:]]*[Gg]ates:[[:space:]]*//p' | tail -1 | tr -d '\r' | tr -d '[:space:]')"
+
+# …AND THE BLOCK GIT STOPS AT. `git interpret-trailers` reads only the LAST paragraph that looks
+# like trailers, so this very real shape lost the request:
+#     <body>
+#
+#     Gates: run
+#
+#     Co-Authored-By: Someone <a@b>
+# — the last block is the sign-off and `Gates: run` is a paragraph above it. Every commit in this
+# office ends with a blank line and a Co-Authored-By, so that is not a corner: it is the shape a
+# request will have. So the same trailer grammar is walked BACKWARDS, block by block, and it stops
+# at the first block that is not trailers — which is what keeps prose and a code fence out.
+if [ "${trailer:-}" != "run" ]; then
+  trailer="$(printf '%s\n' "${msg}" | awk '
+    { line[NR] = $0 }
+    END {
+      i = NR
+      while (i >= 1 && line[i] ~ /^[[:space:]]*$/) i--
+      found = ""
+      while (i >= 1) {
+        start = i
+        while (start >= 1 && line[start] !~ /^[[:space:]]*$/) start--
+        ok = 1; g = ""
+        for (j = start + 1; j <= i; j++) {
+          if (line[j] !~ /^[A-Za-z][A-Za-z0-9-]*:[[:space:]]+[^[:space:]]/) { ok = 0; break }
+          if (line[j] ~ /^[Gg]ates:/) {
+            g = line[j]; sub(/^[Gg]ates:[[:space:]]*/, "", g)
+          }
+        }
+        if (!ok) break
+        if (g != "") { found = g; break }
+        i = start
+        while (i >= 1 && line[i] ~ /^[[:space:]]*$/) i--
+      }
+      print found
+    }' | tr -d '\r' | tr -d '[:space:]')"
+fi
+
+if [ "${trailer:-}" = "run" ]; then
+  echo true
+  echo "reason=trailer 'Gates: run'" >&2
+  exit 0
+fi
+
+# One release of compatibility, deliberately NARROW: the old marker was accepted ANYWHERE in the
+# message, which is the bug this file exists to remove — re-arming it on dgo-stable would fire a run
+# the next time somebody QUOTES it in a record of the defect. The batches' real shape is a subject
+# that ENDS with `[gates]` (802e8db6, fb56beb9, f4f827f6), so that is all that is accepted — first on
+# a dgo-stable head only, now on an office branch too:
+#
+# …and on an office branch too, for the same one release (the release lane, 2026-11-10): when this file
+# reached mac-dgo, six lanes still ended their subjects with `[gates]`, and their pushes would have
+# stopped waking the gates with no word to anyone. A tightening is staged (AGENTS.md rule 8): the
+# marker still asks, the workflow WARNS on every run it answered, and it is refused once the lanes'
+# notes carry the trailer — DGO-1619 is the item that flips both branches to refuse. Still only a
+# subject that ENDS with it — never a quotation.
+subject="$(printf '%s\n' "${msg}" | sed -n '1p')"
+if printf '%s' "${subject}" | grep -qE '\[gates\][[:space:]]*$'; then
+  echo true
+  echo "reason=legacy '[gates]' ending the subject — accepted on a ${branch:-branch} head for one release; write 'Gates: run'" >&2
+  exit 0
+fi
+
+echo false
+echo "reason=no 'Gates: run' trailer${branch:+ (branch ${branch})}" >&2

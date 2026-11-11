@@ -1,0 +1,44 @@
+# browser42-mcp — the office's Playwright MCP server, with its code IN the image (DGO-1561, slice 2).
+#
+# WHAT CHANGED AND WHY. This service used to run `npx -y @playwright/mcp@0.0.83` on `node:22-slim`
+# (docker-compose.yml, the `command:` list). npx downloads the package from registry.npmjs.org when
+# it is not cached — so every fresh container opened a connection to the internet at start, before
+# it served a single MCP call. Measured on Exampleu's server, 2026-11-09 (conntrack + the security
+# app's names), and it had no declaration in platform-base/security/egress.yaml. The owner's rule
+# for a client office: no app goes outside unless we meant it. A server that must not talk to the
+# internet is one whose code is installed at BUILD time.
+#
+# So: the pinned package is installed here, and the service starts its own binary
+# (`playwright-mcp`, the one `bin` @playwright/mcp declares). Nothing is fetched at run time.
+#
+# The image is still `node:22-slim`, the base the others use (`apps/chat/Dockerfile`, and what this
+# service ran before): a tag, not `:latest`, so gate G15 passes and the offline bundle resolves it.
+
+FROM node:22-slim
+
+# PINNED, in one place. `@latest` changed the tool schema under every caller on 2026-09-29 (`ref` →
+# `target`, a required `scale` on screenshots); 0.0.83 is the version the callers were fixed and
+# verified against (apps/domains, apps/social-list read the dialect from the schemas anyway). The
+# version lives here and not in the compose file's command, so there is no second copy to drift.
+ARG PLAYWRIGHT_MCP_VERSION=0.0.83
+
+# No browsers: this server drives the office's browser over CDP (PLAYWRIGHT_MCP_CDP_ENDPOINT, set by
+# docker-compose.yml), so `playwright`'s postinstall has nothing to download — and would otherwise
+# pull ~150 MB of Chromium this container never launches.
+ENV PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1
+
+RUN npm install -g --no-audit --no-fund "@playwright/mcp@${PLAYWRIGHT_MCP_VERSION}" \
+ && npm cache clean --force \
+ # The build proves its own contract: the pinned version is what landed, and its binary is on PATH.
+ # A silent `npm install` that resolved to some other version would be the same class of bug as
+ # `@latest` — this fails the build instead.
+ && test "$(node -p "require('/usr/local/lib/node_modules/@playwright/mcp/package.json').version")" = "${PLAYWRIGHT_MCP_VERSION}" \
+ && command -v playwright-mcp
+
+# /data is where the compose mounts the app's volume: --output-dir /data/output (screenshots, PDFs).
+WORKDIR /data
+
+EXPOSE 8931
+
+# The package's own entry point; every flag stays in the compose `command:` list, as before.
+ENTRYPOINT ["playwright-mcp"]

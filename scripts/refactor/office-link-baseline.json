@@ -1,0 +1,16 @@
+{
+ "apps/browser42/handoff.py": 1,
+ "apps/git/tools/panel-shot.py": 1,
+ "apps/indox/app/webapp/src/pages/DocumentBrowserPage.tsx": 1,
+ "apps/indox/app/webapp/src/siblings.ts": 1,
+ "apps/meet/start/server.py": 2,
+ "apps/project-pln/tasks.py": 1,
+ "apps/telegram/relay/say_group.py": 1,
+ "platform-base/data-management/pull.py": 1,
+ "platform-base/notifications/static/sw.js": 1,
+ "platform/manager/serve.py": 7,
+ "scripts/ci-screenshots.sh": 1,
+ "scripts/ops/edge-bypass-probe.sh": 2,
+ "scripts/ui-coverage/e2e/common.py": 3,
+ "scripts/ui-coverage/route-runtime-qa.py": 1
+}

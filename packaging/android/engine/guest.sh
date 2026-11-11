@@ -12,9 +12,17 @@
 set -euo pipefail
 out="${1:?usage: guest.sh <out.img>}"
 repo="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
-read -r url digest < <(python3 - "${repo}/packaging/macos/engine.yaml" <<'PY'
+# GUEST_ARCH: the machine's architecture, Docker's name for it — arm64 (a phone, the default) or amd64 (an x86_64
+# Android: the emulator on the Dell's KVM, DGO-1723). engine.yaml pins both images with their digests.
+GUEST_ARCH="${GUEST_ARCH:-arm64}"
+case "${GUEST_ARCH}" in
+  arm64) cloud_arch=aarch64 ;;
+  amd64) cloud_arch=x86_64 ;;
+  *) echo "guest.sh: GUEST_ARCH is arm64 or amd64, not ${GUEST_ARCH}" >&2; exit 1 ;;
+esac
+read -r url digest < <(python3 - "${repo}/packaging/macos/engine.yaml" "${cloud_arch}" <<'PY'
 import sys, yaml
-img = next(i for i in yaml.safe_load(open(sys.argv[1]))["images"] if i.get("arch") == "aarch64" and i.get("digest"))
+img = next(i for i in yaml.safe_load(open(sys.argv[1]))["images"] if i.get("arch") == sys.argv[2] and i.get("digest"))
 print(img["location"], img["digest"].split(":", 1)[1])
 PY
 )
@@ -97,9 +105,166 @@ fallocate -l 2G "${mnt}/swapfile"   # one command a line: set -e stops on each, 
 chmod 600 "${mnt}/swapfile"
 mkswap -q "${mnt}/swapfile"
 grep -q '^/swapfile ' "${mnt}/etc/fstab" || echo '/swapfile none swap sw 0 0' >> "${mnt}/etc/fstab"
+# /boot and /boot/efi: nofail, and a long device wait (DGO-1818). The cloud image mounts its BOOT and UEFI partitions
+# by label; under TCG on the owner's phone (2026-11-11, no AVF) the machine stopped in EMERGENCY MODE — docker and
+# the office hang off the normal target, which an emergency boot never reaches — and local-fs.target fails only on
+# what it requires: these two (the root is the initrd's, the swap is not local-fs's). nofail: local-fs no longer
+# requires them, so the boot never waits on them. The wait itself stays long (600 s): the mount job runs on in the
+# background and mounts them when the device comes, as GRUB's success record (/boot) needs; a short one gave up for
+# good on exactly the slow boot this is for (a second reader).
+python3 - "${mnt}/etc/fstab" <<'PY'
+import sys
+path = sys.argv[1]
+out = []
+for line in open(path).read().split("\n"):
+    f = line.split()
+    if len(f) >= 4 and not line.lstrip().startswith("#") and f[1] in ("/boot", "/boot/efi") \
+            and "nofail" not in f[3].split(","):
+        f[3] += ",nofail,x-systemd.device-timeout=600s"
+        line = "\t".join(f)
+    out.append(line)
+open(path, "w").write("\n".join(out))
+PY
+echo "guest: the fstab's boot mounts, as a phone's machine boots them:"
+grep -E '[[:space:]]/boot(/efi)?[[:space:]]' "${mnt}/etc/fstab" | sed 's/^/  /' || echo "  (none)"
 # the packages apt fetched for that are installed now: not carried to every phone. After the swap file,
 # which would otherwise be allocated over their freed blocks — the trim below zeroes only free ones
 inguest apt-get clean
+
+# ── the phone's own virtualization (AVF, DGO-1328) ───────────────────────────────────────────────────────
+# AVF boots a machine's kernel itself — crosvm takes a raw arm64 Image on arm64 (never a compressed vmlinuz),
+# the bzImage itself on x86_64 — with its
+# initrd, over this same disk. Both are exported beside the disk (<out>.kernel, <out>.initrd), and the list a
+# phone fetches names them (guest-box.sh, "boot"). The kernel's packages are held: an unattended upgrade would
+# install another and, in time, remove the modules of the one exported here, which the phone keeps booting.
+held="$(inguest dpkg-query -W -f '${Package} ${Status}\n' 'linux-image-*' 'linux-modules-*' 'linux-headers-*' \
+  'linux-generic*' 'linux-virtual*' 2>/dev/null | awk '$4 == "installed" {print $1}' | sort -u | tr '\n' ' ')"
+if [ -n "${held}" ]; then
+  # shellcheck disable=SC2086 # one package a word
+  inguest apt-mark hold ${held} >/dev/null
+  echo "guest: the kernel held — ${held}"
+fi
+kver="$(ls "${mnt}/lib/modules" | sort -V | tail -1)"
+[ -n "${kver}" ] && [ -f "${mnt}/boot/vmlinuz-${kver}" ] && [ -f "${mnt}/boot/initrd.img-${kver}" ] \
+  || { echo "guest.sh: no kernel ${kver:-at all} with its initrd in /boot" >&2; exit 1; }
+# x86_64: the vmlinuz IS what crosvm boots there (a bzImage, the x86 boot protocol's "HdrS" at 0x202)
+if [ "${GUEST_ARCH}" = amd64 ]; then
+  cp "${mnt}/boot/vmlinuz-${kver}" "${out}.kernel"
+  [ "$(dd if="${out}.kernel" bs=1 skip=514 count=4 2>/dev/null)" = HdrS ] \
+    || { echo "guest.sh: the kernel is not an x86 bzImage (no HdrS at 0x202)" >&2; exit 1; }
+  echo "guest: the AVF kernel ${kver}, a bzImage of $(stat -c %s "${out}.kernel") bytes"
+fi
+# arm64: the kernel unpacked to its raw Image: a gzip of it (Ubuntu's arm64 vmlinuz), or an EFI zboot whose
+# header names its payload's offset, size and coding — gzip and xz here, zstd by the guest's own zstd (exit 3)
+unpacked=0
+[ "${GUEST_ARCH}" = amd64 ] || python3 - "${mnt}/boot/vmlinuz-${kver}" "${out}.kernel" <<'PY' || unpacked=$?
+import gzip, lzma, struct, sys
+src, dst = sys.argv[1:3]
+raw = open(src, "rb").read()
+if raw[:2] == b"\x1f\x8b":
+    raw = gzip.decompress(raw)
+elif raw[:2] == b"MZ" and raw[4:8] == b"zimg":
+    off, size = struct.unpack_from("<II", raw, 8)
+    kind = raw[24:32].rstrip(b"\0").decode()
+    payload = raw[off:off + size]
+    if kind == "gzip":
+        raw = gzip.decompress(payload)
+    elif kind in ("xzkern", "xz", "lzma"):
+        raw = lzma.decompress(payload)
+    elif kind == "zstd22" or kind == "zstd":
+        with open(dst + ".zst", "wb") as o:
+            o.write(payload)
+        sys.exit(3)
+    else:
+        sys.exit(f"guest.sh: the kernel is EFI zboot with {kind}, which this does not unpack")
+with open(dst, "wb") as o:
+    o.write(raw)
+PY
+if [ "${unpacked}" = 3 ]; then
+  inguest zstd -dcq < "${out}.kernel.zst" > "${out}.kernel"
+  rm -f "${out}.kernel.zst"
+elif [ "${unpacked}" != 0 ]; then
+  exit 1
+fi
+if [ "${GUEST_ARCH}" = arm64 ]; then
+  [ "$(dd if="${out}.kernel" bs=1 skip=56 count=4 2>/dev/null)" = "$(printf 'ARM\x64')" ] \
+    || { echo "guest.sh: the kernel is not an arm64 Image once unpacked (no ARM\\x64 at 0x38)" >&2; exit 1; }
+  echo "guest: the AVF kernel ${kver}, a raw Image of $(stat -c %s "${out}.kernel") bytes"
+fi
+cp "${mnt}/boot/initrd.img-${kver}" "${out}.initrd"
+echo "guest: its initrd ${kver}, $(du -h "${out}.initrd" | cut -f1)"
+# What the guest needs from the app under AVF, each switched on by the kernel's command line the app gives
+# it (dgo.engine=avf), so nothing of it runs under QEMU:
+# - its edge, reached over vsock: an app may only connect to a port the guest listens on, so systemd listens
+#   on vsock 5080 and hands every connection to the edge on 80;
+# - a clean power-off: a connection to vsock 5099;
+# - the time: AVF wires no clock to the guest; the app gives its own (dgo.epoch) until NTP has one.
+echo vmw_vsock_virtio_transport > "${mnt}/etc/modules-load.d/dgo-vsock.conf"
+cat > "${mnt}/etc/systemd/system/dgo-edge-vsock.socket" <<'UNIT'
+[Unit]
+Description=The office's edge, as the phone's app reaches it over vsock (AVF, DGO-1328)
+ConditionKernelCommandLine=dgo.engine=avf
+
+[Socket]
+ListenStream=vsock::5080
+
+[Install]
+WantedBy=sockets.target
+UNIT
+cat > "${mnt}/etc/systemd/system/dgo-edge-vsock.service" <<'UNIT'
+[Unit]
+Description=The office's edge, as the phone's app reaches it over vsock (AVF, DGO-1328)
+Requires=dgo-edge-vsock.socket
+After=dgo-edge-vsock.socket
+
+[Service]
+ExecStart=/usr/lib/systemd/systemd-socket-proxyd 127.0.0.1:80
+UNIT
+cat > "${mnt}/etc/systemd/system/dgo-poweroff.socket" <<'UNIT'
+[Unit]
+Description=A power-off the phone's app asks for over vsock (AVF, DGO-1328)
+ConditionKernelCommandLine=dgo.engine=avf
+
+[Socket]
+ListenStream=vsock::5099
+Accept=yes
+
+[Install]
+WantedBy=sockets.target
+UNIT
+cat > "${mnt}/etc/systemd/system/dgo-poweroff@.service" <<'UNIT'
+[Unit]
+Description=A power-off the phone's app asks for over vsock (AVF, DGO-1328)
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/systemctl poweroff --no-block
+UNIT
+cat > "${mnt}/usr/local/bin/dgo-clock" <<'CLOCK'
+#!/bin/sh
+# dgo-clock — the phone's time, given on the kernel's command line (dgo.epoch), where the guest's own clock is
+# behind it: AVF wires no clock to the guest, which would start in 1970 and fail every TLS until NTP.
+e="$(sed -n 's/.*dgo\.epoch=\([0-9][0-9]*\).*/\1/p' /proc/cmdline)"
+[ -n "${e}" ] || exit 0
+if [ "$(date +%s)" -lt "${e}" ]; then date -s "@${e}" >/dev/null && echo "dgo-clock: the phone's time, $(date -u)"; fi
+CLOCK
+chmod 755 "${mnt}/usr/local/bin/dgo-clock"
+cat > "${mnt}/etc/systemd/system/dgo-clock.service" <<'UNIT'
+[Unit]
+Description=The phone's time, before the network's (AVF, DGO-1328)
+DefaultDependencies=no
+Before=sysinit.target time-set.target
+Wants=time-set.target
+ConditionKernelCommandLine=dgo.epoch
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/dgo-clock
+
+[Install]
+WantedBy=sysinit.target
+UNIT
+inguest systemctl enable dgo-edge-vsock.socket dgo-poweroff.socket dgo-clock.service
 
 # The machine's network, declared: QEMU's user network (slirp) on the phone and in try-guest.sh alike —
 # DHCP gives 10.0.2.15, the way out, and its DNS proxy 10.0.2.3. Left to cloud-init's fallback, the first
@@ -171,7 +336,7 @@ if [ -n "${DGO_GUEST_IMAGES:-}" ] && [ -f "${DGO_GUEST_IMAGES}" ]; then
   g info >/dev/null 2>&1 || { echo "guest.sh: the image dockerd did not start:" >&2; tail -n 20 "${d}/log" >&2; exit 1; }
   g load -q -i "${DGO_GUEST_IMAGES}"
   archs="$(g image inspect -f '{{.Architecture}}' $(g image ls -q | sort -u) | sort -u | tr '\n' ' ')"
-  [ "${archs}" = "arm64 " ] || { echo "guest.sh: the images are for ${archs}— not arm64 alone" >&2; exit 1; }
+  [ "${archs}" = "${GUEST_ARCH} " ] || { echo "guest.sh: the images are for ${archs}— not ${GUEST_ARCH} alone" >&2; exit 1; }
   echo "guest: $(g image ls --format '{{.Repository}}:{{.Tag}}' | wc -l) images in its store, $(du -sh "${mnt}/var/lib/docker" | cut -f1)"
   kill "${dpid}"; wait "${dpid}" || true; dpid=""
   if awk -v m="${mnt}/var/" 'index($2, m) == 1' /proc/mounts | grep -q .; then
@@ -261,7 +426,7 @@ ExecStartPre=-/usr/bin/resolvectl status --no-pager
 # builds as everywhere (a prebuilt flag kept for good would hide a stale image). $$ is systemd's literal $.
 # Then the containers on the console: always when bbox failed, and when it exited 0 (as it does with
 # problems too) unless every container is clean.
-ExecStart=/bin/bash -c 'if [ ! -f platform.state.yaml ]; then cp platform.state.core.yaml platform.state.yaml || { echo "dgo-office: no platform.state.core.yaml to start from"; exit 1; }; fi; echo "dgo-office: $$(grep -cE "^ +[a-z0-9-]+: .*(enabled: *true|state: *enabled)" platform.state.yaml) apps on in platform.state.yaml"; [ -f .env ] || CI_IDENTITY=forward-auth CI_ENV_FORCE=1 CI_DEPLOYMENT_NAME=local CI_EDGE_PORT=8080 bash scripts/ci-env.sh; modprobe qemu_fw_cfg 2>/dev/null || true; t=/sys/firmware/qemu_fw_cfg/by_name/opt/dgo/edge-token/raw; v=""; if [ -r "$$t" ]; then v="$$(tr -dc A-Za-z0-9 < "$$t")"; fi; if [ -s .env ] && { [ $${#v} -ge 32 ] || grep -q "^FORWARD_AUTH_EDGE_TOKEN=" .env; }; then if { grep -v "^FORWARD_AUTH_EDGE_TOKEN=" .env; if [ $${#v} -ge 32 ]; then echo "FORWARD_AUTH_EDGE_TOKEN=$$v"; fi; } > .env.edge && [ -s .env.edge ]; then mv .env.edge .env; else rm -f .env.edge; fi; if [ $${#v} -ge 32 ]; then echo "dgo-office: behind the native core of the phone, its token for this boot taken"; else echo "dgo-office: no core token this boot, the last one dropped"; fi; elif [ -d /sys/firmware ] && [ ! -d /sys/firmware/qemu_fw_cfg ]; then echo "dgo-office: no fw_cfg in this guest (qemu_fw_cfg)"; fi; if [ -s /var/lib/dgo/images-commit ] && [ "$$(git rev-parse HEAD 2>/dev/null)" = "$$(cat /var/lib/dgo/images-commit)" ]; then export BBOX_PREBUILT=1; fi; ./bbox run; s=$$?; if [ $$s = 0 ]; then /usr/local/bin/dgo-office-report --if-not-clean; else /usr/local/bin/dgo-office-report; fi; exit $$s'
+ExecStart=/bin/bash -c 'if [ ! -f platform.state.yaml ]; then cp platform.state.core.yaml platform.state.yaml || { echo "dgo-office: no platform.state.core.yaml to start from"; exit 1; }; fi; echo "dgo-office: $$(grep -cE "^ +[a-z0-9-]+: .*(enabled: *true|state: *enabled)" platform.state.yaml) apps on in platform.state.yaml"; [ -f .env ] || CI_IDENTITY=forward-auth CI_ENV_FORCE=1 CI_DEPLOYMENT_NAME=local CI_EDGE_PORT=8080 bash scripts/ci-env.sh; modprobe qemu_fw_cfg 2>/dev/null || true; t=/sys/firmware/qemu_fw_cfg/by_name/opt/dgo/edge-token/raw; v=""; if [ -r "$$t" ]; then v="$$(tr -dc A-Za-z0-9 < "$$t")"; fi; if [ -z "$$v" ] && grep -q "dgo.engine=avf" /proc/cmdline && [ -b /dev/vdb ]; then v="$$(head -c 64 /dev/vdb | tr -dc A-Za-z0-9)"; fi; if [ -s .env ] && { [ $${#v} -ge 32 ] || grep -q "^FORWARD_AUTH_EDGE_TOKEN=" .env; }; then if { grep -v "^FORWARD_AUTH_EDGE_TOKEN=" .env; if [ $${#v} -ge 32 ]; then echo "FORWARD_AUTH_EDGE_TOKEN=$$v"; fi; } > .env.edge && [ -s .env.edge ]; then mv .env.edge .env; else rm -f .env.edge; fi; if [ $${#v} -ge 32 ]; then echo "dgo-office: behind the native core of the phone, its token for this boot taken"; else echo "dgo-office: no core token this boot, the last one dropped"; fi; elif [ -d /sys/firmware ] && [ ! -d /sys/firmware/qemu_fw_cfg ]; then echo "dgo-office: no fw_cfg in this guest (qemu_fw_cfg)"; fi; if [ -s /var/lib/dgo/images-commit ] && [ "$$(git rev-parse HEAD 2>/dev/null)" = "$$(cat /var/lib/dgo/images-commit)" ]; then export BBOX_PREBUILT=1; fi; ./bbox run; s=$$?; if [ $$s = 0 ]; then /usr/local/bin/dgo-office-report --if-not-clean; else /usr/local/bin/dgo-office-report; fi; exit $$s'
 
 [Install]
 WantedBy=multi-user.target
@@ -271,6 +436,57 @@ inguest systemctl enable dgo-office.service
 # 90_dpkg.cfg names every datasource and sorts after a 90- (`-` before `_`), so a 90- file would lose to it
 # and cloud-init would go probing (OpenStack's 169.254.169.254) before the network is online
 echo 'datasource_list: [ NoCloud, None ]' > "${mnt}/etc/cloud/cloud.cfg.d/99-dgo-datasource.cfg"
+# ── what a phone's machine does not run (DGO-1818): every second of TCG is the owner's wait ──────────────────────
+# Masked (a link to /dev/null, so nothing pulls them in). On his phone cloud-init alone took ~35 s to its host keys
+# (Up 355.92 → 391.0 s), and snapd's seeding, multipath, the firewall, plymouth and the daily apt and upgrade timers
+# are work a machine behind QEMU's user network, with its kernel held, has no use for. AppArmor's profile load
+# compiles every profile under TCG; dockerd loads its own docker-default without it. cloud-init's one product here,
+# the SSH host keys, is made per machine at its first boot by dgo-ssh-hostkeys.service (never baked into the image,
+# which every phone shares).
+for u in cloud-init-local.service cloud-init.service cloud-config.service cloud-final.service \
+         cloud-init-main.service cloud-init-network.service \
+         snapd.service snapd.socket snapd.seeded.service snapd.apparmor.service \
+         multipathd.service multipathd.socket ufw.service apparmor.service \
+         plymouth-start.service plymouth-read-write.service plymouth-quit.service plymouth-quit-wait.service \
+         apt-daily.timer apt-daily-upgrade.timer unattended-upgrades.service motd-news.timer \
+         fwupd-refresh.timer man-db.timer e2scrub_all.timer ModemManager.service; do
+  ln -sf /dev/null "${mnt}/etc/systemd/system/${u}"
+done
+touch "${mnt}/etc/cloud/cloud-init.disabled"
+rm -f "${mnt}"/etc/ssh/ssh_host_*      # none baked into the image every phone shares: each machine makes its own
+# Before=ssh.service only: ssh.socket listens without keys (sshd starts on the first connection), and ordering
+# before the socket made a cycle through basic.target → sockets.target (a second reader)
+cat > "${mnt}/etc/systemd/system/dgo-ssh-hostkeys.service" <<'UNIT'
+[Unit]
+Description=This machine's own SSH host keys, made at its first boot (cloud-init is off, DGO-1818)
+ConditionPathExists=!/etc/ssh/ssh_host_ed25519_key
+Before=ssh.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/ssh-keygen -A
+
+[Install]
+WantedBy=multi-user.target
+UNIT
+inguest systemctl enable dgo-ssh-hostkeys.service
+# Every boot measures itself, stage by stage, on the console — what a phone or the CI's try-guest.sh reads:
+# systemd-analyze's total and the units that took longest. Once the normal target is reached.
+cat > "${mnt}/etc/systemd/system/dgo-boot-report.service" <<'UNIT'
+[Unit]
+Description=The machine's boot, measured stage by stage (DGO-1818)
+After=multi-user.target
+
+[Service]
+# exec, not oneshot: its own job must not keep the boot «not yet finished» — it waits for the boot to end, then measures
+Type=exec
+ExecStart=/bin/sh -c 'systemctl is-system-running --wait >/dev/null 2>&1; echo "dgo-boot: $(systemd-analyze 2>&1 | head -1)"; systemd-analyze blame 2>/dev/null | head -12 | sed "s/^/dgo-boot: blame /"; systemd-analyze critical-chain 2>/dev/null | sed -n "2,12p" | sed "s/^/dgo-boot: chain /"'
+StandardOutput=journal+console
+
+[Install]
+WantedBy=multi-user.target
+UNIT
+inguest systemctl enable dgo-boot-report.service
 rm -f "${mnt}/tmp/p.sh"
 # what the machine holds, by the largest parts — the APK carries all of it, under GitHub's 2 GB a file
 echo "guest: $(du -xsh "${mnt}" | cut -f1) in its filesystem; the largest:"

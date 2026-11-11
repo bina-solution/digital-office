@@ -16,7 +16,7 @@ lines = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(lines)
 
 TWO = json.dumps({"messages": [
-    {"id": 22, "date": "Wed, 21 Oct 2026 10:14:07 +0000", "from": "person90@example.com",
+    {"id": 22, "date": "Wed, 21 Oct 2026 10:14:07 +0000", "from": "person96@example.com",
      "subject": "Azaria is running fully locally — DGO-825"},
     {"id": 7, "date": "Wed, 14 Oct 2026 14:07:00 +0000", "from": "ספק הענן <billing@cloudvendor.example>",
      "subject": "חשבונית #INV-2048 — יולי"},
@@ -32,7 +32,7 @@ class Lines(unittest.TestCase):
         out, code = lines.lines(TWO)
         self.assertEqual(code, 0)
         self.assertEqual(out, [
-            "Wed, 21 Oct 2026 10:14 | person90@example.com | Azaria is running fully locally — DGO-825 | id 22",
+            "Wed, 21 Oct 2026 10:14 | person96@example.com | Azaria is running fully locally — DGO-825 | id 22",
             "Wed, 14 Oct 2026 14:07 | ספק הענן <billing@cloudvendor.example> | חשבונית #INV-2048 — יולי | id 7",
         ])
 

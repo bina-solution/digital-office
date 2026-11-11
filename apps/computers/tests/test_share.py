@@ -110,13 +110,13 @@ def main() -> int:
     res = app.ssh_run("c1", "h", 22, "root", {"door": "wss://h/share/" + "A" * 43 + "; id"}, "true", 5)
     check(res.get("code") == 255 and res.get("state") == "error", f"a bad door is an error dict ({res})")
 
-    # ── 2b. an append never joins the last line (DGO-1231: FPG's office-key@hp inside office-key@local's line)
+    # ── 2b. an append never joins the last line (DGO-1231: EXF's office-key@hp inside office-key@local's line)
     import shutil
     import subprocess
     blob = "ssh-ed25519 " + "H" * 68
     real_key = app.public_key
     app.public_key = lambda: blob                                   # app.py's own commands, office key or not
-    swallowed = f"ssh-ed25519 MMMM office-key@local{blob} computers-share:share-33333333:hp\n"   # FPG's file
+    swallowed = f"ssh-ed25519 MMMM office-key@local{blob} computers-share:share-33333333:hp\n"   # EXF's file
     for start in ["ssh-ed25519 MMMM office-key@local", "ssh-ed25519 MMMM office-key@local\n", "", swallowed]:
         h = Path(tempfile.mkdtemp(prefix="share-home-"))
         (h / ".ssh").mkdir()

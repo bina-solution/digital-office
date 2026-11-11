@@ -149,26 +149,7 @@ with tempfile.TemporaryDirectory() as tmp:
     finally:
         uploads.PREPARE.remove(prep)
 
-# ── names and paths ───────────────────────────────────────────────────────────────
-# local.py ALONE, as a module of a package that is only adapters/ — importing `adapters` itself
-# pulls in every engine and the vault client.
-_pkg = types.ModuleType("drive_adapters")
-_pkg.__path__ = [os.path.join(HERE, "adapters")]
-sys.modules["drive_adapters"] = _pkg
-local = importlib.import_module("drive_adapters.local")
-check("a path splits into NFC segments", local.split_path("/פגישות//2026-10-28/") == ["פגישות", "2026-10-28"])
-try:
-    local.split_path("/a/../b")
-    check("'..' is refused", False)
-except Exception as e:      # AdapterError
-    check("'..' is refused", getattr(e, "status", 0) == 400)
-try:
-    local.clean_name("a/b")
-    check("a name with / is refused", False)
-except Exception as e:
-    check("a name with / is refused", getattr(e, "status", 0) == 400)
-ids = {local.new_id("lf") for _ in range(2000)}
-check("ids are unique and carry their kind", len(ids) == 2000 and all(i.startswith("lf") for i in ids))
+# ── names and paths: the office storage's own, held by apps/drive-local/test_engine.py (DGO-1500) ──
 
 print("\n" + ("ALL PASSED" if not FAILS else f"{len(FAILS)} FAILED: {FAILS}"))
 sys.exit(1 if FAILS else 0)

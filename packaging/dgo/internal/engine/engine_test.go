@@ -7,6 +7,7 @@ import (
 	"io/fs"
 	"os"
 	"os/exec"
+	"path"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -128,6 +129,12 @@ func healthyHost(via, root string) map[string]reply {
 		at("test -x /usr/libexec/docker/cli-plugins/docker-compose"):                                                                       ok(""),
 		at(coresKey): cores(6),
 	}
+	// bbox run's .env step with none (lib.sh office_project, office_holds_data): the checkout's physical path,
+	// then its compose project's containers and volumes — an office that holds nothing yet
+	label := " --filter label=com.docker.compose.project=" + strings.ToLower(path.Base(root))
+	r[at(`sh -c cd "$1" && pwd -P sh `+root)] = ok(root + "\n")
+	r[at("docker -H unix:///run/bbox-docker.sock ps -aq"+label)] = ok("")
+	r[at("docker -H unix:///run/bbox-docker.sock volume ls -q"+label)] = ok("")
 	if via != "" {
 		r[at("test -f "+root+"/bbox")] = ok("")
 		r[at("cat /proc/meminfo")] = ok(meminfo(10188772))
@@ -277,6 +284,7 @@ func TestDoctorOnAHealthyEngineOfEachSystem(t *testing.T) {
 			line(pass, "docker", "Docker 28.5.2 (API 1.51, min 1.24)"),
 			// no .env in the guest: bbox run's first step is scripts/ci-env.sh, which writes the floor
 			line(note, "profile", "ci-small (written to .env by scripts/ci-env.sh, which bbox run runs first here) · 4 cores, 4.8 GiB in the guest\n"),
+			line(note, "office", "no .env: bbox run generates a local one for the macOS engine (DEPLOYMENT_NAME=local, edge on :8080) — this checkout's office (mydgo) holds no containers or volumes"),
 			"\nhealthy\n",
 		}},
 		{linuxBox(t), []string{
@@ -427,12 +435,64 @@ func brokenCases() []broken {
 			line(fail, "socket", "BBOX_DOCKER_SOCK=/run/bbox-docker.sock is not a socket (missing)"),
 			"fix: BBOX_DOCKER_SOCK=/run/bbox-docker.sock does not exist. The engine in use is $DOCKER_HOST=tcp://10.0.0.5:2375; containers cannot be handed a socket that is not there.",
 		}},
-		{"linux: no selector answer and nothing in .env", linuxBox, func(r *rec) {
-			delete(r.files, "/proc/meminfo")
+		// «linux: no selector answer and nothing in .env» was a broken fact until DGO-605 (292a6767): bbox falls
+		// back to the floor profile now and says so, which TestPerfProfileMatchesBbox holds — not a fault to name.
+
+		// bbox run's .env step (DGO-1782, DGO-1802): no .env over an office that has data is refused, not
+		// «fixed» with new secrets; a .env that names no office is refused with what to write
+		{"linux: no .env, and the office has volumes (its .env lost)", linuxBox, func(r *rec) {
 			delete(r.files, linRoot+"/.env")
-		}, []string{line(fail, "profile", "no answer (select-profile: could not read machine memory) and .env names no PERFORMANCE_PROFILE — bbox run stops in ensure_perf_profile"),
-			"fix: PERFORMANCE_PROFILE=ci-small in .env — the floor bbox means to fall back to (\"profile selector unavailable — falling back to the floor profile (ci-small).\")"}},
+			r.cmds["docker -H unix:///run/bbox-docker.sock volume ls -q --filter label=com.docker.compose.project=office"] = ok("office_pgdata\n")
+		}, []string{
+			line(fail, "office", "no .env, but this checkout's office (office) already has containers or volumes — its .env is missing, not new"),
+			"fix: " + heldFix,
+		}},
+		{"linux: no .env, and the engine does not say what the office holds", linuxBox, func(r *rec) {
+			delete(r.files, linRoot+"/.env")
+			r.cmds["docker -H unix:///run/bbox-docker.sock ps -aq --filter label=com.docker.compose.project=office"] = no("permission denied")
+		}, []string{
+			line(fail, "office", "no .env, and the engine did not say whether this checkout's office (office) "+unsaidTail),
+		}},
+		{"linux: a .env that names no office", linuxBox, func(r *rec) {
+			r.files[linRoot+"/.env"] = "BUSINESS_NAME=\nCOMPANY_SLUG=\nDEPLOYMENT_DOMAIN=${COMPANY_SLUG}.digital-office.co.il\nPERFORMANCE_PROFILE=prod\n"
+		}, []string{
+			line(fail, "office", ".env names no office: BUSINESS_NAME is empty and every address derives from it (DEPLOYMENT_DOMAIN reads .digital-office.co.il)"),
+			"fix: " + unnamedSaid,
+		}},
 	}
+}
+
+// The no-.env step's three answers in the plan: refused over data, refused while the engine is silent, and the
+// local office generated on a plain Linux machine (DGO-1782: before it, only the sandbox and the Mac had one).
+func TestThePlanSaysTheOfficesEnvStep(t *testing.T) {
+	plain := linuxBox(t)
+	delete(plain.files, linRoot+"/.env")
+	out, _ := plain.answer(t, "plan")
+	has(t, out, "bbox run starts over — here: it runs (a LOCAL office (DEPLOYMENT_NAME=local, every app at <name>.localhost))",
+		"docker ps -aq --filter label=com.docker.compose.project=office", "cd /srv/office && CI_DEPLOYMENT_NAME=local bash scripts/ci-env.sh",
+		"(lib.sh office_unnamed): refused, «"+unnamedSaid+"» — here: it names one, or there is none yet")
+	held := linuxBox(t)
+	delete(held.files, linRoot+"/.env")
+	held.cmds["docker -H unix:///run/bbox-docker.sock ps -aq --filter label=com.docker.compose.project=office"] = ok("3f2a9c\n")
+	out, _ = held.answer(t, "plan")
+	has(t, out, "— here: refused: this checkout's office (office) already has containers or volumes — its .env is missing, not new")
+	named := linuxBox(t)
+	named.files[linRoot+"/.env"] = "BUSINESS_NAME=\nDEPLOYMENT_DOMAIN=.digital-office.co.il\n"
+	out, _ = named.answer(t, "plan")
+	has(t, out, "(lib.sh office_unnamed): refused, «"+unnamedSaid+"» — here: refused")
+	// the sandbox before its first run: nothing answers yet, so the question waits for the engine bbox starts
+	doc, _ := sandboxBox(t).answer(t, "doctor")
+	has(t, doc, line(note, "office", "no .env: bbox run asks its engine, once it answers, whether this checkout's office (office) holds containers or volumes"))
+	// a stranger's Linux with no docker at all: need_docker stops bbox run, so the .env step is never reached —
+	// said as that, never «it runs» (the reader of the twin)
+	bare := sandboxBox(t)
+	bare.cmds["sh -c for c do command -v $c || :; done sh docker dockerd systemctl"] = ok("")
+	bare.cmds["test -f /root/.ccr/ca-bundle.crt"] = no("")
+	out, _ = bare.answer(t, "plan")
+	has(t, out, "— here: not reached: bbox run stops at need_docker first")
+	hasNot(t, out, "— here: it runs (a LOCAL office", "none: it runs (a LOCAL office")
+	doc, _ = bare.answer(t, "doctor")
+	has(t, doc, line(note, "office", "no .env: not reached — bbox run stops at need_docker first (no engine it can ask or start)"))
 }
 
 func TestDoctorNamesEachBrokenFactWithBboxsOwnFix(t *testing.T) {
@@ -521,9 +581,17 @@ func TestTheGeneratedEnvNamesTheProfileBboxKeeps(t *testing.T) {
 	plan, _ = box.answer(t, "plan")
 	has(t, plan, "— here: prod is appended to .env", "printf '\\nPERFORMANCE_PROFILE=%s\\n' prod >> .env")
 
-	// a VPS with no .env is no sandbox: nothing is generated, the selector's answer is appended
+	// a VPS with no .env: since DGO-1782 bbox run generates the local office's .env there too, and its profile is
+	// the floor ci-env.sh writes (before it, nothing was generated off the sandbox and the Mac)
 	box = linuxBox(t)
 	delete(box.files, linRoot+"/.env")
+	doctor, _ = box.answer(t, "doctor")
+	has(t, doctor, line(note, "profile", "ci-small (written to .env by scripts/ci-env.sh, which bbox run runs first here) · 8 cores, 15.6 GiB in this machine · "+
+		"profile: ci-small (set in .env) — this machine (8 cores) would be sized prod; PERFORMANCE_PROFILE=prod in .env adopts it"))
+
+	// a VPS whose .env names no profile: the selector's answer is appended
+	box = linuxBox(t)
+	box.files[linRoot+"/.env"] = "BUSINESS_NAME=x\n"
 	doctor, _ = box.answer(t, "doctor")
 	has(t, doctor, line(note, "profile", "prod · 8 cores, 15.6 GiB in this machine · bbox run writes it to .env: no PERFORMANCE_PROFILE set — sizing to this host (8 cores → prod)"))
 }
@@ -532,7 +600,8 @@ func TestTheGeneratedEnvNamesTheProfileBboxKeeps(t *testing.T) {
 // nproc honours OMP_NUM_THREADS. The profile is the first's; the sentence keeps the second's number.
 func TestCoresAreCountedTheWaySelectProfileCountsThem(t *testing.T) {
 	box := linuxBox(t)
-	delete(box.files, linRoot+"/.env")
+	// a .env with no profile: the selector sizes it (with no .env, bbox run writes ci-env.sh's floor now)
+	box.files[linRoot+"/.env"] = "BUSINESS_NAME=x\n"
 	box.cmds[coresKey] = ok("2\n8\n") // OMP_NUM_THREADS=2 in the environment
 	doctor, _ := box.answer(t, "doctor")
 	has(t, doctor, line(note, "profile", "prod · 8 cores, 15.6 GiB in this machine · bbox run writes it to .env: no PERFORMANCE_PROFILE set — sizing to this host (2 cores → prod)"))
@@ -630,8 +699,8 @@ func TestPlanOnWindowsIsBboxCmdThenNeedDockerInTheDistro(t *testing.T) {
 	}
 	// bbox's order: the pick at load, need_docker, heavy_admit, the .env, render+network, the profile,
 	// foreign_containers+prepare, then the ccr_* steps
-	order := []string{"lib.sh picks the engine", "need_docker:", "the project socket", "heavy_admit", "no .env, on a cloud sandbox",
-		"ensure_rendered", "size the stack", "foreign_containers", "ccr_clamp_nofile", "BBOX_ASSUME_DNS_OK", "CCR_BASES_READY", "docker compose up"}
+	order := []string{"lib.sh picks the engine", "need_docker:", "the project socket", "heavy_admit", "no .env, on ANY machine",
+		"with a .env that names no office", "ensure_rendered", "size the stack", "foreign_containers", "ccr_clamp_nofile", "BBOX_ASSUME_DNS_OK", "CCR_BASES_READY", "docker compose up"}
 	last := -1
 	for _, o := range order {
 		i := strings.Index(out, o)
@@ -678,7 +747,9 @@ func TestPlanOnTheCloudSandboxStartsDockerdAndGeneratesTheEnv(t *testing.T) {
 		"\"no docker daemon — starting dockerd on /run/bbox-docker.sock (DOCKER_MIN_API_VERSION=1.24, mirror https://mirror.gcr.io)…\"",
 		"setsid env DOCKER_MIN_API_VERSION=1.24 dockerd -H unix:///run/bbox-docker.sock -H unix:///var/run/docker.sock --registry-mirror https://mirror.gcr.io >\"$BBOX_TMP/dockerd.log\" 2>&1 </dev/null &",
 		"— here: nothing answers now, so bbox run takes this way",
-		"a secretless one is generated, and bbox run starts over — here: it runs", "cd /srv/office && bash scripts/ci-env.sh",
+		// nothing answers before bbox starts dockerd: the question is asked then, as the doctor says
+		"and bbox run starts over — here: bbox run asks once its engine answers — none: it runs (a secretless cloud .env); some: refused",
+		"cd /srv/office && bash scripts/ci-env.sh",
 		"(ccr_build_serial) — here: it runs", "then the stack itself, which is not the engine's")
 	hasNot(t, out, "systemctl daemon-reload")
 }
@@ -694,6 +765,7 @@ var readOnly = []string{
 	"lsof -nP -iUDP:", macLima + " shell bbox -- ss -lunH",
 	"sh -c for c do command -v $c || :; done sh ", "systemctl cat docker.service",
 	"test -f ", "test -x ", "stat -L -c %F ", "cat /proc/meminfo", "cat " + dropInConf, coresKey,
+	`sh -c cd "$1" && pwd -P sh `, // the checkout's physical path (office_project)
 }
 
 // TestTheLookOnlyReads asks every recorded machine — healthy, broken, the tunnel's states — both
@@ -709,7 +781,10 @@ func TestTheLookOnlyReads(t *testing.T) {
 			for _, a := range box.asked {
 				cmd := strings.TrimPrefix(strings.TrimPrefix(a, winVia+" "), macVia+" ")
 				allowed := strings.HasPrefix(cmd, "docker -H ") &&
-					(strings.HasSuffix(cmd, " info --format {{.OperatingSystem}}") || strings.HasSuffix(cmd, " version --format {{.Server.Version}} {{.Server.APIVersion}} {{.Server.MinAPIVersion}}"))
+					(strings.HasSuffix(cmd, " info --format {{.OperatingSystem}}") || strings.HasSuffix(cmd, " version --format {{.Server.Version}} {{.Server.APIVersion}} {{.Server.MinAPIVersion}}") ||
+						// office_holds_data: the project's containers and volumes, listed
+						strings.Contains(cmd, " ps -aq --filter label=com.docker.compose.project=") ||
+						strings.Contains(cmd, " volume ls -q --filter label=com.docker.compose.project="))
 				for _, r := range readOnly {
 					allowed = allowed || strings.HasPrefix(cmd, r)
 				}

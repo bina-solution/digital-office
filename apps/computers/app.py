@@ -35,6 +35,7 @@ GATEWAY of the `traefik-network` bridge, read from the engine at startup rather 
 from __future__ import annotations
 
 import asyncio
+import concurrent.futures
 import json
 import logging
 import os
@@ -42,8 +43,11 @@ import re
 import shlex
 import socket
 import subprocess
+import sys
 import threading
 import time
+import urllib.parse
+import uuid
 from pathlib import Path
 
 import requests
@@ -54,6 +58,49 @@ from fastapi.staticfiles import StaticFiles
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 log = logging.getLogger("computers")
+
+# ── the fourth channel: what ran on a computer, on `dgo:flow:computers` (flow.v1, DGO-1797) ─────────
+# Through the office's ONE publisher, platform-base/redis/flowpub.py, mounted read-only at /opt/dgo
+# (docker-compose.yml): «כל מקביל» draws every command as a bar on the row «מחשבים», and agents hear it
+# (`./bbox computers flow`). What goes out is which computer, who asked, the command's FIRST WORD, its exit
+# and its time — never the rest of the line (an argument may carry a secret), its stdin or its output. An
+# image run without the mount publishes nothing and works the same.
+sys.path.insert(0, "/opt/dgo")
+try:
+    import flowpub  # noqa: E402
+except ImportError:
+    flowpub = None
+
+_ASSIGN = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*=")
+_PROGRAM = re.compile(r"[A-Za-z0-9._+-]{1,40}")
+_SPANS = re.compile(r"[$`(){}\\]")          # a value that can run on into the next words: $(…), `…`, ( … ), ${…}, \
+
+
+def _first_word(command: str) -> str:
+    r"""The program a command runs, for its bar — or «sh». Words are split as a shell splits them (a quoted
+    `AUTH="Bearer <token>" curl` is ONE assignment, skipped), a path keeps its last part, and only a plain
+    program name goes out. Anything else is said as «sh», never as its text: a word with a quote, `$`, `(`,
+    `;` or `=` left in it (a subshell, a substitution, a second command), and every command whose leading
+    assignment holds `$ \` ( ) { } \\` — such a value can span words a shell joins and shlex does not
+    (`TOKEN=$(echo <secret> | base64) curl`), so the word after it may still be the value (DGO-1797, second
+    and third readers). Only the first 8 KB is read: a long command must not hold the event loop."""
+    try:
+        words = shlex.split(command[:8192], comments=False, posix=True)
+    except ValueError:                                  # an unbalanced quote: nothing of it is a name
+        return "sh"
+    for word in words:
+        if _ASSIGN.match(word):
+            if _SPANS.search(word):
+                return "sh"
+            continue
+        name = word.rsplit("/", 1)[-1]
+        return name if _PROGRAM.fullmatch(name) else "sh"
+    return "sh"
+
+
+def _flow(type_: str, title: str, data: dict) -> None:
+    if flowpub is not None:
+        flowpub.emit("computers", type_, title, data)
 
 
 class _RedactDoorPath(logging.Filter):
@@ -95,6 +142,8 @@ MAX_TIMEOUT = 600
 DEFAULT_TIMEOUT = 60
 STDIN_MAX = 1024 * 1024      # a script or a secret, not a file transfer (that is `transfer`)
 PROBE_TTL = float(os.environ.get("COMPUTERS_PROBE_TTL", "20"))
+#: How many machines the fleet probes at once (DGO-1359): one machine out of reach no longer holds the others.
+PROBE_WORKERS = max(1, int(os.environ.get("COMPUTERS_PROBE_WORKERS", "8") or 8))
 
 KEY_DIR = STATE_DIR / "ssh"
 KEY_PATH = KEY_DIR / "office_key"
@@ -544,19 +593,36 @@ def classify_stderr(err: str, code: int) -> tuple[str, str, str]:
     return ("ok", "", "")
 
 
+class BadDestination(ValueError):
+    """A computer's user or host that ssh would read as something else."""
+
+
+#: what a user or a host may never be: led by «-» (ssh reads `-oProxyCommand=…@host` as an OPTION and runs it in this
+#: container, which holds every machine's key — measured with `ssh -G`), or holding a control character. A space is
+#: a user's right (a Windows account), so it is not refused: the `--` before the destination keeps it one argument.
+_BAD_DEST = re.compile(r"^-|[\x00-\x1f\x7f]")
+
+
+def check_destination(user: str, host: str) -> str:
+    """`user@host`, or BadDestination with the sentence a screen shows."""
+    if not user or _BAD_DEST.search(str(user)):
+        raise BadDestination("שם המשתמש של המחשב אינו תקין: אסור שיתחיל ב-«-» או שיכיל תו בקרה")
+    if not host or _BAD_DEST.search(str(host)) or re.search(r"[\s@]", str(host)):
+        # «@» too: ssh splits the destination at its LAST «@», so a host `a@b` would reach `b` as another user
+        raise BadDestination("כתובת המחשב אינה תקינה: אסור שתתחיל ב-«-» או שתכיל רווח, «@» או תו בקרה")
+    return f"{user}@{host}"
+
+
 def ssh_argv(cid: str, host: str, port: int, user: str, secret: dict,
              command: str, timeout: int = 60) -> list[str]:
-    """The exact ssh command line for one machine.
-
-    Extracted from ssh_run for `transfer`, which must open the SAME kind of connection — same key,
-    same pinned host key, same BatchMode — because a copy that used a looser connection would be a
-    second answer to "how do we reach a machine", and the loose one is the one that drifts.
-    """
+    """The exact ssh command line for one machine — for ssh_run, transfer and the terminal alike, because a copy
+    that used a looser connection would be a second answer to "how do we reach a machine", and the loose one is the
+    one that drifts. `--` ends ssh's options before the destination: nothing a record holds can become one."""
     return ["ssh", *SSH_BASE, *_known_hosts_opt(), *_door_opts(cid, secret),
             "-i", _key_path_for({**secret, "_instance": cid}),
             "-p", str(int(port or 22)),
             "-o", f"ConnectTimeout={min(8, max(3, int(timeout or 8)))}",
-            f"{user}@{host}", command]
+            "--", check_destination(user, host), command]
 
 
 def ssh_run(cid: str, host: str, port: int, user: str, secret: dict,
@@ -579,10 +645,10 @@ def ssh_run(cid: str, host: str, port: int, user: str, secret: dict,
                 "reason": "לא נוצר עדיין מפתח SSH ללשכה",
                 "action": "רענן את הדף — המפתח נוצר אוטומטית עם עליית השירות."}
     try:
-        cmd = ["ssh", *SSH_BASE, *_known_hosts_opt(), *_door_opts(cid, secret), "-i", key,
-               "-p", str(int(port or 22)),
-               "-o", f"ConnectTimeout={min(8, max(3, int(timeout or 8)))}",
-               f"{user}@{host}", command]
+        cmd = ssh_argv(cid, host, port, user, secret, command, timeout)   # ONE command line, not a second copy
+    except BadDestination as e:        # a record saved before its user or host was checked
+        return {"code": 255, "stdout": "", "stderr": "", "timed_out": False, "state": "error",
+                "reason": str(e), "action": "תקן את פרטי המחשב במסך «מחשבים» (מחק והוסף אותו מחדש)."}
     except ValueError as e:            # a `door` in the vault that is not a share address
         return {"code": 255, "stdout": "", "stderr": "", "timed_out": False, "state": "error",
                 "reason": "כתובת השיתוף של המחשב אינה תקינה", "action": str(e)}
@@ -774,6 +840,302 @@ def _err(message: str, status: int, **extra) -> JSONResponse:
     return JSONResponse({"error": message, **extra}, status_code=status)
 
 
+# ── who is asking: every write names its caller (DGO-1304) ──────────────────────────────────────
+# One middleware, not a check per route: a route added later is covered by being a write, the way the
+# door forwards every method and path. The decision is caller.identify (pure, tests/test_caller.py);
+# what this section adds is the office's facts — the hops' addresses, what it shares, the token.
+import caller as callermod  # noqa: E402
+import link_identity as linkid  # noqa: E402
+import remote  # noqa: E402 — the machines linked offices share with this one (DGO-553)
+
+#: warn (the default): a write with no known caller is let through, logged and counted (GET /api/callers),
+#: so the callers that still need a token are found before anything is refused. enforce: it is a 403.
+AUTH_MODE = (os.environ.get("COMPUTERS_EXEC_AUTH") or "warn").strip().lower()
+#: machines refused to an unknown caller whatever the mode — the HP's own host from day one: nothing
+#: depends on it there (it never worked), and opening its door must not open it to every container.
+ENFORCE_MACHINES = {m.strip() for m in (os.environ.get("COMPUTERS_ENFORCE_MACHINES") or "").split(",") if m.strip()}
+#: the linked offices this office gives its computer to (per office, in .env; the HP: macbook)
+SHARE_TO = {o.strip().lower() for o in (os.environ.get("COMPUTERS_SHARE_TO") or "").split(",") if o.strip()}
+EXEC_TOKEN = os.environ.get("COMPUTERS_EXEC_TOKEN") or ""
+WRITE_METHODS = {"POST", "PUT", "PATCH", "DELETE"}
+#: the hops are CONTAINER names of this deployment (`console-hp`, `dgo-net-hp`): a network alias any other
+#: compose file — or another deployment on the same engine — could declare is not a hop (the second reader)
+DEPLOYMENT = os.environ.get("DEPLOYMENT_NAME") or "bina-deployment"
+_HOPS: dict = {"at": 0.0, "door": set(), "sso": set()}
+_HOPS_LOCK = threading.Lock()
+_NAMES: dict[str, str] = {}
+#: the count of unknown callers, bounded: a caller must not be able to grow it (one row per source, method
+#: and route TEMPLATE; past the cap, rows go to one bucket)
+_REFUSED: dict[tuple, dict] = {}
+_REFUSED_CAP = 300
+_REFUSED_SINCE = time.time()
+#: the READS that came from another office (through the link's door) since this process started, by the office it
+#: names and the route template — answered as before, only counted. The first stage of narrowing what a linked
+#: office reads (issues/a-linked-office-reading-computers-through-the-door-gets-the-whole-fleet-…): before any read is
+#: refused to anybody, the count says which offices read what (AGENTS.md rule 8). The office is the header's word
+#: (not verified here: a count, not a decision); bounded like _REFUSED.
+_DOOR_READS: dict[tuple, dict] = {}
+
+
+def _count_door_read(office: str, path: str, herd: bool = False) -> None:
+    """One read through the door, by office, route template and whether the door said the office is the herd's —
+    the count the narrowing is decided by: a row with `herd: false` is what would be narrowed (DGO-1800)."""
+    key = (str(office or "?").strip().lower()[:64], callermod.route_shape(path), bool(herd))
+    if key not in _DOOR_READS and len(_DOOR_READS) >= _REFUSED_CAP:
+        key = ("(many)", "(over the cap)", bool(herd))           # …still apart by herd: the total stays true
+    row = _DOOR_READS.setdefault(key, {"office": key[0], "route": key[1], "herd": key[2], "count": 0})
+    row.update(count=row["count"] + 1, last=int(time.time()))
+
+
+#: the label a read gets when it names an office but did not come from the door: a container's claim, not a peer's read
+NOT_THE_DOOR = "(not the door)"
+
+
+def _door_read(request: Request) -> tuple[bool, bool]:
+    """(from the door, the herd's) for a read that names an office (DGO-1800). Only the door's own address is the door
+    (linkid.from_the_door) — any container can write the office header — and only the door's `x-dgo-herd: 1` says herd:
+    the door removes a peer's own, by key it writes its own. A plain def — `_hops()` may look the door up — so it is run
+    off the event loop."""
+    door, _ = _hops()
+    if not linkid.from_the_door((request.client.host if request.client else "") or "", door):
+        return False, False
+    return True, (request.headers.get(linkid.HERD_HEADER) or "").strip() == "1"
+
+
+def _addrs(names) -> set:
+    out: set = set()
+    for name in names:
+        try:
+            for info in socket.getaddrinfo(name, None, proto=socket.IPPROTO_TCP):
+                out.add(str(info[4][0]))
+        except OSError:
+            continue
+    return out
+
+
+def _hops() -> tuple[set, set]:
+    """The door's and the sign-in hops' addresses, re-read once a minute (15 s while the door is absent:
+    an office linked a moment ago is noticed soon, and a cached miss is never a permission)."""
+    now = time.time()
+    with _HOPS_LOCK:
+        if _HOPS["at"] and now - _HOPS["at"] < (60 if _HOPS["door"] else 15):
+            return _HOPS["door"], _HOPS["sso"]
+    door = _addrs(f"{n}-{DEPLOYMENT}" for n in callermod.DOOR_HOPS)
+    sso = _addrs(f"{n}-{DEPLOYMENT}" for n in callermod.SSO_HOPS)
+    with _HOPS_LOCK:
+        _HOPS.update(at=now, door=door, sso=sso)
+    return door, sso
+
+
+def _link_secret(office: str) -> str:
+    """This office's copy of the secret it shares with ONE linked office (`dgo_link` in the vault) — what
+    the door signs with. Matched EXACTLY as the door matches it (apps/dgo-extend/link-proxy.py `names_office`,
+    `link_secret`): `dgo_link-<office>`, or `<a>-><b>` in the hint, and never an agent credential a linked
+    office handed over. Never a split on `-`: office ids carry hyphens (hp-laptop), hos-005.
+
+    "" means the vault ANSWERED and holds no secret for that pair; a vault that did not answer is None —
+    which the caller refuses. The two looked the same once, and for a minute after a vault hiccup an
+    unsigned request from the door's address passed as "a pair without a secret" (the second reader)."""
+    try:
+        r = requests.get(f"{CONNECTIONS_URL}/api/instances", params={"protocol": "dgo_link"}, timeout=8)
+        if r.status_code != 200:
+            return None
+        rows = (r.json() or {}).get("instances") or []
+        for row in rows:
+            iid = str(row.get("id") or "").lower()
+            if iid.startswith("dgo_link-serve-") and iid.endswith("-agent"):
+                continue
+            hint = str(row.get("account_hint") or "").lower().split(" ", 1)[0]
+            if iid == f"dgo_link-{office}" or ("->" in hint and office in hint.split("->")):
+                s = requests.get(f"{CONNECTIONS_URL}/api/instances/{row.get('id')}/secret", timeout=8)
+                if s.status_code != 200:
+                    return None
+                tok = str(((s.json() or {}).get("secret") or {}).get("token") or "")
+                if tok:
+                    return tok
+    except (requests.RequestException, ValueError):
+        return None
+    return ""
+
+
+_SECRET_CACHE: dict[str, tuple[float, str]] = {}
+
+
+def _secret_of(office: str) -> str | None:
+    """`_link_secret`, remembered for a minute — an ANSWER only: a vault that did not answer is asked again
+    next time, and is never remembered as "this pair has no secret"."""
+    now = time.time()
+    hit = _SECRET_CACHE.get(office)
+    if hit and now - hit[0] < 60:
+        return hit[1]
+    got = _link_secret(office)
+    if got is not None:
+        _SECRET_CACHE[office] = (now, got)
+    return got
+
+
+def _name_of(addr: str) -> str:
+    """The container behind an address (docker's DNS answers the reverse) — asked only when the count is READ
+    (/api/callers, off the request path), never per write: a reverse lookup on the event loop stalled
+    everything, /healthz included (the second reader)."""
+    if addr not in _NAMES:
+        if len(_NAMES) > _REFUSED_CAP:
+            _NAMES.clear()
+        try:
+            _NAMES[addr] = socket.gethostbyaddr(addr)[0].split(".")[0]
+        except (OSError, ValueError):
+            _NAMES[addr] = ""
+    return _NAMES[addr]
+
+
+def identify_request(request: Request) -> callermod.Caller:
+    door, sso = _hops()
+    h = request.headers
+    facts = callermod.Facts(
+        client=(request.client.host if request.client else "") or "",
+        office=h.get(linkid.OFFICE_HEADER) or "", claim=h.get(linkid.IDENTITY_HEADER) or "",
+        user=h.get("x-authentik-username") or "", bearer=callermod.bearer_of(h.get("authorization")))
+    return callermod.identify(facts, callermod.Policy(door_addrs=door, sso_addrs=sso, share_to=SHARE_TO,
+                                                      token=EXEC_TOKEN, secret_of=_secret_of))
+
+
+def _log_path(path: str) -> str:
+    """The path as the log keeps it: a terminal session's id cut to its first four characters — it is what a
+    caller presents to type into that shell, so the log never holds it whole."""
+    return re.sub(r"(/shell/[0-9a-fA-F]{0,4})[^/]*", r"\1…", path) if "/shell/" in path else path
+
+
+def _declares_office(request: Request) -> bool:
+    """Does the request say it comes from another office (the door's two headers)?"""
+    h = request.headers
+    return bool((h.get(linkid.OFFICE_HEADER) or "").strip() or (h.get(linkid.IDENTITY_HEADER) or "").strip())
+
+
+def _count(addr: str, method: str, path: str, why: str) -> bool:
+    """Count one refusal; True when it is worth a log line (the first of its row, then every 100th — a caller
+    must not be able to rotate this container's logs away)."""
+    key = (addr, method, callermod.route_shape(path))
+    if key not in _REFUSED and len(_REFUSED) >= _REFUSED_CAP:
+        key = ("(many)", "*", "(over the cap)")
+    row = _REFUSED.setdefault(key, {"source": key[0], "method": key[1], "route": key[2], "count": 0, "why": why})
+    row.update(count=row["count"] + 1, last=int(time.time()), why=why)
+    return row["count"] == 1 or row["count"] % 100 == 0
+
+
+#: a machine another office shares, as this fleet addresses it: `<machine>.<office>` (remote.office_of), and the rest
+_ITS_OFFICE = re.compile(r"^/api/computers/([^/]+\.[a-z0-9-]+)(/.*)?$")
+#: how long a forwarded call may take: an exec runs up to its own timeout over there, and the link carries it
+REMOTE_CALL_S = float(os.environ.get("COMPUTERS_REMOTE_CALL_S", "330"))
+
+
+# DECLARED BEFORE _who_is_asking, ON PURPOSE: Starlette runs the middleware declared LAST first, so this one runs
+# AFTER the caller check — a write to another office's machine is identified here before it leaves (DGO-553).
+@app.middleware("http")
+async def _to_its_office(request: Request, call_next):
+    """A machine a linked office shares (`<machine>.<office>`): the request goes to THAT office through the link's
+    door and its answer comes back as it is — that office runs it with its own key, on its own machine, under its own
+    caller check (its door holds this office to the machine it gave). Nothing of the machine crosses but HTTP."""
+    m = _ITS_OFFICE.match(request.url.path)
+    if not m:
+        return await call_next(request)
+    office_app, machine = await run_in_threadpool(remote.office_of, m.group(1))
+    if office_app is None:
+        return await call_next(request)              # no linked office of that name: this app's own 404 says so
+    if _declares_office(request):
+        # a request that came through a door does not go on to a third office: as_rows does not re-share either
+        return _err("בקשה שהגיעה מלשכה אחרת אינה ממשיכה ללשכה שלישית", 403)
+    # what reaches another office's machine from here is what its door lets a linked office do there — running a
+    # command, a terminal and its poll, on the one machine it gives — and nothing else (the second reader)
+    local = f"/api/computers/{machine}{m.group(2) or ''}"
+    poll = request.method == "GET" and re.fullmatch(rf"/api/computers/{re.escape(callermod.SHARED_MACHINE)}/shell/[0-9a-f]+",
+                                                    local) is not None
+    if not (callermod.door_allows(request.method, local) or poll):
+        return _err("על מחשב של לשכה אחרת אפשר להריץ פקודה ולפתוח טרמינל, ולא יותר", 403,
+                    action="את השאר מנהלים בלשכה שהמחשב שלה.")
+    if request.method in WRITE_METHODS:
+        # an IDENTIFIED caller only, in every mode: `warn` finds legacy callers, and nothing forwarded here is one —
+        # an unknown container must not leave as this office's signed request (the second reader)
+        who = getattr(request.state, "caller", None)
+        if who is None or not who.ok:
+            return _err("רק מתקשר מזוהה מריץ על מחשב של לשכה אחרת", 403,
+                        action="מסך «מחשבים» דרך הקונסול, או טוקן של שירות.")
+    raw = await request.body()
+    try:
+        payload = json.loads(raw) if raw else None
+    except ValueError:
+        return _err("גוף הבקשה חייב להיות JSON", 400)
+    # EXACTLY the path that was checked above, encoded again — not the raw path, which a crafted `%2F` or an encoded
+    # prefix could make differ from it (the second reader, round 2); an encoded `?` stays encoded
+    path = (f"/api/computers/{machine}{urllib.parse.quote(m.group(2) or '', safe='/')}"
+            + (f"?{request.url.query}" if request.url.query else ""))
+    code, data = await run_in_threadpool(remote.fetch, office_app, request.method, path, payload, REMOTE_CALL_S)
+    return JSONResponse(data, status_code=code)
+
+
+@app.middleware("http")
+async def _who_is_asking(request: Request, call_next):
+    path = request.url.path
+    if request.method not in WRITE_METHODS or path.startswith("/share/"):
+        if path.startswith("/api/") and _declares_office(request):
+            from_door, herd = await run_in_threadpool(_door_read, request)
+            _count_door_read((request.headers.get(linkid.OFFICE_HEADER) or "") if from_door else NOT_THE_DOOR,
+                             path, herd)                         # answered as before; counted
+        return await call_next(request)               # reads stay open; a share's door has its own token
+    who = await run_in_threadpool(identify_request, request)   # a signature may read the vault
+    lp = _log_path(path)
+    if who.ok and who.way == "door" and not callermod.door_allows(request.method, path):
+        # A linked office was given THIS computer to run on — not the fleet, not its management. Refused in
+        # EVERY mode: `warn` exists to find callers with no identity, and this one is identified; there is no
+        # legacy caller to discover, only a door to keep shut (the second reader, round 2).
+        why = (f"לשכה מקושרת מריצה פקודות על המחשב שהלשכה הזו נתנה לה ({callermod.SHARED_MACHINE}) ותו לא — "
+               "לא מנהלת את הצי ולא מגיעה למחשב אחר")
+        log.warning("REFUSED %s %s for %s: outside what a linked office is given", request.method, lp, who.who)
+        return _err(why, 403, action="מכאן אפשר להריץ רק על המחשב המשותף; את השאר מנהלים בלשכה עצמה.")
+    request.state.caller = who
+    if who.note:
+        log.info("caller note (%s %s): %s", request.method, lp, who.note)
+    if not who.ok:
+        addr = (request.client.host if request.client else "") or "?"
+        say = _count(addr, request.method, path, who.why)
+        if callermod.is_shell(path) and _declares_office(request):
+            # A shell to this office's computer for a caller that SAID which office it is and failed the claim
+            # (not from the door, not shared with, a bad signature): refused in every mode. `warn` is there to
+            # find legacy callers with no identity; the shell routes have none, and a failed claim is not one
+            # (the second reader). Exec and probe keep `warn` until their callers over the link are counted —
+            # issues/a-failed-office-claim-on-exec-and-probe-passes-in-warn-until-their-callers-over-the-link-are-counted.yaml
+            if say:
+                log.warning("REFUSED %s %s from %s: %s", request.method, lp, addr, who.why)
+            return _err(who.why, 403, action="טרמינל למחשב של לשכה אחרת נפתח דרך הקישור, למחשב שהיא משתפת.")
+        if callermod.enforced(request.method, path, AUTH_MODE, ENFORCE_MACHINES):
+            if say:
+                log.warning("REFUSED %s %s from %s: %s", request.method, lp, addr, who.why)
+            return _err(who.why, 403, action="מסך «מחשבים» דרך הקונסול, טוקן של שירות (Authorization: Bearer "
+                                             "COMPUTERS_EXEC_TOKEN, לאפליקציה שמצהירה עליו ב-app.json), או "
+                                             "לשכה מקושרת שהלשכה הזו משתפת איתה את המחשב.")
+        if say:
+            log.warning("WOULD REFUSE (warn) %s %s from %s: %s", request.method, lp, addr, who.why)
+    else:
+        log.info("write by %s (%s): %s %s", who.who, who.way, request.method, lp)
+    return await call_next(request)
+
+
+@app.get("/api/callers")
+def api_callers():
+    """The writes that had no known caller since this process started — what `enforce` would refuse. The
+    gate counts these per office before `COMPUTERS_EXEC_AUTH=enforce` (`./bbox computers callers`). A plain
+    def: FastAPI runs it in its threadpool, where the reverse lookups of the sources belong."""
+    rows = sorted(({**r, "name": _name_of(r["source"]) if r["source"][:1].isdigit() else ""}
+                   for r in list(_REFUSED.values())), key=lambda r: -r["count"])
+    reads = sorted((dict(r) for r in list(_DOOR_READS.values())), key=lambda r: -r["count"])   # copies, as above
+    return {"mode": AUTH_MODE, "enforce_machines": sorted(ENFORCE_MACHINES), "share_to": sorted(SHARE_TO),
+            "token": bool(EXEC_TOKEN), "since": int(_REFUSED_SINCE), "unknown": rows,
+            "count": sum(r["count"] for r in rows),
+            # what other offices READ here through the link — counted, not refused (yet): each row says whether the door
+            # called the office the herd's (by key); the reads of an office it did not are what narrowing would touch
+            "door_reads": reads,
+            "door_reads_not_herd": sum(r["count"] for r in reads if not r.get("herd") and r["office"] != NOT_THE_DOOR)}
+
+
 # ── the herd: every office's computer (DGO-890) ─────────────────────────────────────────────────
 # The resource view and the network view of a computer are what its own `machine` and `security`
 # services say, read through `herd.Herd` — here, or through the door when it belongs to a linked
@@ -931,8 +1293,9 @@ async def connections_select(request: Request):
 
 @app.post("/connections")
 async def connections_add(request: Request):
-    body = await request.json() if await request.body() else {}
-    return await api_computers_post(body or {})
+    # the request itself, not its parsed body: api_computers_post reads the body (Starlette keeps it) — handed a dict,
+    # it called `.body()` on the dict and every add through this route was a 500 (the second reader, 2026-11-10)
+    return await api_computers_post(request)
 
 
 @app.delete("/connections/{cid}")
@@ -978,24 +1341,102 @@ def _computer_ctx(rec: dict, host: str) -> tuple[dict, dict]:
 
 
 @app.get("/api/computers")
-def api_computers(probe: int = 1):
-    """The fleet. `?probe=0` skips the SSH round trip (fast, for a background refresh)."""
+def api_computers(request: Request = None, probe: int = 1, shared: int = 1):   # FastAPI injects it; a direct call may not
+    """The fleet. `?probe=0` skips the SSH round trip (fast, for a background refresh). `?shared=0` leaves out the
+    machines linked offices share — what one office asks of another, so two offices never ask each other in a loop.
+
+    (DGO-553's rows are asked only for a person's screen: never when the request came through a door, whatever its
+    `shared` says — an older peer does not send it — or each office would ask the other back, every 15 s, at once.)"""
+    return _fleet(probe, bool(shared) and not (request is not None and _declares_office(request)))
+
+
+def _last_said(rec: dict) -> dict:
+    """A row of `?probe=0`: the record with what its last probe SAID, read from the cache — no SSH, whatever its age
+    (`checked_at` says it). A machine never probed is the bare record, so its reader says «unknown».
+
+    It was the bare record always: the terminal (and apps/terminal before it) read `ok`/`state` off this list and
+    showed «לא ידוע» for every machine, and a linked office's shared row (DGO-553, asked with `probe=0`) carried no
+    state at all — issues/the-fleet-without-a-probe-answered-no-state-so-the-terminal-showed-every-machine-unknown.yaml"""
+    with _probe_lock:
+        hit = _probe_cache.get(rec.get("id"))
+    if not hit:
+        return rec
+    return {**rec, **{k: v for k, v in hit[1].items() if k != "id"}, "cached": True}
+
+
+def _fleet(probe: int, with_shared: bool) -> dict:
+    """The fleet. `?probe=0` skips the SSH round trip (fast, for a background refresh).
+
+    The machines are probed AT ONCE, not in turn (DGO-1359): each probe waits up to ssh's 8 s for a machine
+    that does not answer, so in turn the fleet took the sum — the MacBook away from home, its two LAN machines
+    out of reach, answered in 17–20 s, and every reader with a shorter patience read «did not answer». At once
+    it takes the slowest one. Each probe keeps its own cache and timeout (`probe`)."""
     host = local_gateway()
     insts, err = vault_list()
     if err:
         return _err(err, 502)
-    out = []
-    for i in insts:
-        rec = computer_record(i, host)
-        if probe:
-            sec, _ = _computer_ctx(rec, host)
-            st = probe_computer(rec, sec, max_age=PROBE_TTL)
-            rec = {**rec, **{k: v for k, v in st.items() if k != "id"}}
-        out.append(rec)
+    recs = [computer_record(i, host) for i in insts]
+
+    def probed(rec: dict) -> dict:
+        sec, _ = _computer_ctx(rec, host)
+        st = probe_computer(rec, sec, max_age=PROBE_TTL)
+        return {**rec, **{k: v for k, v in st.items() if k != "id"}}
+
+    if probe and recs:
+        with concurrent.futures.ThreadPoolExecutor(max_workers=min(PROBE_WORKERS, len(recs)),
+                                                   thread_name_prefix="probe") as pool:
+            out = list(pool.map(probed, recs))
+    else:
+        out = [_last_said(rec) for rec in recs]
     out.sort(key=lambda c: (not c.get("builtin"), not c.get("ok"), c.get("label") or ""))
-    return {"computers": out, "count": len(out), "builtin": LOCAL_INSTANCE,
+    shared, shared_from = _shared_machines() if with_shared else ([], [])
+    return {"computers": out + shared, "count": len(out) + len(shared), "builtin": LOCAL_INSTANCE,
             "office_key": {"public_key": public_key(), "fingerprint": key_fingerprint(),
-                           "user": LOCAL_USER, "local_host": host}}
+                           "user": LOCAL_USER, "local_host": host},
+            # the linked offices asked, and the one that did not answer named — its machine absent, not stale
+            "shared_from": shared_from}
+
+
+#: how long one linked office may take to answer its list, and how long the answers are kept (the screen asks often)
+REMOTE_LIST_S = float(os.environ.get("COMPUTERS_REMOTE_LIST_S", "4"))
+_SHARED: dict = {"at": 0.0, "rows": [], "from": []}
+_SHARED_LOCK = threading.Lock()
+
+
+def _shared_machines() -> tuple[list[dict], list[dict]]:
+    """(rows, shared_from): the machine each linked office gives this one, as rows of this fleet addressed
+    `<machine>.<office>` (remote.as_rows; DGO-553) — asked of every office at once, each within REMOTE_LIST_S.
+
+    ONE machine per office: its own (`caller.SHARED_MACHINE`), which is all a linked office's door may run on there
+    (`door_allows`). A peer answers its whole list today (issues/a-linked-office-reading-computers-…): a row for a
+    machine it would refuse is a button that fails, so only the one it gives is listed."""
+    with _SHARED_LOCK:
+        if time.time() - _SHARED["at"] < remote.REMOTE_TTL:
+            return list(_SHARED["rows"]), list(_SHARED["from"])
+    offices = remote.apps()
+    if not offices:
+        return [], []
+
+    def ask(office_app: dict):
+        return office_app, *remote.fetch(office_app, "GET", "/api/computers?probe=0&shared=0", timeout=REMOTE_LIST_S)
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=min(4, len(offices)), thread_name_prefix="peer") as pool:
+        answers = list(pool.map(ask, offices))
+    rows, said = [], []
+    for office_app, code, data in answers:
+        head = {"office": office_app["office"], "label": office_app.get("label") or office_app["office"]}
+        if code >= 300:
+            said.append({**head, "ok": False, "why": (data or {}).get("error") or f"({code})"})
+            continue
+        if not isinstance(data.get("computers"), list):        # a page that is not the list (the door's wall) is not ok
+            said.append({**head, "ok": False, "why": data.get("error") or "התשובה אינה רשימת מחשבים"})
+            continue
+        given = [c for c in data["computers"] if c.get("id") == callermod.SHARED_MACHINE]
+        rows += remote.as_rows(office_app, {"computers": given})
+        said.append({**head, "ok": True})
+    with _SHARED_LOCK:
+        _SHARED.update(at=time.time(), rows=rows, **{"from": said})
+    return list(rows), list(said)
 
 
 def probe_computer(rec: dict, sec: dict, max_age: float = PROBE_TTL) -> dict:
@@ -1022,6 +1463,10 @@ async def api_computers_post(request: Request):
         return _err("חסרה כתובת (host)", 400)
     if re.search(r"[\s;|&$`'\"]", host) or host.startswith("-"):
         return _err("הכתובת אינה תקינה", 400)
+    try:
+        check_destination(user, host)                # the user too: `-oProxyCommand=…` is an ssh option, not a name
+    except BadDestination as e:
+        return _err(str(e), 400)
     try:
         port = int(body.get("port") or 22)
     except (TypeError, ValueError):
@@ -1110,18 +1555,204 @@ async def api_computer_exec(cid: str, request: Request):
     if bad:
         return bad
     sec, _ = _computer_ctx(rec, local_gateway())
-    log.info("exec on %s: %s%s", cid, command.strip().splitlines()[0][:200],
-             f" (stdin {len(raw)} bytes)" if raw is not None else "")
+    who = getattr(request.state, "caller", None)
+    log.info("exec on %s by %s: %s%s", cid, f"{who.who} ({who.way})" if who and who.ok else "UNKNOWN",
+             command.strip().splitlines()[0][:200], f" (stdin {len(raw)} bytes)" if raw is not None else "")
     # OFF THE EVENT LOOP, always. `ssh_run` blocks for as long as the command runs — up to
     # MAX_TIMEOUT — and this handler is `async`, so it ran INSIDE the single uvicorn worker's loop:
     # one long command made every other request wait, including `/healthz`. Measured 2026-10-04:
     # `/healthz` took 30 s and the container's own healthcheck failed 5 runs in a row (exit 1 on its
     # 8 s budget) while a long `exec` was in flight — an office whose door to its machines reports
     # unhealthy exactly when it is being used, and restarts itself under `autoheal`.
-    res = await run_in_threadpool(ssh_run, cid, rec["host"], rec["port"], rec["user"], sec,
-                                  command, timeout, raw)
+    # one bar in «כל מקביל»: `command.started`, then `.ended` (exit 0) or `.failed`, sharing `data.span`
+    title = f"{cid}: {_first_word(command)}"
+    bar = {"cid": cid, "caller": who.who if who and who.ok else "", "way": who.way if who and who.ok else "",
+           "span": uuid.uuid4().hex[:12]}
+    t0 = int(time.time() * 1000)
+    _flow("command.started", title, bar)
+    try:
+        res = await run_in_threadpool(ssh_run, cid, rec["host"], rec["port"], rec["user"], sec,
+                                      command, timeout, raw)
+    except BaseException as e:
+        _flow("command.failed", title, {**bar, "t0": t0, "ms": int(time.time() * 1000) - t0,
+                                        "error": type(e).__name__})
+        raise
+    _flow("command.ended" if res.get("code") == 0 else "command.failed", title,
+          {**bar, "t0": t0, "ms": int(time.time() * 1000) - t0, "exit": res.get("code")})
     return {"id": cid, "command": command, "timeout": timeout,
             **({"stdin_bytes": len(raw)} if raw is not None else {}), **res}
+
+
+# ── an interactive shell: the terminal app's screen over shell.py ─────────────────────────────────────────────────
+# The manifest promised `shell` (app.json required_ops) and the terminal app has called these five since it
+# arrived (apps/terminal/app.py: open, input, poll, resize, close); shell.py, the session manager, waited with its
+# test and no caller — no route joined them (issues/the-terminal-app-calls-shell-routes-the-computers-app-never-had).
+# Ordinary HTTP, as shell.py says why. The same door as /exec: the same machine record, the same key, the same
+# pinned host key — the session is ssh with a terminal (-tt) and no command, so the machine's login shell — and
+# the same caller check (writes pass _who_is_asking; caller.RUN_RE counts the shell as running something on that
+# machine). A session belongs to the caller that opened it: the poll, a read the middleware does not identify,
+# identifies its caller here, and another caller's session answers as one that does not exist (shell.get).
+import shell as shellmod  # noqa: E402
+
+
+def shell_argv(cid: str, rec: dict, sec: dict) -> list[str]:
+    """ssh_argv's own command line with a terminal (-tt), no escape character (-e none: `~C` cannot add a forward)
+    and no command: the machine's login shell. The same checks as ssh_run, refused with a sentence."""
+    ensure_key()
+    if not _key_path_for({**sec, "_instance": cid}):
+        raise shellmod.ShellError("לא נוצר עדיין מפתח SSH ללשכה", 409, "רענן את הדף — המפתח נוצר אוטומטית עם עליית השירות.")
+    try:
+        argv = ssh_argv(cid, rec["host"], rec["port"], rec["user"], sec, "", 8)[:-1]
+    except BadDestination as e:                      # a record saved before its user or host was checked
+        raise shellmod.ShellError(str(e), 409, "תקן את פרטי המחשב במסך «מחשבים» (מחק והוסף אותו מחדש).") from e
+    except ValueError as e:                          # a `door` in the vault that is not a share address
+        raise shellmod.ShellError("כתובת השיתוף של המחשב אינה תקינה", 409, str(e)) from e
+    argv[1:1] = ["-tt", "-e", "none"]
+    return argv
+
+
+def _shell_owner(request: Request, who=None) -> str:
+    who = who or getattr(request.state, "caller", None)
+    return who.who if who is not None else ""
+
+
+def _shell_size(body: dict) -> tuple[int, int]:
+    def num(v, lo, hi, dflt):
+        try:
+            return max(lo, min(hi, int(v)))
+        except (TypeError, ValueError, OverflowError):        # JSON's Infinity is a float int() cannot take
+            return dflt
+    return num(body.get("cols"), 20, 400, 100), num(body.get("rows"), 5, 200, 30)
+
+
+def _shell_state(s, cursor, wait: float = 0.0) -> dict:
+    """What the screen draws: the bytes after `cursor`, the cursor to send next, whether bytes were lost before
+    it, and whether the shell still runs (its reason when it ended)."""
+    capped = s.drain(wait)
+    try:
+        cursor = max(0, int(cursor or 0))
+    except (TypeError, ValueError, OverflowError):            # JSON's Infinity, after the keys were written
+        cursor = 0
+    data, nxt, lost = s.since(cursor)
+    # the cursor stops on a whole character: a UTF-8 sequence cut between two reads is held back for the next one,
+    # not drawn as two «�» (Hebrew is two bytes a letter)
+    hold = _utf8_tail(data)
+    if hold:
+        data, nxt = data[:-hold], nxt - hold
+    # a drain that stopped on its cap may have left the shell's last words in the pty: the reader is told to come
+    # back for them, even when ssh has already ended
+    alive = s.alive() or bool(capped)
+    return {"session": s.key.rsplit(":", 1)[1], "cursor": nxt, "lost": lost, "alive": alive,
+            "output": data.decode("utf-8", "replace"), **({"reason": s.error} if not alive and s.error else {})}
+
+
+def _utf8_tail(b: bytes) -> int:
+    """How many bytes at the end of `b` begin a UTF-8 character that is not complete yet (0–3)."""
+    for back in range(1, min(4, len(b)) + 1):
+        c = b[-back]
+        if c & 0xC0 != 0x80:                           # the lead byte of the last character
+            need = 2 if c & 0xE0 == 0xC0 else 3 if c & 0xF0 == 0xE0 else 4 if c & 0xF8 == 0xF0 else 1
+            return back if back < need else 0
+    return 0
+
+
+def _shell_err(e: "shellmod.ShellError"):
+    return _err(str(e), e.status, action=e.action)
+
+
+async def _shell_body(request: Request):
+    """The JSON object a shell route takes, or None (a list, a number or text that is not JSON is no body)."""
+    try:
+        body = (await request.json()) if await request.body() else {}
+    except ValueError:                                        # not JSON, or not UTF-8
+        return None
+    return body if isinstance(body, dict) else None
+
+
+def _shell_open(cid: str, cols: int, rows: int, owner: str):
+    """(session, None) or (None, the refusal) — the vault's reads, the key check and the pty, all of it in the
+    threadpool: each vault read may wait its full timeout, and none of that is the event loop's."""
+    rec, bad = _resolve(cid, local_gateway())
+    if bad:
+        return None, bad
+    sec, _ = _computer_ctx(rec, local_gateway())
+    return shellmod.start(cid, shell_argv(cid, rec, sec), cols, rows, owner), None
+
+
+@app.post("/api/computers/{cid}/shell")
+async def api_shell_open(cid: str, request: Request):
+    body = await _shell_body(request)
+    if body is None:
+        return _err("גוף הבקשה חייב להיות אובייקט JSON", 400)
+    cols, rows = _shell_size(body)
+    who = getattr(request.state, "caller", None)
+    owner = _shell_owner(request)
+    try:
+        s, bad = await run_in_threadpool(_shell_open, cid, cols, rows, owner)
+    except shellmod.ShellError as e:
+        return _shell_err(e)
+    if bad:
+        return bad
+    log.info("shell on %s by %s", cid, f"{who.who} ({who.way})" if who and who.ok else "UNKNOWN")
+    return await run_in_threadpool(_shell_state, s, 0, 0.6)    # the login banner and the first prompt
+
+
+@app.post("/api/computers/{cid}/shell/{sid}/input")
+async def api_shell_input(cid: str, sid: str, request: Request):
+    body = await _shell_body(request)
+    if body is None:
+        return _err("גוף הבקשה חייב להיות אובייקט JSON", 400)
+    data = body.get("data") or ""
+    if not isinstance(data, str) or len(data.encode("utf-8", "replace")) > 65536:
+        return _err("הקלט לטרמינל חייב להיות טקסט של עד 64KB", 400)
+    try:
+        s = await run_in_threadpool(shellmod.get, cid, sid, _shell_owner(request))   # it may wait on an open's fork
+        await run_in_threadpool(s.write, data)
+    except shellmod.ShellError as e:
+        return _shell_err(e)
+    return await run_in_threadpool(_shell_state, s, body.get("cursor"), 0.12)   # give the shell a moment to echo
+
+
+@app.get("/api/computers/{cid}/shell/{sid}")
+async def api_shell_poll(cid: str, sid: str, request: Request, cursor: int = 0):
+    who = await run_in_threadpool(identify_request, request)   # a read: the middleware did not ask who
+    if not who.ok and _declares_office(request):
+        # as the middleware refuses the writes of one — and counted and logged as they are
+        addr = (request.client.host if request.client else "") or "?"
+        if _count(addr, "GET", request.url.path, who.why):
+            log.warning("REFUSED GET %s from %s: %s", _log_path(request.url.path), addr, who.why)
+        return _err(who.why, 403)
+    try:
+        s = await run_in_threadpool(shellmod.get, cid, sid, _shell_owner(request, who))
+    except shellmod.ShellError as e:
+        return _shell_err(e)
+    return await run_in_threadpool(_shell_state, s, cursor, 0.0)
+
+
+@app.post("/api/computers/{cid}/shell/{sid}/resize")
+async def api_shell_resize(cid: str, sid: str, request: Request):
+    body = await _shell_body(request)
+    if body is None:
+        return _err("גוף הבקשה חייב להיות אובייקט JSON", 400)
+    cols, rows = _shell_size(body)
+    try:
+        s = await run_in_threadpool(shellmod.get, cid, sid, _shell_owner(request))
+        await run_in_threadpool(s.resize, cols, rows)          # it waits on the session's lock: never on the loop
+    except shellmod.ShellError as e:
+        return _shell_err(e)
+    return {"session": sid, "cols": cols, "rows": rows}
+
+
+@app.delete("/api/computers/{cid}/shell/{sid}")
+async def api_shell_close(cid: str, sid: str, request: Request):
+    try:
+        s = await run_in_threadpool(shellmod.get, cid, sid, _shell_owner(request))
+    except shellmod.ShellError as e:
+        if e.status == 404:
+            return {"session": sid, "closed": True}           # already gone: what was asked is so
+        return _shell_err(e)
+    await run_in_threadpool(s.close)
+    return {"session": sid, "closed": True}
 
 
 @app.post("/api/computers/{cid}/stream")
@@ -1149,6 +1780,11 @@ async def api_transfer(cid: str, request: Request):
     dst, bad_dst = _resolve(to, local_gateway())
     if bad_dst:
         return bad_dst
+    try:   # said here, not as a queued job that fails in its thread a moment later (the second reader)
+        check_destination(rec["user"], rec["host"])
+        check_destination(dst["user"], dst["host"])
+    except BadDestination as e:
+        return _err(str(e), 409, action="תקן את פרטי המחשב במסך «מחשבים» (מחק והוסף אותו מחדש).")
 
     def argv_for(machine_id: str, command: str) -> list[str]:
         if machine_id == cid:
@@ -1416,19 +2052,73 @@ def api_computer_probe(cid: str):
 # The remote script only GATHERS facts (`key=value`, one per line) and every judgement is made here,
 # in Python: a rule written in shell is a rule nobody can unit-test, and an audit whose findings
 # cannot be reviewed in a diff is an audit people stop reading.
+# What sshd ITSELF will do (DGO-415). The last matching line of sshd_config and its drop-ins concatenated was
+# how this audit called Exampleu's keys-only server «accepts passwords» and «root may log in» (2026-11-10).
+# * `sshd -T` prints the settings in force — only as root; as anyone else it prints nothing on stdout.
+# * Without it, the files are read the way sshd reads them:
+#   - `keyword value` and `keyword=value` alike, quotes off, a trailing comment off;
+#   - an Include read where it stands (relative to /etc/ssh, globs expanded), the FIRST value of a keyword
+#     wins;
+#   - a Match line ends its file's OWN settings: what follows is conditional, and after an Include the
+#     parent's state is the parent's again. Those lines come out as «@match …»;
+#   - an unreadable file says «@unread …», because a value that might be in it is unknown, not absent;
+#   - where the files say nothing, sshd's own defaults: PasswordAuthentication yes, PermitRootLogin
+#     prohibit-password. `sshd -T` prints them itself, so the two paths agree.
+# * A Match block that loosens a login (passwords, root, empty passwords) is counted either way: `sshd -T`
+#   shows only the server's own settings.
+# Kept apart from AUDIT_SH so its test runs this part alone (tests/test_audit_ssh.py).
+AUDIT_SSH_SH = r"""
+sshd_flat() {
+  [ -r "$1" ] || { printf '@unread %s\n' "$1"; return 0; }
+  m=
+  while IFS= read -r l || [ -n "$l" ]; do
+    l=$(printf '%s\n' "$l" | sed -e 's/^[[:space:]]*//' -e 's/^\([A-Za-z]*\)[[:space:]]*=[[:space:]]*/\1 /' -e 's/"//g')
+    k=$(printf '%s\n' "$l" | awk '{print tolower($1)}')
+    case "$k" in ''|'#'*) continue ;; match) m=1; continue ;; esac
+    if [ -n "$m" ]; then printf '@match %s\n' "$l"; continue; fi
+    if [ "$k" = include ]; then
+      set -f
+      for g in $(printf '%s\n' "$l" | sed -e 's/^[^[:space:]]*[[:space:]]*//' -e 's/[[:space:]]#.*$//'); do
+        set +f
+        case "$g" in /*|~*) ;; *) g="/etc/ssh/$g" ;; esac
+        for f in $g; do [ -f "$f" ] && sshd_flat "$f"; done
+        m=
+        set -f
+      done
+      set +f
+      continue
+    fi
+    printf '%s\n' "$l"
+  done < "$1"
+  return 0
+}
+sshd_files=$(sshd_flat /etc/ssh/sshd_config 2>/dev/null)
+sshdc=$( (sshd -T || /usr/sbin/sshd -T) 2>/dev/null )
+if [ -n "$sshdc" ]; then src=sshd
+elif printf '%s\n' "$sshd_files" | grep -q '^@unread '; then src=files-partial
+else src=files; fi
+[ "$src" = sshd ] || sshdc=$(printf '%s\n' "$sshd_files" | grep -v '^@')
+sshv() { printf '%s\n' "$sshdc" | grep -iE "^[[:space:]]*$1[[:space:]]+" | head -1 | awk '{print tolower($2)}'; }
+pw=$(sshv PasswordAuthentication); rl=$(sshv PermitRootLogin)
+if [ "$src" = files ]; then [ -n "$pw" ] || pw=yes; [ -n "$rl" ] || rl=prohibit-password; fi
+echo "ssh_config_from=$src"
+echo "ssh_password_auth=$pw"
+echo "ssh_root_login=$rl"
+echo "ssh_port=$(sshv Port)"
+echo "ssh_max_auth=$(sshv MaxAuthTries)"
+echo "ssh_empty_pw=$( [ "$(sshv PermitEmptyPasswords)" = yes ] && echo 1 || echo 0)"
+echo "ssh_match_loosens=$(printf '%s\n' "$sshd_files" | grep -ciE '^@match[[:space:]]+(PasswordAuthentication[[:space:]]+yes|PermitRootLogin[[:space:]]+yes|PermitEmptyPasswords[[:space:]]+yes)([[:space:]]|$)')"
+"""
+
 AUDIT_SH = r"""
+[ -n "${ZSH_VERSION:-}" ] && setopt SH_WORD_SPLIT GLOB_SUBST NO_NOMATCH 2>/dev/null
 echo "hostname=$(hostname 2>/dev/null)"
 echo "os=$( (. /etc/os-release 2>/dev/null; printf '%s' "${PRETTY_NAME:-}") )"
 echo "kernel=$(uname -r 2>/dev/null)"
 echo "uptime_days=$(( $(cut -d. -f1 /proc/uptime 2>/dev/null || echo 0) / 86400 ))"
 echo "reboot_required=$([ -f /var/run/reboot-required ] && echo yes || echo no)"
 echo "sshd_running=$(ps -eo comm 2>/dev/null | grep -cx sshd)"
-sshdc=$(cat /etc/ssh/sshd_config 2>/dev/null; cat /etc/ssh/sshd_config.d/*.conf 2>/dev/null)
-echo "ssh_password_auth=$(printf '%s\n' "$sshdc" | grep -iE '^\s*PasswordAuthentication\s+' | tail -1 | awk '{print tolower($2)}')"
-echo "ssh_root_login=$(printf '%s\n' "$sshdc" | grep -iE '^\s*PermitRootLogin\s+' | tail -1 | awk '{print tolower($2)}')"
-echo "ssh_port=$(printf '%s\n' "$sshdc" | grep -iE '^\s*Port\s+' | tail -1 | awk '{print $2}')"
-echo "ssh_max_auth=$(printf '%s\n' "$sshdc" | grep -iE '^\s*MaxAuthTries\s+' | tail -1 | awk '{print $2}')"
-echo "ssh_empty_pw=$(printf '%s\n' "$sshdc" | grep -icE '^\s*PermitEmptyPasswords\s+yes')"
+""" + AUDIT_SSH_SH + r"""
 echo "users_empty_password=$(awk -F: '($2==""){print $1}' /etc/shadow 2>/dev/null | tr '\n' ',' )"
 echo "users_uid0=$(awk -F: '($3==0){print $1}' /etc/passwd 2>/dev/null | tr '\n' ',')"
 echo "users_sudo=$(getent group sudo 2>/dev/null | awk -F: '{print $4}')"
@@ -1514,8 +2204,17 @@ def audit_findings(facts: dict) -> list[dict]:
     if root in ("yes",):
         add("ssh_root_login", "warn", "התחברות root ב-SSH מותרת",
             "PermitRootLogin yes.", "הגדר prohibit-password או no.")
-    elif root == "prohibit-password":
+    elif root in ("prohibit-password", "without-password"):   # sshd -T says the older name for the same thing
         add("ssh_root_login_key", "ok", "root רק עם מפתח", "PermitRootLogin prohibit-password")
+    if _num(facts, "ssh_match_loosens") > 0:
+        # sshd -T shows the server's own settings; a Match block may still open a door for some logins
+        add("ssh_match_loosens", "warn", "בלוק Match פותח סיסמאות או root לחלק מהכניסות",
+            f"{_num(facts, 'ssh_match_loosens')} הגדרות בתוך בלוקי Match מתירות סיסמה, root או סיסמה ריקה.",
+            "בדוק את בלוקי ה-Match ב-sshd_config ובקבצים שהוא כולל.")
+    if facts.get("ssh_config_from") == "files-partial":
+        add("ssh_config_partial", "info", "חלק מהגדרות ה-SSH לא נקראו",
+            "המשתמש שהלשכה מתחברת איתו לא יכול לקרוא חלק מקובצי sshd_config, ולכן ערכי ה-SSH כאן חלקיים.",
+            "חבר את המחשב כ-root, או תן למשתמש הרשאת קריאה ל-/etc/ssh.")
 
     if _num(facts, "ssh_empty_pw") > 0 or (facts.get("users_empty_password") or "").strip(","):
         add("empty_passwords", "error", "חשבונות בלי סיסמה",
@@ -1676,6 +2375,15 @@ def index():
 
 
 app.mount("/static", StaticFiles(directory=str(_STATIC)), name="static")
+
+
+@app.get("/terminal")
+def terminal_page():
+    """«טרמינל» — a shell on the office's machines, served by the app that owns their key, their sessions and the
+    caller check (DGO-1800): the person reaches it through the console and a linked office through the door, so
+    computers sees who is asking with no relay between (issues/the-terminal-app-calls-computers-from-its-own-…).
+    Its paths are relative to this app's root, like every screen here."""
+    return FileResponse(_STATIC / "terminal" / "index.html")
 
 
 @app.get("/{path:path}")

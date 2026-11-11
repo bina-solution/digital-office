@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""meet-watch — apps/meet: the recorder's own health watchdog, and near-live captions (fireplace, 2026-10-26).
+"""meet-watch — apps/meet: the recorder's own health watchdog, and near-live captions (examplef, 2026-10-26).
 
 Runs INSIDE meet-jibri as an s6 longrun (jibri/s6/60-meet-watch), as the image's own user, beside
 Jibri, Chrome, PulseAudio and ffmpeg. It reads only what the container already holds — no docker
@@ -41,7 +41,7 @@ MEET_LIVE_CAPTIONS_MIN_CORES (4) cores AND the recorder is healthy — on a 2-co
 and the recorder share the same two cores, and the recorder wins (its weight). A file
 /run/meet-watch/captions holding on|off|auto overrides the setting at runtime (for a test).
 
-MEMORY comes before either setting (MEET-48, fireplace 2026-11-01: with swap full, one 30-s segment
+MEMORY comes before either setting (MEET-48, examplef 2026-11-01: with swap full, one 30-s segment
 took 271 s, the whole machine stalled for 3.5 min and Jibri's killed ffmpeg left an mp4 with no
 index). Captions start only with MEET_LIVE_CAPTIONS_MIN_FREE_MB (1536) of MemAvailable — the
 transcriber's model is 1.6 GB — and pause while /proc/pressure/memory says every task stalled for
@@ -84,9 +84,9 @@ MIN_FREE_MB = int(os.environ.get("MEET_LIVE_CAPTIONS_MIN_FREE_MB") or 1536)
 PAUSE_PRESSURE = float(os.environ.get("MEET_LIVE_CAPTIONS_PAUSE_PRESSURE") or 10)
 CALM_PRESSURE = 2.0
 CALM_SECONDS = 60
-SLOW = 0.97          # pace below this is "losing time" (fpg103 ran at 0.968x and lost 23 s of 884)
+SLOW = 0.97          # pace below this is "losing time" (exf103 ran at 0.968x and lost 23 s of 884)
 FINE = 0.99
-THROTTLED = 0.10     # a tenth of the periods held back is a starved recorder (fpg103: 41 %)
+THROTTLED = 0.10     # a tenth of the periods held back is a starved recorder (exf103: 41 %)
 QUIET_PEAK = 300     # of 32767: a 30-s segment whose loudest sample is below this has no speech
 
 PROGRESS = re.compile(r"^Jibri (\d{4}-\d\d-\d\d \d\d:\d\d:\d\d)\.(\d{3}) .*?(?:frame=|size=).*?time=(\d+):(\d\d):(\d\d(?:\.\d+)?).*?speed=\s*([\d.]+)x")
@@ -224,6 +224,7 @@ class Recording:
         self.throttle_window = []    # (Δthrottled, Δperiods) per tick, last WINDOW
         self.captions = 0
         self.caption_lag = []
+        self.captions_live = None    # the newest captions decision and its reason (captions_live()), for capture.json
 
     @property
     def stem(self):
@@ -373,6 +374,8 @@ def capture_json(rec, stat):
             "captions": rec.captions,
             "caption_lag_seconds": {"n": len(rec.caption_lag), "median": sorted(rec.caption_lag)[len(rec.caption_lag) // 2] if rec.caption_lag else None,
                                     "max": max(rec.caption_lag) if rec.caption_lag else None},
+            # whether live captions ran, and why not: the meeting page says it (DGO-1325; before, only this log did)
+            "captions_live": rec.captions_live,
         }
         tmp = rec.stem + ".capture.json.part"
         with open(tmp, "w", encoding="utf-8") as f:
@@ -599,6 +602,26 @@ class MemoryGuard:
         return True, f"memory available {avail} MB, pressure {pressure} %", False
 
 
+def captions_live(want, reason):
+    """The captions decision as capture.json keeps it for the meeting page (start/server.py CAPTIONS_WHY): on or not,
+    the reason's kind (on, off, cores, recorder, memory, pressure), its numbers, and the reason as logged."""
+    if want:
+        why = "on"
+    elif reason == "off":
+        why = "off"
+    elif " cores < " in reason:
+        why = "cores"
+    elif "recorder is not healthy" in reason:
+        why = "recorder"
+    elif reason.startswith("memory available") and "<" in reason:
+        why = "memory"
+    else:
+        why = "pressure"                          # memory pressure, or paused until it is calm again
+    avail, _ = memory()
+    return {"on": bool(want), "why": why, "cores": os.cpu_count(), "min_cores": MIN_CORES, "mem_mb": avail,
+            "min_mb": MIN_FREE_MB, "raw": reason, "at": int(time.time())}
+
+
 def captions_wanted(rec_state):
     """on | off | auto, from the override file first, then the environment."""
     mode = CAPTIONS
@@ -702,6 +725,10 @@ def main():
         if kind != said_caps:
             log(f"captions: {reason}")
             said_caps = kind
+        # …and written beside each recording, the first time and whenever it changes, so its page can say why
+        if not rec.captions_live or rec.captions_live.get("kind") != kind:
+            rec.captions_live = dict(captions_live(want, reason), kind=kind)
+            capture_json(rec, stat)
         if pressed and caps is not None:
             caps.end(wait=False)
             caps = None

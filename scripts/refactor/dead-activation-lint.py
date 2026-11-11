@@ -93,9 +93,10 @@ TEST_TAG = "lifecycle:test"
 # enforcing that workflow — so shrinking this dict is the goal, not growing it.
 ACTIVE_TEST_ALLOWLIST: dict[str, str] = {
     # --- legitimately active forever -----------------------------------------------------
-    "ciHelloWebhook01":
-        "IS the probe: scripts/ci-verify.sh asserts that an ACTIVE workflow's webhook actually "
-        "registers and answers. Deactivating it deletes the thing under test.",
+    # `ciHelloWebhook01` USED to sit here ("deactivating it deletes the thing under test"). It is no
+    # longer needed: the probe is committed `active: false` (DGO-1574) and `apps/n8n/hooks/push`
+    # (gate_ci_hello) is the only thing that activates it, on a CI runner — so this gate, which reads
+    # the FILE, has nothing left to allow, and a stale entry would hide the next regression.
 
     # --- MIS-TAGGED: production endpoints wearing a test tag ------------------------------
     # These three are not tests at all — they are the live MCP servers documented in
@@ -203,6 +204,12 @@ SELF_TEST = [
 ]
 
 # CHECK 2 — the blind spot that motivated it: a webhook makes check 1 say "fine".
+# The allowlisted SAMPLE must be an id the allowlist actually holds. Pinned to a literal, this case
+# stopped checking the mechanism and started asserting the list's CONTENTS: DGO-1574 pruned
+# `ciHelloWebhook01` for a real reason (the probe is committed `active: false` and is activated only by
+# `apps/n8n/hooks/push` on a CI runner), and the case failed while the behaviour it exists to check was
+# right. Derived, it follows the list; when the list is empty the case is void and says so.
+_SAMPLE_ALLOWED_ID = sorted(ACTIVE_TEST_ALLOWLIST)[0] if ACTIVE_TEST_ALLOWLIST else ""
 SELF_TEST_ACTIVE_TEST = [
     ("active test WITH a webhook — must catch (this is the blind spot: check 1 allows it)", True,
      {"id": "someTest01", "active": True, "tags": ["indox-app", "lifecycle:test"],
@@ -224,7 +231,7 @@ SELF_TEST_ACTIVE_TEST = [
      {"id": "realProd01", "active": True, "tags": ["indox-app", "role:api"],
       "nodes": [{"name": "W", "type": "n8n-nodes-base.webhook"}]}),
     ("active test ON the allowlist — must allow (decision is written down)", False,
-     {"id": "ciHelloWebhook01", "active": True, "tags": ["lifecycle:test"],
+     {"id": _SAMPLE_ALLOWED_ID, "active": True, "tags": ["lifecycle:test"], "_sample": True,
       "nodes": [{"name": "W", "type": "n8n-nodes-base.webhook"}]}),
     ("no tags at all — must allow", False,
      {"id": "untagged01", "active": True,
@@ -242,14 +249,22 @@ def self_test() -> int:
         print(f"  [{'ok ' if ok else 'FAIL'}] "
               f"{'caught' if got else 'allowed':<8} ({'must catch' if should else 'must allow'}): {label}")
     print("\nCHECK 2 — active lifecycle:test workflow, any trigger shape:")
+    void = 0
     for label, should, doc in SELF_TEST_ACTIVE_TEST:
+        if doc.get("_sample") and _SAMPLE_ALLOWED_ID == "":
+            # Keyed on the SAMPLE, not on the label: rewording a label must not turn a void case into a
+            # failing one (the reader measured exactly that).
+            void += 1
+            print(f"  [-- ] skipped  (void: ACTIVE_TEST_ALLOWLIST is empty, so nothing can be allowed): {label}")
+            continue
         got = check_active_test(doc)
         ok = got == should
         bad += 0 if ok else 1
         print(f"  [{'ok ' if ok else 'FAIL'}] "
               f"{'caught' if got else 'allowed':<8} ({'must catch' if should else 'must allow'}): {label}")
-    total = len(SELF_TEST) + len(SELF_TEST_ACTIVE_TEST)
-    print(f"\nG44 self-test: {total - bad}/{total} passed")
+    total = len(SELF_TEST) + len(SELF_TEST_ACTIVE_TEST) - void
+    print(f"\nG44 self-test: {total - bad}/{total} passed"
+          + (f" ({void} void case(s) skipped, not counted)" if void else ""))
     return 1 if bad else 0
 
 

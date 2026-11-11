@@ -6,6 +6,7 @@
   },
   "layer": 2,
   "kind": "service",
+  "page": "base",
   "version": "1.0.0",
   "summary": {
     "he": "מרכז ההתראות — שגיאות ואירועי מערכת",
@@ -19,6 +20,12 @@
     }
   ],
   "use": [
+    {
+      "capability": "kv",
+      "strength": "wants",
+      "after": false,
+      "dependency": "weak"
+    },
     {
       "capability": "error-tracking",
       "strength": "wants",

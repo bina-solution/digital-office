@@ -12,12 +12,12 @@
 #         raised at all -- and must NOT be merged either, since they are not duplicates.
 # Case B: an ordinary two-row business duplicate, untouched by the quarantine. Must still merge.
 DK="docker -H unix:///run/bbox-docker.sock"
-ENVF=/mnt/c/Users/user/Desktop/personalWorkspace/AutomateOs/deployment-hacohen/.env
+ENVF=/mnt/c/Users/user/Desktop/personalWorkspace/AutomateOs/digital-office/.env
 WU=$(grep -E '^BS_WEBHOOK_USER=' "$ENVF" | head -1 | cut -d= -f2-)
 WP=$(grep -E '^BS_WEBHOOK_PASS=' "$ENVF" | head -1 | cut -d= -f2-)
 P=zzbd$(date +%H%M%S)
 
-$DK exec -i supabase-db-shlomo-laptop psql -U postgres -tAf - <<SQL
+$DK exec -i supabase-db-owner-laptop psql -U postgres -tAf - <<SQL
 SET session_replication_role = replica;
 INSERT INTO public.incoming_documents
  ("ID","COMPANY_ID","DOC_ID","SHORT_DOC_ID","HASH","TYPE","STATUS","DOC_DATE","DOC_TOTAL_AMOUNT",
@@ -36,7 +36,7 @@ SELECT '  seeded: ZZBADID999 under 3 companies (2 rows share one) + one ordinary
 SQL
 
 for s in 1 2; do
-  $DK exec -e I="${P}_a1,${P}_a2,${P}_a3,${P}_a4,${P}_b1,${P}_b2" -e U="$WU" -e P="$WP" n8n-shlomo-laptop node -e '
+  $DK exec -e I="${P}_a1,${P}_a2,${P}_a3,${P}_a4,${P}_b1,${P}_b2" -e U="$WU" -e P="$WP" n8n-owner-laptop node -e '
 const auth=Buffer.from(process.env.U+":"+process.env.P).toString("base64");
 fetch("http://localhost:5678/webhook/indox-drain",{method:"POST",
  headers:{"Content-Type":"application/json",Authorization:"Basic "+auth},
@@ -50,7 +50,7 @@ fetch("http://localhost:5678/webhook/indox-drain",{method:"POST",
 done
 
 echo "  --- result ---"
-$DK exec -i supabase-db-shlomo-laptop psql -U postgres -tAc \
+$DK exec -i supabase-db-owner-laptop psql -U postgres -tAc \
  "SELECT '    '||rpad(\"ID\",16)||rpad(coalesce(\"STATUS\",'-'),16)||'into='||coalesce(\"MERGED_INTO\",'-')
   FROM public.incoming_documents WHERE \"ID\" LIKE '${P}%' ORDER BY \"ID\""
 
@@ -59,13 +59,13 @@ $DK exec -i supabase-db-shlomo-laptop psql -U postgres -tAc \
 # all six rows sat untouched in ACTION_RESTART. "No merge happened" is equally true when the
 # quarantine works and when the drain never ran, so the pass was worthless. The control case
 # failing is what exposed it. A fixture that cannot tell those apart is not a test.
-$DK exec -i supabase-db-shlomo-laptop psql -U postgres -tAc \
+$DK exec -i supabase-db-owner-laptop psql -U postgres -tAc \
  "SELECT '    LIVENESS   : '||CASE WHEN (SELECT count(*) FROM public.indox_action_execution_log
       WHERE \"ID\" LIKE '${P}%')>0
     THEN 'ok ('||(SELECT count(*) FROM public.indox_action_execution_log WHERE \"ID\" LIKE '${P}%')||' dispatch(es)) -- verdicts below are meaningful'
     ELSE 'VOID -- nothing was dispatched; the verdicts below mean nothing, re-run when the system is quiet' END"
 
-$DK exec -i supabase-db-shlomo-laptop psql -U postgres -tAc \
+$DK exec -i supabase-db-owner-laptop psql -U postgres -tAc \
  "SELECT '    QUARANTINE : '||CASE WHEN (SELECT count(*) FROM public.incoming_documents
       WHERE \"ID\" LIKE '${P}_a%' AND \"STATUS\"='MERGED')=0
     THEN 'PASS (bad doc-id never merged)' ELSE 'FAIL (a bad-doc-id row was absorbed)' END;
@@ -73,7 +73,7 @@ $DK exec -i supabase-db-shlomo-laptop psql -U postgres -tAc \
       WHERE \"ID\" LIKE '${P}_b%' AND \"STATUS\"='MERGED')=1
     THEN 'PASS (ordinary pair still merged)' ELSE 'FAIL (ordinary pair did not merge)' END"
 
-$DK exec -i supabase-db-shlomo-laptop psql -U postgres -tAc \
+$DK exec -i supabase-db-owner-laptop psql -U postgres -tAc \
  "DELETE FROM public.indox_action_execution_log WHERE \"ID\" LIKE '${P}%';
   DELETE FROM public.incoming_documents WHERE \"ID\" LIKE '${P}%'" >/dev/null 2>&1
 echo "  (fixtures removed)"

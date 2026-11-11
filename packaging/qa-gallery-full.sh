@@ -25,8 +25,8 @@ echo "=== up ==="
 echo "waiting…"; sleep 75
 
 echo "=== SSO re-register (enabling an app adds a provider the outpost must sync) ==="
-docker restart authentik-bootstrap-shlomo-laptop >/dev/null 2>&1; sleep 75
-docker restart authentik-server-shlomo-laptop   >/dev/null 2>&1; sleep 85
+docker restart authentik-bootstrap-owner-laptop >/dev/null 2>&1; sleep 75
+docker restart authentik-server-owner-laptop   >/dev/null 2>&1; sleep 85
 
 echo "=== containers ==="
 docker ps --format '{{.Names}}' | grep -E 'browser42|redisinsight|portainer|studio|kong' | sed 's/^/  /'

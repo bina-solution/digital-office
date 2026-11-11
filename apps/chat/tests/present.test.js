@@ -92,8 +92,8 @@ describe('parseMentions', () => {
   test('an email address is not a mention', () => {
     // a LETTER/DIGIT immediately before the @ means this is the tail of an address; treating it as
     // a mention would turn every address in a message into a broken lookup
-    expect(parseMentions('שלחו ל-person21@example.com')).toEqual([]);
-    expect(parseMentions('person22-x@example.com')).toEqual([]);   // a hyphen INSIDE the local part, still email
+    expect(parseMentions('שלחו ל-person22@example.com')).toEqual([]);
+    expect(parseMentions('person23-x@example.com')).toEqual([]);   // a hyphen INSIDE the local part, still email
   });
 
   test('the ordinary Hebrew "ו-@דוד" is a mention — a hyphen before @ is not an address', () => {

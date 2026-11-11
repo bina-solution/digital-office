@@ -6,6 +6,7 @@
   },
   "layer": 3,
   "kind": "service",
+  "page": "documents",
   "version": "0.5.4",
   "summary": {
     "he": "OCR, חילוץ ערכים, תמלול עברית ופנקס המסמכים",

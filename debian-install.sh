@@ -265,6 +265,12 @@ setup_env_variables() {
 
   ENV_FILE=".env"
   ENV_EX_FILE=".env.ex"
+  # DGO_LOCAL=1: an office with no domain (a laptop, a try-out). No .env is copied, and `./bbox run` then makes a
+  # local one by itself — every app at <name>.localhost (bbox, `run`, DGO-1782)
+  if [ -n "${DGO_LOCAL:-}" ] && [ ! -f "$ENV_FILE" ]; then
+    log "DGO_LOCAL: no .env copied — ./bbox run makes a local office (http://console.localhost)"
+    return 0
+  fi
   if [ ! -f "$ENV_FILE" ] && [ -f "$ENV_EX_FILE" ]; then
     log "Copying default environment variables from $ENV_EX_FILE to $ENV_FILE"
     cp "$ENV_EX_FILE" "$ENV_FILE"
@@ -319,6 +325,15 @@ main() {
   echo "1. Git: Configure your user with 'git config --global user.name \"Your Name\"' and 'git config --global user.email \"you@example.com\"'."
   echo "2. Docker: To run Docker commands without 'sudo', add your user to the 'docker' group with '$SUDO usermod -aG \$USER'. You will need to log out and log back in for this to take effect."
   echo "3. Gemini CLI: Run 'gemini' to start the tool. It may prompt you to log in with your Google account."
+  if [ -n "${DGO_LOCAL:-}" ] && [ ! -f "$ENV_FILE" ]; then
+    echo "4. The office itself: './bbox run' — with no .env it makes a LOCAL office (every app at <name>.localhost;"
+    echo "   the console: http://console.localhost). An office with a domain brings its own .env first."
+  else
+    echo "4. The office itself: write your business's name in .env (BUSINESS_NAME=\"…\"), then './bbox onboarding'."
+    echo "   On a machine with a PUBLIC address it also declares the security app and applies"
+    echo "   scripts/ops/host-baseline.sh (DGO-1556); a laptop or a VM with only private addresses keeps the light"
+    echo "   core and skips both, by itself."
+  fi
   echo
 }
 

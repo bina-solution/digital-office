@@ -1,0 +1,3 @@
+#!/usr/bin/env bash
+#: status — is Slack's adapter up, and which workspace and user its token is: [--json]
+exec bash "$(dirname "${BASH_SOURCE[0]}")/../tools/verb" status "$@"

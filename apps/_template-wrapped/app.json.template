@@ -1,0 +1,53 @@
+{
+  "id": "<id>",
+  "title": { "he": "<שם בעברית>", "en": "<Name>" },
+  "layer": 3,
+  "kind": "service",
+  "version": "0.1.0",
+  "summary": {
+    "he": "<הלקוח הרשמי של … בתוך הלשכה: מסך בקונסול, ו-CLI, API וזרימה על אותה כניסה>",
+    "en": "<The official … client inside the office: its screen in the console, and the CLI, the API and the flow on the same sign-in>"
+  },
+  "wraps": {
+    "client": "<Vendor client> for Linux, from <the vendor's repository> (Dockerfile.desktop)",
+    "headless": "<the vendor's CLI or library>"
+  },
+  "capabilities": [
+    {
+      "name": "<capability>",
+      "type": "protocol",
+      "interface": "<interface>.v1",
+      "endpoint": "http://<id>:<adapter port>",
+      "required_ops": ["health"]
+    }
+  ],
+  "use": [{ "capability": "identity", "strength": "requires", "after": true }],
+  "compose": "docker-compose.yml",
+  "cli": { "alias": "<short name>" },
+  "agent": { "context": "AGENT.md" },
+  "routing": [
+    {
+      "host": "<id>",
+      "port": 3000,
+      "auth": "sso",
+      "service": "<id>-desktop",
+      "emit_labels": true,
+      "module": {
+        "group": "ראשי", "icon": "monitor", "embed": true, "alias": "<id>", "id": "<id>",
+        "name": "<שם בעברית>", "desc": "<משפט אחד: מה האפליקציה עושה>",
+        "url": "http://<id>-desktop:3000/",
+        "passthrough": [{ "path": "/api", "transport": "websocket", "match": "prefix", "strip_mount_prefix": true }]
+      },
+      "sso": {
+        "slug": "<id>",
+        "display_name": "<Name>",
+        "default_host": "<id>.localhost",
+        "base_url_env": "<ID>_BASE_URL",
+        "local_twin": true
+      }
+    }
+  ],
+  "health": { "structural": "auto", "probe": { "http": "http://<id>:<adapter port>/v1/health", "interval": "30s" } },
+  "data": { "volumes": ["<id>_home"], "on_uninstall": "keep" },
+  "resources": { "cpus": "1.6", "memory": "1824m" }
+}

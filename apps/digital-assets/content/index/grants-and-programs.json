@@ -1,0 +1,1053 @@
+{
+ "topic": "grants-and-programs",
+ "checked": "2026-11-05",
+ "notes": "Method: official issuer pages opened in a real browser on 2026-11-05 (innovationisrael.org.il and gov.il block plain HTTP fetches with 403; sba.org.il opened fine). The Innovation Authority 'open for submission' list and program pages were read in full; dates shown are the 'next submission date' the site printed that day. Grade A here means the issuing government body's own page (no filing/register exists for grants); B = dated press; C = vendor's own site (cloud-credit programmes, global, not Israeli-specific). Pages rarely print a date, so source_date is null with a note. Limits: the session's WebSearch budget ran out mid-research (so tax incentives such as accelerated depreciation, Israel Export Institute digital programmes, Negev/Galilee local programmes and the Ministry of Economy productivity grants were not verified and are listed as 'unverified' in rejected); the Hazenek/R&D programmes are startup- and manufacturing-R&D-oriented, not SME digital-adoption grants – the only live SME digital/AI grant found (SBA computerization 35% up to ₪350k) closed 2026-08-25 and recurs. Press said it was open on 2026-07-29 while the official page says closed – the official page wins.",
+ "rows": [
+  {
+   "id": "iia-tnufa",
+   "name_he": "מסלול תנופה – קרן ההזנק",
+   "name_en": "Tnufa track (Startup Fund)",
+   "url": "https://innovationisrael.org.il/programs/%d7%9e%d7%a1%d7%9c%d7%95%d7%9c-%d7%aa%d7%a0%d7%95%d7%a4%d7%94-%d7%a7%d7%a8%d7%9f-%d7%94%d7%94%d7%96%d7%a0%d7%a7/",
+   "category": "innovation-grant",
+   "summary_he": "מענק ליזם או לקבוצת יזמים בשלב מוקדם לבניית אב־טיפוס, הגנה על קניין רוחני והוכחת היתכנות טכנולוגית. אינו מממן שכר ותקורות.",
+   "why_israeli": "רשות החדשנות – גוף ממשלתי ישראלי; פתוח ליזמים תושבי ישראל ולחברות לפי ההנחיות (דף המסלול)",
+   "issuer": "רשות החדשנות",
+   "kind": "grant",
+   "who_for": "יזמים בראשית הדרך (תושבי ישראל) או חברות, בכל תחומי הטכנולוגיה",
+   "amount": {
+    "text": "עד 80% מהתקציב המאושר ועד ₪200,000 ל־12 חודשים; התקציב המבוקש לא יעלה על ₪250,000",
+    "grade": "A",
+    "source_url": "https://innovationisrael.org.il/programs/%d7%9e%d7%a1%d7%9c%d7%95%d7%9c-%d7%aa%d7%a0%d7%95%d7%a4%d7%94-%d7%a7%d7%a8%d7%9f-%d7%94%d7%94%d7%96%d7%a0%d7%a7/",
+    "source_date": null,
+    "date": null,
+    "note": "דף המסלול אינו נושא תאריך; נקרא ב־2026-11-05"
+   },
+   "status": "open",
+   "deadline": "2026-11-09",
+   "deadline_note": "מועד ההגשה הקרוב לפי רשימת «פתוחים להגשה»: 09/11/2026 12:00",
+   "how_to_apply_url": "https://innovationisrael.org.il/programs/%d7%9e%d7%a1%d7%9c%d7%95%d7%9c-%d7%aa%d7%a0%d7%95%d7%a4%d7%94-%d7%a7%d7%a8%d7%9f-%d7%94%d7%94%d7%96%d7%a0%d7%a7/",
+   "sources": [
+    {
+     "url": "https://innovationisrael.org.il/programs/%d7%9e%d7%a1%d7%9c%d7%95%d7%9c-%d7%aa%d7%a0%d7%95%d7%a4%d7%94-%d7%a7%d7%a8%d7%9f-%d7%94%d7%94%d7%96%d7%a0%d7%a7/",
+     "date": null,
+     "what": "דף המסלול הרשמי: זכאות, שיעור המענק והתקרה",
+     "grade": "A"
+    },
+    {
+     "url": "https://innovationisrael.org.il/%D7%A4%D7%AA%D7%95%D7%97%D7%99%D7%9D-%D7%9C%D7%94%D7%92%D7%A9%D7%94/",
+     "date": "2026-11-05",
+     "what": "רשימת «פתוחים להגשה» (נקראה ב־5.11.2026): מועד הגשה קרוב 09/11/2026 12:00",
+     "grade": "A"
+    }
+   ],
+   "grade": "A",
+   "verified_at": "2026-11-05"
+  },
+  {
+   "id": "iia-technology-incubators",
+   "name_he": "מסלול חממות טכנולוגיות 2020 – קרן החממות הטכנולוגיות",
+   "name_en": "Technological Incubators track (2020)",
+   "url": "https://innovationisrael.org.il/programs/%d7%97%d7%9e%d7%9e%d7%95%d7%aa-%d7%98%d7%9b%d7%a0%d7%95%d7%9c%d7%95%d7%92%d7%99%d7%95%d7%aa/",
+   "category": "startup-funding",
+   "summary_he": "יזם או חוקר מקים חברת הזנק בתוך חממה טכנולוגית. המענק מממן את החברה בשתי תקופות פעילות, והחממה מוסיפה הנחיה עסקית וטכנולוגית ומשרדים.",
+   "why_israeli": "רשות החדשנות – גוף ממשלתי ישראלי; חברות הזנק ישראליות חדשות בבעלות יזמים פרטיים (דף המסלול)",
+   "issuer": "רשות החדשנות",
+   "kind": "accelerator",
+   "who_for": "יזמים פרטיים וחוקרים/מוסדות מחקר שמקימים חברת הזנק בתחום טכנולוגי מורכב ובסיכון גבוה באמצעות חממה",
+   "amount": {
+    "text": "עד 85% מתקציב מאושר של עד ₪1.5 מיליון להוכחת היתכנות; עד 85% מתקציב של ₪2–3.5 מיליון בתקופה ראשונה; 50%–85% מתקציב של ₪1–2.5 מיליון בתקופה שנייה",
+    "grade": "A",
+    "source_url": "https://innovationisrael.org.il/programs/%d7%97%d7%9e%d7%9e%d7%95%d7%aa-%d7%98%d7%9b%d7%a0%d7%95%d7%9c%d7%95%d7%92%d7%99%d7%95%d7%aa/",
+    "source_date": null,
+    "date": null,
+    "note": "דף המסלול אינו נושא תאריך"
+   },
+   "status": "open",
+   "deadline": "2026-11-09",
+   "deadline_note": "מועד ההגשה הקרוב לפי רשימת «פתוחים להגשה»: 09/11/2026 12:00",
+   "how_to_apply_url": "https://innovationisrael.org.il/programs/%d7%97%d7%9e%d7%9e%d7%95%d7%aa-%d7%98%d7%9b%d7%a0%d7%95%d7%9c%d7%95%d7%92%d7%99%d7%95%d7%aa/",
+   "sources": [
+    {
+     "url": "https://innovationisrael.org.il/programs/%d7%97%d7%9e%d7%9e%d7%95%d7%aa-%d7%98%d7%9b%d7%a0%d7%95%d7%9c%d7%95%d7%92%d7%99%d7%95%d7%aa/",
+     "date": null,
+     "what": "דף המסלול הרשמי: זכאות ושיעורי מענק",
+     "grade": "A"
+    },
+    {
+     "url": "https://innovationisrael.org.il/%D7%A4%D7%AA%D7%95%D7%97%D7%99%D7%9D-%D7%9C%D7%94%D7%92%D7%A9%D7%94/",
+     "date": "2026-11-05",
+     "what": "רשימת «פתוחים להגשה»: 09/11/2026 12:00",
+     "grade": "A"
+    }
+   ],
+   "grade": "A",
+   "verified_at": "2026-11-05"
+  },
+  {
+   "id": "iia-innovation-labs",
+   "name_he": "מסלול מעבדות לחדשנות טכנולוגית",
+   "name_en": "Technological Innovation Labs track",
+   "url": "https://innovationisrael.org.il/programs/%d7%9e%d7%a1%d7%9c%d7%95%d7%9c-%d7%9e%d7%a2%d7%91%d7%93%d7%95%d7%aa-%d7%9c%d7%97%d7%93%d7%a9%d7%a0%d7%95%d7%aa-%d7%98%d7%9b%d7%a0%d7%95%d7%9c%d7%95%d7%92%d7%99%d7%aa/",
+   "category": "startup-funding",
+   "summary_he": "יזמים וחברות הזנק מקבלים מענק ותשתית ממעבדה שמפעיל תאגיד, כדי לבצע POC ולגבש מוצר. הגשה להשקעה במעבדה אפשרית לאורך כל השנה.",
+   "why_israeli": "רשות החדשנות – גוף ממשלתי ישראלי; המעבדות מופעלות בישראל על ידי תאגידים ישראליים וזרים (דף המסלול)",
+   "issuer": "רשות החדשנות",
+   "kind": "grant",
+   "who_for": "יזמים וחברות הזנק בראשית דרכם בעלי רעיון טכנולוגי בתחומי ההתמחות של המעבדות",
+   "amount": {
+    "text": "עד 85% מהתקציב המאושר ועד תקציב של ₪1 מיליון לשנה; עד 50% מתקציב של ₪1 מיליון לשנה נוספת",
+    "grade": "A",
+    "source_url": "https://innovationisrael.org.il/programs/%d7%9e%d7%a1%d7%9c%d7%95%d7%9c-%d7%9e%d7%a2%d7%91%d7%93%d7%95%d7%aa-%d7%9c%d7%97%d7%93%d7%a9%d7%a0%d7%95%d7%aa-%d7%98%d7%9b%d7%a0%d7%95%d7%9c%d7%95%d7%92%d7%99%d7%aa/",
+    "source_date": null,
+    "date": null,
+    "note": "דף המסלול אינו נושא תאריך"
+   },
+   "status": "recurring",
+   "deadline": "rolling",
+   "deadline_note": "בדף רשימת המסלולים: «חברות ויזמים יכולים להגיש בקשה להשקעה במעבדה כל השנה»; ברשימת «פתוחים להגשה» מופיע 09/11/2026 12:00 (כנראה קול קורא לתאגידים מפעילים)",
+   "how_to_apply_url": "https://innovationisrael.org.il/programs/%d7%9e%d7%a1%d7%9c%d7%95%d7%9c-%d7%9e%d7%a2%d7%91%d7%93%d7%95%d7%aa-%d7%9c%d7%97%d7%93%d7%a9%d7%a0%d7%95%d7%aa-%d7%98%d7%9b%d7%a0%d7%95%d7%9c%d7%95%d7%92%d7%99%d7%aa/",
+   "sources": [
+    {
+     "url": "https://innovationisrael.org.il/programs/%d7%9e%d7%a1%d7%9c%d7%95%d7%9c-%d7%9e%d7%a2%d7%91%d7%93%d7%95%d7%aa-%d7%9c%d7%97%d7%93%d7%a9%d7%a0%d7%95%d7%aa-%d7%98%d7%9b%d7%a0%d7%95%d7%9c%d7%95%d7%92%d7%99%d7%aa/",
+     "date": null,
+     "what": "דף המסלול הרשמי: זכאות ושיעורי מענק",
+     "grade": "A"
+    },
+    {
+     "url": "https://innovationisrael.org.il/programs/",
+     "date": "2026-11-05",
+     "what": "רשימת המסלולים של רשות החדשנות (נקראה ב־5.11.2026): הגשה כל השנה",
+     "grade": "A"
+    }
+   ],
+   "grade": "A",
+   "verified_at": "2026-11-05"
+  },
+  {
+   "id": "iia-preseed",
+   "name_he": "מסלול Pre-Seed – קרן ההזנק",
+   "name_en": "Pre-Seed track (Startup Fund)",
+   "url": "https://innovationisrael.org.il/programs/preseed/",
+   "category": "startup-funding",
+   "summary_he": "הרשות משתתפת בסבב השקעה פרטי בחברת הזנק בשלב מוקדם מאוד, כדי להקטין סיכון למשקיעים. המענק מנוכה מגובה הסבב.",
+   "why_israeli": "רשות החדשנות – גוף ממשלתי ישראלי; המסלול מיועד לחברות הזנק ישראליות (דף המסלול)",
+   "issuer": "רשות החדשנות",
+   "kind": "grant",
+   "who_for": "חברות הזנק ישראליות שגייסו עד ₪3 מיליון מיום ההתאגדות והכנסותיהן עד ₪300 אלף בשנה האחרונה",
+   "amount": {
+    "text": "60% מגובה סבב ההשקעה ועד ₪2,000,000; ₪2,200,000 לחברה מועדפת (יזם מאוכלוסייה בתת־ייצוג בהייטק או אזור פיתוח א׳)",
+    "grade": "A",
+    "source_url": "https://innovationisrael.org.il/programs/preseed/",
+    "source_date": null,
+    "date": null,
+    "note": "דף המסלול מציין שבתאריך 15.7.26 יחולו בו שינויים; הנוסח שנקרא ב־2026-11-05 הוא העדכני באתר"
+   },
+   "status": "open",
+   "deadline": "2026-11-09",
+   "deadline_note": "מועד ההגשה הקרוב: 09/11/2026 12:00",
+   "how_to_apply_url": "https://innovationisrael.org.il/programs/preseed/",
+   "sources": [
+    {
+     "url": "https://innovationisrael.org.il/programs/preseed/",
+     "date": null,
+     "what": "דף המסלול הרשמי: זכאות, שיעור ותקרה",
+     "grade": "A"
+    },
+    {
+     "url": "https://innovationisrael.org.il/programs/",
+     "date": "2026-11-05",
+     "what": "«תאריך ההגשה הבא: 09/11/2026»",
+     "grade": "A"
+    }
+   ],
+   "grade": "A",
+   "verified_at": "2026-11-05"
+  },
+  {
+   "id": "iia-seed",
+   "name_he": "מסלול Seed – קרן ההזנק",
+   "name_en": "Seed track (Startup Fund)",
+   "url": "https://innovationisrael.org.il/programs/seed/",
+   "category": "startup-funding",
+   "summary_he": "הרשות משתתפת כשותפה בסבב השקעה Seed בחברת הזנק עתירת מו״פ, עם אישור מראש למענק רב־שנתי בשיעור קבוע.",
+   "why_israeli": "רשות החדשנות – גוף ממשלתי ישראלי; מיועד לחברות הזנק ישראליות (דף המסלול)",
+   "issuer": "רשות החדשנות",
+   "kind": "grant",
+   "who_for": "חברות הזנק ישראליות שגייסו עד ₪15 מיליון מיום ההתאגדות והכנסותיהן עד ₪3 מיליון בשנה האחרונה",
+   "amount": {
+    "text": "50% מגובה סבב ההשקעה ועד ₪6 מיליון; ₪6.6 מיליון לחברה מועדפת; ₪7.2 מיליון כשהמו״פ בשדרות או בעוטף עזה",
+    "grade": "A",
+    "source_url": "https://innovationisrael.org.il/programs/seed/",
+    "source_date": null,
+    "date": null,
+    "note": "דף המסלול אינו נושא תאריך"
+   },
+   "status": "open",
+   "deadline": "2026-11-26",
+   "deadline_note": "מועד ההגשה הקרוב: 26/11/2026 12:00",
+   "how_to_apply_url": "https://innovationisrael.org.il/programs/seed/",
+   "sources": [
+    {
+     "url": "https://innovationisrael.org.il/programs/seed/",
+     "date": null,
+     "what": "דף המסלול הרשמי: זכאות, שיעור ותקרה",
+     "grade": "A"
+    },
+    {
+     "url": "https://innovationisrael.org.il/%D7%A4%D7%AA%D7%95%D7%97%D7%99%D7%9D-%D7%9C%D7%94%D7%92%D7%A9%D7%94/",
+     "date": "2026-11-05",
+     "what": "רשימת «פתוחים להגשה»: 26/11/2026 12:00",
+     "grade": "A"
+    }
+   ],
+   "grade": "A",
+   "verified_at": "2026-11-05"
+  },
+  {
+   "id": "iia-round-a",
+   "name_he": "מסלול Round A – קרן ההזנק",
+   "name_en": "Round A track (Startup Fund)",
+   "url": "https://innovationisrael.org.il/programs/rounda/",
+   "category": "startup-funding",
+   "summary_he": "הרשות משתתפת בסבב Round A של חברת הזנק עתירת מו״פ, כדי להרחיב את מקורות המימון ולסנכרן בין גיוס ההון לגיוס המענק.",
+   "why_israeli": "רשות החדשנות – גוף ממשלתי ישראלי; מיועד לחברות הזנק ישראליות (דף המסלול)",
+   "issuer": "רשות החדשנות",
+   "kind": "grant",
+   "who_for": "חברות הזנק ישראליות בשלב Round A (תקרת הגיוס המצטבר לפי דף המסלול)",
+   "amount": {
+    "text": "30% מגובה סבב ההשקעה ועד ₪15 מיליון; ₪16.5 מיליון לחברה באזור פיתוח א׳",
+    "grade": "A",
+    "source_url": "https://innovationisrael.org.il/programs/rounda/",
+    "source_date": null,
+    "date": null,
+    "note": "דף המסלול אינו נושא תאריך"
+   },
+   "status": "open",
+   "deadline": "2026-11-26",
+   "deadline_note": "מועד ההגשה הקרוב: 26/11/2026 12:00",
+   "how_to_apply_url": "https://innovationisrael.org.il/programs/rounda/",
+   "sources": [
+    {
+     "url": "https://innovationisrael.org.il/programs/rounda/",
+     "date": null,
+     "what": "דף המסלול הרשמי: שיעור ותקרה",
+     "grade": "A"
+    },
+    {
+     "url": "https://innovationisrael.org.il/%D7%A4%D7%AA%D7%95%D7%97%D7%99%D7%9D-%D7%9C%D7%94%D7%92%D7%A9%D7%94/",
+     "date": "2026-11-05",
+     "what": "רשימת «פתוחים להגשה»: 26/11/2026 12:00",
+     "grade": "A"
+    }
+   ],
+   "grade": "A",
+   "verified_at": "2026-11-05"
+  },
+  {
+   "id": "iia-runway-fast-track",
+   "name_he": "מסלול מהיר להארכת ה־Runway – קרן המו״פ",
+   "name_en": "Fast track to extend runway (R&D Fund) – startups and early growth",
+   "url": "https://innovationisrael.org.il/programs/fast-track-startups/",
+   "category": "startup-funding",
+   "summary_he": "מסלול מואץ לחברות טכנולוגיה עם Runway קצר: מענק שמאריך את אופק השרידות בהשלמת מימון מצד שלישי, עם ועדה שמתכנסת מדי שבוע.",
+   "why_israeli": "רשות החדשנות – גוף ממשלתי ישראלי; מיועד לחברות טכנולוגיה ישראליות (דפי המסלולים)",
+   "issuer": "רשות החדשנות",
+   "kind": "grant",
+   "who_for": "חברות טכנולוגיה ישראליות מתחילות עם Runway של עד 12 חודשים ונכסים משמעותיים; מסלול נפרד לחברות צמיחה מוקדמת",
+   "amount": {
+    "text": "33% או 50% מההוצאות הצפויות בתקופת ההארכה (חודשיים–שלושה חודשי פעילות): תקרה ₪2 מיליון לחברות מתחילות, ₪15 מיליון לצמיחה מוקדמת; דרוש מימון משלים",
+    "grade": "A",
+    "source_url": "https://innovationisrael.org.il/programs/fast-track-startups/",
+    "source_date": null,
+    "date": null,
+    "note": "תקרת ₪15 מיליון מדף https://innovationisrael.org.il/programs/fast-track-early-growth/"
+   },
+   "status": "open",
+   "deadline": "2026-11-19",
+   "deadline_note": "הגשה שוטפת עם ועדה שבועית; בשני דפי המסלולים נכתב «המסלול ייסגר ב־19/11/2026»",
+   "how_to_apply_url": "https://innovationisrael.org.il/programs/fast-track-startups/",
+   "sources": [
+    {
+     "url": "https://innovationisrael.org.il/programs/fast-track-startups/",
+     "date": null,
+     "what": "דף מסלול חברות מתחילות: תנאים, שיעורים, מועד סגירה 19/11/2026",
+     "grade": "A"
+    },
+    {
+     "url": "https://innovationisrael.org.il/programs/fast-track-early-growth/",
+     "date": null,
+     "what": "דף מסלול צמיחה מוקדמת: תקרה ₪15 מיליון, מועד סגירה 19/11/2026",
+     "grade": "A"
+    }
+   ],
+   "grade": "A",
+   "verified_at": "2026-11-05"
+  },
+  {
+   "id": "iia-mofet-dev-to-manufacturing",
+   "name_he": "מסלול מעבר מפיתוח לייצור – קרן מופ״ת",
+   "name_en": "Development-to-manufacturing track (MOFET fund)",
+   "url": "https://innovationisrael.org.il/programs/rnd-fund-manufacturing-industry/",
+   "category": "industry-rnd",
+   "summary_he": "מימון מו״פ לפיתוח תהליך הייצור של מוצר חדשני בחברת תעשייה מוטת טכנולוגיה, בשלב הקמת קו הייצור – כולל פתרונות ייצור ממוכנים.",
+   "why_israeli": "רשות החדשנות – גוף ממשלתי ישראלי; מיועד לחברות תעשייה בעלות מתקן ייצור בישראל (דפי המסלול והקול הקורא)",
+   "issuer": "רשות החדשנות",
+   "kind": "grant",
+   "who_for": "חברות תעשייה מוטות טכנולוגיה (כהגדרתן במסלול) שפיתחו מוצר חדשני ברמה עולמית ומקימות קו ייצור",
+   "amount": {
+    "text": "40% מהתקציב המאושר: עד ₪3 מיליון (תקציב עד ₪7.5 מיליון ל־12 חודשים) או עד ₪6 מיליון (תקציב עד ₪15 מיליון ל־24 חודשים); תוספת 10% מהמענק כשרוב התוכנית באזורי פיתוח א׳ וב׳",
+    "grade": "A",
+    "source_url": "https://innovationisrael.org.il/programs/rnd-fund-manufacturing-industry/",
+    "source_date": null,
+    "date": null,
+    "note": "דף המסלול אינו נושא תאריך"
+   },
+   "status": "open",
+   "deadline": "2026-11-23",
+   "deadline_note": "מועד ההגשה הקרוב: 23/11/2026 12:00 (הקול הקורא rnd-to-manufacturing-2026)",
+   "how_to_apply_url": "https://innovationisrael.org.il/kol_kore/rnd-to-manufacturing-2026/",
+   "sources": [
+    {
+     "url": "https://innovationisrael.org.il/programs/rnd-fund-manufacturing-industry/",
+     "date": null,
+     "what": "דף המסלול: סכומים ושיעורים",
+     "grade": "A"
+    },
+    {
+     "url": "https://innovationisrael.org.il/%D7%A4%D7%AA%D7%95%D7%97%D7%99%D7%9D-%D7%9C%D7%94%D7%92%D7%A9%D7%94/",
+     "date": "2026-11-05",
+     "what": "רשימת «פתוחים להגשה»: קול קורא למעבר מפיתוח לייצור, 23/11/2026 12:00",
+     "grade": "A"
+    }
+   ],
+   "grade": "A",
+   "verified_at": "2026-11-05"
+  },
+  {
+   "id": "iia-mofet-ideation",
+   "name_he": "מסלול רעיונאות – קרן מופ״ת",
+   "name_en": "Ideation track (MOFET fund)",
+   "url": "https://innovationisrael.org.il/programs/product-discovery-mofet-fund/",
+   "category": "industry-rnd",
+   "summary_he": "שלב ראשון בסולם מענקים לחברות תעשייה: איתור רעיון למוצר חדשני בליווי מאיץ מופ״ת. בהמשך אפשר לעבור להיתכנות טכנו־כלכלית ולפיתוח מוצר.",
+   "why_israeli": "רשות החדשנות – גוף ממשלתי ישראלי; מיועד לחברות תעשייה בעלות מתקן ייצור בישראל (דף המסלול)",
+   "issuer": "רשות החדשנות",
+   "kind": "grant",
+   "who_for": "חברות תעשייה מוטות ייצור (לפחות 50% מההכנסות מייצור במתקן בישראל, כפי שמפורט במסלול) שמגישות יחד עם מאיץ מופ״ת",
+   "amount": {
+    "text": "תקציב עד ₪250,000 במימון של 80% ל־12 חודשים",
+    "grade": "A",
+    "source_url": "https://innovationisrael.org.il/programs/product-discovery-mofet-fund/",
+    "source_date": null,
+    "date": null,
+    "note": "דף המסלול אינו נושא תאריך"
+   },
+   "status": "open",
+   "deadline": "2026-12-27",
+   "deadline_note": "מועד ההגשה הקרוב לפי רשימת המסלולים: 27/12/2026 (גם למסלולי פיתוח מוצר והיתכנות טכנו־כלכלית של מופ״ת)",
+   "how_to_apply_url": "https://innovationisrael.org.il/programs/product-discovery-mofet-fund/",
+   "sources": [
+    {
+     "url": "https://innovationisrael.org.il/programs/product-discovery-mofet-fund/",
+     "date": null,
+     "what": "דף המסלול: תקציב, שיעור מימון ותנאי סף",
+     "grade": "A"
+    },
+    {
+     "url": "https://innovationisrael.org.il/programs/",
+     "date": "2026-11-05",
+     "what": "«תאריך ההגשה הבא: 27/12/2026»",
+     "grade": "A"
+    }
+   ],
+   "grade": "A",
+   "verified_at": "2026-11-05"
+  },
+  {
+   "id": "iia-horizon-europe-erano",
+   "name_he": "Horizon Europe ותכניות במימון משותף (ERA-NET) – ISERD",
+   "name_en": "Horizon Europe and co-funded programmes (ERA-NET) via the Innovation Authority",
+   "url": "https://innovationisrael.org.il/programs/%d7%aa%d7%9b%d7%a0%d7%99%d7%aa-horizon-europe-%d7%95%d7%aa%d7%9b%d7%a0%d7%99%d7%95%d7%aa-%d7%a0%d7%9c%d7%95%d7%95%d7%aa-%d7%91%d7%9e%d7%99%d7%9e%d7%95%d7%9f-%d7%9e%d7%a9%d7%95%d7%aa%d7%a3-era-net/",
+   "category": "international-rnd",
+   "summary_he": "רשות החדשנות מסייעת לחברות וגופי מחקר ישראליים להצטרף לפרויקטי מו״פ אירופיים, כולל ה־EIC Accelerator לחברות קטנות ובינוניות פורצות דרך.",
+   "why_israeli": "רשות החדשנות מפעילה את הממשק הישראלי לתוכנית (דף המסלול); המענק עצמו ניתן על ידי האיחוד האירופי",
+   "issuer": "רשות החדשנות (ISERD) / האיחוד האירופי",
+   "kind": "grant",
+   "who_for": "חברות, חברות הזנק, אקדמיה, משרדי ממשלה, בתי חולים, רשויות ומלכ״רים; חברות קטנות ובינוניות דרך EIC Accelerator",
+   "amount": {
+    "text": "אחוזי מימון של 87.5%–125% לפרויקט לפי דף המסלול, ללא ויתור על קניין רוחני וללא חובת תמלוגים",
+    "grade": "A",
+    "source_url": "https://innovationisrael.org.il/programs/%d7%aa%d7%9b%d7%a0%d7%99%d7%aa-horizon-europe-%d7%95%d7%aa%d7%9b%d7%a0%d7%99%d7%95%d7%aa-%d7%a0%d7%9c%d7%95%d7%95%d7%aa-%d7%91%d7%9e%d7%99%d7%9e%d7%95%d7%9f-%d7%9e%d7%a9%d7%95%d7%aa%d7%a3-era-net/",
+    "source_date": null,
+    "date": null,
+    "note": "הטווח כפי שהוא מופיע בדף; מועדי הקולות הקוראים נקבעים בבריסל לכל קול קורא"
+   },
+   "status": "recurring",
+   "deadline": "rolling",
+   "deadline_note": "בדף המסלולים: «המסלול פתוח כל השנה»; לכל קול קורא אירופי מועד משלו",
+   "how_to_apply_url": "https://innovationisrael.org.il/programs/%d7%aa%d7%9b%d7%a0%d7%99%d7%aa-horizon-europe-%d7%95%d7%aa%d7%9b%d7%a0%d7%99%d7%95%d7%aa-%d7%a0%d7%9c%d7%95%d7%95%d7%aa-%d7%91%d7%9e%d7%99%d7%9e%d7%95%d7%9f-%d7%9e%d7%a9%d7%95%d7%aa%d7%a3-era-net/",
+   "sources": [
+    {
+     "url": "https://innovationisrael.org.il/programs/%d7%aa%d7%9b%d7%a0%d7%99%d7%aa-horizon-europe-%d7%95%d7%aa%d7%9b%d7%a0%d7%99%d7%95%d7%aa-%d7%a0%d7%9c%d7%95%d7%95%d7%aa-%d7%91%d7%9e%d7%99%d7%9e%d7%95%d7%9f-%d7%9e%d7%a9%d7%95%d7%aa%d7%a3-era-net/",
+     "date": null,
+     "what": "דף המסלול הרשמי: זכאות, שיעורי מימון, EIC Accelerator",
+     "grade": "A"
+    },
+    {
+     "url": "https://innovationisrael.org.il/programs/",
+     "date": "2026-11-05",
+     "what": "רשימת המסלולים: «המסלול פתוח כל השנה»",
+     "grade": "A"
+    }
+   ],
+   "grade": "A",
+   "verified_at": "2026-11-05"
+  },
+  {
+   "id": "iia-bilateral-rnd-funds",
+   "name_he": "מסלול קרנות דו־לאומיות (BIRD ואחרות)",
+   "name_en": "Bi-national R&D funds track (BIRD and others)",
+   "url": "https://innovationisrael.org.il/programs/%d7%9e%d7%a1%d7%9c%d7%95%d7%9c-%d7%a7%d7%a8%d7%a0%d7%95%d7%aa-%d7%93%d7%95-%d7%9c%d7%90%d7%95%d7%9e%d7%99%d7%95%d7%aa/",
+   "category": "international-rnd",
+   "summary_he": "מימון משותף לפיתוח מוצר או טכנולוגיה עם שותף בינלאומי מארה״ב, הודו, סינגפור או קוריאה, וסיוע באיתור השותף הזר.",
+   "why_israeli": "רשות החדשנות – גוף ממשלתי ישראלי; חברות טכנולוגיה ישראליות עם שותף זר (דף המסלול)",
+   "issuer": "רשות החדשנות",
+   "kind": "grant",
+   "who_for": "חברות טכנולוגיה ישראליות בכל ענף שמפתחות או משדרגות מוצר עם שותף בארה״ב, הודו, סינגפור או קוריאה",
+   "amount": {
+    "text": "השקעה של עד 50% מהוצאות מו״פ מאושרות; ב־BIRD עד 50% מהתקציב המשותף ותקרת מענק של מיליון דולר (1.5 מיליון דולר במקרים מיוחדים)",
+    "grade": "A",
+    "source_url": "https://innovationisrael.org.il/programs/%d7%9e%d7%a1%d7%9c%d7%95%d7%9c-%d7%a7%d7%a8%d7%a0%d7%95%d7%aa-%d7%93%d7%95-%d7%9c%d7%90%d7%95%d7%9e%d7%99%d7%95%d7%aa/",
+    "source_date": null,
+    "date": null,
+    "note": "דף המסלול אינו נושא תאריך"
+   },
+   "status": "recurring",
+   "deadline": null,
+   "deadline_note": "«פתוח להגשה בהתאם למדינות השונות ולקולות הקוראים»; קולות קוראים לקוריאה, סינגפור והודו נסגרו ב־2026 (ראו rejected)",
+   "how_to_apply_url": "https://innovationisrael.org.il/programs/%d7%9e%d7%a1%d7%9c%d7%95%d7%9c-%d7%a7%d7%a8%d7%a0%d7%95%d7%aa-%d7%93%d7%95-%d7%9c%d7%90%d7%95%d7%9e%d7%99%d7%95%d7%aa/",
+   "sources": [
+    {
+     "url": "https://innovationisrael.org.il/programs/%d7%9e%d7%a1%d7%9c%d7%95%d7%9c-%d7%a7%d7%a8%d7%a0%d7%95%d7%aa-%d7%93%d7%95-%d7%9c%d7%90%d7%95%d7%9e%d7%99%d7%95%d7%aa/",
+     "date": null,
+     "what": "דף המסלול הרשמי: שיעורי מימון ותקרות",
+     "grade": "A"
+    },
+    {
+     "url": "https://innovationisrael.org.il/programs/",
+     "date": "2026-11-05",
+     "what": "רשימת המסלולים: פתוח בהתאם לקולות הקוראים",
+     "grade": "A"
+    }
+   ],
+   "grade": "A",
+   "verified_at": "2026-11-05"
+  },
+  {
+   "id": "iia-rnd-labs-databases",
+   "name_he": "מסלול מעבדות מו״פ ומאגרי מידע – קרן תשתיות המו״פ",
+   "name_en": "R&D labs and databases for industry (R&D Infrastructure Fund)",
+   "url": "https://innovationisrael.org.il/programs/rdlabsanddatabasesforindustry/",
+   "category": "industry-rnd",
+   "summary_he": "מימון הקמה ותפעול של מעבדת מו״פ או מאגר מידע ייעודי שישרתו כמה תאגידים בתעשייה, כשתשתית כזו אינה זמינה בישראל.",
+   "why_israeli": "רשות החדשנות – גוף ממשלתי ישראלי; תאגידים תעשייתיים הפועלים בישראל (דף המסלול)",
+   "issuer": "רשות החדשנות",
+   "kind": "grant",
+   "who_for": "חברה יחידה או תאגידים תעשייתיים שמקימים מעבדת מו״פ או מאגר מידע לשירות תאגידים אחרים בתעשייה",
+   "amount": {
+    "text": "מענק של 55% או 66% מהתקציב המאושר: תאגיד תעשייתי – תקציב עד ₪5 מיליון עד 3 שנים; קבוצת משתמשים – עד 6 שנים",
+    "grade": "A",
+    "source_url": "https://innovationisrael.org.il/programs/rdlabsanddatabasesforindustry/",
+    "source_date": null,
+    "date": null,
+    "note": "דף המסלול אינו נושא תאריך"
+   },
+   "status": "open",
+   "deadline": "rolling",
+   "deadline_note": "«המסלול פתוח להגשות»; אפשר גם להגיש כמענה לקול קורא בנושא ייעודי",
+   "how_to_apply_url": "https://innovationisrael.org.il/programs/rdlabsanddatabasesforindustry/",
+   "sources": [
+    {
+     "url": "https://innovationisrael.org.il/programs/rdlabsanddatabasesforindustry/",
+     "date": null,
+     "what": "דף המסלול הרשמי: זכאות ושיעורי מענק",
+     "grade": "A"
+    },
+    {
+     "url": "https://innovationisrael.org.il/programs/",
+     "date": "2026-11-05",
+     "what": "רשימת המסלולים: «המסלול פתוח להגשות»",
+     "grade": "A"
+    }
+   ],
+   "grade": "A",
+   "verified_at": "2026-11-05"
+  },
+  {
+   "id": "iia-nebius-ai-compute-vouchers",
+   "name_he": "מסלול שוברים לאימון מודלים גדולים: נביוס – קרן המו״פ",
+   "name_en": "Large-model training vouchers: Nebius (R&D Fund)",
+   "url": "https://innovationisrael.org.il/kol_kore/vouchers-nebius-rd-labs/",
+   "category": "ai-compute",
+   "summary_he": "שוברים להנחה במשאבי חישוב של נביוס (מאיצי Nvidia) לאימון מודלי בינה מלאכותית גדולים בתאגידים תעשייתיים בשלב פיתוח מוצר.",
+   "why_israeli": "רשות החדשנות – גוף ממשלתי ישראלי; ההנחה ניתנת לתאגידים תעשייתיים שהמו״פ שלהם מתבצע בישראל (הקול הקורא)",
+   "issuer": "רשות החדשנות",
+   "kind": "credits",
+   "who_for": "תאגידים תעשייתיים שמפתחים מוצר מבוסס בינה מלאכותית, גם אם לא הגישו בקשה לאחד ממסלולי המענקים",
+   "amount": {
+    "text": "שובר לשימוש במאיצי החישוב של נביוס בעלות מופחתת ב־30% ממחיר השוק; מינימום 16 מאיצי Nvidia; שימוש של חודש עד שישה חודשים",
+    "grade": "A",
+    "source_url": "https://innovationisrael.org.il/kol_kore/vouchers-nebius-rd-labs/",
+    "source_date": null,
+    "date": null,
+    "note": "הקול הקורא אינו נושא תאריך פרסום; היצע החישוב החודשי מתעדכן בדף"
+   },
+   "status": "open",
+   "deadline": "2026-12-10",
+   "deadline_note": "מועדי הגשה: 10/12/2026 ו־07/01/2027 (12:00)",
+   "how_to_apply_url": "https://innovationisrael.org.il/kol_kore/vouchers-nebius-rd-labs/",
+   "sources": [
+    {
+     "url": "https://innovationisrael.org.il/kol_kore/vouchers-nebius-rd-labs/",
+     "date": null,
+     "what": "הקול הקורא: הנחה של 30%, תנאי סף, מועדי הגשה 10/12/2026 ו־07/01/2027",
+     "grade": "A"
+    }
+   ],
+   "grade": "A",
+   "verified_at": "2026-11-05"
+  },
+  {
+   "id": "iia-pilot-sites",
+   "name_he": "מסלול אתרי הרצה – קרן תשתיות המו״פ",
+   "name_en": "Pilot (Beta) sites track (R&D Infrastructure Fund)",
+   "url": "https://innovationisrael.org.il/programs/establishment-of-pilot-sites/",
+   "category": "open-innovation",
+   "summary_he": "תאגידים וארגונים גדולים מקבלים מענק על הקמה ותפעול של אתר הרצה שבו חברות טכנולוגיה מנסות את הפתרונות שלהן בסביבת ייצור אמיתית.",
+   "why_israeli": "רשות החדשנות – גוף ממשלתי ישראלי; תאגידים רשומים ופועלים בישראל (דף המסלול)",
+   "issuer": "רשות החדשנות",
+   "kind": "grant",
+   "who_for": "תאגידים וארגונים גדולים הפועלים בישראל (חברות פרטיות, רב־לאומיות וממשלתיות) שמפעילים ומנגישים אתרי הרצה",
+   "amount": {
+    "text": "מענק של 50% מהתקציב המאושר (כוח אדם, חומרים, קבלני משנה, ציוד ייעודי, שיווק)",
+    "grade": "A",
+    "source_url": "https://innovationisrael.org.il/programs/establishment-of-pilot-sites/",
+    "source_date": null,
+    "date": null,
+    "note": "דף המסלול אינו נושא תאריך"
+   },
+   "status": "open",
+   "deadline": "2026-11-26",
+   "deadline_note": "מועד ההגשה הקרוב: 26/11/2026 12:00",
+   "how_to_apply_url": "https://innovationisrael.org.il/kol_kore/tech-pilot-sites/",
+   "sources": [
+    {
+     "url": "https://innovationisrael.org.il/programs/establishment-of-pilot-sites/",
+     "date": null,
+     "what": "דף המסלול: שיעור מענק ותנאים",
+     "grade": "A"
+    },
+    {
+     "url": "https://innovationisrael.org.il/%D7%A4%D7%AA%D7%95%D7%97%D7%99%D7%9D-%D7%9C%D7%94%D7%92%D7%A9%D7%94/",
+     "date": "2026-11-05",
+     "what": "רשימת «פתוחים להגשה»: 26/11/2026 12:00",
+     "grade": "A"
+    }
+   ],
+   "grade": "A",
+   "verified_at": "2026-11-05"
+  },
+  {
+   "id": "iia-human-capital-fund",
+   "name_he": "קרן ההון האנושי להייטק",
+   "name_en": "Human Capital Fund for High-Tech",
+   "url": "https://innovationisrael.org.il/programs/%d7%a7%d7%a8%d7%9f-%d7%94%d7%94%d7%95%d7%9f-%d7%94%d7%90%d7%a0%d7%95%d7%a9%d7%99-%d7%9c%d7%94%d7%99%d7%99%d7%98%d7%a7/",
+   "category": "talent-training",
+   "summary_he": "מימון תוכניות הכשרה וקליטת כוח אדם בהייטק. ההגשה פתוחה רק כשיש קול קורא פעיל, ושיעור המענק יורד ככל שהתקציב גדל.",
+   "why_israeli": "רשות החדשנות – גוף ממשלתי ישראלי (דף המסלול)",
+   "issuer": "רשות החדשנות",
+   "kind": "training",
+   "who_for": "חברות ומלכ״רים, לפי קולות קוראים פתוחים בלבד",
+   "amount": {
+    "text": "70% מתקציב מאושר של עד ₪1,000,000; 50% מתקציב של ₪1–5 מיליון",
+    "grade": "A",
+    "source_url": "https://innovationisrael.org.il/programs/%d7%a7%d7%a8%d7%9f-%d7%94%d7%94%d7%95%d7%9f-%d7%94%d7%90%d7%a0%d7%95%d7%a9%d7%99-%d7%9c%d7%94%d7%99%d7%99%d7%98%d7%a7/",
+    "source_date": null,
+    "date": null,
+    "note": "דף המסלול אינו נושא תאריך; לא נמצא קול קורא פתוח ברשימת «פתוחים להגשה» ב־5.11.2026"
+   },
+   "status": "recurring",
+   "deadline": null,
+   "deadline_note": "«פתוח להגשות בכפוף לקולות קוראים פתוחים בלבד»",
+   "how_to_apply_url": "https://innovationisrael.org.il/programs/%d7%a7%d7%a8%d7%9f-%d7%94%d7%94%d7%95%d7%9f-%d7%94%d7%90%d7%a0%d7%95%d7%a9%d7%99-%d7%9c%d7%94%d7%99%d7%99%d7%98%d7%a7/",
+   "sources": [
+    {
+     "url": "https://innovationisrael.org.il/programs/%d7%a7%d7%a8%d7%9f-%d7%94%d7%94%d7%95%d7%9f-%d7%94%d7%90%d7%a0%d7%95%d7%a9%d7%99-%d7%9c%d7%94%d7%99%d7%99%d7%98%d7%a7/",
+     "date": null,
+     "what": "דף המסלול: שיעורי מימון וסטטוס הגשה",
+     "grade": "A"
+    }
+   ],
+   "grade": "A",
+   "verified_at": "2026-11-05"
+  },
+  {
+   "id": "sba-subsidised-business-consulting",
+   "name_he": "ייעוץ עסקי מסובסד – הסוכנות לעסקים קטנים ובינוניים (מעוף)",
+   "name_en": "Subsidised business consulting – Small and Medium Business Agency (Maof)",
+   "url": "https://www.sba.org.il/hb/AidPrograms/Pages/pr1.aspx",
+   "category": "consulting",
+   "summary_he": "חבילות שעות ייעוץ עסקי בסבסוד ממשלתי אצל יועצים מרשימה מאושרת. התהליך מקוון בפורטל הלקוחות, ויש מסלולים בעלות מופחתת או ללא עלות לקבוצות מוגדרות.",
+   "why_israeli": "הסוכנות לעסקים קטנים ובינוניים במשרד הכלכלה והתעשייה – גוף ממשלתי ישראלי; ההרשמה בהזדהות לאומית",
+   "issuer": "הסוכנות לעסקים קטנים ובינוניים",
+   "kind": "subsidised-consulting",
+   "who_for": "עצמאים, יזמים בתחילת הדרך, עסקים קטנים ובינוניים (עד 100 עובדים או מחזור עד ₪100 מיליון) שלא מימשו זכאות לשעות ייעוץ בעבר",
+   "amount": {
+    "text": "חבילות ייעוץ של 15–60 שעות; עלות לשעה בחבילה הראשונה ₪80–130 + מע״מ; מסלול ללא עלות למשרתי מילואים ומסלולי עלות מופחתת לחבל תקומה ולצפון",
+    "grade": "A",
+    "source_url": "https://www.sba.org.il/hb/AidPrograms/Pages/pr1.aspx",
+    "source_date": null,
+    "date": null,
+    "note": "הדף אינו נושא תאריך; נכתב בו שהתוכנית מיועדת למי שלא מימש זכאות בין 1.6.2014 ל־31.5.2026"
+   },
+   "status": "open",
+   "deadline": "rolling",
+   "deadline_note": "הגשה שוטפת בפורטל הלקוחות; כרגע זמין לביצוע ממחשב בלבד",
+   "how_to_apply_url": "https://sbacustomerportal.economy.gov.il/s/",
+   "sources": [
+    {
+     "url": "https://www.sba.org.il/hb/AidPrograms/Pages/pr1.aspx",
+     "date": null,
+     "what": "דף התוכנית הרשמי: היקף סיוע, עלות לשעה, זכאות והזדהות לאומית",
+     "grade": "A"
+    }
+   ],
+   "grade": "A",
+   "verified_at": "2026-11-05"
+  },
+  {
+   "id": "state-guaranteed-loan-fund",
+   "name_he": "הקרן להלוואות בערבות מדינה לעסקים קטנים ובינוניים",
+   "name_en": "State-guaranteed loan fund for small and medium businesses",
+   "url": "https://www.sba.org.il/hb/AidPrograms/Pages/pr10.aspx",
+   "category": "loan",
+   "summary_he": "הלוואה מבנק או מחברת אשראי בערבות מדינה לעסק שלא היה מקבל אשראי בלעדיה. אפשר לממן הון חוזר, השקעה בציוד ותשתיות והקמה.",
+   "why_israeli": "אגף החשב הכללי במשרד האוצר בשיתוף הסוכנות לעסקים קטנים ובינוניים – גופים ממשלתיים ישראליים",
+   "issuer": "אגף החשב הכללי (משרד האוצר) והסוכנות לעסקים קטנים ובינוניים",
+   "kind": "loan",
+   "who_for": "יזמים ועסקים בעלי מחזור עד ₪100 מיליון; מסלולים לתעשיינים, יצואנים, חקלאים, עסקים בהקמה ועוד",
+   "amount": {
+    "text": "המסלול הכללי: עד ₪500,000 או 8% ממחזור המכירות (הגבוה), ביטחונות עד 15%, החזר עד 5 שנים עם אפשרות לדחיית התשלום הראשון בחצי שנה; מסלול השקעות לתעשייה עד 90% מההשקעה או 15% מהמחזור",
+    "grade": "A",
+    "source_url": "https://www.sba.org.il/hb/AidPrograms/Pages/pr10.aspx",
+    "source_date": null,
+    "date": null,
+    "note": "הדף אינו נושא תאריך; הריבית נקבעת בידי נותן האשראי ועוברת אישור ועדת האשראי של הקרן"
+   },
+   "status": "open",
+   "deadline": "rolling",
+   "deadline_note": "הגשה שוטפת דרך אחד הגופים המתאמים של הקרן; ההלוואה ניתנת דרך בנקים וחברות אשראי",
+   "how_to_apply_url": "https://govextra.gov.il/mof-gloans",
+   "sources": [
+    {
+     "url": "https://www.sba.org.il/hb/AidPrograms/Pages/pr10.aspx",
+     "date": null,
+     "what": "דף התוכנית: מסלולים, סכומים, ביטחונות, גופים מתאמים ונותני אשראי",
+     "grade": "A"
+    },
+    {
+     "url": "https://www.bizportal.co.il/financialconsumerism/news/article/20037509",
+     "date": "2026-08-01",
+     "what": "כתבה בביזפורטל (1.8.2026): מחזור עד ₪100 מיליון, הלוואה עד ₪500 אלף או 8% מהמחזור",
+     "grade": "B"
+    }
+   ],
+   "grade": "A",
+   "verified_at": "2026-11-05"
+  },
+  {
+   "id": "state-guaranteed-loan-tkuma-track",
+   "name_he": "מסלול תקומה – הלוואה בערבות מדינה",
+   "name_en": "Tkuma track – state-guaranteed loan",
+   "url": "https://www.sba.org.il/hb/AidPrograms/Pages/pr10.aspx",
+   "category": "loan",
+   "summary_he": "מסלול הלוואה בערבות מדינה לעסקים ביישובי חבל תקומה, למעתיקים אליהם פעילות ולמקימי עסק חדש שם. חלון הגשה קבוע מראש.",
+   "why_israeli": "אגף החשב הכללי במשרד האוצר והסוכנות לעסקים קטנים ובינוניים; מיועד ליישובי חבל תקומה בישראל",
+   "issuer": "אגף החשב הכללי (משרד האוצר) והסוכנות לעסקים קטנים ובינוניים",
+   "kind": "loan",
+   "who_for": "עסקים ביישובי חבל תקומה, עסקים שמעתיקים אליהם פעילות ועסקים חדשים באזור",
+   "amount": {
+    "text": "עד ₪500,000 או 8% ממחזור המכירות (לא כולל מע״מ), הגבוה מביניהם; ריבית משתנה של פריים + 1%",
+    "grade": "A",
+    "source_url": "https://www.sba.org.il/hb/AidPrograms/Pages/pr10.aspx",
+    "source_date": null,
+    "date": null,
+    "note": "הדף אינו נושא תאריך"
+   },
+   "status": "open",
+   "deadline": "2027-06-30",
+   "deadline_note": "הגשת בקשות מ־1.9.2026 עד 30.6.2027",
+   "how_to_apply_url": "https://govextra.gov.il/mof-gloans",
+   "sources": [
+    {
+     "url": "https://www.sba.org.il/hb/AidPrograms/Pages/pr10.aspx",
+     "date": null,
+     "what": "דף התוכנית: מסלול תקומה, ריבית, חלון הגשה 1.9.26–30.6.27",
+     "grade": "A"
+    }
+   ],
+   "grade": "A",
+   "verified_at": "2026-11-05"
+  },
+  {
+   "id": "moe-capital-investment-grants",
+   "name_he": "מסלול מענקים לפי החוק לעידוד השקעות הון",
+   "name_en": "Grants track under the Law for the Encouragement of Capital Investments",
+   "url": "https://www.gov.il/he/service/aid_to_encourage_investments",
+   "category": "capital-investment-grant",
+   "summary_he": "מענק על ציוד יצרני, מבנים ורכוש קבוע שנרכשים במסגרת תוכנית שאושרה למפעל תעשייתי מייצא באזור פיתוח א׳. ההגשה מקוונת וכרוכה באגרה.",
+   "why_israeli": "משרד הכלכלה והתעשייה – הרשות להשקעות ולפיתוח התעשייה והכלכלה; מבוסס על חוק ישראלי (התשי״ט־1959)",
+   "issuer": "משרד הכלכלה והתעשייה – הרשות להשקעות ולפיתוח התעשייה והכלכלה",
+   "kind": "grant",
+   "who_for": "תאגיד שהוא מפעל תעשייתי, ממוקם באזור פיתוח א׳, מוגדר «בר־תחרות» ומייצא לחו״ל (פטור מיצוא בביוטכנולוגיה וננוטכנולוגיה באישור רשות החדשנות)",
+   "amount": {
+    "text": "20% מסך ההשקעות המאושרות בתוכנית העסקית; תוספת של עד 10% למפעלים בנגב, שדרות, עוטף עזה ובצפון (אשכול פריפריאלי 1–4); אגרת טיפול ₪2,000–10,000 לפי גובה ההשקעה",
+    "grade": "A",
+    "source_url": "https://www.gov.il/he/service/aid_to_encourage_investments",
+    "source_date": null,
+    "date": null,
+    "note": "דף השירות אינו נושא תאריך"
+   },
+   "status": "open",
+   "deadline": "rolling",
+   "deadline_note": "תאגיד עם תוכנית קודמת יכול להגיש שוב רק אחרי תום השנה הקלנדרית שבה קיבל אישור ביצוע סופי",
+   "how_to_apply_url": "https://www.gov.il/he/service/aid_to_encourage_investments",
+   "sources": [
+    {
+     "url": "https://www.gov.il/he/service/aid_to_encourage_investments",
+     "date": null,
+     "what": "דף השירות הרשמי: תנאי סף, שיעור מענק, אגרה, הגשה במערכת «קלכלית»",
+     "grade": "A"
+    }
+   ],
+   "grade": "A",
+   "verified_at": "2026-11-05"
+  },
+  {
+   "id": "sba-maof-courses-and-ai-webinars",
+   "name_he": "קורסים ווובינרים של מעוף – כולל סדרת סוכני AI בשבוע היזמות 2026",
+   "name_en": "Maof courses and webinars – including the AI-agents series for Entrepreneurship Week 2026",
+   "url": "https://www.sba.org.il/hb/Pages/YazamutWeek.aspx",
+   "category": "training",
+   "summary_he": "סדרת וובינרים על סוכני בינה מלאכותית בעסק (15–19.11.2026) ועוד וובינרים לבעלי עסקים עד סוף נובמבר, לצד קורסים מקוונים ללמידה עצמית.",
+   "why_israeli": "הסוכנות לעסקים קטנים ובינוניים במשרד הכלכלה והתעשייה – גוף ממשלתי ישראלי; ההדרכות בעברית",
+   "issuer": "הסוכנות לעסקים קטנים ובינוניים",
+   "kind": "training",
+   "who_for": "בעלי עסקים קטנים ובינוניים ויזמים",
+   "amount": null,
+   "status": "open",
+   "deadline": "2026-11-19",
+   "deadline_note": "מפגשי סדרת ה־AI: 15–19.11.2026; וובינרים נוספים עד 30.11.2026. הדף אינו מציין עלות להשתתפות (הקורס «המסע שלי ליזמות» מוגדר כחינמי)",
+   "how_to_apply_url": "https://www.sba.org.il/hb/Pages/YazamutWeek.aspx",
+   "sources": [
+    {
+     "url": "https://www.sba.org.il/hb/Pages/YazamutWeek.aspx",
+     "date": "2026-11-05",
+     "what": "לוח הוובינרים של שבוע היזמות 2026 (נקרא ב־5.11.2026)",
+     "grade": "A"
+    },
+    {
+     "url": "https://www.sba.org.il/hb/MaofServices/courses/Pages/default.aspx",
+     "date": "2026-11-05",
+     "what": "עמוד הקורסים וההדרכות של מעוף",
+     "grade": "A"
+    }
+   ],
+   "grade": "A",
+   "verified_at": "2026-11-05"
+  },
+  {
+   "id": "google-for-startups-cloud-program",
+   "name_he": "Google for Startups Cloud Program",
+   "name_en": "Google for Startups Cloud Program",
+   "url": "https://cloud.google.com/startup",
+   "category": "cloud-credits",
+   "summary_he": "קרדיטים לענן של גוגל לסטארטאפים בשלבי Pre-Seed עד Series A, כולל קרדיטים למודלי Gemini, הדרכות ושנת Workspace.",
+   "why_israeli": "תוכנית עולמית של Google; אינה ייחודית לישראל (העמוד שנקרא אינו מפרט רשימת מדינות) – סטארטאפים ישראליים מגישים כמו כל אחד",
+   "issuer": "Google Cloud",
+   "kind": "credits",
+   "who_for": "סטארטאפים בשלב Pre-Seed עד Series A שנוסדו ב־3–5 השנים האחרונות; מסלול נפרד לבונים ללא גיוס",
+   "amount": {
+    "text": "עד $350,000 בקרדיטי ענן לאורך שנתיים",
+    "grade": "C",
+    "source_url": "https://cloud.google.com/startup",
+    "source_date": null,
+    "date": null,
+    "note": "אתר החברה; העמוד אינו נושא תאריך"
+   },
+   "status": "open",
+   "deadline": "rolling",
+   "how_to_apply_url": "https://cloud.google.com/startup",
+   "sources": [
+    {
+     "url": "https://cloud.google.com/startup",
+     "date": null,
+     "what": "דף התוכנית של Google: קרדיטים, זכאות",
+     "grade": "C"
+    }
+   ],
+   "grade": "C",
+   "verified_at": "2026-11-05"
+  },
+  {
+   "id": "aws-activate",
+   "name_he": "AWS Activate",
+   "name_en": "AWS Activate",
+   "url": "https://aws.amazon.com/activate/",
+   "category": "cloud-credits",
+   "summary_he": "קרדיטי AWS וליווי מקצועי לסטארטאפים; ניתנים לתשתיות, שירותי נתונים ומודלי בינה מלאכותית, כולל מודלי צד שלישי ב־Amazon Bedrock.",
+   "why_israeli": "תוכנית עולמית של Amazon Web Services; אינה ייחודית לישראל (העמוד שנקרא אינו מפרט מדינות או תנאי זכאות)",
+   "issuer": "Amazon Web Services",
+   "kind": "credits",
+   "who_for": "סטארטאפים (תנאי הזכאות מפורטים בדף ההרשמה, לא בעמוד שנקרא)",
+   "amount": {
+    "text": "עד $200,000 בקרדיטי AWS Activate",
+    "grade": "C",
+    "source_url": "https://aws.amazon.com/activate/",
+    "source_date": null,
+    "date": null,
+    "note": "אתר החברה; העמוד אינו נושא תאריך ואינו מפרט דרגות"
+   },
+   "status": "open",
+   "deadline": "rolling",
+   "how_to_apply_url": "https://aws.amazon.com/activate/",
+   "sources": [
+    {
+     "url": "https://aws.amazon.com/activate/",
+     "date": null,
+     "what": "דף התוכנית של AWS: הסכום המרבי ושימושי הקרדיטים",
+     "grade": "C"
+    }
+   ],
+   "grade": "C",
+   "verified_at": "2026-11-05"
+  },
+  {
+   "id": "microsoft-for-startups",
+   "name_he": "Microsoft for Startups",
+   "name_en": "Microsoft for Startups",
+   "url": "https://www.microsoft.com/en-us/startups",
+   "category": "cloud-credits",
+   "summary_he": "קרדיטי Azure לסטארטאפים שמפתחים ומגדילים מוצר, יחד עם כלי בינה מלאכותית לפיתוח תוכנה. פרטי הזכאות נמצאים בדף ההצטרפות.",
+   "why_israeli": "תוכנית עולמית של Microsoft; אינה ייחודית לישראל (העמוד שנקרא מציג רק גרסת ארה״ב ואינו מפרט מדינות)",
+   "issuer": "Microsoft",
+   "kind": "credits",
+   "who_for": "סטארטאפים (תנאי הזכאות אינם מופיעים בעמוד שנקרא)",
+   "amount": {
+    "text": "עד $150,000 בקרדיטים לשירותי Azure",
+    "grade": "C",
+    "source_url": "https://www.microsoft.com/en-us/startups",
+    "source_date": null,
+    "date": null,
+    "note": "אתר החברה; העמוד אינו נושא תאריך ואינו מפרט דרגות; העמוד אינו מזכיר את השם Founders Hub"
+   },
+   "status": "open",
+   "deadline": "rolling",
+   "how_to_apply_url": "https://www.microsoft.com/en-us/startups",
+   "sources": [
+    {
+     "url": "https://www.microsoft.com/en-us/startups",
+     "date": null,
+     "what": "דף התוכנית של Microsoft: «up to $150,000 in credits»",
+     "grade": "C"
+    }
+   ],
+   "grade": "C",
+   "verified_at": "2026-11-05"
+  },
+  {
+   "id": "nvidia-inception",
+   "name_he": "NVIDIA Inception",
+   "name_en": "NVIDIA Inception",
+   "url": "https://www.nvidia.com/en-us/startups/",
+   "category": "cloud-credits",
+   "summary_he": "תוכנית חינמית לסטארטאפים בתחום הבינה המלאכותית: קרדיטי ענן מ־NVIDIA ושותפים, הנחות על חומרה ותוכנה וקורסי הדרכה. אין תשלום ואין דרישת הון.",
+   "why_israeli": "תוכנית עולמית של NVIDIA; אינה ייחודית לישראל (העמוד שנקרא אינו מפרט רשימת מדינות)",
+   "issuer": "NVIDIA",
+   "kind": "credits",
+   "who_for": "סטארטאפים רשומים כחוק, בני פחות מ־10 שנים, עם אתר פעיל ושימוש ברור בטכנולוגיית NVIDIA; לא ייעוץ/פיתוח חיצוני, קריפטו, ספקי ענן, משווקים וחברות ציבוריות",
+   "amount": {
+    "text": "חינם להצטרפות; קרדיטי ענן והנחות ללא סכום קבוע בעמוד",
+    "grade": "C",
+    "source_url": "https://www.nvidia.com/en-us/startups/",
+    "source_date": null,
+    "date": null,
+    "note": "אתר החברה; העמוד אינו נושא תאריך ואינו מציין סכום קרדיט"
+   },
+   "status": "open",
+   "deadline": "rolling",
+   "how_to_apply_url": "https://www.nvidia.com/en-us/startups/",
+   "sources": [
+    {
+     "url": "https://www.nvidia.com/en-us/startups/",
+     "date": null,
+     "what": "דף התוכנית של NVIDIA: הטבות, זכאות, עלות",
+     "grade": "C"
+    }
+   ],
+   "grade": "C",
+   "verified_at": "2026-11-05"
+  }
+ ],
+ "rejected": [
+  {
+   "id": "sba-computerization-program-4-56",
+   "name_he": "תכנית לקידום המחשוב לעסקים קטנים ובינוניים (הנחיה 4.56)",
+   "issuer": "הסוכנות לעסקים קטנים ובינוניים",
+   "reason": "closed – הדף הרשמי: «ניתן להגיש בקשות עד 25.8.2026 – ההגשה הסתיימה». מימון 35% מעלות פרויקט מחשוב, עד ₪350,000, גם לאוטומציה, בקרה, ניהול מלאי ומערכות מכירות/שיווק; חומרה עד 30%. תוכנית חוזרת – שווה לעקוב אחר סבב הבא",
+   "closed_on": "2026-08-25",
+   "source_url": "https://www.sba.org.il/hb/AidPrograms/Pages/pr52.aspx",
+   "extra_sources": [
+    "https://www.ice.co.il/consumerism/news/article/1123139 (כתבה מ־29.7.2026: תקציב ₪9 מיליון, מחזור עד ₪100 מיליון)",
+    "https://www.gov.il/BlobFolder/policy/economy_dgi_instructions_04_56/he/instructions_4-56_4-56-130726.pdf (הוראת מנכ״ל 4.56 מיולי 2026)"
+   ]
+  },
+  {
+   "id": "iia-incubators-operators-fund",
+   "name_he": "קרן החממות הטכנולוגיות – הקמת חממות",
+   "issuer": "רשות החדשנות",
+   "reason": "closed",
+   "closed_on": "2026-10-08",
+   "source_url": "https://innovationisrael.org.il/programs/technological-incubators-funding-program/"
+  },
+  {
+   "id": "iia-cip-china",
+   "name_he": "מסלול CIP – חדירה לשוק הסיני",
+   "issuer": "רשות החדשנות",
+   "reason": "closed",
+   "closed_on": "2026-07-21",
+   "source_url": "https://innovationisrael.org.il/programs/%d7%9e%d7%a1%d7%9c%d7%95%d7%9c-cip/"
+  },
+  {
+   "id": "iia-korea-israel-fund",
+   "name_he": "מסלול קרן קוריאה–ישראל",
+   "issuer": "רשות החדשנות",
+   "reason": "closed",
+   "closed_on": "2026-08-05",
+   "source_url": "https://innovationisrael.org.il/programs/%d7%9e%d7%a1%d7%9c%d7%95%d7%9c-%d7%a7%d7%a8%d7%9f-%d7%a7%d7%95%d7%a8%d7%99%d7%90%d7%94-%d7%99%d7%a9%d7%a8%d7%90%d7%9c/"
+  },
+  {
+   "id": "iia-singapore-siird",
+   "name_he": "מסלול קרן ישראל–סינגפור SIIRD",
+   "issuer": "רשות החדשנות",
+   "reason": "closed",
+   "closed_on": "2026-07-30",
+   "source_url": "https://innovationisrael.org.il/programs/%d7%9e%d7%a1%d7%9c%d7%95%d7%9c-%d7%a7%d7%a8%d7%9f-%d7%99%d7%a9%d7%a8%d7%90%d7%9c-%d7%a1%d7%99%d7%a0%d7%92%d7%a4%d7%95%d7%a8-siird/"
+  },
+  {
+   "id": "iia-india-i4f",
+   "name_he": "מסלול קרן ישראל–הודו I4F",
+   "issuer": "רשות החדשנות",
+   "reason": "closed",
+   "closed_on": "2026-06-01",
+   "source_url": "https://innovationisrael.org.il/programs/%d7%9e%d7%a1%d7%9c%d7%95%d7%9c-%d7%a7%d7%a8%d7%9f-%d7%99%d7%a9%d7%a8%d7%90%d7%9c-%d7%94%d7%95%d7%93%d7%95-i4f/"
+  },
+  {
+   "id": "iia-regulatory-pilot",
+   "name_he": "מסלול פיילוט רגולטורי – קרן הפיילוטים",
+   "issuer": "רשות החדשנות",
+   "reason": "closed",
+   "closed_on": "2026-04-14",
+   "source_url": "https://innovationisrael.org.il/programs/regularoty-pilots/"
+  },
+  {
+   "id": "iia-rnd-fund-follow-up",
+   "name_he": "מסלול לבקשות המשך של קרן המו״פ",
+   "issuer": "רשות החדשנות",
+   "reason": "closed",
+   "closed_on": "2025-09-25",
+   "source_url": "https://innovationisrael.org.il/programs/%d7%9e%d7%a1%d7%9c%d7%95%d7%9c-%d7%a7%d7%a8%d7%9f-%d7%94%d7%9e%d7%95%d7%a4/"
+  },
+  {
+   "id": "iia-mofet-accelerators",
+   "name_he": "מסלול להקמת מאיצי מופ״ת – קרן מאיצי החדשנות",
+   "issuer": "רשות החדשנות",
+   "reason": "closed",
+   "closed_on": "2025-09-17",
+   "source_url": "https://innovationisrael.org.il/programs/manufacturing-industry-accelerators/"
+  },
+  {
+   "id": "iia-innovation-centers",
+   "name_he": "מסלול להקמת מרכזי חדשנות טכנולוגית – קרן מאיצי החדשנות",
+   "issuer": "רשות החדשנות",
+   "reason": "closed",
+   "closed_on": "2025-10-26",
+   "source_url": "https://innovationisrael.org.il/programs/%d7%9e%d7%a1%d7%9c%d7%95%d7%9c-%d7%9c%d7%94%d7%a7%d7%9e%d7%aa-%d7%9e%d7%a8%d7%9b%d7%96%d7%99-%d7%97%d7%93%d7%a9%d7%a0%d7%95%d7%aa-%d7%98%d7%9b%d7%a0%d7%95%d7%9c%d7%95%d7%92%d7%99%d7%aa-%d7%a7%d7%a8/"
+  },
+  {
+   "id": "labor-employment-innovation-grants",
+   "name_he": "מענקי חדשנות בתעסוקה",
+   "issuer": "משרד העבודה",
+   "reason": "closed – «הסתיים מועד הגשת הבקשות למענק במסגרת מסלול זה»; גם אינו מענק דיגיטל לעסקים (מיזמים לקידום תעסוקה); תאריך הסגירה אינו מופיע בדף",
+   "closed_on": null,
+   "source_url": "https://www.gov.il/he/service/application-innovation-grants"
+  },
+  {
+   "id": "iia-periphery-tech-employment",
+   "name_he": "הזנק להייטק – שלוחות הייטק בנגב ובגליל",
+   "issuer": "רשות החדשנות ומשרד הנגב, הגליל והחוסן הלאומי",
+   "reason": "closed – הודעה לעיתונות מ־28.8.2024; קול קורא מקביל של הרשות להשקעות נסגר ב־16.9.2024",
+   "closed_on": "2024-09-16",
+   "source_url": "https://innovationisrael.org.il/press_release/peripherytechemployment/"
+  },
+  {
+   "id": "iia-ai-human-capital-rnd-call",
+   "name_he": "קול קורא לקידום הון אנושי בתפקידי מו״פ מבוססי בינה מלאכותית",
+   "issuer": "רשות החדשנות ושירות התעסוקה",
+   "reason": "closed – לפי תקציר חיפוש (העמוד עצמו לא נפתח): מועד ההגשה 16/08/2026; עמוד נוסף מציג 07/09/2026 – שניהם חלפו",
+   "closed_on": "2026-08-16",
+   "source_url": "https://innovationisrael.org.il/kol_kore/ai-based-human-capital-rnd/"
+  },
+  {
+   "id": "state-guaranteed-loan-north-track",
+   "name_he": "מסלול צפון – הלוואה בערבות מדינה",
+   "issuer": "אגף החשב הכללי והסוכנות לעסקים קטנים ובינוניים",
+   "reason": "unclear – בדף הסוכנות המסלול מופיע (פריים + 0.25%, עסקים 0–9 ק״מ מגבול לבנון) ללא תאריך סיום; לפי דף בנק לאומי שנראה בתוצאות חיפוש החלון היה 6.8.2025–30.9.2026 ולכן כנראה חלף",
+   "closed_on": "2026-09-30",
+   "source_url": "https://www.sba.org.il/hb/AidPrograms/Pages/pr10.aspx"
+  },
+  {
+   "id": "unverified-border-communities-acceleration",
+   "name_he": "תוכנית האצה לעסקים ביישובי קו הגבול בצפון (50% מעלויות, ₪18 מיליון ל־2026–2027)",
+   "issuer": "הסוכנות לעסקים קטנים ובינוניים",
+   "reason": "unverified – נראה רק בתקציר חיפוש של כתבה בכיפה; לא נפתח מקור רשמי",
+   "closed_on": null,
+   "source_url": null
+  },
+  {
+   "id": "unverified-accelerated-depreciation",
+   "name_he": "פחת מואץ לתוכנה ולמחשבים (רשות המסים)",
+   "issuer": "רשות המסים בישראל",
+   "reason": "unverified – לא נמצא מקור רשמי שנפתח; מכסת החיפוש של הסשן נגמרה לפני שנבדק",
+   "closed_on": null,
+   "source_url": null
+  },
+  {
+   "id": "unverified-export-institute-digital",
+   "name_he": "תוכניות יצוא דיגיטלי של מכון היצוא הישראלי",
+   "issuer": "מכון היצוא",
+   "reason": "unverified – חיפוש אחד לא החזיר תוכנית ישראלית עדכנית ל־2026; לא נבדק באתר המכון",
+   "closed_on": null,
+   "source_url": null
+  },
+  {
+   "id": "unverified-negev-development-authority",
+   "name_he": "מענקים לעסקים של הרשות לפיתוח הנגב",
+   "issuer": "הרשות לפיתוח הנגב / משרד הנגב, הגליל והחוסן הלאומי",
+   "reason": "unverified – חיפוש אחד לא החזיר מסלול עסקי עדכני ל־2026",
+   "closed_on": null,
+   "source_url": null
+  }
+ ],
+ "title_he": "מענקים ותוכניות לעסקים: דיגיטל, אוטומציה ובינה מלאכותית"
+}

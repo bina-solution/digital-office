@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+#: מריץ CI from the shell — the office's GitHub Actions runner: ./bbox ci-runner status | jobs [n] | queue | pause | resume [--json]
+#:   status   is it up, paused, and what runs now · jobs [n] the last n job events · queue what waits on GitHub
+#:   pause    take no new job (the running one finishes) · resume take jobs again · flow the app's event stream
+#
+# The app's one door to the shell (app.json `cli.fallback`): `./bbox ci-runner <verb>` lands here and runs
+# apps/ci-runner/cli.py inside the app's own container, against its API on loopback — the only caller its writes
+# admit today (server.py says why).
+set -uo pipefail
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
+. "${REPO_ROOT}/scripts/lib.sh"
+
+case "${1:-}" in -h|--help) sed -n 's/^#: \{0,1\}//p' "${BASH_SOURCE[0]}"; exit 0 ;; esac
+running "ci-runner-${DN}" || { echo "[ci-runner] ci-runner does not run on this office — \`./bbox app enable ci-runner\`" >&2; exit 3; }
+dcx exec -T ci-runner python3 /app/cli.py "$@"

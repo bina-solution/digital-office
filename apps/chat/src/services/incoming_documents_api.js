@@ -5,6 +5,7 @@
 
 const axios = require('axios');
 const { CONFIG } = require('../config');
+const { defaultResolver, instanceParams } = require('./indox_instance');
 
 /**
  * Post a document record to the central incoming documents webhook.
@@ -18,7 +19,8 @@ const postIncomingDocumentRecord = async (record) => {
   if (CONFIG.INDOX_API_BASE) {
     const indoxUrl = `${CONFIG.INDOX_API_BASE}${CONFIG.INDOX_API_PREFIX}/documents`;
     try {
-      await axios.post(indoxUrl, payload, { timeout: 30000 });
+      // the instance whose books this document belongs to (indox_instance.js) — never «the first client's»
+      await axios.post(indoxUrl, payload, { timeout: 30000, params: await instanceParams(defaultResolver()) });
       return { posted: true };
     } catch (e) {
       console.warn('[incoming-documents-api] INDOX API post failed, trying fallback webhook if configured:', e.message);

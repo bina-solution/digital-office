@@ -287,6 +287,7 @@ fi
 #      marker lines) so compile round-trips deep-equal — proven 81/81 on this estate before the
 #      flip. The exported JSON is an intermediate here and is DELETED once its .ts exists.
 WRAP="${N8N_DIR}/tooling/wrap.mjs"
+. "${N8N_DIR}/tooling/wrap.sh"   # wrap_run: here, or in n8n's own container on a host with no node (DGO-1746)
 # A blueprint workflow file this instance does NOT hold. Kept, and named at the end (see render_dir).
 KEPT_ABSENT=""; KEPT_ABSENT_N=0
 render_dir() {  # $1 = blueprint dir: render every *.json to *.workflow.ts in place, then rm json
@@ -295,7 +296,11 @@ render_dir() {  # $1 = blueprint dir: render every *.json to *.workflow.ts in pl
   # blueprint is shared, and another office's n8n must never be pointed at this one's.
   ( cd "${REPO_ROOT}" && python3 scripts/link-endpoints-apply --stage "$1" --inverse ) \
     || { echo "[n8n-pull] FATAL: the linked offices' addresses could not be turned back in $1 — JSONs left in place." >&2; exit 1; }
-  if "$(bbox_node)" "${WRAP}" render "$1" "$1" >/dev/null; then
+  # …and the commit a push stamped into each live workflow's meta (DGO-1603) is taken out, meta as it was:
+  # it is the push's record, never source
+  python3 "$(npath "${N8N_DIR}")/tooling/push-guard.py" unstamp "$(npath "$1")" >/dev/null \
+    || { echo "[n8n-pull] FATAL: the push's commit stamp could not be taken out in $1 — JSONs left in place." >&2; exit 1; }
+  if wrap_run render "$1" "$1" >/dev/null; then
     # Remove old .ts for workflows that no longer exist live — but a TRACKED file whose workflow is
     # absent from this export is not automatically stale: this blueprint is SHARED between offices
     # through git, and an office that never imported that workflow would otherwise delete another

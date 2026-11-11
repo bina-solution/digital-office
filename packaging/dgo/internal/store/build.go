@@ -21,13 +21,14 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 	"unicode/utf8"
 
-	"github.com/solomonBoltin/deployment-hacohen/packaging/dgo/internal/compiler"
-	"github.com/solomonBoltin/deployment-hacohen/packaging/dgo/internal/pyval"
-	"github.com/solomonBoltin/deployment-hacohen/packaging/dgo/internal/yamlish"
-	"github.com/solomonBoltin/deployment-hacohen/packaging/trust"
+	"github.com/bina-solution/digital-office/packaging/dgo/internal/compiler"
+	"github.com/bina-solution/digital-office/packaging/dgo/internal/pyval"
+	"github.com/bina-solution/digital-office/packaging/dgo/internal/yamlish"
+	"github.com/bina-solution/digital-office/packaging/trust"
 )
 
 const (
@@ -67,7 +68,7 @@ type Built struct {
 	Platform map[string][]string
 	Doc      trust.IndexDoc // the index document: signed, or the unsigned draft
 	Signed   bool
-	Links    []string // "<id>/<path>" of every link left out of an artifact, never followed
+	Links    []string // "<id>/<path>" of every link left out of an artifact, and "<id>/" of an app folder that is one; never followed
 }
 
 // Build compiles Source's catalog into Out: index.json, its signature (or an unsigned draft) and one
@@ -102,7 +103,28 @@ func Build(o Options) (*Built, error) {
 	if st, err := os.Stat(filepath.Join(o.Source, "apps")); err != nil || !st.IsDir() {
 		return nil, fmt.Errorf("--source %s holds no apps/ — it names the tree that holds apps/ and platform-base/, not catalog.py's directory of app folders", o.Source)
 	}
-	cat, err := compiler.LoadCatalog(o.Source)
+	// apps/ itself a link (DGO-1742): every app is behind it, so nothing is built — in catalog.py's words. Before, git
+	// stopped the build by chance (it cannot list a folder outside the repository) and catalog.py packed the walk.
+	if link, err := folderIsLink(filepath.Join(o.Source, "apps")); err != nil {
+		return nil, err
+	} else if link {
+		return nil, errors.New("apps/ is a link — links are never followed, so nothing was built")
+	}
+	if err := readableApps(filepath.Join(o.Source, "apps")); err != nil {
+		return nil, err
+	}
+	b := &Built{Out: o.Out, Platform: map[string][]string{}}
+	// An app folder that is a link (DGO-1735) is left out before its manifest is read or validated, as catalog.py does
+	// (DGO-1742): behind a link, a manifest the compiler refuses stopped this build where catalog.py built the rest.
+	// The apps/ ones are named; a linked platform-base/ folder only stays out of `platform`, which catalog.py never
+	// writes.
+	cat, err := compiler.LoadCatalogSkipping(o.Source, func(root, dir string) (bool, error) {
+		link, err := folderIsLink(dir)
+		if link && root == "apps" {
+			b.Links = append(b.Links, filepath.Base(dir)+"/")
+		}
+		return link, err
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -115,7 +137,6 @@ func Build(o Options) (*Built, error) {
 	if len(errs) > 0 {
 		return nil, errors.New("MANIFEST VALIDATION FAILED:\n  - " + strings.Join(errs, "\n  - "))
 	}
-	b := &Built{Out: o.Out, Platform: map[string][]string{}}
 	var apps []*compiler.App
 	for _, id := range cat.Order {
 		app := cat.Apps[id]
@@ -656,8 +677,9 @@ type source struct {
 //   - Inside a repository the files are git's, or the build stops. catalog.py turns any git failure
 //     (a refused "dubious ownership", a broken index, no git) into a walk of the directory, which
 //     packs the untracked .env and key.pem beside the app. A walk is for a tree outside any repository.
-//   - A link to a directory is named too: catalog.py's walk descends into a Windows junction, out of
-//     the app, and passes over a symlink to a directory without a word.
+//   - A link to a directory is named too. catalog.py's walk passes over a symlink to a directory without a word.
+//     It used to descend into a Windows junction and pack what it found there. Since DGO-639 it names those
+//     files and leaves them out, as a file under any linked folder is (throughALink).
 //   - Two names that differ only in case are refused: they would collide on a case-folding file
 //     system. catalog.py packs both.
 func sources(dir string) ([]source, []string, error) {
@@ -714,6 +736,7 @@ func sources(dir string) ([]source, []string, error) {
 	sort.Strings(rels)
 	var out []source
 	folded := map[string]string{}
+	seenDirs := map[string]bool{}
 	for i, rel := range rels {
 		if i > 0 && rel == rels[i-1] {
 			continue
@@ -728,6 +751,10 @@ func sources(dir string) ([]source, []string, error) {
 		}
 		if gitMode[rel] == "120000" {
 			links = append(links, rel)
+			continue
+		}
+		if throughALink(dir, parts[:len(parts)-1], seenDirs) {
+			links = append(links, rel) // a folder on the way is a link: the bytes are outside the app (DGO-639)
 			continue
 		}
 		st, err := os.Lstat(filepath.Join(dir, filepath.FromSlash(rel)))
@@ -748,6 +775,98 @@ func sources(dir string) ([]source, []string, error) {
 		out = append(out, source{rel, gitMode[rel] == "100755" || diskExec[rel] || strings.HasPrefix(rel, "hooks/")})
 	}
 	return out, links, nil
+}
+
+// throughALink reports whether a folder on the way to a file is a link on disk (DGO-639). A file git tracks
+// under a folder the working tree has since swapped for a link to somewhere else passes its own Lstat as a
+// regular file, and it resolves through the link, so its bytes come from outside the app. A link here is a
+// symlink or a junction, exactly as catalog.py's _through_a_link reads it. Go reports a junction as a symlink
+// under go.mod's 1.22 rules and as irregular under 1.23's; either way it reads back with Readlink. A cloud
+// placeholder (OneDrive) is irregular too, and is not a link. A folder that is missing, or is a plain file, is
+// not a link either: the file's own Lstat decides, as before. Any other error is never trusted. seen keeps
+// each folder's answer for one build.
+func throughALink(dir string, parents []string, seen map[string]bool) bool {
+	p := ""
+	for _, part := range parents {
+		if p == "" {
+			p = part
+		} else {
+			p += "/" + part
+		}
+		linked, ok := seen[p]
+		if !ok {
+			linked = linkOnDisk(filepath.Join(dir, filepath.FromSlash(p)))
+			seen[p] = linked
+		}
+		if linked {
+			return true
+		}
+	}
+	return false
+}
+
+// linkOnDisk reports whether full is a symlink or a junction, read with Lstat: catalog.py's _link_on_disk. A
+// missing path, or one under a plain file, is not a link; its own read decides. Any other error (EIO on a 9p
+// mount) is never trusted, so it counts as a link: named and left out.
+func linkOnDisk(full string) bool {
+	st, err := os.Lstat(full)
+	switch {
+	case err != nil:
+		return !errors.Is(err, fs.ErrNotExist) && !errors.Is(err, syscall.ENOTDIR)
+	case st.Mode()&os.ModeSymlink != 0:
+		return true
+	case st.Mode()&os.ModeIrregular != 0:
+		// a reparse point under Go 1.23's rules: a junction reads back as a link, and a cloud placeholder
+		// (OneDrive) does not, as catalog.py reads them by their reparse tag
+		_, rerr := os.Readlink(full)
+		return rerr == nil
+	}
+	return false
+}
+
+// folderIsLink is linkOnDisk for a folder the build stands on: the source's apps/ itself, and each app's own folder.
+// A read error is not a link here and is never passed over: the build stops on it and names the folder, so an index
+// is never signed without an app that only failed to read (EIO on a 9p mount, EACCES). DGO-1742; catalog.py's twin
+// is _folder_is_link.
+func folderIsLink(full string) (bool, error) {
+	_, err := os.Lstat(full)
+	if err != nil && !errors.Is(err, fs.ErrNotExist) && !errors.Is(err, syscall.ENOTDIR) {
+		return false, unreadable(full, err)
+	}
+	return linkOnDisk(full), nil
+}
+
+func unreadable(full string, err error) error {
+	var pe *fs.PathError
+	if errors.As(err, &pe) {
+		err = pe.Err
+	}
+	return fmt.Errorf("%s/ cannot be read (%v) — nothing was built", filepath.Base(full), err)
+}
+
+// readableApps: every app folder under apps/ can be asked whether it holds a manifest, or the build stops naming the
+// one that cannot. The glob the catalog loader lists the apps with passes over a folder it cannot open without a word
+// (mode 000, EIO on a 9p mount), so an index would be signed without that app (DGO-1742's second reader). A link is
+// not opened here: the build leaves it out and names it. catalog.py's twin is _readable_apps.
+func readableApps(dir string) error {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		if errors.Is(err, fs.ErrNotExist) {
+			return nil
+		}
+		return unreadable(dir, err)
+	}
+	for _, e := range entries {
+		if e.Type()&fs.ModeSymlink != 0 || !e.IsDir() {
+			continue
+		}
+		folder := filepath.Join(dir, e.Name())
+		if _, err := os.Stat(filepath.Join(folder, "app.json")); err != nil &&
+			!errors.Is(err, fs.ErrNotExist) && !errors.Is(err, syscall.ENOTDIR) {
+			return unreadable(folder, err)
+		}
+	}
+	return nil
 }
 
 // inRepo is git's own question — is dir inside a work tree? — answered without git: a .git

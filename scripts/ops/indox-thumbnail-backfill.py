@@ -94,11 +94,11 @@ if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
 REPO = pathlib.Path(__file__).resolve().parents[2]
-DB_CONTAINER = "supabase-db-shlomo-laptop"
+DB_CONTAINER = "supabase-db-owner-laptop"
 DOCKER_SOCK = "unix:///run/bbox-docker.sock"
-DRIVE_CONTAINER = "drive-shlomo-laptop"
+DRIVE_CONTAINER = "drive-owner-laptop"
 DRIVE_PORT = 8975
-INDOX_CONTAINER = "incoming-documents-shlomo-laptop"
+INDOX_CONTAINER = "incoming-documents-owner-laptop"
 INDOX_PORT = 8080
 #: The blueprint's url_prefix, not the bare path. api/__init__.py:3602 reads it from
 #: INCOMING_DOCS_API_PREFIX and defaults to "/incomingDocuments" — the running container

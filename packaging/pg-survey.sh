@@ -3,7 +3,7 @@
 #
 # A file, not an inline `wsl -- bash -lc` command: the outer Git Bash mangles $( ) and loops.
 set -uo pipefail
-D=shlomo-laptop
+D=owner-laptop
 
 probe() {
   local c="$1" u="$2"

@@ -9,9 +9,9 @@
 
   /* a name takes its direction from its own first letter (dir=auto): a Hebrew name reads
      «שם.pdf» with the dot beside the name, an English one «report.pdf» — and only the stem is cut.
-     A Hebrew name whose stem ENDS in Latin («תמלול — fpg106.txt») is one left-to-right run at its
-     end: its extension is written inside the stem, so it reads «fpg106.txt — תמלול» as plain text
-     does — as a box of its own the dot turned and the line read «txt.fpg106 — תמלול» (FPG-385) */
+     A Hebrew name whose stem ENDS in Latin («תמלול — exf106.txt») is one left-to-right run at its
+     end: its extension is written inside the stem, so it reads «exf106.txt — תמלול» as plain text
+     does — as a box of its own the dot turned and the line read «txt.exf106 — תמלול» (EXF-385) */
   const firstStrong = (s, back) => {
     const a = [...String(s)];
     for (const ch of back ? a.reverse() : a) {
@@ -111,6 +111,9 @@
     ];
     const folder = one && one.kind === "folder", sys = items.some((i) => i.system);
     const starred = items.every((i) => i.starred);
+    // what the drive shown can do (api/folders `connection`): not every drive keeps a star
+    const conn = state.connection, can = (op) => !conn || (conn.optional_ops || []).includes(op);
+    const remote = !!conn && conn.protocol && conn.protocol !== "drive_local";
     const out = [];
     if (one) out.push({ icon: folder ? "folder" : "eye", label: L("פתיחה", "Open"), kbd: "Enter", run: () => F.views.open(one) });
     if (one && !folder) openWithFor(one).forEach((x) => out.push({ icon: "external", label: L("פתיחה באמצעות ", "Open with ") + (x.spec.label || x.app), run: () => launch(x, one) }));
@@ -119,12 +122,12 @@
       out.push({ icon: "folder-plus", label: L("תיקייה חדשה בתוכה", "New folder inside"), run: () => D.newFolder(one.id) });
     }
     if (!folder) out.push({ icon: "download", label: L("הורדה", "Download"), run: () => items.forEach(D.download) });
-    if (one && !folder) out.push({ icon: "link", label: L("העתקת קישור לשיתוף", "Copy share link"), run: () => D.copyLink(one) });
+    if (one && !folder && one.link) out.push({ icon: "link", label: remote ? L("העתקת הקישור ב־Google Drive", "Copy the Google Drive link") : L("העתקת קישור לשיתוף", "Copy share link"), run: () => D.copyLink(one) });
     if (one) out.push({ icon: "bot", label: L("העתקת נתיב לסוכנים", "Copy path for agents"), run: () => D.copyPath(one) });
     out.push({ sep: true });
     if (one) out.push({ icon: "edit", label: L("שינוי שם", "Rename"), kbd: "F2", disabled: sys, run: () => D.rename(one) });
     out.push({ icon: "folder-input", label: L("העברה אל…", "Move to…"), disabled: sys, run: () => set({ dialog: { type: "move", items } }) });
-    out.push({ icon: "star", label: starred ? L("הסרת כוכב", "Remove star") : L("סימון בכוכב", "Add star"), run: () => D.star(items, !starred) });
+    if (can("star")) out.push({ icon: "star", label: starred ? L("הסרת כוכב", "Remove star") : L("סימון בכוכב", "Add star"), run: () => D.star(items, !starred) });
     // a widget has no room for the details pane: the entry would do nothing visible
     if (one && where !== "details" && where !== "widget") out.push({ icon: "info", label: L("פרטים", "Details"), kbd: "I", run: () => set({ details: true, sel: [one.id] }) });
     out.push({ sep: true });
@@ -167,6 +170,7 @@
       <div class=${"menu" + (m.sheet ? " sheet" : "")} ref=${ref} role="menu" onKeyDown=${key}>
         ${m.title && html`<div class="mh"><bdi>${m.title}</bdi></div>`}
         ${m.items.map((a, i) => a.sep ? html`<div class="msep" key=${i}></div>` : html`<button key=${i} role="menuitem"
+          data-act=${a.act || a.icon}
           class=${"mi" + (a.danger ? " danger" : "")} disabled=${a.disabled} title=${a.title || ""}
           onClick=${() => { close(); a.run(); }}>${ic(a.icon, "sm")}<span class="lbl">${a.label}</span>${a.kbd && !m.sheet && html`<span class="kbd">${a.kbd}</span>`}</button>`)}
       </div>`;

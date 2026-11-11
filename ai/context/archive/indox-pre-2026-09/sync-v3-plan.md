@@ -4,13 +4,13 @@ Status: **W0–W4 DONE (laptop/dev)** — 2026-07-10: proc-mode parity landed, a
 all 5 registry sources flipped to `engine:v3` (proc auto via processor_wf), live business-like docs from
 localdrive+localmail delivered with full v1 enrichment (sender→company, date−2mo naming, OCR figuring,
 filename-parse, link resolution), billboards flipped, second pass idempotent, sync state AT REST.
-Remaining: prod (hacohen-vps) cutover as a deliberate separate step + W5 optimizations.
+Remaining: prod (example-vps) cutover as a deliberate separate step + W5 optimizations.
 Supersedes the claim/label sync (`sync-refactor-v1`: SyncScanner00001 → SyncScanUnit0001 → SyncProc*).
 Companion decisions + research: memory `indox-sync-best-practices-research` (★/★★ sections + code-review gate).
 
 ## 0. Implementation record (what was actually built — deltas from the plan below)
 
-Built + verified green on shlomo-laptop (all three suites manual AND `--lanes`, plus doc_base/bs canaries):
+Built + verified green on owner-laptop (all three suites manual AND `--lanes`, plus doc_base/bs canaries):
 `sync_kernel` 6/6 lanes (27 asserts, ~14s) · `sync_sources` 4/4 (23 asserts, ~27s) · `sync_full` 5/5
 (25 asserts, ~89s; history walk converges in 3 passes, handoff touched by loop 2 in ~4 checks) ·
 **node coverage 299/299 = 100%** (`scripts/sync-v3-coverage.py`).

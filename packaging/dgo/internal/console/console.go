@@ -39,6 +39,7 @@ import (
 	"io"
 	"io/fs"
 	"log"
+	"maps"
 	"net"
 	"net/http"
 	"net/http/httputil"
@@ -52,7 +53,7 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/solomonBoltin/deployment-hacohen/packaging/dgo/internal/pyval"
+	"github.com/bina-solution/digital-office/packaging/dgo/internal/pyval"
 )
 
 // Config is what New needs. Lookup is os.LookupEnv in production: app.py's own variables keep their
@@ -66,6 +67,21 @@ type Config struct {
 	// Absent answers in the console container's place when it cannot be reached — the phone's core,
 	// before its machine runs (serve.Absent, DGO-1084); nil is the 502 it always was
 	Absent http.Handler
+	// Fallback, when set, IS the console container: every route not answered here goes to it instead of
+	// Upstream — the phone's core, whose container is its machine's console once the machine is up, and the
+	// page that waits for it before then (internal/native, DGO-1328). A request is handed on whole, its body
+	// unread: never first to an Upstream that refuses it.
+	Fallback http.Handler
+	// More, when set, is the tiles of another console this office's rail shows too — the phone's machine's:
+	// the apps it runs and the offices it links (internal/native, DGO-1328) — as its /api/modules answers
+	// them, or nil. Asked with the request whose tiles these are; each whose id the registry and the peers
+	// do not already hold is added, as a peer's is. It must not wait on the other console.
+	More func(*http.Request) []byte
+	// Doors are the apps this office answers in its own process, by app id — the phone's core, whose
+	// core apps have no container (DGO-1328): /a/<id>/… is the handler's, as app_proxy would hand it on
+	// (plane.go doorOf); an id not here is the container's — Upstream's, or Fallback's — as always. Read
+	// only on the native side, and asked before Fallback: a door is this process's own answer.
+	Doors map[string]http.Handler
 }
 
 // builtIn is the console's files compiled into this binary (builtin.go, -tags consoleembed), or nil:
@@ -88,8 +104,11 @@ type Server struct {
 	peers    string // CONSOLE_PEERS_DIR: the remote placements and link.json
 	version  string // BUILD_VERSION, stripped, or "dev"
 	office   *officeRecord
-	door     http.Handler // /a/app-management/ to a control plane on a socket (plane.go), or nil
+	door     http.Handler            // /a/app-management/ to a control plane on a socket (plane.go), or nil
+	doors    map[string]http.Handler // Config.Doors
 	now      func() time.Time
+	// Config.More: another console's tiles, the phone's machine's — or nil
+	more func(*http.Request) []byte
 }
 
 // New builds the server. Under DGO_CONSOLE=container nothing of the native side is read — no
@@ -101,11 +120,15 @@ func New(c Config) (*Server, error) {
 	if err != nil || (target.Scheme != "http" && target.Scheme != "https") || target.Host == "" {
 		return nil, fmt.Errorf("dgo console: --upstream %q is not an http(s) URL of the console container", c.Upstream)
 	}
-	s := &Server{proxy: newProxy(target, c.Logf, c.Absent), trusted: c.Trusted, now: time.Now}
+	s := &Server{proxy: newProxy(target, c.Logf, c.Absent), trusted: c.Trusted, more: c.More, now: time.Now}
+	if c.Fallback != nil {
+		s.proxy = c.Fallback
+	}
 	if v, _ := c.Lookup("DGO_CONSOLE"); v == "container" {
 		return s, nil
 	}
 	s.native = true
+	s.doors = maps.Clone(c.Doors) // the caller's map may change; this server's doors do not
 	switch {
 	case c.Static != "":
 		if s.static, err = filepath.Abs(c.Static); err != nil {
@@ -177,6 +200,12 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		s.door.ServeHTTP(w, r) // the control plane on its socket, with no container to ask (plane.go)
 		return
 	}
+	if s.native {
+		if id, h := s.doorOf(r); h != nil {
+			throughDoor(id, h, w, r) // an app answered in this process (plane.go)
+			return
+		}
+	}
 	if s.native && s.answer(w, r) {
 		return
 	}
@@ -200,6 +229,10 @@ func (s *Server) answer(w http.ResponseWriter, r *http.Request) bool {
 	case p == "/healthz" || !strings.HasPrefix(p, "/") || strings.HasPrefix(p, "/api/") || strings.HasPrefix(p, "/a/"):
 		// /healthz must be able to fail while the container is down; every other /api/ and /a/ path
 		// is a route of app.py (or a werkzeug redirect next to one) that this slice does not answer
+		return false
+	case p == "/go" || strings.HasPrefix(p, "/go/"):
+		// a person's link (DGO-1433): app.py resolves it against the office's live registry and answers
+		// the shell's route for it, or its card — never a file of the shell, which would open the home
 		return false
 	}
 	return s.file(w, r)

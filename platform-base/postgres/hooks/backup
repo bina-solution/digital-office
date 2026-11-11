@@ -89,7 +89,7 @@ echo "SKIPVOL supabase_db_data"
 # vacuous"). This hook is written for an estate that has run the indox/tenancy migration; on a
 # deployment that has not, `public` holds a handful of tables and every one of these FACTs came back
 # empty, so `bbox data export` failed rc=1 and THAT DEPLOYMENT COULD NOT BE BACKED UP AT ALL.
-# Measured 2026-10-11 on wbc-vps: `public` held 3 tables, ten of the twelve names below did not
+# Measured 2026-10-11 on exw-vps: `public` held 3 tables, ten of the twelve names below did not
 # exist, export refused. `factq` — one definition, in scripts/archive-lib.sh — emits the literal
 # `absent` instead, but only for the relation named last on its line and only when the database says
 # it does not exist: truthful on both sides of the restore diff, while a query that failed on a table

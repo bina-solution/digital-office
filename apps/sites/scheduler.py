@@ -25,6 +25,7 @@ import threading
 import time
 
 import checks
+import indexnow
 import machines
 import public
 import runtime
@@ -71,8 +72,15 @@ def _notify(title: str, body: str, level: str = "info", site_id: str | None = No
 
 
 # ── uptime ───────────────────────────────────────────────────────────────────────────────────────
+def _checked(site: dict) -> dict:
+    """The site as the checks read it: they know only `hosts`, and a site the office serves may be
+    published through its public path alone (`public.public_hosts`)."""
+    hosts = public.public_hosts(site)
+    return site if hosts == [h for h in (site.get("hosts") or []) if h] else {**site, "hosts": hosts}
+
+
 def check_uptime(site: dict, notify: bool = True) -> dict:
-    sample = uptime.probe(site)
+    sample = uptime.probe(_checked(site))
     store.add_sample(site["id"], bool(sample.get("ok")), sample.get("status"), sample.get("ms"),
                      uptime.reason(sample) or None, sample.get("url"))
     state = "up" if sample.get("ok") else "down"
@@ -174,6 +182,18 @@ def _check_kwargs(name: str, cfg: dict) -> dict:
     return {}
 
 
+def not_published(name: str) -> dict:
+    """The answer of a scan for a site the office serves and has not published: there is no public
+    address to scan yet, and that is a state the site is in, not an error. Every scan said «לא הוגדר
+    דומיין לאתר» as an ERROR, so Exampleu's clone — a draft by design — carried «3 שגיאות פתוחות» on its
+    card (DGO-1591). Recording this finding resolves those: they are no longer seen."""
+    return {"check": name, "state": "info", "summary": {"reason": "האתר עוד לא פורסם"},
+            "findings": [{"code": "not_published", "severity": "info",
+                          "title": "האתר עוד לא באוויר — הבדיקה תרוץ אחרי הפרסום",
+                          "detail": "הלשכה מגישה את האתר בתוך עצמה, ועוד אין לו כתובת ציבורית לבדוק.",
+                          "fix": "", "url": ""}]}
+
+
 def run_scan(site_id: str, names: list[str] | None = None, trigger: str = "manual") -> dict:
     """Run checks against one site and record everything: the run, its findings, its events.
 
@@ -192,7 +212,8 @@ def run_scan(site_id: str, names: list[str] | None = None, trigger: str = "manua
             continue
         run_id = store.start_run(site_id, name)
         try:
-            result = checks.run(name, site, **_check_kwargs(name, site.get("checks") or {}))
+            result = (not_published(name) if public.mode_of(site) == "office" and not public.entries_of(site)
+                      else checks.run(name, _checked(site), **_check_kwargs(name, site.get("checks") or {})))
             counts = store.record_findings(site_id, name, result.get("findings") or [])
             store.finish_run(run_id, result.get("state") or "ok",
                              {**(result.get("summary") or {}), "counts": counts})
@@ -304,6 +325,14 @@ def public_pass() -> dict:
         out["edge"] = public.publish()
     except Exception as e:                                   # noqa: BLE001
         out["errors"].append(f"publish: {type(e).__name__}")
+    # After the publish: it is what says whether this office answers https, and only then is a site announced.
+    for site in rows:
+        try:
+            res = indexnow.pass_site(site)
+            if res.get("sent"):
+                out.setdefault("indexnow", {})[site["id"]] = res["sent"]
+        except Exception as e:                               # noqa: BLE001
+            out["errors"].append(f"{site['id']}: indexnow {type(e).__name__}")
     _state["last_public"] = store.now()
     if out["errors"]:
         log.warning("public pass: %s", "; ".join(out["errors"])[:400])

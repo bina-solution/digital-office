@@ -191,7 +191,7 @@ export class IndoxV2DrainPoolPLanesXBDocumentsWorkflow {
         g('indoxDrainOn', 'true')                             + " AS drain_on, " +
         g('indoxOn', 'true')                                  + " AS indox_on, " +
         g('indox.statemachine.drain.parallel', '4')           + " AS parallel, " +
-        g('indox.statemachine.driver.batch', '2000')          + " AS batch, " +
+        g('indox.statemachine.driver.batch', '500')           + " AS batch, " +
         g('indox.statemachine.driver.max', '2000')            + " AS lane_max, " +
         g('indox.statemachine.drain.tick_minutes', '2')       + " AS tick_minutes, " +
         g('indox.statemachine.drain.full_minutes', '120')     + " AS full_minutes, " +
@@ -236,7 +236,7 @@ const fullMin = (function (v, d) { const n = Number(v); return (n > 0) ? Math.fl
 // minutes of a full_minutes block ran as the full pass. That was sound while this workflow owned
 // its own Tick (2m). The scheduler cutover DISABLED that trigger and handed dispatch to indox01,
 // whose spacing is ~4 minutes -- so a 2-minute window was tested against 4-minute fires and got
-// straddled. Measured, hacohen, 3 hours: 46 ticks and ONE full sweep; the 08:00 one was skipped
+// straddled. Measured, example, 3 hours: 46 ticks and ONE full sweep; the 08:00 one was skipped
 // outright (07:58:15 -> 118, no fire inside the window, 08:02:15 -> 2, and the test is < 2).
 // That matters because mode=all is the only pass that revisits a HEALTHY document quiet for
 // longer than changedMinutes. (Stalled IN_PROGRESS and ACTION_RESTART rows stopped depending on
@@ -281,7 +281,7 @@ if (mode === 'status' && !statuses.length) mode = 'none';
 
 // [2026-08-24, owner order] The full pass uses the SAME parallel setting as everything else.
 const parallel = num(body.parallel, num(cfg.parallel, 4));
-const batch    = num(body.batch, num(cfg.batch, 2000));
+const batch    = num(body.batch, num(cfg.batch, 500));
 const laneMax  = num(cfg.lane_max, 2000);
 const dry      = (body.dry === true || String(body.dry).toLowerCase() === 'true');
 
@@ -308,7 +308,7 @@ if (mode === 'all') {
   listPipe = statuses.join(PIPE);
 } else if (mode === 'changed') {
   // [strand rescue 2026-08-31] The changed window alone leaks two classes of live work, both
-  // measured on hacohen: 173 IN_PROGRESS rows untouched for 6-72 h (their drivers died with the
+  // measured on example: 173 IN_PROGRESS rows untouched for 6-72 h (their drivers died with the
   // worker -- OOM, restart, the 2026-08-21 timeout class) and 2 ACTION_RESTART rows sitting
   // THREE DAYS after the user clicked restart. Both are eligible, neither is ever re-selected:
   // their updated_at fell out of the window, and the full pass is 120-minute-cadenced and

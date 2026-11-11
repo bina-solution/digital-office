@@ -9,7 +9,7 @@ What it watches
                 which port — the outbound map, and inbound that never touches the edge (SSH, mail,
                 the link's UDP).
   names         the DNS answers the machine receives and the server name of every TLS connection it
-                opens — so an address on the map reads `api.github.com`, not `93.184.216.21`. A kernel
+                opens — so an address on the map reads `api.github.com`, not `93.184.216.30`. A kernel
                 filter (netparse.BPF_DNS_SNI) hands it those packets and nothing else.
   sign-ins      the machine's sshd, from its journal (accepted keys by fingerprint, failures).
   facts         interfaces, routes, the gateway, every listening socket, the router behind the
@@ -53,14 +53,47 @@ import netparse as np
 
 SENSOR_DIR = os.environ.get("SENSOR_DIR", "/sensor")
 JOURNAL_DIR = os.environ.get("SENSOR_JOURNAL_DIR", "/host/journal")
+#: the journal identifiers that are the machine's own doors, not the network's: the hosting provider's
+#: guest agent and the console's login(1) (DGO-1646)
+HOST_IDENTS = ("qemu-ga", "login")
 SSH_DIR = os.environ.get("SENSOR_SSH_DIR", "/host/ssh")
 ROUTER_HINTS = [x.strip() for x in os.environ.get("SECURITY_ROUTER_HINTS", "").split(",") if x.strip()]
 FLUSH_EVERY = 5
 FACTS_EVERY = 30
 ROUTER_EVERY = 300
 NFT_EVERY = 2
+#: How long one ssh connection's port may not be counted twice (DGO-1597). sshd's two lines for one
+#: attempt are milliseconds apart; 30 s is far above that and well below TIME_WAIT, so a different
+#: attempt on a reused port is still counted — and an attacker who pins one source port does not get
+#: every later attempt forgiven (the second reader's point: a wide window IS a way to hide).
+SSH_CONN_WINDOW = 30
 TABLE = "inet dgo_security"
 STOP = threading.Event()
+
+
+def one_attempt(conns: dict, ev: dict) -> bool:
+    """Is this sshd event a NEW attempt on a new connection? (DGO-1597)
+
+    sshd writes one failed attempt as two lines, and both name the same socket — `Invalid user x from
+    93.184.216.7 port 51234`, then `Failed password for invalid user x from 93.184.216.7 port 51234 ssh2` (or
+    `Connection closed by invalid user … port 51234 [preauth]`). The (address, port) pair IS the
+    connection, so a second failure on a connection already counted is the same try: it is dropped,
+    and the count, the screen and the jail's evidence all say one. A SUCCESS is never dropped — one
+    connection may fail an attempt and then sign in, and that sign-in is what the address's trust is
+    made of. In place, because the caller keeps one dict for the life of the reader.
+    """
+    ts = float(ev.get("ts") or time.time())
+    if ev.get("verdict") != "ok" and ev.get("port"):
+        key = (ev.get("ip"), int(ev["port"]))
+        seen = conns.get(key)
+        if seen is not None and ts - seen < SSH_CONN_WINDOW:
+            return False
+        conns[key] = ts
+        if len(conns) > 4000:
+            cutoff = ts - SSH_CONN_WINDOW
+            for k in [k for k, v in conns.items() if v < cutoff]:
+                conns.pop(k, None)
+    return True
 
 
 def log(msg: str) -> None:
@@ -356,10 +389,14 @@ class Collector:
         self.names: dict = {}
         self.sni: dict = {}
         self.auth: list = []
+        self.host: list = []          # the provider's guest agent and the console (DGO-1646)
+        self.host_cursor = 0.0        # the newest host event already handed on (host-cursor.json)
+        self.agent_seen = False       # a guest-agent line in the journal at all: the provider HAS that hand
         self.health = {"conntrack": {"ok": None, "error": "", "events": 0},
                        "sniffer": {"ok": None, "error": "", "packets": 0},
-                       "journal": {"ok": None, "error": "", "lines": 0}}
+                       "journal": {"ok": None, "error": "", "lines": 0, "dupes": 0}}
         self._seen_dns: dict = {}
+        self._ssh_conns: dict = {}      # (ip, port) → ts of the attempt already counted (DGO-1597)
 
     # conntrack ───────────────────────────────────────────────────────────────────────────────────
     def conntrack_loop(self) -> None:
@@ -490,15 +527,91 @@ class Collector:
                     self.sni[key] = {"name": name, "ip": p["dst"], "src": p["src"], "first": now, "last": now, "n": 1}
 
     # journal ─────────────────────────────────────────────────────────────────────────────────────
+    def host_line(self, d: dict) -> None:
+        """One journal entry of the guest agent or of login(1), kept as a host event when it is a call or a
+        sign-in newer than the cursor. A status poll (`guest-exec-status`) is not a row (DGO-1646)."""
+        msg = d.get("MESSAGE")
+        if isinstance(msg, list):                          # journald's form for a message with control bytes
+            msg = bytes(x for x in msg if isinstance(x, int) and 0 <= x < 256).decode("utf-8", "replace")
+        if not isinstance(msg, str):
+            return
+        ident = d.get("SYSLOG_IDENTIFIER") or ""
+        if ident == "qemu-ga":
+            self.agent_seen = True
+        he = np.provider_message(msg) if ident == "qemu-ga" else np.console_message(msg)
+        if not he:
+            return
+        try:
+            ts = int(d.get("__REALTIME_TIMESTAMP") or 0) / 1e6 or time.time()
+        except ValueError:
+            ts = time.time()
+        if ts <= self.host_cursor:
+            return
+        row = ({"ts": ts, "kind": "provider", "op": he["op"], "detail": he["detail"]} if ident == "qemu-ga"
+               else {"ts": ts, "kind": "console", "op": "login", "detail": f"{he['user']} on {he['tty'] or 'the console'}"})
+        with self.lock:                                    # never trimmed: the cursor has passed these rows
+            self.host.append(row)
+            self.host_cursor = ts
+
+    def host_flush(self) -> None:
+        """Spool what the backfill has gathered so far, then move the cursor past it, in that order. A
+        restart repeats nothing and loses nothing, and the sensor never holds a long history in memory."""
+        with self.lock:
+            rows, cursor, self.host = self.host, self.host_cursor, []
+        if rows:
+            write_json(os.path.join(SENSOR_DIR, "spool", f"{int(time.time() * 1000)}-host-{len(rows):06d}.json"),
+                       {"flows": [], "names": [], "sni": [], "auth": [], "host": rows, "at": time.time()})
+            write_json(os.path.join(SENSOR_DIR, "host-cursor.json"), {"ts": cursor})
+
+    def host_backfill(self) -> None:
+        """The provider's calls and the console sign-ins already in the journal when this sensor starts.
+        Read from where the last run stopped (host-cursor.json) and at most 120 days back, so a restart
+        neither loses nor repeats one. A new office is shown what the provider did before the app was
+        installed. On Exampleu that was its first `guest-exec`, `cloud-init status --wait`, at 12:29 on the
+        day it was bought."""
+        cur = read_json(os.path.join(SENSOR_DIR, "host-cursor.json"), {}) or {}
+        self.host_cursor = float(cur.get("ts") or 0)
+        since = max(self.host_cursor, time.time() - 120 * 86400)
+        # streamed line by line, only the three fields it reads, every message whole (`-a`): 120 days of a
+        # busy guest agent never sits in this small container's memory at once
+        read = 0
+        try:
+            p = subprocess.Popen(["journalctl", "-D", JOURNAL_DIR, "-o", "json", "-a", "--since", f"@{int(since)}",
+                                  "--output-fields=MESSAGE,SYSLOG_IDENTIFIER,__REALTIME_TIMESTAMP",
+                                  *sum((["+", f"SYSLOG_IDENTIFIER={i}"] for i in HOST_IDENTS), [])[1:]],
+                                 stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True, bufsize=1)
+        except OSError as e:
+            log(f"host backfill: {e}")
+            return
+        for line in p.stdout:
+            try:
+                self.host_line(json.loads(line))
+            except ValueError:
+                continue
+            read += 1
+            if len(self.host) >= 1000:
+                self.host_flush()
+        p.wait()
+        self.host_flush()
+        self.health["journal"]["host_backfill"] = read
+
     def journal_loop(self) -> None:
         h = self.health["journal"]
         if not os.path.isdir(JOURNAL_DIR) or not os.listdir(JOURNAL_DIR):
             h.update(ok=False, error="no journal on this machine")
             return
+        started = time.time()
+        self.host_backfill()
+        # the follow starts where the backfill STARTED, not «now»: what was written while it ran is read
+        # (host events older than the cursor are skipped), and after a restart of the follow it starts from
+        # the last line it read
+        follow_from = started
         while not STOP.is_set():
             try:
-                p = subprocess.Popen(["journalctl", "-D", JOURNAL_DIR, "-f", "-n", "0", "-o", "json",
-                                      "SYSLOG_IDENTIFIER=sshd", "+", "SYSLOG_IDENTIFIER=sshd-session"],
+                p = subprocess.Popen(["journalctl", "-D", JOURNAL_DIR, "-f", "-a", "--since", f"@{int(follow_from)}",
+                                      "-o", "json",
+                                      "SYSLOG_IDENTIFIER=sshd", "+", "SYSLOG_IDENTIFIER=sshd-session",
+                                      "+", "SYSLOG_IDENTIFIER=qemu-ga", "+", "SYSLOG_IDENTIFIER=login"],
                                      stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, bufsize=1)
             except OSError as e:
                 h.update(ok=False, error=f"journalctl: {e}")
@@ -512,16 +625,27 @@ class Collector:
                     d = json.loads(line)
                 except ValueError:
                     continue
+                try:
+                    follow_from = max(follow_from, int(d.get("__REALTIME_TIMESTAMP") or 0) / 1e6)
+                except ValueError:
+                    pass
+                h["lines"] += 1
+                if (d.get("SYSLOG_IDENTIFIER") or "") in HOST_IDENTS:
+                    self.host_line(d)
+                    continue
                 msg = d.get("MESSAGE")
                 if not isinstance(msg, str):
                     continue
-                h["lines"] += 1
                 ev = np.sshd_message(msg)
                 if ev:
                     try:
                         ev["ts"] = int(d.get("__REALTIME_TIMESTAMP") or 0) / 1e6 or time.time()
                     except ValueError:
                         ev["ts"] = time.time()
+                    # ONE ATTEMPT, ONE EVENT (DGO-1597) — see one_attempt() below.
+                    if not one_attempt(self._ssh_conns, ev):
+                        h["dupes"] = h.get("dupes", 0) + 1
+                        continue
                     with self.lock:
                         self.auth.append(ev)
                         if len(self.auth) > 20000:
@@ -535,8 +659,10 @@ class Collector:
     def drain(self) -> dict | None:
         with self.lock:
             batch = {"flows": list(self.flows.values()), "names": list(self.names.values()),
-                     "sni": list(self.sni.values()), "auth": self.auth}
-            self.flows, self.names, self.sni, self.auth = {}, {}, {}, []
+                     "sni": list(self.sni.values()), "auth": self.auth, "host": self.host}
+            self.flows, self.names, self.sni, self.auth, self.host = {}, {}, {}, [], []
+            if batch["host"]:
+                batch["host_cursor"] = self.host_cursor
         if not any(batch.values()):
             return None
         batch["at"] = time.time()
@@ -590,14 +716,18 @@ def listening() -> list:
     return sorted(out, key=lambda r: (r["scope"] != "all", r["port"]))
 
 
-def ssh_keys() -> list:
+def ssh_keys() -> "list | None":
+    """root's authorized keys: fingerprint, comment. [] when there is no keys file in a readable .ssh, None
+    when the directory itself cannot be read: the screen then says «not measured», never «0 keys»."""
     out = []
     path = os.path.join(SSH_DIR, "authorized_keys")
     try:
         with open(path, encoding="utf-8", errors="replace") as fh:
             lines = fh.read().splitlines()
+    except FileNotFoundError:
+        return out if os.path.isdir(SSH_DIR) and os.access(SSH_DIR, os.R_OK) else None
     except OSError:
-        return out
+        return None
     for line in lines:
         parts = line.strip().split()
         if len(parts) < 2 or line.lstrip().startswith("#"):
@@ -614,6 +744,28 @@ def ssh_keys() -> list:
                             "options": i > 0})
                 break
     return out
+
+
+def closed_door_drops() -> "tuple[str, int | None]":
+    """(fence, drops). The fence is the host's own `inet dgo_host` table from scripts/ops/host-baseline.sh,
+    so it covers IPv4 and IPv6. The drops are the packets it dropped since boot: every knock on a port nobody
+    opened. The fence is «present», «absent» (nft answers and has no such table) or «error» (nft could not
+    be asked), so the screen never mistakes a failed read for a missing fence (DGO-1646). Measured on
+    Exampleu: 3,127 packets between the boot at 02:45 and 16:20 UTC."""
+    try:
+        out = subprocess.run(["nft", "list", "tables"], capture_output=True, text=True, timeout=5)
+        if out.returncode != 0:
+            return "error", None
+        if not re.search(r"^table inet dgo_host$", out.stdout, re.M):
+            return "absent", None
+        out = subprocess.run(["nft", "list", "chain", "inet", "dgo_host", "input"],
+                             capture_output=True, text=True, timeout=5)
+    except (OSError, subprocess.SubprocessError):
+        return "error", None
+    if out.returncode != 0:
+        return "error", None
+    found = re.findall(r"counter packets (\d+) bytes \d+ drop", out.stdout)
+    return "present", (sum(int(x) for x in found) if found else 0)
 
 
 def conntrack_stats() -> dict:
@@ -664,7 +816,7 @@ def _local(tag: str) -> str:
 
 
 def upnp(ip: str) -> dict | None:
-    msg = ("M-SEARCH * HTTP/1.1\r\nHOST: 93.184.216.22:1900\r\nMAN: \"ssdp:discover\"\r\nMX: 1\r\n"
+    msg = ("M-SEARCH * HTTP/1.1\r\nHOST: 93.184.216.31:1900\r\nMAN: \"ssdp:discover\"\r\nMX: 1\r\n"
            "ST: urn:schemas-upnp-org:device:InternetGatewayDevice:1\r\n\r\n").encode()
     s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     s.settimeout(2.5)
@@ -805,6 +957,18 @@ def netdev() -> dict:
 STUN_SERVER = os.environ.get("SECURITY_STUN", "stun.cloudflare.com:3478")
 
 
+def own_public_v4(addrs) -> str:
+    """The public IPv4 address an interface of this machine holds ('' behind NAT)."""
+    return next((a for a in sorted(addrs) if ":" not in a and np.is_public(a)), "")
+
+
+def needs_stun(addrs) -> bool:
+    """Only an office behind NAT has a question to ask. When an interface already holds a public IPv4
+    address (a server), that address IS the answer, and the hourly packet would be an outbound call with no
+    reason: on Exampleu's server it was the one call the security app made that no office declared (DGO-1495)."""
+    return not own_public_v4(addrs)
+
+
 def public_address() -> str:
     """This machine's address as the internet sees it — one STUN binding request (RFC 5389), the same
     question WebRTC and every NAT-traversing link ask. It places the office on its own map. One UDP
@@ -870,7 +1034,9 @@ def main() -> int:
             write_json(os.path.join(SENSOR_DIR, "netdev.json"), {"at": now, "ifaces": netdev()})
         if now - last_stun >= 3600:
             last_stun = now
-            public_ip = public_address() or public_ip
+            # the answer with no packet when an interface holds it — and still an answer: the security screen and
+            # the Computers host view show facts.public_ip («כתובת ציבורית»), which an empty value draws as unknown
+            public_ip = (public_address() or public_ip) if needs_stun(local.addrs) else own_public_v4(local.addrs)
         if now - last_nft >= NFT_EVERY:
             last_nft = now
             try:
@@ -885,7 +1051,10 @@ def main() -> int:
                 batch["vol"], pending_vol = pending_vol, []
             if batch:
                 seq += 1
+                cursor = batch.pop("host_cursor", None)
                 write_json(os.path.join(SENSOR_DIR, "spool", f"{int(now * 1000)}-{seq:06d}.json"), batch)
+                if cursor:                                 # the cursor moves only once its events are spooled
+                    write_json(os.path.join(SENSOR_DIR, "host-cursor.json"), {"ts": cursor})
             # a spool nobody reads must not fill the disk: keep the newest 2000 batches
             try:
                 files = sorted(os.listdir(os.path.join(SENSOR_DIR, "spool")))
@@ -902,10 +1071,17 @@ def main() -> int:
         if now - last_facts >= FACTS_EVERY:
             last_facts = now
             local.refresh()
+            fence, drops = closed_door_drops()
+            journal_ok = bool(col.health["journal"].get("ok"))
             write_json(os.path.join(SENSOR_DIR, "facts.json"), {
                 "at": now, "hostname": socket.gethostname(), "kernel": os.uname().release, "public_ip": public_ip,
                 "interfaces": local.ifaces, "gateway": default_gateway(), "listen": listening(),
                 "conntrack": conntrack_stats(), "ssh_keys": ssh_keys(), "router": router,
+                "closed_fence": fence, "closed_drops": drops,
+                # what this sensor watches, so the screen never says «0» about a door it does not see
+                "watch": ["sshd", *HOST_IDENTS] if journal_ok else [],
+                # does the provider have a guest agent at all? Known once the journal was read
+                "provider_agent": col.agent_seen if journal_ok and "host_backfill" in col.health["journal"] else None,
                 "health": {**col.health, "nft": {"ok": nft.ok, "error": nft.error},
                            "volume": {"ok": vol.ok, "error": vol.error, "addrs": vol.addrs}},
             })

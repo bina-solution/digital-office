@@ -177,4 +177,31 @@ function makeAuth({ profiles, cc }) {
   return { resolveActor, withActor, requireProfile, requireAdmin, requireSelfOrAdmin, REQUIRE_KEY };
 }
 
-module.exports = { makeAuth, AuthError, keyFrom, connectionFrom, REQUIRE_KEY };
+/**
+ * A KEY-SHAPED HEADER IS A REASON TO PASS THE SESSION GUARD ONLY IF IT IS A KEY — an active profile's, and an
+ * admin's (issues/chat-opens-fifteen-routes-to-any-key-shaped-header-and-never-checks-the-key.yaml). The routes
+ * behind this guard alone manage WhatsApp accounts, bots' settings and connections and never call `withActor`, so
+ * the old guard passed any `Authorization: Bearer x`. Nothing in the tree sends a key to them (the callers were
+ * enumerated: the UI's session, connections' Basic, n8n's Basic, the operative's bare curl). No key → the
+ * session guard, exactly as before. A profile store that cannot answer → 503, never a pass.
+ */
+function makeKeyGuard({ profiles, sessionGuard }) {
+  const session = sessionGuard || ((req, res, next) => next());
+  return async function keyGuard(req, res, next) {
+    const key = keyFrom(req);
+    if (!key) return session(req, res, next);
+    let p;
+    try {
+      p = await profiles.byKey(key);
+    } catch (e) {
+      console.warn(`[chat/engine] key guard: the profile store did not answer — refused (${e && e.message})`);
+      return res.status(503).json({ error: 'profile store unavailable', message: 'the key could not be checked' });
+    }
+    if (!p) return res.status(401).json({ error: 'unknown profile key' });
+    if (p.status !== 'active') return res.status(403).json({ error: 'profile not active' });
+    if (!p.is_admin) return res.status(403).json({ error: "an admin's key is needed here" });
+    return next();
+  };
+}
+
+module.exports = { makeAuth, makeKeyGuard, AuthError, keyFrom, connectionFrom, REQUIRE_KEY };

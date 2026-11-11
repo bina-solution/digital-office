@@ -1,0 +1,150 @@
+{
+  "ideas": [
+    {
+      "id": "i01",
+      "title": "חשבונית נכנסה למייל — ושורה הופיעה בטבלת ההוצאות",
+      "verdict": "PASS",
+      "fail": [],
+      "hold": [],
+      "primary_sources": 2,
+      "ours": "measurement"
+    },
+    {
+      "id": "i02",
+      "title": "את מי ה-AI ממליץ לעסק ישראלי: 40 שאלות, ChatGPT וגוגל, בעברית ובאנגלית",
+      "verdict": "HOLD",
+      "fail": [],
+      "hold": [
+        "ours is measured by 2026-11-05 (run 1 of aeo-panel-v1 today (40 prompts × ChatGPT, Google AI) — it waits for the number"
+      ],
+      "primary_sources": 3,
+      "ours": "measurement"
+    },
+    {
+      "id": "i03",
+      "title": "מה להריץ על המחשב של העסק ומה לשכור: מדדנו דיבור, קריינות וסוכן",
+      "verdict": "PASS",
+      "fail": [],
+      "hold": [],
+      "primary_sources": 3,
+      "ours": "measurement"
+    },
+    {
+      "id": "i04",
+      "title": "עברית נכנסת, עברית יוצאת — על שרת אחד קטן",
+      "verdict": "HOLD",
+      "fail": [],
+      "hold": [
+        "ours is measured by 2026-11-12 (record the office doing it: a voice note to the office, tran) — it waits for the number"
+      ],
+      "primary_sources": 2,
+      "ours": "screen"
+    },
+    {
+      "id": "i05",
+      "title": "82 בקשות לסוכן AI בשבוע — כמה באמת נמסרו",
+      "verdict": "HOLD",
+      "fail": [],
+      "hold": [
+        "needs the owner: publishing our own internal numbers is his call"
+      ],
+      "primary_sources": 2,
+      "ours": "verdict"
+    },
+    {
+      "id": "i06",
+      "title": "מה אלטמן באמת אמר על הרצת AI על המחשב שלכם — תמללנו בעצמנו",
+      "verdict": "HOLD",
+      "fail": [],
+      "hold": [
+        "ours is measured by 2026-11-07 (transcribe the Cheeky Pint episode with the office's own spe) — it waits for the number"
+      ],
+      "primary_sources": 2,
+      "ours": "verdict"
+    },
+    {
+      "id": "i07",
+      "title": "הלשכה הדיגיטלית: עסק שלם על מחשב אחד — סיור של 12 דקות",
+      "verdict": "HOLD",
+      "fail": [],
+      "hold": [
+        "ours is measured by 2026-11-14 (after the tour is re-shot at desktop size with every screen ) — it waits for the number"
+      ],
+      "primary_sources": 2,
+      "ours": "screen"
+    },
+    {
+      "id": "x01",
+      "title": "סייבר: מה שלמדנו מ-CWE-bench v2 ומבוטנט האנדרואיד",
+      "verdict": "REJECT",
+      "fail": [
+        "nothing OURS — ours.kind must be measurement, screen, israeli or verdict",
+        "ours.evidence is empty — what exactly is ours, with its number, screen or source",
+        "1 primary sources — at least 2, each a URL that is where the fact was born",
+        "the angle is what the top results already say — top_results.our_difference is empty"
+      ],
+      "hold": [],
+      "primary_sources": 1,
+      "ours": ""
+    },
+    {
+      "id": "x02",
+      "title": "פרומפט אחד — הצעת מחיר בעברית מלאה, 40 שניות, בלי עכבר",
+      "verdict": "REJECT",
+      "fail": [
+        "ours.evidence is empty — what exactly is ours, with its number, screen or source",
+        "0 primary sources — at least 2, each a URL that is where the fact was born",
+        "the angle was not searched — top_results.query and what_they_say are required",
+        "the angle is what the top results already say — top_results.our_difference is empty"
+      ],
+      "hold": [],
+      "primary_sources": 0,
+      "ours": "screen"
+    },
+    {
+      "id": "x03",
+      "title": "המשרד עונה לך בטלגרם",
+      "verdict": "REJECT",
+      "fail": [
+        "ours is promised, not held: a will-measure idea needs ours.plan and ours.by (a date)",
+        "0 primary sources — at least 2, each a URL that is where the fact was born",
+        "the angle was not searched — top_results.query and what_they_say are required",
+        "the angle is what the top results already say — top_results.our_difference is empty"
+      ],
+      "hold": [
+        "needs the owner: his own group is private: a demo chat is needed, and the bot is mid-repair (DGO-1352)"
+      ],
+      "primary_sources": 0,
+      "ours": "screen"
+    },
+    {
+      "id": "x04",
+      "title": "המודל העברי הטוב ביותר למחשב אחד — מדדנו",
+      "verdict": "REJECT",
+      "fail": [
+        "ours is promised, not held: a will-measure idea needs ours.plan and ours.by (a date)",
+        "0 primary sources — at least 2, each a URL that is where the fact was born",
+        "the angle was not searched — top_results.query and what_they_say are required",
+        "the angle is what the top results already say — top_results.our_difference is empty"
+      ],
+      "hold": [],
+      "primary_sources": 0,
+      "ours": "measurement"
+    },
+    {
+      "id": "x05",
+      "title": "וואטסאפ זיהתה טקסט — מה זה אומר לחשבוניות של העסק",
+      "verdict": "REJECT",
+      "fail": [
+        "1 primary sources — at least 2, each a URL that is where the fact was born",
+        "the angle is what the top results already say — top_results.our_difference is empty"
+      ],
+      "hold": [],
+      "primary_sources": 1,
+      "ours": "israeli"
+    }
+  ],
+  "pass": 2,
+  "hold": 5,
+  "reject": 5
+}

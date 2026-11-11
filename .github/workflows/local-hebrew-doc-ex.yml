@@ -19,7 +19,7 @@ name: local-hebrew-doc-ex
 
 on:
   push:
-    branches: [main, shlomo-laptop, release-v2-lockin, platform-os-refactor]
+    branches: [main, owner-laptop, release-v2-lockin, platform-os-refactor]
     paths:
       # the extraction chain — anything else shouldn't burn a full corpus run
       - 'apps/apitools/**'
@@ -39,7 +39,7 @@ permissions:
   packages: write   # images job pushes content-addressed builds to GHCR
 
 env:
-  REG: ghcr.io/solomonboltin/deployment-hacohen
+  REG: ghcr.io/bina-solution/digital-office
 
 jobs:
   # ── content-addressed apitools prebake (same scheme as indox-e2e) ──

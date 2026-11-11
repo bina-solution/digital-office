@@ -11,7 +11,7 @@ services:
     # fetched only when it is not here already, so a checkout that has built it is untouched;
     # the `build:` below stays as the fallback. Needs the GHCR package readable — a package made
     # from a private repo is private, so `docker login ghcr.io` on a machine that must pull.
-    image: ghcr.io/solomonboltin/digital-office/domains:${IMAGE_TAG:-latest}
+    image: ghcr.io/bina-solution/digital-office/domains:${IMAGE_TAG:-latest}
     pull_policy: missing
     build:
       context: .
@@ -27,18 +27,19 @@ services:
       - SITES_URL=${SITES_URL:-http://sites:8979}
       - NOTIFICATIONS_URL=${NOTIFICATIONS_URL:-http://notifications:8977}
       - DOMAINS_STATE_DIR=/data
-      # the office BROWSER, for providers that publish no API at all (see browser_session.py and
-      # ai/context/browser-session-connection.md). The token is the same one the browser app itself
-      # is configured with; the endpoint is in-network only. Without both, the app works exactly as
-      # before and simply reports that portal actions are unavailable.
-      - BROWSER_SESSION_ENDPOINT=${BROWSER_SESSION_ENDPOINT:-http://browser42-caddy:80/mcp}
-      - BROWSER42_MCP_TOKEN=${BROWSER42_MCP_TOKEN:-}
+      # A provider whose only door is its website is its OWN app (domain-<provider>, e.g. domain-internic,
+      # which drives the office browser): this app finds it in the compiled registry mounted below
+      # (provider_client.py) and holds no browser and no provider code (ai/context/provider-apps.md).
+      # DOMAIN_PROVIDER_<ID>_OFFICE picks the office when two linked offices give the same provider.
+      - DOMAINS_REGISTRY_DIR=/registry
+      - DOMAIN_PROVIDER_INTERNIC_OFFICE=${DOMAIN_PROVIDER_INTERNIC_OFFICE:-}
       # WHOIS is a shared public service: each domain at most this often, and never in a crawl.
       - DOMAINS_WHOIS_HOURS=${DOMAINS_WHOIS_HOURS:-12}
       - DOMAINS_EXPIRY_WARN_DAYS=${DOMAINS_EXPIRY_WARN_DAYS:-60}
       - DOMAINS_EXPIRY_URGENT_DAYS=${DOMAINS_EXPIRY_URGENT_DAYS:-14}
     volumes:
       - domains_state:/data
+      - ../../.generated/registry:/registry:ro   # compiled registries: which domain-* provider apps exist (G9)
     networks:
       - traefik-network
     healthcheck:

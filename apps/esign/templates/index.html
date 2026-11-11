@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>חתימות — הלשכה הדיגיטלית</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='esign.css') }}">
+</head>
+<body>
+<div class="wrap">
+  <div class="top">
+    <h1>חתימות</h1>
+    <span class="sub">מסמך יוצא לחתימה בקישור, והעותק החתום נשמר ב«קבצים»</span>
+  </div>
+
+  <div class="card">
+    <h2>מסמך חדש לחתימה</h2>
+    <form method="post" action="/api/envelopes" enctype="multipart/form-data" id="new">
+      <label for="file">המסמך (PDF)</label>
+      <input type="file" id="file" name="file" accept="application/pdf" required>
+      <label for="signer">שם החותם</label>
+      <input type="text" id="signer" name="signer" required placeholder="ישראל ישראלי">
+      <label for="password">סיסמה למסמך (רשות — נשלחת בנפרד מהקישור)</label>
+      <input type="text" id="password" name="password" placeholder="אם צריך">
+      <label for="days">תוקף הקישור בימים</label>
+      <input type="number" id="days" name="days" value="14" min="1" max="365">
+      <p><button type="submit">צור קישור להחתמה</button></p>
+    </form>
+    <p class="note" id="out" hidden></p>
+  </div>
+
+  <div class="card">
+    <h2>מסמכים שנשלחו</h2>
+    {% if rows %}
+    <table>
+      <tr><th>מסמך</th><th>חותם</th><th>מצב</th><th>נשלח</th><th>נחתם</th></tr>
+      {% for r in rows %}
+      <tr>
+        <td>{{ r.doc_name }}</td>
+        <td>{{ r.signer_name }}</td>
+        <td><span class="pill {{ r.status }}">{{ r.status }}</span></td>
+        <td>{{ r.created_at[:16].replace('T', ' ') }}</td>
+        <td>{{ (r.signed_at or '—')[:16].replace('T', ' ') }}</td>
+      </tr>
+      {% endfor %}
+    </table>
+    {% else %}
+    <p class="note">עוד לא יצא מסמך לחתימה.</p>
+    {% endif %}
+  </div>
+  <p class="foot">הדלת הציבורית של האפליקציה היא <code>/s/&lt;token&gt;</code> בלבד — היא פותחת מסמך אחד, לא את הלשכה.</p>
+</div>
+<script>
+  // the office's own screen talks to its own API; the signer's page never loads this script
+  document.getElementById('new').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const out = document.getElementById('out');
+    const r = await fetch('/api/envelopes', {method: 'POST', body: new FormData(e.target)});
+    const j = await r.json();
+    out.hidden = false;
+    if (!j.ok) { out.className = 'err'; out.textContent = j.detail || 'השליחה נכשלה'; return; }
+    out.className = 'note';
+    out.innerHTML = 'הקישור מוכן: <span class="link">' + j.data.link + '</span>';
+  });
+</script>
+</body>
+</html>

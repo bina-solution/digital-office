@@ -712,3 +712,94 @@ Faults found on the way, each fixed and measured (commits on `dgo`):
   `serve.exclude`.
 * The bina-ds DSH "remotes" client polls `/api/remote.mux` on vps1's console every ~10 s (400). It is
   noise from a page, not from this chain.
+
+## Machines and the full console: the two things an app of a linked office could not do (DGO-553)
+
+Written 2026-11-01, after the work landed on hp-laptop. What was already true — an app of a linked office
+is a tile, and a person opens it — did not stretch to two cases, and each needed something new rather
+than a configuration:
+
+**1. Sharing MACHINES is not sharing an app.** A `computers` tile shows the SERVING office's fleet; the
+asking office's own screen listed nothing of the other side's. So:
+
+- `serve.computers.machines` — `"*"` or a list of ids — in the link's own declaration. The screen is
+  «הרחבת לשכה» → מה היא נותנת → מחשבים (`apps/dgo-extend/static/app.js`, `converge._set_home_serve`
+  preserves and validates the list). Absent = today's behaviour (sharing the app shares its machines);
+  malformed = nothing, and it says so.
+- The receiving half is `apps/computers/remote.py`: every linked office's `computers` app (from
+  `remote.<office>.computers.json` — the compiler's record of its door) is asked for ITS list, and the
+  rows are re-issued here as `<machine>.<office>`. Every op on such a row is a call back over the link;
+  nothing is copied and no key crosses.
+- An office whose «מחשבים» predates the `shell` op answers `405`, and the screen says «הלשכה הזו עדיין
+  לא תומכת בטרמינל מרחוק — צריך לעדכן אותה» instead of opening a terminal that dies.
+
+  **EVERY per-machine op crosses the link** — `status`, `probe`, `exec`, the five `shell` routes,
+  `audit`, `authorize-command` — each one asked of the office that holds the machine (its key, its
+  ssh, its box); the «אישור המפתח» dialog therefore prints THAT office's key line, not this one's.
+  Three of them used to stop at a local lookup and answer `404` inside a dialog for a machine that
+  plainly exists (measured 2026-11-02: `authorize-command`, `audit`, `probe`), and `probe` was broken
+  for local machines too (`500` — it called the status route without the request). Two ops
+  deliberately do NOT cross: `DELETE` (a peer's machine is not deleted from here — `403`, by name) and
+  `stream`/`transfer` (moving a volume between offices is two keys and one staging file, i.e. its own
+  work — `501`, by name). Both say why instead of answering "no such machine".
+
+**2. The FULL console could not be mounted.** A linked office's «המרכז» tile opened its console on a
+NESTED host — another site on `*.localhost`, where the frame can neither sign a browser in nor be
+inspected. Two halves fixed it:
+
+- `platform-base/console/app.json` declares `embed: false, path_mount: true`, so
+  `reconcile._own_host_only()` stops calling it own-host-only and `serve.module_entries()` gives the tile
+  a `proxy` + `door` — the peer's console now opens under `/a/console-home.<office>/` through the console
+  proxy, same origin.
+- `platform-base/console/static/mount.js` derives the mount prefix from `document.baseURI` and wraps
+  `fetch`, so the mounted console's own API calls stay under the prefix. Without it every call would
+  address the HOSTING office's `/api` and the frame would show one office's app inside the other's shell
+  (measured 2026-10-05).
+- **A peer can only be mounted when IT carries that pair of files.** Its `/mount.js` must answer as
+  JavaScript; an older console answers its own SPA for any unknown path, so `/mount.js` comes back
+  `text/html` and the tile is drawn as a card that says the office needs an update.
+
+  Two details that make the mounted console actually run, both measured 2026-11-01:
+  1. **Where `mount.js` is fetched from.** `index.html` loads it with an ABSOLUTE path (`/mount.js`, and it
+     is the FIRST script), because an absolute path is not affected by an injected `<base>`. Under
+     `/a/console-home.<office>/` that request therefore lands on the HOSTING console — its copy of the same
+     file — or on the mounted one if the hosting proxy rewrote `src`; either way the script is the same code
+     and it reads the prefix from `document.baseURI`, which the proxy set. Absolute path and `<base>` are
+     working together here, not against each other.
+  2. **The proxy must keep JavaScript a script.** `/a/terminal/static/term.js`,
+     `/a/computers/static/app.js` and `/mount.js` are all served `text/javascript; charset=utf-8` through
+     `/a/<name>/` (the proxy copies every header but the hop-by-hop set). A proxy that flattened the
+     content type would refuse to execute the wrapper while the page still looked right.
+
+**The gate: a header is a claim, and the door signs.** `apps/computers/link_identity.py` verifies
+`x-dgo-identity` — the door's HMAC of `v1\n<office>\n<user>\n<ts>`, keyed by the pair's `dgo_link`
+secret, valid 300 s (the same contract `apps/project-pln/office_identity.py` reads). Measured before the
+fix: `curl -H 'x-dgo-office: nosuchoffice' …/api/computers` answered this office's whole fleet. Two
+refusals now, each in its own sentence: a name that is not a linked office, and an unsigned claim that
+did not come from the door's own address (`dgo-net`/`dgo-link`, the one container that carries peers'
+requests — an office on an older release still works through it, and every such request is logged).
+**A proxy is not an exemption:** `apps/terminal/app.py` forwards the door headers on every call it makes
+to `computers`, because it is a LOCAL caller by construction — without that it listed the whole fleet to
+a linked office and would open a shell on any of it (measured 2026-11-01).
+
+**Proving it, without two updated offices:**
+
+```
+./bbox dgo accept [<office>] [--self-test]   # per clause, per office, with the fact that decides it
+./bbox dgo test readiness                    # the card's words + the judge, against canned facts
+./bbox test computers [--live]               # the app's suites, and the gate itself when live
+                                             # (`--live` also runs tests/cross_office_acceptance.py:
+                                             # every per-machine op answered by the office that holds
+                                             # the machine, on a REAL peer — exit 2 = no peer machine)
+./bbox test terminal [--machine <id>]        # one real session through the chain
+```
+
+The screen reads the same two facts through the door (`GET /api/link/readiness`, cached a minute) and draws
+them as pills on each linked office's card — so "can that office open what I send it" is answered where
+the owner shares, not in a terminal.
+
+**What an office needs to RECEIVE** is its own copy of this code (`path_mount` + `mount.js`, `shell` in
+`computers`), i.e. a merge of this line and `bbox run`. Measured 2026-11-01 with `git merge-tree`: the
+MacBook's `mac-dgo` is a strict ancestor (927 behind, 0 ahead — fast-forward, no conflicts), `dgo` likewise;
+`dell-dgo` has diverged (49 behind, 13 ahead) and conflicts in `apps/dgo-extend/**`, so that one is a merge
+with a decision, not a fast-forward.

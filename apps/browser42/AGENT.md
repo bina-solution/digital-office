@@ -16,7 +16,11 @@ tab you open is in front of him.
 ./bbox b42 task goto|click|extract <slug> <arg> # act on the page
 ./bbox b42 task fill|press <slug> <handle> <value>
 ./bbox b42 task finish <slug>                   # close it; `bbox b42 groups` lists the live ones
+./bbox b42 tab list                             # ANY tab by its id: text|snapshot|shot|navigate|click|type|eval|close <id>
+                                                # (a task's or hand-off's tab is only read; DGO-1251)
 ./bbox b42 handoff <slug>                       # the one link for a person: that tab in front, awake
+./bbox b42 open <app> <url|-> --slug <slug>     # an app needs a person here: every console brings him (DGO-1336)
+./bbox b42 handoff <slug> --done | --failed "<sentence>"   # …and that errand ended; `--list` shows the open ones
 ./bbox b42 await <slug> "<conditions>" 280      # block until the PAGE says the person finished
 ./bbox b42 logins sessions                      # which sites the browser is signed in to
 ./bbox b42 logins list                          # the saved passwords it holds (not sign-ins)
@@ -31,6 +35,12 @@ The agent door is `POST http://browser42:8766/v1/task` with `{"argv": ["start", 
 the same words as `bbox b42 task …`. Over a link: `./bbox b42 task --office <office> …`. The live view is
 `/a/browser42/` on the console host. `page` and `shot` are `link: false` operatives: they drive THIS
 office's browser only.
+
+`GET http://browser42:8766/v1/handoffs` (open, like `/healthz`) lists the hand-offs that are news — which
+app waits for a person here, and how the last one ended; never an address. Every console that shows
+this browser asks it, and brings the browser to whoever is looking while one is `needed` (DGO-1336).
+The view, the websocket and `/handoff/*` are gated (Caddy → handoff.py `/gate`): a linked office's
+console is admitted by the link proxy's address, everyone else by this office's own sign-in.
 
 ## Rules
 
@@ -54,9 +64,21 @@ office's browser only.
 ## Traps
 
 - A slug is lowercase kebab and fixed for the task's life.
-- The usage line in `hooks/await` names `bbox b42 open`, which does not exist — open the tab with
-  `group <slug> <url>` (or `task start`), then `await`.
+- `open` is the hand-off verb (`open <app> <url>`): it switches whoever is looking at that app's tile
+  to the browser. For a tab of your own to await on, open it with `group <slug> <url>` (or
+  `task start`), then `await`. End a hand-off with the `--episode` `open` answered: an end for an
+  episode a newer attempt replaced is refused (exit 3).
+- A sign-in's address never goes into a log, a sentence or an argv: `open <app> -` reads it from stdin,
+  and the manifests and the extension keep addresses bare (no query).
 - A stalled task or an exhausted captcha posts a notice to the owner by itself.
+- **The MCP server's code is IN its image, and it goes nowhere** (DGO-1561). `browser42-mcp` is built
+  from `Dockerfile.mcp` with `@playwright/mcp` at the pinned version installed at build time; it runs
+  that binary, not `npx`. So changing the MCP version is a build and a recreate of that one service
+  (`./scripts/dc build browser42-mcp && ./scripts/dc up -d browser42-mcp`), never a command on a line
+  — and at run time it may reach only the browser's CDP endpoint on `browser42-internal`
+  (`platform-base/security/egress.yaml` declares it as going nowhere, and `platform-base/security/egress.py`
+  is what judges a flow against it). A flow it makes to the internet
+  is a defect, not a fetch.
 
 Gates: G35 (no incident fixture in the generic browser surfaces), G17 (the agent door the compiler
 publishes), its own tests (`test_*.py`).

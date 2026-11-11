@@ -2,14 +2,17 @@
 
 The office's one file layer: people drop files into it from the console, apps write into it
 (meeting recordings into «פגישות», the recorder into «הקלטות»), and agents read what is there by
-path. Three planes, one service:
-  * the ENGINE plane — `drive_local` is a private engine we run, and it has N PROFILES. A profile is
-    an identity holding a credential; it is declared in app.json or created here, and creating one
-    creates its vault instance in the same operation. See profiles.py / bootstrap.py.
-  * the CONNECTION plane (§2) — every profile, private or remote, is an ordinary vault instance.
+path. It is the GENERIC app of its kind (DGO-1500, apps/drive/ENGINES.md): every drive is an account
+of an ENGINE — `drive-local` (the office's own storage, kind engine) or `drive-google` (Google Drive,
+kind external) — found by name and asked over drive-engine.v1 (engines.py). This file holds no
+engine's code: no database, no storage client, no Google. Three planes, one service:
+  * the ENGINE plane — the engines' own. `drive_local` has N PROFILES (identities holding a key,
+    declared in drive-local's app.json or made in «ניהול פרופילים»); its `/engine/*` routes and the
+    share links `/file/d/*` are handed to it verbatim (`routes` in its /ops).
+  * the CONNECTION plane (§2) — every drive of every engine is an ordinary vault instance.
     The BINDING (which one this drive acts as) lives here, as a {scope -> id} map.
-  * the OP plane — every op runs through an adapter (`adapters/`). The UI plane (`/api/*`, the
-    SSO-gated browser) runs on the account the operator selected — the BOUND profile.
+  * the OP plane — every op runs through the account's engine (engines.RemoteAdapter). The UI plane
+    (`/api/*`, the SSO-gated browser) runs on the account the operator selected — the BOUND profile.
     The §3 CANONICAL OPS (`/list /download /upload /move /update /delete /createFromText`, what
     n8n's driveApi01 calls) never fall back to the binding: `connection_id`/`profile_id` is
     REQUIRED on every one of them (see `_explicit_connection_required`).
@@ -20,38 +23,69 @@ request) remains for small files and streams each part from its spooled temp fil
 streamed with Range; a user's file is served inline only when it is a type that cannot run anything
 (media.serve_headers), so a stored .html or .svg can never act with the viewer's session.
 
-AUTHORIZATION. Three rings, checked here, enforced in the adapter's QUERIES:
-    data   any active profile — every drive op, scoped to its own rows
-    self   any active profile — read/update itself, rotate its own key
-    admin  is_admin only      — create/edit/suspend/delete OTHER profiles
-The ACTING profile is the one whose credential the request presents (`X-Drive-Profile-Key`). When no
-credential is presented the request is the SSO-gated browser UI, and it acts as the BOUND profile —
-platform users are explicitly out of scope (profiles-and-engines.md §7), so the SSO session is the
-authentication and the binding is the identity. Data scoping does not depend on this either way: it
-is applied by the adapter to whichever profile ends up resolved.
+AUTHORIZATION. Three rings (data / self / admin) on the office storage's profiles, checked by its
+engine (drive-local) and enforced in its QUERIES. The ACTING profile is the one whose credential the
+request presents (`X-Drive-Profile-Key`), passed to the engine with every call. When no credential is
+presented the request is the SSO-gated browser UI, and it acts as the BOUND profile — platform users
+are explicitly out of scope (profiles-and-engines.md §7), so the SSO session is the authentication and
+the binding is the identity.
 """
 import hashlib
 import os
+import secrets
 import subprocess
 import tempfile
+import urllib.parse
+from json import loads as json_loads
 
 import requests
 from flask import Flask, Response, jsonify, request, send_from_directory
 
-import adapters
-import bootstrap
 import connections_client as cx
+import engines
 import extensions
-import media
-import media_jobs
-import profiles
 import uploads
-from adapters import AdapterError, local as local_engine
-from adapters.google import GoogleAuthError
-from adapters.local import DFILE_COLS, _dfile, ensure_schema, public_stream, q
-from profiles import ProfileError
+from engines import AdapterError, AuthError, ProfileError
 
-local_engine.ON_DELETE.append(media_jobs.forget)
+# ── the fourth channel: what this app did, on `dgo:flow:drive` (flow.v1, DGO-1402) ────────────────
+# Through the office's ONE publisher, platform-base/redis/flowpub.py, mounted read-only at /opt/dgo
+# (docker-compose.yml): «כל מקביל» draws it as the row «דרייב» and agents hear it (`./bbox drive flow`).
+# What goes out is what happened and how big — never a file's NAME (a person's content, the contract's
+# rule). An image run without the mount publishes nothing and works the same.
+import contextlib
+import sys
+
+sys.path.insert(0, "/opt/dgo")
+try:
+    import flowpub
+except ImportError:
+    flowpub = None
+
+
+# The event's own two words are positional-only (`/`): what follows is the event's DATA, and a data key may
+# be any word — `_upload_span` says the file's `kind`, and with `kind` a parameter here that call raised
+# «got multiple values for argument 'kind'», which turned every upload into «שמירת הקובץ נכשלה» (ed670506).
+def _flow(type_, title, /, **data):
+    if flowpub is not None:
+        flowpub.emit("drive", type_, title, data)
+
+
+def _flow_span(kind, title, /, **data):
+    return flowpub.span("drive", kind, title, data) if flowpub is not None else contextlib.nullcontext()
+
+
+def _upload_span(name, mime, size):
+    """A PERSON's upload as one bar — called on the two upload doors (the multipart form and a finished
+    resumable session), NOT in `_store`: the office's backup writes every object through that too (restic,
+    PUT /api/fs/content), and a night's packs would push every upload out of the stream (the second reader)."""
+    kind = _kind_of(name, mime)
+    return _flow_span("file.upload", f"העלאת קובץ {kind} ({max(1, int(size or 0) // 1024)} KB)", size=size, kind=kind)
+
+
+def _kind_of(name, mime) -> str:
+    """What sort of file, without its name: the extension, or the MIME type's major half."""
+    ext = os.path.splitext(str(name or ""))[1].lstrip(".").lower()
+    return ext[:8] if ext.isalnum() else (str(mime or "").split("/")[0] or "file")
 
 # ── Sentry/GlitchTip error reporting (platform standard) ──────────────────────────
 # Wired declaratively: glitchtip-push mints this service's project + deterministic DSN into
@@ -95,45 +129,62 @@ app.wsgi_app = _Surfaces(app.wsgi_app)
 # /api/uploads in pieces, which never parse a form at all).
 app.config["MAX_CONTENT_LENGTH"] = uploads.MAX_SIZE + 16 * 1024 * 1024
 
-CONNECTIONS_PUBLIC_URL = os.environ.get("CONNECTIONS_PUBLIC_URL", "https://connections.localhost").rstrip("/")
-PROFILE_KEY_HEADER = "X-Drive-Profile-Key"
+PROFILE_KEY_HEADER = engines.PROFILE_KEY_HEADER
 TUS = {"Tus-Resumable": "1.0.0"}
-
-# ── one-time provisioning, RETRIED until the DB and the vault are actually there ───
-# On a cold bring-up this service reaches gunicorn before supabase-db accepts TCP; a bare call at
-# import used to leave the worker unprovisioned for life. The PROFILE RECONCILER runs in the same
-# place for the same reason: in-process with direct DB access (which exempts it from profile
-# authentication — the chicken-and-egg of needing an admin key to create the admin), idempotent,
-# ledger-backed, and it NEVER re-mints a credential for a profile that already has an instance.
-_SCHEMA_OK = False
-_PROFILES_OK = False
-
-
-def _provision():
-    global _SCHEMA_OK, _PROFILES_OK
-    if not _SCHEMA_OK:
-        if not ensure_schema():
-            return                  # DB still coming up — the next request tries again
-        try:
-            media_jobs.ensure_table()
-        except Exception as e:
-            print("[drive] media table deferred:", e, flush=True)
-            return
-        _SCHEMA_OK = True
-    if not _PROFILES_OK:
-        try:
-            _PROFILES_OK = bootstrap.reconcile()
-        except Exception as e:      # a reconciler must never take the service down with it
-            print("[drive] profile reconcile deferred:", e, flush=True)
+ENGINE_BODY_LIMIT = 1024 * 1024
+# The office storage's schema and its profile reconciler run in ITS engine (apps/drive-local), which
+# owns the database; nothing is provisioned here.
 
 
 @app.before_request
-def _provision_before_request():
-    # /healthz is polled every 30s, so this re-arms on its own even with no user traffic at all.
-    _provision()
+def _engine_routes():
+    """What an engine keeps for itself is handed to it verbatim, by the path prefixes its /ops names:
+    drive-local's profile plane (`/engine/`) and its share links (`/file/d/`). No prefix is written here."""
+    path = request.path
+    if path.startswith(("/api/", "/oauth/", "/vendor/", "/js/", "/connections")) or path in ("/", "/healthz", "/readyz", "/manifest"):
+        return None
+    # a path that climbs (`/file/d/%2e%2e/…/engine/…`) is never handed over: the share links' router has no
+    # sign-in, and a climb out of its prefix would reach another one (the second reader, DGO-1500)
+    raw = request.environ.get("RAW_URI") or request.environ.get("REQUEST_URI") or ""
+    segs = path.split("/") + urllib.parse.unquote(raw.split("?", 1)[0]).split("/")
+    if any(s in (".", "..") for s in segs) or "\\" in path:
+        return jsonify({"error": "נתיב לא תקין"}), 400
+    for prefix, eid in engines.routes():
+        if path.startswith(prefix):
+            return _hand_over(eid)
+    return None
 
 
-_provision()
+def _hand_over(eid):
+    """The request, as it came, to the engine that owns its prefix. Without a key the engine asks this app
+    which drive is bound (GET /connections/active) — nothing a caller sends can name the profile it acts as."""
+    if request.content_length:
+        body = (request.stream, request.content_length)
+    elif request.path.startswith("/engine/") and request.method in ("POST", "PUT", "PATCH", "DELETE"):
+        # a chunked body (no length) is read here — the profile plane's small JSON, capped: never a body
+        # anyone without a sign-in could make this process hold (the share links take none at all)
+        body = request.stream.read(ENGINE_BODY_LIMIT + 1)
+        if len(body) > ENGINE_BODY_LIMIT:
+            return jsonify({"error": "הבקשה גדולה מדי"}), 413
+    else:
+        body = b""
+    status, out, chunks = engines.proxy(eid, request.path, request.method, request.args.to_dict(flat=False),
+                                        dict(request.headers.items()), body)
+    if request.method != "GET" and request.path.startswith("/engine/"):
+        # a profile made, changed or removed: the drives' list and the default may have moved with it
+        body = b"".join(chunks)
+        engines.invalidate()
+        cx.forget_default()
+        if request.method == "DELETE" and 200 <= status < 300:
+            try:
+                gone = (json_loads(body) or {}).get("removed_connection")
+            except ValueError:
+                gone = None
+            if gone and cx.active() == gone:
+                cx.unbind()             # fall back to the default rather than a drive that is gone
+        return Response(body, status=status, headers=out)
+    return Response(chunks, status=status, headers=out, direct_passthrough=True)
+
 
 # Retire what the deleted bootstrap shim registered (keyed on a marker only the shim wrote, so an
 # app's own registration is untouched). See extensions.retire_bootstrap.
@@ -226,15 +277,77 @@ def _use(require_explicit=False):
     pid, cid = _override()
     if require_explicit and not pid and not cid:
         _explicit_connection_required()
-    inst, adapter = adapters.resolve(profile_id=pid, connection_id=cid)
-    me = acting_profile() if _presented_key() else None
-    if me and inst.get("protocol") in adapters.PRIVATE_PROTOCOLS:
-        target = profiles.by_instance(inst.get("id")) or profiles.get(inst.get("account_hint"))
-        if target and target["id"] != me["id"]:
-            raise ProfileError(
-                f"המפתח שייך לפרופיל «{me['display_name']}» ואינו יכול לפעול בשם "
-                f"«{target['display_name']}»", 403)
-    return inst, adapter
+    key = _presented_key()
+    inst = _resolve_instance(pid, cid)
+    if key and not inst.get("is_private"):
+        # a key is checked by the engine that issues keys, whatever drive it names: an invalid one is a 401
+        _acting(key)
+    # the engine of a private drive refuses a key of profile B on profile A's drive (its check_key)
+    return inst, engines.for_instance(inst, key)
+
+
+def _resolve_instance(pid, cid):
+    """THE single choke point: the instance an op runs on. Precedence: explicit argument > binding >
+    (the default profile, only when NOTHING is bound). A binding that names a missing instance RAISES:
+    an op must fail rather than run against a different account than the one selected (see
+    connections_client.resolve_active, and the 2026-07-17 incident it is named after)."""
+    if pid and not cid:
+        inst = _instance_for_profile(pid)
+        if not inst:
+            raise AdapterError(f"unknown profile {pid!r}", 404)
+        return inst
+    if cid:
+        inst = cx.get_instance(cid)
+        if not inst:
+            raise AdapterError(f"unknown connection {cid!r}", 404)
+        return inst
+    inst, reason = cx.resolve_active()
+    if reason:
+        raise AdapterError(reason, 503)
+    return inst
+
+
+def _instance_for_profile(pid):
+    """The instance carrying a profile's key: the office storage's engine names it (its accounts carry
+    `profile_id`); a stale id resolves to nothing rather than to a connection that no longer exists."""
+    insts, err = cx.vault_instances()
+    if err:
+        raise AdapterError(f"{err} — לא ניתן למצוא את הפרופיל {pid}", 503)
+    private = set(engines.private_protocols())
+    rows = [i for i in insts if i.get("protocol") in private]
+    mine = [r for r in engines.accounts(rows) if r.get("profile_id") == pid and r.get("profile_status") != "missing"]
+    # the profile's own instance (its row's `instance_id`, the authoritative map) before any other that
+    # carries the same hint — a second row added by hand or left by a rotation must not win
+    hit = next((r for r in mine if r.get("primary")), None) or (mine[0] if mine else None)
+    return engines.annotate(hit) if hit else None
+
+
+def _acting(key=None):
+    """Who is acting — {profile, is_admin} — or None. Without a key: the bound drive, as its own engine
+    describes the account (its profile's name, admin flag, state), answered here with no call back into this
+    app. With a key: the office storage's /engine/whoami, and a key it does not know is a 401 here too."""
+    if not key:
+        inst, reason = cx.resolve_active()
+        if reason or not inst or not inst.get("is_private"):
+            return None                 # a binding that does not resolve, or a remote account: no profile acts
+        row = next(iter(engines.accounts([inst])), {}) if inst else {}
+        if row.get("profile_status") in (None, "missing"):
+            return None
+        prof = {"id": row.get("profile_id"), "display_name": row.get("label"), "is_admin": bool(row.get("is_admin")),
+                "status": row.get("profile_status")}
+        return {"ok": True, "profile": prof, "is_admin": prof["is_admin"]}
+    eid = engines.private_engine()
+    if not eid:
+        return None
+    hdrs = {PROFILE_KEY_HEADER: key}
+    try:
+        r = requests.get(engines.url(eid) + "/engine/whoami", headers=hdrs, timeout=(5, 15))
+        doc = r.json()
+    except (requests.RequestException, ValueError, AdapterError):
+        return None
+    if r.status_code == 401:
+        raise ProfileError(doc.get("error") or "מפתח הפרופיל אינו תקף", 401)
+    return doc if isinstance(doc, dict) and doc.get("ok") else None
 
 
 def _need(ad, method, what):
@@ -275,7 +388,7 @@ def _crashed(e):
     return jsonify({"error": "שגיאה פנימית בדרייב — הפעולה לא בוצעה"}), 500
 
 
-@app.errorhandler(GoogleAuthError)
+@app.errorhandler(AuthError)
 def _google_error(e):
     # 503, not 500: the connection is unusable, the service is fine. A MISSING FILE carries the
     # status Google returned (404/410), so a caller can tell "retry later" from "never exists".
@@ -301,44 +414,11 @@ def _presented_key():
 
 
 def acting_profile():
-    """Who is making this request. A presented credential is authoritative; without one the caller
-    is the browser UI behind authentik and acts as the bound profile (there is no platform-user →
-    profile mapping yet, and inventing one here would be a second identity model)."""
-    key = _presented_key()
-    if key:
-        p = profiles.by_key(key)
-        if not p:
-            raise ProfileError("מפתח הפרופיל אינו תקף", 401)
-        return p
-    inst, reason = cx.resolve_active()
-    if reason or not inst:
-        return None
-    if inst.get("protocol") not in adapters.PRIVATE_PROTOCOLS:
-        return None                 # bound to a remote account — there is no engine profile acting
-    return profiles.by_instance(inst.get("id")) or profiles.get(inst.get("account_hint"))
-
-
-def require_profile():
-    p = acting_profile()
-    if not p:
-        raise ProfileError("אין פרופיל פעיל לבקשה הזו", 401)
-    if p["status"] != profiles.STATUS_ACTIVE:
-        raise ProfileError("הפרופיל מושעה", 403)
-    return p
-
-
-def require_admin():
-    p = require_profile()
-    if not p["is_admin"]:
-        raise ProfileError("נדרשות הרשאות מנהל", 403)
-    return p
-
-
-def require_self_or_admin(pid):
-    p = require_profile()
-    if p["id"] != pid and not p["is_admin"]:
-        raise ProfileError("אפשר לשנות רק את הפרופיל שלך", 403)
-    return p
+    """Who is making this request, as the office storage's engine says (its /engine/whoami): a presented
+    credential is authoritative; without one the browser UI behind authentik acts as the bound profile.
+    None when the binding is a remote account or the engine does not answer."""
+    who = _acting(_presented_key())
+    return (who or {}).get("profile")
 
 
 # ── SPA ───────────────────────────────────────────────────────────────────────────
@@ -364,14 +444,28 @@ def index(_rest=None):
 
 
 # ── the UI plane — all through the BOUND profile ──────────────────────────────────
+def _local(ad):
+    """Is this a private engine's drive — one whose bytes sit in this office's storage? Upload sessions
+    are then the profile's own; a Google account's are the connection's."""
+    return bool(getattr(ad, "private", False))
+
+
+def _drive_of(inst, ad):
+    """What the screen needs to know about the drive it is showing, beside its folders: which drive it
+    is, and what this drive can do — so a place it cannot answer is not offered."""
+    ops = engines.ops_for(ad)
+    return {"id": inst.get("id"), "protocol": inst.get("protocol"), "label": inst.get("label"),
+            "account_hint": inst.get("account_hint"),
+            "profile_id": inst.get("profile_id"), "is_private": inst.get("is_private"),
+            "views": engines.views_for(ad), "optional_ops": ops["optional_ops"],
+            "media": callable(getattr(ad, "media_files", None)),
+            "creates": not getattr(ad, "_SA_NO_CREATE", None)}
+
+
 @app.get("/api/folders")
 def api_folders():
     inst, ad = _use()
-    return jsonify({"folders": ad.folders(),
-                    "connection": {"id": inst.get("id"), "protocol": inst.get("protocol"),
-                                   "label": inst.get("label"),
-                                   "profile_id": inst.get("profile_id"),
-                                   "is_private": inst.get("is_private")}})
+    return jsonify({"folders": ad.folders(), "connection": _drive_of(inst, ad)})
 
 
 @app.get("/api/files")
@@ -386,7 +480,7 @@ def api_files():
     if callable(getattr(ad, "trashed_folders", None)):
         kw.update(limit=request.args.get("limit") or 1000, offset=request.args.get("offset") or 0)
     folders = []
-    if view and view in adapters.views_for(ad):
+    if view and view in engines.views_for(ad):
         files = ad.files(request.args.get("folder", ""), trash, view=view, **kw)
         if view == "shared" and callable(getattr(ad, "shared_folders", None)):
             folders = ad.shared_folders()
@@ -417,11 +511,8 @@ def api_media():
     one file at a time; the page asks again on its next refresh."""
     _, ad = _use()
     kind = (request.args.get("kind") or "visual").strip().lower()
-    files = _need(ad, "media_files", "תצוגות מדיה")(kind)
-    todo = [f for f in files if not f.get("probed") or (kind == "audio" and not media_jobs.has_peaks(f["id"]))]
-    if todo:
-        media_jobs.probe_later(todo[:200])
-    return jsonify({"files": files})
+    # the engine that holds the bytes starts finding out what it does not know yet (drive-local)
+    return jsonify({"files": _need(ad, "media_files", "תצוגות מדיה")(kind)})
 
 
 @app.get("/api/file/<fid>/thumb")
@@ -432,10 +523,12 @@ def api_file_thumb(fid):
     item = _need(ad, "_file", "תמונות ממוזערות")(fid)
     if not item:
         return jsonify({"error": "הקובץ אינו קיים"}), 404
-    data = media_jobs.thumb(item, request.args.get("s") or 256)
+    # each engine draws its own pictures: drive-local from its storage, Google its thumbnail
+    got = ad.thumb(item, request.args.get("s") or 256) if callable(getattr(ad, "thumb", None)) else None
+    data, mime = got if got else (None, "image/webp")
     if not data:
         return jsonify({"error": "אין תמונה לקובץ הזה"}), 404
-    return Response(data, mimetype="image/webp",
+    return Response(data, mimetype=mime,
                     headers={"Cache-Control": "private, max-age=604800, immutable", "X-Content-Type-Options": "nosniff"})
 
 
@@ -443,13 +536,13 @@ def api_file_thumb(fid):
 def api_file_peaks(fid):
     """An audio file's waveform — 600 loudness values between 0 and 1."""
     _, ad = _use()
-    item = _need(ad, "_file", "גל קול")(fid)
-    if not item:
-        return jsonify({"error": "הקובץ אינו קיים"}), 404
-    if request.args.get("cached") and not media_jobs.has_peaks(item["id"]):
-        # a list asks without starting the work: the background job measures it (see _store, api_media)
+    if not callable(getattr(ad, "peaks", None)):   # measured only by an engine that holds the bytes
+        return jsonify({"error": "אין גל קול לקובץ הזה"}), 404, {"Cache-Control": "no-store"}
+    cached = bool(request.args.get("cached"))
+    # a list asks without starting the work (`cached`): the engine's background job measures it
+    vals = ad.peaks(fid, cached=cached)
+    if not vals and cached:
         return jsonify({"error": "גל הקול עוד לא נמדד"}), 404, {"Cache-Control": "no-store"}
-    vals = media_jobs.peaks(item)
     if not vals:
         return jsonify({"error": "אין גל קול לקובץ הזה"}), 404
     return jsonify({"peaks": vals}), 200, {"Cache-Control": "private, max-age=604800, immutable"}
@@ -496,7 +589,7 @@ def api_star():
     if not ids:
         return jsonify({"error": "id or ids required"}), 400
     _, ad = _use()
-    if "star" not in adapters.ops_for(ad)["optional_ops"]:
+    if "star" not in engines.ops_for(ad)["optional_ops"]:
         return jsonify({"error": "החיבור הזה אינו תומך בסימון בכוכב"}), 501
     return jsonify(ad.star(ids, bool(b.get("starred", True))))
 
@@ -505,7 +598,7 @@ def api_star():
 def api_storage():
     """Bytes used by THIS profile, file count, the trash's share, and a ceiling only if configured."""
     _, ad = _use()
-    if "storage" not in adapters.ops_for(ad)["optional_ops"]:
+    if "storage" not in engines.ops_for(ad)["optional_ops"]:
         return jsonify({"error": "החיבור הזה אינו מדווח על נפח"}), 501
     return jsonify(ad.storage())
 
@@ -525,7 +618,9 @@ def api_search():
 def api_create_folder():
     b = request.get_json(silent=True) or {}
     _, ad = _use()
-    return jsonify({"folder": ad.create_folder(str(b.get("name") or ""), str(b.get("parent") or ""))}), 201
+    folder = ad.create_folder(str(b.get("name") or ""), str(b.get("parent") or ""))
+    _flow("folder.created", "נוצרה תיקייה")
+    return jsonify({"folder": folder}), 201
 
 
 def _store(ad, src, size, md5, name, mime, folder):
@@ -538,10 +633,8 @@ def _store(ad, src, size, md5, name, mime, folder):
         if size > 64 * 1024 * 1024:
             raise AdapterError("החיבור הזה מקבל קבצים עד 64 MB", 413)
         item = ad.upload(folder, name, mime, src.read())
-    # what the views show about a picture, a video or a recording (and a recording's waveform) is found
-    # out now, in the background — not when somebody first opens it
-    if isinstance(item, dict) and item.get("id") and media_jobs.wants_probe(item):
-        media_jobs.probe_later([item])
+    # what the views show about a picture, a video or a recording is found out by the engine that holds
+    # the bytes, in the background, when it stores them (drive-local)
     return item
 
 
@@ -586,8 +679,9 @@ def api_upload():
             if not size:
                 failed.append({"name": f.filename, "error": "קובץ ריק"})
                 continue
-            done.append(_store(ad, src, size, md5, f.filename, f.mimetype, folder))
-        except (requests.RequestException, GoogleAuthError, AdapterError) as e:
+            with _upload_span(f.filename, f.mimetype, size):
+                done.append(_store(ad, src, size, md5, f.filename, f.mimetype, folder))
+        except (requests.RequestException, AuthError, AdapterError) as e:
             app.logger.warning("upload of %r failed: %s", f.filename, e)
             failed.append({"name": f.filename, "error": _upload_refusal(e)})
         except Exception as e:
@@ -612,7 +706,8 @@ def _session_store(ad):
         name = meta.get("name") or "file"
         if meta.get("mode") == "new" and callable(getattr(ad, "free_name", None)):
             name = ad.free_name(folder, name)
-        return _store(ad, src, size, md5, name, meta.get("mime"), folder)
+        with _upload_span(name, meta.get("mime"), size):
+            return _store(ad, src, size, md5, name, meta.get("mime"), folder)
     return store
 
 
@@ -643,11 +738,17 @@ def tus_options():
                      "Tus-Max-Size": str(uploads.MAX_SIZE)}
 
 
+def _owner(inst, ad):
+    """Whose upload sessions these are: the profile on the office's own engine, else the connection —
+    two Google accounts never see (or finish) each other's half-sent files."""
+    return getattr(ad, "profile_id", "") if _local(ad) else "c:" + str(inst.get("id") or "")
+
+
 @app.post("/api/uploads")
 def tus_create():
     """Open a session. tus headers (`Upload-Length`, `Upload-Metadata: name <b64>,folder <b64>,
     path <b64>,mime <b64>,mode <b64>`) or a JSON body {size, name, folder|path, mime, mode}."""
-    _, ad = _use()
+    inst, ad = _use()
     if request.headers.get("Upload-Length"):
         size = int(request.headers["Upload-Length"])
         meta = uploads.parse_metadata(request.headers.get("Upload-Metadata"))
@@ -656,23 +757,23 @@ def tus_create():
         size, meta = int(b.get("size") or 0), {k: str(b.get(k) or "") for k in ("name", "folder", "path", "mime", "mode", "system", "remux")}
     if meta.get("path"):
         _need(ad, "ensure_path", "נתיבים")
-    s = uploads.create(ad.profile_id if hasattr(ad, "profile_id") else "", size, meta)
+    s = uploads.create(_owner(inst, ad), size, meta)
     return jsonify({"id": s["id"], "offset": 0, "size": s["size"]}), 201, \
         {**TUS, "Location": f"api/uploads/{s['id']}", "Upload-Offset": "0"}
 
 
 def _session_answer(s, status=200):
-    body = {k: s.get(k) for k in ("id", "name", "size", "offset", "state", "error", "file")}
+    body = {k: s.get(k) for k in ("id", "name", "size", "offset", "state", "error", "error_status", "file")}
     return jsonify(body), status, {**TUS, "Upload-Offset": str(s["offset"]), "Upload-Length": str(s["size"]),
                                    "Cache-Control": "no-store"}
 
 
 @app.route("/api/uploads/<uid>", methods=["HEAD", "GET"])
 def tus_status(uid):
-    _, ad = _use()
-    s = uploads.status(uid, getattr(ad, "profile_id", ""))
+    inst, ad = _use()
+    s = uploads.status(uid, _owner(inst, ad))
     if s.get("state") == "complete":                    # every byte is in and nothing finished it
-        s = uploads.finish_async(uid, getattr(ad, "profile_id", ""), _session_store(ad))
+        s = uploads.finish_async(uid, _owner(inst, ad), _session_store(ad))
     return _session_answer(s)
 
 
@@ -680,12 +781,12 @@ def tus_status(uid):
 def tus_patch(uid):
     """The next piece at `Upload-Offset`. The piece that completes the file starts finishing it and
     answers 202 — the client then polls GET until `state` is `done` (with the stored file) or `failed`."""
-    _, ad = _use()
+    inst, ad = _use()
     try:
         offset = int(request.headers.get("Upload-Offset", ""))
     except ValueError:
         raise uploads.UploadError("Upload-Offset חסר", 400)
-    pid = getattr(ad, "profile_id", "")
+    pid = _owner(inst, ad)
     s = uploads.append(uid, pid, offset, request.stream, request.content_length)
     if s["offset"] == s["size"]:
         s = uploads.finish_async(uid, pid, _session_store(ad))
@@ -695,16 +796,16 @@ def tus_patch(uid):
 
 @app.delete("/api/uploads/<uid>")
 def tus_delete(uid):
-    _, ad = _use()
-    uploads.remove(uid, getattr(ad, "profile_id", ""))
+    inst, ad = _use()
+    uploads.remove(uid, _owner(inst, ad))
     return "", 204, TUS
 
 
 @app.get("/api/uploads")
 def tus_list():
     """This profile's unfinished sessions — what the page offers to resume after a reload."""
-    _, ad = _use()
-    return jsonify({"uploads": uploads.open_sessions(getattr(ad, "profile_id", ""))})
+    inst, ad = _use()
+    return jsonify({"uploads": uploads.open_sessions(_owner(inst, ad))})
 
 
 # ── mutations: files and folders alike ────────────────────────────────────────────
@@ -729,7 +830,11 @@ def api_move():
 def api_trash():
     b = request.get_json(silent=True) or {}
     _, ad = _use()
-    return jsonify({"ok": True, "count": ad.trash(_ids(b), bool(b.get("restore")))})
+    restore = bool(b.get("restore"))
+    count = ad.trash(_ids(b), restore)
+    _flow("items.restored" if restore else "items.trashed",
+          f"{'שוחזרו מהאשפה' if restore else 'הועברו לאשפה'} {count} פריטים", count=count)
+    return jsonify({"ok": True, "count": count})
 
 
 @app.post("/api/delete")
@@ -737,7 +842,10 @@ def api_delete():
     """Permanent delete — only of what is in the trash."""
     b = request.get_json(silent=True) or {}
     _, ad = _use()
-    return jsonify({"ok": True, "deleted": ad.delete(_ids(b))})
+    deleted = ad.delete(_ids(b))
+    n = deleted if isinstance(deleted, int) else len(deleted or [])
+    _flow("items.deleted", f"נמחקו לצמיתות {n} פריטים", count=n)
+    return jsonify({"ok": True, "deleted": deleted})
 
 
 @app.get("/api/file/<fid>/content")
@@ -747,7 +855,7 @@ def api_file_content(fid):
     the first byte, not on every seek of a player."""
     _, ad = _use()
     rng = request.headers.get("Range")
-    if "touch" in adapters.ops_for(ad)["optional_ops"] and (not rng or rng.replace(" ", "").startswith("bytes=0-")):
+    if "touch" in engines.ops_for(ad)["optional_ops"] and (not rng or rng.replace(" ", "").startswith("bytes=0-")):
         ad.touch(fid)
     want = "attachment" if request.args.get("dl") else "inline"
     try:
@@ -770,7 +878,8 @@ def api_fs():
     if kind == "file":
         return jsonify({"kind": "file", "file": obj, "path": path})
     fid = obj["id"]
-    kids = [f for f in ad.folders() if (f.get("parent") or "") == fid]
+    sub = getattr(ad, "subfolders", None)
+    kids = sub(fid) if callable(sub) else [f for f in ad.folders() if (f.get("parent") or "") == fid]
     return jsonify({"kind": "folder", "folder": obj, "path": obj["path"],
                     "folders": kids, "files": ad.files(fid)})
 
@@ -790,20 +899,26 @@ def api_fs_content():
 def api_fs_put():
     """Write the request body as the file at `?path=/פגישות/2026-10-28/x.mp4` — folders are created
     on demand; `mode=new` (the default) keeps an existing file and names this one «x (2).mp4»,
-    `mode=replace` trashes the existing one first. The body streams through a temp file (md5 and
-    size must be known before storage takes it), so a recording of any size is fine."""
+    `mode=replace` trashes the existing one first, `mode=exclusive` refuses (409) when the path is
+    taken. The body streams through a temp file (md5 and size must be known before storage takes it),
+    so a recording of any size is fine."""
     _, ad = _use()
     path = request.args.get("path") or ""
     parts = path.rstrip("/").rsplit("/", 1)
     if len(parts) != 2 or not parts[1].strip():
         return jsonify({"error": "path must end in a file name"}), 400
+    mode = request.args.get("mode") or "new"
     folder = _need(ad, "ensure_path", "נתיבים")(parts[0] or "/", request.args.get("system") or None)
     name = parts[1]
-    mode = request.args.get("mode") or "new"
     if mode == "replace":
         old = ad.resolve_path(path)
         if old and old[0] == "file":
             ad.trash([old[1]["id"]])
+    elif mode == "exclusive":
+        # a create that FAILS when the name is taken (DGO-1505: restic writes each pack once, under its own
+        # name, and a second copy under the same name — Google allows that — would be read as the first)
+        if ad.resolve_path(path):
+            return jsonify({"error": f"כבר יש פריט בנתיב {path}", "path": path}), 409
     else:
         name = ad.free_name(folder, name)
     with tempfile.TemporaryFile(dir=os.environ.get("DRIVE_UPLOAD_DIR", "/data/uploads")
@@ -877,12 +992,11 @@ def op_upload():
     name = request.form.get("name") or f.filename
     folder = request.form.get("folderId") or ""
     _inst, ad = _use(require_explicit=True)
-    if callable(getattr(ad, "store_file", None)):
+    if callable(getattr(ad, "op_upload", None)):
+        # streamed from the spooled part; the engine answers its own file resource (drive#file)
         src, size, md5 = _spooled(f)
-        item = ad.store_file(src, size, md5, name, f.mimetype, folder)
-        rows = q(DFILE_COLS + "WHERE id=%s AND profile=%s", (item["id"], ad.profile_id))
-        return jsonify(_dfile(*rows[0]))
-    return jsonify(_op("op_upload", folder, name, f.mimetype, f.read()))
+        return jsonify(ad.op_store_stream(src, size, md5, name, f.mimetype, folder))
+    raise AdapterError("this connection does not support that operation", 501)
 
 
 @app.post("/move")
@@ -938,31 +1052,13 @@ def op_ensure_folder():
     return jsonify({"id": parent, "path": path, "created": created})
 
 
-# ── public byte-serve — the share link, PROFILE-INDEPENDENT by design ─────────────
-@app.get("/file/d/<oid>/view")
-@app.get("/file/d/<oid>")
-def file_view(oid):
-    """/file/d/<id>/view — the shareable link written into documents and fetched by other services.
-    Profile-independent (a link written last year must resolve to the same bytes whichever profile is
-    bound today) and never enumerating: the exact opaque id is the capability. A trashed file is not
-    served; a user's file renders inline only when its type cannot run anything; `?dl=1` downloads."""
-    got = public_stream(oid, request.headers.get("Range"))
-    if not got:
-        return jsonify({"error": "הקובץ אינו קיים או שהועבר לאשפה"}), 404
-    rs, name, mime, md5 = got
-    if rs.status_code >= 400 and rs.status_code != 416:
-        rs.close()
-        return jsonify({"error": "הקובץ אינו זמין באחסון"}), 502 if rs.status_code >= 500 else 404
-    hdrs = media.serve_headers(name, mime, "attachment" if request.args.get("dl") else "inline", etag=md5)
-    for h in ("Content-Length", "Content-Range"):
-        if rs.headers.get(h):
-            hdrs[h] = rs.headers[h]
-    return Response(rs.iter_content(65536), status=rs.status_code, headers=hdrs, direct_passthrough=True)
+# ── the share link /file/d/<id>/view is the office storage's (drive-local), handed to it verbatim by
+# `_engine_routes` above: profile-independent by design, served on this app's address as it always was.
 
 
 @app.get("/healthz")
 def healthz():
-    q("SELECT 1")
+    """The process answers. Whether a drive WORKS is /readyz's question (its engine, its account)."""
     return jsonify({"status": "ok"})
 
 
@@ -974,22 +1070,25 @@ def manifest():
     before the user presses it; null (with a reason) when nothing resolves."""
     conn = None
     try:
-        inst, ad = adapters.resolve()
-        caps = adapters.ops_for(ad)
+        inst = _resolve_instance(None, None)
+        ad = engines.for_instance(inst)
+        caps = engines.ops_for(ad)
         conn = {"id": inst.get("id"), "protocol": inst.get("protocol"),
                 "is_private": inst.get("is_private"), "profile_id": inst.get("profile_id"),
-                "views": adapters.views_for(ad), **caps,
+                "views": engines.views_for(ad), **caps,
                 "paths": callable(getattr(ad, "resolve_path", None)),
                 "folder_ops": callable(getattr(ad, "trashed_folders", None)),
                 "streams": callable(getattr(ad, "store_file", None))}
-    except (AdapterError, GoogleAuthError) as e:
+    except (AdapterError, AuthError, ProfileError) as e:
         conn = {"error": getattr(e, "message", str(e))}
     return jsonify({
         "service": "drive",
-        "protocols": list(adapters.BY_PROTOCOL),
-        "private_protocols": sorted(adapters.PRIVATE_PROTOCOLS),
-        "ops": list(adapters.CANONICAL_OPS),
-        "optional_ops": list(adapters.PROTOCOL_OPS),
+        "protocols": engines.protocols(),
+        "private_protocols": engines.private_protocols(),
+        "engines": [{"id": eid, "app": engines.PREFIX + eid, "kind": o.get("kind"),
+                     "protocols": list(o.get("protocols") or {})} for eid, o in engines.all_ops()],
+        "ops": list(engines.CANONICAL_OPS),
+        "optional_ops": list(engines.PROTOCOL_OPS),
         "slots": list(extensions.SLOTS),
         "connection": conn,
         "capabilities": {
@@ -1016,9 +1115,9 @@ def readyz():
     binding that does not resolve is a 503 naming the dangling id — never a silent downgrade; and
     `connection_id` is the id actually probed."""
     try:
-        inst, ad = adapters.resolve()
-        reason = ad.probe()
-    except (AdapterError, GoogleAuthError) as e:
+        inst = _resolve_instance(None, None)
+        reason = engines.for_instance(inst).probe()
+    except (AdapterError, AuthError, ProfileError) as e:
         status = getattr(e, "status", 503)
         return jsonify({"ready": False, "reason": getattr(e, "message", str(e)),
                         "connection_id": None, "active": cx.active()}), status
@@ -1038,7 +1137,7 @@ def connections_list():
     cid = cx.active()
     acting = None
     try:
-        acting = profiles.public(acting_profile())
+        acting = acting_profile()
     except ProfileError:
         acting = None
     if not cid:
@@ -1053,6 +1152,33 @@ def connections_list():
     return jsonify({"active": cid, "connections": conns, "bound": cid, "acting_profile": acting})
 
 
+@app.get("/connections/active")
+def connections_active():
+    """Which drive this office acts as when nobody names one — the bound one, else the default — for the
+    office storage's engine to know who a keyless request of the screen is (its /engine/whoami). Ids only."""
+    inst, reason = cx.resolve_active()
+    return jsonify({"id": (inst or {}).get("id") if not reason else None, "bound": cx.active(),
+                    "is_private": bool(inst and not reason and inst.get("is_private")), "reason": reason})
+
+
+LEGACY_LEDGER = os.environ.get("DRIVE_LEGACY_LEDGER", "/data/profile-ledger.json")
+
+
+@app.get("/connections/profile-ledger")
+def connections_profile_ledger():
+    """The office storage's profile ledger as it was kept on THIS app's volume before the split (DGO-1500):
+    which profiles the app.json reconciler made — ids only, no credential. drive-local reads it once, on its
+    first start, so what it removes or repairs is what the old reconciler would have; 404 when there is none."""
+    try:
+        with open(LEGACY_LEDGER, encoding="utf-8") as f:
+            doc = json_loads(f.read())
+    except (OSError, ValueError):
+        return jsonify({"error": "no ledger from before the split"}), 404
+    declared = (doc or {}).get("declared") if isinstance(doc, dict) else None
+    return jsonify({"declared": {str(k): {"created_at": (v or {}).get("created_at")}
+                                 for k, v in (declared or {}).items()}})
+
+
 @app.get("/connections/<cid>/probe")
 def connections_probe(cid):
     """Verify ONE connection without selecting it (§4b step 4: a connection is verified, not added).
@@ -1061,8 +1187,8 @@ def connections_probe(cid):
     if not inst:
         return jsonify({"error": f"unknown connection {cid!r}"}), 404
     try:
-        reason = adapters.for_instance(inst).probe()
-    except (AdapterError, GoogleAuthError) as e:
+        reason = engines.for_instance(inst).probe()
+    except (AdapterError, AuthError, ProfileError) as e:
         reason = getattr(e, "message", str(e))
     return jsonify({"ok": not reason, "reason": reason, "id": cid,
                     "account_hint": inst.get("account_hint")})
@@ -1082,247 +1208,259 @@ def connections_select():
 
 @app.post("/connections")
 def connections_add():
-    """Add a connection to an EXISTING account. A `drive_local` instance means "this credential,
-    that profile", and it is accepted only once THE KEY IS VERIFIED — a private connection naming a
-    profile it cannot authenticate as is the "added but never verified" row the contract forbids.
-    Creating a NEW identity is POST /engine/profiles, which mints the credential and the instance."""
+    """Add a connection to an EXISTING account, by the engine that serves its protocol — each checks its
+    own credential (drive-local: the profile's key; drive-google: a service account's JSON), so nothing
+    is added that was never verified. A NEW identity on the office storage is POST /engine/profiles."""
     b = request.get_json(force=True, silent=True) or {}
     proto, label, secret = b.get("protocol"), b.get("label"), b.get("secret")
     if not proto or not label or secret is None:
         return jsonify({"error": "protocol, label and secret required"}), 400
-    hint = b.get("account_hint")
-    if proto == "drive_google_service_account":
-        import json as _json
-        raw = (secret or {}).get("service_account_json") or ""
-        try:
-            parsed = _json.loads(raw) if isinstance(raw, str) else raw
-        except (ValueError, TypeError):
-            return jsonify({"error": "ה־JSON של חשבון השירות אינו תקין"}), 400
-        if not isinstance(parsed, dict) or parsed.get("type") != "service_account" \
-                or not parsed.get("client_email") or not parsed.get("private_key"):
-            return jsonify({"error": "קובץ JSON אינו חשבון שירות תקין — חסרים שדות type / client_email / private_key"}), 400
-        secret = parsed
-        hint = hint or parsed.get("client_email")
-    if proto in adapters.PRIVATE_PROTOCOLS:
-        key = (secret or {}).get("api_key")
-        p = profiles.by_key(key) if key else None
-        if not p:
-            return jsonify({"error": "מפתח הפרופיל אינו תקף. ליצירת פרופיל חדש יש להשתמש "
-                                     "במסך ניהול הפרופילים."}), 400
-        if hint and hint != p["id"]:
-            return jsonify({"error": "account_hint אינו תואם למפתח"}), 400
-        hint = p["id"]
-    body, status = cx.add_instance(proto, label, secret, hint)
-    return jsonify(body), status
+    eid = engines.engine_of(proto)
+    if not eid:
+        return jsonify({"error": f"אין מנוע קבצים פעיל לחשבון מסוג {proto!r}"}), 400
+    try:
+        r = requests.post(engines.url(eid) + "/v1/connect", timeout=(5, 30),
+                          json={"protocol": proto, "label": label, "secret": secret, "account_hint": b.get("account_hint")})
+        body = r.json()
+    except (requests.RequestException, ValueError):
+        return jsonify({"error": f"מנוע הקבצים {engines.PREFIX}{eid} אינו עונה — החשבון לא חובר"}), 503
+    engines.invalidate()
+    return jsonify(body), r.status_code
 
 
 @app.delete("/connections/<cid>")
 def connections_delete(cid):
+    """Disconnect an account, by its own engine (the office storage refuses: a profile is removed in
+    «ניהול פרופילים», or its identity would survive with its key nowhere)."""
     inst = cx.get_instance(cid)
-    if inst and inst.get("protocol") in adapters.PRIVATE_PROTOCOLS:
-        # Deleting the instance alone would strand its profile: the identity would survive with its
-        # credential nowhere, and the next reconcile would rotate a key nobody asked to rotate.
-        return jsonify({"error": "זהו פרופיל של המנוע המקומי — הסרה נעשית במסך ניהול הפרופילים",
-                        "profile_id": inst.get("account_hint")}), 400
-    body, status = cx.delete_instance(cid)
+    if not inst:
+        return jsonify({"error": f"unknown connection {cid!r}"}), 404
+    eid = engines.engine_of(inst.get("protocol") or "")
+    if eid:
+        try:
+            r = requests.post(engines.url(eid) + "/v1/disconnect", json={"connection_id": cid}, timeout=(5, 30))
+            body, status = r.json(), r.status_code
+        except (requests.RequestException, ValueError):
+            return jsonify({"error": f"מנוע הקבצים {engines.PREFIX}{eid} אינו עונה — החשבון לא נותק"}), 503
+    elif engines.unanswered():
+        # an engine of this office does not answer: it may be this account's, and its own refusal (a profile
+        # of the office storage is removed in «ניהול פרופילים») must not be skipped by its silence
+        return jsonify({"error": "מנוע קבצים של הלשכה אינו עונה כרגע — החשבון לא נותק. נסו שוב בעוד רגע.",
+                        "engines": engines.unanswered()}), 503
+    else:
+        # every engine answered and none serves this account's kind: its engine is gone, it can be let go of
+        body, status = cx.delete_instance(cid)
+    engines.invalidate(cid)
     # Drop a now-dangling binding so the service falls back to the default rather than a dead one.
     if 200 <= status < 300 and cx.active() == cid:
         cx.unbind()
     return jsonify(body), status
 
 
-# ── the ENGINE plane: profiles on the private drive engine ────────────────────────
-# Same route names in mail and chat. The profile screen is NOT the connect wizard: creating an
-# identity and connecting to one are different acts.
-@app.get("/engine/profiles")
-def engine_profiles_list():
-    """admin ring. The list carries each profile's instance id so the UI can bind straight to it."""
-    me = require_admin()
-    insts, _err = cx.vault_instances()
-    out = []
-    for p in profiles.listing():
-        inst = bootstrap.instance_for(p["id"], insts)
-        rec = profiles.public(p)
-        rec["connection_id"] = (inst or {}).get("id")
-        rec["declared"] = bootstrap.ours(p["id"])
-        out.append(rec)
-    return jsonify({"ok": True, "acting_as": me["id"], "profiles": out,
-                    "engine": adapters.LocalAdapter.protocol})
-
-
-@app.get("/engine/whoami")
-def engine_whoami():
-    """No ring — deliberately: the screen that decides whether to OFFER profile management has to
-    be able to ask who it is without already being an admin."""
-    me = acting_profile()
-    return jsonify({"ok": True, "profile": profiles.public(me),
-                    "credentialed": bool(_presented_key()),
-                    "connection_id": cx.active(),
-                    "is_admin": bool(me and me["is_admin"]),
-                    "engine": adapters.LocalAdapter.protocol})
-
-
-@app.post("/engine/profiles/reconcile")
-def engine_profiles_reconcile():
-    """admin ring. Force the boot-time reconcile pass; run twice, the second report is empty."""
-    require_admin()
-    rep = bootstrap.reconcile(force=True, report=True)
-    return jsonify({"ok": not rep["errors"], **rep}), (503 if rep["errors"] else 200)
-
-
-@app.post("/engine/profiles")
-def engine_profiles_create():
-    """admin ring. Creates the profile AND its vault instance in one operation, and returns the
-    credential ONCE — this service stores only its hash and can never show it again."""
-    require_admin()
-    b = request.get_json(force=True, silent=True) or {}
-    pid = str(b.get("id") or "").strip().lower()
-    if not profiles.valid_id(pid):
-        return jsonify({"error": "מזהה פרופיל חייב להיות אותיות קטנות/ספרות/מקף"}), 400
-    if profiles.get(pid):
-        return jsonify({"error": f"הפרופיל {pid} כבר קיים"}), 409
-    name = str(b.get("display_name") or pid).strip()
-    profile, key, iid, err = bootstrap.provision_profile(
-        pid, name, bool(b.get("admin", b.get("is_admin"))))
-    body = {"ok": True, "profile": profiles.public(profiles.get(pid)), "key": key,
-            "connection_id": iid}
-    if err:
-        # The identity exists; the vault could not be told. Say so — a later reconcile completes it.
-        body["ok"] = False
-        body["warning"] = f"הפרופיל נוצר אך החיבור לא נוצר עדיין ({err})"
-        return jsonify(body), 202
-    return jsonify(body), 201
-
-
-@app.patch("/engine/profiles/<pid>")
-def engine_profiles_patch(pid):
-    """self (own) / admin (others). Renaming is self; the admin flag and suspension are admin."""
-    me = require_self_or_admin(pid)
-    cur = profiles.get(pid)
-    if not cur:
-        return jsonify({"error": "unknown profile"}), 404
-    b = request.get_json(force=True, silent=True) or {}
-    is_admin = b.get("admin", b.get("is_admin"))
-    status = b.get("status")
-    if (is_admin is not None or status is not None) and not me["is_admin"]:
-        return jsonify({"error": "רק מנהל יכול לשנות הרשאות או להשעות פרופיל"}), 403
-    if status not in (None, profiles.STATUS_ACTIVE, profiles.STATUS_SUSPENDED):
-        return jsonify({"error": "status must be active or suspended"}), 400
-    profiles.require_last_admin_survives(
-        pid,
-        demoting=(is_admin is not None and not bool(is_admin) and cur["is_admin"]),
-        suspending=(status == profiles.STATUS_SUSPENDED))
-    p = profiles.update(pid, display_name=b.get("display_name"),
-                        is_admin=None if is_admin is None else bool(is_admin), status=status)
-    if cur.get("instance_id"):
-        # A suspended or demoted profile must stop serving IMMEDIATELY, not when its cached adapter
-        # expires — the cache is keyed on the connection id.
-        adapters.invalidate(cur["instance_id"])
-    return jsonify({"ok": True, "profile": profiles.public(p)})
-
-
-@app.post("/engine/profiles/<pid>/key")
-def engine_profiles_rotate(pid):
-    """self (own) / admin (others). Mints a replacement credential into the profile's EXISTING vault
-    instance, so the connection id — and every binding and stored reference to it — survives."""
-    require_self_or_admin(pid)
-    if not profiles.get(pid):
-        return jsonify({"error": "unknown profile"}), 404
-    inst = bootstrap.instance_for(pid)
-    profile, key = profiles.rotate(pid)
-    if inst:
-        ok = cx.update_secret(inst["id"], {"api_key": key, "profile_id": pid})
-        adapters.invalidate(inst["id"])
-        if not ok:
-            return jsonify({"ok": False, "profile": profiles.public(profile), "key": key,
-                            "connection_id": inst["id"], "vault_updated": False,
-                            "warning": "המפתח הוחלף אך לא נשמר בכספת — יש לנסות שוב"}), 202
-        return jsonify({"ok": True, "profile": profiles.public(profile), "key": key,
-                        "connection_id": inst["id"], "vault_updated": True})
-    iid, err = bootstrap.mint_instance(pid, profile["display_name"], key)
-    return jsonify({"ok": not err, "profile": profiles.public(profiles.get(pid)), "key": key,
-                    "connection_id": iid, "vault_updated": not err,
-                    **({"warning": err} if err else {})}), (202 if err else 200)
-
-
-@app.delete("/engine/profiles/<pid>")
-def engine_profiles_delete(pid):
-    """admin ring. Removes ACCESS — the profile row and its vault instance. NEVER the files: rows
-    keep their `profile` value, so re-creating the profile under the same id restores the view."""
-    require_admin()
-    if not profiles.get(pid):
-        return jsonify({"error": "unknown profile"}), 404
-    profiles.require_last_admin_survives(pid, removing=True)
-    inst = bootstrap.instance_for(pid)
-    if inst:
-        if cx.active() == inst["id"]:
-            cx.unbind()
-        cx.delete_instance(inst["id"])
-        adapters.invalidate(inst["id"])
-    profiles.delete(pid)
-    bootstrap.unmark(pid)
-    return jsonify({"ok": True, "id": pid, "removed_connection": (inst or {}).get("id"),
-                    "data_kept": True})
+# ── the ENGINE plane: the office storage's profiles live in its engine (drive-local /engine/*), handed
+# to it verbatim by `_engine_routes` — the same route names in mail and chat, on this app's address.
 
 
 # ── engines / providers ───────────────────────────────────────────────────────────
 @app.get("/engines")
-def engines():
-    """Engine-first catalogue (§5e). `private` tells a caller whether profiles can be CREATED here
-    or only CONNECTED to."""
-    return jsonify({"engines": [
-        {"id": "drive_local", "app": "drive", "name": "אחסון מקומי", "icon": "hard-drive",
-         "private": True, "creates_profiles": True,
-         "description": "האחסון שמובנה במערכת. כל פרופיל מקבל דרייב משלו, והקבצים נשארים אצלך."},
-        {"id": "drive_google_oauth", "app": "drive", "name": "Google Drive", "icon": "cloud",
-         "private": False, "creates_profiles": False,
-         "description": "החשבון שלך ב־Google. הקבצים נשארים ב־Drive; המערכת עובדת עליהם ישירות."},
-        {"id": "drive_google_service_account", "app": "drive", "name": "Google Drive — חשבון שירות",
-         "icon": "cloud", "private": False, "creates_profiles": False,
-         "description": "גישה דרך Service Account — ללא צורך בהתחברות של משתמש."},
-    ]})
+def engines_list():
+    """Engine-first catalogue (§5e), each engine's own rows (its /ops `engines`). `private` tells a
+    caller whether profiles can be CREATED here or only CONNECTED to."""
+    return jsonify({"engines": [row for _eid, o in engines.all_ops() for row in (o.get("engines") or [])]})
 
 
 @app.get("/providers")
 def providers():
     """Provider-first catalog for the guided connect flow (§4b): users pick a PROVIDER, and each
-    provider offers auth methods that each map to exactly one engine."""
-    return jsonify({"providers": [
-        {"id": "local", "name": "אחסון מקומי", "icon": "hard-drive", "builtin": True,
-         "engine": "drive_local", "private": True,
-         "description": "האחסון שמובנה במערכת. עובד מיד, בלי חשבון חיצוני, והקבצים נשארים אצלך.",
-         "auth_methods": [{"id": "profile", "label": "פרופיל במנוע המקומי",
-                           "protocol": "drive_local", "needs": [], "recommended": True,
-                           "private": True,
-                           "can": "ניהול תיקיות וקבצים, העלאה, אשפה, חיפוש וקישורים ציבוריים — "
-                                  "בנפרד לכל פרופיל.",
-                           "explain": "פרופילים נוצרים במסך ניהול הפרופילים; כאן בוחרים באיזה "
-                                      "פרופיל הדרייב פועל."}]},
-        {"id": "google_drive", "name": "Google Drive", "icon": "cloud",
-         "engine": "drive_google_oauth", "private": False,
-         "description": "החשבון שלך ב־Google. הקבצים נשארים ב־Drive; המערכת עובדת עליהם ישירות.",
-         "auth_methods": [
-             {"id": "oauth", "label": "התחברות עם Google",
-              "protocol": "drive_google_oauth", "needs": [], "recommended": True,
-              "private": False,
-              "can": "צפייה, העלאה, העברה, שינוי שם ומחיקה בקבצים של החשבון שתאשר.",
-              "explain": "נפתח חלון של Google. לאחר האישור החשבון נוצר כאן ואפשר לבדוק "
-                         "אותו ולהפעיל אותו. אפשר לסגור את החלון בכל שלב — לא ייווצר חיבור.",
-              "start_url": f"{CONNECTIONS_PUBLIC_URL}/oauth/google-workspace-grant/start"
-                           f"?as_instance=1&go=1"},
-             {"id": "service_account", "label": "חשבון שירות (Service Account)",
-              "protocol": "drive_google_service_account", "needs": [], "recommended": False,
-              "private": False,
-              "fields": [{"name": "service_account_json",
-                          "label": "תוכן קובץ ה־JSON של חשבון השירות",
-                          "type": "textarea"}],
-              "can": "גישה מלאה דרך חשבון שירות — ללא צורך בהתחברות של משתמש.",
-              "explain": "הורד את קובץ ה־JSON של חשבון השירות מ־Google Cloud Console ("
-                         "IAM & Admin → Service Accounts → Keys) והדבק את תוכנו כאן. "
-                         "חשוב: ודא שחשבון השירות קיבל גישה לתיקיות הרצויות ב־Drive.",
-              "help_url": "https://cloud.google.com/iam/docs/service-account-overview"},
-         ]},
-    ]})
+    provider offers auth methods that each map to exactly one engine — each engine's own rows (its
+    /ops `providers`), the office's own storage first. An engine that is not running offers nothing."""
+    return jsonify({"providers": [row for _eid, o in engines.all_ops() for row in (o.get("providers") or [])]})
+
+
+# ── «התחברות עם Google» from this screen (DGO-1390) ───────────────────────────────
+# The consent belongs to the office's credential plane (connections: the client, the grant, the
+# instances); this app only opens it and receives it, both legs through itself AS THE BROWSER SEES IT —
+# under the console (/a/drive/…, /a/drive.<office>/… across a link) or on its own host — so the person
+# comes back to the window they started from, on whichever office runs the drive. Google's one
+# registered address is the herd's relay (connections OAUTH_RELAY_URL), never this office's: an office
+# at home has none Google accepts.
+def _theme_block():
+    """The palette as the page carries it (index.html's stamped block): a page this app draws itself
+    names no colour of its own (G82)."""
+    try:
+        with open(os.path.join(app.static_folder, "index.html"), encoding="utf-8") as f:
+            page = f.read()
+        a, b = page.index("/* @bina-theme-tokens:start */"), page.index("/* @bina-theme-tokens:end */")
+        return page[a:b]
+    except (OSError, ValueError):
+        return ""
+
+
+_THEME = _theme_block()
+
+
+def _oauth_page(ok, title, detail="", made=None, status=200):
+    """The window Google returns to: what happened, said in words, told to the window that opened it
+    (so the screen there moves on by itself), and closed when it was a pop-up."""
+    import html as _h
+    import json as _j
+    msg = _j.dumps({"type": "dgo:oauth", "ok": bool(ok), "made": made or [], "error": "" if ok else title}).replace("<", "\\u003c")
+    accounts = "".join(f"<li><bdi>{_h.escape(m.get('account_hint') or '')}</bdi></li>" for m in (made or [])[:1])
+    page = f"""<!doctype html><html lang="he" dir="rtl"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1"><title>{_h.escape(title)}</title>
+<style>{_THEME}
+body{{margin:0;min-height:100vh;display:grid;place-items:center;background:var(--bg);color:var(--ink);
+font:14px/1.5 "Segoe UI",system-ui,-apple-system,"Noto Sans Hebrew",Arial,sans-serif}}
+.card{{width:min(420px,calc(100vw - 32px));box-sizing:border-box;background:var(--surface);border:1px solid var(--line);
+border-radius:16px;padding:22px;box-shadow:var(--shadow)}}
+h1{{margin:0 0 8px;font-size:16px;font-weight:800;color:{'var(--ok)' if ok else 'var(--danger)'}}}
+p,li{{margin:0 0 6px;font-size:13px;color:var(--muted);overflow-wrap:anywhere}} ul{{margin:8px 0 0;padding-inline-start:18px}}
+button{{margin-top:14px;height:34px;padding:0 16px;border-radius:9px;border:0;background:var(--accent);color:var(--accent-ink);
+font:inherit;font-weight:700;cursor:pointer}}</style></head>
+<body><div class="card" role="status"><h1>{_h.escape(title)}</h1>
+{f"<p><bdi>{_h.escape(detail)}</bdi></p>" if detail else ""}{f"<ul>{accounts}</ul>" if accounts else ""}
+<button type="button" onclick="window.close()">סגירת החלון</button></div>
+<script>(function(){{var m={msg};try{{if(window.opener)window.opener.postMessage(m,location.origin);}}catch(e){{}}
+if(window.opener&&m.ok)setTimeout(function(){{window.close();}},1600);}})();</script></body></html>"""
+    # X-Dgo-Oauth marks THIS page as the app's own answer: the return page clears its secret only on it — never on
+    # an error page of the server's or a sign-in page that happens to be HTML too (DGO-1418).
+    return Response(page, status=status, mimetype="text/html",
+                    headers={"Cache-Control": "no-store", "Referrer-Policy": "no-referrer", "X-Dgo-Oauth": "1"})
+
+
+#: Where the window that asked keeps its secret for the consent it started (DGO-1418): `<prefix><state>`, one slot per
+#: consent, so two at once (the drive's and the mail's, two tabs) never take each other's. The screen stores it; the
+#: return page — the same origin, under the console too — reads it, and removes it once the app has answered.
+OAUTH_BIND_KEY = "dgo-oauth-bind:"
+
+
+def _js(value):
+    """A JSON string fit for a <script>: a `</script>` inside a value cannot end the script."""
+    import json as _j
+    return _j.dumps(value).replace("<", "\\u003c")
+
+
+def _oauth_state_of(authorize_url):
+    return (urllib.parse.parse_qs(urllib.parse.urlsplit(authorize_url).query).get("state") or [""])[0]
+
+
+def _oauth_bind_page(authorize_url, secret):
+    """Without the screen (`check` absent): this window keeps the secret itself, then goes to Google."""
+    return Response(f"""<!doctype html><html lang="he" dir="rtl"><head><meta charset="utf-8"><title>Google</title></head>
+<body><script>try{{localStorage.setItem({_js(OAUTH_BIND_KEY + _oauth_state_of(authorize_url))},{_js(secret)});}}catch(e){{}}
+location.replace({_js(authorize_url)});</script></body></html>""", status=200, mimetype="text/html",
+                    headers={"Cache-Control": "no-store", "Referrer-Policy": "no-referrer"})
+
+
+def _door(name):
+    """The consent door an engine names for itself (/ops `oauth`): {"grant", "provider", "connected", "engine"}."""
+    door = engines.oauth(name)
+    if not door or not door.get("grant"):
+        raise AdapterError(f"אין מנוע קבצים פעיל שמתחבר דרך {name!r}", 404)
+    return door
+
+
+@app.get("/oauth/<name>/start")
+def oauth_google_start(name):
+    """Open a provider's consent for a new account — the grant the engine names (drive-google: Google's).
+    `ret` is this app's return page, absolute, as the browser sees it (the screen builds it from its own
+    base). `check=1` answers JSON instead of the redirect: the screen asks first and sends its window to
+    the provider only when it would take the request — a client the provider no longer has is said in the
+    screen, in Hebrew, not on the provider's page.
+
+    The consent is bound to THIS browser (DGO-1418): a secret is made here, connections keeps only its
+    sha256, and the secret goes back in the answer's body (never in an address) for the window to keep."""
+    check = request.args.get("check") == "1"
+    try:
+        door = _door(name)
+    except AdapterError as e:
+        return (jsonify({"error": e.message}), 404) if check else _oauth_page(False, "ההתחברות לא נפתחה", e.message, status=404)
+    who = door.get("provider") or name
+    failed = f"ההתחברות ל־{who} לא נפתחה"
+    ret = (request.args.get("ret") or "").strip()
+    if not ret:          # without a return page it would be the broker's own consent, bound to nothing
+        why = f"חסרה כתובת החזרה של המסך — ההתחברות ל־{who} לא נפתחה."
+        return (jsonify({"error": why}), 400) if check else _oauth_page(False, failed, why, status=400)
+    secret = secrets.token_urlsafe(24)
+    try:
+        r = requests.get(f"{cx.CONNECTIONS_URL}/oauth/{urllib.parse.quote(door['grant'])}/start",
+                         params={"as_instance": "1", "ret": ret,
+                                 "bind": hashlib.sha256(secret.encode()).hexdigest()}, timeout=20)
+        d = r.json()
+    except (requests.RequestException, ValueError):
+        why = f"שירות החשבונות של הלשכה אינו עונה — ההתחברות ל־{who} לא נפתחה. נסו שוב בעוד רגע."
+        return (jsonify({"error": why}), 503) if check else _oauth_page(False, "שירות החשבונות של הלשכה אינו עונה", why, status=503)
+    if r.status_code >= 400 or not d.get("authorize_url"):
+        why = d.get("error") or f"HTTP {r.status_code}"
+        status = 502 if r.status_code < 400 else r.status_code
+        # …with where it is fixed, when connections says (Google Cloud's credentials page, DGO-1634): the screen
+        # shows it as a link under the sentence
+        help_url = d.get("help_url") if str(d.get("help_url") or "").startswith("https://") else None
+        return (jsonify({"error": why, "provider_error": d.get("provider_error"), "help_url": help_url}), status) if check \
+            else _oauth_page(False, failed, why, status=status)
+    if not str(d["authorize_url"]).startswith("https://") or d.get("relayed") is not True:
+        # only a RELAYED consent is bound to this browser; anything else is the broker's own, and not handed out here
+        why = f"כתובת ההסכמה שהתקבלה אינה של הסכמה חתומה ומאובטחת — ההתחברות ל־{who} לא נפתחה."
+        return (jsonify({"error": why}), 502) if check else _oauth_page(False, failed, why, status=502)
+    if check:
+        resp = jsonify({"ok": True, "authorize_url": d["authorize_url"], "bind": secret})
+        resp.headers["Cache-Control"] = "no-store"
+        return resp
+    return _oauth_bind_page(d["authorize_url"], secret)
+
+
+@app.get("/oauth/<name>/return")
+def oauth_google_return(name):
+    """Where the provider (Google, through the herd's relay) sends the browser back. Nothing is done on this
+    GET: the page reads the secret its own window kept (same origin) and hands it, with the provider's
+    answer, to /oauth/<name>/finish — a browser that did not start the consent has no secret to hand.
+
+    `finish` is resolved against THIS page's address, never the document's base: under the console the
+    proxy injects one at the app's mount (`/a/<alias>/`), and a bare relative URL went to `/a/<alias>/finish`.
+    The secret is removed only on the app's own answer (X-Dgo-Oauth). When none came, the page says so and keeps
+    the secret for a reload — and tells the screen nothing: its poller sees an account that was made anyway."""
+    page = f"""<!doctype html><html lang="he" dir="rtl"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1"><title>מחבר את החשבון</title>
+<style>{_THEME}
+body{{margin:0;min-height:100vh;display:grid;place-items:center;background:var(--bg);color:var(--ink);
+font:14px/1.5 "Segoe UI",system-ui,-apple-system,"Noto Sans Hebrew",Arial,sans-serif}}
+.card{{width:min(420px,calc(100vw - 32px));box-sizing:border-box;background:var(--surface);border:1px solid var(--line);
+border-radius:16px;padding:22px;box-shadow:var(--shadow)}} h1{{margin:0 0 8px;font-size:16px;font-weight:800}}
+p{{margin:0;font-size:13px;color:var(--muted)}}</style></head>
+<body><div class="card" role="status"><h1 id="t">מחבר את החשבון…</h1><p id="d">החשבון נבדק ונשמר בלשכה.</p></div>
+<script>(function(){{var q=new URLSearchParams(location.search),key={_js(OAUTH_BIND_KEY)}+(q.get("state")||""),bind="";
+try{{bind=localStorage.getItem(key)||"";}}catch(e){{}}
+function fail(){{document.getElementById("t").textContent="שירות החשבונות של הלשכה אינו עונה";
+document.getElementById("d").textContent="לא ידוע אם החשבון נשמר. אפשר לטעון את החלון מחדש, או לחזור למסך.";}}
+fetch(new URL("finish",location.href),{{method:"POST",credentials:"same-origin",headers:{{"Content-Type":"application/json"}},
+body:JSON.stringify({{code:q.get("code")||"",state:q.get("state")||"",error:q.get("error")||"",bind:bind}})}})
+.then(function(r){{if(!r.headers.get("X-Dgo-Oauth"))throw new Error("HTTP "+r.status);return r.text();}})
+.then(function(h){{try{{localStorage.removeItem(key);}}catch(e){{}}document.open();document.write(h);document.close();}})
+.catch(fail);}})();</script></body></html>"""
+    return Response(page, status=200, mimetype="text/html",
+                    headers={"Cache-Control": "no-store", "Referrer-Policy": "no-referrer"})
+
+
+@app.post("/oauth/<name>/finish")
+def oauth_google_finish(name):
+    """The return page's hand-over: the provider's answer and the secret its window kept go to this
+    office's connections, which keeps the account (Google: one consent, Drive and Gmail) — and the page
+    says which, in the words the engine gives (/ops `oauth`)."""
+    b = request.get_json(force=True, silent=True)
+    b = b if isinstance(b, dict) else {}
+    body = {k: str(b.get(k)) for k in ("code", "state", "error", "bind") if b.get(k)}
+    if body.get("error") == "access_denied":
+        return _oauth_page(False, "ההתחברות בוטלה", "לא נוסף חשבון. אפשר לנסות שוב מתי שרוצים.")
+    try:
+        r = requests.post(f"{cx.CONNECTIONS_URL}/oauth/relayed", json=body, timeout=30)
+        d = r.json()
+    except (requests.RequestException, ValueError):
+        return _oauth_page(False, "שירות החשבונות של הלשכה אינו עונה", "החשבון לא נשמר. נסו להתחבר שוב.", status=503)
+    if not d.get("ok"):
+        return _oauth_page(False, "החשבון לא חובר", d.get("error") or f"HTTP {r.status_code}", status=400)
+    engines.invalidate()
+    door = engines.oauth(name) or {}
+    return _oauth_page(True, "החשבון חובר", door.get("connected") or "החשבון זמין עכשיו בלשכה.", made=d.get("made"))
 
 
 # ── extension slots (§4c) — an app registers UI, this service renders it ───────────

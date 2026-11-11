@@ -44,3 +44,30 @@ entries:
     state: absent
     identifiers:
       name: Wadmin Local Provider
+
+  # 2026-11-09: bina-claude's terminal tile is deleted (DGO-1684, the owner: «Delete the terminal and make sure
+  # nobody gets mixed up again»; gate G105). Its SSO pair (sso.slug `bina-claude-terminal`, display name
+  # «Bina Claude terminal», with the local twin) would stay in the launcher as a tile that answers nothing.
+  - id: rm-app-bina-claude-terminal
+    model: authentik_core.application
+    state: absent
+    identifiers:
+      slug: bina-claude-terminal
+
+  - id: rm-app-bina-claude-terminal-local
+    model: authentik_core.application
+    state: absent
+    identifiers:
+      slug: bina-claude-terminal-local
+
+  - id: rm-provider-bina-claude-terminal
+    model: authentik_providers_proxy.proxyprovider
+    state: absent
+    identifiers:
+      name: Bina Claude terminal Provider
+
+  - id: rm-provider-bina-claude-terminal-local
+    model: authentik_providers_proxy.proxyprovider
+    state: absent
+    identifiers:
+      name: Bina Claude terminal Local Provider

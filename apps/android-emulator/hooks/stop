@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+#: stop — stop the device (its bar on «כל מקביל» closes):  ./bbox android-emulator stop
+set -uo pipefail
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
+. "${REPO_ROOT}/scripts/lib.sh"
+case "${1:-}" in -h|--help) sed -n 's/^#: //p' "${BASH_SOURCE[0]}"; exit 0 ;; esac
+dcx exec -T android-emulator python3 -c '
+import json, urllib.request
+req = urllib.request.Request("http://127.0.0.1:8080/api/stop", data=b"{}", method="POST")
+print(json.dumps(json.load(urllib.request.urlopen(req, timeout=30)), ensure_ascii=False, indent=1))'

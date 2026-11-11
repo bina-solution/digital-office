@@ -14,16 +14,17 @@ from src.utils.logging_config import get_logger
 logger = get_logger('apitools.pdf_to_jpg')
 
 
-# DPI at which PDFs are rasterized before OCR. 96 DPI was far too low for reliable
-# text recognition — small Hebrew glyphs and digits turn to mush (e.g. tax-id
-# 500000112 was misread as 510564699, and multi-word phrases like "חשבונית זיכוי"
-# fragmented), causing UNKNOWN types / missing company-id / failed amount extraction.
-# Empirical dataset sweep (96/120/150/200/250/300): tax-id digits become correct from
-# 120 DPI; type/amount accuracy plateaus at 150 (amount 50%→100%, type 66%→~80%);
-# 200+ adds no measurable gain. 200 is the chosen default — fixes all the above while
-# staying lighter than 300 on memory/CPU. Image preprocessing (upscale+threshold) made
-# NO difference at this DPI (it only helps low-res phone photos). Override via APITOOLS_PDF_DPI.
-PDF_OCR_DPI = int(os.getenv('APITOOLS_PDF_DPI', '300'))
+# DPI at which PDFs are rasterized before OCR — a PRODUCT CONSTANT, not configuration (DGO-216; the owner,
+# 2026-07-13: «stop dangling apitools pdf dpi in env and blaming it.. it should be fixed value this is config
+# not to play with or changed in tests»). No env var, no override: OCR results across offices and test runs
+# are comparable only when every one rasterizes alike.
+# 300 since 51d88df3 (2026-07-07, «300-DPI PDF rasterization»), and the value every office has actually run —
+# the compose file never passed APITOOLS_PDF_DPI into the container, so the old env read was a dead knob.
+# Why not lower: 96 DPI turned small Hebrew glyphs and digits to mush (tax-id 500000187 read as 510564699,
+# «חשבונית זיכוי» fragmented → UNKNOWN types, missing company-id, failed amounts). A sweep over
+# 96/120/150/200/250/300 found tax-id digits correct from 120 and type/amount accuracy flat from 150.
+# Oversized pages are clamped per page below (_effective_dpi_for_page) — that, not this number, bounds memory.
+PDF_OCR_DPI = 300
 
 
 class PdfToJpgException(Exception):

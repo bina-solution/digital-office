@@ -1,0 +1,24 @@
+# Operating «<שם בעברית>» (the `<id>` app)
+
+<Vendor client>, the vendor's own Linux client, inside the office (ai/context/wrapped-official-app.md):
+- its screen is the console's tile;
+- its headless side is behind `http://<id>:<adapter port>` (`<interface>.v1`);
+- its sign-in lives in the volume `<id>_home`.
+
+## What you can do from here
+
+```bash
+./bbox <short name> status [--json]     # up, and signed in
+./bbox <short name> flow                # what it did, as it happens
+curl -s http://<id>:<adapter port>/v1/health
+```
+
+## Rules
+
+- Act through the contract (`<interface>.v1`), never through the vendor's protocol or its files.
+- An outward action (a message to a person, a post) runs only on the owner's word.
+- The sign-in is the owner's: never sign out, and never change the account.
+
+## Traps
+
+- The client's sign-in survives a restart only in the volume. A new volume is a new sign-in.

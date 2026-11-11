@@ -39,6 +39,66 @@ type user struct {
 // and indox …/api/__init__.py:6983 both `.split("|")` this exact header.
 func (u *user) GroupHeader() string { return strings.Join(u.Groups, "|") }
 
+// The two groups the office's access rule reads (DGO-1755). `admins` opens the office's root apps — an app
+// whose app.json declares `people: admins` (computers, app-management, connections, n8n, the agents, the owner's
+// own accounts …), behind `/auth/traefik/admins` and the console's doors. `people` marks a person the owner invited
+// (invite.go): never an admin by that door, whatever else the file says about the office.
+const (
+	adminGroup  = "admins"
+	peopleGroup = "people"
+)
+
+// adminGroups are the names the admin group has in a users file: `admins`, and `authentik-admins`, the renamed
+// authentik group a migration may carry (authentik's own «authentik Admins» cannot be written here: see loadUsers).
+var adminGroups = []string{adminGroup, "authentik-admins"}
+
+// admin reports whether the person's own line names the admin group, by either name.
+func (u *user) admin() bool {
+	for _, g := range adminGroups {
+		if u.in(g) {
+			return true
+		}
+	}
+	return false
+}
+
+// in reports whether the person's own line names the group.
+func (u *user) in(group string) bool {
+	for _, g := range u.Groups {
+		if g == group {
+			return true
+		}
+	}
+	return false
+}
+
+// namesAdmin reports whether any line of the file names the admin group. Asked per request (a file holds a
+// handful of people), so a store a test builds by hand answers like one loaded from a file.
+func (s *userStore) namesAdmin() bool {
+	for _, u := range s.byName {
+		if u.admin() {
+			return true
+		}
+	}
+	return false
+}
+
+// effective is the person as the office's gates and apps are told about them: their own groups, and — on an
+// office whose file names no admin at all — `admins` for every account whose line has NO group (`-`). A migrated
+// office's owner has `-` (authentik's one group, «authentik Admins», cannot be written in this file: see
+// loadUsers), so refusing the root apps to everyone without the group would lock the owner out of their own
+// office (measured 2026-11-10: the Mac's and vps1's files name nobody, every line `-`). A line with any group is
+// what that group says — an invited person's `people`, an imported `incoming-docs-admin` — never an admin by this
+// rule. The file is never rewritten here: naming the admins in it ends the fallback.
+func (s *userStore) effective(u *user) *user {
+	if u.admin() || len(u.Groups) > 0 || s.namesAdmin() {
+		return u
+	}
+	c := *u
+	c.Groups = append(append([]string(nil), u.Groups...), adminGroup)
+	return &c
+}
+
 type userStore struct {
 	byName map[string]*user
 	// burn is a real hash of a password nobody knows, verified against when the NAME is unknown.

@@ -63,7 +63,33 @@ public class OfficeActivity extends Activity {
                     open(u);
                     return true;
                 }
+                // a /login that redirects to /setup with no code: the phone's own one-time link (ownerLink)
+                String owner = r.isForMainFrame() ? ownerLink(u) : null;
+                if (owner != null) {
+                    v.loadUrl(owner);
+                    return true;
+                }
                 return false;
+            }
+
+            // …and what never passes the hook above: a back press, a restored tab. The dead page is in the history
+            // by then: once the owner's page has loaded, the history goes, so back never lands on it again
+            @Override
+            public void onPageStarted(WebView v, String url, android.graphics.Bitmap icon) {
+                String owner = url == null ? null : ownerLink(Uri.parse(url));
+                if (owner != null) {
+                    v.stopLoading();
+                    clearOn = owner;
+                    v.loadUrl(owner);
+                }
+            }
+
+            @Override
+            public void onPageFinished(WebView v, String url) {
+                if (clearOn != null && clearOn.equals(url)) {
+                    clearOn = null;
+                    v.clearHistory();
+                }
             }
         });
         web.setWebChromeClient(new WebChromeClient() {
@@ -110,6 +136,36 @@ public class OfficeActivity extends Activity {
         int major = webViewMajor(s);
         if (major > 0 && major < MIN_WEBVIEW) oldWebView(true);
     }
+
+    /**
+     * The office's setup page without its code is a dead end on a phone (forward-auth: «open the link the device
+     * that started it showed» — there is no other device). While there is no owner, any way there is the phone's
+     * own one-time link instead, the one sign-in this phone has (DGO-1723): the core's (NativeService), or, for an
+     * office the machine runs, the link this screen was opened with. Where the page was going (its rd, on the
+     * office's own hosts) is kept. Null: not that page, or no link to send it to.
+     */
+    private String ownerLink(Uri u) {
+        if (!"signin.localhost".equals(u.getHost()) || !"/setup".equals(u.getPath()) || u.getQueryParameter("code") != null) {
+            return null;
+        }
+        String link = NativeService.firstRunUrl(this);
+        String opened = getIntent().getStringExtra(URL);
+        if (link == null && opened != null && opened.startsWith("http://signin.localhost:8080/setup?code=")) link = opened;
+        if (link == null) return null;
+        String rd = u.getQueryParameter("rd");
+        String rdHost = rd == null ? null : Uri.parse(rd).getHost();
+        if (rdHost == null || !(rdHost.equals("localhost") || rdHost.endsWith(".localhost"))) return link;
+        // rd as it was written (its encoding kept: a decoded `+` would come back a space)
+        String raw = null;
+        for (String kv : String.valueOf(u.getEncodedQuery()).split("&")) {
+            if (kv.startsWith("rd=")) raw = kv.substring(3);
+        }
+        Uri l = Uri.parse(link);
+        return l.getScheme() + "://" + l.getEncodedAuthority() + l.getEncodedPath()
+                + "?code=" + Uri.encode(l.getQueryParameter("code")) + "&rd=" + (raw != null ? raw : Uri.encode(rd));
+    }
+
+    private String clearOn;   // the owner's page loaded in place of a dead one: the history goes once it is up
 
     /**
      * Below this major the office's sign-in does not load at all — measured on Android 11's own WebView,

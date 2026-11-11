@@ -17,13 +17,13 @@
 #   UNLOCKED  neither row still holds a doc_action lock
 set -u
 DK="docker -H unix:///run/bbox-docker.sock"
-ENVF=/mnt/c/Users/user/Desktop/personalWorkspace/AutomateOs/deployment-hacohen/.env
+ENVF=/mnt/c/Users/user/Desktop/personalWorkspace/AutomateOs/digital-office/.env
 WU=$(grep -E '^BS_WEBHOOK_USER=' "$ENVF" | head -1 | cut -d= -f2-)
 WP=$(grep -E '^BS_WEBHOOK_PASS=' "$ENVF" | head -1 | cut -d= -f2-)
 RP=$(grep -E '^REDIS_PASSWORD=' "$ENVF" | head -1 | cut -d= -f2-)
 P=zzml$(date +%H%M%S)
 
-$DK exec -i supabase-db-shlomo-laptop psql -U postgres -tAf - <<SQL
+$DK exec -i supabase-db-owner-laptop psql -U postgres -tAf - <<SQL
 SET session_replication_role = replica;
 INSERT INTO public.incoming_documents
  ("ID","COMPANY_ID","DOC_ID","SHORT_DOC_ID","HASH","TYPE","STATUS","DOC_DATE","DOC_TOTAL_AMOUNT",
@@ -36,7 +36,7 @@ SELECT '  seeded merge pair ${P}_1 / ${P}_2';
 SQL
 
 for s in 1 2; do
-  $DK exec -e I="${P}_1,${P}_2" -e U="$WU" -e P="$WP" n8n-shlomo-laptop node -e '
+  $DK exec -e I="${P}_1,${P}_2" -e U="$WU" -e P="$WP" n8n-owner-laptop node -e '
 const auth=Buffer.from(process.env.U+":"+process.env.P).toString("base64");
 fetch("http://localhost:5678/webhook/indox-drain",{method:"POST",
  headers:{"Content-Type":"application/json",Authorization:"Basic "+auth},
@@ -47,11 +47,11 @@ fetch("http://localhost:5678/webhook/indox-drain",{method:"POST",
 done
 
 echo "  --- result ---"
-$DK exec -i supabase-db-shlomo-laptop psql -U postgres -tAc \
+$DK exec -i supabase-db-owner-laptop psql -U postgres -tAc \
  "SELECT '    '||rpad(\"ID\",14)||rpad(coalesce(\"STATUS\",'-'),16)||'into='||coalesce(\"MERGED_INTO\",'-')
   FROM public.incoming_documents WHERE \"ID\" LIKE '${P}%' ORDER BY \"ID\""
 
-$DK exec -i supabase-db-shlomo-laptop psql -U postgres -tAc \
+$DK exec -i supabase-db-owner-laptop psql -U postgres -tAc \
  "SELECT '    LIVENESS : '||CASE WHEN (SELECT count(*) FROM public.indox_action_execution_log
       WHERE \"ID\" LIKE '${P}%' AND \"ACTION\"='action_merge_doubles')>0
     THEN 'ok -- a merge was dispatched' ELSE 'VOID -- no merge dispatched, verdicts below mean nothing' END;
@@ -59,14 +59,14 @@ $DK exec -i supabase-db-shlomo-laptop psql -U postgres -tAc \
       WHERE \"ID\" LIKE '${P}%' AND \"STATUS\"='MERGED')=1
     THEN 'PASS (one absorbed)' ELSE 'FAIL' END"
 
-LOCKS=$($DK exec -e RP="$RP" redis-shlomo-laptop sh -lc \
+LOCKS=$($DK exec -e RP="$RP" redis-owner-laptop sh -lc \
   "redis-cli -a \"\$RP\" --no-auth-warning --scan --pattern 'n8n.process_lock.doc_action.${P}*' 2>/dev/null" \
   | tr -d '\r' | grep -c . || true)
 echo "    UNLOCKED : $( [ "${LOCKS:-0}" -eq 0 ] && echo 'PASS (no doc_action lock left on either row)' || echo "FAIL ($LOCKS lock(s) still held)" )"
 
-$DK exec -i supabase-db-shlomo-laptop psql -U postgres -tAc \
+$DK exec -i supabase-db-owner-laptop psql -U postgres -tAc \
  "DELETE FROM public.indox_action_execution_log WHERE \"ID\" LIKE '${P}%';
   DELETE FROM public.incoming_documents WHERE \"ID\" LIKE '${P}%'" >/dev/null 2>&1
-$DK exec -e RP="$RP" redis-shlomo-laptop sh -lc \
+$DK exec -e RP="$RP" redis-owner-laptop sh -lc \
   "for k in \$(redis-cli -a \"\$RP\" --no-auth-warning --scan --pattern 'n8n.process_lock.doc_action.${P}*' 2>/dev/null); do redis-cli -a \"\$RP\" --no-auth-warning DEL \"\$k\" >/dev/null; done" 2>/dev/null
 echo "  (fixtures removed)"

@@ -281,7 +281,16 @@ var (
 	flaskJSON     = jsonStyle{sortKeys: true, ascii: true, item: ",", key: ":"}
 	sortedJSON    = jsonStyle{sortKeys: true, item: ", ", key: ": "}
 	indentJSON    = jsonStyle{item: ",", key: ": ", indent: "  "}
+	indent1Sorted = jsonStyle{sortKeys: true, item: ",", key: ": ", indent: " "}
 )
+
+// IndentOneSortedJSON is json.dumps(v, indent=1, sort_keys=True, ensure_ascii=False) — the vault's manifest
+// (.generated/vault/.vault-manifest.json).
+func IndentOneSortedJSON(v any) string {
+	var b strings.Builder
+	writeJSON(&b, v, indent1Sorted)
+	return b.String()
+}
 
 func writeJSON(b *strings.Builder, v any, s jsonStyle) { writeJSONAt(b, v, s, 0) }
 

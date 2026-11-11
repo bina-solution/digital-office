@@ -12,8 +12,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/solomonBoltin/deployment-hacohen/packaging/trust"
-	"github.com/solomonBoltin/deployment-hacohen/packaging/trust/trusttest"
+	"github.com/bina-solution/digital-office/packaging/trust"
+	"github.com/bina-solution/digital-office/packaging/trust/trusttest"
 )
 
 const storeSite = "https://apps.net.digital-office.co.il/v1"

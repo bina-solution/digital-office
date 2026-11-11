@@ -12,8 +12,8 @@
 -- pipes, any row without one of the three e2e-lt SYNC_NAME values, or anything client-real.
 --
 -- Usage:
---   docker cp e2e-loadtest-cleanup.sql supabase-db-shlomo-laptop:/tmp/e2e-loadtest-cleanup.sql
---   docker exec supabase-db-shlomo-laptop psql -U postgres -d postgres -f /tmp/e2e-loadtest-cleanup.sql
+--   docker cp e2e-loadtest-cleanup.sql supabase-db-owner-laptop:/tmp/e2e-loadtest-cleanup.sql
+--   docker exec supabase-db-owner-laptop psql -U postgres -d postgres -f /tmp/e2e-loadtest-cleanup.sql
 --
 -- This is the DB-side half only. Also run (in order, BEFORE this script, so the ledger rows this
 -- script deletes still line up with what's being removed source-side):

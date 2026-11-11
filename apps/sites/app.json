@@ -5,7 +5,9 @@
     "en": "Sites"
   },
   "layer": 3,
+  "people": "admins",
   "kind": "service",
+  "page": "services",
   "version": "0.2.0",
   "summary": {
     "he": "ניהול האתרים של העסק מקצה לקצה — והלשכה גם מגישה אותם בעצמה בנתיב ציבורי: זמינות, ביקורים, אבטחה, SEO, ציון יופי ותוכן שנאסף מהנכסים הדיגיטליים",
@@ -40,6 +42,12 @@
     }
   ],
   "use": [
+    {
+      "capability": "kv",
+      "strength": "wants",
+      "after": false,
+      "dependency": "weak"
+    },
     {
       "capability": "computers",
       "strength": "requires",
@@ -81,7 +89,13 @@
       "dependency": "weak"
     }
   ],
-  "connections": [],
+  "connections": [
+    {
+      "id": "computers-exec-token",
+      "required": false,
+      "note": "every site action is a command run on a machine through computers (DGO-1304)"
+    }
+  ],
   "compose": "docker-compose.yml",
   "routing": [
     {

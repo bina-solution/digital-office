@@ -1,0 +1,13 @@
+{
+ "_about": "Document types as DATA (DGO-1630, plan documents-003): the codes the two providers already use, and the name a person reads. A new type («אפיון», «ייעוץ עסקי») is a row here, never a release. `direction` is where the type is seen: out = issued by the business, in = received, both = either.",
+ "types": [
+  {"code": "INVOICE", "name_he": "חשבונית מס", "direction": "both"},
+  {"code": "INVOICE_RECEIPT", "name_he": "חשבונית מס קבלה", "direction": "both"},
+  {"code": "RECEIPT", "name_he": "קבלה", "direction": "both"},
+  {"code": "QUOTE", "name_he": "הצעת מחיר", "direction": "both"},
+  {"code": "ORDER", "name_he": "הזמנה", "direction": "both"},
+  {"code": "SHIPMENT", "name_he": "תעודת משלוח", "direction": "both"},
+  {"code": "BALANCE_SHEET", "name_he": "דף חשבון", "direction": "both"},
+  {"code": "UNKNOWN", "name_he": "לא מזוהה", "direction": "in"}
+ ]
+}

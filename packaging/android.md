@@ -30,7 +30,11 @@ holds both of its halves:
   (`engine/dgo-qemu`) under the app's package name, its binary and libraries as `lib*.so` in the APK's
   `jniLibs` (the one place an app targeting Android 10+ may execute its own program), each finding its
   libraries beside itself (RUNPATH `$ORIGIN`), its firmware in `assets/qemu`; beside it the zstd program
-  QEMU's own dependency brings, which unpacks the machine;
+  QEMU's own dependency brings, which unpacks the machine. Built only on request (the dispatch input
+  `qemu`, or a push saying `[android-engine-qemu]`, beside `[android-engine]` for the guest too), since
+  the recipe is pinned: a run's guest job carries the QEMU of the newest draft built from the same recipe
+  (the qemu job but its `if:`, `collect-qemu.sh`, `engine/dgo-qemu`), and when there is none and no build
+  was asked for, attaches the guest and then fails by name (DGO-1818);
 * **the office's machine** — its `guest` job (`engine/guest.sh`): the Mac engine's pinned Ubuntu 24.04
   arm64 image and provisioning, Docker 28.5.2 and Compose 2.40.3, the office at /opt/office brought up
   at every boot by `dgo-office.service` (whose lines go to the machine's console, which the app shows),
@@ -58,6 +62,29 @@ recipe at one commit and its builder image by digest (QEMU 11.1.2; a newer QEMU 
 digest and `engine/dgo-qemu/build.sh` together), the machine's Ubuntu image by digest
 (`packaging/macos/engine.yaml`), Docker and Compose in it. Every APK from 0.1.3 on is signed by one kept
 debug key (the workflow's cache, or the repository secret `DGO_ANDROID_DEBUG_KEYSTORE` for good).
+
+## Building it without CI (DGO-1328)
+
+Every build used to need one machine: the self-hosted runner on the Dell, which is off the network most of
+the time — each round of the owner's ping-pong ended waiting for it. `packaging/android/build-local.sh`
+builds the same artifact from this checkout on any Linux machine with Docker:
+
+```bash
+./packaging/android/build-local.sh                    # arm64 (a phone), the core only
+./packaging/android/build-local.sh --check            # …and prove the office root answers first
+./packaging/android/build-local.sh --abi x86_64       # an emulator on an x86_64 host
+./packaging/android/build-local.sh --door https://…   # DGO_PHONE_DOOR compiled in
+```
+
+It does what the workflow's `apk` job does — `dgo` and `forward-auth` for the phone as the app's native
+libraries, `assets/office-root.zip`, then `gradle assembleDebug` — and nothing else. JDK 17 and the Android
+SDK are pulled once into `ci-artifacts/android` (git-ignored); the containers run as the caller, never root
+(root-owned sources cost three sessions already); a second run is minutes. What it cannot build is the
+office's **engine** — QEMU from Termux's recipe under our package name, and the guest machine
+(`android-engine.yml`): an APK from here is the core alone, `[android-core]`'s shape. It prints the APK's
+SHA-256 and its signing key's fingerprint, because an APK installs over the one on a phone only when the two
+fingerprints match (`INSTALL_FAILED_UPDATE_INCOMPATIBLE` otherwise), and the key the phones already carry is
+CI's.
 
 ## Known limits
 

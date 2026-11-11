@@ -7,6 +7,14 @@ services:
     command: ["caddy", "respond", "--listen", ":80", "--body", "hello from a third-party catalog"]
     networks:
       - traefik-network
+    # The cap this app declares in app.json `resources` is the cap it gets: one page of text held by
+    # caddy's static responder, and 64M is what the manifest says. Two files held the two numbers and
+    # nothing compared them until gate G30 read both, so they are the same number here.
+    deploy:
+      resources:
+        limits:
+          cpus: "0.1"
+          memory: 64M
 networks:
   traefik-network:
     external: true

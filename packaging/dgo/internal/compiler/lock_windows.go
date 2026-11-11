@@ -36,6 +36,10 @@ const (
 	errLockViolation    = syscall.Errno(33) // ERROR_LOCK_VIOLATION
 )
 
+// HandBack has nothing to hand back on Windows: there is no root compiling a checkout another user owns, and a
+// new file takes the directory's inherited ACL (reconcile.py's hand_back is a no-op there too: no os.geteuid).
+func HandBack(string) int { return 0 }
+
 // denied is one of them — what CPython reports as PermissionError: [Errno 13]. A rename over a file
 // another process holds open without sharing its deletion fails so, though a write into it does not.
 func denied(err error) bool {

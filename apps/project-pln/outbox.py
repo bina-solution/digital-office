@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """outbox.py — the ticket writes that found no path to Plane, kept until one is back (DGO-1100, any-201).
 
-`tasks start|done|comment|take|attach|label|link` and `plan` are WRITES. When this office has no path
+`tasks start|done|comment|take|attach|label|unlabel|link|new|edit|rm` and `plan` are WRITES. When this office has no path
 to its Plane — it does not run the app here and no linked office publishes it, or the door that does
 is not answering, or the herd's hub is not answering either — a write used to fail and the words were
 lost. They are kept here instead, in the order they were asked for, and sent by the first run that
@@ -17,7 +17,9 @@ moves it, which is how the test runs it in a scratch directory).
 The order is the files' own: `<seq>` is zero-padded and claimed under a lock, so the queue replays
 in the order it was written and two runs never claim the same number. An entry is removed only after
 its command answered success, so nothing is lost; a command that failed stops the queue (order is
-the contract), and the entry stays for the next attempt. The one window that is not closed: a
+the contract), and the entry stays for the next attempt. The one exception is an `attach` that Plane
+answered and refused part of FOR GOOD (exit ANSWERED_REFUSED: a file type it takes not): the rest
+landed, a replay cannot change the answer, so it is said and leaves the queue. The one window that is not closed: a
 request that Plane accepted and whose answer died on the way back still looks unsent here, and a
 `comment` would be written twice. State changes (`start`, `done`, `take`) and `plan` are upserts and
 say the same thing twice harmlessly.
@@ -36,7 +38,11 @@ import time
 HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.dirname(os.path.dirname(HERE))
 DEFAULT_DIR = os.environ.get("PLN_OUTBOX_DIR") or os.path.join(REPO, ".state", "outbox", "project-pln")
-WRITE_VERBS = ("start", "done", "comment", "take", "attach", "label", "link", "plan")
+WRITE_VERBS = ("start", "done", "comment", "take", "attach", "label", "unlabel", "link", "new", "edit", "rm", "item",
+               "plan")   # new/edit/rm/item: DGO-1252; unlabel was a write the list had missed
+#: The exit of a write Plane ANSWERED and refused part of (tasks.py `attach`: a file it takes no such type of —
+#: the others landed). Sent and said; never sent again. The same number is tasks.py's ANSWERED_REFUSED.
+ANSWERED_REFUSED = 4
 
 
 def log(msg: str) -> None:
@@ -85,7 +91,11 @@ def queue(d: str, verb: str, args: list, copies: list) -> int:
         for i, src in enumerate(copies):
             if not os.path.isfile(src):
                 continue
-            dst = os.path.join(entry, "files", "%d-%s" % (i, os.path.basename(src)))
+            # by its OWN name, in a directory of its own (two files of one write may share a name): an attach
+            # replayed from here lands on the item as the file the person named, not «0-<name>» — which is
+            # also what lets the replay see the files that landed before the line went down (DGO-1628)
+            os.makedirs(os.path.join(entry, "files", str(i)))
+            dst = os.path.join(entry, "files", str(i), os.path.basename(src))
             shutil.copy2(src, dst)
             mapped[src] = dst
             files[src] = dst
@@ -106,6 +116,12 @@ def bbox() -> str:
 
 def flush(d: str, quiet: bool = False) -> int:
     """Send what is waiting, oldest first, and stop at the first failure (order is the contract)."""
+    if os.environ.get("PLN_OUTBOX_REPLAY"):
+        # Inside a replay this queue is being sent already, by the flush that holds its lock, so a
+        # second flush would wait for that lock forever. Measured 2026-11-05 on vps1: hooks/plan flushes
+        # before its apply, also when it IS the replay; a queued plan hung there, and every later write
+        # of the office waited behind the same lock (nine writers from five sessions, 75 minutes).
+        return 0
     with locked(d):
         names = pending(d)
         if not names:
@@ -133,6 +149,14 @@ def flush(d: str, quiet: bool = False) -> int:
             except OSError as err:
                 log("לא נשלח (%s) — נשאר בתור, %d ממתין" % (err, count(d)))
                 return 3
+            if rc == ANSWERED_REFUSED and verb == "attach":   # only attach says it; any other 4 keeps its entry
+                # Plane answered and refused part of it (a file it takes no such type of): the rest landed, and
+                # sending it again cannot change the answer. It is said and leaves the queue — kept, it would
+                # stop every later write of this office behind it for good (DGO-1628's second reader).
+                log("נשלח — Plane דחה חלק ממנו (נאמר למעלה), ולא יישלח שוב")
+                shutil.rmtree(entry, ignore_errors=True)
+                sent += 1
+                continue
             if rc != 0:
                 log("לא נשלח (exit %d) — נשאר בתור, %d ממתין" % (rc, count(d)))
                 return 3

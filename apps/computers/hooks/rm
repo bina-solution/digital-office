@@ -1,0 +1,3 @@
+#!/usr/bin/env bash
+#: rm — forget a computer and its stored key for good (never the one the office runs on): <id> --yes --reason "…" [--json]
+exec bash "$(dirname "${BASH_SOURCE[0]}")/../tools/verb" rm "$@"

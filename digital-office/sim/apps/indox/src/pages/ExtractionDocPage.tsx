@@ -223,8 +223,8 @@ export default function ExtractionDocPage() {
           </div>
           <div className="muted small" style={{ marginTop: 8 }}>
             {pane === 'tokens'
-              ? 'זיהוי תווים (/documentOcrDraw): כל מילה שמנוע ה-OCR קרא, ממוסגרת עם הטקסט שזוהה — לפני שכל שאילתה רצה. מה שלא מסומן כאן, החילוץ לא יכול למצוא.'
-              : 'הסימון מצויר על ידי apitools עצמו (/documentDraw): עוגן ירוק, ערך כחול — לכל שדה השאילתה שלו, קריאה אחת לערך.'}
+              ? <>זיהוי תווים (<bdi dir="ltr">/documentOcrDraw</bdi>): כל מילה שמנוע ה-OCR קרא, ממוסגרת עם הטקסט שזוהה — לפני שכל שאילתה רצה. מה שלא מסומן כאן, החילוץ לא יכול למצוא.</>
+              : <>הסימון מצויר על ידי apitools עצמו (<bdi dir="ltr">/documentDraw</bdi>): עוגן ירוק, ערך כחול — לכל שדה השאילתה שלו, קריאה אחת לערך.</>}
           </div>
         </div>
 
@@ -418,7 +418,7 @@ export default function ExtractionDocPage() {
                   </details>
                 ))}
             <div className="muted small" style={{ marginTop: 8 }}>
-              עריכת השאילתות נעשית בטבלת settings (מפתחות q_v3_*) — ללא שינוי בתהליכים.
+              עריכת השאילתות נעשית בטבלת settings (מפתחות <bdi dir="ltr">q_v3_*</bdi>) — ללא שינוי בתהליכים.
             </div>
           </div>
         </div>

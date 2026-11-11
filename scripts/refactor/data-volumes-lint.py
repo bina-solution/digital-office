@@ -18,6 +18,14 @@ So this gate asserts the two directions that can be checked statically:
                  does every writable host bind that holds state.
   2. GROUNDED  — every name in `data.volumes` is a volume the app's compose actually declares, so an
                  entry cannot outlive the volume it names.
+  3. WRITERS   — every `data.writers` entry (what `deployment-archive.py export --quiesce` stops, DGO-1510) is a
+                 service of the app's own compose whose container is exactly
+                 `<service>-${DEPLOYMENT_NAME:-bina-deployment}`, and not a database or key-value store (the
+                 export dumps those). Never waivable.
+  4. ONE OWNER — a volume is in ONE app's `data.volumes`, the app it is backed up, restored and purged with; an app
+                 whose compose mounts another app's volume names it in `data.shares` (DGO-1510: n8n_storage was in
+                 n8n's and any-concurrency's, so `uninstall --purge` of any-concurrency deleted n8n's data). A share
+                 is mounted by the app's compose and owned by exactly one other app. Never waivable.
 
 Read-only mounts, the docker socket, build contexts and source-code binds are not state and are
 skipped — see SKIP rules below. A genuine exception goes in platform/data-volumes-waivers.yaml with
@@ -177,11 +185,102 @@ def scan(app_dir):
     return named, binds
 
 
+def services(app_dir):
+    """{service: (container_name or '', image or '')} of the app's own docker-compose.yml."""
+    cf = app_dir / "docker-compose.yml"
+    cfg = load_yaml(cf) if cf.exists() else {}
+    return {name: (str((svc or {}).get("container_name") or ""), str((svc or {}).get("image") or ""))
+            for name, svc in ((cfg or {}).get("services") or {}).items() if isinstance(svc, dict) or svc is None}
+
+
+# a database or a key-value store is what the export DUMPS (by technology, scripts/deployment-archive.py's
+# PG_IMAGE_HINTS / KV_IMAGE_HINTS): stopped as a "writer", the dump would find nothing to read (the third reader)
+STORE_IMAGE_HINTS = ("postgres", "pgvector", "timescale", "redis", "valkey", "keydb")
+
+
+def bad_writers(app_id, app, app_dir):
+    """data.writers entries the archiver could not stop (DGO-1510): no such service in the app's compose, or a
+    container that is not named exactly `<service>-${DEPLOYMENT_NAME}`, the name a quiesced export asks docker for
+    (exact: `web-${DEPLOYMENT_NAME}-old` is another container; a default only the archiver's own, bina-deployment);
+    or a database or key-value store, which the export dumps and must not stop (the readers)."""
+    out = []
+    writers = (app.get("data") or {}).get("writers") or []
+    if not writers:
+        return out
+    svcs = services(app_dir)
+    for w in writers:
+        name, image = svcs.get(w, ("", ""))
+        if w not in svcs:
+            out.append((app_id, f"{w}  (no such service in the app's compose)"))
+        elif not re.fullmatch(re.escape(w) + r"-\$\{DEPLOYMENT_NAME(?::-bina-deployment)?\}", name):
+            out.append((app_id, f"{w}  (its container_name is {name or 'unset'!r}, not {w}-${{DEPLOYMENT_NAME}}, "
+                                f"so a quiesced export would not find it)"))
+        elif any(h in image.lower() for h in STORE_IMAGE_HINTS):
+            out.append((app_id, f"{w}  (its image {image!r} is a store the export dumps: never a writer it stops)"))
+    return out
+
+
+def bad_shares(manifests, mounted):
+    """The ownership of volumes (DGO-1510): a volume is in ONE app's data.volumes — the app it is backed up, restored
+    and purged with — and an app that mounts another's names it in data.shares. Two owners made `uninstall --purge`
+    of either delete the other's data, and an export or import scoped to either carry it over the other's.
+    `manifests` is {app: app.json}, `mounted` {app: the named volumes its compose mounts}; returns [(app, sentence)]."""
+    owners: dict[str, list[str]] = {}
+    for aid, app in manifests.items():
+        for v in (app.get("data") or {}).get("volumes") or []:
+            owners.setdefault(v, []).append(aid)
+    out = []
+    for v, apps in sorted(owners.items()):
+        if len(apps) > 1:
+            out.append((apps[0], f"{v}  (in data.volumes of {', '.join(apps)}: one owns it, the others name it in "
+                                 f"data.shares)"))
+    for aid, app in sorted(manifests.items()):
+        data = app.get("data") or {}
+        for v in data.get("shares") or []:
+            others = [o for o in owners.get(v, []) if o != aid]
+            if v in (data.get("volumes") or []):
+                out.append((aid, f"{v}  (in its own data.volumes and data.shares: a volume is owned or shared)"))
+            elif len(others) != 1:
+                out.append((aid, f"{v}  (data.shares: no other app owns it in data.volumes)"))
+            if v not in mounted.get(aid, set()):
+                out.append((aid, f"{v}  (data.shares: the app's compose does not mount it)"))
+    return out
+
+
+REDIS_HOOK = REPO / "platform-base/redis/hooks/backup"
+
+
+def bad_kv(manifests, redis_hook_text):
+    """The office redis's databases (DGO-1512). One app declares each (instance, db) in data.kv — the one whose data
+    it is, never an app that only reads it. And while the redis hook carries no key (it says SKIPVOL redis_data, has
+    no DUMP, and FAILS the export on a key without a TTL), no database of the office `redis` is `durable` (the
+    schema's default): a durable claim there is a promise the backup does not keep — any-concurrency declared n8n's
+    db0 durable for months while the hook proved the opposite on every export. Returns [(app, sentence)]."""
+    carries = any(re.search(r"\bDUMP\b", line.split("#", 1)[0])          # a code line, never a comment about it
+                  for line in (redis_hook_text or "").splitlines())
+    seen, out = {}, []
+    for aid, app in sorted(manifests.items()):
+        for kv in (app.get("data") or {}).get("kv") or []:
+            key = (kv.get("instance"), kv.get("db", 0))
+            if key in seen:
+                twice = "twice in its data.kv" if seen[key] == aid else f"in the data.kv of {seen[key]} and {aid}"
+                out.append((aid, f"{key[0]} db{key[1]}  ({twice}: one app declares a database, and its note names "
+                                 f"the other apps that write there)"))
+            seen.setdefault(key, aid)
+            if key[0] == "redis" and kv.get("durable", True) and not carries:
+                out.append((aid, f"redis db{key[1]}  (data.kv says durable, and the office redis is not carried: "
+                                 f"{REDIS_HOOK.relative_to(REPO).as_posix()} skips its volume and fails the export on "
+                                 f"a key without a TTL — keep durable state in a store that is carried, or say "
+                                 f"durable: false and what it holds)"))
+    return out
+
+
 def main():
     waiv_path = REPO / "platform/data-volumes-waivers.yaml"
     waivers = load_yaml(waiv_path) if waiv_path.exists() else {}
 
-    missing, orphan, checked = [], [], 0
+    missing, orphan, writers, checked, n_writers = [], [], [], 0, 0
+    manifests, mounted = {}, {}
     for root in ROOTS:
         for app_dir in sorted((REPO / root).iterdir()):
             manifest = app_dir / "app.json"
@@ -194,13 +293,18 @@ def main():
                 return 1
 
             app_id = app.get("id") or app_dir.name
+            writers.extend(bad_writers(app_id, app, app_dir))
+            n_writers += len((app.get("data") or {}).get("writers") or [])
             # data.paths declares a BIND the app owns, and this gate's whole job is "declared or
             # waived". Counting only data.volumes would leave an app that correctly declared its
             # bind still failing, and push a real declaration into the waiver file — where it would
             # read as "we decided this is not app state", the opposite of what it means.
+            # a share (another app's volume this compose mounts) is declared too: by its owner, named here
             declared = (set((app.get("data") or {}).get("volumes") or [])
-                        | set((app.get("data") or {}).get("paths") or []))
+                        | set((app.get("data") or {}).get("paths") or [])
+                        | set((app.get("data") or {}).get("shares") or []))
             named, binds = scan(app_dir)
+            manifests[app_id], mounted[app_id] = app, set(named)
             if not named and not binds and not declared:
                 continue
             checked += 1
@@ -245,9 +349,36 @@ def main():
     if missing or orphan:
         print("  -> add it to data.volumes in the app's app.json, or waive it with a reason in "
               "platform/data-volumes-waivers.yaml")
+    if writers:
+        # never waivable: a writer the export cannot find keeps writing while its store is copied
+        print(f"G26 FAIL — {len(writers)} data.writers entr(ies) a quiesced export could not stop:")
+        for app_id, w in writers:
+            print(f"  {app_id:24} {'writer':15} {w}")
+        print("  -> name a service of the app's own compose whose container_name is "
+              "<service>-${DEPLOYMENT_NAME:-bina-deployment}, and never a database or key-value store")
+    shares = bad_shares(manifests, mounted)
+    if shares:
+        # never waivable: a volume with two owners is purged, exported and restored by either
+        print(f"G26 FAIL — {len(shares)} volume(s) without exactly one owner:")
+        for app_id, s in shares:
+            print(f"  {app_id:24} {'ownership':15} {s}")
+        print("  -> the app whose compose creates it keeps it in data.volumes; every other app that mounts it names "
+              "it in data.shares")
+    kvs = bad_kv(manifests, REDIS_HOOK.read_text(encoding="utf-8") if REDIS_HOOK.exists() else "")
+    if kvs:
+        # never waivable: a durable claim the backup does not keep is the surprise data.kv exists to prevent
+        print(f"G26 FAIL — {len(kvs)} data.kv entr(ies) the office's backup contradicts:")
+        for app_id, s in kvs:
+            print(f"  {app_id:24} {'kv':15} {s}")
+    if missing or orphan or writers or shares or kvs:
         return 1
 
-    print(f"G26 PASS — {checked} app(s) declare exactly the state their compose creates")
+    n_shares = sum(len((m.get("data") or {}).get("shares") or []) for m in manifests.values())
+    n_kv = sum(len((m.get("data") or {}).get("kv") or []) for m in manifests.values())
+    print(f"G26 PASS — {checked} app(s) declare exactly the state their compose creates; "
+          f"{n_writers} declared writer(s), each a container a quiesced export finds; every volume has one owner "
+          f"({n_shares} shared by another app); {n_kv} redis database(s) in data.kv, each one app's, none "
+          f"claimed durable where the backup does not carry it")
     return 0
 
 

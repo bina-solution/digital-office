@@ -1,0 +1,519 @@
+#!/usr/bin/env python3
+"""drive — a hand on the official Claude desktop app's own entry points (DGO-1298).
+
+Runs INSIDE bina-claude-desktop, as the app's user (HOME=/config, DISPLAY=:1); the agent.v1 adapter runs
+it there with `docker exec -i -u abc …`. The text comes on stdin; one JSON line comes out.
+
+  drive new              start a Code session with the text → {"ok":true,"id":"local_…"}
+  drive send local_<id>  the text as the next message of that session → {"ok":true,"id":"local_…"}
+  drive cancel local_<id>  Esc on that session's running turn → {"ok":true,"id":"local_…","cancelled":true}
+
+Why this way (measured 2026-11-03, DGO-1298 has the detail): the app has no local API. Its session tools
+live inside it, and its sign-in reaches only its own Claude Code children. What it offers every program
+on the machine is its OS entry points, handed to the running app through its single-instance socket:
+  claude://code/new?q=<text>               the New session page, the composer filled with the text
+  claude://code/continue?session=local_…   that session, open
+— and then Return, the key the owner presses. Nothing here holds a credential, and the session it starts
+is the app's own: on its screen, in its sidebar, under its id.
+
+Rules it keeps (the second reader's findings on the first cut are why most of them exist):
+- Return is pressed only into a composer that holds EXACTLY the text: before it, select-all + copy must
+  give the text back. A click that landed elsewhere, or a draft of the owner's, stops the call instead.
+- `send` goes only to a session that is idle, or has no Claude Code process: a busy one is mid-turn, and
+  a "waiting" one has a question or an approval open on the owner's screen, where the composer's click
+  and Return would land on its buttons. It is checked before the click and again before Return.
+- After Return, nothing is ever sent again; a delivery not seen in the app's files is reported as
+  "not-confirmed", never retried. A link the app dropped (its view was still loading) is retried only
+  BEFORE any key was pressed, and only after the window in which the app reports a drop has passed.
+- Text goes through the clipboard (put back after), never `xdotool type`: that drops Hebrew letters
+  («שלום» arrived as «שלו»).
+- One call at a time (a lock), and one deadline for the whole call, inside the adapter's.
+- No `folder=`: the app answers every folder from outside with "Trust this workspace?", even one it trusts. A
+  new session opens in the folder the app has selected for new sessions: the office, once chosen there.
+"""
+import calendar
+import fcntl
+import glob
+import json
+import os
+import re
+import subprocess
+import sys
+import time
+import unicodedata
+import urllib.parse
+
+HOME = os.environ.get("HOME") or "/config"
+APPDIR = os.path.join(HOME, ".config", "Claude")
+RECORDS = os.path.join(APPDIR, "claude-code-sessions", "*", "*", "local_*.json")
+PROJECTS = os.path.join(HOME, ".claude", "projects")
+LIVE = os.path.join(HOME, ".claude", "sessions", "*.json")
+MAIN_LOG = os.path.join(APPDIR, "logs", "main.log")
+LOCK = os.path.join(HOME, ".bina-claude-drive.lock")
+Q_MAX = 14336     # the app's own cap on ?q=, compared with the ENCODED query (Hebrew grows ~6×)
+DROP_WINDOW = 12  # the app waits ≤10 s for its view before it drops a link; a drop is logged by then
+DEADLINE = 150    # the whole call, lock included; the adapter gives it 200 s
+SENTINEL = "⁣drive-nothing-selected⁣"
+started = time.monotonic()
+pressed = False   # Return went into the app: from here on, an end that is not a confirmation is unknown
+
+
+def out(ok, **kw):
+    print(json.dumps({"ok": ok, **kw}, ensure_ascii=False))
+    return 0 if ok else 1
+
+
+def left():
+    return DEADLINE - (time.monotonic() - started)
+
+
+def run(*args, inp=None, timeout=20, env=None):
+    return subprocess.run(args, input=inp, capture_output=True, timeout=timeout, env=env)
+
+
+# The running app's own session: its bus and its keyring. MEASURED on Exampleu 2026-11-09 (DGO-1684): a link
+# handed over under docker exec's bare environment (HOME and DISPLAY only) EMPTIED the app's cookie store
+# within a second — every claude.ai cookie, the sign-in's included — while the app ran on, so its next start
+# asked for the sign-in again. The same hand-off with these four variables, taken from the app's own process,
+# left the store untouched. So a link is never handed without them.
+APP_ENV = ("DBUS_SESSION_BUS_ADDRESS", "GNOME_KEYRING_CONTROL", "XDG_RUNTIME_DIR", "XDG_CURRENT_DESKTOP")
+APP_DIR = b"/usr/lib/claude-desktop/"
+
+
+def app_env(proc="/proc"):
+    """The session variables the running app was started with, read from one of its own processes (the
+    main one may hide its environment; its helpers carry the same one). Both the bus and the keyring, from the
+    NEWEST such process whose bus socket is still there — a helper of an earlier session can outlive it. None
+    when there is none."""
+    best, newest = None, -1
+    for p in glob.glob(os.path.join(proc, "[0-9]*")):
+        try:
+            with open(os.path.join(p, "cmdline"), "rb") as f:
+                if not f.read().startswith(APP_DIR):
+                    continue
+            with open(os.path.join(p, "environ"), "rb") as f:
+                env = dict(kv.split(b"=", 1) for kv in f.read().split(b"\0") if b"=" in kv)
+        except OSError:
+            continue
+        got = {k: env[k.encode()].decode("utf-8", "replace") for k in APP_ENV if k.encode() in env}
+        if "DBUS_SESSION_BUS_ADDRESS" not in got or "GNOME_KEYRING_CONTROL" not in got:
+            continue
+        bus = re.match(r"unix:path=([^,;]+)", got["DBUS_SESSION_BUS_ADDRESS"])
+        if bus and not os.path.exists(bus.group(1)):
+            continue
+        try:
+            with open(os.path.join(p, "stat"), encoding="utf-8") as f:
+                started = int(f.read().rsplit(")", 1)[1].split()[19])
+        except (OSError, IndexError, ValueError):
+            started = 0
+        if started > newest:
+            best, newest = got, started
+    return best
+
+
+def link(url):
+    """Hand a claude:// URL to the running app — what the OS does when one is clicked. Only to a running
+    one: without its window, `claude-desktop <url>` would BECOME the app, under docker exec's environment
+    (no bus, no keyring). And only in the app's own session (APP_ENV says why)."""
+    window()
+    env = app_env()
+    if not env:
+        sys.exit(out(False, code="no-app-session", error="the running app's own session (its bus and keyring) was not "
+                                                         "found; nothing was sent — a link handed without it signs the app out"))
+    try:
+        run("claude-desktop", "--no-sandbox", "--disable-gpu", url, timeout=20, env={**os.environ, **env})
+    except subprocess.TimeoutExpired:
+        sys.exit(out(False, code="no-app", error="the app did not take the link in 20 s; nothing was sent"))
+
+
+def log_end():
+    try:
+        return os.path.getsize(MAIN_LOG)
+    except OSError:
+        return 0
+
+
+def dropped_since(pos):
+    """Did the app drop the link because its view was loading? Its main.log says so."""
+    try:
+        with open(MAIN_LOG, "rb") as f:
+            f.seek(pos)
+            return b"Timed out waiting for mainView" in f.read()
+    except OSError:
+        return False
+
+
+def delivered_link(url):
+    """Send the link; True once the window in which the app could still drop it has passed quietly."""
+    while left() > DROP_WINDOW + 30:
+        pos = log_end()
+        link(url)
+        time.sleep(DROP_WINDOW)
+        if not dropped_since(pos):
+            return True
+    return False
+
+
+def window():
+    ids = run("xdotool", "search", "--name", "^Claude$").stdout.decode().split()
+    if not ids:
+        sys.exit(out(False, code="no-window", error="the Claude window is not on the display"))
+    return ids[0]
+
+
+def press(*keys):
+    run("xdotool", "windowactivate", "--sync", window(), "key", *keys)
+    time.sleep(0.3)
+
+
+def enter():
+    """Return: the one key that sends. Nothing is pressed again after it."""
+    global pressed
+    pressed = True
+    press("Return")
+
+
+def click_composer():
+    """The composer sits at the window's bottom centre on the new-session page and on a session page
+    alike, with the right panel open or closed (measured at 1504×936)."""
+    w = window()
+    geo = dict(kv.split("=", 1) for kv in run("xdotool", "getwindowgeometry", "--shell", w).stdout.decode().split())
+    run("xdotool", "windowactivate", "--sync", w, "mousemove", "--window", w,
+        str(int(geo["WIDTH"]) // 2), str(int(geo["HEIGHT"]) - 62), "click", "1")
+    time.sleep(0.3)
+
+
+def clip_set(data: bytes):
+    """Own the clipboard. xclip stays alive to serve it: its output must not be captured (a captured
+    pipe it holds open hangs the caller)."""
+    subprocess.run(["xclip", "-i", "-selection", "clipboard"], input=data, stdout=subprocess.DEVNULL,
+                   stderr=subprocess.DEVNULL, timeout=10)
+
+
+def clip_get() -> bytes:
+    try:
+        return run("xclip", "-o", "-selection", "clipboard", timeout=3).stdout
+    except subprocess.TimeoutExpired:
+        return b""
+
+
+def selection():
+    """What select-all + copy gives in the focused element ('' when nothing is selected)."""
+    clip_set(SENTINEL.encode())
+    press("ctrl+a")
+    press("ctrl+c")
+    got = clip_get().decode("utf-8", "replace")
+    return "" if got == SENTINEL else got
+
+
+def words(s):
+    """The text as the composer gives it back: its words, in Unicode's compatibility form — the app's editor
+    writes «…» as «...» and «²» as «2» (measured on Exampleu 2026-11-09, DGO-1684), and a brief with either was
+    refused although the composer held all of it. The words themselves are still compared, each one."""
+    return " ".join(unicodedata.normalize("NFKC", str(s or "")).split())
+
+
+def fill(text, prefilled):
+    """Leave the composer holding exactly `text`, focused; or say why not. The clipboard is put back."""
+    old = clip_get()
+    try:
+        if not prefilled:
+            click_composer()
+            here = selection()
+            if here:
+                press("End")                      # leave his draft as it was: not selected, not replaced
+                return "the composer is not empty (a draft of the owner's, or the click did not land in it)"
+            clip_set(text.encode())
+            press("ctrl+v")
+        if words(selection()) != words(text):
+            return "the text is not in the composer (the click did not land in it)"
+        press("End")                              # collapse the selection: Return then sends
+        return None
+    finally:
+        clip_set(old)
+
+
+def records():
+    found = {}
+    for p in glob.glob(RECORDS):
+        try:
+            with open(p, encoding="utf-8") as f:
+                found[os.path.basename(p)[:-len(".json")]] = json.load(f)
+        except (OSError, ValueError):
+            continue
+    return found
+
+
+def alive(j):
+    """Is the live file's process the one that wrote it? A file a killed process left behind names a pid
+    that is gone, or reused (its start time, /proc/<pid>/stat field 22, is then another). Dead only when
+    that is SHOWN: a file this cannot judge (no pid, no procStart, a /proc it cannot read) keeps its status,
+    because "no process" lets keys in."""
+    try:
+        pid = int(j.get("pid"))
+    except (TypeError, ValueError):
+        return True
+    try:
+        with open(f"/proc/{pid}/stat", encoding="utf-8") as f:
+            fields = f.read().rsplit(")", 1)[1].split()
+    except FileNotFoundError:
+        return False
+    except (OSError, IndexError):
+        return True
+    start = j.get("procStart")
+    return start is None or len(fields) <= 19 or fields[19] == str(start)
+
+
+def status(sid):
+    """(busy | waiting | idle | None — no Claude Code process for it right now, what it waits for)."""
+    for p in glob.glob(LIVE):
+        try:
+            with open(p, encoding="utf-8") as f:
+                j = json.load(f)
+        except (OSError, ValueError):
+            continue
+        if j.get("hostSessionId") == sid and alive(j):
+            return j.get("status"), j.get("waitingFor")
+    return None, None
+
+
+def not_idle(sid, left_behind=""):
+    """Why a key may not go into this session now, or None: only idle (or no process) takes one."""
+    st, why = status(sid)
+    if st in (None, "idle"):
+        return None
+    if st == "waiting":
+        return out(False, code="waiting", id=sid, error="the session waits on the owner"
+                   + (f" ({why})" if why else "") + f"; nothing was sent{left_behind} — it is answered on its screen")
+    return out(False, code="busy", id=sid, error=f"the session is mid-turn ({st}); nothing was sent{left_behind} — send when it is idle (bbox agent wait)")
+
+
+def transcript(rec):
+    hits = glob.glob(os.path.join(PROJECTS, "*", f"{rec.get('cliSessionId')}.jsonl"))
+    return hits[0] if hits else None
+
+
+def text_of(r):
+    if r.get("type") == "queue-operation":
+        return r.get("content")
+    c = (r.get("message") or {}).get("content")
+    if not isinstance(c, str):
+        c = " ".join(x.get("text", "") for x in c or [] if isinstance(x, dict) and x.get("type") == "text")
+    return re.sub(r"<system-reminder>[\s\S]*?</system-reminder>", "", c)
+
+
+def stamp(ts):
+    """ISO-8601 UTC ('2026-11-03T15:29:00.986Z') → epoch ms."""
+    try:
+        return calendar.timegm(time.strptime(ts[:19], "%Y-%m-%dT%H:%M:%S")) * 1000
+    except (TypeError, ValueError):
+        return 0
+
+
+def said(path, text, since_ms):
+    """Is exactly `text` in the transcript as a message (sent, or queued with its text), after since_ms?"""
+    if not path:
+        return False
+    want = words(text)
+    try:
+        with open(path, encoding="utf-8", errors="replace") as f:
+            for line in f:
+                try:
+                    r = json.loads(line)
+                except ValueError:
+                    continue
+                if r.get("type") not in ("user", "queue-operation") or r.get("isMeta"):
+                    continue
+                if words(text_of(r)) == want and stamp(r.get("timestamp")) >= since_ms - 2000:
+                    return True
+    except OSError:
+        pass
+    return False
+
+
+def new(text):
+    before = set(records())
+    t0 = int(time.time() * 1000)
+    q = urllib.parse.quote(text)
+    prefilled = len(q) <= Q_MAX
+    # No `folder=`: the app asks «Trust this workspace?» for EVERY folder a link hands it, trusted or not
+    # (measured on Exampleu 2026-11-09, DGO-1684). The session opens in the folder the app itself has selected
+    # for new sessions — the office, once it was chosen there (the folder chip of the New page).
+    if not delivered_link("claude://code/new" + (f"?q={q}" if prefilled else "")):
+        return out(False, code="dropped", error=f"the app kept dropping the link (its view was loading; {MAIN_LOG})")
+    why = fill(text, prefilled)
+    if why:
+        return out(False, code="not-sent", error=f"nothing was sent: {why}")
+    enter()
+    while left() > 0:                             # the app writes the record when the session starts
+        time.sleep(1)
+        for sid, rec in records().items():
+            if sid not in before and said(transcript(rec), text, t0):
+                return out(True, id=sid)
+    return out(False, code="not-confirmed", error="Return pressed, but no new session shows the text yet — look at the app's screen")
+
+
+def send(sid, text):
+    rec = records().get(sid)
+    if not rec:
+        return out(False, code="no-session", error=f"the app has no session {sid}")
+    refused = not_idle(sid)
+    if refused is not None:
+        return refused
+    t0 = int(time.time() * 1000)
+    if not delivered_link("claude://code/continue?" + urllib.parse.urlencode({"session": sid})):
+        return out(False, code="dropped", error=f"the app kept dropping the link (its view was loading; {MAIN_LOG})")
+    refused = not_idle(sid) or not_shown(sid, "sent")   # a turn begun meanwhile, or another page up
+    if refused is not None:
+        return refused
+    why = fill(text, False)
+    if why:
+        return out(False, code="not-sent", id=sid, error=f"nothing was sent: {why}")
+    refused = not_idle(sid, " (the text stays in its composer, unsent)") or not_shown(sid, "sent")
+    if refused is not None:
+        return refused
+    enter()
+    while left() > 0:
+        time.sleep(1)
+        if said(transcript(rec), text, t0):
+            return out(True, id=sid)
+    return out(False, code="not-confirmed", id=sid, error="Return pressed, but the transcript does not show the text yet — look at the app's screen")
+
+
+def focused(sid):
+    """Is `sid` the session the app shows? The app logs every change of it (`LocalSessions.setFocusedSession:
+    sessionId=…`, null on the New page). A refusal when it is ANOTHER page: measured on Exampleu 2026-11-09
+    (DGO-1684), a continue link the app did not follow left the New page up, and Return there started a new
+    session with the text — while the owner was working in the app. None when the log says nothing."""
+    try:
+        with open(MAIN_LOG, "rb") as f:
+            f.seek(max(0, os.path.getsize(MAIN_LOG) - (4 << 20)))
+            last = None
+            for line in f:
+                i = line.find(b"setFocusedSession: sessionId=")
+                if i >= 0:
+                    last = line[i + len(b"setFocusedSession: sessionId="):].strip().split(b",")[0].decode("utf-8", "replace")
+    except OSError:
+        return None
+    return None if last is None else last == sid
+
+
+def not_shown(sid, what):
+    """Why a key may not go into this session's page now, or None."""
+    if focused(sid) is False:
+        return out(False, code="not-focused", id=sid, error=f"the app shows another page than this session; nothing was {what} "
+                   "— the link was not followed (the owner may be working in the app): try again")
+    return None
+
+
+def interrupted(path, since_ms):
+    """Did the app write its Esc marker into the transcript after since_ms? The marker is a message of its own
+    (a text that starts with it), never a tool's output that happens to quote it."""
+    if not path:
+        return False
+    try:
+        with open(path, encoding="utf-8", errors="replace") as f:
+            for line in f:
+                if "[Request interrupted" not in line:
+                    continue
+                try:
+                    r = json.loads(line)
+                except ValueError:
+                    continue
+                if r.get("type") != "user" or stamp(r.get("timestamp")) < since_ms - 2000:
+                    continue
+                c = (r.get("message") or {}).get("content")
+                texts = [c] if isinstance(c, str) else [x.get("text", "") for x in c or []
+                                                         if isinstance(x, dict) and x.get("type") == "text"]
+                if any(t.lstrip().startswith("[Request interrupted") for t in texts):
+                    return True
+    except OSError:
+        pass
+    return False
+
+
+def busy_elsewhere(sid):
+    """Another session mid-turn: Esc goes to the page on screen, and nothing here can show which page that is."""
+    for p in glob.glob(LIVE):
+        try:
+            with open(p, encoding="utf-8") as f:
+                j = json.load(f)
+        except (OSError, ValueError):
+            continue
+        if j.get("hostSessionId") not in (None, sid) and j.get("status") in ("busy", "waiting") and alive(j):
+            return j.get("hostSessionId")
+    return None
+
+
+def cancel(sid):
+    """Esc on the session's page — the owner's own way to stop a turn (DGO-1684). Only into a turn that
+    runs: a session waiting on the owner has a question or an approval open, and Esc there would answer
+    it for him; an idle one has nothing to stop. Confirmed by the app's own files, never assumed."""
+    global pressed
+    rec = records().get(sid)
+    if not rec:
+        return out(False, code="no-session", error=f"the app has no session {sid}")
+    st, why = status(sid)
+    if st == "waiting":
+        return out(False, code="waiting", id=sid, error="the session waits on the owner" + (f" ({why})" if why else "")
+                   + "; nothing was pressed — it is answered (or stopped) on its screen")
+    if st != "busy":
+        return out(True, id=sid, cancelled=False, note="no turn was running; nothing was pressed")
+    other = busy_elsewhere(sid)
+    if other:
+        return out(False, code="busy", id=sid, error=f"another session ({other}) is mid-turn too, and Esc goes to whichever "
+                   "page is on screen; nothing was pressed — stop it on its screen")
+    t0 = int(time.time() * 1000)
+    if not delivered_link("claude://code/continue?" + urllib.parse.urlencode({"session": sid})):
+        return out(False, code="dropped", error=f"the app kept dropping the link (its view was loading; {MAIN_LOG})")
+    st, why = status(sid)
+    if st == "waiting":                           # it asked the owner while the link went in
+        return out(False, code="waiting", id=sid, error="the session now waits on the owner" + (f" ({why})" if why else "")
+                   + "; nothing was pressed — it is answered (or stopped) on its screen")
+    if st != "busy":                              # it ended while the link went in
+        return out(True, id=sid, cancelled=False, note=f"the turn ended by itself ({st or 'no process'}); nothing was pressed")
+    other = busy_elsewhere(sid)
+    if other:                                     # another began while the link went in
+        return out(False, code="busy", id=sid, error=f"another session ({other}) began a turn meanwhile; nothing was pressed")
+    refused = not_shown(sid, "pressed")
+    if refused is not None:
+        return refused
+    pressed = True
+    press("Escape")
+    while left() > 0:
+        time.sleep(1)
+        st, _ = status(sid)
+        if interrupted(transcript(rec), t0) or st in (None, "idle"):
+            return out(True, id=sid, cancelled=True)
+    return out(False, code="not-confirmed", id=sid, error="Esc pressed, but the session still runs — look at the app's screen")
+
+
+def main(argv):
+    if not argv or argv[0] not in ("new", "send", "cancel") or (argv[0] in ("send", "cancel") and len(argv) < 2):
+        print("usage: drive new | drive send local_<id>   (the text on stdin) | drive cancel local_<id>", file=sys.stderr)
+        return 2
+    text = "" if argv[0] == "cancel" else sys.stdin.read().strip()
+    if argv[0] != "cancel" and not text:
+        return out(False, code="no-text", error="the text comes on stdin, and it is empty")
+    os.environ.setdefault("DISPLAY", ":1")
+    with open(LOCK, "w") as lk:
+        while True:
+            try:
+                fcntl.flock(lk, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                break
+            except BlockingIOError:
+                if left() < 60:
+                    return out(False, code="locked", error="another call is driving the app; nothing was sent")
+                time.sleep(1)
+        try:
+            if argv[0] == "cancel":
+                return cancel(argv[1])
+            return new(text) if argv[0] == "new" else send(argv[1], text)
+        except Exception as e:                    # an answer, never a bare traceback: was it sent or not?
+            if pressed:
+                return out(False, code="not-confirmed", error=f"a key was pressed, then the driver failed ({e!r}) — look at the app's screen")
+            return out(False, code="not-sent", error=f"nothing was sent: the driver failed ({e!r})")
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))

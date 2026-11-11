@@ -8,10 +8,10 @@ services:
     # the `build:` below stays as the fallback. Needs the GHCR package readable — a package made
     # from a private repo is private, so `docker login ghcr.io` on a machine that must pull.
     #
-    # It used to be `image: deployment-hacohen-connections` — tagless, so `compose pull` resolved
+    # It used to be `image: digital-office-connections` — tagless, so `compose pull` resolved
     # it against Docker Hub and got "pull access denied"; indox-e2e still carries
     # `--ignore-pull-failures` on that account. The name CI publishes is the one below.
-    image: ghcr.io/solomonboltin/digital-office/connections:${IMAGE_TAG:-latest}
+    image: ghcr.io/bina-solution/digital-office/connections:${IMAGE_TAG:-latest}
     pull_policy: missing
     build:
       context: .
@@ -48,28 +48,39 @@ services:
       # http://127.0.0.1:8990 (the loopback callback published below). Must match a redirect URI
       # registered on the Google OAuth client.
       - CONNECTIONS_PUBLIC_URL=${CONNECTIONS_PUBLIC_URL:-https://${CONNECTIONS_BASE_URL:-connections.${DEPLOYMENT_DOMAIN:-localhost}}}
+      # The ONE address Google returns every office's app consent to (DGO-1390, app.py `oauth_relay`): the
+      # herd's public door. An office at home (`*.localhost`) has no address Google accepts, so it relays
+      # through this one — which must be the redirect URI registered on the OAuth client:
+      # <OAUTH_RELAY_URL>/oauth/relay. An office with its own public connections host may declare itself.
+      - OAUTH_RELAY_URL=${OAUTH_RELAY_URL:-https://connections.staging.digital-office.co.il}
       # BROKER: warn | enforce | off. `warn` is the safe first step of the 3-phase rollout — a
       # caller this service cannot identify is still served AND logged, so the estate keeps booting
       # while the unidentified callers are found. An IDENTIFIED caller is held to the full policy in
       # every mode: it can never obtain another app's secrets, or one its app.json does not declare.
       # Flip to `enforce` once /api/broker/audit shows no `unidentified: true` grants.
       - CONN_BROKER_MODE=${CONN_BROKER_MODE:-warn}
+      # the event stream (flow.v1, DGO-1402) rides the office redis: `dgo:flow:connections`
+      - REDIS_PASSWORD=${REDIS_PASSWORD:-}
+      # the engine, through connections' own read-only door (DGO-1794) — identity.py speaks tcp://host:port
+      - DOCKER_SOCK=tcp://connections-docker-proxy:2375
     volumes:
       - connections_vault:/app/data      # encrypted vault persists
       - ../../.generated/registry:/app/generated:ro   # compiled registries (see gate G9)
-      # Container identity. The broker maps a request's source address to the container that holds
-      # it, and thence to its `com.docker.compose.service` label — the key the manifest is written
-      # in. Without this the broker cannot name ANY caller and degrades to "warn, everyone
-      # unidentified", which /healthz reports rather than hides.
-      #
-      # ⚠ Residual risk, stated plainly: a docker socket in a container is root on the host, and
-      # `:ro` does not restrict the API (it only makes the socket FILE read-only). identity.py issues
-      # GET requests exclusively and never POSTs, but that is a property of our code, not a boundary
-      # the kernel enforces. Where a read-only socket proxy exists, point DOCKER_SOCK at it instead.
-      # Project socket on the host side — see the note in platform-base/traefik/docker-compose.yml.
-      - ${BBOX_DOCKER_SOCK:-/var/run/docker.sock}:/var/run/docker.sock:ro
+      # the office's ONE flow.v1 publisher (DGO-1402) — the platform's file, never a copy of it here
+      - ../redis/flowpub.py:/opt/dgo/flowpub.py:ro
+    # Container identity. The broker maps a request's source address to the container that holds it, and
+    # thence to its `com.docker.compose.service` label — the key the manifest is written in. It reads that from
+    # the engine through its OWN door (DGO-1794), never the socket: a docker socket in a container is root on the
+    # host, `:ro` does not restrict the API, and this container serves an open path (/oauth/relay, below). The door
+    # (connections-docker-proxy, PROXY_PROFILE=connections) answers only the list, one inspect cut to its labels
+    # and its AGENT_TOKEN_FILE, and the archive of that one file — on a network of their own that leaves nowhere.
+    # No `depends_on` on purpose: the door shares traefik's image tag, and `bbox update connections` reads its
+    # image from `config --images`, which would list the door's too (issues/bbox-update-takes-a-dependency-s-image-
+    # name-for-a-service-with-depends-on.yaml) — a rollback there would retag the edge's door. Without its door,
+    # identity says "docker unavailable" and /healthz reports it; it does not crash.
     networks:
       - traefik-network
+      - connections-docker-api
     # Local Google-OAuth callback: publish on host loopback so Google can redirect the browser to
     # http://127.0.0.1:8990/oauth/callback — DIRECT to the container, bypassing Traefik/Authentik (the
     # OAuth callback is unauthenticated). Bound to 127.0.0.1 → harmless on the VPS; the connections.localhost
@@ -95,14 +106,57 @@ services:
       - traefik.http.routers.connections-local.service=connections
       # gate localhost too (matches my-docs-local): the credential plane must never be
       # reachable unauthenticated, even on the dev host.
-      - traefik.http.routers.connections-local.middlewares=authentik@file
+      - traefik.http.routers.connections-local.middlewares=authentik-admins@file
       # public (https, SSO-gated) — CONNECTIONS_BASE_URL derives from DEPLOYMENT_DOMAIN
       - traefik.http.routers.connections-https.rule=Host(`${CONNECTIONS_BASE_URL:-connections.${DEPLOYMENT_DOMAIN:-localhost}}`)
       - traefik.http.routers.connections-https.entrypoints=websecure
       - traefik.http.routers.connections-https.tls=true
       - traefik.http.routers.connections-https.tls.certresolver=${TRAEFIK_CERTRESOLVER-myresolver}
       - traefik.http.routers.connections-https.service=connections
-      - traefik.http.routers.connections-https.middlewares=authentik@file
+      - traefik.http.routers.connections-https.middlewares=authentik-admins@file,hsts@file
+      # Google's ONE return address for the whole herd (DGO-1390): served WITHOUT the office's sign-in,
+      # because the person coming back from Google may be a client's, with no account on this office. It
+      # does one thing (app.py `oauth_relay`): a state one of our offices signed → 302 to the app that asked.
+      # The rule is that exact path (app.json lists it in `auth_exclude`, gate G21); every other path keeps
+      # authentik. HSTS is not a gate a person passes but the browser's own instruction, so this router
+      # carries it too (G21's invariant 7: every `websecure` router carries hsts@file — DGO-1595).
+      - traefik.http.routers.connections-relay-https.rule=Host(`${CONNECTIONS_BASE_URL:-connections.${DEPLOYMENT_DOMAIN:-localhost}}`) && Path(`/oauth/relay`)
+      - traefik.http.routers.connections-relay-https.entrypoints=websecure
+      - traefik.http.routers.connections-relay-https.tls=true
+      - traefik.http.routers.connections-relay-https.tls.certresolver=${TRAEFIK_CERTRESOLVER-myresolver}
+      - traefik.http.routers.connections-relay-https.priority=200
+      - traefik.http.routers.connections-relay-https.service=connections
+      - traefik.http.routers.connections-relay-https.middlewares=hsts@file
+    logging:
+      driver: json-file
+      options: {max-size: 5m, max-file: '3'}
+
+  # connections' read-only door to the engine (DGO-1794): the edge's own door, its code and image
+  # (platform-base/traefik/socket-proxy), declared to serve the vault's identity reads and nothing else. It holds
+  # the socket so that connections does not; it has no route and is on no network but connections'.
+  connections-docker-proxy:
+    build:
+      context: ../traefik/socket-proxy
+      dockerfile: Dockerfile
+    image: digital-office-socket-proxy:latest
+    container_name: connections-docker-proxy-${DEPLOYMENT_NAME:-bina-deployment}
+    restart: unless-stopped
+    environment:
+      - PROXY_PROFILE=connections
+    volumes:
+      # Project socket on the host side — see the note in platform-base/traefik/docker-compose.yml.
+      - ${BBOX_DOCKER_SOCK:-/var/run/docker.sock}:/var/run/docker.sock:ro
+    networks:
+      - connections-docker-api
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import socket,sys; s=socket.create_connection(('127.0.0.1',2375),3); s.sendall(b'GET /_ping HTTP/1.0\\r\\n\\r\\n'); sys.exit(0 if b'200' in s.recv(64) else 1)\""]
+      interval: ${HEALTHCHECK_INTERVAL:-30s}
+      timeout: ${HEALTHCHECK_TIMEOUT:-5s}
+      retries: 3
+      start_period: 10s
+    deploy:
+      resources:
+        limits: {cpus: '0.10', memory: 64M}
     logging:
       driver: json-file
       options: {max-size: 5m, max-file: '3'}
@@ -111,3 +165,6 @@ volumes:
 networks:
   traefik-network:
     external: true
+  # connections and its door, nothing else; internal: no route out, and nothing published on it
+  connections-docker-api:
+    internal: true

@@ -37,7 +37,7 @@ else
 fi
 
 echo "  tag=$TAG  n=$N  chunk=$CHUNK  pool=$POOL"
-$DK exec -i supabase-db-shlomo-laptop psql -U postgres -tAc "
+$DK exec -i supabase-db-owner-laptop psql -U postgres -tAc "
 SET statement_timeout='240s';
 SELECT json_agg(j)::text FROM (
   SELECT row_to_json(d)::jsonb
@@ -56,9 +56,9 @@ PY
 echo "  exported full rows: $LINES"
 [ "${LINES:-0}" -eq 0 ] && { echo "  nothing to test"; exit 1; }
 
-$DK exec -i n8n-shlomo-laptop sh -lc 'cat > /tmp/router_test_lines.json' < /tmp/router_test_lines.json
+$DK exec -i n8n-owner-laptop sh -lc 'cat > /tmp/router_test_lines.json' < /tmp/router_test_lines.json
 T0=$(date +%s)
-$DK exec -e U="$wu" -e P="$wp" -e TAG="$TAG" -e CHUNK="$CHUNK" n8n-shlomo-laptop node -e '
+$DK exec -e U="$wu" -e P="$wp" -e TAG="$TAG" -e CHUNK="$CHUNK" n8n-owner-laptop node -e '
 // Sequential chunks of CHUNK lines; each POST is completion-gated so its wall time IS the
 // lane behaviour. http.request, NOT fetch (undici has a 300s headers timeout).
 const fs = require("fs"), http = require("http");
@@ -98,7 +98,7 @@ T1=$(date +%s)
 echo "  wall: $((T1-T0))s"
 
 echo "  == verification from the system's own records =="
-$DK exec -i supabase-db-shlomo-laptop psql -U postgres -tAc "
+$DK exec -i supabase-db-owner-laptop psql -U postgres -tAc "
 SET statement_timeout='120s';
 SELECT '    brackets for $TAG: opened='||count(*)||' closed='||count(*) FILTER (WHERE \"ENDED_AT\" IS NOT NULL)
 FROM public.indox_action_execution_log WHERE \"TRIGGER\" LIKE '%$TAG%'" | grep -v '^SET$'
@@ -109,13 +109,13 @@ open('/tmp/router_test_ids.txt','w').write(','.join(ids))
 print('    batch ids saved: %d' % len(ids))
 PY
 IDS=$(cat /tmp/router_test_ids.txt)
-$DK exec -i supabase-db-shlomo-laptop psql -U postgres -tAc "
+$DK exec -i supabase-db-owner-laptop psql -U postgres -tAc "
 SET statement_timeout='120s';
 SELECT '    rows landed in window='||count(*)||' distinct='||count(DISTINCT \"INCOMING_DOC_ID\")
 FROM public.indox_priority_local
 WHERE \"INCOMING_DOC_ID\" = ANY(string_to_array('$IDS', ','))
   AND received_at > now() - (interval '1 second' * ($(date +%s) - $T0 + 120))" | grep -v '^SET$'
-$DK exec -i supabase-db-shlomo-laptop psql -U postgres -tAc "
+$DK exec -i supabase-db-owner-laptop psql -U postgres -tAc "
 SET statement_timeout='120s';
 SELECT '    ps_failed_now='||count(*) FILTER (WHERE d.\"STATUS\"='PRIORITY_SYNC_FAILED')
      ||'  error_set='||count(*) FILTER (WHERE coalesce(btrim(d.\"ERROR\"),'') <> '')

@@ -21,13 +21,13 @@ Hitting flakiness that correlates with memory pressure: container OOM/restarts, 
 ## What to stop (NON-essential for INDOX backend processing — INDOX needs n8n+workers, supabase, redis, apitools)
 ```
 docker stop \
-  browser42-browser-shlomo-laptop browser42-mcp-shlomo-laptop \
-  browser42-caddy-shlomo-laptop browser42-reaper-shlomo-laptop \
+  browser42-browser-owner-laptop browser42-mcp-owner-laptop \
+  browser42-caddy-owner-laptop browser42-reaper-owner-laptop \
   chat \
-  homepage-shlomo-laptop redisinsight-shlomo-laptop portainer-shlomo-laptop
+  homepage-owner-laptop redisinsight-owner-laptop portainer-owner-laptop
 ```
 Further (only if still pressured — these ARE used elsewhere, stop knowingly):
-- `glitchtip-shlomo-laptop glitchtip-worker-shlomo-laptop glitchtip-postgres-shlomo-laptop glitchtip-valkey-shlomo-laptop` (error tracking)
+- `glitchtip-owner-laptop glitchtip-worker-owner-laptop glitchtip-postgres-owner-laptop glitchtip-valkey-owner-laptop` (error tracking)
 - ⚠️ `authentik-server-/worker-/postgres-…` — **STOPPING AUTHENTIK 404s EVERY `*.localhost` APP** (it's the Traefik forward-auth outpost): supabase.localhost / n8n.localhost / etc. all return 404 while it's down. Only stop authentik if you do NOT need the web UIs. To restore: `docker start authentik-postgres-… && sleep 3 && docker start authentik-server-… authentik-worker-… authentik-bootstrap-…`, wait ~30s for the outpost to register (you'll see 502 briefly, then 200). INDOX *backend* processing (n8n→supabase, poll, scanners) does NOT need authentik — only the browser-facing UIs do.
 
 ## Check

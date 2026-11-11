@@ -12,7 +12,7 @@
 #   the key has no account behind it (`any`)  → follows
 #   otherwise                                 → follows
 # A KEY no app reports (a custom secret, an address nobody's hook owns) is named as a warning and left as it
-# is — never a wait that could not end (FPG-34's third and fourth readers). Run on its own (no ledger), an
+# is — never a wait that could not end (EXF-34's third and fourth readers). Run on its own (no ledger), an
 # override follows only where .env's KEY already names <local>@<new>.
 #
 # Read from the vault inside connections' container — a vault file that does not DECRYPT is a failure, an
@@ -33,7 +33,7 @@ if ! [[ "${OLD}" =~ ${domain} && "${NEW}" =~ ${domain} && "${OLD}" != "${NEW}" ]
   exit 1
 fi
 LEDGER="${DGO_RENAME_LEDGER:-}"
-if [ -n "${LEDGER}" ] && [ "${DGO_RENAME_PASS:-CHANGE_ME}" = 1 ]; then
+if [ -n "${LEDGER}" ] && [ "${DGO_RENAME_PASS:-2}" = 1 ]; then
   say "[connections] rename-address: the vault's overrides are decided in the second pass, once every app has spoken"
   exit 0
 fi

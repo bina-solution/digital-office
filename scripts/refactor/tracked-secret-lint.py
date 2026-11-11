@@ -25,8 +25,8 @@ IT NEVER PRINTS A VALUE: a finding is `path:line kind`, the line counted on "\\n
 finding that is not a secret — a fixture's made-up token, the export's own patterns — is declared in ALLOWED as
 a COUNT per kind per file, with its reason, so one more of a kind in that file (a real token beside the fake
 ones) fails, and so does a declaration that outlived what it declared: fewer of a kind than declared, a file no
-longer read or no longer tracked. `.env.ex` is declared with its four until DGO-1220 empties it; its entry then
-fails until it is removed.
+longer read or no longer tracked. `.env.ex` was declared with its four until DGO-1220 emptied it (part 2), and its
+entry went in the same commit.
 """
 import argparse
 import collections
@@ -35,24 +35,60 @@ import os
 import re
 import subprocess
 import sys
+import tarfile
 import tempfile
+import zipfile
+
+# G10: this file holds Hebrew and quotes what it finds back; python on Windows would write it in the console's
+# codepage and die on its own output.
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
 REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 RELEASE = os.path.join(REPO, "scripts", "release")
 
 # path → ({kind: how many}, and why they are not a leak to fix here)
 ALLOWED = {
-    ".env.ex": ({"jwt": 3, "anthropic-key": 1},
-                "the template's own values; DGO-1220 part 2 empties them, and this entry then fails until it is removed"),
     "scripts/release/public-export.py": ({"aws-key-id": 1, "jwt": 1}, "the export's own patterns and stand-ins"),
+    "apps/dashboard/test_group.py": ({"telegram-token": 1},
+                                     "the group relay's masking test (hp-dgo, DGO-1329): a made-up bot token it must "
+                                     "mask in a line — bot id 123456789, a sequential run, never a real bot's"),
     "scripts/release/public-export-selftest.py": ({"jwt": 2, "slack-webhook": 1, "google-client-secret": 1,
-                                                   "stripe-webhook-secret": 1},
-                                                  "the export's own cases: made-up tokens it must scrub"),
+                                                   "stripe-webhook-secret": 1, "slack-token": 1, "stripe-key": 1},
+                                                  "the export's own cases: made-up tokens it must scrub, and the "
+                                                  "real-shaped xoxb-/sk_test_ ones a placeholder rule must NOT "
+                                                  "mistake for placeholders (97684911) — sequential digit runs "
+                                                  "and an alternating-case alphabet run, a test-mode shape"),
+    "apps/bina-ds/plugins/vault-key/test/vault.test.mjs": ({"openai-key": 1},
+                                                           "the vault plugin's own test: a made-up counter-example, "
+                                                           "its 32 characters a sequential 0123456789abcdef run, "
+                                                           "asserted to be NOT a placeholder — one count, so a real "
+                                                           "token beside it still fails"),
     "digital-office/sim/mocks/connections.js": ({"google-oauth-token": 1, "google-refresh-token": 1,
                                                  "private-key": 1, "openai-key": 1},
                                                 "the simulator's made-up connection values — shorter than real ones "
                                                 "(ya29 82 chars vs ~170, refresh 42 vs ~100, a key body of 8), "
                                                 "measured by the release session 2026-11-03 (DGO-1223)"),
+    "scripts/refactor/env-template-secret-lint.py": ({"jwt": 1},
+                                                     "G93's self-test sample anon key: made up — header {alg} and payload "
+                                                     "{role} only, a 24-char signature where HS256 has 43, never a value "
+                                                     "of .env.ex's history (checked in memory 2026-11-05, DGO-1352)"),
+}
+# A CLIENT'S DATA (DGO-1792). Two WhatsApp exports of a client's group sat in data/chat-dumps from 2026-06-14, and a
+# production sheet's full export (39,582 rows) in INDOX's sample-data, found by the deep scan of 2026-11-10. Neither
+# is a token, so the scan above could not see them, and an archive is opaque to every gate that reads text (this one,
+# G56). So: a chat export is refused by its NAME — a file or a member of a tracked zip/tar — and never declared; and
+# every tracked archive is declared in ARCHIVES with what it holds and why it is in the tree. A declaration whose file
+# is no longer tracked is stale, and fails.
+CHAT_EXPORT = re.compile(r"(?i)(^|/)(whatsapp chat (with|-) [^/]*|צ.אט whatsapp עם [^/]*|_chat( \d+| \(\d+\))?\.txt"
+                         r"|chatexport_[^/]*)(/|$)")
+ARCHIVE = re.compile(r"(?i)\.(zip|7z|rar|tar|tgz|txz|tbz2?|tlz|gz|bz2|xz|lz|lzma|zst|lz4|z)$")
+ARCHIVES = {
+    "ai/context/browser42-agentic-browsing-observable-ledger.jsonl.gz":
+        "browser42's agentic-browsing event ledger, the evidence of browser42-agentic-browsing-lifetime-report.md, "
+        "redacted by the session that made it (counts, hashes and redactions in the manifest beside it) — yet the "
+        "export's check found a value shaped like a generated secret inside (binaries.txt, 2026-10-22) and this "
+        "gate does not decompress it: held back from the public export, and a debt to read (DGO-1792)",
 }
 RUN = re.compile(r"[A-Za-z0-9+/]{40,}")
 ARMOR = re.compile(r"^[\s>#/*'\"]*[A-Za-z][A-Za-z-]*:\s")   # Proc-Type: 4,ENCRYPTED — DEK-Info: — Version: —
@@ -126,6 +162,42 @@ def judge(results, allowed, tracked_paths):
     return fails, stale
 
 
+def members(full):
+    """The names inside a zip or tar archive, or [] for one that is neither (a .gz/.xz of one file is named by its own
+    path). Read from the index only — no member is extracted."""
+    try:
+        if zipfile.is_zipfile(full):
+            with zipfile.ZipFile(full) as z:
+                return z.namelist()
+        if tarfile.is_tarfile(full):
+            with tarfile.open(full) as t:
+                return t.getnames()
+    except (OSError, zipfile.BadZipFile, tarfile.TarError, EOFError):
+        return ["(an archive this gate cannot open)"]
+    return []
+
+
+def client_data(paths, archives, inside):
+    """paths: the tracked files; inside: path → the names in it (members()). → ([(path, why)] that fail, [stale])."""
+    fails, stale = [], []
+    for path in sorted(paths):
+        if CHAT_EXPORT.search(path):
+            fails.append((path, "a chat export: a client's conversation, never in the tree"))
+            continue
+        if not ARCHIVE.search(path):
+            continue
+        hits = [m for m in inside.get(path, []) if CHAT_EXPORT.search(m) or m.startswith("(an archive")]
+        if hits:
+            fails.append((path, f"an archive holding {hits[0]!r}{' and more' if len(hits) > 1 else ''}"))
+        elif path not in archives:
+            fails.append((path, "an archive no gate can read: declare in ARCHIVES what it holds and why it is in the "
+                                "tree, or keep it in the office's own store"))
+    for path in sorted(archives):
+        if path not in paths:
+            stale.append(f"{path} is declared in ARCHIVES and no longer tracked: remove it")
+    return fails, stale
+
+
 def self_test(pe):
     """Made-up text, built at run time, so this file never holds the shapes it looks for."""
     tok = "gh" + "p_" + "Zx9" * 11
@@ -166,6 +238,42 @@ def self_test(pe):
     for name, (fails, stale), (want_fails, want_stale) in judged:
         if fails != want_fails or len(stale) != want_stale:
             bad.append(f"{name}: got {fails} and {len(stale)} stale")
+    # a client's data (DGO-1792): the shapes the deep scan found, and the ones beside them
+    dump = "data/chat-dumps/WhatsApp Chat with " + "a group.zip"
+    clients = [
+        ("the 2026-06-14 dump: a WhatsApp export by its name", client_data({dump}, {}, {}), 1),
+        ("…also when an ARCHIVES entry names it (a chat export is never declared)", client_data({dump}, {dump: "x"}, {}), 1),
+        ("its text inside, anywhere", client_data({"apps/x/fixtures/_chat.txt"}, {}, {}), 1),
+        ("a Telegram export directory", client_data({"notes/ChatExport_2026-11-10/messages.html"}, {}, {}), 1),
+        ("an undeclared archive (the production sheet's .csv.xz)", client_data({"a/sample-data/docs.csv.xz"}, {}, {}), 1),
+        ("a declared archive passes", client_data({"a/ledger.jsonl.gz"}, {"a/ledger.jsonl.gz": "why"}, {}), 0),
+        ("…unless a chat export is inside it", client_data({"a/b.zip"}, {"a/b.zip": "why"},
+                                                           {"a/b.zip": ["x/WhatsApp Chat - c/_chat.txt"]}), 1),
+        ("…or it cannot be opened", client_data({"a/b.zip"}, {"a/b.zip": "why"},
+                                               {"a/b.zip": ["(an archive this gate cannot open)"]}), 1),
+        ("a code file about WhatsApp is not an export", client_data({"apps/chat/src/whatsapp/send.js"}, {}, {}), 0),
+        ("the Hebrew phone's name for one, and a copy's `_chat 2.txt`",
+         client_data({"x/צ'אט WhatsApp עם קבוצה.zip", "y/_chat 2.txt", "z/_chat (1).txt"}, {}, {}), 3),
+        ("a .txz is an archive too", client_data({"x/group.txz"}, {}, {}), 1),
+    ]
+    # members() on REAL archives built here: a zip and a tar.gz whose member is a chat export
+    with tempfile.TemporaryDirectory() as tmp:
+        zp, tp, inner = os.path.join(tmp, "a.zip"), os.path.join(tmp, "b.tar.gz"), os.path.join(tmp, "_chat.txt")
+        open(inner, "w").write("made up\n")
+        with zipfile.ZipFile(zp, "w") as z:
+            z.write(inner, "WhatsApp Chat - group/_chat.txt")
+        with tarfile.open(tp, "w:gz") as t:
+            t.add(inner, "export/_chat.txt")
+        real = {"a.zip": members(zp), "b.tar.gz": members(tp)}
+    clients.append(("members() reads a real zip's and tar.gz's names, and the chat export inside is found",
+                    client_data(set(real), {"a.zip": "x", "b.tar.gz": "x"}, real), 2))
+    for name, (fails, _), want in clients:
+        if len(fails) != want:
+            bad.append(f"{name}: got {fails}")
+    stale_case = ("a declaration whose archive is gone is stale", len(client_data(set(), {"gone.zip": "x"}, {})[1]), 1)
+    if stale_case[1] != stale_case[2]:
+        bad.append(f"{stale_case[0]}: got {stale_case[1]}")
+    clients.append(stale_case)
     with tempfile.TemporaryDirectory() as tmp:
         release = os.path.join(tmp, "scripts", "release")
         states = [("a tree without scripts/release/ skips", definitions(release)[0], "skip")]
@@ -176,7 +284,7 @@ def self_test(pe):
             bad.append(f"{name}: got {got}")
     for b in bad:
         print(f"  FAIL  {b}")
-    total = len(scans) + len(judged) + len(states)
+    total = len(scans) + len(judged) + len(states) + len(clients)
     print(f"G92 self-test: {total - len(bad)}/{total} passed")
     return 1 if bad else 0
 
@@ -217,18 +325,25 @@ def main(argv=None):
         print(f"G92 FAIL — read 0 of {len(files)} tracked file(s): a scan that reads nothing proves nothing")
         return 1
     fails, stale = judge(results, ALLOWED, set(files))
+    inside = {p: members(os.path.join(REPO, p)) for p in files
+              if ARCHIVE.search(p) and os.path.isfile(os.path.join(REPO, p))}
+    client, client_stale = client_data(set(files), ARCHIVES, inside)
+    stale += client_stale
     for path, n, kind in fails:
         print(f"  FAIL  {path}:{n}  {kind}")
+    for path, why in client:
+        print(f"  FAIL  {path}  {why}")
     for s in stale:
         print(f"  FAIL  {s}")
     for path in over:
         print(f"  FAIL  {path} is a text file over the export's {pe.MAX_TEXT // 2**20} MiB: not read, so not asked")
     declared = sum(min(sum(1 for _, k in results.get(p, []) if k == kind), c)
                    for p, (kinds, _) in ALLOWED.items() for kind, c in kinds.items())
-    ok = not fails and not stale and not over
+    ok = not fails and not stale and not over and not client
     print(f"G92 {'PASS' if ok else 'FAIL'} — {len(results)} tracked text file(s) read of {len(files)}, {len(over)} over "
           f"the export's {pe.MAX_TEXT // 2**20} MiB; {len(fails)} finding(s) outside ALLOWED, {declared} declared in "
-          f"{len(ALLOWED)} file(s), {len(stale)} stale declaration(s); no value is ever printed")
+          f"{len(ALLOWED)} file(s), {len(stale)} stale declaration(s); {len(inside)} archive(s) opened, "
+          f"{len(client)} chat export(s) or undeclared archive(s); no value is ever printed")
     return 0 if ok else 1
 
 

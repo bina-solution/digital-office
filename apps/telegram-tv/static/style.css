@@ -179,7 +179,7 @@ svg{width:1em;height:1em}
 @keyframes pulse{0%{opacity:1}50%{opacity:.2}100%{opacity:1}}
 
 .syncbar{height:3px;background:var(--surface-2);overflow:hidden}
-.syncbar-fill{height:100%;width:0;background:var(--accent);transition:width .5s ease}
+.syncbar-fill{height:100%;width:0;background:var(--info);transition:width .5s ease}   /* a sync under way is in motion = sky, at its text step (the fill was 2.3:1 on the track) (DGO-1593) */
 .banner{margin:10px 26px 0;background:var(--warn-soft);border:1px solid var(--lime-line);color:var(--ink);
         border-radius:var(--radius-sm);padding:9px 13px;font-size:13px}
 .banner.error{background:var(--danger-soft);border-color:var(--plum-line);color:var(--plum-d)}
@@ -371,6 +371,18 @@ svg{width:1em;height:1em}
 .modal-actions{display:flex;gap:8px;margin:14px 0;flex-wrap:wrap}
 .kv{display:grid;grid-template-columns:minmax(80px,120px) 1fr;gap:8px 12px;font-size:13px}
 .kv .k{color:var(--muted)}
+/* every account of the app, in its own settings card (DGO-1798): name over phone, «פעיל» or «החלפה», «הסרה» last */
+.acct-list{display:grid;gap:1px;margin-top:12px;background:var(--line);border:1px solid var(--line);
+           border-radius:var(--radius-sm);overflow:hidden}
+.acct-list[hidden]{display:none}   /* its own display would beat the browser's [hidden] */
+.acct-row{display:flex;align-items:center;gap:8px;padding:8px 10px;background:var(--surface);min-width:0}
+.acct-row.on{background:var(--olive-soft)}
+.acct-name{flex:1;min-width:0;display:flex;flex-direction:column;align-items:flex-start;gap:1px}
+.acct-name>*{max-width:100%}   /* not stretched, each line would take its whole text and run over the buttons */
+.acct-name b{font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.acct-on{font-size:12px;font-weight:700;color:var(--accent-d);padding:0 6px}
+.btn.sm{padding:5px 10px;font-size:12.5px;min-height:30px}
+@media (pointer:coarse){.acct-row .btn.sm{min-height:44px}}
 .drawer{position:fixed;inset-block:0;inset-inline-end:0;width:min(560px,96vw);background:var(--bg);
         border-inline-start:1px solid var(--line);box-shadow:var(--shadow-lg);z-index:50;display:flex;
         flex-direction:column}
@@ -451,9 +463,13 @@ svg{width:1em;height:1em}
   .p-next{inset-inline:14px;bottom:96px;min-width:0}
 }
 
-/* ── the app shell: menu column + content column ─────────────────────────────── */
-.app.shell{display:flex;flex-direction:row;align-items:stretch;min-height:100dvh;padding-bottom:0}
-.app .side{flex:none;width:238px;border-inline-end:1px solid var(--line)}
+/* ── the app shell: the side menu's host contract (bina-nav.css: `.bnv-host` › `.appgrid` › menu + page) ──
+   Its column (full, a rail, a drawer) and its height are the component's. A flex row of this app's own, with
+   the menu at 238px, kept the box wide while the component's rail hid the names: half a menu that neither
+   opened nor closed (DGO-1591, gate G107). */
+.app.shell{min-height:100dvh;padding-bottom:0}
+.app.shell > .appgrid{min-height:100dvh}
+.app .side{border-inline-end:1px solid var(--line)}
 .app-main{flex:1;min-width:0;display:flex;flex-direction:column;min-height:0}
 .app-main .topbar{position:sticky;top:0;z-index:30}
 .app .side .brand-mark{width:28px;height:28px;border-radius:8px}
@@ -736,8 +752,15 @@ svg{width:1em;height:1em}
   overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
   direction:ltr;unicode-bidi:plaintext;
 }
-/* trailing slot: a badge, a dot, a chevron. `nowrap` so it can never wrap into a second line. */
-.bnv-tail{flex:none;display:inline-flex;align-items:center;gap:6px;white-space:nowrap;color:var(--bnv-ink-2);font-size:12px}
+/* trailing slot: a badge, a dot, a chevron. `nowrap` so it can never wrap into a second line.
+   In a RAIL it is the one thing a row still says beside its icon (a count, a dot), so it stays — pinned to
+   the icon's corner and small (`--bnv-tail-pos`, set by the two rail states in §3/§4). As a second column it
+   overflowed a 36px row: social-list's count, domains' (DGO-1591); connections had pinned its own, in every
+   state, so its drawer drew the count on the row's corner. The whole menu and the drawer keep it in line. */
+.bnv-item{position:relative}
+.bnv-tail{flex:none;display:inline-flex;align-items:center;gap:6px;white-space:nowrap;color:var(--bnv-ink-2);
+  font-size:var(--bnv-tail-fs,12px);line-height:var(--bnv-tail-lh,normal);
+  position:var(--bnv-tail-pos,static);inset-block-start:2px;inset-inline-end:2px}
 .bnv-item:hover .bnv-tail,.bnv-item.is-active .bnv-tail{color:inherit}
 .bnv-badge{
   flex:none;min-width:18px;height:18px;padding:0 5px;border-radius:999px;
@@ -800,6 +823,9 @@ svg{width:1em;height:1em}
   --bnv-rest:flex;
   --bnv-head-dir:column;
   --bnv-turn:rotate(180deg);
+  --bnv-tail-pos:absolute;
+  --bnv-tail-fs:10px;
+  --bnv-tail-lh:1;
 }
 /* An OPENED rail: the whole menu, standing over the page until a row is picked or it is shut — the
    way to a rail's search, and to the names of its rows. (The rail by width says the same in §4.) */
@@ -896,6 +922,9 @@ svg{width:1em;height:1em}
     --bnv-rest:flex;
     --bnv-head-dir:column;
     --bnv-turn:rotate(180deg);
+    --bnv-tail-pos:absolute;
+    --bnv-tail-fs:10px;
+    --bnv-tail-lh:1;
   }
   .bnv.is-open{position:fixed;inset-block:0;inset-inline-start:0;z-index:60;width:min(84vw,320px);box-shadow:var(--shadow-lg)}
 }
@@ -938,6 +967,9 @@ svg{width:1em;height:1em}
     --bnv-rest:none;
     --bnv-head-dir:row;
     --bnv-turn:none;
+    --bnv-tail-pos:static;
+    --bnv-tail-fs:12px;
+    --bnv-tail-lh:normal;
   }
   /* The shadow is the OPEN drawer's. On the parked one it still painted: a 40px grey band down the
      screen edge, over the page, in every app that carries this menu (seen in five, 2026-10-06). */

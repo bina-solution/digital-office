@@ -19,7 +19,7 @@ route (a rail item and the drawer inside it) are measured once and counted each 
 property of the address, not of the recipe.
 
     docker run --rm --network traefik-network -v "$PWD:/w" -w /w \
-      --entrypoint python3 deployment-hacohen-sites-render:latest \
+      --entrypoint python3 digital-office-sites-render:latest \
       scripts/ui-coverage/route-runtime-qa.py --url http://console:8000
 
 Exit code is non-zero when any declared view fails to open at its address. A route carrying a
@@ -29,11 +29,18 @@ parameter (`:type`, `{name}`) is reported as SKIPPED with its name: filling it i
 from __future__ import annotations
 
 import argparse
+import contextlib
 import json
 import re
 import sys
 from pathlib import Path
 from urllib.parse import urlparse
+
+# the refusal's line is Hebrew (REFUSED_JS, «למנהלי הלשכה בלבד»): on Windows python's own stdout is not UTF-8, and
+# printing it would crash the run (G10)
+for _stream in (sys.stdout, sys.stderr):
+    with contextlib.suppress(AttributeError, ValueError):
+        _stream.reconfigure(encoding="utf-8")
 
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
@@ -47,6 +54,11 @@ AUTH = {"X-authentik-username": "admin", "X-authentik-email": "admin@office.loca
         "X-authentik-name": "Admin", "X-authentik-groups": "authentik Admins"}
 
 FRAME_WAIT_MS, FRAME_POLL_MS = 20000, 250
+
+#: the console's refusal at an admins' door: its card (`data-card` on <html>, platform-base/console/app.py `_card`)
+#: whose line is «למנהלי הלשכה בלבד» (`_not_for_you`) — the card of an app with no screen is a different line
+REFUSED_JS = ("() => !!document.documentElement && document.documentElement.hasAttribute('data-card')"
+              " && ((document.querySelector('.xn-sub') || {}).textContent || '').trim() === 'למנהלי הלשכה בלבד'")
 
 
 def norm(path: str) -> str:
@@ -137,6 +149,17 @@ def measure(page, base: str, module: str, proxy: str, route: str, redirect: bool
                 "why": f"no frame of /a/{proxy} at {rp} after {waited / 1000:g}s"
                        + (f" (the app is on {seen_at})" if seen_at else "")}
     d = drawn.wait(page.evaluate, page.wait_for_timeout)
+    # REFUSED — the admins' door answered its card (403, «למנהלי הלשכה בלבד») AT the requested address. Read
+    # through the two checks below it would pass: the frame is where it was asked to be and the shell names it.
+    # It is the run that is not signed in as an admin (DGO-1813), and it is said as that, never as a PASS.
+    try:
+        refused = frame.evaluate(REFUSED_JS)
+    except Exception:  # noqa: BLE001 — a frame that navigated away mid-read is not a refusal
+        refused = False
+    if refused:
+        return {"arrived": False, "mirrored": False, "frame": urlparse(frame.url).path, "hash": "",
+                "why": "the admins' door refused this run's identity (its 403 card) — sign in as an admin "
+                       "(--storage-state from bbox flow-qa-session)"}
     fr = urlparse(frame.url)
     got_path, got_hash = norm(fr.path + ("?" + fr.query if fr.query else "")), \
         page.evaluate("() => location.hash")
@@ -193,7 +216,20 @@ def main() -> int:
     ap.add_argument("--params", default="data/browser42/ui-params.json",
                     help="what resolve_params.py resolved on this office (fills {folder}, {id}, …)")
     ap.add_argument("--shot-dir", default="ci-artifacts/route-runtime")
+    ap.add_argument("--storage-state", default="",
+                    help="a signed-in browser (bbox flow-qa-session writes ci-artifacts/flow-qa/storage-state.json):"
+                         " with it, --url is the office's real console address and nothing is forged")
+    ap.add_argument("--no-identity", action="store_true",
+                    help="send no identity at all — through traefik on an office whose SSO is off, traefik writes it")
     a = ap.parse_args()
+    if a.storage_state and a.no_identity:
+        ap.error("--storage-state and --no-identity are two ways of signing in; name one")
+    if not a.storage_state and not a.no_identity:
+        # DGO-1813: the console believes a groups header only from a sign-in hop from stage two on; until then it
+        # NAMES this run in its log (console-unproved-admin). Said here so the run is not read as signed in.
+        print("note: no --storage-state — the admin identity is FORGED in headers (refused by the console from "
+              "DGO-1813's stage two; mint a session with `bbox flow-qa-session` and pass it, or --no-identity through "
+              "traefik on an office whose SSO is off)")
 
     params: dict = {}
     pfile = Path(a.params)
@@ -242,8 +278,9 @@ def main() -> int:
     js_on_addr: dict = {}
     with sync_playwright() as p:
         browser = p.chromium.launch(args=["--no-sandbox"])
-        context = browser.new_context(extra_http_headers=AUTH,
-                                      viewport={"width": 1440, "height": 900}, locale="he-IL")
+        signed_in = {"storage_state": a.storage_state} if a.storage_state else \
+            {} if a.no_identity else {"extra_http_headers": AUTH}
+        context = browser.new_context(**signed_in, viewport={"width": 1440, "height": 900}, locale="he-IL")
         page = context.new_page()
         errors: list[str] = []
         page.on("pageerror", lambda e: errors.append(str(e)))

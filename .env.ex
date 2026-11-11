@@ -6,14 +6,17 @@
 # web surface (below) and four for mail (ai/context/mail-multi-tenant.md). Adding PEOPLE to the
 # company afterwards needs none at all — see LOCALMAIL_USER further down.
 #
-#   BUSINESS_NAME=Hacohen
-#     └─ COMPANY_SLUG        = hacohen                          (derived — see the note below)
-#        ├─ DEPLOYMENT_NAME  = hacohen                          (container-name suffix)
-#        ├─ DEPLOYMENT_DOMAIN= hacohen.digital-office.co.il     (every *_BASE_URL hangs off this)
-#        │  └─ console.hacohen.digital-office.co.il, mail.hacohen…, n8n.hacohen…, auth.hacohen…
-#        ├─ MAIL_DOMAIN      = hacohen.digital-office.co.il     (= DEPLOYMENT_DOMAIN)
+#   BUSINESS_NAME="My Office"          (quoted: a name with a space, in a file some installers `.` into a shell)
+#     └─ COMPANY_SLUG        = my-office                        (derived — see the note below)
+#        ├─ DEPLOYMENT_NAME  = my-office                        (container-name suffix)
+#        ├─ DEPLOYMENT_DOMAIN= my-office.digital-office.co.il   (every *_BASE_URL hangs off this)
+#        │  └─ console.my-office.digital-office.co.il, mail.my-office…, n8n.my-office…, auth.my-office…
+#        ├─ MAIL_DOMAIN      = my-office.digital-office.co.il   (= DEPLOYMENT_DOMAIN)
 #        │  └─ address       = person1@example.com
-#        └─ MAIL_DKIM_SELECTOR = hacohen
+#        └─ MAIL_DKIM_SELECTOR = my-office
+#
+# NO DOMAIN AT ALL? Do not copy this file: `git clone` + `./bbox run` with no .env makes a LOCAL office by itself
+# (every app at <name>.localhost — the console at http://console.localhost, or :8080 on a Mac).
 #
 # ── THE DNS RECORD THAT PUTS THE WEB SURFACE ONLINE ───────────────────────────────────────────
 #   A    *.<slug>.digital-office.co.il   ->   <this VPS's public IP>
@@ -39,7 +42,10 @@
 # {{HOMEPAGE_VAR_BUSINESS_NAME}}), the glitchtip org default, AND — through COMPANY_SLUG — every
 # hostname and the mail address. The ledger business profile (name/ID/VAT) is set separately in
 # the onboarding wizard.
-BUSINESS_NAME=Hacohen
+# EMPTY ON PURPOSE (DGO-1802): this is the one line a new office with a domain must write. An unedited copy
+# used to carry a real office's name and claim its addresses; now `bbox run` refuses an empty name with one
+# line. No domain at all? Do not copy this file: with no .env, `bbox run` makes a local office by itself.
+BUSINESS_NAME=
 
 # DERIVED — DO NOT HAND-EDIT the two values below. Compose cannot lowercase a string or replace
 # characters, so the slug is computed at RENDER time: `platform/manager/reconcile.py :: sync_identity`
@@ -48,7 +54,7 @@ BUSINESS_NAME=Hacohen
 # A fresh clone therefore needs no manual step — nothing in this stack starts before a render.
 #
 # Rule: lowercase, any run of non-alphanumerics -> "-", trimmed of leading/trailing "-".
-#   "Hacohen" -> hacohen   "Bina Solutions" -> bina-solutions   "staging" -> staging
+#   "My Office" -> my-office   "Bina Solutions" -> bina-solutions   "staging" -> staging
 #
 # They are LITERALS, not `${COMPANY_SLUG}`, because the shell and python helpers that read this
 # file parse it line-by-line (scripts/lib.sh `read_env`, which feeds every `<svc>-<DEPLOYMENT_NAME>`
@@ -58,11 +64,11 @@ BUSINESS_NAME=Hacohen
 # directly under a marker. Delete the marker (or the line under it, as scripts/ci-env.sh does for
 # DEPLOYMENT_NAME) and that variable becomes a plain hand-set value that nothing overwrites.
 #@derived slug
-COMPANY_SLUG=hacohen
-# The container-name suffix (`n8n-hacohen`, `mailserver-hacohen`). Same slug, so one company =
+COMPANY_SLUG=
+# The container-name suffix (`n8n-my-office`, `mailserver-my-office`). Same slug, so one company =
 # one name everywhere; CI strips this line and sets its own, which the marker rule then leaves be.
 #@derived slug
-DEPLOYMENT_NAME=hacohen
+DEPLOYMENT_NAME=
 
 # The SHARED base domain this platform hosts companies under. One zone, one owner. A company that
 # later brings its own domain changes this one line (and then owns its own MX/SPF/DMARC/PTR).
@@ -71,8 +77,8 @@ COMPANY_BASE_DOMAIN=digital-office.co.il
 # ── Deployment domain — derived; every *_BASE_URL/*_HOST below derives from IT ──
 DEPLOYMENT_DOMAIN=${COMPANY_SLUG}.${COMPANY_BASE_DOMAIN}
 # Deliberately the SAME host as DEPLOYMENT_DOMAIN. It used to be `dev.${DEPLOYMENT_DOMAIN}`, which
-# put drive/chat one label deeper than the wildcard A record covers — `*.hacohen.digital-office…`
-# does not match `drive.dev.hacohen.digital-office…`, so those hosts resolved nowhere and no
+# put drive/chat one label deeper than the wildcard A record covers — `*.example.digital-office…`
+# does not match `drive.dev.example.digital-office…`, so those hosts resolved nowhere and no
 # certificate could be issued for them. Keep it equal unless you also publish a second wildcard.
 DEV_DOMAIN=${DEPLOYMENT_DOMAIN}
 
@@ -118,8 +124,9 @@ PORTAINER_ADMIN_PASSWORD=
 
 
 # N8N DB configuration
-POSTGRES_USER=hacohen
-POSTGRES_PASSWORD=CHANGE_ME
+POSTGRES_USER=example
+# minted per office by scripts/env-secrets.py: 48 random hex characters
+POSTGRES_PASSWORD=
 POSTGRES_DB=n8n
 N8N_DB_HOST=n8n-db.${DEPLOYMENT_DOMAIN}
 
@@ -129,14 +136,17 @@ N8N_DB_HOST=n8n-db.${DEPLOYMENT_DOMAIN}
 N8N_VERSION=2.17.4
 N8N_BASE_URL=n8n.${DEPLOYMENT_DOMAIN}
 # Generate with: openssl rand -hex 32
-N8N_ENCRYPTION_KEY=CHANGE_ME
+# minted per office by scripts/env-secrets.py: 64 random hex characters
+N8N_ENCRYPTION_KEY=
 # Generate with: openssl rand -hex 32
-N8N_USER_MANAGEMENT_JWT_SECRET=CHANGE_ME
+# minted per office by scripts/env-secrets.py: 64 random hex characters
+N8N_USER_MANAGEMENT_JWT_SECRET=
 # Owner account for a FRESH instance. n8n has no native owner env var, so the push hook (bbox n8n push all)
 # bootstraps it via the REST setup endpoint when no owner exists yet (idempotent: skipped if one
 # already exists, e.g. after `n8n-push --full`). Password rules: 8-64 chars, >=1 number, >=1 capital.
 N8N_OWNER_EMAIL=person2@example.com
-N8N_OWNER_PASSWORD=CHANGE_ME
+# minted per office by scripts/env-secrets.py: a mixed-case password
+N8N_OWNER_PASSWORD=
 N8N_OWNER_FIRSTNAME=Admin
 N8N_OWNER_LASTNAME=User
 N8N_SECURE_COOKIE=true
@@ -170,17 +180,23 @@ COMPOSE_PROFILES=
 # values into .env. Empty = no-op: the hand-set values above stay exactly as they are, which is what
 # a fresh clone wants.
 PERFORMANCE_PROFILE=
+# Said per office, only where one needs it (unset = the defaults; gate G65, DGO-1730):
+#   PERF_HOST_CPUS=6        the cores this office's CPU budget is for, when its profile was chosen for its
+#                           memory and claims fewer cores than the machine has. Never more than it has.
+#   BINA_DS_CPUS=2          the agents' container's cap. Changing it re-creates bina-ds at the next converge.
+#   BINA_DS_CPU_FLOOR=2     what the budget may not take below for the agents' container. Re-creates nothing:
+#                           `docker update` gives it.
 # Container health-check timing, shared by every service of apps/meet as
 # `${HEALTHCHECK_INTERVAL:-30s}` / `${HEALTHCHECK_TIMEOUT:-10s}`. Empty = those defaults; raise them
 # on a slow machine whose Jitsi services need longer than a 10s probe before they answer.
 HEALTHCHECK_INTERVAL=
 HEALTHCHECK_TIMEOUT=
 
-# WhatsApp bot session/data dir on the host. Default = the live hacohen-vps path; set this on
+# WhatsApp bot session/data dir on the host. Default = the live example-vps path; set this on
 # any other machine (it is a bind mount, so a wrong path silently yields an empty data dir).
 # NOTE: a HOST path, not an app name — it is NOT renamed when the app is. It holds the
 # WhatsApp pairing session; repointing it silently loses the link and forces a new QR scan.
-WHATSAPP_DATA_DIR=/home/solomonboltin/whatsapp-hacohanim/data
+WHATSAPP_DATA_DIR=/home/bina-solution/whatsapp-example/data
 
 # Chat configuration
 #
@@ -195,9 +211,19 @@ CHAT_APP_BASE_URL=chat.${DEPLOYMENT_DOMAIN}
 CHAT_APP_PORT=3000
 # Chat basic-auth (n8n 'Chat Auth' cred, env-managed via blueprint credential_overrides)
 # chat's session-cookie key: minted per office by apps/chat/hooks/prepare when missing (DGO-1221) — empty here
+# minted per office by scripts/env-secrets.py: 64 random hex characters
 CHAT_SESSION_SECRET=
 CHAT_AUTH_USER=chat
-CHAT_AUTH_PASS=CHANGE_ME
+# minted per office by scripts/env-secrets.py: 48 random hex characters
+CHAT_AUTH_PASS=
+# An office service's proof to chat under edge trust (`X-Chat-Office-Token`, apps/chat/src/api/middleware/edge_caller.js)
+# minted per office by scripts/env-secrets.py: 64 random hex characters
+CHAT_API_TOKEN=
+# The same header, READ only: GET /api/accounts and GET /api/readyz, nothing else (edge_caller.js READ_ROUTES) — what the
+# office agent's reads carry, so its routine reads hold no credential that sends. Scope, not containment: bina-ds also
+# holds the checkout (this file) and the engine's socket, by the owner's decision (2026-09-17)
+# minted per office by scripts/env-secrets.py: 64 random hex characters
+CHAT_READ_TOKEN=
 
 # API Tools configuration
 APITOOLS_BASE_URL=apitools.${DEPLOYMENT_DOMAIN}
@@ -236,6 +262,10 @@ DOMAINS_BASE_URL=domains.${DEPLOYMENT_DOMAIN}
 GIT_BASE_URL=git.${DEPLOYMENT_DOMAIN}
 HELLO_BINA_BASE_URL=hello-bina.${DEPLOYMENT_DOMAIN}
 DGO_EXTEND_BASE_URL=dgo-extend.${DEPLOYMENT_DOMAIN}
+EXAMPLEM_BASE_URL=examplem.${DEPLOYMENT_DOMAIN}
+ASSETS_BASE_URL=assets.${DEPLOYMENT_DOMAIN}
+LOANS_BASE_URL=loans.${DEPLOYMENT_DOMAIN}
+CI_RUNNER_BASE_URL=ci-runner.${DEPLOYMENT_DOMAIN}
 # ── The office's own git branch (AGENTS.md rule 6) ─────────────────────────────────────────────
 # On the DGO line every office commits and pushes on ITS OWN branch, cut from `dgo`: mac-dgo,
 # hp-dgo, vps1-dgo, dell-dgo, claude-dgo — and takes the others' work only by merging dgo-stable.
@@ -243,13 +273,43 @@ DGO_EXTEND_BASE_URL=dgo-extend.${DEPLOYMENT_DOMAIN}
 # hook on every `git` command) refuses a commit, a push or a branch switch that would break it, and
 # only WARNS while this stays empty. Set it on every office; never copy it between offices.
 DGO_BRANCH=
+# Stage 2 of the rule for everyone who is not a Claude session (DGO-850). With 1, `bbox run` and `bbox baseline`
+# refuse to start from another named branch. A detached checkout, as a converge makes, is only said. Left empty,
+# they say it and start. Set it once every office has declared its DGO_BRANCH.
+DGO_BRANCH_ENFORCE=
 # The branch this office FOLLOWS by itself (r030-201, scripts/follow.sh): a host timer that `bbox run`
 # installs merges its newest commit whose gates are green into DGO_BRANCH every 30 minutes, keeps it only
 # if every service stays healthy (else rolls back), and tells the owner only what failed. dgo-stable on
 # every office that serves the herd (vps1, the HP, the Dell); EMPTY on the MacBook, where live sessions
-# commit in the checkout. DGO_FOLLOW_GATES: the workflow whose success makes a commit takeable.
+# commit in the checkout. DGO_FOLLOW_GATES: the workflow whose success makes a commit takeable. A client
+# office installed from the public release follows it with DGO_BRANCH=main and DGO_FOLLOW=main: each new
+# public commit (a version) is taken, run and checked the same way, and nothing is pushed back.
 DGO_FOLLOW=
 DGO_FOLLOW_GATES=gates-hosted.yml
+# A client office's OWN apps (scripts/client-apps.sh, `bbox client-apps pull`): the public release holds a client's
+# apps back, so they come from the client's private repository — its apps/<id>/ trees, placed at apps/<id>/ and
+# named in this checkout's own .git/info/exclude. Empty: this office has no apps of its own. REF: its branch or tag;
+# KEYFILE: the PATH of a read-only deploy key on the host, when the URL is ssh (a path, not the key).
+DGO_CLIENT_APPS_REPO=
+DGO_CLIENT_APPS_REF=main
+DGO_CLIENT_APPS_KEYFILE=
+# An office whose bbox runs only inside containers (its agent's `./bbox run`; the HP) gets no host timer: it enables
+# the `follow-runner` app (`bbox apps enable follow-runner`), which starts each cycle in a container of its own
+# (r030-205). Its git credential is whatever the checkout's config carries; or this file ON THE HOST, in git's `store`
+# format, mounted read-only into the cycle alone. FOLLOW_EVERY: seconds between cycles (plus up to five minutes of
+# jitter).
+DGO_FOLLOW_GIT_CREDENTIALS=
+FOLLOW_EVERY=1800
+# A cycle is put off while the 1-minute load is above this (a number; empty = the CPU count). An office that runs
+# its agents' sessions all day sits above its CPU count while it works: the HP declares 24 (DGO-1299).
+DGO_FOLLOW_MAX_LOAD=
+# An office with no GitHub credential of its own follows THROUGH a linked office's git app: DGO_FOLLOW_VIA names
+# that office (the HP: macbook), DGO_FOLLOW_VIA_PATH its proxy path for the repository
+# (/git/gh/<account>/<owner>/<repo>.git). Each cycle resolves the address with `bbox remote`, fetches and pushes
+# there, and — where GitHub's API cannot be read — takes the gates from refs/green/<DGO_FOLLOW>, which gates-hosted
+# moves forward on every green run.
+DGO_FOLLOW_VIA=
+DGO_FOLLOW_VIA_PATH=
 # ── The herd's hub relay (DGO-1097, apps/dgo-extend/carrier/relay.go) ─────────────────────────────
 # Off the LAN its peer is on (a laptop at a café), a pair on the TCP path meets its peer at the herd's
 # hub instead: both sides connect out to the hub's link door, which joins them and copies ciphertext —
@@ -265,8 +325,23 @@ DGO_RELAY_FOR=
 # `bina-ds`. Sharing everything (`*`) shares the agent's screen, never its token. Set it on the office
 # that SERVES the agent (the HP, for the MacBook to reach Azaria); empty = no agent token goes anywhere.
 DGO_SERVE_AGENTS=
+# A named SECRET over the link (DGO-1330, «סודות תמיד במק»): `<office>=<vault instance id>`, comma-separated, one
+# by one — never a pattern. The holder lists what it GIVES, the taker what it TAKES; only what both name is pulled,
+# by the taker's own dgo-extend into its own vault (no office writes another's), marked as a copy and removed on
+# unpair. E.g. the HP gives `macbook=telegram_bot-5fdf4bea` and the Mac takes `hp-laptop=telegram_bot-5fdf4bea`.
+DGO_SERVE_SECRETS=
+DGO_TAKE_SECRETS=
+# ── Where this office keeps the off-server copies of the offices it backs up (EXF-92, DGO-1508) ─────
+# DGO_OFFSITE_TO: the computers-app id of the herd's backup store (empty = this office's own machine). An
+# office's record may name its own (`offsite_to`). DGO_OFFSITE_DIR: a directory on that store's own disk that
+# holds the copies, each a volume bound to a directory under it — for a store reached as a user in the docker
+# group (the Dell: `/mnt/dgo-data/dgo/offsite`); empty = docker's own volumes. DGO_OFFSITE_KEEP: verified copies
+# THIS office keeps of each office it backs up, wherever its store is (empty = 7; 1 or more, else the step refuses).
+DGO_OFFSITE_TO=
+DGO_OFFSITE_DIR=
+DGO_OFFSITE_KEEP=
 # ── The office's HERD (DGO-1003) ───────────────────────────────────────────────────────────────
-# The company this office belongs to — «Bina Solutions», «WBC», «The Fireplace Guys». Every office
+# The company this office belongs to — «Bina Solutions», «EXW», «The Examplef Guys». Every office
 # says it about itself; it travels with the office's catalog, and DGO Extend on a linked office
 # groups the offices it sees by it (its own herd first, then each external herd). One line, 1–60
 # characters. Empty = none said: a linked office then counts this one as part of its own herd.
@@ -324,7 +399,8 @@ CONNECTIONS_PUBLIC_URL=https://${CONNECTIONS_BASE_URL}
 # (platform-base/connections/app.py, docker-compose.yml). Generate with: openssl rand -hex 32
 # An empty or CHANGE_ME value means the vault is unlocked with a placeholder — fine for a throwaway
 # box, never for a real deployment. Rotating it is NOT an edit: a new key cannot read the old vault.
-CONNECTIONS_ROOT_KEY=CHANGE_ME
+# minted per office by scripts/env-secrets.py: 32 random bytes, url-safe base64
+CONNECTIONS_ROOT_KEY=
 
 
 # ── MAIL SERVER (Postfix/Dovecot) — the deployment's own MAIL IDENTITY ────────────────────────
@@ -344,6 +420,19 @@ CONNECTIONS_ROOT_KEY=CHANGE_ME
 # Anything ending .test/.local/.localhost puts mailsetup in local-only mode (it then reports ready
 # with no DNS at all) — the right answer on a laptop, not on a VPS.
 MAIL_DOMAIN=${DEPLOYMENT_DOMAIN}
+# The OTHER domains this machine receives for, on top of MAIL_DOMAIN — comma- or space-separated,
+# empty by default. Set it when the company's own address lives on a domain of its own AND that
+# domain's MX also points at this machine: the staging office serves `person3@example.com`
+# this way. Two things follow from it, and nothing else does:
+#   · a mailbox may be created at one of these domains (mailboxd's guard compares against this list
+#     instead of against MAIL_DOMAIN alone), and mailserver-init keeps such an account instead of
+#     deleting it as a previous tenant's on the next bring-up;
+#   · a profile declared in apps/mail/app.json with a `domain` field is brought up here only when
+#     that domain is in this list — the declaration is shared by every office of the platform, and
+#     "which domains has THIS machine got an MX for" is a property of the deployment.
+# It is NOT a way to receive for a domain whose MX points somewhere else: that would be a mailbox
+# that looks live and never receives a message.
+MAIL_DOMAINS=
 # Postfix's HELO name and the A/MX target. MUST equal the PTR name of MAIL_PUBLIC_IP or receivers
 # reject or spam-file the mail. The wildcard A record already resolves it; the PTR is set at the
 # VPS provider.
@@ -413,12 +502,13 @@ MAIL_BIND=127.0.0.1
 #
 # The PRIMARY is the company address: admin@<MAIL_DOMAIN> = admin@<slug>.digital-office.co.il.
 # The company lives in the DOMAIN, so the local part is the plain role name. Both halves are the
-# same slug, so `console.hacohen.…` and `admin@hacohen.…` cannot drift apart.
+# same slug, so `console.example.…` and `admin@example.…` cannot drift apart.
 LOCALMAIL_USER=admin
 # The primary mailbox's password (apps/mail/mailapi/local_app.py reads it; apps/mail/
 # connections.override.yml blanks it so the vault's copy wins in that profile). Generate with:
 # openssl rand -hex 16
-LOCALMAIL_PW=CHANGE_ME
+# minted per office by scripts/env-secrets.py: 48 random hex characters
+LOCALMAIL_PW=
 LOCALMAIL_EXTRA_USERS=
 
 
@@ -441,8 +531,8 @@ GMAIL_BACKEND=
 # app-password IMAP (no OAuth/Gmail-API quota) — only used when GMAIL_IMAP_MODE=gmail.
 # Capture the app password per ai/context/gmail-onboardin-imap-stmp.md; HOST/PORT default to
 # imap.gmail.com:993.
-GMAIL_IMAP_USER=person3@example.com
-GMAIL_IMAP_APP_PW=your-gmail-app-password
+GMAIL_IMAP_USER=person4@example.com
+GMAIL_IMAP_APP_PW=
 # GMAIL_IMAP_HOST=imap.gmail.com
 # GMAIL_IMAP_PORT=993
 
@@ -450,7 +540,8 @@ GMAIL_IMAP_APP_PW=your-gmail-app-password
 # Redis configuration
 REDIS_HOST=redis.${DEPLOYMENT_DOMAIN}
 REDIS_PORT=6379
-REDIS_PASSWORD=CHANGE_ME
+# minted per office by scripts/env-secrets.py: 48 random hex characters
+REDIS_PASSWORD=
 
 
 
@@ -470,6 +561,11 @@ OLLAMA_MAX_LOADED_MODELS=1
 OLLAMA_PULL=
 OLLAMA_CONTEXT_LENGTH=32768
 OLLAMA_KEEP_ALIVE=10m
+# The Ollama release this office BUILDS (apps/ollama/Dockerfile): empty = the Dockerfile's one default. An office
+# whose model needs a newer release says it here, and keeps it across every take — never a hand edit of the file.
+# It takes effect when the image is built: `bbox run` builds (`up --build`); with BBOX_PREBUILT it starts the image
+# already there, whatever its version — `docker exec ollama-engine-<office> ollama --version` says which.
+OLLAMA_VERSION=
 # A machine that is there for its models: every core, most of its memory, a disk of its own.
 # OLLAMA_CPUS=4.0
 # OLLAMA_MEMORY=11G
@@ -479,7 +575,6 @@ OLLAMA_KEEP_ALIVE=10m
 
 # WhatsApp Evolution API
 WHSP2_EVOLUTION_BASE_URL=whsp2-evo.${DEPLOYMENT_DOMAIN}
-WHSP2_EVOLUTION_API_KEY=change_me_to_secure_api_key
 WHSP2_APP_BASE_URL=whsp2.${DEPLOYMENT_DOMAIN}
 
 
@@ -488,7 +583,6 @@ WHSP2_APP_BASE_URL=whsp2.${DEPLOYMENT_DOMAIN}
 # root, that is the origin of the self-hosted instance. A blanket rename of one to the other fed the
 # cloud URL into the app as its own public origin — WEB_URL became "https://https://api.plane.so"
 # and CORS_ALLOWED_ORIGINS was rejected by Django with corsheaders.E014.
-PLANE_API_KEY=your-plane-api-key-here
 PLANE_WORKSPACE_SLUG=your-workspace-slug
 PLANE_BASE_URL=https://api.plane.so
 
@@ -497,19 +591,18 @@ SEARXNG_INSTANCE_URL=http://searxng-bina-deployment:8080
 
 # Firecrawl (self-hosted web scraper - no external API keys needed)
 FIRECRAWL_API_URL=http://firecrawl-api-bina-deployment:3002
-FIRECRAWL_API_KEY=CHANGE_ME
-FIRECRAWL_BULL_AUTH_KEY=change_me_to_secure_key
 FIRECRAWL_VERSION=v1
 
 # Jina AI Reranker (for web search result ranking)
-JINA_API_KEY=your-jina-api-key-here
+JINA_API_KEY=
 
 # General configuration
 # TZ=Asia/Jerusalem   # optional: default is the HOST machine timezone
 
 # Balance Sheet Webhook Auth (N8N "Incoming Documents" credential)
 BS_WEBHOOK_USER=admin
-BS_WEBHOOK_PASS=CHANGE_ME
+# minted per office by scripts/env-secrets.py: 48 random hex characters
+BS_WEBHOOK_PASS=
 # 93.184.216.1: Production svm IP
 # 93.184.216.2 : willi home
 # 93.184.216.3 : random coffee shop
@@ -518,57 +611,47 @@ DBS_ALLOWED_IPS=93.184.216.4,93.184.216.5,93.184.216.6,93.184.216.1,93.184.216.2
 
 # ChatBase - Multi-account WhatsApp chat management
 CHATBASE_BASE_URL=chatbase.${DEPLOYMENT_DOMAIN}
-# Generate with: openssl rand -hex 32
-CHATBASE_SESSION_SECRET=change_me_to_random_32_hex_chars
 CHATBASE_USERNAME=admin
-CHATBASE_PASSWORD=change_me_to_secure_password
 CHATBASE_ADMINS=
 CHATBASE_DAILY_MESSAGE_LIMIT=100
 
 # LibreChat Configuration
 LIBRECHAT_BASE_URL=librechat.${DEPLOYMENT_DOMAIN}
-# Generate with: openssl rand -hex 16
-LIBRECHAT_CREDS_KEY=change_me_to_random_32_hex_chars
-# Generate with: openssl rand -hex 16
-LIBRECHAT_CREDS_IV=change_me_to_random_16_hex_chars
-# Generate with: openssl rand -hex 32
-LIBRECHAT_JWT_SECRET=change_me_to_random_32_hex_chars
-# Generate with: openssl rand -hex 32
-LIBRECHAT_JWT_REFRESH_SECRET=change_me_to_random_32_hex_chars
 LIBRECHAT_ALLOW_REGISTRATION=false
-LIBRECHAT_RAG_DB_PASSWORD=change_me_to_secure_password
-LIBRECHAT_EMBEDDINGS_PROVIDER=openai
-OPENAI_API_KEY=CHANGE_ME
+OPENAI_API_KEY=
 
 # Task Runner Auth Token (production external mode)
 # Generate with: openssl rand -hex 32
-N8N_RUNNERS_AUTH_TOKEN=CHANGE_ME
+# minted per office by scripts/env-secrets.py: 64 random hex characters
+N8N_RUNNERS_AUTH_TOKEN=
 
 # GlitchTip error tracking configuration
 GLITCHTIP_BASE_URL=glitchtip.${DEPLOYMENT_DOMAIN}
 # Generate with: openssl rand -hex 32
-GLITCHTIP_SECRET_KEY=CHANGE_ME
+# minted per office by scripts/env-secrets.py: 64 random hex characters
+GLITCHTIP_SECRET_KEY=
 # Generate with: openssl rand -hex 16
-GLITCHTIP_DB_PASSWORD=CHANGE_ME
+# minted per office by scripts/env-secrets.py: 48 random hex characters
+GLITCHTIP_DB_PASSWORD=
 # SMTP format: smtp://user:password@smtp.example.com:587
 GLITCHTIP_EMAIL_URL=consolemail://
 # Derived like every other address on this deployment. It used to be a literal
-# person4@example.com, which is how the LIVE .env ended up sending alert mail
+# person5@example.com, which is how the LIVE .env ended up sending alert mail
 # from a domain the deployment no longer serves while DEPLOYMENT_DOMAIN said something else.
 GLITCHTIP_FROM_EMAIL=noreply@${DEPLOYMENT_DOMAIN}
 GLITCHTIP_MAX_EVENT_LIFE_DAYS=90
-GLITCHTIP_ENABLE_REGISTRATION=true
+GLITCHTIP_ENABLE_REGISTRATION=false
 GLITCHTIP_ENABLE_ORG_CREATION=false
 # Declarative bootstrap (scripts/glitchtip-push): admin user + org + projects with
 # DETERMINISTIC DSNs are auto-created on bring-up. Set the *_SENTRY_DSN above from the
 # DSNs it prints (they're stable across `down -v` — derived from GLITCHTIP_SECRET_KEY).
-GLITCHTIP_ADMIN_EMAIL=person5@example.com
+GLITCHTIP_ADMIN_EMAIL=person6@example.com
 # empty on purpose: `bbox glitchtip push` mints one into .env on first provisioning (DGO-980 —
 # the literal that stood here was published with this file)
 GLITCHTIP_ADMIN_PASSWORD=
 GLITCHTIP_ORG_NAME=${BUSINESS_NAME}
 # The org's URL slug — what the alerts poller (`notifications`) puts in every GlitchTip API path.
-# It was never declared here, so BOTH consumers fell through to a literal `hacohen`
+# It was never declared here, so BOTH consumers fell through to a literal `example`
 # (platform-base/notifications/docker-compose.yml and app.py): any other company's deployment
 # polled an org that does not exist, got 404, and showed an empty — not failing — alerts screen.
 # Same slug as everything else, so the org GlitchTip creates and the org we poll cannot diverge.
@@ -594,6 +677,7 @@ AUTH_PROTOCOL=https
 # authentik. Its own host — `auth` stays authentik's while both exist.
 FORWARD_AUTH_BASE_URL=signin.${DEPLOYMENT_DOMAIN}
 # Its cookie signing key: hex, 32 bytes or more (scripts/ci-env.sh writes one). Empty: it refuses to start.
+# minted per office by scripts/env-secrets.py: 96 random hex characters
 FORWARD_AUTH_SECRET=
 # Which identity service the edge asks: forward-auth (a fresh office, since release 0.3.0 — the one
 # platform.state.default.yaml and platform.state.core.yaml enable) or authentik (an office installed
@@ -608,16 +692,20 @@ DGO_IDENTITY=forward-auth
 # providers → every Authentik-gated app (browser42.localhost, machine.localhost, …)
 # returns "Not Found" (forward-auth 404). If you must use base64, strip newlines:
 #   openssl rand -base64 60 | tr -d '\n'
-AUTHENTIK_SECRET_KEY=CHANGE_ME
+# minted per office by scripts/env-secrets.py: 96 random hex characters
+AUTHENTIK_SECRET_KEY=
 # Generate with: openssl rand -hex 16
-AUTHENTIK_POSTGRES_PASSWORD=CHANGE_ME
+# minted per office by scripts/env-secrets.py: 48 random hex characters
+AUTHENTIK_POSTGRES_PASSWORD=
 # Initial admin credentials (only used on first start)
 AUTHENTIK_BOOTSTRAP_USER=akadmin
-AUTHENTIK_BOOTSTRAP_PASSWORD=CHANGE_ME
+# minted per office by scripts/env-secrets.py: a mixed-case password
+AUTHENTIK_BOOTSTRAP_PASSWORD=
 AUTHENTIK_BOOTSTRAP_EMAIL=admin@${DEPLOYMENT_DOMAIN}
 # Bootstrap API token (auto-creates on first start, used by Homepage widget)
 # Generate with: openssl rand -hex 32
-AUTHENTIK_BOOTSTRAP_TOKEN=CHANGE_ME
+# minted per office by scripts/env-secrets.py: 64 random hex characters
+AUTHENTIK_BOOTSTRAP_TOKEN=
 # Google OAuth (configure in Authentik admin after first login)
 # https://console.cloud.google.com/apis/credentials
 GOOGLE_OAUTH_CLIENT_ID=
@@ -640,6 +728,9 @@ SECURITY_GEO=city
 SECURITY_REMOTE_CONTROL=0
 # a laptop office runs inside a VM whose gateway is the VM's NAT: name the LAN router here to see it
 SECURITY_ROUTER_HINTS=
+# what THIS office sends out on purpose beyond platform-base/security/egress.yaml (DGO-1561), marked declared:
+#   "app=pattern pattern; app=pattern" — e.g. "@host=api.anthropic.com claude.ai" for a Claude CLI on the host
+SECURITY_EGRESS_EXTRA=
 
 # browser42 — stealth browser + Playwright MCP + live view
 BROWSER42_BASE_URL=browser42.${DEPLOYMENT_DOMAIN}
@@ -682,7 +773,20 @@ BINA_DS_AGENT_PORT=3081
 # access is already gated by Authentik at the edge. Set a strong value to require it.
 BROWSER42_VNC_PASSWORD=
 # Bearer token required on /mcp. REQUIRED — generate with: openssl rand -hex 32
-BROWSER42_MCP_TOKEN=CHANGE_ME
+# minted per office by scripts/env-secrets.py: 64 random hex characters
+BROWSER42_MCP_TOKEN=
+# examplem-io (Examplem's books): the bearer token a service (its n8n flow, an employee's home) calls its API with; its own
+# CLI needs none (loopback inside its container). Empty = only the CLI answers.
+# minted per office by scripts/env-secrets.py: 64 random hex characters
+EXAMPLEM_API_TOKEN=
+# assets («נכסים», the group's property records): the bearer token a service calls its API with; its own CLI needs
+# none (loopback inside its container). Empty = only the CLI answers.
+# minted per office by scripts/env-secrets.py: 64 random hex characters
+ASSETS_API_TOKEN=
+# loans («הלוואות», the group's loans and investments): the bearer token a service calls its API with; its own CLI
+# needs none (loopback inside its container). Empty = only the CLI answers.
+# minted per office by scripts/env-secrets.py: 64 random hex characters
+LOANS_API_TOKEN=
 # Debug mode for the Playwright MCP. Set non-empty (e.g. 1) to enable: a full
 # per-action session log + Playwright trace are written to data/browser42/output/,
 # and verbose MCP logs go to the container's stderr (docker logs). Empty = off.
@@ -697,10 +801,12 @@ BROWSER42_STATE_PASSPHRASE=
 FV_BASE_URL=fv.${DEV_DOMAIN}
 FV_SCHEDULE_MINUTES=0
 # Generate from n8n UI: Settings → n8n API
-N8N_API_KEY=eyJhbGciOiJub25lIn0.eyJyZWRhY3RlZCI6dHJ1ZX0.REDACTED
+# issued by n8n itself on the first push (apps/n8n/hooks/push-app ensure_api_key)
+N8N_API_KEY=
 
 N8N_WEBHOOK_USER=cicd
-N8N_WEBHOOK_PASS=CHANGE_ME
+# minted per office by scripts/env-secrets.py: 48 random hex characters
+N8N_WEBHOOK_PASS=
 
 # Rocket.Chat
 ROCKETCHAT_BASE_URL=rocketchat.${DEPLOYMENT_DOMAIN}
@@ -708,24 +814,27 @@ ROCKETCHAT_BASE_URL=rocketchat.${DEPLOYMENT_DOMAIN}
 # Supabase (Self-Hosted) configuration
 SUPABASE_DB_NAME=postgres
 SUPABASE_DB_USER=postgres
-SUPABASE_DB_PASSWORD=CHANGE_ME
+# minted per office by scripts/env-secrets.py: 48 random hex characters
+SUPABASE_DB_PASSWORD=
 SUPABASE_DB_PORT=5433
 # Generate with: openssl rand -hex 32
-SUPABASE_JWT_SECRET=CHANGE_ME
+# minted per office by scripts/env-secrets.py: 64 random hex characters
+SUPABASE_JWT_SECRET=
 # Generate with: openssl rand -hex 32
-SUPABASE_COOKIE_KEY=CHANGE_ME
-# Note: Generate JWT tokens for ANON_KEY and SERVICE_KEY using jwt.io or the provided script
-# ANON_KEY: CHANGE_ME with HS256, payload: {"iss":"supabase","role":"anon"}
-# SERVICE_KEY: CHANGE_ME with HS256, payload: {"iss":"supabase","role":"service_role"}
-SUPABASE_ANON_KEY=eyJhbGciOiJub25lIn0.eyJyZWRhY3RlZCI6dHJ1ZX0.REDACTED
-SUPABASE_SERVICE_KEY=eyJhbGciOiJub25lIn0.eyJyZWRhY3RlZCI6dHJ1ZX0.REDACTED
+# minted per office by scripts/env-secrets.py: 48 random hex characters
+SUPABASE_COOKIE_KEY=
+# minted per office by scripts/env-secrets.py: an HS256 JWT, role anon, signed with this office's SUPABASE_JWT_SECRET
+SUPABASE_ANON_KEY=
+# minted per office by scripts/env-secrets.py: an HS256 JWT, role service_role, signed with this office's SUPABASE_JWT_SECRET
+SUPABASE_SERVICE_KEY=
 SUPABASE_BASE_URL=supabase.${DEV_DOMAIN}
 SUPABASE_STUDIO_BASE_URL=supabase-studio.${DEV_DOMAIN}
 SUPABASE_FILE_SIZE_LIMIT=52428800
 SUPABASE_STORAGE_BUCKET=default
 # The Supabase dashboard (Studio/kong) login password — apps/supabase/app.json declares it, and its
 # compose defaults it to CHANGE_ME. Generate with: openssl rand -hex 24
-SUPABASE_DASHBOARD_PASSWORD=CHANGE_ME
+# minted per office by scripts/env-secrets.py: 48 random hex characters
+SUPABASE_DASHBOARD_PASSWORD=
 
 # ── incoming-documents (Phase 3) ──────────────────────────────────────
 INCOMING_DOCS_ENABLED=true
@@ -752,21 +861,22 @@ SUPABASE_CREDS_NAME=Supabase account
 # NOTE: distinct from GOOGLE_OAUTH_CLIENT_* above (those are reserved for Authentik).
 # Shared Google client for Sheets / Drive / Sheets-Trigger nodes
 N8N_GOOGLE_OAUTH_CLIENT_ID=your-google-client-id.apps.googleusercontent.com
-N8N_GOOGLE_OAUTH_CLIENT_SECRET=your-google-client-secret
+N8N_GOOGLE_OAUTH_CLIENT_SECRET=
 # Gmail client (can be a separate Google project)
 N8N_GMAIL_OAUTH_CLIENT_ID=your-gmail-client-id.apps.googleusercontent.com
-N8N_GMAIL_OAUTH_CLIENT_SECRET=your-gmail-client-secret
+N8N_GMAIL_OAUTH_CLIENT_SECRET=
 
 # Anthropic API key — used by the proxy for Claude model passthrough.
 # When a claude-* model is requested, the proxy forwards directly to Anthropic.
 # Set this to a valid Anthropic key to enable Claude models.
-ANTHROPIC_API_KEY='CHANGE_ME'
+ANTHROPIC_API_KEY=
 
 # DeepSeek V4 Pro — used by anthropic-proxy for DeepSeek model routing
-DEEPSEEK_API_KEY='CHANGE_ME'
+DEEPSEEK_API_KEY=
 DEEPSEEK_BASE_URL='https://api.deepseek.com'
 # Generate with: openssl rand -hex 32
-AGENT_RUNNER_TOKEN=CHANGE_ME
+# minted per office by scripts/env-secrets.py: 64 random hex characters
+AGENT_RUNNER_TOKEN=
 AGENT_RUNNER_MAX_CONCURRENCY=3
 AGENT_RUNNER_TIMEOUT_MS=600000
 ANY_CONCURRENCY_BASE_URL=any-concurrency.${DEPLOYMENT_DOMAIN}
@@ -779,15 +889,29 @@ OPENHANDS_BASE_URL=openhands.${DEPLOYMENT_DOMAIN}
 # The openhands dispatcher's public host (Telegram webhook target + every link its bot sends).
 DISPATCH_BASE_URL=dispatch.${DEPLOYMENT_DOMAIN}
 # Generate with: openssl rand -hex 32
-OPENHANDS_JWT_SECRET=change_me_to_random_32_hex_chars
+# minted per office by scripts/env-secrets.py: 64 random hex characters
+OPENHANDS_JWT_SECRET=
 # Dispatcher bridge (WhatsApp → OpenHands)
 # Generate with: openssl rand -hex 32
-DISPATCHER_TOKEN=CHANGE_ME
+# minted per office by scripts/env-secrets.py: 64 random hex characters
+DISPATCHER_TOKEN=
+# Gemini for openhands (the dispatcher's vision, the gateway's gemini/* models, the agent's sandbox). Empty =
+# no Gemini. Its own line on purpose: INDOX's GEMINI_API_KEY no longer reaches openhands' environment or turns
+# Gemini on there, so a yes for one app is not a yes for the other (DGO-1792). A consent switch, not containment:
+# the sandbox still mounts the checkout, this file included. Fill it only on the owner's word.
+OPENHANDS_GEMINI_API_KEY=
+# OpenAI for the Google Workspace agent's image and audio tools (gDriveMcpAgent01). Empty = those tools answer
+# «off» and no file leaves the office: the agent asks the connections service whether THIS key is set before any
+# OpenAI node (DGO-1814). Its own line on purpose — the office's OPENAI_API_KEY is not a yes for this agent. Fill
+# it only on the owner's word, HERE (n8n's credential is seeded from this file at `bbox n8n push`; a key typed on
+# the connections screen opens the gate but never reaches it). Emptying it turns the agent off once connections is
+# recreated (`./bbox up connections`): the gate reads that container's environment.
+GOOGLE_WORKSPACE_AGENT_OPENAI_API_KEY=
 
 # ── Development Projects ────────────────────────────────────────────────
 HELLO_BASE_URL=hello.${DEV_DOMAIN}
 CHESS_BASE_URL=chess.${DEV_DOMAIN}
-TELEGRAM_BOT_TOKEN=your-telegram-bot-token-here
+TELEGRAM_BOT_TOKEN=
 # errorHandler01's Telegram alert branch (n8n). Gated OFF by default: `apps/n8n/hooks/push`
 # (gate_telegram_notifier) only enables the node when this is exactly "true" AND TELEGRAM_BOT_TOKEN
 # above is set to a real token (not empty, not this placeholder) — either condition failing leaves
@@ -805,14 +929,23 @@ ERROR_NOTIFY_TELEGRAM=false
 # a "Sink Unreachable (suppressed)" node — but leaving the send off when there is no sink keeps
 # the noise out of the execution list too.
 ERROR_REPORT_GLITCHTIP=false
+# ciHelloWebhook01's probe webhook (/webhook/ci-hello, basic auth). DGO-1574: the blueprint ships it
+# `active: false` and `apps/n8n/hooks/push` (gate_ci_hello) activates it ONLY (a) on a CI runner —
+# GITHUB_ACTIONS or CI in the pushing shell — or (b) when this is exactly "true". A DEPLOYMENT_NAME of
+# `ci` is NOT evidence on its own: scripts/ci-env.sh writes that name for any machine that runs it,
+# including a laptop and a throwaway fresh-machine check, and activating the probe there is the defect
+# this flag closes. Turn it on in an office where you want to run scripts/ci-verify.sh by hand and keep
+# its end-to-end "a trigger really registers and answers" proof.
+CI_HELLO_ENABLED=false
 
 # ktivayehudit-clone2 static site
 KTIVAYEHUDIT_CLONE2_BASE_URL=ktivayehudit-clone2.${DEV_DOMAIN}
-GEMINI_API_KEY=your-google-ai-api-key
+GEMINI_API_KEY=
 
 # --- n8n adjacent-automation creds (env-managed via blueprint credential_overrides) ---
 # MCP_AUTH_TOKEN: CHANGE_ME token for the n8n MCP Server Triggers (generate: openssl rand -hex 24)
-MCP_AUTH_TOKEN=CHANGE_ME
+# minted per office by scripts/env-secrets.py: 48 random hex characters
+MCP_AUTH_TOKEN=
 # Priority ERP basic-auth (httpBasicAuth creds). Leave blank if not using Priority.
 PRIORITY_USER=
 PRIORITY_PASS=
@@ -824,9 +957,10 @@ DOCUMENT_AI_SA_EMAIL=
 DOCUMENT_AI_SA_PRIVATE_KEY=
 
 # --- aligned with .env (bbox verify dependencies parity) ---
-GOOGLE_VISION_API_KEY=your-google-vision-api-key
+GOOGLE_VISION_API_KEY=
 SETTINGS_AUTH_USER=settings
-SETTINGS_AUTH_PASS=CHANGE_ME
+# minted per office by scripts/env-secrets.py: 48 random hex characters
+SETTINGS_AUTH_PASS=
 # Optional: override OAuth redirect base for local n8n creds (e.g. http://127.0.0.1:5678). Blank=use N8N_BASE_URL.
 N8N_OAUTH_BASE=
 # THE SCHEME n8n ITSELF ADVERTISES (editor base URL, webhook URL, the push-origin header). It is
@@ -869,21 +1003,22 @@ OCR_ENGINE=local
 ALLOCATION_BACKEND=stub
 #ITA_ALLOCATION_URL=https://...
 #ITA_ALLOCATION_TOKEN=...
-SUPABASE_POSTGRES_PASSWORD=CHANGE_ME
-SUPABASE_AUTHENTICATOR_PASSWORD=CHANGE_ME
 TRUST_EDGE_AUTH=true
 
 # The chat relay's own signing key (32-byte hex, == openssl rand -hex 32). Auto-minted by
 # connections when absent; set it here to pin one. Stable across restarts by design.
+# minted per office by scripts/env-secrets.py: 64 random hex characters
 CHAT_RELAY_KEY=
 
 # The three secrets this app carries its own services with. REQUIRED (`:?` in its compose):
 # the shipped defaults used to be the word "plane". Generated on a fresh machine by
 # scripts/ci-env.sh; rotate them while the instance is empty — that means recreating
 # plane-db and plane-mq, which are the only places these are stored.
+# minted per office by scripts/env-secrets.py: 48 random hex characters
 PLANE_DB_PASSWORD=
 # PLANE_MQ_PASSWORD is gone with RabbitMQ: Celery brokers on plane-redis now
 # (apps/project-pln/patches/redis-broker.py). A leftover key in an existing .env is simply ignored.
+# minted per office by scripts/env-secrets.py: 48 random hex characters
 PLANE_S3_SECRET_KEY=
 
 # The OWNER's login for this Plane. Plane ships no bootstrap: without these, a fresh instance
@@ -941,7 +1076,7 @@ MEET_JIBRI_RECORDER_PASSWORD=
 #   MEET_TURN_BASE_URL                   the TURN-over-TLS host (default meet-turn.<domain>, port 443)
 MEET_TURN_SECRET=
 # ── prebuilt images (DGO-41) ─────────────────────────────────────────────────────────────────────
-# Which tag of ghcr.io/solomonboltin/digital-office/<app> this deployment pulls when the CI-images
+# Which tag of ghcr.io/bina-solution/digital-office/<app> this deployment pulls when the CI-images
 # overlay is applied (`OVERLAYS=platform/profiles/ci-images.yml ./scripts/dc up -d --no-build`).
 # `latest` follows the branch; a commit SHA pins exactly what the declaration names. Unset = the
 # services are built from source, which stays the default (a GHCR package from a private repo is

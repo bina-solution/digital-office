@@ -240,6 +240,31 @@ def set_state(sid: str, state: str, error: str | None = None) -> None:
 def event(sid: str | None, kind: str, message: str, meta: dict | None = None) -> None:
     conn().execute("INSERT INTO events (site_id, ts, kind, message, meta) VALUES (?,?,?,?,?)",
                    (sid, now(), kind, message, json.dumps(meta or {}, ensure_ascii=False)))
+    _flow(sid, kind, message, meta)
+
+
+# ── the fourth channel: every event above, also on `dgo:flow:sites` (flow.v1, DGO-1402) ───────────
+# Through the office's ONE publisher, platform-base/redis/flowpub.py, mounted read-only at /opt/dgo
+# (docker-compose.yml) — «כל מקביל» draws it as the row «אתרים», agents hear it (`./bbox sites flow`).
+# `deploy_failed` becomes `site.deploy.failed`; only scalar facts of `meta` go out (a failure's detail is
+# a machine's output, and the stream is read by every agent). An image run without the mount publishes
+# nothing and works the same.
+import sys as _sys
+
+_sys.path.insert(0, "/opt/dgo")
+try:
+    import flowpub as _flowpub
+except ImportError:
+    _flowpub = None
+
+
+def _flow(sid: str | None, kind: str, message: str, meta: dict | None) -> None:
+    if _flowpub is None:
+        return
+    kind = str(kind)
+    type_ = f"site.{kind[:-len('_failed')]}.failed" if kind.endswith("_failed") else f"site.{kind}"
+    facts = {k: v for k, v in (meta or {}).items() if isinstance(v, (bool, int, float))}
+    _flowpub.emit("sites", type_, message, {"site": sid, **facts} if sid else facts)
 
 
 def recent_events(sid: str | None = None, limit: int = 50) -> list[dict]:

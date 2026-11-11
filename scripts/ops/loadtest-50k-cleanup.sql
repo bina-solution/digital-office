@@ -4,8 +4,8 @@
 --                              sync_ledger/sync_pipe_state/sync_attempt/sync_cursor "source" = 'loadtest-50k'
 --
 -- Usage:
---   docker cp loadtest-50k-cleanup.sql supabase-db-shlomo-laptop:/tmp/loadtest-50k-cleanup.sql
---   docker exec supabase-db-shlomo-laptop psql -U postgres -d postgres -f /tmp/loadtest-50k-cleanup.sql
+--   docker cp loadtest-50k-cleanup.sql supabase-db-owner-laptop:/tmp/loadtest-50k-cleanup.sql
+--   docker exec supabase-db-owner-laptop psql -U postgres -d postgres -f /tmp/loadtest-50k-cleanup.sql
 --
 -- Does NOT touch any row belonging to a real pipe (gmail-doc, drive-gdoc, mail-private, etc.)
 -- because every fake row/ledger entry carries the 'loadtest-50k' marker exclusively.

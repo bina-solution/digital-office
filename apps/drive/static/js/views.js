@@ -81,7 +81,10 @@
         e.dataTransfer.effectAllowed = "move";
       },
       ...(it.kind === "folder" ? dropTarget(it.id) : {}),
-      tabIndex: 0, "data-id": it.id,
+      // stable handles for whatever drives this page (the simulation's map, flow-qa, an agent's browser), like
+      // the shell's data-place: the item, and whether it is a folder or a file (always one of the two: an item's
+      // own `kind` is not given by every engine)
+      tabIndex: 0, "data-id": it.id, "data-kind": it.kind === "folder" ? "folder" : "file",
     };
   }
   /* a folder (row, card, crumb, side entry) takes items dragged onto it */
@@ -115,13 +118,15 @@
   }
 
   /* ── rows and cards ────────────────────────────────────────────────────── */
+  /* a Google Doc, Sheet or Slides file has no bytes of its own: Google counts none, and «0 B» would be a lie */
+  const sizeOf = (it) => (String(it.mime || "").startsWith("application/vnd.google-apps.") && !Number(it.size) ? "" : fmtSize(it.size));
   function Row({ it, list }) {
     const sel = F.useStore((s) => s.sel.includes(it.id));
     const ctx = F.useStore((s) => !!(s.menu && s.menu.for === it.id));
     const playing = F.useStore((s) => { const c = s.player.queue[s.player.index]; return !!(c && c.id === it.id && s.player.playing); });
     const h = useItem(it, list);
     const folder = it.kind === "folder";
-    const meta = folder ? (it.count ? F.count(it.count, ["קובץ אחד", "1 file"], ["קבצים", "files"]) : "") : [fmtSize(it.size), fmtWhen(it.created)].filter(Boolean).join(" · ");
+    const meta = folder ? (it.count ? F.count(it.count, ["קובץ אחד", "1 file"], ["קבצים", "files"]) : "") : [sizeOf(it), fmtWhen(it.created)].filter(Boolean).join(" · ");
     return html`<div class=${"lr" + (sel ? " sel" : "") + (ctx ? " ctx" : "") + (playing ? " playing" : "")} role="row" aria-selected=${sel} ...${h}>
       <div class=${"th" + (folder ? " folder" : "")} title=${it.system ? L("האפליקציה «" + it.system + "» שומרת לכאן", "The «" + it.system + "» app saves here") : null}><${U.Thumb} it=${it} size=${96} />
         ${T.isMedia(it) === "audio" && html`<span class="play">${ic(playing ? "pause" : "play", "sm")}</span>`}
@@ -132,8 +137,8 @@
         <div class="meta">${meta}</div>
       </div>
       <div class="c-date">${fmtWhen(it.created || it.last)}</div>
-      <div class="c-size num">${folder ? "" : fmtSize(it.size)}</div>
-      <button class="rowact" title=${L("פעולות", "Actions")} aria-label=${L("פעולות", "Actions")}
+      <div class="c-size num">${folder ? "" : sizeOf(it)}</div>
+      <button class="rowact" data-act="menu" title=${L("פעולות", "Actions")} aria-label=${L("פעולות", "Actions")}
         onClick=${(e) => { e.stopPropagation(); itemMenu(it, e, it.name); }}>${ic("more", "sm")}</button>
     </div>`;
   }
@@ -149,8 +154,8 @@
         ${dur ? html`<span class="badge">${k === "video" ? ic("play", "sm") : ic("music", "sm")}${fmtDur(dur)}</span>` : ""}
         <${Check} it=${it} on=${sel} /></div>
       <div class="body"><div class="fname"><${U.Name} name=${it.name} /></div>
-        <button class="rowact" title=${L("פעולות", "Actions")} onClick=${(e) => { e.stopPropagation(); itemMenu(it, e, it.name); }}>${ic("more", "sm")}</button></div>
-      <div class="sub">${folder ? (it.count ? F.count(it.count, ["קובץ אחד", "1 file"], ["קבצים", "files"]) : L("תיקייה", "Folder")) : [fmtSize(it.size), fmtWhen(it.created)].join(" · ")}</div>
+        <button class="rowact" data-act="menu" title=${L("פעולות", "Actions")} onClick=${(e) => { e.stopPropagation(); itemMenu(it, e, it.name); }}>${ic("more", "sm")}</button></div>
+      <div class="sub">${folder ? (it.count ? F.count(it.count, ["קובץ אחד", "1 file"], ["קבצים", "files"]) : L("תיקייה", "Folder")) : [sizeOf(it), fmtWhen(it.created)].filter(Boolean).join(" · ")}</div>
     </div>`;
   }
 
@@ -217,6 +222,7 @@
   function HomeView() {
     const list = F.useStore((s) => s.list);
     const store = F.useStore((s) => s.storage);
+    const narrow = F.useStore((s) => s.size.w === "n");
     if (list.loading && !list.files.length && !list.folders.length) return html`<${Loading} />`;
     if (list.error && !list.files.length) return html`<${Failed} error=${list.error} />`;
     const recent = list.files.slice(0, 12);
@@ -227,12 +233,16 @@
     return html`
       ${recent.length > 0 && html`<div class="sect"><h2>${L("נוספו לאחרונה", "Recently added")}</h2>
         <button class="more" onClick=${() => F.go({ view: "recent" })}>${L("נפתחו לאחרונה", "Recently opened")}</button></div>
-        <div class="strip">${recent.map((it) => html`<${Card} key=${it.id} it=${it} list=${recent} />`)}</div>`}
+        ${narrow
+          /* a phone: the newest five as ROWS (Google Drive's «Suggested»), not 218 px cards of which two fit
+             the screen beside nothing else (DGO-1507) — «נפתחו לאחרונה» above is the rest */
+          ? html`<div class="list" role="grid">${recent.slice(0, 5).map((it) => html`<${Row} key=${it.id} it=${it} list=${recent} />`)}</div>`
+          : html`<div class="strip">${recent.map((it) => html`<${Card} key=${it.id} it=${it} list=${recent} />`)}</div>`}`}
       ${list.folders.length > 0 && html`<div class="sect"><h2>${L("תיקיות", "Folders")}</h2>
         <button class="more" onClick=${() => F.go({ view: "folder", id: "" })}>${L("כל הקבצים", "All files")}</button></div>
         <div class="folders">${list.folders.map((f) => html`<${FolderCard} key=${f.id} it=${f} />`)}</div>`}
       ${store && html`<div class="sect"><h2>${L("אחסון", "Storage")}</h2></div>
-        <div class="vcount">${F.count(store.files, ["קובץ אחד", "1 file"], ["קבצים", "files"])} · ${fmtSize(store.used)}${store.trash_files ? L(` · ${fmtSize(store.trash_used)} באשפה`, ` · ${fmtSize(store.trash_used)} in trash`) : ""}</div>`}`;
+        <div class="vcount">${typeof store.files === "number" ? F.count(store.files, ["קובץ אחד", "1 file"], ["קבצים", "files"]) + " · " : ""}<span class="num">${fmtSize(store.used)}${store.limit ? " / " + fmtSize(store.limit) : ""}</span>${store.trash_used ? html` · <span class="num">${fmtSize(store.trash_used)}</span> ${L("באשפה", "in trash")}` : ""}</div>`}`;
   }
   function FolderCard({ it }) {
     const sel = F.useStore((s) => s.sel.includes(it.id));
@@ -241,7 +251,7 @@
     return html`<div class=${"fcard" + (sel ? " sel" : "") + (ctx ? " ctx" : "")} ...${h}>
       <div class="th folder">${ic(it.system ? "folder-input" : "folder", "sm")}</div>
       <div class="t"><b><bdi>${it.name}</bdi></b><span>${it.count ? F.count(it.count, ["קובץ אחד", "1 file"], ["קבצים", "files"]) : L("ריקה", "Empty")}</span></div>
-      <button class="rowact show" title=${L("פעולות", "Actions")} onClick=${(e) => { e.stopPropagation(); itemMenu(it, e, it.name); }}>${ic("more", "sm")}</button>
+      <button class="rowact show" data-act="menu" title=${L("פעולות", "Actions")} onClick=${(e) => { e.stopPropagation(); itemMenu(it, e, it.name); }}>${ic("more", "sm")}</button>
     </div>`;
   }
 
@@ -313,7 +323,7 @@
           <div class="t"><b><bdi>${F.player.titleOf(t)}</bdi></b><span>${m.artist || fmtWhen(t.created)}</span></div>
           <div class="alb">${m.album || fmtSize(t.size)}</div>
           <div class="dur num">${m.duration ? fmtDur(m.duration) : ""}</div>
-          <button class="rowact show" title=${on && p.playing ? L("השהיה", "Pause") : L("ניגון", "Play")}
+          <button class="rowact show" data-act="play" title=${on && p.playing ? L("השהיה", "Pause") : L("ניגון", "Play")}
             onClick=${(e) => { e.stopPropagation(); on ? F.player.toggle() : F.player.play(tracks, i); }}>${ic(on && p.playing ? "pause" : "play", "sm")}</button>
         </div>`;
       })}</div>`;

@@ -57,12 +57,13 @@ curl -s http://dgo-extend:8983/api/office/<id>/run # step states + log
   answer says which.
 
 ## Traps
+- How a link dies and comes back (each mode, its detector, its repair): ai/context/dgo-link-lifetime.md.
 - **A dead link is one of two facts, and it heals itself in both.** Either this office's own source
   port was blackholed by a home NAT/router — `wg` counts the initiations as sent and the far side
   captures none (measured twice, on 51820 and 51832) — or the peer's ADDRESS moved: a
   pair's endpoint is a fact of the pairing, so a new DHCP lease on the listening office leaves every
-  packet going to an address nobody holds (2026-10-07: hp-laptop came back as `192.168.16.100` while
-  the record said `192.168.16.102`, and six port rotations changed nothing). A dialed pair that stays
+  packet going to an address nobody holds (2026-10-07: hp-laptop came back as .100 while the record
+  said .102; six port rotations changed nothing). A dialed pair that stays
   unreachable therefore gets BOTH repairs, on their own clocks: a fresh source port
   (`/data/listen-ports.json`) and a bounded, nearest-first search of the lost address's own /24,
   accepting nothing but a completed WireGuard handshake (`/data/find-peer.json` says what it adopted).
@@ -75,8 +76,7 @@ curl -s http://dgo-extend:8983/api/office/<id>/run # step states + log
   the render, with the record to add.
 - The commit of a declared office must be **pushed** — its machine fetches it from the repo.
   `/api/context` → `home.pushed`.
-- A machine-sized app set is a decision: what runs on a small remote is what its declaration names.
-- An app whose image cannot be pulled there stops `bbox run` mid-stack; `run` reports it.
+- A small remote runs only what its declaration names: its app set is a decision.
+- An image that cannot be pulled there stops `bbox run` mid-stack; `run` reports it.
 - Deleting a declaration never touches the machine, its files or its volumes.
-- `placement:` (an app shown here through a token door) is the retired model. New work uses `serve:` +
-  the catalog.
+- `placement:` (token doors) is retired; new work uses `serve:` + the catalog.

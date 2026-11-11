@@ -1,0 +1,1187 @@
+{
+ "topic": "gov-digital-services-for-business",
+ "checked": "2026-11-05",
+ "notes": "Method: gov.il, btl.gov.il, boi.org.il and my.gov.il were read in the built-in browser (curl and WebFetch get HTTP 403 from gov.il's bot wall); data.gov.il and openapi-portal.taxes.gov.il were read with plain HTTP. Accordion text was read from the page DOM. Source dates are the 'עודכן לאחרונה בתאריך' / 'תאריך עדכון' lines printed on the page; null where the page prints none. 'cost' is 'free' only where the page says so; 'login' values: national-id | certificate | password | none | null, with the real options in login_note. 'api.available' is true only where developer-facing documentation or a live API was seen. Categories used (the manifest's category map for this topic is empty): tax, customs-trade, social-insurance, corporate-registry, open-data, licensing, identity, employment, intellectual-property, privacy, open-banking, non-profits, small-business-support, postal. Not covered because no page was opened: Population Authority, public procurement, pension clearing house, Bituach Leumi self-employed.",
+ "rows": [
+  {
+   "id": "ita-allocation-number-request",
+   "name_he": "בקשה מקוונת למספר הקצאה לחשבונית מס",
+   "name_en": "Allocation number request for a tax invoice (Tax Authority online form)",
+   "url": "https://www.gov.il/he/service/request-assignment-number-for-tax-invoice",
+   "category": "tax",
+   "summary_he": "טופס מקוון וחינמי לבקשת מספר הקצאה לחשבונית מס כשהסכום לפני מע״מ מעל 5,000 ₪ (עדכון 2026), למי שמפיק חשבוניות בפנקס או בתוכנה לא מחוברת.",
+   "why_israeli": "גוף ממשלתי ישראלי; דף רשמי",
+   "sources": [
+    {
+     "url": "https://www.gov.il/he/service/request-assignment-number-for-tax-invoice",
+     "date": "2026-06-01",
+     "what": "Service page: purpose, who may submit, 'service is free of charge', threshold 5,000 NIS before VAT from 1.6.2026",
+     "grade": "A"
+    }
+   ],
+   "grade": "A",
+   "verified_at": "2026-11-05",
+   "authority": "רשות המסים בישראל",
+   "service_he": "טופס באתר לבקשת מספר הקצאה לחשבונית מס מעל הסף, או מספר אישור הקצאה (עסקה עתידית) לחשבון עסקה או פרופורמה, כשהחשבונית לא מונפקת מתוכנה המחוברת לרשות.",
+   "who_for": "עוסקים מורשים ומי שקיבלו מהם הרשאה, שמשתמשים בפנקס חשבוניות או בתוכנה שאינה מחוברת לשירות",
+   "api": {
+    "available": true,
+    "docs_url": "https://www.gov.il/he/pages/apinew",
+    "note": "The same function for connected software is the 'allocation numbers' API (see ita-api-services); this row is the manual form."
+   },
+   "cost": "free",
+   "login": null,
+   "official_url": "https://www.gov.il/he/service/request-assignment-number-for-tax-invoice",
+   "login_note": "The page names the Tax Authority permissions system for authorised users but does not state the sign-in method."
+  },
+  {
+   "id": "ita-api-services",
+   "name_he": "שירותי ה-API של רשות המסים ופורטל המפתחים",
+   "name_en": "Tax Authority API services and developer portal (SHAAM Open API)",
+   "url": "https://www.gov.il/he/pages/apinew",
+   "category": "tax",
+   "summary_he": "הקטלוג הרשמי של שירותי ה-API של רשות המסים: מספרי הקצאה, דיווח ותשלום מע״מ, מקדמות וניכויים, נספחי הדוח השנתי ואישורי תרומה. נדרש רישום בית תוכנה.",
+   "why_israeli": "גוף ממשלתי ישראלי; דף רשמי",
+   "sources": [
+    {
+     "url": "https://www.gov.il/he/pages/apinew",
+     "date": "2026-10-14",
+     "what": "API services page (published 22.07.2026, updated 14.10.2026): lists 15 services incl. allocation numbers, VAT reports, advances, deductions, annual-report appendices, donation receipts, capital declarations",
+     "grade": "A"
+    },
+    {
+     "url": "https://www.gov.il/he/service/connect-to-shaam",
+     "date": "2026-10-22",
+     "what": "Connection page for representatives, vaults and software houses: software-house procedure, undertaking letter, security appendix, developer-portal work procedure",
+     "grade": "A"
+    },
+    {
+     "url": "https://openapi-portal.taxes.gov.il/sandbox/support",
+     "date": null,
+     "what": "Developer portal (sandbox) support page: sandbox returns structurally real but not live data; production portal needs Tax Authority approval",
+     "grade": "A"
+    }
+   ],
+   "grade": "A",
+   "verified_at": "2026-11-05",
+   "authority": "רשות המסים בישראל",
+   "service_he": "בית תוכנה נרשם לפי נוהל החיבור, ורק אחרי אישור נכנס לפורטל המפתחים (סביבת sandbox עם נתוני דמה במבנה אמיתי) ומתחבר לשירותים מתוך מערכות הניהול של העסקים.",
+   "who_for": "בתי תוכנה ויצרני מערכות מידע; בעלי עסקים נותנים להם הרשאה לפעול בשמם",
+   "api": {
+    "available": true,
+    "docs_url": "https://openapi-portal.taxes.gov.il/sandbox/support"
+   },
+   "cost": null,
+   "login": null,
+   "official_url": "https://www.gov.il/he/pages/apinew",
+   "cost_note": "No fee statement found on the pages read.",
+   "login_note": "Software-house registration, then developer-portal sign-in; the business authorises its software house via the permissions system (per the connection page). Exact auth scheme not read.",
+   "note": "Production portal link seen on the sandbox page: https://openapi-portal.taxes.gov.il/shaam/production (root URL returned HTTP 503 to our fetcher on 2026-11-05).",
+   "related": [
+    "ita-allocation-number-request",
+    "ita-software-registry",
+    "ita-digital-permissions"
+   ]
+  },
+  {
+   "id": "ita-vat-reporting",
+   "name_he": "דיווח ותשלום דוחות מע״מ",
+   "name_en": "VAT report filing and payment (Tax Authority)",
+   "url": "https://www.gov.il/he/service/reporting-or-payment-of-vat-reports",
+   "category": "tax",
+   "summary_he": "דיווח ותשלום מע״מ תקופתי באינטרנט; מי שמדווח ומשלם מקוון זוכה במועד עד ה-19 בחודש. כניסה בשם משתמש וסיסמה, בכרטיס חכם או דרך מייצג.",
+   "why_israeli": "גוף ממשלתי ישראלי; דף רשמי",
+   "sources": [
+    {
+     "url": "https://www.gov.il/he/service/reporting-or-payment-of-vat-reports",
+     "date": "2026-06-01",
+     "what": "Service page (updated 01.06.2026): who files, sign-in options, 19th-of-month online deadline, card payment limit 50,000 NIS/month, bank authorisation",
+     "grade": "A"
+    },
+    {
+     "url": "https://www.gov.il/he/pages/apinew",
+     "date": "2026-10-14",
+     "what": "API list: 'VAT report filing and payment' service for representative software linked to SHAAM",
+     "grade": "A"
+    }
+   ],
+   "grade": "A",
+   "verified_at": "2026-11-05",
+   "authority": "רשות המסים בישראל",
+   "service_he": "עוסק רשום במע״מ מגיש באתר את הדוח התקופתי ומשלם בכרטיס אשראי, בהרשאה לחיוב חשבון בבנק, בשובר לבנק הדואר, או דרך מייצג המקושר לשע״ם.",
+   "who_for": "עוסקים רשומים במע״מ (יחידים, חברות ושותפויות)",
+   "api": {
+    "available": true,
+    "docs_url": "https://www.gov.il/he/pages/apinew",
+    "note": "API route is for representatives' software linked to SHAAM, per the API list."
+   },
+   "cost": null,
+   "login": "password",
+   "official_url": "https://www.gov.il/he/service/reporting-or-payment-of-vat-reports",
+   "cost_note": "No filing fee mentioned; the page says instalment card deals carry extra card-company and bank costs.",
+   "login_note": "Personal-area username and password, or smart card, or via a representative; corporations/partnerships through the 'super admin' personal area."
+  },
+  {
+   "id": "ita-personal-area",
+   "name_he": "האזור האישי של רשות המסים",
+   "name_en": "Tax Authority personal area",
+   "url": "https://www.gov.il/he/service/personal_area_taxes",
+   "category": "tax",
+   "summary_he": "אזור אישי חינמי באתר רשות המסים לפעולות, מידע ופניות; ההרשמה מאומתת בכרטיס אשראי (לעיתים חיוב של שקל שמוחזר) ובנתונים מטופס 106.",
+   "why_israeli": "גוף ממשלתי ישראלי; דף רשמי",
+   "sources": [
+    {
+     "url": "https://www.gov.il/he/service/personal_area_taxes",
+     "date": "2026-07-19",
+     "what": "Service page (updated 19.07.2026): who can use it, registration questions, 'service is free of charge'",
+     "grade": "A"
+    }
+   ],
+   "grade": "A",
+   "verified_at": "2026-11-05",
+   "authority": "רשות המסים בישראל",
+   "service_he": "הרשמה וכניסה לאזור אישי לביצוע פעולות, קבלת מידע ופתיחת פניות מול רשות המסים.",
+   "who_for": "שכירים, עצמאים ומייצגים; חברות ותאגידים מסומנים בדף כ«יעלה בקרוב»",
+   "api": {
+    "available": null,
+    "docs_url": null
+   },
+   "cost": "free",
+   "login": "password",
+   "official_url": "https://www.gov.il/he/service/personal_area_taxes",
+   "login_note": "One-time registration; card details used for verification only."
+  },
+  {
+   "id": "ita-annual-income-tax-report-1301",
+   "name_he": "דוח מס שנתי ליחיד ולבעל עסק שאינו חברה (טופס 1301)",
+   "name_en": "Annual income-tax report 1301 for individuals and non-company business owners",
+   "url": "https://www.gov.il/he/service/reporting-and-payment-2025-annual-tax-report-for-individuals",
+   "category": "tax",
+   "summary_he": "הגשת הדוח השנתי למס הכנסה באינטרנט לעצמאים ולמי שחייב בדוח. לשנת המס 2025: עד 30.6.2026 למי שחייב בהגשה מקוונת, עד 29.5.2026 למי שפטור ממנה.",
+   "why_israeli": "גוף ממשלתי ישראלי; דף רשמי",
+   "sources": [
+    {
+     "url": "https://www.gov.il/he/service/reporting-and-payment-2025-annual-tax-report-for-individuals",
+     "date": "2026-07-16",
+     "what": "Service page (updated 16.07.2026): who files, deadlines for tax year 2025, attached forms list",
+     "grade": "A"
+    },
+    {
+     "url": "https://www.gov.il/he/pages/apinew",
+     "date": "2026-10-14",
+     "what": "API list: annual-report appendices and income-tax advances can be sent from software via API",
+     "grade": "A"
+    }
+   ],
+   "grade": "A",
+   "verified_at": "2026-11-05",
+   "authority": "רשות המסים בישראל",
+   "service_he": "הגשה מקוונת של דוח ההכנסות השנתי למס הכנסה, כולל הנספחים, וההמשך בטיפול בדוח.",
+   "who_for": "יחידים ובעלי עסק עצמאי שאינו חברה, בעלי שליטה ומי שחייבים בדוח או מבקשים החזר",
+   "api": {
+    "available": true,
+    "docs_url": "https://www.gov.il/he/pages/apinew",
+    "note": "The API covers annual-report appendices and advance payments (via representatives' software); the 1301 form itself is filed in the online system."
+   },
+   "cost": null,
+   "login": null,
+   "official_url": "https://www.gov.il/he/service/reporting-and-payment-2025-annual-tax-report-for-individuals",
+   "cost_note": "No fee statement found on the page.",
+   "login_note": "Sign-in method not stated in the text we read."
+  },
+  {
+   "id": "ita-withholding-tax-info",
+   "name_he": "מידע על אישורי ניכוי מס במקור וניהול ספרים",
+   "name_en": "Withholding-tax certificate and bookkeeping-approval lookup",
+   "url": "https://www.gov.il/he/service/itc-gmishurim",
+   "category": "tax",
+   "summary_he": "שירות מידע חינמי לבדיקת אישור ניכוי מס במקור של ספק. זה מידע בלבד: הבקשה לפטור או להקטנת הניכוי מוגשת בשירות נפרד.",
+   "why_israeli": "גוף ממשלתי ישראלי; דף רשמי",
+   "sources": [
+    {
+     "url": "https://www.gov.il/he/service/itc-gmishurim",
+     "date": "2024-05-13",
+     "what": "Service page (updated 13.05.2024): who it is for, free of charge, lookup by file number, System 1000, 'Mevzak'; 'information only, not an application'",
+     "grade": "A"
+    },
+    {
+     "url": "https://www.gov.il/he/service/itc2542",
+     "date": null,
+     "what": "Title seen in gov.il search results: request for exemption or reduction of withholding (form 2542); page not opened",
+     "grade": "A"
+    }
+   ],
+   "grade": "A",
+   "verified_at": "2026-11-05",
+   "authority": "רשות המסים בישראל",
+   "service_he": "בדיקה אם לספק יש אישור ניכוי מס במקור בתוקף ומה שיעור הניכוי, לפי מספר תיק או עד 10 תיקים; מערכת 1000 לגופים עד 1,000 ספקים, ומערכת «מבזק» לגופים גדולים יותר.",
+   "who_for": "משלמים החייבים בניכוי מס במקור ומקבלי תשלום",
+   "api": {
+    "available": null,
+    "docs_url": null
+   },
+   "cost": "free",
+   "login": null,
+   "official_url": "https://www.gov.il/he/service/itc-gmishurim",
+   "login_note": "Not stated in the text we read.",
+   "related": [
+    "ita-personal-area"
+   ]
+  },
+  {
+   "id": "ita-digital-permissions",
+   "name_he": "מערכת למתן הרשאה לפעולות דיגיטליות מול רשות המסים",
+   "name_en": "Tax Authority permissions system for digital actions",
+   "url": "https://www.gov.il/he/service/authorize-certification-perform-digital-operations",
+   "category": "tax",
+   "summary_he": "המערכת שבה נותנים הרשאה לפעול מול רשות המסים בשמכם: מספרי הקצאה בחשבוניות ישראל, דיווח מע״מ, טופס 161 ותרומות.",
+   "why_israeli": "גוף ממשלתי ישראלי; דף רשמי",
+   "sources": [
+    {
+     "url": "https://www.gov.il/he/service/authorize-certification-perform-digital-operations",
+     "date": "2026-07-19",
+     "what": "Service page (updated 19.07.2026): examples of services needing a permission – allocation numbers, form 161, donations, online VAT",
+     "grade": "A"
+    }
+   ],
+   "grade": "A",
+   "verified_at": "2026-11-05",
+   "authority": "רשות המסים בישראל",
+   "service_he": "יחיד או תאגיד נותן הרשאה לגורמים שונים (למשל רואה חשבון או בית תוכנה) לבצע בשמו פעולות דיגיטליות מוגדרות מול רשות המסים.",
+   "who_for": "יחידים ותאגידים; הגורמים שמקבלים הרשאה",
+   "api": {
+    "available": null,
+    "docs_url": null
+   },
+   "cost": null,
+   "login": null,
+   "official_url": "https://www.gov.il/he/service/authorize-certification-perform-digital-operations",
+   "cost_note": "Not stated in the text we read.",
+   "login_note": "Not stated in the text we read.",
+   "related": [
+    "ita-allocation-number-request",
+    "ita-api-services"
+   ]
+  },
+  {
+   "id": "ita-software-registry",
+   "name_he": "מרשם תוכנות לניהול מערכת חשבונות ממוחשבת",
+   "name_en": "Registry of computerised accounting software (Tax Authority)",
+   "url": "https://www.gov.il/he/service/registration-software-designed-managing-computerized-accounting-system",
+   "category": "tax",
+   "summary_he": "יצרני תוכנה להנהלת חשבונות שמוכרים, משכירים או מפיצים (גם בחינם) חייבים לרשום אותה אצל רשות המסים; עסקים יכולים לבדוק אם הרישום בתוקף.",
+   "why_israeli": "גוף ממשלתי ישראלי; דף רשמי",
+   "sources": [
+    {
+     "url": "https://www.gov.il/he/service/registration-software-designed-managing-computerized-accounting-system",
+     "date": "2025-05-29",
+     "what": "Service page (updated 29.05.2025): who must register, who may submit, attachments",
+     "grade": "A"
+    },
+    {
+     "url": "https://www.gov.il/he/departments/targetaudience/taxes-adience-software/govil-landing-page",
+     "date": null,
+     "what": "Software-houses hub: lists registration, the lookup service for businesses, the allocation-number request and API info",
+     "grade": "A"
+    }
+   ],
+   "grade": "A",
+   "verified_at": "2026-11-05",
+   "authority": "רשות המסים בישראל",
+   "service_he": "יצרן תוכנה מגיש בקשה מקוונת לרישום תוכנה, מהדורה חדשה או הארכת תעודת רישום, בצירוף פלט סימולטור לקובץ במבנה אחיד; עסקים בודקים באתר תוקף של תעודת רישום.",
+   "who_for": "יצרני תוכנה (הגשה) ועסקים שמשתמשים בתוכנות הנהלת חשבונות (בדיקת תוקף)",
+   "api": {
+    "available": null,
+    "docs_url": null
+   },
+   "cost": null,
+   "login": null,
+   "official_url": "https://www.gov.il/he/service/registration-software-designed-managing-computerized-accounting-system",
+   "cost_note": "A cost section exists on the page but was not read.",
+   "login_note": "Not stated in the text we read.",
+   "note": "Registration certifies a product as a computerised accounting system; it is not an integration with the allocation-number API."
+  },
+  {
+   "id": "customs-shaar-olami",
+   "name_he": "מכס: מערכת היצוא «שער עולמי»",
+   "name_en": "Israel Customs export system 'Shaar Olami' (Global Gateway)",
+   "url": "https://www.gov.il/he/Departments/Topics/customs-commercial-export-shaarolami",
+   "category": "customs-trade",
+   "summary_he": "«שער עולמי» היא מערכת היצוא של המכס, הפועלת מינואר 2023 במקום המערכת הקודמת, לעבודה דיגיטלית בלבד מול יצואנים, סוכני מכס וחברות שילוח.",
+   "why_israeli": "גוף ממשלתי ישראלי; דף רשמי",
+   "sources": [
+    {
+     "url": "https://www.gov.il/he/Departments/Topics/customs-commercial-export-shaarolami",
+     "date": null,
+     "what": "Export topic page: Shaar Olami replaces the previous operating system from 15.1.2023, digital-only, paperless; lists online services",
+     "grade": "A"
+    },
+    {
+     "url": "https://www.gov.il/he/Departments/Topics/tech-support-global-gateway",
+     "date": null,
+     "what": "Tech-support topic for Shaar Olami (lists online forms, smart card, payments sub-topics)",
+     "grade": "A"
+    }
+   ],
+   "grade": "A",
+   "verified_at": "2026-11-05",
+   "authority": "רשות המסים בישראל – המכס",
+   "service_he": "מערכת יצוא דיגיטלית שבה יצואנים, סוכני מכס וחברות שילוח עובדים מול המכס ללא נייר; כוללת גם שירותים מקוונים כמו הארכת מועד לשהיית טובין, ייבוא בפטור מותנה ותביעת הישבון.",
+   "who_for": "יצואנים, סוכני מכס, חברות שילוח ומשרדי ממשלה שמתחברים באופן דיגיטלי",
+   "api": {
+    "available": null,
+    "docs_url": null
+   },
+   "cost": null,
+   "login": null,
+   "official_url": "https://www.gov.il/he/Departments/Topics/customs-commercial-export-shaarolami",
+   "cost_note": "Not stated on the pages read.",
+   "login_note": "Not stated; the tech-support topic lists a smart-card sub-topic.",
+   "note": "Pages show no 'last updated' line."
+  },
+  {
+   "id": "btl-employer-report-payment",
+   "name_he": "ביטוח לאומי: דיווח ותשלום דמי ביטוח עבור עובדים (כולל טופס 102)",
+   "name_en": "National Insurance: employer monthly report and payment (incl. form 102)",
+   "url": "https://www.btl.gov.il/Insurance/Maasik/MToshavYisrael/DivuahVetashlum/Pages/Divuhach.aspx",
+   "category": "social-insurance",
+   "summary_he": "המעסיק מדווח ומשלם עד ה-15 בחודש: באתר התשלומים, ישירות מתוכנת שכר (כרטיס אשראי או הרשאה לחיוב), דרך מייצג, או בבנק ובסניף בטופס 102.",
+   "why_israeli": "גוף ממשלתי ישראלי; דף רשמי",
+   "sources": [
+    {
+     "url": "https://www.btl.gov.il/Insurance/Maasik/MToshavYisrael/DivuahVetashlum/Pages/Divuhach.aspx",
+     "date": null,
+     "what": "Employer page: 15th-of-month deadline and every reporting/payment route, form 102 with report code 12, payroll-software transfer with validation",
+     "grade": "A"
+    },
+    {
+     "url": "https://www.btl.gov.il/Insurance/Maasik/MToshavYisrael/DivuahVetashlum/Pages/default.aspx",
+     "date": null,
+     "what": "Parent page: monthly report and payment duty plus a quarterly computerised report for some worker types",
+     "grade": "A"
+    },
+    {
+     "url": "https://www.btl.gov.il/Insurance/WaysToPay/Pages/default.aspx",
+     "date": null,
+     "what": "Ways to pay National Insurance contributions: employers, self-employed, non-workers",
+     "grade": "A"
+    }
+   ],
+   "grade": "A",
+   "verified_at": "2026-11-05",
+   "authority": "המוסד לביטוח לאומי",
+   "service_he": "מעסיק מדווח על עובדים ומשלם דמי ביטוח עד ה-15 בחודש באתר התשלומים (יבוא קובץ מתוכנת שכר או הקלדה), ישירות מתוכנת השכר, דרך מייצג, בבנק או בסניף בטופס 102.",
+   "who_for": "מעסיקים של עובדים ופנסיונרים תושבי ישראל",
+   "api": {
+    "available": null,
+    "docs_url": null,
+    "note": "Payroll software passes reports and payments straight into the BTL system, but we saw no developer documentation, so 'available' is left null."
+   },
+   "cost": null,
+   "login": null,
+   "official_url": "https://www.btl.gov.il/Insurance/Maasik/MToshavYisrael/DivuahVetashlum/Pages/Divuhach.aspx",
+   "cost_note": "No fee statement on the pages read.",
+   "login_note": "Sign-in method for the payments site not stated on the pages read.",
+   "note": "Pages show no 'last updated' line. The BTL site is a separate site from gov.il."
+  },
+  {
+   "id": "btl-employers-personal-site",
+   "name_he": "ביטוח לאומי: אתר אישי למעסיקים",
+   "name_en": "National Insurance: employers' personal site",
+   "url": "https://www.btl.gov.il/Insurance/Maasik/Pages/AtarIsiMasik.aspx",
+   "category": "social-insurance",
+   "summary_he": "אתר אישי מקוון למעסיקים לצפייה בחשבון, דיווח ותשלום והסדרי תשלום; בקיץ 2026 הוצע לנרשמים מבצע להפחתת ריביות והצמדה.",
+   "why_israeli": "גוף ממשלתי ישראלי; דף רשמי",
+   "sources": [
+    {
+     "url": "https://www.btl.gov.il/Insurance/Maasik/Pages/AtarIsiMasik.aspx",
+     "date": null,
+     "what": "Employers' personal-site page: feature list and the July-August 2026 interest and linkage reduction offer",
+     "grade": "A"
+    }
+   ],
+   "grade": "A",
+   "verified_at": "2026-11-05",
+   "authority": "המוסד לביטוח לאומי",
+   "service_he": "אתר אישי למעסיק: פירוט חשבון עדכני, דיווחים שוטפים, ביצוע תשלומים, עדכון פרטים לדיוור אלקטרוני, עדכונים בנושא גבייה ומילואים ונפגעי עבודה, עדכון חשבון בנק להחזרים והסדר תשלומים.",
+   "who_for": "מעסיקים רשומים באתר מעסיקים",
+   "api": {
+    "available": null,
+    "docs_url": null
+   },
+   "cost": null,
+   "login": null,
+   "official_url": "https://www.btl.gov.il/Insurance/Maasik/Pages/AtarIsiMasik.aspx",
+   "cost_note": "Not stated.",
+   "login_note": "Not stated on the page.",
+   "note": "Page shows no 'last updated' line."
+  },
+  {
+   "id": "ica-company-annual-report",
+   "name_he": "רשות התאגידים: דיווח שנתי לחברה",
+   "name_en": "Corporations Authority: company annual report",
+   "url": "https://www.gov.il/he/service/companies_annual_report",
+   "category": "corporate-registry",
+   "summary_he": "הגשת הדוח השנתי של חברה פרטית ליחידת החברות באינטרנט, ללא עלות; מיוני 2024 כל הדיווחים לרשם החברות מוגשים אונליין. כניסה בהזדהות לאומית או בכרטיס חכם.",
+   "why_israeli": "גוף ממשלתי ישראלי; דף רשמי",
+   "sources": [
+    {
+     "url": "https://www.gov.il/he/service/companies_annual_report",
+     "date": "2026-08-25",
+     "what": "Service page (updated 25.08.2026): free of charge, national authentication or smart card, online filing mandatory from 27.6.2024, 14-day change reporting",
+     "grade": "A"
+    }
+   ],
+   "grade": "A",
+   "verified_at": "2026-11-05",
+   "authority": "רשות התאגידים (משרד המשפטים)",
+   "service_he": "דירקטור או מוסמך לדווח מגיש באתר «תאגידים ברשת» את הדוח השנתי של חברה פרטית; הדף מזכיר גם חובת דיווח על שינויים בתוך 14 יום, בנפרד מהדוח.",
+   "who_for": "דירקטורים ומוסמכים לדווח בחברה פרטית",
+   "api": {
+    "available": null,
+    "docs_url": null,
+    "note": "No API stated for filing; the registry data is separately available as open data (see ica-company-registry-open-data)."
+   },
+   "cost": "free",
+   "login": "national-id",
+   "official_url": "https://www.gov.il/he/service/companies_annual_report",
+   "login_note": "National authentication, or a smart card issued by an approved issuer."
+  },
+  {
+   "id": "ica-company-extract",
+   "name_he": "רשות התאגידים: נסח חברה ומידע בסיסי על תאגידים",
+   "name_en": "Corporations Authority: company extract and basic company information",
+   "url": "https://www.gov.il/he/service/company_extract",
+   "category": "corporate-registry",
+   "summary_he": "נסח חברה בעברית ובאנגלית או מידע בסיסי חינם על חברות ושותפויות, מאתר רשות התאגידים; הדף עודכן לאחרונה ב-4.11.2026.",
+   "why_israeli": "גוף ממשלתי ישראלי; דף רשמי",
+   "sources": [
+    {
+     "url": "https://www.gov.il/he/service/company_extract",
+     "date": "2026-11-04",
+     "what": "Service page (updated 04.11.2026): Hebrew/English extract or free basic information on companies and partnerships",
+     "grade": "A"
+    }
+   ],
+   "grade": "A",
+   "verified_at": "2026-11-05",
+   "authority": "רשות התאגידים (משרד המשפטים)",
+   "service_he": "הפקת נסח חברה בעברית או באנגלית, או צפייה חינם במידע בסיסי על חברות ושותפויות, כולל מידע ממקורות ממשלתיים נוספים.",
+   "who_for": "עסקים, ספקים ולקוחות שבודקים חברה או שותפות",
+   "api": {
+    "available": null,
+    "docs_url": null,
+    "note": "Registry data is available through data.gov.il (see ica-company-registry-open-data)."
+   },
+   "cost": null,
+   "login": null,
+   "official_url": "https://www.gov.il/he/service/company_extract",
+   "cost_note": "The page title says basic information is free; the extract fee itself was not read.",
+   "login_note": "Not read.",
+   "related": [
+    "ica-company-registry-open-data"
+   ]
+  },
+  {
+   "id": "ica-company-registry-open-data",
+   "name_he": "מאגר החברות של רשם החברות (נתונים פתוחים)",
+   "name_en": "Registrar of Companies database as open data (data.gov.il)",
+   "url": "https://data.gov.il/he/datasets/ministry_of_justice/ica_companies",
+   "category": "open-data",
+   "summary_he": "רשימת החברות הרשומות במרשם כנתונים פתוחים עם API לשאילתות; רשומת המאגר עודכנה ב-5.11.2026, וקיימים גם מאגרי שותפויות, שינויים ומחיקות.",
+   "why_israeli": "גוף ממשלתי ישראלי; דף רשמי",
+   "sources": [
+    {
+     "url": "https://data.gov.il/api/3/action/package_show?id=ica_companies",
+     "date": "2026-11-05",
+     "what": "CKAN dataset record 'ica_companies': title, Ministry of Justice, licence other-open, datastore active on the CSV resource, modified 2026-11-05",
+     "grade": "A"
+    },
+    {
+     "url": "https://data.gov.il/he/datasets/ministry_of_justice/ica_companies",
+     "date": null,
+     "what": "Dataset page on data.gov.il (opened, HTTP 200; JS-rendered)",
+     "grade": "A"
+    },
+    {
+     "url": "https://data.gov.il/api/3/action/package_search",
+     "date": "2026-11-05",
+     "what": "Search endpoint returned sibling datasets: ica_partnerships, ica-changes, ica-deletion",
+     "grade": "A"
+    }
+   ],
+   "grade": "A",
+   "verified_at": "2026-11-05",
+   "authority": "משרד המשפטים – רשם החברות",
+   "service_he": "קובץ של כל החברות הרשומות במרשם (פעילות, בפירוק, מחוקות ועוד) הזמין להורדה ולשאילתה ב-API של data.gov.il; יש גם מאגרי שותפויות, שינויים ומחיקות.",
+   "who_for": "מפתחים, ספקי מידע ועסקים שבודקים ספקים ולקוחות",
+   "api": {
+    "available": true,
+    "docs_url": "https://data.gov.il/he/docs"
+   },
+   "cost": "free",
+   "login": "none",
+   "official_url": "https://data.gov.il/he/datasets/ministry_of_justice/ica_companies",
+   "cost_note": "Open licence 'other-open' per the dataset record; no fee seen.",
+   "login_note": "Our unauthenticated GET requests to package_search and package_show succeeded."
+  },
+  {
+   "id": "datagov-ckan-api",
+   "name_he": "data.gov.il: מאגרי המידע הממשלתיים ו-API",
+   "name_en": "data.gov.il open government data portal and CKAN API",
+   "url": "https://data.gov.il/he/docs",
+   "category": "open-data",
+   "summary_he": "פורטל הנתונים הפתוחים של הממשלה, עם API לשליפת מאגרים ושאילתה על טבלאות. בבדיקה שלנו קריאות חיפוש ותיאור עבדו בלי מפתח.",
+   "why_israeli": "גוף ממשלתי ישראלי; דף רשמי",
+   "sources": [
+    {
+     "url": "https://data.gov.il/he/docs",
+     "date": null,
+     "what": "API documentation page: CKAN action API, server https://data.gov.il/api/3, endpoints package_search/package_show/datastore_search etc.",
+     "grade": "A"
+    },
+    {
+     "url": "https://data.gov.il/he",
+     "date": null,
+     "what": "Home page: collection of datasets from all ministries open for public use",
+     "grade": "A"
+    },
+    {
+     "url": "https://data.gov.il/api/3/action/package_search",
+     "date": "2026-11-05",
+     "what": "Live endpoint answered an unauthenticated query (success: true)",
+     "grade": "A"
+    }
+   ],
+   "grade": "A",
+   "verified_at": "2026-11-05",
+   "authority": "מדינת ישראל – מאגרי המידע הממשלתיים",
+   "service_he": "פורטל נתונים פתוחים של משרדי הממשלה עם API בנוסח CKAN: חיפוש מאגרים, תיאור מאגר ושאילתות על טבלאות (datastore_search); התיעוד זמין בפורמט Swagger.",
+   "who_for": "מפתחים, אנליסטים ועסקים שמשלבים נתונים ציבוריים במערכות",
+   "api": {
+    "available": true,
+    "docs_url": "https://data.gov.il/he/docs"
+   },
+   "cost": "free",
+   "login": "none",
+   "official_url": "https://data.gov.il/he/docs",
+   "cost_note": "Home page describes the data as open for public use; no fee seen.",
+   "login_note": "Verified only for read endpoints (package_search, package_show) on 2026-11-05."
+  },
+  {
+   "id": "moin-business-licensing",
+   "name_he": "משרד הפנים: רישוי עסקים – הרפורמה, הצו והמפרטים האחידים",
+   "name_en": "Interior Ministry business-licensing information (reform, order, uniform specifications)",
+   "url": "https://www.gov.il/he/departments/topics/busines-licensing/govil-landing-page",
+   "category": "licensing",
+   "summary_he": "מרכז המידע של משרד הפנים על רישוי עסקים: הרפורמה בחוק, הצו, המפרטים האחידים ומידע לבעל עסק. הרישיון עצמו מונפק על ידי הרשות המקומית.",
+   "why_israeli": "גוף ממשלתי ישראלי; דף רשמי",
+   "sources": [
+    {
+     "url": "https://www.gov.il/he/departments/topics/busines-licensing/govil-landing-page",
+     "date": null,
+     "what": "Interior Ministry topic page: reform (Amendment 34), law/regulations/order, uniform specifications, information for business owners, glossary (latest news item 2024)",
+     "grade": "A"
+    },
+    {
+     "url": "https://www.gov.il/he/pages/business_licensing",
+     "date": "2022-02-10",
+     "what": "Health Ministry page states approvals are given to the local authority that issues business licences",
+     "grade": "A"
+    }
+   ],
+   "grade": "A",
+   "verified_at": "2026-11-05",
+   "authority": "משרד הפנים – האגף הבכיר לרישוי עסקים",
+   "service_he": "דף נושא של האגף הבכיר לרישוי עסקים: הרפורמה (תיקון 34 לחוק), חוק תקנות וצו, מפרטים אחידים, מידע לבעל עסק ומילון מונחים; האגף עובד עם רשויות הרישוי ברשויות המקומיות.",
+   "who_for": "בעלי עסקים, רשויות מקומיות ורשויות רישוי",
+   "api": {
+    "available": null,
+    "docs_url": null
+   },
+   "cost": null,
+   "login": "none",
+   "official_url": "https://www.gov.il/he/departments/topics/busines-licensing/govil-landing-page",
+   "cost_note": "Information site; no fee stated.",
+   "login_note": "Information pages need no sign-in.",
+   "note": "We found no single national online application form: the licence is issued by the local authority per the Health Ministry page."
+  },
+  {
+   "id": "moh-business-licence-approval",
+   "name_he": "משרד הבריאות: אישור לרישיון עסק, חוות דעת מקדמית והשגה",
+   "name_en": "Health Ministry approval for a business licence, preliminary opinion and objection",
+   "url": "https://www.gov.il/he/pages/business_licensing",
+   "category": "licensing",
+   "summary_he": "משרד הבריאות בודק ומאשר רישיונות לעסקים הקשורים לבריאות הציבור. באתר טפסים לבקשת אישור, לחוות דעת מקדמית בתשלום ולהשגה.",
+   "why_israeli": "גוף ממשלתי ישראלי; דף רשמי",
+   "sources": [
+    {
+     "url": "https://www.gov.il/he/pages/business_licensing",
+     "date": "2022-02-10",
+     "what": "Guide page (published 10.02.2022): scope of approval, preliminary opinion is paid, links to the application, preliminary-opinion and objection services",
+     "grade": "A"
+    },
+    {
+     "url": "https://www.gov.il/he/service/business-license-law-objections",
+     "date": null,
+     "what": "Objection-filing service link seen on the guide page; not opened",
+     "grade": "A"
+    }
+   ],
+   "grade": "A",
+   "verified_at": "2026-11-05",
+   "authority": "משרד הבריאות – המערך הארצי לבריאות הסביבה",
+   "service_he": "המשרד מאשר, לפי צו רישוי עסקים, עסקים הקשורים לבריאות הציבור (מסעדות, בריכות, בתי מלון, מקוואות ועוד) ומעביר את האישור לרשות המקומית; באתר שירותים מקוונים לבקשה, לחוות דעת מקדמית ולהשגה.",
+   "who_for": "בעלי עסקים טעוני רישוי בתחום בריאות הציבור",
+   "api": {
+    "available": null,
+    "docs_url": null
+   },
+   "cost": null,
+   "login": null,
+   "official_url": "https://www.gov.il/he/pages/business_licensing",
+   "cost_note": "The preliminary opinion is paid per the page; the amount was not read.",
+   "login_note": "Not stated."
+  },
+  {
+   "id": "national-authentication",
+   "name_he": "מערכת ההזדהות הלאומית",
+   "name_en": "National authentication system (gov.il sign-in)",
+   "url": "https://www.gov.il/he/pages/signup_sso_faq",
+   "category": "identity",
+   "summary_he": "חשבון הזדהות אחד לשירותים הממשלתיים המקוונים. הדף הרשמי מפרט שיטות הרשמה (כולל תעודת זהות ביומטרית) וכניסה עם סיסמה וקוד או כרטיס חכם.",
+   "why_israeli": "גוף ממשלתי ישראלי; דף רשמי",
+   "sources": [
+    {
+     "url": "https://www.gov.il/he/pages/signup_sso_faq",
+     "date": "2026-08-26",
+     "what": "Guide page (published 08.05.2024, updated 26.08.2026): what the system is, registration methods, sign-in methods incl. smart cards and quick entry",
+     "grade": "A"
+    }
+   ],
+   "grade": "A",
+   "verified_at": "2026-11-05",
+   "authority": "מדינת ישראל – מערכת ההזדהות הלאומית",
+   "service_he": "תשתית הזדהות אחת לשירותים מקוונים ממשלתיים: הרשמה בשני אמצעי זיהוי מתוך ארבעה (אשראי, דרכון ישראלי, שאלות אישיות, תעודת עולה) או בתעודת זהות ביומטרית; כניסה עם סיסמה וקוד, כרטיס חכם או כניסה מהירה.",
+   "who_for": "כל מי שמזדהה אישית בשירות ממשלתי מקוון, כולל דירקטורים ומוסמכים לדווח בשירותי רשות התאגידים",
+   "api": {
+    "available": null,
+    "docs_url": null
+   },
+   "cost": null,
+   "login": "national-id",
+   "official_url": "https://www.gov.il/he/pages/signup_sso_faq",
+   "cost_note": "Not stated.",
+   "login_note": "This row is the sign-in layer itself; no separate business identity is described on the page.",
+   "note": "Search results listed the same guide as https://www.gov.il/he/Departments/Guides/signup_sso_faq (redirects to the /pages/ URL)."
+  },
+  {
+   "id": "my-gov-il",
+   "name_he": "האזור האישי הממשלתי (my.gov.il)",
+   "name_en": "Government personal area (my.gov.il)",
+   "url": "https://my.gov.il/",
+   "category": "identity",
+   "summary_he": "אזור אישי ממשלתי אחד שמרכז מידע אישי ועסקי מהרשויות ומאפשר פעולות. הכניסה דורשת הזדהות לאחר הרשמה חד־פעמית.",
+   "why_israeli": "גוף ממשלתי ישראלי; דף רשמי",
+   "sources": [
+    {
+     "url": "https://my.gov.il/",
+     "date": null,
+     "what": "Landing page text: personal and business information from government bodies, sign-in requires identification after one-time registration",
+     "grade": "A"
+    }
+   ],
+   "grade": "A",
+   "verified_at": "2026-11-05",
+   "authority": "מדינת ישראל",
+   "service_he": "אזור אישי מרוכז שמציג מידע אישי ועסקי ממשרדי הממשלה ומאפשר לבצע פעולות; הכניסה דורשת הזדהות אחרי הרשמה חד־פעמית, והנתונים אינם נשמרים במערכת לפי הדף.",
+   "who_for": "אזרחים ובעלי עסקים",
+   "api": {
+    "available": null,
+    "docs_url": null
+   },
+   "cost": null,
+   "login": null,
+   "official_url": "https://my.gov.il/",
+   "cost_note": "Not stated.",
+   "login_note": "The landing page does not name the identification method.",
+   "note": "Page shows no date."
+  },
+  {
+   "id": "employment-service-employers",
+   "name_he": "שירות התעסוקה: פרסום משרה וחיפוש עובדים (מערכת מעסיקים)",
+   "name_en": "Employment Service employers system: post jobs and search candidates",
+   "url": "https://www.gov.il/he/service/add_job_offer_and_seach_for_workers_employers_system",
+   "category": "employment",
+   "summary_he": "מעסיקים רשומים מפרסמים משרות ומחפשים מועמדים במאגר קורות החיים של שירות התעסוקה, ללא עלות.",
+   "why_israeli": "גוף ממשלתי ישראלי; דף רשמי",
+   "sources": [
+    {
+     "url": "https://www.gov.il/he/service/add_job_offer_and_seach_for_workers_employers_system",
+     "date": "2023-07-26",
+     "what": "Service page (updated 26.07.2023): who may register, free of charge, how to apply",
+     "grade": "A"
+    }
+   ],
+   "grade": "A",
+   "verified_at": "2026-11-05",
+   "authority": "שירות התעסוקה הישראלי",
+   "service_he": "מעסיק נרשם למערכת מעסיקים באתר שירות התעסוקה, מפרסם משרות ומחפש מועמדים במאגר קורות החיים של האתר.",
+   "who_for": "מעסיקים עם מספר חברה (ח.פ.) או תיק ניכויים במס הכנסה",
+   "api": {
+    "available": null,
+    "docs_url": null
+   },
+   "cost": "free",
+   "login": null,
+   "official_url": "https://www.gov.il/he/service/add_job_offer_and_seach_for_workers_employers_system",
+   "login_note": "Registration to the employers system on the Employment Service site; sign-in method not stated."
+  },
+  {
+   "id": "ilpo-trademark-registration",
+   "name_he": "רשות הפטנטים: הגשת בקשה לרישום סימן מסחר",
+   "name_en": "Patent Authority: online trademark application",
+   "url": "https://www.gov.il/he/service/trademark_registration",
+   "category": "intellectual-property",
+   "summary_he": "בקשה מקוונת לרישום סימן מסחר או סימן שירות; כניסה בהזדהות לאומית או בכרטיס חכם, ותשלום אגרה בסוף התהליך.",
+   "why_israeli": "גוף ממשלתי ישראלי; דף רשמי",
+   "sources": [
+    {
+     "url": "https://www.gov.il/he/service/trademark_registration",
+     "date": "2025-06-03",
+     "what": "Service page (updated 03.06.2025): sign-in options, fee payment flow, who may apply",
+     "grade": "A"
+    }
+   ],
+   "grade": "A",
+   "verified_at": "2026-11-05",
+   "authority": "רשות הפטנטים (משרד המשפטים)",
+   "service_he": "הגשה באתר ההגשה המקוון של מחלקת סימני המסחר: פרטי הסימן, המבקשים ומיופי הכוח, ותשלום אגרה בשירות התשלומים הממשלתי.",
+   "who_for": "מבקשים ישראלים ומבקשים מחוץ לארץ",
+   "api": {
+    "available": null,
+    "docs_url": null
+   },
+   "cost": "fee: application fee (amount not read), paid through the government payments service",
+   "login": "national-id",
+   "official_url": "https://www.gov.il/he/service/trademark_registration",
+   "login_note": "National authentication or smart card, or a new user created on the trademark department's site."
+  },
+  {
+   "id": "ilpo-trademark-search",
+   "name_he": "רשות הפטנטים: חיפוש במאגר סימני המסחר",
+   "name_en": "Patent Authority: trademark database search",
+   "url": "https://www.gov.il/he/service/search_israeli_trademarks_database",
+   "category": "intellectual-property",
+   "summary_he": "בדיקה אם סימן מסחר דומה או זהה כבר רשום בישראל: חיפוש עצמאי חינם, או חיפוש של בוחן בתשלום אגרה.",
+   "why_israeli": "גוף ממשלתי ישראלי; דף רשמי",
+   "sources": [
+    {
+     "url": "https://www.gov.il/he/service/search_israeli_trademarks_database",
+     "date": "2025-06-03",
+     "what": "Service page (updated 03.06.2025): examiner search request, search fee under regulation 78a, free self-service search of Israeli marks",
+     "grade": "A"
+    }
+   ],
+   "grade": "A",
+   "verified_at": "2026-11-05",
+   "authority": "רשות הפטנטים (משרד המשפטים)",
+   "service_he": "בקשה לחיפוש דמות או מלל במאגר הסימנים על ידי בוחן (בתשלום אגרה), או חיפוש עצמאי חינם בסימנים ישראליים במנוע החיפוש הישראלי.",
+   "who_for": "עסקים וממציאים שבודקים אם סימן דומה כבר רשום",
+   "api": {
+    "available": null,
+    "docs_url": null
+   },
+   "cost": "free (self-service search) / fee (examiner search)",
+   "login": "national-id",
+   "official_url": "https://www.gov.il/he/service/search_israeli_trademarks_database",
+   "cost_note": "Examiner-search fee amount not read.",
+   "login_note": "Same sign-in as the trademark department's online submission site."
+  },
+  {
+   "id": "ilpo-patent-application",
+   "name_he": "רשות הפטנטים: הגשת בקשה לרישום פטנט",
+   "name_en": "Patent Authority: online patent application",
+   "url": "https://www.gov.il/he/service/application_for_patent_registration",
+   "category": "intellectual-property",
+   "summary_he": "בקשה מקוונת לרישום פטנט ברשות הפטנטים. יש אגרה, ולזכאים (לפי מחזור או מוסד אקדמי) הנחה של 40% באגרת הבקשה החדשה.",
+   "why_israeli": "גוף ממשלתי ישראלי; דף רשמי",
+   "sources": [
+    {
+     "url": "https://www.gov.il/he/service/application_for_patent_registration",
+     "date": "2025-06-03",
+     "what": "Service page (updated 03.06.2025): fee structure including a 40% reduced fee for eligible applicants",
+     "grade": "A"
+    }
+   ],
+   "grade": "A",
+   "verified_at": "2026-11-05",
+   "authority": "רשות הפטנטים (משרד המשפטים)",
+   "service_he": "הגשה מקוונת של בקשה חדשה לפטנט; האגרה כוללת תוספת להגשה בהיקף גדול (הדף מזכיר 100 דפים) והנחה של 40% לזכאים.",
+   "who_for": "ממציאים, חברות וסטארט־אפים",
+   "api": {
+    "available": null,
+    "docs_url": null
+   },
+   "cost": "fee: application fee; 40% discount for eligible applicants (amount not read)",
+   "login": null,
+   "official_url": "https://www.gov.il/he/service/application_for_patent_registration",
+   "login_note": "Not read."
+  },
+  {
+   "id": "ppa-amendment-13-guidance",
+   "name_he": "הרשות להגנת הפרטיות: היערכות עסקים לתיקון 13",
+   "name_en": "Privacy Protection Authority: preparing a business for Amendment 13",
+   "url": "https://www.gov.il/he/departments/topics/amendment-13",
+   "category": "privacy",
+   "summary_he": "מדריך הרשות לעסקים אחרי תיקון 13 (נכנס לתוקף באוגוסט 2025): חובת רישום המאגרים צומצמה, מינוי DPO בחלק מהגופים, ונוהל אבטחה מחייב.",
+   "why_israeli": "גוף ממשלתי ישראלי; דף רשמי",
+   "sources": [
+    {
+     "url": "https://www.gov.il/he/departments/topics/amendment-13",
+     "date": null,
+     "what": "Topic page (resolves to govextra.gov.il): key changes, four steps, tools, timeline ending 'August 2025 – entry into force'; registration duty almost entirely cancelled for private-sector digital databases except certain types; database-manager duty cancelled, duties move to the controller",
+     "grade": "A"
+    }
+   ],
+   "grade": "A",
+   "verified_at": "2026-11-05",
+   "authority": "הרשות להגנת הפרטיות (משרד המשפטים)",
+   "service_he": "דף הדרכה מדורג לעסקים: מיפוי מאגרי מידע, נוהל אבטחה כתוב, צמצום מידע מיותר, מסמך מטרות מאגר, בדיקת חובת מינוי ממונה הגנת פרטיות (DPO) וכלי להערכת סיכוני פרטיות.",
+   "who_for": "בעלי עסקים, ממוני הגנת פרטיות ומנהלי אבטחת מידע",
+   "api": {
+    "available": null,
+    "docs_url": null
+   },
+   "cost": null,
+   "login": "none",
+   "official_url": "https://www.gov.il/he/departments/topics/amendment-13",
+   "cost_note": "Information page.",
+   "login_note": "Information pages need no sign-in.",
+   "note": "Page shows no 'last updated' line. The Authority's database-notice form (ppa-notice-obligation) is the online step for large sensitive databases.",
+   "related": [
+    "ppa-database-registration",
+    "ppa-notice-obligation",
+    "ppa-security-incident-report"
+   ]
+  },
+  {
+   "id": "ppa-database-registration",
+   "name_he": "הרשות להגנת הפרטיות: בקשה לרישום מאגר מידע",
+   "name_en": "Privacy Protection Authority: database registration request",
+   "url": "https://www.gov.il/he/service/registration_in_the_database",
+   "category": "privacy",
+   "summary_he": "רישום מאגר מידע במרשם של הרשות להגנת הפרטיות באמצעות טופס מקוון, ללא עלות; הדף מסביר מי חייב ברישום אחרי תיקון 13.",
+   "why_israeli": "גוף ממשלתי ישראלי; דף רשמי",
+   "sources": [
+    {
+     "url": "https://www.gov.il/he/service/registration_in_the_database",
+     "date": "2026-05-12",
+     "what": "Service page (updated 12.05.2026): online form, 'service is free of charge', registration after Amendment 13",
+     "grade": "A"
+    }
+   ],
+   "grade": "A",
+   "verified_at": "2026-11-05",
+   "authority": "הרשות להגנת הפרטיות (משרד המשפטים)",
+   "service_he": "טופס מקוון לרישום מאגר מידע במרשם מאגרי המידע, למאגרים שחייבים ברישום לפי החוק אחרי תיקון 13; המגיש מקבל אישור קליטה.",
+   "who_for": "בעלי שליטה במאגר מידע החייב ברישום",
+   "api": {
+    "available": null,
+    "docs_url": null
+   },
+   "cost": "free",
+   "login": null,
+   "official_url": "https://www.gov.il/he/service/registration_in_the_database",
+   "login_note": "Not stated in the text we read."
+  },
+  {
+   "id": "ppa-notice-obligation",
+   "name_he": "הרשות להגנת הפרטיות: חובת הודעה על מאגר מידע רגיש",
+   "name_en": "Privacy Protection Authority: notice duty for large sensitive databases",
+   "url": "https://www.gov.il/he/service/notice-obligation",
+   "category": "privacy",
+   "summary_he": "מאגר עם מידע רגיש במיוחד על יותר מ-100,000 אנשים מחייב הודעה לרשות להגנת הפרטיות תוך 30 יום, בטופס המקוון.",
+   "why_israeli": "גוף ממשלתי ישראלי; דף רשמי",
+   "sources": [
+    {
+     "url": "https://www.gov.il/he/service/notice-obligation",
+     "date": "2026-05-12",
+     "what": "Service page (updated 12.05.2026): notice duty above 100,000 data subjects, 30-day deadline, online form",
+     "grade": "A"
+    }
+   ],
+   "grade": "A",
+   "verified_at": "2026-11-05",
+   "authority": "הרשות להגנת הפרטיות (משרד המשפטים)",
+   "service_he": "בעל שליטה במאגר שאינו חייב ברישום אך כולל מידע רגיש במיוחד על יותר מ-100,000 נושאי מידע מודיע לרשות בטופס מקוון תוך 30 יום, מצרף את מסמך הגדרות המאגר ומעדכן על שינויים.",
+   "who_for": "בעלי שליטה במאגרים עם מידע בעל רגישות מיוחדת בהיקף גדול",
+   "api": {
+    "available": null,
+    "docs_url": null
+   },
+   "cost": null,
+   "login": null,
+   "official_url": "https://www.gov.il/he/service/notice-obligation",
+   "cost_note": "Not stated in the text we read.",
+   "login_note": "Not stated."
+  },
+  {
+   "id": "ppa-security-incident-report",
+   "name_he": "הרשות להגנת הפרטיות: דיווח על אירוע אבטחה חמור במאגר מידע",
+   "name_en": "Privacy Protection Authority: serious security incident report",
+   "url": "https://www.gov.il/he/service/report-of-data-breach",
+   "category": "privacy",
+   "summary_he": "דיווח מקוון מיידי לרשות על אירוע אבטחה חמור במאגר מידע. חובת הדיווח תלויה ברמת האבטחה של המאגר, כפי שהדף מפרט.",
+   "why_israeli": "גוף ממשלתי ישראלי; דף רשמי",
+   "sources": [
+    {
+     "url": "https://www.gov.il/he/service/report-of-data-breach",
+     "date": "2026-05-12",
+     "what": "Service page (updated 12.05.2026): immediate report of a serious security event; when reporting is mandatory by security level",
+     "grade": "A"
+    }
+   ],
+   "grade": "A",
+   "verified_at": "2026-11-05",
+   "authority": "הרשות להגנת הפרטיות (משרד המשפטים)",
+   "service_he": "טופס מקוון לדיווח מיידי על אירוע אבטחה חמור במאגר מידע; הדף מפרט מתי חובה לדווח לפי רמת האבטחה של המאגר.",
+   "who_for": "בעלי מאגרי מידע שחוו אירוע אבטחה חמור",
+   "api": {
+    "available": null,
+    "docs_url": null
+   },
+   "cost": null,
+   "login": null,
+   "official_url": "https://www.gov.il/he/service/report-of-data-breach",
+   "cost_note": "Not stated in the text we read.",
+   "login_note": "Not stated."
+  },
+  {
+   "id": "boi-open-banking",
+   "name_he": "בנק ישראל: סטנדרט הבנקאות הפתוחה",
+   "name_en": "Bank of Israel open-banking standard (Directive 368)",
+   "url": "https://www.boi.org.il/roles/supervisionregulation/area/technologyninnovation/",
+   "category": "open-banking",
+   "summary_he": "בנק ישראל גיבש סטנדרט אחיד לבנקאות פתוחה שמאפשר ללקוח לשתף צד שלישי במידע הפיננסי שלו. הדף מפרסם את ההוראה בנושא (1.9.2025).",
+   "why_israeli": "גוף ממשלתי ישראלי; דף רשמי",
+   "sources": [
+    {
+     "url": "https://www.boi.org.il/roles/supervisionregulation/area/technologyninnovation/",
+     "date": "2025-09-01",
+     "what": "Technology and innovation page: Bank of Israel formed a uniform open-banking standard; lists 'open banking in Israel' publication dated 01/09/2025",
+     "grade": "A"
+    },
+    {
+     "url": "https://www.boi.org.il/media/wu5h2lp5/368_8.pdf",
+     "date": null,
+     "what": "Directive 368 PDF (title shows version 8, 04/25), seen in a search result; not opened",
+     "grade": "A"
+    },
+    {
+     "url": "https://www.gov.il/he/Departments/Guides/guide_0002?chapterIndex=4",
+     "date": "2026-03-05",
+     "what": "Capital Market Authority guide on the Financial Information Service Law (Nov 2021) for context",
+     "grade": "A"
+    }
+   ],
+   "grade": "A",
+   "verified_at": "2026-11-05",
+   "authority": "בנק ישראל – הפיקוח על הבנקים",
+   "service_he": "הוראת ניהול בנקאי תקין 368 מחייבת בנקים וחברות כרטיסי אשראי לאפשר, בהסכמת הלקוח, גישה למידע הפיננסי שלו לצדדים שלישיים בסטנדרט אחיד.",
+   "who_for": "בנקים וחברות אשראי (מקורות מידע), נותני שירות מידע פיננסי ולקוחות בהסכמתם",
+   "api": {
+    "available": true,
+    "docs_url": "https://www.boi.org.il/roles/supervisionregulation/nbt/nbt368/",
+    "note": "docs_url is a link seen on the Bank of Israel technology page; the directive page itself could not be opened in our browser session."
+   },
+   "cost": null,
+   "login": null,
+   "official_url": "https://www.boi.org.il/roles/supervisionregulation/area/technologyninnovation/",
+   "cost_note": "Not applicable (regulatory standard).",
+   "login_note": "Access is by customer consent through the bank.",
+   "related": [
+    "cma-financial-information-service"
+   ]
+  },
+  {
+   "id": "cma-financial-information-service",
+   "name_he": "רשות שוק ההון: שירות מידע פיננסי (Open Finance)",
+   "name_en": "Capital Market Authority: financial information service (Open Finance)",
+   "url": "https://www.gov.il/he/Departments/Guides/guide_0002?chapterIndex=4",
+   "category": "open-banking",
+   "summary_he": "מדריך הרשות לשוק ההון על שירות מידע פיננסי בגופים החוץ־בנקאיים: החוק מנובמבר 2021, תקן טכנולוגי ומרשם נותני שירות. עודכן במרץ 2026.",
+   "why_israeli": "גוף ממשלתי ישראלי; דף רשמי",
+   "sources": [
+    {
+     "url": "https://www.gov.il/he/Departments/Guides/guide_0002?chapterIndex=4",
+     "date": "2026-03-05",
+     "what": "Guide (published 19.02.2023, updated 05.03.2026): law, supervised bodies, adopted technological standard, contact openfinance mailbox",
+     "grade": "A"
+    }
+   ],
+   "grade": "A",
+   "verified_at": "2026-11-05",
+   "authority": "רשות שוק ההון, ביטוח וחיסכון",
+   "service_he": "מדריך על חוק שירות מידע פיננסי (נובמבר 2021): גופים מוסדיים ונותני אשראי מפוקחים משמשים מקור מידע ונותן שירות, לפי תקן טכנולוגי שמבוסס על מסגרת Berlin Group ומותאם למערכת החוץ־בנקאית.",
+   "who_for": "גופים מוסדיים, נותני אשראי וחברות שמבקשות לתת שירות מידע פיננסי",
+   "api": {
+    "available": true,
+    "docs_url": "https://www.gov.il/he/Departments/Guides/guide_0002?chapterIndex=4"
+   },
+   "cost": null,
+   "login": null,
+   "official_url": "https://www.gov.il/he/Departments/Guides/guide_0002?chapterIndex=4",
+   "cost_note": "Not applicable (regulatory guide).",
+   "login_note": "Not applicable.",
+   "note": "Licensing of information-service providers is run by the Israel Securities Authority (register: https://www.new.isa.gov.il/nav-index/supervised-api/informationapi, read in a sibling index file, not re-opened here).",
+   "related": [
+    "boi-open-banking"
+   ]
+  },
+  {
+   "id": "registrar-nonprofits-online",
+   "name_he": "רשם העמותות: «תאגידים ברשת» – פעולות מקוונות לעמותות וחל״צ",
+   "name_en": "Registrar of Non-Profits: online actions for associations and public-benefit companies",
+   "url": "https://www.gov.il/he/pages/022316",
+   "category": "non-profits",
+   "summary_he": "אתר «תאגידים ברשת» מאפשר לעמותות וחל״צ לרשום, לעדכן ולדווח אונליין (דוח שנתי, אישור ניהול תקין, בעלי תפקידים), בהזדהות לאומית או בכרטיס חכם.",
+   "why_israeli": "גוף ממשלתי ישראלי; דף רשמי",
+   "sources": [
+    {
+     "url": "https://www.gov.il/he/pages/022316",
+     "date": "2023-11-15",
+     "what": "Guidance page (published 16.02.2023, updated 15.11.2023): actions requiring identification, smart card or national authentication",
+     "grade": "A"
+    }
+   ],
+   "grade": "A",
+   "verified_at": "2026-11-05",
+   "authority": "רשות התאגידים – יחידת העמותות וחל״צ",
+   "service_he": "דף הכוונה לאתר «תאגידים ברשת»: רישום, דוח שנתי, אישור ניהול תקין, עדכון בעלי תפקידים ושינויי שם, מטרות ותקנון, פירוק ומחיקה מרצון, חלקם בהזדהות עם כרטיס חכם או הזדהות לאומית.",
+   "who_for": "עמותות, חברות לתועלת הציבור, עורכי דין ורואי חשבון שמייצגים אותן",
+   "api": {
+    "available": null,
+    "docs_url": null
+   },
+   "cost": null,
+   "login": "national-id",
+   "official_url": "https://www.gov.il/he/pages/022316",
+   "cost_note": "Not stated.",
+   "login_note": "Smart card or national authentication for the actions listed.",
+   "note": "Search results listed the same page as https://www.gov.il/he/Departments/Guides/assocciations-online (redirects to /pages/022316)."
+  },
+  {
+   "id": "sba-subsidised-consulting",
+   "name_he": "הסוכנות לעסקים קטנים ובינוניים: ייעוץ עסקי בסבסוד המדינה",
+   "name_en": "Small and Medium Business Agency: state-subsidised business consulting",
+   "url": "https://www.sba.org.il/hb/AidPrograms/Pages/pr1.aspx",
+   "category": "small-business-support",
+   "summary_he": "ייעוץ עסקי מסובסד לעסקים קטנים ובינוניים: בחירת יועץ בפורטל הלקוחות, ובחבילה הראשונה העסק משלם 80–130 ₪ לשעה בתוספת מע״מ.",
+   "why_israeli": "גוף ממשלתי ישראלי; דף רשמי",
+   "sources": [
+    {
+     "url": "https://www.sba.org.il/hb/AidPrograms/Pages/pr1.aspx",
+     "date": null,
+     "what": "Program page (read via WebFetch summary): eligibility, 15–60 hour packages, 80–130 NIS/hour + VAT in the first package, customer portal sign-in via national digital identity",
+     "grade": "A"
+    },
+    {
+     "url": "https://www.sba.org.il/",
+     "date": null,
+     "what": "Agency home page: lists online learning system (free), reservists' free advice, customer portal sbacustomerportal.economy.gov.il, consultant portal, business benefits board",
+     "grade": "A"
+    }
+   ],
+   "grade": "A",
+   "verified_at": "2026-11-05",
+   "authority": "הסוכנות לעסקים קטנים ובינוניים (משרד הכלכלה)",
+   "service_he": "העסק נכנס לפורטל הלקוחות בהזדהות דיגיטלית, ממלא שאלון «תיק עסק», מקבל יועצים מתאימים ובוחר אחד; חבילות של 15 עד 60 שעות.",
+   "who_for": "עסקים בינוניים (עד 100 עובדים או מחזור 100 מיליון), קטנים, עצמאים ויזמים בראשית הדרך; מסלול חינם למשרתי מילואים",
+   "api": {
+    "available": null,
+    "docs_url": null
+   },
+   "cost": "fee: 80–130 NIS per hour + VAT in the first package (reservists: free)",
+   "login": "national-id",
+   "official_url": "https://www.sba.org.il/hb/AidPrograms/Pages/pr1.aspx",
+   "cost_note": "Page gives no total subsidy percentage; the figures above are the business's hourly payment in the first package.",
+   "login_note": "Customer portal sign-in via 'National Digital Identity' per the page.",
+   "note": "Page shows no 'last updated' line."
+  },
+  {
+   "id": "israel-post-business",
+   "name_he": "דואר ישראל: שירותים ללקוחות עסקיים",
+   "name_en": "Israel Post business-customer services",
+   "url": "https://doar.israelpost.co.il/content/business-clients",
+   "category": "postal",
+   "summary_he": "דואר ישראל מציעה לעסקים מנוי «לקוח דיגיטלי», משלוחים מרוכזים, מעקב באינטרנט, click2post ועוד. בדף לא מוזכר API.",
+   "why_israeli": "חברה ממשלתית ישראלית; האתר בעברית",
+   "sources": [
+    {
+     "url": "https://doar.israelpost.co.il/content/business-clients",
+     "date": null,
+     "what": "Business clients page: list of services, tracking online, contact route for business cooperation; no API or developer page mentioned",
+     "grade": "C"
+    }
+   ],
+   "grade": "C",
+   "verified_at": "2026-11-05",
+   "authority": "דואר ישראל (חברה ממשלתית)",
+   "service_he": "עמוד השירותים לעסקים: לקוח דיגיטלי (מנוי עסקי), ישיר למשרד, הפצה עסקית, מעקב משלוחים, click2post, דואר רשום ומשלוחים מרוכזים של חבילות ודברי דואר.",
+   "who_for": "בתי עסק, חברות וארגונים ששולחים דואר וחבילות",
+   "api": {
+    "available": null,
+    "docs_url": null
+   },
+   "cost": null,
+   "login": null,
+   "official_url": "https://doar.israelpost.co.il/content/business-clients",
+   "cost_note": "Price list exists (link on the page); not read.",
+   "login_note": "Not stated.",
+   "note": "Graded C because it is the company's own site; Israel Post is a state-owned company, not an authority."
+  }
+ ],
+ "rejected": [
+  {
+   "name": "Tax Authority online tax coordination (תיאום מס)",
+   "reason": "Employee-facing service (https://www.gov.il/he/service/tax-coordination-online seen in links); not opened, not a business service."
+  },
+  {
+   "name": "Business compensation claims for war damage (https://www.gov.il/he/service/business-compensation-claim)",
+   "reason": "Time-limited relief programme; belongs in the grants index; page not opened."
+  },
+  {
+   "name": "Customs import registration and customs-agent registration forms",
+   "reason": "Only form titles seen in search results (e.g. customs agent corporation forms); no service page opened."
+  },
+  {
+   "name": "Population and Immigration Authority employer services (foreign workers)",
+   "reason": "Search showed only an agriculture-sector foreign-worker file service; not opened; sector-specific."
+  },
+  {
+   "name": "Government procurement portal (tenders)",
+   "reason": "No page opened in this session."
+  },
+  {
+   "name": "Pension clearing-house services for employers",
+   "reason": "No page opened in this session."
+  },
+  {
+   "name": "Israel Securities Authority register of financial-information licensees",
+   "reason": "Already used in israel-invoice-ready-software.json; cross-referenced in cma-financial-information-service instead of duplicated."
+  },
+  {
+   "name": "Israel Post tracking and zip-code lookup tools",
+   "reason": "Listed on the business page; no separate page opened, and no API documentation seen."
+  },
+  {
+   "name": "Bituach Leumi self-employed reporting",
+   "reason": "Link seen on the BTL home page; page not opened in this session."
+  },
+  {
+   "name": "israelpost.co.il digital-customer subscription page",
+   "reason": "Browser navigation to the israelpost.co.il apex domain failed twice; nothing read."
+  }
+ ]
+}

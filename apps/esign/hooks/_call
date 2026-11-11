@@ -1,0 +1,17 @@
+#!/usr/bin/env bash
+# One HTTP call into the app's own container (the app is the only holder of its store), and its JSON back.
+# Usage: _call <METHOD> <path+query> [json-body]
+set -uo pipefail
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
+. "${REPO_ROOT}/scripts/lib.sh"
+DN="$(read_env_value DEPLOYMENT_NAME)"; DN="${DN:-bina-deployment}"
+exec docker exec -e M="${1}" -e P="${2}" -e B="${3:-}" "esign-${DN}" python3 -c '
+import json,os,urllib.request
+m,p,b=os.environ["M"],os.environ["P"],os.environ.get("B") or ""
+req=urllib.request.Request("http://127.0.0.1:8080"+p, data=(b.encode() if b else None), method=m,
+                           headers={"content-type":"application/json"})
+try:
+    with urllib.request.urlopen(req, timeout=600) as r: print(r.read().decode())
+except Exception as e: raise SystemExit("esign: %s" % e)
+'

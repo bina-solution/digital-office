@@ -17,6 +17,8 @@
     <string name="engine">הלשכה בטלפון</string>
     <string name="engine_running">הלשכה בטלפון רצה</string>
     <string name="engine_stop">עצירה</string>
+    <!-- the status screen (DGO-1328), from the notification and the first screen -->
+    <string name="status">מצב</string>
     <!-- the console -->
     <string name="no_download">את הקובץ הזה אי אפשר להוריד מכאן</string>
     <string name="webview_old_title">רכיב התצוגה של הטלפון ישן</string>

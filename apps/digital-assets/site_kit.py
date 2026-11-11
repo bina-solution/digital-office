@@ -1,13 +1,23 @@
 """digital-assets.site_kit — every text and picture on the website is a slot.
 
-The contract with a website is five HTML attributes, and nothing else (no script on the page, no
-runtime fetch, nothing that search engines cannot read):
+The contract with a website is HTML attributes, and nothing else (no script on the page, no runtime
+fetch, nothing that search engines cannot read):
 
     <h1 data-da="content.website.home-hero">…</h1>              the element's TEXT is the slot
     <img data-da-src="identity.logo.primary" src="…">            the image's SRC is the slot's file
     <a data-da-href="content.docs.home" href="…">…</a>           the link's HREF
     <meta name="description" data-da-content="identity.description.short" content="…">
     <img data-da-alt="identity.name.brand-he" alt="…">           an ALT text
+    <input data-da-placeholder="content.website.form-name" placeholder="…">   a field's PLACEHOLDER
+    <a data-da-title="content.website.reset" title="…">                    a TITLE (the tooltip)
+    <button data-da-aria-label="content.website.menu" aria-label="…">      what a screen reader says
+
+    <span data-da-attr-data-to-value="content.website.units" data-to-value="…">   ANY other attribute
+
+The last four are texts a visitor reads (or hears) as much as a heading: a contact form's «שם» and
+«אימייל», a menu button's «תפריט», the number a counter widget counts up to (it lives in
+`data-to-value`; the element's own text is only where the animation starts). A text that lives only
+in an attribute was otherwise the one text on a page that could not come from digital assets.
 
 `scan(html)` lists what a page already maps (key, attribute, current value) and — just as useful —
 what it does NOT map yet: every heading, paragraph, button, image and meta description, so the owner
@@ -32,7 +42,9 @@ from html.parser import HTMLParser
 from pathlib import Path
 
 ATTRS = {"data-da": "text", "data-da-src": "src", "data-da-href": "href",
-         "data-da-content": "content", "data-da-alt": "alt"}
+         "data-da-content": "content", "data-da-alt": "alt", "data-da-placeholder": "placeholder",
+         "data-da-title": "title", "data-da-aria-label": "aria-label"}
+ATTR_PREFIX = "data-da-attr-"
 VOID = {"area", "base", "br", "col", "embed", "hr", "img", "input", "link", "meta", "param",
         "source", "track", "wbr"}
 CANDIDATES = {"h1", "h2", "h3", "p", "button", "title", "img", "a", "li", "figcaption", "blockquote"}
@@ -92,12 +104,21 @@ def _plain(fragment: str) -> str:
     return re.sub(r"\s+", " ", htmllib.unescape(re.sub(r"<[^>]+>", " ", fragment or ""))).strip()
 
 
+def _mapping(attrs: dict) -> list[tuple[str, str]]:
+    """(the data-da attribute, what it sets) for one element: the named ones in ATTRS, then every
+    `data-da-attr-<name>` — any other attribute whose value is a text (a counter's `data-to-value`)."""
+    out = [(a, w) for a, w in ATTRS.items() if attrs.get(a)]
+    out += [(a, a[len(ATTR_PREFIX):]) for a in attrs
+            if a.startswith(ATTR_PREFIX) and len(a) > len(ATTR_PREFIX) and attrs.get(a)]
+    return out
+
+
 def scan(text: str) -> dict:
     mapped, candidates = [], []
     for el in _elements(text):
-        keys = [(a, el["attrs"][a]) for a in ATTRS if el["attrs"].get(a)]
-        for attr, key in keys:
-            what = ATTRS[attr]
+        pairs = _mapping(el["attrs"])
+        keys = [(a, el["attrs"][a]) for a, _ in pairs]
+        for (attr, key), (_, what) in zip(keys, pairs):
             cur = _plain(el["text"]) if what == "text" else el["attrs"].get(what, "")
             mapped.append({"key": key, "what": what, "tag": el["tag"], "current": (cur or "")[:200]})
         if keys or el["tag"] not in CANDIDATES:
@@ -120,11 +141,31 @@ def scan(text: str) -> dict:
             "keys": sorted({m["key"] for m in mapped})}
 
 
+try:
+    # The tag's attributes are walked with the SAME expressions HTMLParser uses to read them into
+    # `el["attrs"]`, so the attribute replaced here is by construction the one the parser saw: a quoted
+    # value is consumed whole (`onclick="… title='x'"` is not a title), and an unquoted one with `=` in it
+    # (`href=?p=2`) does not end the walk — which, when it did, appended a SECOND attribute: the browser
+    # shows the first (old) value, the parser keeps the last, and the slot silently never appeared.
+    from html.parser import attrfind_tolerant as _ATTRFIND, tagfind_tolerant as _TAGFIND
+except ImportError:                                    # pragma: no cover — the stdlib's own, as of 3.9–3.12
+    _ATTRFIND = re.compile(r'((?<=[\'"\s/])[^\s/>][^\s/=>]*)(\s*=+\s*(\'[^\']*\'|"[^"]*"|(?![\'"])[^>\s]*))?'
+                           r'(?:\s|/(?!>))*')
+    _TAGFIND = re.compile(r'([a-zA-Z][^\t\n\r\f />\x00]*)(?:\s|/(?!>))*')
+
+
 def _set_attr(raw: str, name: str, value: str) -> str:
     esc = htmllib.escape(value, quote=True)
-    pat = re.compile(r'(\s' + re.escape(name) + r'\s*=\s*)("[^"]*"|\'[^\']*\'|[^\s>]+)', re.I)
-    if pat.search(raw):
-        return pat.sub(lambda m: f'{m.group(1)}"{esc}"', raw, count=1)
+    tag = _TAGFIND.match(raw, 1)
+    k = tag.end() if tag else len(raw)
+    while k < len(raw):
+        m = _ATTRFIND.match(raw, k)
+        if not m or m.end() == k:
+            break
+        if m.group(1).lower() == name.lower():
+            end = m.end(2) if m.group(2) else m.end(1)
+            return f'{raw[:m.start(1)]}{m.group(1)}="{esc}"{raw[end:]}'
+        k = m.end()
     close = raw.rstrip()
     tail = "/>" if close.endswith("/>") else ">"
     body = close[: -len(tail)].rstrip()
@@ -149,10 +190,8 @@ def apply(text: str, bundle: dict, file_url=None) -> tuple[str, dict]:
     for el in _elements(text):
         raw = el["raw"]
         new_raw = raw
-        for attr, what in ATTRS.items():
+        for attr, what in _mapping(el["attrs"]):
             key = el["attrs"].get(attr)
-            if not key:
-                continue
             used.add(key)
             entry = slots.get(key)
             if not entry:
@@ -166,8 +205,18 @@ def apply(text: str, bundle: dict, file_url=None) -> tuple[str, dict]:
                     edits.append((el["inner_start"], el["inner_end"], new_inner))
                     changed.append({"key": key, "what": what})
             else:
-                value = (file_url(entry) if (file_url and entry.get("url") and what == "src")
-                         else entry.get("url") if what == "src" else entry.get("text") or entry.get("url") or "")
+                # A FILE goes through `file_url` into whichever attribute names it (a lazy loader's
+                # `data-src` as much as `src`): the bundle's own URL is the asset service's internal
+                # address, which a page must never show. A TEXT goes in as it is — except into `src`,
+                # where a text slot has nothing to point at and the attribute is left as it was.
+                url = entry.get("url")
+                as_file = (file_url(entry) if file_url else url) if url else None
+                if what == "src":
+                    value = as_file
+                else:
+                    value = entry.get("text") or as_file or ""
+                if value is None:
+                    continue
                 if el["attrs"].get(what) != value:
                     new_raw = _set_attr(new_raw, what, value)
                     changed.append({"key": key, "what": what})

@@ -25,6 +25,12 @@ WHAT THIS CHECKS, and why in two halves:
     is off screen, every app the dock did not draw is behind the door, and a panel tile opens — and
     that a window's three controls mirror with its bar (the desktop's other bug; the static half
     refuses the stylesheet rule that caused it).
+  * DGO-1637, both halves: the screen around the dock is whole at every width from 360 up. Static: a
+    compact desk does not hide its menu bar, its dock is no sideways scroller, the resize of a narrower
+    desk fits the bar and budgets the dock again before it returns, the bar is fitted to its room on
+    every geometry change, and the desk takes a framed app's search (so Files drops its phone tabs).
+    Measured: `dock-fit.py --narrow/--phones` — a desk opened at 1440 narrowed in place to 1100…360,
+    and a phone opened at 390 and 360.
 
 WARN MODE FOR ONE RELEASE. `run-gates.py` invokes this with `--warn` (see GATE_ARGS): a failed live
 measurement is printed as WARN and exits 0, per the design doc's §8.5 and AGENTS.md's staged-rollout
@@ -101,6 +107,30 @@ def static_checks() -> list[str]:
     elif re.search(r"(^|;)\s*direction\s*:", lights.group(1)):
         bad.append("desktop.css pins .dk-lights to a direction of its own — the window's controls "
                    "must inherit the bar's, or the group mirrors and its contents do not")
+    # DGO-1637 — a desk made NARROWER keeps a whole screen («התפריט … נחתך באמצע ברגע שהמסך צר מדי, זה
+    # באג»). Compact hid the menu bar (the search and every menu went with it) and left the resize before
+    # the dock was budgeted again, so the wide dock ran off the screen as a sideways scroller, and Files
+    # drew its phone tabs above it: two bars. Each half of that is refused here by name.
+    for sel, body in re.findall(r"([^{}]+)\{([^{}]*)\}", re.sub(r"/\*.*?\*/", "", css, flags=re.S)):
+        # one spelling of a selector: spaces collapsed, none around a combinator (`.dk.compact>.dk-bar`)
+        sels = [re.sub(r"\s*([>+~])\s*", r" \1 ", re.sub(r"\s+", " ", s.strip())) for s in sel.split(",")]
+        sels = [s.replace(" > ", " ") for s in sels]
+        if ".dk.compact .dk-bar" in sels and re.search(r"display\s*:\s*none", body):
+            bad.append("desktop.css hides the menu bar in compact: a narrowed desk loses its search and "
+                       "every menu (DGO-1637)")
+        if ".dk.compact .dk-dock" in sels and re.search(r"overflow(-x)?\s*:\s*(auto|scroll)", body):
+            bad.append("desktop.css makes the compact dock a sideways scroller — the dock is budgeted for "
+                       "the width it has instead (DGO-1637)")
+    narrow = re.search(r"if \(root && !wideEnough\(\)\) \{(.*?)return;", desktop, re.S)
+    if not narrow or "buildDock()" not in narrow.group(1) or "applyBarGeom(" not in narrow.group(1):
+        bad.append("desktop.js leaves the resize of a narrower desk before its bar and its dock are fitted "
+                   "again — the wide dock runs off the screen (DGO-1637)")
+    if "function fitBar" not in desktop or not re.search(r"function applyBarGeom\([^)]*\)\s*\{[^}]*fitBar\(\)", desktop):
+        bad.append("desktop.js does not fit the menu bar to its room on every geometry change — a row of "
+                   "fixed widths wider than its room is cut (DGO-1637)")
+    if '"bina:search-offer"' not in desktop or '"bina:search-taken"' not in desktop:
+        bad.append("desktop.js does not take a framed app's search in compact — Files then draws its "
+                   "phone tabs above the dock: two bars (DGO-1637)")
     return bad
 
 
@@ -164,7 +194,8 @@ def main() -> int:
             print(f"  FAIL  {b}")
     else:
         print("  PASS  static: one pure budget, asked for on every width; tiles sized by token, "
-              "never shrinking; an «עוד» door for what does not fit")
+              "never shrinking; an «עוד» door for what does not fit; a narrowed desk keeps its bar "
+              "(fitted to its room), a dock budgeted again, and takes its app's search")
         print(f"  PASS  arithmetic: {said_math}")
 
     measured: bool | None = None

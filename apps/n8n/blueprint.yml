@@ -13,7 +13,7 @@ parts:
   credentials:
     path: ./credentials
     format: json            # export:credentials — id/name/type readable; secret AES-encrypted
-    count: 24
+    count: 25
 community_nodes:            # npm packages reinstalled on push (N8N_REINSTALL_MISSING_PACKAGES)
   []
 active_workflows:           # SNAPSHOT of what was active when pulled — read by nothing
@@ -40,6 +40,8 @@ credential_overrides:       # local/owned creds RE-SEEDED from .env on push (n8n
   7EtGaV94DlDDrs7q: {"name":"Ollama account [env-managed]","type":"ollamaApi","data":{"baseUrl":"${OLLAMA_INTERNAL_URL}"}}
   # --- remote keys (real value lives in .env / .env.ex; routed into the cred) ---
   xu8Y1cko7L6LmqMd: {"name":"OpenAi account [env-managed]","type":"openAiApi","data":{"apiKey":"${OPENAI_API_KEY}"}}
+  # the Google Workspace agent's own (DGO-1814): its image/audio tools ask whether THIS key is set before they send
+  gwaAgentOpenAi01: {"name":"OpenAi — Google Workspace agent [env-managed]","type":"openAiApi","data":{"apiKey":"${GOOGLE_WORKSPACE_AGENT_OPENAI_API_KEY}"}}
   EmuwriU7cnK5nZTM: {"name":"N8N TG LOGGER [env-managed]","type":"telegramApi","data":{"accessToken":"${TELEGRAM_BOT_TOKEN}"}}
   BmKlKWiEeZAxNWyi: {"name":"Chat Auth [env-managed]","type":"httpBasicAuth","data":{"user":"${CHAT_AUTH_USER}","password":"${CHAT_AUTH_PASS}"}}
   # --- adjacent automations (MCP servers / ERP / Document AI) ---

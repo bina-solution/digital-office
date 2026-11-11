@@ -17,7 +17,7 @@ import sys, os, json, time, subprocess, shutil, csv, re, random, hashlib
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 BASE = 'http://localhost:5678'
 CK = os.path.join(ROOT, 'data', '_runs', 'hll_cookies.txt')
-DN = 'shlomo-laptop'
+DN = 'owner-laptop'
 CRED_DRIVE = 'KirWFwoFdEFmnN0R'
 IDS_FILE = '/home/node/.n8n-files/hll_link_ids.json'
 random.seed()
@@ -52,7 +52,7 @@ def rest(method, path, body=None):
 
 
 def psql_n8n(q):
-    return subprocess.run(['docker', 'exec', f'n8n-postgres-{DN}', 'psql', '-U', 'hacohen', '-d', 'n8n', '-tAc', q],
+    return subprocess.run(['docker', 'exec', f'n8n-postgres-{DN}', 'psql', '-U', 'example', '-d', 'n8n', '-tAc', q],
                           capture_output=True, text=True, encoding='utf-8', errors='replace').stdout.strip()
 
 

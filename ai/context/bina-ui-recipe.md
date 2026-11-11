@@ -498,6 +498,7 @@ document.body.style.setProperty('--dsh-content-font-size', '14px')
   `digital-office/sim/overlay/responsive.js` (‏`table{display:block;max-width:100%;overflow-x:auto}`
   ≤820px).
 * **ניווט הטלפון מקודד קשיח ארבעה מזהי layer 3:** `app.js:299` — `["drive","mail","chat","incoming"]`.
+  **תוקן 2026-11-10 (DGO-1800, ff96948a1):** אפליקציה מצהירה `module.tab: true`, והסרגל לוקח את המצהירות בסדר המסילה.
   חמש האפליקציות הפעילות האחרות (computers/sites/domains/telegram-tv/git) נגישות בטלפון **רק**
   דרך כפתור "עוד" שפותח את לוח הפקודות. `chat` מבוטל, כלומר בפועל 3 אריחים מתוך 9.
 * **`.bizform{grid-template-columns:1fr 1fr}` (`style.css:329`) לא מכוסה** ב-`@media (max-width:640px)`
@@ -644,7 +645,8 @@ height:100dvh;overflow:hidden}`, `min-width:0` על כל עמודה, גולל י
 * `env(safe-area-inset-bottom)` ל-`.bottomnav` + `viewport-fit=cover` ב-`index.html:5`.
 * החלפת 4 שימושי ה-`vh` שנשארו בקונסול ל-`dvh`; `<meta viewport>` ל-`connections`.
 * **ניווט הטלפון לא יקודד קשיח** `["drive","mail","chat","incoming"]` (`app.js:299`) — לגזור אותו
-  מ-`.generated/registry/console.modules.yaml` (אותו מקור שהאריחים נבנים ממנו).
+  מ-`.generated/registry/console.modules.yaml` (אותו מקור שהאריחים נבנים ממנו). **נעשה (DGO-1800, ff96948a1):**
+  `tab: true` על האריח, מתוך ה-`app.json` של האפליקציה.
 
 ### שלב 6 — הפיכת ה-lint של ה-viewport לגלובלי (חצי יום)
 `scripts/ops/lint_viewport_units.py` — מהרחבת ה-scope שלו מחדר המסמכים של indox לכל 24 המשטחים,

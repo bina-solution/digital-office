@@ -64,7 +64,7 @@ def text_boolean_columns():
     # at all -- which looks identical to "no boolean columns exist".
     sql = " ".join(l for l in COLUMN_SQL.split("\n") if not l.strip().startswith("--"))
     out = subprocess.run(
-        DOCKER + ["exec", "-i", "supabase-db-shlomo-laptop", "psql", "-U", "postgres", "-tAc", sql],
+        DOCKER + ["exec", "-i", "supabase-db-owner-laptop", "psql", "-U", "postgres", "-tAc", sql],
         capture_output=True, text=True, encoding="utf-8", errors="replace")
     if out.returncode != 0 or not out.stdout.strip():
         sys.stderr.write((out.stderr or "").strip()[:400] + "\n")

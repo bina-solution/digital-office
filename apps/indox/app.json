@@ -6,6 +6,7 @@
   },
   "layer": 3,
   "kind": "service",
+  "page": "documents",
   "version": "2.3.0",
   "summary": {
     "he": "עיבוד מסמכים נכנסים מקצה לקצה — סנכרון, חילוץ, תיוק ותצוגה.. בקרוב גם מרכז ניהול מסמכים כללים של העסק ",
@@ -175,6 +176,7 @@
         "name": "מסמכים",
         "desc": "עיבוד מסמכים אוטומטי (INDOX)",
         "order": 0,
+        "tab": true,
         "url_env": "INCOMING_UI_URL",
         "url": "http://incoming-documents:8080"
       },
@@ -200,6 +202,9 @@
     "paths": [
       "apps/indox/storage"
     ],
+    "writers": [
+      "incoming-documents"
+    ],
     "on_uninstall": "prompt",
     "sql": [
       {
@@ -214,21 +219,17 @@
           "settings_history",
           "ai_extraction_cache",
           "sync_ledger",
-          "sync_pipe_state",
-          "sync_attempt",
           "sync_cursor",
-          "tag_rules",
           "bs_extracted_lines",
           "indox_action_execution_log",
           "indox_priority_local",
           "indox_dashboard_stats",
-          "indox_sync_stats",
           "merge_audit"
         ],
         "shared_tables": [
           "ai_extraction_cache"
         ],
-        "note": "SHARED vs PER-INSTANCE: every table here is per-instance (one copy in each indox_<id> schema) EXCEPT those in shared_tables, which live once in public and are addressed by every instance. ai_extraction_cache is shared on purpose (owner, 2026-08-28): it is keyed by content hash, so the same supplier PDF arriving at two clients is OCR'd once rather than twice. It must never be schema-qualified — indoxApi01's Build Table Get / Build Table Upsert hold the SHARED map that enforces this. [2026-08-27] Five tables were live but UNDECLARED, so data-management scored them UNCLAIMED and they were in no export, backup or deployment transfer: incoming_documents_archive (15,366 rows, and registered as a repo the console can switch to), indox_action_execution_log (485k rows, the action-log source of truth), indox_priority_local (the ERP stand-in), and the two live aggregates indox_dashboard_stats / indox_sync_stats. settings_history is new in the same change. Nineteen further public.* tables carry the indox_/incoming_ prefix and are deliberately NOT listed: they are dated scratch from past migrations (see the stale list in the tenancy review) and declaring them would enshrine debris in every future backup."
+        "note": "SHARED vs PER-INSTANCE: every table here is per-instance (one copy in each indox_<id> schema) EXCEPT those in shared_tables, which live once in public and are addressed by every instance. ai_extraction_cache is shared on purpose (owner, 2026-08-28): it is keyed by content hash, so the same supplier PDF arriving at two clients is OCR'd once rather than twice. It must never be schema-qualified — indoxApi01's Build Table Get / Build Table Upsert hold the SHARED map that enforces this. [2026-08-27] Five tables were live but UNDECLARED, so data-management scored them UNCLAIMED and they were in no export, backup or deployment transfer: incoming_documents_archive (15,366 rows, and registered as a repo the console can switch to), indox_action_execution_log (485k rows, the action-log source of truth), indox_priority_local (the ERP stand-in), and the two live aggregates indox_dashboard_stats / indox_sync_stats. settings_history is new in the same change. Nineteen further public.* tables carry the indox_/incoming_ prefix and are deliberately NOT listed: they are dated scratch from past migrations (see the stale list in the tenancy review) and declaring them would enshrine debris in every future backup. [2026-11-10, DGO-120] Four declared tables are gone and are no longer declared. sync_pipe_state and indox_sync_stats were DROPPED (2026-09-02_sync_item_counts.sql; the board reads the sync_item_counts and sync_item_reasons views). sync_attempt and tag_rules were RENAMED, to sync_attempt_retired_20260902 (2026-09-02_sync_item.sql; folded into sync_ledger) and tag_rules_retired_20260903 (2026-09-03_retire_tag_rules.sql; N1, one rules store in the mail organizer). The renamed copies still hold their old rows on the instances that had them, and they are deliberately not declared: like the dated scratch above, they are history, and declaring them would carry debris into every backup. schema.sql creates none of the four, and every table still listed is one schema.sql creates."
       }
     ]
   },

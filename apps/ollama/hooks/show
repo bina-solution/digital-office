@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+#: show — what a model is (family, size, quantization, context; reads):  ./bbox ollama show <model> [--office <office>] [--json]
+# apps/ollama/llm.py does the asking (POST /api/show): through this office's front, or a linked office's Ollama with
+# --office.
+set -uo pipefail
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
+. "${REPO_ROOT}/scripts/lib.sh"
+case "${1:-}" in -h|--help) sed -n 's/^#: //p' "${BASH_SOURCE[0]}"; exit 0 ;; esac
+front=""; running "ollama-screen-${DN}" && front="ollama-screen-${DN}"
+OLLAMA_FRONT="${front}" exec python3 "$(npath "${REPO_ROOT}")/apps/ollama/llm.py" show "$@"

@@ -22,9 +22,11 @@
 #   (baseline NEVER touches .env — it uses yours as-is, so creds are stable across runs)
 #   BASELINE_SKIP_BUILD=1   skip the fresh `docker compose build --pull` (use present images)
 #   BASELINE_SKIP_RESET=1   skip the destructive `bbox reset` (bring up on top of current state)
+#   BASELINE_RESET=wipe     the reset on a machine whose office already holds data — asked for by name, or refused
 #   BASELINE_NO_INDOX=1     skip the functional INDOX suites (criterion 2b)
 #   BASELINE_NO_UIMAP=1     skip the ui-map capture (criterion 5)
-#   BASELINE_WITH_BROWSER42=1   keep browser42 in the stack (needs a big-disk host; default drops it)
+#   BASELINE_WITH_BROWSER42=1   bring browser42 up too, when platform.state.yaml enables it (a big-disk host; by
+#                               default it is left out of the bring-up — its image is still built when enabled)
 #   BASELINE_SERVICES="…"   override the bring-up service set (default: whole graph minus browser42)
 set -uo pipefail
 LOG_TAG=baseline
@@ -53,6 +55,21 @@ die() { echo "${cr}[baseline] error:${c0} $*" >&2; exit 2; }
 # ── P0 preflight ─────────────────────────────────────────────────────────────
 hr "P0  preflight (env + network + volumes)"
 need_docker
+# P1's reset WIPES the office's data (down -v, through `bbox reset --force`, which skips reset's own question). On a
+# machine whose office already holds containers or volumes that is never done because the verb was typed: it is
+# asked for by name (BASELINE_RESET=wipe), or the baseline proves the running office without it
+# (BASELINE_SKIP_RESET=1). Asked HERE, first — before the gates' minutes, so a refusal costs nothing — and a refused
+# run stops (issues/a-stranger-cannot-follow-…yaml, item 6: a verb that destroys asks).
+if [ "${BASELINE_SKIP_RESET:-0}" != 1 ] && [ "${BASELINE_RESET:-}" != wipe ]; then
+  _held=0; office_holds_data || _held=$?   # the form that survives `set -e`, as in bbox
+  if [ "${_held}" != 1 ]; then
+    printf '%s\n' "baseline: refused — this office ($(office_project)) $([ "${_held}" = 0 ] && echo holds containers or volumes || echo may hold data: the engine did not say), and P1's reset would WIPE them (down -v). Choose, by name:" \
+      "  BASELINE_RESET=wipe ./bbox baseline        wipe it, then prove a fresh baseline" \
+      "  BASELINE_SKIP_RESET=1 ./bbox baseline      prove the office as it runs, nothing wiped" >&2
+    rm -f "${RESULTS}"
+    exit 2
+  fi
+fi
 # Traefik v3.3 compiles its docker client against API 1.24. If the daemon's floor is above that,
 # the provider never loads: traefik starts, reports healthy, and every single *.localhost host
 # 404s. This is a FAILURE, not a warning — a baseline run on such a daemon produces a hundred
@@ -86,6 +103,31 @@ case "${API124}" in
   200) : ;;
   000) crit "P0 docker-api-floor" fail "could not probe the docker API at \$DOCKER_HOST=${DOCKER_HOST:-<unset>} — traefik's provider talks to this same endpoint, so if the probe cannot reach it, traefik will not either." ;;
   *)   crit "P0 docker-api-floor" fail "the daemon refused an API v1.24 request (HTTP ${API124}). traefik v3.3 compiles its docker client against 1.24, so it will discover ZERO routers and every *.localhost will 404 while traefik reports healthy. Run an engine that still serves 1.24." ;;
+esac
+
+# AppArmor that STACKS the container's label (DGO-1604). Ubuntu's default
+# kernel.apparmor_restrict_unprivileged_unconfined=1 turns runc's profile change into a stack, so a
+# container's processes carry `docker-default//&unconfined`; Docker's profile allows signals and
+# ptrace only to the literal peer `docker-default`, so on kernels 7.0.0-42 and later (Ubuntu 26.04)
+# a container's processes cannot signal each other AT ALL. Measured on the Dell 2026-11-09 with
+# postgres started as its own user (so gosu is not involved): autovacuum cancelled every naptime,
+# `pg_reload_conf()`/`pg_cancel_backend()` → Permission denied, `docker stop` → tini cannot forward
+# SIGTERM, and the next start runs crash recovery that stalls on `the database system is starting up`.
+# Same reasoning as the API-floor check above: this is a FAILURE, not a warning — a baseline run on
+# such a host is a hundred red checks whose cause no message names. It is never fixed here: loading a
+# host profile is the owner's act, and neither `apparmor_restrict_unprivileged_unconfined=0` nor
+# `apparmor=unconfined` is acceptable. `./bbox apparmor …` is where both halves live.
+# AA_PULL=1: a baseline run may fetch the tiny probe image, so a fresh host MEASURES rather than
+# saying "could not measure" (`bbox run` asks for it too, but with a 20 s cap).
+aa_m="$(AA_PULL=1 bash "${SELF_DIR}/apparmor-host.sh" status --machine 2>/dev/null || true)"
+aa_label="$(printf '%s\n' "${aa_m}" | tr ' ' '\n' | sed -n 's/^label=//p' | head -1)"
+aa_signal="$(printf '%s\n' "${aa_m}" | tr ' ' '\n' | sed -n 's/^signal=//p' | head -1)"
+aa_reason="$(printf '%s\n' "${aa_m}" | sed -n 's/.*reason=\([^ ]*\).*/\1/p' | head -1)"
+case "${aa_label:-unknown}:${aa_signal:-unknown}" in
+  unconfined:ok)  crit "P0 apparmor-container-signals" warn "containers on this host run with NO AppArmor profile (apparmor=unconfined): everything works, and the host's hardening was traded away for it. That is a decision for this host, never a product default — ./bbox apparmor install is the way back to a real profile" ;;
+  stacked:denied) crit "P0 apparmor-container-signals" fail "this kernel STACKS the container's AppArmor label (docker-default//&unconfined) and DENIES signals between a container's own processes: every postgres-backed app will hang (gosu spins, autovacuum cancelled, docker stop is a kill) and the cause appears in no error. Install the profile that lifts it — the owner's act, it does not weaken the host: sudo ./bbox apparmor install (read it first: ./bbox apparmor status)" ;;
+  *:ok)           crit "P0 apparmor-container-signals" pass "a container's processes can signal each other${aa_label:+ (label: ${aa_label})}" ;;
+  *)              crit "P0 apparmor-container-signals" warn "could not measure the host's AppArmor${aa_reason:+ (${aa_reason})} — a stacked label would stop every database container; ./bbox apparmor status says it by hand, with the reason it gives." ;;
 esac
 
 # Container egress. A container that cannot resolve a name is a host-readiness fact checkable in
@@ -122,24 +164,16 @@ docker volume  inspect wa_media        >/dev/null 2>&1 || { log "creating volume
 # edits one. Credentials therefore stay identical across every run unless you deliberately change
 # them. (Random per-run secrets are minted ONLY by scripts/ci-env.sh, which the CI lanes call
 # themselves; baseline does not.)
-[ -f .env ] || die "no .env — copy .env.ex to .env and set your credentials, then re-run"
+[ -f .env ] || die "no .env — run './bbox run' once (with no .env it makes a local office), or put your office's own .env here, then re-run"
 log "using existing .env ($(grep -c = .env) keys) — baseline does not modify it"
-# n8n-postgres asks for nofile hard=262144; a sandbox with a lower hard limit refuses it ("error
-# setting rlimit type 7: operation not permitted") and the container never starts. Cap PG_NOFILE_*
-# to the host's hard limit so it boots anywhere. No-op on a normal host (its limit is already higher).
-HARDLIM="$(ulimit -Hn 2>/dev/null || echo 262144)"
-if [ "${HARDLIM}" != unlimited ] && [ "${HARDLIM}" -lt 262144 ] 2>/dev/null; then
-  for kv in "PG_NOFILE_SOFT=${HARDLIM}" "PG_NOFILE_HARD=${HARDLIM}"; do
-    k="${kv%%=*}"; grep -q "^${k}=" .env && sed -i "s#^${k}=.*#${kv}#" .env || echo "${kv}" >> .env
-  done
-  log "capped PG_NOFILE_* to host hard nofile limit (${HARDLIM})"
-fi
-# Drop browser42 unless explicitly asked to keep it (its patched-Chromium image is huge and pulls
-# from a non-docker.io base — excluded to fit a ~30GB host). This zeroes the compose profile.
-if [ "${BASELINE_WITH_BROWSER42:-0}" != 1 ]; then
-  grep -q '^COMPOSE_PROFILES=' .env && sed -i 's#^COMPOSE_PROFILES=.*#COMPOSE_PROFILES=#' .env || echo 'COMPOSE_PROFILES=' >> .env
-  log "browser42 dropped (COMPOSE_PROFILES=)"
-fi
+# Two things this run needs differently from a manual `bbox run`, and neither is written into .env
+# (DGO-125, the owner: «passwords and all creds should be consistent across all runs»). Both used to be:
+#   - a host whose hard nofile limit is below n8n-postgres's 262144: `ccr_clamp_nofile` (P2, below)
+#     EXPORTS the capped PG_NOFILE_* for this process — `bbox run` does the same (bbox) — where this
+#     appended PG_NOFILE_SOFT/HARD to .env and left them there for every later run;
+#   - leaving browser42 out: BASELINE_SERVICES (P0b, below) is the bring-up set without it. This
+#     emptied COMPOSE_PROFILES in .env on every run, which decides nothing since browser42 lost its
+#     `profiles:` (G22: the app's state in platform.state.yaml is the one thing that does).
 dcx config -q 2>/tmp/baseline-cfg.err || { cat /tmp/baseline-cfg.err; die "compose config invalid"; }
 crit "P0 preflight" pass "network+volume ready; .env=$(grep -c = .env) keys; compose config valid"
 
@@ -159,10 +193,13 @@ else
   crit "P0b gates" fail "$(printf '%s' "${gout}" | tail -1) — invariants broken; fix before trusting anything below"
 fi
 
-# The bring-up set: the whole default graph minus browser42 (compose pulls in depends_on automatically).
-BASELINE_SERVICES="${BASELINE_SERVICES:-$(dcx config --services 2>/dev/null | grep -viE 'browser42' | tr '\n' ' ')}"
+# The bring-up set: the whole default graph minus browser42 (compose pulls in depends_on automatically),
+# or with it when BASELINE_WITH_BROWSER42=1 — the knob the header promises, which this line ignored.
+if [ "${BASELINE_WITH_BROWSER42:-0}" = 1 ]; then _b42_out='^$'; else _b42_out='browser42'; fi
+BASELINE_SERVICES="${BASELINE_SERVICES:-$(dcx config --services 2>/dev/null | grep -viE "${_b42_out}" | tr '\n' ' ')}"
 
 # ── P1 fresh reset (hard) ────────────────────────────────────────────────────
+# (an office that holds data reaches this line only when the reset was asked for by name — P0 refused it before)
 hr "P1  fresh reset (down -v)"
 if [ "${BASELINE_SKIP_RESET:-0}" = 1 ]; then crit "P1 reset" warn "skipped (BASELINE_SKIP_RESET=1)"
 else "${REPO_ROOT}/bbox" reset --force --remove-orphans || true; crit "P1 reset" pass "docker compose down -v (fresh-machine state)"; fi
@@ -225,23 +262,48 @@ fi
 # health census — by COMPOSE PROJECT LABEL, never by a container-name suffix.
 #
 # It was `docker ps -a --format '{{.Names}}' | grep -c -- "-${DN}$"`, with DN from .env's
-# DEPLOYMENT_NAME — and a name is not an identity. Measured 2026-10-14: .env said `hacohen` while
+# DEPLOYMENT_NAME — and a name is not an identity. Measured 2026-10-14: .env said `example` while
 # every container ended in `-staging`, so the census counted 0 and this stage printed GREEN over an
 # estate it had never looked at. The engine already knows which containers are this office's — they
 # carry the compose project label — so it is asked directly. COMPOSE_PROJECT_NAME is the same value
 # compose itself reads from .env (compose's own default when unset: the project directory's basename).
-PPROJ="$(read_env COMPOSE_PROJECT_NAME)"; [ -n "${PPROJ}" ] || PPROJ="$(basename "${REPO_ROOT}")"
-_ps_ours() { docker ps -a --filter "label=com.docker.compose.project=${PPROJ}" --format '{{.Names}}\t{{.Status}}'; }
-total="$(_ps_ours | wc -l | tr -d ' ')"
-upc="$(_ps_ours | grep -c 'Up ' || true)"
+# …and it is asked in the spelling COMPOSE USES. compose normalizes the project name to lower case
+# (`.env` here declares no COMPOSE_PROJECT_NAME, so the project is the clone directory's basename —
+# `MyDGO` on this machine, and every container's label says `mydgo`), so the unfiltered comparison
+# matched nothing and this census reported "NOT green" over a stack it had never counted. A census
+# that cannot run must not read as a verdict either way; the fix is to ask with the same spelling.
+PPROJ="$(read_env COMPOSE_PROJECT_NAME)"; [ -n "${PPROJ}" ] || PPROJ="$(office_project)"   # lib.sh: compose's own normalisation
+PPROJ="$(printf '%s' "${PPROJ}" | tr '[:upper:]' '[:lower:]')"
+_ps_ours_all() { docker ps -a --filter "label=com.docker.compose.project=${PPROJ}" --format '{{.Names}}\t{{.Status}}\t{{.Label "com.docker.compose.service"}}'; }
+# …and the containers of an app this office DECLARES off are not part of the census either. A stopped
+# container of a disabled app is the state file being obeyed, not a failure — and counting it made
+# this stage's "problems" list permanent background noise (measured on hp-laptop, 2026-11-01: the
+# retired identity's four containers, one of them `Exited (137)`, sitting exactly where
+# `bbox apps disable` left them). The reading is lib.sh's `off_services`, the SAME one `bbox status`
+# makes, so the two can never disagree: the compiler's enabled closure says what must run, and a
+# service outside it belongs to an app that is declared off. An app HELD UP by an enabled app's
+# requirement is inside the closure and stays a real container.
+OFF_LIST="$(off_services 2>/dev/null || true)"
+_on() { _ps_ours_all | awk -F'\t' -v off="${OFF_LIST}" 'BEGIN { n = split(off, r, "\n"); for (i = 1; i <= n; i++) { split(r[i], c, "\t"); if (c[1] != "") offsvc[c[1]] = 1 } } !($3 in offsvc)'; }
+total="$(_on | wc -l | tr -d ' ')"
+upc="$(_on | grep -c 'Up ' || true)"
 # A problem is anything not Up and not cleanly exited — including a container that IS up but unhealthy
 # or still starting, which the old `grep -viE 'Up |Exited \(0\)'` dropped silently while this stage's
 # own message claimed "no unhealthy/crashed".
-downlist="$(_ps_ours | awk -F'\t' '$2 !~ /^(Up |Exited \(0\))/ || $2 ~ /unhealthy|health: starting/')"
+downlist="$(_on | awk -F'\t' '$2 !~ /^(Up |Exited \(0\))/ || $2 ~ /unhealthy|health: starting/')"
+# …and the ones left OUT, per app, so the scorecard names what it did not count instead of the number
+# silently shrinking. Read from the containers that are actually here, not from the state file: an
+# app declared off that has no container on this machine leaves nothing behind to mention.
+offtally="$(_ps_ours_all | awk -F'\t' -v off="${OFF_LIST}" '
+  BEGIN { n = split(off, r, "\n"); for (i = 1; i <= n; i++) { split(r[i], c, "\t"); if (c[1] != "") appof[c[1]] = c[2] } }
+  ($3 in appof) { cnt++ ; if (!(appof[$3] in seen)) { seen[appof[$3]] = 1 ; per[appof[$3]] = 0 } ; per[appof[$3]]++ }
+  END { m = "" ; for (a in per) m = m (m == "" ? "" : ", ") a " (" per[a] ")" ; printf "%d\t%s", cnt, m }')"
+offc="${offtally%%$'\t'*}"; offnames="${offtally#*$'\t'}"
+offnote=""; [ "${offc:-0}" -gt 0 ] && offnote=" (${offnames} not counted: platform.state.yaml declares them off)"
 if [ "${total:-0}" -eq 0 ]; then
   crit "P3 bring-up" fail "census matched NO container of compose project '${PPROJ}' (DEPLOYMENT_NAME '${DN}' is not a container identity) — nothing was counted, so this is NOT green"
-elif [ -z "${downlist}" ]; then crit "P3 bring-up" pass "${upc}/${total} containers Up; no unhealthy/crashed"
-else crit "P3 bring-up" fail "${upc}/${total} Up — problems:\n$(echo "${downlist}" | sed 's/^/      /')"; fi
+elif [ -z "${downlist}" ]; then crit "P3 bring-up" pass "${upc}/${total} containers Up; no unhealthy/crashed${offnote}"
+else crit "P3 bring-up" fail "${upc}/${total} Up — problems:\n$(echo "${downlist}" | sed 's/^/      /')${offnote:+ —${offnote}}"; fi
 # Does every probe in the LIVE stack use a binary its container actually has? G18 answers this
 # statically for images we build; only a running stack can answer it for vendor images. The bug it
 # catches is silent by construction — a container stuck unhealthy while the app serves fine — so
@@ -257,7 +319,9 @@ fi
 # apps screen, or the agent's own `./bbox run`, that re-creates half of it (the edge, the databases,
 # the sign-in — measured 2026-10-06). The check is read-only and asks the engine itself.
 if idout="$(bash "${SELF_DIR}/config-by-caller.sh" 2>&1)"; then
-  crit "P3 one-identity" pass "every caller of compose compiles the same containers; a second bring-up re-creates none; every CPU quota is the budget's"
+  # question 2 (what a bring-up would re-create) is SAID, not yet a verdict — config-by-caller.sh says why (stage 1 of
+  # rule 8, from 2026-11-11): its own line is carried here, never replaced by «re-creates none»
+  crit "P3 one-identity" pass "every caller of compose compiles the same containers; every CPU quota is the budget's; $(printf '%s\n' "${idout}" | grep -m1 '^2\. ' || echo '2. a bring-up from here would re-create: (not answered)')$(printf '%s\n' "${idout}" | grep -m1 '^\[bbox\] stale check' | sed 's/^/ — /')"
 else
   crit "P3 one-identity" fail "a container's configuration depends on who asks for it:
 $(printf '%s\n' "${idout}" | grep -E '^[0-9]\. ' | sed 's/^/      /')"
@@ -336,10 +400,13 @@ if [ "${BASELINE_NO_INDOX:-0}" = 1 ]; then crit "P5d node-coverage" warn "skippe
 else
   covout="$(python3 "$(npath "${REPO_ROOT}")/scripts/refactor/node-coverage-gate.py" 2>&1)"; covrc=$?
   printf '%s\n' "${covout}" | sed 's/^/  /'
+  # The gate's number is ITS declaration (docstring line one), not this phase's business: strip
+  # whatever `G<n> PASS|FAIL — ` it prints. Hard-coding `G65` here is what made a renumbering of
+  # the gate a two-file change (it became G94 on 2026-11-03).
   if [ "${covrc}" = 0 ]; then
-    crit "P5d node-coverage" pass "$(printf '%s' "${covout}" | head -1 | sed 's/^G65 PASS — //')"
+    crit "P5d node-coverage" pass "$(printf '%s' "${covout}" | head -1 | sed -E 's/^G[0-9]+ PASS — //')"
   else
-    crit "P5d node-coverage" fail "$(printf '%s' "${covout}" | head -1 | sed 's/^G65 FAIL — //')"
+    crit "P5d node-coverage" fail "$(printf '%s' "${covout}" | head -1 | sed -E 's/^G[0-9]+ (PASS|FAIL) — //')"
   fi
 fi
 

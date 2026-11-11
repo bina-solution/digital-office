@@ -1,0 +1,3 @@
+#!/usr/bin/env bash
+#: audit — a computer's security findings (SSH, firewall, updates, open ports), the screen's «אבטחה»: <id|local> [--fresh] [--json]
+exec bash "$(dirname "${BASH_SOURCE[0]}")/../tools/verb" audit "$@"

@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+#: categories — the taxonomy and how many items each holds:  ./bbox newsflow categories
+set -uo pipefail
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+out="$("${SCRIPT_DIR}/_call" GET /api/categories)" || exit $?
+printf '%s' "${out}" | python3 -c '
+import json,sys
+for c in json.load(sys.stdin)["categories"]: print("%-14s %-24s %s" % (c["id"], c["he"], c["articles"]))'

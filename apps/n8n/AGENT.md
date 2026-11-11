@@ -60,7 +60,20 @@ the edge with no SSO, so a webhook workflow guards itself.
   so a retired workflow never comes back that way. `push <app>` does not read it, and gate G38 fails
   when a retired id has a blueprint file.
 - There is no `hooks/test`: `bbox test n8n` fails. Test a workflow with `bbox n8n test`.
-- The editor is n8n's own login on its own host (external tile), not the office's SSO.
+- **The editor is behind the office's sign-in AND n8n's own** (DGO-1594). `routing.auth: "sso"` in
+  app.json puts the same forwardAuth in front of `n8n.<office host>` and the host the console frames
+  it at, on every office — it said `auth: none` with hand-written routers that carried no middleware,
+  and the editor, its own `/signin` and `/rest/settings` answered the whole internet (measured from
+  outside 2026-11-09; two scanners loaded it within two minutes of an edge restart). n8n's own account
+  is the second lock. What stays public, by declaration: `/webhook/`, `/webhook-waiting/` and `/form/`
+  — the `n8n-hooks` routers on `n8n-webhook`, priority 150 — because a webhook's caller is another
+  machine with no session, and `/rest/push` keeps its own path-scoped chain (`sub_routes`) so the
+  editor's live updates still pass n8n's own Origin check. A person's path is the console tile: it
+  takes them through the sign-in once (`/.dgo/enter`) and then frames the editor.
+- The routers are COMPILED from `routing` in app.json; the app's own compose keeps only the
+  middlewares (`n8n-embed`, `n8n-push-origin`, `n8n-frame-origin`) and the hooks routers. Do not
+  hand-write a router back into `apps/n8n/docker-compose.yml`: that is how a gate silently disappeared.
 
-Gates: G38 (no dangling or retired workflow reference), G42, G61 (published drift), G63, G86. Every
+Gates: G38 (no dangling or retired workflow reference), G42, G61 (published drift), G63, G86, G96 (a
+host that shows a person a screen is not open). Every
 blueprint gate in `scripts/refactor/run-gates.py`'s n8n set reads every app's `*.workflow.ts`.

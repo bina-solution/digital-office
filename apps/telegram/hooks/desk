@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+#: desk — the owner's requests in the group as records that move until he sees them done:  ./bbox telegram desk list | show|take|promise|done|close|reopen|answer <msg> …
+# The ledger, its rules and why it exists are apps/telegram/relay/desk.py (DGO-1352). It speaks to the office's
+# redis by name, so it runs where the group's answerer runs — a container on the office network — with the
+# password read from .env here and handed over in the environment, never on a line.
+set -uo pipefail
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
+. "${REPO_ROOT}/scripts/lib.sh"   # read_env_value, npath; exports PYTHONIOENCODING=utf-8
+case "${1:-}" in ""|-h|--help) sed -n 's/^#: //p' "${BASH_SOURCE[0]}"; python3 "$(npath "${REPO_ROOT}")/apps/telegram/relay/desk.py" --help | sed -n '1,4p'; exit 0 ;; esac
+REDIS_PASSWORD="${REDIS_PASSWORD:-$(read_env_value REDIS_PASSWORD)}" \
+  exec python3 "$(npath "${REPO_ROOT}")/apps/telegram/relay/desk.py" "$@"

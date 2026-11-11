@@ -1,0 +1,19 @@
+#!/usr/bin/env bash
+#: install <file.apk> — copy an APK into the app's drop folder and install it on the running device:  ./bbox android-emulator install dgo.apk
+# adb's own answer is printed (Success, or why not: the reason an install check needs).
+set -uo pipefail
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
+. "${REPO_ROOT}/scripts/lib.sh"
+case "${1:-}" in -h|--help|"") sed -n 's/^#: //p' "${BASH_SOURCE[0]}"; exit 0 ;; esac
+apk="$1"
+[ -f "${apk}" ] && [ "${apk%.apk}" != "${apk}" ] || { echo "install: ${apk} is not an .apk file here" >&2; exit 2; }
+name="$(basename "${apk}")"
+dcx cp "${apk}" "android-emulator:/apks/${name}" || exit 1
+dcx exec -T -e "APK=${name}" android-emulator python3 -c '
+import json, os, sys, urllib.error, urllib.request
+req = urllib.request.Request("http://127.0.0.1:8080/api/install", data=json.dumps({"apk": os.environ["APK"]}).encode(), method="POST")
+try:
+    print(json.dumps(json.load(urllib.request.urlopen(req, timeout=660)), ensure_ascii=False, indent=1))
+except urllib.error.HTTPError as e:
+    print(e.read().decode("utf-8", "replace"), file=sys.stderr); sys.exit(1)'

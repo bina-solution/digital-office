@@ -18,7 +18,7 @@ name: indox-e2e
 
 on:
   push:
-    branches: [main, shlomo-laptop, release-v2-lockin, platform-os-refactor]
+    branches: [main, owner-laptop, release-v2-lockin, platform-os-refactor]
     paths-ignore: ['.ci-cd/**']
   workflow_dispatch:
 
@@ -33,7 +33,7 @@ permissions:
   packages: write   # images job pushes to GHCR
 
 env:
-  REG: ghcr.io/solomonboltin/deployment-hacohen
+  REG: ghcr.io/bina-solution/digital-office
 
 jobs:
   # ── ensure content-addressed images exist in GHCR (build only on miss) ──
@@ -319,7 +319,13 @@ jobs:
       # sync-v3 100% node-coverage gate: every node in the sync-v3 workflows must have
       # executed during the battery above; a node nobody runs = a branch nobody tests.
       - name: sync-v3 node-coverage gate (100% required)
-        run: python3 apps/indox/hooks/sync-coverage.py --since-minutes 60 2>&1 | tee ci-artifacts/sync-v3-coverage.txt
+        # `set -o pipefail` is the whole point of the tee: without it a pipeline's status is `tee`'s,
+        # so this RED gate wrote its reason into the artifact and left the step GREEN. The house
+        # pattern for a tee'd step (see the n8n-push step above) is pipefail inside the block.
+        run: |
+          mkdir -p ci-artifacts
+          set -o pipefail
+          python3 apps/indox/hooks/sync-coverage.py --since-minutes 60 2>&1 | tee ci-artifacts/sync-v3-coverage.txt
 
       # ESTATE-WIDE node coverage. The gate above requires 100% of the sync-v3 workflows; this one
       # measures every indox workflow the battery touched and holds a ratchet floor.
@@ -336,7 +342,12 @@ jobs:
       # Placed AFTER the battery on purpose: it counts executions, so before the suites run it
       # would read zero and pass vacuously — the exact failure it exists to catch.
       - name: indox node-coverage gate (ratchet floor)
-        run: python3 scripts/refactor/node-coverage-gate.py 2>&1 | tee ci-artifacts/indox-node-coverage.txt
+        # Same swallowed rc as the step above, and the same fix: this gate's entire job is to fail
+        # on an empty scan or a drop below the floor, and `| tee` alone made both of those green.
+        run: |
+          mkdir -p ci-artifacts
+          set -o pipefail
+          python3 scripts/refactor/node-coverage-gate.py 2>&1 | tee ci-artifacts/indox-node-coverage.txt
 
       # apitools' OWN feature-validation suites — the only OCR/extraction coverage the estate has.
       #
@@ -398,12 +409,12 @@ jobs:
         if: failure()
         run: |
           # errored executions grouped: which workflows error-loop and how often
-          docker exec n8n-postgres-ci psql -U hacohen -d n8n -t -A -c "
+          docker exec n8n-postgres-ci psql -U example -d n8n -t -A -c "
             SELECT count(*)||'x  '||w.name FROM execution_entity e
             JOIN workflow_entity w ON w.id=e.\"workflowId\"
             WHERE e.status='error' GROUP BY w.name ORDER BY count(*) DESC LIMIT 15;" || true
           # last 10 errored executions with node + message (null-safe: coalesce EACH part)
-          docker exec n8n-postgres-ci psql -U hacohen -d n8n -t -A -c "
+          docker exec n8n-postgres-ci psql -U example -d n8n -t -A -c "
             SELECT e.id||' :: '||coalesce(w.name,'?')||' :: '||coalesce(substring(d.data from '\"lastNodeExecuted\",\"([^\"]+)\"'),'?')||' :: '||coalesce(substring(d.data from '\"message\",\"([^\"]{1,160})'),'?') FROM execution_entity e
             JOIN execution_data d ON d.\"executionId\"=e.id
             LEFT JOIN workflow_entity w ON w.id=e.\"workflowId\"

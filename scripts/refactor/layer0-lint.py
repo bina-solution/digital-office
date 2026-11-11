@@ -81,11 +81,13 @@ REPO = pathlib.Path(__file__).resolve().parents[2]
 #: implementation, so it is layer 0 by the same argument as the rest — and the two apps it speaks to
 #: (the link plane and the credential plane) are addressed the way this gate allows, by their own
 #: manifests' paths, with every endpoint read out of them.
-LAYER0 = ["bbox", "scripts/lib.sh", "scripts/dc", "scripts/onboarding", "scripts/remote.py"]
+LAYER0 = ["bbox", "scripts/lib.sh", "scripts/dc", "scripts/onboarding", "scripts/remote.py",
+          "scripts/apparmor-host.sh"]
 
 # Known debt: (file, substring identifying the line, task id in the release plan).
 #
-# EMPTY, and that is the point of the ratchet rather than an accident of it. The last two entries
+# It was EMPTY until 2026-11-10 (the entries below, each a WORD and not an app's knowledge), and empty is the
+# point of the ratchet rather than an accident of it. The last two entries before those
 # were the same remaining item — authentik's cold-start special-casing in `bbox run`: a head start
 # for its own four services, and a probe of its own postgres volume to choose the wait timeout.
 # Both moved into platform-base/authentik/hooks/prepare under G2.3, where the app starts what it
@@ -94,7 +96,44 @@ LAYER0 = ["bbox", "scripts/lib.sh", "scripts/dc", "scripts/onboarding", "scripts
 # fails this gate, which is what stops the list rotting into a permanent exemption.
 #
 # Anything added here needs a task id that closes it, and the same obligation to remove it.
-DEBT = []
+#
+# 2026-11-10, the release that took batch 32 (DGO-969): three app ids that are words layer 0 itself uses — a
+# WORD here, never the app. `containers` is platform-base/containers (the container runtime, DGO-1723), and layer 0 calls
+# Docker's containers by that word; `documents` is apps/documents (DGO-1630), and the backup's help says what
+# INDOX holds; `storage` is supabase's service, and Playwright's `storage_state` is not it. DGO-1754 closes
+# them (a name, or a rule that tells a word from an app) and deletes these lines.
+# 2026-11-10, batch 34: a fourth — `signal` is apps/signal (Signal Desktop, DGO-1264), and `bbox apparmor`'s help says
+# what a stacked profile stops (processes that cannot signal each other). The same word, the same item.
+DEBT = [
+    ("bbox", "so a container's processes cannot signal each", "DGO-1754"),
+    # …and hp-dgo's AppArmor probe (DGO-1604) keeps the signal it measured in a variable named `signal`
+    ("scripts/apparmor-host.sh", "local out label label_ signal verdict", "DGO-1754"),
+    ("scripts/apparmor-host.sh", '[ -n "${signal}" ] || signal="unknown"', "DGO-1754"),
+    ("scripts/apparmor-host.sh", '[ "${label_}" = "stacked" ] && [ "${signal}" = "denied" ]', "DGO-1754"),
+    ("scripts/apparmor-host.sh", "local label signal verdict raw reason", "DGO-1754"),
+    ("scripts/apparmor-host.sh", 'signal="$(pick "${f}" signal)"', "DGO-1754"),
+    ("scripts/apparmor-host.sh", 'case "${signal}" in', "DGO-1754"),
+    ("bbox", "foreign_containers", "DGO-1754"),
+    ("bbox", "remove just these containers", "DGO-1754"),
+    ("bbox", "stale_containers", "DGO-1754"),
+    ("bbox", "n8n workflows+credentials, documents, auth users", "DGO-1754"),
+    ("bbox", "storage_state for", "DGO-1754"),
+    ("scripts/lib.sh", "containers cannot be handed a socket", "DGO-1754"),
+    ("scripts/lib.sh", "stale_containers() {", "DGO-1754"),
+    ("scripts/lib.sh", "foreign_containers() {", "DGO-1754"),
+    ("scripts/remote.py", "which containers are attached", "DGO-1754"),
+    # [2026-11-10] hp-dgo 7872dbd4 (taken in batch 33, DGO-969): `bbox status` called image_drift, shared_hosts and
+    # shared_names, which lib.sh never defined; hp defined them. `_dbx_containers` is Docker's word again (DGO-1754),
+    # and «the terminal» in remote.py's docstring is the word, not hp's `terminal` app.
+    ("scripts/lib.sh", "_dbx_containers", "DGO-1754"),
+    ("scripts/remote.py", "This CLI is the fourth face — the terminal and the agent", "DGO-1754"),
+    # …but shared_hosts reads the EDGE's own knowledge (its service name, traefik.enable, its router rules) in layer 0:
+    # real debt. DGO-1766 moves it into the edge app's own hook, which bbox status runs generically.
+    ("scripts/lib.sh", 'EDGE = re.compile(r"^traefik(-[A-Za-z0-9_]+)?$")', "DGO-1766"),
+    ("scripts/lib.sh", 'if svc == "traefik" or EDGE.match(name):', "DGO-1766"),
+    ("scripts/lib.sh", 'if str(labels.get("traefik.enable", "true")).strip().lower() == "false":', "DGO-1766"),
+    ("scripts/lib.sh", 'if not (key.startswith("traefik.http.routers.") and key.endswith(".rule")):', "DGO-1766"),
+]
 
 
 def app_tokens(aliases=None):
@@ -108,6 +147,14 @@ def app_tokens(aliases=None):
     layer 0 is prose-heavy (a whole help screen), and three- and four-letter ids collide with
     English constantly. It is why `n8n` and `chat` are not tokens, and therefore why `bbox help`
     may keep its `n8n` section heading. A gate that fired on that word would be off within a week.
+
+    A WORD IS NOT A NAME, and the length filter does not save it. An id that is an everyday English
+    word fires on code that has nothing to do with the app: `network` (the id `apps/network` had,
+    DGO-543) matched `ensure_network()`, `docker network inspect`, `NETWORK=` and `_in_network()`
+    in `bbox`, `scripts/lib.sh` and `scripts/remote.py` — nineteen findings, none of them a
+    reference to the app. The rule this gate enforces by accident is worth stating: **an app id is
+    a token (a name or a hyphenated compound), never a common word.** The rename to `office-routes`
+    took the count back to the one known red below.
 
     `cli.alias` is the one thing exempt from that filter, and it has to be: browser42's alias is
     `b42`, three characters, and `b42 dump|load|list` is HALF of what `bbox help` hardcoded. Catch

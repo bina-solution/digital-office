@@ -4,7 +4,8 @@
 # (the Dell), the job builds into no Docker but the box's, prunes nothing, needs no sudo, and leaves nothing
 # behind but what it publishes and the box's Docker store (/store, kept for the next build). The checkout is /src (read-only), <work> the job's own directory; out of it
 # come <work>/out's parts of the .xz and its digest. What GitHub's runner did, in the same order: the
-# office's images for arm64, guest.sh, xz.
+# office's images for the machine's architecture (GUEST_ARCH: arm64, a phone's and the default, or amd64, an
+# x86_64 Android's — DGO-1723), guest.sh, xz.
 #   guest-box.sh --sweep <work>   what a box that was killed left: its loop device, the arm64 handler, <work>
 # The arm64 handler (binfmt_misc) is the kernel's, the one thing here that is not the box's own: added only
 # where the machine has none, and removed again at the end. Run under `dind` (android-engine.yml), which
@@ -14,6 +15,14 @@ sweep=""
 if [ "${1:-}" = --sweep ]; then sweep=1; shift; fi
 work="${1:?usage: guest-box.sh [--sweep] <work>}"
 src=/src
+# GUEST_ARCH: arm64 (a phone, the default) or amd64 (an x86_64 Android: the emulator, DGO-1723) — guest.sh's
+GUEST_ARCH="${GUEST_ARCH:-arm64}"
+case "${GUEST_ARCH}" in arm64|amd64) ;; *) echo "guest-box.sh: GUEST_ARCH is arm64 or amd64, not ${GUEST_ARCH}" >&2; exit 1 ;; esac
+# an amd64 machine builds natively only: nothing here registers an x86_64 handler on another host
+if [ "${GUEST_ARCH}" = amd64 ] && [ "$(uname -m)" != x86_64 ]; then
+  echo "guest-box.sh: an amd64 machine builds on an x86_64 host, not $(uname -m)" >&2; exit 1
+fi
+export GUEST_ARCH
 bm=/proc/sys/fs/binfmt_misc
 mountpoint -q "${bm}" || mount -t binfmt_misc binfmt_misc "${bm}"
 # a box's /dev is a copy made as it starts: a loop device the kernel adds later has no node here
@@ -30,11 +39,13 @@ unbind() {
 if [ -n "${sweep}" ]; then
   # the disk's loop device, by the file's inode (its path as the dead box named it is no longer anyone's),
   # before the file goes: a device left holding it would hold its blocks until the machine restarts
-  if [ -f "${work}/dgo-guest-arm64.img" ]; then
-    losetup -l -n -O NAME -j "${work}/dgo-guest-arm64.img" | while read -r d; do
+  # any machine's disk, whatever GUEST_ARCH the sweep was given (its caller passes none): an amd64 box's too
+  for img in "${work}"/dgo-guest-*.img; do
+    [ -f "${img}" ] || continue
+    losetup -l -n -O NAME -j "${img}" | while read -r d; do
       echo "sweep: ${d}"; losetup -d "${d}" || true
     done
-  fi
+  done
   unbind
   find "${work}" -mindepth 1 -maxdepth 1 -exec rm -rf --one-file-system {} +
   exit 0
@@ -53,16 +64,19 @@ trap leave EXIT
 
 # the package's own line (Ubuntu 24.04's qemu-user-static ships it for systemd-binfmt alone, nothing in
 # /usr/share/binfmts for update-binfmts to import), written to the kernel as systemd-binfmt writes it
-if [ ! -e "${bm}/qemu-aarch64" ]; then
-  touch "${work}/binfmt-added"
-  # a write the kernel refused added nothing — not even one another registered meanwhile is this job's
-  grep '^:qemu-aarch64:' /usr/lib/binfmt.d/qemu-aarch64.conf > "${bm}/register" || {
-    rm -f "${work}/binfmt-added"
-    echo "guest-box.sh: could not register the arm64 handler from /usr/lib/binfmt.d/qemu-aarch64.conf" >&2; exit 1
-  }
+# — only for an arm64 machine on a machine that is not arm64: an amd64 one builds natively on the Dell
+if [ "${GUEST_ARCH}" = arm64 ] && [ "$(uname -m)" != aarch64 ]; then
+  if [ ! -e "${bm}/qemu-aarch64" ]; then
+    touch "${work}/binfmt-added"
+    # a write the kernel refused added nothing — not even one another registered meanwhile is this job's
+    grep '^:qemu-aarch64:' /usr/lib/binfmt.d/qemu-aarch64.conf > "${bm}/register" || {
+      rm -f "${work}/binfmt-added"
+      echo "guest-box.sh: could not register the arm64 handler from /usr/lib/binfmt.d/qemu-aarch64.conf" >&2; exit 1
+    }
+  fi
+  # F: the kernel opens the interpreter now, so a build's container and guest.sh's chroot run arm64 too
+  grep -q '^flags: .*F' "${bm}/qemu-aarch64" || { echo "guest-box.sh: the machine's arm64 handler has no F flag" >&2; exit 1; }
 fi
-# F: the kernel opens the interpreter now, so a build's container and guest.sh's chroot run arm64 too
-grep -q '^flags: .*F' "${bm}/qemu-aarch64" || { echo "guest-box.sh: the machine's arm64 handler has no F flag" >&2; exit 1; }
 
 # the box's own Docker, its store on a real filesystem (overlay2 does not stack on the box's own): /store,
 # kept between builds in the runner's tool cache (android-engine.yml), so a build reuses every layer whose
@@ -72,7 +86,8 @@ mkdir -p "${work}/tmp" "${work}/out"
 export TMPDIR="${work}/tmp"
 droot="${work}/docker"
 drop() { echo "guest-box.sh: $1 — the kept store dropped, built from zero"; rm -rf --one-file-system /store/docker; rm -f /store/builder-prune.stamp /store/kept-mb /store/dirty; }
-if [ -d /store ]; then
+# (the kept store is the arm64 machine's: an amd64 build in it would take over the same tags — it builds in <work>)
+if [ -d /store ] && [ "${GUEST_ARCH}" = arm64 ]; then
   exec 9> /store/lock
   if flock -n 9; then
     droot=/store/docker
@@ -103,7 +118,7 @@ s=$(date +%s)
 cp -a "${src}" "${work}/office" && cd "${work}/office"
 # the guest's compose (2.40.3, pinned there): app-management bakes the compose version it was built with,
 # and two versions re-create each other's containers
-export COMPOSE_PROJECT_NAME=office DOCKER_DEFAULT_PLATFORM=linux/arm64 BBOX_COMPOSE_VERSION=2.40.3
+export COMPOSE_PROJECT_NAME=office DOCKER_DEFAULT_PLATFORM="linux/${GUEST_ARCH}" BBOX_COMPOSE_VERSION=2.40.3
 docker version --format 'box docker {{.Server.Version}}'
 # the phone's office as its first boot makes it (guest.sh): forward-auth's identity, the core
 CI_IDENTITY=forward-auth CI_ENV_FORCE=1 CI_DEPLOYMENT_NAME=local CI_EDGE_PORT=8080 bash scripts/ci-env.sh
@@ -126,13 +141,13 @@ fi
 # is in no registry) and none says never to pull. Pulled for arm64 even when one by that name is here
 ./scripts/dc config --format json > "${work}/compose.json"
 pulled="$(python3 -c 'import json, sys; s = list(json.load(open(sys.argv[1]))["services"].values()); built = {v.get("image") for v in s if "build" in v}; print(" ".join(sorted({v["image"] for v in s if v.get("image") and v["image"] not in built and v.get("pull_policy") != "never"})))' "${work}/compose.json")"
-for i in ${pulled}; do docker pull -q --platform linux/arm64 "${i}"; done
-echo "pulled for arm64: ${pulled}"
+for i in ${pulled}; do docker pull -q --platform "linux/${GUEST_ARCH}" "${i}"; done
+echo "pulled for ${GUEST_ARCH}: ${pulled}"
 # all of them, each checked to be here and for arm64 — a missing build stops it
 all="$(./scripts/dc config --images | sort -u)"
 for i in ${all}; do
   a="$(docker image inspect -f '{{.Architecture}}' "${i}" 2>/dev/null || true)"
-  [ "${a}" = arm64 ] || { echo "guest-box.sh: ${i} is ${a:-not here}, not arm64" >&2; exit 1; }
+  [ "${a}" = "${GUEST_ARCH}" ] || { echo "guest-box.sh: ${i} is ${a:-not here}, not ${GUEST_ARCH}" >&2; exit 1; }
 done
 # shellcheck disable=SC2086 — a list of image names
 docker save -o "${work}/images.tar" ${all}
@@ -160,7 +175,7 @@ cp /etc/resolv.conf /run/systemd/resolve/stub-resolv.conf
 cp /etc/resolv.conf /run/systemd/resolve/resolv.conf
 
 s=$(date +%s)
-DGO_GUEST_IMAGES="${work}/images.tar" bash "${src}/packaging/android/engine/guest.sh" "${work}/dgo-guest-arm64.img"
+DGO_GUEST_IMAGES="${work}/images.tar" bash "${src}/packaging/android/engine/guest.sh" "${work}/dgo-guest-${GUEST_ARCH}.img"
 echo "made in $(( $(date +%s) - s )) s"
 rm -f "${work}/images.tar"
 # xz, the smallest the phone reads (the zstd program beside QEMU reads .xz; Java's framework has no reader
@@ -168,19 +183,22 @@ rm -f "${work}/images.tar"
 # 1.13 GB of public images no room: measured from their registries, 2026-11-01). As many threads as the
 # box has CPUs (its --cpus); in parts under that limit too, joined in name order.
 s=$(date +%s)
-xz -T"${GUEST_BOX_CPUS:-2}" -9 -c "${work}/dgo-guest-arm64.img" > "${work}/dgo-guest-arm64.img.xz"
-rm -f "${work}/dgo-guest-arm64.img"
-echo "packed in $(( $(date +%s) - s )) s: $(du -h "${work}/dgo-guest-arm64.img.xz" | cut -f1)"
-(cd "${work}" && sha256sum dgo-guest-arm64.img.xz > out/dgo-guest-arm64.img.xz.sha256)
-split -b 1900M -d -a 2 "${work}/dgo-guest-arm64.img.xz" "${work}/out/dgo-guest-arm64.img.xz.part"
+xz -T"${GUEST_BOX_CPUS:-2}" -9 -c "${work}/dgo-guest-${GUEST_ARCH}.img" > "${work}/dgo-guest-${GUEST_ARCH}.img.xz"
+rm -f "${work}/dgo-guest-${GUEST_ARCH}.img"
+echo "packed in $(( $(date +%s) - s )) s: $(du -h "${work}/dgo-guest-${GUEST_ARCH}.img.xz" | cut -f1)"
+(cd "${work}" && sha256sum dgo-guest-${GUEST_ARCH}.img.xz > out/dgo-guest-${GUEST_ARCH}.img.xz.sha256)
+split -b 1900M -d -a 2 "${work}/dgo-guest-${GUEST_ARCH}.img.xz" "${work}/out/dgo-guest-${GUEST_ARCH}.img.xz.part"
 # …and the pieces a phone fetches instead (DGO-1089, Guest.fetch): 32 MiB of the .xz each, named by its
 # SHA-256, and their list — whose own SHA-256 is what an APK that fetches the machine is built with
 # (read straight from the .xz, one 32 MiB block at a time — the memory one piece takes). The list is also
 # published under its own SHA-256, the name a phone asks for it by.
 mkdir -p "${work}/out/pieces"
-python3 - "${work}/dgo-guest-arm64.img.xz" "${work}/out/pieces" "${work}/out/dgo-guest-arm64.manifest.json" <<'PY'
+# The machine's AVF kernel and initrd (guest.sh, DGO-1328) go with it, named the same way: the list's
+# "boot", which a phone that runs AVF fetches beside the pieces (Guest.boot).
+python3 - "${work}/dgo-guest-${GUEST_ARCH}.img.xz" "${work}/out/pieces" "${work}/out/dgo-guest-${GUEST_ARCH}.manifest.json" \
+  "${work}/dgo-guest-${GUEST_ARCH}.img.kernel" "${work}/dgo-guest-${GUEST_ARCH}.img.initrd" <<'PY'
 import hashlib, json, os, sys
-xz, pieces, manifest = sys.argv[1:4]
+xz, pieces, manifest, kernel, initrd = sys.argv[1:6]
 listed, total = [], 0
 with open(xz, "rb") as f:
     while True:
@@ -194,14 +212,24 @@ with open(xz, "rb") as f:
         os.replace(tmp, os.path.join(pieces, sha))   # the same bytes twice are one piece, listed twice
         listed.append({"sha256": sha, "size": len(block)})
         total += len(block)
-raw = json.dumps({"version": 1, "total": total, "pieces": listed}, separators=(",", ":")).encode()
+doc = {"version": 1, "total": total, "pieces": listed}
+boot = {}
+for name, path in (("kernel", kernel), ("initrd", initrd)):
+    data = open(path, "rb").read()
+    assert 0 < len(data) <= 1 << 30, f"{name}: {len(data)} bytes"
+    sha = hashlib.sha256(data).hexdigest()
+    with open(os.path.join(pieces, sha), "wb") as o:
+        o.write(data)
+    boot[name] = {"sha256": sha, "size": len(data)}
+doc["boot"] = boot
+raw = json.dumps(doc, separators=(",", ":")).encode()
 with open(manifest, "wb") as o:
     o.write(raw)
 with open(os.path.join(pieces, hashlib.sha256(raw).hexdigest()), "wb") as o:
     o.write(raw)
-print(f"{len(listed)} pieces, {total} bytes; the list {hashlib.sha256(raw).hexdigest()}")
+print(f"{len(listed)} pieces, {total} bytes, its AVF kernel and initrd; the list {hashlib.sha256(raw).hexdigest()}")
 PY
-rm -f "${work}/dgo-guest-arm64.img.xz"
+rm -f "${work}/dgo-guest-${GUEST_ARCH}.img.xz" "${work}/dgo-guest-${GUEST_ARCH}.img.kernel" "${work}/dgo-guest-${GUEST_ARCH}.img.initrd"
 # the runner's user publishes them (the box is root)
 chown -R "$(stat -c %u:%g "${src}")" "${work}/out"
 ls -la "${work}/out"

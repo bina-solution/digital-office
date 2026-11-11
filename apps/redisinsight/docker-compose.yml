@@ -25,17 +25,17 @@ services:
     - traefik.http.routers.redisinsight-local.rule=Host(`redisinsight.localhost`)
     - traefik.http.routers.redisinsight-local.entrypoints=web
     - traefik.http.routers.redisinsight-local.service=redisinsight
-    - traefik.http.routers.redisinsight-local.middlewares=authentik@file
+    - traefik.http.routers.redisinsight-local.middlewares=authentik-admins@file
     - traefik.http.routers.redisinsight-http.rule=Host(`${REDISINSIGHT_BASE_URL}`)
     - traefik.http.routers.redisinsight-http.entrypoints=web
     - traefik.http.routers.redisinsight-http.service=redisinsight
-    - traefik.http.routers.redisinsight-http.middlewares=authentik@file
+    - traefik.http.routers.redisinsight-http.middlewares=authentik-admins@file
     - traefik.http.routers.redisinsight-https.rule=Host(`${REDISINSIGHT_BASE_URL}`)
     - traefik.http.routers.redisinsight-https.entrypoints=websecure
     - traefik.http.routers.redisinsight-https.tls=true
     - traefik.http.routers.redisinsight-https.tls.certresolver=${TRAEFIK_CERTRESOLVER-myresolver}
     - traefik.http.routers.redisinsight-https.service=redisinsight
-    - traefik.http.routers.redisinsight-https.middlewares=authentik@file
+    - traefik.http.routers.redisinsight-https.middlewares=authentik-admins@file,hsts@file
     - traefik.http.services.redisinsight.loadbalancer.server.port=5540
 volumes:
   redisinsight_data: null

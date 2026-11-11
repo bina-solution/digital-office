@@ -161,9 +161,9 @@ DOC = "ai/context/dgo-security-session.md"
 #: `image-pin-lint.py`'s FIRST_PARTY_* by hand, because the two answer different questions (G15:
 #: "is it pinned at all"; here: "is it digest-pinned, and is a digest even the right question for
 #: this reference").
-FIRST_PARTY_PREFIXES = ("deployment-hacohen-", "binaos/", "incoming-documents-local", "my-docs-local",
+FIRST_PARTY_PREFIXES = ("digital-office-", "binaos/", "incoming-documents-local", "my-docs-local",
                         "llm-gateway-local")
-OFFICE_REGISTRY = "ghcr.io/solomonboltin/digital-office/"
+OFFICE_REGISTRY = "ghcr.io/bina-solution/digital-office/"
 
 #: The doc's line for each rule, printed beside it so a reader can check the quotation.
 RULE_DOC = {
@@ -258,8 +258,12 @@ JUSTIFIED: dict[str, str] = {
         "Claude Code operates the office from inside the container the way Azaria does (DGO-1074, the "
         "owner: «Claude will be able to use Bina DS's agents … via the CLI»): `./bbox agent` reads the "
         "other agent's action token with `docker exec` (POST /containers/{id}/exec — a write), and "
-        "`./bbox` / `./scripts/dc` run compose against the engine. `:ro` breaks both. The desktop "
-        "app's container (bina-claude-desktop) holds no socket.",
+        "`./bbox` / `./scripts/dc` run compose against the engine. `:ro` breaks both.",
+    "apps/bina-claude/docker-compose.yml|bina-claude-desktop|${BBOX_DOCKER_SOCK:-/var/run/docker.sock}:/var/run/docker.sock":
+        "the official Claude app's sessions run `./bbox` and `./scripts/dc` on the office themselves "
+        "(DGO-1323, the owner: «אתה רץ בתוך הhp ואמור להיות לך גישה מלאה להריץ כל פקודה … עזריה היה רק כרשת "
+        "ביטחון»): compose up/build and `docker exec` are writes, so `:ro` breaks the reason it exists. Root on "
+        "the host, accepted in his words as S28 (ai/context/dgo-security.md).",
     "apps/bina-ds/docker-compose.yml|bina-ds|${BBOX_DOCKER_SOCK:-/var/run/docker.sock}:/var/run/docker.sock":
         "the agent's shell runs `./bbox run` — compose, i.e. the engine — from inside the container. "
         "It is the deliberate door described in the office's own operating model: `exec` on a "
@@ -269,6 +273,12 @@ JUSTIFIED: dict[str, str] = {
         "job is `docker run` of the cycle container (`POST /containers/create`, a write), which then runs "
         "`./bbox run` — bina-ds's own door, for the same named call. The cycle runs in a container of its "
         "own so the `bbox run` it causes cannot kill it (runner.sh). Off by default (platform.state.default.yaml).",
+    "apps/ci-runner/docker-compose.yml|ci-runner-agent|${BBOX_DOCKER_SOCK:-/var/run/docker.sock}:/var/run/docker.sock":
+        "the office's GitHub runner as an app (DGO-1797): its jobs bring the stack up and run the gates on THIS "
+        "office's engine — `docker compose up`, `docker run`, builds: writes. Docker-in-Docker (the devops-vps "
+        "shape) would add a second engine and ~4.5 GB a 15 GB laptop does not have. It replaces a runner installed "
+        "on the Dell's host by hand with the same reach and nothing to see; this one is on the screen, pausable, "
+        "one job at a time behind the office's door (prejob.sh). Off by default.",
     "apps/openhands/docker-compose.yml|openhands|/var/run/docker.sock:/var/run/docker.sock":
         "a coding agent that launches its own runtime containers (docker-outside-of-docker) — "
         "already declared as such by G32's SOCK_ALLOWED_APPS for the same reason. Disabled gallery "
@@ -664,7 +674,7 @@ def self_test() -> int:
     # the counted rules, which are not findings and must not become any
     unpinned = _third_party_unpinned({"a/docker-compose.yml": {"services": {
         "u": {"image": "postgres:17"}, "d": {"image": "postgres@sha256:" + "0" * 64},
-        "f": {"image": "deployment-hacohen-console"}, "o": {"image": OFFICE_REGISTRY + "drive:latest"}}}})
+        "f": {"image": "digital-office-console"}, "o": {"image": OFFICE_REGISTRY + "drive:latest"}}}})
     if [i for i, _ in unpinned] != ["postgres:17"]:
         bad += 1
         print(f"  [FAIL] the digest count must be 1 (postgres:17), got {unpinned}")

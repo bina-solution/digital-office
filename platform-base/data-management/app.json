@@ -5,6 +5,7 @@
     "en": "Data Management"
   },
   "layer": 2,
+  "people": "admins",
   "kind": "service",
   "system": true,
   "version": "0.1.0",
@@ -21,6 +22,16 @@
         "inventory",
         "export",
         "import"
+      ]
+    },
+    {
+      "name": "backup-store",
+      "type": "protocol",
+      "endpoint": "http://data-management:8080",
+      "link": true,
+      "required_ops": [
+        "repo-runs",
+        "repo"
       ]
     }
   ],

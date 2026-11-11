@@ -27,6 +27,23 @@
   "blueprints": {
     "n8n": "blueprint/n8n"
   },
+  "contributes": {
+    "connection_providers": [
+      {
+        "id": "google-workspace-agent-openai",
+        "title": "OpenAI key of the Google Workspace agent — its image and audio tools send files only with this",
+        "title_he": "מפתח OpenAI של סוכן Google Workspace — כלי התמונה והשמע שלו שולחים קבצים רק איתו",
+        "kind": "text-secret",
+        "env": "GOOGLE_WORKSPACE_AGENT_OPENAI_API_KEY",
+        "optional": true,
+        "probe": {"type": "present"},
+        "now": "env -> n8n credential gwaAgentOpenAi01 (credential_overrides). gDriveMcpAgent01 asks GET /api/is-set/google-workspace-agent-openai before its two OpenAI nodes: unset, and no image or recording leaves the office (DGO-1814). The office's OPENAI_API_KEY is not a yes for this agent. Set it in .env (the credential is seeded from there at push, not from this screen); emptying it is «off» once connections is recreated."
+      }
+    ]
+  },
+  "connections": [
+    {"id": "google-workspace-agent-openai", "required": false}
+  ],
   "data": {
     "volumes": [],
     "on_uninstall": "purge"

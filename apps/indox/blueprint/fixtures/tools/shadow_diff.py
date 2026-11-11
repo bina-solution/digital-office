@@ -36,7 +36,7 @@ def main():
 
     cols = ",".join(f'"{c}"' for c in ["ID", "API_TOOLS_ID"] + sorted(set(CMP.values())))
     idlist = ",".join(f"'{i}'" for i in ids)
-    rows = sh(["docker", "exec", "supabase-db-shlomo-laptop", "psql", "-U", "postgres", "-d", "postgres",
+    rows = sh(["docker", "exec", "supabase-db-owner-laptop", "psql", "-U", "postgres", "-d", "postgres",
                "-tAF|", "-c", f'SELECT {cols} FROM incoming_documents WHERE "ID" IN ({idlist}) ORDER BY "ID"'])
     hdr = ["ID", "API_TOOLS_ID"] + sorted(set(CMP.values()))
     docs = []

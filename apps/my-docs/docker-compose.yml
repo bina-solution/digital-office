@@ -7,7 +7,7 @@ services:
     #
     # It used to be `image: my-docs-local:latest`, a local tag no registry has — so CI published an
     # image under a name this compose never asked for.
-    image: ghcr.io/solomonboltin/digital-office/my-docs:${IMAGE_TAG:-latest}
+    image: ghcr.io/bina-solution/digital-office/my-docs:${IMAGE_TAG:-latest}
     pull_policy: missing
     build:
       context: .
@@ -43,7 +43,7 @@ services:
       - traefik.http.routers.my-docs-https.tls=true
       - traefik.http.routers.my-docs-https.tls.certresolver=${TRAEFIK_CERTRESOLVER-myresolver}
       - traefik.http.routers.my-docs-https.service=my-docs
-      - traefik.http.routers.my-docs-https.middlewares=authentik@file
+      - traefik.http.routers.my-docs-https.middlewares=authentik@file,hsts@file
       - traefik.http.services.my-docs.loadbalancer.server.port=8000
 
 networks:

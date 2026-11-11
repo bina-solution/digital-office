@@ -175,7 +175,7 @@ services:
       - PIPELINE_N8N_PGHOST=${INCOMING_DOCS_N8N_PG_HOST:-n8n-postgres}
       - PIPELINE_N8N_PGPORT=5432
       - PIPELINE_N8N_PGDATABASE=${POSTGRES_DB:-n8n}
-      - PIPELINE_N8N_PGUSER=${POSTGRES_USER:-hacohen}
+      - PIPELINE_N8N_PGUSER=${POSTGRES_USER:-example}
       - PIPELINE_N8N_PGPASSWORD=${POSTGRES_PASSWORD:-}
       # --- Observability (optional).
       - SENTRY_DSN=${INCOMING_DOCS_SENTRY_DSN:-}
@@ -216,7 +216,7 @@ services:
       - traefik.http.routers.incoming-documents-https.tls=true
       - traefik.http.routers.incoming-documents-https.tls.certresolver=${TRAEFIK_CERTRESOLVER-myresolver}
       - traefik.http.routers.incoming-documents-https.service=incoming-documents
-      - traefik.http.routers.incoming-documents-https.middlewares=authentik@file
+      - traefik.http.routers.incoming-documents-https.middlewares=authentik@file,hsts@file
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
       interval: ${HEALTHCHECK_INTERVAL:-30s}

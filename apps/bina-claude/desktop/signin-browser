@@ -1,0 +1,94 @@
+#!/bin/sh
+# /usr/local/bin/bina-claude-signin-browser <url> — this desktop's browser, for ONE thing: the app's own sign-in
+# (DGO-1506). desktop/autostart names it the http/https handler, and $BROWSER (the same answer for an xdg-open
+# that finds no handler).
+#
+# «Continue with Google» is a browser round trip on Linux. The app asks the system to open
+#   https://claude.com/cai/login/app-google-auth?open_in_browser=1&hop_nonce=…
+# Google's page is filled in that browser, and claude.ai answers by opening
+#   claude://login/google-auth?code=…&hop_nonce=…
+# which the system hands back to the running app (desktop/claude-desktop). On a computer the browser and the
+# app share one screen. Here that screen is the one the console streams, to a computer or a phone, so the
+# browser opens on it, maximized, and the person signs in on Google's own page. Until now the image had no
+# browser at all: the click did nothing (xdg-open: "no method available", the HP 2026-11-04).
+#
+# ONLY THE SIGN-IN. The browser runs without Chromium's sandbox (the container denies it the namespaces it
+# needs), as the desktop user, who can reach the host's docker socket (DGO-1323). So it opens nothing but the
+# app's sign-in, on claude.ai or claude.com: a link Claude prints in a chat, or a session opens, is not opened
+# (as before there was a browser) and is logged by its host only. The window lives at most
+# BINA_CLAUDE_SIGNIN_MAX_S seconds (15 min), in a throwaway profile deleted when it closes, so no Google or
+# claude.ai session stays in the office; the policy (browser-policy.json) blocks downloads. A new press closes
+# an earlier press's window (the app has replaced its nonce).
+#
+# The log names a host and a path, never the query (it carries the sign-in's nonce), and each window by an id,
+# so hooks/signin-log.awk can tell which window a «closed» line belongs to.
+set -u
+LOG="${HOME:-/config}/.claude-open-url.log"
+BIN="${BINA_CLAUDE_BROWSER_BIN:-chromium}"
+TMP="${TMPDIR:-/tmp}"
+PREFIX="bina-claude-signin."
+MAX_S="${BINA_CLAUDE_SIGNIN_MAX_S:-900}"
+
+note() {
+  if [ -f "$LOG" ] && [ "$(wc -l < "$LOG")" -gt 400 ]; then
+    tail -n 200 "$LOG" > "$LOG.new" 2>/dev/null && mv -f "$LOG.new" "$LOG" 2>/dev/null
+  fi
+  printf '%s %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$*" >> "$LOG" 2>/dev/null || true
+}
+# A URL's pieces as they may be written down: no control characters (a newline would forge a log line).
+clean() { printf '%s' "$1" | tr -d '\000-\037\177'; }
+
+url="${1:-}"
+case "$url" in
+  http://*|https://*) ;;
+  *) note "refused: not a web address"; exit 2 ;;
+esac
+# Only a plain address is read: a backslash ends the host for the browser (the URL standard) but not for
+# this parser (https://evil.example\@claude.ai/ is evil.example to Chromium), and whitespace or a byte outside
+# printable ASCII has no place in the app's sign-in address.
+case "$url" in
+  *\\*|*" "*) note "refused: not a plain web address"; exit 2 ;;
+esac
+# What is left once every printable character is removed must be nothing (the x keeps a newline from being
+# swallowed by the command substitution).
+if [ "$(printf '%s' "$url" | LC_ALL=C tr -d '!-~'; printf x)" != x ]; then
+  note "refused: not a plain web address"; exit 2
+fi
+rest="${url#*://}"
+noq="${rest%%[?#]*}"
+query="${rest#"$noq"}"
+host="${noq%%/*}"
+host="${host##*@}"
+host="$(clean "${host%%:*}" | tr 'A-Z' 'a-z')"
+path="/${noq#*/}"; [ "$path" = "/$noq" ] && path="/"
+path="$(clean "$path")"
+signin=no
+case "$host" in
+  claude.ai|*.claude.ai|claude.com|*.claude.com)
+    case "$path" in */login/*) signin=yes ;; esac
+    case "$query" in *[?\&]hop_nonce=*) signin=yes ;; esac ;;
+esac
+if [ "$signin" != yes ]; then
+  note "not opened link ${host}: this desktop's browser opens only the app's sign-in"
+  exit 0
+fi
+if pkill -f -- "--user-data-dir=${TMP}/${PREFIX}" 2>/dev/null; then
+  note "closed an earlier sign-in's window"
+fi
+profile="$(mktemp -d "${TMP}/${PREFIX}XXXXXX")" || { note "failed sign-in https://${host}${path}: no profile folder"; exit 1; }
+id="${profile##*.}"
+note "opened sign-in https://${host}${path} window=${id}"
+# --no-sandbox: Chromium's sandbox needs user namespaces docker's default seccomp denies (as for the app).
+# --password-store=basic: this throwaway profile never touches the keyring the app keeps its own sign-in in.
+# --disable-breakpad: no crash dump (a sign-in's memory) is written to the volume.
+# The image has coreutils' timeout (Dockerfile.desktop checks it); a test host without one runs uncapped.
+cap=""; command -v timeout >/dev/null 2>&1 && cap="timeout -k 5 ${MAX_S}"
+(
+  $cap "$BIN" --no-sandbox --disable-gpu --disable-breakpad --password-store=basic \
+    --user-data-dir="$profile" --no-first-run --no-default-browser-check --start-maximized --new-window \
+    "$url" >/dev/null 2>&1
+  rc=$?
+  rm -rf "$profile"
+  note "closed sign-in window=${id} (browser exit ${rc})"
+) </dev/null >/dev/null 2>&1 &
+exit 0

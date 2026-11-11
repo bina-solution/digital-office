@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+#: types — the document types (data, not code):  ./bbox documents types
+# Pipes the app's own CLI (apps/documents/cli.py) into its container: no address, no key, no rebuild.
+set -uo pipefail
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
+. "${REPO_ROOT}/scripts/lib.sh"
+case "${1:-}" in -h|--help) sed -n 's/^#: //p' "${BASH_SOURCE[0]}"; exit 0 ;; esac
+dcx exec -T documents python - types "$@" < "$(npath "${REPO_ROOT}")/apps/documents/cli.py"

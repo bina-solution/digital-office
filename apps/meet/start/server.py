@@ -15,15 +15,12 @@ open the room's link on the meeting host, and wait there until a host is in (ENA
     GET /recordings/<session>/<file>.mp4
                      one recording, from the recorder's volume (read-only here), with byte ranges
                      so a browser can play it and seek
-    GET /flow        meet-flow (fireplace 2026-10-28): every meeting that has one - its whole life on
-                     one time axis (the recording, the side recordings, who spoke, every word, the
-                     screens, topics, decisions, tasks, its documents)
-    GET /flow/<room>/          that meeting's page (start/flow/index.html), and under it its files:
-                     data.js, frames/, media/ (byte ranges), docs/ - from the meeting's flow folder; a meeting
-                     with no flow yet gets the live page (start/flow/live.html): its captions as they arrive
+    GET /flow/ and /flow/<room>/   «פגישות», the meetings app's one page (start/flow/app.html), for all the meetings
+                     and for one — its whole life on one time axis (the recording, the side recordings, who spoke,
+                     every word, the screens, topics, decisions, tasks, its documents); under it the meeting's files:
+                     data.js, frames/, media/ (byte ranges), docs/ - from the meeting's flow folder. (The pages before
+                     it, «v1», were parked in the legacy archive when no office served them any more, DGO-1325.)
     GET /flow/<room>/live.json the meeting now, from prosody's captions door: captions, who is in, recording
-    GET /flow/ and /flow/<room>/   with MEET_FLOW_UI=v2 (the default): «פגישות» v2, the meetings app's one page
-                     (start/flow/app.html), for all of them and for one; v1 = the two pages above, as they were
     GET /flow/api/meetings · /flow/api/search?q=…[&room=…] · /flow/api/inbox[?all=1]
                      every meeting as data (kept 15 s), a search of all that was said and decided, the
                      decisions and tasks not approved yet (all=1: every one of them, with its state)
@@ -47,7 +44,7 @@ it answers only the containers MEET_MACHINE_PEERS names (n8n's):
                                          signed for the recording's work item (posted only to
                                          MEET_PLANE_API_URL's /uploads)
 
-…and the recorder's own door, for the watchdog that runs inside meet-jibri (jibri/watch.py, fireplace
+…and the recorder's own door, for the watchdog that runs inside meet-jibri (jibri/watch.py, examplef
 2026-10-26), answered only to that container (MEET_RECORDER_PEERS) with the secret both hold
 (MEET_RECORDER_WATCH_SECRET): the two things it cannot reach from meet-net itself.
 
@@ -58,7 +55,7 @@ it answers only the containers MEET_MACHINE_PEERS names (n8n's):
                                          (MEET_SPEECH_URL /transcribe, synchronous for short audio;
                                          `auto` = the whisper model, as spoken; `he` = ivrit) → {text}
 
-…and two threads of its own (fireplace, 2026-10-27): every ended meeting's live captions (prosody's
+…and two threads of its own (examplef, 2026-10-27): every ended meeting's live captions (prosody's
 /meet-captions door) go to Plane — a comment on the recording's item, or an item of their own for a
 meeting with no recording — and a watch that tells the owner (the notice centre, source meet-health)
 when a meeting is not being recorded, the bridge is overloaded, a meeting service does not answer, no
@@ -124,7 +121,7 @@ QUIET = {u.strip() for u in os.environ.get("MEET_QUIET_INITIATORS", "qa-host").s
 CONSOLE_URL = os.environ.get("MEET_CONSOLE_URL", "").strip().rstrip("/")
 PLANE_API = os.environ.get("MEET_PLANE_API_URL", "").strip().rstrip("/")
 # An office whose Plane is its OWN (no link door to sign the call in) names the key here; empty =
-# the link door signs it, as on vps1 (FPG, 2026-10-26).
+# the link door signs it, as on vps1 (EXF, 2026-10-26).
 PLANE_KEY = os.environ.get("MEET_PLANE_API_KEY", "").strip()
 # The recorder's watchdog (jibri/watch.py): which container it is, the secret it shows, where the
 # notice centre and the transcriber answer. Empty peers or secret: the door is shut.
@@ -135,22 +132,59 @@ NOTIFY_URL = os.environ.get("MEET_NOTIFY_URL", "").strip().rstrip("/")
 SPEECH_URL = os.environ.get("MEET_SPEECH_URL", "").strip().rstrip("/")
 
 
+# An office whose Plane is its OWN, with no key in .env (DGO-1649): the key is the office's own, kept in the vault by
+# project-pln's bootstrap (`plane_local_api_token-local`), and read from it when a call needs it — never copied into a
+# file. hooks/prepare names the vault's instance (MEET_PLANE_KEY_VAULT) when it points Meet at this office's own
+# Plane. Measured on Exampleu, 2026-11-10: the vault answers meet-start for that instance; project-pln:80 answers 401
+# without a key. A key written in .env (MEET_PLANE_API_KEY, EXF's way) still wins.
+PLANE_KEY_VAULT = os.environ.get("MEET_PLANE_KEY_VAULT", "").strip()
+VAULT_URL = os.environ.get("CONNECTIONS_URL", "http://connections:8990").strip().rstrip("/")
+_vault_key = {"at": 0.0, "key": ""}
+VAULT_KEY_TTL = 300.0
+
+
+def _plane_key(now=None) -> str:
+    """The key Plane's API is asked with: .env's, else the vault's (held for five minutes; a vault that does not
+    answer keeps the last key it gave, and with none there is no key — the call is refused by Plane, and said)."""
+    if PLANE_KEY or not PLANE_KEY_VAULT:
+        return PLANE_KEY
+    # the office's OWN key goes to the office's own Plane only — never across a link to another office's, whatever
+    # an operator wrote into MEET_PLANE_API_URL by hand beside the vault line (the second reader of DGO-1649)
+    if (urlsplit(PLANE_API).hostname or "") != "project-pln":
+        return ""
+    now = time.time() if now is None else now
+    if _vault_key["key"] and now - _vault_key["at"] < VAULT_KEY_TTL:
+        return _vault_key["key"]
+    key = ""
+    try:
+        with urllib.request.urlopen(f"{VAULT_URL}/api/instances/{quote(PLANE_KEY_VAULT, safe='')}/secret",
+                                    timeout=8) as r:
+            sec = (json.loads(r.read() or b"{}") or {}).get("secret") or {}
+        key = str(sec.get("token") or "").strip() if isinstance(sec, dict) else ""
+    except (OSError, ValueError) as e:                    # urllib's errors are OSErrors; a body that is not JSON
+        print(f"[meet-start] the vault did not give Plane's key ({type(e).__name__})", flush=True)
+    if key:
+        _vault_key.update(at=now, key=key)
+    return key or _vault_key["key"]
+
+
 def _plane_headers(h: dict) -> dict:
-    if PLANE_KEY:
-        h["X-API-Key"] = PLANE_KEY
+    key = _plane_key()
+    if key:
+        h["X-API-Key"] = key
     return h
 # DGO-907: the recordings' workflow is called the moment a recording ends (its webhook), and the
 # recordings list links each recording to its Plane item. Empty: nothing is called.
 WORKFLOW_HOOK = os.environ.get("MEET_WORKFLOW_HOOK", "").strip()
 PLANE_WS = os.environ.get("MEET_PLANE_WORKSPACE", "bina").strip()
 SOURCE = "meet-recording"            # the workflow's key for a recording's item (with session/file)
-# meet-flow (fireplace 2026-10-28). The app is start/flow/ (one page for every meeting). A meeting's flow is a
+# meet-flow (examplef 2026-10-28). The app is start/flow/ (one page for every meeting). A meeting's flow is a
 # folder beside its recording, <session>/flow, or flows/<room> for a meeting recorded elsewhere, holding its
 # flow.json ({room, title, started, session, ...}), data.js, frames/, media/ and docs/. The flow pipeline writes
 # it; this door only reads it (the volume is read-only here) and only behind the office sign-in.
 FLOW_APP = os.path.join(HERE, "flow")
 # An open byte range (a player's «bytes=N-») is answered with at most this much: the console's proxy drops a response
-# that streams for long (a 369 MB recording broke after ~10 s, fireplace 2026-10-28), and a player asks for the next
+# that streams for long (a 369 MB recording broke after ~10 s, examplef 2026-10-28), and a player asks for the next
 # piece by itself. 0 = the whole rest, as before.
 try:
     MEDIA_CHUNK = max(0, int(os.environ.get("MEET_MEDIA_CHUNK", str(4 << 20))))
@@ -193,7 +227,7 @@ def silences(folder, name):
 
 
 def holes_of(folder, name):
-    """The digital-zero holes jibri/finalize.sh measured in a recording's sound (the fpg103 damage):
+    """The digital-zero holes jibri/finalize.sh measured in a recording's sound (the exf103 damage):
     {runs, seconds, pct} or None when it has not measured them."""
     try:
         with open(os.path.join(folder, name[:-4] + ".holes.json"), encoding="utf-8") as f:
@@ -305,15 +339,15 @@ def recording_start(name: str):
     return time.mktime((int(m["y"]), int(m["m"]), int(m["d"]), int(m["H"]), int(m["M"]), int(m["S"]), 0, 0, -1))
 
 
-# \u2500\u2500 the office's own words in the machine's text (fireplace, 2026-10-29, AUD-C5-002110) \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
-# Call 5 (fpg105): the live captions wrote \u00abDGO fee\u00bb as \u00abDGOP\u00bb, \u00ab\u05d3\u05d9 \u05d2'\u05d5\u05e4\u05d9\u00bb, \u00ab\u05d3\u05d9\u05d2'\u05d9 \u05d0\u05d5\u05e4\u05d9\u00bb, \u00ab\u05d3\u05d9\u05d2'\u05d9 \u05d0\u05d5 \u05e4\u05d9\u00bb, and \u00abOur share\u00bb
+# \u2500\u2500 the office's own words in the machine's text (examplef, 2026-10-29, AUD-C5-002110) \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+# Call 5 (exf105): the live captions wrote \u00abDGO fee\u00bb as \u00abDGOP\u00bb, \u00ab\u05d3\u05d9 \u05d2'\u05d5\u05e4\u05d9\u00bb, \u00ab\u05d3\u05d9\u05d2'\u05d9 \u05d0\u05d5\u05e4\u05d9\u00bb, \u00ab\u05d3\u05d9\u05d2'\u05d9 \u05d0\u05d5 \u05e4\u05d9\u00bb, and \u00abOur share\u00bb
 # as \u00ab\u05d0\u05d0\u05d5\u05d5\u05e8 \u05e9\u05d9\u05d9\u05e8\u00bb / \u00ab\u05d4\u05d5\u05d5\u05e8\u05e9\u05d9\u05d9\u05e8\u00bb; William asked why it says DGOP [0:19:32]. The office's speech service takes no word list
 # (no prompt), so what it is known to mishear is put right after it: in the captions the recorder posts to the room
 # (/api/recorder/captions answers the fixed text, which jibri/watch.py posts and writes to the .live.txt), in the server
 # captions read back from a .live.txt, and in the first processing (the machine's own words kept beside it, \u00ab\u05de\u05e7\u05d5\u05e8\u00bb).
 # A setting, not code: MEET_VOCAB_FILE (default start/vocab.json), {"terms": [{"say": "DGO fee", "heard": [...]}]};
 # a Hebrew prefix stays and takes a hyphen (\u00ab\u05d1-DGO fee\u00bb), as the reviewed transcripts write it. Re-read when it changes.
-# …and BEFORE the recogniser too (FPG-471, 2026-10-29): the same file's "prompt" — the office's English terms, as a
+# …and BEFORE the recogniser too (EXF-471, 2026-10-29): the same file's "prompt" — the office's English terms, as a
 # list — goes with every live caption to the speech service as Whisper's initial prompt (apitools-asr `prompt`), so
 # the model can spell them the office's way in the first place (measured: an English speaker's «Zelle», «chimney cap»);
 # the rules above still put right what it misses (the owners' Hebrew «די ג'י אופי» is not changed by any prompt).
@@ -371,7 +405,7 @@ def vocab_rules() -> list:
 
 
 def vocab_prompt() -> str:
-    """The vocabulary file's "prompt" (the office's terms for the recogniser, FPG-471); "" without one."""
+    """The vocabulary file's "prompt" (the office's terms for the recogniser, EXF-471); "" without one."""
     vocab_rules()
     return _vocab["prompt"]
 
@@ -385,10 +419,10 @@ def fix_terms(text):
     return text
 
 
-# \u2500\u2500 a meeting known by its recording alone (fireplace, 2026-10-29, CHAT-61 / CHAT-62) \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+# \u2500\u2500 a meeting known by its recording alone (examplef, 2026-10-29, CHAT-61 / CHAT-62) \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
 # Since 2026-10-27 no browser captions anyone (config.dgoCaptions.mode 'off': the voice stays in the office), so
 # prosody's captions door opens no record of a meeting at all (it opens one at the first browser caption) \u2014 and a
-# meeting it has no record of had no live captions on its page, no first processing and no row in \u00ab\u05e4\u05d2\u05d9\u05e9\u05d5\u05ea\u00bb: fpg106
+# meeting it has no record of had no live captions on its page, no first processing and no row in \u00ab\u05e4\u05d2\u05d9\u05e9\u05d5\u05ea\u00bb: exf106
 # (2026-10-28) was recorded twice and its page answered 404. The office's own captions are the recorder's
 # (jibri/watch.py, MEET_LIVE_CAPTIONS=on): 30-s pieces of the meeting's sound, written beside the recording as
 # <room>_<time>.live.txt, "[MM:SS] text" from the recording's start. So the recording is enough: while it records, its
@@ -471,28 +505,50 @@ _BIDI = re.compile("[\u200e\u200f\u202a-\u202e\u2066-\u2069]")
 _first_cache = {}
 
 
-def speech_job(audio_name: str, model: str = "ivrit"):
-    """The speech service's finished job for this recording's audio (the recordings' workflow asks for it the moment a
-    recording ends): its id, or None while there is none."""
+_jobs = {"at": 0.0, "jobs": None}
+_jobs_lock = threading.Lock()
+
+
+def speech_jobs(max_age: float = 10.0):
+    """The speech service's 100 newest jobs (/speechJobs, newest first), kept 10 s — every open meeting page asks every
+    15 s, and the meetings list asks once per meeting; None when the service does not answer, and that is kept 30 s
+    (a list of eight meetings must not wait eight timeouts, under the list's lock)."""
     if not SPEECH_URL:
         return None
+    with _jobs_lock:
+        if _jobs["at"] and time.time() - _jobs["at"] < (max_age if _jobs["jobs"] is not None else 30.0):
+            return _jobs["jobs"]
     try:
-        with urllib.request.urlopen(f"{SPEECH_URL}/speechJobs?limit=100", timeout=8) as r:
-            jobs = json.loads(r.read()).get("jobs") or []
+        with urllib.request.urlopen(f"{SPEECH_URL}/speechJobs?limit=100", timeout=5) as r:
+            jobs = [j for j in json.loads(r.read()).get("jobs") or [] if isinstance(j, dict)]
     except (OSError, ValueError):
-        return None
-    for j in jobs:
+        jobs = None
+    with _jobs_lock:
+        _jobs.update(at=time.time(), jobs=jobs)
+    return jobs
+
+
+def job_for(jobs, audio_name: str, model: str, status=None):
+    """The newest job of this recording's audio and model (of that status, when given), or None."""
+    for j in jobs or []:
         src, opt = j.get("source") or {}, j.get("options") or {}
-        if j.get("status") == "completed" and src.get("name") == audio_name and (opt.get("model") or "") == model:
-            return j.get("id")
+        if src.get("name") == audio_name and (opt.get("model") or "") == model and (status is None or j.get("status") == status):
+            return j
     return None
 
 
-# ── the office's second recogniser beside the first, and no translation in either (fireplace, 2026-10-29, MT-01) ──
+def speech_job(audio_name: str, model: str = "ivrit"):
+    """The speech service's finished job for this recording's audio (the recordings' workflow asks for it the moment a
+    recording ends): its id, or None while there is none."""
+    j = job_for(speech_jobs(), audio_name, model, "completed")
+    return j.get("id") if j else None
+
+
+# ── the office's second recogniser beside the first, and no translation in either (examplef, 2026-10-29, MT-01) ──
 # The recordings' workflow transcribes every recording twice (DGO-955): ivrit (Hebrew-tuned, language he) and whisper
 # (multilingual, language auto) — never translated. The first processing showed ivrit only; whisper's words for the
 # same moment now sit beside each line under «מקור» (it often writes the English words ivrit spells in Hebrew letters).
-# Shlomo (S15 [09:38]): «לא צריך לתרגם פגישות». Whisper's known failure on a Hebrew stretch it took for English is to
+# Owner (S15 [09:38]): «לא צריך לתרגם פגישות». Whisper's known failure on a Hebrew stretch it took for English is to
 # write it in English — a translation, not a transcript. Such a piece (English where ivrit heard Hebrew) is left out
 # and said so in the line's notes; so are whisper's stock lines in a silent room (the workflow's own STOCK rule).
 WHISPER_STOCK = {"תודה רבה", "תודה", "תודה רבה לכם", "thank you", "thanks", "you", "bye", "שלום", "תודה שצפיתם",
@@ -551,6 +607,14 @@ def with_second_pass(turns: list, segs: list) -> None:
             t.setdefault("alts", {})["whisper"] = auto
 
 
+def turn_speaker(seg: dict) -> str:
+    """The speaker one turn shows: the transcriber's own label when it has one (DGO-1627: «דובר 1»,
+    «דובר 2»…), and «?» for a transcript made before the diarizer existed. This page is the FIRST
+    pass — it is drawn before any analysis names anybody — so a label here is the machine's, never a
+    person's."""
+    return str(seg.get("speaker") or "?")
+
+
 def first_pass(audio_name: str, offset: float):
     """The recording's transcription as meet-flow turns: one per segment, every word on the recording's clock (tenths
     of a second from the turn's start) and the words the recogniser was unsure of (confidence < 0.5); beside each, what
@@ -579,7 +643,10 @@ def first_pass(audio_name: str, offset: float):
             text, wt, low = _BIDI.sub("", str(seg.get("text") or "")).strip(), None, []
         if not text:
             continue
-        t = {"id": f"m{i:04d}", "s": round(s0, 2), "e": round(float(seg.get("end") or 0) + offset, 2), "who": "?", "text": text,
+        # the transcriber's own label when it has one (DGO-1627), otherwise the old «?»: this page is
+        # the FIRST pass, drawn before any analysis names anybody
+        t = {"id": f"m{i:04d}", "s": round(s0, 2), "e": round(float(seg.get("end") or 0) + offset, 2),
+             "who": turn_speaker(seg), "text": text,
              "flags": ["ivrit turbo (the office's recogniser), not reviewed"]}
         fixed = fix_terms(text)
         if fixed != text:                      # the office's words (vocab.json); what the machine wrote stays one click away
@@ -603,8 +670,8 @@ def first_pass(audio_name: str, offset: float):
     return jid, turns
 
 
-# ── the moments a screen was pointed at (fireplace, 2026-10-29, M5-T44) ───────────────────────────────────────────
-# Shlomo, call 5 [1:41:39]: whenever someone says «here» («פה»), the shared screen's frame from that second belongs
+# ── the moments a screen was pointed at (examplef, 2026-10-29, M5-T44) ───────────────────────────────────────────
+# Owner, call 5 [1:41:39]: whenever someone says «here» («פה»), the shared screen's frame from that second belongs
 # with the meeting; C1 [35:53]: every «צילום מסך» in a video call, automatically. The transcript knows the second each
 # word was said (the recogniser's word times), so the moments are found in it: «צילום מסך» / «screenshot» (asked
 # for: kind "shot") and «פה», «הנה», «כאן» (kind "here"), one moment per 15 s (call 5: 101 moments). The page draws
@@ -651,6 +718,16 @@ def screen_moments(turns: list) -> list:
     return out
 
 
+def meeting_title(room: str, flow=None, meta=None) -> str:
+    """A meeting's one title, wherever it is shown: its full processing's (the flow folder's, or its data's), else its
+    room. What is being done to it is the status line's to say, never the title's (DGO-1325: «bs101 · עיבוד ראשון» was
+    written in five places, and on a phone it was the title AND the state pill AND the ribbon)."""
+    for got in ((flow or {}).get("title"), (meta or {}).get("title")):
+        if got and str(got).strip():
+            return str(got).strip()
+    return room
+
+
 def machine_flow(room: str):
     """The first processing of a meeting that ended and was recorded: the MEETING data of meet-flow's page, built from
     the recording (video, length) and its live captions (one paragraph per speaker, on the recording's clock). None
@@ -695,7 +772,7 @@ def machine_flow(room: str):
         captions = []
     people = [a.get("name") for a in (doc.get("attendees") or []) if isinstance(a, dict) and a.get("name")] or list(doc.get("people") or [])
     quiet = [n for n in (doc.get("uncaptioned") or []) if n]
-    return {"meeting": {"id": room, "title": f"{room} · עיבוד ראשון", "duration": round(dur, 1),
+    return {"meeting": {"id": room, "title": meeting_title(room), "duration": round(dur, 1),
                         "subtitle": f"{rec['started']} · {', '.join(people[:8])}",
                         "transcript_label": "תמלול מכונה (ivrit, לא נבדק)" if heard else "כתוביות חיות (מכונה)",
                         "facts": [["מה יש כאן", "ההקלטה והכתוביות החיות של הפגישה, מיד כשהסתיימה. העיבוד המלא (מזהה הדיבור הטוב ביותר, "
@@ -772,6 +849,25 @@ def plane_items(max_age: float = 60.0) -> dict:
     return _items["map"]
 
 
+# ── the fourth channel: meetings and recordings, on `dgo:flow:meet` (flow.v1, DGO-1402) ──────────
+# Through the office's ONE publisher, platform-base/redis/flowpub.py, mounted read-only at /opt/dgo
+# (../docker-compose.yml) — «כל מקביל» draws it as the row «פגישות», agents hear it (`./bbox meet flow`):
+# a meeting opened (its room, never who opened it), a recording ready, and each run of the recordings'
+# workflow as ONE bar from the call to its answer. An image run without the mount publishes nothing.
+import sys as _sys
+
+_sys.path.insert(0, "/opt/dgo")
+try:
+    import flowpub as _flowpub
+except ImportError:
+    _flowpub = None
+
+
+def _flow(type_, title, data=None):
+    if _flowpub is not None:
+        _flowpub.emit("meet", type_, title, data or {})
+
+
 # `ok_at` starts at this door's start: a run this door began before a restart may still be going in
 # n8n (its socket went, the run did not), so the workflow's clock waits as it does after a run.
 _hook = {"want": None, "busy": False, "busy_since": 0.0, "ok_at": time.time()}
@@ -801,6 +897,13 @@ def call_workflow() -> None:
             (reason, keys), _hook["want"] = _hook["want"], None
             _hook["busy"], _hook["busy_since"] = True, time.time()
         ok = False
+        run = {"span": secrets.token_hex(6), "reason": reason, "recordings": len(keys)}
+        t0 = int(time.time() * 1000)
+        # the five-minute safety tick with nothing to hand over is not work worth a bar: ~300 a day would push
+        # the recordings and the meetings out of the stream's window (the second reader)
+        told = not (reason == "tick" and not keys)
+        if told:
+            _flow("recordings.process.started", "עיבוד ההקלטות (תמלול ופריט)", run)
         try:
             body = json.dumps({"reason": reason, "recordings": keys[:20]}).encode()
             req = urllib.request.Request(WORKFLOW_HOOK, data=body, method="POST",
@@ -815,6 +918,10 @@ def call_workflow() -> None:
                 _hook["busy"] = False
                 if ok:
                     _hook["ok_at"] = time.time()
+            t1 = int(time.time() * 1000)
+            if told or not ok:              # a failed tick is told even so: n8n not answering is news
+                _flow("recordings.process.ended" if ok else "recordings.process.failed", "עיבוד ההקלטות (תמלול ופריט)",
+                      {**run, "t0": t0, "ms": t1 - t0})
         if not ok:
             time.sleep(30)                                           # n8n down: not a call every second
 
@@ -843,6 +950,8 @@ def watch_recordings() -> None:
             fresh = [] if first else [k for k in ready if k not in seen]
             seen.update(ready)
             first = False
+            for k in fresh:
+                _flow("recording.ready", "הקלטה חדשה מוכנה", {"session": ready[k]["session"]})
             waiting = [k for k, r in ready.items()
                        if _items["ok"] and k not in items and now - r["mtime"] < waiting_s]
             if WORKFLOW_HOOK and fresh:
@@ -1048,9 +1157,10 @@ class Door(BaseHTTPRequestHandler):
         base = meet_base()[0]
         if path in ("/", "/index.html"):
             # the tile (CHAT-67, «one meetings app»): «פגישות», the meetings centre, to a signed-in person — its «פגישה
-            # חדשה» and «פתיחה לפי שם» open Jitsi. MEET_HOME=jitsi (or nobody signed in): Jitsi's own welcome page, as before.
+            # חדשה» card opens Jitsi by the host's door /r/<room>, under the name it shows (DGO-1632; /new stays for a
+            # link that wants the server to name the room). MEET_HOME=jitsi (or nobody signed in): Jitsi's own welcome page.
             # Served here, not redirected: its root is read off this address (…/a/meet/ in the console), as for /flow/.
-            if path == "/" and MEET_HOME == "flow" and flow_v2():
+            if path == "/" and MEET_HOME == "flow":
                 who = self.person()
                 if who is not None:
                     return self.send(200, flow_shell(base, None, who))
@@ -1070,6 +1180,13 @@ class Door(BaseHTTPRequestHandler):
             # Jitsi reads the token from the room's query string (its own tokenAuthUrl contract) and
             # leaves it out of every link it hands on (the invite dialog builds a clean one).
             claim = room if ROOM_PLAIN.fullmatch(room) else "*"
+            # /new opens a meeting; /r/<room> is somebody coming into one (each person, each time). The room's
+            # NAME is the guests' key to a live meeting (ENABLE_GUESTS: a guest joins by its link; new_room()
+            # makes "a name nobody guesses"), so the stream carries a short hash of it — enough to tell the
+            # meetings apart, never enough to walk into one (the second reader, DGO-1402).
+            ref = hashlib.sha256(room.encode("utf-8")).hexdigest()[:8]
+            _flow("meeting.opened" if path == "/new" else "meeting.entered",
+                  f"{'נפתחה פגישה חדשה' if path == '/new' else 'כניסה לפגישה'} ({ref})", {"room_ref": ref})
             return self.redirect(f"{base}/{quote(room, safe='')}?jwt={mint(who, claim)}")
         if path == "/recordings":
             rows, items, now = recordings(), _items["map"], time.time()
@@ -1094,42 +1211,11 @@ class Door(BaseHTTPRequestHandler):
             if not file:
                 return self.send(404, b"not found\n", "text/plain; charset=utf-8")
             return self.send_file(file)
-        if path in ("/flow", "/flow/") and flow_v2():
-            return self.send(200, flow_shell(base, None, who))                 # «פגישות» v2: the app's one page
         if path in ("/flow", "/flow/"):
-            rows = [{k: v for k, v in f.items() if k != "folder"} for f in flows()]
-            if RECORDER_SECRET:
-                # the meetings whose first processing is ready: ended, recorded, no flow folder yet, not QA's
-                try:
-                    have, recs = {f["room"] for f in rows}, {r["session"]: r for r in recordings(limit=300)}
-                    for m in captions_door("/meetings") or []:
-                        room = str(m.get("room") or "").strip().lower()
-                        if m.get("live") or room in have or not FLOW_ROOM_RE.fullmatch(room):
-                            continue
-                        rec = next((recs[x] for x in (m.get("sessions") or []) if x in recs), None)
-                        if not rec or not rec.get("done") or rec.get("initiator") in QUIET or time.time() - float(m.get("ended") or 0) > 14 * 86400:
-                            continue
-                        have.add(room)
-                        rows.append({"room": room, "title": f"{room} · עיבוד ראשון", "started": rec["started"], "who": ", ".join(rec.get("people") or []),
-                                     "length": f"{round((float(m.get('ended') or 0) - float(m.get('started') or 0)) / 60)} דק׳",
-                                     "tags": [["הקלטה + כתוביות חיות — לפני העיבוד המלא", "text"]], "docs": []})
-                    rows.sort(key=lambda r: str(r.get("started") or ""), reverse=True)
-                except (OSError, ValueError):
-                    pass
-            live = []
-            if RECORDER_SECRET:
-                try:
-                    live = [{"room": str(r.get("room") or ""), "people": r.get("people"), "names": r.get("names") or [],
-                             "recording": r.get("recording"), "since": r.get("since")}
-                            for r in (captions_door("/rooms") or []) if FLOW_ROOM_RE.fullmatch(str(r.get("room") or "").strip().lower())]
-                except (OSError, ValueError):
-                    live = []
-            return self.send(200, page("flow/list.html", {
-                "CONFIG": html.escape(json.dumps({"meet": base, "flows": rows, "live": live}, ensure_ascii=False)),
-            }))
+            return self.send(200, flow_shell(base, None, who))                 # «פגישות»: the app's one page
         if path in ("/flow/api/meetings", "/flow/api/search", "/flow/api/inbox"):
             return self.flow_api(path)                                         # «פגישות» v2: the meetings as data
-        m = re.fullmatch(r"/flow/app/([a-z0-9_-]+\.(?:js|css))", path)          # start/flow/: the app and live.js
+        m = re.fullmatch(r"/flow/app/([a-z0-9_-]+\.(?:js|css))", path)          # start/flow/: the app's two bundles
         if m:
             file = os.path.join(FLOW_APP, m.group(1))
             if not os.path.isfile(file):
@@ -1165,24 +1251,8 @@ class Door(BaseHTTPRequestHandler):
                 if doc is None:
                     return self.send(404, b'{"error": "no such meeting"}', "application/json")
                 return self.send(200, json.dumps(doc, ensure_ascii=False).encode("utf-8"), "application/json")
-            if rest in ("", "index.html") and flow_v2():
-                return self.send(200, flow_shell(base, room, who))             # any valid room: «לפני הפגישה» too
             if rest in ("", "index.html"):
-                flow, _ = flow_file(room, "flow.json")
-                if not flow:
-                    # not processed yet: the first processing once it ended and was recorded (the full page, its data
-                    # built on request), the live page while it runs
-                    try:
-                        if RECORDER_SECRET and machine_flow(room):
-                            return self.send(200, page("flow/index.html", {"ROOM": room}))
-                        known = RECORDER_SECRET and live_meeting(room) is not None
-                    except (OSError, ValueError):
-                        known = False
-                    if known:
-                        return self.send(200, page("flow/live.html", {"ROOM": room, "MEET": html.escape(base)}))
-                    return self.send(404, b"no meet-flow for this meeting yet\n", "text/plain; charset=utf-8")
-                # every path in it is written from the app's root (flow/<room>/…): the console sets the base
-                return self.send(200, page("flow/index.html", {"ROOM": room}))
+                return self.send(200, flow_shell(base, room, who))             # any valid room: «לפני הפגישה» too
             flow, file = flow_file(room, rest)
             if not file and not flow and rest == "data.js" and RECORDER_SECRET:
                 try:
@@ -1692,7 +1762,7 @@ class MachineDoor(Door):
         parts = []
         fields = [("language", language), ("model", model), ("response_format", "json")]
         if vocab_prompt():
-            fields.append(("prompt", vocab_prompt()))      # the office's terms, before the first words (FPG-471)
+            fields.append(("prompt", vocab_prompt()))      # the office's terms, before the first words (EXF-471)
         for name, value in fields:
             parts.append(f"--{boundary}\r\nContent-Disposition: form-data; name=\"{name}\"\r\n\r\n{value}\r\n".encode())
         parts.append(f"--{boundary}\r\nContent-Disposition: form-data; name=\"file\"; filename=\"segment.wav\"\r\n"
@@ -1756,7 +1826,7 @@ class MachineDoor(Door):
 
 
 
-# ── LIVE TRANSCRIPTS AND THE MEETINGS' WATCH (fireplace, 2026-10-27) ───────────────────────────────
+# ── LIVE TRANSCRIPTS AND THE MEETINGS' WATCH (examplef, 2026-10-27) ───────────────────────────────
 # The owner: «if critical things stop working I should get an alert in the office's notifications app»,
 # and every meeting's words must survive a recording that broke or never happened. Two threads, both
 # reading prosody's door (prosody/mod_meet_captions.lua: the live captions every browser sends, and
@@ -2055,7 +2125,7 @@ _holes_told = set()
 def tell_recording_holes(now: float) -> None:
     """A recording that came out with holes in its sound (finalize.sh's holes.json, pct ≥ 1): told once, as an
     error — the meeting's words in those holes are gone, and the live transcript is where they still are. The notice
-    names its own room only (FPG-281: a body that also said «fpg103», the incident it was modelled on, read as if the
+    names its own room only (EXF-281: a body that also said «exf103», the incident it was modelled on, read as if the
     damage were in another meeting)."""
     for r in recordings(limit=20):
         h = r.get("holes")
@@ -2149,15 +2219,49 @@ def _in_drive(path: str) -> bool:
         raise
 
 
+class TooBig(Exception):
+    """The drive takes no file this big — refused when the upload is opened (its ceiling), or when it is finished (an
+    engine's own limit, e.g. a Google connection's 64 MB). Not an outage: the copier skips the file and goes on."""
+
+    def __init__(self, size: int):
+        super().__init__(f"{size} bytes")
+        self.size = size
+
+
+def _drop_session(sid: str) -> None:
+    """A session that will not finish is removed at once — never left with its bytes on the drive's disk (a refused
+    300 MB recording a day would fill it, and then every upload, a person's own too, is refused)."""
+    try:
+        _drive("DELETE", f"/api/uploads/{sid}")
+    except Exception:                                      # noqa: BLE001 — best effort, and never instead of the
+        pass                                               # reason being raised (the drive's sweep takes it later)
+
+
 def _to_drive_one(src: str, folder: str, name: str, mime: str) -> None:
-    size = os.path.getsize(src)
-    _, s = _drive("POST", "/api/uploads", {"size": size, "name": name, "mime": mime, "path": folder})
-    sid, off = s["id"], 0
-    with open(src, "rb") as f:
+    with open(src, "rb") as f:                             # the size of the file OPENED, not of the path a moment ago
+        size = os.fstat(f.fileno()).st_size
+        try:
+            _, s = _drive("POST", "/api/uploads", {"size": size, "name": name, "mime": mime, "path": folder})
+        except urllib.error.HTTPError as e:
+            if e.code == 413:                              # only the OPENING's 413 is the ceiling (a piece's is not)
+                raise TooBig(size) from None
+            raise
+        sid, off = s["id"], 0
         while off < size:
-            piece = f.read(DRIVE_PIECE)
+            piece = f.read(min(DRIVE_PIECE, size - off))   # never past the size declared
             if not piece:
+                _drop_session(sid)
                 raise OSError(f"{src} ended at {off} of {size} bytes")
+            if off + len(piece) >= size:                   # before the last piece: is this still the recording there?
+                try:
+                    now = os.stat(src)
+                except OSError:
+                    now = None
+                if now is None or (now.st_ino, now.st_size) != (os.fstat(f.fileno()).st_ino, size):
+                    # replaced while copied (finalize.sh's rebuilt mp4): the copy would be the old one, kept in
+                    # «קבצים» for good (_in_drive) — dropped, and the new file is copied on the next pass
+                    _drop_session(sid)
+                    raise OSError(f"{src} was replaced while it was copied: copied again on the next pass")
             _drive("PATCH", f"/api/uploads/{sid}", data=piece, timeout=300,
                    headers={"Upload-Offset": str(off), "Content-Type": "application/offset+octet-stream", "Tus-Resumable": "1.0.0"})
             off += len(piece)
@@ -2166,13 +2270,21 @@ def _to_drive_one(src: str, folder: str, name: str, mime: str) -> None:
         if st.get("state") == "done":
             return
         if st.get("state") == "failed":
+            _drop_session(sid)
+            if st.get("error_status") == 413:              # the engine's own limit, said when it stores the bytes
+                raise TooBig(size)
             raise OSError(st.get("error") or "the drive could not store it")
         time.sleep(5)
     raise OSError("the drive did not finish storing it in 20 minutes")
 
 
 def to_drive() -> None:
-    marked, quiet_until = False, 0.0
+    # A file the drive takes no file that big for (TooBig) is said ONCE and skipped, and the pass goes on: one file over
+    # the ceiling must never keep the rest out of «קבצים» — measured on Exampleu 2026-11-10, exu101's 388 MB video
+    # (drive's ceiling there is 50 MB) failed every ten minutes since 5.11, and with it exu101's own 27 MB sound and
+    # every meeting listed after it. The mark is kept in memory for a day, then asked again (a raised ceiling is
+    # found without a restart); after a restart it is asked once more, and said once more.
+    marked, quiet_until, too_big = False, 0.0, {}
     while True:
         try:
             if time.time() >= quiet_until:
@@ -2188,9 +2300,21 @@ def to_drive() -> None:
                 for r in todo:
                     folder = f"/{DRIVE_FOLDER}/{r['started'][:10]} · {r['room']}"
                     for name, mime in ((r["file"], "video/mp4"), (r["audio"], "audio/ogg")):
-                        if not name or _in_drive(f"{folder}/{name}"):
+                        key = (r["session"], name)
+                        if not name or time.monotonic() - too_big.get(key, -1e12) < 86400 or _in_drive(f"{folder}/{name}"):
                             continue
-                        _to_drive_one(os.path.join(RECORDINGS, r["session"], name), folder, name, mime)
+                        try:                              # an empty file has nothing to copy, and its upload would
+                            if os.path.getsize(os.path.join(RECORDINGS, r["session"], name)) == 0:   # never finish:
+                                continue                  # 20 minutes of every pass, behind it, for good
+                        except OSError:
+                            continue                      # gone between the listing and now: the next pass sees
+                        try:                              # any other failure: the whole pass waits, as before
+                            _to_drive_one(os.path.join(RECORDINGS, r["session"], name), folder, name, mime)
+                        except TooBig as e:
+                            too_big[key] = time.monotonic()          # a day of the monotonic clock, not the wall's
+                            print(f"meet-start: {r['session']}/{name} ({e.size // 2 ** 20} MB) is more than «קבצים» "
+                                  "takes — not copied; the other recordings go on (asked again in a day)", flush=True)
+                            continue
                         print(f"meet-start: copied {r['session']}/{name} into «קבצים» {folder}", flush=True)
         except Exception as e:                                       # noqa: BLE001 — the copier never dies
             print(f"meet-start: copying the recordings into «קבצים»: {e}", flush=True)
@@ -2231,10 +2355,11 @@ def tell_flow_links() -> None:
         time.sleep(20)
 
 
-# ── «פגישות» v2 — the meetings app's server half (fireplace, 2026-10-28) ──────────────────────────────────────────
+# ── «פגישות» v2 — the meetings app's server half (examplef, 2026-10-28) ──────────────────────────────────────────
 # The owner (2026-10-28): every meeting on one time axis, live from its first minute, editable, on the phone and the
-# desktop. Its one page is start/flow/app.html (MEET_FLOW_UI=v2, the default; v1 serves the pages before it exactly
-# as they were). Under it: every meeting as data (/flow/api/meetings, search, inbox), one meeting's state
+# desktop. Its one page is start/flow/app.html (the pages before it, and MEET_FLOW_UI=v1 that served them, were retired
+# on 2026-11-05 when no office served them: DGO-1325). Under it: every meeting as data (/flow/api/meetings, search,
+# inbox), one meeting's state
 # (meeting.json), and what people add to a meeting — corrections to its transcript (edits), the approval of its
 # decisions and tasks (items: an approved task is ONE Plane work item, in the project the recordings' items are in),
 # more tracks and texts (uploads).
@@ -2253,8 +2378,7 @@ def tell_flow_links() -> None:
 # X-Meet-Flow: 1 (the CSRF guard: Door.flow_write). 0.1 CPU and 48 MB: nothing large is held in memory (an upload
 # passes in 256 KB reads, files go out in byte ranges); a data.js is parsed once per change, one at a time, and only
 # what search needs is kept — within SEARCH_CACHE bytes, the least recently used dropped first.
-FLOW_UI = os.environ.get("MEET_FLOW_UI", "v2").strip().lower()
-MEET_HOME = os.environ.get("MEET_HOME", "flow").strip().lower()   # the tile: flow = «פגישות» (CHAT-67), jitsi = its welcome page
+MEET_HOME =os.environ.get("MEET_HOME", "flow").strip().lower()   # the tile: flow = «פגישות» (CHAT-67), jitsi = its welcome page
 FLOW_DATA = (os.path.realpath(os.environ["MEET_FLOW_DATA"]) if os.environ.get("MEET_FLOW_DATA", "").strip() else "")
 try:
     UPLOAD_MAX = max(1, int(os.environ.get("MEET_FLOW_UPLOAD_MAX", str(2 << 30))))
@@ -2294,12 +2418,6 @@ _uploading = set()                      # (room, name) of the uploads a PUT is w
 _plane_lock = threading.Lock()          # one approved task filed in Plane at a time: never two items for one task
 _ids = {"last": 0}
 _ids_lock = threading.Lock()
-
-
-def flow_v2() -> bool:
-    """«פגישות» v2's page (start/flow/app.html) — unless MEET_FLOW_UI=v1, or the page is not there yet: this door may
-    ship before its page, and then the v1 pages answer as they always did."""
-    return FLOW_UI != "v1" and os.path.isfile(os.path.join(FLOW_APP, "app.html"))
 
 
 def flow_shell(base: str, room, who) -> bytes:
@@ -2630,7 +2748,7 @@ def local_ts(text):
 
 
 def series_of(room: str):
-    """fpg105 → ("fpg", 105), SERIES_RE; a room that does not end in digits is a series of its own (n None)."""
+    """exf105 → ("exf", 105), SERIES_RE; a room that does not end in digits is a series of its own (n None)."""
     m = SERIES_RE.fullmatch(room)
     return (m.group(1), int(m.group(2))) if m else (room, None)
 
@@ -2817,9 +2935,27 @@ def folder_index(folder: str, text: bool = False):
     return txt if text else meta
 
 
+_transcripts = {}                        # room → every finished transcription of it seen so far (job ids)
+
+
+def transcript_key(room: str) -> tuple:
+    """The finished transcriptions of a room's recordings (their job ids, from the speech service's newest jobs): a
+    first processing is built again when one of them lands, so its counts and lines are the transcript's. It only
+    grows: a service that does not answer, or a job that fell out of its newest 100, must not read as a change — an
+    open page would reload into less than it shows (the second reader of DGO-1325)."""
+    jobs = speech_jobs()
+    seen = set(_transcripts.get(room, ()))
+    if jobs is not None:
+        seen |= {str(j.get("id")) for j in jobs if j.get("status") == "completed"
+                 and str((j.get("source") or {}).get("name") or "").startswith(room + "_")}
+    _transcripts[room] = key = tuple(sorted(seen))
+    return key
+
+
 def first_index(room: str, mid, ended, text: bool = False):
-    """The same for a first processing (machine_flow, from the captions door), built once per ended meeting."""
-    src, stamp = "first:" + room, (str(mid), num(ended))
+    """The same for a first processing (machine_flow, from the captions door), built once per ended meeting and again
+    when its transcription lands (transcript_key)."""
+    src, stamp = "first:" + room, (str(mid), num(ended), transcript_key(room))
     got = _cached(src, stamp, text)
     if got is not None:
         return got
@@ -2928,10 +3064,10 @@ def _list_meetings(now: float):
         except (OSError, ValueError):
             meta = {}
         src[room] = ("first", room, m.get("id"), m.get("ended"))
-        rows.append(meeting_row(room, f"{room} · עיבוד ראשון", rec["started"], recording_start(rec["file"]) or started or None,
+        rows.append(meeting_row(room, meeting_title(room), rec["started"], recording_start(rec["file"]) or started or None,
                                 ended or None, ended - started if ended and started else None,
                                 list(rec.get("people") or []) or meta.get("people") or [], "first", meta, True, [],
-                                [["הקלטה + כתוביות חיות — לפני העיבוד המלא", "text"]]))
+                                [[FIRST_TAG, "text"]]))
     # a recorded meeting the captions door has no record of (no browser captions anyone): its recording is the meeting,
     # its newest finished one per room (with_server_captions' rule), 14 days back, not QA's
     newest = {}
@@ -2950,10 +3086,10 @@ def _list_meetings(now: float):
         except (OSError, ValueError):
             meta = {}
         src[room] = ("first", room, "rec:" + r["session"], ended)
-        rows.append(meeting_row(room, f"{room} · עיבוד ראשון", r["started"], start, ended,
+        rows.append(meeting_row(room, meeting_title(room), r["started"], start, ended,
                                 (ended - start) if start and ended else None,
                                 list(r.get("people") or []) or meta.get("people") or [], "first", meta, True, [],
-                                [["הקלטה + כתוביות השרת — לפני העיבוד המלא", "text"]]))
+                                [[FIRST_TAG, "text"]]))
     for room, r in live.items():
         if room in src:
             continue
@@ -2982,46 +3118,205 @@ def flow_meetings(max_age: float = 15.0):
         return _meetings["doc"], _meetings["src"]
 
 
-def flow_stages(state: str, flow, doc, rec, first: bool) -> list:
-    """The meeting's way from its recording to its review, honestly: only what exists says done."""
+# ── what is being done to a meeting, step by step, with the reason and the time (DGO-1325) ─────────────────────────
+# The owner, 2026-11-03, on bs101's page («עיבוד ראשון», a promise that the transcript «will replace this», no
+# progress, no reason): «שאני אוכל לראות מה בדיוק קורה ולמה אני לא מקבל עדיין כתוביות». So every step says its
+# state, and what it measures: the recording's size and length; live captions' words — or why there were none (the
+# watchdog's own decision, jibri/watch.py, in capture.json `captions_live`); each transcription pass from the speech
+# service's own job (/speechJobs: queued — how many before it, processing — how far, and when it ends at the pace it
+# measures, or failed — why, and when it is tried again); then what waits for «קדימה» and for a person.
+FIRST_TAG = "הקלטה — לפני העיבוד המלא"
+LIVE_CAPTIONS = (os.environ.get("MEET_LIVE_CAPTIONS") or "auto").strip().lower()
+try:
+    LIVE_MIN_CORES = int(os.environ.get("MEET_LIVE_CAPTIONS_MIN_CORES") or 4)
+except ValueError:
+    LIVE_MIN_CORES = 4
+# why a recording had no live captions, from the watchdog's word for it (jibri/watch.py captions_why)
+CAPTIONS_WHY = {
+    "cores": "לשרת המשרד יש {cores} ליבות, וכתוביות חיות צריכות {min_cores}",
+    "off": "הכתוביות החיות כבויות בהגדרות המשרד",
+    "recorder": "המקליט לא עמד בקצב, וההקלטה קודמת לכתוביות",
+    "memory": "לשרת היו {mem_mb} MB פנויים, וכתוביות חיות צריכות {min_mb}",
+    "pressure": "הן הושהו: לשרת חסר זיכרון, וההקלטה קודמת",
+    "failed": "הן לא עלו: {raw}",
+}
+JOB_WHY = {"queue_full": "התור של המתמלל היה מלא", "timeout": "התמלול לקח יותר מהזמן המותר", "too_long": "ההקלטה ארוכה מהמותר למתמלל",
+           "cancelled": "התמלול בוטל"}
+PASSES = (("ivrit", "ivrit"), ("whisper", "whisper"))       # the page's step → the speech service's model
+RETRY_AFTER = 6 * 3600                                      # the workflow's: three failures, then again 6 hours later
+
+
+def capture_of(rec):
+    """A recording's capture.json (its watchdog's account, jibri/watch.py), or {}."""
+    if not rec:
+        return {}
+    try:
+        with open(os.path.join(RECORDINGS, rec["session"], rec["file"][:-4] + ".capture.json"), encoding="utf-8") as f:
+            got = json.load(f)
+        return got if isinstance(got, dict) else {}
+    except (OSError, ValueError, KeyError, TypeError):
+        return {}
+
+
+def captions_why(rec) -> tuple:
+    """(reason key, Hebrew sentence) of a recording that had no live captions: the watchdog's own decision when it
+    wrote one (capture.json `captions_live`, since 2026-11-05), else what this office's switch and cores say now —
+    the same rule the watchdog applies (watch.py captions_wanted)."""
+    live = capture_of(rec).get("captions_live")
+    if isinstance(live, dict) and live.get("why") in CAPTIONS_WHY:
+        vals = {k: live.get(k) for k in ("cores", "min_cores", "mem_mb", "min_mb")}
+        vals["raw"] = str(live.get("raw") or "")[:120]
+        try:
+            return live["why"], CAPTIONS_WHY[live["why"]].format(**vals)
+        except (KeyError, IndexError, ValueError):
+            return live["why"], CAPTIONS_WHY[live["why"]]
+    if LIVE_CAPTIONS in ("off", "0", "false", "no"):
+        return "off", CAPTIONS_WHY["off"]
+    cores = os.cpu_count() or 1
+    if LIVE_CAPTIONS not in ("on", "1", "true", "yes") and cores < LIVE_MIN_CORES:
+        return "cores", CAPTIONS_WHY["cores"].format(cores=cores, min_cores=LIVE_MIN_CORES)
+    return "", "לא נרשמה סיבה"
+
+
+def iso_epoch(v):
+    """An ISO time of the speech service («2026-11-03T11:45:52+00:00») as epoch seconds, or None."""
+    try:
+        return datetime.datetime.fromisoformat(str(v).replace("Z", "+00:00")).timestamp() if v else None
+    except ValueError:
+        return None
+
+
+def wall_per_audio(jobs) -> float:
+    """The transcriber's measured pace: the median wall seconds per audio second of its finished jobs of a minute or
+    more (1.0 when it has none) — bs101 took 0.99 of its length on vps1's two cores."""
+    got = sorted(float(u["wall_seconds"]) / float(u["audio_seconds"]) for u in ((j.get("usage") or {}) for j in jobs or [])
+                 if num(u.get("wall_seconds")) and (num(u.get("audio_seconds")) or 0) >= 60)
+    return got[len(got) // 2] if got else 1.0
+
+
+def _left(j, now: float, pace: float) -> float:
+    """Wall seconds until a queued or running job ends, at its own pace when it has one."""
+    p = j.get("progress") or {}
+    audio, done = num(p.get("audio_seconds")) or 0.0, num(p.get("processed_seconds")) or 0.0
+    started = iso_epoch(j.get("started"))
+    if j.get("status") == "processing" and started and done >= 30 and now - started >= 60:
+        return max(0.0, (audio - done) * (now - started) / done)
+    return max(0.0, (audio - done) * pace)
+
+
+def job_stage(key: str, job, jobs, now: float) -> dict:
+    """One transcription pass as a step of the page: done, running (how far, and when it ends), waiting (how many
+    before it, and when it ends), or failed (why, and when it is tried again)."""
+    p = job.get("progress") or {}
+    audio, done = num(p.get("audio_seconds")) or 0.0, num(p.get("processed_seconds")) or 0.0
+    st, pace = job.get("status"), wall_per_audio(jobs)
+    if st == "completed":
+        u = job.get("usage") or {}
+        wall = num(u.get("wall_seconds"))
+        segs = p.get("segments")
+        detail = " · ".join(x for x in (f"{int(segs):,} קטעים" if isinstance(segs, (int, float)) and segs else "",
+                                        f"{clock(audio)} תומללו ב-{clock(wall)}" if audio and wall else "") if x)
+        return {"key": key, "state": "done", "detail": detail or "הושלם", "since": iso_epoch(job.get("ended"))}
+    if st == "processing":
+        started = iso_epoch(job.get("started"))
+        return {"key": key, "state": "running", "detail": f"{clock(done)} מתוך {clock(audio)}" if audio else "רץ עכשיו",
+                "pct": round(100.0 * done / audio, 1) if audio else 0.0, "done_s": round(done, 1), "audio_s": round(audio, 1),
+                "since": started, "eta": round(now + _left(job, now, pace)) if audio else None}
+    if st == "queued":
+        mine = iso_epoch(job.get("created")) or now
+        rank = {model: i for i, (_, model) in enumerate(PASSES)}
+
+        def before(j):                     # the service's queue is first come first served; its clock has whole seconds
+            if j.get("status") == "processing":
+                return True
+            c = iso_epoch(j.get("created")) or 0
+            if c != mine:
+                return c < mine
+            return rank.get((j.get("options") or {}).get("model"), 9) < rank.get((job.get("options") or {}).get("model"), 9)
+        ahead = [j for j in jobs or [] if j.get("id") != job.get("id") and j.get("status") in ("processing", "queued") and before(j)]
+        eta = now + sum(_left(j, now, pace) for j in ahead) + audio * pace
+        names = [str((j.get("source") or {}).get("name") or "").rsplit("_", 3)[0] for j in ahead]
+        return {"key": key, "state": "waiting", "detail": f"בתור — לפניה {len(ahead)}" + (f" ({', '.join(n for n in names[:3] if n)})" if names else "") if ahead else "בתור — הבאה בתור",
+                "ahead": len(ahead), "since": mine, "eta": round(eta) if audio else None}
+    err = job.get("error") or {}
+    raw = str(err.get("message") or err.get("code") or st or "")[:160]
+    fails = sum(1 for j in jobs or [] if j.get("status") in ("error", "cancelled") and (j.get("source") or {}).get("name") == (job.get("source") or {}).get("name")
+                and (j.get("options") or {}).get("model") == (job.get("options") or {}).get("model"))
+    ended = iso_epoch(job.get("ended")) or now
+    again = "ייעשה ניסיון נוסף בסבב הבא של המערכת (תוך כמה דקות)" if fails < 3 else \
+        f"נכשל {fails} פעמים — ניסיון נוסף בעוד כשש שעות (~{time.strftime('%H:%M', time.localtime(ended + RETRY_AFTER))})"
+    return {"key": key, "state": "failed", "detail": f"נכשל ב-{time.strftime('%H:%M', time.localtime(ended))}",
+            "why": f"{JOB_WHY.get(err.get('code'), JOB_WHY['cancelled'] if st == 'cancelled' else 'שגיאה במתמלל')}. {again}", "raw": raw}
+
+
+def flow_stages(state: str, flow, doc, rec, first: bool, jobs=None, now=None) -> list:
+    """The meeting's way from its recording to its review, honestly: only what exists says done, and what does not
+    says why and until when. jobs: the speech service's (speech_jobs()); None when it did not answer."""
+    now = now or time.time()
     now_room = (doc or {}).get("now") or {}
     words = int(num((doc or {}).get("words")) or 0)
     said = flow.get("stages") if flow and isinstance(flow.get("stages"), dict) else {}
     out = []
     if rec and rec.get("done"):
         holes = rec.get("holes") or {}
-        out.append(("record", "done", f"{rec['file']} · {rec['bytes'] / 1e6:.0f} MB"
-                    + (f" · {holes['pct']:.1f}% מהשמע חסר" if (holes.get("pct") or 0) >= 1 else "")))
+        secs = recorded_seconds(rec)
+        out.append({"key": "record", "state": "done", "detail": " · ".join(x for x in (
+            f"{rec['bytes'] / 1e6:.0f} MB", clock(secs) if secs else "",
+            f"{holes['pct']:.1f}% מהשמע חסר" if (holes.get("pct") or 0) >= 1 else "") if x)})
     elif rec or now_room.get("recording") == "on":
-        out.append(("record", "running", "מקליט עכשיו" if now_room else "ההקלטה נסגרת"))
+        out.append({"key": "record", "state": "running", "detail": "מקליט עכשיו" if now_room else "ההקלטה נסגרת"})
     elif now_room.get("failure"):
-        out.append(("record", "failed", f"ההקלטה נכשלה: {now_room['failure']}"))
+        out.append({"key": "record", "state": "failed", "detail": "ההקלטה נכשלה", "why": f"ההקלטה נכשלה: {now_room['failure']}"})
     elif now_room.get("recording") == "pending" or (state == "before" and doc is None and AUTO_RECORD):
-        out.append(("record", "waiting", "תוקלט כשהפגישה תתחיל" if doc is None else "ההקלטה מתחילה"))
+        out.append({"key": "record", "state": "waiting", "detail": "תוקלט כשהפגישה תתחיל" if doc is None else "ההקלטה מתחילה"})
     else:
-        out.append(("record", "off", "לא הוקלטה"))
+        out.append({"key": "record", "state": "off", "detail": "לא הוקלטה"})
     if words > 0:
-        out.append(("captions", "running" if doc.get("live") else "done", f"{words} מילים בכתוביות החיות"))
-    elif doc is not None and doc.get("live"):
-        out.append(("captions", "waiting", "עוד אין כתוביות"))
+        out.append({"key": "captions", "state": "running" if doc.get("live") else "done", "detail": f"{words:,} מילים"})
+    elif state == "before":
+        out.append({"key": "captions", "state": "waiting", "detail": "כשהפגישה תתחיל"})
     else:
-        out.append(("captions", "off", "אין כתוביות חיות"))
-    if flow or first:
-        out.append(("first", "done", "העיבוד המלא קיים" if flow else "ההקלטה והכתוביות החיות על ציר אחד"))
-    elif doc is None or doc.get("live") or (rec and not rec.get("done")):
-        out.append(("first", "waiting", "כשהפגישה תסתיים וההקלטה תיסגר"))
-    else:
-        out.append(("first", "off", "הפגישה לא הוקלטה"))
-    for key, name in (("best", "מזהה הדיבור הטוב ביותר"), ("speakers", "מי אמר מה"), ("summary", "נושאים, החלטות ומשימות")):
+        key, why = captions_why(rec)
+        live = doc is not None and doc.get("live")
+        out.append({"key": "captions", "state": "waiting" if live and not key else "off",
+                    "detail": "עוד אין כתוביות" if live else "לא היו כתוביות חיות", "why": why if key else ""})
+    best = said.get("best")
+    audio = re.sub(r"\.mp4$", ".ogg", rec["file"]) if rec and rec.get("file") else None
+    for key, model in PASSES:
+        # a finished pass is what the page shows (machine_flow reads it), even when a later try of it failed
+        job = (job_for(jobs, audio, model, "completed") or job_for(jobs, audio, model)) if audio else None
+        if key == "ivrit" and flow and best:                         # the full processing's own transcript
+            b = best if isinstance(best, dict) else {"state": "done", "detail": str(best)}
+            out.append({"key": key, "state": b.get("state") if b.get("state") in STAGE_STATES else "done",
+                        "detail": str(b.get("detail") or "התמלול המלא")})
+        elif job:
+            out.append(job_stage(key, job, jobs, now))
+        elif flow:
+            continue                                                 # processed, its passes no longer listed
+        elif state in ("before", "live") or not rec or not rec.get("done"):
+            out.append({"key": key, "state": "waiting", "detail": "כשההקלטה תיסגר", "code": "recording"})
+        elif rec.get("initiator") in QUIET:
+            out.append({"key": key, "state": "off", "detail": "הקלטת בדיקה", "why": "הקלטת בדיקה לא נשלחת לתמלול", "code": "quiet"})
+        elif jobs is None:
+            out.append({"key": key, "state": "waiting", "detail": "המתמלל לא ענה עכשיו — הדף שואל שוב בעוד 15 שניות", "code": "no-answer"})
+        elif key == "whisper":
+            out.append({"key": key, "state": "waiting", "detail": "יישלח עם התמלול העברי", "code": "not-sent"})
+        elif now - float(rec.get("mtime") or now) < 1800:
+            out.append({"key": key, "state": "waiting", "detail": "עוד לא נשלח — המערכת שולחת הקלטה חדשה תוך דקות", "code": "not-sent"})
+        else:
+            out.append({"key": key, "state": "off", "detail": "לא נמצא אצל המתמלל", "code": "missing",
+                        "why": "המתמלל לא מכיר את ההקלטה הזו (הוא זוכר את 100 העבודות האחרונות)"})
+    for key, name in (("speakers", "מי אמר מה"), ("summary", "נושאים, החלטות ומשימות")):
         v = said.get(key)
         if isinstance(v, dict) and v.get("state") in STAGE_STATES:
-            out.append((key, v["state"], str(v.get("detail") or name)))
+            out.append({"key": key, "state": v["state"], "detail": str(v.get("detail") or name)})
         elif v:
-            out.append((key, "done", v if isinstance(v, str) else name))
+            out.append({"key": key, "state": "done", "detail": v if isinstance(v, str) else name})
         else:
-            out.append((key, "waiting", name))
-    out.append(("review", "done", "נבדק") if flow and flow.get("reviewed") is True else ("review", "waiting", "עוד לא נבדק"))
-    return [{"key": k, "state": st, "detail": d} for k, st, d in out]
+            out.append({"key": key, "state": "waiting", "detail": "אחרי «קדימה» — העיבוד המלא" if state in ("first", "ready") else name})
+    out.append({"key": "review", "state": "done", "detail": "נבדק"} if flow and flow.get("reviewed") is True
+               else {"key": "review", "state": "waiting", "detail": "עוד לא נבדק"})
+    return out
 
 
 def flow_meeting(room: str, base: str) -> dict:
@@ -3040,27 +3335,28 @@ def flow_meeting(room: str, base: str) -> dict:
         rec = next((recs[x] for x in (doc.get("sessions") or []) if x in recs), None)
     # data.js answers a first processing exactly when machine_flow() builds one: ended, recorded and finished
     first = bool(not flow and RECORDER_SECRET and doc and not doc.get("live") and rec and rec.get("done"))
+    # ended, and its recording still being closed: already after the meeting (no data yet), never «before» it
+    closing = bool(not flow and doc and not doc.get("live") and not doc.get("now") and rec and not rec.get("done"))
     meta, title, start, ended, people = {}, room, None, None, []
     if flow:
         meta = folder_index(flow["folder"]) or {}
-        title = str(flow.get("title") or meta.get("title") or room)
+        title = meeting_title(room, flow, meta)
         start = meta.get("start_ts") or local_ts(flow.get("started"))
         ended = start + meta["duration"] if start and meta.get("duration") else None
         people = list(meta.get("people") or [])
     elif doc:
         if first:
-            title = f"{room} · עיבוד ראשון"
             try:
                 meta = first_index(room, doc.get("id"), doc.get("ended")) or {}
             except (OSError, ValueError):
                 meta = {}
-        start = (recording_start(rec["file"]) if first else None) or num(doc.get("started"))
+        start = (recording_start(rec["file"]) if first or closing else None) or num(doc.get("started"))
         ended = None if doc.get("live") else num(doc.get("ended"))
         people = ([a.get("name") for a in (doc.get("attendees") or []) if isinstance(a, dict) and a.get("name")]
                   or [str(x) for x in (doc.get("people") or []) if x]
                   or [str(x) for x in ((doc.get("now") or {}).get("names") or []) if x])
     state = ("live" if (doc or {}).get("now") else "reviewed" if flow and flow.get("reviewed") is True
-             else "ready" if flow else "first" if first else "before")
+             else "ready" if flow else "first" if first or closing else "before")
     series, n = series_of(room)
     prev = None
     if n is not None:
@@ -3070,14 +3366,19 @@ def flow_meeting(room: str, base: str) -> dict:
             best = max(older, key=lambda r: (r["start_ts"] or 0, r["n"]))
             prev = {"room": best["room"], "title": best["title"]}
     has_data = bool(flow and os.path.isfile(os.path.join(flow["folder"], "data.js"))) or first
-    return {"room": room, "title": title, "series": series, "n": n, "state": state, "prev": prev,
+    jobs = speech_jobs() if rec else None
+    # what the page compares every 15 s: a change means its data changed (the transcript landed, the full processing
+    # came) and the page takes it in without a reload
+    stamp = _stamp(os.path.join(flow["folder"], "data.js")) if flow else None
+    rev = hashlib.sha1(json.dumps([state, has_data, stamp, transcript_key(room) if first else ()]).encode()).hexdigest()[:12]
+    return {"room": room, "title": title, "series": series, "n": n, "state": state, "prev": prev, "rev": rev,
             "started_ts": start, "ended_ts": ended, "people": people,
             "uncaptioned": [str(x) for x in ((doc or {}).get("uncaptioned") or []) if x],
             "recording": {"session": rec["session"], "file": rec["file"], "done": bool(rec.get("done"))} if rec else None,
             "meet_url": f"{base}/{quote(room, safe='')}",
             "data": f"flow/{room}/data.js" if has_data else None,
             "live": f"flow/{room}/live.json" if doc is not None else None,
-            "stages": flow_stages(state, flow, doc, rec, first),
+            "stages": flow_stages(state, flow, doc, rec, first, jobs),
             "counts": counts_of(meta, items_of(room))}
 
 
@@ -3650,7 +3951,19 @@ import faulthandler, signal
 if hasattr(signal, "SIGUSR1"):                            # (a test run on Windows has no SIGUSR1)
     faulthandler.register(signal.SIGUSR1, all_threads=True)   # docker kill -s USR1 <container>: every thread's stack into the log
 
-# ── a meeting's transcript as a file, and every finished meeting's processing in Drive (fireplace, 2026-10-29) ──────
+# A helper that imports this file inside meet-start — cli.py from the hooks, «קדימה»'s link_tasks.py and close_items.py —
+# runs in the server's own memory cap. When the two pass it, the kernel kills the BIGGEST process, the server, and the
+# meetings' door goes down and restarts (EXU-20: Exampleu, 2026-11-09). So a process that imports this file without being
+# the server asks to be the one taken: oom_score_adj 1000 (anyone may raise their own). The server runs as __main__.
+# The helpers mark themselves BEFORE importing this file (its compile is most of their 28.8 MB); this is the backstop.
+if __name__ != "__main__":
+    try:
+        with open("/proc/self/oom_score_adj", "w") as _adj:
+            _adj.write("1000")
+    except OSError:                                       # (no /proc: a test run on a Mac or on Windows)
+        pass
+
+# ── a meeting's transcript as a file, and every finished meeting's processing in Drive (examplef, 2026-10-29) ──────
 # CHAT-63: the transcript leaves the page as people corrected it — text (with a list of the screen moments), WebVTT
 # (the speaker as a <v> voice) and SRT — at /flow/<room>/transcript.{txt,vtt,srt}. CHAT-62: the owner's rule that
 # Drive is the office's one file layer — the moment a recorded meeting's first processing exists (the office's
@@ -3819,7 +4132,7 @@ if __name__ == "__main__":
         print("meet-start: MEET_JWT_SECRET is empty — /healthz answers 503 until apps/meet/hooks/prepare mints it", flush=True)
     # (ASCII only: this line is printed before anything else, whatever the log's encoding)
     kind = store_kind()
-    print(f"meet-start: meet-flow {'v1' if FLOW_UI == 'v1' else 'v2'}; its store: "
+    print("meet-start: meet-flow; its store: "
           + (f"Drive {DRIVE_URL} (profile {DRIVE_PROFILE}), each meeting's folder in {DRIVE_FOLDER!a}" if kind == "drive"
              else f"the folder {FLOW_DATA!a} (" + ("writable" if store_ok() else "missing or read-only") + ")"
              if kind == "local" else "none (MEET_DRIVE_URL is empty): its reads answer empty, its writes 503"), flush=True)

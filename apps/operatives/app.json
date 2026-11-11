@@ -6,6 +6,10 @@
   },
   "layer": 3,
   "kind": "tool",
+  "page": "ai",
+  "share": {
+    "local": "Recipes with no service of their own, so there is nothing to serve: a linked office reads the same recipes from its own copy of the source."
+  },
   "version": "0.1.0",
   "summary": {
     "he": "כל הפעולות שהלשכה יודעת לעשות, כמתכון טקסט קצר אחד לכל פעולה — איפה היא רצה, ואיזו מהן בקשה צריכה",

@@ -1,6 +1,6 @@
 # app-coupling-waivers — chassis that names an installable app, and why.
 #
-# G33 (scripts/refactor/app-coupling-lint.py) asserts that layer 1 and 2 apps do not name layer 2/3
+# G93 (scripts/refactor/app-coupling-lint.py) asserts that layer 1 and 2 apps do not name layer 2/3
 # apps in their source. What is here is the coupling that ALREADY existed when the gate was
 # introduced: recorded so the gate is green today and NEW coupling fails, not because any of it is
 # endorsed. Each entry lists where it occurs; deleting one and keeping the gate green is always an

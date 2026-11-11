@@ -1,0 +1,100 @@
+{
+  "id": "newsflow",
+  "title": {
+    "he": "זרימת חדשות",
+    "en": "NewsFlow"
+  },
+  "layer": 3,
+  "kind": "service",
+  "page": "services",
+  "version": "0.1.0",
+  "summary": {
+    "he": "כל החדשות שרלוונטיות לבינה סלושנס — נאספות דרך דפדפן הלשכה, מסודרות לפי קטגוריה, ומוצגות במקום אחד",
+    "en": "Every news item that matters to BINA Solutions — collected through the office browser, organised by category, in one place"
+  },
+  "capabilities": [
+    {
+      "name": "news-feed",
+      "type": "service",
+      "interface": "newsflow.v1",
+      "endpoint": "http://newsflow:8991",
+      "contract": "platform-service.v1",
+      "required_ops": [
+        "list",
+        "categories",
+        "collect",
+        "status"
+      ]
+    }
+  ],
+  "use": [
+    {
+      "capability": "browser",
+      "strength": "requires",
+      "after": false,
+      "dependency": "strong"
+    }
+  ],
+  "connections": [],
+  "compose": "docker-compose.yml",
+  "agent": {
+    "context": "AGENT.md",
+    "order": 31
+  },
+  "routing": [
+    {
+      "host": "newsflow",
+      "port": 8991,
+      "auth": "sso",
+      "module": {
+        "group": "ראשי",
+        "icon": "globe",
+        "embed": true,
+        "alias": "newsflow",
+        "id": "newsflow",
+        "name": "זרימת חדשות",
+        "desc": "החדשות שלנו: טכנולוגיה, AI, עסקים, ישראל, חוק, קרנות — מסודר לפי קטגוריה",
+        "order": 4,
+        "service": "newsflow",
+        "url_env": "NEWSFLOW_URL",
+        "url": "http://newsflow:8991",
+        "passthrough": [
+          {
+            "path": "/",
+            "match": "prefix",
+            "transport": "http",
+            "strip_mount_prefix": true
+          }
+        ]
+      },
+      "sso": {
+        "slug": "newsflow",
+        "display_name": "NewsFlow",
+        "default_host": "newsflow.localhost",
+        "base_url_env": "NEWSFLOW_BASE_URL",
+        "local_twin": true
+      },
+      "external": true
+    }
+  ],
+  "health": {
+    "structural": "auto",
+    "probe": {
+      "http": "http://newsflow:8991/healthz",
+      "interval": "30s"
+    }
+  },
+  "data": {
+    "volumes": [
+      "newsflow_data"
+    ],
+    "on_uninstall": "keep"
+  },
+  "resources": {
+    "cpus": "0.25",
+    "memory": "192M"
+  },
+  "observability": {
+    "sentry_platform": "python"
+  }
+}

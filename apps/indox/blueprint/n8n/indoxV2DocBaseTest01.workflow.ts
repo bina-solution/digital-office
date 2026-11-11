@@ -172,7 +172,7 @@ return [{json:{
   __instance:'test',
   collectionId:'indoxV2ActionsGlobal01',  // router_doc_base
   decideId:'indoxV2Decide01',
-  routerId:'indoxApiRouter01',
+  routerId:'indoxApi01',
   testCompany:{id1:'999000111', name:'DocBase Test Co'},
   // seed state -> expected DECIDED action (every docBase branch). expectStatus => also execute-covered.
   // [selection 2026-08-31, aligned to the 2026-08-25 owner order] SELECT BEFORE YOU TERMINALISE:
@@ -247,7 +247,7 @@ return [{json:{
     {ID:'dbf_inv', upname:'dbf_inv-agn-3.162b24.pdf',      path:'invoice/files/agn-3.dbf.pdf',            expectType:'INVOICE',       expectCompany:'500000062'},
     {ID:'dbf_ord', upname:'dbf_ord-PO25010001.fd669c.png', path:'order/files/PO25010001.dbf.png',         expectType:'ORDER',         expectCompany:'511234567'},
     {ID:'dbf_shp', upname:'dbf_shp-by-gy-4.995211.pdf',     path:'shipment/files/by-gy-4.dbf.pdf',         expectType:'SHIPMENT',      expectCompany:'500000070'},
-    {ID:'dbf_bs',  upname:'dbf_bs-asyp-shr-ts-1.pdf',path:'balance_sheet/files/asyp-shr-ts-1.dbf.pdf',expectType:'BALANCE_SHEET', expectCompany:'500001037', seedCompany:'500001037'},
+    {ID:'dbf_bs',  upname:'dbf_bs-asyp-shr-ts-1.pdf',path:'balance_sheet/files/asyp-shr-ts-1.dbf.pdf',expectType:'BALANCE_SHEET', expectCompany:'500000435', seedCompany:'500000435'},
   ],
 }}];
 `,
@@ -277,7 +277,7 @@ return [{json:{
     })
     SeedCompanies = {
         operation: 'executeQuery',
-        query: "INSERT INTO indox_test.companies (\"instance\", \"מזהה 1\", \"שם חברה\") VALUES ('incoming-documents-main','999000111','DocBase Test Co'),('incoming-documents-main','500000062','Fig Inv Co'),('incoming-documents-main','511234567','Fig Ord Co'),('incoming-documents-main','500000070','Fig Shp Co'),('incoming-documents-main','500001037','Asif Schar Etz') ON CONFLICT (\"instance\", \"מזהה 1\") DO UPDATE SET \"שם חברה\"=EXCLUDED.\"שם חברה\";",
+        query: "INSERT INTO indox_test.companies (\"instance\", \"מזהה 1\", \"שם חברה\") VALUES ('incoming-documents-main','999000111','DocBase Test Co'),('incoming-documents-main','500000062','Fig Inv Co'),('incoming-documents-main','511234567','Fig Ord Co'),('incoming-documents-main','500000070','Fig Shp Co'),('incoming-documents-main','500000435','Asif Schar Etz') ON CONFLICT (\"instance\", \"מזהה 1\") DO UPDATE SET \"שם חברה\"=EXCLUDED.\"שם חברה\";",
         options: {},
     };
 

@@ -15,10 +15,12 @@ if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8")  # Hebrew titles; cp1255 default on Windows crashes
 
 import glob
+import importlib.util
 import json
 import re
 import secrets
 import shutil
+import signal
 import subprocess
 import tempfile
 import threading
@@ -99,7 +101,7 @@ def _public_origin(app_id: str, host: str, base_url_env: str | None) -> str:
     if dom and dom != "localhost":
         return f"https://{host}.{dom}"
     return f"http://{host}.localhost"
-PROJECT = os.getenv("COMPOSE_PROJECT", "deployment-hacohen")
+PROJECT = os.getenv("COMPOSE_PROJECT", "digital-office")
 STATE = os.path.join(REPO, "platform.state.yaml")
 RECONCILE = os.path.join(REPO, "platform", "manager", "reconcile.py")
 # apps/ holds layer 3 (installable); platform-base/ holds layers 1-2 (core, protected).
@@ -107,6 +109,17 @@ ROOTS = {"apps": 3, "platform-base": 12}
 # One lifecycle op at a time: edits to platform.state.yaml + a reconcile render + the container
 # apply must not interleave, or two clicks could corrupt the state file or race the compile.
 _LIFECYCLE = threading.Lock()
+# …and one bring-up of an app's containers at a time, per app (DGO-1496): a provider brought up for one
+# enable runs outside _LIFECYCLE, so a second enable that needs it, or that provider's own enable, would
+# otherwise run its hooks and its `up` at the same moment. Taken BEFORE _LIFECYCLE wherever both are taken,
+# never the other way round.
+_APP_LOCKS = {}
+_APP_LOCKS_GUARD = threading.Lock()
+
+
+def _app_lock(aid):
+    with _APP_LOCKS_GUARD:
+        return _APP_LOCKS.setdefault(aid, threading.Lock())
 
 # The catalog/install machinery is layer-1 MECHANISM and lives with the compiler, so the CLI
 # (`bbox app install`) and this control plane run the same code — not two implementations of
@@ -145,6 +158,14 @@ except Exception as _e:
         return app_id.upper().replace("-", "_") + "_BASE_URL"
 else:
     _CATALOG_IMPORT_ERROR = None
+
+# «מכולות» (DGO-1723): an app an office runs unless its state says otherwise — reconcile's rule, read from it. On
+# its own: this file comes from the image and reconcile.py from the office's checkout, and a checkout older than
+# the image has no such name — which must cost this one rule, never the whole catalog above.
+try:
+    from reconcile import ON_UNLESS_SAID as _ON_UNLESS_SAID
+except Exception:
+    _ON_UNLESS_SAID = ()
 
 app = Flask(__name__, static_folder="static")
 
@@ -386,7 +407,9 @@ def _generation():
     """
     d = os.path.join(REPO, ".generated", "generations")
     try:
-        ns = [int(x) for x in os.listdir(d) if x.isdigit()]
+        # ASCII digits only, as the compiler names a generation (reconcile.py _numbered, DGO-632): isdigit() took
+        # «²» — int() refused it and every app reported generation 0 — and read «٣» as 3
+        ns = [int(x) for x in os.listdir(d) if x.isascii() and x.isdigit()]
         return max(ns) if ns else 0
     except Exception:
         return 0
@@ -549,16 +572,71 @@ def _app_runtime(services, cidx, enabled=True):
             "present": len(present)}
 
 
+def opens_inside(module):
+    """Does «פתיחה» open this app INSIDE the console (#/m/<module>) rather than in a new tab?
+
+    Exactly when the console has a tile for it (DGO-1502, the owner: «כל האפליקציות יפתחו גם בתוך
+    הלשכה»), by the compiler's own rule (reconcile.py render_registries): `tile: false` is a door with
+    no tile (machine — `#/m/machine` was the console's «אין מסך בשם הזה»); an app on its OWN host
+    (`external`) gets a tile that frames that host — while its `embed` is false (n8n, the forge), so
+    this screen sent it to a new tab although the rail opened the same app inside; any other module is
+    a tile when it has an alias and is not `embed: false`. Called only for a routing entry with a host."""
+    if module.get("tile") is False:
+        return False
+    if module.get("external"):
+        return True
+    return bool(module.get("alias")) and module.get("embed", True) is not False
+
+
+_GUARD = {}
+
+
+def _env_value(name):
+    """_repo_env's value as the shell's read_env_value takes it: a trailing ` # comment` off, then its quotes."""
+    return re.sub(r"\s+#.*$", "", _repo_env(name)).strip().strip('"').strip("'").strip()
+
+
+def _herd_away():
+    """{app: (office key, label)} for every app the herd runs on another office than this one (DGO-579) — read
+    through scripts/herd_enable_guard.py, the same reader `bbox apps enable` asks, from the repo this container
+    mounts. {} when this office is not one of the herd's, when it says another herd (DGO_HERD), or when the checkout
+    has no guard: nothing is then refused, and the catalog says nothing.
+
+    An office with no container engine (the phone's core, packaging/dgo/internal/serve) is never one of the herd's
+    offices, so the native twin carries none of this; an office of the herd that ran without an engine would need it."""
+    path = os.path.join(REPO, "scripts", "herd_enable_guard.py")
+    try:
+        mtime = os.stat(path).st_mtime
+    except OSError:
+        return {}
+    try:
+        # loaded once per version of the file (the catalog is asked every few seconds by every open screen)
+        if _GUARD.get("key") != (path, mtime):
+            spec = importlib.util.spec_from_file_location("herd_enable_guard_" + str(abs(hash(path))), path)
+            guard = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(guard)
+            _GUARD.update(key=(path, mtime), mod=guard)
+        office, herd = _env_value("DGO_OFFICE_ID"), _env_value("DGO_HERD")
+        # the herd file of THIS repo, by name: the guard's own default follows whichever herd_home was imported first
+        return _GUARD["mod"].homes(office, herd, herd_file=os.path.join(REPO, "apps", "computers", "herd.yaml"))
+    except Exception as e:                              # noqa: BLE001 — a herd file it cannot read refuses nothing
+        app.logger.warning("the herd file was not read (%s) — no app is held to one office", type(e).__name__)
+        return {}
+
+
 def _catalog():
     state = _load_state()
     cidx = _container_index()
+    _away = _herd_away()
     _gen = _generation()
     _auth = _auth_blockers()
     _mans = _load_manifests()
     _by_id = {x.get("id"): x for x in _mans if x.get("id")}
     # runtime is computed once per app and reused when resolving other apps' dependencies, so a
     # catalog call stays one docker query rather than N-squared lookups.
-    _enabled_ids = {aid for aid in _by_id if _disposition(state.get(aid)) == "enabled"}
+    # …and an app the office runs unless its state says otherwise («מכולות», reconcile.ON_UNLESS_SAID)
+    _enabled_ids = {aid for aid in _by_id
+                    if _disposition(state.get(aid)) == "enabled" or (aid in _ON_UNLESS_SAID and aid not in state)}
     _rt_cache = {aid: _app_runtime(_services_of(x), cidx, aid in _enabled_ids)
                  for aid, x in _by_id.items()}
     apps = []
@@ -570,7 +648,7 @@ def _catalog():
         # while volumes and the catalog tile are KEPT — Android 15's app archiving, which exists
         # precisely because "uninstall to free space" throws away the data people care about.
         entry = state.get(aid) or {}
-        dispo = _disposition(entry)
+        dispo = "enabled" if aid in _ON_UNLESS_SAID and aid not in state else _disposition(entry)
         enabled = dispo == "enabled"
         if m.get("_broken"):
             apps.append({"id": aid, "broken": m["_broken"], "core": core,
@@ -613,9 +691,15 @@ def _catalog():
                 _url = _path
             else:
                 _url = _origin
+            # `screen`: the app DECLARED a screen of its own (a routing entry with a module) — not a service
+            # whose host routing[0] happens to give (forward-auth's sign-in, traefik's dashboard), and not a
+            # door whose screen lives in another app (`tile: false`: machine's is in «מחשבים», DGO-890). The
+            # console's screen search offers only these (DGO-1760, the owner: «למה יש שתי אפלקציות כניסה ?
+            # כפל זה חמור»); the url stays, so nothing that opens an app by it changes.
             launch = {"url": _url,
-                      "embed": bool(module.get("embed")),
-                      "module": module.get("id") or aid}
+                      "embed": opens_inside(module),
+                      "module": module.get("id") or aid,
+                      "screen": bool(r_ui.get("module")) and module.get("tile") is not False}
         services = _services_of(m)
         rt = _app_runtime(services, cidx, enabled)
         if rt["state"] == "stopped" and enabled and rt.get("present") and _asleep(services, cidx, m):
@@ -646,6 +730,10 @@ def _catalog():
                 sorted({t for sv in services for t in _auth.get(sv, [])}),
                 m.get("progress_deadline_seconds")),
             "state_desired": dispo,
+            # where the herd runs it, when that is another office and it is not running here (DGO-579): the card
+            # says so, and switching it on here — or bringing an archived copy back («שחזר», DGO-1743) — asks first
+            **({"herd_home": _away[aid][0], "herd_home_label": _away[aid][1]}
+               if aid in _away and not enabled else {}),
             "archived": dispo == "archived",
             "state_by": entry.get("by"),
             # An archived app is still INSTALLED — that is the whole point: its data and its tile
@@ -997,12 +1085,24 @@ def reconcile_once():
 
         services = _services_of(m)
         if services:
-            have = {c.labels.get("com.docker.compose.service") for c in _app_containers(services)}
-            if have != set(services) and m.get("_root") != "platform-base":
-                created, errs = _install(aid)
-                if created:
-                    report["converged"].append({"app": aid, "action": "containers", "created": created})
-                report["errors"] += [{"app": aid, "error": e} for e in errs]
+            # its own enable, or another's bring-up of it as a provider, may be making its containers right now, in
+            # the order a bring-up has (prepare before them); creating them here would come first (DGO-1496). The
+            # app's lock is TAKEN, not looked at, and held for its `_install`: a bring-up that starts meanwhile then
+            # waits for it. Without waiting — this runs under _LIFECYCLE, and the app lock is the one taken first.
+            job = _JOBS.get(aid)
+            mine = _app_lock(aid)
+            if (job and not job["finished"].is_set()) or not mine.acquire(blocking=False):
+                report["skipped"].append({"app": aid, "why": "being brought up"})
+                continue
+            try:
+                have = {c.labels.get("com.docker.compose.service") for c in _app_containers(services)}
+                if have != set(services) and m.get("_root") != "platform-base":
+                    created, errs = _install(aid)
+                    if created:
+                        report["converged"].append({"app": aid, "action": "containers", "created": created})
+                    report["errors"] += [{"app": aid, "error": e} for e in errs]
+            finally:
+                mine.release()
 
     wf_apps, why = _workflow_apps()
     if wf_apps is None:
@@ -1046,6 +1146,62 @@ def api_reconcile():
         except Exception as e:                       # never let a converge attempt kill the plane
             return jsonify(ok=False, error=str(e)), 500
     return jsonify(ok=not rep["errors"], **rep), (200 if not rep["errors"] else 500)
+
+
+# ── the office's language (DGO-971, ai/context/platform-language.md) ──────────────────────────────
+# ONE variable for the whole office, and this is its write path for a screen: the console's /api/language
+# hands a POST here (the console is a layer-2 base app with no mount of the repo), and `bbox lang` does the
+# same from a terminal. The write is reconcile.py's (`lang`, set_language(): gate G33's one writer), then the
+# render, which rewrites .generated/registry/locale.json. No container is restarted: a language is a property
+# of the office, and every screen reads the file on its next request.
+@app.post("/api/language")
+def api_language_set():
+    """Switch the office's language. An unknown code is refused BY NAME before anything is written."""
+    if request.headers.get(OFFICE_HEADER):
+        # a request that crossed a link cannot write this office's own state (§9 of the pairing contract)
+        return jsonify(error="a linked office does not switch this office's language"), 403
+    # Everything a caller sends is checked before a process is started (the second reader of slice 4): a body
+    # that is not an object answered 500 (DGO-607's _json_object), a code like `-x` became an argv word that
+    # argparse read as a flag, a NUL byte or a 3 MB code raised in subprocess.run. Both values now ride as
+    # `--opt=value`, one argv word each, so `-x` is a value reconcile.py refuses by name like any unknown code;
+    # what cannot reach it at all (a NUL, more than a code's length) is refused here; `by` is a short label.
+    body, refused = _json_object()
+    if refused:
+        return refused
+    code = str(body.get("lang") or "").strip().lower()
+    by = "".join(ch for ch in str(body.get("by") or "") if ch.isprintable()).strip()[:40] or "control-plane"
+    # printable: a NUL, a lone surrogate (`"\ud800"`, which subprocess.run cannot encode), a control character
+    # or a newline is no code (an empty one is, and reconcile.py refuses it by name)
+    if not code.isprintable() or len(code) > 40:
+        return jsonify(ok=False, error="unknown_language",
+                       lang="".join(ch for ch in code[:40] if ch.isprintable()).encode("utf-8", "replace").decode(),
+                       detail="not a language code"), 400
+    # the same patience as a bring-up's: a lifecycle under way answers 409, never a request held for 90 s
+    if not _LIFECYCLE.acquire(timeout=BRINGUP_WAIT_S):
+        return jsonify(ok=False, error="another change to the office is under way — try again when it is done"), 409
+    try:
+        try:
+            r = subprocess.run(["python3", RECONCILE, "lang", f"--lang={code}", f"--by={by}"], cwd=REPO,
+                               capture_output=True, text=True, timeout=60)
+        except subprocess.TimeoutExpired:
+            return jsonify(ok=False, error="state_write_failed", lang=code, detail="the write did not end in 60 s"), 504
+        if r.returncode != 0:
+            said = (r.stderr or r.stdout or "").strip()[:300]
+            if "unknown language" in said:
+                return jsonify(ok=False, error="unknown_language", lang=code, detail=said), 400
+            return jsonify(ok=False, error="state_write_failed", lang=code, detail=said), 500
+        try:
+            _render()
+        except Exception as e:
+            return jsonify(ok=False, error=f"recompile failed: {e}"), 500
+    finally:
+        _LIFECYCLE.release()
+    try:
+        with open(os.path.join(REPO, ".generated", "registry", "locale.json"), encoding="utf-8") as f:
+            doc = json.load(f)
+    except (OSError, ValueError):
+        doc = {}
+    return jsonify(ok=True, changed=not r.stdout.startswith("language is already"), **doc)
 
 
 def _run_hook(m, verb, timeout):
@@ -1200,7 +1356,8 @@ def _frame_gate(aid, m, was_on, step):
 def _apply(aid, m, enable, step=lambda _name: None, patience=-1, restore=None):
     """One lifecycle change, start to finish. Returns (payload, http status).
 
-    ENABLING IS THE WHOLE BRING-UP of that app, in the order `bbox run` gives every app: its
+    ENABLING IS THE WHOLE BRING-UP of that app, in the order `bbox run` gives every app: the
+    providers it cannot run without (started, or brought up when they have no container — DGO-1496), its
     `prepare` hook, its containers (created through scripts/dc when they do not exist), a wait until
     they answer, sign-in for its host, its `onboard` hook, its automations. It used to stop at
     "containers created", so an
@@ -1211,8 +1368,10 @@ def _apply(aid, m, enable, step=lambda _name: None, patience=-1, restore=None):
 
     The lock covers what two changes could corrupt between them — the state file, the compile, the
     compose project. The wait and the app's own bootstrap run after it: they concern one app, and
-    `_JOBS` already keeps a second change away from that app. `patience` is how long a caller that
-    answers a person may wait for the lock (-1: a job, which waits its turn).
+    `_JOBS` already keeps a second change away from that app. An enable takes it twice: for the state
+    and the compile, and — after its providers came up, outside it — for its own prepare and
+    containers. `patience` is how long a caller that answers a person may wait for the lock (-1: a
+    job, which waits its turn; every enable is one).
 
     `restore` ({office, archive}) makes it a bring-up WITH THE APP'S DATA, which is what arriving
     from another office means: once the fresh instance answers, its data is fetched and restored
@@ -1224,54 +1383,110 @@ def _apply(aid, m, enable, step=lambda _name: None, patience=-1, restore=None):
     # the app's OWN allowance for a first start (the number its Progressing condition is judged by)
     allowance = int(m.get("progress_deadline_seconds") or DEFAULT_PROGRESS_DEADLINE)
     hooks, acted, created, errs, needed, providers_down = {}, [], [], [], [], []
+    providers_up, prov_blueprints = [], {}
+    def busy():
+        return ({"error": "another app is being brought up — try again when it is done", "id": aid,
+                 "busy": sorted(a for a, j in list(_JOBS.items()) if not j["finished"].is_set())}, 409)
     if not _LIFECYCLE.acquire(timeout=patience):
-        return {"error": "another app is being brought up — try again when it is done", "id": aid,
-                "busy": sorted(a for a, j in _JOBS.items() if not j["finished"].is_set())}, 409
+        return busy()
     try:
         step("state")
         # whether it was ON before this change: the frame gate never takes down an app that was running
         was_on = _was_enabled(aid) if enable else True
         # writes either form, so an entry already migrated to `{ state: ... }` is updated too
         if not _set_disposition(aid, "enabled" if enable else "disabled"):
-            # the desired state did not change hands, so nothing after this may: containers started
-            # for an app the state file still calls disabled are what the next `bbox run` stops
+            # the desired state did not change hands, so nothing after this may: containers started for an app
+            # the state file still calls disabled run until it is switched off (here or `bbox apps disable`) —
+            # `bbox run` starts what is on and stops nothing (`bbox status` names them as drift)
             return {"error": "the desired state could not be written (see this service's log)", "id": aid}, 500
         try:
             _render()
         except Exception as e:
             return {"error": f"recompile failed: {e}", "id": aid}, 500
-        if enable:
-            step("prepare")
-            hooks["prepare"] = _run_hook(m, "prepare", 600)
-        step("containers")
-        containers = _app_containers(services)
-        have = {c.labels.get("com.docker.compose.service") for c in containers}
-        # SWITCHED OFF IS NOT STOPPED when an enabled app requires this one. The compiler keeps a
-        # required provider's services in the compiled office whatever its own line says (drive
-        # requires supabase's object store), and the next `bbox run` starts them again — so
-        # stopping them here only broke the app that needs them until somebody ran it. The line is
-        # written, the containers stay, and the answer says who keeps them.
-        needed = _required_by(aid) if not enable else []
-        for c in containers:
-            try:
-                if enable and c.status != "running":
-                    c.start(); acted.append(c.name)
-                elif not enable and not needed and c.status == "running":
+        if not enable:
+            step("containers")
+            # SWITCHED OFF IS NOT STOPPED when an enabled app requires this one. The compiler keeps a
+            # required provider's services in the compiled office whatever its own line says (drive
+            # requires supabase's object store), and the next `bbox run` starts them again — so
+            # stopping them here only broke the app that needs them until somebody ran it. The line is
+            # written, the containers stay, and the answer says who keeps them.
+            needed = _required_by(aid)
+            for c in _app_containers(services):
+                if needed or c.status != "running":
+                    continue
+                try:
                     c.stop(timeout=20); acted.append(c.name)
-            except Exception as e:
-                return {"error": f"docker {'start' if enable else 'stop'} {c.name}: {e}", "id": aid}, 500
-        # enabling an app whose containers don't exist (a gallery install or a previously-uninstalled
-        # app) CREATES them — that is what makes "install" work, not just "start". Core apps never
-        # reach this: `_lifecycle` refuses them before anything is written.
-        if enable and (have != set(services)):
-            created, errs = _install(aid)
+                except Exception as e:
+                    return {"error": f"docker stop {c.name}: {e}", "id": aid}, 500
     finally:
         _LIFECYCLE.release()
+    # THE PROVIDERS FIRST, as `bbox run` and `bbox update` order them: an app whose provider is down
+    # cannot answer, and its own `prepare` may need it. A stopped one is started; one that has no
+    # container is brought up by the bring-up `bbox update` runs (DGO-1496, `_bring_up_providers`).
+    # OUTSIDE the lock: a provider's bring-up is as long as its first start (its images, its wait, its
+    # hooks), and holding the lock that long kept every other change out — a switch-off answered 409,
+    # `bbox run`'s converge timed out. `bbox update` brings a provider up with no lock at all. Before
+    # c49b19fb this step came after a healthy wait, so it never ran for exactly the app that needed it
+    # (Exampleu, 2026-11-08: the wizard enabled drive, supabase had never been created, drive waited its
+    # 600 s, and the job named nothing).
+    if enable:
+        prov = _bring_up_providers(aid, services, step)
+        acted += prov["acted"]; providers_down = prov["down"]; errs += prov["errs"]
+        hooks.update(prov["hooks"])
+        providers_up = prov["up"]
+        if prov["signin"]:
+            # a provider brought up gates a host: sign-in learns it now, whatever becomes of the app itself
+            step("signin")
+            hooks["signin"] = _signin_refresh()
+        # its automations come with it, as the app's own come with the app below (`reconcile_once` imports
+        # what is missing only when `bbox run` asks it to) — the workflows THIS office holds, by the rule the
+        # converge follows (`_workflow_apps`: a provider whose row gives them to another office keeps them there)
+        # …not while the app is held: a provider's workflows may call the one that did not come up
+        held_here = _workflow_apps()[0] if providers_up and not errs else None
+        for pid in (providers_up if not errs else []):
+            if held_here is not None and pid not in held_here:
+                continue
+            r = _blueprint_apply(pid, True)
+            if r:
+                prov_blueprints[pid] = r
+    # a provider it needs did not come up: nothing of its own is started, since it could not answer
+    # (its line stays `enabled`, as for a failed install, and enabling it again tries again)
+    held = enable and bool(errs)
+    if enable and not held:
+        # its own lock first (a bring-up of THIS app as another enable's provider is not run beside its own
+        # prepare and containers), then the lifecycle's — always in that order
+        mine = _app_lock(aid)
+        mine.acquire()
+        if not _LIFECYCLE.acquire(timeout=patience):
+            mine.release()
+            return busy()
+        try:
+            step("prepare")
+            hooks["prepare"] = _run_hook(m, "prepare", 600)
+            step("containers")
+            containers = _app_containers(services)
+            have = {c.labels.get("com.docker.compose.service") for c in containers}
+            for c in containers:
+                if c.status == "running":
+                    continue
+                try:
+                    c.start(); acted.append(c.name)
+                except Exception as e:
+                    return {"error": f"docker start {c.name}: {e}", "id": aid}, 500
+            # enabling an app whose containers don't exist (a gallery install or a previously-uninstalled
+            # app) CREATES them — that is what makes "install" work, not just "start". Core apps never
+            # reach this: `_lifecycle` refuses them before anything is written.
+            if have != set(services):
+                created, errs = _install(aid)
+        finally:
+            _LIFECYCLE.release()
+            mine.release()
     late = f"the app's containers did not all answer within {allowance}s"
     if enable and not errs:
         step("health")
         if not _wait_ready(services, allowance):
-            errs.append(late)
+            errs.append(late + (f" — the providers it needs are not up: {', '.join(providers_down)}"
+                                if providers_down else ""))
     if enable and restore and not errs:
         step("restore")
         problem = _carry_in(aid, restore)
@@ -1289,38 +1504,24 @@ def _apply(aid, m, enable, step=lambda _name: None, patience=-1, restore=None):
             return ({"ok": False, "id": aid, "enabled": False, "error": frame["sentence"], "frame": frame,
                      "switched_off": bool(off.get("ok"))}, 409)
     if enable and not errs:
-        if any((r or {}).get("auth") == "sso" for r in m.get("routing") or []):
+        # one refresh serves every compiled host: when a provider's already ran AND succeeded, it served this
+        # one too; one that failed is tried again now, for this app's host
+        early = hooks.get("signin")
+        if not (early and early.get("rc") == 0) and any((r or {}).get("auth", "sso") == "sso" for r in m.get("routing") or []):
             step("signin")
             hooks["signin"] = _signin_refresh()
         step("onboard")
         hooks["onboard"] = _run_hook(m, "onboard", allowance + 600)
-    # the providers this app pulls in (its hard closure, from the compiler): enabling a dependent
-    # must not leave its provider's containers down. START any that are compiled but stopped — fast
-    # and safe, they already exist — and NAME in `providers_down` any that is not up at all. Bringing
-    # a provider up FROM NOTHING is its own full bring-up (prepare, onboard, and for n8n the
-    # owner-signed blueprint push — own-031); it is reported here, never forced, and never fails the
-    # dependent's own enable.
-    if enable and not errs:
-        own = set(services)
-        extra = [s for s in (_closure_services(aid) or []) if s not in own]
-        if extra:
-            step("providers")
-            present = {c.labels.get("com.docker.compose.service"): c for c in _app_containers(extra)}
-            for s in extra:
-                c = present.get(s)
-                if c is None:
-                    providers_down.append(s)
-                elif c.status != "running":
-                    try:
-                        c.start(); acted.append(c.name)
-                    except Exception as e:                       # noqa: BLE001
-                        providers_down.append(f"{s} ({type(e).__name__})")
     # automations follow the app: imported on enable, removed on disable — but a provider switched
     # off while an enabled app still needs it KEEPS its workflows too, for the same reason its
     # containers stay (see `needed`, computed above): unpushing them would strand the dependent
     # (disabling INDOX while chat needs indox-api would delete the 69 workflows chat's flows call).
     if not enable and needed:
         blueprint = {"kept": f"required by {', '.join(needed)}"}
+    elif held:
+        # not imported for an app that was not started: an active schedule would fire at nothing (Exampleu's
+        # first run: INDOX's scheduler failed 46 times against an app that was not there)
+        blueprint = {"held": "the app was not started"}
     else:
         step("automations")
         blueprint = _blueprint_apply(aid, enable)
@@ -1329,7 +1530,8 @@ def _apply(aid, m, enable, step=lambda _name: None, patience=-1, restore=None):
     # 200 with ok=True and the UI reported success, while create_errors was read by nobody.
     return ({"ok": not errs, "id": aid, "enabled": enable, "acted": acted, "created": created,
              "create_errors": errs, "blueprint": blueprint, "required_by": needed,
-             "providers_down": providers_down,
+             "providers_down": providers_down, "providers_up": providers_up,
+             **({"provider_blueprints": prov_blueprints} if prov_blueprints else {}),
              "restored": restore if (restore and not errs) else None,
              "hooks": {k: v for k, v in hooks.items() if v},
              **({"frame": frame} if frame else {}), **rt}, 200 if not errs else 500)
@@ -1621,7 +1823,33 @@ def api_unarchive(aid):
     """Bring an archived app back: re-create from its compose and start it. Data was never gone."""
     if request.headers.get(OFFICE_HEADER):
         return jsonify(error="a linked office does not bring this office's apps back"), 403
+    asked, bad = _json_object()
+    if bad:
+        return bad
+    # What this route starts is a second running copy when the herd runs the app on another office — archived here
+    # or never here: data kept here does not make two copies one (DGO-1743; its second reader: archive, then
+    # «שחזר», started the app the herd had moved to the HP with no question). It asks what enable asks.
+    held = _herd_held(aid, asked)
+    if held:
+        return held
     return _lifecycle(aid, True)
+
+
+_JSON_KIND = {"list": "an array", "str": "a string", "int": "a number", "float": "a number", "bool": "true"}
+
+
+def _json_object():
+    """(the request's JSON body, None) — or ({}, a refusal) when it is not an object.
+
+    No body, or a falsy one (`[]`, `0`, `""`, `false`), is `{}`, as `get_json(silent=True) or {}` always made it —
+    and as the native twin reads a plain switch-on (packaging/dgo internal/serve `plainSwitchOn`). Any OTHER value
+    that is not an object is refused BY NAME, 400: a list, a number or a string reached `.get` and the route
+    answered 500 with a traceback in the log (DGO-607 — enable, move, uninstall, catalog preview and install)."""
+    body = request.get_json(silent=True) or {}
+    if isinstance(body, dict):
+        return body, None
+    kind = _JSON_KIND.get(type(body).__name__, type(body).__name__)
+    return {}, (jsonify(error=f"the body is a JSON object of named fields, not {kind}"), 400)
 
 
 @app.post("/api/apps/<aid>/enable")
@@ -1632,7 +1860,10 @@ def api_enable(aid):
     WHICH office is the link's answer when there is one: a request that crossed a link carries the
     office it came from, written by the door (`OFFICE_HEADER`), and that wins over the body — so a
     linked office can have its OWN export fetched and nobody else's."""
-    restore = (request.get_json(silent=True) or {}).get("restore")
+    asked, bad = _json_object()
+    if bad:
+        return bad
+    restore = asked.get("restore")
     if request.headers.get(OFFICE_HEADER) and not isinstance(restore, dict):
         # A linked office reaches this route for ONE thing: a move placing an app HERE with its data
         # (`_move` on the other side POSTs `{"restore": {archive, …}}`). Everything else this route
@@ -1650,7 +1881,33 @@ def api_enable(aid):
             return jsonify(error="restore needs the archive's name and the office that holds it",
                            id=aid), 400
         restore = {"office": office, "archive": archive}
+    # ONE PER HERD (DGO-579): a plain switch-on of an app the herd runs on another office is refused unless the
+    # request says a second one is meant (`anyway` — the apps screen sends it after asking the person). A move
+    # (`restore`: the app arriving with its data) is never asked, and switching on what already runs changes nothing.
+    if restore is None:
+        held = _herd_held(aid, asked)
+        if held:
+            return held
     return _lifecycle(aid, True, restore)
+
+
+def _herd_held(aid, asked):
+    """The 409 for a switch-on of an app the herd runs on another office (DGO-579), or None. Asked by every route that
+    starts an app without its data — enable, unarchive and the catalog's install (DGO-1743: those two started it with
+    no question) — unless the request says a second one is meant (`anyway`, what the apps screen sends after asking
+    the person). Switching on what already runs here changes nothing, and is not asked."""
+    if asked.get("anyway") is True:
+        return None
+    away = _herd_away()
+    if aid not in away:
+        return None
+    state = _load_state()
+    if _disposition(state.get(aid)) == "enabled" or (aid in _ON_UNLESS_SAID and aid not in state):
+        return None
+    home, label = away[aid]
+    return jsonify(error=f"the herd runs {aid} on {home} (apps/computers/herd.yaml, apps:) — this office "
+                         f"reaches it through the link; to start a second one here on purpose, ask with "
+                         f"{{\"anyway\": true}}", id=aid, herd={"home": home, "label": label}), 409
 
 
 @app.post("/api/apps/<aid>/apply")
@@ -1712,11 +1969,228 @@ def _closure_services(aid):
     """Every compose service this app's HARD closure needs — itself and the providers it pulls in,
     in dependency order (the compiler's `services --for`). [] when it could not be asked, so a
     failure here never strands the app's own bring-up (the caller falls back to the app's own)."""
-    code, out, err = _compiler("services", "--for", aid)
+    try:
+        code, out, err = _compiler("services", "--for", aid)
+    except (subprocess.SubprocessError, OSError) as e:   # a compiler that hangs or cannot start
+        app.logger.warning("services --for %s: %s", aid, e)
+        return []
     if code != 0:
         app.logger.warning("services --for %s: %s", aid, (err or out)[-200:])
         return []
     return [s for s in re.split(r"[,\s]+", (out or "").strip()) if s]
+
+
+def _providers_of(aid):
+    """The providers this app pulls in, grouped as `bbox update` reads them (scripts/app-update-plan.py, the
+    compiler's own resolution): [(root, app id, seconds its first start may take, [its services])], in dependency
+    order. [] when the plan cannot be had — then nothing is brought up, and what has no container is only named."""
+    try:
+        r = subprocess.run(["python3", os.path.join(REPO, "scripts", "app-update-plan.py"), aid], cwd=REPO,
+                           capture_output=True, text=True, timeout=120, encoding="utf-8", errors="replace",
+                           env={**os.environ, "PYTHONIOENCODING": "utf-8"})
+    except (OSError, subprocess.SubprocessError) as e:          # a plan that hangs or cannot start
+        app.logger.warning("app-update-plan %s: %s", aid, e)
+        return []
+    if r.returncode != 0:
+        app.logger.warning("app-update-plan %s: %s", aid, (r.stderr or r.stdout or "")[-200:])
+        return []
+    rows = []
+    for line in (r.stdout or "").splitlines():
+        f = line.split()
+        if len(f) >= 5 and f[0] == "provider" and f[3].isdigit():
+            rows.append((f[1], f[2], int(f[3]), f[4:]))
+    return rows
+
+
+def _compiled_services():
+    """The services compose runs on THIS office (`scripts/dc config --services`), the question `bbox update` asks
+    before it brings a provider up: a provider the plan names that runs on a linked office, or not at all, is not
+    compiled here. None when compose cannot say — then no provider is brought up."""
+    try:
+        r = subprocess.run(["bash", "scripts/dc", "config", "--services"], cwd=REPO, capture_output=True,
+                           text=True, timeout=120, encoding="utf-8", errors="replace",
+                           env={**os.environ, "COMPOSE_PROJECT_NAME": PROJECT})
+    except (OSError, subprocess.SubprocessError):
+        return None
+    if r.returncode != 0:
+        return None
+    return {s.strip() for s in (r.stdout or "").splitlines() if s.strip()}
+
+
+# its images (a build may take as long as _compose_up allows one), then its prepare and its onboard hooks
+PROVIDER_UP_SLACK = 3600
+
+
+def _provider_up(root, pid, seconds, services):
+    """Bring ONE provider up with scripts/provider-up.sh — the bring-up `bbox update` sources for a provider the
+    checkout newly requires (DGO-1583): its prepare hook, these services alone (`--no-deps`), a wait as long as its
+    first start may take, its onboard hook. What comes BEFORE differs by door: the update also builds its images
+    from the checkout it applies and runs env-secrets first, which makes an empty key of an app that keeps no
+    data yet; an enable starts what is there (an image is built only when it is missing, as `_install` does) and
+    does not write .env — this plane runs as root, and the owner's .env is the owner's file — so a provider with
+    an empty key of its own is refused before this, with the keys named (`_empty_keys_of`).
+    {"ran", "rc": 0 up | 1 not up | 3 up with a hook that failed | None not run, "out"}.
+
+    The file is read from the mounted checkout while this code is the image's: an image newer than the checkout
+    finds no such file, and that is «not run» (the provider is named, as before), never a failed enable."""
+    if not os.path.exists(os.path.join(REPO, "scripts", "provider-up.sh")):
+        return {"ran": False, "rc": None, "out": "scripts/provider-up.sh is not in this office's checkout"}
+    limit = seconds + PROVIDER_UP_SLACK
+    try:
+        # its own process group: a bring-up that outlives its bound is ended WHOLE (compose, a hook), not only
+        # the shell that started them — which would leave them running after this enable gave up on them
+        p = subprocess.Popen(["bash", "scripts/provider-up.sh", root, pid, str(seconds), *services], cwd=REPO,
+                             stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, encoding="utf-8",
+                             errors="replace", start_new_session=True,
+                             env={**os.environ, "COMPOSE_PROJECT_NAME": PROJECT, "PROVIDER_UP_BUILD": "missing"})
+    except OSError as e:
+        return {"ran": False, "rc": 1, "out": str(e)[:200]}
+    try:
+        out, _ = p.communicate(timeout=limit)
+    except subprocess.TimeoutExpired:
+        try:
+            os.killpg(p.pid, signal.SIGKILL)
+        except OSError:
+            pass
+        try:
+            p.communicate(timeout=30)        # a child that left the group and holds the pipe does not hold the job
+        except subprocess.TimeoutExpired:
+            pass
+        return {"ran": True, "rc": 1, "out": f"its bring-up did not finish within {limit}s"}
+    return {"ran": True, "rc": p.returncode, "out": (out or "").rstrip()[-400:]}
+
+
+def _bring_up_providers(aid, own, step):
+    """Make the providers `aid` pulls in run, before anything of its own starts (DGO-1496).
+
+    Every service of its hard closure that is not its own (the compiler's `services --for`), provider by provider in
+    the plan's dependency order: a provider whose services all EXIST has its stopped ones STARTED — fast and safe
+    (c49b19fb); one with a service that has NO container is brought up with its own bring-up, the one `bbox update`
+    runs (`_provider_up`), for its services that do not run (compose starts them in their own order; a sibling that
+    runs is never recreated). The enable brings up MORE than the update does, and that is the point: the update
+    applies a checkout and brings up only what the checkout added (a provider taken down with `bbox stop` stays down
+    there); switching an app on is the owner's ask that it RUN, which a provider it cannot answer without
+    overrides — Exampleu's wizard enabled drive while supabase had never been created, and the enable could only
+    name it. Not brought up, and named in `down`: a service the plan claims for no app (or no plan could be had),
+    one this office does not compile (it runs on a linked office), and every absent one after a provider that did
+    not come up or that could not be brought up here (no scripts/provider-up.sh in this checkout). Without a plan,
+    what is stopped is still started, as before.
+
+    {"acted": started containers, "up": provider ids brought up, "down": services still not up, "errs": [the
+    sentence of a provider that did not come up], "hooks": {"provider:<id>": its bring-up}, "signin": whether one
+    brought up gates a host}."""
+    res = {"acted": [], "up": [], "down": [], "errs": [], "hooks": {}, "signin": False}
+    own = set(own)
+    extra = [s for s in (_closure_services(aid) or []) if s not in own]
+    if not extra:
+        return res
+    step("providers")
+    present = {c.labels.get("com.docker.compose.service"): c for c in _app_containers(extra)}
+    absent = {s for s in extra if s not in present}
+
+    def start(svcs):
+        for s in svcs:
+            c = present.get(s)
+            if c is not None and c.status != "running":
+                try:
+                    c.start(); res["acted"].append(c.name)
+                except Exception as e:                   # noqa: BLE001
+                    res["down"].append(f"{s} ({type(e).__name__})")
+
+    def not_up(svcs):
+        return [s for s in svcs if s in absent or (s in present and present[s].status != "running")]
+
+    rows = _providers_of(aid) if absent else []
+    compiled = _compiled_services() if rows else None
+    done = set()
+    for root, pid, seconds, svcs in (rows if compiled else []):
+        mine = [s for s in svcs if s in extra and s not in done]
+        gone = [s for s in mine if s in absent and s in compiled]
+        if not gone:                                     # every service of it exists (or is not compiled here)
+            start(mine); done.update(mine)
+            res["down"] += [s for s in mine if s in absent]
+            continue
+        # its own keys first: `bbox run` and `bbox update` make an empty one (scripts/env-secrets.py) before they
+        # bring an app up; this plane runs as root and does not write the owner's .env, so it names them
+        lacking = _empty_keys_of(_manifest(pid) or {})
+        if lacking:
+            done.update(mine)
+            res["errs"].append(f"{pid}, which {aid} needs, has no value yet in this office's .env for "
+                               f"{', '.join(lacking)} — `bbox run` makes them (scripts/env-secrets.py, which "
+                               f"names any it cannot); switch {aid} on again after it")
+            res["down"] += not_up(mine)
+            break
+        with _app_lock(pid):
+            # another enable may have brought it up while this one waited for it: what is missing, asked again
+            now = {c.labels.get("com.docker.compose.service"): c for c in _app_containers(mine)}
+            present.update(now)
+            absent.difference_update(now)
+            gone = [s for s in gone if s not in now]
+            if not gone:
+                start(mine); done.update(mine)
+                continue
+            want = [s for s in mine if s in gone or (s in present and present[s].status != "running")]
+            r = res["hooks"][f"provider:{pid}"] = _provider_up(root, pid, seconds, want)
+        if r.get("rc") is None:                          # it cannot be brought up here: as if no plan, below
+            break
+        done.update(mine)
+        if r.get("rc") not in (0, 3):                    # 3: up, and one of its hooks failed (said in its words)
+            words = next((ln.strip() for ln in reversed((r.get("out") or "").splitlines()) if ln.strip()),
+                         f"exit {r.get('rc')}")
+            res["errs"].append(f"{pid}, which {aid} needs, did not come up: {words}")
+            res["down"] += want + [s for s in mine if s in absent and s not in gone]
+            break
+        res["up"].append(pid)
+        res["down"] += [s for s in mine if s in absent and s not in gone]
+        if any((x or {}).get("auth", "sso") == "sso" for x in (_manifest(pid) or {}).get("routing") or []):  # no auth is sso (DGO-630)
+            res["signin"] = True
+    rest = [s for s in extra if s not in done]
+    if not res["errs"]:
+        start(rest)                                      # what no provider row took: started as before
+        res["down"] += [s for s in rest if s in absent]
+    else:
+        res["down"] += not_up(rest)                      # nothing is started after a failure: all of it named
+    return res
+
+
+_SECRET_NAMES = None
+
+
+def _secret_names():
+    """The keys an office makes for itself (scripts/env-secrets.py's TABLE), read from the mounted checkout once;
+    an empty set when it cannot be read (then nothing is refused for a key)."""
+    global _SECRET_NAMES
+    if _SECRET_NAMES is None:
+        try:
+            spec = importlib.util.spec_from_file_location("env_secrets", os.path.join(REPO, "scripts", "env-secrets.py"))
+            mod = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(mod)
+            _SECRET_NAMES = set(getattr(mod, "TABLE", {}))
+        except (Exception, SystemExit):                  # noqa: BLE001 — never the job thread's end
+            return set()
+    return _SECRET_NAMES
+
+
+def _empty_keys_of(m):
+    """The office's own secrets an app's compose reads with no fallback (`${KEY}`, `${KEY:?…}` — not `${KEY:-…}`)
+    that .env holds an EMPTY value for, or none — what scripts/env-secrets.py would make before a bring-up. Read as
+    compose reads .env (its last line for a key wins). [] when it cannot be told: no compose, or a .env this
+    container cannot read (a packaged office's .env links to /etc/binaos, which is not mounted here)."""
+    fname = m.get("compose")
+    if not fname:
+        return []
+    try:
+        with open(os.path.join(m.get("_dir") or REPO, fname), encoding="utf-8") as f:
+            names = set(re.findall(r"\$\{([A-Z][A-Z0-9_]*)(?![A-Z0-9_]|:?-)", f.read()))
+        with open(os.path.join(REPO, ".env"), encoding="utf-8") as f:
+            env = {}
+            for line in f:
+                k, eq, v = line.strip().partition("=")
+                if eq and not k.startswith("#"):
+                    env[k.strip()] = v.strip().strip('"').strip("'")
+    except OSError:
+        return []
+    return sorted(k for k in names & _secret_names() if not env.get(k))
 
 
 def _required_by(aid):
@@ -1748,6 +2222,80 @@ def _compiler(*args, stdin=None):
     r = subprocess.run(["python3", RECONCILE, *args], cwd=REPO, capture_output=True, text=True,
                        input=stdin, timeout=120, encoding="utf-8", errors="replace")
     return r.returncode, (r.stdout or "").strip(), (r.stderr or "").strip()
+
+
+def _network_facts():
+    """The last compile's answer for the office's own routes (`.generated/network.json`), or None.
+
+    The screen shows what the FILE declares and what the COMPILE made of it, side by side, because
+    those two are the whole feature: a route that is declared and not yet compiled is an instruction
+    waiting for a converge, and a door nobody declared can never be open. Rendered output is read
+    through this plane (the app itself has no business reading `.generated/`), never written."""
+    try:
+        with open(os.path.join(REPO, ".generated", "network.json"), encoding="utf-8") as fh:
+            return json.load(fh)
+    except (OSError, ValueError):
+        return None
+
+
+@app.get("/api/network")
+def api_network_get():
+    """The office's own routes: what `platform.state.yaml` declares, plus the compiled facts, plus
+    the one address THIS MACHINE is already declared to hold.
+
+    That last one is `DGO_WG_ENDPOINT` — written by a host-side step that measured the machine
+    (`apps/dgo-extend/hooks/prepare`), which is the only place any part of this office can honestly
+    learn a machine's own address: a container's `/proc` is its own network namespace. It is handed
+    to the screen as a HINT for the picker and nothing else — the route is checked by knocking and
+    enforced where the machine is (the firewall converge)."""
+    code, out, err = _compiler("network-get")
+    if code != 0:
+        return jsonify(error=err[-300:] or "the state file could not be read"), 500
+    known = _repo_env("DGO_WG_ENDPOINT").strip()
+    return jsonify(routes=(json.loads(out or "{}") or {}).get("routes", []),
+                   rendered=_network_facts(),
+                   known_addresses=[known] if re.fullmatch(r"\d{1,3}(\.\d{1,3}){3}", known) else [])
+
+
+@app.put("/api/network")
+def api_network_put():
+    """THE writer for `network:` — the office's own routes, declared.
+
+    Same shape as `PUT /api/remote` and for the same reasons: the compiler owns the file's format
+    and validates BEFORE writing (a refused block changes nothing and says why), the lifecycle lock
+    keeps two writers from racing, and a request that crossed a LINK can never touch this — the
+    office's doors are its owner's, and a linked office that could open one would be opening a way
+    into this machine (§9 of the pairing contract: a peer does not write this office's state)."""
+    if request.headers.get(OFFICE_HEADER):
+        return jsonify(error="a linked office does not open this office's doors"), 403
+    body = request.get_json(silent=True)
+    if not isinstance(body, dict) or not isinstance(body.get("routes"), list):
+        return jsonify(error='send {"routes": [...]} — the whole block'), 400
+    if not _LIFECYCLE.acquire(timeout=BRINGUP_WAIT_S):
+        return jsonify(error="another change is being applied — try again when it is done"), 409
+    rendered, compile_error = False, ""
+    try:
+        code, out, err = _compiler("network-set", "--json", stdin=json.dumps({"routes": body["routes"]}))
+        if code == 0 and json.loads(out or "{}").get("written"):
+            # THE WRITE IS NOT THE DOOR: what the edge serves and what the machine side reads are
+            # COMPILED from this block, so the compile is part of the same act — exactly as
+            # `PUT /api/remote` renders when a withdrawal has to take a tile away. Without it the
+            # screen would report "applied" over a door that is still shut until somebody runs
+            # `bbox run`, which is the kind of lie this platform spends its comments on.
+            try:
+                _render()
+                rendered = True
+            except Exception as e:                      # noqa: BLE001 — said in the answer
+                compile_error = str(e)[-300:]
+    finally:
+        _LIFECYCLE.release()
+    if code == 1:
+        return jsonify(error="the compiler refuses this block — nothing written",
+                       refused=[ln.strip(" -") for ln in err.splitlines() if ln.strip()]), 422
+    if code != 0:
+        return jsonify(error=err[-300:] or "the block could not be written"), 500
+    return jsonify(ok=True, rendered=rendered, **json.loads(out or "{}"),
+                   **({"compile_error": compile_error} if compile_error else {}))
 
 
 @app.get("/api/remote")
@@ -1836,7 +2384,9 @@ def api_move(aid):
                        id=aid), 403
     if docker_sdk is None:
         return jsonify(error="docker socket unavailable"), 503
-    asked = request.get_json(silent=True) or {}
+    asked, bad = _json_object()
+    if bad:
+        return bad
     to, wake = str(asked.get("to") or "").strip().lower(), asked.get("wake") is True
     anyway = asked.get("force") is True
     if not _OFFICE_RE.match(to):
@@ -1928,7 +2478,9 @@ def api_uninstall(aid):
     # the app's declared on_uninstall decides. This is the on_uninstall contract every app.json has
     # carried but nothing implemented until now.
     policy = (m.get("data") or {}).get("on_uninstall", "keep")
-    body = request.get_json(silent=True) or {}
+    body, bad = _json_object()
+    if bad:
+        return bad
     purge = bool(body["purge"]) if "purge" in body else (policy == "purge")
 
     with _LIFECYCLE:
@@ -2067,7 +2619,10 @@ def api_catalog_preview():
             up.save(blob_path)
             ref, body = blob_path, {}
         else:
-            body = request.get_json(silent=True) or {}
+            body, bad = _json_object()
+            if bad:
+                shutil.rmtree(work, ignore_errors=True)
+                return bad
             ref = (body.get("ref") or "").strip()
             if not ref:
                 shutil.rmtree(work, ignore_errors=True)
@@ -2126,13 +2681,20 @@ def api_catalog_install():
         return jsonify(error="a linked office does not install into this office"), 403
     if appinstall is None:
         return jsonify(error=f"catalog unavailable: {_CATALOG_IMPORT_ERROR}"), 503
-    body = request.get_json(silent=True) or {}
+    body, bad = _json_object()
+    if bad:
+        return bad
     st = _STAGED.get((body.get("token") or "").strip())
     if not st:
         return jsonify(error="unknown or expired staging token — preview again"), 410
     if st["refusals"]:
         return jsonify(error="refused: " + "; ".join(st["refusals"])), 409
     aid = st["id"]
+    # An app the herd runs on another office, installed here from a catalog, is a second one (DGO-1743): asked before
+    # a byte is placed, and the staged bytes kept, so the screen can ask the person and send the same token again.
+    held = _herd_held(aid, body)
+    if held:
+        return held
     with _LIFECYCLE:
         try:
             # placed DISABLED, then enabled through the normal lifecycle below — so an install
@@ -2260,7 +2822,7 @@ def _asleep(services, cidx, m):
 def _wake(services):
     """Start an on-demand app's stopped containers: (started, state). One start at a time — a request
     that finds a start under way only answers, it never queues behind it. Nothing is CREATED here: a
-    missing container is the lifecycle's to make (enable/apply, under its lock), so it is said, not
+    missing container is the lifecycle's to make (enable/apply, under its locks), so it is said, not
     built in a request thread. state: "starting", "missing" or "unhealthy" (running, and its probe fails)."""
     if not _WAKE_LOCK.acquire(blocking=False):
         return [], "starting"

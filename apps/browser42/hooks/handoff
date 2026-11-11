@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-#: handoff <slug> — the ONE address for a person: the browser awake, that group's tab in front, the strip visible
+#: handoff <slug> [--done | --failed <sentence>] | --list — the ONE address for a person, and the end of what he was needed for
 # handoff — print the absolute address a human opens when the office browser needs a hand on <slug>.
 #
 #   bbox b42 handoff whatsapp-pair
@@ -11,6 +11,17 @@
 # and the group's name are visible, and lands on the live view. The same address is what the captcha
 # refusal (`captcha_attempts_exhausted`) and the watchdog's notice carry — every hand-off says one thing.
 # noVNC shows a whole screen: the promise is "the right tab in front", never "only that page".
+#
+# A hand-off `bbox b42 open` recorded (DGO-1336) is ended here by whoever finished the errand, so every
+# console that brought the browser to a person takes him back to the app — or says why not:
+#
+#   bbox b42 handoff claude-signin --done [--episode <id>]
+#   bbox b42 handoff claude-signin --failed "Google לא ענה בתוך 25 דקות — לחצו שוב Continue with Google" [--episode <id>]
+#   bbox b42 handoff --list            the hand-offs that are news (what GET /handoff/ answers)
+#
+# `--episode` is the id `bbox b42 open` answered: an end that names it is refused (exit 3, `superseded`)
+# when a newer attempt has opened the hand-off since — a watcher that outlived its attempt never ends
+# the new one with the old one's outcome.
 set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
@@ -18,4 +29,17 @@ REPO_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
 
 BROWSER="$(docker ps --filter name=browser42-browser --format '{{.Names}}' | head -1)"
 [ -n "${BROWSER}" ] || die "browser42-browser not running — run 'bbox run' first"
+case "${1:-}" in
+  --list) exec docker exec -i "${BROWSER}" python3 /handoff.py list ;;
+esac
+slug="${1:-}"
+case "${2:-}" in
+  --done)
+    shift 2
+    exec docker exec -i "${BROWSER}" python3 /handoff.py record "${slug}" done "$@" ;;
+  --failed)
+    sentence="${3:-}"
+    case "${sentence}" in --*) sentence=""; shift 2 ;; *) shift "$(( $# < 3 ? $# : 3 ))" ;; esac   # no sentence given
+    exec docker exec -i "${BROWSER}" python3 /handoff.py record "${slug}" failed --sentence "${sentence}" "$@" ;;
+esac
 docker exec -i "${BROWSER}" python3 /handoff.py link "$@"

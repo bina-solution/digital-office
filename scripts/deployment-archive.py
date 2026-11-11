@@ -3,9 +3,9 @@
 
     bbox export [--mode config|full] [--out DIR] [--quiesce] [--force]
     bbox import [DIR] [--force]
-    bbox export --verify [DIR]        # re-read the live estate and diff it against a manifest
+    bbox export --verify DIR          # re-read the live estate and diff it against DIR's manifest
 
-THE PROBLEM THIS EXISTS FOR. `zip -r deployment.zip deployment-hacohen/` looks like a backup and is
+THE PROBLEM THIS EXISTS FOR. `zip -r deployment.zip digital-office/` looks like a backup and is
 not one. Every database, every n8n workflow and credential, every document, every auth user and
 every sync cursor lives in DOCKER NAMED VOLUMES under /var/lib/docker — outside the folder. Measured
 on this host: the repo folder is 7.3 GB and the volumes are another ~6.2 GB, and the 6.2 GB is the
@@ -34,8 +34,8 @@ the interpreter itself, and a hook that fails FAILS THE EXPORT rather than being
 CONSISTENCY. Each Postgres store is dumped with `pg_dump`, which takes a REPEATABLE READ snapshot,
 so a store's dump is internally consistent as of the moment it started even while n8n workers write.
 CROSS-store consistency is NOT free: an execution recorded in n8n's database a millisecond after
-supabase's dump began is in one artifact and not the other. `--quiesce` stops the writers (n8n main,
-workers, task-runners and the indox poller) for the duration and restarts them afterwards, which is
+supabase's dump began is in one artifact and not the other. `--quiesce` stops the writers (each app's
+`data.writers`: n8n's main, workers and runners, INDOX's poller, mail's) for the duration and restarts them afterwards, which is
 the right choice for a MIGRATION (you are leaving this machine anyway) and the wrong one for a
 routine backup of a live system. Default is off; the manifest records which was used, so a restore
 can never silently assume the stronger guarantee.
@@ -82,9 +82,31 @@ SECRET_PATHS = [
     "secrets",
     ".catalog-signing-key.json",
     "portainer_password.txt",
+    # Where portainer's compose actually keeps it (gitignored there). The root entry above found
+    # nothing on any office measured, and the inventory reported the password "absent" while the
+    # file sat in apps/portainer/ (DGO-1510, MacBook 2026-11-09). Both stay: an older checkout may
+    # still have the root one.
+    "apps/portainer/portainer_password.txt",
     "platform-base/traefik/config/acme.json",
     "apps/n8n/.credentials-state",
 ]
+
+# What a clone does not bring and is the office's own DECLARATION rather than its secret. Carried
+# ALWAYS, tracked or not:
+#   platform.state.yaml   the apps the owner chose. Gitignored on the public copy (.gitignore), so on
+#                         a client's office it was in NO archive: the volumes restored, and the office
+#                         came up with the default apps. Tracked on an office branch, it still holds
+#                         the edits since the last commit (`M platform.state.yaml` on mac-dgo), which
+#                         the commit's copy would drop.
+#   .state/outbox         the work-item writes project-pln has not sent yet (apps/project-pln/outbox.py).
+# Never `.dgo/`: .gitignore says it is this machine's rendering of the link, re-rendered from the
+# dgo-extend volumes, and a copy would carry another machine's keys.
+DECLARATION_PATHS = [
+    "platform.state.yaml",
+    ".state/outbox",
+]
+# The declaration an import puts in place BEFORE it renders the compose config (cmd_import).
+STATE_FIRST = {"platform.state.yaml"}
 
 # Bind-mount subtrees excluded in `config` mode, with the cost of excluding each.
 CONFIG_MODE_BIND_EXCLUDES = {
@@ -426,6 +448,85 @@ def _assert_gitignored(path: pathlib.Path):
             f"or pass --out to a path outside the repo.")
 
 
+def carried_source(rel):
+    """The path to read for a carried file or tree `rel` (SECRET_PATHS, DECLARATION_PATHS), or None
+    when the office has none.
+
+    A symlink is read at its TARGET. On a packaged office `.env` is a link to /etc/binaos/binaos.env
+    (packaging/linux/header.sh), and a link whose target this process cannot see is REFUSED, never
+    stepped over. `exists()` follows the link, so the old `if not src.exists(): continue` read a
+    dangling `.env` as "no .env here". Inside data-management, which does not mount /etc/binaos, that
+    produced an archive with no .env, i.e. no key to any credential in it, under a green export
+    (DGO-1510).
+    """
+    p = REPO / rel
+    if p.is_symlink():
+        real = pathlib.Path(os.path.realpath(p))
+        if not real.exists():
+            raise RuntimeError(
+                f"{rel} is a link to {real}, which this process cannot see, so the archive would be "
+                f"written without it. Run the export where {real} is visible, or mount it here.")
+        return real
+    return p if p.exists() else None
+
+
+def undeclared_volumes(listing, declared, project):
+    """Pure. What on this engine no installed app declares, so no archive carries it.
+
+    listing:  [(volume name, its compose project label or "", its size or None)]
+    declared: the short names every INSTALLED app declares (data.volumes)
+    Returns ([{name, project, ours, size}], anonymous): `ours` is a volume of THIS project
+    (`<project>_<short>`) whose short name nobody declares; the rest belong to another project or to
+    none (a `docker volume create`, an earlier office's leftovers). Every one is named: the inventory's
+    UNCLAIMED list saw only this project's prefix, and 26 volumes on the MacBook (2026-11-09) were in
+    no list at all. Anonymous volumes (64 hex) are counted, not named.
+    """
+    rows, anonymous = [], {"count": 0, "sizes": []}
+    for name, label, size in listing:
+        size = None if str(size or "").strip().upper() in ("", "N/A") else size
+        if re.fullmatch(r"[0-9a-f]{64}", name or ""):
+            anonymous["count"] += 1
+            anonymous["sizes"].append(size)
+            continue
+        # The compose label decides whose a volume is, when there is one: a project `p_x` would
+        # otherwise read `p_x_data` as a volume of `p`. With no label, the name's prefix is all
+        # there is to go by.
+        ours = (label == project) if label else name.startswith(project + "_")
+        if ours and name.startswith(project + "_") and name[len(project) + 1:] in declared:
+            continue
+        rows.append({"name": name, "project": label or (project if ours else None), "ours": ours,
+                     "size": size})
+    return rows, anonymous
+
+
+def engine_volumes():
+    """[(name, compose project label, size)] of every volume on the project engine. The size is
+    docker's own (`system df -v`), or None where it did not answer: a missing size is said, never
+    guessed."""
+    r = run(["docker", "volume", "ls", "--format", '{{.Name}}\t{{.Label "com.docker.compose.project"}}'],
+            env=docker_env(), timeout=90)
+    if r.returncode != 0:
+        raise RuntimeError("docker volume ls failed: "
+                           + (r.stderr or b"").decode("utf-8", "replace")[-300:])
+    sizes = {}
+    try:                                   # sizes are a nicety: their timeout must not lose the names
+        df = run(["docker", "system", "df", "-v", "--format",
+                  "{{range .Volumes}}{{.Name}}\t{{.Size}}\n{{end}}"], env=docker_env(), timeout=240)
+    except subprocess.TimeoutExpired:
+        df = None
+    if df is not None and df.returncode == 0:
+        for line in (df.stdout or b"").decode("utf-8", "replace").splitlines():
+            n, _, s = line.partition("\t")
+            if n:
+                sizes[n.strip()] = s.strip() or None
+    out = []
+    for line in (r.stdout or b"").decode("utf-8", "replace").splitlines():
+        n, _, label = line.partition("\t")
+        if n.strip():
+            out.append((n.strip(), label.strip(), sizes.get(n.strip())))
+    return out
+
+
 def sha256_size(p: pathlib.Path):
     h = hashlib.sha256()
     n = 0
@@ -450,6 +551,53 @@ def declared_volumes(apps):
         for v in ((app_manifest(root, aid).get("data") or {}).get("volumes") or []):
             out[v] = aid
     return out
+
+
+def app_shares(aid):
+    """The volumes app `aid` mounts but another app owns (`data.shares`, DGO-1510): carried, restored and purged with
+    their owner, never in `aid`'s own scope."""
+    root = next((r for r, i in installed_apps() if i == aid), None)
+    return set(((app_manifest(root, aid).get("data") or {}).get("shares") or [])) if root else set()
+
+
+def volume_of(rel, e):
+    """The volume a volume artifact restores (`volumes/<v>.tar.gz`, parsed as the restore parses it), or ""."""
+    p = pathlib.PurePosixPath(rel)
+    if e.get("kind") in ("volume", "volume-dormant") and p.parent.as_posix() == "volumes" \
+            and p.name.endswith(".tar.gz"):
+        return p.name[:-len(".tar.gz")]
+    return ""
+
+
+def shared_entries(scope_app):
+    """{`volumes/<v>.SHARED`: entry} for each volume `scope_app` only shares (DGO-1510): what an export scoped to it
+    records instead of the volume. Filed under the app like any artifact of its scope, so that app's own `--app`
+    import of the archive finds it (an app move: export here, `import --app` there)."""
+    owners = declared_volumes(installed_apps())
+    out = {}
+    for vol in sorted(app_shares(scope_app)):
+        owner = owners.get(vol, "another app")
+        out[f"volumes/{vol}.SHARED"] = {
+            "kind": "skipped", "bytes": 0, "sha256": "", "app": scope_app,
+            "note": f"{owner}'s volume, which {scope_app} shares: `export --app {owner}` carries it"}
+    return out
+
+
+def drop_shares(scope, artifacts):
+    """(artifacts without the volumes `scope` only shares, [(artifact, owner)]) — what an import scoped to `scope`
+    must never write: another app's volume (G26 holds each volume to one owner)."""
+    shares = app_shares(scope)
+    if not shares:
+        return artifacts, []
+    owners = declared_volumes(installed_apps())
+    keep, dropped = {}, []
+    for rel, e in artifacts.items():
+        vol = volume_of(rel, e)
+        if vol and vol in shares:
+            dropped.append((rel, owners.get(vol, "another app")))
+        else:
+            keep[rel] = e
+    return keep, dropped
 
 
 def compose_config():
@@ -739,14 +887,22 @@ def _run_hook(path: pathlib.Path, args):
     return parsed
 
 
-def _writers():
-    """Container names of everything that writes to the app databases while an export runs."""
+def _writers(apps):
+    """Container names of the RUNNING services that `apps` declare as writing to their stores (`data.writers`), in
+    declaration order — what a quiesced export stops (it passes every installed app: one app's service may write
+    another app's store, and a disabled app's may still run). Read from the declarations (DGO-1510): it used to pick
+    containers by name (n8n-*, incoming-documents, mailboxd, mailapi), which no new app could join without an edit
+    here, and whose suffix match also hit another deployment's `n8n-x-<name>`. G26 holds each declared writer to a
+    service of the app's compose whose container is `<service>-${DEPLOYMENT_NAME}`, and never a database."""
     dn = read_env("DEPLOYMENT_NAME") or "bina-deployment"
-    names = sh(["docker", "ps", "--format", "{{.Names}}"], env=docker_env()).split()
-    want = ("n8n-", "incoming-documents", "mailboxd", "mailapi")
-    return [n for n in names
-            if n.endswith(f"-{dn}") and any(n.startswith(w) for w in want)
-            and "postgres" not in n]
+    running = set(sh(["docker", "ps", "--format", "{{.Names}}"], env=docker_env()).split())
+    out = []
+    for root, aid in apps:
+        for svc in ((app_manifest(root, aid).get("data") or {}).get("writers") or []):
+            name = f"{svc}-{dn}"
+            if name in running and name not in out:
+                out.append(name)
+    return out
 
 
 def cmd_export(a):
@@ -759,6 +915,13 @@ def cmd_export(a):
 
     mpath = out / "manifest.json"
     man = json.loads(mpath.read_text(encoding="utf-8")) if mpath.exists() and not a.force else {}
+    # A run resumes only an archive of its own scope: resuming another's (an `--app n8n` directory with
+    # `--app any-concurrency`, or a whole-office one) mixed two scopes in one manifest — and a sharer's run then
+    # removed the owner's tarball from that other backup (DGO-1510, the third reader).
+    if "scope" in man and (man.get("scope") or {}).get("app") != (getattr(a, "app", None) or None):
+        raise SystemExit(f"[archive] {out} holds an archive of {(man.get('scope') or {}).get('app') or 'the whole office'}"
+                         f", not of {getattr(a, 'app', None) or 'the whole office'}: resume it with the same scope, "
+                         "or export into another directory (--force starts this one again)")
     man.setdefault("format_version", FORMAT_VERSION)
     man.setdefault("artifacts", {})
     man.setdefault("facts", {})
@@ -815,10 +978,22 @@ def cmd_export(a):
     say(f"deployment={dn}  project={project_name()}  mode={a.mode}  out={out}")
     say(f"scope: {'app ' + scope_app if scope_app else str(len(apps)) + ' enabled app(s)'}")
 
+    # Every carried path is asked FIRST. A `.env` link this process cannot follow (a packaged office,
+    # run from data-management, which does not mount /etc/binaos) refuses in carried_source. Asked at
+    # step 4, that refusal came after every volume had been tarred, hours into a large office.
+    if not scope_app:
+        for rel in SECRET_PATHS + DECLARATION_PATHS:
+            carried_source(rel)
+
     stopped = []
     try:
         if a.quiesce:
-            stopped = _writers()
+            # every INSTALLED app's running writers, whatever the scope: n8n writes INDOX's tables (its workflows'
+            # upserts), so an export of INDOX alone that stopped only INDOX's service was not quiet (the second
+            # reader, DGO-1510); and a disabled app's volumes are exported too (2b, and `--app` of a disabled app),
+            # while its containers may still run — a state written before its render (the third reader). Only
+            # running ones are stopped, and exactly those are started again.
+            stopped = _writers(installed_apps())
             if stopped:
                 say(f"quiescing {len(stopped)} writer(s): {' '.join(stopped)}")
                 sh(["docker", "stop"] + stopped, env=docker_env())
@@ -859,6 +1034,21 @@ def cmd_export(a):
             _tar_volume(vol, part)
             part.rename(out / rel)
             record(rel, "volume", aid, app=aid)
+        # a volume the scoped app only shares is its owner's (DGO-1510): not carried here, and said where it is.
+        # A tarball of it an earlier run into this directory left (before the share was declared) goes too:
+        # resumability keeps what is on disk, and this archive must not carry it.
+        if scope_app:
+            stale = []
+            for rel, entry in shared_entries(scope_app).items():
+                say(f"  - {rel[len('volumes/'):-len('.SHARED')]}: {entry['note']}")
+                tar = rel[:-len(".SHARED")] + ".tar.gz"
+                if man["artifacts"].pop(tar, None) is not None or (out / tar).exists():
+                    stale.append(tar)
+                man["artifacts"][rel] = entry
+            save()                                         # the manifest first: it never names a file gone
+            for tar in stale:                              # …even under --force, whose manifest began empty
+                (out / tar).unlink(missing_ok=True)
+                say(f"    {tar} of an earlier run removed: it is the owner's")
 
         # 2b. volumes belonging to apps that are INSTALLED BUT NOT ENABLED.
         #
@@ -866,7 +1056,7 @@ def cmd_export(a):
         # export. That is a real loss, not a tidy omission: the platform's own schema promises that
         # disabling keeps data, so the volume is live user state the operator was told is safe.
         # Export -> restore on a new machine -> enable the app again, and it comes back empty. On
-        # shlomo-laptop 2026-08-12 this was 4 volumes / 89.6MB, including `cloakprofile`, which
+        # owner-laptop 2026-08-12 this was 4 volumes / 89.6MB, including `cloakprofile`, which
         # holds a logged-in Google browser session that cannot be re-created from the repo.
         #
         # Tarred generically and never via hooks: a disabled app has no running container for a hook
@@ -979,8 +1169,8 @@ def cmd_export(a):
             sec = out / "secrets"
             sec.mkdir(exist_ok=True)
             os.chmod(sec, 0o700)
-            src = REPO / rel
-            if not src.exists():
+            src = carried_source(rel)          # a link is read at its target; a dangling one fails
+            if src is None:
                 continue
             dst = sec / rel.replace("/", "__")
             if src.is_dir():
@@ -1016,10 +1206,66 @@ def cmd_export(a):
         man["secrets_carried"] = carried
         save()
 
+        # 5. the office's own declarations a clone does not bring (DECLARATION_PATHS). The
+        # deployment's, like the secrets, so not in --app scope. Read through a container like the
+        # secrets: the outbox is written by project-pln, which runs as root.
+        declared_carried = []
+        for rel in (DECLARATION_PATHS if not scope_app else []):
+            src = carried_source(rel)
+            if src is None:
+                continue
+            ddir = out / "declarations"
+            ddir.mkdir(exist_ok=True)
+            dst = ddir / rel.replace("/", "__")
+            if src.is_dir():
+                dst = dst.parent / (dst.name + ".tar.gz")
+            # Written whole under `.part` and renamed, like every other artifact (RESUMABLE above):
+            # a run cut short never leaves half a state file recorded as the office's.
+            part = dst.parent / (dst.name + ".part")
+            if src.is_dir():
+                _tar_dir_as_root(src, part)
+            else:
+                # `cp -p`: the mode travels with the file (a declaration keeps its mode on import).
+                sh(["docker", "run", "--rm", "-v", f"{src.parent}:/src:ro", "-v", f"{dst.parent}:/out",
+                    "alpine", "sh", "-c",
+                    f"cp -p /src/{src.name} /out/{part.name} && "
+                    f"chown {os.getuid()}:{os.getgid()} /out/{part.name}"], env=docker_env())
+            part.rename(dst)
+            declared_carried.append(rel)
+            record(f"declarations/{dst.name}", "declaration", rel, app="_platform")
+        man["declarations_carried"] = declared_carried
+        save()
+
     finally:
         if stopped:
             say(f"restarting {len(stopped)} writer(s)")
             run(["docker", "start"] + stopped, env=docker_env())
+
+    # 6. what on this engine NO installed app declares. Not carried (there is no owner to say what it
+    # is or how to restore it), but named in the run and in the manifest, so an archive never reads as
+    # "everything" while a volume of data sits beside it. After the writers are back (it adds up to
+    # 330 s of docker questions, none of which a quiesced office should wait for), and a REPORT only:
+    # a docker that does not answer it is said in the manifest and fails nothing that was carried.
+    if not scope_app:
+        try:
+            rows, anon = undeclared_volumes(engine_volumes(), set(declared_volumes(installed_apps())),
+                                            project_name())
+            man["undeclared_volumes"] = rows
+            man["anonymous_volumes"] = anon["count"]
+            man.pop("undeclared_volumes_error", None)
+            for row in rows:
+                say(f"  ! {row['name']} ({row['size'] or 'size unknown'}, project "
+                    f"{row['project'] or 'none'}): no installed app declares it — NOT in this archive")
+            if anon["count"]:
+                say(f"  ! {anon['count']} anonymous volume(s) — NOT in this archive")
+        except (RuntimeError, OSError, subprocess.TimeoutExpired) as e:
+            # a resumed run's earlier list is not this run's answer
+            man.pop("undeclared_volumes", None)
+            man.pop("anonymous_volumes", None)
+            man["undeclared_volumes_error"] = f"{type(e).__name__}: {e}"[:300]
+            say(f"  ! could not list this engine's volumes to name the undeclared ones: "
+                f"{man['undeclared_volumes_error']}")
+        save()
 
     # PRUNE entries whose file is not on disk.
     #
@@ -1058,7 +1304,10 @@ def cmd_export(a):
         print()
         print(f"  On the target machine:  ./bbox data import <dir> --app {scope_app}")
     else:
-        print("  Travels IN the archive : " + ", ".join(carried))
+        print("  Travels IN the archive : " + ", ".join(carried + declared_carried))
+        if man.get("undeclared_volumes") or man.get("anonymous_volumes"):
+            print(f"  NOT in the archive     : {len(man.get('undeclared_volumes') or [])} volume(s) no app "
+                  f"declares, {man.get('anonymous_volumes') or 0} anonymous (named above and in the manifest)")
         print("  Travels in the FOLDER  : source tree, apps/*/storage, apps/*/logs (also archived above)")
         print("  Must be carried by YOU : nothing — but the archive holds .env in clear. Move it over a")
         print("                           channel you trust, and delete it from the source machine when")
@@ -1076,6 +1325,178 @@ def _untar_volume(vol, src: pathlib.Path):
     sh(["docker", "run", "--rm", "-v", f"{full}:/v", "-v", f"{src.parent}:/in:ro",
         "alpine", "sh", "-c",
         f"rm -rf /v/* /v/.[!.]* 2>/dev/null; tar xzf /in/{src.name} -C /v"], env=docker_env())
+
+
+def carried_artifact(kind, note):
+    """The one artifact name the export gives a carried path: `secrets/<a__b>` or
+    `declarations/<a__b>`, plus `.tar.gz` for a tree. Returns the two names a manifest may use."""
+    base = ("secrets/" if kind == "secret" else "declarations/") + note.replace("/", "__")
+    return {base, base + ".tar.gz"}
+
+
+def carried_skips(artifacts):
+    """{artifact: why} for the secrets and declarations that import must NOT write.
+
+    `note` is the archive's word for where a carried file goes, and import writes REPO/<note>. An
+    archive is also what a linked office hands this one (pull.py), so a note of `scripts/dc` or
+    `../x` would have been written into the checkout. Only a path this archiver itself carries
+    (SECRET_PATHS for a secret, DECLARATION_PATHS for a declaration), under the artifact name the
+    export gives it, is a slot. Anything else is left out by name, never written. It is not a refusal
+    of the whole archive: an archive from before a path moved (n8n's credential state lived under
+    platform-base/ until DGO-477) still restores everything else.
+    """
+    allowed = {"secret": set(SECRET_PATHS), "declaration": set(DECLARATION_PATHS)}
+    skips = {}
+    for rel, e in artifacts.items():
+        kind, note = e.get("kind"), e.get("note") or ""
+        if kind not in allowed:
+            continue
+        if note not in allowed[kind]:
+            skips[rel] = f"{note!r} is not a path this archiver carries as a {kind}"
+        elif rel not in carried_artifact(kind, note):
+            skips[rel] = f"a {kind} for {note!r} must be named {sorted(carried_artifact(kind, note))[0]}"
+    return skips
+
+
+#: a volume's short name as an app declares it — nothing that could leave docker's `-v <project>_<name>:/v`
+#: or the helper's `tar xzf /in/<name>.tar.gz`
+_VOLUME_NAME_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,127}")
+
+
+def writable_binds(cfg):
+    """The checkout directories this office's compose mounts read-write — what an export carries as
+    binds (stateful_binds), named without walking a single file."""
+    out = set()
+    for svc in (cfg.get("services") or {}).values():
+        for m in svc.get("volumes") or []:
+            if m.get("type") != "bind" or m.get("read_only"):
+                continue
+            src = (m.get("source") or "").replace("\\", "/")
+            if not src or src.startswith(SKIP_BIND_PREFIX):
+                continue
+            try:
+                rel = pathlib.Path(src).resolve().relative_to(REPO).as_posix()
+            except ValueError:
+                continue
+            if rel not in ("", "."):
+                out.add(rel)
+    return out
+
+
+def restore_skips(artifacts, cfg):
+    """{artifact: why} for the binds and volumes import must NOT write (DGO-1510).
+
+    carried_skips' rule, for the two kinds that are unpacked as ROOT: a bind's `note` is the directory
+    REPO/<note> its tree is unpacked over (through a container), a volume's file name is the volume
+    emptied and refilled. Both are the archive's words, and an archive is also what a linked office hands
+    this one (pull.py): a note of `../../etc` or `apps/x/../../etc` (which a prefix match takes for app
+    x's) would have been unpacked over the machine. So only what THIS office would carry itself is a
+    slot: a directory its compose mounts read-write, or a path an installed app declares (data.paths),
+    under the artifact name the export gives it; a volume an installed app here declares (data.volumes,
+    enabled or not), by a plain name. Anything else is left out by name, never written — the rest of the
+    archive still restores.
+
+    The same for the SQL an app-scoped archive carries (`sql`, `sql-functions`: pg_restore --clean, and the
+    archive's own SQL run by psql): only into a database the app it is filed under declares HERE (data.sql).
+
+    Known limit: a bind of an app that is installed but NOT enabled here, and that no app declares in
+    data.paths, is in no compose config this office renders, so it is skipped by name (DGO-1510 slice 2:
+    data.paths as the bind contract, with its gate).
+    """
+    binds, volumes, sqls = None, None, None
+    carried = SECRET_PATHS + DECLARATION_PATHS
+    skips = {}
+    for rel, e in artifacts.items():
+        kind = e.get("kind")
+        if kind == "bind":
+            if binds is None:
+                owner, _located = path_owner_map()
+                binds = writable_binds(cfg) | set(owner)
+            raw = (e.get("note") or "").split("  ")[0]
+            p = pathlib.PurePosixPath(raw)
+            norm = p.as_posix()
+            if not raw or p.is_absolute() or ".." in p.parts or norm in ("", "."):
+                skips[rel] = f"{raw!r} is not a path inside the checkout"
+            elif norm not in binds:
+                skips[rel] = f"{norm!r} is not a directory this office mounts read-write or an app declares"
+            elif rel != "binds/" + norm.replace("/", "__") + ".tar.gz":
+                skips[rel] = f"a bind for {norm!r} must be named binds/{norm.replace('/', '__')}.tar.gz"
+            elif any(norm == c or norm.startswith(c + "/") for c in carried):
+                skips[rel] = f"{norm!r} is a carried secret or declaration, installed by its own rule"
+            elif (REPO / norm).exists() and not (REPO / norm).is_dir():
+                # a single-file mount (a postgres init .sql, a password file): a tree is never unpacked over it
+                skips[rel] = f"{norm!r} is a file here, not a directory"
+        elif kind in ("sql", "sql-functions"):
+            if sqls is None:
+                sqls = {(aid, (decl or {}).get("database")) for aid, decl in app_sql_decls(installed_apps())}
+            if (e.get("app"), e.get("database")) not in sqls:
+                skips[rel] = (f"no app installed here declares the database {e.get('database')!r} "
+                              f"for {e.get('app')!r} (data.sql)")
+        elif kind in ("volume", "volume-dormant"):
+            if volumes is None:
+                volumes = set()
+                for root, aid in installed_apps():
+                    for v in ((app_manifest(root, aid).get("data") or {}).get("volumes") or []):
+                        volumes.add(v if isinstance(v, str) else (v or {}).get("name"))
+            r = pathlib.PurePosixPath(rel)
+            vol = r.name[:-len(".tar.gz")] if r.name.endswith(".tar.gz") else ""
+            if r.parent.as_posix() != "volumes" or not _VOLUME_NAME_RE.fullmatch(vol):
+                skips[rel] = "not a volume archive by the name the export gives one (volumes/<name>.tar.gz)"
+            elif vol not in volumes:
+                skips[rel] = f"no app installed here declares the volume {vol!r}"
+    return skips
+
+
+def _extract_as_root(src: pathlib.Path, dest: pathlib.Path):
+    """Unpack a carried tree at `dest` (inside the checkout) through a container, as the binds are:
+    a tree a root container wrote (the project-pln outbox) cannot be re-created by the operator's own
+    tar, and a `.state/` the operator cannot write would fail the import halfway, after the secrets.
+    Only the nearest directory that exists above `dest` is mounted, never the whole checkout. The
+    path and the file name are the ones carried_skips() admits."""
+    base = dest.parent
+    while not base.exists() and base != REPO:
+        base = base.parent
+    rest = dest.relative_to(base).as_posix()
+    sh(["docker", "run", "--rm", "-v", f"{base}:/p", "-v", f"{src.parent}:/in:ro", "alpine",
+        "sh", "-c", f"mkdir -p '/p/{rest}' && tar xzf '/in/{src.name}' -C '/p/{rest}'"],
+       env=docker_env())
+
+
+def install_carried(src: pathlib.Path, note: str, secret: bool):
+    """Put one carried file or tree (a secret or a declaration) at REPO/<note>.
+
+    Into an EMPTY slot only. An occupied one is kept, and the archive's copy goes BESIDE it as
+    `<name>.from-archive` (see cmd_import's secrets step for why it is never written over). Returns
+    that side path, repo-relative, or None when the slot was empty and the copy is now in place. A
+    secret file is left 0600. A declaration keeps its own mode: the console rewrites the state file,
+    and a 0600 one it cannot read is an office that cannot change its apps. A secret tree is unpacked
+    by the operator's tar, as it always was; a declaration tree through a container.
+    """
+    target = REPO / note
+    target.parent.mkdir(parents=True, exist_ok=True)
+    tree = src.name.endswith(".tar.gz")
+
+    def unpack(dest):
+        if secret:
+            dest.mkdir(parents=True, exist_ok=True)
+            sh(["tar", "xzf", str(src), "-C", str(dest)])
+        else:
+            _extract_as_root(src, dest)
+
+    if target.exists() or target.is_symlink():
+        side = target.parent / (target.name + ".from-archive")
+        if tree:
+            unpack(side)
+        else:
+            shutil.copy2(src, side)
+        return side.relative_to(REPO).as_posix()
+    if tree:
+        unpack(target)
+    else:
+        shutil.copy2(src, target)
+        if secret:
+            os.chmod(target, 0o600)
+    return None
 
 
 def _assert_app_owns(aid, artifacts):
@@ -1137,14 +1558,36 @@ def cmd_import(a):
     # "put drive back the way it was last Tuesday" without touching anything else on the host.
     only = getattr(a, "app", None)
     if only:
-        keep = {r: e for r, e in man["artifacts"].items() if e.get("app") == only}
+        # what the archive files under the app — and, in a WHOLE-office archive, every volume the app OWNS here
+        # whatever the archive filed it under: one made before data.shares filed a volume two apps declared under
+        # either of them (cad_projects under cad-api), and the owner's restore must still find it (DGO-1510). Never
+        # from an archive of ANOTHER app: its copy of the owner's volume came without the owner's database, and
+        # restoring it alone would roll the owner back half-way. _assert_app_owns holds both to what X declares here.
+        whole = not (man.get("scope") or {}).get("app")
+        own_root = next((r for r, i in installed_apps() if i == only), None)
+        owned = set(((app_manifest(own_root, only).get("data") or {}).get("volumes") or [])) \
+            if own_root and whole else set()
+        keep = {r: e for r, e in man["artifacts"].items()
+                if e.get("app") == only or (volume_of(r, e) and volume_of(r, e) in owned)}
         if not keep:
             owners = sorted({e.get("app") for e in man["artifacts"].values() if e.get("app")})
             raise SystemExit(f"[archive] this archive holds nothing for '{only}'. It has: "
                              f"{', '.join(owners) or '(artifacts predate per-app tagging)'}")
         say(f"scope: app {only} — {len(keep)} of {len(man['artifacts'])} artifact(s)")
         man["artifacts"] = keep
-        _assert_app_owns(only, keep)
+    # a volume the scoped app only SHARES is its owner's, restored with its owner alone (DGO-1510): an archive made
+    # before data.shares carried n8n_storage with any-concurrency, and importing it wrote n8n's data back to that day
+    scoped_app = only or (man.get("scope") or {}).get("app")
+    if scoped_app:
+        man["artifacts"], dropped = drop_shares(scoped_app, man["artifacts"])
+        for rel, owner in dropped:
+            say(f"  ! {rel} NOT restored: {owner} owns it and {scoped_app} only shares it — it comes back with "
+                f"{owner}'s own restore (an archive of {owner}, or of the whole office)")
+    # An archive whose every artifact of the app was a share restores nothing, and says so above — as the new
+    # export of an app that only shares (a marker alone) does: an app move from an office on the code before
+    # data.shares must not stop on what is the owner's to carry (the second reader).
+    if only:
+        _assert_app_owns(only, man["artifacts"])
 
     say(f"restoring {d}")
     say(f"  from deployment '{man['deployment_name']}' (project '{man['compose_project']}')"
@@ -1164,7 +1607,39 @@ def cmd_import(a):
             "restore into a differently-named directory, or pass --force if you really mean to "
             "overwrite in place.")
 
-    # NETWORK ISOLATION FIRST, before integrity, before secrets, before anything is written.
+    # Where carried files may go is decided before anything is written (carried_skips).
+    skips = carried_skips(man["artifacts"])
+    for rel, why in sorted(skips.items()):
+        say(f"  ! {rel} NOT installed: {why}")
+
+    # THE STATE FILE, before compose_config() below. On a clone with no `.generated/`, compose_config
+    # renders it, and the render CREATES platform.state.yaml from the default. The archive's state file
+    # would then always find its slot taken, land beside it, and the office would come up with the
+    # default apps. So it is checked by its sha256 and put into its empty slot first. It writes into
+    # THIS checkout only, so it cannot hurt another deployment (the one thing the isolation check
+    # exists for), and the check then asks about the archive's own apps rather than the default's.
+    # The other declarations (the outbox) wait for the checks: a refused import must leave no unsent
+    # writes behind to be sent.
+    def declarations(early):
+        for rel, e in sorted(man["artifacts"].items()):
+            if e["kind"] != "declaration" or rel in skips or (e["note"] in STATE_FIRST) != early:
+                continue
+            p = d / rel
+            if not p.exists() or sha256_size(p)[0] != e["sha256"]:
+                raise SystemExit(f"[archive] {'missing' if not p.exists() else 'checksum mismatch on'} "
+                                 f"artifact {rel}")
+            side = install_carried(p, e["note"], secret=False)
+            if side:
+                say(f"  declaration KEPT (target already has one) -> {side}")
+            else:
+                say(f"  declaration -> {e['note']}")
+                if e["note"] == ".state/outbox":
+                    say("    its unsent Plane writes are now THIS office's to send; if the office the "
+                        "archive came from still runs, it sends them too")
+
+    declarations(early=True)
+
+    # NETWORK ISOLATION FIRST, before integrity, before secrets, before anything else is written.
     # This is the only check whose failure damages a deployment OTHER than the target, so it is the
     # only one that must run before the driver has done a single thing. See assert_network_isolation.
     scope = None
@@ -1199,30 +1674,21 @@ def cmd_import(a):
     #
     # So: install into an empty slot (the fresh-machine case, which is the whole point), and beside
     # an occupied one (the restore-into-a-second-deployment case, which is how anyone tests this).
+    #
+    # (The office's declarations follow the same rule, and were put in place above, before the
+    # compose config was rendered.)
     deferred = []
     for rel, e in sorted(man["artifacts"].items()):
-        if e["kind"] != "secret":
+        if e["kind"] != "secret" or rel in skips:
             continue
-        target = REPO / e["note"]
-        src = d / rel
-        target.parent.mkdir(parents=True, exist_ok=True)
-        if target.exists():
-            side = target.parent / (target.name + ".from-archive")
-            if src.name.endswith(".tar.gz"):
-                side.mkdir(parents=True, exist_ok=True)
-                sh(["tar", "xzf", str(src), "-C", str(side)])
-            else:
-                shutil.copy2(src, side)
-            deferred.append((e["note"], side.relative_to(REPO).as_posix()))
-            say(f"  secret KEPT (target already has one) -> {side.relative_to(REPO).as_posix()}")
-            continue
-        if src.name.endswith(".tar.gz"):
-            target.mkdir(parents=True, exist_ok=True)
-            sh(["tar", "xzf", str(src), "-C", str(target)])
+        side = install_carried(d / rel, e["note"], secret=True)
+        if side:
+            if e["note"] == ".env":            # what the key check below points the operator at
+                deferred.append((e["note"], side))
+            say(f"  secret KEPT (target already has one) -> {side}")
         else:
-            shutil.copy2(src, target)
-            os.chmod(target, 0o600)
-        say(f"  secret -> {e['note']}")
+            say(f"  secret -> {e['note']}")
+    declarations(early=False)
 
     # ── pre-flight: the keys the archive was encrypted under must be the keys in force here ──────
     # This is the single check that turns this feature's worst failure mode — a restore that reports
@@ -1249,11 +1715,26 @@ def cmd_import(a):
         else:
             say(f"  encryption key fingerprint matches ({want}) — credentials will decrypt")
 
+    # Where the binds, volumes and SQL may go is decided before any of them is written (restore_skips) —
+    # against the compose config rendered NOW, with the archive's .env and state in place: a bind whose
+    # source comes from .env (`${WHATSAPP_DATA_DIR:-./data}`) is judged by this office's value, not the default.
+    rskips = restore_skips(man["artifacts"], compose_config())
+    for rel, why in sorted(rskips.items()):
+        say(f"  ! {rel} NOT restored: {why}")
+    # …and each allowed bind's REAL directory is pinned before the first tree is unpacked: `docker -v` follows a
+    # link, so a link one bind's tree planted where another bind goes would aim that one's root unpack elsewhere
+    pinned = {rel: os.path.realpath(REPO / e["note"].split("  ")[0])
+              for rel, e in man["artifacts"].items() if e["kind"] == "bind" and rel not in rskips}
+
     for rel, e in sorted(man["artifacts"].items()):
-        if e["kind"] != "bind":
+        if e["kind"] != "bind" or rel in rskips:
             continue
         relpath = e["note"].split("  ")[0]
         target = REPO / relpath
+        if os.path.realpath(target) != pinned[rel]:
+            say(f"  ! {rel} NOT restored: {relpath} now leads to {os.path.realpath(target)} "
+                f"(a link appeared there during this restore)")
+            continue
         target.mkdir(parents=True, exist_ok=True)
         # Through a container, for the mirror of the reason _tar_dir_as_root exists: these trees
         # contain root-owned files, and an unprivileged host `tar -x` cannot restore their ownership
@@ -1268,7 +1749,7 @@ def cmd_import(a):
     # would have exported those volumes faithfully and then silently declined to restore them —
     # a backup that passes every check and quietly drops the data of every disabled app.
     for rel, e in sorted(man["artifacts"].items()):
-        if e["kind"] not in ("volume", "volume-dormant"):
+        if e["kind"] not in ("volume", "volume-dormant") or rel in rskips:
             continue
         vol = pathlib.Path(rel).name[:-len(".tar.gz")]
         _untar_volume(vol, d / rel)
@@ -1286,7 +1767,7 @@ def cmd_import(a):
         return (0 if item[1]["kind"] == "sql-functions" else 1, item[0])
 
     for rel, e in sorted(man["artifacts"].items(), key=_sql_first):
-        if e["kind"] not in ("sql", "sql-functions"):
+        if e["kind"] not in ("sql", "sql-functions") or rel in rskips:
             continue
         container, dbname = e.get("instance") or "", e.get("database") or ""
         # The SOURCE container name will not exist on the target — DEPLOYMENT_NAME suffixes it — so
@@ -1376,12 +1857,16 @@ def main():
                         "config = the deployment without its history")
     e.add_argument("--out")
     e.add_argument("--quiesce", action="store_true",
-                   help="stop n8n + the indox poller for the duration, for a cross-store "
+                   help="stop every app's declared writers (data.writers) for the duration, for a cross-store "
                         "consistent snapshot (right for a migration, wrong for a live backup)")
     e.add_argument("--force", action="store_true", help="redo artifacts already present")
     e.add_argument("--app", metavar="ID",
                    help="export ONLY this app's declared stores, as a self-contained archive that "
                         "can be imported into a different deployment on its own")
+    # `bbox export --verify DIR`, the form this file's header documents: bbox hands every word after `export` to
+    # this parser, so the `verify` subcommand below had no door from bbox at all (issues/a-stranger-cannot-follow-…)
+    e.add_argument("--verify", metavar="DIR",
+                   help="export nothing: re-read the live estate and diff it against the manifest in DIR")
     e.set_defaults(fn=cmd_export)
 
     i = sub.add_parser("import")
@@ -1400,6 +1885,13 @@ def main():
     v.set_defaults(fn=cmd_verify)
 
     a = p.parse_args()
+    if a.cmd == "export" and a.verify is not None:
+        # an empty DIR (`--verify "$DIR"` with DIR unset) must not fall through into a full export
+        if not a.verify.strip():
+            p.error("export --verify needs the directory of an export's manifest")
+        if a.out or a.app or a.quiesce or a.force or a.mode != "full":
+            p.error("export --verify reads the live estate against DIR's manifest; it takes no export option")
+        a.dir, a.fn = a.verify, cmd_verify
     try:
         return a.fn(a)
     except RuntimeError as ex:

@@ -121,7 +121,7 @@ def _iter_py() -> list[Path]:
             # RELATIVE to ROOT, never the absolute path: `p.parts` carries whatever directory the
             # checkout happens to live in, so a SKIP_PART that collides with one of those names
             # skipped EVERY file and this gate reddened with "scanned 0" on a real tree. Measured
-            # 2026-10-25 in /opt/digital-office/fireplace, where "digital-office" is a SKIP_PART
+            # 2026-10-25 in /opt/digital-office/examplef, where "digital-office" is a SKIP_PART
             # (the dev-only UI workbench) and every absolute path begins with it.
             if set(p.relative_to(ROOT).parts) & SKIP_PARTS:
                 continue
@@ -485,7 +485,7 @@ def main() -> int:
     # port answered does not want the body — and there are ~100 of them here. Failing all of them
     # today would mean this gate is disabled by Friday, which is how a lint turns into something
     # people pass with --no-verify. So B is measured against a recorded ceiling and may only ever
-    # go DOWN. Same shape as G65's coverage floor, for the same reason: a number nobody can move
+    # go DOWN. Same shape as G94's coverage floor, for the same reason: a number nobody can move
     # is a number nobody reads.
     ceil_path = ROOT / "scripts" / "ci" / "unread-error-ceiling.json"
     try:

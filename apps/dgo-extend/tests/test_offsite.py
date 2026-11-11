@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""test_offsite — the daily backup that leaves the server (FPG-26), each piece run for real where it can be.
+"""test_offsite — the daily backup that leaves the server (EXF-26), each piece run for real where it can be.
 
 - the script: the snapshot under its OWN, per-office name, the free-space check sized for the copies it
   writes, the key never exported (only openssl's environment) and never in a command (stdin), umask 077, a
@@ -25,9 +25,11 @@ Run: python3 apps/dgo-extend/tests/test_offsite.py   (needs bash, tar, openssl, 
 """
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import re
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -57,55 +59,86 @@ def restore():
 
 
 def test_cache_left_out():
-    """FPG-92: a volume an app declares rebuildable (data.cache) is left out of the off-server copy, by name — under
+    """EXF-92: a volume an app declares rebuildable (data.cache) is left out of the off-server copy, by name — under
     its compose prefix too — and only of that copy; an odd name never reaches the script."""
-    s = converge.offsite_script("/opt/o", "fireplace", KEY, "abc123def456", ["apitools_asr_data", "x;rm -rf /"])
-    r = subprocess.run(["sh", "-c", 'for v in fireplace_apitools_asr_data apitools_asr_data fireplace_db; do ' +
+    s = converge.offsite_script("/opt/o", "examplef", KEY, "abc123def456", ["apitools_asr_data", "x;rm -rf /"])
+    r = subprocess.run(["sh", "-c", 'for v in examplef_apitools_asr_data apitools_asr_data examplef_db; do ' +
                         s[s.index('  case "$v" in dgo-offsite*)'):s.index("  src=/var/lib/docker/volumes/$v/_data")] +
                         '  echo "KEEP $v"; done'], capture_output=True, text=True)
-    check(r.stdout.split("\n").count("KEEP fireplace_db") == 1 and "KEEP fireplace_apitools" not in r.stdout
+    check(r.stdout.split("\n").count("KEEP examplef_db") == 1 and "KEEP examplef_apitools" not in r.stdout
           and "KEEP apitools_asr_data" not in r.stdout and r.stdout.count("rebuildable (data.cache)") == 2,
           f"the cache volume is left out under either name, the rest kept: {r.stdout!r} {r.stderr!r}")
     check("rm -rf /" not in s.split("trap")[0] + s[s.index('case "$v" in dgo-offsite*)'):], "an odd name never reaches it")
-    check("rebuildable" not in converge.offsite_script("/opt/o", "fireplace", KEY, "abc123def456"),
+    check("rebuildable" not in converge.offsite_script("/opt/o", "examplef", KEY, "abc123def456"),
           "no cache declared: nothing left out")
 
 
+def test_room_counts_what_is_taken():
+    """DGO-1508: the room check counts only what the snapshot takes. examplef's own 8 GB staging archive
+    (dgo-offsite-examplef) and its 3.8 GB speech model (data.cache) made 18.5 GB of volumes ask for ~44 GB
+    with 24 GB free, so every daily copy from 11-06 was skipped for a copy of ~6.7 GB. Run for real: the room
+    check's own lines, over a volumes tree with a file of known size in each."""
+    s = converge.offsite_script("/opt/o", "examplef", KEY, "abc123def456", ["apitools_asr_data"])
+    part = s[s.index("skip_vol() {"):s.index("need_mb=")]
+    with tempfile.TemporaryDirectory() as t:
+        # the left-out ones are big and the kept ones small, so a count that took either left-out volume is
+        # unmistakable; `du -sm` rounds each directory up to a MB (and ext4 adds its directory blocks), so
+        # the kept 2 + 3 MB read as 5 to 9
+        for name, mb in (("dgo-offsite-examplef", 20), ("examplef_apitools_asr_data", 20), ("examplef_db", 2),
+                         ("examplef_meet_recordings", 3)):
+            Path(t, name, "_data").mkdir(parents=True)
+            Path(t, name, "_data", "f").write_bytes(os.urandom(mb << 20))
+        Path(t, "metadata.db").write_bytes(b"x" * 1024)               # a file beside the volumes, not one
+        # the script's own lines, pointed at this tree (the production path is not a knob)
+        here = part.replace("/var/lib/docker/volumes", t)
+        r = subprocess.run(["bash", "-c", "set -e\n" + here + 'echo "VOL=$vol_mb"'], capture_output=True, text=True,
+                           timeout=30)
+        got = int(re.search(r"VOL=(\d+)", r.stdout).group(1)) if "VOL=" in r.stdout else -1
+        check(r.returncode == 0 and here != part and 5 <= got <= 9,
+              f"only the db and the recordings are counted (5–9 MB), not the staging archive or the cache: "
+              f"{got} MB {r.stderr!r}")
+    check('dgo-offsite*|apitools_asr_data|*_apitools_asr_data) return 0' in s,
+          "the cache the copy leaves out is left out of the count too")
+    plain = converge.offsite_script("/opt/o", "examplef", KEY, "abc123def456")
+    check('skip_vol() { case "$1" in dgo-offsite*) return 0 ;; esac; return 1; }' in plain,
+          "with no cache declared, only the off-server copies are left out of the count")
+
+
 def test_script():
-    s = converge.offsite_script("/opt/o", "fireplace", KEY, "abc123def456")
+    s = converge.offsite_script("/opt/o", "examplef", KEY, "abc123def456")
     lines = s.splitlines()
     check(lines[0] == "umask 077" and lines[1] == f"K='{KEY}'" and s.count(KEY) == 1,
           "umask first, the key once, NOT exported")
     check("export DGO_OFFSITE_KEY" not in s and 'DGO_OFFSITE_KEY="$K" openssl' in s and "-pass env:DGO_OFFSITE_KEY" in s,
           "only openssl's own environment holds the key")
-    check(re.search(r"^D=/root/offsite-fireplace-\$STAMP$", s, re.M) and not re.search(r"^D=/root/backup-", s, re.M),
+    check(re.search(r"^D=/root/offsite-examplef-\$STAMP$", s, re.M) and not re.search(r"^D=/root/backup-", s, re.M),
           "the snapshot goes under the office's own name, never a pre-upgrade backup's")
     check("/root/backup-" not in s and "PRUNED=" not in s, "the daily copy never prunes a pre-upgrade backup")
     check("vol_mb * 225 / 100" in s and "vol_mb * 125 / 100" not in s, "the room check covers the copies it writes")
-    check("-name 'offsite-fireplace-[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]-[0-9][0-9][0-9][0-9][0-9][0-9]' -mmin +180" in s
-          and "-name 'offsite-*'" not in s and "trap 'rm -rf \"/root/offsite-fireplace-${STAMP:-none}\"' EXIT" in s,
+    check("-name 'offsite-examplef-[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]-[0-9][0-9][0-9][0-9][0-9][0-9]' -mmin +180" in s
+          and "-name 'offsite-*'" not in s and "trap 'rm -rf \"/root/offsite-examplef-${STAMP:-none}\"' EXIT" in s,
           "a killed run's plaintext is removed by the next — that office's snapshot shape only")
-    check("dgo-offsite*) " in s and "docker volume create dgo-offsite-fireplace" in s,
+    check("dgo-offsite*) " in s and "docker volume create dgo-offsite-examplef" in s,
           "the off-server volumes are never in a backup, and the office has its own")
-    check('"key": "offsite_key-fireplace", "key_fingerprint": "abc123def456"' in s and "-md sha256" in s,
+    check('"key": "offsite_key-examplef", "key_fingerprint": "abc123def456"' in s and "-md sha256" in s,
           "the .json names the key and its fingerprint; the digest is pinned")
     # the cleanup's pattern, by find itself: this office's snapshots, never a drill's dir or another office's
     with tempfile.TemporaryDirectory() as t:
-        for n in ("offsite-fireplace-20261022-224700", "offsite-restore", "offsite-other-20261022-224700",
-                  "backup-20261022-224700-pre-upgrade", "offsite-fireplace-x"):
+        for n in ("offsite-examplef-20261022-224700", "offsite-restore", "offsite-other-20261022-224700",
+                  "backup-20261022-224700-pre-upgrade", "offsite-examplef-x"):
             Path(t, n).mkdir()
-        glob = converge.OFFSITE_SNAP_GLOB.replace("__OID__", "fireplace")
+        glob = converge.OFFSITE_SNAP_GLOB.replace("__OID__", "examplef")
         hit = subprocess.run(["find", t, "-maxdepth", "1", "-name", glob], capture_output=True, text=True).stdout.split()
-        check([Path(h).name for h in hit] == ["offsite-fireplace-20261022-224700"], f"the cleanup matches only its own: {hit}")
+        check([Path(h).name for h in hit] == ["offsite-examplef-20261022-224700"], f"the cleanup matches only its own: {hit}")
     for bad in ("short", "has space " + "x" * 40, ""):
         try:
-            converge.offsite_script("/opt/o", "fireplace", bad, "fp")
+            converge.offsite_script("/opt/o", "examplef", bad, "fp")
             check(False, f"a malformed key is refused: {bad!r}")
         except converge.StepFailed as e:
             check("אל תמחק" in e.action, f"and never told to delete it: {e.action!r}")
 
 
-def _tail(oid="fireplace"):
+def _tail(oid="examplef"):
     return (converge.OFFSITE_ENCRYPT.replace("__VOLUME__", converge.offsite_volume(oid)).replace("__OID__", oid)
             .replace("__CIPHER__", converge.OFFSITE_CIPHER).replace("__ITER__", str(converge.OFFSITE_ITER))
             .replace("__KEYID__", f"offsite_key-{oid}").replace("__FP__", "fp12"))
@@ -118,8 +151,8 @@ def test_encrypt_roundtrip():
         for d in (snap / "pg", out, bin_):
             d.mkdir(parents=True)
         (snap / "pg" / "db.sql").write_text("CREATE TABLE customers (name text);\n")
-        (out / "fireplace-20000101-000000.tar.enc").write_text("yesterday")
-        (out / "fireplace-20000101-000000.tar.enc.json").write_text("{}")
+        (out / "examplef-20000101-000000.tar.enc").write_text("yesterday")
+        (out / "examplef-20000101-000000.tar.enc.json").write_text("{}")
         (bin_ / "docker").write_text("#!/bin/bash\n"
                                      f'[ "$1 $2" = "volume inspect" ] && echo "{out}"; exit 0\n')
         os.chmod(bin_ / "docker", 0o755)
@@ -127,13 +160,13 @@ def test_encrypt_roundtrip():
         script = f"set -e\nK='{KEY}'\nSTAMP=20261022-224700\nD='{snap}'\n" + _tail()
         r = subprocess.run(["bash", "-c", script], capture_output=True, text=True, timeout=60, env=env)
         f = converge.parse_facts(r.stdout)
-        enc = out / "fireplace-20261022-224700.tar.enc"
+        enc = out / "examplef-20261022-224700.tar.enc"
         meta = json.loads((out / (enc.name + ".json")).read_text()) if (out / (enc.name + ".json")).exists() else {}
         check(r.returncode == 0 and enc.exists() and f.get("OFFSITE_FILE") == enc.name
               and f.get("OFFSITE_BYTES") == str(enc.stat().st_size) and len(f.get("OFFSITE_SHA", "")) == 64,
               f"the archive is written and named: rc={r.returncode} {f} {r.stderr[-300:]!r}")
         check(meta.get("sha256") == f.get("OFFSITE_SHA") and meta.get("pbkdf2_iter") == converge.OFFSITE_ITER
-              and meta.get("key") == "offsite_key-fireplace" and meta.get("md") == "sha256",
+              and meta.get("key") == "offsite_key-examplef" and meta.get("md") == "sha256",
               f"a .json beside it says how to open it: {meta}")
         check(not snap.exists(), "the plaintext snapshot is gone")
         check(sorted(p.name for p in out.iterdir()) == [enc.name, enc.name + ".json"],
@@ -170,15 +203,15 @@ def _with_docker(listing: str, rc: int, cmd: str) -> subprocess.CompletedProcess
 
 
 def test_home_copies():
-    vols = ("dgo-offsite-fireplace-20261021-224700\ndgo-offsite-fireplace-20261022-224700\n"
-            "dgo-offsite-fireplace-x-20261022-224700\ndgo-offsite-fireplace\nfireplace_db\n")
-    r = _with_docker(vols, 0, converge._home_copies("fireplace"))
-    check(r.returncode == 0 and r.stdout.split() == ["dgo-offsite-fireplace-20261021-224700",
-                                                     "dgo-offsite-fireplace-20261022-224700"],
+    vols = ("dgo-offsite-examplef-20261021-224700\ndgo-offsite-examplef-20261022-224700\n"
+            "dgo-offsite-examplef-x-20261022-224700\ndgo-offsite-examplef\nexamplef_db\n")
+    r = _with_docker(vols, 0, converge._home_copies("examplef"))
+    check(r.returncode == 0 and r.stdout.split() == ["dgo-offsite-examplef-20261021-224700",
+                                                     "dgo-offsite-examplef-20261022-224700"],
           f"the office's copies, anchored — not another office's, not its own machine-side volume: {r.stdout!r}")
-    r = _with_docker("fireplace_db\n", 0, "set -o pipefail; " + converge._home_copies("fireplace") + " | wc -l")
+    r = _with_docker("examplef_db\n", 0, "set -o pipefail; " + converge._home_copies("examplef") + " | wc -l")
     check(r.returncode == 0 and r.stdout.strip() == "0", f"none is an answer, also under pipefail: {r.stdout!r} rc={r.returncode}")
-    r = _with_docker("", 1, converge._home_copies("fireplace") + " | wc -l")
+    r = _with_docker("", 1, converge._home_copies("examplef") + " | wc -l")
     check(r.returncode != 0, f"a docker that fails is a failure, never «none»: rc={r.returncode} {r.stdout!r}")
 
 
@@ -186,7 +219,7 @@ def test_key():
     store, calls, homes = {}, [], {"n": "0", "rc": 0}
 
     def must(m, cmd, t=120, what="", stdin=None):
-        r = _with_docker("dgo-offsite-fireplace-20261022-224700\n" * int(homes["n"]), homes["rc"], cmd)
+        r = _with_docker("dgo-offsite-examplef-20261022-224700\n" * int(homes["n"]), homes["rc"], cmd)
         if r.returncode != 0:
             raise converge.StepFailed(what, "", r.stderr)
         return r.stdout
@@ -204,7 +237,7 @@ def test_key():
         store[body["id"]] = body["secret"]
         return {"id": body["id"]}
     converge._http = http
-    office = {"id": "fireplace", "label": "The Fireplace Guys"}
+    office = {"id": "examplef", "label": "The Examplef Guys"}
     k1, fp1 = converge._offsite_key(office)
     k2, fp2 = converge._offsite_key(office)
     check(len(k1) >= 40 and k1 == k2 and fp1 == fp2 and len(fp1) == 12 and sum(m == "POST" for m, _ in calls) == 1,
@@ -321,7 +354,7 @@ def test_transfer():
 def test_received_copy():
     """What the client's machine sent is checked by the real shell here before anything reads it: exactly the
     archive and its .json, as plain files — a link or a pipe from there leads no root command here."""
-    office = {"id": "fireplace", "path": "/opt/o", "machine": "m"}
+    office = {"id": "examplef", "path": "/opt/o", "machine": "m"}
     with tempfile.TemporaryDirectory() as t:
         vol, bin_ = Path(t, "vol"), Path(t, "bin")
         vol.mkdir()
@@ -329,7 +362,7 @@ def test_received_copy():
         Path(bin_, "docker").write_text(f"#!/bin/bash\n[ \"$1 $2\" = \"volume inspect\" ] && echo '{vol}'; exit 0\n")
         os.chmod(Path(bin_, "docker"), 0o755)
         env = {**os.environ, "PATH": f"{bin_}:{os.environ['PATH']}"}
-        fname = "fireplace-20261022-224700.tar.enc"
+        fname = "examplef-20261022-224700.tar.enc"
         Path(vol, fname).write_bytes(b"ciphertext")
         Path(vol, fname + ".json").write_text("{}")
         real_sha = subprocess.run(["sha256sum", str(Path(vol, fname))], capture_output=True, text=True).stdout.split()[0]
@@ -372,7 +405,7 @@ def test_backup_waits():
     converge.wait_detached = lambda office, name, emit, limit, every=8.0: order.append(f"wait:{name}") or (
         "BACKUP_DONE=/root/backup-x\nPG=1\nVOL=2\nSIZE=1M\n" if name == "backup" else "")
     converge.start_detached = lambda office, name, script, secret=False: order.append(f"start:{name}")
-    converge.step_backup({"id": "fireplace", "path": "/opt/o", "machine": "m"}, {}, lambda ln: None)
+    converge.step_backup({"id": "examplef", "path": "/opt/o", "machine": "m"}, {}, lambda ln: None)
     check(order == ["wait:offsite", "start:backup", "wait:backup"], f"the off-server snapshot ends first: {order}")
     restore()
 
@@ -392,12 +425,14 @@ def _step_world(transfer=None, home_sha=None, facts=None, busy=(), decls=(), fre
     def wait(office, name, emit, limit, every=8.0):
         calls["waited"].append(name)
         return facts or ("WARN: pg_dumpall failed for x-db: refused\nOFFSITE_STAMP=20261022-224700\n"
-                         f"OFFSITE_FILE=fireplace-20261022-224700.tar.enc\nOFFSITE_BYTES=123\nOFFSITE_SHA={SHA}\n")
+                         f"OFFSITE_FILE=examplef-20261022-224700.tar.enc\nOFFSITE_BYTES=123\nOFFSITE_SHA={SHA}\n")
     converge.wait_detached = wait
 
     def exec_on(machine, cmd, timeout=120, stdin=None):
         calls["exec"].append(cmd)
         calls["on"].append((machine, cmd))
+        if "STORE_UID=" in cmd:                         # DGO-1508: the store is asked who it is reached as
+            return {"code": 0, "stdout": "STORE_UID=0\n"}
         if "df -PB1" in cmd and free is not None:
             return {"code": 0, "stdout": f"{free}\n"}
         running = [n for n in busy if f"/{n}[.]sh" in cmd]
@@ -415,9 +450,9 @@ def _step_world(transfer=None, home_sha=None, facts=None, busy=(), decls=(), fre
 
 
 def test_store_and_room():
-    """FPG-92: the copies go to the declared store (offsite_to) and are checked and kept there; a store without room
+    """EXF-92: the copies go to the declared store (offsite_to) and are checked and kept there; a store without room
     for twice the archive refuses before anything moves."""
-    office = {"id": "fireplace", "path": "/opt/o", "machine": "m", "offsite_to": "computer_hp"}
+    office = {"id": "examplef", "path": "/opt/o", "machine": "m", "offsite_to": "computer_hp"}
     sent = []
 
     def to_store(frm, to, *a, **k):
@@ -439,12 +474,183 @@ def test_store_and_room():
     check(converge.offsite_home({"id": "x"}) == converge.LOCAL_MACHINE, "no store declared: this home, as before")
 
 
+def _docker_store(rows: str, uid: str = "1000", **kw) -> dict:
+    """The step's world with a store that says who it is reached as, and the disks `df` reports there."""
+    calls = _step_world(**kw)
+    inner = converge.exec_on
+
+    def exec_on(machine, cmd, timeout=120, stdin=None):
+        if "STORE_UID=" in cmd or "df -PB1" in cmd:
+            calls["exec"].append(cmd)
+            calls["on"].append((machine, cmd))
+            return {"code": 0, "stdout": f"STORE_UID={uid}\n" if "STORE_UID=" in cmd else rows}
+        return inner(machine, cmd, timeout, stdin)
+    converge.exec_on = exec_on
+    return calls
+
+
+def test_store_through_docker():
+    """DGO-1508: a store reached as a user who is not root (the Dell: `PermitRootLogin no`) is read, marked and pruned
+    through a helper container, never through docker's directories that user cannot read; `offsite_dir` binds each
+    copy to the store's own disk before the transfer, and each disk is asked for what lands on it (one disk holding
+    both, for both); `offsite_dir` on a root store, or an unsafe one, is refused before the client makes a snapshot."""
+    office = {"id": "examplef", "path": "/opt/o", "machine": "m", "offsite_to": "computer_dell",
+              "offsite_dir": "/mnt/dgo-data/dgo/offsite"}
+    dest = "dgo-offsite-examplef-20261022-224700"
+    calls = _docker_store("/dev/sda2 40000000000\n/dev/sdb5 50000000000\n")
+    converge._transfer_volume = lambda *a, **k: calls["on"].append(("transfer", "")) or {"state": "ok"}
+    res = converge.step_offsite(office, {}, lambda ln: None)
+    on_store = [c for m, c in calls["on"] if m == "computer_dell"]
+    bind = [i for i, (m, c) in enumerate(calls["on"]) if "--opt o=bind" in c]
+    moved = [i for i, (m, c) in enumerate(calls["on"]) if m == "transfer"]
+    check(res.get("verified") and res.get("store") == "computer_dell", f"a whole run through docker: {res}")
+    check(bind and moved and bind[0] < moved[0]
+          and f"device=/mnt/dgo-data/dgo/offsite/{dest}" in calls["on"][bind[0]][1],
+          f"the copy's volume is bound to the store's directory before the transfer: {calls['on']}")
+    check(any(f"-v {dest}:/m:ro" in c and "sha256sum" in c for c in calls["must"])
+          and any(f"-v {dest}:/m " in c and ".verified" in c for c in calls["must"])
+          and any("drop()" in c and "head -n -" in c for c in calls["must"])
+          and not any("Mountpoint" in c for c in on_store),
+          f"checked read-only, marked and pruned through docker, never by docker's directories: {calls['must']}")
+    # the disks: two disks are each asked for one archive; one disk for both
+    gb, n = 1 << 30, 123
+    for rows, ok in ((f"/dev/sda2 {gb + n + 50}\n/dev/sdb5 {gb + n + 50}\n", True),
+                     (f"/dev/sda2 {gb + n + 50}\n/dev/sda2 {gb + n + 50}\n", False),
+                     (f"/dev/sda2 {gb * 4}\n/dev/sdb5 {gb // 2}\n", False)):
+        sent = []
+        _docker_store(rows)
+        converge._transfer_volume = lambda *a, **k: sent.append(a) or {"state": "ok"}
+        try:
+            converge.step_offsite(office, {}, lambda ln: None)
+            check(ok, f"a disk without room fails the step: {rows!r}")
+        except converge.StepFailed as e:
+            check(not ok and not sent and "computer_dell" in e.detail, f"…before anything moves, named: {rows!r} {e.detail}")
+    # no directory declared: docker's own volumes, read through docker all the same, and nothing bound
+    calls = _docker_store("/dev/sda2 40000000000\n")
+    converge.step_offsite({**office, "offsite_dir": ""}, {}, lambda ln: None)
+    check(not any("--opt o=bind" in c for m, c in calls["on"])
+          and any(f"-v {dest}:/m:ro" in c for c in calls["must"]), f"plain volumes through docker: {calls['must']}")
+    # a failed transfer leaves nothing there: the copy dropped (its directory emptied), the stage gone from its volume
+
+    def failed(*a, **k):
+        raise converge.StepFailed("העברת הגיבוי נכשלה", "", "x")
+    calls = _docker_store("/dev/sda2 40000000000\n/dev/sdb5 50000000000\n", transfer=failed)
+    try:
+        converge.step_offsite(office, {}, lambda ln: None)
+        check(False, "a failed transfer fails the step")
+    except converge.StepFailed:
+        clean = [c for c in calls["exec"] if "drop()" in c]
+        check(clean and f"drop {dest};" in clean[0] and f"rmdir /mnt/dgo-data/dgo/offsite/{dest}" in clean[0]
+              and "-v bina-transfer:/s" in clean[0] and f"/s/dgo-offsite-examplef__{dest}.tar.json" in clean[0],
+              f"a failed transfer leaves no copy and no stage: {calls['exec']}")
+    # refused before the client makes a snapshot: a directory on a root store, a directory that is not safe, and a
+    # store that does not say who it is reached as (never guessed: read as root, a docker store drops a good copy)
+    for o, uid, what in (({**office}, "0", "a store directory on a root store"),
+                         ({**office, "offsite_dir": "/mnt/x/../etc"}, "1000", "a path with .."),
+                         ({**office, "offsite_dir": "/mnt/x;rm -rf /"}, "1000", "a path with a command"),
+                         ({**office}, "", "a store that does not answer")):
+        calls = _docker_store("/dev/sda2 40000000000\n", uid=uid)
+        if not uid:
+            inner = converge.exec_on
+            converge.exec_on = lambda m, c, t=120, stdin=None: ({"code": 255, "stdout": "", "stderr": "timed out"}
+                                                                 if "STORE_UID=" in c else inner(m, c, t, stdin))
+        try:
+            converge.step_offsite(o, {}, lambda ln: None)
+            check(False, f"{what} is refused")
+        except converge.StepFailed as e:
+            check(not calls["started"] and (uid or "לא ענה" in e.reason), f"{what} is refused before any snapshot: {e.reason}")
+    # the store's directory must be there: never made, so a disk that is not mounted never takes the copies
+    sent = []
+    calls = _docker_store("NODIR\n")
+    converge._transfer_volume = lambda *a, **k: sent.append(a) or {"state": "ok"}
+    try:
+        converge.step_offsite(office, {}, lambda ln: None)
+        check(False, "a store directory that is not there fails the step")
+    except converge.StepFailed as e:
+        check(not sent and "mkdir -p" not in " ".join(calls["exec"] + calls["must"]) and "/mnt/dgo-data/dgo/offsite" in e.detail,
+              f"…before anything moves, and nothing makes it: {e.detail} {calls['exec']}")
+    # a root store is served exactly as before
+    calls = _docker_store("40000000000\n", uid="0")
+    converge.step_offsite({**office, "offsite_dir": ""}, {}, lambda ln: None)
+    check(any("Mountpoint" in c and "sha256sum" in c for c in calls["must"])
+          and not any(c.startswith("docker run") for c in calls["must"]), f"a root store, as before: {calls['must']}")
+    restore()
+
+
+def test_store_through_docker_real():
+    """The same, for real, where this user is not root and docker answers (the Dell): the check, the mark and the
+    retention run in the helper over real volumes, the copy lands in the store's directory, a copy no one marked
+    and a copy past OFFSITE_KEEP are removed — their directories with them — and the new one stays."""
+    if os.geteuid() == 0 or not shutil.which("docker") or \
+            subprocess.run(["docker", "info"], capture_output=True, timeout=60).returncode:
+        print("SKIP test_store_through_docker_real: needs a user who is not root and may run docker")
+        return
+    oid, stamp = "probe1508", "20261109-120000"
+    dest, fname, body = f"dgo-offsite-{oid}-{stamp}", f"{oid}-{stamp}.tar.enc", b"ciphertext"
+
+    def sh(cmd: str, stdin: bytes | None = None) -> subprocess.CompletedProcess:
+        return subprocess.run(["bash", "-c", cmd], input=stdin, capture_output=True, timeout=300)
+
+    helper = f"docker run --rm -i --init --network none {converge.OFFSITE_HELPER}"
+    keep = converge.OFFSITE_KEEP
+    t = tempfile.mkdtemp(prefix="probe1508-")
+    sdir = f"{t}/offsite"
+    office = {"id": oid, "path": "/opt/o", "machine": "client", "offsite_to": "store", "offsite_dir": sdir}
+    try:
+        # an older verified copy bound to the directory, a copy nobody marked (a plain volume), and a bound copy whose
+        # directory was removed by hand (it cannot be mounted: it must not stop the cleanup)
+        old, gone = f"dgo-offsite-{oid}-20261020-000000", f"dgo-offsite-{oid}-20261019-000000"
+        os.makedirs(sdir)
+        Path(sdir, converge.OFFSITE_STORE_MARK).touch()           # the store's mark: this directory is on its disk
+        sh(f"mkdir -p {sdir}/{old} && docker volume create --driver local --opt type=none --opt o=bind "
+           f"--opt device={sdir}/{old} {old} >/dev/null && "
+           f"docker run --rm -v {old}:/m {converge.OFFSITE_HELPER} sh -c ': > /m/.verified; echo x > /m/a'")
+        sh(f"docker volume create dgo-offsite-{oid}-20261021-000000 >/dev/null")
+        sh(f"docker volume create --driver local --opt type=none --opt o=bind --opt device={sdir}/{gone} {gone} >/dev/null")
+        converge.OFFSITE_KEEP = 1
+        converge._offsite_key = lambda office: (KEY, "fp12")
+        converge._records = lambda want: []
+        converge.start_detached = lambda *a, **k: None
+        converge.wait_detached = lambda *a, **k: (f"OFFSITE_STAMP={stamp}\nOFFSITE_FILE={fname}\nOFFSITE_BYTES=10\n"
+                                                  f"OFFSITE_SHA={hashlib.sha256(body).hexdigest()}\n")
+
+        def exec_on(machine, cmd, timeout=120, stdin=None):
+            if machine != "store":
+                return {"code": 0, "stdout": "ready\n"}
+            r = sh(cmd)
+            return {"code": r.returncode, "stdout": r.stdout.decode(), "stderr": r.stderr.decode()}
+
+        def must(machine, cmd, timeout=120, what="", stdin=None):
+            r = sh(cmd)
+            if r.returncode:
+                raise converge.StepFailed(what, "", r.stderr.decode()[-500:])
+            return r.stdout.decode()
+
+        def transfer(frm, to, volume, dest_volume, emit, limit=7200):
+            r = sh(f"{helper.replace('-i --init', f'-i --init -v {dest_volume}:/m')} sh -c "
+                   f"'cat > /m/{fname} && echo {{}} > /m/{fname}.json'", stdin=body)
+            return {"state": "ok" if r.returncode == 0 else "error"}
+        converge.exec_on, converge.must, converge._transfer_volume = exec_on, must, transfer
+        res = converge.step_offsite(office, {}, lambda ln: None)
+        left = sh(f"docker volume ls -q | grep '^dgo-offsite-{oid}-' || true").stdout.decode().split()
+        check(res.get("verified") and res.get("kept") == "1" and left == [dest],
+              f"checked, marked, the unmarked and the oldest removed, the new one kept: {res} {left}")
+        check(Path(sdir, dest, fname).is_file() and Path(sdir, dest, ".verified").is_file()
+              and not Path(sdir, old).exists(),
+              f"the copy is on the store's own disk, and a removed copy's directory goes with it: {sorted(os.listdir(sdir))}")
+    finally:
+        converge.OFFSITE_KEEP = keep
+        restore()
+        sh(f"{converge._drop_fn()}; for v in $(docker volume ls -q | grep '^dgo-offsite-{oid}-'); do drop \"$v\"; done")
+        shutil.rmtree(t, ignore_errors=True)
+
+
 def test_step():
-    office = {"id": "fireplace", "path": "/opt/o", "machine": "m"}
+    office = {"id": "examplef", "path": "/opt/o", "machine": "m"}
     calls = _step_world()
     res = converge.step_offsite(office, {}, lambda ln: None)
     check(calls["secret"] is True and res.get("verified") is True and res.get("kept") == "3"
-          and res.get("key") == "offsite_key-fireplace" and res.get("key_fingerprint") == "fp12"
+          and res.get("key") == "offsite_key-examplef" and res.get("key_fingerprint") == "fp12"
           and res.get("warnings") == ["WARN: pg_dumpall failed for x-db: refused"],
           f"a whole run: secret script, verified at home, the key named, the WARN line kept: {res}")
     check(any("rm -f \"$m\"/.verified && : > \"$m\"/.verified" in c for c in calls["must"])
@@ -452,7 +658,7 @@ def test_step():
           f"a verified copy is marked, and retention counts only those: {calls['must']}")
     # the busy check must not match its own shell (its argv carries the pattern)
     probe = next(c for c in calls["exec"] if "pgrep" in c and "offsite" in c)
-    check("pgrep -f '[.]digital-office/fireplace/offsite[.]sh'" in probe, f"the busy check cannot match itself: {probe!r}")
+    check("pgrep -f '[.]digital-office/examplef/offsite[.]sh'" in probe, f"the busy check cannot match itself: {probe!r}")
 
     def refused(*a, **k):
         raise urllib.error.URLError("connection refused")
@@ -467,12 +673,12 @@ def test_step():
             converge.step_offsite(office, {}, lambda ln: None)
             check(False, f"{what} fails the step")
         except converge.StepFailed:
-            cleanup = [c for c in calls["exec"] if "docker volume rm dgo-offsite-fireplace-20261022-224700" in c]
-            check(cleanup and re.search(r"rm -f '?/var/lib/bina-transfer/dgo-offsite-fireplace__"
-                                        r"dgo-offsite-fireplace-20261022-224700\.tar'?\*", cleanup[0]),
+            cleanup = [c for c in calls["exec"] if "docker volume rm dgo-offsite-examplef-20261022-224700" in c]
+            check(cleanup and re.search(r"rm -f '?/var/lib/bina-transfer/dgo-offsite-examplef__"
+                                        r"dgo-offsite-examplef-20261022-224700\.tar'?\*", cleanup[0]),
                   f"{what} leaves no volume and no staging behind: {calls['exec']}")
     # a stamp or a file name forged in the machine's log never reaches a command here
-    for forged in ("OFFSITE_STAMP=1;touch /tmp/pwned;#\nOFFSITE_FILE=fireplace-1;touch /tmp/pwned;#.tar.enc\n",
+    for forged in ("OFFSITE_STAMP=1;touch /tmp/pwned;#\nOFFSITE_FILE=examplef-1;touch /tmp/pwned;#.tar.enc\n",
                    "OFFSITE_STAMP=20261022-224700\nOFFSITE_FILE=$(touch /tmp/pwned)\n"):
         calls = _step_world(facts=forged + f"OFFSITE_SHA={SHA}\n")
         try:
@@ -502,7 +708,7 @@ def test_step():
     except converge.StepFailed:
         check(not [c for c in calls["exec"] if "docker volume rm" in c] and any("עדיין רצה" in s for s in said),
               f"…and a copy still running keeps its volume until retention: {calls['exec']} {said}")
-    calls = _step_world(decls=({"id": "other", "machine": "m"}, {"id": "fireplace", "machine": "m"},
+    calls = _step_world(decls=({"id": "other", "machine": "m"}, {"id": "examplef", "machine": "m"},
                                {"id": "far", "machine": "n"}, {"id": "peer", "machine": "m", "kind": "paired"}))
     try:
         converge.step_offsite(office, {}, lambda ln: None)
@@ -527,8 +733,9 @@ def test_secret_on_stdin():
 
 
 def main() -> int:
-    for t in (test_script, test_cache_left_out, test_encrypt_roundtrip, test_home_copies, test_key, test_transfer, test_step,
-              test_store_and_room, test_received_copy, test_backup_waits, test_secret_on_stdin):
+    for t in (test_script, test_cache_left_out, test_room_counts_what_is_taken, test_encrypt_roundtrip, test_home_copies, test_key, test_transfer, test_step,
+              test_store_and_room, test_store_through_docker, test_store_through_docker_real, test_received_copy,
+              test_backup_waits, test_secret_on_stdin):
         before = len(FAIL)
         t()
         print(("PASS " if len(FAIL) == before else "FAIL ") + t.__name__)

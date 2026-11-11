@@ -52,8 +52,8 @@ export function useInstanceParam(): string | null {
 /**
  * Build a link that STAYS IN THE INSTANCE YOU ARE IN.
  *
- * A plain `to="/sync"` is instance-less, and an instance-less path resolves to the first enabled
- * instance — so from לוי's settings, "צפה בסנכרון" silently landed on הכהן's pipes. Every in-app
+ * A plain `to="/sync"` is instance-less, and an instance-less path resolves to the office's default
+ * instance (`defaultInstanceId`) — so from לוי's settings, "צפה בסנכרון" silently landed on הדוגמה's pipes. Every in-app
  * link goes through this, so the instance survives navigation the same way it survives a reload:
  * because it is in the URL.
  */

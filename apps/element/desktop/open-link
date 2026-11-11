@@ -1,0 +1,35 @@
+#!/bin/sh
+# /usr/local/bin/element-open-link <link> — Element's link handler, with the flags this container needs (DGO-1264;
+# bina-claude's desktop/claude-desktop is the pattern, DGO-1506).
+#
+# A browser sign-in comes back as an element:// or io.element.desktop: link. The system hands it to the handler
+# named in Element's .desktop file, which would start a second Element WITHOUT --no-sandbox: in a container that
+# instance dies before it can pass the link to the running one, so the sign-in never arrives. Dockerfile.desktop
+# points the .desktop file's Exec here, and this passes the link on with the same flags as desktop/autostart.
+# A link is only ever handed to a RUNNING app: one started from here would not be the session's, which starts
+# its own every 3 s. The log names the scheme and the path, never the query (it carries the login token).
+APP="${ELEMENT_APP_BIN:-/opt/Element/element-desktop}"
+LOG="${HOME:-/config}/.element-open-url.log"
+TMP="${TMPDIR:-/tmp}"
+note() { printf '%s %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$*" >> "$LOG" 2>/dev/null || true; }
+
+link=""
+for a in "$@"; do
+  case "$a" in element://*|io.element.desktop:*) link="$a" ;; esac
+done
+[ -n "$link" ] || exec "$APP" --no-sandbox --disable-gpu --password-store=gnome-libsecret "$@"
+
+bare="$(printf '%s' "${link%%[?#]*}" | tr -d '\000-\037\177')"
+if ! ps -u "$(id -u)" -o args= | grep -E "^${APP}( |\$)" | grep -v -e "--type=" | grep -q .; then
+  note "dropped sign-in answer ${bare}: Element is not running (it starts again by itself; sign in again)"
+  exit 1
+fi
+"$APP" --no-sandbox --disable-gpu --password-store=gnome-libsecret "$@" >/dev/null 2>&1
+rc=$?
+if [ "$rc" -ne 0 ]; then
+  note "failed to deliver ${bare} (exit ${rc})"
+  exit "$rc"
+fi
+note "delivered ${bare} to Element"
+pkill -f -- "--user-data-dir=${TMP}/element-signin\." 2>/dev/null && note "closed the sign-in window"
+exit 0

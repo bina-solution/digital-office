@@ -91,7 +91,7 @@ an operator's password.
 On this laptop Docker lives in WSL and the 172.x bridge is not routable from Windows, so the natural
 place to run this is inside WSL, where the container IP resolves directly:
 
-    wsl -d Ubuntu -- bash -lc 'cd /mnt/c/…/deployment-hacohen && python3 scripts/ui-coverage/live-ui-map.py'
+    wsl -d Ubuntu -- bash -lc 'cd /mnt/c/…/digital-office && python3 scripts/ui-coverage/live-ui-map.py'
 
 From Windows instead, forward the port first (any loopback tunnel will do) and pass --url.
 """

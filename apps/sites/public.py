@@ -32,7 +32,7 @@ surface (`/api/…` is a different prefix and a different router).
 from __future__ import annotations
 
 import base64
-import io
+import hashlib
 import json
 import logging
 import mimetypes
@@ -43,13 +43,16 @@ import shutil
 import tarfile
 import threading
 import time
+import uuid
 from pathlib import Path
+from urllib.parse import quote
 
 import requests
 
 import machines
 import runtime
 import store
+import indexnow  # it imports this module back, and reads nothing of it at import time
 
 log = logging.getLogger("sites.public")
 
@@ -66,12 +69,15 @@ BUNDLE_TTL = int(os.environ.get("SITES_PUBLIC_BUNDLE_TTL", "60"))
 SYNC_SECONDS = int(os.environ.get("SITES_PUBLIC_SYNC_SECONDS", "300"))
 
 DOMAIN_RE = re.compile(r"^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$")
+#: named here, not guessed, where the image's Python (3.12) does not know the type — .webp, every image Astro writes
+#: — or leaves out a charset: text/markdown requires one (RFC 7763), and the docs' Markdown twins are Hebrew (DGO-1793)
 MIME = {".html": "text/html; charset=utf-8", ".htm": "text/html; charset=utf-8",
         ".css": "text/css; charset=utf-8", ".js": "application/javascript; charset=utf-8",
         ".mjs": "application/javascript; charset=utf-8", ".json": "application/json; charset=utf-8",
         ".svg": "image/svg+xml", ".xml": "application/xml; charset=utf-8",
         ".txt": "text/plain; charset=utf-8", ".webmanifest": "application/manifest+json",
-        ".woff2": "font/woff2", ".woff": "font/woff", ".ico": "image/x-icon"}
+        ".woff2": "font/woff2", ".woff": "font/woff", ".ico": "image/x-icon",
+        ".webp": "image/webp", ".md": "text/markdown; charset=utf-8"}
 
 
 # ── the record ───────────────────────────────────────────────────────────────────────────────────
@@ -218,44 +224,132 @@ def _served_dir(site: dict) -> str | None:
     return f"{str(site.get('root') or '').rstrip('/')}/{rel}"
 
 
-def sync(site: dict, force: bool = False) -> dict:
-    """Pull the served directory off the machine into this app's cache.
+#: One slice of a sync's archive per call through the `computers` door. The door holds a command's
+#: whole output in memory (and so does this app, once more as JSON), and `computers` runs under a
+#: 160 MB cap: a site's archive sent as ONE base64 blob — 4/3 of the site, in one answer — killed it
+#: for any site of more than a few dozen MB (Exampleu's clone: 213 MB → ~284 MB of base64, DGO-1503).
+SYNC_CHUNK = int(os.environ.get("SITES_PUBLIC_SYNC_CHUNK", str(8 * 1024 * 1024)))
 
-    A tar over the `computers` door, base64 so it survives a JSON hop, extracted into a temporary
-    directory and SWAPPED into place — a failed or partial sync must leave the previous copy
-    serving, not a half-written one. Nothing here writes to the machine.
+
+def _fail(res: dict, what: str) -> dict:
+    return {"ok": False, "reason": res.get("reason") or f"{what} נכשלה (קוד {res.get('code')})",
+            "detail": (res.get("stderr") or "")[-300:]}
+
+
+_sync_locks: dict[str, threading.Lock] = {}
+_sync_locks_guard = threading.Lock()
+
+
+def sync(site: dict, force: bool = False, wait: bool = False) -> dict:
+    """Pull the served directory off the machine into this app's cache — one sync of a site at a time.
+
+    A site is synced from several places (the switch to `office`, the public pass while its cache is
+    empty, the sync button, an asset push), and a big one takes minutes: two at once would race on
+    the cache's temporary directory. `wait=True` is for a caller whose next step NEEDS this copy — the
+    switch to `office` (it then stops the container) and an asset push (it just rewrote the pages):
+    it waits its turn, on its own thread. Without it (the button, the public pass) a second sync
+    answers that one is running instead of holding its caller for minutes.
+    """
+    with _sync_locks_guard:
+        lock = _sync_locks.setdefault(site["id"], threading.Lock())
+    if not lock.acquire(blocking=wait):
+        return {"ok": False, "busy": True, "reason": "סנכרון של האתר הזה כבר רץ — התוכן יגיע ממנו"}
+    try:
+        return _sync(site, force)
+    finally:
+        lock.release()
+
+
+def _sync(site: dict, force: bool = False) -> dict:
+    """The machine packs the directory into ONE tar in its /var/tmp (disk — /tmp is RAM on Debian 13),
+    and the archive comes over the `computers` door in slices of SYNC_CHUNK (base64, so each survives a
+    JSON hop) into a file here — so neither this app nor the door ever holds more than one slice,
+    whatever the site weighs. The archive is checked against the machine's own size and sha256,
+    extracted into a temporary directory and SWAPPED into place: a failed or partial sync leaves the
+    previous copy serving, not a half-written one. The staging tar is the only thing written to the
+    machine, under a name of its own, and it is removed whatever happens.
     """
     sid = site["id"]
     src = _served_dir(site)
     if not src:
         return {"ok": False, "reason": "לאתר הזה אין תיקיית תוכן מגוגשת (proxy?)"}
     mid = site["machine"]
-    size_s = machines.stdout_of(mid, f"du -sb {machines.q(src)} 2>/dev/null | cut -f1", timeout=60)
+    q = machines.q
+    size_s = machines.stdout_of(mid, f"du -sb {q(src)} 2>/dev/null | cut -f1", timeout=60)
     try:
         size = int((size_s or "0").strip().splitlines()[-1] or 0)
     except (ValueError, IndexError):
         size = 0
     if size and size > MAX_SYNC_BYTES:
         return {"ok": False, "reason": f"התיקון גדול מהמותר ({size // 1048576}MB)"}
-    res = machines.exec_on(mid, f"tar -C {machines.q(src)} -cf - . | base64 -w0", timeout=420)
-    if res.get("code") != 0:
-        return {"ok": False, "reason": res.get("reason") or f"הקריאה נכשלה (קוד {res.get('code')})",
-                "detail": (res.get("stderr") or "")[-300:]}
-    b64 = (res.get("stdout") or "").strip()
-    if not b64:
-        return {"ok": False, "reason": "לא התקבל תוכן מהמכונה"}
+    # what a sync of this site that never reached its `finally` left (the app restarted in the middle):
+    # no other sync of it runs now — this one holds its lock. The token follows a `.`, which a site id
+    # cannot contain, so `exampleu.*` never matches `exampleu-clone.…` — another site's sync in flight.
+    machines.exec_on(mid, f"rm -f /var/tmp/bina-site-sync-{q(sid)}.*.tar", timeout=60)
+    PUBLIC_DIR.mkdir(parents=True, exist_ok=True)
+    for stale in PUBLIC_DIR.glob(f".{sid}.*.tar"):
+        stale.unlink(missing_ok=True)
+    token = uuid.uuid4().hex[:12]
+    stage = f"/var/tmp/bina-site-sync-{sid}.{token}.tar"
+    local_tar = PUBLIC_DIR / f".{sid}.{token}.tar"
+    received = False
+    warning = ""
     try:
-        blob = base64.b64decode(b64)
-    except Exception as e:                                      # noqa: BLE001
-        log.warning("sync: %r", e)
-        return {"ok": False, "reason": "פענוח התוכן נכשל"}
+        # tar's own exit code is kept and judged here, not by `&&`: GNU tar answers 1 for "file changed
+        # as we read it" and 2 for a file it could not read, and in both it still writes the archive of
+        # everything else — the one-blob sync synced those sites (base64's code was the pipe's), so this
+        # one does too, and says so. No archive at all is a failure.
+        res = machines.exec_on(mid, f"tar -C {q(src)} -cf {q(stage)} . ; rc=$?; [ -s {q(stage)} ] || exit 3; "
+                                    f"echo TAR_RC=$rc; wc -c < {q(stage)}; "
+                                    f"(sha256sum {q(stage)} 2>/dev/null || shasum -a 256 {q(stage)}) | cut -d' ' -f1",
+                               timeout=420)
+        if res.get("code") != 0:
+            return _fail(res, "האריזה")
+        out = res.get("stdout") or ""
+        rc = re.search(r"TAR_RC=(\d+)", out)
+        if not rc or int(rc.group(1)) > 2:
+            return _fail({**res, "code": rc.group(1) if rc else res.get("code")}, "האריזה")
+        if int(rc.group(1)):
+            warning = (res.get("stderr") or "").strip()[-300:] or f"tar exit {rc.group(1)}"
+        try:
+            total_s, remote_sha = out.split()[-2:]
+            total = int(total_s)
+        except ValueError:
+            return {"ok": False, "reason": "המכונה לא החזירה את גודל הארכיון"}
+        if total > MAX_SYNC_BYTES:                      # also where `du -sb` does not exist (busybox)
+            return {"ok": False, "reason": f"התיקון גדול מהמותר ({total // 1048576}MB)"}
+        digest = hashlib.sha256()
+        got = 0
+        with open(local_tar, "wb") as fh:
+            while got < total:
+                part = machines.exec_on(mid, f"tail -c +{got + 1} {q(stage)} | head -c {SYNC_CHUNK} | "
+                                             f"base64 | tr -d '\\n'", timeout=300)
+                if part.get("code") != 0:
+                    return _fail(part, "הקריאה")
+                try:
+                    chunk = base64.b64decode((part.get("stdout") or "").strip())
+                except Exception as e:                          # noqa: BLE001
+                    log.warning("sync: %r", e)
+                    return {"ok": False, "reason": "פענוח התוכן נכשל"}
+                if not chunk:
+                    return {"ok": False, "reason": "לא התקבל תוכן מהמכונה", "bytes": got, "total": total}
+                fh.write(chunk)
+                digest.update(chunk)
+                got += len(chunk)
+        if got != total or digest.hexdigest() != remote_sha:
+            return {"ok": False, "reason": "הארכיון שהתקבל אינו זהה לזה שבמכונה", "bytes": got, "total": total}
+        received = True
+    finally:
+        machines.exec_on(mid, f"rm -f {q(stage)}", timeout=60)
+        if not received:
+            local_tar.unlink(missing_ok=True)
     dest = cache_dir(sid)
     tmp = PUBLIC_DIR / f".{sid}.tmp"
     shutil.rmtree(tmp, ignore_errors=True)
     tmp.mkdir(parents=True, exist_ok=True)
     files = 0
     try:
-        with tarfile.open(fileobj=io.BytesIO(blob), mode="r:") as tf:
+        with tarfile.open(local_tar, mode="r:") as tf:
             for m in tf.getmembers():
                 name = posixpath.normpath(m.name.lstrip("./"))
                 if name in (".", "") or name.startswith("..") or "/../" in name:
@@ -266,16 +360,24 @@ def sync(site: dict, force: bool = False) -> dict:
                     tf.extract(m, tmp)
                 if m.isfile():
                     files += 1
-    except tarfile.TarError as e:
+    except (tarfile.TarError, OSError) as e:
         shutil.rmtree(tmp, ignore_errors=True)
         return {"ok": False, "reason": f"חילוץ הארכיון נכשל ({e})"}
+    finally:
+        local_tar.unlink(missing_ok=True)
+    if warning and not files:
+        # tar complained AND nothing readable came: an archive of bare directories, not the site
+        shutil.rmtree(tmp, ignore_errors=True)
+        return {"ok": False, "reason": "לא נקרא אף קובץ מתיקיית האתר", "detail": warning}
     dest.mkdir(parents=True, exist_ok=True)
     shutil.rmtree(dest, ignore_errors=True)
     tmp.rename(dest)
     info = {"ok": True, "site": sid, "machine": mid, "from": src, "files": files,
-            "bytes": len(blob), "source_bytes": size, "at": int(time.time())}
+            "bytes": total, "source_bytes": size, "at": int(time.time())}
+    if warning:
+        info["warning"] = warning
     _write_meta(sid, info)
-    log.info("public sync %s: %s files, %s bytes from %s", sid, files, len(blob), src)
+    log.info("public sync %s: %s files, %s bytes from %s", sid, files, total, src)
     return info
 
 
@@ -290,6 +392,8 @@ def forget(sid: str) -> dict:
     had = sum(1 for _ in d.rglob("*")) if d.exists() else 0
     shutil.rmtree(d, ignore_errors=True)
     _meta_path(sid).unlink(missing_ok=True)
+    with indexnow._lock:                              # its key and what the engines were told, never mid-submission
+        indexnow._state_path(sid).unlink(missing_ok=True)
     return {"removed": str(d), "entries": had}
 
 
@@ -339,15 +443,84 @@ def content_type(p: Path) -> str:
     return guess or "application/octet-stream"
 
 
-def serve(site: dict, path: str, host: str = "", count: bool = True) -> dict:
+def https_address(site: dict, host: str, scheme: str, asked: str) -> str:
+    """Where a PLAIN-http request for a public site is sent on to, or "" when it is served as it is.
+
+    A PUBLIC SITE HAS ONE ADDRESS (DGO-1765). `http://digital-office.co.il/` and
+    `http://bina-solutions.co.il/about/` answered 200 with the page beside the https address (measured
+    2026-11-10): every page of both sites existed twice and a search engine was left to choose, while the
+    office's own names answer 308 on port 80. The answer is given HERE, by the app that serves the site:
+      * not by traefik's `redirectScheme` — v3 answers 301 there, which turns a POST into a GET;
+      * not by the office's `port80-https` middleware — its server answers 400 to any host outside the
+        office's own domain (platform-base/https-redirect/server.py), which is every public site, and
+        traefik drops a router whole when it names a middleware it cannot resolve.
+    It is sent on only when ALL of these hold, and served as before otherwise:
+      * the edge says the request came over plain http (`X-Forwarded-Proto`, which traefik writes itself);
+      * it came on one of the site's own public domains — never the console's mount or this app's host,
+        and never a host a stranger put in the header (the Location names only a declared domain);
+      * the office's edge answers https for it: `_state["https"]`, which `publish()` sets from the
+        machine's live edge — a resolver, and the office's own port-80 rule, which exists only on a server
+        office where certificates do. A laptop office, or this process before its first publish, serves.
+    `asked` is the path the visitor asked for (traefik's `X-Replaced-Path`, with its query), so an entry
+    under a path prefix goes back to that prefix.
+    """
+    host = (host or "").split(":")[0].strip().lower()
+    if (scheme or "").strip().lower() != "http" or not _state.get("https") or not on_public_domain(site, host):
+        return ""
+    asked = asked if (asked or "").startswith("/") else "/" + (asked or "")
+    return f"https://{host}{asked}"
+
+
+def asked_address(site: dict, host: str, path: str, replaced: str = "", query: str = "") -> str:
+    """The path (and query) a visitor asked the public domain for. The edge rewrote `<prefix>/<rest>` onto
+    this app's `/public/<id>/<rest>` and says so in `X-Replaced-Path` (`replaced`); without that header the
+    entry's own prefix is put back in front of what reached us."""
+    if not (replaced or "").startswith("/"):
+        host = (host or "").split(":")[0].strip().lower()
+        prefix = next((e["path"] for e in entries_of(site) if e["domain"] == host), "/").rstrip("/")
+        replaced = f"{prefix}/{(path or '').lstrip('/')}"
+    return replaced + (f"?{query}" if query else "")
+
+
+def edge_answers_https(edge: dict) -> bool:
+    """Does this machine's edge answer https for a public site — a certificate resolver, and the office's own
+    port-80 rule among the middlewares the LIVE edge lists (`runtime.probe_edge`): that rule is written only
+    on a server office that redirects its own names (reconcile.py, `render_https_redirect`), which is where
+    certificates exist. `publish()` keeps the answer in `_state["https"]` for `https_address`."""
+    return bool(edge.get("tls") and edge.get("certresolver")
+                and len(list(edge.get("entrypoints") or [])) > 1
+                and PORT80 in (edge.get("middlewares_available") or []))
+
+
+def serve(site: dict, path: str, host: str = "", count: bool = True, prefix: str = "",
+          ua: str = "", ip: str = "", scheme: str = "", asked: str = "") -> dict:
     """The answer for one public request: `{status, headers, body}` (body is bytes).
 
     The Host decides nothing except redirects: the edge already routed `<domain><path>` here, and
-    this app's only job is to hand back the file — or the site's own `404.html`.
+    this app's only job is to hand back the file — or the site's own `404.html`. `prefix` is the
+    request's `X-Forwarded-Prefix`: it changes a page only when it names a console mount
+    (`under_mount`). `ua` and `ip` (the client's User-Agent and address) only count the visit.
+    `scheme` and `asked` are the request's `X-Forwarded-Proto` and the address it asked for: a plain-http
+    request on a public domain is sent on to https where the office answers it (`https_address`).
     """
     sid = site["id"]
+    onward = https_address(site, host, scheme, asked or asked_address(site, host, path))
+    if onward:
+        # An hour, not for ever: a browser keeps a 308 with no lifetime indefinitely, and an office whose
+        # https later breaks (or whose owner closes the redirect) must not have left visitors stuck on it.
+        return {"status": 308, "headers": {"Location": onward, "Content-Type": "text/plain; charset=utf-8",
+                                           "Cache-Control": "max-age=3600"},
+                "body": b"", "redirect": onward}
+    key = indexnow.key_file(site, path)     # `/<key>.txt`: how a search engine knows the site announced itself
+    if key:
+        return key
     if (path or "").lstrip("/").startswith(".assets/"):
-        return _serve_asset(site, (path or "").lstrip("/"))
+        out = _serve_asset(site, (path or "").lstrip("/"))
+        # counted here, as a page is: a request on the site's own domain, never a HEAD (`count`), never the office
+        # looking at itself — the asset path used to count every fetch, from any host and any agent
+        if count and out.get("status") == 200 and on_public_domain(site, host):
+            _count_visit(sid, "/" + (path or "").lstrip("/"), 200, len(out.get("body") or b""), ua, ip)
+        return out
     root = cache_dir(sid)
     host = (host or "").split(":")[0].strip().lower()
     target = _redirect_for(site, host, path)
@@ -384,13 +557,83 @@ def serve(site: dict, path: str, host: str = "", count: bool = True) -> dict:
     headers = {"Content-Type": ctype, "Cache-Control": "public, max-age=300",
                "X-Served-By": "sites-app"}
     if ctype.startswith("text/html"):
-        applied, report = apply_assets(body.decode("utf-8", "replace"))
+        applied, report = apply_assets(body.decode("utf-8", "replace"), path or "")
+        if under_mount(site, prefix, host):
+            applied = with_base(applied)
+            headers.update({"Cache-Control": "private, no-cache", "Vary": "X-Forwarded-Prefix"})
         body = applied.encode("utf-8")
         if report.get("assets"):
             headers["X-Assets"] = str(report["assets"])
-    if count:
-        _count_visit(sid, "/" + (path or "").lstrip("/"), status, len(body))
+    if count and on_public_domain(site, host):
+        _count_visit(sid, "/" + (path or "").lstrip("/"), status, len(body), ua, ip)
     return {"status": status, "headers": headers, "body": body}
+
+
+# ── seen inside the office: the console's frame ──────────────────────────────────────────────────
+# The console reaches an app at `/a/<alias>/…` and writes `<base href="/a/<alias>/">` into every HTML
+# page it proxies, unless the page carries a `<base>` of its own (platform-base/console/app.py
+# `_inject_base`). Right for an app's own screen, wrong for a site's page, whose every URL is relative
+# to the PAGE: `wp-content/x.css` on `/a/sites/public/exampleu/` became `/a/sites/wp-content/x.css`, and
+# the site opened from the console with no styles, pictures or working links (measured on Exampleu
+# 2026-11-09, DGO-1591). So a page asked for through a console mount — the request says so in
+# `X-Forwarded-Prefix` — carries a `<base>` of its own WITHOUT an address (`target="_self"`, the
+# default): the console sees a base and writes none, and the browser keeps the one it would have used
+# anyway — the document's own address, spelled exactly as it asked for it, query included. Computing
+# that address here could only approximate it (the second reader, two rounds: a directory sent `#top`
+# to another document; a re-encoded path spelled `(`, `,` or a lowercase `%d7` differently, and the
+# browser reloaded instead of scrolling). Anything else (the edge's public routers, the app's own host,
+# a probe) gets the bytes unchanged.
+_MOUNT_RE = re.compile(r"/a/[A-Za-z0-9][A-Za-z0-9._-]{0,127}")
+NO_BASE = '<base target="_self">'
+
+
+def public_hosts(site: dict) -> list[str]:
+    """The domains the site answers on in public: its own `hosts` — or, for a site the office serves
+    with only a public path declared (`public.entries`, no `hosts`), that path's serving domains, a
+    root entry first and redirect twins left out. The checks know only `hosts`, so a site published
+    that way was «לא הוגדר דומיין לאתר» to every scan and never probed for uptime (the second reader,
+    DGO-1591). A path entry (`ex.co.il/site`) is checked at its domain's root — a known limit."""
+    hosts = [h for h in (site.get("hosts") or []) if h]
+    if hosts or mode_of(site) != "office":
+        return hosts
+    out: list[str] = []
+    for e in sorted(entries_of(site), key=lambda e: e["path"] != "/"):
+        if not e.get("redirect") and e["domain"] not in out:
+            out.append(e["domain"])
+    return out
+
+
+def on_public_domain(site: dict, host: str) -> bool:
+    """The request arrived on one of the site's own public domains — a visitor, not the office."""
+    host = (host or "").split(":")[0].strip().lower()
+    return bool(host) and any(e["domain"] == host for e in entries_of(site))
+
+
+def under_mount(site: dict, prefix: str, host: str = "") -> bool:
+    """True when `prefix` is exactly a console mount (`/a/<alias>`) and the request did not arrive on
+    one of the site's own public domains — a visitor's address is the site's, never a mount."""
+    if not _MOUNT_RE.fullmatch((prefix or "").strip().rstrip("/")):
+        return False
+    return not on_public_domain(site, host)
+
+
+def with_base(html: str, tag: str = NO_BASE) -> str:
+    """`html` with `tag` first in its head — unchanged when it already has a base (the page's own
+    decision, and the same test the console makes before writing one). A document with neither
+    `<head>` nor `<html>` (valid HTML5) gets it after its doctype, a byte-order mark allowed before
+    it: ahead of the doctype the browser would render the page in quirks mode."""
+    if "<base " in html.lower():
+        return html
+    m = (re.search(r"<head(?:\s[^>]*)?>", html, re.I) or re.search(r"<html(?:\s[^>]*)?>", html, re.I)
+         or re.match(r"[\s﻿]*<!doctype[^>]*>", html, re.I))
+    return html[:m.end()] + tag + html[m.end():] if m else tag + html
+
+
+def preview_path(site: dict) -> str:
+    """Where the office shows a site it serves itself, RELATIVE to this app's root — so the same
+    link is `/public/<id>/` on the app's own host and `/a/sites/public/<id>/` in the console; ""
+    for a site its machine serves (that one opens at its own address)."""
+    return f"public/{quote(site['id'], safe='')}/" if mode_of(site) == "office" else ""
 
 
 def _redirect_for(site: dict, host: str, path: str) -> str:
@@ -408,12 +651,42 @@ def _redirect_for(site: dict, host: str, path: str) -> str:
     return ""
 
 
-def _count_visit(sid: str, path: str, status: int, nbytes: int) -> None:
-    """Visits for a site the OFFICE serves have no nginx log to read, so they are counted here."""
+_seen: dict = {}                      # (site, hour) → hashed client addresses already counted
+_seen_lock = threading.Lock()
+SEEN_CAP = 50_000                     # addresses told apart per site per hour; past it, no more uniques
+
+
+def _count_visit(sid: str, path: str, status: int, nbytes: int, ua: str = "", ip: str = "") -> None:
+    """Visits for a site the OFFICE serves have no nginx log to read, so they are counted here, with
+    the meaning the log-based count has (checks/visits.py `aggregate`): a hit per request, a bot by
+    its User-Agent, a unique per client address per hour.
+
+    Only a request on one of the site's own public domains reaches here (`serve`): a look from inside
+    the office (the console, this app's own host, the internal address) is not a visit — Exampleu's
+    clone, which has no domain at all, showed 1011 «ביקורים» in 7 days, every one of them the office's
+    own requests (DGO-1591). Nor is the office's own check that arrives through the domain (uptime
+    every minute, the scans): `checks.visits.OWN_UA`, left out of the log-based count the same way.
+    Uniques were 1 per request — every picture a new visitor; an address is now counted once an hour
+    (hashed, held for this hour and the last, at most `SEEN_CAP` of them — past it a flood of fresh
+    addresses adds hits, not visitors; a restart may count one twice within the hour)."""
     try:
+        from checks.visits import BOT_UA, OWN_UA
+        if (ua or "").startswith(OWN_UA):
+            return
+        bot = bool(BOT_UA.search(ua or ""))
         hour = int(time.time() // 3600) * 3600
-        store.add_visit_hour(sid, hour, 1, 1, 0, 1 if status >= 400 else 0, nbytes,
-                             {path[:200]: 1}, {})
+        unique = 0
+        if not bot:
+            key = hashlib.sha256(f"{sid}\0{ip or ''}".encode()).hexdigest()[:16]
+            with _seen_lock:
+                for k in [k for k in _seen if k[1] < hour - 3600]:
+                    _seen.pop(k, None)
+                seen = _seen.setdefault((sid, hour), set())
+                if key not in seen and len(seen) < SEEN_CAP:
+                    seen.add(key)
+                    unique = 1
+        store.add_visit_hour(sid, hour, 1, unique, 1 if bot else 0, 1 if status >= 400 else 0, nbytes,
+                             {} if bot else {path[:200]: 1}, {})
     except Exception as e:                                      # noqa: BLE001 — never fail a request
         log.debug("visit counting failed for %s: %s", sid, type(e).__name__)
 
@@ -448,15 +721,18 @@ def bundle(force: bool = False) -> dict | None:
     return data
 
 
-def apply_assets(html: str) -> tuple[str, dict]:
+def apply_assets(html: str, page: str = "") -> tuple[str, dict]:
     """Rewrite every `data-da*` value in a page from the active bundle. Never raises: a page that
-    cannot be rewritten is served as it is, and the report says the bundle was missing."""
+    cannot be rewritten is served as it is, and the report says the bundle was missing.
+
+    `page` is where the document is inside the site, as the browser asked for it (`""` for the root,
+    `projects/x/` for a page in a directory): a file slot's URL is written relative to it."""
     b = bundle()
     if not b:
         return html, {"assets": 0, "reason": "bundle unavailable"}
     try:
         import site_kit
-        out, report = site_kit.apply(html, b, file_url=_asset_url)
+        out, report = site_kit.apply(html, b, file_url=lambda entry: _asset_url(entry, page))
         edits = report.get("changed") or []
         return out, {"assets": len(edits), "missing": report.get("missing") or [],
                      "report": {k: v for k, v in (report or {}).items() if k != "changed"}}
@@ -465,21 +741,29 @@ def apply_assets(html: str) -> tuple[str, dict]:
         return html, {"assets": 0, "reason": type(e).__name__}
 
 
-def _asset_url(entry: dict) -> str:
-    """A file slot's URL as the PAGE must reference it: `/.assets/<file>` on the site's own origin.
+def _asset_url(entry: dict, page: str = "") -> str:
+    """A file slot's URL as the PAGE must reference it: `.assets/<file>` in the site, RELATIVE to the page.
 
     Never the asset service's absolute origin: the site is served on whatever domain its public path
     names, so a page pointing at `http://digital-assets:8985/...` shows an internal name and breaks
     the moment the domain changes. The office serves the file under the site's own prefix instead.
+
+    Relative, not `/.assets/…`: the browser resolves it against the document's own URL, so one page is
+    right at a domain's root, under a path entry (`ex.co.il/site/`) and under this app's own prefix
+    (`/public/<id>/`, which is how a site is seen inside the office before it has a public address). A
+    root-absolute URL named the root of whatever host served the page — a root the site owns only in
+    the first of the three, so its pictures broke in the other two. `page` is the document's path
+    inside the site as the browser asked for it: one `../` per directory above it.
     """
+    up = "../" * (page or "").lstrip("/").count("/")
     url = str((entry or {}).get("url") or "")
     m = re.search(r"/files/([A-Za-z0-9._-]+)$", url)
     if m:
-        return f"/.assets/{m.group(1)}"
+        return f"{up}.assets/{m.group(1)}"
     sha = (entry or {}).get("sha")
     if sha:
         ext = str((entry or {}).get("ext") or "")
-        return f"/.assets/{sha}" + (f".{ext}" if ext else "")
+        return f"{up}.assets/{sha}" + (f".{ext}" if ext else "")
     return url if url.startswith("/") else ""
 
 
@@ -503,8 +787,6 @@ def _serve_asset(site: dict, rel: str) -> dict:
     if r.status_code >= 400:
         return {"status": 404, "headers": {"Content-Type": "text/plain; charset=utf-8"},
                 "body": b"Not Found"}
-    if site.get("id"):
-        _count_visit(site["id"], f"/.assets/{name}", 200, len(r.content))
     return {"status": 200, "body": r.content,
             "headers": {"Content-Type": r.headers.get("content-type") or "application/octet-stream",
                         "Cache-Control": "public, max-age=86400",
@@ -552,6 +834,22 @@ def edge_dir(machine_id: str) -> dict:
                             or "@" not in m]}
 
 
+def site_middlewares(site: dict, edge: dict) -> list[str]:
+    """The edge middlewares a site's public routers carry: the ones its own record names (`edge.middlewares`), else
+    the machine's default — each only when the live edge defines it (`middlewares_available`: traefik drops a router
+    that names a middleware it cannot resolve), only from the file provider, and never a sign-in one (a public path
+    is public). The record's list used to be ignored here: digital-office.co.il and bina-solutions.co.il name
+    `security-headers@file` and `ratelimit-default@file`, and served without them from the day the office took them
+    over (no HSTS, nosniff, frame or referrer policy, no rate limit — the sites app's own scan, 2026-11-10)."""
+    available = set(edge.get("middlewares_available") or [])
+
+    def usable(names) -> list[str]:
+        return [m for m in dict.fromkeys(names or [])
+                if m.endswith("@file") and m.split("@")[0] in available and "auth" not in m.lower()]
+    # a record whose every name is gone from the edge keeps the default, not an empty chain (it would lose compress)
+    return usable((site.get("edge") or {}).get("middlewares")) or usable(edge.get("middlewares"))
+
+
 def render_edge(sites: list[dict], edge: dict) -> str:
     """The file-provider config for every OFFICE-served site: one router per public entry.
 
@@ -579,7 +877,7 @@ def render_edge(sites: list[dict], edge: dict) -> str:
             prefix = e["path"]
             regex = r"^/" if prefix == "/" else "^" + re.escape(prefix) + r"/?"
             middlewares[mw] = {"replacePathRegex": {"regex": regex, "replacement": f"/public/{sid}/"}}
-            chain = [mw] + [m for m in (edge.get("middlewares") or []) if m.endswith("@file")]
+            chain = [mw] + site_middlewares(site, edge)
             rule = f"Host(`{e['domain']}`) && PathPrefix(`{prefix}`)"
             common = {"rule": rule, "service": svc, "middlewares": chain, "priority": 100}
             eps = list(edge.get("entrypoints") or ["web", "websecure"])
@@ -631,7 +929,9 @@ def office_machine(machine_id: str = "") -> str:
     return ""
 
 
-_state = {"at": 0.0, "text": "", "machine": "", "error": ""}
+#: The office's own port-80 rule, by the name the live edge lists it under (`edge_answers_https`).
+PORT80 = "port80-https"
+_state = {"at": 0.0, "text": "", "machine": "", "error": "", "https": False}
 
 
 def publish(machine_id: str = "", force: bool = False) -> dict:
@@ -648,6 +948,7 @@ def publish(machine_id: str = "", force: bool = False) -> dict:
     edge = edge_dir(mid)
     if not edge:
         return {"ok": False, "reason": "לא נמצא קצה (traefik) במחשב הזה"}
+    _state["https"] = edge_answers_https(edge)      # asked of the machine at every publish, never remembered
     text = render_edge(sites, edge)
     path = f"{edge['dir']}/{EDGE_FILE}"
     if not text:
@@ -732,7 +1033,7 @@ def slots_apply(site: dict, bundle: dict, actor: str = "", client: str = "") -> 
             skipped.append({"page": rel, "reason": "הקובץ לא נקרא"})
             continue
         try:
-            out, report = site_kit.apply(cur, bundle, file_url=_asset_url)
+            out, report = site_kit.apply(cur, bundle, file_url=lambda entry, page=rel: _asset_url(entry, page))
         except Exception as e:                                  # noqa: BLE001
             errors.append({"page": rel, "reason": f"{type(e).__name__}"})
             continue
@@ -743,7 +1044,7 @@ def slots_apply(site: dict, bundle: dict, actor: str = "", client: str = "") -> 
             continue
         machines.write_file(mid, remote, out, mode=0o644, timeout=120)
         changed.append({"page": rel, "edits": len(edits)})
-    res = sync(site, force=True)
+    res = sync(site, force=True, wait=True)       # the pages just changed: this copy must land
     store.event(sid, "assets", f"הנכסים הופעלו באתר ({len(changed)} עמודים)",
                 {"actor": actor, "client": client, "changed": changed, "sync": res.get("ok")})
     return {"ok": True, "site": sid, "changed": changed, "skipped": skipped, "errors": errors,
@@ -800,9 +1101,33 @@ def selftest() -> None:
     assert "- websecure" in text, text
     assert render_edge([], {}) == "" and render_edge([{"id": "d", "hosts": ["d.co.il"]}],
                                                      {"certresolver": "r", "tls": True}) == ""
+    # a site's own middlewares reach its routers — only those the edge defines, from the file provider, never a
+    # sign-in one; a site that names none keeps the machine's default
+    _edge = {"entrypoints": ["web", "websecure"], "certresolver": "r", "tls": True, "middlewares": ["compress@file"],
+             "middlewares_available": ["compress", "security-headers", "ratelimit-default", "authentik"]}
+    _own = {"id": "s", "hosts": ["s.co.il"], "public": {"mode": "office"},
+            "edge": {"middlewares": ["ratelimit-default@file", "security-headers@file", "compress@file", "gone@file",
+                                     "authentik@file", "x@docker", "security-headers@file"]}}
+    _want = ["ratelimit-default@file", "security-headers@file", "compress@file"]
+    assert site_middlewares(_own, _edge) == _want, site_middlewares(_own, _edge)
+    assert site_middlewares({"id": "t"}, _edge) == ["compress@file"]
+    assert site_middlewares({"id": "u", "edge": {"middlewares": ["gone@file"]}}, _edge) == ["compress@file"]
+    # the edge's catalogue is what a `middlewares:` MAPPING defines — not a router's list, a setting or a header name
+    _text = ("http:\n  middlewares:\n    security-headers:\n      headers:\n        customFrameOptionsValue: SAMEORIGIN\n"
+             "        customRequestHeaders:\n          Host: x\n    compress:\n      compress: {}\n  routers:\n"
+             "    dgo-port80:\n      middlewares:\n      - port80-https\n      service: dgo-port80\n"
+             "    other:\n      middlewares:\n        - compress\n      service: s\n"
+             "http:\n    middlewares:\n        port80-https:\n            redirectScheme: {}\n"
+             "http:\n  middlewares:   # the sign-in ones\n    authentik:\n{{- if .X }}\n      forwardAuth: {}\n"
+             "{{- end }}\n    'ratelimit-default':\n      rateLimit: {}\n")
+    assert runtime._middlewares_from(_text) == ["security-headers", "compress", "port80-https", "authentik",
+                                                "ratelimit-default"], runtime._middlewares_from(_text)
+    _routers = _yaml.safe_load(render_edge([_own], _edge))["http"]["routers"]
+    assert _routers["sites-public-s-0-https"]["middlewares"] == ["sites-public-s-0-to-office"] + _want, _routers
+    assert _routers["sites-public-s-0-http"]["middlewares"] == ["sites-public-s-0-to-office"] + _want, _routers
     import tempfile
     with tempfile.TemporaryDirectory() as d:
-        root = Path(d)
+        root = Path(d).resolve()        # macOS: /var links to /private/var, and resolve() answers the real path
         (root / "index.html").write_text("<h1>hi</h1>")
         (root / "about").mkdir()
         (root / "about" / "index.html").write_text("about")
@@ -815,9 +1140,38 @@ def selftest() -> None:
         assert resolve(root, "nope") is None
         (root / "noindex").mkdir()
         assert resolve(root, "noindex") is None and (root / "noindex").is_dir()
-    assert _asset_url({"url": "http://digital-assets:8985/files/ab12cd.png"}) == "/.assets/ab12cd.png"
-    assert _asset_url({"sha": "ff00", "ext": "svg"}) == "/.assets/ff00.svg"
+    # named, not guessed: Python 3.12 knows no .webp (octet-stream, measured live) and gives .md no charset
+    assert content_type(Path("x/shot.light.he.webp")) == "image/webp"
+    assert content_type(Path("he/start.md")) == "text/markdown; charset=utf-8"
+    assert _asset_url({"url": "http://digital-assets:8985/files/ab12cd.png"}) == ".assets/ab12cd.png"
+    assert _asset_url({"sha": "ff00", "ext": "svg"}) == ".assets/ff00.svg"
     assert _asset_url({"url": "/local.png"}) == "/local.png" and _asset_url({}) == ""
+    # relative to the document: one `../` per directory above it, whatever prefix serves the site
+    e = {"url": "http://digital-assets:8985/files/ab12cd.png"}
+    assert _asset_url(e, "about/") == "../.assets/ab12cd.png"
+    assert _asset_url(e, "/projects/x/index.html") == "../../.assets/ab12cd.png"
+    assert _asset_url(e, "features") == ".assets/ab12cd.png"
+    import posixpath as _pp
+    for _prefix in ("/", "/public/s/", "/site/"):
+        for _page in ("", "about/", "projects/x/"):
+            _doc = _prefix + _page
+            _abs = _pp.normpath(_pp.join(_pp.dirname(_doc), _asset_url(e, _page)))
+            assert _abs == _prefix + ".assets/ab12cd.png", (_prefix, _page, _abs)
+    # a page asked for through a console mount carries a base of its own, with no address
+    _s = {"id": "s", "public": {"mode": "office", "entries": [{"domain": "ex.co.il", "path": "/"}]}}
+    assert under_mount(_s, "/a/sites") and under_mount(_s, "/a/sites/") and under_mount(_s, "/a/sites.exampleu")
+    assert not under_mount(_s, "") and not under_mount(_s, "/site") and not under_mount(_s, "/a/")
+    assert not under_mount(_s, '/a/x"><script>') and not under_mount(_s, "/a/sites/public")
+    assert not under_mount(_s, "/a/sites", host="ex.co.il:443")       # a visitor's address is the site's
+    assert NO_BASE == '<base target="_self">' and "href" not in NO_BASE
+    assert with_base("<html><head><title>t</title>") == '<html><head><base target="_self"><title>t</title>'
+    assert with_base('<head lang="he">x') == '<head lang="he"><base target="_self">x'
+    assert with_base("<head><base href='/own/'>") == "<head><base href='/own/'>"
+    assert with_base("<header>x") == '<base target="_self"><header>x'     # <header> is not <head>
+    assert (with_base("<!doctype html><meta charset=utf-8><title>x</title>")    # no head, no html
+            == '<!doctype html><base target="_self"><meta charset=utf-8><title>x</title>')
+    assert with_base("﻿<!DOCTYPE html><p>x") == '﻿<!DOCTYPE html><base target="_self"><p>x'
+    assert preview_path(_s) == "public/s/" and preview_path({"id": "c", "hosts": ["c.co.il"]}) == ""
     print("public.py selftest: ok")
 
 

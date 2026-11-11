@@ -10,7 +10,7 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	"github.com/solomonBoltin/deployment-hacohen/packaging/dgo/internal/pyval"
+	"github.com/bina-solution/digital-office/packaging/dgo/internal/pyval"
 )
 
 // ── the office's .env, as render reads it ─────────────────────────────────────────────────────────
@@ -45,13 +45,29 @@ func isRegular(p string) bool {
 	return err == nil && fi.Mode().IsRegular()
 }
 
-// readEnvText is ENVFILE.read_text(encoding="utf-8", errors="replace"): bytes that are not UTF-8 read
-// as U+FFFD — one per bad sequence, where CPython's decoder puts one — and universal newlines.
+// readEnvText is ENVFILE.read_text(encoding="utf-8", errors="replace"): readEnvRaw, and universal newlines.
 func readEnvText(path string) (string, error) {
+	s, err := readEnvRaw(path)
+	if err != nil {
+		return "", err
+	}
+	return strings.NewReplacer("\r\n", "\n", "\r", "\n").Replace(s), nil
+}
+
+// readEnvRaw is open(path, encoding="utf-8", errors="replace", newline="").read(): bytes that are not
+// UTF-8 read as U+FFFD — one per bad sequence, where CPython's decoder puts one — and every line ending
+// as the file has it.
+func readEnvRaw(path string) (string, error) {
 	raw, err := os.ReadFile(path)
 	if err != nil {
 		return "", err
 	}
+	return decodeReplace(raw), nil
+}
+
+// decodeReplace is raw.decode("utf-8", errors="replace"): a U+FFFD for each bad sequence, where CPython's
+// decoder puts one.
+func decodeReplace(raw []byte) string {
 	var b strings.Builder
 	for len(raw) > 0 {
 		if utf8.Valid(raw) {
@@ -63,7 +79,24 @@ func readEnvText(path string) (string, error) {
 		b.WriteRune(utf8.RuneError)
 		raw = raw[end:]
 	}
-	return strings.NewReplacer("\r\n", "\n", "\r", "\n").Replace(b.String()), nil
+	return b.String()
+}
+
+// splitLineEnds is re.split(r"(\r\n|\r|\n)", raw) as sync_identity takes it apart: the lines where universal
+// newlines split them, and each line's own ending — "" for the last.
+func splitLineEnds(raw string) (lines, ends []string) {
+	for {
+		i := strings.IndexAny(raw, "\r\n")
+		if i < 0 {
+			return append(lines, raw), append(ends, "")
+		}
+		n := 1
+		if raw[i] == '\r' && i+1 < len(raw) && raw[i+1] == '\n' {
+			n = 2
+		}
+		lines, ends = append(lines, raw[:i]), append(ends, raw[i:i+n])
+		raw = raw[i+n:]
+	}
 }
 
 // envAssignment is _env_assign: (key, value) of an assignment line, ok false for anything else.
@@ -126,6 +159,17 @@ func group(s string, m []int, n int) string {
 		return ""
 	}
 	return s[m[2*n]:m[2*n+1]]
+}
+
+// present is "the file names this key at all": the one distinction value() cannot make, and one
+// caller needs it — `TRAEFIK_CERTRESOLVER=` (present, empty) is the deliberate "no ACME on this
+// machine", while an ABSENT line leaves compose's own `myresolver` default in force (DGO-1595).
+func (e *dotenv) present(name string) bool {
+	if e == nil {
+		return false
+	}
+	_, ok := e.vals[name]
+	return ok
 }
 
 // here is _here(text): text with every ${NAME} / ${NAME:-default} resolved from this machine's .env,
@@ -195,20 +239,21 @@ func slugify(name string) string {
 // syncIdentity is sync_identity(): every `#@derived slug` line of .env set to slugify(BUSINESS_NAME),
 // and COMPANY_SLUG planted under BUSINESS_NAME when no marked line names it — written only when a value
 // changes, and said on stderr. Nothing happens without a .env, a BUSINESS_NAME, or a name that
-// slugifies to something.
-//
-// reconcile.py means to keep a CRLF file's line endings, but read_text has already read every ending
-// as \n by then (universal newlines): a file it rewrites is written with \n endings. So is it here.
+// slugifies to something. A file it rewrites keeps its own line endings: CRLF if it has one (DGO-631).
 func syncIdentity(repo string, stderr io.Writer) error {
 	path := envPath(repo)
 	if !isRegular(path) {
 		return nil
 	}
-	raw, err := readEnvText(path)
+	raw, err := readEnvRaw(path)
 	if err != nil {
 		return died(".env: %v", err)
 	}
-	lines := strings.Split(raw, "\n")
+	nl := "\n" // for a line added under a last line that had none
+	if strings.Contains(raw, "\r\n") {
+		nl = "\r\n"
+	}
+	lines, ends := splitLineEnds(raw)
 	business := ""
 	for _, ln := range lines {
 		if k, v, ok := envAssignment(ln); ok && k == "BUSINESS_NAME" {
@@ -240,7 +285,12 @@ func syncIdentity(repo string, stderr io.Writer) error {
 	if !haveSlugVar { // compose's interpolation is ordered: the slug goes right under BUSINESS_NAME
 		for i, ln := range lines {
 			if k, _, ok := envAssignment(ln); ok && k == "BUSINESS_NAME" {
+				end := ends[i]
+				if end == "" { // the last line, with no ending: it gets one now
+					ends[i], end = nl, ""
+				}
 				lines = slices.Insert(lines, i+1, derivedMarker, "COMPANY_SLUG="+slug)
+				ends = slices.Insert(ends, i+1, ends[i], end)
 				changed = append(changed, "COMPANY_SLUG: (absent) -> "+slug+"   [inserted under BUSINESS_NAME]")
 				break
 			}
@@ -249,7 +299,11 @@ func syncIdentity(repo string, stderr io.Writer) error {
 	if len(changed) == 0 {
 		return nil
 	}
-	if err := os.WriteFile(path, []byte(strings.Join(lines, "\n")), 0o666); err != nil {
+	var out strings.Builder
+	for i, ln := range lines {
+		out.WriteString(ln + ends[i])
+	}
+	if err := os.WriteFile(path, []byte(out.String()), 0o666); err != nil {
 		return died(".env: %v", err)
 	}
 	fmt.Fprintf(stderr, "  identity  BUSINESS_NAME=%s -> slug %s\n", pyval.Repr(business), pyval.Repr(slug))

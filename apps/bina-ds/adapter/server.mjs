@@ -21,7 +21,7 @@
 // operator's own `bbox agent login` (which reads it via the engine — the same trust as docker).
 import { createServer } from "node:http";
 import { randomUUID, timingSafeEqual } from "node:crypto";
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { appendFileSync, closeSync, mkdirSync, openSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import path from "node:path";
 
@@ -148,7 +148,9 @@ const summary = (s) => {
     updated_at: s.updatedAt ? new Date(s.updatedAt).toISOString() : null,
     preset: v.agentPreset || null,
     permissions: v.permissions?.currentValue || null,
-    model: v.modelSelection?.lastUsed || v.modelSelection?.next || null,
+    // the model the NEXT turn runs on: a selection made since the last turn is `next` (DGO-1731 — `show` named
+    // the last turn's model after a `--set`, and the set looked as if it had not taken)
+    model: v.modelSelection?.next || v.modelSelection?.lastUsed || null,
     goal: goal ? { objective: goal.objective, phase: goal.phase, rounds: v.goal.roundsStarted, max_rounds: goal.maxGoalRounds } : null,
     todos: v.todos || null,
     turns: (v.turnOutline || []).length,
@@ -208,6 +210,7 @@ class Live {
   refreshList(force = false) {
     if (this.listPending) return this.listPending;
     if (!force && Date.now() - this.listAt < LIST_REFRESH_MS) return Promise.resolve();
+    const asked = Date.now();
     this.listPending = rpc("session/list", { _request: {} }, 600000).then((v) => {
       for (const s of v?.items || []) {
         const cur = this.entry(s.sessionId);
@@ -215,6 +218,7 @@ class Live {
         this.mergeProjections(cur, s.projections);
       }
       this.listAt = Date.now();
+      this.listFrom = asked;          // the moment the list describes (DGO-582: the seder's watch reads only a fresh one)
     }, () => {}).finally(() => { this.listPending = null; });
     return this.listPending;
   }
@@ -426,10 +430,18 @@ function sederState() {
   }
 }
 
+/** The record written whole or not at all: a temporary file renamed over it. The watch writes it around
+ *  restarts, and a write cut by one left broken JSON, which sederState reads as no fires at all. */
+function sederWrite(fires) {
+  const file = sederFile(), part = `${file}.${process.pid}.part`;
+  writeFileSync(part, JSON.stringify({ fires: fires.slice(-200) }, null, 1));
+  renameSync(part, file);
+}
+
 function sederKeep(state, entry) {
   state.fires.push(entry);
   const kept = { fires: state.fires.slice(-200) };
-  try { writeFileSync(sederFile(), JSON.stringify(kept, null, 1)); } catch { /* the cycle still opened */ }
+  try { sederWrite(kept.fires); } catch { /* the cycle still opened */ }
   return kept;
 }
 
@@ -443,9 +455,13 @@ function sederGrant(day) {
   return 1;
 }
 
-/** The notice centre, best effort — the same door this app already uses for its boot notice. */
-function notifyOffice(title, body, link) {
-  const payload = JSON.stringify({ source: "bina-ds", source_id: "seder-door", level: "info", title, body, ...(link ? { link } : {}) });
+/** The notice centre, best effort — the same door this app already uses for its boot notice. Each
+ *  notice carries its OWN source_id: the centre dedupes on (source, source_id) and a known row only
+ *  resurfaces when meta.count grows, so the constant «seder-door» it used to send made every cycle's
+ *  notice after the first fold silently into the first one (DGO-582: «ואיש לא ידע»). */
+function notifyOffice(title, body, link, { id, level } = {}) {
+  const payload = JSON.stringify({ source: "bina-ds", source_id: `seder-door:${id || Date.now()}`, level: level || "info",
+    title, body, ...(link ? { link } : {}) });
   fetch(process.env.BINA_DS_NOTIFY_URL || "http://notifications:8977/api/notifications", {
     method: "POST", headers: { "content-type": "application/json" }, body: payload, signal: AbortSignal.timeout(8000),
   }).catch(() => {});
@@ -499,6 +515,182 @@ function sederClock(fired) {
   };
 }
 
+// ── NO SEDER ON A LOCAL MODEL (DGO-1741, 2026-11-10) ────────────────────────────────────────────────
+// A cycle starts on the office's DEFAULT model (settings.yaml `agent-default-model`), and a cycle is the
+// `seder` skill: eight steps, a budget, a balance, many tool calls. A local model (a `dgo-ollama-*` route,
+// tools/llm-routes.mjs — this office's Ollama or a linked machine's) cannot carry that. Measured on Exampleu (4 cores,
+// qwen3.5:4b, 32k window): the 07:00 fire held the server at 380% CPU for about 40 minutes and ended on
+// ONE output token, and the clock fires three times a day — 21:00 included, the hour a client meets. So
+// the door refuses, in words: the clock's workflow already turns `{started: false, reason}` into a notice,
+// and the cycles come back by themselves the day the default model is one that can run them.
+/** The provider of the office's default model as the settings document writes it, "" when it names none.
+ *  The harness writes the block form; the flow form is read too. Pure: the text in, the name out. */
+function defaultProvider(settingsText) {
+  const lines = String(settingsText || "").split(/\r?\n/);
+  const at = lines.findIndex((l) => /^agent-default-model:/.test(l));
+  if (at < 0) return "";
+  const flow = /^agent-default-model:\s*\{([^}]*)\}/.exec(lines[at]);
+  if (flow) return (/(?:^|,)\s*provider:\s*["']?([^"',\s}]+)/.exec(flow[1]) || [])[1] || "";
+  for (let i = at + 1; i < lines.length && /^(\s|$)/.test(lines[i]); i++) {
+    const m = /^\s+provider:\s*["']?([^"'\s#]+)/.exec(lines[i]);
+    if (m) return m[1];
+  }
+  return "";
+}
+
+// ── A SESSION'S MODEL IS ITS OWN (DGO-1731, 2026-11-11) ─────────────────────────────────────────────
+// The harness's `session/selectModel` (what its web model picker sends) also rewrites the office's DEFAULT
+// model (`agent-default-model` above). That default decides three things for the whole office: the model every
+// new session starts on, the default preset (tools/llm-routes.mjs pairs the lean local one with a local
+// default), and whether the seder cycles run at all. Through this door a model is set for ONE session: an
+// errand, a test, `bbox agent model <id> --set`. Until now the office's default moved with it, unseen. Measured
+// on the HP 2026-11-11: two such calls (03:5x and 07:2x UTC) moved it from qwen3:1.7b to DeepSeek and then to the
+// Dell's qwen3:4b, so every new session started on whatever the last caller tried. So the door puts the default
+// back after it selects, unless the request asks for the office's default too (`default: true`). The web picker
+// is untouched: a person who chooses there still chooses the default, as the harness means.
+
+/** The `agent-default-model` entry of a settings document: the index of its first line and of the line after
+ *  it, and the provider, model and effort it names; null when the document has none. Block and flow form, like
+ *  defaultProvider. The block is its key line and the indented lines under it (blank lines inside it
+ *  included, blank lines after it not). Pure. */
+function defaultEntry(settingsText) {
+  const lines = String(settingsText || "").split("\n");
+  const at = lines.findIndex((l) => /^agent-default-model:/.test(l));
+  if (at < 0) return null;
+  const flow = /^agent-default-model:\s*\{([^}]*)\}/.exec(lines[at]);
+  let to = at + 1, body;
+  if (flow) body = flow[1].split(",");
+  else {
+    for (let i = at + 1; i < lines.length && /^(\s|$)/.test(lines[i]); i++) if (lines[i].trim()) to = i + 1;
+    body = lines.slice(at + 1, to);
+  }
+  const val = (key) => {
+    for (const l of body) {
+      const m = new RegExp(`^\\s*${key}:\\s*(?:"([^"]*)"|'([^']*)'|([^\\s#"',}][^\\s#,}]*))`).exec(l.replace(/\r$/, ""));
+      if (m) return m[1] ?? m[2] ?? m[3];
+    }
+    return "";
+  };
+  return { from: at, to, provider: val("provider"), model: val("model"), effort: val("reasoningEffort") };
+}
+
+/** The settings document with the office's default as it was BEFORE a session's selection, or null when
+ *  nothing is to be written: the entry does not name what this call selected (the harness did not write it, or
+ *  somebody chose since, and theirs stands), or it already says what it said before. `beforeText` "" is a
+ *  document that had no default, and its entry is taken out again. The other lines are kept as they are,
+ *  comments included. Pure. */
+function keepDefault(afterText, beforeText, selected) {
+  const now = defaultEntry(afterText), was = defaultEntry(beforeText);
+  if (!now || now.provider !== selected.provider || now.model !== selected.model) return null;
+  if (was && was.provider === now.provider && was.model === now.model && was.effort === now.effort) return null;
+  const lines = String(afterText).split("\n");
+  lines.splice(now.from, now.to - now.from, ...(was ? String(beforeText).split("\n").slice(was.from, was.to) : []));
+  return lines.join("\n");
+}
+
+const SETTINGS_FILE = () => `${process.env.DSH_HOME || "/data/dsh"}/settings.yaml`;
+const readSettings = () => { try { return readFileSync(SETTINGS_FILE(), "utf8"); } catch (e) { return e.code === "ENOENT" ? "" : null; } };
+
+/** What became of the office's default after a session's selection, and its putting back. The document is
+ *  written the way the harness writes it: under its `settings.yaml.lock` sibling (O_EXCL, at most 2 s), renamed
+ *  into place, mode 0600 (tools/llm-routes.mjs `edit`). The harness may write the selection a moment after it
+ *  answers, so the entry is read for up to 1 s until it differs from before. The answer says only what was
+ *  measured: "kept" (the entry is the one from before), "restored" (it named this selection and was put back),
+ *  "changed" with why (asked for; or it names something else, somebody else's, left as it is; or it could not
+ *  be written), "unknown" with why (the document could not be read). */
+async function keepOfficeDefault(beforeText, selected, asked = false) {
+  const file = SETTINGS_FILE(), lock = `${file}.lock`, was = defaultEntry(beforeText);
+  const same = (a, b) => (!a && !b) || (!!a && !!b && a.provider === b.provider && a.model === b.model && a.effort === b.effort);
+  const said = (e) => (e ? `${e.provider}/${e.model}${e.effort ? `@${e.effort}` : ""}` : "no default");
+  const theirs = (e) => ({ default: "changed", why: `the default names ${said(e)}, not this selection; left as it is` });
+  const unread = { default: "unknown", why: "settings.yaml could not be read after the selection" };
+  const names = (e) => !!e && e.provider === selected.provider && e.model === selected.model;
+  // the selection IS the default from before: whatever the harness writes, nothing moves (no 1 s wait)
+  if (names(was) && (was.effort || "") === (selected.effort || "")) return { default: "kept" };
+  let text = readSettings();
+  for (let i = 0; i < 5 && text !== null && same(defaultEntry(text), was); i++) {
+    await new Promise((r) => setTimeout(r, 200)); text = readSettings();
+  }
+  if (text === null) return unread;
+  const now = defaultEntry(text);
+  if (same(now, was)) return { default: "kept" };
+  if (asked) return names(now) ? { default: "changed", why: "asked" } : theirs(now);
+  if (keepDefault(text, beforeText, selected) === null) return theirs(now);
+  let fd = null;
+  for (let wait = 25, until = Date.now() + 2000; fd === null; wait = Math.min(wait * 2, 400)) {
+    try { fd = openSync(lock, "wx"); } catch (e) {
+      if (e.code !== "EEXIST" || Date.now() > until) return { default: "changed", why: `the settings lock was not taken (${e.code})` };
+      await new Promise((r) => setTimeout(r, wait));
+    }
+  }
+  try {
+    const fresh = readSettings();
+    if (fresh === null) return unread;
+    if (same(defaultEntry(fresh), was)) return { default: "kept" };
+    const out = keepDefault(fresh, beforeText, selected);
+    if (out === null) return theirs(defaultEntry(fresh));
+    const tmp = `${file}.adapter.${process.pid}`;
+    try {
+      writeFileSync(tmp, out, { mode: 0o600 });
+      renameSync(tmp, file);
+    } catch (e) {
+      rmSync(tmp, { force: true });
+      return { default: "changed", why: `the default could not be put back (${e.code || e.message})` };
+    }
+    return { default: "restored" };
+  } finally {
+    closeSync(fd);
+    rmSync(lock, { force: true });
+  }
+}
+
+/** Select one session's model and keep the office's default unless `b.default === true` (A SESSION'S MODEL IS ITS
+ *  OWN). One selection at a time in this process: two overlapping ones would each read the other's model as
+ *  «before», and the last put-back would leave the office on a session's model (the second reader). `call` is the
+ *  harness's RPC. The answer is the route's. */
+let modelTurn = Promise.resolve();
+function selectSessionModel(call, id, b) {
+  const run = modelTurn.then(() => selectOne(call, id, b));
+  modelTurn = run.catch(() => {});
+  return run;
+}
+async function selectOne(call, id, b) {
+  const before = readSettings();
+  const sel = { provider: String(b.provider), model: String(b.model), effort: b.effort ? String(b.effort) : "" };
+  try {
+    await call("session/selectModel", { request: { sessionId: id, provider: b.provider, model: b.model, ...(b.effort ? { reasoningEffort: b.effort } : {}) } });
+  } catch (e) {
+    // the harness may have written the default before it failed or timed out: put it back all the same (the bench's
+    // `finally`), then answer the error as before
+    if (before !== null && b.default !== true) await keepOfficeDefault(before, sel).catch(() => {});
+    throw e;
+  }
+  const kept = before === null ? { default: "unknown", why: "settings.yaml could not be read before the selection" }
+    : await keepOfficeDefault(before, sel, b.default === true);
+  const e = defaultEntry(readSettings() || "");
+  return { id, provider: b.provider, model: b.model, effort: b.effort || null, ...kept,
+    office_default: e ? { provider: e.provider, model: e.model, effort: e.effort || null } : null };
+}
+
+/** Why a cycle may not open on this office now, or null. A settings document that cannot be read
+ *  refuses nothing: the door then behaves as it always did. */
+function sederLocalRefusal() {
+  let text = "";
+  try { text = readFileSync(`${process.env.DSH_HOME || "/data/dsh"}/settings.yaml`, "utf8"); } catch { return null; }
+  const provider = defaultProvider(text);
+  if (!provider.startsWith("dgo-ollama-")) return null;
+  return `מודל ברירת המחדל של הלשכה הוא מודל מקומי (${provider}), וסדר צריך מיומנויות, תקציב וצעדים רבים שמודל `
+    + `מקומי לא נושא — בלשכה של לקוח הוא החזיק את השרת עמוס כ-40 דקות וענה באסימון אחד. הסדרים חוזרים לבד `
+    + `כשמודל ברירת המחדל יהיה מודל שמסוגל להם.`;
+}
+
+// The preset a cycle runs on, named rather than inherited: the `seder` skill lives in this one
+// (harness/profile/agent-presets/azaria/skills/), and the office's DEFAULT preset may be another —
+// tools/llm-routes.mjs makes the lean local one the default while the default model is local, and in the
+// minute after a switch back to DeepSeek, or with its record lost, a cycle that inherited it would be told
+// «load the skill `seder`» by a preset that has none (the second reader of DGO-1741).
+const SEDER_PRESET = "azaria";
+
 /** What a cycle WOULD be — the day, the clock time, the grant, which fire of the day it is, and the
  *  brief it would carry — with nothing opened and no money spent. `startSeder` builds its own answer
  *  from this, so the dry run cannot drift from the real call: one computation, two doors. */
@@ -530,16 +722,127 @@ async function startSeder(cycle, fired) {
   // day's conversations came to be scattered. When the workspace cannot be had (an older harness, a
   // storage fault) the cycle still opens, in the office directory — an unfiled cycle beats no cycle.
   const workspaceId = await sederWorkspaceId().catch(() => undefined);
-  const created = await rpc("session/create", { request: workspaceId ? { workspaceId } : { cwd: OFFICE } });
+  const created = await rpc("session/create",
+    { request: { ...(workspaceId ? { workspaceId } : { cwd: OFFICE }), agentPreset: SEDER_PRESET } });
   const id = created.sessionId;
   await rpc("session/rename", { request: { sessionId: id, title } }).catch(() => {});
   await prompt(id, text, [], false);
   live.refreshList(true);
-  const entry = { cycle, name, day, at, session: id, link: `/#/m/bina?s=${id}`, brief: text, grant };
+  const entry = { cycle, name, day, at, session: id, link: `/#/m/bina?s=${id}`, brief: text, grant, opened: Date.now() };
   sederKeep(sederState(), entry);
   const folder = sederDayPage(entry);
-  notifyOffice(`השעון: סדר ${name} נפתח`, `שיחה חדשה לסדר ${name} (${at}) — ה-${entry.at} היום, תקציב היום ₪${grant.toFixed(2)}.`, entry.link);
+  notifyOffice(`השעון: סדר ${name} נפתח`, `שיחה חדשה לסדר ${name} (${at}) — ה-${entry.at} היום, תקציב היום ₪${grant.toFixed(2)}.`,
+    entry.link, { id: `open:${id}` });
   return [201, { started: true, opened_today: openedToday + 1, grant, folder, ...entry }];
+}
+
+// ── THE SEDER'S WATCH (DGO-582) ───────────────────────────────────────────────────────────────────
+// 2026-10-14: the clock fired, the door opened מנחה, the cycle worked four minutes and died with the
+// container restarted in place — and nobody was told, nothing resumed it, and its page never got a
+// balance. A cycle the clock opened is therefore watched by the door that opened it until it ends WITH
+// its balance — every minute, and 45 s after this door boots, the moment after a restart.
+//
+// TWO DEATHS, BOTH TOLD, NEITHER PUSHED. (1) KILLED WITH THE CONTAINER: this process started after the
+// cycle opened and its page has no balance. The harness restarted with it, so the turn — and every
+// sub-agent it had spawned — is certainly dead; nothing else can be true. That is DGO-582's death: the
+// owner is told (error), once, with the link. It is not pushed on: the owner's ruling of 2026-11-03
+// (DGO-1292) is that no session continues itself — a turn the door sends by itself is one nobody asked
+// for, and it costs money — so going on is his call, from the link. (A record that carries `resumed`
+// was pushed by the first cut of this watch; sederFate still reads it.) (2) STOPPED WITH THIS PROCESS
+// ALIVE and no balance: it may have been cancelled on purpose, closed a partial turn by its skill's
+// own rule, or be waiting for sub-agents — the owner is TOLD once (warning), with the link. It is read only
+// from a session list asked for after this pass began, of a session that is not stale, not running,
+// with no job or queued item, idle past SEDER_IDLE_MS. Only cycles carrying `opened` (since DGO-582)
+// are watched, so a deploy raises no old cycle; BINA_DS_SEDER_WATCH=0 turns the watch off where the
+// data is a copy (a probe, a drill, a restored office).
+const SEDER_GRACE_MS = Number(process.env.BINA_DS_SEDER_GRACE_MS || 3 * 60 * 1000);
+const SEDER_IDLE_MS = Number(process.env.BINA_DS_SEDER_IDLE_MS || 20 * 60 * 1000);
+const SEDER_PENDING = "(נכתב בשלב תיעוד)";
+const SEDER_BALANCE = "## מאזן הסדר";
+const SEDER_ZONE = process.env.BINA_DS_SEDER_TZ || "Asia/Jerusalem";       // the clock's zone, not the container's
+
+/** A cycle's page carries its balance: what follows «## מאזן הסדר» is written and is not the pending
+ *  marker (the reading day-progress.py uses). A page that cannot be read is not balanced. */
+function sederBalanced(pageText) {
+  const at = String(pageText || "").indexOf(SEDER_BALANCE);
+  if (at < 0) return false;
+  const rest = pageText.slice(at + SEDER_BALANCE.length).split("\n## ")[0].trim();
+  return !!rest && !rest.startsWith(SEDER_PENDING);
+}
+
+/** What a watched cycle is now — PURE, so the selfcheck replays it: "balanced", "killed" (this process
+ *  started after the cycle opened, or after its push), "stopped" (idle past the limit while this process
+ *  lives), or "watching" (running, busy, unknown, or not long enough). */
+function sederFate({ opened, resumed, balanced, started, session, listFrom, passFrom, now,
+                     grace = SEDER_GRACE_MS, idle = SEDER_IDLE_MS }) {
+  if (balanced) return "balanced";
+  const since = resumed || opened || 0;
+  if (started > since && now - started >= grace) return "killed";
+  if (!listFrom || listFrom < passFrom || !session || session.stale || session.running) return "watching";
+  if ((session.jobs && session.jobs.length) || (session.queueItems && session.queueItems.length)) return "watching";
+  if (now - Math.max(since, new Date(session.updatedAt || 0).getTime() || 0) < idle) return "watching";
+  return "stopped";
+}
+
+function sederPage(f) {
+  return path.join(OFFICE, "data/bina-ds/sedarim", f.day, `${String(f.at).replace(":", "-")}-${f.cycle}.md`);
+}
+
+function sederPageNote(f, line) {
+  try { appendFileSync(sederPage(f), `\n- ${line}\n`); } catch { /* the notice still goes out */ }
+}
+
+/** Put marks on one fire in the record NOW (re-read, so a cycle the clock opened meanwhile is kept). */
+function sederMark(session, marks) {
+  const latest = sederState();
+  const fires = latest.fires.map((f) => (f && f.session === session ? { ...f, ...marks } : f));
+  try { sederWrite(fires); return true; } catch { return false; }
+}
+
+let sederWatching = false;
+async function sederWatch() {
+  if (sederWatching) return;                       // one pass at a time: a slow list must not run two
+  sederWatching = true;
+  try {
+    const passFrom = Date.now();
+    const open = sederState().fires.filter((f) => f && f.opened && !f.settled);
+    // a cycle watched for two days without an end it could read is not dropped in silence: told once, and left
+    for (const f of open.filter((x) => passFrom - x.opened >= 2 * 86400000)) {
+      if (!sederMark(f.session, { settled: "unknown", reported: passFrom })) continue;
+      notifyOffice(`סדר ${f.name} לא נסגר`, `סדר ${f.name} של ${f.day} ${f.at} לא נגמר במאזן, ובמשך יומיים לא נראה שנעצר או נקטע. `
+        + "הוא כבר לא נבדק; הקישור כאן.", f.link, { id: `unknown:${f.session}`, level: "warning" });
+    }
+    const recent = open.filter((f) => passFrom - f.opened < 2 * 86400000);
+    if (!recent.length) return;
+    // the list is asked for, but a death by restart does not depend on it; a stopped cycle needs a fresh one
+    await live.sessions(true).catch(() => {});
+    for (const f of recent) {
+      let pageText = "";
+      try { pageText = readFileSync(sederPage(f), "utf8"); } catch { /* no page: not balanced */ }
+      const now = Date.now();
+      const fate = sederFate({ opened: f.opened, resumed: f.resumed, balanced: sederBalanced(pageText), started: STARTED,
+        session: live.items.get(f.session), listFrom: live.listFrom, passFrom, now });
+      const when = new Date(now).toLocaleTimeString("he-IL", { timeZone: SEDER_ZONE, hour: "2-digit", minute: "2-digit" });
+      if (fate === "balanced") { sederMark(f.session, { settled: "balanced" }); continue; }
+      if (fate === "killed" || fate === "stopped") {
+        const killed = fate === "killed";                         // no turn is sent either way (DGO-1292)
+        if (!sederMark(f.session, { settled: killed ? "killed" : "stopped", reported: now })) continue;  // told once, on record
+        sederPageNote(f, killed ? `${when} — נקטע בהפעלה מחדש של הלשכה, לפני שנכתב לו מאזן; לא נשלח לו תור.`
+          : `${when} — עומד בלי מאזן (לא רץ, בלי עבודה ברקע); לא נשלח לו תור.`);
+        notifyOffice(killed ? `סדר ${f.name} נקטע בדרך` : `סדר ${f.name} נעצר בלי מאזן`,
+          killed ? `סדר ${f.name} של ${f.day} ${f.at} נקטע כשהלשכה הופעלה מחדש, לפני שנכתב לו מאזן. `
+            + "הלשכה לא ממשיכה שיחה מעצמה; כדי להמשיך אותו, פתחו את הקישור."
+            : `סדר ${f.name} של ${f.day} ${f.at} עומד בלי מאזן ואינו רץ. ייתכן שנעצר בכוונה או סיים מצב חלקי — לא נשלח לו תור; הקישור כאן.`,
+          f.link, { id: `${fate}:${f.session}`, level: killed ? "error" : "warning" });
+      }
+    }
+  } finally {
+    sederWatching = false;
+  }
+}
+
+if (process.env.BINA_DS_SEDER_WATCH !== "0") {
+  setTimeout(() => { sederWatch().catch(() => {}); setInterval(() => sederWatch().catch(() => {}), 60000); }, 45000);
 }
 
 // ── routes ──────────────────────────────────────────────────────────────────────
@@ -601,18 +904,43 @@ async function route(req, res) {
     //     declared n8n workflow sends. A caller that does not name it is refused with the reason, so
     //     an accidental POST reads as a refusal instead of as a 25-minute session.
     const b = await jsonBody(req);
-    if (b.dry_run === true) return [200, { ...(await sederPlan(cycle, b.fired)), dry_run: true }];
+    const refused = sederLocalRefusal();
+    if (b.dry_run === true) {
+      // `would_refuse`, never `started`: a dry run starts nothing and says only that (seder-door-selfcheck.py)
+      return [200, { ...(await sederPlan(cycle, b.fired)), dry_run: true, ...(refused ? { would_refuse: refused } : {}) }];
+    }
     if (String(b.by || "") !== SEDER_DRIVER) {
       throw new Fail(403, "caller",
         `a POST to /v1/seder/${cycle} starts a full autonomous session and spends the day's budget — `
         + `it is for the office's own clock (${SEDER_DRIVER}). A real call names it: {"by": "${SEDER_DRIVER}"}. `
         + `To see what it would do without starting anything: {"dry_run": true}.`);
     }
+    // the clock is who it says it is, and the office's model cannot run a cycle: nothing opens, and the
+    // workflow tells the notice centre the door's own reason (binaSeder00001, «הדלת סירבה»)
+    if (refused) return [200, { started: false, cycle, reason: refused }];
+    // ── THE DAY'S BUDGET IS A CEILING, NOT A LABEL (owner, 2026-11-03) ─────────────────────────
+    // Until today this door read `grant` only to write it into the brief and told the session to
+    // "keep to the day's budget" — nothing compared the grant to what the office had actually spent,
+    // so "₪1 a day" bounded nothing at all. On 2026-11-01 a session that continued itself spent ₪19.10
+    // in one evening and no component in the office was counting money (DGO-1292).
+    // The owner's ruling: **₪1 a day is the ceiling for anything that activates ITSELF**, and a
+    // self-activated session is refused — in words — while that ceiling cannot be proven. A cycle's
+    // spend is measurable only through a meter this app does not have; so with none configured the
+    // door opens nothing. This is a decision, not an omission: turning the office clock back on means
+    // IMPLEMENTING THE METER, not deleting this block.
+    const meter = String(process.env.BINA_DS_SEDER_BUDGET_METER || "").trim();
+    if (meter === "") {
+      throw new Fail(409, "seder-budget",
+        `the day's spend cannot be measured here, so no cycle is opened: a סדר is a full autonomous `
+        + `session and the office's ceiling for anything that activates itself is ₪1/day (the owner, `
+        + `2026-11-03). Wire a meter (BINA_DS_SEDER_BUDGET_METER) that proves today is under the `
+        + `grant, or drive the work yourself from the command forward. Inspection is still free: `
+        + `{"dry_run": true}.`);
+    }
     const [status, body] = await startSeder(cycle, b.fired);
     return [status, body];
   }
   if (!authorized(req)) throw new Fail(401, "auth", "missing or wrong Bearer token");
-
   // ── collections
   if (req.method === "GET" && p === "/v1/sessions") return [200, { sessions: await listSessions(q.get("fresh") === "1"), partial: live.partial }];
   if (req.method === "POST" && p === "/v1/sessions") {
@@ -692,9 +1020,9 @@ async function route(req, res) {
   if (sub === "model" && req.method === "POST") {
     const b = await jsonBody(req);
     if (!b.provider || !b.model) throw new Fail(400, "model", "provider and model are required");
-    await rpc("session/selectModel", { request: { sessionId: id, provider: b.provider, model: b.model, ...(b.effort ? { reasoningEffort: b.effort } : {}) } });
+    const r = await selectSessionModel(rpc, id, b);   // A SESSION'S MODEL IS ITS OWN, above
     live.refreshList(true);
-    return [200, { id, provider: b.provider, model: b.model, effort: b.effort || null }];
+    return [200, r];
   }
   if (sub === "preset" && req.method === "POST") {
     const b = await jsonBody(req);
@@ -719,6 +1047,21 @@ async function route(req, res) {
   throw new Fail(404, "route", `no route ${req.method} ${p}`);
 }
 
+// The follow request the harness takes. `maxMessages` must be a positive integer: the harness refuses 0
+// («maxMessages must be a positive safe integer» — measured on Exampleu's office 2026-11-10, where every
+// `bbox agent new -F` and `follow` without --history died on it). A caller that asked for NO history still gets
+// none: the snapshot of the one message the harness sends is dropped (snapshotRecords).
+function followRequest(address, history, assistantStream) {
+  const asked = Math.max(0, Math.min(500, Math.floor(Number(history) || 0)));
+  return { request: { address, maxMessages: Math.max(1, asked), assistantStream: !!assistantStream } };
+}
+
+// The snapshot's records a caller asked for: none for history 0, else the events after `since`.
+function snapshotRecords(records, history, since) {
+  if (!(Number(history) > 0)) return [];
+  return (records || []).filter((r) => r && r.type === "event" && r.event && r.event.seq > since);
+}
+
 // live events of one session → SSE
 async function follow(res, id, q) {
   const raw = q.get("raw") === "1";
@@ -729,7 +1072,7 @@ async function follow(res, id, q) {
   const done = () => { stream?.cancel(); out.close(); };
   res.on("close", done);
   try {
-    stream = await mux.open("session/follow", { request: { address: address(id), maxMessages: history, assistantStream: true } }, {
+    stream = await mux.open("session/follow", followRequest(address(id), history, true), {
       onItem: (item) => {
         if (raw) { out.send("raw", item, item.event?.seq); return; }
         if (item.type === "event" && item.event) {
@@ -737,7 +1080,7 @@ async function follow(res, id, q) {
           for (const e of normalize(item.event)) out.send(e.type, e, item.event.seq);
         } else if (item.type === "snapshot") {
           // the history the follow request asked for: {header, cursor, records:[{type:"event", event}]}
-          const evs = (item.records || []).flatMap((r) => (r.type === "event" && r.event && r.event.seq > since ? normalize(r.event) : []));
+          const evs = snapshotRecords(item.records, history, since).flatMap((r) => normalize(r.event));
           out.send("snapshot", { id, header: item.header || null, cursor: item.cursor ?? null, events: evs });
         } else if (item.type === "assistant-stream" && item.frame) {
           for (const e of normalizeFrame(item.frame)) out.send(e.type, e);
@@ -762,7 +1105,7 @@ function snapshotEvents(id, history) {
     let stream = null, settled = false;
     const finish = (fn, v) => { if (settled) return; settled = true; clearTimeout(timer); try { stream?.cancel(); } catch {} fn(v); };
     const timer = setTimeout(() => finish(reject, new Fail(504, "snapshot/timeout", "the harness sent no history within 60s")), 60000);
-    mux.open("session/follow", { request: { address: address(id), maxMessages: history, assistantStream: false } }, {
+    mux.open("session/follow", followRequest(address(id), history, false), {
       onItem: (item) => {
         if (item.type !== "snapshot") return;
         finish(resolve, (item.records || []).flatMap((r) => (r.type === "event" && r.event ? normalize(r.event) : [])));

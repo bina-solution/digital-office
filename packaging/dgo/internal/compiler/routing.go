@@ -1,13 +1,14 @@
 package compiler
 
 import (
+	"net"
 	"regexp"
 	"sort"
 	"strconv"
 	"strings"
 
-	"github.com/solomonBoltin/deployment-hacohen/packaging/dgo/internal/pyval"
-	"github.com/solomonBoltin/deployment-hacohen/packaging/dgo/internal/yamlish"
+	"github.com/bina-solution/digital-office/packaging/dgo/internal/pyval"
+	"github.com/bina-solution/digital-office/packaging/dgo/internal/yamlish"
 )
 
 // ── routing.override.yml: the edge's labels and what an app contributes to a base app ─────────────
@@ -74,6 +75,7 @@ func renderRouting(repo string, cat *Catalog, order []string, env *dotenv) (stri
 		if err != nil {
 			return "", err
 		}
+		compiled := 0 // this app's passthroughs so far: their routers are numbered across its routes
 		for _, r := range routes {
 			module, err := dict(get(r, "module"), aid+": routing.module")
 			if err != nil {
@@ -85,11 +87,12 @@ func renderRouting(repo string, cat *Catalog, order []string, env *dotenv) (stri
 				if consoleR == nil || consoleR.Len() == 0 { // `not console_r`: no route, or an empty one
 					return "", &exit{aid + ": module.passthrough requires the console app"}
 				}
-				labels, err := passthroughLabels(aid, r, consoleR, console, env)
+				labels, err := passthroughLabels(aid, r, consoleR, console, env, compiled, appAdmins(doc))
 				if err != nil {
 					return "", err
 				}
 				o.add(either(get(r, "service"), aid), "labels", labels...)
+				compiled += len(pass)
 			}
 			if !truthy(getOr(r, "emit_labels", true)) {
 				continue // the app carries its own labels in its own compose
@@ -101,7 +104,7 @@ func renderRouting(repo string, cat *Catalog, order []string, env *dotenv) (stri
 					return "", err
 				}
 			}
-			labels, err := routingLabels(aid, r, framed, env)
+			labels, err := routingLabels(aid, r, framed, env, appAdmins(doc))
 			if err != nil {
 				return "", err
 			}
@@ -270,8 +273,14 @@ func renderRouting(repo string, cat *Catalog, order []string, env *dotenv) (stri
 // routingLabels is routing_labels(app_id, r, framed): the platform's three routers per host — the
 // `.localhost` one, and the app's own host on web and on websecure with TLS — every one behind the
 // sign-in middleware when the route is `auth: sso`, a fourth for the host the shell frames the app on
-// where its own variable does not already route it, and the service's port.
-func routingLabels(appID string, r *yamlish.Map, framed string, env *dotenv) ([]any, error) {
+// where its own variable does not already route it, the entry's declared `sub_routes` (a PATH whose
+// chain is its own, on this host or on the framed one), and the service's port.
+//
+// The chain a router carries is the platform's sign-in FIRST and the app's own `middlewares` after
+// it (`<name>@docker`, since those are defined on this app's own service labels; a name that already
+// carries a provider is kept as written). reconcile.py's routing_labels says why each half exists.
+// `admins`: the app says `people: admins`, and its sign-in is `authentik-admins@file` (DGO-1755).
+func routingLabels(appID string, r *yamlish.Map, framed string, env *dotenv, admins bool) ([]any, error) {
 	svc := pyval.Str(either(get(r, "service"), appID))
 	name := pyval.Str(either(get(r, "name"), appID))
 	hostv, err := index(r, "host", appID+": routing")
@@ -295,8 +304,78 @@ func routingLabels(appID string, r *yamlish.Map, framed string, env *dotenv) ([]
 		return nil, &exit{appID + ": routing auth '" + pyval.Str(auth) + "' is declared in the schema but not implemented by the " +
 			"label emitter — it would publish an UNAUTHENTICATED route. Use 'sso' or 'none'."}
 	}
+	chain := func(extra []any) ([]string, error) {
+		out := []string{}
+		if sso { // authentik@file: the file provider's middleware, which exists whatever the docker snapshot holds
+			out = append(out, ssoMiddleware(admins))
+		}
+		for _, m := range extra {
+			text, err := asText(m, appID+": routing.middlewares[]")
+			if err != nil {
+				return nil, err
+			}
+			if strings.Contains(text, "@") {
+				// a name carrying its own provider is refused, not passed through: reconcile.py's
+				// routing_labels emits `<name>@docker` and G21 checks the middleware exists
+				return nil, &exit{appID + ": routing middleware '" + text + "' carries its own provider; a declared " +
+					"middleware is one YOUR compose defines on your own service's labels " +
+					"(emitted `<name>@docker`). Name it without the provider."}
+			}
+			out = append(out, text+"@docker")
+		}
+		return out, nil
+	}
+	ownMW, err := list(get(r, "middlewares"), appID+": routing.middlewares")
+	if err != nil {
+		return nil, err
+	}
+	ownChain, err := chain(ownMW)
+	if err != nil {
+		return nil, err
+	}
+	// every certificate this edge serves also PINS https for its host (DGO-1595): a server office only,
+	// and only on the routers that speak TLS. `hsts` is defined in the generated zz-https.yaml on every
+	// office, so the name always resolves — traefik drops a router whose middleware it cannot resolve.
+	// DGO-1557: a host that carries an API rather than a screen. `httpsOnly` drops the plain-http
+	// twin; `publish: domain` renders the public routers only where this office names a real host
+	// (a `.localhost` value is how an office that publishes nothing declares it, and it also keeps a
+	// certresolver off a name no authority can issue for).
+	httpsOnly := truthy(get(r, "https_only"))
+	publish := pyval.Str(getOr(r, "publish", "always"))
+	if publish != "always" && publish != "domain" {
+		return nil, &exit{appID + ": routing publish '" + publish + "' is not one of 'always' | 'domain'."}
+	}
+	published := true
+	if publish == "domain" {
+		hostval := strings.ToLower(strings.TrimSpace(env.value(pyval.Str(either(get(r, "url_env"), baseURLEnv(appID))))))
+		if i := strings.Index(hostval, "//"); i >= 0 {
+			hostval = hostval[i+2:]
+		}
+		hostval = strings.SplitN(hostval, "/", 2)[0]
+		hostval = strings.SplitN(hostval, ":", 2)[0]
+		office := strings.ToLower(strings.TrimSpace(env.domain()))
+		// UNDER THE OFFICE'S OWN NAME, and only that (reconcile.py says why): a dotted name that is
+		// not this office's is not a public name, and a certresolver on it is an ACME loop.
+		published = office != "" && office != "localhost" &&
+			(hostval == office || strings.HasSuffix(hostval, "."+office)) &&
+			!strings.HasSuffix(hostval, ".")
+		if published {
+			if net.ParseIP(hostval) != nil {
+				published = false
+			}
+		}
+	}
+	srv := serverOffice(env)
+	mwFor := func(tls bool) []string {
+		if tls && srv {
+			return append(append([]string{}, ownChain...), "hsts@file")
+		}
+		return ownChain
+	}
+	var wantMW []string
 	labels := []any{"traefik.enable=true"}
 	router := func(suffix, rule, entry string, tls bool) {
+		wantMW = mwFor(tls)
 		p := "traefik.http.routers." + name + "-" + suffix
 		labels = append(labels, p+".rule="+rule, p+".entrypoints="+entry)
 		if tls {
@@ -305,15 +384,99 @@ func routingLabels(appID string, r *yamlish.Map, framed string, env *dotenv) ([]
 			labels = append(labels, p+".tls=true", p+".tls.certresolver=${TRAEFIK_CERTRESOLVER-myresolver}")
 		}
 		labels = append(labels, p+".service="+svc)
-		if sso { // authentik@file: the file provider's middleware, which exists whatever the docker snapshot holds
-			labels = append(labels, p+".middlewares=authentik@file")
+		if len(wantMW) > 0 {
+			labels = append(labels, p+".middlewares="+strings.Join(wantMW, ","))
 		}
 	}
-	router("local", "Host(`"+host+".localhost`)", "web", false)
-	router("http", "Host(`"+hostEnv+"`)", "web", false)
-	router("https", "Host(`"+hostEnv+"`)", "websecure", true)
-	if framed != "" && !ownRouteHosts(appID, r, env)[framed] {
+	// a `.localhost` twin is the LAPTOP's door; on a server office an https_only host keeps none
+	// (plain HTTP on port 80, and a spoofed Host: header reaches it from the internet)
+	if !(httpsOnly && srv) {
+		router("local", "Host(`"+host+".localhost`)", "web", false)
+	}
+	if published && !httpsOnly {
+		router("http", "Host(`"+hostEnv+"`)", "web", false)
+	}
+	if published {
+		router("https", "Host(`"+hostEnv+"`)", "websecure", true)
+	}
+	framedRouted := framed != "" && !ownRouteHosts(appID, r, env)[framed]
+	if framedRouted {
 		router("frame", "Host(`"+framed+"`)", "web", false)
+	}
+
+	// Path-scoped sub-routers: a longer rule already outranks the plain one, and `priority` says it
+	// out loud so a new twin cannot quietly change the answer.
+	subs, err := dicts(get(r, "sub_routes"), appID+": routing.sub_routes")
+	if err != nil {
+		return nil, err
+	}
+	for _, sub := range subs {
+		sname := ""
+		if v := get(sub, "name"); !truthy(v) {
+			return nil, &exit{appID + ": routing sub_route without 'name' — every sub_route needs a 'name' " +
+				"(its router suffix) and a 'path' (its PathPrefix)."}
+		} else if sname, err = asText(v, appID+": routing.sub_routes[].name"); err != nil {
+			return nil, err
+		}
+		var path string
+		if v := get(sub, "path"); !truthy(v) {
+			return nil, &exit{appID + ": routing sub_route without 'path' — every sub_route needs a 'name' " +
+				"(its router suffix) and a 'path' (its PathPrefix)."}
+		} else if path, err = asText(v, appID+": routing.sub_routes[].path"); err != nil {
+			return nil, err
+		}
+		on := pyval.Str(getOr(sub, "on", "host"))
+		if on != "host" && on != "framed" {
+			return nil, &exit{appID + ": routing sub_route '" + sname + "' declares on='" + on + "'; only 'host' (this " +
+				"entry's own host) or 'framed' (the host the shell frames it at) are emitted."}
+		}
+		if on == "framed" && !framedRouted {
+			continue // only an office that frames the app at a nested host has that host
+		}
+		subMW, err := list(get(sub, "middlewares"), appID+": routing.sub_routes[].middlewares")
+		if err != nil {
+			return nil, err
+		}
+		subChain, err := chain(subMW)
+		if err != nil {
+			return nil, err
+		}
+		// `python: sub.get("priority") is not None` — a key that is there with a null is not a priority
+		priority := get(sub, "priority")
+		if _, present := sub.Get("priority"); !present {
+			priority = nil
+		}
+		subRouter := func(suffix, rule, entry string, tls bool) {
+			p := "traefik.http.routers." + name + "-" + sname
+			if suffix != "" {
+				p += "-" + suffix
+			}
+			labels = append(labels, p+".rule="+rule+" && PathPrefix(`"+path+"`)", p+".entrypoints="+entry)
+			if tls {
+				labels = append(labels, p+".tls=true", p+".tls.certresolver=${TRAEFIK_CERTRESOLVER-myresolver}")
+			}
+			if priority != nil {
+				labels = append(labels, p+".priority="+pyval.Str(priority))
+			}
+			labels = append(labels, p+".service="+svc)
+			mids := subChain
+			if tls && srv { // hsts pins a CERTIFICATE's host: the https twin of this path only
+				mids = append(append([]string{}, subChain...), "hsts@file")
+			}
+			if len(mids) > 0 {
+				labels = append(labels, p+".middlewares="+strings.Join(mids, ","))
+			}
+		}
+		if on == "host" {
+			subRouter("local", "Host(`"+host+".localhost`)", "web", false)
+			subRouter("http", "Host(`"+hostEnv+"`)", "web", false)
+			subRouter("https", "Host(`"+hostEnv+"`)", "websecure", true)
+		} else {
+			// the framed host answers on `web` alone (the frame router is web-only; on an https office
+			// the shell frames the app at its own host instead), so an `-https` twin would be a router
+			// no request can reach — reconcile.py's routing_labels says the same in one comment
+			subRouter("", "Host(`"+framed+"`)", "web", false)
+		}
 	}
 	return append(labels, "traefik.http.services."+svc+".loadbalancer.server.port="+pyval.Str(port)), nil
 }
@@ -432,8 +595,22 @@ func ownRouteHosts(appID string, r *yamlish.Map, env *dotenv) map[string]bool {
 // passthroughLabels is console_passthrough_labels(): direct edge routes for the transports the
 // console's proxy cannot carry (a websocket), on the console's own hosts — under the app's /a/<alias>
 // mount with the prefix stripped, or at the console's root for a `mount: root` path, carved out of the
-// paths the console reserves — always behind the sign-in middleware.
-func passthroughLabels(appID string, r, consoleR, console *yamlish.Map, env *dotenv) ([]any, error) {
+// paths the console reserves — always behind the sign-in middleware. first is the number of the app's
+// passthroughs compiled from its earlier routes: the routers are numbered across all of them, so two
+// tiles of one app never share a name that traefik would drop from both (DGO-1626).
+// ssoMiddleware is reconcile.py's sso_middleware: the office's sign-in in front of a signed-in route, and for an
+// app whose app.json says `people: admins` the one that also refuses a person who is not an admin (DGO-1755).
+func ssoMiddleware(admins bool) string {
+	if admins {
+		return "authentik-admins@file"
+	}
+	return "authentik@file"
+}
+
+// appAdmins is reconcile.py's app_admins: the app is the office's admins' alone (`people: admins`).
+func appAdmins(doc *yamlish.Map) bool { return pyEqual(get(doc, "people"), "admins") }
+
+func passthroughLabels(appID string, r, consoleR, console *yamlish.Map, env *dotenv, first int, admins bool) ([]any, error) {
 	module, _ := dict(get(r, "module"), appID+": routing.module")
 	specs, _ := list(get(module, "passthrough"), appID+": module.passthrough")
 	if !truthy(getOr(module, "embed", true)) {
@@ -484,7 +661,7 @@ func passthroughLabels(appID string, r, consoleR, console *yamlish.Map, env *dot
 		if err != nil {
 			return nil, err
 		}
-		route := appID + "-console-" + pyval.Str(transport) + "-" + itoa(i)
+		route := appID + "-console-" + pyval.Str(transport) + "-" + itoa(first+i)
 		root := pyEqual(getOr(spec, "mount", "alias"), "root")
 		path, err := index(spec, "path", appID+": module.passthrough")
 		if err != nil {
@@ -508,7 +685,7 @@ func passthroughLabels(appID string, r, consoleR, console *yamlish.Map, env *dot
 			labels = append(labels, "traefik.http.middlewares."+strip+".stripprefix.prefixes=/a/"+pyval.Str(alias))
 			middlewares = append(middlewares, strip)
 		}
-		middlewares = append(middlewares, "authentik@file")
+		middlewares = append(middlewares, ssoMiddleware(admins)) // an admins' app is theirs on the console's host too
 		for _, rt := range []struct {
 			suffix, host, entry string
 			tls                 bool

@@ -77,3 +77,14 @@ One drawing, two colourways, each used on the surface it contrasts with:
 - **Previews:** `final/previews/` holds the console, the site header and the site footer.
 - **Versions:** `final/oldstyle-versions.png` shows the 20 versions this pair was chosen from; the
   tools are `tools/oldstyle.py` and `old_render.py`.
+
+## The wall (DGO-1501)
+
+The owner chose a wall of versions with no scores — the hundred of 2026-09-25 17:58 (`selected_preview.png`
+in the logo story, DGO-1451) — as the background of the sign-in app and of the office's card «it has nothing
+to show». That picture was a screenshot from a folder that is gone, so `tools/wall.py fit` found each of its
+100 tiles again with `iomark.Design`. The record is `wall/wall100.json`: per-tile raster IoU mean 0.9994, 98
+of 100 at 0.99 or more, the lowest 0.9755. `tools/wall.py svg` draws it as
+`platform-base/bina-ui/brand/bina-wall.svg`: one evenodd path per tile, shapes only and no colour, so a screen
+paints it with the palette through a mask (`platform-base/bina-ui/bina-card.css`). Chrome's render of that file
+against the original PNG gives a median tile IoU of 0.9939.

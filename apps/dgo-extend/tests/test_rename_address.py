@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""test_rename_address — the pieces of FPG-34 that run as shell: the `accounts` step's detached script, the
+"""test_rename_address — the pieces of EXF-34 that run as shell: the `accounts` step's detached script, the
 ledger the hooks keep (scripts/lib.sh rename_note), the key reader and the key writer (read_env_value,
 env_set), and connections' verdict over the ledger — each run for real, in bash, in a scratch folder.
 

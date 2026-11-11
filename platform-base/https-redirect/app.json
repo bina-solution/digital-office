@@ -1,0 +1,37 @@
+{
+  "id": "https-redirect",
+  "title": {
+    "he": "הפניה ל-HTTPS",
+    "en": "HTTPS redirect"
+  },
+  "layer": 2,
+  "kind": "service",
+  "page": "base",
+  "version": "1.0.0",
+  "summary": {
+    "he": "פורט 80 עונה 308 ל-https בלשכת שרת — ולא מגיש תוכן",
+    "en": "Port 80 answers 308 to https on a server office — and serves nothing"
+  },
+  "use": [],
+  "compose": "docker-compose.yml",
+  "agent": {
+    "context": "AGENT.md",
+    "order": 46
+  },
+  "health": {
+    "structural": "auto",
+    "probe": {
+      "http": "http://127.0.0.1:8079/healthz",
+      "interval": "30s"
+    }
+  },
+  "data": {
+    "volumes": [],
+    "on_uninstall": "keep"
+  },
+  "resources": {
+    "cpus": "0.2",
+    "memory": "64m"
+  },
+  "progress_deadline_seconds": 120
+}

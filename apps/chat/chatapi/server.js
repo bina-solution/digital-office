@@ -17,7 +17,7 @@ const adapters = require('./adapters');
 const cc = require('./connections_client');
 const bots = require('../bots/chat_bot');
 const { ProfileStore } = require('./engine/profiles');
-const { makeAuth, keyFrom } = require('./engine/auth');
+const { makeAuth, makeKeyGuard, keyFrom } = require('./engine/auth');
 const engineRoutes = require('./engine/routes');
 // Memory storage: an attachment's bytes go straight to the engine's object store, so a temp
 // file on this container's disk would only be something to clean up. 50MB matches the relay's
@@ -80,9 +80,9 @@ function register(app, isAuthenticated, opts = {}) {
    * session and no business getting one — without this it is answered with a 401 or a 302 to
    * /login, which reads as "the service is down" to anything that is not a browser.
    *
-   * The key is not TRUSTED here — it is only a reason to proceed. `withActor` then resolves it by
-   * hash and refuses anything it does not recognise, so a bogus key buys a 401 rather than a way
-   * past the session guard, and a real one can still only ever act as its own profile.
+   * Here the key is not TRUSTED — it is only a reason to proceed: every route behind `guard` calls
+   * `withActor`, which resolves it by hash and refuses anything it does not recognise, and a real one
+   * can only ever act as its own profile (a non-admin's key reads its own conversations).
    */
   const guard = (req, res, next) => (keyFrom(req) ? next() : sessionGuard(req, res, next));
 
@@ -90,6 +90,14 @@ function register(app, isAuthenticated, opts = {}) {
   // share ONE store — two would eventually disagree about who is an admin.
   const profiles = opts.profiles || new ProfileStore();
   adapters.useProfiles(profiles);                 // one store, so ops and routes cannot disagree
+  /**
+   * THE FIFTEEN ROUTES WITH NO `withActor` — WhatsApp accounts, bots' settings, connections — resolve a
+   * key here instead (engine/auth.js makeKeyGuard): only an active ADMIN's profile key passes (unknown
+   * 401, inactive or not an admin 403, a store that cannot answer 503); no key → the session guard.
+   * They used `guard`, so any `Authorization: Bearer x` opened them
+   * (issues/chat-opens-fifteen-routes-to-any-key-shaped-header-and-never-checks-the-key.yaml).
+   */
+  const adminKeyGuard = makeKeyGuard({ profiles, sessionGuard });
   const auth = makeAuth({ profiles, cc });
   const { withActor } = auth;
 
@@ -157,7 +165,7 @@ function register(app, isAuthenticated, opts = {}) {
   });
 
   // ── accounts (connections) ─────────────────────────────────────────────────
-  app.get('/api/accounts', guard, async (req, res) => {
+  app.get('/api/accounts', adminKeyGuard, async (req, res) => {
     try {
       const { instances, reachable, error } = await allInstances();
       const activeId = await defaultConnection();
@@ -176,7 +184,7 @@ function register(app, isAuthenticated, opts = {}) {
     } catch (e) { onAdapterError(res, e); }
   });
 
-  app.post('/api/account/select', guard, async (req, res) => {
+  app.post('/api/account/select', adminKeyGuard, async (req, res) => {
     try {
       const id = (req.body && req.body.id) || null;
       const { instances } = await allInstances();
@@ -252,7 +260,7 @@ function register(app, isAuthenticated, opts = {}) {
   // ONE handler on TWO paths: /api/chat-providers is what the chat client calls (the sim's mock
   // named it), /providers is what the console's connect wizard calls on every platform-service.v1
   // app. Same body, so the two surfaces cannot disagree about which providers exist.
-  app.get(['/api/chat-providers', '/providers'], guard, (req, res) => {
+  app.get(['/api/chat-providers', '/providers'], adminKeyGuard, (req, res) => {
     res.json({ providers: cc.PROTOCOLS.map((p) => PROVIDERS[p]).filter(Boolean) });
   });
 
@@ -264,7 +272,7 @@ function register(app, isAuthenticated, opts = {}) {
    * no secret to forward, so it is refused HERE with the place that owns it named, rather than being
    * passed on to produce the vault's generic "a non-empty secret{} is required".
    */
-  app.post('/api/account/add', guard, async (req, res) => {
+  app.post('/api/account/add', adminKeyGuard, async (req, res) => {
     const b = req.body || {};
     const { protocol, label } = b;
     if (!protocol || !label) return res.status(400).json({ ok: false, error: 'protocol and label required' });
@@ -307,7 +315,7 @@ function register(app, isAuthenticated, opts = {}) {
    * account the operator believes they removed), and the cached backend is dropped — it holds live
    * sockets against a credential that no longer exists, and the id can be reused by a later instance.
    */
-  app.delete('/api/account/:id', guard, async (req, res) => {
+  app.delete('/api/account/:id', adminKeyGuard, async (req, res) => {
     const id = req.params.id;
     // A local instance is a PROFILE. Deleting it is DELETE /engine/profiles/<id>, which is
     // admin-ringed, keeps the person's history and drops the credential — none of which this route
@@ -339,7 +347,7 @@ function register(app, isAuthenticated, opts = {}) {
    * forwarding the backend's 503 here would make an operator's health check read as an outage of
    * this route.
    */
-  app.get('/api/account/:id/probe', guard, async (req, res) => {
+  app.get('/api/account/:id/probe', adminKeyGuard, async (req, res) => {
     const id = req.params.id;
     try {
       const { instances } = await allInstances();
@@ -359,7 +367,7 @@ function register(app, isAuthenticated, opts = {}) {
   });
 
   // ── bots ───────────────────────────────────────────────────────────────────
-  app.get('/api/bots', guard, (req, res) => res.json({ bots: bots.listBots() }));
+  app.get('/api/bots', adminKeyGuard, (req, res) => res.json({ bots: bots.listBots() }));
 
   // Settings are per (connection, bot): the same bot on a public WhatsApp number and on internal local
   // chat is doing two different jobs. The connection therefore has to be part of every settings call,
@@ -367,7 +375,7 @@ function register(app, isAuthenticated, opts = {}) {
   const forConn = async (req) => (req.body && req.body.connection_id) || req.query.connection_id
     || await defaultConnection();
 
-  app.get('/api/bots/:id/settings', guard, async (req, res) => {
+  app.get('/api/bots/:id/settings', adminKeyGuard, async (req, res) => {
     try {
       const schema = bots.settingsSchema(req.params.id);
       if (!bots.getBot(req.params.id)) return res.status(404).json({ error: `unknown bot ${req.params.id}` });
@@ -376,7 +384,7 @@ function register(app, isAuthenticated, opts = {}) {
     } catch (e) { onAdapterError(res, e); }
   });
 
-  app.put('/api/bots/:id/settings', guard, async (req, res) => {
+  app.put('/api/bots/:id/settings', adminKeyGuard, async (req, res) => {
     try {
       const cid = await forConn(req);
       const values = (req.body && req.body.settings) || {};
@@ -397,7 +405,7 @@ function register(app, isAuthenticated, opts = {}) {
    *
    * `{keys:[...]}` resets those fields; no body resets the whole (connection, bot) pair.
    */
-  app.delete('/api/bots/:id/settings', guard, async (req, res) => {
+  app.delete('/api/bots/:id/settings', adminKeyGuard, async (req, res) => {
     try {
       const cid = await forConn(req);
       const keys = (req.body && req.body.keys) || null;
@@ -407,7 +415,7 @@ function register(app, isAuthenticated, opts = {}) {
     } catch (e) { onAdapterError(res, e); }
   });
 
-  app.post('/api/account/bot', guard, async (req, res) => {
+  app.post('/api/account/bot', adminKeyGuard, async (req, res) => {
     try {
       const id = (req.body && req.body.id) || await defaultConnection();
       const bot = req.body && req.body.bot;
@@ -866,7 +874,7 @@ function register(app, isAuthenticated, opts = {}) {
   //
   // /api/* stays: the chat client is built on it, and the sim's mock defined those paths.
 
-  app.get('/connections', guard, async (req, res) => {
+  app.get('/connections', adminKeyGuard, async (req, res) => {
     try {
       const { instances, reachable, error } = await allInstances();
       res.json({
@@ -886,7 +894,7 @@ function register(app, isAuthenticated, opts = {}) {
     } catch (e) { onAdapterError(res, e); }
   });
 
-  app.post('/connections/select', guard, async (req, res) => {
+  app.post('/connections/select', adminKeyGuard, async (req, res) => {
     try {
       const id = (req.body && req.body.id) || null;
       const { instances } = await allInstances();
@@ -897,7 +905,7 @@ function register(app, isAuthenticated, opts = {}) {
     } catch (e) { onAdapterError(res, e); }
   });
 
-  app.post('/connections', guard, async (req, res) => {
+  app.post('/connections', adminKeyGuard, async (req, res) => {
     try {
       const b = req.body || {};
       const protocol = String(b.protocol || '').trim();
@@ -920,7 +928,7 @@ function register(app, isAuthenticated, opts = {}) {
     }
   });
 
-  app.delete('/connections/:id', guard, async (req, res) => {
+  app.delete('/connections/:id', adminKeyGuard, async (req, res) => {
     const id = req.params.id;
     const owned = await profiles.byInstance(id).catch(() => null);
     if (owned) {

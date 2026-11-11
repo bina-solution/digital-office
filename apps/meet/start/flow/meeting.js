@@ -1,24 +1,42 @@
 /* «פגישות» — meeting.js: ONE address for a meeting's whole life (…/flow/<room>/). Before it starts: what is left
    open from the meeting before it, and the way in. While it runs: what is being said, as it is said, and a button to
-   mark a moment. The moment it ends: its recording and its captions. After processing: every word, who said it,
-   what was decided and who does what — each on the one time axis, each a click from its moment. */
+   mark a moment. The moment it ends: its recording, and a status line that says what is being done to it, how far it
+   is and when it ends. After processing: every word, who said it, what was decided and who does what — each on the
+   one time axis, each a click from its moment.
+   The layout (DGO-1325, the owner 2026-11-03: «עיצוב הרבה יותר אסוף ומקצועי … לחשוב מחדש על כל הארגון של הממשק»):
+   a one-row header, the status line (status.js) under it, then two panes — the screen with its transport and axis,
+   and the parts of the meeting in five tabs. On a wide screen the panes stand side by side with a divider that
+   drags; on a phone the second is a bottom sheet (sheet.js) over the screen, with three snaps. */
 (() => {
   "use strict";
   const MF = window.MF;
+  // five tabs fit a phone's 390 px; «עבודה» and «עוד» hold more than one view, chosen under the tab bar
+  const GROUPS = [
+    ["tr", "תמלול", ["tr"]],
+    ["ov", "סקירה", ["ov"]],
+    ["work", "עבודה", ["decision", "task", "question"]],
+    ["sc", "מסכים", ["sc"]],
+    ["more", "עוד", ["tl", "files", "hist"]],
+  ];
+  const VIEW = { tr: "תמלול", ov: "סקירה", decision: "החלטות", task: "משימות", question: "שאלות", sc: "מסכים", tl: "ציר זמן", files: "קבצים", hist: "יומן" };
+  const ALL_VIEWS = Object.keys(VIEW);
+  const groupOf = (k) => (GROUPS.find((g) => g[2].includes(k)) || GROUPS[0]);
+  const SIDE_MIN = 320, SIDE_MAX = 720;
 
-  MF.Meeting = function Meeting(app, where) {
+  MF.Meeting = function Meeting(app, where0) {
+    let where = where0;
     const { esc, ic, fmt } = MF;
     const room = where.room;
     const api = (p) => `flow/${encodeURIComponent(room)}/${p}`;
     const offs = [], timers = [];
     const on = (el, ev, fn, o) => { el.addEventListener(ev, fn, o); offs.push(() => el.removeEventListener(ev, fn, o)); };
     let info = null, M = null, stage = null, tr = null, lists = {}, files = null, items = {}, edits = {}, uploads = [], dead = false;
-    let versions = {}, whoEdits = {}, screens = null;    // CHAT-63: every correction of a line; a line's corrected speaker
+    let versions = {}, whoEdits = {}, screens = null, sheet = null, view = "tr", stepsOpen = false;
     let hue = MF.people({});
     const isPhone = () => window.matchMedia("(max-width: 899px)").matches;
     document.title = `${room} · פגישות`;
 
-    app.innerHTML = `<div class="mf-mtg" data-state="loading"><header class="mf-mh"><a class="mf-back" href="${esc(MF.url("flow/"))}" data-go>${ic("chevronR")}<span>פגישות</span></a><div class="mf-mh-t"><h1><bdi>${esc(room)}</bdi></h1><div class="mf-mh-meta"><span class="mf-skel w8"></span></div></div></header><div class="mf-loading" role="status"><span class="mf-spin"></span><span>טוען את הפגישה…</span></div></div>`;
+    app.innerHTML = `<div class="mf-mtg" data-state="loading"><header class="mf-mh"><a class="mf-back" href="${esc(MF.url("flow/"))}" data-go title="כל הפגישות">${ic("chevronR")}<span>פגישות</span></a><div class="mf-mh-t"><h1><bdi>${esc(room)}</bdi></h1></div></header><div class="mf-loading" role="status"><span class="mf-spin"></span><span>טוען את הפגישה…</span></div></div>`;
 
     /* ---------- loading ---------- */
     async function load() {
@@ -28,57 +46,100 @@
       document.title = `${info.title || room} · פגישות`;
       if (info.state === "before") return renderBefore();
       if (info.state === "live") return renderLive();
-      if (!info.data) return fail(new MF.Error(404, "לפגישה הזו עוד אין נתונים"));
-      try {
-        const [m, ed, it] = await Promise.all([
-          MF.loadData(info.data),
-          MF.api(api("edits")).catch(() => ({ edits: [] })),
-          MF.api(api("items")).catch(() => ({ items: {} })),
-        ]);
-        M = m; items = (it && it.items) || {};
-        edits = {}; versions = {}; whoEdits = {};
-        for (const e of (ed && ed.edits) || []) {
-          if (e.kind === "line") { edits[e.target] = e; (versions[e.target] = versions[e.target] || []).push(e); }
-          else if (e.kind === "speaker" && e.after) whoEdits[e.target] = e;
-        }
-        for (const [k, e] of Object.entries(edits)) if (e.after === e.before) delete edits[k];
-        // a corrected speaker is the line's speaker everywhere: the transcript, the axis, who talked how much
-        for (const x of (M.turns || []).concat(M.tail || [])) { const w = whoEdits[x.id]; if (w && w.after !== x.who) { x.whoWas = x.who; x.who = w.after; } }
-        if (!Array.isArray(M.moments)) M.moments = MF.moments ? MF.moments(M.turns) : [];
-        try { const u = await MF.api(api("uploads")); uploads = (u && u.uploads) || []; } catch (e) { uploads = []; }
-      } catch (e) { return fail(e); }
+      if (!info.data) return renderNoData();
+      try { await loadData(); } catch (e) { return fail(e); }
       if (dead) return;
-      hue = MF.people(M.colors);
       renderFull();
+    }
+    async function loadData() {
+      const [m, ed, it] = await Promise.all([
+        MF.loadData(info.data),
+        MF.api(api("edits")).catch(() => ({ edits: [] })),
+        MF.api(api("items")).catch(() => ({ items: {} })),
+      ]);
+      M = m; items = (it && it.items) || {};
+      edits = {}; versions = {}; whoEdits = {};
+      for (const e of (ed && ed.edits) || []) {
+        if (e.kind === "line") { edits[e.target] = e; (versions[e.target] = versions[e.target] || []).push(e); }
+        else if (e.kind === "speaker" && e.after) whoEdits[e.target] = e;
+      }
+      for (const [k, e] of Object.entries(edits)) if (e.after === e.before) delete edits[k];
+      // a corrected speaker is the line's speaker everywhere: the transcript, the axis, who talked how much
+      for (const x of (M.turns || []).concat(M.tail || [])) { const w = whoEdits[x.id]; if (w && w.after !== x.who) { x.whoWas = x.who; x.who = w.after; } }
+      if (!Array.isArray(M.moments)) M.moments = MF.moments ? MF.moments(M.turns) : [];
+      try { const u = await MF.api(api("uploads")); uploads = (u && u.uploads) || []; } catch (e) { uploads = []; }
+      hue = MF.people(M.colors);
     }
     function fail(e) {
       if (dead) return;
-      app.querySelector(".mf-loading").outerHTML = `<div class="mf-fail callout warn"><b>${esc(e.code === 404 ? "הפגישה לא נמצאה" : "הפגישה לא נטענה")}</b><p>${esc(e.message || "")}</p><p><a class="btn sm ghost" href="${esc(MF.url("flow/"))}" data-go>חזרה לפגישות</a> <button class="btn sm" type="button" data-retry>לנסות שוב</button></p></div>`;
+      const box = app.querySelector(".mf-loading") || app.querySelector(".mf-mtg");
+      const html = `<div class="mf-fail callout warn"><b>${esc(e.code === 404 ? "הפגישה לא נמצאה" : "הפגישה לא נטענה")}</b><p>${esc(e.message || "")}</p><p><a class="btn sm ghost" href="${esc(MF.url("flow/"))}" data-go>חזרה לפגישות</a> <button class="btn sm" type="button" data-retry>לנסות שוב</button></p></div>`;
+      if (box.classList.contains("mf-loading")) box.outerHTML = html; else box.insertAdjacentHTML("beforeend", html);
       app.querySelector("[data-retry]").onclick = () => MF.render();
     }
 
-    /* ---------- the header and the ribbon of stages (the same for every state) ---------- */
+    /* ---------- the header (one row) and the status line (the same for every state) ---------- */
     function head(extraActs) {
       const st = info.state, people = info.people || [];
       const when = info.started_ts ? `${MF.day(info.started_ts)} · ${MF.clock(info.started_ts)}` : "";
       const len = info.started_ts && info.ended_ts ? MF.fmtLen(info.ended_ts - info.started_ts) : "";
       const hostUrl = MF.url("r/" + encodeURIComponent(room));
       const join = st === "before" || st === "live" ? `<a class="btn" href="${esc(hostUrl)}" target="_blank" rel="noopener" title="פתיחת הפגישה בחלון חדש">${ic("video")}<span>${st === "live" ? "הצטרפות לפגישה" : "התחלת הפגישה"}</span></a>` : "";
+      const title = info.title || room;
       return `<header class="mf-mh">
-        <a class="mf-back" href="${esc(MF.url("flow/"))}" data-go title="כל הפגישות">${ic("chevronR")}<span>פגישות</span></a>
-        <div class="mf-mh-t"><h1><bdi>${esc(info.title || room)}</bdi></h1>
-          <div class="mf-mh-meta">${MF.statePill(st)}${when ? `<span>${esc(when)}</span>` : ""}${len ? `<span>${esc(len)}</span>` : ""}${people.length ? `<span class="mf-people">${people.slice(0, 6).map((p) => MF.avatar(p, hue(p))).join("")}<span class="mf-people-n">${esc(people.slice(0, 3).join(", "))}${people.length > 3 ? ` +${people.length - 3}` : ""}</span></span>` : ""}</div></div>
-        <div class="mf-mh-acts">${join}${extraActs || ""}<button class="btn ghost" type="button" data-share title="להעתיק את הקישור לפגישה">${ic("share")}<span>שיתוף</span></button></div>
-      </header>${ribbon()}`;
+        <a class="mf-back" href="${esc(MF.url("flow/"))}" data-go title="כל הפגישות" aria-label="כל הפגישות">${ic("chevronR")}<span>פגישות</span></a>
+        <div class="mf-mh-t"><h1 title="${esc(title)}">${esc(title)}</h1>
+          <div class="mf-mh-meta">${when ? `<span>${esc(when)}</span>` : ""}${len ? `<span>${esc(len)}</span>` : ""}${people.length ? `<span class="mf-people">${people.slice(0, 6).map((p) => MF.avatar(p, hue(p))).join("")}<span class="mf-people-n">${esc(people.slice(0, 3).join(", "))}${people.length > 3 ? ` +${people.length - 3}` : ""}</span></span>` : ""}</div></div>
+        <div class="mf-mh-acts">${join}${extraActs || ""}<button class="btn ghost" type="button" data-share title="להעתיק את הקישור לפגישה" aria-label="שיתוף">${ic("share")}<span>שיתוף</span></button></div>
+      </header>
+      <div class="mf-statusbox">${statusHtml()}</div>`;
     }
-    function ribbon() {
-      const s = info.stages || [];
-      if (!s.length) return "";
-      return `<ol class="mf-ribbon" aria-label="שלבי העיבוד">${s.map((x) => `<li data-st="${esc(x.state)}" title="${esc((MF.STAGE_STATE[x.state] || x.state) + (x.detail ? " — " + x.detail : ""))}"><i aria-hidden="true">${x.state === "done" ? ic("tick") : x.state === "running" ? '<span class="mf-spin sm"></span>' : x.state === "failed" ? ic("x") : ""}</i><span>${esc(MF.STAGE[x.key] || x.key)}</span></li>`).join("")}</ol>`;
+    const TONE_IC = { spin: '<span class="mf-spin sm"></span>', live: '<i class="mf-pulse"></i>', check: "check", alert: "alert", clock: "clock", user: "user" };
+    function statusHtml() {
+      const s = MF.status(info, Date.now() / 1000);
+      const icn = TONE_IC[s.icon] || "clock";
+      return `<button class="mf-status" type="button" data-tone="${esc(s.tone)}" aria-expanded="${stepsOpen}" aria-controls="mf-steps" title="מה קורה עכשיו לפגישה — לחיצה מציגה את כל השלבים">
+          <span class="mf-status-ic" aria-hidden="true">${icn.startsWith("<") ? icn : ic(icn)}</span>
+          <span class="mf-status-t">${esc(s.text)}${s.sub ? `<span class="mf-status-sub"> · ${esc(s.sub)}</span>` : ""}</span>
+          ${s.num ? `<b class="mf-status-n">${esc(s.num)}</b>` : ""}${ic("chevronD", "mf-status-caret")}
+          ${s.pct != null ? `<i class="mf-status-bar" style="--p:${s.pct}%" aria-hidden="true"></i>` : ""}
+        </button>
+        <div class="mf-steps" id="mf-steps" role="region" aria-label="שלבי העיבוד"${stepsOpen ? "" : " hidden"}>${stepsHtml(s.steps)}</div>`;
+    }
+    function stepsHtml(steps) {
+      const now = Date.now() / 1000;
+      return `<ol class="mf-stages">${steps.map((x) => {
+        const extra = [x.detail, x.state === "running" && x.eta ? `צפוי ~${MF.atClock(x.eta, now)}` : "", x.state === "waiting" && x.eta ? `צפוי להסתיים ~${MF.atClock(x.eta, now)}` : ""].filter(Boolean).join(" · ");
+        return `<li data-st="${esc(x.state)}"><i aria-hidden="true">${x.state === "done" ? ic("tick") : x.state === "running" ? '<span class="mf-spin sm"></span>' : x.state === "failed" ? ic("x") : ""}</i>
+          <div><b>${esc(x.he)}</b><span class="mf-stage-w">${esc(x.word)}</span>${extra ? `<span class="mf-stage-d">${esc(extra)}</span>` : ""}${x.why && x.state !== "done" ? `<span class="mf-stage-why">${esc(x.why)}</span>` : ""}
+          ${x.state === "running" && x.pct != null ? `<span class="mf-bar"><i style="--p:${Math.max(0, Math.min(100, x.pct))}%"></i></span>` : ""}</div></li>`;
+      }).join("")}</ol>`;
     }
     function bindHead(root) {
       const sh = root.querySelector("[data-share]");
       if (sh) sh.onclick = () => MF.copy(location.origin + MF.roomUrl(room) + (stage && stage.t > 1 ? "#t" + Math.floor(stage.t) : ""), stage && stage.t > 1 ? `הקישור הועתק — נפתח ב-${fmt(stage.t)}` : "הקישור לפגישה הועתק");
+      bindStatus(root);
+      on(document, "click", (e) => { if (stepsOpen && !(e.target.closest && e.target.closest(".mf-statusbox"))) toggleSteps(false); });
+    }
+    function bindStatus(root) {
+      const b = root.querySelector(".mf-status"); if (!b) return;
+      b.onclick = () => toggleSteps(!stepsOpen);
+    }
+    function toggleSteps(v) {
+      stepsOpen = !!v;
+      const b = app.querySelector(".mf-status"), p = app.querySelector(".mf-steps");
+      if (b) b.setAttribute("aria-expanded", stepsOpen);
+      if (p) p.hidden = !stepsOpen;
+    }
+    // the status line again, from a fresh meeting.json (every 15 s); the steps stay open if they were — and every
+    // sentence that says why there is no line yet and when it comes (data-why: the transcript pane, the cards)
+    function paintStatus() {
+      const box = app.querySelector(".mf-statusbox"); if (!box) return;
+      const s = MF.status(info, Date.now() / 1000);
+      box.innerHTML = statusHtml(); bindStatus(box);
+      const mini = app.querySelector(".mf-mini-s"); if (mini) mini.textContent = s.text;
+      const hist = app.querySelector('[data-pane="hist"] .mf-stages'); if (hist) hist.outerHTML = stepsHtml(s.steps);
+      for (const el of app.querySelectorAll("[data-why]")) el.textContent = el.dataset.why === "title" ? s.empty.title : s.empty.body;
     }
 
     /* ---------- BEFORE: the way in, and what the meeting before it left open ---------- */
@@ -118,6 +179,15 @@
       poll(10000, async () => { const n = await MF.api(api("meeting.json")); if (n.state !== "before") MF.render(); });
     }
 
+    /* ---------- a meeting that ended with nothing to show yet (not recorded, or its recording not closed) ---------- */
+    function renderNoData() {
+      const s = MF.status(info, Date.now() / 1000);
+      app.innerHTML = `<div class="mf-mtg" data-state="${esc(info.state)}">${head()}
+        <div class="mf-before"><section class="mf-card mf-door"><div class="mf-door-ic">${ic("clock")}</div><h2 data-why="title">${esc(s.empty.title)}</h2><p class="muted" data-why="body">${esc(s.empty.body)}</p></section></div></div>`;
+      bindHead(app);
+      poll(15000, async () => { const n = await MF.api(api("meeting.json")); if (n.data || n.state !== info.state) MF.render(); else { info = n; paintStatus(); } });
+    }
+
     /* ---------- LIVE: what is being said, as it is said ---------- */
     function renderLive() {
       app.innerHTML = `<div class="mf-mtg" data-state="live">${head()}
@@ -125,7 +195,7 @@
           <section class="mf-stagecol">
             <div class="mf-card mf-onair">
               <div class="mf-onair-h"><span class="mf-state" data-tone="live"><i class="mf-pulse"></i>בשידור</span><time class="mf-elapsed" dir="ltr">0:00</time><span class="mf-rec muted small"></span></div>
-              <div class="mf-bigcap" aria-live="polite"><p class="muted">מחכים למילים הראשונות…</p></div>
+              <div class="mf-bigcap" aria-live="polite"><p class="muted" data-why="body">${esc(MF.status(info).empty.body)}</p></div>
               <div class="mf-present"></div>
             </div>
             <div class="mf-card mf-markbar">
@@ -135,7 +205,7 @@
               <div class="mf-marklist"></div>
             </div>
           </section>
-          <aside class="mf-side"><div class="mf-pane on mf-livelist" aria-live="off"><div class="mf-empty">${ic("mic")}<p>הכתוביות מופיעות כאן כשמישהו מדבר.</p></div></div></aside>
+          <aside class="mf-side"><div class="mf-pane on mf-livelist" aria-live="off"><div class="mf-empty">${ic("mic")}<p data-why="body">${esc(MF.status(info).empty.body)}</p></div></div></aside>
         </div></div>`;
       bindHead(app);
       const list = app.querySelector(".mf-livelist"), big = app.querySelector(".mf-bigcap"), present = app.querySelector(".mf-present");
@@ -180,33 +250,44 @@
           big.innerHTML = last.map((s) => `<p${MF.dirAttr(s.text)}><b data-hue="${esc(hue(s.name))}"><bdi>${esc(s.name || "?")}</bdi></b> ${esc(s.text)}</p>`).join("");
         }
       }
+      async function again() {
+        try { const n = await MF.api(api("meeting.json")); if (dead) return; if (n.state !== "live") { MF.render(); return; } info = n; paintStatus(); } catch (e) { /* the next round */ }
+      }
       pull(); marks();
-      poll(4000, pull); poll(20000, marks);
+      poll(4000, pull); poll(20000, marks); poll(15000, again);
     }
 
     /* ---------- AFTER: the whole meeting on one axis ---------- */
-    const TABS = [["tr", "תמלול", "message"], ["ov", "סקירה", "eye"], ["decision", "החלטות", "flag"], ["task", "משימות", "task"], ["question", "שאלות", "help"], ["sc", "מסכים", "image"], ["tl", "ציר זמן", "layers"], ["files", "קבצים", "folder"], ["hist", "יומן", "clock"]];
     function countOf(kind) { return MF.itemsOf(kind, M, items); }
-    function tabBadge(k) {
+    function badgeOf(k) {
       if (k === "sc") return M && (M.moments || []).length ? `<span class="n" title="רגעים שבהם הצביעו על המסך">${MF.num(M.moments.length)}</span>` : "";
       if (!["decision", "task", "question"].includes(k)) return "";
       const all = countOf(k), wait = all.filter((v) => v.state === "proposed").length;
       return all.length ? `<span class="n${wait ? " wait" : ""}" title="${wait ? `${wait} ממתינים לאישור` : "הכול טופל"}">${MF.num(all.length)}</span>` : "";
     }
+    function groupBadge(g) {
+      if (g === "sc") return badgeOf("sc");
+      if (g !== "work") return "";
+      const all = ["decision", "task", "question"].flatMap((k) => countOf(k)), wait = all.filter((v) => v.state === "proposed").length;
+      if (!all.length) return "";
+      return wait ? `<span class="n wait" title="${wait} ממתינים לאישור">${MF.num(wait)}</span>` : `<span class="n" title="הכול טופל">${MF.num(all.length)}</span>`;
+    }
     function renderFull() {
       const st = info.state;
       const extraAudio = uploads.filter((u) => u.done && (u.kind === "audio" || u.kind === "video") && u.offset != null).map((u) => ({ id: "up-" + u.name, label: u.label || u.name, short: u.label || u.name.replace(/\.[^.]+$/, ""), src: "uploads/" + encodeURIComponent(u.name), offset: +u.offset, duration: +u.duration || 0 }));
-      app.innerHTML = `<div class="mf-mtg" data-state="${esc(st)}">${head(`<button class="btn ghost" type="button" data-upload title="הקלטה נוספת, טקסט או מסמך">${ic("upload")}<span>הוספת קובץ</span></button>`)}
-        ${st === "first" ? `<div class="callout mf-firstnote">${ic("refresh")}<span><b>עיבוד ראשון.</b> ההקלטה והכתוביות החיות, מיד כשהפגישה נגמרה. התמלול המלא, הדוברים, הנושאים, ההחלטות והמשימות יחליפו את זה כאן — באותה כתובת.</span></div>` : ""}
+      app.innerHTML = `<div class="mf-mtg" data-state="${esc(st)}">${head(`<button class="btn ghost" type="button" data-upload title="הקלטה נוספת, טקסט או מסמך" aria-label="הוספת קובץ">${ic("upload")}<span>הוספת קובץ</span></button>`)}
         <div class="mf-body">
-          <section class="mf-stagecol"><div class="mf-player"></div><div class="mf-transportbox"></div><div class="mf-scrubbox"></div></section>
+          <section class="mf-stagecol"><div class="mf-player"></div><div class="mf-mini-t"><b>${esc(info.title || room)}</b><span class="mf-mini-s">${esc(MF.status(info).text)}</span></div><div class="mf-transportbox"></div><div class="mf-scrubbox"></div></section>
+          <div class="mf-divide" role="separator" aria-orientation="vertical" aria-label="רוחב הלוח" tabindex="0" title="גרירה (או החיצים) משנה את רוחב הלוח"></div>
           <aside class="mf-side">
-            <nav class="mf-tabs" role="tablist" aria-label="חלקי הפגישה">${TABS.map(([k, h, i]) => `<button type="button" role="tab" data-tab="${k}" aria-selected="false" aria-controls="mf-p-${k}"><span>${h}</span>${tabBadge(k)}</button>`).join("")}</nav>
-            <div class="mf-panes">${TABS.map(([k]) => `<div class="mf-pane" id="mf-p-${k}" role="tabpanel" data-pane="${k}"></div>`).join("")}</div>
+            <button class="mf-grab" type="button" role="slider" aria-label="גובה הלוח — גרירה, לחיצה או החיצים" aria-valuemin="0" aria-valuemax="2"><i></i></button>
+            <nav class="mf-tabs" role="tablist" aria-label="חלקי הפגישה">${GROUPS.map(([g, h]) => `<button type="button" role="tab" data-group="${g}" aria-selected="false"><span>${h}</span>${groupBadge(g)}</button>`).join("")}</nav>
+            <div class="mf-subnav" hidden></div>
+            <div class="mf-panes">${ALL_VIEWS.map((k) => `<div class="mf-pane" id="mf-p-${k}" role="tabpanel" data-pane="${k}"></div>`).join("")}</div>
           </aside>
           <section class="mf-tlbox" aria-label="ציר הזמן"><div class="mf-tl-resize" role="separator" aria-orientation="horizontal" title="גרירה משנה את גובה ציר הזמן"></div><div class="mf-tlmount"></div></section>
         </div>
-        <div class="mf-sheet" hidden role="dialog" aria-modal="true"><div class="mf-sheet-b"><header><b class="mf-sheet-t"></b><button class="mf-tb" type="button" data-close aria-label="סגירה">${ic("x")}</button></header><div class="mf-sheet-c"></div></div></div>
+        <div class="mf-modal" hidden role="dialog" aria-modal="true"><div class="mf-modal-b"><header><b class="mf-modal-t"></b><button class="mf-tb" type="button" data-close aria-label="סגירה">${ic("x")}</button></header><div class="mf-modal-c"></div></div></div>
       </div>`;
       bindHead(app);
       const root = app.querySelector(".mf-mtg");
@@ -226,41 +307,82 @@
         changed: () => { refreshWork(); stage.rebuild(); } };
       tr = MF.Transcript(app.querySelector('[data-pane="tr"]'), { M, stage, room, hue, edits, versions,
         people: (info.people || []).concat(M.people || []),
+        empty: MF.status(info, Date.now() / 1000).empty,
         onEdit: () => { stage.rebuild(); renderHistory(); },
         onSpeaker: () => { stage.rebuild(); renderOverview(); renderHistory(); },
         onExport: () => { showTab("files", true); setTimeout(() => { const x = app.querySelector(".mf-export"); if (x) { x.scrollIntoView({ block: "center", behavior: "smooth" }); const a = x.querySelector("a"); if (a) a.focus({ preventScroll: true }); } }, 60); },
-        onTaskFrom: (x, text) => { showTab("task"); lists.task.addTask({ text, t: x.s, owner: x.who }); } });
+        onTaskFrom: (x, text) => { showTab("task", true); lists.task.addTask({ text, t: x.s, owner: x.who }); } });
       offs.push(() => tr && tr.destroy());
       for (const k of ["decision", "task", "question"]) lists[k] = MF.WorkList(app.querySelector(`[data-pane="${k}"]`), Object.assign({}, ctx, { kind: k }));
       renderOverview(); renderHistory();
       files = MF.Files(app.querySelector('[data-pane="files"]'), { M, room, stage, openDoc, onChange: async () => { try { const u = await MF.api(api("uploads")); uploads = (u && u.uploads) || []; } catch (e) { /* */ } if (screens) screens.refresh(); } });
       if (MF.Screens) {
         screens = MF.Screens(app.querySelector('[data-pane="sc"]'), { M, room, stage, uploads: () => uploads,
-          onSeek: () => { if (isPhone()) window.scrollTo({ top: 0, behavior: "smooth" }); },
+          onSeek: () => { if (isPhone() && sheet && sheet.snap === "full") sheet.set("half", "tap"); },
           onSaved: async () => { try { const u = await MF.api(api("uploads")); uploads = (u && u.uploads) || []; } catch (e) { /* */ } if (files) files.reload(); renderHistory(); } });
         offs.push(() => screens && screens.destroy());
       }
-      // the axis: under the screen on a wide screen, a tab of its own on a phone
+      // the second pane: a bottom sheet on a phone, a pane beside the screen with a divider on a wide one
+      const side = app.querySelector(".mf-side");
+      sheet = MF.Sheet(side, { box: root, key: "sheet", handles: [side.querySelector(".mf-grab"), side.querySelector(".mf-tabs")], heights: sheetHeights,
+        onSnap: (s) => { if (stage) setTimeout(() => stage.relayout(), 240); side.querySelector(".mf-grab").setAttribute("aria-label", s === "full" ? "הקטנת הלוח" : "הגדלת הלוח"); } });
+      offs.push(() => sheet && sheet.destroy());
+      divider();
       placeTimeline();
       on(window, "resize", placeTimeline);
-      app.querySelector(".mf-tabs").addEventListener("click", (e) => { const b = e.target.closest("[data-tab]"); if (b) showTab(b.dataset.tab, true); });
+      app.querySelector(".mf-tabs").addEventListener("click", (e) => { const b = e.target.closest("[data-group]"); if (b) showGroup(b.dataset.group); });
+      app.querySelector(".mf-subnav").addEventListener("click", (e) => { const b = e.target.closest("[data-view]"); if (b) showTab(b.dataset.view, true); });
       app.querySelector("[data-upload]").onclick = () => { showTab("files", true); setTimeout(() => app.querySelector(".mf-drop input")?.click(), 50); };
-      app.querySelector(".mf-sheet").addEventListener("click", (e) => { if (e.target.closest("[data-close]") || e.target.classList.contains("mf-sheet")) closeSheet(); });
+      app.querySelector(".mf-modal").addEventListener("click", (e) => { if (e.target.closest("[data-close]") || e.target.classList.contains("mf-modal")) closeModal(); });
       resizeTl();
-      const want = where.view && TABS.some(([k]) => k === where.view) ? where.view : MF.store.get("tab", "tr");
-      showTab(want === "tl" && !isPhone() ? "tr" : want);
+      const want = where.view && ALL_VIEWS.includes(where.view) ? where.view : MF.store.get("tab", "tr");
+      showTab(want === "tl" && !isPhone() ? "tr" : ALL_VIEWS.includes(want) ? want : "tr");
       if (where.t != null) { stage.zoomTo(4); stage.seek(where.t); } else stage.seek(0, { hash: false });
       if (where.q) tr.setQuery(where.q);
       keys();
       on(window, "hashchange", () => { const w = MF.where(); if (w.t != null) stage.seek(w.t); });
+      poll(15000, refresh);
+    }
+    // the sheet's three heights on a phone: the tab bar alone; half (the screen whole above it when it fits); all but
+    // the 56-px mini-player
+    function sheetHeights(H) {
+      const top = (app.querySelector(".mf-mh")?.offsetHeight || 44) + (app.querySelector(".mf-statusbox")?.offsetHeight || 44);
+      const w = app.querySelector(".mf-mtg")?.clientWidth || 390;
+      const natural = top + (w - 24) * 9 / 16 + 8 + 48 + 26;
+      const half = Math.round(Math.max(H * 0.45, Math.min(H - natural, H * 0.62)));
+      return { peek: 68, half, full: Math.max(half, H - 56) };
+    }
+    function divider() {
+      const d = app.querySelector(".mf-divide"), body = app.querySelector(".mf-body"); if (!d) return;
+      const set = (w) => { w = Math.round(Math.max(SIDE_MIN, Math.min(SIDE_MAX, w, (body.clientWidth || 1200) - 360))); body.style.setProperty("--side-w", w + "px"); return w; };
+      const saved = MF.store.get("sideW", 0); if (saved) set(saved);
+      const width = () => app.querySelector(".mf-side").getBoundingClientRect().width;
+      d.addEventListener("pointerdown", (e) => {
+        if (isPhone()) return;
+        d.setPointerCapture(e.pointerId); d.classList.add("on");
+        const x0 = e.clientX, w0 = width();
+        // the side pane is the far one (the left, in a right-to-left page): the divider moves with its edge
+        const dir = getComputedStyle(body).direction === "rtl" ? 1 : -1;
+        d.onpointermove = (ev) => set(w0 + dir * (ev.clientX - x0));
+        d.onpointerup = () => { d.onpointermove = null; d.classList.remove("on"); MF.store.set("sideW", Math.round(width())); if (stage) stage.relayout(); };
+      });
+      d.addEventListener("keydown", (e) => {
+        const step = e.shiftKey ? 80 : 20, rtl = getComputedStyle(body).direction === "rtl";
+        if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
+        e.preventDefault();
+        // the divider moves the way the arrow points: in a right-to-left page the pane is on its left, so → widens it
+        const grow = (e.key === "ArrowRight") === rtl;
+        MF.store.set("sideW", set(width() + (grow ? step : -step))); if (stage) stage.relayout();
+      });
     }
     function placeTimeline() {
       const box = app.querySelector(".mf-tlbox"), pane = app.querySelector('[data-pane="tl"]'), mount = app.querySelector(".mf-tlmount");
       if (!box || !mount) return;
       const target = isPhone() ? pane : box;
       if (mount.parentElement !== target) { target.appendChild(mount); if (stage) setTimeout(() => stage.relayout(), 0); }
-      app.querySelector('[data-tab="tl"]').hidden = !isPhone();
-      if (!isPhone() && app.querySelector('[data-tab="tl"][aria-selected="true"]')) showTab("tr");
+      if (sheet) sheet.activate(isPhone());
+      if (!isPhone() && view === "tl") showTab("files");
+      else subnav();
     }
     function resizeTl() {
       const h = app.querySelector(".mf-tl-resize"), box = app.querySelector(".mf-tlbox"); if (!h) return;
@@ -272,48 +394,97 @@
         h.onpointerup = () => { h.onpointermove = null; MF.store.set("tlH", Math.round(box.getBoundingClientRect().height)); stage && stage.relayout(); };
       });
     }
+    // a group's views under the tab bar (only for «עבודה» and «עוד»); the axis is a view of its own only on a phone
+    function viewsOf(g) { return groupOf(g)[2].filter((k) => k !== "tl" || isPhone()); }
+    function subnav() {
+      const nav = app.querySelector(".mf-subnav"); if (!nav) return;
+      const g = groupOf(view)[0], ks = GROUPS.find((x) => x[0] === g)[2].filter((k) => k !== "tl" || isPhone());
+      nav.hidden = ks.length < 2;
+      nav.innerHTML = ks.length < 2 ? "" : `<div class="mf-seg" role="tablist" aria-label="${esc(groupOf(view)[1])}">${ks.map((k) => `<button type="button" role="tab" data-view="${k}" aria-selected="${k === view}">${VIEW[k]}${badgeOf(k)}</button>`).join("")}</div>`;
+    }
+    function showGroup(g) {
+      const gs = GROUPS.find((x) => x[0] === g); if (!gs) return;
+      const ks = gs[2].filter((k) => k !== "tl" || isPhone());
+      const last = MF.store.get("sub:" + g, ks[0]);
+      showTab(ks.includes(last) ? last : ks[0], true);
+      if (isPhone() && sheet && sheet.snap === "peek") sheet.set("half", "tap");
+    }
     function showTab(k, user) {
-      for (const b of app.querySelectorAll(".mf-tabs [data-tab]")) b.setAttribute("aria-selected", b.dataset.tab === k);
+      if (!ALL_VIEWS.includes(k)) k = "tr";
+      view = k;
+      const g = groupOf(k)[0];
+      for (const b of app.querySelectorAll(".mf-tabs [data-group]")) b.setAttribute("aria-selected", b.dataset.group === g);
       for (const p of app.querySelectorAll(".mf-pane")) p.classList.toggle("on", p.dataset.pane === k);
-      if (user) { MF.store.set("tab", k); MF.setQuery("v", k === "tr" ? "" : k); }
+      subnav();
+      if (user) { MF.store.set("tab", k); MF.store.set("sub:" + g, k); MF.setQuery("v", k === "tr" ? "" : k); }
       if (k === "tl" && stage) setTimeout(() => stage.relayout(), 0);
-      const sel = app.querySelector(`.mf-tabs [data-tab="${k}"]`); if (sel && sel.scrollIntoView && isPhone()) sel.scrollIntoView({ block: "nearest", inline: "center" });
     }
     function refreshWork() {
       for (const k of Object.keys(lists)) lists[k].render();
-      for (const b of app.querySelectorAll(".mf-tabs [data-tab]")) { const n = b.querySelector(".n"); const nb = tabBadge(b.dataset.tab); if (n) n.outerHTML = nb || ""; else if (nb) b.insertAdjacentHTML("beforeend", nb); }
-      renderOverview(); renderHistory();
+      for (const b of app.querySelectorAll(".mf-tabs [data-group]")) { const n = b.querySelector(".n"); const nb = groupBadge(b.dataset.group); if (n) n.outerHTML = nb || ""; else if (nb) b.insertAdjacentHTML("beforeend", nb); }
+      subnav(); renderOverview(); renderHistory();
+    }
+    // every 15 s: the meeting as the server says it now — the status line moves, and when its data changed (the
+    // transcript landed, the full processing came) the page takes it in without a reload, keeping the moment played
+    let refreshing = false;
+    async function refresh() {
+      if (refreshing) return;
+      refreshing = true;
+      try {
+        const n = await MF.api(api("meeting.json"));
+        if (dead) return;
+        const was = info;
+        info = n;
+        if (n.state === "live" || n.state === "before") { MF.render(); return; }
+        if (n.rev && was.rev && n.rev !== was.rev && n.data) {
+          const keep = { t: stage ? stage.t : 0, playing: stage ? stage.playing : false, view, lines: (M.turns || []).length };
+          try { await loadData(); } catch (e) { info = was; return; }      // not taken: the next round asks again
+          if (dead) return;
+          where = Object.assign(MF.where(), { t: null });                     // the address as it is now, not at load
+          for (const f of offs.splice(0)) f();
+          for (const t of timers.splice(0)) clearInterval(t);
+          renderFull();
+          stage.seek(keep.t, { hash: false }); if (keep.playing) stage.play();
+          showTab(keep.view);
+          const lines = (M.turns || []).length;
+          MF.tell(n.state !== was.state ? `הפגישה עודכנה: ${MF.status(n).text}` : lines > keep.lines ? `התמלול הגיע — ${MF.num(lines)} שורות` : "הפגישה עודכנה", "ok");
+          return;
+        }
+        paintStatus();
+      } catch (e) { /* the next round */ }
+      finally { refreshing = false; }
     }
     function pick(k, x) {
       if (["decision", "task", "question"].includes(k)) {
         showTab(k, true);
+        if (isPhone() && sheet && sheet.snap === "peek") sheet.set("half", "tap");
         const arr = { decision: M.decisions, task: M.tasks, question: M.questions }[k];
         const key = `${k}:${MF.itemId(k, x, arr.indexOf(x))}`;
         const card = app.querySelector(`.mf-pane.on .mf-item[data-key="${CSS.escape(key)}"]`);
         if (card) { card.scrollIntoView({ block: "center", behavior: "smooth" }); card.classList.add("flash"); setTimeout(() => card.classList.remove("flash"), 1600); }
       } else if (k === "frame" || k === "screen") {
         const f = k === "frame" ? x.f : (x.frames || [])[0];
-        sheet(k === "screen" ? x.label : `המסך ב-${fmt(x.t)}`, `${f ? `<img class="mf-frame" src="${esc(MF.roomUrl(room, "frames/f/" + f))}" alt="">` : ""}${k === "screen" && x.detail ? `<p dir="auto">${esc(x.detail)}</p>` : ""}<p class="muted small">${fmt(x.s ?? x.t)}${x.e ? "–" + fmt(x.e) : ""}</p>`);
+        modal(k === "screen" ? x.label : `המסך ב-${fmt(x.t)}`, `${f ? `<img class="mf-frame" src="${esc(MF.roomUrl(room, "frames/f/" + f))}" alt="">` : ""}${k === "screen" && x.detail ? `<p dir="auto">${esc(x.detail)}</p>` : ""}<p class="muted small">${fmt(x.s ?? x.t)}${x.e ? "–" + fmt(x.e) : ""}</p>`);
       } else if (k === "topic") {
         showTab("ov", true);
         const n = app.querySelector(`.mf-topic[data-s="${x.s}"]`); if (n) { n.open = true; n.scrollIntoView({ block: "center", behavior: "smooth" }); }
       } else if (k === "turn" && !isPhone()) showTab("tr");
     }
-    function sheet(title, html) {
-      const s = app.querySelector(".mf-sheet"); s.querySelector(".mf-sheet-t").textContent = title || ""; s.querySelector(".mf-sheet-c").innerHTML = html; s.hidden = false;
+    function modal(title, html) {
+      const s = app.querySelector(".mf-modal"); s.querySelector(".mf-modal-t").textContent = title || ""; s.querySelector(".mf-modal-c").innerHTML = html; s.hidden = false;
       s.querySelector("[data-close]").focus();
     }
-    function closeSheet() { const s = app.querySelector(".mf-sheet"); if (s) { s.hidden = true; s.querySelector(".mf-sheet-c").innerHTML = ""; } }
+    function closeModal() { const s = app.querySelector(".mf-modal"); if (s && !s.hidden) { s.hidden = true; s.querySelector(".mf-modal-c").innerHTML = ""; return true; } return false; }
     function openDoc(href) {
-      sheet("מסמך", `<iframe class="mf-docframe" src="${esc(MF.roomUrl(room, href))}" title="מסמך"></iframe>`);
+      modal("מסמך", `<iframe class="mf-docframe" src="${esc(MF.roomUrl(room, href))}" title="מסמך"></iframe>`);
       const f = app.querySelector(".mf-docframe");
       f.addEventListener("load", () => {
         try {
-          const d = f.contentDocument; app.querySelector(".mf-sheet-t").textContent = d.title || "מסמך";
+          const d = f.contentDocument; app.querySelector(".mf-modal-t").textContent = d.title || "מסמך";
           d.addEventListener("click", (e) => {
             const a = e.target.closest("a[href]"); if (!a) return;
             const m = a.getAttribute("href").match(/#t=?(\d+(?:\.\d+)?)/);
-            if (m) { e.preventDefault(); stage.seek(+m[1]); if (isPhone()) closeSheet(); MF.tell(`קופצים ל-${fmt(+m[1])}`, "ok", { ms: 1500 }); }
+            if (m) { e.preventDefault(); stage.seek(+m[1]); if (isPhone()) closeModal(); MF.tell(`קופצים ל-${fmt(+m[1])}`, "ok", { ms: 1500 }); }
           });
         } catch (e) { /* another origin: its links stay its own */ }
       });
@@ -332,9 +503,9 @@
       const sec = (title, n, body, open) => `<details class="mf-sec mf-fold"${open ? " open" : ""}><summary><h3>${title}</h3>${n != null ? `<span class="n">${MF.num(n)}</span>` : ""}${MF.ic("chevronD", "mf-caret")}</summary>${body}</details>`;
       p.innerHTML = `
         <div class="mf-strip">${kp.map(([a, b]) => `<div><span>${a}</span><b>${b}</b></div>`).join("")}</div>
-        ${people.length ? `<section class="mf-sec"><h3>מי דיבר כמה</h3><div class="mf-talk">${talk.map(([w, s]) => `<div class="mf-talk-row"><span class="mf-talk-who">${MF.avatar(w, hue(w))}<bdi>${esc(w)}</bdi></span><span class="mf-talk-bar"><i style="--p:${(s / tot) * 100}%;--c:var(--${hue(w)})"></i></span><span class="mf-talk-n" dir="ltr">${Math.round((s / tot) * 100)}%</span></div>`).join("")}</div></section>` : ""}
+        ${people.length && !(people.length === 1 && people[0] === "?") ? `<section class="mf-sec"><h3>מי דיבר כמה</h3><div class="mf-talk">${talk.map(([w, s]) => `<div class="mf-talk-row"><span class="mf-talk-who">${MF.avatar(w, hue(w))}<bdi>${esc(w)}</bdi></span><span class="mf-talk-bar"><i style="--p:${(s / tot) * 100}%;--c:var(--${hue(w)})"></i></span><span class="mf-talk-n" dir="ltr">${Math.round((s / tot) * 100)}%</span></div>`).join("")}</div></section>` : ""}
         ${(M.meeting.docs || []).length ? `<section class="mf-sec"><h3>מסמכים</h3>${M.meeting.docs.map((d) => `<button class="mf-file mf-doc" type="button" data-doc="${esc(d.href)}"><span class="mf-file-ic">${ic("file-text")}</span><div class="mf-file-b"><b dir="auto">${esc(d.title)}</b></div>${ic("chevronL", "mf-go")}</button>`).join("")}</section>` : ""}
-        ${(M.topics || []).length ? sec("נושאים לפי הסדר", M.topics.length, `<div class="mf-topics">${M.topics.map((x) => `<details class="mf-topic" data-s="${x.s}"><summary><button class="mf-t" type="button" data-seek="${x.s}"><time dir="ltr">${fmt(x.s)}</time></button><b${MF.dirAttr(x.title)}>${esc(x.title)}</b></summary><div class="mf-topic-b"${MF.dirAttr(x.body)}>${esc(x.body || "")}</div></details>`).join("")}</div>`, true) : ""}
+        ${(M.topics || []).length ? sec("נושאים לפי הסדר", M.topics.length, `<div class="mf-topics">${M.topics.map((x) => `<details class="mf-topic" data-s="${x.s}"><summary><button class="mf-t" type="button" data-seek="${x.s}"><time dir="ltr">${fmt(x.s)}</time></button><b${MF.dirAttr(x.title)}>${esc(x.title)}</b></summary><div class="mf-topic-b"${MF.dirAttr(x.body)}>${esc(x.body || "")}</div></details>`).join("")}</div>`, true) : (info.state === "first" ? `<div class="mf-empty">${ic("layers")}<p>הנושאים, ההחלטות והמשימות יופיעו כאן אחרי העיבוד המלא («קדימה»).</p></div>` : "")}
         ${marks.length ? sec("רגעים שסומנו", marks.length, `<ol class="mf-mlist">${marks.map((v) => `<li><button class="mf-t" type="button" data-seek="${v.t}"><time dir="ltr">${fmt(v.t)}</time></button><b>${esc(MF.MARK[v.label] || "סימון")}</b>${v.text ? `<span dir="auto">${esc(v.text)}</span>` : ""}${v.by ? `<span class="muted small">${esc(v.by.name || v.by.username)}</span>` : ""}</li>`).join("")}</ol>`, true) : ""}
         ${(M.likes || []).length ? sec("מה אהבו ומה דחו", M.likes.length, `<ul class="mf-plain">${M.likes.map((x) => `<li><button class="mf-t" type="button" data-seek="${x.t}"><time dir="ltr">${fmt(x.t)}</time></button><span class="mf-tag" data-tone="${x.kind === "rejected" ? "bad" : "ok"}">${x.kind === "rejected" ? "נדחה" : "אהבו"}</span><span${MF.dirAttr(x.text)}>${esc(x.text)}</span></li>`).join("")}</ul>`) : ""}
         ${(M.insights || []).length ? sec("תובנות", M.insights.length, `<ul class="mf-plain">${M.insights.map((x) => `<li><button class="mf-t" type="button" data-seek="${x.t}"><time dir="ltr">${fmt(x.t)}</time></button>${x.kind ? `<span class="mf-tag">${esc(x.kind)}</span>` : ""}<span${MF.dirAttr(x.text)}>${esc(x.text)}</span></li>`).join("")}</ul>`) : ""}
@@ -345,7 +516,7 @@
       };
     }
 
-    /* ---------- the meeting's lifetime: its stages, and what people did to it ---------- */
+    /* ---------- the meeting's lifetime: its steps, and what people did to it ---------- */
     function renderHistory() {
       const p = app.querySelector('[data-pane="hist"]'); if (!p) return;
       const ev = [];
@@ -356,7 +527,7 @@
       for (const u of uploads) if (u.at) ev.push({ at: u.at, who: u.by, what: "הוסיף קובץ", detail: u.label || u.name });
       ev.sort((a, b) => b.at - a.at);
       p.innerHTML = `
-        <section class="mf-sec"><h3>שלבי העיבוד</h3><ol class="mf-stages">${(info.stages || []).map((x) => `<li data-st="${esc(x.state)}"><i aria-hidden="true">${x.state === "done" ? ic("tick") : x.state === "running" ? '<span class="mf-spin sm"></span>' : ""}</i><div><b>${esc(MF.STAGE[x.key] || x.key)}</b><span class="muted small">${esc(MF.STAGE_STATE[x.state] || x.state)}${x.detail ? " · " + esc(x.detail) : ""}</span></div></li>`).join("")}</ol></section>
+        <section class="mf-sec"><h3>שלבי העיבוד</h3>${stepsHtml(MF.status(info).steps)}</section>
         <section class="mf-sec"><h3>מה נעשה בפגישה הזו</h3>${ev.length ? `<ol class="mf-activity">${ev.slice(0, 200).map((x) => `<li><span class="muted small">${esc(MF.ago(x.at))}</span><b><bdi>${esc((x.who && (x.who.name || x.who.username)) || "מישהו")}</bdi> ${esc(x.what)}</b>${x.t != null ? `<button class="mf-t" type="button" data-seek="${x.t}"><time dir="ltr">${fmt(x.t)}</time></button>` : ""}<span class="mf-act-d" dir="auto">${esc(String(x.detail || "").slice(0, 160))}</span>${x.plane && x.plane.url ? `<a href="${esc(x.plane.url)}" target="_blank" rel="noopener">${esc(x.plane.key || "Plane")}</a>` : ""}</li>`).join("")}</ol>` : '<p class="muted small">עוד אף אחד לא תיקן, אישר או הוסיף כאן דבר.</p>'}</section>`;
       p.onclick = (e) => { const s = e.target.closest("[data-seek]"); if (s) stage.seek(+s.dataset.seek); };
     }
@@ -364,11 +535,17 @@
     /* ---------- the keyboard ---------- */
     function keys() {
       on(window, "keydown", (e) => {
+        // a field, a dialog and the confirmation keep their own Esc (cancel an edit, clear a search)
         if (e.target.closest && e.target.closest("input, textarea, select, [contenteditable], .bask, dialog")) return;
-        if (e.key === "Escape") { closeSheet(); return; }
+        if (e.key === "Escape") {
+          if (closeModal()) return;
+          if (stepsOpen) { toggleSteps(false); return; }
+          if (sheet && sheet.escape()) return;
+        }
         if (!stage || e.ctrlKey || e.metaKey || e.altKey) return;
         // by the key's place, not its letter: K / L / J / F are the same keys on a Hebrew keyboard (ל / ך / ח / כ)
         if (e.code === "Space" || e.code === "KeyK") { e.preventDefault(); stage.toggle(); }
+        else if (e.target.closest && e.target.closest(".mf-divide, .mf-grab")) return;
         else if (e.key === "ArrowRight") { e.preventDefault(); stage.seek(stage.t + (e.shiftKey ? 30 : 5)); }
         else if (e.key === "ArrowLeft") { e.preventDefault(); stage.seek(stage.t - (e.shiftKey ? 30 : 5)); }
         else if (e.code === "KeyL") stage.seek(stage.t + 10);
@@ -382,6 +559,17 @@
     function poll(ms, f) { timers.push(setInterval(() => { if (dead || document.hidden) return; const p = f(); if (p && p.catch) p.catch(() => {}); }, ms)); }
 
     load();
-    return { destroy() { dead = true; for (const t of timers) clearInterval(t); for (const f of offs) f(); } };
+    return {
+      destroy() { dead = true; for (const t of timers) clearInterval(t); for (const f of offs) f(); },
+      // Back inside the meeting: the sheet leaves full; the page is not drawn again. A tab is never a step of history
+      // (it replaces the address), so the tab stays the one picked and the address is written to say it again.
+      popstate() {
+        const w = MF.where();
+        if (dead || w.room !== room || !stage) return false;
+        if (sheet) sheet.onPop();
+        MF.setQuery("v", view === "tr" ? "" : view);
+        return true;
+      },
+    };
   };
 })();

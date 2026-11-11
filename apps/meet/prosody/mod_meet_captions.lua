@@ -1,5 +1,5 @@
--- mod_meet_captions — apps/meet: writes the live captions down as they are said (fireplace, 2026-10-27:
--- the owner, after fpg103/fpg104 came out of a starved recorder with a third of their words gone:
+-- mod_meet_captions — apps/meet: writes the live captions down as they are said (examplef, 2026-10-27:
+-- the owner, after exf103/exf104 came out of a starved recorder with a third of their words gone:
 -- «live transcription showing up in meet so i will never be betrayed like that», and on a 2-core box,
 -- «להגדיל זה לא אופציה»).
 --

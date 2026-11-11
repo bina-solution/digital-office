@@ -10,8 +10,8 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/solomonBoltin/deployment-hacohen/packaging/dgo/internal/pyval"
-	"github.com/solomonBoltin/deployment-hacohen/packaging/dgo/internal/yamlish"
+	"github.com/bina-solution/digital-office/packaging/dgo/internal/pyval"
+	"github.com/bina-solution/digital-office/packaging/dgo/internal/yamlish"
 )
 
 // ── the reverse plane: the apps of linked offices, shown and routed HERE (platform/manager/serve.py) ─
@@ -25,6 +25,8 @@ import (
 const (
 	signedInPath = "/.dgo/signed-in" // SIGNED_IN_PATH: answered by this office, never forwarded
 	enterPath    = "/.dgo/enter"     // ENTER_PATH: this office's sign-in, then the console again
+	// REMOTE_SIGN_IN: the sign-in in front of every form that reaches a linked office's app (DGO-1755)
+	remoteSignIn = "authentik-admins@file"
 )
 
 // ownHost is OWN_HOST: what the tile of an app that keeps its own host names — the question and the
@@ -162,6 +164,16 @@ func tileless(cat *Catalog, appID string) bool {
 	return n > 0
 }
 
+// handoffsPath is serve.handoffs_path(): the path the app's own manifest — THIS office's copy, as
+// tileless reads it — declares for its hand-offs (DGO-1336), or "".
+func handoffsPath(cat *Catalog, appID string) string {
+	a := cat.Apps[appID]
+	if a == nil {
+		return ""
+	}
+	return handoffsPathOf(a.doc)
+}
+
 // moduleEntries is module_entries(): the console tile of each remote app, one per (office, alias) —
 // external, namespaced `<alias>.<office>`, marked with its office. The office's label and mark are the
 // entry's own objects, as in Python, so the registry writes them once and refers to them after. An app
@@ -199,6 +211,11 @@ func moduleEntries(served []remoteEntry, cat *Catalog) []any {
 			t.Set("remote", ordered("office", e.office, "label", e.label, "link", either(e.link, e.office),
 				"address", e.address, "commit", e.commit, "mark", mark, "port", a.port, "api_port", a.apiPort,
 				"alias", a.alias, "module_id", a.moduleID))
+			// the people it is waiting for (DGO-1336), asked on its agent door through the link — read from
+			// THIS office's copy of the manifest, as serve.handoffs_path
+			if h := handoffsPath(cat, a.app); h != "" && truthy(a.apiPort) {
+				t.Set("handoffs", "http://"+tile+":"+pyval.Str(a.apiPort)+h)
+			}
 			out = append(out, t)
 		}
 	}
@@ -287,6 +304,15 @@ func serveRender(served []remoteEntry, cat *Catalog, domain, consolePort string,
 		}
 		return "authentik@file"
 	}
+	// remoteDoorOf: the sign-in in front of a form that REACHES a linked office's app — its admins' (DGO-1755):
+	// the door rewrites the caller to the far office's mapped user, so an app of a linked office is the office's
+	// admins' alone, as the console's own /a/<alias>.<office>/ door holds it (serve.py remote_door_of)
+	remoteDoorOf := func(entryPoints []string) string {
+		if len(entryPoints) == 1 && entryPoints[0] == "lan" {
+			return "lan-auth-admins@docker"
+		}
+		return remoteSignIn
+	}
 	ownHostRouters := func(name, host string, entryPoints []string) {
 		auth := doorOf(entryPoints)
 		for _, h := range []struct {
@@ -320,7 +346,7 @@ func serveRender(served []remoteEntry, cat *Catalog, domain, consolePort string,
 			services.Set(svc, ordered("loadBalancer", ordered(
 				"servers", []any{ordered("url", fmt.Sprintf("http://%s:%d", tile, door(e, a)))},
 				"passHostHeader", true)))
-			baseMW := []string{"authentik@file"}
+			baseMW := []string{remoteSignIn}
 			if e.identTo != nil {
 				baseMW = append(baseMW, mwName)
 			}
@@ -349,8 +375,8 @@ func serveRender(served []remoteEntry, cat *Catalog, domain, consolePort string,
 			for _, f := range forms {
 				chain := make([]string, len(baseMW))
 				for i, m := range baseMW {
-					if m == "authentik@file" {
-						m = doorOf(f.entryPoints)
+					if m == remoteSignIn {
+						m = remoteDoorOf(f.entryPoints)
 					}
 					chain[i] = m
 				}

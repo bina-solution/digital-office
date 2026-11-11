@@ -130,7 +130,8 @@ def run(site: dict, hosts: list[str] | None = None, deep: bool = True) -> dict:
         findings.append(H.finding(
             "no_hsts", "warn", "חסר כותרת HSTS",
             "בלי Strict-Transport-Security הדפדפן ינסה שוב http בחיבור הבא.",
-            "הוסף: Strict-Transport-Security: max-age=31536000; includeSubDomains"))
+            "הוסף: Strict-Transport-Security: max-age=31536000 (בלי includeSubDomains כשתת-דומיין עשוי להיות "
+            "שרת אחר)"))
     else:
         m = re.search(r"max-age=(\d+)", hsts)
         if m and int(m.group(1)) < MIN_HSTS:

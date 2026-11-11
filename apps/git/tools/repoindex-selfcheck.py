@@ -94,11 +94,11 @@ def reset() -> None:
 # 1. every account contributes, and a LOCAL repository sorts first
 reset()
 ACCOUNT_ROWS[:] = [
-    {"id": "gh1", "label": "GitHub — solomon", "protocol": "git_github_pat", "account_hint": "person40@example.com"},
+    {"id": "gh1", "label": "GitHub — solomon", "protocol": "git_github_pat", "account_hint": "person36@example.com"},
     {"id": "lc1", "label": "פורג' מקומי", "protocol": "git_forge_local", "account_hint": "office@forge"},
 ]
-REPOS["gh1"] = [{"full_name": "solomonBoltin/b", "description": "", "default_branch": "main"},
-                {"full_name": "solomonBoltin/a", "description": "alpha", "default_branch": "main"}]
+REPOS["gh1"] = [{"full_name": "bina-solution/b", "description": "", "default_branch": "main"},
+                {"full_name": "bina-solution/a", "description": "alpha", "default_branch": "main"}]
 REPOS["lc1"] = [{"full_name": "office/repo", "description": "", "default_branch": "main"}]
 out = repoindex.index()
 check("lists every account's repositories", len(out["repos"]), 3)
@@ -113,7 +113,7 @@ ACCOUNT_ROWS[:] = [
     {"id": "gh1", "label": "GitHub — solomon", "protocol": "git_github_pat"},
     {"id": "gl1", "label": "GitLab", "protocol": "git_gitlab_pat"},
 ]
-REPOS["gh1"] = [{"full_name": "solomonBoltin/a", "description": ""}]
+REPOS["gh1"] = [{"full_name": "bina-solution/a", "description": ""}]
 FAIL["gl1"] = "timeout"
 out = repoindex.index()
 check("the healthy account still answers", len(out["repos"]), 1)
@@ -130,20 +130,20 @@ truthy("…and says why", "קוד בלבד" in (out["errors"][0]["error"] or "")
 # 4. a mirror is attached to the repository it copies, and is not a row of its own
 reset()
 ACCOUNT_ROWS[:] = [{"id": "gh1", "label": "GitHub", "protocol": "git_github_pat"}]
-REPOS["gh1"] = [{"full_name": "solomonBoltin/deployment-hacohen", "description": ""}]
-MIRRORS[:] = [{"id": "m1", "source_account": "gh1", "source_repo": "solomonBoltin/deployment-hacohen",
-               "target_owner": "office", "target_repo": "deployment-hacohen", "last_status": "ok"}]
+REPOS["gh1"] = [{"full_name": "bina-solution/digital-office", "description": ""}]
+MIRRORS[:] = [{"id": "m1", "source_account": "gh1", "source_repo": "bina-solution/digital-office",
+               "target_owner": "office", "target_repo": "digital-office", "last_status": "ok"}]
 out = repoindex.index()
 check("the list is still one repository", len(out["repos"]), 1)
 check("the mirror is attached", (out["repos"][0]["mirror"] or {}).get("id"), "m1")
 check("…and browses into the forge",
-      (out["repos"][0]["mirror"] or {}).get("browse_url"), PUBLIC_BASE + "/office/deployment-hacohen")
+      (out["repos"][0]["mirror"] or {}).get("browse_url"), PUBLIC_BASE + "/office/digital-office")
 
 # 5. searching filters on the name AND the description
 reset()
 ACCOUNT_ROWS[:] = [{"id": "gh1", "label": "GitHub", "protocol": "git_github_pat"}]
-REPOS["gh1"] = [{"full_name": "solomonBoltin/alpha", "description": ""},
-                {"full_name": "solomonBoltin/beta", "description": "הצעת מחיר"}]
+REPOS["gh1"] = [{"full_name": "bina-solution/alpha", "description": ""},
+                {"full_name": "bina-solution/beta", "description": "הצעת מחיר"}]
 check("search by name", len(repoindex.index(q="alpha")["repos"]), 1)
 check("search by description", len(repoindex.index(q="מחיר")["repos"]), 1)
 check("a query that matches nothing", repoindex.index(q="zzz")["repos"], [])
@@ -151,7 +151,7 @@ check("a query that matches nothing", repoindex.index(q="zzz")["repos"], [])
 # 6. THE CACHE — the reason a refreshing screen does not spend the GitHub quota
 reset()
 ACCOUNT_ROWS[:] = [{"id": "gh1", "label": "GitHub", "protocol": "git_github_pat"}]
-REPOS["gh1"] = [{"full_name": "solomonBoltin/a", "description": ""}]
+REPOS["gh1"] = [{"full_name": "bina-solution/a", "description": ""}]
 repoindex.index()
 repoindex.index()
 check("a second read is served from the cache", CALLS.get("gh1"), 1)

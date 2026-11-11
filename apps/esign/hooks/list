@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+#: list [N] — the documents that went out for signature, newest first
+set -uo pipefail
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+out="$("${SCRIPT_DIR}/_call" GET "/api/envelopes?limit=${1:-40}")" || exit $?
+printf '%s' "${out}" | python3 -c '
+import json,sys
+for it in json.load(sys.stdin)["data"]["items"]:
+    print("%s  %-9s %-22s %s" % (it["created_at"][:16].replace("T"," "), it["status"], it["signer_name"][:22], it["doc_name"]))
+    if it.get("drive_path"): print("      " + it["drive_path"])'

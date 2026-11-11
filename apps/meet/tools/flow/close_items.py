@@ -4,7 +4,7 @@ page's buttons (approve a decision = «אושרה», approve a question = «נע
 approving one files a Plane item, which is link_tasks.py's or the page's business.
 
     docker exec -i meet-start-<office> python - '<json>' < close_items.py
-    json: [{"room": "fpg2", "kind": "question", "id": "Q12", "action": "reject"}, …]
+    json: [{"room": "exf2", "kind": "question", "id": "Q12", "action": "reject"}, …]
 
 DGO-1183 (the owner: «I come into the document and I see like 300 questions open … close everything. So really we
 get only the questions we really need, if any»). A separate process from the server: the server's store lock does not
@@ -13,6 +13,14 @@ and the meetings list may show the old counts for a minute (the server's own cac
 """
 import json
 import sys
+
+# Before server.py is compiled — most of this helper's 28.8 MB — it asks to be the one the kernel takes if meet-start's
+# memory cap is passed, never the server it shares the cap with (EXU-20).
+try:
+    with open("/proc/self/oom_score_adj", "w") as _adj:
+        _adj.write("1000")
+except OSError:                                           # (no /proc: a Mac, Windows)
+    pass
 
 sys.path.insert(0, "/app")
 import server  # noqa: E402  (meet-start's own module)

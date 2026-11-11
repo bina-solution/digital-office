@@ -84,10 +84,13 @@ func TestEdgesAgreeWithPyYAML(t *testing.T) {
 		{"a surrogate pair", "a: \"" + bs + "ud83d" + bs + "ude00\"\n", false},
 		{"U+10FFFF", "a: \"" + bs + "U0010FFFF\"\n", true}, {"NUL", "a: \"" + bs + "u0000\"\n", true},
 		{"x1c", "a: \"" + bs + "x1cenabled\"\n", true},
-		// keys Python's dict makes one: refused here, unless they are spelled alike
-		{"1 and true", "a: {1: x, true: y}\n", false}, {"1 and 1.0", "a: {1: x, 1.0: y}\n", false},
-		{"0 and false", "a: {0: x, false: y}\n", false}, {"-0.0 and 0", "a: {-0.0: x, 0: y}\n", false},
-		{"block 1 and true", "a:\n  1: x\n  true: y\n", false},
+		// keys Python's dict makes one: one key — the first spelling, its place, the last value (DGO-637)
+		{"1 and true", "a: {1: x, true: y}\n", true}, {"1 and 1.0", "a: {1: x, 1.0: y}\n", true},
+		{"0 and false", "a: {0: x, false: y}\n", true}, {"-0.0 and 0", "a: {-0.0: x, 0: y}\n", true},
+		{"block 1 and true", "a:\n  1: x\n  true: y\n", true},
+		// …and keys Python holds apart that one spelling would merge here: refused as outside the subset
+		{"1 and '1'", "a: {1: x, '1': y}\n", false}, {"null and 'null'", "a: {~: x, 'null': y}\n", false},
+		{"block '1' then 1", "a:\n  '1': x\n  1: y\n", false},
 		{"1 and 0x1", "a: {1: x, 0x1: y}\n", true}, {"NaN twice", "a: {.nan: x, .nan: y}\n", true},
 		// read alike
 		{"bang inside", "a: x!\n", true}, {"amp inside", "a: x &y\n", true}, {"-x", "a: -x\n", true},
@@ -265,6 +268,18 @@ func TestEdgesAgreeWithPyYAML(t *testing.T) {
 // this reader reads it alike or refuses it as outside its subset (OutsideSubset) — never as a refusal
 // PyYAML makes — and never reads it otherwise: no guess anywhere in the tree. Where PyYAML refuses a
 // file, this reader refuses it too, and says it is PyYAML's refusal (not OutsideSubset).
+// Keys Python holds apart that a Map would hold under one spelling must be REFUSED as outside the subset:
+// PyYAML's answer passed through JSON is the very merge they would make here, so agreeing with it proves
+// nothing (DGO-637, the second reader's find).
+func TestKeysPythonHoldsApartUnderOneSpellingAreRefused(t *testing.T) {
+	for _, src := range []string{"a: {1: x, '1': y}\n", "a: {~: x, 'null': y}\n", "a:\n  '1': x\n  1: y\n",
+		"a: {true: x, 'true': y}\n", "a: {1.0: x, '1.0': y}\n"} {
+		if v, err := Unmarshal([]byte(src)); !OutsideSubset(err) {
+			t.Errorf("%q: read as %s (%v) — two keys to Python, one spelling here: must be refused as outside the subset", src, FlaskJSON(v), err)
+		}
+	}
+}
+
 func TestTheTreeIsReadAsPyYAMLReadsIt(t *testing.T) {
 	root := repoRoot(t)
 	// each file read once, and both readers asked the same text: a live checkout rewrites .generated/

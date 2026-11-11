@@ -120,6 +120,66 @@
         usdRate: 3.7
         peakPricing: true
 
+# ── the office's scoped service tokens in the agent's shell (DGO-1812) ─────────────
+# The harness drops every *KEY*/*PASSWORD*/*SECRET*/*TOKEN* name from a model shell call's environment, so a
+# token the container holds never reaches a brief's curl. This contributor hands on, as declared DSH_* facts,
+# exactly the two the office gives the agent on purpose: DSH_COMPUTERS_EXEC_TOKEN and DSH_CHAT_READ_TOKEN
+# (plugins/office-shell-env). Nothing else crosses.
+- insert:
+    - id: office-shell-env
+      name: '@bina/dsh-office-shell-env'
+
+# ── the office vault as a live credential source ────────────────────────────────────────────────
+# The shipped credential service is replaced by this office's own (`plugins/vault-key`), which keeps
+# the file-backed layer exactly and adds ONE value shape: a reference whose stored value is
+# `vault:<connection-id>` is a POINTER at a connection in the credential plane (`connections`), and
+# the value behind it is fetched at the moment it is used — per request, in this container's own name,
+# through the broker (`POST /api/broker/lease`), cache 30 s. So a key picked in the vault never lands
+# in $DSH_HOME/.credentials.yaml, and rotating it reaches the next request with no restart. The
+# browser half puts «בחר מהסודות» on the Models page's provider card, through the page's own
+# extension seat `settings.models.provider-card`. Owner, 2026-11-03: «שאפלקציית בינה יכולה לבחור מתוך
+# אפלקציית סודות … ולהזרים את המפתח מהסודות». See plugins/vault-key/README.md.
+- id: credentials
+  disabled: true
+- insert:
+    - id: vault-key
+      name: '@bina/dsh-vault-key'
+      config:
+        vaultUrl: http://connections:8990
+        service: bina-ds
+        cacheSeconds: 30
+# ── the automatic goal round loop: OFF (owner, 2026-11-03) ────────────────────────────────────
+# A goal used to keep itself going: the harness's round driver gave an active goal one more round
+# every time its agent went idle, and nothing in that loop asked whether the round it just paid for
+# did anything. Measured on 2026-11-01 (session-f7a05d7b): 786 rounds in one hour, 783 of them one
+# step, ZERO tool calls, ~2.2 s each — text in, text out, next round — and the session closed at 961
+# rounds / 1.245 billion input tokens / ₪19.10, four fifths of the office's whole LLM spend for the
+# week. Every time the run was stopped its own closing line was "everything that is mine is done; the
+# rest is your decision" — an honest "I have finished" answered with another round.
+#
+# The owner's ruling, 2026-11-03 («תעיף את כל מה שקשור להמשך אין סופי של סשנים»): no session may
+# continue itself. So the DRIVER is off — not tuned — and the /goal command that opens the loop is
+# off with it. For now the office is driven from the command forward, one step at a time, and what
+# runs is what someone can see. The goal *records* stay (get/create/update write down an objective
+# and its cap; with no driver they continue nothing), and `goal-guard` stays mounted as the second
+# fence for the day somebody turns the driver back on: a round that ends without a single tool/call
+# is blocked (`no-progress`) instead of earning the next one, and every goal is clamped to the
+# office's round ceiling (12) — the harness's own default is 256, and the runaway created goals with
+# 400. Its tests replay each case.
+- id: goal-round-driver
+  disabled: true
+- id: command-goal
+  disabled: true
+- id: goal
+  config:
+    defaultMaxGoalRounds: 12
+- insert:
+    - id: goal-guard
+      name: '@bina/dsh-goal-guard'
+      config:
+        maxGoalRounds: 12
+        noProgress: true
+
 # ── production quiet ──────────────────────────────────────────────────────────────────────────
 # dsh-client-hmr is the harness's dev hot-reload driver ("Dev-only", its own header). dsh-web-app
 # mounts it unconditionally, and its node half polls (statSync) every client bundle on an interval —

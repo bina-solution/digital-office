@@ -108,6 +108,22 @@ def _addr(peer: dict) -> str:
     return addr
 
 
+def _self(peer: dict) -> str:
+    """OUR side of this peer's pair (net.pair_conf's `self`), or "" for a record that names none (one rendered before
+    pairs carried it, or a test's). With it, a delivery rule accepts only what is addressed TO this pair: WireGuard
+    pins a packet's source, never its destination, and the kernel answers any local address on any interface, so
+    without it a peer on one tunnel reached another pair's listener on the same port (every pair's catalog is on
+    one port) and was stamped as that pair's office (issues/a-peer-on-one-tunnel-can-reach-another-pairs-catalog-…)."""
+    mine = (peer or {}).get("self") or ""
+    if not mine:
+        return ""
+    try:
+        ipaddress.IPv4Address(mine)
+    except ipaddress.AddressValueError:
+        raise FirewallError(f"לזוג עם {((peer or {}).get('office'))!r} אין כתובת מנהרה תקינה בצד שלנו ({mine!r})")
+    return mine
+
+
 def direction(peer: dict) -> str:
     """`serve` = the peer may reach apps HERE; `use` = the peer may not; `both` = the owner declared
     the link bidirectional, so the peer may arrive AND this office reaches it. Anything else is
@@ -234,9 +250,11 @@ def nft_document(peers: list[dict], wg_if: str = WG_IF, forward_policy: str = "d
     # INPUT packet and the `forward` chain above never sees it. Same declaration, same list, the other
     # hook — and it must be here rather than in a chain of the delivery half's own, because a base
     # chain's `accept` is not final across chains (see this module's docstring for the measurement).
+    # …and only to THIS pair's own address (`ip daddr`, from the record's `self`): see `_self`.
     for p in sorted(peers or [], key=_addr):
+        to = f" ip daddr {_self(p)}" if _self(p) else ""
         for app, port in sorted(allowed_ports(p).items(), key=lambda kv: (int(kv[1]), kv[0])):
-            lines.append(f'    iifname "{iface_of(p, wg_if)}" ip saddr {_addr(p)} tcp dport {int(port)} '
+            lines.append(f'    iifname "{iface_of(p, wg_if)}" ip saddr {_addr(p)}{to} tcp dport {int(port)} '
                          f'accept   # {app} — delivered to the app behind the link')
     lines += [
         "    drop",
@@ -454,6 +472,27 @@ def selftest() -> list[str]:
         problems.append("a served port must be accepted on its own pair's interface")
     if 'iifname "wg3" ip saddr 10.79.3.2 tcp dport 8979 accept   # sites' not in served_multi:
         problems.append("the second pair's served port must be accepted on the second interface")
+    # WHO A DELIVERY IS ADDRESSED TO (issues/a-peer-on-one-tunnel-can-reach-another-pairs-catalog-listener-…): every
+    # pair's catalog is on ONE port, each bound to its own pair address, and WireGuard pins only the source. With the
+    # pair's own side named (`self`), wg3's peer has no accept for pair 2's address; without it, as before.
+    cat = {"dgo-extend": 8983}
+    with_self = nft_document([{**pair_a, "direction": "serve", "ports": cat, "self": "10.79.2.1"},
+                              {**pair_b, "direction": "serve", "ports": cat, "self": "10.79.3.1"}])
+    delivered = [ln.strip() for ln in with_self.splitlines() if "delivered to the app" in ln]
+    if 'iifname "wg2" ip saddr 10.79.2.2 ip daddr 10.79.2.1 tcp dport 8983 accept   # dgo-extend — delivered to the app ' \
+            'behind the link' not in delivered:
+        problems.append("a delivery must be accepted only when it is addressed to its own pair's side (ip daddr)")
+    if any(ln.startswith('iifname "wg3"') and "ip daddr 10.79.3.1 " not in ln for ln in delivered) \
+            or not any(ln.startswith('iifname "wg3"') for ln in delivered):
+        problems.append("wg3's peer must have no accept for any address but its own pair's (pair 2's catalog is closed to it)")
+    if any("ip daddr" in ln for ln in served_multi.splitlines()):
+        problems.append("a record that names no side renders as before (no daddr)")
+    try:
+        nft_document([{**pair_a, "direction": "serve", "ports": cat, "self": "10.79.2.1; accept"}])
+        problems.append("a side that is not an address must be refused, never written into a rule")
+    except FirewallError:
+        pass
+
     single = nft_document([pair_a])
     if 'iifname "wg2" oifname "wg2" drop' not in single:
         problems.append("one pair must still render the single-name relay rule it always had")

@@ -1,6 +1,6 @@
 /* Mock backend for "חיבורים ומפתחות" (connections/secrets manager) — development/connections/ui.html.
    Real UI code is untouched; only window.fetch is intercepted. Data is for the fictitious
-   client "בינה פתרונות בע״מ" (company_id 514789234, person105@example.com), matching the
+   client "בינה פתרונות בע״מ" (company_id 514789234, person111@example.com), matching the
    other digital-office/sim mocks (console.js, my-docs.js, mailview.js).
 
    Endpoints implemented (see ui.html's api() calls):
@@ -35,7 +35,7 @@
   var ROWS = [
     /* ── app-password: login passwords to the deployment's own apps ── */
     { id:'n8n-admin', pillar:'app-password', title:'n8n', title_he:'n8n',
-      app:{name:'n8n', user:'person111@example.com', url:'https://n8n.bina-solutions.co.il'},
+      app:{name:'n8n', user:'person117@example.com', url:'https://n8n.bina-solutions.co.il'},
       kind:'password', status:'healthy', source:'db', secret:true, masked:'••••nX9k', clear:null,
       reveal_ok:true, rotatable:true },
     { id:'portainer-admin', pillar:'app-password', title:'Portainer', title_he:'Portainer',
@@ -43,11 +43,11 @@
       kind:'password', status:'needs_action', source:'env', secret:true, masked:'••••fault', clear:null,
       reveal_ok:true, rotatable:true, rotate_warn:'הסיסמה הנוכחית היא ברירת המחדל מההתקנה — מומלץ להחליף.' },
     { id:'glitchtip-admin', pillar:'app-password', title:'GlitchTip', title_he:'GlitchTip',
-      app:{name:'GlitchTip', user:'person114@example.com', url:'https://glitchtip.bina-solutions.co.il'},
+      app:{name:'GlitchTip', user:'person120@example.com', url:'https://glitchtip.bina-solutions.co.il'},
       kind:'password', status:'healthy', source:'minted', secret:true, masked:'••••7qLp', clear:null,
       reveal_ok:true, rotatable:true },
     { id:'supabase-studio-admin', pillar:'app-password', title:'Supabase Studio', title_he:'Supabase Studio',
-      app:{name:'Supabase Studio', user:'person111@example.com', url:'https://supabase.bina-solutions.co.il'},
+      app:{name:'Supabase Studio', user:'person117@example.com', url:'https://supabase.bina-solutions.co.il'},
       kind:'password', status:'healthy', source:'db', secret:true, masked:'••••2Vt8', clear:null,
       reveal_ok:true, rotatable:true },
     { id:'authentik-admin', pillar:'app-password', title:'Authentik', title_he:'Authentik',
@@ -67,7 +67,7 @@
       rotate_warn:'יבטל את הגישה לקבצים המחוברים עד לטעינת מפתח שירות חדש.',
       impact:['sync-drive'] },
     { id:'whatsapp-qr', pillar:'auth', title:'WhatsApp Bot', title_he:'בוט ווצאפ',
-      kind:'qr-session', protocol:'qr', consumers:['whatsapp-hacohanim'],
+      kind:'qr-session', protocol:'qr', consumers:['whatsapp-example'],
       status:'healthy', source:'minted', secret:true, masked:'linked', clear:null,
       reveal_ok:false, rotatable:false },
     { id:'openai-api-key', pillar:'auth', title:'OpenAI API Key', title_he:'מפתח API — OpenAI',
@@ -102,7 +102,7 @@
 
   var CREDS = {
     'n8n-admin': { fields:[
-      { key:'username', label:'שם משתמש', source:'db', primary:false, secret:false, clear:'person111@example.com' },
+      { key:'username', label:'שם משתמש', source:'db', primary:false, secret:false, clear:'person117@example.com' },
       { key:'password', label:'סיסמה', source:'db', primary:true, secret:true }
     ]},
     'portainer-admin': { fields:[
@@ -110,11 +110,11 @@
       { key:'password', label:'סיסמה', source:'env', primary:true, secret:true }
     ]},
     'glitchtip-admin': { fields:[
-      { key:'username', label:'שם משתמש', source:'db', primary:false, secret:false, clear:'person114@example.com' },
+      { key:'username', label:'שם משתמש', source:'db', primary:false, secret:false, clear:'person120@example.com' },
       { key:'password', label:'סיסמה', source:'minted', primary:true, secret:true }
     ]},
     'supabase-studio-admin': { fields:[
-      { key:'username', label:'שם משתמש', source:'db', primary:false, secret:false, clear:'person111@example.com' },
+      { key:'username', label:'שם משתמש', source:'db', primary:false, secret:false, clear:'person117@example.com' },
       { key:'password', label:'סיסמה', source:'db', primary:true, secret:true }
     ]},
     'authentik-admin': { fields:[
@@ -128,7 +128,7 @@
       { key:'scope', label:'הרשאות', source:'env', primary:false, secret:false, clear:'gmail.readonly drive.file' }
     ]},
     'gdrive-service-account': { fields:[
-      { key:'client_email', label:'Service Account Email', source:'db', primary:false, secret:false, clear:'person115-x@example.com' },
+      { key:'client_email', label:'Service Account Email', source:'db', primary:false, secret:false, clear:'person121-x@example.com' },
       { key:'private_key', label:'מפתח פרטי', source:'db', primary:true, secret:true }
     ]},
     'whatsapp-qr': { fields:[

@@ -59,7 +59,7 @@ config.localRecording = Object.assign(config.localRecording || {}, { disable: tr
 // office's own transcriber instead (jibri/watch.py, MEET_LIVE_CAPTIONS). 'on' only for a recognizer that runs locally.
 config.dgoCaptions = Object.assign({ mode: 'off', lang: 'he-IL' }, config.dgoCaptions || {});
 
-// THE 2-CORE OFFICE (fireplace, 2026-10-27, measured with load ramps: one full page + light participants with
+// THE 2-CORE OFFICE (examplef, 2026-10-27, measured with load ramps: one full page + light participants with
 // moving cameras, their own Hebrew speech and a shared screen; README «Load, measured on the 2-core office»).
 // The recorder is the first thing a growing meeting spends on. Its big cost was Jitsi's blurred background
 // (custom-interface_config.js turns it off on the recorder's page: 1.25 → 0.57 cores with a shared screen). Here:
@@ -78,17 +78,17 @@ config.videoQuality = Object.assign(config.videoQuality || {}, {
     }
 })();
 
-// ── MT-11 (fireplace, 2026-10-29, lane R2-L7 — STAGED: applied by apply-web-config.sh with no meeting on, then a restart
-// of `meet`). What the owner ran into on a phone browser (Samsung Internet) and on a computer, in fpg2 and fpg105.
+// ── MT-11 (examplef, 2026-10-29, lane R2-L7 — STAGED: applied by apply-web-config.sh with no meeting on, then a restart
+// of `meet`). What the owner ran into on a phone browser (Samsung Internet) and on a computer, in exf2 and exf105.
 // Researched against this exact release (jitsi-meet 1.0.9442 = stable/jitsi-meet_11248, lib-jitsi-meet v2205.0.0).
 
-// THE «BARKING» (fpg105 [1:11]): this office's server speaks to the room in chat messages (prosody/mod_meet_silent_mic.lua
+// THE «BARKING» (exf105 [1:11]): this office's server speaks to the room in chat messages (prosody/mod_meet_silent_mic.lua
 // on every silent/back change; the live caption lines), and this release plays its incoming-message sound for every
 // message received while the chat is closed, delay-stamped ones too (react/features/chat/middleware.ts). Off on the pages
 // and in the phone apps; a message still pops up.
 config.disabledSounds = (config.disabledSounds || []).concat(['INCOMING_MSG_SOUND']);
 
-// SHARING FROM A COMPUTER (fpg105 [0:25], the endless mirror): lib-jitsi-meet builds Chrome's getDisplayMedia request from
+// SHARING FROM A COMPUTER (exf105 [0:25], the endless mirror): lib-jitsi-meet builds Chrome's getDisplayMedia request from
 // screenShareSettings — its own defaults made explicit, and the picker opens on tabs. The meeting's own tab is never
 // offered, so a shared tab cannot mirror; a shared WINDOW or SCREEN that shows the meeting does (Jitsi draws your own share).
 config.screenShareSettings = Object.assign({}, config.screenShareSettings, {
@@ -98,7 +98,7 @@ config.screenShareSettings = Object.assign({}, config.screenShareSettings, {
     desktopSurfaceSwitching: 'include'
 });
 
-// «ADD PEOPLE» ON A PHONE BROWSER (fpg2 [02:07]): the page has Invite, but up to 370 px wide the bar holds only microphone,
+// «ADD PEOPLE» ON A PHONE BROWSER (exf2 [02:07]): the page has Invite, but up to 370 px wide the bar holds only microphone,
 // camera and chat. Each array replaces Jitsi's bar of the same length (3 buttons up to 370 px, 4 up to 420, 5 up to 470);
 // computers keep theirs. Browser pages only: the phone app evaluates this file too (no `location`), and its own 4- and
 // 5-button bars carry «⋯» and hang-up, which a same-length array would replace.
@@ -111,7 +111,7 @@ config.screenShareSettings = Object.assign({}, config.screenShareSettings, {
     ];
 })();
 
-// CAMERA OFF ON JOINING, ONE'S OWN PICTURE SHOWN (fpg2 [04:33], [1:17:35]). In this release the browser's STORED Jitsi
+// CAMERA OFF ON JOINING, ONE'S OWN PICTURE SHOWN (exf2 [04:33], [1:17:35]). In this release the browser's STORED Jitsi
 // settings outrank config.js (getPropertyValue: jwt → #config. → stored → config) and are stored as «camera on» from the
 // first visit, so config.startWithVideoMuted alone changes nothing; a «Hide self view» once clicked stays (config OR
 // stored). So each page load stores camera off and self-view on; a person can still turn either back during a meeting,

@@ -1,0 +1,7 @@
+# domain-internic — the HTTP service, the browser's MCP over HTTP (requests), and the office's event
+# stream (redis). No secret is typed by this app: the office browser's own password store fills the
+# portal's login (login.py), so it needs no DevTools client.
+fastapi==0.115.6
+uvicorn[standard]==0.34.0
+requests==2.32.3
+redis==5.2.1

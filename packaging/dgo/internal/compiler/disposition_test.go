@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/solomonBoltin/deployment-hacohen/packaging/dgo/internal/yamlish"
+	"github.com/bina-solution/digital-office/packaging/dgo/internal/yamlish"
 )
 
 // TestDispositionIsPythons asks reconcile.py's own disposition() the states that read apart between Go's

@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""test_state_step — a declaration that names only business apps never switches the platform off (FPG-8).
+"""test_state_step — a declaration that names only business apps never switches the platform off (EXF-8).
 
 The state step switches off every app enabled on the machine that the declaration does not name. A
-declaration of fireplace that named its business apps only (project-pln, bina-ds, n8n, sites, …) switched
+declaration of examplef that named its business apps only (project-pln, bina-ds, n8n, sites, …) switched
 off traefik, authentik, postgres, redis, console and connections — "7 enabled · 15 switched off" — and the
 compiler then refused to render (identity had no provider it may start). This runs the Python the state
 step sends to the machine, against a scratch office.

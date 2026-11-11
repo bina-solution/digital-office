@@ -1,0 +1,3 @@
+#!/usr/bin/env bash
+#: login — sign the adapter's own device in: <homeserver> <user> --password-stdin, or <homeserver> --token-stdin [--json]
+exec bash "$(dirname "${BASH_SOURCE[0]}")/../tools/verb" login "$@"

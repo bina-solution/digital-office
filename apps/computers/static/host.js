@@ -56,25 +56,42 @@ const Host = (() => {
 
   /** The resource view's figures: machine's own, or — where machine does not answer — security's reading
    *  of the same machine. Kept in S.hd[where] so the fleet list and this page draw one answer. */
+  // A read has a time limit: a source that never answers is a source that did not answer, said as such — not a
+  // page that waits on it (the Dell, 2026-11-10: «מחשבים > מחשב הזה לא מפסיק לטעון את המדדים»).
+  // Above the server's own 10 s (herd.py), so its worded answer wins whenever it has one; the timer is cleared.
+  const READ_LIMIT_S = 15;
+  const timed = (p) => {
+    let t = 0;
+    const late = new Promise((done) => { t = setTimeout(() => done({ ok: false, status: 0,
+      d: { error: `${binaSaid(0)} אחרי ${READ_LIMIT_S} שניות` } }), READ_LIMIT_S * 1000); });
+    return Promise.race([p, late]).finally(() => clearTimeout(t));
+  };
   async function overview(where, brief) {
     const h = hd(where);
-    let r = await read(where, "machine", "api/overview", brief ? "brief=1" : "");
+    // ticks come every 5 s and a read may take longer: only the newest read of this computer writes its state
+    const seq = (h.seq = (h.seq || 0) + 1);
+    let r = await timed(read(where, "machine", "api/overview", brief ? "brief=1" : ""));
     let src = "machine";
+    const tried = [["שירות המכונה", r]];
     if (!r.ok && r.status !== 401 && r.status !== 403) {
-      const s = await read(where, "security", "api/host/overview", brief ? "brief=1" : "");
+      const s = await timed(read(where, "security", "api/host/overview", brief ? "brief=1" : ""));
+      tried.push(["אפליקציית האבטחה", s]);
       if (s.ok) { r = s; src = "security"; }
     }
+    if (h.seq !== seq) return h;                     // a newer read of this computer has started: it writes
     if (r.ok && r.d && r.d.cpu) {
-      Object.assign(h, { ov: r.d, src, at: Date.now(), err: "" });
+      Object.assign(h, { ov: r.d, src, at: Date.now(), err: "", errs: null, since: 0 });
       if (!brief) h.full = true;
     } else {
-      Object.assign(h, { err: (r.d && r.d.error) || binaSaid(r.status), at: h.at || 0 });
+      // which source did not answer, each in its own words, and since when (the page says it instead of a loader)
+      const errs = tried.filter(([, x]) => !(x.ok && x.d && x.d.cpu)).map(([who, x]) => [who, (x.d && x.d.error) || binaSaid(x.status)]);
+      Object.assign(h, { err: (r.d && r.d.error) || binaSaid(r.status), errs, since: h.since || Date.now(), at: h.at || 0 });
     }
     return h;
   }
   async function summary(where) {
     const h = hd(where);
-    const r = await read(where, "security", "api/summary", "hours=24");
+    const r = await timed(read(where, "security", "api/summary", "hours=24"));   // the fleet's «בודק…» ends too
     if (r.ok && r.d && r.d.kpi) Object.assign(h, { sum: r.d, sumErr: "", sumStatus: 200, sumAt: Date.now() });
     else Object.assign(h, { sum: null, sumErr: (r.d && r.d.error) || binaSaid(r.status), sumStatus: r.status });
     return h;
@@ -140,9 +157,17 @@ const Host = (() => {
 
   function notice(html) { const n = el("hNotice"); if (n) n.innerHTML = html || ""; }
   function noResources(h) {
-    return alertBox("warn", "<b>המשאבים של המחשב הזה לא נקראו.</b> " + esc(h.err || "אין תשובה") +
+    const said = (h.errs && h.errs.length ? h.errs : [["", h.err || "אין תשובה"]])
+      .map(([who, why]) => (who ? `<b>${esc(who)}</b>: ` : "") + esc(why)).join(" · ");   // each source in its own words
+    const since = h.since ? " — אין תשובה מאז " + esc(new Date(h.since).toLocaleTimeString("he-IL", { hour: "2-digit", minute: "2-digit" })) : "";
+    return alertBox("warn", `<b>המשאבים של המחשב הזה לא נקראו${since}.</b> ` + said +
       '<div class="small">את המשאבים מספר שירות המכונה של המחשב עצמו, ואם הוא אינו פועל שם — אפליקציית האבטחה שלו. ' +
-      "מחשב של לשכה מקושרת נקרא דרך הקישור, ולכן גם קישור שנפל נראה כך.</div>");
+      "מחשב של לשכה מקושרת נקרא דרך הקישור, ולכן גם קישור שנפל נראה כך. הדף מנסה שוב לבד.</div>");
+  }
+  // no figure ever arrived: each one reads «לא נמדד» — the skeleton was a loader that never ended
+  const UNMEASURED = '<span class="muted">לא נמדד</span>';
+  function unmeasured(ids) {
+    ids.forEach((id) => { const n = el(id); if (n) { n.classList.remove("skel"); n.innerHTML = UNMEASURED; } });
   }
 
   // ── resources (machine's screen) ─────────────────────────────────────────────────────────────────
@@ -235,7 +260,7 @@ const Host = (() => {
 
   function paintRes(where, h) {
     const d = h.ov;
-    if (!d) { notice(noResources(h)); return; }
+    if (!d) { notice(noResources(h)); unmeasured(["hCpu", "hMem", "hDisk", "hNet", "hCont", "hInfo", "hSvc"]); return; }
     notice(h.err ? alertBox("warn", "<b>הקריאה האחרונה נכשלה</b> — " + esc(h.err) + ". מוצגים המספרים מלפני " + esc(ago((Date.now() - h.at) / 1000)) + ".") : "");
     document.querySelectorAll("#hBody .skel").forEach((n) => n.classList.remove("skel"));
     const C = colors(), hist = d.history || [], nr = d.net_rate || { rx: 0, tx: 0 };
@@ -386,9 +411,10 @@ const Host = (() => {
    *  screen is still the one that asked (a 24h answer arriving after the switch to 7d is dropped). */
   async function loadNet(where, win) {
     const hrs = winOf(win)[0];
-    const [s, i, o, n] = await Promise.all([read(where, "security", "api/summary", "hours=" + hrs),
-      read(where, "security", "api/inbound", `hours=${hrs}&limit=${LIST_LIMIT}`),
-      read(where, "security", "api/outbound", `hours=${hrs}&limit=${LIST_LIMIT}`), read(where, "security", "api/network")]);
+    // each with the same limit as the resource reads: a read that hangs ends as «no answer», never as «טוען…» for good
+    const [s, i, o, n] = await Promise.all([timed(read(where, "security", "api/summary", "hours=" + hrs)),
+      timed(read(where, "security", "api/inbound", `hours=${hrs}&limit=${LIST_LIMIT}`)),
+      timed(read(where, "security", "api/outbound", `hours=${hrs}&limit=${LIST_LIMIT}`)), timed(read(where, "security", "api/network"))]);
     // this tab's own window: the fleet's row keeps reading the day (`summary`), into its own fields
     const got = s.ok && s.d && s.d.kpi ? { nsum: s.d, nsumErr: "", nsumStatus: 200, nsumAt: Date.now() }
       : { nsum: null, nsumErr: (s.d && s.d.error) || binaSaid(s.status), nsumStatus: s.status };
@@ -704,7 +730,7 @@ const Host = (() => {
   }
   function paintDisk(where, h) {
     const d = h.ov;
-    if (!d) { notice(noResources(h)); return; }
+    if (!d) { notice(noResources(h)); unmeasured(["dBars", "dDocker"]); return; }
     notice("");
     const s = d.storage || {}, tops = s.top_paths || [], max = Math.max(1, ...tops.map((p) => p.size || 0));
     el("dStamp").textContent = s.generated_at ? `עודכן ${new Date(s.generated_at).toLocaleTimeString("he-IL")}` : "";
@@ -768,7 +794,8 @@ const Host = (() => {
       return;
     }
     const st = stateOf(c);
-    const acts = (c.state === "needs_action" ? ["auth", "probe"] : c.ok ? ["exec", "audit", "probe"] : ["probe", "auth"]);
+    // «טרמינל» here too: the office's own machine and the herd's computers live in this view, not in the fleet's rows
+    const acts = (c.state === "needs_action" ? ["auth", "probe"] : c.ok ? ["exec", "term", "audit", "probe"] : ["probe", "auth"]);
     el("hSsh").innerHTML = `<div class="card"><h3><span>גישה ב־SSH</span><span class="pill ${st.cls}">${esc(st.he)}</span></h3>
       <div class="facts">${[["כתובת", c.host], ["משתמש", c.user], ["פורט", String(c.port || 22)], ["שם המארח", c.hostname || "—"],
         ["מערכת", c.os || "—"], ["עומס", shortLoad(c.load)]].map(([k, v]) => `<div><div class="k">${esc(k)}</div><div class="v" title="${esc(v)}">${esc(v)}</div></div>`).join("")}</div>

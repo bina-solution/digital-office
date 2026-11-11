@@ -314,7 +314,7 @@ function enchdr(s){return '=?UTF-8?B?'+Buffer.from(String(s),'utf8').toString('b
 function buildMime(o){
   const b='bnd_'+Math.random().toString(36).slice(2,12);
   const att=Buffer.from(o.attContent,'utf8').toString('base64').replace(/(.{76})/g,'$1\\r\\n');
-  const L=['From: '+o.from,'To: person80-x-x@example.com','Date: '+new Date().toUTCString(),
+  const L=['From: '+o.from,'To: person86-x-x@example.com','Date: '+new Date().toUTCString(),
     'Subject: '+enchdr(o.subject),'MIME-Version: 1.0',
     'Content-Type: multipart/mixed; boundary="'+b+'"','',
     '--'+b,'Content-Type: text/plain; charset="UTF-8"','Content-Transfer-Encoding: base64','',
@@ -327,7 +327,7 @@ const tok=$('Config').first().json.tok;
 // Hebrew subject+body on purpose: rule 8 (PROMOTIONAL) fires on a body with NO Hebrew, and
 // PROMOTIONAL blocks DOC_TO_SYNC. A Hebrew business mail with an attachment is the real shape.
 return [{json:{op:'append', __instance:'test', params:{
-  raw_base64: buildMime({from:'person81-x@example.com',
+  raw_base64: buildMime({from:'person87-x@example.com',
     subject:'mailorg_'+tok+' מסמך נכנס לבדיקה',
     body:'מצורף מסמך לבדיקת מנוע התיוג. מספר הרצה '+tok,
     attName:'mailorg_'+tok+'.pdf', attContent:'mail organizer gate attachment '+tok}),
@@ -838,7 +838,7 @@ function enchdr(s){return '=?UTF-8?B?'+Buffer.from(String(s),'utf8').toString('b
 function buildMime(o){
   const b='bnd_'+Math.random().toString(36).slice(2,12);
   const att=Buffer.from(o.attContent,'utf8').toString('base64').replace(/(.{76})/g,'$1\\r\\n');
-  const L=['From: '+o.from,'To: person80-x-x@example.com','Date: '+new Date().toUTCString(),
+  const L=['From: '+o.from,'To: person86-x-x@example.com','Date: '+new Date().toUTCString(),
     'Subject: '+enchdr(o.subject),'MIME-Version: 1.0',
     'Content-Type: multipart/mixed; boundary="'+b+'"','',
     '--'+b,'Content-Type: text/plain; charset="UTF-8"','Content-Transfer-Encoding: base64','',
@@ -849,7 +849,7 @@ function buildMime(o){
 }
 const tok=$('Config').first().json.tok;
 return [{json:{op:'append', __instance:'test', params:{
-  raw_base64: buildMime({from:'person81-x@example.com',
+  raw_base64: buildMime({from:'person87-x@example.com',
     subject:'mailorgsl_'+tok+' מסמך נכנס לבדיקה',
     body:'מצורף מסמך לבדיקת יצירת תוויות. מספר הרצה '+tok,
     attName:'mailorgsl_'+tok+'.pdf', attContent:'mail organizer label-create gate '+tok}),

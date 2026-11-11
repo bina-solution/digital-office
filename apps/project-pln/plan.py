@@ -128,6 +128,28 @@ def cached(key: str, fetch, fresh: bool = False):
     return v
 
 
+def forget_module_members(pid: str) -> None:
+    """tasks.py keeps each project's module membership in this cache (`<pid>:module-members:<module set>`, DGO-962).
+    Items just placed in a module make that map wrong — `tasks show` said «module: —» for them for up to the TTL —
+    so it is dropped here, and the next `show` reads the modules again."""
+    try:
+        with open(CACHE) as f:
+            data = json.load(f)
+    except Exception:                                          # noqa: BLE001 — no cache, nothing to forget
+        return
+    gone = [k for k in data if isinstance(k, str) and k.startswith(f"{pid}:module-members")]
+    if not gone:
+        return
+    for k in gone:
+        del data[k]
+    try:
+        with open(CACHE + ".tmp", "w") as f:
+            json.dump(data, f)
+        os.replace(CACHE + ".tmp", CACHE)
+    except Exception:                                          # noqa: BLE001 — a cache is never required
+        pass
+
+
 # ── HTTP ────────────────────────────────────────────────────────────────────────
 # A Plane that does not answer fails the plan in about two minutes, not in an hour (tasks.py, the same rule
 # and why: issues/plane-calls-hang-half-an-hour-when-the-office-that-runs-plane-stalls.yaml).
@@ -144,6 +166,7 @@ def http(method: str, url: str, body=None, headers=None, tries: int = 6):
         WRITES += 1
     data = json.dumps(body).encode() if body is not None else None
     hdrs = {"Content-Type": "application/json", **(headers or {})}
+    lost = 0                                                            # connection failures, apart from the 404s
     for attempt in range(tries):
         req = urllib.request.Request(url, data=data, method=method, headers=hdrs)
         try:
@@ -159,9 +182,18 @@ def http(method: str, url: str, body=None, headers=None, tries: int = 6):
             if e.code in GONE and method == "GET" and attempt + 1 < tries:
                 time.sleep(5 * (attempt + 1))                           # a READ is asked again; a write is not (Transient)
                 continue
-            return {"error": e.read().decode("utf-8", "replace")[:400]}, e.code
+            try:
+                text = e.read().decode("utf-8", "replace")
+            except Exception:                                           # noqa: BLE001 — a body cut short is no body
+                text = ""
+            # an EMPTY 404 is not Plane's: the door's table did not hold Plane for a moment (tasks.py EMPTY_404_TRIES)
+            if e.code == 404 and not text.strip() and method == "GET" and attempt + 1 < tries:
+                time.sleep(5 * (attempt + 1))
+                continue
+            return {"error": text[:400]}, e.code
         except (urllib.error.URLError, OSError) as e:                  # no connection, or no answer in time
-            if attempt + 1 < min(tries, 2):
+            lost += 1
+            if lost < 2 and attempt + 1 < tries:
                 time.sleep(3)
                 continue
             DOWN = f"{type(e).__name__}: {e}"
@@ -494,7 +526,7 @@ def main() -> None:
         # project is read once, as a whole plan is: a lookup that came back empty must never be the
         # reason an item is created twice (nothing here deletes).
         out, code = http("GET", f"{p.ws}{P}/issues/?external_source={SOURCE}&external_id={urllib.parse.quote(key)}&expand=labels", headers=p.h)
-        if code == 404:
+        if code == 404 and (out or {}).get("error"):    # Plane's own «none» — an EMPTY 404 is the door's, never «absent»
             continue
         if code != 200 or not isinstance(out, dict):
             raise RuntimeError(f"GET item {key} → HTTP {code}: {out.get('error', out) if isinstance(out, dict) else out}")
@@ -599,6 +631,7 @@ def main() -> None:
                 p.call("POST", f"{P}/modules/{mod['id']}/module-issues/", {"issues": new_ids})
             except Transient:                           # adding the same items to a module twice is the same module
                 p.call("POST", f"{P}/modules/{mod['id']}/module-issues/", {"issues": new_ids})
+            forget_module_members(pid)
     finish(project=proj, items=n_items)
 
 

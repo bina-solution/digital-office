@@ -51,7 +51,7 @@ APPLY_ORDER = [
     _wslpath("apps", "n8n", "schema", "01_platform.sql"),
     _wslpath("apps", "indox", "blueprint", "fixtures", "schema.sql"),
 ]
-CTR = "supabase-db-shlomo-laptop"
+CTR = "supabase-db-owner-laptop"
 SCRATCH = "indox_schema_freshcheck"
 DK = "docker -H unix:///run/bbox-docker.sock"
 

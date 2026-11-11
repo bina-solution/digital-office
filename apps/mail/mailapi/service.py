@@ -77,8 +77,6 @@ app.register_blueprint(connections_bp)
 # profile; you need this to get the first one).
 profiles.start()
 
-CONNECTIONS_PUBLIC_URL = os.environ.get("CONNECTIONS_PUBLIC_URL", "https://connections.localhost").rstrip("/")
-
 
 def _reply(r):
     """Backends return a payload, or (payload, status). One place to turn either into a response, so
@@ -551,7 +549,7 @@ def engine_profiles_delete(pid):
     """Remove ACCESS — the account and its connection. The maildir stays on disk; the response says
     where. Profile-keyed twin of `DELETE /mailboxes/<address>`, which the mailbox screen calls."""
     profiles.require_admin(request.args.get("connection_id"), target_pid=pid)
-    payload, code = profiles.delete_profile(profiles.address_of(pid))
+    payload, code = profiles.delete_profile(profiles.address(pid))
     return jsonify(payload), code
 
 
@@ -592,10 +590,14 @@ def providers():
              {"id": "oauth", "label": "התחברות עם Google", "protocol": "mail_gmail_oauth",
               "needs": [], "recommended": True,
               "can": "קריאה, חיפוש, תוויות ושליחה בחשבון שתאשר.",
-              "explain": "נפתח חלון של Google. לאחר האישור החשבון נוצר כאן ואפשר לבדוק אותו "
-                         "ולהפעיל אותו. אפשר לסגור את החלון בכל שלב — לא ייווצר חיבור.",
-              "start_url": f"{CONNECTIONS_PUBLIC_URL}/oauth/google-workspace-grant/start"
-                           f"?as_instance=1&go=1"},
+              "explain": "נפתח חלון של Google. אחרי האישור החשבון נבדק ונפתח כאן — גם ה־Gmail וגם "
+                         "ה־Drive שלו. אפשר לסגור את החלון בכל שלב: לא ייווצר חיבור.",
+              # relative: the screen opens it under its own base (the console's /a/mailview…/ or its
+              # own host), and the consent comes back to the screen (mailview oauth_google_start)
+              "start_url": "oauth/google/start",
+              # the consent it opens, by connections' catalog id (the one mailview's start asks for): a
+              # screen where mail is not served asks connections' own start by this (EXU-19)
+              "grant": "google-workspace-grant"},
              {"id": "app_password", "label": "סיסמת אפליקציה", "protocol": "mail_imap_app_password",
               "needs": ["username", "password"],
               "can": "קריאה, חיפוש, תוויות ושליחה — בלי חלון אישור.",

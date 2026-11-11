@@ -16,7 +16,7 @@
     GET  /caps/{style}                              one cap: its 3D, pieces, sheets, BOM, cost and the rules it
                                                     took for granted, with the sizes in the address (static/cap.html)
 
-    GET  /models, /models/{name}                    the office's FreeCAD models, one address each (FPG-621): the 3D,
+    GET  /models, /models/{name}                    the office's FreeCAD models, one address each (EXF-621): the 3D,
     GET  /api/models, /api/models/{name}            renders, parts list, steps, build sheet and files to download
     GET  /models/{name}/files/{file}                one of its files (only the kinds MODEL_FILES names)
 
@@ -183,7 +183,7 @@ def cap_page(style: str):
     return FileResponse(os.path.join(STATIC, "cap.html"))
 
 
-# --- the office's FreeCAD models (FPG-604, FPG-621): each one's own address, like an item's -----------------------
+# --- the office's FreeCAD models (EXF-604, EXF-621): each one's own address, like an item's -----------------------
 #: where the FreeCAD jobs publish (job.sh → the cad app's /config/projects/caps-pro = this volume's caps-pro)
 MODELS = os.environ.get("CAD_MODELS", "/projects/caps-pro")
 #: what a model page offers to download, by extension (anything else in its folder is not served)

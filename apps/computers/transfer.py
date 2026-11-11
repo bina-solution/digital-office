@@ -67,6 +67,15 @@ STALL_SECONDS = int(os.environ.get("COMPUTER_TRANSFER_STALL_S", "180"))
 VOL_ROOT = "/var/lib/docker/volumes"
 #: The archive in flight, ON THE DESTINATION. Outside the volumes on purpose (see the docstring).
 STAGE_DIR = os.environ.get("COMPUTER_TRANSFER_STAGE_DIR", "/var/lib/bina-transfer")
+#: A destination reached as a user who is NOT root but may run docker (DGO-1508: the Dell's sshd says
+#: `PermitRootLogin no` and `AllowUsers shlomy`, who is in the docker group). /var/lib/docker and /var/lib are
+#: root's there, so the archive in flight is kept in a volume of its own and every command that touches it or
+#: the destination volume runs in a throwaway container of this image, with both mounted: busybox's sh, tar,
+#: find, du, df, stat and sha256sum. A destination reached as root is served exactly as before. Owners arrive by
+#: NUMBER (`--numeric-owner`); one thing busybox's tar does not restore is a SYMLINK's owner (it lands root's), which
+#: Linux ignores outside a sticky world-writable directory.
+HELPER = os.environ.get("COMPUTER_TRANSFER_HELPER", "alpine:3.20")
+STAGE_VOLUME = os.environ.get("COMPUTER_TRANSFER_STAGE_VOLUME", "bina-transfer")
 
 _jobs: dict[str, dict] = {}
 _lock = threading.Lock()
@@ -107,6 +116,26 @@ def stage_path(src_vol: str, dst_vol: str) -> str:
 
 def meta_path(src_vol: str, dst_vol: str) -> str:
     return stage_path(src_vol, dst_vol) + ".json"
+
+
+def _dest_mode(argv_for, machine: str) -> str:
+    """How the destination's volumes are written: `root` (on the host, as always) or `docker` (in a helper
+    container). Neither is refused by name: such a user cannot write a volume at all."""
+    code, out, err = _run(argv_for(machine, 'if [ "$(id -u)" = 0 ]; then echo root; '
+                                            'elif docker info >/dev/null 2>&1; then echo docker; '
+                                            'else echo none; fi'), 60)
+    mode = out.strip().splitlines()[-1].strip() if out.strip() else ""
+    if code != 0 or mode not in ("root", "docker"):
+        raise RuntimeError("במכונת היעד המשתמש אינו root ואינו יכול להריץ docker — אין איך לכתוב שם ל-volume "
+                           f"({err.strip()[:200] or mode or code})")
+    return mode
+
+
+def _in_helper(dst_vol: str, script: str, stdin: bool = False) -> str:
+    """`script` (busybox sh) in a throwaway container on the destination, the volume at /v and the archive in
+    flight under /s. No network, and no log of what it prints."""
+    return (f"docker run --rm {'-i ' if stdin else ''}--init --network none --log-driver none "
+            f"-v {q(dst_vol)}:/v -v {q(STAGE_VOLUME)}:/s {q(HELPER)} sh -c {q(script)}")
 
 
 def q(s: str) -> str:
@@ -228,20 +257,39 @@ def _copy(job: dict, argv_for) -> None:
     try:
         # ── prepare ────────────────────────────────────────────────────────────
         _tap(job, "prepare")
-        code, out, err = _run(argv_for(job["to"],
-                                       f"docker volume create {q(dst_vol)} && "
-                                       f"mkdir -p {q(STAGE_DIR)} && chmod 700 {q(STAGE_DIR)} && "
-                                       f"test -d {q(dst_path)}"),
-                              timeout=180)
+        mode = job["dest_mode"] = _dest_mode(argv_for, job["to"])
+        if mode == "docker":
+            # the same names, inside the helper: the volume at /v, the archive in flight in the stage volume
+            dst_path, stage = "/v", f"/s/{src_vol}__{dst_vol}.tar"
+            meta = stage + ".json"
+
+            def wrap(script: str, stdin: bool = False) -> str:
+                return _in_helper(dst_vol, script, stdin)
+            # the helper image is made present HERE, in prepare's budget: a pull inside a later step would read as
+            # «no stage» or «no room»
+            prep = (f"docker volume create {q(dst_vol)} >/dev/null && docker volume create {q(STAGE_VOLUME)} >/dev/null && "
+                    f"{{ docker image inspect {q(HELPER)} >/dev/null 2>&1 || docker pull -q {q(HELPER)} >/dev/null; }}")
+        else:
+            def wrap(script: str, stdin: bool = False) -> str:
+                return script
+            prep = (f"docker volume create {q(dst_vol)} && "
+                    f"mkdir -p {q(STAGE_DIR)} && chmod 700 {q(STAGE_DIR)} && "
+                    f"test -d {q(dst_path)}")
+        code, out, err = _run(argv_for(job["to"], prep), timeout=180)
         if code != 0:
             raise RuntimeError(f"יצירת ה-volume ביעד נכשלה: {err.strip() or out.strip()}")
-        _append(job, f"ה-volume ביעד מוכן: {dst_vol}")
+        _append(job, f"ה-volume ביעד מוכן: {dst_vol}" + (" (נכתב דרך docker: המשתמש ביעד אינו root)"
+                                                         if mode == "docker" else ""))
 
         fp = _fingerprint(argv_for, job["from"], src_path)
         job["fingerprint"] = fp[:12]
-        code, out, _ = _run(argv_for(job["to"], f"stat -c %s {q(stage)} 2>/dev/null || echo 0"), 60)
+        code, out, err = _run(argv_for(job["to"], wrap(f"stat -c %s {q(stage)} 2>/dev/null || echo 0")), 120)
+        if mode == "docker" and (code != 0 or not out.strip()):
+            # the `|| echo 0` runs INSIDE the helper: a helper that did not run is not «no stage» — appending a
+            # whole archive to a stage that is there would wreck it
+            raise RuntimeError(f"קונטיינר העזר ביעד לא רץ ({code}): {err.strip()[:200]}")
         have = int((out or "0").strip().splitlines()[-1] or 0)
-        old_meta = _read_meta(argv_for, job["to"], meta)
+        old_meta = _read_meta(argv_for, job["to"], meta, wrap, strict=mode == "docker")
         if have:
             same = old_meta.get("fingerprint") == fp
             if not same and not job["restart"]:
@@ -249,7 +297,10 @@ def _copy(job: dict, argv_for) -> None:
                     "ה-volume במקור השתנה מאז ניסיון ההעברה הקודם — אי אפשר להמשיך מאותה נקודה. "
                     "הרץ שוב עם restart=true כדי להתחיל מהתחלה.", code="source_changed")
             if job["restart"] or not same:
-                _run(argv_for(job["to"], f"rm -f {q(stage)} {q(meta)}"), 60)
+                code, _, err = _run(argv_for(job["to"], wrap(f"rm -f {q(stage)} {q(meta)}")), 120)
+                if mode == "docker" and code != 0:
+                    # an old stage left in place would have a whole archive appended to it
+                    raise RuntimeError(f"קונטיינר העזר ביעד לא רץ ({code}): {err.strip()[:200]}")
                 have = 0
         job["resumed_from"] = have
         # The bytes already on the destination ARE progress: a resumed copy that reports 0% until its
@@ -266,18 +317,43 @@ def _copy(job: dict, argv_for) -> None:
         # In direct mode there is no archive to keep, so only the extracted copy has to fit.
         need = int((total or data) * 1.02 + data * 1.02) if job["resume"] else int(data * 1.05)
         where = STAGE_DIR if job["resume"] else dst_path
-        code, out, _ = _run(argv_for(job["to"], f"df -B1 --output=avail {q(where)} | tail -1"), 60)
-        free = int((out or "0").strip().splitlines()[-1].split()[0] or 0) if out.strip() else 0
-        job["dest_free_bytes"] = free
-        if free and need and free < need:
-            raise RuntimeError(
-                f"אין מקום ביעד ({where}): נדרשים {need / 1024 ** 3:.1f}GB פנויים "
-                f"(ארכיון בדרך + התוכן שחולץ) ויש {free / 1024 ** 3:.1f}GB")
+        if mode == "docker":
+            # the stage volume and the destination may sit on two disks (a volume bound to a store's own disk):
+            # each is asked for what lands on it, and one disk holding both is asked for both
+            code, out, _ = _run(argv_for(job["to"], wrap("df -Pk /s /v | awk 'NR>1{print $1, $4}'")), 120)
+            rows = [ln.split() for ln in out.splitlines() if len(ln.split()) == 2 and ln.split()[1].isdigit()]
+            free, checks = 0, []
+            if len(rows) == 2:
+                (fs_s, kb_s), (fs_v, kb_v) = rows
+                free = int(kb_v) * 1024
+                if not job["resume"]:
+                    checks = [(dst_vol, free, int(data * 1.05))]
+                elif fs_s == fs_v:
+                    checks = [(dst_vol, free, need)]
+                else:
+                    checks = [(STAGE_VOLUME, int(kb_s) * 1024, int((total or data) * 1.02)),
+                              (dst_vol, free, int(data * 1.02))]
+            job["dest_free_bytes"] = free
+            if not checks:
+                _append(job, f"המקום ביעד לא נמדד (df: {out.strip()[:120]!r})")
+            for where, have_room, want in checks:
+                if have_room and want and have_room < want:
+                    raise RuntimeError(
+                        f"אין מקום ביעד ({where}): נדרשים {want / 1024 ** 3:.1f}GB פנויים "
+                        f"ויש {have_room / 1024 ** 3:.1f}GB")
+        else:
+            code, out, _ = _run(argv_for(job["to"], f"df -B1 --output=avail {q(where)} | tail -1"), 60)
+            free = int((out or "0").strip().splitlines()[-1].split()[0] or 0) if out.strip() else 0
+            job["dest_free_bytes"] = free
+            if free and need and free < need:
+                raise RuntimeError(
+                    f"אין מקום ביעד ({where}): נדרשים {need / 1024 ** 3:.1f}GB פנויים "
+                    f"(ארכיון בדרך + התוכן שחולץ) ויש {free / 1024 ** 3:.1f}GB")
         if data > MAX_BYTES:
             raise RuntimeError(f"ה-volume גדול מהמותר ({MAX_BYTES // (1024 ** 3)}GB) — הופסק")
         _write_meta(argv_for, job["to"], meta, {"fingerprint": fp, "total": total, "data": data,
                                                 "src_volume": src_vol, "dest_volume": dst_vol,
-                                                "stage": stage, "started": job["started"]})
+                                                "stage": stage, "started": job["started"]}, wrap)
         _append(job, f"מקור: {data / 1024 ** 2:.0f}MB · ארכיון: "
                      f"{(str(round(total / 1024 ** 2)) + 'MB') if total else 'לא נמדד'} · "
                      f"פנוי ביעד: {free / 1024 ** 3:.1f}GB" +
@@ -288,13 +364,17 @@ def _copy(job: dict, argv_for) -> None:
         job["stream_started"] = int(time.time())
         if job["resume"]:
             src_cmd = _bash(f"set -o pipefail; tar -C {q(src_path)} -cf - . | tail -c +{have + 1}")
-            dst_cmd = _bash(f"cat >> {q(stage)}")
+            dst_cmd = (wrap(f"cat >> {q(stage)}", stdin=True) if mode == "docker"
+                       else _bash(f"cat >> {q(stage)}"))
         else:
             # No staging, no resume: straight into the destination volume. Chosen for a copy that
             # cannot fit twice on the destination disk — and a drop means starting over.
             src_cmd = _bash(f"tar -C {q(src_path)} -cf - .")
-            dst_cmd = _bash(f"rm -rf {q(dst_path)} && mkdir -p {q(dst_path)} && "
-                            f"tar -xf - -C {q(dst_path)}")
+            # /v is the helper's mount point: emptied, never removed
+            # --numeric-owner: busybox would map the archive's user NAMES through alpine's own passwd (www-data 33→82)
+            dst_cmd = (wrap("find /v -mindepth 1 -delete && tar --numeric-owner -xf - -C /v", stdin=True) if mode == "docker"
+                       else _bash(f"rm -rf {q(dst_path)} && mkdir -p {q(dst_path)} && "
+                                  f"tar -xf - -C {q(dst_path)}"))
             _append(job, "מצב ישיר (ללא קובץ ביניים): ניתוק יחייב התחלה מהתחלה")
 
         p_src = subprocess.Popen(argv_for(job["from"], src_cmd), stdout=subprocess.PIPE,
@@ -360,7 +440,7 @@ def _copy(job: dict, argv_for) -> None:
 
         # ── verify ─────────────────────────────────────────────────────────────
         _tap(job, "verify")
-        code, out, err = _run(argv_for(job["to"], f"stat -c %s {q(stage)} 2>/dev/null || echo 0"), 60)
+        code, out, err = _run(argv_for(job["to"], wrap(f"stat -c %s {q(stage)} 2>/dev/null || echo 0")), 120)
         got = int((out or "0").strip().splitlines()[-1] or 0) if out.strip() else 0
         job["staged_bytes"] = got
         if not job["resume"]:
@@ -372,7 +452,7 @@ def _copy(job: dict, argv_for) -> None:
                 raise RuntimeError(f"קובץ הביניים קטן מההתחלה ({got} < {have}) — היעד התאפס")
             if job["verify"]:
                 _append(job, "מאמת את הארכיון מול המקור (sha256)")
-                s_dst = _sha256(argv_for, job["to"], f"sha256sum {q(stage)} | cut -d' ' -f1")
+                s_dst = _sha256(argv_for, job["to"], wrap(f"sha256sum {q(stage)} | cut -d' ' -f1"))
                 s_src = _sha256(argv_for, job["from"],
                                 _bash(f"set -o pipefail; tar -C {q(src_path)} -cf - . | "
                                       f"sha256sum | cut -d' ' -f1"))
@@ -385,17 +465,23 @@ def _copy(job: dict, argv_for) -> None:
         # ── extract ────────────────────────────────────────────────────────────
         if job["resume"]:
             _tap(job, "extract")
-            code, out, err = _run(argv_for(job["to"],
-                                           _bash(f"set -e; rm -rf {q(dst_path)}; mkdir -p {q(dst_path)}; "
-                                                 f"tar -xf {q(stage)} -C {q(dst_path)}; "
-                                                 f"rm -f {q(stage)} {q(meta)}; "
-                                                 f"du -sb {q(dst_path)} | cut -f1")),
-                                  timeout=6 * 3600)
+            if mode == "docker":
+                # numeric owners (see the direct mode), and KiB: busybox's du has no -b everywhere
+                extract = wrap(f"set -e; find /v -mindepth 1 -delete; tar --numeric-owner -xf {q(stage)} -C /v; "
+                               f"rm -f {q(stage)} {q(meta)}; du -sk /v | cut -f1")
+            else:
+                extract = _bash(f"set -e; rm -rf {q(dst_path)}; mkdir -p {q(dst_path)}; "
+                                f"tar -xf {q(stage)} -C {q(dst_path)}; "
+                                f"rm -f {q(stage)} {q(meta)}; "
+                                f"du -sb {q(dst_path)} | cut -f1")
+            code, out, err = _run(argv_for(job["to"], extract), timeout=6 * 3600)
             if code != 0:
                 raise RuntimeError(f"חילוץ הארכיון ביעד נכשל: {err.strip()[:300]}")
             grown = int((out or "0").strip().splitlines()[-1] or 0) if out.strip() else 0
+            grown *= 1024 if mode == "docker" else 1
             job["dest_bytes"] = grown
-            _append(job, f"חולץ ל-{dst_path} ({grown / 1024 ** 2:.0f}MB) וקובץ הביניים נמחק")
+            _append(job, f"חולץ ל-{dst_path if mode == 'root' else dst_vol} ({grown / 1024 ** 2:.0f}MB) "
+                         f"וקובץ הביניים נמחק")
 
         # ── done ───────────────────────────────────────────────────────────────
         _tap(job, "done")
@@ -438,17 +524,21 @@ def _progress_line(job: dict, moved: int, now: float) -> str:
     return bit
 
 
-def _read_meta(argv_for, machine: str, meta: str) -> dict:
-    code, out, _ = _run(argv_for(machine, f"cat {q(meta)} 2>/dev/null || true"), 60)
+def _read_meta(argv_for, machine: str, meta: str, wrap=None, strict: bool = False) -> dict:
+    wrap = wrap or (lambda s: s)
+    code, out, err = _run(argv_for(machine, wrap(f"cat {q(meta)} 2>/dev/null || true")), 120)
+    if strict and code != 0:
+        raise RuntimeError(f"קונטיינר העזר ביעד לא רץ ({code}): {err.strip()[:200]}")
     try:
         return json.loads(out or "{}") or {}
     except ValueError:
         return {}
 
 
-def _write_meta(argv_for, machine: str, meta: str, data: dict) -> None:
+def _write_meta(argv_for, machine: str, meta: str, data: dict, wrap=None) -> None:
+    wrap = wrap or (lambda s: s)
     payload = q(json.dumps(data, ensure_ascii=False))
-    _run(argv_for(machine, f"printf %s {payload} > {q(meta)} && chmod 600 {q(meta)}"), 60)
+    _run(argv_for(machine, wrap(f"printf %s {payload} > {q(meta)} && chmod 600 {q(meta)}")), 120)
 
 
 def _public(job: dict) -> dict:

@@ -31,6 +31,7 @@ from datetime import datetime, timezone
 from typing import Any, BinaryIO
 
 from .engine import ENGINE, ENGINES
+from . import diarize
 
 LOG = logging.getLogger("asr.jobs")
 
@@ -190,6 +191,14 @@ class Jobs:
         self.uploads_max_bytes = int(_env("SPEECH_UPLOADS_MAX_BYTES", str(5 * 1024**3)))
         self.job_timeout = float(_env("SPEECH_JOB_TIMEOUT_SECONDS", str(2 * 3600)))
         self.beam_size = int(_env("SPEECH_BEAM_SIZE", "5"))
+        # diarization (DGO-1627): on by default, because a transcript that cannot say who spoke is
+        # the defect this option removes; a deployment on a box too small for it sets it to 0
+        self.diarize = _env("SPEECH_DIARIZE", "1").strip().lower() not in ("0", "false", "no", "off")
+        self.diarize_threshold = float(_env("SPEECH_DIARIZE_THRESHOLD", str(diarize.THRESHOLD)))
+        # …and only for audio long enough to be a conversation: a 30-second voice note is one person,
+        # and labelling it would change the srt/vtt/txt this service returns for it (DGO-1627's
+        # review). A meeting, a call, a recording — those are what this is for.
+        self.diarize_min_audio = float(_env("SPEECH_DIARIZE_MIN_AUDIO_SECONDS", "120"))
         # a recording longer than this and a half is transcribed in pieces of about this length (_pieces)
         self.chunk_seconds = max(60.0, float(_env("SPEECH_CHUNK_SECONDS", "600")))
         os.makedirs(self.jobs_dir, exist_ok=True)
@@ -372,7 +381,7 @@ class Jobs:
         # mode finds it per 30 s window; 1.2.1 does not say which, so the segments do not either)
         chosen = ENGINES.get(opts.get("model") or "", ENGINE)
         auto = language == "auto"
-        # the caller's words for this audio (app._options `prompt`, FPG-471): the text before the first words of
+        # the caller's words for this audio (app._options `prompt`, EXF-471): the text before the first words of
         # each piece — with condition_on_previous_text off, only the first 30-s window of a piece sees it, which
         # is a live caption's whole segment. None (every job before it, and every caller that sends none): unchanged.
         prompt = opts.get("prompt") or None
@@ -463,6 +472,35 @@ class Jobs:
                 del audio
 
         inference = time.time() - inference_started
+
+        # WHO SPOKE (DGO-1627). After the words, never before them: a label that costs a transcript
+        # is not a label worth having, so a diarization that fails leaves the segments as they were
+        # and says so in usage.diarize_error. The audio is read a second time, in order, one window
+        # at a time — the whole file is never held (a 72-minute meeting is 276 MB of float32).
+        speakers: list[dict[str, Any]] = []
+        diarize_seconds = 0.0
+        diarize_error: str | None = None
+        if (self.diarize and job.status == "processing" and len(out) >= diarize.MIN_SEGMENTS
+                and (not duration or duration >= self.diarize_min_audio)):
+            job.progress = dict(job.progress, phase="diarization")
+            self._persist(job)
+            t_di = time.time()
+            try:
+                got = diarize.attach(
+                    out, path, num_speakers=opts.get("num_speakers"), threshold=self.diarize_threshold,
+                    # the pass is minutes long on a long meeting: a cancel or a timeout must reach it
+                    should_stop=lambda: job.cancel_requested or (time.time() - started > self.job_timeout),
+                )
+                out = got["segments"]
+                speakers = got["speakers"]
+                LOG.info("job %s: %d voice(s) over %d segment(s) in %.1fs", job.id, len(speakers),
+                         len(out), time.time() - t_di)
+            except Exception as exc:      # a transcript is the deliverable; the labels are a bonus
+                diarize_error = f"{type(exc).__name__}: {exc}"
+                LOG.warning("job %s: diarization failed (%s); the transcript stands", job.id, diarize_error)
+            diarize_seconds = time.time() - t_di
+            diarize.release()       # the encoder's ~0.5 GiB goes back before the result is written
+
         wall = time.time() - started
         job.status = "completed"
         job.ended = _now()
@@ -477,6 +515,7 @@ class Jobs:
             "duration": round(duration, 2),
             "text": " ".join(s["text"] for s in out if s["text"]).strip(),
             "segments": out,
+            "speakers": speakers,
             "usage": {
                 "audio_seconds": round(duration, 2),
                 # inference only — the fetch and the load are costs of the FIRST job and are
@@ -485,6 +524,8 @@ class Jobs:
                 "wall_seconds": round(wall, 1),
                 "rtf": round(duration / inference, 2) if inference else None,
                 "model_load_seconds": round(chosen.state().get("load_seconds") or 0.0, 1) if loaded_now else 0.0,
+                "diarize_seconds": round(diarize_seconds, 1),
+                **({"diarize_error": diarize_error} if diarize_error else {}),
             },
         }
         job.usage = job.result["usage"]

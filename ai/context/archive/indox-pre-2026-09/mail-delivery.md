@@ -15,7 +15,7 @@ evidence, because each one looked like something else.
 
 ## The working configuration
 
-Host `bina-devops-vps` (93.184.216.5), mailbox `person12@example.com`.
+Host `bina-devops-vps` (93.184.216.5), mailbox `person13@example.com`.
 
 | Layer | Value | Why it matters |
 |---|---|---|
@@ -159,7 +159,7 @@ and on the receiving side, in the message's own `Received:` header, `with ESMTPS
 `ESMTP` without the S is the failure this section is about.
 
 **How to read the receiving side when you cannot log into the receiving mailbox.** Send to a
-Google-hosted address that will reject — `person13@example.com` is one — and Google's DSN
+Google-hosted address that will reject — `person14@example.com` is one — and Google's DSN
 comes back to the sending mailbox carrying a `text/rfc822-headers` part: the original message's
 headers **including the `Received:` line Google's own MTA wrote**. Same recipient, ten minutes
 apart, on 2026-07-29:
@@ -170,7 +170,7 @@ by mx.google.com with ESMTPS id … (version=TLS1_3 cipher=TLS_AES_256_GCM_SHA38
 ```
 
 That is the receiver describing the session it just had with us, which is the only evidence that is
-not our own opinion of our own configuration. `person14-x@example.com` is the companion for
+not our own opinion of our own configuration. `person15-x@example.com` is the companion for
 SPF/DKIM/iprev — it replies to the envelope sender, so the report lands in the mailbox under test
 and doubles as proof that a brand-new address can receive mail from the public internet.
 
@@ -181,7 +181,7 @@ the postfix cleanup line, and it is easy to read past because the line otherwise
 
 ```
 postfix/cleanup[3704]: 4C9B0ABD74: message-id=<>          ← ours, composed by mailapi
-postfix/cleanup[1957]: EF48BAB5C7: message-id=<person15-x@example.com>   ← inbound, normal
+postfix/cleanup[1957]: EF48BAB5C7: message-id=<person16-x@example.com>   ← inbound, normal
 ```
 
 Google states the consequence plainly:
@@ -224,7 +224,7 @@ parameter name** — whether it applies to a given submission depends on `local_
 the mailserver.
 
 Proof is the same log line, with the field populated, plus the receiver's own copy of the headers
-from a `person14-x@example.com` report.
+from a `person15-x@example.com` report.
 
 ## Deliberately still closed
 

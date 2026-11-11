@@ -29,8 +29,13 @@
   function apply(t) {
     window.__DO_THEME = t;                 // apps read this on (re)load via tokens.js
     applyTo(document, t);                  // the console shell itself
-    var f = document.getElementById('frame');
-    try { if (f && f.contentDocument) applyTo(f.contentDocument, t); } catch (e) {}   // the live app
+    // …and EVERY app it holds: the classic shell's one #frame, and in desktop mode each window's own frame
+    // (DGO-162 phase 0 — «exactly one #frame» was a harness assumption; a window kept the old ground until it
+    // reloaded). A frame of another origin cannot be reached, and is left to read __DO_THEME when it loads.
+    var frames = document.querySelectorAll('iframe');
+    for (var i = 0; i < frames.length; i++) {
+      try { if (frames[i].contentDocument) applyTo(frames[i].contentDocument, t); } catch (e) {}
+    }
     persist(t);
   }
 

@@ -28,7 +28,7 @@ from hebnorm import norm_str  # noqa: E402
 ap = argparse.ArgumentParser()
 ap.add_argument("out")
 ap.add_argument("--sys", nargs="+", required=True, help="LABEL=HYP.json:KEYREGEX[:MAPSUFFIX[:TEMPO]]")
-ap.add_argument("--maps", default="/root/fpgaudio/bench/data/tmp")
+ap.add_argument("--maps", default="/root/exfaudio/bench/data/tmp")
 ap.add_argument("--min-votes", type=int, default=2)
 ap.add_argument("--primary", default=None)
 ap.add_argument("--win", type=float, default=0.25)

@@ -9,7 +9,7 @@
    via the mailapi container's own live IMAP connection object (there is no message-delete
    HTTP op on mailapi — see report) so no separate credentials are needed.
 
-Usage: python3 teardown.py --state <dir> --deployment-name shlomo-laptop
+Usage: python3 teardown.py --state <dir> --deployment-name owner-laptop
 """
 import argparse
 import json
@@ -192,7 +192,7 @@ def delete_mail_messages(dn, provision):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--state", required=True)
-    ap.add_argument("--deployment-name", default="shlomo-laptop")
+    ap.add_argument("--deployment-name", default="owner-laptop")
     a = ap.parse_args()
     dn = a.deployment_name
     with open(os.path.join(a.state, "provision.json"), encoding="utf-8") as f:

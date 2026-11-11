@@ -1,6 +1,6 @@
 # QA — 03: Filters
 
-URL: `https://any-concurrency.hacohen.bina-solutions.co.il/`
+URL: `https://any-concurrency.example.bina-solutions.co.il/`
 
 ---
 

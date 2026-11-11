@@ -1,0 +1,13 @@
+#!/usr/bin/env bash
+#: add-record <domain> <type> <name> <value> [--ttl N] [--consent "<who>: <why>"] — create one record through the InterNIC portal and read it back:  ./bbox domain-internic add-record digital-office.co.il A '*.exampleu' 93.184.216.11
+# Pipes the app's own CLI (apps/domain-internic/cli.py) into its container, or — on an office that does not
+# run it — into the credential plane's container, at the linked office's door (../where.sh).
+# Without --consent it runs only when the office has already seen this action succeed once (portal.verified);
+# --consent names the person who decided, and why — it is kept with the write (DGO-1032, DGO-1473).
+set -uo pipefail
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
+. "${REPO_ROOT}/scripts/lib.sh"
+case "${1:-}" in -h|--help|"") sed -n 's/^#: //p' "${BASH_SOURCE[0]}"; exit 0 ;; esac
+. "${SCRIPT_DIR}/../where.sh"
+di_cli add-record "$@"

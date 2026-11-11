@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+#: line <data.json> [<out.pdf>] [--html] [--drive "/folder/"] — a client document (a quote, a service agreement, or both) in the business's one house style, made from data:  ./bbox my-docs line apps/my-docs/line/example.json
+# The code is apps/my-docs/line/line.py (its header is the whole contract, DGO-1454). It runs on THIS machine's python:
+# it renders with WeasyPrint when it is installed, else with a Chromium it finds, and says so when there is neither.
+set -uo pipefail
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
+. "${REPO_ROOT}/scripts/lib.sh"
+case "${1:-}" in -h|--help|"") sed -n 's/^#: //p' "${BASH_SOURCE[0]}"; exit 0 ;; esac
+exec python3 "$(npath "${REPO_ROOT}/apps/my-docs/line/line.py")" "$@"

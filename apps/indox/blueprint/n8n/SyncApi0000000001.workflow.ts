@@ -73,7 +73,11 @@ export class SyncApiWorkflow {
         httpMethod: 'POST',
         path: 'indox-manage',
         responseMode: 'lastNode',
-        options: {},
+        // DGO-1603 (G97): the control plane (SCAN · INJECT · RELEASE, and RESET in IndoxResetFull01) is
+        // called by the BFF at http://n8n-webhook:5678/webhook/indox-manage — never from outside. The
+        // allow-list closes the internet door; the basicAuth pairing this file's issue describes
+        // (_svc_call must send the credential) is a separate, paired change and is not done here.
+        options: { ipWhitelist: '10.0.0.0/8,172.16.0.0/12,192.168.0.0/16,127.0.0.1,::1' },
     };
 
     @node({

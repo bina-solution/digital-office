@@ -9,7 +9,7 @@ the `cloakprofile` volume, so this is a **one-time, human-in-the-loop** step.
 1. **Open the window for the user.** Drive the live-view tab (page 0 — the tab
    `/view` renders) to the login URL so the form is waiting when they connect:
    ```bash
-   docker exec -i browser42-browser-shlomo-laptop python3 - <<'PY'
+   docker exec -i browser42-browser-owner-laptop python3 - <<'PY'
    from playwright.sync_api import sync_playwright
    with sync_playwright() as p:
        b = p.chromium.connect_over_cdp("http://localhost:9222")
@@ -33,7 +33,7 @@ the `cloakprofile` volume, so this is a **one-time, human-in-the-loop** step.
    `continue=` param, so match the host *prefix*, not a substring):
    ```bash
    for i in $(seq 1 90); do
-     url=$(docker exec -i browser42-browser-shlomo-laptop python3 - <<'PY'
+     url=$(docker exec -i browser42-browser-owner-laptop python3 - <<'PY'
    from playwright.sync_api import sync_playwright
    with sync_playwright() as p:
        b = p.chromium.connect_over_cdp("http://localhost:9222")

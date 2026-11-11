@@ -108,7 +108,8 @@ const buttons = (id) => [...row(id).matchAll(/<button[^>]*class="([^"]*)"[^>]*da
   .map((m) => ({ cls: m[1].split(/\s+/).filter(Boolean), act: m[2], title: m[3], rest: m[4], body: m[5].trim() }));
 
 /* ── a row's actions: ONE word, the rest icons that say what they do ──────────────────────────── */
-const want = { srv: ['exec', 'audit', 'probe', 'del'], hp: ['probe', 'auth', 'del'], nas: ['auth', 'probe', 'del'] };
+// a machine that answers also opens a live shell («טרמינל», DGO-1800: the terminal screen is this app's now)
+const want = { srv: ['exec', 'term', 'audit', 'probe', 'del'], hp: ['probe', 'auth', 'del'], nas: ['auth', 'probe', 'del'] };
 for (const [id, acts] of Object.entries(want)) {
   const bs = buttons(id);
   ok(bs.map((b) => b.act).join() === acts.join(), `${id}: the actions of its state, in order (${bs.map((b) => b.act)})`);
@@ -128,7 +129,9 @@ ok(html('alerts').includes('ממתין לאישור מפתח ה־SSH של הלש
 /* ── the cells ───────────────────────────────────────────────────────────────────────────────── */
 ok((table.match(/<th>/g) || []).length === 7, 'seven columns: the address is the second line of the name');
 ok(!table.includes('class="dot'), 'a state is said once (the pill), not twice');
-ok(row('srv').includes('title="root@203.0.113.82:22"'), 'user and port are one hover away, not in the line');
+// the hover holds the address first, then what the machine calls itself when that is not its name (DGO-387, 8adac7ae)
+ok(/title="root@203\.0\.113\.82:22( · [^"]*)?"/.test(row('srv')) && !row('srv').replace(/<[^>]*>/g, '').includes('root@'),
+   'user and port are one hover away, not in the line');
 ok(/class="small muted nw"><span class="num">6\.4 GB \/ 7\.8 GB</.test(row('srv')), 'used / total never breaks inside a value');
 ok(row('srv').includes('1.83 · 2.06 · 1.81'), 'the load is three figures, not a raw string');
 const units = (s) => (X.uptimeHe(s).match(/<bdi>/g) || []).length;
@@ -203,5 +206,30 @@ X.showRoute('c/vps1/disk');
 ok(wrote.at(-1) === '/a/computers/c/vps1/disk', "a computer's page writes its address segment by segment (no %2F)");
 ok(!/#\/c\//.test(src) && !/location\.hash\s*=/.test(src.replace(/window\.top\.location\.hash/g, '')),
    'no screen of this app lives in the hash: the console mirrors the path only (G83)');
+
+/* ── a computer whose machine AND security do not answer: said, never a loader (the Dell, 2026-11-10) ── */
+// host.js runs beside app.js in the page, so it runs in the same context here; no answer is canned for its reads,
+// so both fail as a browser's fetch does when nothing answers
+sandbox.clearInterval = () => {};
+sandbox.clearTimeout = () => {};
+vm.runInContext(`${readFileSync(join(here, '..', 'static', 'host.js'), 'utf8')}\nglobalThis.__h = Host;`, sandbox);
+const H = sandbox.__h;
+H.open('nas', 'res');          // a computer nothing above has read: no figure from before to fall back on
+await H.tick();
+ok(html('hNotice').includes('<b>שירות המכונה</b>: ') && html('hNotice').includes('<b>אפליקציית האבטחה</b>: '),
+   "no source answering: the computer's page names each source that did not give figures");
+ok(['hCpu', 'hMem', 'hDisk', 'hNet', 'hCont', 'hInfo', 'hSvc'].every((id) => html(id).includes('לא נמדד')),
+   '…and each figure and card reads «לא נמדד» — the skeleton was a loader that never ended');
+H.close();
+// the Dell's own failure: both sources ANSWER, with a 502 and the server's words — said as the server said them
+ANSWERS['api/hosts/hp/machine/api/overview'] = [502, { error: 'השירות במחשב ענה בשגיאה' }];
+ANSWERS['api/hosts/hp/security/api/host/overview'] = [502, { error: 'השירות לא מותקן במחשב הזה' }];
+H.open('hp', 'res');
+await H.tick();
+ok(html('hNotice').includes('<b>שירות המכונה</b>: השירות במחשב ענה בשגיאה')
+   && html('hNotice').includes('<b>אפליקציית האבטחה</b>: השירות לא מותקן במחשב הזה'),
+   "…a source that answered with an error is said in the server's own words");
+ok(html('hCpu').includes('לא נמדד'), '…and its figures read «לא נמדד» too');
+H.close();
 
 console.log(`computers ui-selfcheck: ${passed} checks passed`);

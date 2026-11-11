@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"math/big"
 	"sort"
 	"strconv"
 	"strings"
@@ -116,7 +117,8 @@ func (e *emitter) anchor(v any, seen map[*Map]bool) {
 			return
 		}
 		seen[t] = true
-		for _, k := range e.keys(t) {
+		keys, _ := e.keys(t) // an order refused is refused where the mapping is written
+		for _, k := range keys {
 			x, _ := t.Get(k)
 			e.anchor(x, seen)
 		}
@@ -127,13 +129,90 @@ func (e *emitter) anchor(v any, seen map[*Map]bool) {
 	}
 }
 
-// keys are a mapping's keys in the order they are written.
-func (e *emitter) keys(m *Map) []string {
+// keys are a mapping's keys in the order they are written — or the one order this writer will not guess.
+func (e *emitter) keys(m *Map) ([]string, error) {
 	keys := m.Keys()
-	if e.sortKeys {
-		sort.Strings(keys)
+	if !e.sortKeys || len(keys) < 2 {
+		return keys, nil
 	}
-	return keys
+	// sorted(mapping.items()): strings by code point (UTF-8's byte order is the same), numbers — a bool is
+	// one — by value (DGO-636). Keys Python cannot order against each other — a string beside a number, a
+	// null beside anything — raise TypeError there, which represent_mapping catches: then as it is.
+	type number struct {
+		inf   int
+		exact *big.Rat
+	}
+	nums, strs, nans := map[string]number{}, 0, 0
+	for _, k := range keys {
+		switch t := m.TypedKey(k).(type) {
+		case string:
+			strs++
+		case float64:
+			if math.IsNaN(t) {
+				nans++
+				continue
+			}
+			inf, exact, _ := pyKeyNumber(t)
+			nums[k] = number{inf, exact}
+		default:
+			if inf, exact, ok := pyKeyNumber(t); ok {
+				nums[k] = number{inf, exact}
+			}
+		}
+	}
+	switch {
+	case strs == len(keys):
+		sort.Strings(keys)
+	case len(nums) == len(keys):
+		sort.SliceStable(keys, func(a, b int) bool {
+			x, y := nums[keys[a]], nums[keys[b]]
+			return pyKeyCmp(x.inf, x.exact, y.inf, y.exact) < 0
+		})
+	case len(nums)+nans == len(keys):
+		// a NaN among numbers raises nothing in sorted(): it lands where timsort's comparisons put it
+		return keys, errors.New("unsupported: a NaN key among numbers, sorted — Python's order there is " +
+			"timsort's comparisons with NaN, which this writer does not model")
+	}
+	return keys, nil
+}
+
+// pyKeyNumber is a key that is a number to Python (a bool is one), as < between keys goes by it: an infinity
+// by its sign, anything else exactly. False for a string, a null, and NaN (which orders against nothing).
+func pyKeyNumber(v any) (inf int, exact *big.Rat, ok bool) {
+	switch t := v.(type) {
+	case bool:
+		if t {
+			return 0, big.NewRat(1, 1), true
+		}
+		return 0, new(big.Rat), true
+	case int64:
+		return 0, new(big.Rat).SetInt64(t), true
+	case BigInt:
+		r, ok := new(big.Rat).SetString(string(t))
+		return 0, r, ok
+	case float64:
+		switch {
+		case math.IsNaN(t):
+			return 0, nil, false
+		case math.IsInf(t, 0):
+			return int(math.Copysign(1, t)), nil, true
+		}
+		return 0, new(big.Rat).SetFloat64(t), true
+	}
+	return 0, nil, false
+}
+
+// pyKeyCmp orders two pyKeyNumber values: -1, 0 or +1.
+func pyKeyCmp(ai int, a *big.Rat, bi int, b *big.Rat) int {
+	switch {
+	case ai < bi:
+		return -1
+	case ai > bi:
+		return 1
+	case ai != 0:
+		return 0
+	}
+	return a.Cmp(b)
 }
 
 // node is expect_node. inMapping says the node is a key or value of a block mapping (a sequence
@@ -217,7 +296,11 @@ func pyYAMLFloat(f float64) string {
 // key is written as YAML typed it where it was read (TypedKey: `80:` stays the int 80, not '80').
 func (e *emitter) mapping(m *Map) error {
 	e.increaseIndent(false, false)
-	for _, k := range e.keys(m) {
+	keys, err := e.keys(m)
+	if err != nil {
+		return err
+	}
+	for _, k := range keys {
 		e.writeIndent()
 		text, isString, err := represent(m.TypedKey(k))
 		if err != nil {

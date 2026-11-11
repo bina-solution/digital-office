@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+#: competitors [id] — per competitor on the watchlist, its mentions and the latest ones:  ./bbox newsflow competitors wix
+set -uo pipefail
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+out="$("${SCRIPT_DIR}/_call" GET "/api/competitors${1:+?id=$1}")" || exit $?
+printf '%s' "${out}" | python3 -c '
+import json,sys
+for c in json.load(sys.stdin)["competitors"]:
+    print("%-12s %4d mentions" % (c["id"], c["mentions"]))
+    for it in c["latest"][:5]:
+        print("      %s  %s  %s" % (it["found_at"][:10], it["source"], it["title"][:80]))'

@@ -5,7 +5,11 @@
     "en": "RedisInsight"
   },
   "layer": 3,
+  "people": "admins",
   "kind": "tool",
+  "share": {
+    "local": "Raw access to the cache and the queues, sessions and tokens among them: it never crosses a link."
+  },
   "version": "1.0.0",
   "summary": {
     "he": "כלי תצוגה וניפוי שגיאות למטמון ולתורים",

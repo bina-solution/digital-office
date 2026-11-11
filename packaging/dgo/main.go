@@ -29,13 +29,14 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/solomonBoltin/deployment-hacohen/packaging/dgo/internal/compiler"
-	"github.com/solomonBoltin/deployment-hacohen/packaging/dgo/internal/console"
-	"github.com/solomonBoltin/deployment-hacohen/packaging/dgo/internal/edge"
-	"github.com/solomonBoltin/deployment-hacohen/packaging/dgo/internal/engine"
-	"github.com/solomonBoltin/deployment-hacohen/packaging/dgo/internal/native"
-	"github.com/solomonBoltin/deployment-hacohen/packaging/dgo/internal/serve"
-	"github.com/solomonBoltin/deployment-hacohen/packaging/dgo/internal/store"
+	"github.com/bina-solution/digital-office/packaging/dgo/internal/adb"
+	"github.com/bina-solution/digital-office/packaging/dgo/internal/compiler"
+	"github.com/bina-solution/digital-office/packaging/dgo/internal/console"
+	"github.com/bina-solution/digital-office/packaging/dgo/internal/edge"
+	"github.com/bina-solution/digital-office/packaging/dgo/internal/engine"
+	"github.com/bina-solution/digital-office/packaging/dgo/internal/native"
+	"github.com/bina-solution/digital-office/packaging/dgo/internal/serve"
+	"github.com/bina-solution/digital-office/packaging/dgo/internal/store"
 )
 
 var version = "dev" // -ldflags "-X main.version=…"
@@ -74,6 +75,7 @@ var nativeVerbs = map[string]func(root string, args []string, stdout, stderr io.
 	"compose-files":       compiler.ComposeFilesCmd,
 	"serve-plan":          compiler.ServePlanCmd,
 	"set-state":           compiler.SetStateCmd,
+	"lang":                compiler.LangCmd,
 	"office-set": func(root string, args []string, out, err io.Writer) int {
 		return compiler.OfficeSetCmd(root, args, os.Stdin, out, err)
 	},
@@ -87,6 +89,7 @@ var nativeVerbs = map[string]func(root string, args []string, stdout, stderr io.
 // asks before it looks for a checkout. `be-child` is no app id, no cli.alias and no bbox verb, so it
 // shadows nothing (TestBeChildShadowsNoAppAndNoBboxVerb, TestBeChildRunsTheConsoleServerAndShadowsNoApp).
 var children = map[string]func(root string, args []string, stderr io.Writer) int{
+	"adb":     adb.Main,     // the phone's app granting itself AVF's permissions through Wireless debugging (DGO-1328)
 	"console": console.Main, // the shell's files and file-only routes; DGO_CONSOLE=container hands them all back
 	"control": serve.Main,   // app-management's routes; BBOX_CONTROL_PLANE=container hands them all back
 	"edge":    edge.Main,    // the edge where there is no traefik: by host, gated through forward-auth (DGO-1090)
@@ -171,7 +174,10 @@ func findRoot(starts ...string) (string, error) {
 func plan(root string, args []string, goos string) (invocation, error) {
 	verb := args[0]
 	if fn, ok := nativeVerbs[verb]; ok && os.Getenv("DGO_COMPILER") != "python" {
-		native := func(out, err io.Writer) int { return fn(root, args[1:], out, err) }
+		native := func(out, err io.Writer) int {
+			defer compiler.HandBack(root) // root compiling the office's checkout leaves it the owner's (DGO-121)
+			return fn(root, args[1:], out, err)
+		}
 		return invocation{native: native, why: "compiler verb, native (DGO_COMPILER=python delegates it)"}, nil
 	}
 	if verb == "be-child" { // before the WSL hand-off below: the office's own processes run on the host
@@ -205,10 +211,22 @@ func plan(root string, args []string, goos string) (invocation, error) {
 			why: "handed to bbox.cmd (the WSL hand-off)"}, nil
 	}
 	if aid, dir := appOf(root, verb); aid != "" {
+		// `cli.fallback`, as bbox reads it: a word that is not a hook of the app's own — or no word at all —
+		// goes to the app's one door, the word first (`dgo drive -p admin files list` → hooks/cli -p admin …)
+		fb := cliFallback(dir)
 		if len(args) < 2 {
+			if fh, fr, ferr := resolveHook(dir, fb); fb != "" && ferr == nil {
+				return invocation{argv: append(append([]string{}, fr...), fh), why: "app fallback " + aid + "/" + fb}, nil
+			}
 			return invocation{}, fmt.Errorf("dgo %s needs a verb: %s", verb, strings.Join(appVerbs(dir), " "))
 		}
 		hook, runner, err := resolveHook(dir, args[1])
+		if err != nil && fb != "" {
+			if fh, fr, ferr := resolveHook(dir, fb); ferr == nil {
+				argv := append(append([]string{}, fr...), fh)
+				return invocation{argv: append(argv, args[1:]...), why: "app fallback " + aid + "/" + fb}, nil
+			}
+		}
 		if err != nil {
 			return invocation{}, fmt.Errorf("dgo %s %s: %v (its verbs: %s)", verb, args[1], err, strings.Join(appVerbs(dir), " "))
 		}
@@ -274,6 +292,24 @@ func cliAlias(appDir string) string {
 		return ""
 	}
 	return m.CLI.Alias
+}
+
+// cliFallback is the hook a manifest names for every word that is not a hook of its own (`cli.fallback`,
+// read as bbox's app_resolve reads it): "" when the app declares none.
+func cliFallback(appDir string) string {
+	raw, err := os.ReadFile(filepath.Join(appDir, "app.json"))
+	if err != nil {
+		return ""
+	}
+	var m struct {
+		CLI struct {
+			Fallback string `json:"fallback"`
+		} `json:"cli"`
+	}
+	if json.Unmarshal(raw, &m) != nil {
+		return ""
+	}
+	return m.CLI.Fallback
 }
 
 // appVerbs lists an app's verbs the way bbox's app_verbs does: the BASE names of the files in its

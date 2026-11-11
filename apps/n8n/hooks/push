@@ -83,6 +83,22 @@ elif not w and isinstance(e, dict) and (str(e.get("state") or "").strip().lower(
   fi
 fi
 
+# ── A checkout that lacks what is LIVE, or is behind its office's branch, does not push (DGO-1603) ──────
+# On 2026-11-09 a push from a checkout that lacked newer work put twelve webhooks on vps1 back open to the
+# internet: a push imports what its checkout says. tooling/push-guard.py asks whether a live row came from a
+# commit this checkout lacks (every import carries its commit, `meta.dgoCommit`) and whether HEAD is behind
+# origin/<DGO_BRANCH> (asked first) or the local branch, and says the way past it. Asked here, before the lock
+# and every instance-wide step, so a refused push changes nothing; hooks/push-app and hooks/clean-recreate ask
+# the same. 3 is the refusal; any other failure is an unanswered question, which is not a yes either.
+_gc=0
+python3 "$(npath "${N8N_DIR}")/tooling/push-guard.py" behind "$(npath "${REPO_ROOT}")" || _gc=$?
+case "${_gc}" in
+  0) ;;
+  3) echo "Error: n8n push refused (above). Nothing was changed." >&2; exit 1 ;;
+  *) echo "Error: n8n push refused — the push guard could not answer (exit ${_gc}, above). Nothing was changed." >&2
+     exit 1 ;;
+esac
+
 # performance profile: refresh the .env block + perf_* settings rows (no-op if unset) — after the guard, so
 # a refused push changes nothing (the second reader of DGO-998)
 ( cd "${REPO_ROOT}" && python3 scripts/perf-profile-apply ) || true
@@ -499,23 +515,10 @@ _bp_list="$( cd "${REPO_ROOT}" && python3 platform/manager/reconcile.py blueprin
   echo "Error: could not resolve n8n blueprints from the app manifests." >&2; exit 1; }
 [ -n "${_bp_list}" ] || { echo "Error: no app declares blueprints.n8n${APP_SCOPE:+ for '${APP_SCOPE}'}." >&2; exit 1; }
 WRAP="${N8N_DIR}/tooling/wrap.mjs"
-# compile_in_engine <ts dir> <out dir> — `wrap.mjs compile`, run where node is when it is not HERE
-# (DGO-994). Convergence compiles from inside app-management, whose image has no node, so on a fresh
-# office the agent's blueprints were never imported and the error blamed the .workflow.ts. The engine's
-# own container runs node anyway. tar carries the toolchain in (never its node_modules: wrap.mjs
-# installs those once, in the engine's own cache) and the blueprints, and the JSON back out — no path
-# has to mean the same thing on both sides, and nothing lands as another user.
-compile_in_engine() {
-  local box="/tmp/bbox-wrap-$$" rc=0
-  docker exec "${N8N_CONTAINER}" sh -c "rm -rf '${box}' && mkdir -p '${box}/tooling' '${box}/src' '${box}/out'" || return 1
-  tar -C "${N8N_DIR}/tooling" --exclude=node_modules --exclude=test -cf - . \
-    | docker exec -i "${N8N_CONTAINER}" tar -C "${box}/tooling" -xf - || rc=1
-  [ "${rc}" = 0 ] && { tar -C "$1" -cf - . | docker exec -i "${N8N_CONTAINER}" tar -C "${box}/src" -xf - || rc=1; }
-  [ "${rc}" = 0 ] && { docker exec "${N8N_CONTAINER}" node "${box}/tooling/wrap.mjs" compile "${box}/src" "${box}/out" >/dev/null || rc=1; }
-  [ "${rc}" = 0 ] && { docker exec "${N8N_CONTAINER}" tar -C "${box}/out" -cf - . | tar -C "$2" --no-same-owner -xf - || rc=1; }
-  docker exec "${N8N_CONTAINER}" rm -rf "${box}" >/dev/null 2>&1 || true
-  return "${rc}"
-}
+# wrap_run <verb> <src> <out> — wrap.mjs here when this host has node, else inside the office's own n8n
+# container (DGO-994: convergence compiles from inside app-management, whose image has no node; DGO-1746:
+# a server office has none either). One copy for push, push-app, pull and pull-app: tooling/wrap.sh.
+. "${N8N_DIR}/tooling/wrap.sh"
 while IFS="$(printf '\t')" read -r _aid _rel; do
   [ -n "${_rel}" ] || continue
   _dir="${REPO_ROOT}/${_rel}"
@@ -526,18 +529,10 @@ while IFS="$(printf '\t')" read -r _aid _rel; do
   if ls "${_dir}"/*.workflow.ts >/dev/null 2>&1; then
     _gen="${REPO_ROOT}/.generated/n8n/${_aid}"
     rm -rf "${_gen}" && mkdir -p "${_gen}"
-    # bbox_node dies when there is no node here; inside an `if` that is the else branch, not the end of
-    # the hook (set -e), and the else compiles in the engine instead of blaming the blueprint.
-    if _node="$(bbox_node 2>/dev/null)"; then
-      "${_node}" "${WRAP}" compile "${_dir}" "${_gen}" >/dev/null || {
-        echo "Error: wrap.mjs compile failed for '${_aid}' (${_rel}) — fix the .workflow.ts before pushing." >&2
-        rm -rf "${STAGE_DIR}"; exit 1; }
-    else
-      compile_in_engine "${_dir}" "${_gen}" || {
-        echo "Error: there is no node here, and compiling '${_aid}' (${_rel}) inside ${N8N_CONTAINER} failed too." >&2
-        echo "       Install node here or set NODE_BIN; the engine's own output is above." >&2
-        rm -rf "${STAGE_DIR}"; exit 1; }
-    fi
+    wrap_run compile "${_dir}" "${_gen}" >/dev/null || {
+      echo "Error: wrap.mjs compile failed for '${_aid}' (${_rel}) — here, or inside ${N8N_CONTAINER} on a host with" >&2
+      echo "       no node; its own output is above. Fix the .workflow.ts before pushing." >&2
+      rm -rf "${STAGE_DIR}"; exit 1; }
     _src="${_gen}"
   fi
   for _f in "${_src}"/*.json; do
@@ -570,6 +565,26 @@ echo "[n8n-push] staged ${STAGED_N} workflow(s) from $(printf '%s\n' "${_bp_list
 # An address of an app that runs in a LINKED office, not here, goes to that office's door (DGO-945).
 ( cd "${REPO_ROOT}" && python3 "$(npath "${REPO_ROOT}")/scripts/link-endpoints-apply" --stage "$(npath "${STAGE_DIR}")" ) || {
   echo "Error: the linked offices' addresses could not be applied — nothing imported." >&2
+  rm -rf "${STAGE_DIR}"; exit 1; }
+# What this push would overwrite is asked before it is imported (DGO-1603): a live row of the staged workflows
+# that came from work this checkout lacks, and a webhook live has closed that this push would open again (G97's
+# rule, both sides). 3 is the refusal; anything else is an unanswered question, which is not a yes either.
+for _q in live reopen; do
+  _gc=0
+  if [ "${_q}" = live ]; then
+    python3 "$(npath "${N8N_DIR}")/tooling/push-guard.py" live "$(npath "${REPO_ROOT}")" --pg "${PG_CONTAINER}" \
+      --ids-from "$(npath "${STAGE_DIR}")" || _gc=$?
+  else
+    python3 "$(npath "${N8N_DIR}")/tooling/push-guard.py" reopen "$(npath "${STAGE_DIR}")" "$(npath "${REPO_ROOT}")" \
+      --pg "${PG_CONTAINER}" || _gc=$?
+  fi
+  [ "${_gc}" = 0 ] || { rm -rf "${STAGE_DIR}"
+    echo "Error: n8n push refused — no workflow was imported (push guard '${_q}', exit ${_gc}, above)." >&2; exit 1; }
+done
+# Every staged workflow names the commit and the office's line it was rendered from (`meta.dgoCommit`,
+# `meta.dgoBranch`, kept by import:workflow), so a live row says which checkout put it there (DGO-1603).
+python3 "$(npath "${N8N_DIR}")/tooling/push-guard.py" stamp "$(npath "${STAGE_DIR}")" "$(npath "${REPO_ROOT}")" || {
+  echo "Error: the staged workflows could not be stamped with their commit — nothing imported." >&2
   rm -rf "${STAGE_DIR}"; exit 1; }
 tar -C "${STAGE_DIR}" -cf - . | docker exec -i "${N8N_CONTAINER}" tar -C /tmp/n8n-push-wf -xf -
 # ── Pre-create every tag the staged workflows reference ──
@@ -788,6 +803,41 @@ gate_glitchtip_reporter() {
     console.log("[n8n-push]   glitchtip-gate: REPORTING_ENABLED="+enabled+(reason?" ("+reason+")":""));'
 }
 gate_glitchtip_reporter
+
+# ── The CI probe: activated ONLY where CI runs (DGO-1574) ──────────────────────────────────────
+# ciHelloWebhook01 is a probe with exactly one caller, scripts/ci-verify.sh, and it registers a real
+# webhook (/webhook/ci-hello) behind basic auth. On a client office nobody pokes it: measured on
+# Exampleu 2026-11-09, it was active on an office whose CI runs elsewhere — an endpoint kept alive for
+# a caller that does not exist. The committed blueprint now ships `active: false` (safe default, the
+# same shape as the Telegram node's `disabled: true`), and this function is the only thing that turns
+# it on: on a CI runner (GITHUB_ACTIONS or CI in the pushing shell) or where .env declares
+# CI_HELLO_ENABLED=true. A DEPLOYMENT_NAME of `ci` is NOT accepted as evidence — scripts/ci-env.sh
+# writes that name for any machine that runs it, including a laptop.
+# Idempotent and scoped like its two siblings — a push that does not stage this file skips silently.
+gate_ci_hello() {
+  local file="ciHelloWebhook01.json" want="false" why="" dep
+  docker exec "${N8N_CONTAINER}" test -f "/tmp/n8n-push-wf/${file}" 2>/dev/null || {
+    log "ci-hello-gate: ${file} not in this push's scope — skipping"; return; }
+  if [ "$(read_env CI_HELLO_ENABLED)" = "true" ]; then
+    want="true"; why="CI_HELLO_ENABLED=true"
+  elif [ -n "${GITHUB_ACTIONS:-}" ] || [ -n "${CI:-}" ]; then
+    # the pushing shell IS a CI runner. A DEPLOYMENT_NAME of `ci` is deliberately NOT accepted as
+    # evidence: scripts/ci-env.sh writes that name for any machine that runs it — a laptop, a
+    # throwaway fresh-machine check — and activating a public webhook there is the defect itself
+    # (found in review: a container-name suffix is not proof of a CI runner).
+    want="true"; why="a CI runner (GITHUB_ACTIONS=${GITHUB_ACTIONS:-unset} CI=${CI:-unset})"
+  else
+    why="CI_HELLO_ENABLED is not true and this is not a CI runner (GITHUB_ACTIONS/CI unset)"
+  fi
+  log "ci-hello-gate: ${want} (${why})"
+  docker exec -e CH_ACTIVE="${want}" "${N8N_CONTAINER}" node -e '
+    const fs=require("fs"); const p="/tmp/n8n-push-wf/ciHelloWebhook01.json";
+    const w=JSON.parse(fs.readFileSync(p,"utf8"));
+    const want=process.env.CH_ACTIVE==="true";
+    if(!!w.active!==want){ w.active=want; fs.writeFileSync(p, JSON.stringify(w,null,2)); }
+    console.log("[n8n-push]   ci-hello-gate: active="+want);'
+}
+gate_ci_hello
 
 # Bulk import in ONE CLI call (n8n >= 2.17.0 handles --separate cleanly) — ~100x fewer process spawns
 # than per-file. import:workflow always imports INACTIVE, so re-activate the active set afterwards.

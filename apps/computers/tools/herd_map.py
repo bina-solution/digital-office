@@ -89,7 +89,7 @@ class Namer:
         parts = r["name"].split("-")
         cands += ["-".join(parts[:i]) for i in range(len(parts), 0, -1)]     # the longest declared prefix wins
         tail = r["image"].split("@")[0].rsplit(":", 1)[0].rsplit("/", 1)[-1]
-        cands += [tail, re.sub(r"^(deployment-hacohen|platform-os-net|digital-office|mydgo)-", "", tail)]
+        cands += [tail, re.sub(r"^(digital-office|platform-os-net|digital-office|mydgo)-", "", tail)]
         for cand in cands:
             app = self._known(cand) if cand else ""
             if app:

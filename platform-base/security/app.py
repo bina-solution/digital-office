@@ -21,6 +21,7 @@ import ipaddress
 import json
 import os
 import queue
+import re
 import socket
 import threading
 import time
@@ -40,8 +41,12 @@ from edge import Routers, Tail
 from geo import Geo
 from herd import Herd
 from hostinfo import HostInfo
+from firsts import ban_answer, is_news, new_addresses
 from jails import Jails, ban_seconds
 from store import Store, day_of
+from egress import Policy as EgressPolicy, PolicyError as EgressPolicyError
+import countries
+import verdict
 
 DATA = os.environ.get("SECURITY_DATA", "/data")
 SENSOR = os.environ.get("SENSOR_DIR", "/sensor")
@@ -61,6 +66,14 @@ DOOR_SOURCE = os.environ.get("SECURITY_DOOR_SOURCE", "")
 LINK_SOURCE = os.environ.get("SECURITY_LINK_SOURCE", "")
 REMOTE_CONTROL = os.environ.get("SECURITY_REMOTE_CONTROL", "0") == "1"
 STATIC = os.path.join(os.path.dirname(os.path.abspath(__file__)), "static")
+# Where each app may go outside the office (egress.yaml + SECURITY_EGRESS_EXTRA): every outbound row says whether
+# it was declared (DGO-1561, slice 1 — marked, not yet dropped). A declaration that does not load is a health
+# error, never «no rules» and never a crash: bans and the inbound view do not depend on it.
+try:
+    EGRESS: EgressPolicy | None = EgressPolicy.load()
+    EGRESS_ERROR = ""
+except EgressPolicyError as _e:
+    EGRESS, EGRESS_ERROR = None, str(_e)
 
 store = Store(os.path.join(DATA, "security.db"))
 geo = Geo(os.path.join(DATA, "geo"), os.environ.get("SECURITY_GEO", "city"))
@@ -226,22 +239,52 @@ def mode() -> str:
     return store.get("mode", "observe")
 
 
-def notify(title: str, body: str, level: str = "info", source_id: str = "") -> None:
+def notify(title: str, body: str, level: str = "info", source_id: str = "", actions=None) -> None:
+    """A row in the notice centre; `actions` are the answers it offers (meta.actions — «חסום», firsts.ban_answer)."""
     if not NOTIFY_URL:
         return
+    meta = {"office": OFFICE}
+    if actions:
+        meta["actions"] = actions
     try:
         notices_q.put_nowait({"source": "security", "title": title, "body": body, "level": level,
-                              "source_id": source_id or title, "meta": {"office": OFFICE}})
+                              "source_id": source_id or title, "meta": meta})
     except queue.Full:
         pass
 
 
 # ── collectors ───────────────────────────────────────────────────────────────────────────────────
+#: Traefik's own lines about certificates, said once an hour each (DGO-1597): a renewal that keeps failing
+#: writes one line per retry, and an inbox of the same sentence is not more information than one.
+_ACME_SAID: dict = {}
+_ACME_QUIET = 3600
+
+
 def on_edge_line(ts: float, line: str) -> bool:
     r = np.clf_line(line)
-    if not r or not r.get("ip"):
+    if not r:
+        # Not an access line — but the edge's stream also carries the CERTIFICATE provider's own words,
+        # and Let's Encrypt's validation never appears in the access log at all (traefik 3.3 answers
+        # `/.well-known/acme-challenge/…` from its internal handler and logs no access line for it —
+        # measured on the HP, 2026-11-09). A renewal that cannot get a certificate was therefore
+        # invisible; it is an event and, when it fails, a notice (DGO-1597).
+        a = np.traefik_acme(line)
+        if not a:
+            return False
+        key = (a.get("domain") or "", a.get("message", "")[:60])
+        now = time.time()
+        if now - _ACME_SAID.get(key, 0) >= _ACME_QUIET:
+            _ACME_SAID[key] = now
+            title = ("אימות תעודה: " + (a.get("domain") or "הקצה")) if a.get("domain") else "תעודה: " + a["message"][:80]
+            store.event("acme", a.get("level") or "info", title, a.get("message") or "", ref=a.get("domain") or "")
+            if a.get("level") == "error":
+                notify(title, a.get("message") or "", "warn", f"acme:{a.get('domain') or a.get('message')[:40]}")
+        return True
+    if not r.get("ip"):
         return False
-    c = routers.classify(r.get("router") or "")
+    # the PATH is asked as well as the router: Let's Encrypt's validation is the edge's own request and
+    # is not always attributed to a router of the office's (DGO-1597).
+    c = routers.classify(r.get("router") or "", r.get("path") or "")
     r["ts"] = r.get("ts") or ts
     r.update(kind=c["kind"], app=c["app"], office=c["office"], src="edge")
     try:
@@ -300,6 +343,10 @@ def start_tails() -> None:
 
 
 _known_countries: set = set()
+_known_addrs: set = set()      # addresses decided about (firsts.py); seeded from Trust.signed at the first read
+_addr_watch = {"since": 0.0}   # when this process began watching for new addresses (firsts.is_news)
+_addr_sent: list = []          # times of the last hour's new-address notices
+ADDR_PER_HOUR = 6              # more than this in an hour is the board's (the events), not the owner's phone
 
 
 def ingest_hits() -> None:
@@ -314,21 +361,69 @@ def ingest_hits() -> None:
     store.add_hits(batch, geo)
     for h in batch:
         jails.feed_hit(h)
-    # a country never seen before on what is behind the sign-in is worth a line to the owner
+    # A country never seen before on what is behind the sign-in is worth a line to the owner — but ONLY
+    # when someone from it actually got in. A request bounced to the sign-in page is not a way in, and
+    # the edge produces those by the thousand: a WordPress/WooCommerce scan is answered with the login
+    # page itself (200 on `/login?rd=https://…/wp-json/wp/v2/users/me`) or with a 302 to it, and BOTH
+    # pass `status < 400`. That is how the 2026-11-04 burst happened — ZA, JM, EC and MZ inside two
+    # minutes, and 40 such alerts in three days, every one from an address with no sign-in on record
+    # and no user (the `signin` table was empty for all 40). So a hit must also come from an address
+    # that COMPLETED a sign-in here (SSO or SSH in 30 days — Trust.signed), its `status` must be a real
+    # one (an unparsed status is 0, and `0` used to pass as success through the default), and the
+    # sign-in page's own path is never evidence of a way in.
     if not _known_countries:
         _known_countries.update(r["cc"] for r in store.q(
             "SELECT DISTINCT a.cc FROM hit_day d JOIN addr a ON a.ip=d.ip WHERE d.kind IN ('private','remote','auth') AND a.cc!=''"))
         _known_countries.add("")
     for h in batch:
-        if h.get("kind") in ("private", "remote", "auth") and h.get("status", 0) < 400:
-            row = store.one("SELECT cc FROM addr WHERE ip=?", (h["ip"],))
-            cc = (row or {}).get("cc") or ""
-            if cc and cc not in _known_countries:
-                _known_countries.add(cc)
-                title = f"כניסה ממדינה חדשה: {cc}"
-                store.event("country", "warn", title, f"{h['ip']} → {h.get('app')}", h["ip"])
-                notify(title, f"הכתובת {h['ip']} פתחה את {h.get('app') or 'הלשכה'} מ־{cc} — מדינה שלא נראתה קודם בכניסה ללשכה.",
-                       "warning", f"country:{cc}")
+        if h.get("kind") not in ("private", "remote", "auth"):
+            continue
+        status = int(h.get("status") or 0)
+        if not 200 <= status < 400:
+            continue
+        if (h.get("path") or "").startswith("/login"):
+            continue
+        if not h.get("ip") or h["ip"] not in trust.signed:
+            continue
+        row = store.one("SELECT cc FROM addr WHERE ip=?", (h["ip"],))
+        cc = (row or {}).get("cc") or ""
+        if cc and cc not in _known_countries:
+            _known_countries.add(cc)
+            # the country as the owner reads it — its flag and its Hebrew name, never only its code (DGO-1639)
+            title = f"כניסה ממדינה חדשה: {countries.name(cc)}"
+            store.event("country", "warn", title, f"{h['ip']} → {h.get('app')}", h["ip"])
+            notify(title, f"הכתובת {h['ip']} התחברה ללשכה ({h.get('app') or 'הלשכה'}) מ־{countries.name(cc)} ({cc}) — "
+                          f"מדינה שלא נראתה קודם, וההתחברות הזו הצליחה.", "warning", f"country:{cc}")
+    # An ADDRESS that got in for the first time (firsts.py, DGO-1329): one line with «חסום» — the owner answers it in
+    # the group, and this office's own mode decides what a ban does. Only once Trust has read the sign-ins: the
+    # addresses already in at that moment are the past, never a burst at start.
+    if trust.at:
+        if not _addr_watch["since"]:
+            _addr_watch["since"] = time.time()
+            _known_addrs.update(trust.signed)
+            _known_addrs.add("")
+        now = time.time()
+        for h in new_addresses(batch, _known_addrs, trust.signed):
+            ip = h["ip"]
+            try:
+                first = store.one("SELECT MIN(ts) t FROM signin WHERE ip=? AND verdict='ok'", (ip,)) or {}
+                if is_news(trust.why(ip), first.get("t"), _addr_watch["since"]):
+                    who = store.one("SELECT user FROM signin WHERE ip=? AND verdict='ok' ORDER BY ts DESC LIMIT 1",
+                                    (ip,)) or {}
+                    place = store.one("SELECT cc, org FROM addr WHERE ip=?", (ip,)) or {}
+                    where = " · ".join(x for x in (place.get("cc"), place.get("org")) if x) or "מקום לא ידוע"
+                    title = f"כתובת חדשה נכנסה ללשכה: {ip}"
+                    body = ((f"נכנסו ל־{h['app']}" if h.get("app") else "נכנסו ללשכה") + f" מהכתובת {ip} ({where})"
+                            + (f", כמשתמש {who['user']}" if who.get("user") else "")
+                            + " — כתובת שלא נכנסה לכאן קודם.")
+                    store.event("address", "info", title, body, ip)
+                    _addr_sent[:] = [t for t in _addr_sent if now - t < 3600]
+                    if len(_addr_sent) < ADDR_PER_HOUR:
+                        _addr_sent.append(now)
+                        notify(title, body, "warning", f"addr:{ip}", ban_answer(ip))
+                _known_addrs.add(ip)               # decided: news told, or the past/the herd's own — never asked again
+            except Exception as e:                 # noqa: BLE001 — judged again at its next hit, never lost
+                print(f"security: a new address was not judged ({ip}): {type(e).__name__}: {e}"[:300], flush=True)
 
 
 def ingest_spool() -> None:
@@ -353,6 +448,7 @@ def ingest_spool() -> None:
             names.append({"ip": n["ip"], "name": n["name"], "via": "dns", "first": n["first"], "last": n["last"], "n": n["n"]})
         for n in doc.get("sni") or []:
             names.append({"ip": n["ip"], "name": n["name"], "via": "tls", "first": n["first"], "last": n["last"], "n": n["n"]})
+        store.add_host_events(doc.get("host") or [])
         for a in doc.get("auth") or []:
             signins.append({"ts": a.get("ts") or time.time(), "ip": a["ip"], "src": "ssh", "verdict": a["verdict"],
                             "user": a.get("user") or "", "how": a.get("how") or "", "fp": a.get("fp") or ""})
@@ -565,6 +661,49 @@ def window(hours: float) -> float:
     return time.time() - max(0.1, min(float(hours), 24 * 120)) * 3600
 
 
+#: WHY a sign-in failed, in the words a person reads — said by the line itself (`how`): sshd names the
+#: reason it refused (an unknown name, the method it tried, a disconnect before authentication) and the
+#: identity provider names the `auth_method`. A failed sign-in that shows only «נכשלה» is not itemized
+#: (DGO-1597), so every row carries one of these beside its source.
+_REASON = {
+    "invalid-user": "משתמש לא קיים",
+    "password": "סיסמה שגויה",
+    "publickey": "מפתח לא מתאים",
+    "keyboard-interactive": "אימות אינטראקטיבי",
+    "keyboard": "אימות אינטראקטיבי",
+    "hostbased": "אימות מהמארח",
+    "gssapi-with-mic": "אימות GSSAPI",
+    "preauth": "ניתוק לפני אימות",
+    "authenticating": "ניתוק לפני אימות",
+    "invalid": "משתמש לא קיים",
+    "banner": "באנר לא תקין",
+    "protocol": "פרוטוקול לא נתמך",
+    "suspicious_request": "בקשה חשודה",
+    "none": "בלי שיטה",
+}
+#: forward-auth's own words (`_FA_EVENTS`): the account was refused, or the sign-in never got its data.
+_REASON_PLAIN = {"blocked": "המשתמש חסום", "setup": "ההתחברות לא הוגדרה"}
+
+
+def reason(src: str, how: str, verdict: str = "fail") -> str:
+    """Why it ended as it did — the source is the row's own `src` (`sso`, `ssh`), this is the reason.
+
+    Asked of `how`, which is not one vocabulary: sshd writes `invalid-user` or the method it tried, and the
+    identity provider writes its own (`default-authentication-password`, forward-auth's `blocked`/`setup`).
+    So the exact word is tried first and then the WORDS INSIDE it — a stage name still says `password`, and
+    a reason nobody listed is shown as written rather than replaced by a guess (the second reader's point).
+    """
+    key = (how or "").lower()
+    word = _REASON.get(key)
+    if not word:
+        word = next((v for k, v in _REASON.items() if k and k in key and len(k) > 3), "")
+    if not word and key in _REASON_PLAIN:
+        word = _REASON_PLAIN[key]
+    if verdict == "ok":
+        return word or (how or "כניסה")
+    return word or (how or "כניסה שנכשלה")
+
+
 @app.get("/healthz")
 def healthz():
     return {"ok": True}
@@ -595,9 +734,14 @@ def summary(hours: float = 24):
     for r in top_a:
         r["title"] = routers.title(r["app"], r["office"]) if r["app"] else ""
     facts = read_json(os.path.join(SENSOR, "facts.json"), {}) or {}
+    try:
+        undeclared = undeclared_count(hours)
+    except Exception:                                                   # noqa: BLE001 — a count never takes the summary down
+        undeclared = None
     return {"office": OFFICE, "at": time.time(), "hours": hours, "mode": mode(),
             "kpi": {"requests": k.get("requests") or 0, "addrs": k.get("addrs") or 0, "countries": k.get("countries") or 0,
                     "fails": k.get("fails") or 0, "kinds": kinds, "out_dests": out.get("dests") or 0, "out_conns": out.get("conns") or 0,
+                    "out_undeclared": undeclared,
                     "signin_ok": sig.get("ok", 0), "signin_fail": sig.get("fail", 0),
                     "bans": sum(1 for b in bans if b["mode"] == "enforce"), "would_ban": sum(1 for b in bans if b["mode"] != "enforce"),
                     "watching": len(jails.watching(time.time()))},
@@ -606,7 +750,8 @@ def summary(hours: float = 24):
                        "auth": TAILS["auth"].health if "auth" in TAILS else {"ok": None, "error": "no sign-in container declared"},
                        **({"auth_lan": TAILS["auth-lan"].health} if "auth-lan" in TAILS else {}),
                        "sensor": HEALTH["sensor"], "sensor_parts": (facts.get("health") or {}),
-                       "geo": geo.status, "door": HEALTH["door"], "notify": HEALTH["notify"]},
+                       "geo": geo.status, "door": HEALTH["door"], "notify": HEALTH["notify"],
+                       "egress": {"ok": EGRESS is not None, "error": EGRESS_ERROR}},
             "host": {"hostname": facts.get("hostname") or "", "kernel": facts.get("kernel") or ""}}
 
 
@@ -616,6 +761,71 @@ def _state(ip: str, banned: dict) -> str:
         return "banned" if b["mode"] == "enforce" else "would"
     why = trust.why(ip)
     return {"signed-in": "trusted", "allowed": "allowed", "herd": "herd", "own": "own"}.get(why, "seen")
+
+
+#: THE DOCKER DOOR, TESTED FROM WHERE AN APP STANDS (DGO-1647, DGO-1652). The edge reads the engine through
+#: docker-socket-proxy. Until 2026-11-09 that door sat on traefik-network, where every app is, and it handed
+#: any app every container's environment and files. Now it sits on an internal network only the edge
+#: shares. This app is on traefik-network, the apps' network, and from there it asks:
+#:   - a name that does not resolve, or a refusal, means no app can reach the door: «closed»;
+#:   - if the door answers, its own inspect carrying an `Env` means «open»;
+#:   - so does a 200 for one harmless file (`/etc/hostname`).
+#: It reads no other container's secret, and it asks at most every ten minutes.
+PROXY_URL = os.environ.get("SECURITY_DOCKER_PROXY", "http://docker-socket-proxy:2375").rstrip("/")
+_PROXY = {"at": 0.0, "state": None}
+
+
+def own_container_id() -> str:
+    """This container's id, read from the engine's own bind mount of /etc/hostname in /proc/self/mountinfo.
+    The hostname is NOT the id: compose sets `hostname: security`, and inspecting «security» answered 404,
+    so the check never ran (the second reader, DGO-1646). Falls back to the compose container name."""
+    try:
+        with open("/proc/self/mountinfo", encoding="utf-8") as fh:
+            m = re.search(r"/containers/([0-9a-f]{64})/hostname", fh.read())
+        if m:
+            return m.group(1)
+    except OSError:
+        pass
+    return "security-" + (os.environ.get("DEPLOYMENT_NAME") or OFFICE)
+
+
+def proxy_check() -> str | None:
+    if time.time() - _PROXY["at"] < 600:
+        return _PROXY["state"]
+    me = own_container_id()
+    state = None
+    try:
+        with urllib.request.urlopen(f"{PROXY_URL}/v1.24/containers/{me}/json", timeout=5) as r:  # noqa: S310
+            doc = json.loads(r.read() or b"{}")
+        state = "open" if (doc.get("Config") or {}).get("Env") else "closed"
+        if state == "closed":
+            req = urllib.request.Request(f"{PROXY_URL}/v1.24/containers/{me}/archive?path=/etc/hostname", method="HEAD")
+            try:
+                with urllib.request.urlopen(req, timeout=5):                           # noqa: S310
+                    state = "open"
+            except urllib.error.HTTPError:
+                pass                                                                    # 403: the door refused
+    except urllib.error.URLError as e:
+        # The door does not answer an app at all: its name does not resolve, or it refuses the connection.
+        # Since DGO-1652 it lives on a network only the edge shares, and that is the best state there is.
+        reason = getattr(e, "reason", None)
+        state = "closed" if isinstance(reason, (socket.gaierror, ConnectionRefusedError)) else None
+    except (OSError, ValueError):
+        state = None                                                                    # it blinked
+    _PROXY.update(at=time.time(), state=state)
+    return state
+
+
+@app.get("/api/verdict")
+def verdict_view(hours: float = 24):
+    """The screen's first answer (verdict.py): who the traffic is, whether anything got in, what the
+    internet tried, who signed in, and every door into the machine."""
+    hours = max(0.1, min(float(hours), 24 * 120))
+    facts = read_json(os.path.join(SENSOR, "facts.json"), {}) or {}
+    would = sum(1 for b in store.active_bans() if b["mode"] != "enforce")
+    out = verdict.compute(store, trust.why, facts, hours, mode=mode(), would_ban=would, proxy=proxy_check())
+    out["mode"] = mode()
+    return out
 
 
 @app.get("/api/inbound")
@@ -665,11 +875,17 @@ def inbound_one(ip: str):
         h["title"] = routers.title(h["app"], h["office"]) if h["app"] else ""
     days = store.q("SELECT day, app, kind, office, n, fails FROM hit_day WHERE ip=? ORDER BY day DESC LIMIT 200", (ip,))
     signins = store.q("SELECT ts, src, verdict, user, how, fp FROM signin WHERE ip=? ORDER BY ts DESC LIMIT 100", (ip,))
+    for s in signins:
+        s["reason"] = reason(s.get("src") or "", s.get("how") or "", s.get("verdict") or "")
     flows = store.q("SELECT day, dir, src, dst, port, proto, n, last FROM flow WHERE src=? OR dst=? ORDER BY last DESC LIMIT 100", (ip, ip))
     ban = store.one("SELECT * FROM ban WHERE ip=?", (ip,))
     log = store.q("SELECT * FROM ban_log WHERE ip=? ORDER BY ts DESC LIMIT 50", (ip,))
     return {"addr": addr, "trust": trust.why(ip), "ban": ban, "ban_log": log, "hits": hits, "days": days,
-            "signins": signins, "flows": flows}
+            "signins": signins, "flows": flows,
+            # WHAT THE PAGE HOLDS, beside what it shows: every list above is capped, and a reader must
+            # not take the cap for the truth (DGO-1597 — eight addresses read that way on Exampleu).
+            "totals": store.detail_totals(ip),
+            "capped": {"hits": 300, "days": 200, "signins": 100, "flows": 100, "ban_log": 50}}
 
 
 # WHO HELD AN ADDRESS, for the last quarter of an hour. A connection is reported when it ENDS, and a
@@ -695,7 +911,9 @@ def remember_addrs() -> dict:
             image = (c.get("Image") or "").split("@")[0].rsplit("/", 1)[-1].split(":")[0]
             for net in ((c.get("NetworkSettings") or {}).get("Networks") or {}).values():
                 if net.get("IPAddress") and image:
-                    images[net["IPAddress"]] = image
+                    # `image:` says it is no app of the office: egress judges it as @unnamed, and an image that
+                    # happens to share a service's name never inherits that service's rules (DGO-1561)
+                    images[net["IPAddress"]] = "image:" + image
     with _RECENT_LOCK:
         for ip, a in addrs.items():
             _RECENT[ip] = (images.get(ip) or a["name"], now)
@@ -731,6 +949,7 @@ def outbound(hours: float = 24, q: str = "", limit: int = 1000):
                    "GROUP_CONCAT(DISTINCT src || '|' || COALESCE(who, '')) pairs "
                    "FROM flow WHERE dir='out' AND last>=? GROUP BY dst ORDER BY n DESC LIMIT ?", (since, max(1, min(limit, 5000))))
     names = store.names_for([r["dst"] for r in rows])
+    dns_names = store.names_for([r["dst"] for r in rows], via=("dns",), since=since)
     srcs = set()
     for r in rows:
         r["srcs"] = sorted(set((r.get("srcs") or "").split(",")) - {""})
@@ -767,12 +986,56 @@ def outbound(hours: float = 24, q: str = "", limit: int = 1000):
         r.update({"cc": g.get("cc") or "", "city": g.get("city") or "", "org": g.get("org") or "", "asn": g.get("asn")})
         r["local"] = trust.label(r["dst"])
         r["state"] = "blocked" if r["dst"] in blocked else "seen"
+        # judged by the names the office's resolver answered INSIDE THE WINDOW — never a TLS server name (the
+        # client's choice) or a PTR (the address owner's), which could declare a leak by naming it (the second reader)
+        if EGRESS is None:
+            r["declared"], r["declared_by"] = None, "egress: " + EGRESS_ERROR
+        else:
+            r["declared"], r["declared_by"] = EGRESS.judge(r["apps"], dns_names.get(r["dst"]) or [], r["dst"], r["ports"], r["local"])
         if ql and ql not in json.dumps(r, ensure_ascii=False).lower():
             continue
         out.append(r)
     inbound_flows = store.q("SELECT dst port_owner, port, proto, COUNT(DISTINCT src) addrs, SUM(n) n, MAX(last) last FROM flow "
                             "WHERE dir='in' AND last>=? GROUP BY port, proto ORDER BY n DESC LIMIT 50", (since,))
     return {"hours": hours, "rows": out, "inbound_ports": inbound_flows}
+
+
+@app.get("/api/egress")
+def egress_view(hours: float = 24):
+    """The declaration and what it did not cover: every outbound destination no rule of its app declares."""
+    if EGRESS is None:
+        return {"hours": hours, "error": EGRESS_ERROR, "rules": {}, "declared": 0, "undeclared": []}
+    rows = outbound(hours=hours, limit=5000)["rows"]
+    return {"hours": hours, "rules": EGRESS.rules, "declared": sum(1 for r in rows if r.get("declared")),
+            "undeclared": [r for r in rows if r.get("declared") is False]}
+
+
+_UNDECLARED: dict = {}
+
+
+def undeclared_count(hours: float) -> int | None:
+    """How many destinations some app went to undeclared — every one, not the busiest 2000 (a one-off leak is the
+    rarest row), from what ingest recorded (no engine call: the overview must not wait on a stalled engine);
+    a minute's cache, since the overview asks every minute and every linked office asks too."""
+    if EGRESS is None:
+        return None
+    now = time.time()
+    hit = _UNDECLARED.get(hours)
+    if hit and now - hit[0] < 60:
+        return hit[1]
+    since = window(hours)
+    rows = store.q("SELECT dst, GROUP_CONCAT(DISTINCT COALESCE(NULLIF(who, ''), src)) apps, "
+                   "GROUP_CONCAT(DISTINCT port || '/' || proto) ports FROM flow WHERE dir='out' AND last>=? GROUP BY dst",
+                   (since,))
+    names = store.names_for([r["dst"] for r in rows], via=("dns",), since=since)
+    n = 0
+    for r in rows:
+        apps = sorted(set((r.get("apps") or "").split(",")) - {""})
+        ports = sorted(set((r.get("ports") or "").split(",")) - {""})
+        if not EGRESS.judge(apps, names.get(r["dst"]) or [], r["dst"], ports, trust.label(r["dst"]))[0]:
+            n += 1
+    _UNDECLARED[hours] = (now, n)
+    return n
 
 
 @app.get("/api/outbound/{ip}")
@@ -856,6 +1119,7 @@ def signins(hours: float = 168, limit: int = 500):
     for r in rows:
         k = keys.get(r.get("fp") or "")
         r["key_label"] = (k or {}).get("comment") or ""
+        r["reason"] = reason(r.get("src") or "", r.get("how") or "", r.get("verdict") or "")
     by_key = store.q("SELECT fp, COUNT(*) n, COUNT(DISTINCT ip) addrs, MAX(ts) last FROM signin WHERE src='ssh' AND verdict='ok' "
                      "AND ts>=? GROUP BY fp ORDER BY n DESC", (since,))
     for r in by_key:
@@ -863,7 +1127,21 @@ def signins(hours: float = 168, limit: int = 500):
         r["label"] = (k or {}).get("comment") or ""
         r["type"] = (k or {}).get("type") or ""
         r["authorized"] = bool(k)
-    return {"hours": hours, "rows": rows, "keys": by_key, "authorized": list(keys.values())}
+    # EVERY SOURCE, and EVERY FAILURE — never a sample (DGO-1597). `keys` above is grouped by the key a
+    # sign-in used, which is not a source: five keys read as «five sources» while fifteen addresses had
+    # connected. `sources` is per address; `failed` is one row per failed attempt, each with its source
+    # (`src`) and its reason (`reason`), and `totals` says how many there were whatever `limit` showed.
+    failed = store.failed_signins(since)
+    for f in failed["rows"]:
+        f["reason"] = reason(f.get("src") or "", f.get("how") or "", "fail")
+    sources = store.ssh_sources(since)
+    return {"hours": hours, "rows": rows, "keys": by_key, "authorized": list(keys.values()),
+            "sources": sources["rows"], "failed": failed["rows"],
+            "totals": {"rows": store.one("SELECT COUNT(*) n FROM signin WHERE ts>=?", (since,))["n"],
+                       "failed": failed["total"], "sources": sources["total"],
+                       "ssh_lines": store.one("SELECT COUNT(*) n FROM signin WHERE src='ssh' AND ts>=?", (since,))["n"]},
+            # what each list is capped at, beside the numbers above: a cap is never a total (DGO-1597)
+            "capped": {"rows": max(1, min(limit, 5000)), "failed": failed["limit"], "sources": sources["limit"]}}
 
 
 @app.get("/api/links")

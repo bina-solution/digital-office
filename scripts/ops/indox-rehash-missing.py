@@ -101,7 +101,7 @@ if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
 REPO = pathlib.Path(__file__).resolve().parents[2]
-DB_CONTAINER = "supabase-db-shlomo-laptop"
+DB_CONTAINER = "supabase-db-owner-laptop"
 DOCKER_SOCK = "unix:///run/bbox-docker.sock"
 
 # Deliberately ONE LINE each with no tabs. `psql -tAc` receives these through a shell, and any
@@ -161,7 +161,7 @@ def census() -> list[dict]:
     return rows
 
 
-DRIVE_CONTAINER = "drive-shlomo-laptop"
+DRIVE_CONTAINER = "drive-owner-laptop"
 DRIVE_PORT = 8975
 
 

@@ -1,0 +1,49 @@
+#!/usr/bin/env bash
+#: new <file.pdf> --to "<signer>" [--password "<pw>"] [--days N] [--page N] [--box x0,y0,x1,y1] — put a document out for signature and print its link
+set -uo pipefail
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
+. "${REPO_ROOT}/scripts/lib.sh"
+DN="$(read_env_value DEPLOYMENT_NAME)"; DN="${DN:-bina-deployment}"
+[ $# -ge 1 ] || { sed -n 's/^#: //p' "${BASH_SOURCE[0]}"; exit 2; }
+FILE="$1"; shift
+[ -f "${FILE}" ] || { say "${cr}[esign] no such file: ${FILE}${c0}"; exit 2; }
+TO=""; PW=""; DAYS="14"; PAGE="1"; BOX=""; NAME=""
+while [ $# -gt 0 ]; do
+  case "${1}" in
+    --to) TO="${2:-}"; shift ;;
+    --password) PW="${2:-}"; shift ;;
+    --days) DAYS="${2:-14}"; shift ;;
+    --page) PAGE="${2:-1}"; shift ;;
+    --box) BOX="${2:-}"; shift ;;
+    --name) NAME="${2:-}"; shift ;;
+  esac
+  shift
+done
+[ -n "${TO}" ] || { say "${cr}[esign] --to \"<signer>\" is required${c0}"; exit 2; }
+# the file goes INTO the container (the app is the only holder of its store) and is posted from there
+INNER="/tmp/esign-upload-$$.pdf"
+docker cp "${FILE}" "esign-${DN}:${INNER}" >/dev/null || { say "${cr}[esign] could not copy the file into the app${c0}"; exit 1; }
+out="$(docker exec -e F="${INNER}" -e TO="${TO}" -e PW="${PW}" -e DAYS="${DAYS}" -e PAGE="${PAGE}" -e BOX="${BOX}" -e NAME="${NAME}" "esign-${DN}" python3 -c '
+import os,json,uuid,urllib.request
+b="----esign"+uuid.uuid4().hex
+def field(k,v):
+    return ("--%s\r\nContent-Disposition: form-data; name=\"%s\"\r\n\r\n%s\r\n" % (b,k,v)).encode()
+parts=[]
+for k in ("TO","PW","DAYS","PAGE","BOX","NAME"):
+    v=os.environ.get(k) or ""
+    if v: parts.append(field({"TO":"signer","PW":"password","DAYS":"days","PAGE":"page","BOX":"box","NAME":"name"}[k], v))
+data=open(os.environ["F"],"rb").read()
+head=("--%s\r\nContent-Disposition: form-data; name=\"file\"; filename=\"document.pdf\"\r\nContent-Type: application/pdf\r\n\r\n" % b).encode()
+body=b"".join(parts)+head+data+("\r\n--%s--\r\n" % b).encode()
+req=urllib.request.Request("http://127.0.0.1:8080/api/envelopes", data=body,
+                           headers={"content-type":"multipart/form-data; boundary="+b}, method="POST")
+try: print(urllib.request.urlopen(req, timeout=300).read().decode())
+except urllib.error.HTTPError as e: print(e.read().decode())
+')" || exit $?
+docker exec "esign-${DN}" rm -f "${INNER}" >/dev/null 2>&1
+printf '%s' "${out}" | python3 -c '
+import json,sys
+j=json.load(sys.stdin)
+if not j.get("ok"): raise SystemExit("[esign] %s" % j.get("detail"))
+print(j["data"]["link"])'

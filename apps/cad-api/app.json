@@ -10,6 +10,7 @@
   },
   "layer": 3,
   "kind": "service",
+  "page": "services",
   "version": "0.2.0",
   "compose": "docker-compose.yml",
   "capabilities": [],
@@ -39,15 +40,23 @@
         "default_host": "cad-api.localhost",
         "base_url_env": "CAD_API_BASE_URL",
         "local_twin": true
+      },
+      "module": {
+        "name": "מודלים פרמטריים",
+        "icon": "box",
+        "desc": "הגלריה של המודלים הפרמטריים — דף לכל מודל, עם המידות שלו",
+        "group": "עסק",
+        "order": 39,
+        "embed": false
       }
     }
   ],
   "data": {
-    "volumes": [
+    "shares": [
       "cad_projects"
     ],
     "on_uninstall": "keep",
-    "note": "cad_projects holds the models this api writes (STEP / glTF), shared with the cad app's FreeCAD when both run."
+    "note": "cad_projects holds the models this api writes (STEP / glTF), shared with the cad app's FreeCAD when both run. The cad app owns it (its data.volumes): it is backed up, restored and purged with cad, never with cad-api alone (DGO-1510)."
   },
   "agent": {
     "context": "AGENT.md",

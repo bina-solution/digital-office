@@ -31,6 +31,7 @@
       ${people.length > 1 ? `<div class="mf-who-filter" role="group" aria-label="להציג דובר">${people.map((w) => `<button type="button" class="mf-chip" data-who="${esc(w)}" aria-pressed="false">${MF.avatar(w, hue(w))}<bdi>${esc(w)}</bdi></button>`).join("")}</div>` : ""}
       <div class="mf-tr-list" role="list"></div>
       <button class="mf-backnow" type="button" hidden>${ic("target")}<span>חזרה לרגע המתנגן</span></button>`;
+    el.classList.toggle("mf-tr-none", !turns.length);   // no line yet: the reason and the time, not a search of nothing
     const list = el.querySelector(".mf-tr-list"), input = el.querySelector("input[type=search]"), count = el.querySelector(".mf-find-n");
     const backNow = el.querySelector(".mf-backnow");
     const orig = el.querySelector(".mf-origbtn");
@@ -58,7 +59,8 @@
     function render() {
       tailHead = turns.findIndex((x) => x.tail);
       list.innerHTML = turns.map((x, i) => (i === tailHead ? `<div class="mf-divider" role="separator"><span>אחרי שהשיחה בווידאו נגמרה — מהקלטה נוספת</span></div>` : "") + row(x, i)).join("")
-        || `<div class="mf-empty">${ic("message")}<p>אין עוד שורות בתמלול.</p></div>`;
+        || (ctx.empty ? `<div class="mf-empty mf-why">${ic("message")}<p><b data-why="title">${esc(ctx.empty.title)}</b></p><p data-why="body">${esc(ctx.empty.body || "")}</p></div>`
+          : `<div class="mf-empty">${ic("message")}<p>אין עוד שורות בתמלול.</p></div>`);
       applyFilter();
     }
 

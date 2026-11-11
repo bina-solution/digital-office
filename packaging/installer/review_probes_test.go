@@ -24,8 +24,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/solomonBoltin/deployment-hacohen/packaging/trust"
-	"github.com/solomonBoltin/deployment-hacohen/packaging/trust/trusttest"
+	"github.com/bina-solution/digital-office/packaging/trust"
+	"github.com/bina-solution/digital-office/packaging/trust/trusttest"
 )
 
 func mintCA(t *testing.T) (*x509.Certificate, crypto.Signer, *x509.CertPool) {

@@ -1,0 +1,11 @@
+{
+  "name": "digital-office",
+  "description": "הלשכה הדיגיטלית DGO for Claude: «תתקין לי לשכה דיגיטלית» installs the open-source business operating system on your own Linux, macOS or Windows computer and hands you the first-admin link.",
+  "version": "0.2.0",
+  "author": {
+    "name": "Bina Solutions"
+  },
+  "homepage": "https://digital-office.co.il",
+  "repository": "https://github.com/bina-solution/digital-office",
+  "license": "AGPL-3.0"
+}

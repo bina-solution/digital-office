@@ -1,0 +1,207 @@
+/* page.css — the sign-in app's look (DGO-1501): the office's palette, THE card and the logo wall, and the
+   few rules of its own a form needs. Embedded in the binary (ui.go) and served at /ui/page.css.
+
+   The two marked regions are not written here: gate G27 (scripts/refactor/theme-token-lint.py) stamps them
+   from platform-base/bina-ui/theme-tokens.css and platform-base/bina-ui/bina-card.css, and fails when they
+   drift. Until 2026-11-09 these pages had no style at all, on the reasoning that a service which cannot
+   read the palette must not invent one; it carries a kept copy instead, as every other screen does. */
+:root{--font:"Segoe UI",system-ui,-apple-system,"Noto Sans Hebrew","Assistant",Arial,sans-serif}
+/* @bina-theme-tokens:start */
+/* OLIVE GROVE — the one palette of the office (the owner, 2026-10-07 · DGO-450). Four hues, sampled
+   from his mock-up, and the ground they stand on. A screen never writes a colour: it names one of
+   these. Each hue is the colour itself (a FILL — a button, a bar, a dot), «-d» for text and thin
+   lines on the ground (4.5:1 or more), «-soft» and «-line» for a tint and its hairline, and «-ink»
+   for what is written ON the fill. The role names every screen already uses point at them:
+   (no backtick in this block: one of its copies lives inside a script's template string)
+     olive  the brand and the main action · what is well, what is done
+     sky    what is in motion, what only informs · a link
+     lime   look here — a warning, something waiting
+     plum   a person must act — a failure, a removal, the one final action
+   Contrast, measured (WCAG): ink on the ground 13.7 · muted 4.65 · light text on olive 5.51 and on
+   plum 9.54 · ink on lime 6.88 · its ink on sky 6.32 · sky-d 4.61 · lime-d 4.70 · violet 5.32 ·
+   on the desk: its ink 6.32 (dark: 13.96), and 11.2 where the sky pales (dark: 5.12). */
+:root,:root[data-theme="light"]{
+  color-scheme:light;
+  accent-color:var(--accent);   /* the browser's OWN controls - a checkbox, a radio, a range, a progress bar - on both grounds: said once, here (it was said for eight single controls, and every other one was the browser's blue) */
+  --bg:#f3f5f7; --surface:#fff; --surface-2:#f9fafb; --ink:#1f2a17; --muted:#6a7068; --line:#dcdfde;
+  --olive:#56693f; --olive-d:#475734; --olive-soft:#e7eae4; --olive-line:#bfc6b6; --olive-ink:#f3f5f7;
+  --sky:#7baae3; --sky-d:#2a6fc4; --sky-soft:#edf3fb; --sky-line:#cddff4; --sky-ink:#13263f;
+  --lime:#a9b84c; --lime-d:#69732e; --lime-soft:#f3f5e6; --lime-line:#dee4bb; --lime-ink:#1f2a17;
+  --plum:#5b3349; --plum-d:#4a303b; --plum-soft:#e8e2e6; --plum-line:#c1b1ba; --plum-ink:#f3f5f7;
+  --accent:var(--olive); --accent-d:var(--olive-d); --accent-soft:var(--olive-soft); --accent-ink:var(--olive-ink);
+  --blue:var(--sky-d); --amber:var(--lime-d); --red:var(--plum);
+  --violet:#7c5c6d;   /* plum, lifted a fifth toward white: someone has to look — nothing has failed */
+  --ok:var(--olive); --warn:var(--lime-d); --danger:var(--plum); --info:var(--sky-d);
+  --ok-soft:var(--olive-soft); --warn-soft:var(--lime-soft); --danger-soft:var(--plum-soft); --info-soft:var(--sky-soft);
+  --red-soft:var(--plum-soft); --amber-soft:var(--lime-soft); --blue-soft:var(--sky-soft); --violet-soft:var(--plum-soft);
+  --side:var(--olive); --side-ink:#f3f5f7; --side-mut:#dce1da; --side-line:#788765;
+  --desk:var(--sky); --desk-ink:var(--sky-ink);   /* desktop mode's ground is the sky (the owner, DGO-452), and what is written straight on it */
+  --scrim:rgba(31,42,23,.5);                      /* what dims a screen behind a pop-up */
+  --shadow:0 1px 3px rgba(31,42,23,.08),0 6px 24px rgba(31,42,23,.06);
+  --shadow-lg:0 20px 60px rgba(31,42,23,.28);
+  /* ONE COLOUR AND ONE ANIMAL PER OFFICE (the owner, 2026-10-09 · flt-002). When offices are linked,
+     a person reads WHICH office a thing belongs to without opening it, so each office gets a hue of
+     its own. The hue is an IDENTITY and never a health state: an office that stopped answering keeps
+     its colour, and the quiet mark is the one that says "not answering". Each is an ALIAS of the
+     palette's own hue — no fourth value is invented, and because the ground re-points the hue, the
+     office mark follows the ground by itself. Each office's animal (elephant, deer, eagle) is a
+     glyph of bina-icons.js. */
+  --office-hp:var(--muted);   /* hp · elephant — grey: the heavy laptop at home, in the palette's own grey */
+  --office-mac:var(--lime);   /* macbook · deer — yellow: the palette has one yellow and it is lime. A FILL, so what is written ON it is --lime-ink, never this */
+  --office-vps:var(--sky-d);  /* vps · eagle — deep sky blue, «the eagle in the clouds». THE OWNER'S OWN CHOICE (2026-10-09, in writing: vps = נשר + כחול-שמיים) — this line is the colour he picked, not a default kept for him */
+}
+
+/* ── A LINKED OFFICE'S MARK, BY NAME (flt-004) ───────────────────────────────────────────────
+   The link carries a NAME — mark: {color, animal} in the catalog, from the office's own identity
+   — and never a value: the office that DRAWS a linked tile owns the pixels, so it paints the name
+   with its own palette. These seven rules are that translation, one per family above; a screen sets
+   data-office-hue="lime" and paints var(--office-hue).
+   A name this file does not know paints nothing, which is why the vocabulary in
+   apps/dgo-extend/identity.py may only name families that exist here — and why --red and --ok
+   are not among them: they mean «danger» and «it is well» on every screen in the office. */
+[data-office-hue="grey"]   { --office-hue:var(--muted); }
+[data-office-hue="lime"]   { --office-hue:var(--lime); }
+[data-office-hue="sky"]    { --office-hue:var(--sky-d); }
+[data-office-hue="olive"]  { --office-hue:var(--olive-d); }
+[data-office-hue="plum"]   { --office-hue:var(--plum); }
+[data-office-hue="blue"]   { --office-hue:var(--blue); }
+[data-office-hue="violet"] { --office-hue:var(--violet); }
+/* the dark ground is the same four hues on the palette's own ink, and the SAME legend. Olive on that
+   ink is 2.5:1, so its text step there is olive LIFTED — its own hue and saturation, lighter (7.14
+   on a card, 4.82 on its own tint) — and the brand, the main action and «it is well» take that step.
+   Lime stays «look here» and the sky «in motion», as on the light ground: were lime the accent here
+   (it was, for a day), a warning, a selection and «it is well» were one colour. Each «-d» on its
+   own «-soft» there, measured: olive 4.82 · sky 4.62 · lime 4.63 · plum 4.71. */
+@media (prefers-color-scheme:dark){
+  :root{ color-scheme:dark;
+         --bg:#141b0f; --surface:#1f2a17; --surface-2:#192213; --ink:#f3f5f7; --muted:#a2a8a2; --line:#414a3b;
+         --olive-d:#a5ba8c; --olive-soft:#384629; --olive-line:#56693f;
+         --sky-d:#7baae3; --sky-soft:#2e3f38; --sky-line:#4d6a8c;
+         --lime-d:#a9b84c; --lime-soft:#3b4622; --lime-line:#69732e;
+         --plum-d:#ad99a4; --plum-soft:#402f33; --plum-line:#7c5c6d;
+         --accent:var(--olive-d); --accent-ink:var(--surface);
+         --red:#ad99a4; --violet:#bdadb6; --danger:#ad99a4; --ok:var(--olive-d); --side:var(--surface);
+         --desk:var(--sky-ink); --desk-ink:var(--ink); --scrim:rgba(0,0,0,.6);
+         --shadow:0 1px 3px rgba(0,0,0,.4),0 6px 24px rgba(0,0,0,.3);
+         --shadow-lg:0 20px 60px rgba(0,0,0,.55); }
+}
+:root[data-theme="midnight"]{
+  color-scheme:dark;
+  --bg:#141b0f; --surface:#1f2a17; --surface-2:#192213; --ink:#f3f5f7; --muted:#a2a8a2; --line:#414a3b;
+  --olive-d:#a5ba8c; --olive-soft:#384629; --olive-line:#56693f;
+  --sky-d:#7baae3; --sky-soft:#2e3f38; --sky-line:#4d6a8c;
+  --lime-d:#a9b84c; --lime-soft:#3b4622; --lime-line:#69732e;
+  --plum-d:#ad99a4; --plum-soft:#402f33; --plum-line:#7c5c6d;
+  --accent:var(--olive-d); --accent-ink:var(--surface);
+  --red:#ad99a4; --violet:#bdadb6; --danger:#ad99a4; --ok:var(--olive-d); --side:var(--surface);
+  --desk:var(--sky-ink); --desk-ink:var(--ink); --scrim:rgba(0,0,0,.6);
+  --shadow:0 1px 3px rgba(0,0,0,.4),0 6px 24px rgba(0,0,0,.3);
+  --shadow-lg:0 20px 60px rgba(0,0,0,.55);
+}
+/* THE KEYBOARD'S RING - what the browser draws around the stop the keyboard is on, in the palette, wherever
+   a part draws none of its own. It has no specificity at all (:where), so any rule of a part wins. Two
+   screens said this for themselves; on the others nearly every stop wore the browser's ring (DGO-455).
+   A field keeps the offset it has - fourteen rules draw a field's own outline and say no offset. An area
+   (a scroll box, a table) takes the ring inside, where nothing clips it; a control takes it outside,
+   where a filled button does not hide it. */
+:where(:focus-visible){outline:2px solid var(--accent)}
+:where(:focus-visible:not(a,button,summary,[role=button],input,select,textarea)){outline-offset:-2px}
+:where(a,button,summary,[role=button]):focus-visible{outline-offset:2px}
+/* HEBREW AT A HEAVY WEIGHT - on Windows, where the first family of --font is installed. "Segoe UI" has its
+   Hebrew in Light, Regular, Semibold and Bold. Asked for 800 or 900 the browser takes the family's Black
+   face, which has none, and so has every family after it - so the Hebrew of every title at 800 was drawn in
+   the system's last-resort serif, thin, beside Latin in Black: «חשבונות ומראות» at 20px is 150px wide at 700
+   and 120px at 800 (Chrome 154; the screens ask for 800 in 167 places, the question's title among them).
+   These faces give the family's HEBREW RANGE the faces that have it. A family a sheet names is no longer the
+   system's for those characters, so every weight and both styles are named, each as the system resolves it:
+   measured, only upright 800 and 900 change. Any other character is not theirs and goes on to the next
+   family the screen names - system-ui in --font, on Windows the same faces, Black included - which is why
+   G27 asks that system-ui follows wherever a screen names this family itself. Where the family is not
+   installed nothing here resolves and nothing changes. */
+@font-face{font-family:"Segoe UI";src:local("Segoe UI Light");font-weight:100 300;unicode-range:U+0590-05FF,U+FB1D-FB4F}
+@font-face{font-family:"Segoe UI";src:local("Segoe UI");font-weight:400;unicode-range:U+0590-05FF,U+FB1D-FB4F}
+@font-face{font-family:"Segoe UI";src:local("Segoe UI Semibold");font-weight:500 600;unicode-range:U+0590-05FF,U+FB1D-FB4F}
+@font-face{font-family:"Segoe UI";src:local("Segoe UI Bold");font-weight:700 900;unicode-range:U+0590-05FF,U+FB1D-FB4F}
+@font-face{font-family:"Segoe UI";src:local("Segoe UI Light Italic");font-weight:100 300;font-style:italic;unicode-range:U+0590-05FF,U+FB1D-FB4F}
+@font-face{font-family:"Segoe UI";src:local("Segoe UI Italic");font-weight:400;font-style:italic;unicode-range:U+0590-05FF,U+FB1D-FB4F}
+@font-face{font-family:"Segoe UI";src:local("Segoe UI Semibold Italic");font-weight:500 600;font-style:italic;unicode-range:U+0590-05FF,U+FB1D-FB4F}
+@font-face{font-family:"Segoe UI";src:local("Segoe UI Bold Italic");font-weight:700 900;font-style:italic;unicode-range:U+0590-05FF,U+FB1D-FB4F}
+/* @bina-theme-tokens:end */
+/* @card:start */
+/* the card for a tile that is not shown here (sign-in needed · opened at an address with no names
+   under it · the linked office did not answer · the app answered with no screen): one object, in
+   the middle of where the app would be. ONE card: the shell draws it in its own content
+   (app.js: externalNotice), and the console answers with it INSIDE the frame when an app or a
+   linked office has no page to give (app.py: _card, which inlines this block and the palette —
+   it had rules of its own, and the two stood side by side in one menu as two designs). The sign-in
+   app's pages (forward-auth) and the link's door are the same card: this block is stamped into each of
+   them from platform-base/bina-ui/bina-card.css by gate G27, and the console's copy is the one app.py
+   reads by name. */
+.xn{display:grid;place-items:center;min-height:100%;padding:24px 0}
+.xn,.xn-card,.xn-ic{box-sizing:border-box}      /* the shell's reset, said here: the frame's page has none */
+.xn-card{width:min(460px,100%);background:var(--surface);border:1px solid var(--line);border-radius:16px;
+  box-shadow:var(--shadow);padding:26px 26px 24px;text-align:center}
+.xn-ic{display:inline-grid;place-items:center;width:44px;height:44px;border-radius:12px;background:var(--surface-2);
+  border:1px solid var(--line);color:var(--muted)}
+.xn-ic .ic-svg{width:22px;height:22px}
+.xn-card :is(h1,h2){margin:12px 0 2px;font-size:16px;font-weight:800}
+.xn-sub{color:var(--muted);font-size:12.5px;font-weight:600}
+.xn-card p{margin:12px 0 0;font-size:13px;line-height:1.65;color:var(--ink)}
+.xn-card .btn{display:inline-block;margin-top:16px}   /* a box, not a run of text: the shell's .btn says no display, and an
+   inline <a class="btn"> took no margin and laid its padding over the line above — the address on the owner's phone (DGO-1593) */
+.xn-acts{display:flex;flex-wrap:wrap;gap:8px}
+/* what was actually answered, as it was, one click away */
+.xn-card details{margin-top:12px;color:var(--muted);font-size:12.5px}
+.xn-card summary{cursor:pointer}
+.xn-card pre{margin:6px 0 0;white-space:pre-wrap;word-break:break-word;direction:ltr;text-align:start;
+  font:12px ui-monospace,Menlo,Consolas,monospace;color:var(--ink)}
+/* …as a page of its own, in the frame: the shell's ground and type around it */
+html[data-card],html[data-card] body{height:100%}
+html[data-card] body{margin:0;padding:0 16px;box-sizing:border-box;background:var(--bg);color:var(--ink);
+  font-family:var(--font);font-size:14px}
+/* THE WALL (DGO-1501 · the owner, 2026-11-09). The logo wall he chose — the hundred versions of the mark
+   drawn on 2026-09-25 at 17:58, before any was scored — stands behind THE card (`.xn`): the sign-in app's
+   pages, and every screen that says an app or a linked office has nothing to show. The file is shapes and
+   nothing else (bina-ui/brand/bina-wall.svg, no colour in it); the screen paints it with the palette through
+   two masks — the tiles, then the wall's ink — so it turns with the theme like every other part. Text never
+   stands on it: text stands on the card, which is solid. Every surface serves the file at one absolute
+   path, `/bina-wall.svg`, so a page under an app's prefix (the console sets its base there) finds it. */
+.xn{position:relative;isolation:isolate;
+  --wall-cell:44px;                               /* one tile and its gap: the file is 10 × 10 of them. Whole */
+  --wall-tile:var(--surface);                     /* pixels at every width, so the two masks repeat in step */
+  --wall-ink:var(--olive-line)}                   /* the dark half of every version */
+@media (min-width:960px){.xn{--wall-cell:56px}}
+@media (min-width:1280px){.xn{--wall-cell:64px}}
+.xn::before,.xn::after{content:"";position:absolute;inset:0;z-index:-1;pointer-events:none;
+  -webkit-mask-repeat:repeat;mask-repeat:repeat;-webkit-mask-position:center;mask-position:center}
+/* the tiles: two by two, so their edges fall where the wall's own do (both are centred) */
+.xn::before{background:var(--wall-tile);
+  -webkit-mask-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 260 260'%3E%3Cpath d='M5 5h120v120H5zM135 5h120v120H135zM5 135h120v120H5zM135 135h120v120H135z'/%3E%3C/svg%3E");
+  mask-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 260 260'%3E%3Cpath d='M5 5h120v120H5zM135 5h120v120H135zM5 135h120v120H5zM135 135h120v120H135z'/%3E%3C/svg%3E");
+  -webkit-mask-size:calc(var(--wall-cell) * 2);mask-size:calc(var(--wall-cell) * 2)}
+.xn::after{background:var(--wall-ink);
+  -webkit-mask-image:url("/bina-wall.svg");mask-image:url("/bina-wall.svg");
+  -webkit-mask-size:calc(var(--wall-cell) * 10);mask-size:calc(var(--wall-cell) * 10)}
+/* a page that is the card and nothing else (a frame's card, the sign-in pages): the wall is the window's */
+html[data-card] .xn::before,html[data-card] .xn::after{position:fixed}
+/* @card:end */
+/* the button the card holds: the shell's own (console style.css .btn) */
+.btn{background:var(--accent);color:var(--accent-ink);font-weight:700;border:none;border-radius:8px;padding:8px 14px;
+  cursor:pointer;font-family:inherit;font-size:13px;text-decoration:none;display:inline-block}
+.btn:hover{background:var(--accent-d)}
+/* the office's mark, where the card's icon goes: its three parts wear the palette (as the shell's .logo) */
+.xn-mark{display:block;width:52px;height:52px;margin:0 auto}
+.xn-mark svg{display:block;width:100%;height:100%}
+.xn-mark .t{fill:var(--olive)} .xn-mark .m{fill:var(--olive-ink)} .xn-mark .a{fill:var(--lime)}
+/* what went wrong with what was typed: one sentence, above the form it is about */
+.xn-alert{margin:14px 0 0;padding:9px 12px;border-radius:8px;border:1px solid var(--plum-line);
+  background:var(--danger-soft);color:var(--danger);font-size:13px;font-weight:600;text-align:start}
+.xn-form{display:grid;gap:12px;margin-top:18px;text-align:start}
+.xn-field{display:flex;flex-direction:column;gap:5px;font-size:12.5px;font-weight:700;color:var(--ink)}
+.xn-field small{font-weight:400;color:var(--muted)}
+/* 16px: a phone zooms into a field whose type is smaller, and the card leaves the screen */
+.xn-field input{box-sizing:border-box;width:100%;background:var(--surface);border:1px solid var(--line);
+  border-radius:8px;padding:10px 12px;font:inherit;font-size:16px;font-weight:400;color:var(--ink)}
+.xn-field input[dir=ltr]{text-align:left}
+.xn-field input:focus{outline:2px solid var(--accent);outline-offset:0;border-color:transparent}
+.xn-form .btn{width:100%;margin-top:4px;padding:11px 14px;font-size:14px}

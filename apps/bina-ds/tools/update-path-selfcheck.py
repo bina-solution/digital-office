@@ -2,8 +2,8 @@
 """update-path-selfcheck — does `bbox update bina-ds` reach the self-update door, from ANYWHERE?
 
 WHY THIS EXISTS. Recreating the container the agent harness runs in cuts every conversation working at
-that moment; the one path that snapshots them and sends each its "carry on" message is
-`apps/bina-ds/self-update.sh` (through `apps/bina-ds/hooks/self-update`). The compose guard in
+that moment; the one path that snapshots them and names each, with its link, in a notice (none is told
+to carry on — the owner's rule, DGO-1792) is `apps/bina-ds/self-update.sh` (through `apps/bina-ds/hooks/self-update`). The compose guard in
 scripts/lib.sh hands a recreate to that door only when the CALLER is inside the container being
 replaced — `bbox_self_service` starts with `[ -f /.dockerenv ]` (lib.sh:697) — so on 2026-10-13 two
 HOST-side `bbox update bina-ds` runs recreated the container directly and a session that was mid-turn
@@ -21,8 +21,8 @@ What this pins:
      2026-10-14 09:23 (session-07dd93c1, turn 1, `"kind":"interrupted"` at its 7th step) — while an
      operator's `BINA_DS_SELF_UPDATE_FORCE_AFTER=0` ("never wait for quiet") stays untouched and a
      window the operator narrowed is never widened;
-  4. that the forced apply LOGS the conversations whose turns it is about to throw away, and that the
-     resumed conversation is told where its own log is;
+  4. that the forced apply LOGS the conversations whose turns it is about to throw away, and that a
+     conversation told of the update (BINA_DS_SELF_UPDATE_RESUME=send only) is told where its own log is;
   5. the log clock: the door's own log() must stamp OFFICE time even when the caller is the host, where
      TZ is unset (UTC) — 2026-10-13 wrote `13:17:50` into a file whose neighbours said `16:17:23`.
 

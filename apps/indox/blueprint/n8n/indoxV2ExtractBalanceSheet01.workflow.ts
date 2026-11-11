@@ -2,7 +2,7 @@ import { workflow, node, links } from '@n8n-as-code/transformer';
 
 // <workflow-map>
 // Workflow : Balance Sheet Extractor - v2- shmuel
-// Nodes   : 57  |  Connections: 59
+// Nodes   : 62  |  Connections: 64
 //
 // NODE INDEX
 // ──────────────────────────────────────────────────────────────────
@@ -64,6 +64,11 @@ import { workflow, node, links } from '@n8n-as-code/transformer';
 // CallSettings                       executeWorkflow            [executeOnce]
 // If3                                if                         [onError→regular]
 // ConfigFinal                        set
+// CheckAiEnabledSetting              postgres                   [creds]
+// IfAiDisabled                       if
+// ResumeItemAiOn                     code
+// AiDisabledReply                    set
+// ApiResponseAiDisabled              respondToWebhook
 //
 // ROUTING MAP
 // ──────────────────────────────────────────────────────────────────
@@ -71,42 +76,47 @@ import { workflow, node, links } from '@n8n-as-code/transformer';
 //    → MapLink1
 //      → Switch_
 //        → BeforeStart
-//          → If1
-//            → Crypto
-//              → Kvstorage
-//                → If_
-//                  → CodeInJavascript1
-//                    → ApiResponse1
-//                 .out(1) → Code2
-//                    → Start
-//                      → FileTypeRouter
-//                        → ExtractFromFile1
-//                          → TextualInput
-//                            → TextProcessor1
-//                              → ExtractResponse
-//                                → ParseJsonResponse
-//                                  → FormatResponse
-//                                    → MapResponse
-//                                      → End
-//                                        → ApiResponse
-//                                        → IfEvalRun
-//                                          → Evaluation1
-//                                        → IfSuccess
-//                                          → Kvstorage1
-//                       .out(1) → ExtractFromFile
-//                          → Code
-//                            → TextualInput (↩ loop)
-//                       .out(2) → ExtractFromFile2
-//                          → Code (↩ loop)
-//                       .out(3) → ExtractFromFile2 (↩ loop)
-//                       .out(4) → Start1
-//                          → DocumentProcessor
-//                            → ExtractResponse (↩ loop)
-//                       .out(5) → Start1 (↩ loop)
-//                       .out(6) → Start1 (↩ loop)
-//                       .out(7) → ResponseFormatUnsupportedFileError
-//                          → End (↩ loop)
-//           .out(1) → Start (↩ loop)
+//          → CheckAiEnabledSetting
+//            → IfAiDisabled
+//              → AiDisabledReply
+//                → ApiResponseAiDisabled
+//             .out(1) → ResumeItemAiOn
+//                → If1
+//                  → Crypto
+//                    → Kvstorage
+//                      → If_
+//                        → CodeInJavascript1
+//                          → ApiResponse1
+//                       .out(1) → Code2
+//                          → Start
+//                            → FileTypeRouter
+//                              → ExtractFromFile1
+//                                → TextualInput
+//                                  → TextProcessor1
+//                                    → ExtractResponse
+//                                      → ParseJsonResponse
+//                                        → FormatResponse
+//                                          → MapResponse
+//                                            → End
+//                                              → ApiResponse
+//                                              → IfEvalRun
+//                                                → Evaluation1
+//                                              → IfSuccess
+//                                                → Kvstorage1
+//                             .out(1) → ExtractFromFile
+//                                → Code
+//                                  → TextualInput (↩ loop)
+//                             .out(2) → ExtractFromFile2
+//                                → Code (↩ loop)
+//                             .out(3) → ExtractFromFile2 (↩ loop)
+//                             .out(4) → Start1
+//                                → DocumentProcessor
+//                                  → ExtractResponse (↩ loop)
+//                             .out(5) → Start1 (↩ loop)
+//                             .out(6) → Start1 (↩ loop)
+//                             .out(7) → ResponseFormatUnsupportedFileError
+//                                → End (↩ loop)
+//                 .out(1) → Start (↩ loop)
 //          → CallSettings
 //            → If3
 //              → Config11
@@ -141,7 +151,7 @@ import { workflow, node, links } from '@n8n-as-code/transformer';
 @workflow({
     /*__n8n__*/ description: null,
     /*__n8n__*/ isArchived: false,
-    /*__n8n__*/ connections: {"Webhook Trigger":{"main":[[{"node":"MAP LINK1","type":"main","index":0}]]},"File Type Router":{"main":[[{"node":"Extract from File1","type":"main","index":0}],[{"node":"Extract from File","type":"main","index":0}],[{"node":"Extract from File2","type":"main","index":0}],[{"node":"Extract from File2","type":"main","index":0}],[{"node":"Start1","type":"main","index":0}],[{"node":"Start1","type":"main","index":0}],[{"node":"Start1","type":"main","index":0}],[{"node":"Response Format: Unsupported File Error","type":"main","index":0}]]},"Textual Input":{"main":[[{"node":"Text Processor1","type":"main","index":0}]]},"Extract from File":{"main":[[{"node":"Code","type":"main","index":0}]]},"Code":{"main":[[{"node":"Textual Input","type":"main","index":0}]]},"Extract from File1":{"main":[[{"node":"Textual Input","type":"main","index":0}]]},"Extract from File2":{"main":[[{"node":"Code","type":"main","index":0}]]},"Response Format: Unsupported File Error":{"main":[[{"node":"End","type":"main","index":0}]]},"Crypto":{"main":[[{"node":"KVStorage","type":"main","index":0}]]},"KVStorage":{"main":[[{"node":"If","type":"main","index":0}]]},"End":{"main":[[{"node":"API Response","type":"main","index":0},{"node":"If Eval Run","type":"main","index":0},{"node":"If Success","type":"main","index":0}]]},"Before Start":{"main":[[{"node":"If1","type":"main","index":0},{"node":"Call 'Settings'","type":"main","index":0},{"node":"Config1","type":"main","index":0}]]},"Start":{"main":[[{"node":"File Type Router","type":"main","index":0}]]},"If":{"main":[[{"node":"Code in JavaScript1","type":"main","index":0}],[{"node":"Code2","type":"main","index":0}]]},"Code2":{"main":[[{"node":"Start","type":"main","index":0}]]},"If1":{"main":[[{"node":"Crypto","type":"main","index":0}],[{"node":"Start","type":"main","index":0}]]},"When Executed by Another Workflow":{"main":[[{"node":"Switch","type":"main","index":0}]]},"Switch":{"main":[[{"node":"Before Start","type":"main","index":0}],[{"node":"Download LINK","type":"main","index":0}]]},"Download LINK":{"main":[[{"node":"If Binary","type":"main","index":0}]]},"If Binary":{"main":[[{"node":"Before Start","type":"main","index":0}],[{"node":"Code in JavaScript","type":"main","index":0}]]},"Code in JavaScript1":{"main":[[{"node":"API Response1","type":"main","index":0}]]},"MAP LINK":{"main":[[{"node":"Switch","type":"main","index":0}]]},"Eval Start":{"main":[[{"node":"MAP LINK","type":"main","index":0}]]},"If Success":{"main":[[{"node":"KVStorage1","type":"main","index":0}]]},"If Eval Run":{"main":[[{"node":"Evaluation1","type":"main","index":0}]]},"Map Response":{"main":[[{"node":"End","type":"main","index":0}]]},"Extract Response":{"main":[[{"node":"Parse JSON Response","type":"main","index":0}]]},"Parse JSON Response":{"main":[[{"node":"Format Response","type":"main","index":0}]]},"Response Format: No LLM Output":{"main":[[{"node":"End","type":"main","index":0}]]},"MAP LINK1":{"main":[[{"node":"Switch","type":"main","index":0}]]},"When clicking ‘Execute workflow’":{"main":[[{"node":"Delete Cache","type":"main","index":0}]]},"Document Processor":{"main":[[{"node":"Extract Response","type":"main","index":0}]]},"Text Processor1":{"main":[[{"node":"Extract Response","type":"main","index":0}]]},"Format Response":{"main":[[{"node":"Map Response","type":"main","index":0}]]},"Document OCR":{"main":[[{"node":"Code in JavaScript2","type":"main","index":0}]]},"Code in JavaScript2":{"main":[[{"node":"If2","type":"main","index":0}]]},"If2":{"main":[[{"node":"Code in Python (Native)","type":"main","index":0}],[]]},"Start1":{"main":[[{"node":"Document Processor","type":"main","index":0}]]},"Code in Python (Native)":{"main":[[]]},"Call 'Settings'":{"main":[[{"node":"If3","type":"main","index":0}]]},"If3":{"main":[[{"node":"CONFIG1","type":"main","index":0}],[{"node":"CONFIG","type":"main","index":0}]]},"CONFIG1":{"main":[[{"node":"CONFIG","type":"main","index":0}]]},"CONFIG":{"main":[[{"node":"CONFIG FINAL","type":"main","index":0}]]},"Code in JavaScript":{"main":[[{"node":"API Response1","type":"main","index":0}]]}},
+    /*__n8n__*/ connections: {"Webhook Trigger":{"main":[[{"node":"MAP LINK1","type":"main","index":0}]]},"File Type Router":{"main":[[{"node":"Extract from File1","type":"main","index":0}],[{"node":"Extract from File","type":"main","index":0}],[{"node":"Extract from File2","type":"main","index":0}],[{"node":"Extract from File2","type":"main","index":0}],[{"node":"Start1","type":"main","index":0}],[{"node":"Start1","type":"main","index":0}],[{"node":"Start1","type":"main","index":0}],[{"node":"Response Format: Unsupported File Error","type":"main","index":0}]]},"Textual Input":{"main":[[{"node":"Text Processor1","type":"main","index":0}]]},"Extract from File":{"main":[[{"node":"Code","type":"main","index":0}]]},"Code":{"main":[[{"node":"Textual Input","type":"main","index":0}]]},"Extract from File1":{"main":[[{"node":"Textual Input","type":"main","index":0}]]},"Extract from File2":{"main":[[{"node":"Code","type":"main","index":0}]]},"Response Format: Unsupported File Error":{"main":[[{"node":"End","type":"main","index":0}]]},"Crypto":{"main":[[{"node":"KVStorage","type":"main","index":0}]]},"KVStorage":{"main":[[{"node":"If","type":"main","index":0}]]},"End":{"main":[[{"node":"API Response","type":"main","index":0},{"node":"If Eval Run","type":"main","index":0},{"node":"If Success","type":"main","index":0}]]},"Before Start":{"main":[[{"node":"Check AI Enabled Setting","type":"main","index":0},{"node":"Call 'Settings'","type":"main","index":0},{"node":"Config1","type":"main","index":0}]]},"Check AI Enabled Setting":{"main":[[{"node":"If AI Disabled","type":"main","index":0}]]},"If AI Disabled":{"main":[[{"node":"AI Disabled Reply","type":"main","index":0}],[{"node":"Resume Item (AI on)","type":"main","index":0}]]},"Resume Item (AI on)":{"main":[[{"node":"If1","type":"main","index":0}]]},"AI Disabled Reply":{"main":[[{"node":"API Response - AI Disabled","type":"main","index":0}]]},"Start":{"main":[[{"node":"File Type Router","type":"main","index":0}]]},"If":{"main":[[{"node":"Code in JavaScript1","type":"main","index":0}],[{"node":"Code2","type":"main","index":0}]]},"Code2":{"main":[[{"node":"Start","type":"main","index":0}]]},"If1":{"main":[[{"node":"Crypto","type":"main","index":0}],[{"node":"Start","type":"main","index":0}]]},"When Executed by Another Workflow":{"main":[[{"node":"Switch","type":"main","index":0}]]},"Switch":{"main":[[{"node":"Before Start","type":"main","index":0}],[{"node":"Download LINK","type":"main","index":0}]]},"Download LINK":{"main":[[{"node":"If Binary","type":"main","index":0}]]},"If Binary":{"main":[[{"node":"Before Start","type":"main","index":0}],[{"node":"Code in JavaScript","type":"main","index":0}]]},"Code in JavaScript1":{"main":[[{"node":"API Response1","type":"main","index":0}]]},"MAP LINK":{"main":[[{"node":"Switch","type":"main","index":0}]]},"Eval Start":{"main":[[{"node":"MAP LINK","type":"main","index":0}]]},"If Success":{"main":[[{"node":"KVStorage1","type":"main","index":0}]]},"If Eval Run":{"main":[[{"node":"Evaluation1","type":"main","index":0}]]},"Map Response":{"main":[[{"node":"End","type":"main","index":0}]]},"Extract Response":{"main":[[{"node":"Parse JSON Response","type":"main","index":0}]]},"Parse JSON Response":{"main":[[{"node":"Format Response","type":"main","index":0}]]},"Response Format: No LLM Output":{"main":[[{"node":"End","type":"main","index":0}]]},"MAP LINK1":{"main":[[{"node":"Switch","type":"main","index":0}]]},"When clicking ‘Execute workflow’":{"main":[[{"node":"Delete Cache","type":"main","index":0}]]},"Document Processor":{"main":[[{"node":"Extract Response","type":"main","index":0}]]},"Text Processor1":{"main":[[{"node":"Extract Response","type":"main","index":0}]]},"Format Response":{"main":[[{"node":"Map Response","type":"main","index":0}]]},"Document OCR":{"main":[[{"node":"Code in JavaScript2","type":"main","index":0}]]},"Code in JavaScript2":{"main":[[{"node":"If2","type":"main","index":0}]]},"If2":{"main":[[{"node":"Code in Python (Native)","type":"main","index":0}],[]]},"Start1":{"main":[[{"node":"Document Processor","type":"main","index":0}]]},"Code in Python (Native)":{"main":[[]]},"Call 'Settings'":{"main":[[{"node":"If3","type":"main","index":0}]]},"If3":{"main":[[{"node":"CONFIG1","type":"main","index":0}],[{"node":"CONFIG","type":"main","index":0}]]},"CONFIG1":{"main":[[{"node":"CONFIG","type":"main","index":0}]]},"CONFIG":{"main":[[{"node":"CONFIG FINAL","type":"main","index":0}]]},"Code in JavaScript":{"main":[[{"node":"API Response1","type":"main","index":0}]]}},
     /*__n8n__*/ tags: [{"updatedAt":"2026-08-16T14:20:49.737Z","createdAt":"2026-08-16T14:20:49.737Z","id":"93ff3a3f-6b78-5d0a-a4de-2948ea161953","name":"app:indox"},{"updatedAt":"2026-07-30T23:42:19.465Z","createdAt":"2026-07-30T23:42:19.465Z","id":"b1a4e768-96a2-4b15-958d-950999027b09","name":"indox-dev"},{"updatedAt":"2026-07-30T23:41:29.646Z","createdAt":"2026-07-30T23:41:29.646Z","id":"9c337cfe-7feb-4f3d-ab26-3de6439357ce","name":"sm-refactore-v2.1"},{"updatedAt":"2026-08-05T22:56:59.007Z","createdAt":"2026-08-05T22:56:59.007Z","id":"38de779e-63ee-415a-94f7-63c0ca2a68ac","name":"dev"},{"updatedAt":"2026-08-05T22:56:59.007Z","createdAt":"2026-08-05T22:56:59.007Z","id":"edad0600-cc86-4f33-b016-311b555b8f4e","name":"indox-app"},{"updatedAt":"2026-08-05T22:56:59.007Z","createdAt":"2026-08-05T22:56:59.007Z","id":"22f1e71e-91bf-48db-811f-8d3bc4e55a3e","name":"sm-refactor-v2.1"}],
     /*__n8n__*/ versionMetadata: {"name":null,"description":null},
     /*__n8n__*/ meta: null,
@@ -573,6 +583,121 @@ return [{
         position: [544, 880],
     })
     BeforeStart = {};
+
+    // THE OFFICE'S WORD BEFORE A MODEL (DGO-1792, 2026-11-11). Every trigger reaches the models only through
+    // Before Start, so the switch is read here, true-word only, falling back to 'false', as BsDocEx01 and the
+    // invoice extractor read it. Without it any POST to bs_ex_2_dev reached Gemini whatever the instance's
+    // extraction_ai_enabled said. The instance is the caller's (its own field, the sub-workflow's input, or
+    // MAP LINK1's __instance/instance); none → refuse (throw). With the switch off a cached result is refused too.
+    @node({
+        id: 'bs-ai-gate-check-01',
+        name: 'Check AI Enabled Setting',
+        type: 'n8n-nodes-base.postgres',
+        version: 2.6,
+        position: [736, 880],
+        credentials: { postgres: { id: 'yY8FYvp6Kz86pt2t', name: 'INDOX Supabase Postgres' } },
+    })
+    CheckAiEnabledSetting = {
+        operation: 'executeQuery',
+        query: "=SELECT COALESCE((SELECT value FROM {{ (() => { let i = String($json.__instance || ''); if (!i) { try { i = String(($('When Executed by Another Workflow').first().json || {}).__instance || ''); } catch (e) { i = ''; } } if (!i) { try { i = String(($('MAP LINK1').first().json || {}).__instance || ''); } catch (e) { i = ''; } } if (!/^[a-z][a-z0-9_]*$/.test(i)) { throw new Error('indoxV2ExtractBalanceSheet01: no valid __instance — the extraction_ai_enabled switch cannot be read, so no model is called'); } return 'indox_' + i; })() }}.settings WHERE key='extraction_ai_enabled' AND lower(trim(value)) = 'true'), 'false') AS ai_enabled",
+        options: {},
+    };
+
+    @node({
+        id: 'bs-ai-gate-if-01',
+        name: 'If AI Disabled',
+        type: 'n8n-nodes-base.if',
+        version: 2.2,
+        position: [928, 880],
+    })
+    IfAiDisabled = {
+        conditions: {
+            options: {
+                caseSensitive: true,
+                leftValue: '',
+                typeValidation: 'strict',
+                version: 2,
+            },
+            conditions: [
+                {
+                    id: 'bs-ai-gate-cond-01',
+                    leftValue: '={{ $json.ai_enabled }}',
+                    rightValue: 'false',
+                    operator: {
+                        type: 'string',
+                        operation: 'equals',
+                    },
+                },
+            ],
+            combinator: 'and',
+        },
+        options: {},
+    };
+
+    @node({
+        id: 'bs-ai-gate-resume-01',
+        name: 'Resume Item (AI on)',
+        type: 'n8n-nodes-base.code',
+        version: 2,
+        position: [1120, 880],
+    })
+    ResumeItemAiOn = {
+        mode: 'runOnceForEachItem',
+        jsCode: `// the check answered with its own row; If1 gets the item it was always given: Before Start's json and file
+return { json: $('Before Start').item.json, binary: $('Before Start').item.binary };`,
+    };
+
+    @node({
+        id: 'bs-ai-gate-reply-01',
+        name: 'AI Disabled Reply',
+        type: 'n8n-nodes-base.set',
+        version: 3.4,
+        position: [1120, 1072],
+    })
+    AiDisabledReply = {
+        assignments: {
+            assignments: [
+                {
+                    id: 'bs-ai-gate-reply-success',
+                    name: 'success',
+                    value: false,
+                    type: 'boolean',
+                },
+                {
+                    id: 'bs-ai-gate-reply-disabled',
+                    name: 'ai_disabled',
+                    value: true,
+                    type: 'boolean',
+                },
+                {
+                    id: 'bs-ai-gate-reply-error',
+                    name: 'error',
+                    value: 'extraction_ai_enabled is not true for this instance',
+                    type: 'string',
+                },
+                {
+                    id: 'bs-ai-gate-reply-data',
+                    name: 'data',
+                    value: "={{ { documentDate: '', documentTotalAmount: '', lines: [] } }}",
+                    type: 'object',
+                },
+            ],
+        },
+        options: {},
+    };
+
+    @node({
+        id: 'bs-ai-gate-respond-01',
+        name: 'API Response - AI Disabled',
+        type: 'n8n-nodes-base.respondToWebhook',
+        version: 1,
+        position: [1312, 1072],
+    })
+    ApiResponseAiDisabled = {
+        respondWith: 'json',
+        responseBody: '={{ $json }}',
+        options: {},
+    };
 
     @node({
         id: 'd8da50be-c9c0-47ca-9a36-26518bf9382e',
@@ -2274,7 +2399,12 @@ return [{
         this.End.out(0).to(this.ApiResponse.in(0));
         this.End.out(0).to(this.IfEvalRun.in(0));
         this.End.out(0).to(this.IfSuccess.in(0));
-        this.BeforeStart.out(0).to(this.If1.in(0));
+        this.BeforeStart.out(0).to(this.CheckAiEnabledSetting.in(0));
+        this.CheckAiEnabledSetting.out(0).to(this.IfAiDisabled.in(0));
+        this.IfAiDisabled.out(0).to(this.AiDisabledReply.in(0));
+        this.IfAiDisabled.out(1).to(this.ResumeItemAiOn.in(0));
+        this.ResumeItemAiOn.out(0).to(this.If1.in(0));
+        this.AiDisabledReply.out(0).to(this.ApiResponseAiDisabled.in(0));
         this.BeforeStart.out(0).to(this.CallSettings.in(0));
         this.BeforeStart.out(0).to(this.Config1.in(0));
         this.Start.out(0).to(this.FileTypeRouter.in(0));

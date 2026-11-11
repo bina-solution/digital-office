@@ -1,0 +1,8 @@
+# esign — the test toolchain. Not in the runtime image: `docker build --target test` installs this,
+# the runtime stage never sees pytest. pypdfium2 is here because the certificate page's Hebrew is
+# PROVEN by rasterising it, not by assuming the font has the letters.
+-r requirements.txt
+pytest==9.2.0
+pypdfium2==5.15.2
+fonttools==4.68.0
+pikepdf==10.18.0

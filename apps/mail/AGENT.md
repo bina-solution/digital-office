@@ -21,11 +21,22 @@ Each mailbox is a **connection**, an account in the credential plane. **Name the
   - It has no sign-in of its own and is not routed outside the office network.
 - **`mailboxd`** is the only writer of the local server's accounts.
 
-From the shell, reads through the same formatter the operatives use:
-- `./bbox mail connections`, `./bbox mail inbox [N]`, `./bbox mail find "<query>" [N]`,
-  `./bbox mail read <id>`.
-- Each takes `--connection <id>`. Without it, the mailbox used is named on stderr.
+From any office's shell (`bbox mail …` and `dgo mail …` are the same door), reads through the same
+formatter the operatives use:
+- `./bbox mail profile list` lists every mailbox and the default (`*`); `connections` is the same as JSON.
+- `./bbox mail -p <mailbox> inbox [N]`, `find "<query>" [N]`, `read <id>`, `thread <id>`, `labels`. `-p` (or
+  `--connection`) names a mailbox by its address, its name or its id. Without it, the mailbox used is named on
+  stderr.
+- `mark <id>… starred|important|unread|archived [--off]` and `tag <id> +label -label` change labels through
+  the screen's own /api/mark and /api/tag. A write refuses without `-p`. Sending stays with the screen.
+- On an office that does not run the mail (the MacBook) the same commands reach the one that does, through
+  the link.
 - `./bbox mail test` runs the label engine's suite against a LOCAL test mailbox only.
+
+The screen lists every mailbox in its menu («חשבונות») and shows the one chosen in THAT window (`?mailbox=`
+in its address, `connection_id` on its calls): looking at another mailbox moves nothing on the server.
+«חיבור חשבון» connects Gmail by signing in with Google (one consent: Gmail and Drive; it returns through the
+herd's public door, connections `OAUTH_RELAY_URL/oauth/relay`) or by an app password.
 Recipes: `./bbox ops find "שלח מייל"` (`mail.inbox`, `mail.find`, `mail.read`, `mail.send`). On a linked
 office: `./bbox remote <office> mailview '/api/messages?limit=5'` (quoted: zsh expands a bare `?`).
 
@@ -55,5 +66,20 @@ office: `./bbox remote <office> mailview '/api/messages?limit=5'` (quoted: zsh e
 - `label:<a label that does not exist>` in a query is an error, not zero messages.
 - The inbox is the INBOX folder, not a search. `view=attention` merges the failure labels.
 - `connections.override.yml` is stale: it names a service `inbox` that no longer exists.
+
+## A second domain — a company address whose MX is this machine
+
+`MAIL_DOMAIN` (the deployment's subdomain) stays the default. A COMPANY domain whose MX also points
+here (staging serves `person3@example.com`) is DECLARED, never assumed:
+
+- `.env` `MAIL_DOMAINS=digital-office.co.il` (comma/space list), read by `mailboxd`, `mailserver-init`
+  (an account at a served domain is kept; at an unserved one, deleted as a previous tenant's) and the
+  engine reconciler.
+- the account is a profile with a `domain` (`app.json` → `engine.profiles`; `POST /connections` refuses
+  local logins), brought up only where `MAIL_DOMAINS` names it.
+- DKIM: `mailserver-init` keys and signs every served domain (DGO-1389); `mailsetup` names the TXT
+  record each needs (`<MAIL_DKIM_SELECTOR>._domainkey.<domain>`). Keys are create-only.
+- receiving needs port 25 published: `MAIL_BIND=0.0.0.0`. At the default `127.0.0.1` **no mail from
+  the internet arrives**.
 
 Gates: G27, G36 (pagination), G62 (the mail connection), G71, G89; its own tests (`bbox mail test`).

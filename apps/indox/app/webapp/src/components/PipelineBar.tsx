@@ -75,7 +75,7 @@ const MODES: {
 }[] = [
   { key: 'all', label: 'הכל', hint: 'עובר על כל הטבלה', mode: 'all', dry: false },
   { key: 'changed', label: 'שהשתנו', hint: 'רק מסמכים שהשתנו לאחרונה', mode: 'changed', dry: false },
-  { key: 'dry', label: 'יבש', hint: 'עובר על הכל, לא משגר שום פעולה', mode: 'all', dry: true },
+  { key: 'dry', label: 'יבש', hint: 'עובר על הכל, לא מריץ שום פעולה', mode: 'all', dry: true },
 ];
 
 /**
@@ -433,8 +433,8 @@ export default function PipelineBar() {
       <span className="stat" title="ACTION_RESTART — ההרצה מחדש היחידה המאושרת">
         הרצה מחדש <b className="num">{num(s?.action_restart, dbUp)}</b>
       </span>
-      <span className="stat" title="שיגורי פעולות שנפתחו בחמש הדקות האחרונות">
-        שיגורים 5 דק׳ <b className="num">{num(s?.dispatch_5m, dbUp)}</b>
+      <span className="stat" title="פעולות שנפתחו בחמש הדקות האחרונות">
+        פעולות 5 דק׳ <b className="num">{num(s?.dispatch_5m, dbUp)}</b>
       </span>
       <span
         className="stat"

@@ -7,10 +7,10 @@
 
 The compiled registry (`.generated/registry/remote.<office>.<alias>.json`) lists what every linked office
 publishes, and more than one office can publish the same app — ours, and a client's office we installed
-and linked. Measured 2026-10-22: with fireplace linked, the first file alphabetically was the client's, and
+and linked. Measured 2026-10-22: with examplef linked, the first file alphabetically was the client's, and
 every `tasks` call went to a Plane that does not know this office (HTTP 401). Measured 2026-11-03 from the
 MacBook while the HP was rebuilding its catalog (its own `bbox run`): the HP's plane entry was gone,
-fireplace's was the only one left, and `tasks` went to the client's Plane again. So:
+examplef's was the only one left, and `tasks` went to the client's Plane again. So:
   - the herd (apps/computers/herd.yaml `apps:`) names the office that runs each of ITS apps, and a registry
     file names an office by the id that office declares, which may be one of its `aliases:`;
   - on one of the herd's own offices, that office is the ONLY answer: while it does not publish the app,

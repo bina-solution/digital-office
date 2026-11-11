@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import os
 import platform
 import socket
@@ -14,6 +15,8 @@ from pathlib import Path
 from typing import Any
 
 import docker
+import desk
+import requests  # the docker SDK's own transport (its dependency): a cleanup's read timeout is its exception
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import FileResponse
@@ -41,7 +44,7 @@ if _SENTRY_DSN:
 APP_ROOT = Path(__file__).parent
 STATIC_DIR = APP_ROOT / "static"
 HOST_ROOT = Path(os.getenv("HOST_ROOT", "/host/root"))
-DEPLOYMENT_PATH = Path(os.getenv("DEPLOYMENT_PATH", "/host/root/root/deployment-hacohen"))
+DEPLOYMENT_PATH = Path(os.getenv("DEPLOYMENT_PATH", "/host/root/root/digital-office"))
 POLL_TIMEOUT_S = float(os.getenv("MACHINE_DU_TIMEOUT_S", "20"))
 CLEANUP_ALLOWED_ACTIONS = {
     action.strip()
@@ -52,7 +55,7 @@ DEPLOYMENT_NAME = os.getenv("DEPLOYMENT_NAME", "bina-deployment")
 MAX_STAT_WORKERS = int(os.getenv("MACHINE_STAT_WORKERS", "8"))
 OVERVIEW_CACHE_TTL_S = float(os.getenv("MACHINE_OVERVIEW_CACHE_TTL_S", "8"))
 # The heavy disk walk (`du` of /var/lib/docker, /usr, the logs, home, the deployment, and `docker system df`)
-# is taken again at most this often while a screen is open. Once a minute it re-walked FPG's 67 GB Docker
+# is taken again at most this often while a screen is open. Once a minute it re-walked EXF's 67 GB Docker
 # tree all the time the owner watched it, on a 2-vCPU server the provider was throttling (DGO-1231); the
 # folder sizes it shows do not move by the minute, and the disk's own use beside them stays live.
 STORAGE_HEAVY_TTL_S = float(os.getenv("MACHINE_STORAGE_HEAVY_TTL_S", "900"))
@@ -189,6 +192,104 @@ def _mem_info() -> dict[str, Any]:
         "swap_total": swap_total,
         "swap_used": max(swap_total - swap_free, 0),
     }
+
+
+# ── the disk, watched where it is MEASURED (DGO-70) ───────────────────────────────────────────────
+# This service already samples the machine's root every REFRESH_INTERVAL_S (10 s), so the "a filling
+# disk is said within a minute" half of the item costs one comparison here — and a watcher that reads
+# a number nobody looks at is the item's whole subject: `df` under 80% at rest, and a fill that is
+# SAID when it happens rather than discovered by a person whose build just failed.
+#
+# The notice goes through the office's own notification centre (the same door every watcher uses),
+# with an id of its own so the owner can close it and so a recovery closes it: posted on a
+# TRANSITION (under → over, over → under) and not on every tick, because a notice on a schedule is a
+# notice nobody reads.
+DISK_WARN_PCT = float(os.environ.get("MACHINE_DISK_WARN_PCT", "80"))
+DISK_ERROR_PCT = float(os.environ.get("MACHINE_DISK_ERROR_PCT", "92"))
+NOTIFY_URL = (os.environ.get("MACHINE_NOTIFY_URL") or "http://notifications:8977/api/notifications").rstrip("/")
+_disk_alarm_state: dict[str, Any] = {"over": False}
+
+
+def disk_alarm(percent: float, free: int) -> dict[str, Any] | None:
+    """The sentence a given reading deserves — None while the machine is fine.
+
+    Pure, so the proof does not have to fill a disk: `/api/disk/probe` runs THIS function on a
+    reading somebody hands it and, when told to, posts the result through the same call the loop
+    makes.
+    """
+    gb = free / (1 << 30)
+    if percent >= DISK_ERROR_PCT:
+        return {"id": "machine-disk", "level": "error",
+                "title": f"הדיסק של המנוע כמעט מלא — {percent:.0f}%",
+                "body": f"נשארו {gb:.1f} GB פנויים. כל בנייה, כל גיבוי וכל ייבוא נכשלים מכאן והלאה."}
+    if percent >= DISK_WARN_PCT:
+        return {"id": "machine-disk", "level": "warn",
+                "title": f"הדיסק של המנוע מתמלא — {percent:.0f}%",
+                "body": f"נשארו {gb:.1f} GB פנויים (הסף {DISK_WARN_PCT:.0f}%). "
+                        f"מה שמתפנה לבד: images שאינן בשימוש ומטמון בנייה (bbox status מראה כמה)."}
+    return None
+
+
+def _refused(url: str, code: int, read) -> None:
+    """What the notices service said when it refused (`read` is the error's own e.read), in the log —
+    its words, never thrown away."""
+    try:
+        said = read(200)
+    except Exception:                       # noqa: BLE001 — a body that breaks off while read is no body
+        said = b""
+    print(f"[machine] {url} answered HTTP {code}: {said!r}", flush=True)
+
+
+def _get_json(url: str) -> dict | None:
+    import urllib.error
+    import urllib.request
+    try:
+        with urllib.request.urlopen(url, timeout=10) as r:
+            return json.loads(r.read().decode("utf-8", "replace") or "{}")
+    except urllib.error.HTTPError as e:
+        _refused(url, e.code, e.read)
+        return None
+    except Exception:                       # noqa: BLE001 — reading the list is best-effort too
+        return None
+
+
+def _notify(method: str, url: str, body: dict | None = None) -> bool:
+    import urllib.error
+    import urllib.request
+    try:
+        req = urllib.request.Request(url, method=method,
+                                     data=json.dumps(body).encode() if body is not None else None,
+                                     headers={"Content-Type": "application/json"})
+        with urllib.request.urlopen(req, timeout=10) as r:
+            return 200 <= r.status < 300
+    except urllib.error.HTTPError as e:
+        _refused(url, e.code, e.read)
+        return False
+    except Exception:                       # noqa: BLE001 — a notice that cannot be sent is not a fault of the machine
+        return False
+
+
+def disk_watch() -> None:
+    """One tick of the watch: say it when it starts, close it when it ends, nothing in between."""
+    try:
+        usage = _disk_usage(HOST_ROOT)
+    except Exception:                       # noqa: BLE001 — an unreadable root is not a disk alarm
+        return
+    alarm = disk_alarm(usage["percent"], usage["free"])
+    over = alarm is not None
+    if over and not _disk_alarm_state["over"]:
+        _notify("POST", NOTIFY_URL, {"source": "machine", "source_id": alarm["id"],
+                                     "title": alarm["title"], "body": alarm["body"],
+                                     "level": alarm["level"], "link": "/#/m/machine"})
+    elif not over and _disk_alarm_state["over"]:
+        # A RECOVERY CLOSES ITS OWN NOTICE, the way every watcher here does it: read the open ones
+        # and mark this one — there is no "close by source" door, and inventing one for this call
+        # would be a second way to do what the notice list already does.
+        listing = _get_json(NOTIFY_URL + "?limit=60") or {}
+        for row in (listing.get("notifications") or []):
+            if row.get("source_id") == "machine-disk" and not row.get("is_read"):
+                _notify("POST", f"{NOTIFY_URL}/{row.get('id')}/read")
+    _disk_alarm_state["over"] = over
 
 
 def _disk_usage(path: Path) -> dict[str, Any]:
@@ -519,6 +620,7 @@ async def _refresh_loop() -> None:
                 "rx": _net_rate[0],
                 "tx": _net_rate[1],
             })
+            disk_watch()                    # DGO-70: a filling disk is SAID, not discovered
             # 2) full container build (cache + net) — only while watched (or cold),
             #    fired CONCURRENTLY so the expensive stats collection never stalls
             #    the sampling cadence above.
@@ -534,6 +636,29 @@ async def _refresh_loop() -> None:
 @app.on_event("startup")
 async def _start_collector() -> None:
     asyncio.create_task(_refresh_loop())
+
+
+@app.post("/api/disk/probe")
+async def disk_probe(payload: dict | None = None) -> dict[str, Any]:
+    """Run the disk watch on a GIVEN reading — the proof, without filling a disk.
+
+    `{"percent": 91, "free_gb": 12, "notify": "http://…"}`: the same `disk_alarm()` the loop calls,
+    and (only when `notify` is given) the same POST — aimed wherever the caller says, so a proof run
+    never writes into the owner's notice list. The real reading is in the answer either way.
+    """
+    body = payload or {}
+    usage = _disk_usage(HOST_ROOT)
+    percent = float(body.get("percent", usage["percent"]))
+    free = int(float(body.get("free_gb", usage["free"] / (1 << 30))) * (1 << 30))
+    alarm = disk_alarm(percent, free)
+    posted = None
+    target = str(body.get("notify") or "")
+    if alarm and target:
+        posted = _notify("POST", target.rstrip("/"), {"source": "machine", "source_id": alarm["id"],
+                                                      "title": alarm["title"], "body": alarm["body"],
+                                                      "level": alarm["level"], "link": "/#/m/machine"})
+    return {"real": usage, "percent": percent, "alarm": alarm, "posted": posted,
+            "warn_pct": DISK_WARN_PCT, "error_pct": DISK_ERROR_PCT}
 
 
 @app.get("/api/storage")
@@ -580,21 +705,45 @@ def cleanup_options() -> dict[str, Any]:
     }
 
 
+# A prune takes minutes on a full disk: the Dell's 22.7 GB of build cache (2026-11-11, DGO-1811) outlasted the
+# Docker SDK's default 60 s read timeout, and the action answered 500 while the daemon finished the work. The
+# cleanup calls get a client of their own, with a timeout a prune fits in, under the edge's own 600 s
+# (traefik's respondingTimeouts): past it a caller through the edge gets nothing back whatever this says.
+def _cleanup_timeout() -> int:
+    try:
+        value = int(os.getenv("MACHINE_CLEANUP_TIMEOUT_S") or "540")
+    except ValueError:                       # a knob's typo never stops the app
+        return 540
+    return value if value > 0 else 540
+
+
+CLEANUP_ACTIONS = {"docker_container_prune", "docker_image_prune_dangling", "docker_image_prune_all",
+                   "docker_builder_prune_all"}
+
+
 @app.post("/api/cleanup/{action_id}")
 def run_cleanup(action_id: str) -> dict[str, Any]:
     if action_id not in CLEANUP_ALLOWED_ACTIONS:
         raise HTTPException(status_code=403, detail=f"Cleanup action is disabled. Add {action_id} to MACHINE_CLEANUP_ALLOWED_ACTIONS to enable it.")
-    client = docker_client()
-    if action_id == "docker_container_prune":
-        result = client.containers.prune()
-    elif action_id == "docker_image_prune_dangling":
-        result = client.images.prune(filters={"dangling": True})
-    elif action_id == "docker_image_prune_all":
-        result = client.images.prune(filters={"dangling": False})
-    elif action_id == "docker_builder_prune_all":
-        result = client.api.prune_builds(all=True)
-    else:
+    if action_id not in CLEANUP_ACTIONS:
         raise HTTPException(status_code=404, detail="Unknown cleanup action")
+    timeout = _cleanup_timeout()
+    client = docker.from_env(timeout=timeout)
+    try:
+        if action_id == "docker_container_prune":
+            result = client.containers.prune()
+        elif action_id == "docker_image_prune_dangling":
+            result = client.images.prune(filters={"dangling": True})
+        elif action_id == "docker_image_prune_all":
+            result = client.images.prune(filters={"dangling": False})
+        else:
+            result = client.api.prune_builds(all=True)
+    except requests.exceptions.ReadTimeout:
+        # the daemon keeps going after the read gives up: say so, never «failed»
+        raise HTTPException(status_code=504, detail=f"{action_id} did not answer in {timeout} s; the daemon may "
+                            "still finish it — the storage card shows what it freed") from None
+    finally:
+        client.close()
     global _overview_cache, _storage_cache
     _overview_cache = None
     _storage_cache = None
@@ -649,6 +798,45 @@ def _power_policy() -> dict[str, Any]:
     return policy
 
 
+# Is somebody at the desk (DGO-1797)? desk.py asks the desktop itself every DESK_TICK_S and writes
+# data/power/desk.json, which the heavy-work admit reads and this screen shows. A reading older than
+# DESK_STALE_S is «unknown» — and unknown is never «in use», so a dead sampler holds no job.
+DESK_TICK_S = 10
+DESK_STALE_S = 60
+LOCKS_DIR = Path(os.getenv("LOCKS_DIR", "/data/locks"))   # the office's data/.locks, read-only (docker-compose.yml)
+DESK_RETRY_S = 300   # a desk that answered «unknown» (no GNOME, a refusal) is asked again this often, not every tick
+
+
+def _desk_loop() -> None:
+    last: dict[str, Any] | None = None
+    ask_at = 0.0
+    while True:
+        tick = time.monotonic()                  # the retry clock: a clock step on the host never delays it
+        try:
+            if last is None or last.get("in_use") is not None or tick >= ask_at:
+                last = desk.read_desk(HOST_ROOT)
+                ask_at = tick + (DESK_RETRY_S if last.get("in_use") is None else 0)
+            desk.write_desk(POWER_DIR, {**last, "at": int(time.time())})
+        except Exception:  # noqa: BLE001 — the sampler never stops the app
+            pass
+        time.sleep(DESK_TICK_S)
+
+
+@app.on_event("startup")
+async def _start_desk() -> None:
+    threading.Thread(target=_desk_loop, name="desk", daemon=True).start()
+
+
+def _desk_now() -> dict[str, Any] | None:
+    reading = _power_read("desk.json")
+    if not reading or not isinstance(reading.get("at"), (int, float)):
+        return None
+    age = max(0, int(time.time() - reading["at"]))
+    if age > DESK_STALE_S:
+        return {**reading, "in_use": None, "how": "unknown", "why": f"the reading is {age} s old", "age_s": age}
+    return {**reading, "age_s": age}
+
+
 @app.get("/api/power")
 def power() -> dict[str, Any]:
     status = _power_read("status.json")
@@ -661,7 +849,11 @@ def power() -> dict[str, Any]:
     # exists for macOS; on a Windows host its absence is not a fault to start something about.
     return {"policy": _power_policy(), "defaults": POWER_DEFAULTS, "status": status,
             "agent": agent, "age_s": age, "host_os": (_host_facts() or {}).get("os") or "",
-            "generated_at": _iso_now()}
+            "desk": _desk_now(), "heat": {"pkg_c": desk.pkg_temp_c(HOST_ROOT)},
+            # a battery on the machine itself, and whether this is an engine's VM on a person's computer (desk): with no
+            # agent and no host OS, no battery AND no engine VM is a server — the card's one line (DGO-1801)
+            "battery": desk.has_battery(HOST_ROOT), "engine_vm": desk.engine_vm(HOST_ROOT),
+            "heavy": desk.heavy_slot(LOCKS_DIR, HOST_ROOT / "proc" / "locks"), "generated_at": _iso_now()}
 
 
 @app.put("/api/power/policy")

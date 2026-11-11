@@ -226,7 +226,7 @@ for(const m of Object.keys(map).sort()){
   const c2=map[m]; const ids=((cos[c2]||{}).identifiers)||[];
   if(ids.length && !/no-?reply/i.test(m)){ sender=m; senderCo=c2; senderCid=String(ids[0]); break; }
 }
-if(!sender){ sender='person79-x@example.com'; senderCo=null; senderCid=null; }
+if(!sender){ sender='person85-x@example.com'; senderCo=null; senderCid=null; }
 const tok=String($execution.id||'0').replace(/\\D/g,'').slice(-5).padStart(5,'4');
 const out=[];
 for(const e of reg){
@@ -284,7 +284,7 @@ const body = p.bs
      customer:{name:(p.kind==='gmail'?(p.senderCo||p.co):p.co)}}
   : {doc_type:'INVOICE', doc_id:p.doc_id, doc_date:'06/07/2026',
      supplier:{name:p.co, company_id:p.cid, city:'תל אביב'},
-     customer:{name:'הכהן שירותים', company_id:'515111111'},
+     customer:{name:'הדוגמה שירותים', company_id:'515111111'},
      lines:[{description:'אספקת שירותים', qty:2, unit_price:340.0}]};
 return [{json:{...p, _url:'http://apitools:8080/docGen?truth=1', _body:body}}];`,
     };

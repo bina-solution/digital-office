@@ -36,52 +36,6 @@
  "apps/indox/blueprint/fixtures/tag_rules.json": {
   "client-mailbox": 1
  },
- "apps/indox/blueprint/n8n/SyncScanUnit0001.json": {
-  "connection-instance-id": 1
- },
- "apps/indox/blueprint/n8n/SyncSource000001.json": {
-  "connection-instance-id": 1
- },
- "apps/indox/blueprint/n8n/indoxGmailLinkDownloader01.json": {
-  "client-mailbox": 2
- },
- "apps/indox/blueprint/n8n/indoxProcessDocument01.json": {
-  "drive-open-url": 1,
-  "connection-instance-id": 1
- },
- "apps/indox/blueprint/n8n/indoxV2BSTest01.json": {
-  "drive-open-url": 2
- },
- "apps/indox/blueprint/n8n/indoxV2ExtractBalanceSheet01.json": {
-  "connection-instance-id": 1
- },
- "apps/indox/blueprint/n8n/indoxV2ExtractInvoiceGemini01.json": {
-  "connection-instance-id": 1
- },
- "apps/indox/blueprint/n8n/indoxV2GDocTest01.json": {
-  "drive-open-url": 1
- },
- "apps/indox/blueprint/n8n/indoxV2QueryPurchaseId01.json": {
-  "connection-instance-id": 1
- },
- "apps/indox/blueprint/n8n/indoxV2QueryShipmentId01.json": {
-  "connection-instance-id": 1
- },
- "apps/indox/blueprint/n8n/indoxV2SearchFile01.json": {
-  "connection-instance-id": 1
- },
- "apps/indox/blueprint/n8n/indoxV2SearchWarehouse01.json": {
-  "connection-instance-id": 1
- },
- "apps/indox/blueprint/n8n/indoxV2UploadApiTools01.json": {
-  "connection-instance-id": 1
- },
- "apps/indox/blueprint/n8n/syncV3Main0001.json": {
-  "connection-instance-id": 1
- },
- "apps/indox/blueprint/n8n/tVzFMkz18pCsXRyw.json": {
-  "connection-instance-id": 1
- },
  "apps/mail/mailapi/fixtures/tag_rules.json": {
   "client-mailbox": 1
  }

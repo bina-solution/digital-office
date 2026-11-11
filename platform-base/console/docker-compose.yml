@@ -3,7 +3,7 @@
 services:
   console:
     build: {context: ., dockerfile: Dockerfile}
-    image: deployment-hacohen-console
+    image: digital-office-console
     container_name: console-${DEPLOYMENT_NAME:-bina-deployment}
     hostname: console
     restart: unless-stopped
@@ -12,8 +12,20 @@ services:
       # app.json) and merged in via .generated/routing.override.yml — see gate G9.
       - SENTRY_DSN=${CONSOLE_SENTRY_DSN:-}
       - DEPLOYMENT_NAME=${DEPLOYMENT_NAME:-bina-deployment}
+      # which office this console is: `/go/<alias>.<this office>` is this office's own tile (links.py, DGO-1433) —
+      # the control plane's office record carries no id
+      - DGO_OFFICE_ID=${DGO_OFFICE_ID:-}
       - PORT=8000
       - CONNECTIONS_URL=${CONNECTIONS_URL:-http://connections:8990}
+      # SIGNING OUT (DGO-1621, the owner: «אין לי אפשרות להתנתקות»). Which identity provider the edge asks — the
+      # office's one switch, read the way traefik reads it — and, for the office's own sign-in app, the page that
+      # signs a person out (forward-auth's /logout, at the address a browser reaches it: its compose says how).
+      - DGO_IDENTITY=${DGO_IDENTITY:-authentik}
+      - CONSOLE_SIGNOUT_URL=${FORWARD_AUTH_EXTERNAL_URL:-${AUTH_PROTOCOL:-http}://${FORWARD_AUTH_BASE_URL:-signin.${DEPLOYMENT_DOMAIN:-localhost}}}/logout
+      # …which is THIS host's way out only: the console is also reached at a LAN address (apps/lan-console) whose
+      # sign-in is another app's, and a phone there cannot even resolve the sign-in host above. The host the
+      # router above serves the console at (the same expression as its rule) is the one that offers it.
+      - CONSOLE_HOST=${CONSOLE_BASE_URL:-console.${DEPLOYMENT_DOMAIN:-localhost}}
       # --- glibc allocator containment. Third instance of the defect proved on
       # `incoming-documents` 2026-08-11 (full derivation in apps/indox/docker-compose.yml).
       #
@@ -32,6 +44,8 @@ services:
       - MALLOC_TRIM_THRESHOLD_=131072
     volumes:
       - ../../.generated/registry:/app/generated:ro   # compiled registries (see gate G9)
+      # the links a person was given, and every time each was opened again (DGO-1433, app.py `links_record`)
+      - console_links:/app/links
     networks: [traefik-network]
     healthcheck:
       test: ["CMD-SHELL", "python -c \"import urllib.request,sys;sys.exit(0 if urllib.request.urlopen('http://localhost:8000/healthz',timeout=3).status==200 else 1)\""]
@@ -81,8 +95,8 @@ services:
       - traefik.http.routers.console-https.tls=true
       - traefik.http.routers.console-https.tls.certresolver=${TRAEFIK_CERTRESOLVER-myresolver}
       - traefik.http.routers.console-https.service=console
-      - traefik.http.routers.console-https.middlewares=authentik@file
-      # [2026-10-22] THE OFFICE'S BARE DOMAIN OPENS ITS CONSOLE. The owner typed https://fpg.digital-office.co.il
+      - traefik.http.routers.console-https.middlewares=authentik@file,hsts@file
+      # [2026-10-22] THE OFFICE'S BARE DOMAIN OPENS ITS CONSOLE. The owner typed https://exf.digital-office.co.il
       # on his phone — the address a person types — and got NET::ERR_CERT_AUTHORITY_INVALID: nothing routed
       # the apex, so traefik answered it with its default certificate and a 404. Now the apex has its own
       # Let's Encrypt certificate and redirects to the console, where SSO takes over. It serves nothing
@@ -102,7 +116,8 @@ services:
       - traefik.http.routers.console-apex.tls=true
       - traefik.http.routers.console-apex.tls.certresolver=${DGO_APEX_CERTRESOLVER-${TRAEFIK_CERTRESOLVER-myresolver}}
       - traefik.http.routers.console-apex.service=noop@internal
-      - traefik.http.routers.console-apex.middlewares=console-apex
+      # the apex redirects into the console, and its certificate pins https for the domain (DGO-1595)
+      - traefik.http.routers.console-apex.middlewares=console-apex,hsts@file
       - traefik.http.routers.console-apex-http.rule=Host(`${DGO_APEX_HOST:-apex.invalid}`)
       - traefik.http.routers.console-apex-http.entrypoints=web
       - traefik.http.routers.console-apex-http.priority=1
@@ -111,5 +126,7 @@ services:
       - traefik.http.middlewares.console-apex.redirectregex.regex=^https?://[^/]+/?(.*)$$
       - traefik.http.middlewares.console-apex.redirectregex.replacement=https://${CONSOLE_BASE_URL:-console.${DEPLOYMENT_DOMAIN:-localhost}}/$${1}
     logging: {driver: json-file, options: {max-size: 5m, max-file: '3'}}
+volumes:
+  console_links:
 networks:
   traefik-network: {external: true}

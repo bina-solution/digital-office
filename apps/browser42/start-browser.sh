@@ -258,6 +258,12 @@ for module in navigation clipboard keyboard; do
          "rebuild it with: ./scripts/dc up -d --build browser42-browser" >&2
   fi
 done
+# 4b'''. The card over the screen when it does not connect (DGO-437): its stylesheet, beside the navigation module
+#     that draws it and loads it by its own URL. An image without it draws no card: the module checks that the
+#     sheet loaded, and noVNC's own page stays as it was.
+if [ -f /usr/local/share/browser42/browser-card.css ]; then
+  cp /usr/local/share/browser42/browser-card.css /usr/share/novnc/app/browser42-card.css
+fi
 python3 - <<'PY'
 import re
 from pathlib import Path
@@ -335,8 +341,14 @@ python3 /usr/local/bin/browser42-broker.py &
 #     copied (docker-compose.yml), so a fix lands without a rebuild; a container recreated from an
 #     older compose has no file and says so — the browser keeps running, because losing the shared
 #     surface over a hand-off helper would be the wrong trade.
+#     KEPT ALIVE (DGO-1336): it also answers Caddy's gate (`/gate`) before the live view and its
+#     websocket, so a crash here would close the whole screen — not only /handoff/ as before.
 if [ -f /handoff.py ]; then
-    python3 /handoff.py serve &
+    ( while :; do
+        python3 /handoff.py serve || true
+        echo "[4f-bis] the hand-off server exited — starting it again (the live view's gate asks it)" >&2
+        sleep 1
+      done ) &
 else
     echo "[4f-bis] /handoff.py is not mounted — /handoff/<slug> will answer 502; recreate: ./scripts/dc up -d browser42-browser" >&2
 fi

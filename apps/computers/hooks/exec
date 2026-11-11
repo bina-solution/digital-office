@@ -1,0 +1,3 @@
+#!/usr/bin/env bash
+#: exec — run one command ON a computer and exit with its code (`ssh` is the interactive door): <id|local> [--timeout S] [--json] -- <command…>
+exec bash "$(dirname "${BASH_SOURCE[0]}")/../tools/verb" exec "$@"

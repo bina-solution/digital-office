@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+#: run the state machine: a sweep, or --id/--company/--status/--changed; follows the drain to its end (--dry decides only)
+# bbox indox main — DGO-231. Thin: the drain API (indoxV2BaseDrain01's webhook) through hooks/drain.py.
+set -euo pipefail
+HOOK_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+. "$(cd "${HOOK_DIR}/../../.." && pwd)/scripts/lib.sh"   # npath()
+export PYTHONIOENCODING=utf-8 PYTHONUNBUFFERED=1
+exec python3 "$(npath "${HOOK_DIR}")/drain.py" main "$@"

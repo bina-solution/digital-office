@@ -282,7 +282,10 @@ body:has(.editor:not(.hidden)) #bina-tell{inset-block-end:84px}
   .dash-top{grid-template-columns:1fr}.kpi-strip{grid-template-columns:repeat(2,minmax(0,1fr))}}
 /* a NARROW frame — a phone, a small window: a line's description takes a line of its own and the numbers
    the next. In one row the numbers' columns are fixed and the description got what was left: 35px at 390 */
-@media (max-width:560px){table.lines,table.lines thead,table.lines tbody{display:block}
+/* …and the dashboard's «recent documents» (table.data, five columns): 14px each side made it 39px wider than a
+   390 phone, a box that slid sideways (DGO-158's map). 8px gives the five back 60px. */
+@media (max-width:560px){table.data th,table.data td{padding-inline:8px}
+  table.lines,table.lines thead,table.lines tbody{display:block}
   table.lines tr{display:grid;grid-template-columns:52px minmax(56px,1fr) 88px 30px;align-items:center;gap:2px 6px}   /* (the last is the «×»: 30px under a finger) */
   table.lines tbody tr{padding-block:6px;border-top:1px dashed var(--line)}
   table.lines th:first-child,table.lines td:first-child{grid-column:1/-1}

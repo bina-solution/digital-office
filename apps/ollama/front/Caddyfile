@@ -1,0 +1,37 @@
+# The ollama front (EXU-21, G106): every caller's `http://ollama:11434` lands here. One request is answered here —
+# a BROWSER's `/` (Accept: text/html) gets the models screen — and every other request goes to the engine as it
+# was, streaming (a chat's tokens flush as they come) and with no time limit of the proxy's own (a first load of a
+# model on a CPU takes most of a minute, a long answer longer).
+{
+	admin off
+	auto_https off
+}
+
+:11434 {
+	# One JSON line per request, written when it ends, with its duration: ollama-watch (watch/watch.py) reads the
+	# chat/generate/embed turns off it into «כל מקביל» (DGO-1797). Rolled at 5 MiB, two kept: about 15k requests.
+	# Caddy writes Cookie, Set-Cookie and (Proxy-)Authorization as REDACTED; the body is never in it.
+	log {
+		output file /log/access.json {
+			roll_size 5MiB
+			roll_keep 2
+		}
+		format json
+	}
+	@screen {
+		path / /index.html
+		header Accept *text/html*
+	}
+	handle @screen {
+		root * /front
+		rewrite * /index.html
+		header Cache-Control no-cache
+		header X-Content-Type-Options nosniff
+		file_server
+	}
+	handle {
+		reverse_proxy ollama-engine:11434 {
+			flush_interval -1
+		}
+	}
+}

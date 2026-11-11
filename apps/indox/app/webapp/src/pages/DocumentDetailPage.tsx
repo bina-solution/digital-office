@@ -216,7 +216,7 @@ function RestartFollow({
       const r = await api.dashboardActionsDocument(id);
       if (deadRef.current) return;
       setD(r);
-      setErr(r.reachable === false ? r.error || 'יומן השיגורים אינו זמין' : null);
+      setErr(r.reachable === false ? r.error || 'יומן הפעולות אינו זמין' : null);
     } catch (e: unknown) {
       if (deadRef.current) return;
       setErr(e instanceof Error ? e.message : String(e));
@@ -278,7 +278,7 @@ function RestartFollow({
         </dd>
       </div>
       <div className="kv">
-        <dt>פעולה ששוגרה</dt>
+        <dt>פעולה שרצה</dt>
         <dd>
           {newest ? (
             <ActionName name={newest.label} />
@@ -350,10 +350,10 @@ function RestartFollow({
             כשחוזרים אליה.
           </>
         ) : pickedUp ? (
-          <>המעקב הסתיים. ההיסטוריה המלאה של המסמך ממשיכה להתעדכן בכרטיס «שיגורים אחרונים».</>
+          <>המעקב הסתיים. ההיסטוריה המלאה של המסמך ממשיכה להתעדכן בכרטיס «פעולות אחרונות».</>
         ) : (
           <>
-            שתי דקות של צפייה ולא נרשם שיגור. זו תשובה, לא תקלה: הבקשה נרשמה, ומה שלא קרה הוא
+            שתי דקות של צפייה ולא נרשמה פעולה. זו תשובה, לא תקלה: הבקשה נרשמה, ומה שלא קרה הוא
             שהניקוז עדיין לא הגיע למסמך. בדקו את מתג <span className="mono">indoxDrainOn</span> ואת
             תקרות הראוטר במסך ההגדרות.
           </>
@@ -1071,7 +1071,7 @@ export default function DocumentDetailPage() {
         <>
           הסטטוס של המסמך ישונה מ־<b>{cur ? statusLabel(cur) : '—'}</b> ל־
           <b className="mono">ACTION_RESTART</b>, ומכונת המצבים תיקח אותו במחזור הניקוז הבא. שום
-          פעולה לא משוגרת מכאן ישירות — זו הבקשה היחידה המאושרת להרצה חוזרת, והמכונה נשארת הכותב
+          פעולה לא מורצת מכאן ישירות — זו הבקשה היחידה המאושרת להרצה חוזרת, והמכונה נשארת הכותב
           היחיד של השורה.
         </>
       ),
@@ -1084,16 +1084,16 @@ export default function DocumentDetailPage() {
           kind: cur ? statusKind(cur) : 'muted',
         },
         {
-          label: 'שיגורים שכבר רצו על המסמך',
+          label: 'פעולות שכבר רצו על המסמך',
           value: acts?.total != null ? acts.total.toLocaleString('he-IL') : '—',
-          title: 'מתוך יומן השיגורים של הראוטר',
+          title: 'מתוך יומן הפעולות של הראוטר',
         },
         ...(lastTs
-          ? [{ label: 'שיגור אחרון', value: new Date(lastTs).toLocaleString('he-IL') }]
+          ? [{ label: 'פעולה אחרונה', value: new Date(lastTs).toLocaleString('he-IL') }]
           : []),
       ],
       unknown:
-        'מתי הבקשה תילקח תלוי במחזור הניקוז ובתקרות הראוטר, ולא ניתן להבטיח זאת מכאן. אחרי האישור המסך יעקוב אחריה כשתי דקות ויראה מה שוגר בפועל.',
+        'מתי הבקשה תילקח תלוי במחזור הניקוז ובתקרות הראוטר, ולא ניתן להבטיח זאת מכאן. אחרי האישור המסך יעקוב אחריה כשתי דקות ויראה מה רץ בפועל.',
       confirmLabel: 'בקש עיבוד מחדש',
     });
     if (!ok) return;
@@ -1399,18 +1399,18 @@ export default function DocumentDetailPage() {
 
             <div className="card">
               <h3>
-                שיגורים אחרונים{' '}
+                פעולות אחרונות{' '}
                 {acts?.total != null && <span className="muted small num">({acts.total})</span>}
               </h3>
               {acts == null && <div className="muted small">טוען…</div>}
               {acts && acts.reachable === false && (
                 <div className="callout bad" style={{ marginTop: 0 }}>
-                  {acts.error || 'יומן השיגורים אינו זמין'}
+                  {acts.error || 'יומן הפעולות אינו זמין'}
                 </div>
               )}
               {acts && acts.reachable !== false && (acts.rows?.length ?? 0) === 0 && (
                 <div className="muted small">
-                  הראוטר עדיין לא שיגר אף פעולה על המסמך הזה. אם הוא אמור להיות בעיבוד, זו עצמה
+                  הראוטר עדיין לא הריץ אף פעולה על המסמך הזה. אם הוא אמור להיות בעיבוד, זו עצמה
                   תשובה.
                 </div>
               )}
@@ -1448,7 +1448,7 @@ export default function DocumentDetailPage() {
                 </ol>
               )}
               <div className="muted small" style={{ marginTop: 8 }}>
-                מקור: יומן השיגורים של הראוטר.{' '}
+                מקור: יומן הפעולות של הראוטר.{' '}
                 <Link className="link" to={link('/actions')} title="יומן הפעולות של המופע">
                   ליומן הפעולות <Ic p={IC.arrowLeft} />
                 </Link>

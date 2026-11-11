@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+#: flow — the sites' events (created, deployed, started, stopped, removed), the last 10 and then live:  ./bbox sites flow [-n N] [--once] [--json]
+# The app's stream on the office's event stream (flow.v1, DGO-1402): the platform's reader, for `dgo:flow:sites`.
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+exec bash "${SCRIPT_DIR}/../../../platform-base/redis/hooks/flow" sites "$@"

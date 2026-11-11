@@ -33,6 +33,55 @@ sys.path.insert(0, str(REPO / 'scripts' / 'ui-coverage'))
 import drawn  # noqa: E402
 
 LATE = []      # (profile, panel number, label, what was said, drawn at all?): over the budget, or never drawn
+FITS = []      # (profile, panel number, label, the fit measured): does the screen fit its width? (DGO-158)
+
+# DOES THE SCREEN FIT ITS WIDTH (DGO-158). The owner's phone, 2026-10-14 (DGO-574): «the mobile view lets
+# everything slide right». A picture cannot show that — the slide is a finger's, and the shot is taken at
+# rest — so every panel is MEASURED as well as photographed, in the shell and in the framed app:
+#   page      the document scrolls sideways (its scrollWidth is past its width);
+#   scrollers the boxes a finger can drag sideways: overflow-x auto|scroll and content wider than the box
+#             (DGO-574's was one of these — the list's own scroller, 282px of it invisible skeleton rows).
+# UI law (platform-ui-ux «640px: nothing hidden, nothing horizontal-scrolling»). WARN FIRST (AGENTS.md
+# rule 8): the run prints and writes ui-map/fit.json, and does not fail on it until the count is known.
+FIT_JS = """() => {
+  const w = document.documentElement.clientWidth || innerWidth;
+  // a root that clips (overflow-x hidden|clip on html or body) cannot be slid by a finger, whatever it holds
+  const clips = (e) => !!e && ['hidden', 'clip'].includes(getComputedStyle(e).overflowX);
+  const clipped = clips(document.documentElement) || clips(document.body);
+  const doc = clipped ? 0 : Math.max(document.documentElement.scrollWidth, document.body ? document.body.scrollWidth : 0);
+  const name = (e) => e.tagName.toLowerCase() + (e.id ? '#' + e.id : '') +
+                      (typeof e.className === 'string' && e.className.trim() ? '.' + e.className.trim().split(/\\s+/)[0] : '');
+  const scrollers = [];
+  for (const e of document.querySelectorAll('body *')) {
+    if (e.clientWidth < 40 || e.scrollWidth <= e.clientWidth + 2) continue;
+    const s = getComputedStyle(e);
+    if (s.overflowX !== 'auto' && s.overflowX !== 'scroll') continue;
+    if (s.visibility === 'hidden' || s.display === 'none' || +s.opacity === 0) continue;
+    const r = e.getBoundingClientRect();
+    // off-canvas (a drawer moved by translateX(±100%) ends exactly AT the edge) is not on the screen
+    if (r.width < 1 || r.height < 1 || r.right <= 0 || r.left >= w) continue;
+    scrollers.push(name(e) + ' ' + (e.scrollWidth - e.clientWidth) + 'px');
+  }
+  return {width: w, page: doc > w + 2 ? doc - w : 0, clipped, scrollers: scrollers.length, first: scrollers.slice(0, 4)};
+}"""
+
+
+def measure_fit(pg):
+    """The fit of the shell and of the app framed in it (#frame), as FIT_JS reads them."""
+    out = {}
+    try:
+        out["shell"] = pg.evaluate(FIT_JS)
+    except Exception as e:                                  # noqa: BLE001 — a measure that failed is said
+        out["shell"] = {"error": type(e).__name__}
+    try:
+        el = pg.query_selector('#frame')
+        fr = el.content_frame() if el else None
+        out["app"] = fr.evaluate(FIT_JS) if fr else None
+    except Exception as e:                                  # noqa: BLE001
+        out["app"] = {"error": type(e).__name__}
+    return out
+
+
 def _chrome():
     """Resolve a Chromium, or None to let Playwright use the one it manages.
 
@@ -151,23 +200,52 @@ def open_side(pg, fl):
     NB: `is_visible()` is NOT the test — an element inside a translated-off-screen drawer still has
     a box and still reports visible, so the click lands on whatever covers it and times out. The
     only reliable signal is the drawer's own open state."""
-    # דרייב ships its own drawer: #sideToggle flips `.side.open`. מייל's menu is the office's side menu
-    # (BinaNav): #navToggle, and `is-open` on the menu itself.
-    for toggle, opened in (('#sideToggle', 'aside.side.open'), ('#navToggle', '#sideNav.is-open')):
+    # דרייב ships its own drawer: since DGO-1507 its «עוד» (`[data-place="more"]`, in the phone's bottom tabs or,
+    # inside the console, the row of chips) flips `aside.fx-side.open`; before it, #sideToggle flipped `.side.open`.
+    # מייל's menu is the office's side menu (BinaNav): #navToggle, and `is-open` on the menu itself.
+    for toggle, opened in (('[data-place="more"]', 'aside.fx-side.open'), ('#sideToggle', 'aside.side.open'),
+                           ('#navToggle', '#sideNav.is-open')):
         try:
-            tog = fl.locator(toggle)
-            if tog.count() and tog.first.is_visible():
+            tog = pressable(fl.locator(toggle))
+            if tog is not None:
                 if fl.locator(opened).count() == 0:
-                    tog.first.click(timeout=2500); pg.wait_for_timeout(450)
+                    tog.click(timeout=2500); pg.wait_for_timeout(450)
                 return
         except Exception:
             pass
 
 
+# A FINGER CAN PRESS IT: on the screen and the topmost thing at its own centre. `is_visible()` cannot say this
+# (see open_side); a hit test can — an entry in a drawer moved off the screen, or under a scrim, fails it.
+HIT_JS = """(e) => {
+  const r = e.getBoundingClientRect();
+  if (r.width < 1 || r.height < 1) return false;
+  const x = r.left + r.width / 2, y = r.top + r.height / 2;
+  if (x < 0 || y < 0 || x >= innerWidth || y >= innerHeight) return false;
+  const t = document.elementFromPoint(x, y);
+  return !!t && (t === e || e.contains(t));
+}"""
+
+
+def pressable(loc):
+    """The first match a finger can press as the page stands, or None — asked of every match in ONE call, so a
+    list that redraws between a count and a per-match ask cannot leave a wait on a match that is gone."""
+    try:
+        i = loc.evaluate_all(f"(els) => els.findIndex({HIT_JS})")
+    except Exception:
+        return None
+    return loc.nth(i) if isinstance(i, int) and i >= 0 else None
+
+
 def rail_click(pg, fl, sel):
-    """Click a rail entry, opening the drawer first when the viewport put the rail behind one."""
-    open_side(pg, fl)
-    fl.locator(sel).first.click(timeout=8000)
+    """Click a rail entry: the one a finger can press as the page stands (a phone's bottom tab, a wide screen's
+    rail); otherwise open the drawer the viewport put the rail behind, and press it there. When neither finds one
+    (an entry below the rail's fold), the first match, as before: the click scrolls it into view."""
+    el = pressable(fl.locator(sel))
+    if el is None:
+        open_side(pg, fl)
+        el = pressable(fl.locator(sel))
+    (el or fl.locator(sel).first).click(timeout=8000)
 
 
 def _click(fl, sel, wait=500, pg=None):
@@ -175,20 +253,89 @@ def _click(fl, sel, wait=500, pg=None):
     if pg: pg.wait_for_timeout(wait)
 
 
-def drive_place(place, then=None):
+def drive_place(*places, then=None):
+    """A place of the drive by its `data-place`. Several names are the SAME place in the drive's two fronts, the
+    one of 2026-10-28 first (apps/drive/static/js/shell.js `placeOf()`: a folder view is `files`) and the one
+    before it second (`mydrive`) — flow-qa.py's PLACE_FRONTS; whichever front the simulation carries answers."""
     def go(pg, fl):
-        rail_click(pg, fl, f'[data-place="{place}"]'); pg.wait_for_timeout(900)
+        sel = ', '.join(f'[data-place="{p}"]' for p in places)
+        # the new front draws a place only where the drive shown can answer it (shell.js `needs` / `offered`)
+        if new_drive(fl) and not fl.locator(sel).count():
+            raise Absent(f"this drive does not offer «{places[0]}» (its connection's views)")
+        rail_click(pg, fl, sel); pg.wait_for_timeout(900)
         if then: then(pg, fl)
     return go
 
 
+def drive_folder(pg, fl):
+    """Into the first folder of «הקבצים שלי»: the old front's `[data-folder]` row; in the new front a folder is a
+    list row whose thumb says folder (`.lr` › `.th.folder`, pressed on its name: the thumb is the row's check) or a
+    grid cell (`.card` › `.pic.folder`) — views.js `Row` and `Card`."""
+    fl.locator('[data-folder], .lr:has(> .th.folder) .name, .card:has(> .pic.folder)').first.click(timeout=6000)
+    pg.wait_for_timeout(900)
+
+
+class Absent(Exception):
+    """The front the simulation carries has no such surface (printed as the reason the panel was NOT REACHED)."""
+
+
+def new_drive(fl):
+    """The drive's front of 2026-10-28 (apps/drive/static/js): its rail is `aside.fx-side`, which the one before
+    did not have. Its surfaces carry stable handles: `data-id` and `data-kind` on every item, `data-act` on a row's
+    «⋮» (`menu`), on the bars' «עוד» (`more`) and on every menu entry (its `act`, else its icon), `data-layout` on
+    the layout switch, `data-place` on the places."""
+    return fl.locator('aside.fx-side').count() > 0
+
+
+FILE = '[data-id][data-kind="file"]'                           # an item of the new front that is a file
+
+
+def drive_files(pg, fl):
+    rail_click(pg, fl, '[data-place="files"], [data-place="mydrive"]'); pg.wait_for_timeout(800)
+
+
+def drive_item_menu(pg, fl):
+    """The first file's own menu: its «⋮» where a finger can press it, else a right-click (a mouse: the row's
+    «⋮» shows on hover)."""
+    item = fl.locator(FILE).first
+    dots = pressable(item.locator('[data-act="menu"]'))
+    if dots is not None:
+        dots.click(timeout=4000)
+    else:
+        item.click(button='right', timeout=4000)
+    pg.wait_for_timeout(500)
+
+
+def hold(pg, fl, target, picked):
+    """A finger held on `target`: a touch pointer that does not move (both apps pick an item after 480 ms, DGO-1507),
+    until `picked` is in the page, then the lift — heard on the document — and past the click a lift may bring."""
+    touch = {'pointerType': 'touch', 'isPrimary': True, 'pointerId': 7}
+    fl.locator(target).first.dispatch_event('pointerdown', {**touch, 'clientX': 200, 'clientY': 300})
+    fl.locator(picked).first.wait_for(state='attached', timeout=4000)
+    fl.locator('body').dispatch_event('pointerup', touch)
+    pg.wait_for_timeout(600)
+
+
 def drive_grid(pg, fl):
-    rail_click(pg, fl, '[data-place="mydrive"]'); pg.wait_for_timeout(800)
-    fl.locator('#btnGrid').click(); pg.wait_for_timeout(700)
+    drive_files(pg, fl)
+    if not new_drive(fl):
+        fl.locator('#btnGrid').click(); pg.wait_for_timeout(700)
+        return
+    if fl.locator('.grid[role="grid"]').count():
+        return                             # already a grid (a layout kept from before): nothing to switch
+    switch = pressable(fl.locator('[data-layout="grid"]'))
+    if switch is None:                     # a phone: «תצוגת רשת» is in the top bar's «עוד» (not the selection bar's)
+        fl.locator('.top-acts [data-act="more"]').first.click(timeout=4000); pg.wait_for_timeout(400)
+        switch = fl.locator('.menu [data-act="grid"]').first
+    switch.click(timeout=4000); pg.wait_for_timeout(700)
 
 
 def drive_details(pg, fl):
-    rail_click(pg, fl, '[data-place="mydrive"]'); pg.wait_for_timeout(800)
+    drive_files(pg, fl)
+    if new_drive(fl):                      # «פרטים» is an entry of the item's own menu, on every width
+        drive_item_menu(pg, fl)
+        fl.locator('.menu [data-act="info"]').first.click(timeout=4000); pg.wait_for_timeout(700)
+        return
     # Select FIRST, then open the pane. Below 1120px the pane is a fixed overlay, so opening it
     # first puts it between the pointer and the row the panel is supposed to be describing.
     # (A row is selected by its icon: a press on its name opens the file, and on a phone the name
@@ -199,16 +346,25 @@ def drive_details(pg, fl):
 
 
 def drive_filter(pg, fl):
+    if new_drive(fl):
+        raise Absent("the drive's front of 2026-10-28 has no filter chips")
     rail_click(pg, fl, '[data-place="recent"]'); pg.wait_for_timeout(800)
     fl.locator('[data-chip="type"]').click(); pg.wait_for_timeout(500)
 
 
 def drive_preview(pg, fl):
+    if new_drive(fl):                      # a press opens a file, a finger's and a mouse's alike (views.js clickItem)
+        drive_files(pg, fl)
+        fl.locator(FILE).first.click(timeout=4000)
+        fl.locator('.vw').first.wait_for(state='attached', timeout=6000); pg.wait_for_timeout(700)
+        return
     rail_click(pg, fl, '[data-place="recent"]'); pg.wait_for_timeout(900)
     fl.locator('tr[data-id] .name-open').first.click(); pg.wait_for_timeout(900)
 
 
 def drive_share(pg, fl):
+    if new_drive(fl):
+        raise Absent("the drive's front of 2026-10-28 shares by «copy share link», with no dialog")
     rail_click(pg, fl, '[data-place="recent"]'); pg.wait_for_timeout(900)
     row = fl.locator('tr[data-id]').first
     row.hover(); pg.wait_for_timeout(200)
@@ -222,11 +378,17 @@ def drive_share(pg, fl):
 
 
 def drive_context(pg, fl):
+    if new_drive(fl):
+        drive_files(pg, fl); drive_item_menu(pg, fl)
+        return
     rail_click(pg, fl, '[data-place="recent"]'); pg.wait_for_timeout(900)
     fl.locator('tr[data-id]').first.click(button='right'); pg.wait_for_timeout(600)
 
 
 def drive_bulk(pg, fl):
+    if new_drive(fl):                      # a held item starts the selection, and the frame says so
+        drive_files(pg, fl); hold(pg, fl, FILE, '[data-selecting]')
+        return
     rail_click(pg, fl, '[data-place="recent"]'); pg.wait_for_timeout(900)
     rows = fl.locator('tr[data-id] .ficon')
     rows.nth(0).click(); pg.wait_for_timeout(200)
@@ -243,18 +405,31 @@ def mail_view(view):
     return go
 
 
+def mail_selecting(pg, fl):
+    """The selection bar, and the «בחירה» menu in it, is there from the start on a wide screen. On a phone
+    (≤820) it shows only once a row is picked, and a finger picks a row by holding it — 480 ms of a touch
+    pointer that does not move (DGO-1507, mailview's app.js). The lift is heard on the document; the click a
+    lift may bring is swallowed for 450 ms after it, so the next press waits past that."""
+    if fl.locator('#gmAllCaret').is_visible():
+        return
+    hold(pg, fl, '#msgTable .gm-row[data-id]', '#msgTable.selecting')
+
+
 def mail_selmenu(pg, fl):
+    mail_selecting(pg, fl)
     fl.locator('#gmAllCaret').click(); pg.wait_for_timeout(500)
 
 
 # (the predicate is «מסומנים בכוכב»: read and unread are offered only where the mailbox can report them,
 #  and this one — Gmail's — cannot)
 def mail_bulk(pg, fl):
+    mail_selecting(pg, fl)
     fl.locator('#gmAllCaret').click(); pg.wait_for_timeout(300)
     fl.locator('[data-sel="starred"]').click(); pg.wait_for_timeout(700)
 
 
 def mail_undo(pg, fl):
+    mail_selecting(pg, fl)
     fl.locator('#gmAllCaret').click(); pg.wait_for_timeout(300)
     fl.locator('[data-sel="starred"]').click(); pg.wait_for_timeout(400)
     fl.locator('[data-bulk="archive"]').click(); pg.wait_for_timeout(700)
@@ -281,8 +456,8 @@ PANELS = [
     ("מסמכים שלי · תצוגת מסמך (my-docs · doc)",   "#/m/my-docs",     open_first_row),
     # ── דרייב · every component surface ──
     ("דרייב · בית (drive · home)",                 "#/m/drive",       None),
-    ("דרייב · הדרייב שלי (my drive · list)",       "#/m/drive",       drive_place("mydrive")),
-    ("דרייב · תיקייה + נתיב (folder + crumbs)",    "#/m/drive",       drive_place("mydrive", lambda pg, fl: (fl.locator('[data-folder]').first.click(timeout=6000), pg.wait_for_timeout(900)))),
+    ("דרייב · הדרייב שלי (my drive · list)",       "#/m/drive",       drive_place("files", "mydrive")),
+    ("דרייב · תיקייה + נתיב (folder + crumbs)",    "#/m/drive",       drive_place("files", "mydrive", then=drive_folder)),
     ("דרייב · תצוגת רשת (grid)",                   "#/m/drive",       drive_grid),
     ("דרייב · חלונית פרטים (details pane)",         "#/m/drive",       drive_details),
     ("דרייב · מסנני צ׳יפים (filter chips)",         "#/m/drive",       drive_filter),
@@ -349,19 +524,26 @@ def capture(name, prof, outdir):
             pg.evaluate(f"location.hash='{mod}'")
             # asked from the moment the tile opens; the 2600 ms are the shell's own animation, as before
             took = drawn.wait(pg.evaluate, pg.wait_for_timeout, since=t0, at_least_ms=2600)
+            skipped = ""
             if action:
                 try:
                     action(pg, pg.frame_locator('#frame'))
                 except Exception as e:
-                    print(f"  · {name}/{label}: action skipped ({type(e).__name__})")
+                    skipped = f"{type(e).__name__}: {e}" if isinstance(e, Absent) else type(e).__name__
+                    print(f"  · {name}/{label}: action skipped ({skipped})")
                 pg.wait_for_timeout(1200)
                 shown = drawn.wait(pg.evaluate, pg.wait_for_timeout)     # …and what the action opened is drawn too
                 took = took if shown['drawn'] else shown
             fn = outdir / f"{i:02d}.png"
             pg.screenshot(path=str(fn))
+            # a panel whose action did not run is the screen it STARTED from, not this panel: its picture and its
+            # measure say nothing about the panel, and the row says so (DGO-158: 13 drive panels were the home)
+            fit = measure_fit(pg)
+            FITS.append((name, i, label, {**fit, "skipped": skipped} if skipped else fit))
             if took['slow']:
                 LATE.append((name, i, label, drawn.said(took), took['drawn']))
-            shots.append((label, fn)); print(f"  captured [{name}] {label} · {drawn.said(took)}")
+            shots.append((label, fn))
+            print(f"  {'NOT REACHED' if skipped else 'captured'} [{name}] {label} · {drawn.said(took)}")
             ctx.close()
         b.close()
     return shots
@@ -448,14 +630,42 @@ if __name__ == '__main__':
     if a.list:
         for n, pr in PROFILES.items():
             print(f"{n:9s} {pr['width']:>5}x{pr['height']:<5} @{pr.get('dsf',1)}x  {pr.get('label','')}"
-                  f"  ua: {pr.get('user_agent') or 'browser default'}")
+                  f"  ua: {pr.get('user_agent') or 'browser default'}"
+                  + ("  (on request: --profile only)" if pr.get('on_request') else ""))
         sys.exit(0)
 
-    names = sorted(PROFILES) if a.all else [a.profile or DEFAULT]
+    # `--all` is every profile a map run is FOR: one kept for a single question (`on_request`, the ultrawide of
+    # DGO-1789) is captured only when a run names it, so the ordinary map takes no longer than before
+    names = (sorted(n for n, pr in PROFILES.items() if not pr.get('on_request')) if a.all
+             else [a.profile or DEFAULT])
     outs = [o for o in (run(n, PROFILES[n], a.recompose) for n in names) if o]
     print("done:")
     for o in outs:
         print(" ", o)
+    if FITS:
+        # DGO-158: which panels do not fit their width, per profile — said, and kept in ui-map/fit.json.
+        import json
+        rows = [{"profile": prof, "panel": i, "label": label, **fit} for prof, i, label, fit in FITS]
+        (OUT / "fit.json").write_text(json.dumps(rows, ensure_ascii=False, indent=1), encoding="utf-8")
+        bad = lambda f: bool(f) and not f.get("error") and (f.get("page") or f.get("scrollers"))   # noqa: E731
+        # a measure that failed, or an app frame that was not there, is NOT a panel that fits: counted apart
+        unread = lambda r: any(not f or f.get("error") for f in (r["shell"], r["app"]))           # noqa: E731
+        print("\nfit (DGO-158) — panels that scroll sideways, per profile (warn only, for now):")
+        for prof in names:
+            mine = [r for r in rows if r["profile"] == prof]
+            # (a panel NOT REACHED measured the screen it started from: its overflow is not the panel's)
+            off = [r for r in mine if not r.get("skipped") and (bad(r["shell"]) or bad(r["app"]))]
+            blind = [r for r in mine if unread(r)]
+            missed = [r for r in mine if r.get("skipped")]
+            print(f"  {prof:8s} {len(off)} of {len(mine)} panel(s)"
+                  + (f" · {len(blind)} not measured (no app frame, or the measure failed)" if blind else "")
+                  + (f" · {len(missed)} NOT REACHED (the action did not run: the row measures the screen it"
+                     f" started from)" if missed else ""))
+            for r in off:
+                where = "; ".join(f"{k}: page +{f['page']}px, {f['scrollers']} scroller(s) {', '.join(f['first'])}".rstrip()
+                                  for k, f in (("shell", r["shell"]), ("app", r["app"])) if bad(f))
+                print(f"    {r['panel']:02d}  {r['label'][:46]:<48} {where}")
+        print(f"  → {OUT / 'fit.json'}")
     if LATE:
         # Named, both kinds. A panel that NEVER finished is a picture of placeholders: the run is red.
         # One that was only slow is said and is not: here the time is this machine's load as much as

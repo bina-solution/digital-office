@@ -82,8 +82,8 @@ to the real API so the modeling transfers back to the real build later.
   table + indox-repos counts + indox-root dashboard (total/completed/review/failed/companies/score + pipeline
   bar) all derive live via `ix.*` computed vals. Verified in Chromium (5→6 docs, completed 0→4, score 0%→67%).
   V1 no-regression (mean 14.25→14.23; INDOX screens 5.6–10.8%, near floor). NOTE build step: edit `frag/*` +
-  `tooling/index.base.html`, then **`cp index.base.html index.html`** before `node assemble.js` (assembler reads
-  index.html).
+  `tooling/index.html`, then `node assemble.js` (it strips its own previous templates; the separate
+  `index.base.html` copy is gone, 2026-11-10).
 - V1 gate built (verify/ui_map_diff.py): baseline mean 14.25%%, median 7.16%% across 95 screens (worst = new subagent-authored state screens; will fix via real frontend code). Spawned a subagent to map the real app frontends → context/REAL-FRONTEND-MAP.md.
 - I2 DONE — my-docs wired to the engine: documents/customers/items tables render from DO via data-list; "+ מסמך/לקוח/פריט" open real inline modals that mutate the store (verified docs 5→6 + toast, no errors); rows get context menus.
 - I1 DONE — engine (window.DO): reactive store, live tick (clock/msgs/INDOX pipeline/mail/jobs), actions (addDocument/Customer/Item), interaction layer (modal/drawer/toast/menu/tabs/drag delegation), hydration (data-bind/data-list). Dashboard live: bound stats, ticking clock+live pill, real-time activity feed, business summary. Verified in Chromium (msgs/clock/feed advance; addDocument mutates store).

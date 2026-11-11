@@ -32,6 +32,17 @@ ALLOWED = {
     "goto": (3, 3),
     "click": (3, 3),
     "fill": (4, 4),
+    # type <slug> <text> [selector] — KEYBOARD into the page, with no handle required. `fill` needs an
+    # element `inspect` found first, and the pages that matter do not expose one: a portal's table row
+    # (portal.internic.co.il) and claude.ai's composer both answer `inspect` with zero controls, which
+    # left the office unable to type a single character there and handed the work back to the owner
+    # (DGO-1033). This verb focuses a selector, the element already focused, or the page's last EMPTY
+    # visible field (a form's new row is added at the bottom), then types with real key events.
+    "type": (3, 5),
+    # js <slug> <expression> — the deliberate escape hatch for a page whose DOM `inspect` cannot
+    # enumerate. It runs INSIDE the task's own lease (never the outside-the-protocol ui-driver, which
+    # contends with the shared browser) and returns the expression's own value.
+    "js": (3, 4),
     # login <slug> <site> — the SITE, never the credential: group-manager leases it from the
     # credential plane and types it into the page, so the value is not in argv, in the journal or in
     # the response. Keeping the arity at exactly 3 is the guard that stops a caller from passing one.
@@ -60,6 +71,10 @@ ALLOWED = {
     # report what proved it, or refuse with what the page last showed.
     "await": (3, 4),
     "goal": (4, 4),
+    # tab <verb> [<id> [args…]] — one verb on ANY tab, named by the CDP id `tab list` prints (DGO-1251):
+    # list, navigate, click, type, eval, text, snapshot, shot, close. A tab someone holds (an active task,
+    # a hand-off) is only read here; group-manager.py refuses the rest by name.
+    "tab": (2, 5),
 }
 # Read commands never take a work slot — monitoring must not starve owning agents.
 READ_COMMANDS = {"status", "heartbeat"}
@@ -264,8 +279,28 @@ def authorized(header: str, token: str) -> bool:
     return hmac.compare_digest(given.strip().encode(), token.encode())
 
 
+def handoffs_answer() -> dict:
+    """GET /v1/handoffs (DGO-1336): the hand-offs that are news — which app waits for a person in this
+    browser, and how the last one ended (handoff.read_records: slug, app, state, a sentence, an episode
+    id; never an address, a tab or a code). A console that shows this browser asks it every few seconds,
+    this office's own and a linked office's through the agent door (`<alias>.<office>:<port>`), to bring
+    the browser to whoever is looking while an app waits. Open like /healthz: it says that a person is
+    needed, never where, and nothing in it acts on the browser — the hand-off route itself stays behind
+    Caddy's gate."""
+    try:
+        import handoff                                   # mounted beside this file (docker-compose.yml)
+    except ImportError:                                  # pragma: no cover — a container recreated from an older compose
+        return {"ok": False, "error": {"code": "no_handoff_module",
+                                       "message": "/handoff.py is not mounted in the task runner — recreate it"}}
+    return {"ok": True, "handoffs": handoff.read_records()}
+
+
 class Handler(BaseHTTPRequestHandler):
     def do_GET(self) -> None:  # noqa: N802 - HTTP handler API
+        if self.path.split("?", 1)[0] == "/v1/handoffs":
+            answer = handoffs_answer()
+            self.respond(200 if answer.get("ok") else 503, answer)
+            return
         if self.path != "/healthz":
             self.respond(404, {"ok": False, "error": {"code": "not_found", "message": "unknown endpoint"}})
             return

@@ -17,7 +17,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/solomonBoltin/deployment-hacohen/packaging/dgo/internal/yamlish"
+	"github.com/bina-solution/digital-office/packaging/dgo/internal/yamlish"
 )
 
 // ── the oracle for the generating verbs: reconcile.py and dgo on two copies of one tree ────────────
@@ -66,8 +66,15 @@ func generatorTree(t *testing.T, c renderCase, realState string) string {
 	}
 	for _, f := range []string{"platform/manager/reconcile.py", "platform/manager/serve.py", "platform/schema/app.schema.json",
 		"platform/legacy-capabilities.yaml", "compose.yml", "platform.state.default.yaml", "apps/dgo-extend/identity.py",
-		"platform-base/authentik/bootstrap.sh", "platform-base/authentik/outpost-ready.py"} {
+		"platform-base/authentik/bootstrap.sh", "platform-base/authentik/outpost-ready.py",
+		// the office's vault (render_vault): its declaration, the herd file it scopes by and the diagrams it
+		// draws — the documents it names are left out here (each a «missing» note), copied in by one case
+		"apps/obsidian/vault.yaml", "apps/computers/herd.yaml"} {
 		copyIn(f)
+	}
+	diagrams, _ := filepath.Glob(filepath.Join(src, "apps", "archify", "diagrams", "*.json"))
+	for _, d := range diagrams {
+		copyIn("apps/archify/diagrams/" + filepath.Base(d))
 	}
 	blueprints, _ := filepath.Glob(filepath.Join(src, "platform-base", "authentik", "blueprints", "*.yaml"))
 	for _, b := range blueprints {
@@ -483,7 +490,7 @@ const (
 	envDomain = "BUSINESS_NAME=\"Bina Solutions Ltd.\"\r\n#@derived slug\r\nCOMPANY_SLUG=old\r\n" +
 		"DEPLOYMENT_DOMAIN=${COMPANY_SLUG}.example.co.il\r\nCONSOLE_BASE_URL=console.${DEPLOYMENT_DOMAIN}\r\n" +
 		"AUTH_PROTOCOL=https\r\nGIT_BASE_URL=git.${DEPLOYMENT_DOMAIN}\r\nBAD=\xff\xfe${MISSING:-fallback}\r\n"
-	envLocalPort = "# a laptop office: the edge on :8080\nBUSINESS_NAME=Hacohen\nexport X=1\nDEPLOYMENT_DOMAIN=localhost\n" +
+	envLocalPort = "# a laptop office: the edge on :8080\nBUSINESS_NAME=Example\nexport X=1\nDEPLOYMENT_DOMAIN=localhost\n" +
 		"CONSOLE_BASE_URL=http://console.localhost:8080\nAPP_MANAGEMENT_BASE_URL=apps.localhost:8080\n" +
 		"GIT_BASE_URL='git.localhost:8080'\nPROJECT_PLN_BASE_URL=plane.console.localhost\nGIT_PROTOCOL=ftp\nSELF=${SELF}x\n"
 	// a remote block of every shape plan() accepts: two offices, one behind a door (link_port) with an
@@ -517,6 +524,16 @@ const (
     order: 2.5
     module: {kind: embedded}
     identity: {to: owner, from: carol}
+  - app: browser42
+    alias: browser42
+    port: 80
+    agent_api_port: 8766
+    name: דפדפן הלשכה
+    icon: monitor
+    group: עסק
+    order: 260
+    module: {kind: external, id: browser42}
+    host: browser42.localhost
 - office: vps9
   label: Staging
   address: " 10.79.9.2 "
@@ -591,6 +608,104 @@ func TestRenderMatchesPython(t *testing.T) {
 	render := []string{"render"}
 	cases := []renderCase{
 		{name: "this checkout as committed: a remote: block with a linked office", argv: render},
+		{name: "the office's vault on a herd office, every declared document present (render_vault)", argv: render,
+			files: map[string]string{".env": "BUSINESS_NAME=Bina\nDEPLOYMENT_NAME=bina\nDGO_OFFICE_ID=hp-laptop\n"},
+			setup: func(t *testing.T, _ []string, dir string) { copyVaultSources(t, dir) }},
+		// the vault's other branches (its second reader's list): no declaration, odd declarations, odd sources
+		{name: "no vault declaration: a vault left from an earlier render is removed", argv: render,
+			files: map[string]string{vaultManifestRel: removed},
+			setup: func(t *testing.T, _ []string, dir string) {
+				put(t, dir, ".generated/vault/Notes/mine.md", "x")
+				put(t, dir, ".generated/vault/Office/old.md", "y")
+			}},
+		{name: "a vault declared oddly: a null row, generated as a str, a CRLF source, one not UTF-8, one missing", argv: render,
+			files: map[string]string{
+				vaultManifestRel: "version: 1\ngenerated: \"apps index\"\nnotes:\n  - null\n  - {to: Office/a.md}\n" +
+					"  - {to: Office/b.md, from: docs/b.md, title: \"  B  \"}\n  - {to: Office/c.md, from: docs/c.md}\n" +
+					"  - {to: Office/gone.md, from: docs/none.md}\n",
+				"docs/b.md": "line one\r\nline two", "docs/c.md": "a bad \xff byte\n",
+				".env": "BUSINESS_NAME=Bina\nDGO_OFFICE_ID=client-x\n"},
+			setup: func(t *testing.T, _ []string, dir string) { put(t, dir, ".generated/vault/Old/stale.md", "z") }},
+		{name: "a vault whose `generated` is a mapping, its diagrams odd: not JSON, a file named .json", argv: render,
+			files: map[string]string{
+				vaultManifestRel:                    "generated: {diagrams: 1, inventory: 1}\n",
+				"apps/archify/diagrams/broken.json": "{not json",
+				"apps/archify/diagrams/.json":       `{"diagram_type": "flow"}`,
+				"apps/archify/diagrams/titled.json": `{"meta": {"title": "  T  "}, "diagram_type": ""}`}},
+		{name: "an empty vault declaration: the start of a vault and its manifest", argv: render,
+			files: map[string]string{vaultManifestRel: ""}},
+		{name: "a vault declaration PyYAML refuses: no vault", argv: render,
+			files: map[string]string{vaultManifestRel: "notes: [\n"}},
+		{name: "a diagram that is a list: render stops, as reconcile.py does", argv: render, dies: true,
+			files: map[string]string{"apps/archify/diagrams/list.json": "[1, 2]"}},
+		{name: "a vault note whose `to` is a number: render stops after the vault's folder is made", argv: render, dies: true,
+			files: map[string]string{vaultManifestRel: "generated: [index]\nnotes:\n  - {to: 5, from: AGENTS.md}\n"}},
+		// the release lane's seven vault cases (its own twin, written beside this one; the coordinator's order,
+		// DGO-1745: one twin is kept, and it answers every case either wrote)
+		{name: "the vault on a herd office: the herd's documents too, an earlier render's stale notes taken out", argv: render,
+			files: map[string]string{".env": "DEPLOYMENT_NAME= Bina \nDGO_OFFICE_ID=macbook\n",
+				".generated/vault/Old/stale.md": "x\n", ".generated/vault/Apps/gone.md": "y\n",
+				".generated/vault/.vault-manifest.json": "{}\n", ".generated/vault/Empty/.keep": "",
+				"apps/archify/diagrams/.hidden.json":   `{"meta":{"title":"  hidden "},"diagram_type":" flow "}`,
+				"apps/archify/diagrams/zz-broken.json": "{not json", "apps/archify/diagrams/zz-untitled.json": `{"meta":null}`},
+			setup: func(t *testing.T, _ []string, dir string) { copyVaultSources(t, dir) }},
+		{name: "a vault declared by hand: a source gone, one not UTF-8, a CRLF one, rows to skip, generated as one text", argv: render,
+			state: withApps(t, state, "enabled", "zz-vault"),
+			files: map[string]string{".env": "DGO_OFFICE_ID=a-client\n",
+				vaultManifestRel: "version: 1\nnotes:\n" +
+					"  - {to: \"Office/gone.md\", from: ai/context/no-such-doc.md, title: \"  gone  \"}\n" +
+					"  - {to: \"Office/latin.md\", from: zz/latin.md}\n  - {to: \"Office/crlf.md\", from: zz/crlf.md, title: crlf}\n" +
+					"  - {to: \"\", from: x}\n  - null\n  - {to: \"Office/dir.md\", from: zz}\n  - {to: \"Office/num.md\", from: 2024, title: n}\n" +
+					"herd_docs:\n  - {to: \"Herd/h.md\", from: zz/latin.md}\ngenerated: \"apps,inventory,index\"\n",
+				"zz/latin.md": "caf\xe9 \xe2\x82\n\xf0\x9f\x98", "zz/crlf.md": "a\r\nb",
+				// validate refuses an agent.context that is not there (enabled or not), so the brief exists: CRLF
+				// and the spaces strip() takes
+				"apps/zz-vault/NOPE.md": "  the brief\r\nline two\r\n\r\n",
+				"apps/zz-vault/app.json": manifestJSON("zz-vault", `"agent":{"context":" NOPE.md "},
+					"capabilities":[{"name":"zv","type":"service"},{"name":"zw","type":"service","endpoint":"http://zw:1"}],
+					"routing":[{"host":"zv","port":80,"module":{"alias":"zv","embed":false}},{"host":"zw","port":81,"service":"zw","module":{"alias":"zw","name":"w","icon":"x","group":"עסק"}}]`)}},
+		{name: "an empty vault declaration: an empty vault, and its manifest", argv: render,
+			files: map[string]string{vaultManifestRel: "# nothing yet\n"}},
+		{name: "no vault declaration: an earlier render's vault taken away whole", argv: render,
+			files: map[string]string{vaultManifestRel: removed,
+				".generated/vault/Office/x.md": "x\n", ".generated/vault/.vault-manifest.json": "{}\n"}},
+		{name: "a vault declaration PyYAML refuses: no vault, the earlier one taken away", argv: render,
+			files: map[string]string{vaultManifestRel: "notes: [\n", ".generated/vault/Office/x.md": "x\n"}},
+		{name: "a vault declaration that is a list: no vault", argv: render,
+			files: map[string]string{vaultManifestRel: "- to: x\n  from: y\n"}},
+		{name: "a vault row that is no mapping: reconcile.py raises", argv: render, dies: true,
+			files: map[string]string{vaultManifestRel: "notes: [just-a-name]\n"}},
+		// the console's bar on a phone: an app that asks for it says `tab: true`, and the tile carries it — on an
+		// embedded tile and a framed one; a false, a word and a number carry nothing, as reconcile.py's `is True`
+		{name: "tiles that ask for the phone bar: tab true on an embedded and a framed one, nothing for false, a word or 1 (DGO-1800)", argv: render,
+			state: withApps(t, state, "enabled", "zz-tab"),
+			files: map[string]string{"apps/zz-tab/app.json": manifestJSON("zz-tab", `"routing":[`+
+				`{"host":"zt","port":80,"module":{"id":"zt","alias":"zt","name":"t","icon":"x","group":"עסק","tab":true}},`+
+				`{"host":"zu","port":81,"module":{"id":"zu","alias":"zu","name":"u","icon":"x","group":"עסק","external":true,"tab":true}},`+
+				`{"host":"zv","port":82,"module":{"id":"zv","alias":"zv","name":"v","icon":"x","group":"עסק","tab":"yes"}},`+
+				`{"host":"zw","port":83,"module":{"id":"zw","alias":"zw","name":"w","icon":"x","group":"עסק","tab":false}},`+
+				`{"host":"zx","port":84,"module":{"id":"zx","alias":"zx","name":"x","icon":"x","group":"עסק","external":true,"tab":1}}]`)}},
+		// a memory limit an .env sets too high (DGO-1797, package 7): the warning render prints on stderr — an .env
+		// value raising a service above its app's declared 512m; a literal far past half of any machine (G30's, not
+		// this), an int, a word and a reference with nothing set say nothing
+		{name: "memory limits set too high: .env above the app's declaration, one past half the machine (DGO-1797)", argv: render,
+			state: withApps(t, state, "enabled", "zz-ceil"),
+			files: map[string]string{".env": "DEPLOYMENT_NAME=bina\nZZ_CEIL_MEM=\"2G\"\nZZ_CEIL_WORD=lots\n",
+				"apps/zz-ceil/app.json": manifestJSON("zz-ceil", `"compose":"docker-compose.yml","resources":{"memory":"512m"}`),
+				"apps/zz-ceil/docker-compose.yml": "services:\n" +
+					"  zz-ceil:\n    image: x\n    deploy: {resources: {limits: {memory: \"${ZZ_CEIL_MEM:-256M}\"}}}\n" +
+					"  zz-ceil-big:\n    image: x\n    deploy: {resources: {limits: {memory: 4096G}}}\n" +
+					"  zz-ceil-int:\n    image: x\n    deploy: {resources: {limits: {memory: 1048576}}}\n" +
+					"  zz-ceil-word:\n    image: x\n    deploy: {resources: {limits: {memory: \"${ZZ_CEIL_WORD:-1G}\"}}}\n" +
+					"  zz-ceil-unset:\n    image: x\n    deploy: {resources: {limits: {memory: \"${ZZ_CEIL_NONE-1G}\"}}}\n"}},
+		{name: "memory limits within what the app declares: an empty .env value takes the compose's default (DGO-1797)", argv: render,
+			state: withApps(t, state, "enabled", "zz-ceil"),
+			files: map[string]string{".env": "DEPLOYMENT_NAME=bina\nZZ_CEIL_MEM=\n",
+				"apps/zz-ceil/app.json": manifestJSON("zz-ceil", `"compose":"docker-compose.yml","resources":{"memory":"512m"}`),
+				"apps/zz-ceil/docker-compose.yml": "services:\n  zz-ceil:\n    image: x\n" +
+					"    deploy: {resources: {limits: {memory: \"${ZZ_CEIL_MEM:-256M}\"}}}\n"}},
+		{name: "a linked office's tiles with a null order and a word beside numbers: 900, and the whole render (DGO-627)", argv: render,
+			state: withoutRemote(state) + strings.NewReplacer("order: 2.5", "order: null", "order: 260", "order: soon").Replace(remoteShapes)},
 		{name: "every app enabled, a real domain, a CRLF .env with a stale slug and bytes that are not UTF-8", argv: render, state: all,
 			files: map[string]string{".env": envDomain}},
 		{name: "every app enabled on a .localhost edge with a port: framed hosts and their port twins", argv: render, state: all,
@@ -618,6 +733,8 @@ func TestRenderMatchesPython(t *testing.T) {
 		{name: "a refused plan: the product's binding never starts a provider the office switched off", argv: render,
 			state: withApps(t, withApps(t, state, "enabled", "zz-c"), "disabled", "zz-p2"), files: zzProviders(t)},
 		{name: "nothing enabled: every list empty, every overlay absent", argv: render, state: "schema_version: 1\napps: {}\ninstances:\n"},
+		{name: "the office in English (DGO-971): locale.json says so, in the same bytes", argv: render,
+			state: "schema_version: 1\nlanguage: ' EN '\napps: {}\ninstances:\n"},
 		{name: "an office: block, instances and the legacy serve: block", argv: render,
 			state: strings.Replace(state, "\nremote:\n", "\noffice:\n  name: הלשכה\n  animal: elephant\n  hue: muted\nserve:\n", 1)},
 		{name: "a remote block of every shape", argv: render, state: withoutRemote(state) + remoteShapes},
@@ -707,24 +824,36 @@ func TestRenderMatchesPython(t *testing.T) {
 				"apps/zz-one/app.json": manifestJSON("zz-one", `"routing":[{"host":"one","port":80,"auth":"sso","sso":{"slug":"one","default_host":"one.localhost","display_name":"Same","base_url_env":"ONE_URL"}}]`),
 				"apps/zz-two/app.json": manifestJSON("zz-two", `"routing":[{"host":"two","port":80,"auth":"sso","sso":{"slug":"two","default_host":"two.localhost","display_name":"Same","base_url_env":"TWO_URL","local_twin":true}}]`),
 			}},
+		{name: "a route with a chain of its own: app middlewares on the entry, path-scoped sub-routes on both hosts (DGO-1594)", argv: render,
+			state: withApps(t, withoutRemote(state), "enabled", "zz-chain"),
+			files: map[string]string{".env": envLocalPort,
+				"apps/zz-chain/app.json": manifestJSON("zz-chain", `"routing":[{"host":"zc","port":80,"auth":"sso",
+				"sso":{"slug":"zc","display_name":"ZC","default_host":"zc.localhost","base_url_env":"ZC_BASE_URL","local_twin":true},
+				"middlewares":["zz-embed","zz-second"],
+				"sub_routes":[{"name":"push","path":"/rest/push","priority":200,"on":"host","middlewares":["zz-push"]},
+				{"name":"frame-push","path":"/rest/push","priority":200,"on":"framed","middlewares":["zz-frame-push"]},
+				{"name":"no-priority","path":"/quiet","on":"host"}],
+				"module":{"alias":"zc","name":"צ","icon":"x","group":"עסק","embed":false,"external":true}}]`)}},
+		// A refused declaration is a SENTENCE, not a traceback (`dies` is for the cases where Python
+		// really raises): both twins must print the same one and change nothing.
+		{name: "a declared middleware that names its own provider: refused, both twins, the same sentence", argv: render,
+			state: withApps(t, withoutRemote(state), "enabled", "zz-mwref"),
+			files: map[string]string{"apps/zz-mwref/app.json": manifestJSON("zz-mwref", `"routing":[{"host":"zm","port":80,"auth":"sso","middlewares":["zm-console@file"]}]`)}},
+		{name: "a routing sub_route without its path: a sentence naming the field, never a traceback", argv: render,
+			state: withApps(t, withoutRemote(state), "enabled", "zz-subpath"),
+			files: map[string]string{"apps/zz-subpath/app.json": manifestJSON("zz-subpath", `"routing":[{"host":"zs","port":80,"auth":"sso","sub_routes":[{"name":"push"}]}]`)}},
 		{name: "a routing entry without its host: reconcile.py raises", argv: render, state: withApps(t, state, "enabled", "zz-hostless"), dies: true,
 			files: map[string]string{"apps/zz-hostless/app.json": manifestJSON("zz-hostless", `"routing":[{"port":80}]`)}},
-		{name: "a remote app's order that is text beside numbers: reconcile.py cannot sort the tiles", argv: render, dies: true,
-			state: withoutRemote(state) + "remote:\n- office: macbook\n  address: 10.79.3.2\n  apps: [{app: x, port: 1, order: first}]\n"},
 		{name: "a contribution whose volumes are null: .extend(None) raises", argv: render, dies: true,
 			state: withApps(t, state, "enabled", "zz-vols", "n8n"),
 			files: map[string]string{"apps/zz-vols/app.json": manifestJSON("zz-vols", `"contributes":{"volumes":{"n8n":null}}`)}},
 		{name: "a remote office's orders with a NaN among them: the tiles in sorted()'s order", argv: render,
 			state: withoutRemote(state) + "remote:\n- office: macbook\n  address: 10.79.3.2\n  apps:\n  - {app: a, port: 1, order: 1}\n" +
 				"  - {app: b, port: 2, order: .nan}\n  - {app: c, port: 3, order: 2}\n  - {app: d, port: 4, order: 0.5}\n"},
-		{name: "one tile only, its order a mapping with typed keys: written as safe_dump writes them", argv: render,
-			state: "schema_version: 1\napps: {}\nremote:\n- office: macbook\n  address: 10.79.3.2\n  apps:\n  - {app: a, port: 1, order: {1: x, 2.5: y, null: z, '3': w}}\n"},
-		{name: "orders that are lists headed by NaN: sorted() compares past it (PyYAML's one NaN object)", argv: render,
+		{name: "orders that are a mapping and lists — each read as 900 (DGO-627) — and a description that is a mapping with typed keys: spelled as str() spells it", argv: render,
 			state: "schema_version: 1\napps: {}\nremote:\n- office: macbook\n  address: 10.79.3.2\n  apps:\n" +
-				"  - {app: a, port: 1, order: [.nan, 2]}\n  - {app: b, port: 2, order: [.nan, 1]}\n  - {app: c, port: 3, order: [.nan, 1, 0]}\n"},
-		{name: "orders headed by equal mappings, a description with typed keys: compared and spelled as Python does", argv: render,
-			state: "schema_version: 1\napps: {}\nremote:\n- office: macbook\n  address: 10.79.3.2\n  apps:\n" +
-				"  - {app: a, port: 1, order: [{k: 1}, 2], desc: {1: x, 2.5: y, null: z}}\n  - {app: b, port: 2, order: [{k: 1.0}, 1]}\n"},
+				"  - {app: a, port: 1, order: {1: x, 2.5: y, null: z, '3': w}, desc: {1: x, 2.5: y, null: z}}\n" +
+				"  - {app: b, port: 2, order: [.nan, 1]}\n  - {app: c, port: 3, order: [{k: 1.0}, 1]}\n"},
 		{name: "traefik's config directory is a file, nothing served or framed: unlink raises where the OS calls it no directory", argv: render,
 			state: "schema_version: 1\napps: {}\ninstances:\n", dies: runtime.GOOS != "windows", // Windows answers "path not found", which missing_ok takes
 			setup: func(t *testing.T, py []string, dir string) {
@@ -891,13 +1020,19 @@ func TestComposeFilesMatchesPython(t *testing.T) {
 		{name: "a CPU plan with a stale service: the effective one written", argv: cf, setup: rendered(func(dir string) {
 			put(t, dir, ".generated/cpu-budget.yml", "services:\n  traefik-deployment:\n    deploy: {resources: {limits: {cpus: '0.5'}}}\n  gone:\n    cpus: 1\n")
 		})},
+		{name: "a CPU plan that keeps a service named 2: the key stays an int, the order as safe_dump leaves it (DGO-636)", argv: cf,
+			setup: rendered(func(dir string) {
+				put(t, dir, ".generated/connections.override.yml", "services:\n  2: {}\n")
+				put(t, dir, ".generated/cpu-budget.yml", "services:\n  traefik-deployment: {cpus: 1}\n  2: {cpus: 1}\n  gone: {cpus: 1}\n")
+			})},
 		{name: "a CPU plan whose every service exists: itself", argv: cf, setup: rendered(func(dir string) {
 			put(t, dir, ".generated/cpu-budget.yml", "services:\n  traefik-deployment: {cpus: 1}\n  authentik-server: {cpus: 2}\n")
 		})},
-		{name: "an effective CPU plan that is not UTF-8: reconcile.py raises (only OSError is caught there)", argv: cf, dies: true,
+		{name: "an effective CPU plan and a bootstrap overlay that are not UTF-8: written again, as missing ones are (DGO-629)", argv: cf,
 			setup: rendered(func(dir string) {
 				put(t, dir, ".generated/cpu-budget.yml", "services:\n  traefik: {cpus: 1}\n  gone: {cpus: 1}\n")
 				put(t, dir, ".generated/cpu-budget.effective.yml", "old \xff\n")
+				put(t, dir, ".generated/authentik-bootstrap.override.yml", "old \xff\n")
 			})},
 		{name: "a CPU plan that is not YAML: the overlay as rendered", argv: cf, setup: rendered(func(dir string) {
 			put(t, dir, ".generated/cpu-budget.yml", "services: [\n")

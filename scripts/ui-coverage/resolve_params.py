@@ -32,7 +32,7 @@ from pathlib import Path
 def _deployment_name() -> str:
     """Match ci-ui-map.sh: read DEPLOYMENT_NAME from .env, default bina-deployment.
 
-    The old hardcoded "shlomo-laptop" is only right on one dev laptop; in CI the
+    The old hardcoded "owner-laptop" is only right on one dev laptop; in CI the
     deployment name comes from ci-env.sh, so container lookups (`<svc>-<DN>`) silently
     resolved to nothing and every param stayed unresolved. Discover it instead.
     """
@@ -67,11 +67,11 @@ def _container(service: str) -> str:
 
 INDOX_DOCS = [
     {"ID": "demo-inv-1001", "TYPE": "INVOICE", "SHORT_DOC_ID": "06146",
-     "COMPANY_DOC_ID": "SI256006146", "COMPANY_ID": "500000153",
+     "COMPANY_DOC_ID": "SI256006146", "COMPANY_ID": "500000138",
      "COMPANY_NAME": "סבח סוכנויות בע\"מ", "NAME": "חשבונית מס 06146",
      "DOC_DATE": "12/06/2026", "DOC_TOTAL_AMOUNT": "5400"},
     {"ID": "demo-shp-5001", "TYPE": "SHIPMENT", "SHORT_DOC_ID": "05179",
-     "COMPANY_DOC_ID": "S0125005179", "COMPANY_ID": "500000187",
+     "COMPANY_DOC_ID": "S0125005179", "COMPANY_ID": "500000161",
      "COMPANY_NAME": "פוליראן תעשיות", "NAME": "תעודת משלוח 05179",
      "DOC_DATE": "03/06/2026", "SHIPMENT_DOC_ID": "S0125005179"},
     {"ID": "demo-ord-7001", "TYPE": "ORDER", "SHORT_DOC_ID": "10004",
@@ -79,12 +79,12 @@ INDOX_DOCS = [
      "COMPANY_NAME": "אגן שיווק", "NAME": "הזמנת רכש 10004",
      "DOC_DATE": "28/05/2026", "PURCHASE_ID": "PO25010004"},
     {"ID": "demo-inv-1002", "TYPE": "INVOICE", "SHORT_DOC_ID": "00818",
-     "COMPANY_DOC_ID": "SI266000818", "COMPANY_ID": "500001003",
+     "COMPANY_DOC_ID": "SI266000818", "COMPANY_ID": "500000393",
      "COMPANY_NAME": "ישראל קרטון", "NAME": "חשבונית מס 00818",
      "DOC_DATE": "14/05/2026", "DOC_TOTAL_AMOUNT": "12800"},
     {"ID": "demo-inv-1003", "TYPE": "INVOICE", "SHORT_DOC_ID": "01661",
-     "COMPANY_DOC_ID": "SI256001661", "COMPANY_ID": "500001011",
-     "COMPANY_NAME": "מ.ש. הכהנים בע\"מ", "NAME": "חשבונית מס 01661",
+     "COMPANY_DOC_ID": "SI256001661", "COMPANY_ID": "500000401",
+     "COMPANY_NAME": "מ.ש. הדוגמה בע\"מ", "NAME": "חשבונית מס 01661",
      "DOC_DATE": "22/04/2026", "DOC_TOTAL_AMOUNT": "3120"},
 ]
 
@@ -125,11 +125,23 @@ def indox_probe(build_code, timeout: int = 60) -> str:
     return ""
 
 
-def indox(subs: dict) -> None:
-    # NOTE: INDOX mounts its API under INCOMING_DOCS_API_PREFIX (/incomingDocuments).
-    # A bare /repos hits the SPA fallback and returns HTML, which reads as "no data".
-    def build(B):
-        return f'''
+def indox_documents_code(B: str, instance: str, may_seed: bool) -> str:
+    """The probe that fills `:repo` and `:id` — FROM THE INSTANCE the screens show (`:instance`), never INDOX's
+    default one (DGO-1815). A document table that is empty is seeded with the fixture documents ONLY when that
+    instance is the office's `test` tenant: on a fresh office the default is a client's production books, and
+    fixture documents there are fake documents in a client's books."""
+    from urllib.parse import quote
+    scope = f"?instance={quote(instance, safe='')}" if instance else ""
+    seed = f'''
+if not rows:
+    body = json.dumps({json.dumps(INDOX_DOCS, ensure_ascii=False)}, ensure_ascii=False).encode()
+    rq = urllib.request.Request(D + "{scope}", data=body, method="PUT",
+                                headers={{"Content-Type": "application/json"}})
+    urllib.request.urlopen(rq, timeout=30).read()
+    rows = json.loads(urllib.request.urlopen(q, timeout=20).read())
+    rows = rows.get("documents") or rows.get("items") or rows.get("rows") or []
+''' if (may_seed and instance) else ""
+    return f'''
 import urllib.request, json
 B = "{B}"
 repos = json.loads(urllib.request.urlopen(B + "/repos", timeout=15).read()).get("repos", [])
@@ -137,17 +149,11 @@ if not repos:
     print(json.dumps({{}})); raise SystemExit
 name = repos[0].get("name")
 D = f"{{B}}/repos/{{name}}/documents"
-q = urllib.request.Request(D + "/query", data=b"{{}}",
+q = urllib.request.Request(D + "/query{scope}", data=b"{{}}",
                            headers={{"Content-Type": "application/json"}})
 rows = json.loads(urllib.request.urlopen(q, timeout=20).read())
 rows = rows.get("documents") or rows.get("items") or rows.get("rows") or []
-if not rows:
-    body = json.dumps({json.dumps(INDOX_DOCS, ensure_ascii=False)}, ensure_ascii=False).encode()
-    rq = urllib.request.Request(D, data=body, method="PUT",
-                                headers={{"Content-Type": "application/json"}})
-    urllib.request.urlopen(rq, timeout=30).read()
-    rows = json.loads(urllib.request.urlopen(q, timeout=20).read())
-    rows = rows.get("documents") or rows.get("items") or rows.get("rows") or []
+{seed}
 out = {{":repo": name}}
 if rows:
     doc = rows[0]
@@ -156,23 +162,34 @@ if rows:
             out[":id"] = str(doc[k]); break
 print(json.dumps(out, ensure_ascii=False))
 '''
-    out = indox_probe(build)
+
+
+def indox(subs: dict, instance: str = "", purpose: str = "") -> None:
+    # NOTE: INDOX mounts its API under INCOMING_DOCS_API_PREFIX (/incomingDocuments).
+    # A bare /repos hits the SPA fallback and returns HTML, which reads as "no data".
+    may_seed = purpose == "test"
+    out = indox_probe(lambda B: indox_documents_code(B, instance, may_seed))
     try:
         got = json.loads(out.splitlines()[-1]) if out else {}
     except Exception:
         got = {}
     if got:
-        subs["incoming-documents"] = got
+        # merged, not assigned: `:instance` is filled first now and must survive
+        subs.setdefault("incoming-documents", {}).update(got)
 
 
-def indox_instances(subs: dict) -> None:
+def indox_instances(subs: dict) -> tuple:
     """Resolve `:instance` — the id in INDOX's real addresses (`/i/<instance>/documents`).
 
     The bare paths (`/repos`, `/documents`, `/sync` …) are redirects now: they resolve the instance
     ONCE and send you to the scoped URL (App.tsx), which is why the scoped form is what a screen's
-    address is. The app's own `/instances` lists them with `enabled`; the console's live frame shows
-    the first enabled one, so that is the one filled here. `:repo` is a DIFFERENT thing — a repository
+    address is. The app's own `/instances` lists them with `enabled` and `purpose`; the front door shows the
+    first enabled one whose purpose is not 'test' (api.ts `defaultInstanceId`), else the first enabled, so that
+    is the one filled here. `:repo` is a DIFFERENT thing — a repository
     name from `/repos`, which is what the legacy deep links carry.
+
+    Returns (id, purpose) of that instance, '' for each when none answers — the documents probe reads
+    that instance and seeds only a `test` one. An INDOX that does not say purpose reads as production.
     """
     def build(B):
         return f'''
@@ -180,16 +197,20 @@ import urllib.request, json
 B = "{B}"
 got = json.loads(urllib.request.urlopen(B + "/instances", timeout=15).read()).get("instances", [])
 on = [i for i in got if i.get("enabled")] or got
+# the front door's own default (webapp/src/api.ts defaultInstanceId): the first one whose purpose is not 'test'
+on = [i for i in on if (i.get("purpose") or "") != "test"] or on
 if on:
-    print(json.dumps({{":instance": on[0].get("id")}}))
+    print(json.dumps({{":instance": on[0].get("id"), "purpose": on[0].get("purpose") or ""}}))
 '''
     out = indox_probe(build)
     try:
         got = json.loads(out.splitlines()[-1]) if out else {}
     except Exception:
         got = {}
+    purpose = str(got.pop("purpose", "") or "")
     if got:
         subs.setdefault("incoming-documents", {}).update(got)
+    return str(got.get(":instance") or ""), purpose
 
 
 def indox_extraction(subs: dict) -> None:
@@ -287,8 +308,9 @@ def main() -> int:
     a = ap.parse_args()
 
     subs: dict = {}
-    indox(subs)
-    indox_instances(subs)
+    # the instance first: the documents probe reads the one the screens show, and seeds only a `test` one
+    instance, purpose = indox_instances(subs)
+    indox(subs, instance, purpose)
     indox_extraction(subs)
     simple(subs, "drive", "drive", 8975, "/api/folders", "folders",
            "{folder}", ("id", "folderId", "label", "name"))

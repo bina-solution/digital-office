@@ -1,0 +1,121 @@
+#!/usr/bin/env bash
+# reference-transaction — before git moves any ref, the office's branch rule (DGO-1764; the rule, why it lives in git
+# and what it cannot hold: _office_branch.sh). Git calls this with `prepared` and the updates on stdin, one per line:
+# `<old> <new> <ref>`, where a symbolic ref's value reads `ref:<target>` (git ≥ 2.46 reports HEAD's switches; an older
+# git does not, and a commit on another branch is refused all the same). <old> is all zeroes when the caller named no
+# old value (`update-ref`, `branch -f`): the branch's tip is then read here. A non-zero exit aborts the whole
+# transaction: nothing moves.
+#
+# Refused: creating, moving or deleting a local branch other than the office's; any HEAD (this worktree's, the main
+# one's, another worktree's) pointed at another branch; the office's branch deleted or made a symbolic ref; a move of it
+# that drops a commit a remote-tracking ref already holds (a reset, rebase or amend of pushed history). Not judged: a
+# detached HEAD (probe worktrees, converge's deploys), tags (a fetch writes them; pushing one is refused by pre-push),
+# remote-tracking refs, stash, ORIG_HEAD and every other ref.
+if [ "${1:-}" != prepared ]; then cat >/dev/null; exit 0; fi
+INPUT="$(cat)"
+case "${INPUT}" in *" HEAD"*|*"/HEAD"*|*" refs/heads/"*) ;; *) exit 0 ;; esac   # most transactions touch neither
+. "$(dirname "$0")/_office_branch.sh"
+OFFICE="$(ob_branch)"
+[ -n "${OFFICE}" ] || exit 0
+
+# `git pack-refs` (gc, maintenance) moves loose refs into packed-refs in two transactions that read as a create and a
+# delete of every branch it packs; nothing changes value. Only when THIS git process is pack-refs, and only a ref
+# that keeps its value (the create writes what the ref already is; the delete drops a loose copy packed-refs holds
+# at the same value), is it let through — a real delete of a packed branch is still refused (the reader: gc failed).
+PACKING=""                        # asked once, and only when a branch's create or delete is judged (the cost)
+ob_packing() {
+  if [ -z "${PACKING}" ]; then
+    PACKING=no
+    # `ps` where there is one; /proc where there is not (the follow image has no procps). The PROCESS must be git's
+    # pack-refs (gc and maintenance run `git pack-refs …` as a child) — never a command line that merely names it
+    # (a branch called pack-refs-x, `-c x=pack-refs`: the reader of v4)
+    set -- $( (ps -o args= -p "${PPID}" || tr '\0' ' ' < "/proc/${PPID}/cmdline") 2>/dev/null)
+    case "${1##*[/\\]}" in
+      git|git.exe)
+        shift
+        # git's own options before the verb (`git -C <dir> pack-refs`, `git -c k=v pack-refs`, `--no-pager`)
+        while [ "$#" -gt 0 ]; do
+          case "$1" in
+            -C|-c|--git-dir|--work-tree|--namespace) shift 2 ;;
+            -*) shift ;;
+            *) break ;;
+          esac
+        done
+        [ "${1:-}" = pack-refs ] && PACKING=yes ;;
+    esac
+  fi
+  [ "${PACKING}" = yes ]
+}
+ob_packing_same() {               # <old> <new> <ref>: pack-refs moving <ref> without changing it
+  if ob_zero "$1"; then
+    ob_packing || return 1        # asked only for a create or a delete, the shapes pack-refs makes
+    [ "$(git rev-parse -q --verify "$3" 2>/dev/null)" = "$2" ]
+  elif ob_zero "$2"; then
+    ob_packing || return 1
+    # the line exactly as packed-refs holds it (-F: a dot in a ref's name is no regex)
+    PACKED="$(git rev-parse --git-common-dir 2>/dev/null)/packed-refs"
+    [ -f "${PACKED}" ] && grep -qxF "$1 $3" "${PACKED}"
+  else
+    return 1
+  fi
+}
+
+WHY=""
+while read -r old new ref; do
+  [ -n "${ref}" ] || continue
+  case "${ref}" in
+    HEAD|main-worktree/HEAD|worktrees/*/HEAD)
+      case "${new}" in
+        ref:*) [ "${new#ref:}" = "refs/heads/${OFFICE}" ] \
+                 || WHY="${ref} would point at ${new#ref:refs/heads/}: this office works on ${OFFICE} only" ;;
+        *) ob_zero "${new}" && WHY="it would delete ${ref}: the checkout would stop being one" ;;
+      esac ;;
+    refs/heads/*)
+      b="${ref#refs/heads/}"
+      if ob_packing_same "${old}" "${new}" "${ref}"; then
+        :
+      elif [ "${b}" != "${OFFICE}" ]; then
+        # a delete first: a packed branch's delete arrives as zero → zero (the reader named it a create)
+        if ob_zero "${new}"; then WHY="it would delete the branch ${b}"
+        elif ob_zero "${old}"; then WHY="it would create the branch ${b}"
+        else WHY="it would move the branch ${b}"; fi
+        WHY="${WHY}: this office works on ${OFFICE} only, and takes others' work by merging dgo-stable"
+      elif ob_zero "${new}"; then
+        WHY="it would delete ${OFFICE}, the office's own branch"
+      else
+        case "${new}" in
+          ref:*) WHY="it would make ${OFFICE} point at ${new#ref:}: the office's branch is never a symbolic ref" ;;
+          *)
+            # no old value named (update-ref, branch -f): the branch's tip, read before anything moves
+            case "${old}" in ref:*) old="" ;; esac
+            if [ -z "${old}" ] || ob_zero "${old}"; then
+              old="$(git rev-parse -q --verify "refs/heads/${OFFICE}^{commit}" 2>/dev/null)"
+            fi
+            if [ -n "${old}" ] && [ "${old}" != "${new}" ] && ! git merge-base --is-ancestor "${old}" "${new}" 2>/dev/null; then
+              # what a remote already holds of the old tip (their merge-base) must stay under the new one. The list
+              # is read first and the loop is fed the variable: an unquoted here-document's body is text, never a
+              # command it runs (G88).
+              tracked="$(git for-each-ref --format='%(refname)' "refs/remotes/*/${OFFICE}" 2>/dev/null)"
+              while read -r tracking; do
+                [ -n "${tracking}" ] || continue
+                held="$(git merge-base "${old}" "${tracking}" 2>/dev/null)" || continue
+                [ -n "${held}" ] || continue
+                if ! git merge-base --is-ancestor "${held}" "${new}" 2>/dev/null; then
+                  WHY="it would rewrite ${OFFICE}'s history that ${tracking#refs/remotes/} already holds (a reset, rebase or amend of pushed commits)"
+                fi
+              done <<EOF
+${tracked}
+EOF
+            fi ;;
+        esac
+      fi ;;
+  esac
+  [ -n "${WHY}" ] && break
+done <<EOF
+${INPUT}
+EOF
+
+[ -n "${WHY}" ] || exit 0
+ob_refuse "${WHY}" "No branch moved (AGENTS.md rule 6) — but git writes the files and the index BEFORE the
+branch: after a refused checkout, switch or reset, \`git status\` shows what already changed here; commit nothing until
+it is the office's own work again. The owner's explicit ask runs with DGO_GIT_OVERRIDE=1."

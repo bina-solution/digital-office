@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+# post-rewrite <amend|rebase> — every commit an amend or a rebase made, as root: its files go back to the checkout's
+# owner (scripts/checkout-owner.sh, DGO-1324). stdin: "<old> <new> [extra]" per rewritten commit.
+[ "$(id -u)" = 0 ] || { cat >/dev/null; exit 0; }
+while read -r _old new _rest; do
+  [ -n "${new}" ] && git diff-tree --no-commit-id --name-only --no-renames -r -z --root "${new}" 2>/dev/null
+done | bash "$(git rev-parse --show-toplevel)/scripts/checkout-owner.sh" restore
+exit 0

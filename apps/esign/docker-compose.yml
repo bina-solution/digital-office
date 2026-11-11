@@ -1,0 +1,102 @@
+# esign — the office's signing app (DGO-1631). ai/context/research/dgo-1631-esign.md is the design.
+#
+# Its own routers, `emit_labels: false` in app.json, because the PUBLIC half cannot be compiled by the
+# compiler: `auth_exclude` is a declaration the platform reads and the label emitter does not implement
+# (platform/schema/app.schema.json, route-claim-lint.py's note), which is exactly how drive's
+# `/file/d/` share links and browser42's `/mcp` are built. Gate G21 accepts a hand-written router that
+# carries no sign-in ONLY for a path its app's manifest lists in `auth_exclude` — here: `/s/`.
+#
+#   esign-ui     the whole host, behind the office's sign-in        priority 1
+#   esign-s      /s/ on that host, NO sign-in                       priority 200
+#
+# The public router answers three routes and nothing else: the signer's page, that envelope's document
+# bytes (not before the password, when one is set), and the POST that records the signature.
+services:
+  esign:
+    image: esign:${IMAGE_TAG:-latest}
+    pull_policy: missing
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: runtime
+    container_name: esign-${DEPLOYMENT_NAME:-bina-deployment}
+    hostname: esign
+    restart: unless-stopped
+    environment:
+      - ESIGN_PORT=8080
+      - ESIGN_DATA=/data
+      # the address the signer's link is minted on: the office's own host, never a container name
+      - ESIGN_BASE_URL=${ESIGN_BASE_URL:-http://esign.${DEPLOYMENT_DOMAIN:-localhost}:8080}
+      - ESIGN_DRIVE_FOLDER=${ESIGN_DRIVE_FOLDER:-חתימות}
+      - ESIGN_MAX_UPLOAD=${ESIGN_MAX_UPLOAD:-41943040}
+      # an office PKCS#12, when the owner connects one (a registered CA's, or the office's own)
+      - ESIGN_CERT_P12=${ESIGN_CERT_P12:-}
+      - ESIGN_CERT_PASS=${ESIGN_CERT_PASS:-}
+      - DRIVE_URL=${DRIVE_URL:-http://drive:8975}
+      - NOTIFICATIONS_URL=${NOTIFICATIONS_URL:-http://notifications:8977}
+      # the office's event stream (flow.v1) — dgo:flow:esign
+      - REDIS_URL=redis://:${REDIS_PASSWORD:-}@redis:6379/0
+      - REDIS_PASSWORD=${REDIS_PASSWORD:-}
+      - TZ=${TZ:-Asia/Jerusalem}
+    volumes:
+      # the envelopes, the documents, the signed copies, the audit trail and the signing key
+      - esign_data:/data
+    networks:
+      - traefik-network
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=traefik-network
+      # the office's app: the screen, the API, the downloads
+      - traefik.http.routers.esign-ui.rule=(Host(`esign.localhost`) || Host(`${ESIGN_BASE_URL:-esign.${DEPLOYMENT_DOMAIN:-localhost}}`))
+      - traefik.http.routers.esign-ui.entrypoints=web
+      - traefik.http.routers.esign-ui.priority=1
+      - traefik.http.routers.esign-ui.middlewares=authentik@file
+      - traefik.http.routers.esign-ui.service=esign-svc
+      - traefik.http.routers.esign-ui-https.rule=Host(`${ESIGN_BASE_URL:-esign.${DEPLOYMENT_DOMAIN:-localhost}}`)
+      - traefik.http.routers.esign-ui-https.entrypoints=websecure
+      - traefik.http.routers.esign-ui-https.tls=true
+      - traefik.http.routers.esign-ui-https.tls.certresolver=${TRAEFIK_CERTRESOLVER-myresolver}
+      - traefik.http.routers.esign-ui-https.priority=1
+      - traefik.http.routers.esign-ui-https.middlewares=authentik@file,hsts@file
+      - traefik.http.routers.esign-ui-https.service=esign-svc
+      # THE PUBLIC HALF — the signer's page. No authentik here, and no other path may use this router.
+      # `hsts` on the https twin: a share link is public, the origin is the office's (DGO-1595).
+      - traefik.http.routers.esign-s.rule=(Host(`esign.localhost`) || Host(`${ESIGN_BASE_URL:-esign.${DEPLOYMENT_DOMAIN:-localhost}}`)) && PathPrefix(`/s/`)
+      - traefik.http.routers.esign-s.entrypoints=web
+      - traefik.http.routers.esign-s.priority=200
+      - traefik.http.routers.esign-s.service=esign-svc
+      - traefik.http.routers.esign-s-https.rule=Host(`${ESIGN_BASE_URL:-esign.${DEPLOYMENT_DOMAIN:-localhost}}`) && PathPrefix(`/s/`)
+      - traefik.http.routers.esign-s-https.entrypoints=websecure
+      - traefik.http.routers.esign-s-https.tls=true
+      - traefik.http.routers.esign-s-https.tls.certresolver=${TRAEFIK_CERTRESOLVER-myresolver}
+      - traefik.http.routers.esign-s-https.priority=200
+      - traefik.http.routers.esign-s-https.middlewares=hsts@file
+      - traefik.http.routers.esign-s-https.service=esign-svc
+      - traefik.http.services.esign-svc.loadbalancer.server.port=8080
+    healthcheck:
+      # python, never curl: the image carries no curl (gate G18)
+      test: ["CMD", "python3", "-c", "import urllib.request,sys;sys.exit(0 if urllib.request.urlopen('http://localhost:8080/healthz',timeout=8).status==200 else 1)"]
+      interval: ${HEALTHCHECK_INTERVAL:-30s}
+      timeout: ${HEALTHCHECK_TIMEOUT:-10s}
+      retries: 3
+      start_period: 20s
+    deploy:
+      resources:
+        limits:
+          cpus: '0.25'
+          memory: 384M
+        reservations:
+          cpus: '0.02'
+          memory: 48M
+    logging:
+      driver: ${LOGGING_DRIVER:-json-file}
+      options:
+        max-size: 5m
+        max-file: '3'
+
+volumes:
+  esign_data:
+
+networks:
+  traefik-network:
+    external: true

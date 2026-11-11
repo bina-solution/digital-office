@@ -779,6 +779,7 @@ class Joiner:
         # the reply must bind the host's WireGuard key inside what it signed: nobody compares six
         # digits here, so a key swapped on the way would otherwise become this tunnel's peer
         opened = self.engine.offer_reply(reply_text, offer_rid, require_wg=True)
+        self._accept_grant(cfg, offer_rid)
         host = opened["peer"]["office_id"]
         # Replaced only when there is nothing, or a record a join through THIS door wrote — never a
         # record of that name that a person paired or this office installed.
@@ -797,6 +798,9 @@ class Joiner:
         log.info("joined %s through %s (%s)", host, cfg["hub"], "invite" if cfg.get("invite") else "approval")
         return self._say("joined", hub=cfg["hub"], peer=host, link=out.get("link"))
 
+    def _accept_grant(self, cfg: dict, offer_rid: str) -> None:
+        """The opened grant, before anything is written: any grant the host sealed is this office's own join."""
+
     def run_forever(self, stop: threading.Event | None = None) -> None:
         stop = stop or threading.Event()
         while not stop.is_set():
@@ -806,6 +810,33 @@ class Joiner:
                 log.warning("join pass failed: %s: %s", type(e).__name__, e)
                 state = "failed"
             stop.wait(POLL_EVERY if state == "waiting" else RETRY_EVERY)
+
+
+class ClientJoiner(Joiner):
+    """A client's office we set up, joined ONE WAY (clients.py, DGO-964): asked for `use`, and its grant taken only
+    when the host SERVES — a client's screen that approved `use` or `both` would see ours, and nothing is written."""
+
+    def __init__(self, engine: pair_api.Pairing, store: Path, client: str, env: dict, **kw):
+        super().__init__(engine, store, env=env, **kw)
+        self.client = client
+
+    def _accept_grant(self, cfg: dict, offer_rid: str) -> None:
+        try:
+            row = self.engine.offers.get(offer_rid)
+        except pairing.PairingError as e:
+            raise PairError(str(e), 409) from e
+        granted = str((((row or {}).get("claim") or {}).get("grant") or {}).get("direction") or "")
+        if granted != "serve":
+            # said in this office's log, and NOT a 403: a 403 rests the joiner for REFUSED_REST, and the owner, told to
+            # approve again, would find no request on the client's screen — a 409 asks again within RETRY_EVERY
+            log.warning("client %s: %s granted '%s' — a client's office is joined one way (it serves, we use); nothing "
+                        "was written, and a new request is asked for", self.client, cfg["hub"], granted or "?")
+            raise PairError(f"{cfg['hub']} אישרה את הצירוף בכיוון '{granted or '?'}' — לשכה של לקוח מקושרת אלינו "
+                            "בכיוון אחד בלבד: היא נותנת, ואנחנו רק משתמשים. הצימוד לא נכתב; בקשה חדשה תופיע שם "
+                            "תוך דקה — אשרו אותה בלי לבחור כיוון", 409)
+
+    def status(self) -> dict:
+        return {**super().status(), "client": self.client}
 
 
 # ── HTTP ─────────────────────────────────────────────────────────────────────────────────────────
@@ -853,7 +884,7 @@ def build_public_router(hub: Hub):
     return router
 
 
-def build_admin_router(hub: Hub, joiner: Joiner):
+def build_admin_router(hub: Hub, joiner: Joiner, clients=None):
     """The person's side — behind this office's sign-in like every other `/api/*` of the app."""
     from fastapi import APIRouter, Request
     from fastapi.concurrency import run_in_threadpool
@@ -880,7 +911,9 @@ def build_admin_router(hub: Hub, joiner: Joiner):
         host = hub.host()
         return {"door": {"host": host, "url": f"https://{host}" if host else ""},
                 "requests": hub.pending(), "invites": hub.invites(), "joined": hub.joined(),
-                "joiner": joiner.status()}
+                "joiner": joiner.status(),
+                # the client offices this office joins one way (clients.py): each one's own joiner
+                "clients": {cid: j.status() for cid, j in sorted((clients() if clients else {}).items())}}
 
     @router.post("/api/join/{ref}/approve")
     async def approve(ref: str, request: Request):

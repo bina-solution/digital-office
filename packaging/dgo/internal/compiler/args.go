@@ -8,7 +8,7 @@ import (
 	"unicode"
 	"unicode/utf8"
 
-	"github.com/solomonBoltin/deployment-hacohen/packaging/dgo/internal/pyval"
+	"github.com/bina-solution/digital-office/packaging/dgo/internal/pyval"
 )
 
 // ── the command line, read the way reconcile.py's argparse parser reads it ─────────────────────────
@@ -23,19 +23,21 @@ import (
 // invalid --state with quoted choices, refuse an ambiguous abbreviation before an earlier -h is
 // read, and refuse "-hx" where the current one prints the help — three typo paths, nothing else.
 
-// Verbs are the compiler's twenty-one verbs in the order reconcile.py declares them as `verb`'s
+// Verbs are the compiler's twenty-two verbs in the order reconcile.py declares them as `verb`'s
 // choices — the contract the plan's §6 measured. dgo routes exactly these to the compiler.
 // `link-endpoints` (DGO-945) is answered by reconcile.py alone: the map `bbox n8n push` applies.
+// `lang` (DGO-971) is native since DGO-1238's first step (LangCmd, language.go).
 var Verbs = []string{"plan", "render", "up", "validate", "compose-files", "services", "required-by",
 	"compose-services", "blueprints", "generations", "rollback", "apply", "enabled-apps",
 	"set-state", "capability-provider", "serve-plan", "remote-get", "remote-set",
-	"office-get", "office-set", "link-endpoints"}
+	"office-get", "office-set", "link-endpoints", "lang"}
 
 // Args is the Namespace main() reads: "", false or nil for an option not given, By's default "user".
 type Args struct {
-	Capability, App, State, By string
-	Create, JSON               bool
-	Roots, Exclude             []string // --for (dest `roots`) and --exclude: one entry per use
+	Capability, App, State, By, Lang string
+	Create, JSON                     bool
+	LangGiven                        bool     // --lang was given: Python's None (omitted: say the language) is not ""
+	Roots, Exclude                   []string // --for (dest `roots`) and --exclude: one entry per use
 }
 
 // option is one of main()'s optional arguments as add_argument declares it. An empty metavar is an
@@ -72,6 +74,9 @@ var options = []option{
 	{names: []string{"--exclude"}, metavar: "SVC", help: "services: drop these compose services from the output " +
 		"(repeatable or comma-separated). Trimming a lane stays possible, but stays VISIBLE.",
 		store: func(a *Args, v string) { a.Exclude = append(a.Exclude, v) }},
+	{names: []string{"--lang"}, metavar: "CODE", help: "lang: the language to write into platform.state.yaml " +
+		"(he|en). Omit to print the current one.",
+		store: func(a *Args, v string) { a.Lang, a.LangGiven = v, true }},
 }
 
 // use is one way to read a command-line string as an option: which one, by what name, and the value

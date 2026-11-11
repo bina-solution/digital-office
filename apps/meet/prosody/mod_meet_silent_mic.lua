@@ -1,6 +1,6 @@
 -- mod_meet_silent_mic — apps/meet: tells a person whose microphone is not reaching the meeting
 -- (DGO-959, the owner 2026-10-21: «When I shared the screen, it disabled the microphone … It's like 20
--- minutes of talking … no way this happens again»; and fireplace 2026-10-26: the host joined from a
+-- minutes of talking … no way this happens again»; and examplef 2026-10-26: the host joined from a
 -- Mac Chrome that had never been allowed the microphone, joined muted, the bridge got 0 kbps for the
 -- whole call, the recording is silent, and nobody was told).
 --

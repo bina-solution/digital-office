@@ -5,7 +5,11 @@
     "en": "OpenHands"
   },
   "layer": 3,
+  "people": "admins",
   "kind": "service",
+  "share": {
+    "local": "A coding agent that runs code in this office's workspace with a container runtime: served on a link, it would hand another office code execution here."
+  },
   "version": "1.8.0",
   "summary": {
     "he": "סוכן קוד אוטונומי",
@@ -58,6 +62,14 @@
         "default_host": "openhands.localhost",
         "base_url_env": "OPENHANDS_BASE_URL",
         "local_twin": true
+      },
+      "module": {
+        "name": "OpenHands",
+        "icon": "bot",
+        "desc": "סוכן קוד — כותב ומריץ קוד בסביבת עבודה של הלשכה",
+        "group": "תשתית",
+        "order": 250,
+        "embed": false
       }
     }
   ],

@@ -12,6 +12,11 @@
 	handle /api/lan {
 		reverse_proxy unix//run/lan/api.sock
 	}
+	# «מצב» / «קדימה» (snapshot.py, DGO-1339): the office as one table, read-only, on the collector's same socket —
+	# the group's relay asks it at http://dashboard/api/snapshot
+	handle /api/snapshot {
+		reverse_proxy unix//run/lan/api.sock
+	}
 	handle {
 		root * /srv
 		file_server

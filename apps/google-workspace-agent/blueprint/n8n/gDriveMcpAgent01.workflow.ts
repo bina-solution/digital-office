@@ -1,8 +1,8 @@
 import { workflow, node, links } from '@n8n-as-code/transformer';
 
 // <workflow-map>
-// Workflow : Google Drive MCP Server - agent.hacohen
-// Nodes   : 17  |  Connections: 9
+// Workflow : Google Drive MCP Server - agent.example
+// Nodes   : 24  |  Connections: 17
 //
 // NODE INDEX
 // ──────────────────────────────────────────────────────────────────
@@ -21,6 +21,13 @@ import { workflow, node, links } from '@n8n-as-code/transformer';
 // GetCsvResponse                     set                        [executeOnce]
 // ReadFileFromGdrive                 toolWorkflow               [ai_tool]
 // SearchFilesFromGdrive              googleDriveTool            [creds] [ai_tool]
+// CheckAgentKeyImage                 httpRequest
+// IfAgentKeySetImage                 if
+// ResumeFileImage                    code
+// CheckAgentKeyAudio                 httpRequest
+// IfAgentKeySetAudio                 if
+// ResumeFileAudio                    code
+// AgentAiOffResponse                 set
 // AnalyseImage                       openAi                     [creds]
 // TranscribeAudio                    openAi                     [creds]
 // StickyNote2                        stickyNote
@@ -35,8 +42,10 @@ import { workflow, node, links } from '@n8n-as-code/transformer';
 //            → GetPdfResponse
 //         .out(1) → ExtractFromCsv
 //            → GetCsvResponse
-//         .out(2) → AnalyseImage
-//         .out(3) → TranscribeAudio
+//         .out(2) → CheckAgentKeyImage → IfAgentKeySetImage → ResumeFileImage → AnalyseImage
+//                                                       .out(1) → AgentAiOffResponse
+//         .out(3) → CheckAgentKeyAudio → IfAgentKeySetAudio → ResumeFileAudio → TranscribeAudio
+//                                                       .out(1) → AgentAiOffResponse
 //
 // AI CONNECTIONS
 // GoogleDriveMcpServer.uses({ ai_tool: [ReadFileFromGdrive, SearchFilesFromGdrive] })
@@ -49,21 +58,21 @@ import { workflow, node, links } from '@n8n-as-code/transformer';
 @workflow({
     /*__n8n__*/ description: null,
     /*__n8n__*/ isArchived: false,
-    /*__n8n__*/ connections: {"FileType":{"main":[[{"node":"Extract from PDF","type":"main","index":0}],[{"node":"Extract from CSV","type":"main","index":0}],[{"node":"Analyse Image","type":"main","index":0}],[{"node":"Transcribe Audio","type":"main","index":0}],[]]},"Operation":{"main":[[{"node":"Download File1","type":"main","index":0}]]},"Download File1":{"main":[[{"node":"FileType","type":"main","index":0}]]},"Extract from CSV":{"main":[[{"node":"Get CSV Response","type":"main","index":0}]]},"Extract from PDF":{"main":[[{"node":"Get PDF Response","type":"main","index":0}]]},"Read File From GDrive":{"ai_tool":[[{"node":"Google Drive MCP Server","type":"ai_tool","index":0}]]},"Search Files from Gdrive":{"ai_tool":[[{"node":"Google Drive MCP Server","type":"ai_tool","index":0}]]},"When Executed by Another Workflow":{"main":[[{"node":"Operation","type":"main","index":0}]]}},
+    /*__n8n__*/ connections: {"FileType":{"main":[[{"node":"Extract from PDF","type":"main","index":0}],[{"node":"Extract from CSV","type":"main","index":0}],[{"node":"Check Agent Key (image)","type":"main","index":0}],[{"node":"Check Agent Key (audio)","type":"main","index":0}],[]]},"Check Agent Key (image)":{"main":[[{"node":"If Agent Key Set (image)","type":"main","index":0}]]},"If Agent Key Set (image)":{"main":[[{"node":"Resume File (image)","type":"main","index":0}],[{"node":"Agent AI Off Response","type":"main","index":0}]]},"Resume File (image)":{"main":[[{"node":"Analyse Image","type":"main","index":0}]]},"Check Agent Key (audio)":{"main":[[{"node":"If Agent Key Set (audio)","type":"main","index":0}]]},"If Agent Key Set (audio)":{"main":[[{"node":"Resume File (audio)","type":"main","index":0}],[{"node":"Agent AI Off Response","type":"main","index":0}]]},"Resume File (audio)":{"main":[[{"node":"Transcribe Audio","type":"main","index":0}]]},"Operation":{"main":[[{"node":"Download File1","type":"main","index":0}]]},"Download File1":{"main":[[{"node":"FileType","type":"main","index":0}]]},"Extract from CSV":{"main":[[{"node":"Get CSV Response","type":"main","index":0}]]},"Extract from PDF":{"main":[[{"node":"Get PDF Response","type":"main","index":0}]]},"Read File From GDrive":{"ai_tool":[[{"node":"Google Drive MCP Server","type":"ai_tool","index":0}]]},"Search Files from Gdrive":{"ai_tool":[[{"node":"Google Drive MCP Server","type":"ai_tool","index":0}]]},"When Executed by Another Workflow":{"main":[[{"node":"Operation","type":"main","index":0}]]}},
     /*__n8n__*/ tags: [{"updatedAt":"2026-08-06T00:00:00.000Z","createdAt":"2026-08-06T00:00:00.000Z","id":"AppTagGwa000001a","name":"gwa-app"},{"updatedAt":"2026-08-06T00:00:00.000Z","createdAt":"2026-08-06T00:00:00.000Z","id":"dcb770a3-465f-4ed5-b5d4-ca1ff6dcd994","name":"lifecycle:test"},{"name":"app:google-workspace-age"}],
     /*__n8n__*/ versionMetadata: {"name":null,"description":null},
     /*__n8n__*/ meta: null,
     /*__n8n__*/ pinData: null,
     /*__n8n__*/ staticData: null,
-    /*__n8n__*/ shared: [{"updatedAt":"2026-06-29T10:06:58.177Z","createdAt":"2026-06-29T10:06:58.177Z","role":"workflow:owner","workflowId":"gDriveMcpAgent01","projectId":"Wx6WPGz1tIrghF2r","project":{"updatedAt":"2026-06-29T10:06:28.586Z","createdAt":"2026-06-29T10:02:30.215Z","id":"Wx6WPGz1tIrghF2r","name":"Shlomo Laptop <person2@example.com>","type":"personal","icon":null,"description":null,"creatorId":"147f2398-75f7-4139-8132-7c477ee5cdfd"}}],
+    /*__n8n__*/ shared: [{"updatedAt":"2026-06-29T10:06:58.177Z","createdAt":"2026-06-29T10:06:58.177Z","role":"workflow:owner","workflowId":"gDriveMcpAgent01","projectId":"Wx6WPGz1tIrghF2r","project":{"updatedAt":"2026-06-29T10:06:28.586Z","createdAt":"2026-06-29T10:02:30.215Z","id":"Wx6WPGz1tIrghF2r","name":"Owner Laptop <person2@example.com>","type":"personal","icon":null,"description":null,"creatorId":"147f2398-75f7-4139-8132-7c477ee5cdfd"}}],
     id: 'gDriveMcpAgent01',
-    name: 'Google Drive MCP Server - agent.hacohen',
+    name: 'Google Drive MCP Server - agent.example',
     active: true,
     isArchived: false,
     tags: ['gwa-app', 'lifecycle:test'],
     settings: { executionOrder: 'v1', callerPolicy: 'workflowsFromSameOwner', availableInMCP: false },
 })
-export class GoogleDriveMcpServerAgentHacohenWorkflow {
+export class GoogleDriveMcpServerAgentExampleWorkflow {
     // =====================================================================
     // CONFIGURATION DES NOEUDS
     // =====================================================================
@@ -519,13 +528,142 @@ $input.all()
         queryString: "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('Search_Query', ``, 'string') }}",
     };
 
+    // ── THE AGENT'S AI GATE (DGO-1814) ────────────────────────────────────────────────────────────────────────
+    // An image or a recording leaves the office for OpenAI only when the office SAYS this agent has its own key:
+    // the connections service answers `GET /api/is-set/google-workspace-agent-openai` with {set: true|false} and
+    // nothing else (no value, no mask, no probe — n8n keeps every node's answer). It used the office's general
+    // OPENAI_API_KEY, and an OpenAI node with an empty key still SENDS the file (OpenAI refuses it after it left).
+    // Not set, or the service unreachable or not answering 200 → nothing is sent: the off reply, or the error.
+    @node({
+        id: 'gwa-ai-gate-check-image',
+        name: 'Check Agent Key (image)',
+        type: 'n8n-nodes-base.httpRequest',
+        version: 4.2,
+        position: [1480, 820],
+    })
+    CheckAgentKeyImage = {
+        method: 'GET',
+        url: 'http://connections:8990/api/is-set/google-workspace-agent-openai',
+        options: {
+            timeout: 10000,
+        },
+    };
+
+    @node({
+        id: 'gwa-ai-gate-if-image',
+        name: 'If Agent Key Set (image)',
+        type: 'n8n-nodes-base.if',
+        version: 2.2,
+        position: [1660, 820],
+    })
+    IfAgentKeySetImage = {
+        conditions: {
+            options: { caseSensitive: true, leftValue: '', typeValidation: 'strict', version: 2 },
+            conditions: [
+                {
+                    id: 'gwa-ai-gate-cond-image',
+                    leftValue: '={{ $json.set }}',
+                    rightValue: '',
+                    operator: { type: 'boolean', operation: 'true', singleValue: true },
+                },
+            ],
+            combinator: 'and',
+        },
+        options: {},
+    };
+
+    @node({
+        id: 'gwa-ai-gate-resume-image',
+        name: 'Resume File (image)',
+        type: 'n8n-nodes-base.code',
+        version: 2,
+        position: [1840, 800],
+    })
+    ResumeFileImage = {
+        mode: 'runOnceForEachItem',
+        jsCode: `// the check answered with its own row; the model gets the item it was always given: the downloaded file
+return { json: $('Download File1').item.json, binary: $('Download File1').item.binary };`,
+    };
+
+    @node({
+        id: 'gwa-ai-gate-check-audio',
+        name: 'Check Agent Key (audio)',
+        type: 'n8n-nodes-base.httpRequest',
+        version: 4.2,
+        position: [1480, 1000],
+    })
+    CheckAgentKeyAudio = {
+        method: 'GET',
+        url: 'http://connections:8990/api/is-set/google-workspace-agent-openai',
+        options: {
+            timeout: 10000,
+        },
+    };
+
+    @node({
+        id: 'gwa-ai-gate-if-audio',
+        name: 'If Agent Key Set (audio)',
+        type: 'n8n-nodes-base.if',
+        version: 2.2,
+        position: [1660, 1000],
+    })
+    IfAgentKeySetAudio = {
+        conditions: {
+            options: { caseSensitive: true, leftValue: '', typeValidation: 'strict', version: 2 },
+            conditions: [
+                {
+                    id: 'gwa-ai-gate-cond-audio',
+                    leftValue: '={{ $json.set }}',
+                    rightValue: '',
+                    operator: { type: 'boolean', operation: 'true', singleValue: true },
+                },
+            ],
+            combinator: 'and',
+        },
+        options: {},
+    };
+
+    @node({
+        id: 'gwa-ai-gate-resume-audio',
+        name: 'Resume File (audio)',
+        type: 'n8n-nodes-base.code',
+        version: 2,
+        position: [1840, 980],
+    })
+    ResumeFileAudio = {
+        mode: 'runOnceForEachItem',
+        jsCode: `// the check answered with its own row; the model gets the item it was always given: the downloaded file
+return { json: $('Download File1').item.json, binary: $('Download File1').item.binary };`,
+    };
+
+    @node({
+        id: 'gwa-ai-gate-off-reply',
+        name: 'Agent AI Off Response',
+        type: 'n8n-nodes-base.set',
+        version: 3.4,
+        position: [1840, 1160],
+    })
+    AgentAiOffResponse = {
+        options: {},
+        assignments: {
+            assignments: [
+                {
+                    id: 'gwa-ai-gate-off-response',
+                    name: 'response',
+                    type: 'string',
+                    value: 'Image and audio analysis is off in this office: the Drive agent has no OpenAI key of its own (connection google-workspace-agent-openai). ניתוח תמונות ושמע כבוי בלשכה הזאת: לסוכן ה-Drive אין מפתח OpenAI משלו.',
+                },
+            ],
+        },
+    };
+
     @node({
         id: '98197c91-c7e9-4fbb-a2b1-c16c873fa0a1',
         name: 'Analyse Image',
         type: '@n8n/n8n-nodes-langchain.openAi',
         version: 1.8,
         position: [1620, 440],
-        credentials: { openAiApi: { id: 'xu8Y1cko7L6LmqMd', name: 'OpenAi account [env-managed]' } },
+        credentials: { openAiApi: { id: 'gwaAgentOpenAi01', name: 'OpenAi — Google Workspace agent [env-managed]' } },
     })
     AnalyseImage = {
         modelId: {
@@ -546,7 +684,7 @@ $input.all()
         type: '@n8n/n8n-nodes-langchain.openAi',
         version: 1.8,
         position: [1620, 620],
-        credentials: { openAiApi: { id: 'xu8Y1cko7L6LmqMd', name: 'OpenAi account [env-managed]' } },
+        credentials: { openAiApi: { id: 'gwaAgentOpenAi01', name: 'OpenAi — Google Workspace agent [env-managed]' } },
     })
     TranscribeAudio = {
         options: {},
@@ -599,8 +737,16 @@ This MCP example is based off an official MCP reference implementation which can
     defineRouting() {
         this.Filetype.out(0).to(this.ExtractFromPdf.in(0));
         this.Filetype.out(1).to(this.ExtractFromCsv.in(0));
-        this.Filetype.out(2).to(this.AnalyseImage.in(0));
-        this.Filetype.out(3).to(this.TranscribeAudio.in(0));
+        this.Filetype.out(2).to(this.CheckAgentKeyImage.in(0));
+        this.CheckAgentKeyImage.out(0).to(this.IfAgentKeySetImage.in(0));
+        this.IfAgentKeySetImage.out(0).to(this.ResumeFileImage.in(0));
+        this.IfAgentKeySetImage.out(1).to(this.AgentAiOffResponse.in(0));
+        this.ResumeFileImage.out(0).to(this.AnalyseImage.in(0));
+        this.Filetype.out(3).to(this.CheckAgentKeyAudio.in(0));
+        this.CheckAgentKeyAudio.out(0).to(this.IfAgentKeySetAudio.in(0));
+        this.IfAgentKeySetAudio.out(0).to(this.ResumeFileAudio.in(0));
+        this.IfAgentKeySetAudio.out(1).to(this.AgentAiOffResponse.in(0));
+        this.ResumeFileAudio.out(0).to(this.TranscribeAudio.in(0));
         this.Operation.out(0).to(this.DownloadFile1.in(0));
         this.DownloadFile1.out(0).to(this.Filetype.in(0));
         this.ExtractFromCsv.out(0).to(this.GetCsvResponse.in(0));

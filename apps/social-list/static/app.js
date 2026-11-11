@@ -74,6 +74,7 @@ var binaAsk, binaTell;
     + "@media (pointer:coarse){.bask-btn{height:44px}.bask-field input{height:44px}}"
     + "@media (max-height:399px){.bask{padding:8px}.bask-card{padding:12px}.bask-acts{margin-top:10px}}"   // the side menu's own short frame
     + "#bina-tell{position:fixed;inset-block-end:16px;inset-inline-start:16px;z-index:2147483001;display:grid;gap:8px;max-width:min(420px,calc(100vw - 32px))}"
+    + "#bina-tell[data-at~=top]{inset-block-start:16px;inset-block-end:auto}#bina-tell[data-at~=end]{inset-inline-start:auto;inset-inline-end:16px}"   // where it covers nothing (place())
     + ".btell{--c:var(--ok);padding:10px 14px;border-radius:12px;background:color-mix(in srgb,var(--c) 14%,var(--surface));color:var(--ink);border:1px solid color-mix(in srgb,var(--c) 38%,var(--surface));border-inline-start:4px solid var(--c);font:13px/1.45 var(--font,system-ui,sans-serif);box-shadow:var(--shadow-lg);cursor:pointer;text-align:start}"
     + ".btell.warn{--c:var(--lime)}.btell.bad{--c:var(--red)}"   // --ok and --red, not the bare hues: they are the steps that are lifted on the dark ground
     + ".btell small{display:block;margin-top:2px;font-size:11.5px;color:var(--muted);overflow-wrap:anywhere;unicode-bidi:plaintext}"
@@ -178,6 +179,47 @@ var binaAsk, binaTell;
     });
   };
 
+  // The notice never sits on a control of the page (DGO-618): it keeps its corner while that covers nothing, and
+  // otherwise takes the first corner that does — at every frame size, a desktop window of 380 x 260 included,
+  // where the bottom corner is where a window keeps its buttons. With no corner free at its full width, the corners
+  // again at two thirds and at half of it (a narrower notice fits over a title, beside a window's ✕); with none
+  // free at all, the place that covers fewest.
+  var CONTROLS = "button,a[href],input:not([type=hidden]),select,textarea,summary,[role=button],[tabindex]:not([tabindex='-1'])";
+  function covered(box) {
+    var b = box.getBoundingClientRect(), n = 0;
+    if (b.width < 2 || b.height < 2) return 0;
+    doc.querySelectorAll(CONTROLS).forEach(function (c) {
+      var r = c.getBoundingClientRect();     // the cheap test first: on a screen of thousands of rows most are far away
+      if (Math.min(b.right, r.right) - Math.max(b.left, r.left) <= 1 || Math.min(b.bottom, r.bottom) - Math.max(b.top, r.top) <= 1) return;
+      // inside the notice, in a part of the page made inert (a window the page put over it), or not drawn: not a control here
+      if (box.contains(c) || c.closest("[inert]") || (c.checkVisibility && !c.checkVisibility({ checkVisibilityCSS: true }))) return;
+      n++;
+    });
+    return n;
+  }
+  function put(box, at, w) {
+    if (at) box.setAttribute("data-at", at); else box.removeAttribute("data-at");
+    box.style.maxWidth = w;
+    // a top spot lets go of the bottom, written on the element: a page's own rule that lifts the notice off its bar
+    // (`body:has(…) #bina-tell{inset-block-end:…}`) out-ranks the attribute, and the box stretched to the full height
+    box.style.insetBlockEnd = at.indexOf("top") < 0 ? "" : "auto";
+  }
+  function place(box) {
+    var best = null;
+    ["", "min(280px,calc((100vw - 32px) * .66))", "min(210px,calc((100vw - 32px) * .5))"].some(function (w) {
+      return ["", "end", "top", "top end"].some(function (at) {
+        put(box, at, w);
+        var n = covered(box);
+        if (!best || n < best.n) best = { at: at, w: w, n: n };
+        return n === 0;
+      });
+    });
+    put(box, best.at, best.w);
+  }
+  var placing = 0;
+  function replace() { var box = doc.getElementById("bina-tell"); if (box && box.firstChild) place(box); }
+  window.addEventListener("resize", function () { clearTimeout(placing); placing = setTimeout(replace, 120); });
+
   // The third word is how long the notice stays (ms) — or what more it carries: { ms, more, act, stay }.
   //   more  the service's own sentence, on a line of its own under the notice's words
   //   act   [label, fn] — one way on from the notice (an undo, a refresh): pressing it runs fn and takes the notice down
@@ -194,12 +236,13 @@ var binaAsk, binaTell;
     if (o.act) {
       var go = el("button", "", o.act[0]);
       go.setAttribute("type", "button");
-      go.addEventListener("click", function (e) { e.stopPropagation(); n.remove(); o.act[1](); });
+      go.addEventListener("click", function (e) { e.stopPropagation(); n.remove(); replace(); o.act[1](); });
       n.appendChild(go);
     }
-    n.addEventListener("click", function () { n.remove(); });
+    n.addEventListener("click", function () { n.remove(); replace(); });
     box.appendChild(n);
-    if (!o.stay) setTimeout(function () { n.remove(); }, o.ms || (kind === "bad" ? 9000 : 5200));
+    place(box);
+    if (!o.stay) setTimeout(function () { n.remove(); replace(); }, o.ms || (kind === "bad" ? 9000 : 5200));
     return n;
   };
 })();
@@ -235,6 +278,9 @@ const TOS = { ban: ['התקנון אוסר אוטומציה', 'plain'], risk: ['
 const ANS = { yes: [ic('check'), 'm-yes', 'נתמך'], limited: ['חלקי', 'm-limited', 'חלקי'], no: ['—', 'm-no', 'עוד לא'] };
 const STATE_HE = { queued: 'בתור', running: 'רץ', ok: 'בוצע', error: 'נכשל', cancelled: 'בוטל',
   needs_verification: 'דורש הרצה בנוכחות', assert_failed: 'לא אומת' };
+// each state's chip, in the palette's legend: in motion is sky, done olive, a person violet, a stop grey —
+// «בתור», «רץ» and «בוטל» were drawn as «נכשל» (plum), the one colour that says it failed (DGO-1593)
+const STATE_CHIP = { queued: 'run', running: 'run', ok: 'ok', cancelled: 'plain', needs_verification: 'owner' };
 const PROBE_HE = { ok: ['מחובר', 'ok'], needs_action: ['דורש טיפול', 'owner'], unsupported: ['חיבור קריאה מוגבל', 'plain'], error: ['שגיאה', 'bad'] };
 const errText = (b) => (b && (b.error || b.message)) || 'הפעולה נכשלה';
 const fmtAgo = (ts) => { if (!ts) return ''; const s = Math.max(0, Date.now() / 1000 - (typeof ts === 'number' ? ts : Date.parse(ts) / 1000));
@@ -432,7 +478,7 @@ function actList(rows) {
   if (!rows.length) return '<div class="empty">עוד לא בוצעה פעולה.</div>';
   const ops = (S.ov && S.ov.ops) || {};
   return `<div class="plan">${rows.map((x) => `<div class="pi" style="grid-template-columns:auto minmax(0,1fr) auto">
-    ${chip(STATE_HE[x.state] || x.state, x.state === 'ok' ? 'ok' : x.state === 'needs_verification' ? 'owner' : 'bad', x.state)}
+    ${chip(STATE_HE[x.state] || x.state, STATE_CHIP[x.state] || 'bad', x.state)}
     <div style="min-width:0"><div class="c">${esc((ops[x.op] || {}).he || x.op)} ${x.summary ? `· <span class="note">${esc(x.summary)}</span>` : ''}</div>
       <div class="w">${esc(KIND_HE[x.kind] || x.kind)} · ${esc(x.actor && x.actor.startsWith('digital-assets') ? 'נכסים דיגיטליים' : x.actor === 'owner' ? 'הבעלים' : x.actor || '')}
       ${x.result && x.result.error ? ` · ${esc(x.result.error)}` : ''}</div></div>

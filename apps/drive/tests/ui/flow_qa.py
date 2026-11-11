@@ -75,8 +75,9 @@ def check(name, ok, got=""):
 
 
 def ready(pg):
-    pg.wait_for_function("(() => { const r = F.state.route, l = F.state.list;"
-                         " return l.key === [r.view, r.id || '', r.q || ''].join('\\u241f') && !l.loading; })()", timeout=15000)
+    # the page's own key for the route (F.data.keyOf), never a copy of it (layout_qa.py says why)
+    pg.wait_for_function("(() => { const l = F.state.list;"
+                         " return l.key === F.data.keyOf(F.state.route) && !l.loading; })()", timeout=15000)
     pg.wait_for_timeout(200)
 
 
@@ -152,8 +153,10 @@ def mouse(b, url):
     check("Escape closes the menu", pg.locator(".menu").count() == 0)
     check("…and the mark goes with it", "ctx" not in (row_of(pg, "פרויקטים").get_attribute("class") or ""))
 
-    row_of(pg, "מסמכים").click(modifiers=["Control"])
-    row_of(pg, "פרויקטים").click(modifiers=["Control"])
+    # the platform's own key, as a person presses it: Ctrl, and ⌘ on a Mac — where Ctrl+click IS a right-click
+    # and opened the item's menu, whose scrim then took the next click (DGO-1582); views.js takes either
+    row_of(pg, "מסמכים").click(modifiers=["ControlOrMeta"])
+    row_of(pg, "פרויקטים").click(modifiers=["ControlOrMeta"])
     check("ctrl+click selects one by one", sel(pg) == 2, sel(pg))
     row_of(pg, "פרויקטים").locator(".rowact").click()
     n = pg.evaluate("() => F.state.menu && F.state.menu.items.length")

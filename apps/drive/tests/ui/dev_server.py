@@ -12,6 +12,24 @@ import sys
 HERE = os.path.dirname(os.path.abspath(__file__))
 STATIC = os.path.normpath(os.path.join(HERE, "..", "..", "static"))
 MOCK = os.path.join(HERE, "mock.js")
+
+# «התחברות עם Google» without Google (accounts.js): the window the screen opens is this stand-in — a
+# simulation that says it is one — and it comes back to the return page the way the relay does
+# (connections /oauth/relay → app.py oauth_google_return), telling the opener which account it made.
+CONSENT = """<!doctype html><html lang="he" dir="rtl"><meta charset="utf-8"><title>חלון ההסכמה — סימולציה</title>
+<body style="font:14px system-ui;margin:24px;max-width:420px"><h1 style="font-size:17px">חלון ההסכמה (סימולציה)</h1>
+<p>בהדגמה אין Google. כאן בוחרים איזה חשבון מחברים — בלשכה האמיתית זה החלון של Google עצמו.</p>
+<p><button id="ok" type="button">אישור · person33@example.com</button> <button id="no" type="button">ביטול</button></p>
+<script>var ret=new URLSearchParams(location.search).get("ret")||"/oauth/google/return";
+document.getElementById("ok").onclick=function(){location.href=ret+"?code=demo&state=r1.demo";};
+document.getElementById("no").onclick=function(){location.href=ret+"?error=access_denied&state=r1.demo";};</script></body></html>"""
+RETURN = """<!doctype html><html lang="he" dir="rtl"><meta charset="utf-8"><title>חזרה מההתחברות</title>
+<body style="font:14px system-ui;margin:24px"><b id="t">…</b><script>
+var q=new URLSearchParams(location.search),ok=!!q.get("code"),made=[];
+try{if(ok&&window.opener&&window.opener.__mockGoogleConnected)made=window.opener.__mockGoogleConnected("person33@example.com");}catch(e){}
+document.getElementById("t").textContent=ok?"החשבון חובר":"ההתחברות בוטלה";
+try{window.opener&&window.opener.postMessage({type:"dgo:oauth",ok:ok,made:made,error:ok?"":"ההתחברות בוטלה"},location.origin);}catch(e){}
+if(window.opener&&ok)setTimeout(function(){window.close();},1200);</script></body></html>"""
 mimetypes.add_type("text/javascript", ".mjs")
 mimetypes.add_type("text/javascript", ".js")
 
@@ -34,6 +52,10 @@ class Handler(http.server.BaseHTTPRequestHandler):
         if path == "/__mock.js":
             with open(MOCK, "rb") as f:
                 return self._send(f.read(), "text/javascript; charset=utf-8")
+        if path == "/__mock-google":
+            return self._send(CONSENT.encode("utf-8"), "text/html; charset=utf-8")
+        if path == "/oauth/google/return":
+            return self._send(RETURN.encode("utf-8"), "text/html; charset=utf-8")
         local = os.path.normpath(os.path.join(STATIC, path.lstrip("/")))
         if local.startswith(STATIC) and os.path.isfile(local):
             with open(local, "rb") as f:

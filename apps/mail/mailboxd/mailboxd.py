@@ -3,7 +3,7 @@
 
 Adding a mailbox is one line in `postfix-accounts.cf`:
 
-    person88@example.com|{SHA512-CRYPT}$6$…
+    person94@example.com|{SHA512-CRYPT}$6$…
 
 and that is the whole of "a new person in this company gets an address" — no DNS, no certificate,
 no restart, because the company's domain records already exist (ai/context/mail-multi-tenant.md).
@@ -37,7 +37,8 @@ This process has no traefik labels, no published port, no authentication of its 
 none: nothing outside the docker network can address it. It never accepts a path, a filename or a
 shell fragment from its caller — the only file it will ever open is `$MAILBOXD_CFG/postfix-accounts.cf`,
 composed here from a constant. Its whole vocabulary is list / create / delete, and every mutation
-is validated against the ONE domain this deployment serves before it touches disk.
+is validated against the domains this deployment SERVES before it touches disk — `MAIL_DOMAIN` plus
+whatever `MAIL_DOMAINS` adds (a company whose own domain's MX also points at this machine).
 
 ── why it runs the mailserver image ──────────────────────────────────────────────────────────────
 The password hash must come from the very Dovecot that will verify it — `mailserver-init` already
@@ -108,6 +109,22 @@ SETTLE = 20
 NUDGE_MARK = "# mailboxd: regenerate "
 
 MAIL_DOMAIN = (os.environ.get("MAIL_DOMAIN") or "local.test").strip().lower()
+# Every domain this deployment SERVES — MAIL_DOMAIN first, then whatever `MAIL_DOMAINS` adds.
+#
+# The guard used to be `dom != MAIL_DOMAIN` on the premise, written out in create_mailbox(), that
+# "MX points at this machine for exactly one domain". That premise is a property of the DEPLOYMENT,
+# not of the code: a company whose own address (person3@example.com) lists this machine as
+# its MX has a second domain here, and refusing it produced exactly the failure the guard was
+# written to prevent — an address that exists at the provider and is a black hole in the world.
+# So the guard stays, and what it compares against is now declared: MAIL_DOMAIN is always served,
+# MAIL_DOMAINS names the rest (comma- or space-separated).
+def served_domains():
+    out = [MAIL_DOMAIN]
+    for d in re.split(r"[,;\s]+", (os.environ.get("MAIL_DOMAINS") or "")):
+        d = d.strip().lower()
+        if d and d not in out:
+            out.append(d)
+    return out
 # The account mailapi itself authenticates as. It is not a mailbox like the others: deleting it
 # does not remove a person, it disconnects the mail application from its own server.
 #
@@ -383,26 +400,34 @@ def list_mailboxes():
             "maildir_exists": exists,
             "size_bytes": _dir_bytes(md) if exists else 0,
         })
-    return {"domain": MAIL_DOMAIN, "primary": PRIMARY, "mailboxes": out, "count": len(out)}
+    return {"domain": MAIL_DOMAIN, "domains": served_domains(), "primary": PRIMARY,
+            "mailboxes": out, "count": len(out)}
 
 
 def create_mailbox(body):
     local = (body.get("local") or "").strip().lower()
     address = (body.get("address") or "").strip().lower()
-    if address and not local:
+    dom = ""
+    if address:
         local, _, dom = address.partition("@")
-        # A mailbox on another domain would be accepted here and then never receive anything: MX
-        # points at this machine for exactly one domain. Refusing is the honest answer; creating it
-        # would produce an address that looks live on the screen and is a black hole in the world.
-        if dom and dom != MAIL_DOMAIN:
-            return {"error": "הדומיין %s אינו של השרת הזה — תיבות נוצרות כאן רק ב-%s" % (dom, MAIL_DOMAIN)}, 400
+    elif "@" in local:
+        local, _, dom = local.partition("@")
+    # A mailbox on a domain this machine does not serve would be accepted here and then never
+    # receive anything: nothing points its MX here. Refusing is the honest answer; creating it would
+    # produce an address that looks live on the screen and is a black hole in the world. What counts
+    # as "served" is DECLARED (`MAIL_DOMAINS`), never inferred: a company's own domain lists this
+    # machine as its MX, and that is the whole reason the list exists.
+    if dom and dom not in served_domains():
+        hosts = served_domains()
+        said = hosts[0] if len(hosts) == 1 else " או ".join(hosts)
+        return {"error": "הדומיין %s אינו של השרת הזה — תיבות נוצרות כאן רק ב-%s" % (dom, said)}, 400
     if not LOCAL_RE.match(local):
         return {"error": "שם תיבה לא תקין — אותיות לטיניות קטנות, ספרות, נקודה, מקף וקו תחתון; "
                          "בקצוות אות או ספרה"}, 400
     pw = body.get("password") or ""
     if len(pw) < MIN_PW:
         return {"error": SHORT_PW, "min": MIN_PW}, 400
-    addr = "%s@%s" % (local, MAIL_DOMAIN)
+    addr = "%s@%s" % (local, dom or MAIL_DOMAIN)
     with _lock:
         lines = _read_lines()
         if any(a == addr for a, _h in _entries()):

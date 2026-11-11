@@ -1,0 +1,388 @@
+# apps/digital-assets/content/topics.yaml — the topics log (DGO-818, seo-1010)
+#
+# Every new subject the business could write about, from where it was said, in the words it was said in:
+#   the owner's messages, a user's question, a Search Console query, something seen in the field.
+# The owner, 2026-10-19 (DGO-659): «think out of the box and scan each thing I say and try to create more stuff
+# around it». So nothing he says about a subject is left in a chat: it is an entry here, and each entry ends as a
+# work item, or is declined with its reason.
+#
+# HOW AN ENTRY IS ADDED (any agent of the office, any writer):
+#   1. Append an entry with the next id, `state: open`, and the words verbatim (quote marks as they were said).
+#   2. Open its item: ./bbox project-pln tasks new DGO "<a name for the subject>" --comment "<the words>"
+#      (or attach it to the item that already covers it), then set `item:` and `state: item`.
+#   3. Never edit `words` after the fact, and never delete an entry: a subject not taken is `state: declined`
+#      with `why:`.
+# `python3 apps/digital-assets/content/topics.py` lists the open entries (what is still to become an item), and
+# `topics.py --check` refuses a log that breaks these rules (exit 1).
+#
+# Fields: id (tNNN, never reused) · date · source: owner | user | search | field · where (the item, meeting or
+# query it came from) · words · item (DGO-NNN once it has one) · state: open | item | declined · why (declined).
+#
+# The first 52 entries are the owner's SEO request of 2026-10-19 (DGO-659), each the line plans/seo.yaml quotes
+# as its «מקור», with the item it became.
+
+topics:
+  - id: t001
+    date: 2026-10-19
+    source: owner
+    where: DGO-659
+    words: "we today released the version, the first version of DGO under AGPL license, V3 license ... It can be run on local hardware and on remote hardware"
+    item: DGO-661       # seo-002
+    state: item
+  - id: t002
+    date: 2026-10-19
+    source: owner
+    where: DGO-659
+    words: "every layer should be perfect for itself. So after the second layer, we should have all the text already"
+    item: DGO-664       # seo-005
+    state: item
+  - id: t003
+    date: 2026-10-19
+    source: owner
+    where: DGO-659
+    words: "Really don't waste anybody's time ... just make sure it's not lying"
+    item: DGO-665       # seo-006
+    state: item
+  - id: t004
+    date: 2026-10-19
+    source: owner
+    where: DGO-659
+    words: "outline the whole mental image or the whole diaspora of Israeli SEO, and DGO related, and naming and everything we can relate to"
+    item: DGO-667       # seo-101
+    state: item
+  - id: t005
+    date: 2026-10-19
+    source: owner
+    where: DGO-659
+    words: "deep think about everything that Israelis are looking right now"
+    item: DGO-668       # seo-102
+    state: item
+  - id: t006
+    date: 2026-10-19
+    source: owner
+    where: DGO-659
+    words: "We should like collect maybe 30-35 open source projects that are related"
+    item: DGO-669       # seo-103
+    state: item
+  - id: t007
+    date: 2026-10-19
+    source: owner
+    where: DGO-659
+    words: "we should find 200 other business related content creating related, maybe CAD, open source CAD"
+    item: DGO-670       # seo-104
+    state: item
+  - id: t008
+    date: 2026-10-19
+    source: owner
+    where: DGO-659
+    words: "try to relate ourselves to products like us, okay, that were successful and the SEO they did"
+    item: DGO-671       # seo-105
+    state: item
+  - id: t009
+    date: 2026-10-19
+    source: owner
+    where: DGO-659
+    words: "which websites currently in Israel are populated, maybe 200 most related popular websites"
+    item: DGO-672       # seo-106
+    state: item
+  - id: t010
+    date: 2026-10-19
+    source: owner
+    where: DGO-659
+    words: "map out all Israeli banks, all Israeli software all Israeli bank services"
+    item: DGO-673       # seo-107
+    state: item
+  - id: t011
+    date: 2026-10-19
+    source: owner
+    where: DGO-659
+    words: "The big retailers Rami Levy and Shufersal and all of this, that provide online purchasing"
+    item: DGO-675       # seo-109
+    state: item
+  - id: t012
+    date: 2026-10-19
+    source: owner
+    where: DGO-659
+    words: "where you make all all the digital processes that can happen and that are provided online"
+    item: DGO-676       # seo-110
+    state: item
+  - id: t013
+    date: 2026-10-19
+    source: owner
+    where: DGO-659
+    words: "Official offices in Israel, all the embassies, all the physical offices, that where you get all the password"
+    item: DGO-677       # seo-111
+    state: item
+  - id: t014
+    date: 2026-10-19
+    source: owner
+    where: DGO-659
+    words: "All should be very organized inside our website ... make sure you make like it separated properly"
+    item: DGO-679       # seo-113
+    state: item
+  - id: t015
+    date: 2026-10-19
+    source: owner
+    where: DGO-659
+    words: "we should think also in other areas like cloud infrastructure"
+    item: DGO-680       # seo-114
+    state: item
+  - id: t016
+    date: 2026-10-19
+    source: owner
+    where: DGO-659
+    words: "against Claude, against Google Cloud, Gemini, OpenAI, like Dots, Muse, like try really to collect all high SEO and maybe even less known stuff"
+    item: DGO-681       # seo-115
+    state: item
+  - id: t017
+    date: 2026-10-19
+    source: owner
+    where: DGO-659
+    words: "Our website should be scanned for emojis or any deep thing on things that make websites look cheap"
+    item: DGO-682       # seo-201
+    state: item
+  - id: t018
+    date: 2026-10-19
+    source: owner
+    where: DGO-659
+    words: "just make sure it's not lying"
+    item: DGO-683       # seo-202
+    state: item
+  - id: t019
+    date: 2026-10-19
+    source: owner
+    where: DGO-659
+    words: "don't delete stuff, just make them better"
+    item: DGO-684       # seo-203
+    state: item
+  - id: t020
+    date: 2026-10-19
+    source: owner
+    where: DGO-659
+    words: "everything should be Hebrew first, but initially in both languages, English and Hebrew, but starting with Hebrew"
+    item: DGO-686       # seo-205
+    state: item
+  - id: t021
+    date: 2026-10-19
+    source: owner
+    where: DGO-659
+    words: "it should be like properly branded like it is right now"
+    item: DGO-689       # seo-208
+    state: item
+  - id: t022
+    date: 2026-10-19
+    source: owner
+    where: DGO-659
+    words: "From the 35 selected, we should have maybe 2,000 words on each ... what should people want to know"
+    item: DGO-690       # seo-300
+    state: item
+  - id: t023
+    date: 2026-10-19
+    source: owner
+    where: DGO-659
+    words: "500 for 200 open source other projects"
+    item: DGO-727       # seo-400
+    state: item
+  - id: t024
+    date: 2026-10-19
+    source: owner
+    where: DGO-659
+    words: "maybe CAD, open source CAD"
+    item: DGO-728       # seo-401
+    state: item
+  - id: t025
+    date: 2026-10-19
+    source: owner
+    where: DGO-659
+    words: "Now there is a lot of new software for all Photoshop or open source alternative popping up"
+    item: DGO-729       # seo-402
+    state: item
+  - id: t026
+    date: 2026-10-19
+    source: owner
+    where: DGO-659
+    words: "exactly what should be told to Claude and how Claude should operate when he's told to install DGO"
+    item: DGO-749       # seo-501
+    state: item
+  - id: t027
+    date: 2026-10-19
+    source: owner
+    where: DGO-659
+    words: "Just like give them the context on how to operate and make yourself related to them like online"
+    item: DGO-753       # seo-505
+    state: item
+  - id: t028
+    date: 2026-10-19
+    source: owner
+    where: DGO-659
+    words: "you can deep research on the triangle connection we're doing. So this kind of way you can run open source wherever you want and access them wherever you want"
+    item: DGO-757       # seo-509
+    state: item
+  - id: t029
+    date: 2026-10-19
+    source: owner
+    where: DGO-659
+    words: "maybe one small VPS to let all the apps connect all the and share"
+    item: DGO-758       # seo-510
+    state: item
+  - id: t030
+    date: 2026-10-19
+    source: owner
+    where: DGO-659
+    words: "how to have private agents running"
+    item: DGO-759       # seo-511
+    state: item
+  - id: t031
+    date: 2026-10-19
+    source: owner
+    where: DGO-659
+    words: "how to run agents for private GPUs. So using Olama, all of that stuff"
+    item: DGO-760       # seo-512
+    state: item
+  - id: t032
+    date: 2026-10-19
+    source: owner
+    where: DGO-659
+    words: "Hebrew day-to-day challenges, people like let's say paying bills, maybe using the browser inside DGO"
+    item: DGO-766       # seo-601
+    state: item
+  - id: t033
+    date: 2026-10-19
+    source: owner
+    where: DGO-659
+    words: "we have a big solution for everything related to accounting and document processing"
+    item: DGO-767       # seo-602
+    state: item
+  - id: t034
+    date: 2026-10-19
+    source: owner
+    where: DGO-659
+    words: "how to get a full automation in documents using DGO and the incoming documents application inside DGO"
+    item: DGO-768       # seo-603
+    state: item
+  - id: t035
+    date: 2026-10-19
+    source: owner
+    where: DGO-659
+    words: "how to make advertisements from DGO"
+    item: DGO-769       # seo-604
+    state: item
+  - id: t036
+    date: 2026-10-19
+    source: owner
+    where: DGO-659
+    words: "how to project management like from A to Z"
+    item: DGO-770       # seo-605
+    state: item
+  - id: t037
+    date: 2026-10-19
+    source: owner
+    where: DGO-659
+    words: "we can also talk about online purchasing using the browser, using using DGO"
+    item: DGO-771       # seo-606
+    state: item
+  - id: t038
+    date: 2026-10-19
+    source: owner
+    where: DGO-659
+    words: "how it can lower the cost of software from hundreds of thousands of dollars to basic hardware cost"
+    item: DGO-775       # seo-610
+    state: item
+  - id: t039
+    date: 2026-10-19
+    source: owner
+    where: DGO-659
+    words: "So how to move from Lovable to DGO"
+    item: DGO-782       # seo-701
+    state: item
+  - id: t040
+    date: 2026-10-19
+    source: owner
+    where: DGO-659
+    words: "or how to move from Base 44"
+    item: DGO-783       # seo-702
+    state: item
+  - id: t041
+    date: 2026-10-19
+    source: owner
+    where: DGO-659
+    words: "or anti-gravity, all of this stuff also"
+    item: DGO-784       # seo-703
+    state: item
+  - id: t042
+    date: 2026-10-19
+    source: owner
+    where: DGO-659
+    words: "always reference back to Bina Solutions as the company providing DGO"
+    item: DGO-792       # seo-801
+    state: item
+  - id: t043
+    date: 2026-10-19
+    source: owner
+    where: DGO-659
+    words: "So that SEO and connection between websites is also very important"
+    item: DGO-793       # seo-802
+    state: item
+  - id: t044
+    date: 2026-10-19
+    source: owner
+    where: DGO-659
+    words: "make yourself related to them like online. So this is like really, this is like a big push toward being recognized"
+    item: DGO-799       # seo-808
+    state: item
+  - id: t045
+    date: 2026-10-19
+    source: owner
+    where: DGO-659
+    words: "And maybe only after that we will be able to maybe for some stuff add generate automated video or screen recording"
+    item: DGO-801       # seo-901
+    state: item
+  - id: t046
+    date: 2026-10-19
+    source: owner
+    where: DGO-659
+    words: "demonstrating stuff the Rami Levy purchase"
+    item: DGO-802       # seo-902
+    state: item
+  - id: t047
+    date: 2026-10-19
+    source: owner
+    where: DGO-659
+    words: "updates on any of the open source projects that are going out. So what are the new features? What are the big updates?"
+    item: DGO-809       # seo-1001
+    state: item
+  - id: t048
+    date: 2026-10-19
+    source: owner
+    where: DGO-659
+    words: "and on automation regulation and legal stuff and everything"
+    item: DGO-811       # seo-1003
+    state: item
+  - id: t049
+    date: 2026-10-19
+    source: owner
+    where: DGO-659
+    words: "Physical company and interfaces of different stuff"
+    item: DGO-812       # seo-1004
+    state: item
+  - id: t050
+    date: 2026-10-19
+    source: owner
+    where: DGO-659
+    words: "benchmarking in Hebrew models"
+    item: DGO-813       # seo-1005
+    state: item
+  - id: t051
+    date: 2026-10-19
+    source: owner
+    where: DGO-659
+    words: "And best practices and everything that can be followed"
+    item: DGO-814       # seo-1006
+    state: item
+  - id: t052
+    date: 2026-10-19
+    source: owner
+    where: DGO-659
+    words: "think out of the box and scan each thing I say and try to create more stuff around it"
+    item: DGO-818       # seo-1010
+    state: item

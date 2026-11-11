@@ -14,7 +14,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/solomonBoltin/deployment-hacohen/packaging/trust"
+	"github.com/bina-solution/digital-office/packaging/trust"
 )
 
 // now is the signing clock of every test: relsign takes it as an argument, so a test is deterministic.

@@ -359,23 +359,128 @@ def docker_ts(prefix: str) -> float | None:
         return None
 
 
+# ── traefik's own lines about certificates ──────────────────────────────────────────────────────
+# Let's Encrypt's validation is NOT in the edge's ACCESS log: traefik 3.3 answers
+# `/.well-known/acme-challenge/…` from its internal ACME handler and writes no access line for it
+# (measured on the HP, 2026-11-09: the request answered 404 and the access log had nothing). What it
+# does write is the provider's own line on stdout —
+#   ERR  Cannot retrieve the ACME challenge for console.localhost (token "…")  providerName=acme
+#   ERR  Unable to obtain ACME certificate for domains … error="… 400 :: POST :: https://acme-v02…
+# — and the app tails that same stream. Until DGO-1597 those lines were dropped, so a renewal that was
+# failing (three domains on Exampleu) was invisible. They are coloured (ANSI) and logfmt-shaped.
+_ANSI = re.compile(r"\x1b\[[0-9;]*m")
+_ACME_WORDS = ("acme", "challenge", "certificate")
+_LOG_TAG = re.compile(r"^\d{4}-\d\d-\d\dT[\d:.]+Z?\s+(?P<level>TRC|DBG|INF|WRN|ERR|FTL)\s+(?P<msg>.*)$")
+_PROVIDER = re.compile(r"providerName=(?P<provider>[^\s\]]+)")
+
+
+def traefik_acme(line: str) -> dict | None:
+    """A traefik line about a certificate → {level, message, provider, domain, token}, or None.
+
+    Only the certificate provider's lines: an access-log line is `clf_line`'s, and every other message
+    traefik writes is none of this app's business.
+    """
+    text = _ANSI.sub("", line or "").strip()
+    m = _LOG_TAG.match(text)
+    if not m:
+        return None
+    msg = m.group("msg").strip()
+    low = msg.lower()
+    if not any(w in low for w in _ACME_WORDS):
+        return None
+    if "acme" not in low and "providerName=acme" not in text:
+        return None
+    provider = _PROVIDER.search(text)
+    domain = re.search(r"for (?:domains )?(?:\[)?([a-z0-9*.-]+\.[a-z]{2,})", low)
+    token = re.search(r'token\s+"?([^"\s\]]+)', low)
+    return {"level": {"TRC": "info", "DBG": "info", "INF": "info", "WRN": "warn", "ERR": "error", "FTL": "error"}[m.group("level")],
+            "message": msg[:300], "provider": (provider.group("provider") if provider else ""),
+            "domain": (domain.group(1) if domain else ""), "token": (token.group(1) if token else "")}
+
+
 # ── sshd ─────────────────────────────────────────────────────────────────────────────────────────
+# The PORT is captured in every rule on purpose. One attempt at one connection is written by sshd as
+# TWO lines — «Invalid user x from 93.184.216.7 port 51234» and then «Failed password for invalid user x from
+# 93.184.216.7 port 51234 ssh2» (or «Connection closed by invalid user …») — and both carry the same port
+# because they are the same socket. Measured 2026-11-09 (DGO-1590): without it one attempt counted twice,
+# so the sshd jail's 5 failures were really 2½ attempts and every try showed twice on the screen.
+# `how` also carries the REASON of a failure (invalid-user, the method it tried, preauth): the item asks
+# that every failed sign-in is itemized with its source and its reason, and a row that says «fail» only
+# is not itemized.
 _SSH_RULES = [
-    ("ok", re.compile(r"^Accepted (?P<how>\S+) for (?P<user>\S+) from (?P<ip>\S+) port \d+(?: ssh2(?:: (?P<keytype>\S+) (?P<fp>SHA256:\S+))?)?")),
-    ("fail", re.compile(r"^Invalid user (?P<user>\S*) from (?P<ip>\S+) port \d+")),
-    ("fail", re.compile(r"^Failed (?P<how>\S+) for (?:invalid user )?(?P<user>\S+) from (?P<ip>\S+) port \d+")),
-    ("fail", re.compile(r"^Connection closed by (?:authenticating|invalid) user (?P<user>\S*) (?P<ip>\S+) port \d+ \[preauth\]")),
-    ("fail", re.compile(r"^Disconnected from (?:authenticating|invalid) user (?P<user>\S*) (?P<ip>\S+) port \d+ \[preauth\]")),
-    ("fail", re.compile(r"^banner exchange: Connection from (?P<ip>\S+) port \d+: invalid format")),
-    ("fail", re.compile(r"^Unable to negotiate with (?P<ip>\S+) port \d+")),
-    ("probe", re.compile(r"^Connection closed by (?P<ip>\S+) port \d+ \[preauth\]")),
-    ("probe", re.compile(r"^Connection closed by (?P<ip>\S+) port \d+$")),
+    ("ok", re.compile(r"^Accepted (?P<how>\S+) for (?P<user>\S+) from (?P<ip>\S+) port (?P<port>\d+)(?: ssh2(?:: (?P<keytype>\S+) (?P<fp>SHA256:\S+))?)?")),
+    ("fail", re.compile(r"^Invalid user (?P<user>\S*) from (?P<ip>\S+) port (?P<port>\d+)")),
+    ("fail", re.compile(r"^Failed (?P<how>\S+) for (?:invalid user )?(?P<user>\S+) from (?P<ip>\S+) port (?P<port>\d+)")),
+    ("fail", re.compile(r"^Connection closed by (?P<how>authenticating|invalid) user (?P<user>\S*) (?P<ip>\S+) port (?P<port>\d+) \[preauth\]")),
+    ("fail", re.compile(r"^Disconnected from (?P<how>authenticating|invalid) user (?P<user>\S*) (?P<ip>\S+) port (?P<port>\d+) \[preauth\]")),
+    ("fail", re.compile(r"^banner exchange: Connection from (?P<ip>\S+) port (?P<port>\d+): invalid format")),
+    ("fail", re.compile(r"^Unable to negotiate with (?P<ip>\S+) port (?P<port>\d+)")),
+    ("probe", re.compile(r"^Connection closed by (?P<ip>\S+) port (?P<port>\d+) \[preauth\]")),
+    ("probe", re.compile(r"^Connection closed by (?P<ip>\S+) port (?P<port>\d+)$")),
 ]
+#: The reason for the lines that name none themselves — they say it in what they lead with.
+_SSH_DEFAULT_HOW = (("Invalid user", "invalid-user"), ("banner exchange", "banner"),
+                    ("Unable to negotiate", "protocol"), ("Connection closed by", "preauth"),
+                    ("Disconnected from", "preauth"))
+
+
+#: THE PROVIDER'S HAND INSIDE THE MACHINE (DGO-1646). The QEMU guest agent runs what the hypervisor sends
+#: it, as root, and it never crosses the network, so no flow or edge log can show it. It does write each
+#: call to the journal. Measured on Hostinger's servers on 2026-11-09:
+#:   - an hourly telemetry script written into /, run and deleted (`guest-file-open … mode: w`, then
+#:     `guest-exec called: "… /.hstgr-…usage-telemetry.py"`);
+#:   - a listing of every process's command line;
+#:   - fstrim and the disk's provisioning mode;
+#:   - a freeze for snapshots.
+#: What QEMU's agent writes is what it logs (qga/commands-posix.c): exec with its command line, and file-open
+#: with the path and the mode. It writes nothing for setting a password or for the SSH-key calls, so no
+#: rule here pretends to catch those. Watching the files they change is the auditd item (DGO-1659).
+_QGA_EXEC = re.compile(r'^info: guest-exec called: "(?P<d>.*)"\s*$', re.S)
+_QGA_FILE = re.compile(r"^info: guest-file-open called, filepath: (?P<d>.+?), mode: (?P<m>\S+)\s*$", re.S)
+_QGA_FREEZE = re.compile(r"^info: guest-fsfreeze(?:-freeze)? called(?P<d>.*)$", re.S)
+#: A sign-in at the console (the provider's VNC or serial screen), which never passes through sshd. ONE
+#: line per sign-in: util-linux writes «ROOT LOGIN ON tty1», shadow writes «ROOT LOGIN  on '/dev/tty1'»;
+#: both also write a pam_unix line, which is not counted, so a sign-in is never counted twice.
+_CONSOLE = re.compile(r"^(?:ROOT LOGIN|LOGIN)\s+on\s+'?(?:/dev/)?(?P<tty>[^\s']+)'?(?:\s+by\s+'?(?P<user>[^\s']+)'?)?",
+                      re.I)
+#: what may never be shown or kept of a command line: a value after `=`, a long token, a quoted string
+_SECRETISH = re.compile(r"(=)\S+|\b[A-Za-z0-9+/_-]{24,}={0,2}\b|'[^']{8,}'|\"[^\"]{8,}\"")
+
+
+def redact(cmd: str) -> str:
+    """A command line as the screen may show it: what ran, without any value that could be a secret."""
+    return _SECRETISH.sub(lambda m: (m.group(1) or "") + "…", " ".join(cmd.split()))[:300]
+
+
+def provider_message(msg: str) -> dict | None:
+    """One line of the guest agent's journal as {op, detail}; None for a line that is not a call. A
+    file opened with w, a or + is a write; r alone is a read."""
+    msg = msg.strip()
+    m = _QGA_EXEC.match(msg)
+    if m:
+        return {"op": "exec", "detail": redact(m.group("d"))}
+    m = _QGA_FILE.match(msg)
+    if m:
+        write = any(c in m.group("m") for c in "wa+")
+        return {"op": "file-write" if write else "file-read", "detail": m.group("d")[:300]}
+    m = _QGA_FREEZE.match(msg)
+    if m:
+        return {"op": "freeze", "detail": ""}
+    return None
+
+
+def console_message(msg: str) -> dict | None:
+    """One line of login(1) as {tty, user}; None for a line that is not a sign-in."""
+    m = _CONSOLE.match(msg.strip())
+    if not m:
+        return None
+    return {"tty": m.group("tty") or "", "user": m.group("user") or "root"}
 
 
 def sshd_message(msg: str) -> dict | None:
+    text = msg.strip()
     for verdict, rx in _SSH_RULES:
-        m = rx.match(msg.strip())
+        m = rx.match(text)
         if m:
             g = m.groupdict()
             ip = g.get("ip") or ""
@@ -383,8 +488,13 @@ def sshd_message(msg: str) -> dict | None:
                 ipaddress.ip_address(ip)
             except ValueError:
                 return None
-            return {"verdict": verdict, "ip": ip, "user": g.get("user") or "", "how": g.get("how") or "",
-                    "fp": g.get("fp") or ""}
+            how = g.get("how") or next((v for k, v in _SSH_DEFAULT_HOW if text.startswith(k)), "")
+            try:
+                port = int(g.get("port") or 0)
+            except ValueError:
+                port = 0
+            return {"verdict": verdict, "ip": ip, "user": g.get("user") or "", "how": how,
+                    "fp": g.get("fp") or "", "port": port}
     return None
 
 

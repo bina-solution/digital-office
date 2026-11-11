@@ -378,6 +378,8 @@ func TestReadVerbsMatchPythonOnAFixture(t *testing.T) {
 		".generated/generations/0001/sub/deeper/b":    "x",
 		".generated/generations/0010/x":               "x",
 		".generated/generations/9/x":                  "x",
+		".generated/generations/²/x":                  "x", // isdigit() took it, int() refused it: skipped (DGO-632)
+		".generated/generations/٣/x":                  "x", // int() read it as 3: skipped now, on both sides
 		".generated/generations/notes/x":              "x",
 		".generated/generations/0003":                 "a file named like a generation",
 		".generated/generations/0002/.keep-empty-dir": "",
@@ -518,15 +520,29 @@ func TestReadVerbsStopWherePythonStops(t *testing.T) {
 		argv("office-get"), argv("remote-get"),
 	}
 	agree(t, repo, calls)
-	// a compose that is not a path: reconcile.py's validate() itself dies on it (a TypeError where it
-	// joins the path — Go's Validate reports the type instead), so only the verbs that do not
-	// validate are asked
+	// a compose that is not a path: validate says the type and goes on, on both sides (DGO-612 — reconcile.py
+	// died on it with a TypeError where it joined the path, and this died with it); compose-services, which
+	// reads the file, still stops
 	repo = pyFixture(t, map[string]string{"apps/num/app.json": manifest("num", 3, `"compose":5`)},
 		stateHead+"  num: { enabled: true }\n")
 	agree(t, repo, []call{
+		argv("validate"),
 		argv("required-by", "--app", "num"),
 		{argv: []string{"compose-services", "--app", "num"}, dies: "FATAL num: "},
 	})
+	// …a capability with no name: said by name, not a KeyError (DGO-612)
+	repo = pyFixture(t, map[string]string{"apps/cap/app.json": manifest("cap", 3, `"capabilities":[{"type":"protocol"}]`)},
+		stateHead+"  cap: { enabled: true }\n")
+	agree(t, repo, []call{argv("validate"), argv("required-by", "--app", "cap")})
+	// …and an id YAML does not read as text: the state's `on:` is the key True and `null:` the key None, so the
+	// id is refused by name — and required-by, which does not validate, reads neither key as an app on either side
+	for _, id := range []string{"on", "true", "null"} {
+		repo = pyFixture(t, map[string]string{
+			"apps/" + id + "/app.json": manifest(id, 3, `"use":[{"capability":"sql"}]`),
+			"apps/db/app.json":         manifest("db", 3, `"capabilities":[{"name":"sql","type":"protocol"}]`),
+		}, stateHead+"  "+id+": { enabled: true }\n  db: { enabled: true }\n")
+		agree(t, repo, []call{argv("validate"), argv("required-by", "--app", "db")})
+	}
 }
 
 // TestReadVerbsWithoutAStateFile: a checkout that has compiled before and lost its state file. The

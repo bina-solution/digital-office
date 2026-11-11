@@ -29,6 +29,11 @@ import subprocess
 import sys
 from pathlib import Path
 
+# G10: this file holds Hebrew (in its comments, and in what it may quote back from a screen); python on Windows would
+# write any of it in the console's codepage and die on its own output.
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+
 ROOT = Path(__file__).resolve().parents[2]
 SOURCE = ROOT / "platform-base/bina-ui/theme-tokens.css"
 
@@ -48,6 +53,16 @@ END = "/* @bina-theme-tokens:end */"
 TARGETS = [
     "platform-base/console/static/style.css",
     "platform-base/bina-ui/bina-ui.css",
+    # [2026-11-10] esign's screen (DGO-1631, hp-dgo), taken by the release (DGO-969): it carried the block, unlisted
+    "apps/esign/static/esign.css",
+    # [2026-11-10] hp-dgo's calculator and news screens (DGO-969): they named a palette of their own (G82)
+    "apps/calculator/static/index.html",
+    "apps/newsflow/static/index.html",
+    # …and its terminal (a shell on the office's machines), which named the tokens and carried none of them
+    "apps/terminal/static/style.css",
+    # [2026-11-11] the same screen served by computers itself (DGO-1800: the terminal moves into the app that owns the
+    # key and the caller check); apps/terminal's copy leaves with the app
+    "apps/computers/static/terminal/style.css",
     # [2026-10-01] dgo-extend's pairing screen (DGO-34). A file is a surface whether or not it is an
     # app's `index.html`: connect.html is opened by a person on a machine that is being joined, so it
     # needs the same palette, the same side menu and the same page chrome as every other screen.
@@ -61,18 +76,41 @@ TARGETS = [
     "apps/git/static/index.html",
     "apps/sites/static/index.html",
     "apps/domains/static/index.html",
+    # [2026-11-08] the InterNIC provider app's screen (DGO-1473): the session, the domains, a zone
+    "apps/domain-internic/static/index.html",
     "apps/digital-assets/static/index.html",
     "apps/social-list/static/index.html",
+    # [2026-10-12] the routes screen (DGO-543): what the office answers on, and where.
+    "apps/office-routes/static/index.html",
     "apps/dgo-extend/static/index.html",
-    # [2026-10-22] the field-sales services app of The Fireplace Guys (FPG-15): its one stylesheet
+    # [2026-10-22] the field-sales services app of The Examplef Guys (EXF-15): its one stylesheet
     "apps/chimney-services/static/app.css",
     # [2026-11-01] the caps as digital replicas (DGO-1091): cad-api's gallery and cap pages share one stylesheet
     "apps/cad-api/static/cad.css",
     "apps/telegram-tv/static/style.css",
+    # [2026-11-03] the office's Telegram (DGO-1300): the account, the watched chats, the live stream
+    "apps/telegram/static/index.html",
     # [2026-10-20] The video meetings' own pages (DGO-824, DGO-826): the recordings list, and the
     # page a request without a signed-in person gets. Every other screen there is Jitsi's own.
     "apps/meet/start/recordings.html",
     "apps/meet/start/signin.html",
+    # [2026-11-09] the sign-in app's own pages (DGO-1501): sign-in, the first owner, sign-out, and the
+    # failures a person can meet there. They were the browser's default type on a blank page, because
+    # a Go service "could not read the palette"; it carries its copy here, embedded in its binary.
+    "platform-base/forward-auth/ui/page.css",
+    # [2026-11-10] Examplem's cash flow by date (DGO-1548): the first screen of a client's own system
+    "apps/examplem-io/static/index.html",
+    # [2026-11-10] the group's properties, «מסך אחד» and the property's file (DGO-1529, DGO-1534)
+    "apps/assets/static/index.html",
+    # [2026-11-11] the group's loans on a day and who owes whom — the third app of Exampleu's group (DGO-1782)
+    "apps/loans/static/index.html",
+    # [2026-11-10] the local models' screen, served by the ollama front in place of «Ollama is running» (EXU-21)
+    "apps/ollama/front/index.html",
+    # [2026-11-10] the office's GitHub runner as an app, «מריץ CI» (DGO-1797)
+    "apps/ci-runner/static/index.html",
+    # [2026-11-10] the card over the office browser's screen when it does not connect (DGO-437): drawn inside
+    # noVNC's page, and answered by Caddy when the browser does not answer at all
+    "apps/browser42/viewer/card.css",
     # [2026-10-12] The screens that carry the menu's MARKUP but copied only its stylesheet: they had
     # the component's looks and none of its behaviour, and on a phone that was a 56px rail 127px tall
     # with no way into the menu (the owner's screenshot; `sites`, `domains`, `drive`, `git`,
@@ -110,14 +148,12 @@ TARGETS = [
     # …and INDOX, the one app that is compiled: its sheet said "light-only, deliberately" while the
     # console was, and kept the old palette when the console's changed.
     "apps/indox/app/webapp/src/index.css",
-    # [2026-10-29] the meeting-start "flow" screens (the host door's own pages). Five of them carry
+    # [2026-10-29] the meeting-start "flow" screens (the host door's own pages). Five of them carried
     # the block and were rows of nothing, so the gate said so on every run — the same "a copy nobody
     # keeps" this file exists for, one level up. Listed, not silenced: the copies that had already
     # drifted are reported as drift, and re-syncing them is the meet owner's (`--fix` there).
-    "apps/meet/start/flow/app.css",
+    # [2026-11-05] two remain: the v1 pages (app.css, list.html, live.html) went to legacy/ (DGO-1325).
     "apps/meet/start/flow/bina-ui.css",
-    "apps/meet/start/flow/list.html",
-    "apps/meet/start/flow/live.html",
     "apps/meet/start/flow/mf.css",
 ]
 
@@ -151,6 +187,13 @@ FONT_TARGETS = [
     "apps/computers/static/index.html",
     "apps/git/static/index.html",
     "platform-base/security/static/index.html",
+    "platform-base/forward-auth/ui/page.css",
+    "apps/browser42/viewer/card.css",
+    "apps/ci-runner/static/index.html",
+    # [2026-11-11] the three client screens of Exampleu's group, which used var(--font) and never defined it (DGO-1782)
+    "apps/examplem-io/static/index.html",
+    "apps/assets/static/index.html",
+    "apps/loans/static/index.html",
 ]
 
 
@@ -207,6 +250,7 @@ PAGE_TARGETS: list[str] = [
     # [2026-10-29] …and the meeting-start "flow" pages, whose copies of the chrome were unlisted.
     "apps/meet/start/flow/bina-page.css",
     "apps/meet/start/flow/mf.css",
+    "apps/telegram/static/index.html",   # [2026-11-03] one page, three places (DGO-1300)
 ]
 
 NAV_TARGETS: list[str] = [
@@ -270,19 +314,33 @@ BLOCKS = [
                  "platform-base/console/static/app.js", "platform-base/machine/static/index.html",
                  "platform-base/notifications/static/index.html", "apps/social-list/static/app.js",
                  "apps/digital-assets/static/app.js", "platform-base/connections/ui.html",
+                 "apps/office-routes/static/app.js",
                  "platform-base/app-management/static/app.js", "apps/telegram-tv/static/app.js",
                  "apps/mail/mailview/static/app.js", "apps/chat/src/api/ui/chat.ejs",
                  "apps/dgo-extend/static/app.js", "apps/apitools/feature-validation/api/dashboard.html",
                  "platform-base/security/static/app.js",
                  # [2026-10-29] the meeting-start flow pages ask and report in the page too.
-                 "apps/meet/start/flow/bina-ask.js", "apps/meet/start/flow/mf.js"]},
+                 "apps/meet/start/flow/bina-ask.js", "apps/meet/start/flow/mf.js",
+                 "apps/telegram/static/app.js"]},
     # The office's ONE mark, drawn inline so its three parts wear the palette's tokens (the image
     # files beside the source carry the values, for a favicon and the site). Two screens drew their
     # own copies of it before (the shell, the first-run wizard); the simulator embeds the shell, and
     # the site copies the files — so this is where "the logo, integrated everywhere" is kept true.
     {"name": "the office's mark", "source": "platform-base/bina-ui/brand/mark.html",
      "start": "<!-- @bina-brand:start -->", "end": "<!-- @bina-brand:end -->",
-     "targets": ["platform-base/console/static/index.html", "platform-base/console/static/install.html"]},
+     "targets": ["platform-base/console/static/index.html", "platform-base/console/static/install.html",
+                 # [2026-11-09] the sign-in app's pages wear the mark where the card's icon goes (DGO-1501)
+                 "platform-base/forward-auth/ui/pages.html"]},
+    # THE CARD, AND THE LOGO WALL IT STANDS ON (DGO-1501, 2026-11-09). The card a screen shows when it
+    # has nothing else to show (`.xn`) lived in the console's stylesheet alone; the sign-in app's pages
+    # were unstyled and the link's door drew a card of its own. One card now, stamped from bina-ui. The
+    # console keeps its marker names: app.py `_card` reads the region of style.css called `card`.
+    {"name": "the card", "source": "platform-base/bina-ui/bina-card.css",
+     "start": "/* @card:start */", "end": "/* @card:end */",
+     "targets": ["platform-base/console/static/style.css",
+                 "platform-base/forward-auth/ui/page.css",
+                 "apps/dgo-extend/static/card.css",
+                 "apps/browser42/viewer/card.css"]},
     # A DIALOG, BOUNDED BY ITS WINDOW (2026-10-10). Five surfaces carried their own copy of
     # `.modal-ov/.modal/.modal-h` and they had drifted exactly as one would expect: two
     # (computers, dgo-extend) had already learned that a card taller than the window must scroll
@@ -306,7 +364,10 @@ BLOCKS = [
                  "platform-base/console/static/install.js", "apps/my-docs/static/app.js",
                  "apps/drive/static/app.js", "apps/mail/mailview/static/app.js",
                  "platform-base/connections/ui.html", "apps/apitools/feature-validation/api/dashboard.html",
-                 "platform-base/security/static/app.js"]},
+                 "platform-base/security/static/app.js", "apps/telegram/static/app.js",
+                 "apps/examplem-io/static/index.html", "apps/assets/static/index.html",
+                 "apps/loans/static/index.html", "apps/ollama/front/index.html",
+                 "apps/terminal/static/vendor/bina-said.js", "apps/office-routes/static/app.js"]},
     # There WAS a "the screen in the address bar" block here (`platform-base/bina-ui/bina-route.js`),
     # stamped into each app so it could speak to the console about its route. It is gone: the shell
     # reads the frame's own URL instead (platform-base/console/static/app.js `watchFrameRoute`), so
@@ -325,6 +386,20 @@ VENDORED = ["platform-base/bina-ui/bina-table.js", "platform-base/bina-ui/bina-t
 # favicon. Source -> the copies that must stay byte-identical to it.
 VENDORED_COPIES = {
     "platform-base/bina-ui/brand/favicon.svg": ["platform-base/console/static/favicon.svg"],
+    # the logo wall behind the card (DGO-1501): each surface that draws the card serves it at /bina-wall.svg
+    "platform-base/bina-ui/brand/bina-wall.svg": ["platform-base/console/static/bina-wall.svg",
+                                                   "platform-base/forward-auth/ui/bina-wall.svg",
+                                                   "apps/dgo-extend/static/bina-wall.svg",
+                                                   "apps/browser42/viewer/bina-wall.svg"],
+    # the office's language runtime (DGO-971): «קבצים» serves its copy from its own static root and loads it
+    # by name, and every surface that takes the runtime next is one more line here
+    "platform-base/bina-ui/bina-lang.js": ["apps/drive/static/bina-lang.js"],
+    # the QR code drawn for a pairing (DGO Extend's own page, the dashboard's «add a phone»): one source, both copies
+    # stamped from it — they were two hand copies of one library (the deep scan of 2026-11-10, herd row 1)
+    "platform-base/bina-ui/qrcode/qrcode.min.js": ["apps/dashboard/static/vendor/qrcode/qrcode.min.js",
+                                                   "apps/dgo-extend/static/vendor/qrcode/qrcode.min.js"],
+    "platform-base/bina-ui/qrcode/LICENSE": ["apps/dashboard/static/vendor/qrcode/LICENSE",
+                                            "apps/dgo-extend/static/vendor/qrcode/LICENSE"],
 }
 
 

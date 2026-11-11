@@ -293,7 +293,7 @@ func TestNoProxyReadsLikeNetHTTP(t *testing.T) {
 		{"example.com:8443", "example.com", "8443", true},
 		{" Example.COM , other.net", "example.com", "443", true},
 		{"10.0.0.0/8", "10.1.2.3", "443", true},
-		{"10.0.0.0/8", "93.184.216.20", "443", false},
+		{"10.0.0.0/8", "93.184.216.25", "443", false},
 		{"10.0.0.0/8", "example.com", "443", false},
 		{"10.1.2.3", "10.1.2.3", "443", true},
 		{"10.1.2.3:8443", "10.1.2.3", "443", false},

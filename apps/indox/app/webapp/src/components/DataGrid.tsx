@@ -86,6 +86,11 @@ export type GridFilterValue =
  *  server-side translation, instead of each spelling it out. */
 export const GRID_MONTH_NONE = '__no_date__';
 
+/** The page sizes a grid offers when its page passes none. A page that seeds its size from the
+ *  address takes only one of these (DGO-234: `?size=1000` paged by 1000 over an API capped at 500,
+ *  and rows 500–999 were never shown). apps/indox/tests/test_page_sizes.py reads this list. */
+export const DEFAULT_PAGE_SIZES = [25, 50, 100, 200];
+
 /** 'YYYY-MM' → 'מרץ 2026'. Built from the key, never from the bucket list, so a chip can
  *  still name its month after the index behind it has been refetched or dropped. */
 export function gridMonthLabel(key: string): string {
@@ -863,7 +868,7 @@ export default function DataGrid({
   searchPlaceholder = 'חיפוש…',
   emptyMessage = 'אין רשומות להצגה.',
   initialPageSize = 50,
-  pageSizeOptions = [25, 50, 100, 200],
+  pageSizeOptions = DEFAULT_PAGE_SIZES,
   initialHiddenKeys = [],
   initialSearch = '',
   initialSorting = [],

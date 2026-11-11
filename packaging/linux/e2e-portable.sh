@@ -27,6 +27,11 @@ export DOCKER_HOST="${DOCKER_HOST:-unix:///run/binaos-docker.sock}"
 echo "using DOCKER_HOST=${DOCKER_HOST}"
 
 step "3. start the stack"
+# The template names no office since DGO-1802 and the unit refuses to start without a slug (binaos.service), so the
+# drill names its office the way the installer tells a person to — in place, so DEPLOYMENT_DOMAIN's
+# ${COMPANY_SLUG} (read in file order) sees it.
+grep -Eq '^COMPANY_SLUG=[^#[:space:]]?[A-Za-z0-9]' /etc/binaos/binaos.env \
+  || sed -i 's/^COMPANY_SLUG=$/COMPANY_SLUG=drill/; s/^BUSINESS_NAME=$/BUSINESS_NAME="Drill office"/' /etc/binaos/binaos.env
 systemctl start binaos || echo "unit start returned non-zero — checking what actually came up"
 
 step "4. wait for containers"

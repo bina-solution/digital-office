@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+#: flow — Telegram's events, the last 10 and then live:  ./bbox telegram flow [-n N] [--once] [--json]  (== dgo telegram flow)
+# The app's stream on the office's event stream (flow.v1): the platform's reader, for `dgo:flow:telegram`.
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+exec bash "${SCRIPT_DIR}/../../../platform-base/redis/hooks/flow" telegram "$@"

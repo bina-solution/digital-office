@@ -1,0 +1,12 @@
+# classes.yaml — which CLASS of job a workflow is, for the door before it runs (prejob.sh). Flat `<workflow>: <class>`
+# lines (the agent image carries no YAML library, and this needs none); a workflow not named here is `default`.
+#
+# The FIGURES are not here: they are scripts/ops/admission-thresholds.sh's, the office's one source for "how much
+# memory is enough" (mounted read-only into the agent), so this app and every other gate on the machine agree:
+#   stack  a job that brings the 33-container stack up: ADMISSION_STACK_MIN_AVAIL_GB available (6)
+#   light  a job that brings no stack up — `go test`, the static gates in the checkout: ADMISSION_MIN_AVAIL_MIB,
+#          rounded up to whole GB (1536 → 2). Held at the stack figure, a go-test waited 13+ minutes on 2026-11-01
+#          while the office kept ~5.8 GB available, and every job queued behind it.
+default: stack
+go-test: light
+gates-hosted: light

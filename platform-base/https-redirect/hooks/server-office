@@ -1,0 +1,13 @@
+#!/usr/bin/env bash
+# platform-base/https-redirect/hooks/server-office — the port-80 answer exists only when this app is in
+# the compiled set (reconcile.render_https_redirect: "redirect = server_office() and
+# 'https-redirect' in order"). Without it a server office installs with the HSTS middleware and NO
+# redirect, and port 80 goes on answering the applications in cleartext — the measurement DGO-1595
+# exists to close. Called generically by scripts/onboarding (gate G31: no app id in layer-0 tooling).
+set -uo pipefail
+say() { printf '%s\n' "$*"; }
+say "declaring the port-80 answer (308 to https — DGO-1595)…"
+if ! bash "${REPO_ROOT}/bbox" apps enable https-redirect; then
+  say "⚠ the port-80 answer is not declared: port 80 of this office will answer CLEARTEXT."
+  say "  cure: ./bbox apps enable https-redirect   (then ./bbox run)"
+fi

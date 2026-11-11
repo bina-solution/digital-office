@@ -10,7 +10,7 @@ services:
     # fetched only when it is not here already, so a checkout that has built it is untouched;
     # the `build:` below stays as the fallback. Needs the GHCR package readable — a package made
     # from a private repo is private, so `docker login ghcr.io` on a machine that must pull.
-    image: ghcr.io/solomonboltin/digital-office/notifications:${IMAGE_TAG:-latest}
+    image: ghcr.io/bina-solution/digital-office/notifications:${IMAGE_TAG:-latest}
     pull_policy: missing
     build:
       context: .
@@ -36,8 +36,12 @@ services:
       - GLITCHTIP_QUERY=${NOTIFICATIONS_QUERY:-is:unresolved}
       - NOTIFICATIONS_POLL_INTERVAL=${NOTIFICATIONS_POLL_INTERVAL:-60}
       - NOTIFICATIONS_DB=/data/notifications.db
+      # the event stream (flow.v1, DGO-1402) rides the office redis: `dgo:flow:notifications`
+      - REDIS_PASSWORD=${REDIS_PASSWORD:-}
     volumes:
       - notifications_data:/data
+      # the office's ONE flow.v1 publisher (DGO-1402) — the platform's file, never a copy of it here
+      - ../redis/flowpub.py:/opt/dgo/flowpub.py:ro
     networks:
       - traefik-network
     labels:
@@ -60,7 +64,7 @@ services:
       - traefik.http.routers.notifications-https.entrypoints=websecure
       - traefik.http.routers.notifications-https.tls=true
       - traefik.http.routers.notifications-https.tls.certresolver=${TRAEFIK_CERTRESOLVER-myresolver}
-      - traefik.http.routers.notifications-https.middlewares=authentik@file
+      - traefik.http.routers.notifications-https.middlewares=authentik@file,hsts@file
       - traefik.http.routers.notifications-https.service=notifications
       - traefik.http.services.notifications.loadbalancer.server.port=8977
     healthcheck:

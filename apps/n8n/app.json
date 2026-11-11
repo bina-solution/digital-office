@@ -5,7 +5,9 @@
     "en": "Automations"
   },
   "layer": 3,
+  "people": "admins",
   "kind": "service",
+  "page": "base",
   "version": "2.17.0",
   "summary": {
     "he": "מנוע האוטומציות — תזמון, טריגרים ותהליכים",
@@ -111,8 +113,42 @@
     {
       "host": "n8n",
       "port": 5678,
-      "auth": "none",
-      "emit_labels": false,
+      "auth": "sso",
+      "auth_exclude": [
+        "/webhook/",
+        "/webhook-waiting/",
+        "/form/"
+      ],
+      "sso": {
+        "slug": "n8n",
+        "display_name": "n8n",
+        "default_host": "n8n.localhost",
+        "base_url_env": "N8N_BASE_URL",
+        "local_twin": true
+      },
+      "middlewares": [
+        "n8n-embed"
+      ],
+      "sub_routes": [
+        {
+          "name": "push",
+          "path": "/rest/push",
+          "priority": 200,
+          "on": "host",
+          "middlewares": [
+            "n8n-push-origin"
+          ]
+        },
+        {
+          "name": "frame-push",
+          "path": "/rest/push",
+          "priority": 200,
+          "on": "framed",
+          "middlewares": [
+            "n8n-frame-origin"
+          ]
+        }
+      ],
       "module": {
         "id": "n8n",
         "group": "תשתית",
@@ -137,6 +173,15 @@
       "n8n_storage",
       "postgres_storage"
     ],
+    "writers": [
+      "n8n",
+      "n8n-webhook",
+      "n8n-task-runners",
+      "n8n-worker-1",
+      "n8n-worker-1-runners",
+      "n8n-worker-2",
+      "n8n-worker-2-runners"
+    ],
     "on_uninstall": "keep",
     "sql": [
       {
@@ -151,6 +196,14 @@
         "instance": "n8n-postgres",
         "database": "n8n",
         "note": "n8n owns this instance entirely - workflows, credentials, execution history"
+      }
+    ],
+    "kv": [
+      {
+        "instance": "redis",
+        "db": 0,
+        "durable": false,
+        "note": "shared, declared here: n8n's queue (bull:*) and caches (n8n:cache:*, n8n.exec.*), INDOX's process locks (n8n.process_lock.*) and markers (incoming_docs_actions:*, TTL), telegram's desk ledger (dgo:desk:*, 30-day TTL), chat's relay and every app's event stream (dgo:flow:*, 30-day TTL) - measured 2026-11-10 on vps1 and the Mac (DGO-1512): no key without a TTL outside n8n's queue and cache; platform-base/redis/hooks/backup re-proves it on every export"
       }
     ]
   },

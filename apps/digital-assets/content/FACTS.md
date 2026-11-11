@@ -1,4 +1,10 @@
-# DGO facts — the only things an article may say about DGO (as of 2026-10-19)
+# DGO facts — the only things an article may say about DGO (as of 2026-11-10)
+
+Updated 2026-11-10 (DGO-1311).
+- Measured that day: sign-in, the 0.2.0 release, phones, the company's offices and the GitHub stars.
+- The founder's words at his briefing (bs101, 2026-11-03), not measurements: the four values and the money
+  plan.
+The rest of the text is as of 2026-10-19.
 
 Every sentence about DGO, Bina Solutions or "the office" in any piece of content comes from this file.
 If a piece needs a fact about DGO that is not here, write the placeholder `[[fact: what must be checked]]`
@@ -32,6 +38,17 @@ Say «מופע» for an instance, never "tenancy".
   core and make it an optional add-on.
 - The DGO console does **not yet** show users a link to the running version's source (work item
   DGO-657 is open). Do not claim it does.
+- **The latest release is 0.2.0, 2026-10-31.** It holds three programs, each built for Linux, Windows
+  and macOS on both amd64 and arm64:
+  - `dgo`, the office's core (about 8 MB);
+  - `dgo-install`, the installer (about 4 MB);
+  - `forward-auth`, the sign-in service (about 7.5 MB).
+  These are development builds. They are not signed yet, they are not published for download, and no
+  page on the site offers them.
+- **0.3.0, «the release ready for the market», is in progress.** The goal the founder set on 2026-11-03:
+  within three months, a stable version for iPhone, Android, Mac, Windows and Linux, as a download from
+  the site and in the app stores. That is a goal, not a fact, so never write it as done. The measured
+  state is on the roadmap.
 
 ## Where it runs
 
@@ -50,13 +67,28 @@ Say «מופע» for an instance, never "tenancy".
   - `vps1` is a Hostinger KVM 2: 2 vCPU, 8 GB RAM, 100 GB disk, Debian 12, Paris. It runs a full
     office and the company's public sites.
   - The MacBook office runs inside a 4-CPU / 5 GiB virtual machine.
+- **Phones (2026-11-10):**
+  - **Android:** an app is in development. It opens every office it knows.
+    - The latest build is 0.1.77, 16.8 MB, from 2026-11-03.
+    - The app carries the office's core, built to run on the phone itself, without containers.
+    - Since 2026-11-10 the containers are a separate part («מכולות»). It comes only with an app that
+      needs it.
+    - A whole office running on a phone is not proven yet.
+    - No build is released, and the app is in no store.
+  - **iPhone:** not started.
+  - Until then, a phone reaches its offices through the browser.
 
 ## What a person sees and gets
 
 - **The console («המרכז»):** a Hebrew, right-to-left desktop in the browser.
   - Every app opens in its own window.
   - It works on a phone, a tablet and a desktop.
-- **One sign-in for every app** (authentik).
+- **One sign-in for every app.** Since 2026-11-02 a new office signs in through `forward-auth`, DGO's own
+  small sign-in service (Go, about 7.5 MB). It replaces authentik, which takes about 1.1 GB of memory.
+  Offices installed before that date move to it one at a time. Three were measured on it on
+  2026-11-10. n8n stands behind it too since 2026-11-09 (DGO-1594; `apps/n8n/app.json` `auth: sso`), except
+  its `/webhook/`, `/webhook-waiting/` and `/form/` addresses, which outside services call; behind the sign-in
+  n8n keeps its own owner account.
 - **Apps:** installed, enabled, disabled and removed from the screen «ניהול אפליקציות».
 - **Credentials:** one vault, «חיבורים ומפתחות», holds keys, passwords and OAuth logins. Apps receive
   them from the vault and never store them.
@@ -66,7 +98,10 @@ Say «מופע» for an instance, never "tenancy".
   - full backup and restore of all the office's data («ניהול נתונים»);
   - automatic restart of services that report themselves unhealthy («ריפוי עצמי»).
 - **Backups are per app.** Each app declares what its backup holds. Examples from `bbox help`:
-  - n8n: its database dump plus its `.n8n` volume, which holds n8n's encryption key;
+  - n8n: its database dump plus its `.n8n` volume, which holds only a SECOND copy of n8n's encryption key (the
+    `config` file n8n writes on first boot). The key that counts is `N8N_ENCRYPTION_KEY` in the office's `.env`,
+    and without it the credentials stay undecryptable after a restore; the export of the whole office carries
+    `.env` (`scripts/deployment-archive.py` SECRET_PATHS; `apps/n8n/hooks/backup`, «the .n8n volume»);
   - Plane: its database and its object store (projects, work items, every file);
   - authentik: its database (users, groups, tokens, providers);
   - Supabase: its auth users and its storage index.
@@ -102,7 +137,7 @@ Say «מופע» for an instance, never "tenancy".
 
 **18 as apps:**
 - n8n
-- authentik
+- authentik (in offices installed before 2026-11-02; a new office runs DGO's own `forward-auth`)
 - Traefik
 - PostgreSQL (the Supabase build)
 - Redis
@@ -155,8 +190,15 @@ explain how people run them in Docker now.
 ## Linking offices — DGO Extend, «המשולש»
 
 - Every office is one `./bbox run` on one machine. Offices link to each other.
-  - The company's own setup: the owner's MacBook, an HP laptop (Windows/WSL) and a small VPS.
-  - Each one is linked to the other two.
+  - The company's own setup is four offices, each linked to the others:
+    - the owner's MacBook;
+    - an HP laptop (Windows/WSL);
+    - a Linux laptop;
+    - a small VPS.
+  - On 2026-11-10 the Linux laptop was down and its link with it, so do not write "all four are linked
+    now".
+  - Two customers run offices of their own. A customer's office links to ours one way. Never name a
+    customer without the customer's approval.
 - **Ways to link:**
   - **Pairing from the screens:** a QR code, the camera, or an offer pasted as text. Both screens show
     the same six digits.
@@ -179,12 +221,40 @@ explain how people run them in Docker now.
   - optionally a small VPS (the vps1 class: Hostinger KVM 2);
   - any paid API you choose to use, for example an AI model's API.
 - There is no managed cloud offer yet. Never state its price: `[[fact: managed cloud price]]`.
+- **How Bina Solutions plans to earn** («הקניון», the mall; the founder, bs101, 2026-11-03):
+  - The software stays free.
+  - The money comes from brokering what costs money physically:
+    - servers, including servers in Israel;
+    - compute and GPU;
+    - storage;
+    - domains;
+    - remote access;
+    - an AI model that runs in Israel, paid ahead in credit.
+  - No one is locked in. An office may use outside AI providers or run local models.
+  - **None of this is on sale yet.** Write it as the plan, and never state a price.
+
+## What DGO aims to be: four values (the founder, bs101, 2026-11-03)
+
+These are values, in the founder's words. They are not measurements, so write them as what DGO aims for,
+never as a measured fact.
+
+- **Patterns:** a person reaches every app the same ways: its screen, the `dgo` command line, and an agent.
+- **One interface:** one screen for the whole office.
+- **A collection:** apps chosen and tested by us, some of them translated into Hebrew.
+- **Integration:** «הכול יודע על הכול», everything knows about everything.
+
+The positioning: «מערכת ההפעלה לעידן המודרני». Businesses come first, and Israel first among them. The
+segments: real estate, retail, development, service companies and content creators. The personal use
+belongs to DGO, but not necessarily to the business plan.
 
 ## Never claim
 
 - A certification or approval that was not verified. For example: Israeli Tax Authority–registered
   invoicing software, ISO, or accessibility compliance.
 - User counts, customer names, revenue, or GitHub stars beyond what was measured. The public repo had
-  **1 star on 2026-10-19**.
-- The signed app store with `dgo install` (work item DGO-599, in progress). It is not released yet.
+  **2 stars on 2026-11-10** (1 on 2026-10-19).
+- The signed app store with `dgo install` (work item DGO-599, in progress). It is not released yet. What
+  exists is the signed catalog that each office keeps for itself (`bbox catalog build`).
+- A download page, a signed installer, or an app in Google Play or the App Store. None of these exists
+  on 2026-11-10.
 - An English version of the product site. It is not live yet.

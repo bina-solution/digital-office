@@ -1,0 +1,53 @@
+# The docs' screenshots (DGO-1788; blueprint §6): one row per `![…](TODO-shot: …)` left in the pages. A capture
+# driver (scripts/ui-coverage's image, profiles from scripts/ui-coverage/view-profiles.yaml) reads this list against
+# a DEMO office: freshly installed, seeded with `./bbox seed`, ours — never a client's office, never a real person's
+# mail, file, name, face or address in a picture. Light theme; Hebrew interface. The PNG goes beside its page as
+# `<name>.light.he.png` and replaces the placeholder (alt text kept). Retaken every release.
+#
+# Why not one of our working offices (measured on the night of 2026-11-10, vps1's console at 1440x900): its home opens an app
+# that says the sign-in was not recognised, and its side menu and «ניהול אפליקציות» show the herd — apps of the HP,
+# the MacBook and claude-cloud, «18 remote in 3 offices» — which a reader's new office does not have. A real screen
+# that is not the reader's screen teaches the wrong thing; so a demo office it is.
+#
+# fresh: the shot needs an office that has just been installed (its /setup code still valid, nothing turned on yet).
+profile_sizes: {desktop: 1440x900, phone: 390x844}
+shots:
+  - {name: console-home, page: he/index.md, where: "/#/", size: desktop,
+     state: "the console's home: one tile per app", data: seeded}
+  - {name: console-apps, page: he/what-is-dgo.md, where: "/#/", size: desktop,
+     state: "the console, the grid of apps", data: seeded}
+  - {name: first-hour-1-console, page: he/start/first-hour.md, where: "/#/", size: desktop, fresh: true,
+     state: "right after the first sign-in", data: none}
+  - {name: first-hour-2-app-management, page: he/start/first-hour.md, where: "/#/m/app-management", size: desktop,
+     fresh: true, state: "the row of «קבצים» (drive) with its switch", data: none}
+  - {name: first-hour-3-drive-file, page: he/start/first-hour.md, where: "/#/m/drive", size: desktop, fresh: true,
+     state: "«קבצים» with the one uploaded file (a demo PDF)", data: "one demo file"}
+  - {name: first-hour-4-connections, page: he/start/first-hour.md, where: "/#/m/connections", size: desktop, fresh: true,
+     state: "a language-model key connection for «בינה» (the key itself masked)", data: "a demo key"}
+  - {name: first-hour-5-bina-answer, page: he/start/first-hour.md, where: "/#/m/bina-ds", size: desktop, fresh: true,
+     state: "a conversation where «בינה» answers with the file's path", data: "the demo file; a model key"}
+  - {name: setup-card, page: he/start/after-install.md, where: "forward-auth /setup", size: desktop, fresh: true,
+     state: "the card that creates the first administrator", data: none}
+  - {name: setup-card-linux, page: he/start/install/linux.md, where: "forward-auth /setup", size: desktop, fresh: true,
+     state: "the first screen of a new office on Linux (the same /setup card)", data: none}
+  - {name: sign-in-setup, page: he/use/sign-in.md, where: "forward-auth /setup", size: desktop, fresh: true,
+     state: "the first-run card: name and password, with a valid code", data: none}
+  - {name: sign-in-invite, page: he/use/sign-in.md, where: "forward-auth /invite", size: phone,
+     state: "the invitation card with the person's name and the password fields", data: "an invitation to a demo person"}
+  - {name: files-folder, page: he/use/files.md, where: "/#/m/drive", size: desktop,
+     state: "folder /מסמכים open with three demo files", data: "three demo files"}
+  - {name: ask-bina, page: he/use/ask-bina.md, where: "/#/m/bina-ds", size: desktop,
+     state: "«בינה» in the middle of a task (find a file in «קבצים»), its steps shown", data: "demo files; a model key"}
+  - {name: mail-connect, page: he/use/mail.md, where: "/#/m/mail", size: desktop,
+     state: "«חיבור חשבון» open over an EMPTY inbox (no real mail behind it)", data: none}
+  - {name: apps-list, page: he/apps/index.md, where: "/#/m/app-management", size: desktop,
+     state: "the installed apps tab with the switches", data: seeded}
+  - {name: add-app-turning-on, page: he/use/add-app.md, where: "/#/m/app-management", size: desktop,
+     state: "right after pressing «הדלק» on «קבצים», the app turning on", data: none}
+  - {name: machine-overview, page: he/admin/health.md, where: "/#/m/machine", size: desktop,
+     state: "overview: CPU, memory, disk (addresses masked)", data: none}
+  - {name: macos-engine-status, page: he/start/install/macos.md, where: "Terminal on a Mac", size: desktop,
+     state: "after ./bbox engine status, the engine running (its whole output is the word «Running»)", data: none,
+     note: "a terminal, not the console: the real output, set in a terminal window"}
+  - {name: windows-bbox-run, page: he/start/install/windows.md, where: "CMD on Windows", size: desktop, fresh: true,
+     state: "bbox.cmd run in the middle of its run", data: none, note: "a real run on a Windows machine of ours"}

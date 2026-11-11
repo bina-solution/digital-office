@@ -414,8 +414,15 @@ button{font:inherit}
   overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
   direction:ltr;unicode-bidi:plaintext;
 }
-/* trailing slot: a badge, a dot, a chevron. `nowrap` so it can never wrap into a second line. */
-.bnv-tail{flex:none;display:inline-flex;align-items:center;gap:6px;white-space:nowrap;color:var(--bnv-ink-2);font-size:12px}
+/* trailing slot: a badge, a dot, a chevron. `nowrap` so it can never wrap into a second line.
+   In a RAIL it is the one thing a row still says beside its icon (a count, a dot), so it stays — pinned to
+   the icon's corner and small (`--bnv-tail-pos`, set by the two rail states in §3/§4). As a second column it
+   overflowed a 36px row: social-list's count, domains' (DGO-1591); connections had pinned its own, in every
+   state, so its drawer drew the count on the row's corner. The whole menu and the drawer keep it in line. */
+.bnv-item{position:relative}
+.bnv-tail{flex:none;display:inline-flex;align-items:center;gap:6px;white-space:nowrap;color:var(--bnv-ink-2);
+  font-size:var(--bnv-tail-fs,12px);line-height:var(--bnv-tail-lh,normal);
+  position:var(--bnv-tail-pos,static);inset-block-start:2px;inset-inline-end:2px}
 .bnv-item:hover .bnv-tail,.bnv-item.is-active .bnv-tail{color:inherit}
 .bnv-badge{
   flex:none;min-width:18px;height:18px;padding:0 5px;border-radius:999px;
@@ -478,6 +485,9 @@ button{font:inherit}
   --bnv-rest:flex;
   --bnv-head-dir:column;
   --bnv-turn:rotate(180deg);
+  --bnv-tail-pos:absolute;
+  --bnv-tail-fs:10px;
+  --bnv-tail-lh:1;
 }
 /* An OPENED rail: the whole menu, standing over the page until a row is picked or it is shut — the
    way to a rail's search, and to the names of its rows. (The rail by width says the same in §4.) */
@@ -574,6 +584,9 @@ button{font:inherit}
     --bnv-rest:flex;
     --bnv-head-dir:column;
     --bnv-turn:rotate(180deg);
+    --bnv-tail-pos:absolute;
+    --bnv-tail-fs:10px;
+    --bnv-tail-lh:1;
   }
   .bnv.is-open{position:fixed;inset-block:0;inset-inline-start:0;z-index:60;width:min(84vw,320px);box-shadow:var(--shadow-lg)}
 }
@@ -616,6 +629,9 @@ button{font:inherit}
     --bnv-rest:none;
     --bnv-head-dir:row;
     --bnv-turn:none;
+    --bnv-tail-pos:static;
+    --bnv-tail-fs:12px;
+    --bnv-tail-lh:normal;
   }
   /* The shadow is the OPEN drawer's. On the parked one it still painted: a 40px grey band down the
      screen edge, over the page, in every app that carries this menu (seen in five, 2026-10-06). */
@@ -841,9 +857,43 @@ button.pg-live{cursor:pointer}
 /* @bina-page:end */
 
 .pg{--pg-kpi-cols:5}
-@media (max-width:430px) and (min-height:700px){.pg{--pg-kpi-cols:2}}
+@media (max-width:430px) and (min-height:700px){.pg{--pg-kpi-cols:2}
+  /* five numbers in two columns: the fifth takes its row, so the strip has no empty grey cell (DGO-1593) */
+  .pg-kpis>.pg-kpi:last-child:nth-child(odd){grid-column:1/-1}}
 .pg-head .bnv-burger{order:-1}
 .pg-kpis{margin-bottom:16px}
+/* THE VERDICT (DGO-1646): the answer before the counts — every colour a token, every size the page's own */
+.v-verdict{display:grid;grid-template-columns:auto 1fr;gap:14px;align-items:start;margin-bottom:14px}
+.v-mark{width:42px;height:42px;border-radius:50%;display:grid;place-items:center;background:var(--accent-soft);color:var(--accent-d)}
+.v-verdict[data-state="bad"] .v-mark{background:var(--danger-soft);color:var(--red)}
+.v-mark svg{width:24px;height:24px}
+.v-say{margin:0;font-size:19px;line-height:27px;font-weight:800;color:var(--ink)}
+.v-verdict[data-state="bad"] .v-say{color:var(--red)}
+.v-proof{margin:4px 0 0;color:var(--muted);font-size:13px;line-height:20px}
+.v-proof b{color:var(--ink)}
+.v-learn{margin-top:10px;display:flex;gap:8px;align-items:flex-start;color:var(--muted);font-size:12.5px;line-height:19px}
+.pg .v-who{--pg-kpi-cols:3;margin-bottom:14px}
+.pg-kpis.v-who .pg-kpi .sub{display:block;white-space:normal;overflow:visible;text-overflow:clip}
+.v-rows{list-style:none;margin:0;padding:0}
+.v-row{display:grid;grid-template-columns:1fr auto auto;gap:12px;align-items:center;padding:9px 2px;border-top:1px solid var(--line)}
+.v-row:first-child{border-top:0}
+.v-row[data-tried]{cursor:pointer}
+.v-row[data-tried]:hover .v-what,.v-row[data-tried]:focus-visible .v-what{color:var(--accent-d)}
+.v-what{font-weight:700;color:var(--ink);font-size:13px;line-height:19px;min-width:0}
+.v-what small{display:block;font-weight:400;color:var(--muted);font-size:12px;line-height:17px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.v-n{font-weight:800;color:var(--ink);font-size:14px;text-align:end}
+.v-n small{display:block;font-weight:400;color:var(--muted);font-size:11px}
+.v-how{margin:12px 0 0;padding:10px 12px;border-radius:10px;background:var(--surface-2);color:var(--muted);font-size:12.5px;line-height:19px}
+.v-how b{color:var(--ink)}
+.v-split{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+.v-split>div{padding:10px 12px;border:1px solid var(--line);border-radius:12px;background:var(--surface-2);min-width:0}
+.v-split .v-n{display:block;text-align:start;font-size:20px;line-height:26px}
+.v-split .sub{display:block;color:var(--muted);font-size:12px;line-height:17px}
+.v-ltr{direction:ltr;unicode-bidi:isolate}
+.v-detailhead{margin:22px 2px 10px;font-size:15px;line-height:22px;color:var(--muted)}
+@media (max-width:700px){.pg .v-who{--pg-kpi-cols:1}.v-split{grid-template-columns:1fr}
+  .v-row{grid-template-columns:1fr auto}.v-row>.pill,.v-row>.btn{grid-column:1/-1;justify-self:start}
+  .v-say{font-size:17px;line-height:24px}}
 .pg-kpi .sub{display:block;font-size:12px;color:var(--muted);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 
 /* the window chips: how far back every number on the screen looks */
@@ -1728,8 +1778,11 @@ var BinaNav = (function () {
   // the same in every app.
   function adoptStatic(doc) {
     var menus = doc.querySelectorAll(".bnv:not([data-bnv-mounted])");
-    for (var i = 0; i < menus.length; i++) {
-      var menu = menus[i];
+    // one call per menu, so each control and each shut holds ITS menu (a loop's `var` would hand every
+    // handler the last one)
+    for (var i = 0; i < menus.length; i++) adoptOne(doc, menus[i]);
+  }
+  function adoptOne(doc, menu) {
       try {
         var parent = menu.parentElement;
         if (parent && parent.classList && typeof parent.closest === "function" && !parent.closest(".bnv-host")) {
@@ -1752,6 +1805,38 @@ var BinaNav = (function () {
         });
         doc.addEventListener("keydown", function (ev) { if (ev.key === "Escape") shut(); });
         menu.setAttribute("data-bnv-mounted", "static");
+        // …and the rail's way in, which a mounted menu has in its brand row (DGO-1591, the owner: «חצי תפריט …
+        // לא נפתח, לא נסגר» — a static menu at a rail's width showed its icons and no way to their names). Its
+        // head gets the same one control, where the menu stands in the component's grid (`.appgrid`: its column
+        // is the grid's, so a rail is a rail's width): open → shut; a chosen rail → the whole menu again; names
+        // hidden (a rail by width) → the whole menu over the page; the whole menu → a chosen rail. The same
+        // steps as the mounted control's (`build()`), and a chosen rail is remembered the same way — per page,
+        // since a static menu has no id of the app's: under the console every app shares one origin.
+        var mhead = menu.querySelector(".bnv-head");
+        if (mhead && !mhead.querySelector(".bnv-collapse") && parent && parent.classList.contains("appgrid")) {
+          var railKey = "bnav:rail:static:" + ((doc.location && doc.location.pathname) || "") + "#" + (menu.id || "");
+          var setRail = function (on) {
+            menu.classList.toggle("is-rail", !!on);
+            try { localStorage.setItem(railKey, on ? "1" : "0"); } catch (e) { /* private mode */ }
+          };
+          try { if (localStorage.getItem(railKey) === "1") menu.classList.add("is-rail"); } catch (e) { /* private mode */ }
+          // the head's own text is THE sign of names on screen: it is there from the first paint (the rows'
+          // labels come when the app renders them, and a missing node reads as "hidden")
+          var nameShown = function () {
+            return shown(mhead.querySelector(".bnv-head-text") || menu.querySelector(".bnv-label"));
+          };
+          var cbtn = el("button", "bnv-collapse", svg("chevron-end"));
+          cbtn.type = "button";
+          cbtn.title = LABELS.rail;
+          cbtn.setAttribute("aria-label", LABELS.rail);
+          cbtn.addEventListener("click", function () {
+            if (menu.classList.contains("is-open")) { shut(); return; }
+            if (nameShown()) { setRail(true); return; }
+            if (menu.classList.contains("is-rail")) setRail(false);
+            if (!nameShown()) { menu.classList.add("is-open"); scrim.classList.add("is-open"); }
+          });
+          mhead.appendChild(cbtn);
+        }
         // …and the way in: the component's own 48px button, exactly as a page that placed none
         if (typeof doc.querySelector === "function" && !doc.querySelector("[data-nav-toggle]")) {
           var b = el("button", "bnv-burger is-float");
@@ -1769,7 +1854,6 @@ var BinaNav = (function () {
           if (doc.documentElement && doc.documentElement.classList) doc.documentElement.classList.add("bnv-float");
         }
       } catch (e) { /* one menu that cannot be adopted is not the other menus' problem */ }
-    }
   }
   if (typeof document !== "undefined" && typeof document.querySelectorAll === "function") {
     if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", function () { adoptStatic(document); });

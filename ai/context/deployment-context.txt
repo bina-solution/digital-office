@@ -1,10 +1,10 @@
-# Deployment Context — deployment-hacohen (baseline inventory)
+# Deployment Context — digital-office (baseline inventory)
 
-Single Debian host, one Docker Compose project rooted at `/root/deployment-hacohen`,
+Single Debian host, one Docker Compose project rooted at `/root/digital-office`,
 behind Traefik v3.3. Branch: `COPILOT`. Run ALL compose cmds from repo root.
 
 ## Domains
-- Prod:  `<svc>.${DEPLOYMENT_DOMAIN}`        (DEPLOYMENT_DOMAIN = hacohen.bina-solutions.co.il)
+- Prod:  `<svc>.${DEPLOYMENT_DOMAIN}`        (DEPLOYMENT_DOMAIN = example.bina-solutions.co.il)
 - Dev:   `<svc>.dev.${DEPLOYMENT_DOMAIN}`     (DEV_DOMAIN = dev.<…>)
 - Local: `<svc>.localhost`
 - Containers: `<svc>-${DEPLOYMENT_NAME:-bina-deployment}` (a few use bare names: `apitools`, `feature-validation-api`, `*-validator`)
@@ -65,7 +65,11 @@ repo as regular files (no longer git submodules — no `.gitmodules`).
 
 ## Auth posture
 - ForwardAuth (`middlewares=authentik`): homepage, redisinsight, machine, traefik dashboard, etc.
-- Own auth (no ForwardAuth): n8n, authentik, portainer, glitchtip, supabase-studio (basic auth).
+- Own auth (no ForwardAuth): authentik (it IS the sign-in), portainer, glitchtip, supabase-studio
+  (basic auth). n8n is NOT in this list any more: since DGO-1594 the editor host and the host the
+  console frames it at are behind the same forwardAuth as every other app (`routing.auth: sso`
+  in apps/n8n/app.json), with `/webhook/`, `/webhook-waiting/` and `/form/` still public on the
+  `n8n-hooks` routers of `n8n-webhook`.
 
 ## What it does (business)
 Hebrew financial-document automation: invoices / delivery notes / purchase orders /

@@ -1,0 +1,39 @@
+# ci-runner-agent — GitHub's Actions runner as a container of the office (DGO-1797), not a host service.
+#
+# The owner, 2026-11-10 17:48Z: the Dell runs only the office, what runs in it, and a browser; the runner is an
+# office app he can see and switch. Until this, the Dell's runner was /opt/actions-runner under a systemd unit,
+# installed by hand, invisible on any screen.
+#
+# The runner's version and its archive's sha256 are HERE and only here, as the release publishes them
+# (github.com/actions/runner/releases/tag/v2.338.2, «BEGIN SHA linux-x64»): a build of anything else fails. That pin
+# is the FLOOR, not a freeze: the runner updates itself when GitHub asks (disabling that stops GitHub sending jobs
+# about 30 days after the next release), the update lives in the container and is fetched again after a rebuild,
+# and bumping the two lines below to the newest release is how the floor moves. Its own
+# installdependencies.sh brings the libraries it needs (ICU and the rest). The jobs' toolchains are not baked in:
+# the workflows ask for them with actions/setup-go, setup-python and setup-node, which fill the runner's tool cache
+# on the app's volume once. What a job runs the stack with is the office's own engine — the docker CLI and its
+# compose plugin here, the engine's socket mounted by the compose (exposure-lint's JUSTIFIED says why).
+FROM ubuntu:24.04
+ARG RUNNER_VERSION=2.338.2
+ARG RUNNER_SHA256=baebf204307bac6193480852732f0aba2ae97b6c5597c244f4d5558390147c40
+SHELL ["/bin/bash", "-euo", "pipefail", "-c"]
+# The runner runs as root here: the jobs drive the office's engine through its socket, which is root on the host
+# whoever holds it, and a drop to another user needs gosu or a socket group — gosu livelocks under Ubuntu 26.04's
+# AppArmor on the Dell (issues/postgres-never-starts-on-ubuntu-26-04-kernels-because-apparmor-stacks-the-container-
+# label.yaml), and the socket's group differs per host.
+ENV DEBIAN_FRONTEND=noninteractive RUNNER_ALLOW_RUNASROOT=1
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends ca-certificates curl git jq tar gzip unzip xz-utils zstd \
+      python3 procps docker.io docker-compose-v2 tini \
+ && rm -rf /var/lib/apt/lists/*
+RUN mkdir -p /runner && cd /runner \
+ && curl -fsSL -o runner.tgz \
+      "https://github.com/actions/runner/releases/download/v${RUNNER_VERSION}/actions-runner-linux-x64-${RUNNER_VERSION}.tar.gz" \
+ && echo "${RUNNER_SHA256}  runner.tgz" | sha256sum -c - \
+ && tar xzf runner.tgz && rm runner.tgz \
+ && ./bin/installdependencies.sh \
+ && rm -rf /var/lib/apt/lists/*
+COPY agent.sh prejob.sh postjob.sh record.py classes.yaml door.py jobs.json /opt/ci-runner/
+RUN chmod 0755 /opt/ci-runner/*.sh
+WORKDIR /runner
+ENTRYPOINT ["/usr/bin/tini", "--", "/opt/ci-runner/agent.sh"]

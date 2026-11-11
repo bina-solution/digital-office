@@ -162,6 +162,35 @@ def names_software(family_name: str) -> bool:
     return bool(family_name) and family_name not in LANGUAGE_RUNTIMES
 
 
+#: A REVERSE PROXY IN FRONT IS NOT THE SOFTWARE either. Since EXU-21 (9139523b) the host `ollama:11434` that
+#: `llm-local` names is answered by a small Caddy that passes every path through to `ollama-engine`; taking the
+#: front's image as the capability's family made every app with a Caddy of its own (browser42's, dashboard's,
+#: hello-bina's, indox-demo-docs') read as a second local-model server, and G25 --strict went red on all four. A
+#: front is read through to what it fronts — the services it `depends_on` whose image names software — and only a
+#: front with nothing behind it keeps its own family (a site served by an nginx IS served by nginx). Only the web
+#: servers this catalog puts in front of an engine are fronts: traefik IS the `edge` it serves, and its depends_on is
+#: the socket proxy it reads, not something it fronts (read through, `edge` became the socket proxy's family and
+#: connections' own socket proxy a second edge — measured, 2026-11-10).
+PROXIES = frozenset({"caddy", "nginx"})
+
+
+def served_by(svcs, svc):
+    """The image families that serve what the compose service `svc` answers: its own — or, for a reverse proxy
+    in front, those of the services it depends on that name software (see PROXIES)."""
+    f = fam(svc["image"])
+    if f not in PROXIES:
+        return {f}
+    deps = svc.get("depends_on") or []
+    behind = set()
+    for d in (deps if isinstance(deps, (list, dict)) else []):
+        s = svcs.get(d)
+        if isinstance(s, dict) and s.get("image"):
+            b = fam(s["image"])
+            if names_software(b) and b not in PROXIES:
+                behind.add(b)
+    return behind or {f}
+
+
 # Capabilities served by something OUTSIDE this catalog, waived BY NAME with the reason. It is empty
 # and must stay that way for as long as every provider is a manifest: the enumeration below already
 # spans apps/ + platform-base/, which is where the platform's own substrate (sql, kv, secrets, edge,
@@ -242,7 +271,8 @@ def load_catalog():
 def capability_families(cat):
     """capability -> {image families that PROVIDE it}.
 
-    The family must come from the ONE service that actually serves the capability, found through
+    The family must come from the ONE service that actually serves the capability (a caddy/nginx front
+    reports what it fronts — see PROXIES), found through
     the capability's own `endpoint` host. The obvious shortcut — union every family in the
     provider's compose — is wrong, and wrong in the direction that makes the gate useless: glitchtip
     provides `error-tracking` and also runs a postgres and a redis sidecar, so `error-tracking`
@@ -266,24 +296,25 @@ def capability_families(cat):
         except (OSError, yaml.YAMLError):
             continue
         svcs = (doc.get("services") or {})
-        # host -> family, for every name the host could be written as
+        # host -> the families serving it (a front read through, see PROXIES), for every name the host could be
+        # written as
         by_host = {}
         for name, svc in svcs.items():
             if not isinstance(svc, dict) or not svc.get("image"):
                 continue
-            f = fam(svc["image"])
-            if not f:
+            fams = {f for f in served_by(svcs, svc) if f}
+            if not fams:
                 continue
             for alias in service_names(name, svc):
-                by_host[alias] = f
+                by_host[alias] = fams
         for c in a.get("capabilities", []):
             ep, name = c.get("endpoint"), c.get("name")
             if not (ep and name):
                 continue          # abstract capability (forward-auth, automation-stdlib) — no image
             host = ep.split("://", 1)[-1].split("/", 1)[0].rsplit(":", 1)[0]
-            f = by_host.get(host)
-            if f and names_software(f):
-                out.setdefault(name, set()).add(f)
+            for f in by_host.get(host, ()):
+                if names_software(f):
+                    out.setdefault(name, set()).add(f)
     return out
 
 
@@ -337,6 +368,19 @@ def self_test() -> int:
         ("a fork speaking the same protocol is the same family", fam("valkey/valkey:8"), "redis"),
         ("a database's image names the software", names_software("postgres"), True),
         ("a language runtime names nothing to compare", names_software(fam("python:3-alpine")), False),
+        ("a reverse proxy in front is read through to what it fronts (llm-local, EXU-21)",
+         served_by({"engine": {"image": "ghcr.io/x/ollama:${IMAGE_TAG:-latest}"}},
+                   {"image": "caddy:2-alpine", "depends_on": ["engine"]}), {"ollama"}),
+        ("depends_on as a mapping is read the same",
+         served_by({"engine": {"image": "ollama/ollama:0.5"}},
+                   {"image": "caddy:2", "depends_on": {"engine": {"condition": "service_started"}}}), {"ollama"}),
+        ("a front with nothing behind it keeps its own family", served_by({}, {"image": "nginx:1.27"}), {"nginx"}),
+        ("a front before a language runtime alone keeps its own family",
+         served_by({"app": {"image": "python:3.12-alpine"}}, {"image": "caddy:2", "depends_on": ["app"]}), {"caddy"}),
+        ("a server that is no proxy is its own family", served_by({}, {"image": "postgres:16"}), {"postgres"}),
+        ("traefik IS the edge: never read through to the socket proxy it reads",
+         served_by({"sp": {"image": "tecnativa/docker-socket-proxy:0.3"}},
+                   {"image": "traefik:v3.3", "depends_on": ["sp"]}), {"traefik"}),
         ("a use[] a manifest provides is satisfied", unsatisfied(good), []),
         ("a use[] NOBODY provides is refused, by name and manifest",
          unsatisfied(typo), [("bina-ds", "notifications", "requires", "apps/bina-ds/app.json")]),

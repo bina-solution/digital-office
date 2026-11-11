@@ -17,8 +17,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/solomonBoltin/deployment-hacohen/packaging/trust"
-	"github.com/solomonBoltin/deployment-hacohen/packaging/trust/trusttest"
+	"github.com/bina-solution/digital-office/packaging/trust"
+	"github.com/bina-solution/digital-office/packaging/trust/trusttest"
 )
 
 // R2-1 — revoking the NEWER of two listed keys reopens rollback to anything the older one signed. The

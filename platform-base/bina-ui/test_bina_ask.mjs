@@ -18,10 +18,15 @@ const src = readFileSync(join(dirname(fileURLToPath(import.meta.url)), 'bina-ask
 
 /* ── a DOM, just enough of one ──────────────────────────────────────────────────────────────── */
 class El {
-  constructor(tag) { this.tag = tag; this.children = []; this.attrs = {}; this.on = {}; this.className = ''; this.textContent = ''; this.value = ''; this.disabled = false; this.parent = null; this.id = ''; }
+  constructor(tag) { this.tag = tag; this.children = []; this.attrs = {}; this.on = {}; this.className = ''; this.textContent = ''; this.value = ''; this.disabled = false; this.parent = null; this.id = ''; this.style = {}; }
   appendChild(n) { this.children.push(n); n.parent = this; return n; }
   remove() { if (this.parent) this.parent.children = this.parent.children.filter((c) => c !== this); this.parent = null; }
   setAttribute(k, v) { this.attrs[k] = String(v); }
+  removeAttribute(k) { delete this.attrs[k]; }
+  // the notice measures where it sits (place(), DGO-618): a stub has no layout — size 0, so it keeps its corner
+  getBoundingClientRect() { return { left: 0, top: 0, right: 0, bottom: 0, width: 0, height: 0 }; }
+  contains(n) { return this.all().includes(n); }
+  closest() { return null; }
   addEventListener(t, f) { (this.on[t] = this.on[t] || []).push(f); }
   focus() { doc.activeElement = this; }
   fire(t, e = {}) { (this.on[t] || []).forEach((f) => f(Object.assign({ target: this, preventDefault() {}, stopPropagation() {} }, e))); }
@@ -34,12 +39,17 @@ const doc = {
   head: new El('head'), body: new El('body'), activeElement: null,
   createElement: (t) => new El(t),
   getElementById: (id) => [...doc.head.all(), ...doc.body.all()].find((n) => n.id === id) || null,
+  querySelectorAll: () => [],                            // the page's controls, which the notice must not cover
   addEventListener: (t, f) => { if (t === 'keydown') keys.push(f); },
   removeEventListener: (t, f) => { const i = keys.indexOf(f); if (i >= 0) keys.splice(i, 1); },
 };
 const press = (key, extra = {}) => [...keys].forEach((f) => f(Object.assign({ key, preventDefault() {}, stopPropagation() {} }, extra)));
 const timers = [];
-const box = { document: doc, setTimeout: (f, ms) => { timers.push([f, ms]); return timers.length; }, Promise };
+// a browser's window: the notice re-places itself on `resize` (05d8e567, DGO-618) — a page always has one
+const winOn = {};
+const win = { addEventListener: (t, f) => { (winOn[t] = winOn[t] || []).push(f); } };
+const box = { document: doc, window: win, setTimeout: (f, ms) => { timers.push([f, ms]); return timers.length; },
+              clearTimeout: () => {}, Promise };
 vm.createContext(box);
 vm.runInContext(src, box);
 vm.runInContext(src, box);                               // two screens on one page may both carry it

@@ -11,7 +11,7 @@ name: images
 #     `./scripts/dc up -d`. Every app compose names the published image beside its `build:` with
 #     `pull_policy: missing`, so an image that is not present locally is fetched and one that is, is
 #     used as it is. `console` is the one app still outside that: its compose names the local tag
-#     `deployment-hacohen-console`, so it keeps building.
+#     `digital-office-console`, so it keeps building.
 #   * a DEVELOPER does nothing differently: edit, `./bbox run`, the `build:` fallback compiles.
 #
 # WHICH TAG IS WHICH — `IMAGE_TAG` in .env picks one (`.env.ex` defaults it to `latest`):
@@ -43,6 +43,14 @@ name: images
 #   Third-party images are NOT rebuilt: 28 image references carry no `build:` anywhere (gate G15
 #   counts them), and a rebuilt upstream image is a fork of somebody else's release cadence.
 #
+# UPDATE 2026-10-12 — the overlay was drifted, and drifting it publishes NOTHING. The image MATRIX
+# (one per app directory that holds a Dockerfile) is 22 apps; `platform/profiles/ci-images.yml`
+# named 20 of them: `forward-auth`, a declared app since 3aeaa83a, and the new `office-routes` were
+# missing, so the comparison in `plan` failed and every other image — the 20 that were fine — was
+# never pushed either. The machine told to pull therefore builds, which is exactly the state
+# DGO-41 exists to end. Both are in the overlay now; the two lists are equal (22 = 22, measured by
+# the same two commands the workflow runs).
+#
 # Nothing here is reachable from a deployment: this job only pushes. Verifying it is a `docker pull`
 # plus the overlay (README, "Prebuilt images").
 
@@ -71,19 +79,23 @@ concurrency:
 
 env:
   # A literal, in lowercase, on purpose: `${{ github.repository_owner }}` carries the account's own
-  # casing (`solomonBoltin`), and docker's reference grammar has no uppercase in the path —
-  # `docker image inspect ghcr.io/SolomonBoltin/digital-office/git:latest` answers
-  # "invalid reference format: repository name (SolomonBoltin/digital-office/git) must be lowercase".
+  # casing (`bina-solution`), and docker's reference grammar has no uppercase in the path —
+  # `docker image inspect ghcr.io/Bina-solution/digital-office/git:latest` answers
+  # "invalid reference format: repository name (Bina-solution/digital-office/git) must be lowercase".
   # It is also what every compose file writes, so CI and the composes name the same thing by hand
   # rather than by agreement.
-  REG: ghcr.io/solomonboltin/digital-office
+  REG: ghcr.io/bina-solution/digital-office
 
 jobs:
   # The matrix is computed, not hand-listed: an app joins the image set by being an APP — it has the
   # app.json the platform reads — and by carrying the Dockerfile that image is built from. Anything
   # else (a source directory with a Dockerfile and no manifest, an app whose images live below its
-  # root) is outside for a reason recorded in the header above, and `platform-base/forward-auth` is
-  # the directory that rule deliberately leaves out.
+  # root) is outside for a reason recorded in the header above.
+  #
+  # AND THE OVERLAY IS NOT COMPUTED, so it is compared below and that comparison is the guard:
+  # measured 2026-10-12 it named 20 of the 22 apps (missing `forward-auth`, which became a declared
+  # app in 3aeaa83a, and `office-routes`, which is new) — a drift that fails THIS job, so nothing is
+  # published at all, and the machine that was told to pull builds instead.
   plan:
     runs-on: ubuntu-latest
     outputs:
@@ -100,7 +112,9 @@ jobs:
           WANT: ${{ github.event.inputs.apps }}
         run: |
           set -euo pipefail
-          skip="apitools n8n indox chat autoheal follow-runner"
+          # assets, examplem-io and loans are one client group's own apps: the public export holds them back
+          # (scripts/release/public/exclude.txt, DGO-1792), so their images never go to the public registry either
+          skip="apitools n8n indox chat autoheal follow-runner assets examplem-io loans"
           list=""
           for d in apps/*/ platform-base/*/; do
             id="$(basename "$d")"
@@ -134,7 +148,7 @@ jobs:
         # fails loudly instead of quietly rebuilding on every machine that opted in.
         run: |
           set -euo pipefail
-          grep -oE '^ +image: ghcr\.io/solomonboltin/digital-office/[a-z0-9-]+' platform/profiles/ci-images.yml \
+          grep -oE '^ +image: ghcr\.io/bina-solution/digital-office/[a-z0-9-]+' platform/profiles/ci-images.yml \
             | sed 's|.*/||' | sort -u > /tmp/overlay.txt
           echo '${{ steps.set.outputs.apps }}' | tr -d '[]"' | tr ',' '\n' | sed '/^$/d' | sort -u > /tmp/matrix.txt
           if ! diff -u /tmp/overlay.txt /tmp/matrix.txt; then

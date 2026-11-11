@@ -1,0 +1,65 @@
+{
+  "panel": "aeo-panel-v1",
+  "fixed_on": "2026-11-05",
+  "why": "DGO-1382: the owner, 2026-11-04 18:31 UTC, «איך להגיע למקום ראשון בהמלצות של ai». The same 40 prompts every week, worded as a person asks, never edited once a run used them: a changed prompt is a new panel (aeo-panel-v2) and the baseline starts again.",
+  "measure": "Whether an answer NAMES us, not where: AI recommendation lists differ between runs (SparkToro, January 2026), while the set of names an engine considers is stable. Per answer: named, our URLs cited, the alternatives named, every cited domain, and for brand prompts what the answer says about DGO against FACTS.md.",
+  "kinds": {
+    "category": "the field we want to be named in, without our name",
+    "problem": "a job a person needs done, in their words",
+    "comparison": "the alternatives a person weighs",
+    "brand": "what the engine knows about us, checked against FACTS.md",
+    "local": "Israeli reality: Hebrew, local companies, local constraints"
+  },
+  "prompts": [
+    {"id": "c01", "kind": "category", "lang": "en", "text": "What are the best open-source alternatives to Google Workspace for a small business that wants to own its data?"},
+    {"id": "c02", "kind": "category", "lang": "en", "text": "What is the best self-hosted platform to run all of a small business's apps (automation, documents, email, chat, AI agents) on one server?"},
+    {"id": "c03", "kind": "category", "lang": "en", "text": "Which open-source platforms let a small business run AI agents on its own server, with access to its email, files and a browser?"},
+    {"id": "c04", "kind": "category", "lang": "en", "text": "What are the best platforms for self-hosting business apps with Docker, with an app store and one sign-in for every app?"},
+    {"id": "c05", "kind": "category", "lang": "he", "text": "מה החלופות בקוד פתוח לגוגל וורקספייס לעסק קטן שרוצה שהמידע יישאר אצלו?"},
+    {"id": "c06", "kind": "category", "lang": "he", "text": "איזו מערכת מומלצת כדי להריץ את כל האפליקציות של העסק על שרת אחד משלנו?"},
+    {"id": "c07", "kind": "category", "lang": "he", "text": "מה הפלטפורמות הטובות ביותר למשרד דיגיטלי לעסק קטן בישראל?"},
+    {"id": "c08", "kind": "category", "lang": "he", "text": "איך מקימים לעסק סוכן AI בעברית שעובד עם המייל, הקבצים והוואטסאפ של העסק?"},
+
+    {"id": "p01", "kind": "problem", "lang": "en", "text": "How can I automatically read Hebrew invoices and receipts and put their data into a spreadsheet?"},
+    {"id": "p02", "kind": "problem", "lang": "en", "text": "How do I replace a pile of SaaS subscriptions with self-hosted open-source tools without becoming a sysadmin?"},
+    {"id": "p03", "kind": "problem", "lang": "en", "text": "How do I run self-hosted Docker apps on a Mac without Docker Desktop?"},
+    {"id": "p04", "kind": "problem", "lang": "en", "text": "How can I link a home server and a cheap VPS so that apps running on one open from the other?"},
+    {"id": "p05", "kind": "problem", "lang": "en", "text": "How do I give an AI agent safe access to my business email, files and a browser without handing it my passwords?"},
+    {"id": "p06", "kind": "problem", "lang": "he", "text": "איך לחלץ אוטומטית נתונים מחשבוניות וקבלות בעברית לתוך טבלה?"},
+    {"id": "p07", "kind": "problem", "lang": "he", "text": "איך מפסיקים לשלם על עשרות מנויי SaaS ומריצים את אותם כלים בעצמנו?"},
+    {"id": "p08", "kind": "problem", "lang": "he", "text": "איך מגבים את כל המערכות של העסק במקום אחד, ומשחזרים כשמשהו נופל?"},
+    {"id": "p09", "kind": "problem", "lang": "he", "text": "איך מחברים וואטסאפ לאוטומציה בעסק בלי לשלם על מערכת יקרה?"},
+    {"id": "p10", "kind": "problem", "lang": "he", "text": "איך מתקינים n8n על שרת VPS? אני צריך מדריך בעברית"},
+
+    {"id": "x01", "kind": "comparison", "lang": "en", "text": "n8n vs Zapier vs Make: which is better for a small business in Israel?"},
+    {"id": "x02", "kind": "comparison", "lang": "en", "text": "Coolify vs CasaOS vs Umbrel vs Cloudron vs YunoHost: which is best for running a small business's apps?"},
+    {"id": "x03", "kind": "comparison", "lang": "en", "text": "Nextcloud vs Google Workspace for a small business in 2026: which should I choose?"},
+    {"id": "x04", "kind": "comparison", "lang": "en", "text": "What are the best open-source alternatives to Monday.com that support Hebrew and right-to-left?"},
+    {"id": "x05", "kind": "comparison", "lang": "he", "text": "n8n או Make או Zapier — מה עדיף לעסק קטן בישראל?"},
+    {"id": "x06", "kind": "comparison", "lang": "he", "text": "מה משתלם יותר לעסק: לשלם על SaaS או להריץ קוד פתוח על שרת משלו? כמה זה עולה באמת?"},
+    {"id": "x07", "kind": "comparison", "lang": "he", "text": "מה עדיף להרצת המערכות של עסק: שרת במשרד או VPS בענן?"},
+    {"id": "x08", "kind": "comparison", "lang": "he", "text": "מה מערכות ניהול המסמכים הטובות לעסק ישראלי, כולל סריקה וזיהוי טקסט בעברית?"},
+
+    {"id": "b01", "kind": "brand", "lang": "en", "text": "What is DGO, the Digital Office by Bina Solutions?"},
+    {"id": "b02", "kind": "brand", "lang": "en", "text": "What is digital-office.co.il?"},
+    {"id": "b03", "kind": "brand", "lang": "en", "text": "How do I install the open-source Digital Office from github.com/bina-solution/digital-office?"},
+    {"id": "b04", "kind": "brand", "lang": "en", "text": "What license is the DGO Digital Office released under, and can I use it in my business?"},
+    {"id": "b05", "kind": "brand", "lang": "he", "text": "מה זה הלשכה הדיגיטלית (DGO)?"},
+    {"id": "b06", "kind": "brand", "lang": "he", "text": "מה עושה בינה סולושנס (bina-solutions.co.il)?"},
+    {"id": "b07", "kind": "brand", "lang": "he", "text": "איך מתקינים את הלשכה הדיגיטלית DGO על מחשב או על שרת?"},
+    {"id": "b08", "kind": "brand", "lang": "he", "text": "האם הלשכה הדיגיטלית DGO חינמית, ומה יש בה?"},
+
+    {"id": "l01", "kind": "local", "lang": "en", "text": "What software do small businesses in Israel use to automate documents, WhatsApp and email in Hebrew?"},
+    {"id": "l02", "kind": "local", "lang": "en", "text": "Which Israeli companies build open-source business automation or self-hosted AI agents?"},
+    {"id": "l03", "kind": "local", "lang": "en", "text": "Is there an Israeli open-source alternative to Zapier or Microsoft 365?"},
+    {"id": "l04", "kind": "local", "lang": "he", "text": "אילו חברות בישראל מתמחות באוטומציה עסקית עם n8n ו-AI?"},
+    {"id": "l05", "kind": "local", "lang": "he", "text": "איך עסק ישראלי יכול להשתמש ב-AI בלי לשלוח את המידע שלו לענן?"},
+    {"id": "l06", "kind": "local", "lang": "he", "text": "איזו מערכת בעברית מנהלת את המסמכים, המייל והוואטסאפ של העסק במקום אחד?"}
+  ],
+  "us": {
+    "names": ["DGO", "Digital Office", "הלשכה הדיגיטלית", "Bina Solutions", "בינה סולושנס", "בינה סולושינס"],
+    "domains": ["digital-office.co.il", "bina-solutions.co.il", "github.com/bina-solution"],
+    "named_rule": "an answer names us when it says «הלשכה הדיגיטלית», «Bina Solutions», «בינה סולושנס», one of our domains, or «DGO» / «Digital Office» together with Bina, digital-office.co.il or the repository. «DGO» or «digital office» alone is not us: both are common words."
+  },
+  "alternatives": ["n8n", "Zapier", "Make", "Nextcloud", "Google Workspace", "Microsoft 365", "Zoho", "Odoo", "CasaOS", "Umbrel", "Coolify", "Cloudron", "YunoHost", "Unraid", "TrueNAS", "Proxmox", "Portainer", "Dokploy", "CapRover", "Sandstorm", "Monday", "ClickUp", "Notion", "Plane", "OpenProject", "Taiga", "Paperless-ngx", "Mayan EDMS", "Docspell", "OnlyOffice", "Collabora", "Mattermost", "Rocket.Chat", "Zulip", "Activepieces", "Windmill", "Node-RED", "Huginn", "Pipedream", "OpenHands", "Dify", "Flowise", "LangFlow", "AnythingLLM", "Open WebUI", "LibreChat", "Ollama", "Green Invoice", "חשבונית ירוקה", "iCount", "Rivhit", "Priority", "SAP Business One", "Hashavshevet", "חשבשבת", "Morning", "Cardcom", "Wix", "WhatsApp Business", "Twilio", "Manychat", "Glassix", "Respond.io"]
+}

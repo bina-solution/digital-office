@@ -1,5 +1,5 @@
 -- mod_meet_recorder_watch — apps/meet: the recorder's watchdog, and the captions, speak to the room
--- (fireplace, 2026-10-26: the recorder was starved to 0.48 of a core, ffmpeg ran at 0.93-0.97x, 40 %
+-- (examplef, 2026-10-26: the recorder was starved to 0.48 of a core, ffmpeg ran at 0.93-0.97x, 40 %
 -- of every second of audio became zeros, and nobody in the room was told).
 --
 -- The watching itself happens inside meet-jibri (jibri/watch.py: ffmpeg's pace, the cgroup's

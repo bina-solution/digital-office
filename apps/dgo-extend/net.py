@@ -55,7 +55,7 @@ WG_PORT = 51820
 #: NAT/ISP can blackhole that one flow while every other flow from the same machine crosses fine.
 #: Measured 2026-10-04 (vps1 ↔ macbook): the tunnel had counted ~7.8 KiB of handshake initiations as
 #: sent, tcpdump on the office's own host showed each 148-byte initiation leaving as
-#: `192.168.5.15.51820 > 31.97.196.82.51820`, the server's `tcpdump` and its ufw counter saw NONE of
+#: `192.168.5.15.51820 > 93.184.216.5.51820`, the server's `tcpdump` and its ufw counter saw NONE of
 #: them — while packets with the same 5-tuple and the same WireGuard shape, sent from the same
 #: machine or another container, arrived. Re-applying the plan (fresh socket, same port) did not help;
 #: `wg set wg0 listen-port 51830` brought the handshake back within 10 seconds. So the dialing side's
@@ -409,9 +409,9 @@ def roaming_stall(measured: dict, pairs: list, window: int = STALL_WINDOW) -> li
 
     That shape is THIS side's network, not a peer: two public offices do not go down in the same two
     minutes, and a laptop that changed networks loses every one of them at once. Measured 2026-11-01,
-    the MacBook taken from home to a coffee shop at 09:12 UTC: vps1 and fireplace, both public, stopped
+    the MacBook taken from home to a coffee shop at 09:12 UTC: vps1 and examplef, both public, stopped
     answering together. The engine's NAT kept the old network's mapping for each tunnel's fixed port,
-    and the 25 s keepalives kept it from expiring. `wg set … listen-port 0` brought fireplace back in
+    and the 25 s keepalives kept it from expiring. `wg set … listen-port 0` brought examplef back in
     5 s and vps1 in 25 s, by hand, four minutes later, while the repair loop was still waiting out its
     `HEAL_AFTER` from the first sighting. A single public pair that dies is told apart from nothing (the
     peer may be down: vps1 itself, 11:20 the same day), so it waits for `HEAL_AFTER` as before. A public
@@ -554,7 +554,9 @@ def pair_conf(pair: dict) -> dict:
         # The firewall is rendered from the SAME two facts the [Peer] block is: this address, and the
         # direction of this link. Permission is not a second opinion about the tunnel — it is the same
         # declaration, asked the other question ("what may arrive", not "how do I reach it").
-        "firewall_peer": {"office": pid, "address": other, "direction": direction, "iface": iface,
+        # `self`: OUR side of this pair — what a peer's delivery may be addressed to (firewall: `ip daddr`, so a peer
+        # on this tunnel cannot address another pair's listener; issues/a-peer-on-one-tunnel-can-reach-…)
+        "firewall_peer": {"office": pid, "address": other, "self": mine, "direction": direction, "iface": iface,
                           "ports": pair.get("ports") or {}},
     }
 
@@ -853,6 +855,10 @@ def selftest() -> list[str]:
                     {"home": {"drive": 8975}})
     if 'ip saddr 10.79.3.2 tcp dport 8975 accept   # drive' not in served["nftables"]:
         problems.append("a `serve` link opens exactly the served app ports")
+    if (f'ip saddr 10.79.3.2 ip daddr {served["addressing"]["self"]} tcp dport 8975 accept   # drive — delivered'
+            not in served["nftables"]):
+        problems.append("a delivery is accepted only when it is addressed to THIS pair's own side (`self`): a peer on "
+                        "one tunnel must not reach another pair's listener on the same port")
     if "ip saddr 10.79.3.2 drop" not in served["nftables"]:
         problems.append("and drops everything else from that peer")
     if served["guard"]["rule"] != "ClientIP(`10.79.3.2/32`)":
@@ -1170,7 +1176,7 @@ def selftest() -> list[str]:
     t = 1_800_000_000
     dead = lambda shook: {"alive": False, "handshake_at": shook}           # noqa: E731
     coffee = {"wg2": dead(t), "wg6": dead(t + 40), "wg5": dead(t - 9000)}
-    pairs = [("wg2", "93.184.216.5"), ("wg6", "93.184.216.10"), ("wg5", "127.0.0.1")]
+    pairs = [("wg2", "93.184.216.5"), ("wg6", "93.184.216.13"), ("wg5", "127.0.0.1")]
     if roaming_stall(coffee, pairs) != ["wg2", "wg6"]:
         problems.append(f"two public pairs dead within the window are moved at once (the tcp pair never): "
                         f"{roaming_stall(coffee, pairs)}")

@@ -17,13 +17,13 @@
 #   3. is the service healthy, and what does the self-update log say?
 #
 # Usage: post-update-verify.sh [expected-image-id-prefix] [marker]
-#   defaults: expected = the image behind ghcr.io/solomonboltin/digital-office/bina-ds:latest
+#   defaults: expected = the image behind ghcr.io/bina-solution/digital-office/bina-ds:latest
 #             marker   = bina-voice-strip (the composer-draft UI, not the rejected overlay panel)
 set -uo pipefail
 
-REPO="${BBOX_REPO_HOST:-/root/deployment-hacohen}"
+REPO="${BBOX_REPO_HOST:-/root/digital-office}"
 CONTAINER="bina-ds-${DEPLOYMENT_NAME:-staging}"
-WANT="${1:-$(docker inspect -f '{{.Id}}' ghcr.io/solomonboltin/digital-office/bina-ds:latest 2>/dev/null)}"
+WANT="${1:-$(docker inspect -f '{{.Id}}' ghcr.io/bina-solution/digital-office/bina-ds:latest 2>/dev/null)}"
 MARKER="${2:-bina-voice-strip}"
 OUT="${REPO}/data/bina-ds/post-update-verify.log"
 mkdir -p "$(dirname "${OUT}")"

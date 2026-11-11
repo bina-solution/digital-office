@@ -40,6 +40,14 @@ log "Container: ${N8N_CONTAINER} / DB: ${PG_CONTAINER} (${PGDB})"
 docker ps --format '{{.Names}}' | grep -Fxq "${N8N_CONTAINER}" || { echo "Error: '${N8N_CONTAINER}' not running." >&2; exit 1; }
 docker ps --format '{{.Names}}' | grep -Fxq "${PG_CONTAINER}"  || { echo "Error: '${PG_CONTAINER}' not running."  >&2; exit 1; }
 
+# The push below restores from THIS checkout, and it refuses a checkout that lacks what is live or is behind its
+# office's branch (DGO-1603). Asked HERE, before the wipe: asked after it, a refusal would leave the instance
+# empty — no workflows, no credentials — and the live rows that said which commit they came from gone with it.
+_gc=0
+python3 "$(npath "${N8N_DIR}")/tooling/push-guard.py" check "$(npath "${REPO_ROOT}")" --pg "${PG_CONTAINER}" || _gc=$?
+[ "${_gc}" = 0 ] || { echo "Error: clean-recreate refused before wiping anything (push guard exit ${_gc}, above)." >&2
+                      exit 1; }
+
 # ── 1) WIPE content (owner/settings/projects/roles preserved). CASCADE clears the join/child tables:
 #       workflows_tags, shared_workflow, shared_credentials, webhook_entity, workflow_history,
 #       workflow_statistics, execution_data/metadata, *_dependency, workflow_publish*. ──
@@ -52,7 +60,11 @@ log "Delegating to the push hook for restore..."
 # The hook is `push` — `n8n-push` was its pre-refactor script name, so this path did not exist and
 # the whole restore step failed silently after the TRUNCATE above (i.e. clean-recreate WIPED and
 # never restored).
-"${SCRIPT_DIR}/push"
+# The guard was asked before the wipe (above); asked again here, a refusal — origin moved meanwhile, or a fetch
+# that failed then and answers now — would leave the instance empty. So the restore carries that first answer.
+# (After the wipe nothing is live, so no webhook can be RE-opened either: the reopen question has nothing to ask.)
+N8N_PUSH_BEHIND_OK="clean-recreate: the push guard was asked before the wipe" \
+  N8N_PUSH_REOPEN_OK="clean-recreate: nothing is live after the wipe" "${SCRIPT_DIR}/push"
 
 # ── 3) REBUILD tags deterministically from the workflow files ──
 log "Rebuilding tags (tag_entity + workflows_tags) from blueprint files..."

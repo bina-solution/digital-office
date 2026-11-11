@@ -37,8 +37,8 @@ printf '%s' "${out}" | grep -iE "error" | head -4
 sleep 75
 
 echo "=== 3. sync SSO for newly enabled apps ==="
-docker restart authentik-bootstrap-shlomo-laptop >/dev/null 2>&1; sleep 80
-docker restart authentik-server-shlomo-laptop   >/dev/null 2>&1; sleep 85
+docker restart authentik-bootstrap-owner-laptop >/dev/null 2>&1; sleep 80
+docker restart authentik-server-owner-laptop   >/dev/null 2>&1; sleep 85
 
 echo "=== 4. Open targets ==="
 fail=0

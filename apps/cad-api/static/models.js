@@ -1,4 +1,4 @@
-/* models.js (cad-api: static/) — the office's FreeCAD models, each at its own address (FPG-621).
+/* models.js (cad-api: static/) — the office's FreeCAD models, each at its own address (EXF-621).
  *
  * /models lists every model the FreeCAD jobs published (newest first); /models/<name> is one of them: the model in 3D
  * (its own glb, its own colours), the renders, the parts list, the steps, the build sheet and every file to download,
@@ -19,7 +19,7 @@ const fileUrl = (m, f) => `/models/${enc(m.name)}/files/${enc(f)}`;
 const when = (s) => (s ? new Date(s * 1000).toLocaleString() : '');
 // FreeCAD itself: the office's cad app, next to this one (cad-api.<office> → cad.<office>)
 const freecadUrl = () => `${location.protocol}//${location.host.replace(/^cad-api\./, 'cad.')}/`;
-const STYLE = { 'fpg-standard': 'Standard (the shop’s build)', 'fpg-turtle': 'Turtle Top (the shop’s build)',
+const STYLE = { 'exf-standard': 'Standard (the shop’s build)', 'exf-turtle': 'Turtle Top (the shop’s build)',
                 standard: 'Standard (generic)' };
 
 export async function modelsPage(box) {

@@ -162,17 +162,16 @@ type profile struct {
 	set       bool
 	generated bool // set by the .env ci-env.sh generates, which bbox run writes first
 	said      []string
-	stop      error // no answer and nothing in .env: bbox run stops there (see pickProfile)
 }
 
 // pickProfile is ensure_perf_profile. A profile .env names is kept — said once when this machine
 // would be sized otherwise; with none, the selector's answer is what bbox appends to .env.
 //
-// With none AND no answer, bbox means to fall back to the floor ("profile selector unavailable —
-// falling back to the floor profile") and never gets there: `prof="$(python3 …select-profile.py)"`
-// is a failed assignment under `set -e`, so bbox run exits on that line without a word (stderr is
-// discarded). That is what bbox does, so that is what this says; TestPerfProfileMatchesBbox runs
-// bbox's own function to prove it.
+// With none AND no answer, bbox falls back to the floor and says so — "profile selector unavailable —
+// falling back to the floor profile (ci-small)." — then sizes to it as to any answer. Until DGO-605
+// (292a6767) it never got there: the failed `prof="$(python3 …select-profile.py)"` ended bbox run under
+// `set -e` without a word, and this said that; `|| true` let the fallback speak, and this says what it
+// says now. TestPerfProfileMatchesBbox runs bbox's own function to prove it.
 func pickProfile(env []byte, fit string, fitErr error, cores int) profile {
 	if cur, ok := envProfile(env); ok {
 		p := profile{name: cur, set: true}
@@ -182,7 +181,9 @@ func pickProfile(env []byte, fit string, fitErr error, cores int) profile {
 		return p
 	}
 	if fitErr != nil {
-		return profile{stop: fitErr}
+		return profile{name: floor, said: []string{
+			fmt.Sprintf("profile selector unavailable — falling back to the floor profile (%s).", floor),
+			fmt.Sprintf("no PERFORMANCE_PROFILE set — sizing to this host (%d cores → %s)", cores, floor)}}
 	}
 	return profile{name: fit, said: []string{fmt.Sprintf("no PERFORMANCE_PROFILE set — sizing to this host (%d cores → %s)", cores, fit)}}
 }

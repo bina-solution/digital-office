@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-r"""rules-lib-parity-lint — the rule editor's preview library must be the label engine's, verbatim.
+r"""rules-lib-parity-lint — gate G71: the rule editor's preview library must be the label engine's, verbatim.
 
     python3 scripts/refactor/rules-lib-parity-lint.py
 

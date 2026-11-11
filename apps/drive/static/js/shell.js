@@ -13,15 +13,19 @@
   const PLACES = [
     { view: "home", icon: "home", he: "בית", en: "Home" },
     { view: "folder", id: "", icon: "drive", he: "הקבצים שלי", en: "My files", tab: ["קבצים", "Files"] },
-    { view: "recent", icon: "clock", he: "נפתחו לאחרונה", en: "Recent" },
-    { view: "starred", icon: "star", he: "מסומנים בכוכב", en: "Starred" },
+    { view: "recent", icon: "clock", he: "נפתחו לאחרונה", en: "Recent", needs: "recent" },
+    { view: "starred", icon: "star", he: "מסומנים בכוכב", en: "Starred", needs: "starred" },
+    { view: "shared", icon: "users", he: "שותפו איתי", en: "Shared with me", needs: "shared" },
   ];
+  /* a place is offered only where the drive shown can answer it (the server says which: api/folders) —
+     a Google account has «shared with me», the office's own storage does not */
+  const offered = (p, conn) => !p.needs || !conn || (conn.views || []).includes(p.needs);
   const MEDIA = [
     { view: "photos", icon: "image", he: "תמונות", en: "Photos" },
     { view: "music", icon: "music", he: "מוזיקה ואודיו", en: "Music & audio", tab: ["אודיו", "Audio"] },
     { view: "videos", icon: "film", he: "סרטונים", en: "Videos" },
   ];
-  const TITLES = { home: ["בית", "Home"], recent: ["נפתחו לאחרונה", "Recent"], starred: ["מסומנים בכוכב", "Starred"], photos: ["תמונות", "Photos"],
+  const TITLES = { home: ["בית", "Home"], recent: ["נפתחו לאחרונה", "Recent"], starred: ["מסומנים בכוכב", "Starred"], shared: ["שותפו איתי", "Shared with me"], photos: ["תמונות", "Photos"],
     music: ["מוזיקה ואודיו", "Music & audio"], videos: ["סרטונים", "Videos"], trash: ["אשפה", "Trash"] };
   const placeOf = (p) => (p.view === "folder" ? "files" : p.view);
   const isOn = (p, r) => p.view === r.view && (p.view !== "folder" || (r.id || "") === (p.id || ""));
@@ -40,7 +44,9 @@
     const folders = F.useStore((s) => s.folders);
     const store = F.useStore((s) => s.storage);
     const open = F.useStore((s) => s.drawer);
-    const top = folders.filter((f) => !f.parent).sort((a, b) => (b.system ? 1 : 0) - (a.system ? 1 : 0) || a.name.localeCompare(b.name, "he"));
+    const conn = F.useStore((s) => s.connection);
+    const top = folders.filter((f) => !f.parent && !f.shared).sort((a, b) => (b.system ? 1 : 0) - (a.system ? 1 : 0) || (b.drive ? 1 : 0) - (a.drive ? 1 : 0) || a.name.localeCompare(b.name, "he"));
+    const creates = !conn || conn.creates !== false;
     // data-place: a stable handle for whatever drives this page (the simulation's map, an agent's browser)
     const item = (p) => html`<a class=${"nav-i place" + (isOn(p, route) ? " on" : "")} data-place=${placeOf(p)} href=${F.BASE + F.pathOf(p)} aria-current=${isOn(p, route) ? "page" : null}
       onClick=${(e) => { e.preventDefault(); F.go(p); }} ...${p.view === "folder" ? F.views.dropTarget(p.id || "") : {}}>
@@ -50,24 +56,27 @@
       <div class="side-brand"><span class="mark">${ic("folder", "sm")}</span><b>${L("קבצים", "Files")}</b>
         <span class="spacer"></span>
         <button class="icbtn only-n" title=${L("סגירה", "Close")} onClick=${() => set({ drawer: false })}>${ic("x")}</button></div>
-      <button class="side-new" onClick=${(e) => { set({ drawer: false }); addMenu(e); }}>${ic("plus")}${L("חדש", "New")}</button>
+      <button class="side-new" disabled=${!creates} title=${creates ? "" : L("החשבון הזה אינו יכול לשמור קבצים חדשים (חשבון שירות של Google בלי אחסון משלו)", "This account cannot keep new files (a Google service account has no storage of its own)")}
+        onClick=${(e) => { set({ drawer: false }); addMenu(e); }}>${ic("plus")}${L("חדש", "New")}</button>
       <nav class="side-scroll">
-        ${PLACES.map(item)}
-        <div class="nav-h">${L("מדיה", "Media")}</div>
-        ${MEDIA.map(item)}
+        <${F.drives.Section} />
+        <div class="nav-h">${L("מקומות", "Places")}</div>
+        ${PLACES.filter((p) => offered(p, conn)).map(item)}
+        ${(!conn || conn.media !== false) && html`<div class="nav-h">${L("מדיה", "Media")}</div>
+        ${MEDIA.map(item)}`}
         <div class="nav-h">${L("תיקיות", "Folders")}
-          <button title=${L("תיקייה חדשה", "New folder")} onClick=${() => D.newFolder("")}>${ic("plus", "sm")}</button></div>
+          ${creates && html`<button title=${L("תיקייה חדשה", "New folder")} onClick=${() => D.newFolder("")}>${ic("plus", "sm")}</button>`}</div>
         ${top.map((f) => html`<a key=${f.id} class=${"nav-i" + (route.view === "folder" && route.id === f.id ? " on" : "")} href=${F.BASE + F.pathOf({ view: "folder", id: f.id })}
-          onClick=${(e) => { e.preventDefault(); F.go({ view: "folder", id: f.id }); }} ...${F.views.dropTarget(f.id)} title=${f.name}>
-          ${ic(f.system ? "folder-input" : "folder")}<span class="lbl"><bdi>${f.name}</bdi></span>${f.count ? html`<span class="cnt num">${f.count}</span>` : ""}</a>`)}
+          onClick=${(e) => { e.preventDefault(); F.go({ view: "folder", id: f.id }); }} ...${F.views.dropTarget(f.id)} title=${f.drive ? f.name + " · " + L("כונן משותף", "Shared drive") : f.name}>
+          ${ic(f.drive ? "users" : f.system ? "folder-input" : "folder")}<span class="lbl"><bdi>${f.name}</bdi></span>${f.count ? html`<span class="cnt num">${f.count}</span>` : ""}</a>`)}
         ${!top.length && html`<div class="nav-i muted static">${ic("folder", "sm")}<span class="lbl">${L("עוד אין תיקיות", "No folders yet")}</span></div>`}
         <div class="nav-h"></div>
         ${item({ view: "trash", icon: "trash", he: "אשפה", en: "Trash" })}
       </nav>
-      ${store && html`<div class="side-store" title=${F.count(store.files, ["קובץ אחד", "1 file"], ["קבצים", "files"])}>
+      ${store && html`<div class="side-store" title=${typeof store.files === "number" ? F.count(store.files, ["קובץ אחד", "1 file"], ["קבצים", "files"]) : ""}>
         <div class="t"><span>${L("אחסון", "Storage")}</span><span class="num">${fmtSize(store.used)}${store.limit ? " / " + fmtSize(store.limit) : ""}</span></div>
         ${pct != null && html`<div class="bar"><i style=${"width:" + pct + "%"}></i></div>`}
-        <div class="t"><span>${F.count(store.files, ["קובץ אחד", "1 file"], ["קבצים", "files"])}</span>${store.trash_used ? html`<span>${L("באשפה ", "Trash ")}${fmtSize(store.trash_used)}</span>` : ""}</div>
+        ${(typeof store.files === "number" || store.trash_used) && html`<div class="t"><span>${typeof store.files === "number" ? F.count(store.files, ["קובץ אחד", "1 file"], ["קבצים", "files"]) : ""}</span>${store.trash_used ? html`<span>${L("באשפה ", "Trash ")}${fmtSize(store.trash_used)}</span>` : ""}</div>`}
       </div>`}
     </aside>`;
   }
@@ -127,9 +136,9 @@
         <button class="icbtn" title=${L("מחיקה לצמיתות", "Delete forever")} onClick=${() => D.destroy(sel)}>${ic("trash")}</button>` : html`
         ${!sel.some((x) => x.kind === "folder") && html`<button class="icbtn hide-n" title=${L("הורדה", "Download")} onClick=${() => sel.forEach(D.download)}>${ic("download")}</button>`}
         <button class="icbtn" title=${L("העברה אל…", "Move to…")} disabled=${sys} onClick=${() => set({ dialog: { type: "move", items: sel } })}>${ic("folder-input")}</button>
-        <button class="icbtn hide-n" title=${L("כוכב", "Star")} onClick=${() => D.star(sel, !sel.every((x) => x.starred))}>${ic("star")}</button>
+        ${(!state.connection || (state.connection.optional_ops || []).includes("star")) && html`<button class="icbtn hide-n" title=${L("כוכב", "Star")} onClick=${() => D.star(sel, !sel.every((x) => x.starred))}>${ic("star")}</button>`}
         <button class="icbtn" title=${L("העברה לאשפה", "Move to trash")} disabled=${sys} onClick=${() => D.trash(sel)}>${ic("trash")}</button>`}
-      <button class="icbtn" title=${L("עוד", "More")} onClick=${(e) => U.openMenu(U.actionsFor(sel), e)}>${ic("more")}</button>
+      <button class="icbtn" data-act="more" title=${L("עוד", "More")} onClick=${(e) => U.openMenu(U.actionsFor(sel), e)}>${ic("more")}</button>
     </div>`;
   }
   function Top() {
@@ -140,6 +149,7 @@
     const details = F.useStore((s) => s.details);
     const searching = F.useStore((s) => s.searching);
     const narrow = w === "n";
+    const shell = F.useStore((s) => !!s.shell);
     const setLayout = (l) => { F.localSet("layout", l); set({ layout: l }); };
     const listy = !["photos", "music", "videos"].includes(route.view);
     if (sel) return html`<header class="fx-top"><${SelBar} /></header>`;
@@ -148,17 +158,17 @@
       <${SearchBox} /></header>`;
     return html`<header class="fx-top">
       <div class="top-title"><${Crumbs} route=${route} w=${w} /></div>
-      ${narrow ? html`<button class="icbtn" title=${L("חיפוש", "Search")} onClick=${() => set({ searching: true })}>${ic("search")}</button>`
+      ${narrow ? (shell ? "" : html`<button class="icbtn" title=${L("חיפוש", "Search")} onClick=${() => set({ searching: true })}>${ic("search")}</button>`)
         : html`<${SearchBox} />`}
       ${narrow && html`<button class="icbtn add" title=${L("הוספה: העלאה, תיקייה חדשה", "Add: upload, new folder")} aria-label=${L("הוספה", "Add")} onClick=${(e) => addMenu(e)}>${ic("plus")}</button>`}
       <div class="top-acts">
         ${listy && w === "w" && html`<div class="seg" role="group" aria-label=${L("תצוגה", "View")}>
-          <button class=${layout === "list" ? "on" : ""} title=${L("רשימה", "List")} aria-pressed=${layout === "list"} onClick=${() => setLayout("list")}>${ic("list", "sm")}</button>
-          <button class=${layout === "grid" ? "on" : ""} title=${L("רשת", "Grid")} aria-pressed=${layout === "grid"} onClick=${() => setLayout("grid")}>${ic("grid", "sm")}</button></div>`}
-        ${listy && w === "m" && html`<button class="icbtn" title=${layout === "list" ? L("תצוגת רשת", "Grid view") : L("תצוגת רשימה", "List view")}
+          <button data-layout="list" class=${layout === "list" ? "on" : ""} title=${L("רשימה", "List")} aria-pressed=${layout === "list"} onClick=${() => setLayout("list")}>${ic("list", "sm")}</button>
+          <button data-layout="grid" class=${layout === "grid" ? "on" : ""} title=${L("רשת", "Grid")} aria-pressed=${layout === "grid"} onClick=${() => setLayout("grid")}>${ic("grid", "sm")}</button></div>`}
+        ${listy && w === "m" && html`<button class="icbtn" data-layout=${layout === "list" ? "grid" : "list"} title=${layout === "list" ? L("תצוגת רשת", "Grid view") : L("תצוגת רשימה", "List view")}
           onClick=${() => setLayout(layout === "list" ? "grid" : "list")}>${ic(layout === "list" ? "grid" : "list")}</button>`}
         ${!narrow && html`<button class=${"icbtn" + (details ? " on" : "")} title=${L("פרטים (I)", "Details (I)")} aria-pressed=${details} onClick=${() => set({ details: !details })}>${ic("info")}</button>`}
-        ${narrow && html`<button class="icbtn" title=${L("עוד", "More")} onClick=${(e) => U.openMenu([
+        ${narrow && html`<button class="icbtn" data-act="more" title=${L("עוד", "More")} onClick=${(e) => U.openMenu([
           ...(listy ? [{ icon: layout === "list" ? "grid" : "list", label: layout === "list" ? L("תצוגת רשת", "Grid view") : L("תצוגת רשימה", "List view"), run: () => setLayout(layout === "list" ? "grid" : "list") }] : []),
           { icon: "sort", label: L("מיון לפי שם", "Sort by name"), run: () => F.views.setSort("name") },
           { icon: "sort", label: L("מיון לפי תאריך", "Sort by date"), run: () => F.views.setSort("date") },
@@ -180,6 +190,19 @@
       <button class="tab" data-place="more" onClick=${() => set({ drawer: true })}><span class="pill">${ic("menu")}</span><span>${L("עוד", "More")}</span></button>
     </nav>`;
   }
+  /* ONE TAB BAR ON A PHONE (DGO-1507). Inside the console a phone already has the office's tab bar at
+     the bottom, and these tabs stood on top of it: two bars, 125 px of the screen. There the same
+     places are one row of chips under the header — the same links, the same «עוד» to the drawer. */
+  function Places() {
+    const route = F.useStore((s) => s.route);
+    const tabs = [PLACES[0], PLACES[1], MEDIA[0], MEDIA[1]];
+    return html`<nav class="fx-places" aria-label=${L("ניווט ראשי", "Main navigation")}>
+      ${tabs.map((p) => html`<a class=${"fx-chip" + (isOn(p, route) ? " on" : "")} data-place=${placeOf(p)} title=${L(p.he, p.en)}
+        aria-current=${isOn(p, route) ? "page" : null} href=${F.BASE + F.pathOf(p)} onClick=${(e) => { e.preventDefault(); F.go(p); }}>
+        ${ic(p.icon, "sm")}<span>${p.tab ? L(p.tab[0], p.tab[1]) : L(p.he, p.en)}</span></a>`)}
+      <button class="fx-chip" data-place="more" onClick=${() => set({ drawer: true })}>${ic("menu", "sm")}<span>${L("עוד", "More")}</span></button>
+    </nav>`;
+  }
 
   /* ── the frame ────────────────────────────────────────────────────────── */
   function Frame() {
@@ -190,6 +213,7 @@
     const hasPlayer = F.useStore((s) => s.player.index >= 0 && s.player.queue.length > 0);
     const upH = F.useStore((s) => s.upH || 0);
     const selecting = F.useStore((s) => s.sel.length > 0);
+    const shell = F.useStore((s) => !!s.shell);
     const [veil, setVeil] = hooks.useState(false);
 
     /* a box too small for the app — under 300 tall, or under 560×440 — is a widget (widget.js): the
@@ -218,16 +242,27 @@
       co.observe(el);
       return () => co.disconnect();
     }, [size.tiny]);
-    hooks.useEffect(() => { D.loadList(); }, [route.view, route.id, route.q]);
+    hooks.useEffect(() => { D.loadList(); }, [route.view, route.id, route.q, route.drive]);
+    /* another drive: its tree and its meter (the list follows by its key) */
+    const shownDrive = hooks.useRef(route.drive || "");
+    hooks.useEffect(() => {
+      if ((route.drive || "") === shownDrive.current) return;
+      shownDrive.current = route.drive || "";
+      // nothing of the drive left behind stays on the screen (Back included), and the home and a folder list
+      // their folders from the tree: drawn again once the new tree is in
+      set({ folders: [], storage: null, connection: null, sel: [] });
+      D.loadFolders().then(() => D.loadList(true)).catch(() => { /* the list says why */ });
+      D.loadStorage();
+    }, [route.drive]);
     /* the office's notices sit above what is at the bottom of this app (tabs, player, the queue) — in a
        widget they come from the top (files.css body[data-tiny]): the bottom is the widget's buttons */
     hooks.useEffect(() => {
       const narrow = size.w === "n";
-      const lift = (narrow ? (size.h === "s" ? 52 : 64) : 0) + (hasPlayer ? (narrow ? 66 : 72) : 0) + (upH && narrow ? upH + 8 : 0);
+      const lift = (narrow && !shell ? (size.h === "s" ? 52 : 64) : 0) + (hasPlayer ? (narrow ? 66 : 72) : 0) + (upH && narrow ? upH + 8 : 0);
       document.body.style.setProperty("--tell-lift", lift + "px");
       document.body.dataset.w = size.w;
       if (size.tiny) document.body.dataset.tiny = ""; else delete document.body.dataset.tiny;
-    }, [size.w, size.h, size.tiny, hasPlayer, upH]);
+    }, [size.w, size.h, size.tiny, hasPlayer, upH, shell]);
     /* a file dropped in from the computer — anywhere on the app */
     hooks.useEffect(() => {
       let depth = 0;
@@ -245,12 +280,13 @@
     const narrow = size.w === "n";
     const where = state.route.view === "folder" ? (D.folderPath(state.route.id).slice(-1)[0] || {}).name || L("הקבצים שלי", "My files") : L("הקבצים שלי", "My files");
     return html`<div class=${"fx" + (hasPlayer ? " has-player" : "")} ref=${root} data-w=${size.w} data-h=${size.h}
-      data-touch=${size.touch ? "" : null} data-selecting=${selecting ? "" : null} data-tiny=${size.tiny ? "" : null}>
+      data-touch=${size.touch ? "" : null} data-selecting=${selecting ? "" : null} data-tiny=${size.tiny ? "" : null} data-shell=${shell ? "" : null}>
       ${size.tiny ? html`<${F.widget.Widget} />` : html`
       <${Side} />
       ${narrow && html`<div class=${"fx-scrim" + (drawer ? " on" : "")} onClick=${() => set({ drawer: false })}></div>`}
       <main class="fx-main">
         <${Top} />
+        ${narrow && shell && html`<${Places} />`}
         <div class="fx-body">
           <section class="fx-content" ref=${content} tabIndex="-1" aria-live="polite"
             onClick=${(e) => { if (e.target === e.currentTarget && state.sel.length) set({ sel: [] }); }}
@@ -262,12 +298,13 @@
         </div>
       </main>
       <${F.player.PlayerBar} />
-      ${narrow && html`<${Tabs} />`}`}
+      ${narrow && !shell && html`<${Tabs} />`}`}
       <${F.upload.UploadPanel} />
       <${F.widget.Publish} />
       <${F.upload.Pickers} />
       <${U.Menu} />
       <${U.MoveDialog} />
+      <${F.drives.Dialogs} />
       <${F.viewer.Viewer} />
       ${veil && html`<div class="drop-veil"><div>${ic("upload")}${L("שחררו כדי להעלות אל ", "Drop to upload to ")}«${where}»</div></div>`}
     </div>`;
@@ -281,6 +318,27 @@
     addEventListener("popstate", () => set({ route: F.parse(), viewer: null, menu: null }));
     render(html`<${Frame} />`, document.getElementById("app"));
     document.getElementById("app").removeAttribute("aria-busy");
+    /* ONE SEARCH ON THE SCREEN (DGO-1507) — the console's contract, the same as mail's («ONE SEARCH» in
+       apps/mail/mailview/static/app.js): embedded, the app offers its search to the shell; the shell's
+       answer `bina:search-taken` also says its bar and its tab bar stand over this app (a phone then has
+       no magnifier and no tabs of the app's own), and `bina:find` is the shell's «חיפוש בקבצים» pressed.
+       A shell that never answers (an older console, a desktop window) leaves the app as it was. */
+    if (window.parent !== window) {
+      addEventListener("message", (e) => {
+        if (e.origin !== location.origin || e.source !== window.parent || !e.data) return;
+        if (e.data.type === "bina:search-taken") set({ shell: true });
+        // full screen in the console: its bar and its tab bar are gone, so the app's own come back
+        else if (e.data.type === "bina:search-released") set({ shell: false });
+        else if (e.data.type === "bina:find") {
+          if (state.size.w === "n") set({ searching: true, sel: [] });   // (a selection's bar would stand over the search)
+          // (the field is drawn on the next frame on a phone; `autofocus` acts only on a page's load)
+          setTimeout(() => { const i = document.querySelector(".top-search input"); if (i) i.focus(); }, 30);
+        }
+      });
+      try { parent.postMessage({ type: "bina:search-offer", app: "drive", label: L("חיפוש בקבצים", "Search files") }, location.origin); }
+      catch (e) { /* an opaque parent: the app keeps its own search */ }
+    }
+    F.drives.load();
     try { await D.loadFolders(); } catch (e) { /* the list says why */ }
     D.loadList(true); D.loadStorage(); D.loadOpenWith(); D.watch();
     const r = state.route;

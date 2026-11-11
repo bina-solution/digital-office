@@ -52,7 +52,7 @@
   let root = null, cvBg = null, cvFx = null, layer = null, dimEl = null, bar = null, dock = null;
   let snapEl = null, helpEl = null, toastEl = null, menuEl = null, menuName = "";
   let wins = [], order = [], seq = 0, focused = null, drag = null, expose = null, flash = null;
-  let G = null, booted = false, clockT = 0, saveT = 0, toastT = 0, resizeRaf = 0, measCtx = null, acctFor = undefined;
+  let G = null, booted = false, clockT = 0, saveT = 0, toastT = 0, resizeRaf = 0, measCtx = null;
 
   // what the rest of the desktop (desktop-memory.js) hangs off: window events, and the native tools
   const listeners = {};
@@ -236,6 +236,7 @@
   }
 
   function loadFrame(w) {
+    w.offer = null;                       // a search offer belongs to the page that made it (offerOf)
     if (w.ext) {
       // A linked office the platform has already MEASURED as not answering: the card, never the frame.
       // A window on a cross-origin host that fails shows the edge's `Bad Gateway` and cannot be
@@ -478,6 +479,7 @@
     // page, and is this page's own sign-in still alive. Without it a desktop left open for days kept
     // running the build it was loaded with, and kept opening windows onto a sign-in that had run out.
     if (typeof freshen === "function") freshen(true);
+    if (m && m.id) noteUse(m);                 // the dock's order is this number, nothing else
     // An app of its own host: a window on that host, not a frame of the shell's proxy. `externalUrl`
     // is the shell's one derivation of that origin (app.js, loaded after this file, so it is resolved
     // at call time) — the same URL the content frame uses. The INNER ROUTE travels with it: a console
@@ -577,7 +579,7 @@
     w.el.querySelector(".dk-end").appendChild(out);
     if (!ext.ask) {                     // a host that is asked first never comes up empty unexplained
       const hint = h("div", "dk-exthint");
-      hint.textContent = "אם החלון נשאר ריק, האפליקציה אינה מאפשרת הטמעה · אפשר לפתוח אותה בלשונית (הכפתור בכותרת)";
+      hint.textContent = "אם החלון נשאר ריק, האפליקציה אינה מאפשרת הטמעה · אפשר לפתוח אותה בלשונית (הכפתור בכותרת, או בתפריט של שם היישום)";
       w.el.querySelector(".dk-body").appendChild(hint);
       setTimeout(() => hint.classList.add("gone"), 7000);
     }
@@ -664,6 +666,7 @@
     if (w.sleeping || w.native) return;
     w.sleeping = true;
     w.el.classList.add("sleeping");
+    w.offer = null;                       // …and is let go with it: a sleeping window frees its page
     try { w.frame.src = "about:blank"; } catch (e) { /* ignore */ }
   }
   function wake(w) {
@@ -687,21 +690,6 @@
       sleepWin(victims.shift());
       live = pages();
     }
-  }
-
-  // An account switch moves the service's pointer; every window showing that service re-reads it —
-  // asked first (platform:connection-changed), reloaded if it does not answer. The same contract
-  // app.js keeps with the single frame (reloadEmbeddedApp).
-  function reloadService(service) {
-    wins.filter(x => x.frame && !x.sleeping && (modById(x.mid) || {}).service === service).forEach(w => {
-      let acked = false;
-      const onAck = e => {
-        if (e.origin === location.origin && e.source === w.frame.contentWindow && e.data && e.data.type === "platform:reload-ack") acked = true;
-      };
-      window.addEventListener("message", onAck);
-      try { w.frame.contentWindow.postMessage({ type: "platform:connection-changed", service }, location.origin); } catch (e) { /* reload covers it */ }
-      setTimeout(() => { window.removeEventListener("message", onAck); if (!acked) loadFrame(w); }, 400);
-    });
   }
 
   // ── moving, resizing, shaking ────────────────────────────────────────────────────────────
@@ -1199,14 +1187,17 @@
       '<button class="dk-appname" data-menu="app"></button>' +
       '<button data-menu="win">חלון</button><button data-menu="view">תצוגה</button><button data-menu="help">עזרה</button>' +
       '<span class="dk-grow"></span>' +
-      // the focused window's account (drive, mail, …): the classic top-bar chip, following focus
-      '<span class="dk-acct hidden"></span>' +
       '<button class="dk-srch" data-act="palette" title="חיפוש (Ctrl K)">' + SEARCH_SVG + '<span>חיפוש</span></button>' +
       '<span class="dk-clock" aria-live="off"></span>';
     bar.addEventListener("click", ev => {
       const b = ev.target.closest("button");
       if (!b) return;
-      if (b.dataset.act === "palette") { closeMenu(); if (typeof openPalette === "function") openPalette(); return; }
+      if (b.dataset.act === "palette") {
+        closeMenu();
+        if (offerOf(focused)) postTo(focused, "bina:find");   // a compact desk: the bar's search IS the app's
+        else if (typeof openPalette === "function") openPalette();
+        return;
+      }
       if (b.dataset.menu) { if (menuName === b.dataset.menu) closeMenu(); else openMenu(b.dataset.menu, b); }
     });
     bar.addEventListener("mouseover", ev => {
@@ -1215,12 +1206,56 @@
     });
     tickClock();
     updateBar();
+    // what changes an item's width without a resize: the focused app's name, the account chip (drawn
+    // late, after its service answers), the search's word (an app's own, in compact)
+    if (window.ResizeObserver) {
+      barRO = new ResizeObserver(() => fitBar());
+      bar.querySelectorAll(".dk-appname,.dk-srch").forEach(el => barRO.observe(el));
+    }
   }
   function applyBarGeom(full) {
-    const pill = prefs.pill && !full;
+    // a compact desk is one screen: its bar runs the full width, never the focus zone's pill
+    const pill = prefs.pill && !full && !compact;
     bar.classList.toggle("pill", pill);
     bar.style.left = pill ? G.zl + "px" : "0px";
     bar.style.right = pill ? (G.W - G.zr) + "px" : "0px";
+    fitBar();
+  }
+
+  // ── the bar fits the room it has (DGO-1637) ────────────────────────────────────────────
+  // «התפריט … נחתך באמצע ברגע שהמסך צר מדי, זה באג» (MEET-28, 44:43). The bar is one row of items
+  // whose widths are their words, and a row wider than its room is cut — at a narrow window, in the
+  // focus zone's pill, at a large zoom, with a long account name. So the ROOM decides what the row
+  // carries, in a fixed order of what steps aside first: the clock; then the window/view/help menus,
+  // which move into the office's mark menu (nothing is lost, it is one press further); then the
+  // search's word (its glass stays). The app's name
+  // is the one item that may shorten, so the row fits at every width. Measured on the bar's own items
+  // after each step — never a breakpoint, because the words, the account and the zoom decide.
+  const FOLDS = ["f-clock", "f-menus", "f-srch"];
+  let barRO = null;
+  // the width the bar is GOING to have: its pill transition may still be running, so not its box
+  const barRoom = () => (bar.classList.contains("pill") ? G.zr - G.zl : window.innerWidth);
+  function barNeed() {
+    const cs = getComputedStyle(bar), px = v => parseFloat(v) || 0;
+    let need = px(cs.paddingLeft) + px(cs.paddingRight) + px(cs.borderLeftWidth) + px(cs.borderRightWidth), n = 0;
+    for (const el of bar.children) {
+      if (getComputedStyle(el).display === "none") continue;
+      n++;                              // every item shown is a gap, the spacer included (it is a flex item)
+      if (el.classList.contains("dk-grow")) continue;
+      const ms = getComputedStyle(el);
+      // the app's name is measured whole: it is the item that shortens, so its box may already be short
+      need += (el.classList.contains("dk-appname") ? el.scrollWidth : el.offsetWidth) + px(ms.marginLeft) + px(ms.marginRight);
+    }
+    return need + Math.max(0, n - 1) * px(cs.columnGap);
+  }
+  function fitBar() {
+    if (!bar || !G) return;
+    FOLDS.forEach(c => bar.classList.remove(c));
+    const room = barRoom();
+    for (const c of FOLDS) {
+      if (barNeed() <= room) break;
+      bar.classList.add(c);
+    }
   }
   function updateBar() {
     if (!bar) return;
@@ -1234,16 +1269,8 @@
       : ` · <span class="dk-office"${r.hue ? ` data-office-hue="${escH(r.hue)}"` : ""}>` +
         (r.animal ? `<span class="office-animal">${icon(r.animal)}</span>` : "") +
         escH(r.label) + (r.off ? " (לא זמינה כרגע)" : "") + "</span>");
-    // the account chip follows focus, like a menu bar follows the front app; re-rendered only when
-    // the SERVICE changes, since rendering it probes the service
-    const slot = bar.querySelector(".dk-acct");
-    const m = focused && !focused.native ? modById(focused.mid) : null;
-    const svc = m && m.service ? m.service : null;
-    if (!slot || svc === acctFor) return;
-    acctFor = svc;
-    slot.innerHTML = "";
-    slot.classList.toggle("hidden", !svc);
-    if (svc && typeof renderAccountBar === "function") renderAccountBar(svc, slot);
+    syncBarSearch();
+    // (an app's account chip stood here, following focus: an app's accounts are its own screen's — DGO-1624)
   }
   function tickClock() {
     const c = bar && bar.querySelector(".dk-clock");
@@ -1255,14 +1282,27 @@
   function winLabel(w) { return w.titleFull || metaOf(w).name; }
   function menuItems(name) {
     const f = focused, fm = f && !f.native ? modById(f.mid) : null;
-    if (name === "sys") return [
+    // the menus the bar had no room for (fitBar) open from here, at the mark
+    const folded = bar && bar.classList.contains("f-menus") ? bar.querySelector(".dk-logo") : null;
+    if (name === "sys") return (folded ? [
+      { label: "חלון", kbd: "‹", act: () => openMenu("win", folded) },
+      { label: "תצוגה", kbd: "‹", act: () => openMenu("view", folded) },
+      { label: "עזרה", kbd: "‹", act: () => openMenu("help", folded) },
+      "-",
+    ] : []).concat([
       { label: "הגדרות מסוף…", act: openSettings },
       { label: "קיצורי מקלדת", kbd: "?", act: () => toggleHelp(true) },
       "-",
       { label: "חזרה לתצוגה הרגילה", act: () => api.disable() },
-    ];
+      // the way out (DGO-1621): the office's own sign-out, as the classic view's account menu offers it — read once
+      // by the shell at boot (app.js signoutUrl); an office with none here shows the item disabled, not a dead link
+      { label: "התנתקות", disabled: !(typeof SIGNOUT === "string" && SIGNOUT),
+        act: () => { location.href = SIGNOUT + (SIGNOUT.includes("?") ? "&" : "?") + "rd=" + encodeURIComponent(location.origin + "/"); } },
+    ]);
     if (name === "app") return [
       { label: fm ? "חלון נוסף של " + fm.name : "חלון נוסף", disabled: !fm, act: () => openWin(fm, f.route) },
+      // a compact desk draws no window title bar, and an app on its own host keeps its way out here
+      ...(f && f.ext ? [{ label: "פתיחה בלשונית נפרדת", act: () => window.open(f.ext.url, "_blank", "noopener") }] : []),
       { label: "טעינה מחדש", disabled: !f, act: () => { if (f.sleeping) wake(f); else loadFrame(f); } },
       { label: "שליחה לצד", disabled: !f, act: () => stashWins([f], false) },
       { label: "הגדלה / שחזור", disabled: !f, act: () => toggleMax(f) },
@@ -1312,7 +1352,8 @@
     const r = btn.getBoundingClientRect();
     const mw = menuEl.offsetWidth;
     menuEl.style.top = (r.bottom + 6) + "px";
-    menuEl.style.left = clamp(r.right - mw, 6, G.W - mw - 6) + "px";
+    // the screen's width, not the desk's: a compact desk keeps the width it had (G) for its windows
+    menuEl.style.left = clamp(r.right - mw, 6, window.innerWidth - mw - 6) + "px";
     menuName = name;
     btn.classList.add("open");
   }
@@ -1343,7 +1384,8 @@
     const B = window.BinaDockBudget || {};
     const L = B.DOCK || { tile: 46, gap: 8, pad: 20, sep: 5, min: 3 };
     const keys = Object.keys(natives);
-    const apps = modules();
+    const groups = dockGroups(modules());     // one entry per KIND, the copies live in its stack
+    const apps = groups;
     const fixed = keys.length + 1;            // the desk's own tools + «כל החלונות»
     const budget = (B.resolveDock || (() => ({ slots: apps.length + fixed + 1, showMore: false })))({
       available: Math.max(0, window.innerWidth - 40), count: apps.length + fixed,
@@ -1355,7 +1397,123 @@
     const room = budget.showMore
       ? (B.dockRoom ? B.dockRoom(budget, budget.slots, fixed) : Math.max(1, budget.slots - fixed - 1))
       : apps.length;
-    return { L: L, budget: budget, shown: apps.slice(0, room), behind: apps.slice(room), keys: keys };
+    // `all` is every KIND, shown or behind: what the next build compares against to know which one
+    // just arrived (DGO-1427). `shown`/`behind` were previously app entries and are now group entries.
+    return { L: L, budget: budget, shown: apps.slice(0, room), behind: apps.slice(room), keys: keys,
+             all: apps };
+  }
+
+  // ── THE DOCK GROUPS (the owner, msg 337, DGO-1426) ─────────────────────────────────────────────
+  // One tile per KIND of app, not per (app × office). An office that links three others showed «בינה»
+  // four times, «טלגרם» twice, «מחשבים» twice — the row was a list of installations, which is the
+  // estate's shape and not a person's. The kinds a person uses sit side by side; the copies live one
+  // hover away, this office's own first, and everything opens what a click always opened.
+  const USAGE_KEY = "bina.dock.usage";
+
+  function kindOf(m) {                          // «bina.hp-laptop» and «bina» are one kind: bina
+    return String((m && (m.alias || m.id)) || "").split(".")[0] || "";
+  }
+
+  function dockUsage() {
+    try { return JSON.parse(localStorage.getItem(USAGE_KEY) || "{}") || {}; } catch (e) { return {}; }
+  }
+
+  function noteUse(m) {                         // the count behind "most used first", nothing else
+    const k = kindOf(m);
+    if (!k) return;
+    const u = dockUsage();
+    u[k] = (u[k] || 0) + 1;
+    try { localStorage.setItem(USAGE_KEY, JSON.stringify(u)); } catch (e) {}
+  }
+
+  function dockGroups(apps) {
+    const by = new Map();
+    for (const m of apps) {
+      const k = kindOf(m);
+      if (!by.has(k)) by.set(k, []);
+      by.get(k).push(m);
+    }
+    const usage = dockUsage();
+    const groups = [];
+    for (const [kind, items] of by) {
+      // this office's own copy first: a click on the tile must open the one that always answers, and
+      // "closest" is exactly the meaning of a non-remote entry here.
+      items.sort((a, b) => (remoteInfo(a) ? 1 : 0) - (remoteInfo(b) ? 1 : 0));
+      groups.push({ kind: kind, items: items, primary: items[0], uses: usage[kind] || 0 });
+    }
+    // Most used first, and the sort is stable: an untouched office keeps the registry's own order.
+    return groups.sort((a, b) => b.uses - a.uses);
+  }
+
+  let seenKinds = null;                         // what was on the row at the previous build
+
+  function stackPanel(g) {
+    // The copies of one kind, above the tile, the way macOS opens a stack. Only drawn when there is
+    // more than one — a single copy needs no menu, and the tile already says its name on hover.
+    if (g.items.length < 2) return null;
+    const box = h("div", "dk-stack");
+    box.setAttribute("role", "menu");
+    g.items.forEach((m, i) => {
+      const r = remoteInfo(m);
+      const b = h("button", "dk-stack-i" + (i === 0 ? " is-own" : ""),
+        icon(m.icon) + '<span class="dk-stack-t"></span><span class="dk-stack-o"></span>');
+      b.querySelector(".dk-stack-t").textContent = m.name || m.id;
+      b.querySelector(".dk-stack-o").textContent = r ? r.label : "הלשכה הזאת";
+      if (r && r.hue) b.dataset.officeHue = r.hue;
+      b.setAttribute("aria-label", (m.name || m.id) + " — " + (r ? r.label : "הלשכה הזאת"));
+      b.addEventListener("click", ev => {
+        ev.stopPropagation();
+        const mm = modById(m.id);
+        if (mm) openModule(mm, "");
+      });
+      box.appendChild(b);
+    });
+    return box;
+  }
+
+  function groupTile(g) {
+    // The tile keeps every mark it had (colour, remote bracket, running dot) — it is the PRIMARY copy
+    // that carries them, and the stack says which copy is which.
+    const m = g.primary;
+    const b = h("button", "dk-ic " + colorFor(m.id) + remoteCls(m), icon(m.icon) + '<span class="tip"></span>');
+    b.querySelector(".tip").textContent = g.items.length > 1
+      ? (m.name || "") + " · " + one(g.items.length, "עותק אחד", "עותקים")
+      : remoteTip(m);
+    const r = remoteInfo(m);
+    if (r && r.hue) b.dataset.officeHue = r.hue;
+    b.dataset.mid = m.id;
+    b.dataset.kind = g.kind;
+    b.setAttribute("aria-label", b.querySelector(".tip").textContent);
+    b.addEventListener("click", ev => {
+      const mm = modById(m.id);
+      if (!mm) return;
+      if (ev.ctrlKey || ev.metaKey || ev.shiftKey) openWin(mm, ""); else openModule(mm, "");
+    });
+    const slot = h("div", "dk-slot");
+    slot.dataset.kind = g.kind;
+    if (g.items.length > 1) {
+      const n = h("span", "dk-n num");
+      n.textContent = String(g.items.length);
+      slot.appendChild(n);
+    }
+    slot.appendChild(b);
+    const panel = stackPanel(g);
+    if (panel) {
+      // A stack that opens past the window's edge is half a menu: the row's last slots sit against the
+      // screen, so the panel is nudged back inside before it is ever shown (measured 2026-11-05: the
+      // first tile's stack ran off the right edge). Measured, not guessed — once per hover.
+      slot.addEventListener("mouseenter", () => {
+        panel.style.setProperty("--stack-dx", "0px");
+        const r = panel.getBoundingClientRect();
+        const pad = 12;
+        let dx = 0;
+        if (r.right > window.innerWidth - pad) dx = (window.innerWidth - pad) - r.right;
+        else if (r.left < pad) dx = pad - r.left;
+        if (dx) panel.style.setProperty("--stack-dx", Math.round(dx) + "px");
+      });
+      slot.appendChild(panel);
+    }
+    return slot;
   }
 
   function appTile(m) {
@@ -1404,9 +1562,9 @@
     closeDockMore();
     if (!root) return;
     const apps = modules();
-    // …AND THE APPS THIS CONSOLE DOES NOT FRAME (FPG-107). An app whose UI lives only on its own host
+    // …AND THE APPS THIS CONSOLE DOES NOT FRAME (EXF-107). An app whose UI lives only on its own host
     // (`embed: false`, e.g. the services app) has no module, so this panel — the desktop's only search —
-    // never listed it while the apps screen did: «החיפוש לא מוצא את אפליקציית השירותים» (fpg2 2:24:48).
+    // never listed it while the apps screen did: «החיפוש לא מוצא את אפליקציית השירותים» (exf2 2:24:48).
     // They come from the answer ⌘K already reads (app.js otherApps(): app-management's /api/apps) and
     // open the way ⌘K and that screen open them (app.js openOutside: a window on this desktop).
     let others = [];
@@ -1482,7 +1640,16 @@
     dock.style.setProperty("--dock-gap", d.L.gap + "px");
     dock.style.setProperty("--dock-pad", (d.L.pad / 2) + "px");
     dock.innerHTML = "";
-    d.shown.forEach(m => dock.appendChild(appTile(m)));
+    // A kind that was not on the row a moment ago arrived — it gets its entrance (DGO-1427), and it
+    // is never the first paint: the desk opening for the first time is not "an app was created".
+    const nowKinds = new Set(d.shown.map(g => g.kind));
+    const born = seenKinds ? new Set([...nowKinds].filter(k => !seenKinds.has(k))) : new Set();
+    seenKinds = new Set(d.all.map(g => g.kind));
+    d.shown.forEach(g => {
+      const slot = groupTile(g);
+      if (born.has(g.kind)) slot.classList.add("dk-born");
+      dock.appendChild(slot);
+    });
     dock.appendChild(h("span", "sep"));
     // the desktop's own tools (registered by desktop-memory.js), then the all-windows view
     d.keys.forEach(key => {
@@ -1542,11 +1709,13 @@
     // Ctrl-K from INSIDE a window: the page's own document never reaches app.js's listener
     if ((e.ctrlKey || e.metaKey) && e.code === "KeyK" && e.target && e.target.ownerDocument && e.target.ownerDocument !== document) {
       e.preventDefault();
-      if (typeof openPalette === "function") openPalette();
+      // …not behind an open dialog (DGO-1634): the key waits for it to close
+      if (typeof openPalette === "function" && !document.querySelector(".modal-ov")) openPalette();
     }
   }
   function onKey(e) {
-    if (!root) return;
+    // an open dialog is over the desktop (DGO-1634): the desktop's own keys (E, S, M, 4, ?) wait for it to close
+    if (!root || document.querySelector(".modal-ov")) return;
     if (e.key === "Escape") {
       if (root.querySelector(".dk-more")) { closeDockMore(true); return; }
       if (menuEl) { closeMenu(); return; }
@@ -1635,6 +1804,132 @@
     return true;
   }
 
+  // ── a hand-off: the office browser BESIDE the window that asked, and that window back (DGO-1434) ──────
+  // The owner, 2026-11-06: «in desktop mode in a new window so both shown … and later even after login it
+  // should open back that application». handoffs.js decides WHEN (a hand-off `needed` for a window in
+  // view, and its end); this places it. The window that asked keeps its side and gives up half the width,
+  // the browser takes the other half (handoffs.js `beside`, the rule its test holds). The asking window says
+  // it waits, with «show the browser» and «cancel»; the browser's title says whom it serves. At the end the
+  // browser window the errand OPENED goes — one that was open before goes back where it was — and the asking
+  // window gets its place back, in front: «activate the app that asked», not a new window. Compact (a
+  // narrow desk, one window at a time) has no «beside»: the browser comes to the front, and the app back.
+  let ho = null, hoClosing = false;
+  const hoCancel = [];
+  const tileOf = w => (w && !w.native ? String(w.mid).replace(/^ext:/, "") : "");
+  const winOfTile = id => wins.filter(x => tileOf(x) === id).sort((a, b) => b.lastFocus - a.lastFocus)[0] || null;
+  const geomOf = w => ({ cx: w.cx, cy: w.cy, w: w.w, h: w.h, max: !!w.max, dock: w.dock || null });
+  const hoSay = () => hoCancel.forEach(fn => { try { fn(); } catch (e) { console.error("[desktop] handoff", e); } });
+  function placeWin(w, r) {
+    w.dock = r.dock || null;            // a window parked on a flank's shelf goes back to it
+    w.max = !!r.max;                    // `w.prev` (the size before a maximise) is kept for the next toggle
+    w.cx = r.cx; w.cy = r.cy; w.w = r.w; w.h = r.h;
+    if (w.max) maxGeom(w);
+    applyPos(w, true);
+    setTitle(w, w.title, true);
+  }
+  function hoMark(w, spec) {
+    let r = w.el.querySelector(".dk-ho");
+    if (!r) {
+      r = h("div", "dk-ho");
+      r.setAttribute("role", "status");
+      r.innerHTML = '<span class="dk-ho-pulse" aria-hidden="true"></span><span class="dk-ho-t">ממתין לך בדפדפן הלשכה</span>' +
+        '<span class="dk-ho-grow"></span>' +
+        '<button type="button" class="btn sm ghost" data-ho="show" title="מביא את חלון הדפדפן לחזית">הצגת הדפדפן</button>' +
+        '<button type="button" class="btn sm ghost" data-ho="cancel" title="סוגר את מה שנפתח בשביל החלון הזה ומחזיר אותו לחזית">ביטול</button>';
+      r.addEventListener("click", ev => {
+        const b = ev.target.closest("[data-ho]");
+        if (!b) return;
+        ev.stopPropagation();
+        if (b.dataset.ho === "cancel") { hoSay(); return; }
+        if (ho && ho.bro && wins.includes(ho.bro)) { if (!inZone(ho.bro) || ho.bro.mode !== "win") bringToZone(ho.bro); focusWin(ho.bro); }
+      });
+      w.el.querySelector(".dk-body").appendChild(r);
+    }
+    r.title = spec.sentence || "";
+  }
+  function hoPill(w, spec) {
+    let p = w.el.querySelector(".dk-ho-pill");
+    if (!p) { p = h("span", "pill need dk-ho-pill"); w.el.querySelector(".dk-title").appendChild(p); }
+    p.textContent = "עבור " + (spec.name || "");
+    p.title = spec.sentence || "";
+  }
+  function hoUnmark(x) {
+    [x.app, x.bro].forEach(w => { if (w && w.el) w.el.querySelectorAll(".dk-ho, .dk-ho-pill").forEach(e => e.remove()); });
+  }
+  // open({at, for, route, name, sentence}) → true when the desktop took it (false: let the address do it).
+  // The browser window first: when it cannot open (the window limit, an address that is not one), nothing
+  // else has moved (the second reader of DGO-1434).
+  function hoOpen(spec) {
+    const m = spec && modById(spec.at);
+    if (!root || !m) return false;
+    if (ho && (ho.at !== spec.at || ho.for !== spec.for)) hoEnd({ back: false });   // another errand's windows back
+    const app = winOfTile(spec.for);
+    const before = winOfTile(spec.at);
+    // where a browser window he already had sits — read BEFORE opening, which brings it to the zone (the
+    // second reader: one parked on a flank went back to the middle)
+    const beforeAt = before ? geomOf(before) : null;
+    const r = compact || !(window.BinaHandoffs && BinaHandoffs.beside) ? null
+      : BinaHandoffs.beside(app ? { cx: app.cx } : null, { W: G.W, top: G.top, bottom: G.bottom });
+    const b = openModule(m, spec.route || "", r ? { cx: r.bro.cx, cy: r.bro.cy, w: r.bro.w, h: r.bro.h } : {});
+    if (!b) return false;
+    if (!ho) ho = { at: spec.at, for: spec.for, app: null, appPrev: null, appClosed: false, bro: null, broPrev: null, opened: false };
+    if (!ho.bro) { ho.opened = !before; ho.broPrev = beforeAt; }
+    ho.bro = b;
+    if (before && r) placeWin(b, r.bro);
+    if (app) {
+      if (ho.app !== app) { ho.app = app; ho.appPrev = geomOf(app); ho.appClosed = false; }
+      if (r) placeWin(app, r.app);
+      // both halves in front of whatever else is open: the app right under the browser (a press inside a
+      // window on its own host does not raise it — the frame is another origin)
+      focusWin(app, { noHash: true, keepFocus: true });
+      hoMark(app, spec);
+    }
+    hoPill(b, spec);
+    focusWin(b);
+    // the address names what is in front (a window on its own host writes none itself): a reload lands here
+    const to = "#/m/" + spec.at + (spec.route || "");
+    if (location.hash !== to) history.replaceState(null, "", to);
+    return true;
+  }
+  // end({for, back, from}) — the marks go and the windows get their places back: the browser window the
+  // errand OPENED closes (one that was open before goes back where it was), the asking window returns to its
+  // place. That is done even when he is in another window — quietly, his focus stays where it is. With
+  // `back` the asking window comes to the front as well. A window he closed himself is never reopened;
+  // after a reload (no record of the places) the asking app is only brought to the front.
+  function hoEnd(spec) {
+    spec = spec || {};
+    const x = ho;
+    ho = null;
+    if (!root) return;
+    if (x) {
+      hoUnmark(x);
+      // …but the window he is working in is never closed or moved under him by a QUIET end (the record
+      // gone, another app's ask): only its mark goes (the second reader of DGO-1434)
+      const busy = !spec.back && focused === x.bro;
+      if (x.bro && wins.includes(x.bro) && !busy) {
+        if (x.opened) { hoClosing = true; try { closeWin(x.bro); } finally { hoClosing = false; } }
+        else if (x.broPrev) placeWin(x.bro, x.broPrev);
+      }
+      if (x.app && wins.includes(x.app) && x.appPrev) placeWin(x.app, x.appPrev);
+    }
+    if (!spec.back) return;
+    const app = x ? (x.app && wins.includes(x.app) ? x.app : null) : winOfTile(spec.for);
+    if (app) {
+      if (!inZone(app) || app.mode !== "win") bringToZone(app);
+      focusWin(app);
+    } else if (!x && spec.for && modById(spec.for)) openModule(modById(spec.for), "");
+    if (!app && x && x.appClosed) return;                 // he closed it: the address stays where he is
+    const to = typeof spec.from === "string" && /^#\/m\//.test(spec.from) ? spec.from : (spec.for ? "#/m/" + spec.for : "");
+    if (to && location.hash !== to) history.replaceState(null, "", to);
+  }
+  // the person closed the browser's window while it served another app: that is his «cancel». His closing
+  // the asking window is remembered, so the end never brings it back (closing all windows closes both).
+  (listeners.close = listeners.close || []).push(w => {
+    if (!ho || hoClosing) return;
+    if (w === ho.bro) { ho.bro = null; ho.opened = false; hoSay(); }
+    else if (w === ho.app) { ho.app = null; ho.appClosed = true; }
+  });
+
   // ── mounting ────────────────────────────────────────────────────────────────────────────
   function mount() {
     if (root) return;
@@ -1680,8 +1975,8 @@
     if (!root) return;
     saveLayout();
     emit("unmount");
-    acctFor = undefined;
     compact = false;
+    if (barRO) { barRO.disconnect(); barRO = null; }
     clearInterval(clockT);
     // EVERY timer this mount started, not just the clock. The toast's 1.9s timer outlived the desk it
     // belonged to and fired into a null `toastEl` — measured live on the running console: turning the
@@ -1703,6 +1998,7 @@
     wins = [];
     order = [];
     focused = drag = expose = flash = null;
+    ho = null;                          // a hand-off's windows went with the desk (handoffs.js keeps the trip)
     document.documentElement.classList.remove("dk-on");
   }
   const wanted = () => asked || !!load(K.on, false);
@@ -1713,16 +2009,58 @@
   // still loaded. Handing back to the classic shell here would tear every window down and reload its
   // page, an agent's running chat and the live browser it drives included. A screen that is narrow
   // from the start (a phone) never mounts the desktop at all; that is the classic shell's job.
+  //
+  // COMPACT IS THE CLASSIC SHELL'S SHAPE, NOT LESS OF IT (DGO-1637). It used to hide the menu bar and
+  // keep the dock it had at the wide width: the search and every menu were gone, the dock ran off the
+  // screen's edge as a sideways scroller, and Files drew its own phone tabs above the dock — two bars.
+  // Now the screen keeps one bar on top (the office's mark and menus, the app's name, the search, all
+  // fitted by fitBar), the focused window under it without a title bar of its own (the bar names it),
+  // and the dock under it, budgeted again for the width it has. And the shell's bars stand over the
+  // app the way the classic shell's do, by the same contract: an app that offered its search
+  // (`bina:search-offer`) is told `bina:search-taken`, so it drops its own magnifier and phone tabs,
+  // and the bar's search becomes its search (`bina:find`). Back to wide, it is `bina:search-released`.
   let compact = false;
   function setCompact(on) {
     if (!root || compact === on) return;
     compact = on;
     root.classList.toggle("compact", on);
     closeMenu();
+    wins.forEach(w => { if (offerOf(w, true)) postTo(w, on ? "bina:search-taken" : "bina:search-released"); });
+    syncBarSearch();
     if (!on) return;
     if (expose) exitExpose(null);
-    if (focused && focused.mode !== "win") bringToZone(focused);
+    // …a window on a flank too, not only an icon: its page keeps the flank's reading zoom otherwise
+    if (focused && (focused.mode !== "win" || !inZone(focused))) bringToZone(focused);
   }
+
+  // The offer belongs to the DOCUMENT that made it (the window's frame keeps its window object across
+  // navigations, its document does not), exactly as app.js keeps the classic frame's. `any` asks
+  // whether the window offered at all; without it, whether the bar's search is the app's right now.
+  function offerOf(w, any) {
+    if (!w || !w.offer || !w.frame || (!any && !compact)) return null;
+    try { return w.frame.contentWindow.document === w.offer.doc ? w.offer : null; } catch (e) { return null; }
+  }
+  function postTo(w, type) {
+    try { w.frame.contentWindow.postMessage({ type }, location.origin); } catch (e) { /* the window went */ }
+  }
+  function syncBarSearch() {
+    const b = bar && bar.querySelector(".dk-srch");
+    if (!b) return;
+    const o = offerOf(focused);
+    b.querySelector("span").textContent = o ? o.label : "חיפוש";
+    b.title = o ? o.label + " (Ctrl K: חיפוש מסך)" : "חיפוש (Ctrl K)";
+    b.setAttribute("aria-label", o ? o.label : "חיפוש");   // its word may be folded away (fitBar)
+  }
+  window.addEventListener("message", e => {
+    if (e.origin !== location.origin || !e.data || e.data.type !== "bina:search-offer" || !root) return;
+    const w = wins.find(x => x.frame && x.frame.contentWindow === e.source);
+    if (!w) return;                       // the classic frame's offer is app.js's
+    let doc = null;
+    try { doc = w.frame.contentWindow.document; } catch (err) { return; }
+    w.offer = { doc, label: String(e.data.label || "").trim().slice(0, 40) || "חיפוש" };
+    if (compact) postTo(w, "bina:search-taken");
+    if (w === focused) syncBarSearch();
+  });
 
   // debounced with a timer, not a frame: a backgrounded tab gets no frames, and a resize there must
   // still be handled
@@ -1730,7 +2068,14 @@
     if (BARE || !booted || resizeRaf) return;
     resizeRaf = setTimeout(() => {
       resizeRaf = 0;
-      if (root && !wideEnough()) { setCompact(true); return; }
+      if (root && !wideEnough()) {
+        // the windows keep the geometry of the wide desk (G) for when it comes back; the bar and the
+        // dock are this screen's, so they are fitted again on every narrower width
+        setCompact(true);
+        applyBarGeom();
+        buildDock();
+        return;
+      }
       if (!root && wanted() && wideEnough()) { mount(); if (typeof route === "function") route(); return; }
       if (!root) return;
       if (compact) setCompact(false);   // back to the full desktop; positions rescale from the width it had
@@ -1823,10 +2168,15 @@
       unmount();
       if (typeof route === "function") route();
     },
-    // app.js reloadEmbeddedApp() hands an account switch here while the desktop is up
-    reloadService,
     // an app on its own host (embed:false), opened as a window — app-management's "open" calls this
     openExternal: spec => openExternal(spec),
+    // a hand-off (handoffs.js, DGO-1434): the browser beside the window that asked, and that window back
+    handoff: {
+      open: hoOpen,
+      end: hoEnd,
+      onCancel(fn) { if (typeof fn === "function" && !hoCancel.includes(fn)) hoCancel.push(fn); },
+      toast: msg => toast(msg),
+    },
     // The window manager as the rest of the desktop sees it (desktop-memory.js): events —
     // mount, unmount, open, close, focus(w, prev), route, load(w, doc), pos — the windows, and the
     // few verbs a tool needs. A window object is shared, not copied: read it, do not rewrite it.

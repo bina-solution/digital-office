@@ -58,7 +58,10 @@ export class Jqexv3RunBsWorkflow {
         httpMethod: 'POST',
         path: 'jqexv3-run-bs',
         responseMode: 'responseNode',
-        options: {},
+        // DGO-1603 (G97): the extraction runner is called from inside the office — extraction.py's
+        // _run_hook POSTs to http://n8n-webhook:5678 — and the edge publishes /webhook/* on the public
+        // host. The office's own ranges, the same list meetRecordings01 carries.
+        options: { ipWhitelist: '10.0.0.0/8,172.16.0.0/12,192.168.0.0/16,127.0.0.1,::1' },
     };
 
     @node({

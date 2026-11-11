@@ -1,30 +1,95 @@
 name: android-app
 
-# The Digital Office's Android app (DGO-1071): packaging/android, built on GitHub's hosted runner — the
-# Android SDK is on it — with dgo for android/arm64 compiled in as the app's native library
-# (lib/arm64-v8a/libdgo.so: the one place an app that targets Android 10+ may execute its own program,
-# and the store forbids fetching one). The APK is attached to a DRAFT pre-release, visible to the
-# repository's people only: the account's Actions storage is full, and release assets are not counted
-# there. Debug-signed until the owner's store key exists — installable by hand, not yet on the store.
-# Only on request: a push to dgo-stable whose head commit says "[android]" (a dispatch once this file is
-# on main), or "[android-core]" for the core and QEMU alone, no machine in the APK (~17 MB, r030-103).
+# The Digital Office's Android app (DGO-1071): packaging/android, with dgo for android/arm64 compiled in as
+# the app's native library (lib/arm64-v8a/libdgo.so: the one place an app that targets Android 10+ may
+# execute its own program, and the store forbids fetching one). Debug-signed until the owner's store key
+# exists — installable by hand, not yet on the store.
+#
+# What a phone installs is built from the PUBLIC COPY of the commit (scripts/release/public-export.py, its
+# own checks passed), as android-engine.yml builds the machine: the APK carries every app's manifest and the
+# console's files (office-root.sh), and the private tree holds what never leaves the company (a client's
+# app among them). So the APK may be published, and it is (DGO-1328): a release that is not a draft —
+# every APK until 0.1.77 was a draft of this PRIVATE repository, which no link of the owner's could open —
+# and its copy on the public repository bina-solution/digital-office, whose links open with no sign-in.
+#
+# When: a push to dgo-stable whose head commit says "[android]" ("[android-core]" for the core and QEMU
+# alone), or that touches what the phone runs (the phone job, DGO-1338); and a dispatch from ANY ref
+# (`gh workflow run android-app.yml --ref mac-dgo -f machine=fetch`), so a build waits for no batch.
 
 on:
   push:
     branches: [dgo-stable]
   workflow_dispatch:
+    inputs:
+      machine:
+        description: "fetch: the APK names the public machine (~17 MB) · embed: the machine inside (~1.4 GB) · none: the core and QEMU alone"
+        type: choice
+        options: [fetch, embed, none]
+        default: fetch
+      engine:
+        description: "the android-engine draft to take QEMU (and the machine) from, e.g. android-engine-73 — empty: the newest whole one"
+        type: string
+        default: ""
+      abis:
+        description: "the APK's ABIs: arm64-v8a (phones) — or with x86_64 too (an x86_64 Android, the emulator: DGO-1723)"
+        type: choice
+        options: [arm64-v8a, "arm64-v8a,x86_64"]
+        default: arm64-v8a
 
 permissions:
-  contents: write   # the draft release, and nothing else
+  contents: write   # this repository's release, and nothing else
   actions: read     # whether the engine built by the same push failed (the wait below ends on it)
 
+env:
+  # gh's repository by name: once the workspace is the public copy (below) it has no remote to read it from
+  GH_REPO: ${{ github.repository }}
+
 jobs:
+  # WHETHER THIS RUN WANTS AN APK (DGO-1338). The tag in a commit message is a person remembering, and
+  # batches 22–24 went out without it while the phone's own office — its console, its core, its sign-in —
+  # changed: nothing was built, and the owner kept an APK from the batch before (measured 2026-11-04). A
+  # release that touches what the phone RUNS builds one by itself; the tag still forces it, and a dispatch
+  # asks for it by hand.
+  phone:
+    runs-on: [self-hosted, portable, ssd]
+    timeout-minutes: 55   # a minute's work, and up to 45 that ops/prejob_waitfree.sh may hold it (run 86 died at 10)
+    outputs:
+      build: ${{ steps.what.outputs.build }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+      - id: what
+        env:
+          MESSAGE: ${{ github.event.head_commit.message }}
+          EVENT: ${{ github.event_name }}
+          BEFORE: ${{ github.event.before }}
+        run: |
+          set -euo pipefail
+          build=no
+          case "${MESSAGE}" in *"[android]"*|*"[android-core]"*) build=yes ;; esac
+          [ "${EVENT}" != workflow_dispatch ] || build=yes
+          # the whole pushed range — a push of several commits changes what its earlier ones changed too —
+          # or the last commit, where the push names no commit before it (a new branch) or it cannot be fetched
+          from="HEAD^"
+          if [ -n "${BEFORE}" ] && [ -z "${BEFORE//0/}" ]; then
+            :
+          elif [ -n "${BEFORE}" ] && git fetch -q --no-tags --depth=1 origin "${BEFORE}" 2>/dev/null; then
+            from="${BEFORE}"
+          fi
+          if [ "${build}" = no ] && git rev-parse -q --verify "${from}^{commit}" >/dev/null 2>&1; then
+            if git diff --name-only "${from}" HEAD -- \
+                 packaging/android packaging/dgo platform-base/console platform-base/forward-auth \
+                 platform.state.core.yaml | grep . >/dev/null; then
+              build=yes
+            fi
+          fi
+          echo "build=${build}" >> "${GITHUB_OUTPUT}"
+          echo "an APK: ${build}"
+
   apk:
-    # dgo-stable only: a cache is scoped to its branch, so a run from another ref would make a second key,
-    # and the two refs' APKs would not install over each other
-    if: >-
-      github.ref == 'refs/heads/dgo-stable' && (github.event_name == 'workflow_dispatch'
-      || contains(github.event.head_commit.message, '[android]') || contains(github.event.head_commit.message, '[android-core]'))
+    needs: phone
+    if: needs.phone.outputs.build == 'yes'
     # On the JOB, not the workflow: a later push that does not ask for an APK starts a run too, and a
     # workflow-level group let that run cancel the build and then skip its own job.
     concurrency:
@@ -35,8 +100,47 @@ jobs:
     # image and holds no core for long: it assembles the APK from an engine draft that exists.
     runs-on: [self-hosted, portable, ssd]
     timeout-minutes: 265   # up to 180 of them waiting for the engine built by the same push (below), up to 45 that ops/prejob_waitfree.sh may hold it
+    env:
+      DGO_ABIS: ${{ inputs.abis || 'arm64-v8a' }}   # build.gradle's abiFilters; x86_64's libraries are built below
     steps:
+      # no token left in .git/config: the workspace becomes the public copy below
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      # the export parses every JavaScript file it changes, and the Dell's runner has no node of its own
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      # THE PUBLIC COPY IS WHAT IS BUILT (DGO-1328): the export of this commit, its checks passed (fail closed),
+      # in place of the checkout — a repository of its own, one commit, as office-root.sh archives HEAD. Its
+      # tree's hash and a tarball of it go with the APK: what a phone runs is that tree, byte for byte, and its
+      # source is beside it (AGPL).
+      - name: The public copy, in place of the checkout
+        run: |
+          set -euo pipefail
+          bash scripts/ci/pip-ensure.sh yaml:pyyaml
+          src="${RUNNER_TEMP}/public-src"
+          rm -rf "${src}" && mkdir -p "${src}"
+          python3 scripts/release/public-export.py --rev "${GITHUB_SHA}" --out "${src}" --report "${RUNNER_TEMP}/public-src.json"
+          python3 -c "import json,sys; r=json.load(open(sys.argv[1])); print('export ok:', r.get('ok')); sys.exit(0 if r.get('ok') else 1)" "${RUNNER_TEMP}/public-src.json"
+          # the commit's own date: the same export makes the same commit, and its time is the console's
+          # commit-time (below), not this build's
+          when="$(git log -1 --format=%cI "${GITHUB_SHA}")"
+          find "${GITHUB_WORKSPACE}" -mindepth 1 -maxdepth 1 -exec rm -rf {} +
+          cp -a "${src}/." "${GITHUB_WORKSPACE}/"
+          rm -rf "${src}"
+          cd "${GITHUB_WORKSPACE}"
+          git init -q -b main
+          # -f: every file the export kept, an ignored name or not — what is built is what the tree holds
+          git add -A -f
+          GIT_AUTHOR_DATE="${when}" GIT_COMMITTER_DATE="${when}" \
+            git -c user.name=export -c user.email=export@localhost commit -q -m "the public copy of ${GITHUB_SHA::8}"
+          git remote add origin https://github.com/bina-solution/digital-office.git
+          git archive --format=tar.gz --prefix="digital-office-${GITHUB_SHA::8}/" -o "${RUNNER_TEMP}/public-copy.tar.gz" HEAD
+          git rev-parse 'HEAD^{tree}' > "${RUNNER_TEMP}/public-copy.tree"
+          echo "building the public copy of ${GITHUB_SHA::8}: $(git ls-files | wc -l) files, tree $(cat "${RUNNER_TEMP}/public-copy.tree"), source $(du -h "${RUNNER_TEMP}/public-copy.tar.gz" | cut -f1)"
 
       # gh, which the engine draft's lookup, its download and the APK's upload use: GitHub's machine has it; on
       # ours, where nothing is installed by hand, a pinned release, checked against its published digest
@@ -95,7 +199,7 @@ jobs:
           cp -R platform-base/console/static platform-base/console/modules.yaml "${snapshot}/"
           git show -s --format=%ct HEAD > "${snapshot}/commit-time"
           (cd packaging/dgo && CGO_ENABLED=0 GOOS=android GOARCH=arm64 go build -trimpath -tags consoleembed \
-            -ldflags "-s -w -X main.version=0.1.${{ github.run_number }}+${GITHUB_SHA::8}" -o "${lib}/libdgo.so" .)
+            -ldflags "-s -w -X main.version=0.2.${{ github.run_number }}+${GITHUB_SHA::8}" -o "${lib}/libdgo.so" .)
           (cd platform-base/forward-auth && CGO_ENABLED=0 GOOS=android GOARCH=arm64 go build -trimpath \
             -ldflags "-s -w" -o "${lib}/libforward-auth.so" .)
           ls -la "${lib}"
@@ -151,20 +255,33 @@ jobs:
           # where the machine's pieces are published for phones to fetch (DGO-1089), or nothing: the variable
           # is the repository's, set once a place serves them
           MACHINE_URL: ${{ vars.DGO_MACHINE_URL }}
+          # a dispatch's choices: how the APK has its machine, and which engine draft (empty: the newest whole)
+          WANT_MACHINE: ${{ inputs.machine }}
+          WANT_ENGINE: ${{ inputs.engine }}
         run: |
           set -euo pipefail
-          # $1: the commit the draft must target, or "" for any — "<tag> <the commit it was built from>"
+          # $1: the commit the draft must target, or "" for any; $2: its tag, or "" for any — "<tag> <the commit
+          # it was built from> <public|private>": public when its guest was made from the public copy
+          # ([android-engine-public], public-copy.tree beside it). Only such a machine may go into an APK that is
+          # published, or be fetched by one (DGO-1089): a machine made from the checkout holds the private tree.
           whole() {
-            WANT="$1" gh api "repos/${GITHUB_REPOSITORY}/releases?per_page=50" --jq '[sort_by(.created_at) | reverse | .[] | select(.draft
+            WANT="$1" TAG="${2:-}" gh api "repos/${GITHUB_REPOSITORY}/releases?per_page=50" --jq '[sort_by(.created_at) | reverse | .[] | select(.draft
                 and (.tag_name | startswith("android-engine-"))
+                and ($ENV.TAG == "" or .tag_name == $ENV.TAG)
                 and ($ENV.WANT == "" or .target_commitish == $ENV.WANT)
                 and ([.assets[] | select(.state == "uploaded") | .name]
                      | (index("qemu-android-arm64.tgz") != null and index("qemu-android-arm64.tgz.sha256") != null
                         and index("dgo-guest-arm64.img.xz.sha256") != null)))
-                | "\(.tag_name) \(.target_commitish)"][0] // empty' 2>/dev/null || true
+                | "\(.tag_name) \(.target_commitish) \(if ([.assets[] | select(.state == "uploaded") | .name] | index("public-copy.tree")) != null then "public" else "private" end)"][0] // empty' 2>/dev/null || true
           }
           t=""
-          case "${MSG}" in
+          if [ -n "${WANT_ENGINE:-}" ]; then
+            [[ "${WANT_ENGINE}" =~ ^android-engine-[0-9]+$ ]] || { echo "::error::engine ${WANT_ENGINE} is not an android-engine-<n> draft"; exit 1; }
+            t="$(whole "" "${WANT_ENGINE}")"
+            [ -n "${t}" ] || { echo "::error::${WANT_ENGINE} is not a whole engine draft (QEMU and the machine's digest)"; exit 1; }
+          fi
+          case "${t:+given}:${MSG}" in
+            given:*) ;;
             *"[android-engine]"*)
               s=$(date +%s)
               while [ $(( $(date +%s) - s )) -lt 10800 ]; do
@@ -178,8 +295,10 @@ jobs:
             *) t="$(whole "")" ;;
           esac
           [ -n "${t}" ] || { echo "::error::no engine draft with both QEMU and the office's machine"; exit 1; }
-          target="${t#* }"; t="${t%% *}"
+          read -r t target made <<< "${t}"
           [ -n "${target}" ] && [ "${target}" != "${t}" ] || { echo "::error::draft ${t} names no commit it was built from"; exit 1; }
+          echo "ENGINE_DRAFT=${t}" >> "${GITHUB_ENV}"
+          echo "ENGINE_MADE=${made}" >> "${GITHUB_ENV}"
           # The machine goes in only if it speaks this core's protocol (packaging/android/engine/machine-
           # protocol, at the commit the draft was built from; none there is 1): one of another protocol never
           # proves itself to the core, and the owner's first container app would wait for it forever. Without
@@ -202,18 +321,37 @@ jobs:
           # 2026-11-02, DGO-1090, r030-103), embed (the .xz in the APK), or fetch — where the draft's pieces are
           # published (DGO-1089): the APK is built with their list's SHA-256 and carries no machine, only once
           # that list and every piece it names answer there (never an APK pointing at a list that does not)
+          # A dispatch says which (WANT_MACHINE): "fetch" fails here rather than becoming the 1.4 GB APK his
+          # installer refused, "embed" never asks the public copy, "none" is the core alone.
           mode=none
-          case "${MSG}" in *"[android-core]"*) core_only=1 ;; *) core_only="" ;; esac
+          case "${WANT_MACHINE:-}:${MSG}" in none:*|:*"[android-core]"*) core_only=1 ;; *) core_only="" ;; esac
+          if [ -n "${WANT_MACHINE:-}" ] && [ "${WANT_MACHINE}" != none ] && [ "${theirs}" != "${ours}" ]; then
+            echo "::error::the machine of ${t} (${target::8}) speaks protocol ${theirs:-?}, this core ${ours}: no ${WANT_MACHINE} APK from it"; exit 1
+          fi
+          # a machine made from the private checkout never goes into an APK, nor is named by one: every APK is
+          # published (above) — asked for by a dispatch, it fails; on a push, the APK is the core alone
+          if [ -z "${core_only}" ] && [ "${made}" != public ]; then
+            if [ -n "${WANT_MACHINE:-}" ]; then
+              echo "::error::${t}'s machine was made from the private checkout, not the public copy ([android-engine-public]): no ${WANT_MACHINE} APK from it"; exit 1
+            fi
+            echo "::warning::${t}'s machine was made from the private checkout: the APK carries no machine"
+            core_only=1
+          fi
           if [ -z "${core_only}" ] && [ "${theirs}" = "${ours}" ]; then
             mode=embed
-            if [ -n "${MACHINE_URL:-}" ]; then
-              url="${MACHINE_URL%/}"
-              # build.gradle's own rule, here first: a URL it would refuse fails the build rather than embedding
-              [[ "${url}" =~ ^https://[A-Za-z0-9._~:/%-]+$ ]] || { echo "::error::DGO_MACHINE_URL is not a plain https URL"; exit 1; }
+            if [ "${WANT_MACHINE:-}" != embed ]; then
               # https only, redirects too: the phone follows no other (Guest.open)
               get() { curl -fsSL --proto =https --proto-redir =https --max-time "$@"; }
               if said="$(gh release download "${t}" -D "${e}" -p dgo-guest-arm64.manifest.json --clobber 2>&1)"; then
                 m="$(sha256sum "${e}/dgo-guest-arm64.manifest.json" | cut -d' ' -f1)"
+                # where a machine is published: a release of its own on the public repository, named by its list
+                # (scripts/release/android-public.sh machine <draft>) — under DGO_MACHINE_URL's base when the
+                # variable names another place (its value up to the release, or the whole of it)
+                base="${MACHINE_URL:-https://github.com/bina-solution/digital-office/releases/download}"
+                base="${base%/}"; base="${base%/machine-arm64-*}"
+                url="${base}/machine-arm64-${m::12}"
+                # build.gradle's own rule, here first: a URL it would refuse fails the build rather than embedding
+                [[ "${url}" =~ ^https://[A-Za-z0-9._~:/%-]+$ ]] || { echo "::error::${url} is not a plain https URL"; exit 1; }
                 missing=0
                 [ "$(get 60 "${url}/${m}" | sha256sum | cut -d' ' -f1)" = "${m}" ] || missing=1
                 # the list as the phone reads it (Guest.parse): "<sha> <size>" a piece, or nothing
@@ -241,13 +379,18 @@ jobs:
                   { echo "DGO_MACHINE_URL=${url}"; echo "DGO_MACHINE_MANIFEST=${m}"; } >> "${GITHUB_ENV}"
                   echo "the machine is fetched by the phone: ${url}/${m::12}…"
                 else
-                  echo "::warning::${url} does not serve all of ${t}'s machine (${missing} missing): the APK carries it"
+                  echo "::warning::${url} does not serve all of ${t}'s machine (${missing} missing; scripts/release/android-public.sh machine ${t} publishes it): the APK carries it"
                 fi
               else
                 echo "::warning::${t}'s list of pieces could not be taken (${said}): the APK carries the machine"
               fi
             fi
           fi
+          if [ "${WANT_MACHINE:-}" = fetch ] && [ "${mode}" != fetch ]; then
+            echo "::error::a fetch APK was asked, and ${url:-the public repository} does not serve ${t}'s machine whole (above)"; exit 1
+          fi
+          # what the release says of its machine: how the APK has it, and from which draft
+          echo "APK_MACHINE=${mode}" >> "${GITHUB_ENV}"
           if [ "${mode}" = embed ]; then
             gh release download "${t}" -D "${e}" -p qemu-android-arm64.tgz -p qemu-android-arm64.tgz.sha256 \
               -p 'dgo-guest-arm64.img.xz.part*' -p dgo-guest-arm64.img.xz.sha256
@@ -295,6 +438,55 @@ jobs:
         with:
           packages: 'platforms;android-35 build-tools;35.0.0'
 
+      # An x86_64 Android (the emulator on the Dell's KVM, DGO-1723): the same dgo and forward-auth, for
+      # android/amd64 — which Go links only through the NDK's, 16 KB pages as Play requires from February 2027.
+      # netgo,osusergo: with cgo on, Go's android net would ask libc's resolver — the emulator would resolve what a
+      # phone's pure-Go core cannot; with them cgo is the linker and nothing more, as on arm64. The console's
+      # snapshot is the arm64 step's (one commit).
+      - name: dgo and forward-auth for android/amd64 (x86_64), linked by the NDK
+        if: contains(env.DGO_ABIS, 'x86_64')
+        run: |
+          set -euo pipefail
+          ndk=27.2.12479018
+          sdkmanager --install "ndk;${ndk}" > /dev/null
+          cc="${ANDROID_HOME}/ndk/${ndk}/toolchains/llvm/prebuilt/linux-x86_64/bin/x86_64-linux-android26-clang"
+          [ -x "${cc}" ] || { echo "::error::no NDK clang at ${cc}"; exit 1; }
+          lib="${GITHUB_WORKSPACE}/packaging/android/app/src/main/jniLibs/x86_64"
+          mkdir -p "${lib}"
+          (cd packaging/dgo && CGO_ENABLED=1 CC="${cc}" GOOS=android GOARCH=amd64 go build -trimpath -tags consoleembed,netgo,osusergo \
+            -ldflags "-s -w -X main.version=0.2.${{ github.run_number }}+${GITHUB_SHA::8} -extldflags=-Wl,-z,max-page-size=16384" \
+            -o "${lib}/libdgo.so" .)
+          (cd platform-base/forward-auth && CGO_ENABLED=1 CC="${cc}" GOOS=android GOARCH=amd64 go build -trimpath -tags netgo,osusergo \
+            -ldflags "-s -w -extldflags=-Wl,-z,max-page-size=16384" -o "${lib}/libforward-auth.so" .)
+          # the machine's unpacker (Guest.UNPACKER, libzstd-cli.so): a phone's comes with its QEMU (Termux's zstd, with
+          # liblzma); here zstd 1.5.6 with xz 5.8.2's liblzma — it reads the .xz the machine is shipped as — each from
+          # its published release, checked against its published SHA-256, linked by the same NDK, 16 KB pages
+          src="${RUNNER_TEMP}/unpacker"
+          rm -rf "${src}" && mkdir -p "${src}"
+          curl -fsSL -o "${src}/xz.tgz" https://github.com/tukaani-project/xz/releases/download/v5.8.2/xz-5.8.2.tar.gz
+          echo "ce09c50a5962786b83e5da389c90dd2c15ecd0980a258dd01f70f9e7ce58a8f1  ${src}/xz.tgz" | sha256sum -c -
+          curl -fsSL -o "${src}/zstd.tgz" https://github.com/facebook/zstd/releases/download/v1.5.6/zstd-1.5.6.tar.gz
+          echo "8c29e06cf42aacc1eafc4077ae2ec6c6fcb96a626157e0593d5e82a34fd403c1  ${src}/zstd.tgz" | sha256sum -c -
+          tar -xzf "${src}/xz.tgz" -C "${src}"
+          tar -xzf "${src}/zstd.tgz" -C "${src}"
+          command -v make > /dev/null || { echo "::error::this runner has no make: the unpacker for android/amd64 is built with it"; exit 1; }
+          ndkbin="$(dirname "${cc}")"   # the NDK's own archiver: nothing of the runner's binutils is assumed
+          (cd "${src}/xz-5.8.2" && ./configure --host=x86_64-linux-android CC="${cc}" AR="${ndkbin}/llvm-ar" RANLIB="${ndkbin}/llvm-ranlib" \
+            --disable-shared --enable-static --disable-xz --disable-xzdec --disable-lzmadec --disable-lzmainfo --disable-scripts \
+            --disable-doc --disable-nls --prefix="${src}/lzma" > "${src}/xz.log" 2>&1 \
+            && make -j2 >> "${src}/xz.log" 2>&1 && make install >> "${src}/xz.log" 2>&1) \
+            || { tail -30 "${src}/xz.log"; echo "::error::liblzma for android/amd64 did not build"; exit 1; }
+          # CPPFLAGS/LDFLAGS from the environment, never on make's line: there they would override the Makefile's own
+          # `zstd: CPPFLAGS += -DZSTD_LZMADECOMPRESS` (and threads, legacy) — a zstd built that way links, and reads no .xz
+          CPPFLAGS="-I${src}/lzma/include" LDFLAGS="-L${src}/lzma/lib -Wl,-z,max-page-size=16384" \
+            make -C "${src}/zstd-1.5.6/programs" zstd -j2 CC="${cc}" AR="${ndkbin}/llvm-ar" HAVE_LZMA=1 HAVE_ZLIB=0 HAVE_LZ4=0 \
+            > "${src}/zstd.log" 2>&1 || { tail -30 "${src}/zstd.log"; echo "::error::zstd for android/amd64 did not build"; exit 1; }
+          "${ndkbin}/llvm-nm" "${src}/zstd-1.5.6/programs/zstd" | grep -q lzma_stream_decoder \
+            || { echo "::error::zstd for android/amd64 was built without .xz (no lzma_stream_decoder): it could not unpack the machine"; exit 1; }
+          cp "${src}/zstd-1.5.6/programs/zstd" "${lib}/libzstd-cli.so"
+          rm -rf "${src}"
+          ls -la "${lib}"
+
       # One debug key across runs: a new runner makes a new one, and an APK signed by another key does
       # not install over the last (INSTALL_FAILED_UPDATE_INCOMPATIBLE) — the phone would lose its offices
       # and its sign-ins. The repository secret DGO_ANDROID_DEBUG_KEYSTORE (the keystore, base64) keeps
@@ -331,6 +523,13 @@ jobs:
           fp="$(keytool -list -v -keystore "${ks}" -storepass android -alias androiddebugkey | awk '/SHA256:/ && !p { print; p = 1 }')"
           [ -n "${fp}" ] || { echo "::error::the debug key has no SHA256 fingerprint line"; exit 1; }
           echo "debug key ${fp}"
+          # THE key the owner's phone has (every APK from 0.1.3 on, run 41686653737 and the Dell's own builds):
+          # an APK signed by any other does not install over his, and he would lose his office to reinstall it.
+          # A run on a ref whose cache holds no key (a dispatch from mac-dgo) and a runner without the file make
+          # a new one — stopped here, before anything is built or published with it.
+          pinned=96DBB719FC416A55AB7329DE67ABA0E4372A37C2EF57F3C2824680CB7C2609FD
+          have="$(printf '%s' "${fp##* }" | tr -d ':' | tr 'a-f' 'A-F')"
+          [ "${have}" = "${pinned}" ] || { echo "::error::the debug key here is ${have}, the owner's phone has ${pinned}: an APK signed by it would not install over his"; exit 1; }
 
       # said here while the job can still write its log (a full disk kills the runner, log and all)
       - name: Room for the packaging
@@ -341,11 +540,20 @@ jobs:
           free_kb="$(df -k --output=avail / | tail -1)"
           [ "${free_kb}" -gt $((10 << 20)) ] || { echo "::error::$((free_kb >> 20)) GB free: packaging the machine needs 10"; exit 1; }
 
+      # 0.2.<run>, its code 2000 + run (DGO-1328): the Dell's hand-built 0.1.84–0.1.86 took numbers this
+      # workflow's runs had not reached, and a phone refuses an APK whose code is lower than the one it has
       - name: The APK
         env:
-          DGO_APP_VERSION: "0.1.${{ github.run_number }}"
-          DGO_APP_VERSION_CODE: "${{ github.run_number }}"
-        run: DGO_ANDROID_DEBUG_KEYSTORE_FILE="${HOME}/.android/debug.keystore" gradle -p packaging/android --no-daemon assembleDebug
+          # The business's door this phone opens the apps it cannot run through (DGO-1332): the repository
+          # variable, compiled in as BuildConfig.DOOR_URL and handed to the core by NativeService. Empty is a
+          # phone of no herd, and then an app that is not here offers nothing.
+          DGO_PHONE_DOOR: "${{ vars.DGO_PHONE_DOOR }}"
+        run: |
+          set -euo pipefail
+          export DGO_APP_VERSION="0.2.${{ github.run_number }}"
+          export DGO_APP_VERSION_CODE="$(( 2000 + ${{ github.run_number }} ))"
+          echo "the APK ${DGO_APP_VERSION}, code ${DGO_APP_VERSION_CODE}"
+          DGO_ANDROID_DEBUG_KEYSTORE_FILE="${HOME}/.android/debug.keystore" gradle -p packaging/android --no-daemon assembleDebug
 
       # AGP reads an asset into one array and cannot pack the 1.35 GB machine (compressDebugAssets: "Required
       # array size too large", run 41247725128). So it is added here — stored, as the app reads it through
@@ -393,26 +601,69 @@ jobs:
           path: ~/.android/debug.keystore
           key: dgo-android-debug-key
 
-      - name: Attached to a draft pre-release
+      # A release, NOT a draft (DGO-1328), with the APK, its digest and the source it was built from (the
+      # public copy, AGPL). This repository is private, so its release is the record; what the owner's link
+      # opens is the copy on the public repository — made here when the secret DGO_PUBLIC_RELEASE_TOKEN (a
+      # token that may write bina-solution/digital-office's releases, the owner's to make) is set, and until
+      # then by the command post with scripts/release/android-public.sh, which copies these same files.
+      - name: Released — here, and on the public repository
         env:
           GH_TOKEN: ${{ github.token }}
+          PUBLIC_TOKEN: ${{ secrets.DGO_PUBLIC_RELEASE_TOKEN }}
         run: |
           set -euo pipefail
-          v="0.1.${{ github.run_number }}"
+          v="0.2.${{ github.run_number }}"
           apk="dgo-android-${v}.apk"
-          mv packaging/android/app/build/outputs/apk/debug/app-debug.apk "${apk}"   # mv: it is ~1.4 GB
+          # an APK with x86_64 too is the emulator's (DGO-1723): named so, said so, and never published
+          [ "${DGO_ABIS}" = arm64-v8a ] || apk="dgo-android-${v}-${DGO_ABIS//,/-}.apk"
+          mv packaging/android/app/build/outputs/apk/debug/app-debug.apk "${apk}"   # mv: it may be ~1.4 GB
           # GitHub keeps a release file under 2 GiB: said here, not as a failed upload
           [ "$(stat -c %s "${apk}")" -lt $((2 << 30)) ] || { echo "::error::${apk} is $(du -h "${apk}" | cut -f1): over a release file's 2 GiB"; exit 1; }
           sha256sum "${apk}" > "${apk}.sha256"
           cat "${apk}.sha256"
-          # a re-run keeps its run number: the same draft gets the new files. Only "not found" creates one —
-          # a view that failed otherwise (network, rate limit) would leave two drafts of one tag.
-          if seen="$(gh release view "android-${v}" 2>&1)"; then
-            gh release upload "android-${v}" "${apk}" "${apk}.sha256" --clobber
-          elif ! printf '%s' "${seen}" | grep -qi "not found"; then
-            echo "::error::could not tell whether draft android-${v} exists: ${seen}"; exit 1
-          else
-            gh release create "android-${v}" "${apk}" "${apk}.sha256" --draft --prerelease --target "${GITHUB_SHA}" \
-              --title "The Digital Office for Android ${v} (draft)" \
-              --notes "The Digital Office on this phone, whole: install, open — it sets itself up and opens its console (DGO-1084). Debug-signed, installed by hand (allow installs from this source); from 0.1.3 on, each installs over the last. The store's build follows (DGO-1073)."
+          src="dgo-android-${v}-source.tar.gz"
+          mv "${RUNNER_TEMP}/public-copy.tar.gz" "${src}"
+          cp "${RUNNER_TEMP}/public-copy.tree" "dgo-android-${v}-source.tree"
+          files=("${apk}" "${apk}.sha256" "${src}" "dgo-android-${v}-source.tree")
+          case "${APK_MACHINE:-none}" in
+            fetch) said="its Linux machine, made by ${ENGINE_DRAFT} from the public copy, is fetched on the first open over Wi-Fi (${DGO_MACHINE_URL})" ;;
+            embed) said="its Linux machine, made by ${ENGINE_DRAFT} from the public copy, is inside it" ;;
+            *) said="it carries no Linux machine" ;;
+          esac
+          notes="The Digital Office on an Android phone (arm64): install, open — it sets itself up and opens its console; ${said}. Debug-signed, installed by hand (allow installs from this source); each installs over the last. Built from the public copy of ${GITHUB_SHA::8} (tree $(cat "dgo-android-${v}-source.tree")): its source is ${src} beside it — the «Source code» archives GitHub adds are the repository's default branch, not this build."
+          if [ "${DGO_ABIS}" != arm64-v8a ]; then
+            notes="For an x86_64 Android too (${DGO_ABIS}: the emulator on the Dell's KVM, DGO-1723): on x86_64 the office's core runs natively; its machine is the arm64 phone's, so an x86_64 Android runs the core alone. ${notes}"
           fi
+          # a re-run keeps its run number: the same release gets the new files. Only "not found" creates one —
+          # a view that failed otherwise (network, rate limit) would leave two releases of one tag.
+          if seen="$(gh release view "android-${v}" 2>&1)"; then
+            gh release upload "android-${v}" "${files[@]}" --clobber
+          elif ! printf '%s' "${seen}" | grep -qi "not found"; then
+            echo "::error::could not tell whether release android-${v} exists: ${seen}"; exit 1
+          else
+            gh release create "android-${v}" "${files[@]}" --prerelease --target "${GITHUB_SHA}" \
+              --title "The Digital Office for Android ${v}" --notes "${notes}"
+          fi
+          if [ "${DGO_ABIS}" != arm64-v8a ]; then
+            echo "::notice::android-${v} (${DGO_ABIS}) is the emulator's: released here only, never on the public repository"
+            exit 0
+          fi
+          if [ -z "${PUBLIC_TOKEN}" ]; then
+            echo "::notice::android-${v} is released here; bina-solution/digital-office gets it from the command post (scripts/release/android-public.sh android-${v}) until DGO_PUBLIC_RELEASE_TOKEN is set"
+            exit 0
+          fi
+          pub=bina-solution/digital-office
+          if seen="$(GH_TOKEN="${PUBLIC_TOKEN}" gh release view "android-${v}" --repo "${pub}" 2>&1)"; then
+            GH_TOKEN="${PUBLIC_TOKEN}" gh release upload "android-${v}" --repo "${pub}" "${files[@]}" --clobber
+          elif ! printf '%s' "${seen}" | grep -qi "not found"; then
+            echo "::error::could not tell whether ${pub}'s android-${v} exists: ${seen}"; exit 1
+          else
+            GH_TOKEN="${PUBLIC_TOKEN}" gh release create "android-${v}" --repo "${pub}" "${files[@]}" --prerelease \
+              --title "The Digital Office for Android ${v}" --notes "${notes}"
+          fi
+          # what the owner's link opens, as a phone opens it: no sign-in, the APK's own size
+          url="https://github.com/${pub}/releases/download/android-${v}/${apk}"
+          got="$(curl -fsIL --max-time 60 "${url}" | tr -d '\r' | awk '/^HTTP\// { c = $2 } tolower($1) == "content-length:" { v = $2 } END { print c, v }')" \
+            || got="no answer"
+          [ "${got}" = "200 $(stat -c %s "${apk}")" ] || { echo "::error::${url} answers «${got}» with no sign-in, not 200 and the APK's size"; exit 1; }
+          echo "public: ${url} — 200, $(stat -c %s "${apk}") bytes, no sign-in"

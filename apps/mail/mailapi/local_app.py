@@ -41,6 +41,7 @@ from imapclient import IMAPClient
 # attachment name/mime/size out of BODYSTRUCTURE exactly the way the Gmail backend does, and a
 # second BODYSTRUCTURE walker is a second place for the two backends' `attachments` to disagree.
 from app import imap_since_date, decode_part, _bs_leaves
+import snippets
 
 _START = time.time()
 
@@ -84,7 +85,7 @@ _u = os.environ.get("LOCALMAIL_USER", "indox")
 # which is right on a laptop and wrong on every real deployment — and wrong in the most confusing
 # possible way, because BOTH halves looked correct in isolation:
 #
-#   mailserver-init provisioned  person83@example.com   (it appends MAIL_DOMAIN)
+#   mailserver-init provisioned  person89@example.com   (it appends MAIL_DOMAIN)
 #   this backend logged in as    indox@local.test                          (it appended local.test)
 #
 # so a freshly deployed company got `[AUTHENTICATIONFAILED] Authentication failed` against a mailbox
@@ -499,7 +500,7 @@ class BadMessageId(ValueError):
     """`id`/`ids` was not a message id. Carries the offending value so the caller can be fixed.
 
     MEASURED 2026-08-06: the live pipeline called POST /labels/add with
-    {"id": "person86@example.com", "labelIds": ["אינדוקס - חשבונית נשמרה"]} — a MAILBOX ADDRESS
+    {"id": "person92@example.com", "labelIds": ["אינדוקס - חשבונית נשמרה"]} — a MAILBOX ADDRESS
     where a hex message id belongs (`incoming_documents.SOURCE_ID` holds the sender address on 2,298
     GMAIL rows). `int(addr, 16)` raised a bare ValueError, Flask answered 500 with its default HTML
     page ("the server is overloaded or there is an error in the application"), and the defect was
@@ -832,6 +833,7 @@ class LocalBackend:
                 next_cursor = uids[0] if uids else 0
             out = []
             kept = []
+            want_snip, leaves_by_uid = bool(b.get("snippets")), {}
             if uids:
                 resp = c.fetch(uids, [b"BODY.PEEK[HEADER]", b"FLAGS", b"BODYSTRUCTURE", b"INTERNALDATE"])
                 for uid in uids:
@@ -851,6 +853,15 @@ class LocalBackend:
                         continue
                     out.append(s)
                     kept.append(uid)
+                    if want_snip and data.get(b"BODYSTRUCTURE"):
+                        leaves_by_uid[uid] = _bs_leaves(data[b"BODYSTRUCTURE"])
+                if want_snip and out:
+                    # the row's preview line (DGO-1507) — see snippets.py and app.py::GmailBackend.search
+                    try:
+                        snippets.fill(c, out, leaves_by_uid, (self.reg_path, "INBOX", uidvalidity),
+                                      log=self._warn)
+                    except Exception as e:
+                        self._warn("snippets: %s", e)
             if since_ts is not None:
                 # Same rule as the Gmail backend, and see its comment for the measurement that ruled
                 # out the cheaper UID-order arithmetic: exact only when the whole candidate set was

@@ -47,11 +47,11 @@
   },
   {
     "name": "real-doc-1-customer-name",
-    "notes": "Customer name field: find after הכהנים → חומרי (Local Tesseract OCR)",
+    "notes": "Customer name field: find after הדוגמה → חומרי (Local Tesseract OCR)",
     "source_file": "fixtures/real-doc-1.png",
     "ocr_json_query": {
       "action": "find after",
-      "action_value": "הכהנים",
+      "action_value": "הדוגמה",
       "is_rtl": true,
       "tolerances": {
         "max_vertical_gap": 120,
@@ -61,7 +61,7 @@
     },
     "expected": {
       "result_value_contains": "חומרי",
-      "text_match_equals": "הכהנים"
+      "text_match_equals": "הדוגמה"
     }
   },
   {
@@ -104,7 +104,7 @@
   },
   {
     "name": "real-doc-2-business-id",
-    "notes": "Business registration: find after מורשה: → 500000120 (Local Tesseract OCR)",
+    "notes": "Business registration: find after מורשה: → 500000104 (Local Tesseract OCR)",
     "source_file": "fixtures/real-doc-2.png",
     "ocr_json_query": {
       "action": "find after",
@@ -121,7 +121,7 @@
       ]
     },
     "expected": {
-      "result_value_equals": "500000120",
+      "result_value_equals": "500000104",
       "text_match_equals": "מורשה:"
     }
   },

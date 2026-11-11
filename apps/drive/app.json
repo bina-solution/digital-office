@@ -6,6 +6,7 @@
   },
   "layer": 3,
   "kind": "adapter",
+  "page": "drive",
   "version": "1.0.0",
   "summary": {
     "he": "כל הקבצים של העסק במקום אחד — מסמכים, תמונות, הקלטות, פגישות וסרטונים; כל אפליקציה וכל סוכן קוראים וכותבים כאן",
@@ -33,28 +34,15 @@
       "contract": "platform-service.v1"
     }
   ],
-  "engine": {
-    "id": "drive_local",
-    "profiles": [
-      {
-        "id": "admin",
-        "display_name": "מנהל",
-        "admin": true
-      },
-      {
-        "id": "user2",
-        "display_name": "משתמש 2"
-      }
-    ]
-  },
   "use": [
     {
-      "capability": "workflow",
-      "strength": "requires",
-      "after": true
+      "capability": "kv",
+      "strength": "wants",
+      "after": false,
+      "dependency": "weak"
     },
     {
-      "capability": "sql",
+      "capability": "workflow",
       "strength": "requires",
       "after": true
     },
@@ -64,25 +52,14 @@
       "after": true
     },
     {
-      "capability": "object-storage",
+      "capability": "drive-local",
       "strength": "requires",
-      "after": true,
-      "ops": [
-        "put",
-        "get",
-        "list",
-        "delete"
-      ]
-    }
-  ],
-  "connections": [
-    {
-      "id": "supabase-service-key",
-      "required": true
+      "after": true
     },
     {
-      "id": "supabase-db-password",
-      "required": true
+      "capability": "drive-google",
+      "strength": "requires",
+      "after": false
     }
   ],
   "blueprints": {
@@ -92,21 +69,6 @@
   "agent": {
     "context": "AGENT.md",
     "order": 15
-  },
-  "broker": {
-    "service": "drive",
-    "blank_env": [
-      "SUPABASE_DB_PASSWORD",
-      "SUPABASE_SERVICE_KEY"
-    ],
-    "entrypoint": [
-      "sh",
-      "/inject.sh",
-      "gunicorn",
-      "-c",
-      "gunicorn.conf.py",
-      "app:app"
-    ]
   },
   "routing": [
     {
@@ -126,6 +88,7 @@
         "name": "קבצים",
         "desc": "מסמכים, תמונות, הקלטות וסרטונים",
         "order": 2,
+        "tab": true,
         "service": "drive",
         "url_env": "DRIVE_URL",
         "url": "http://drive:8975"
@@ -168,19 +131,7 @@
     "volumes": [
       "localdrive_data"
     ],
-    "on_uninstall": "prompt",
-    "sql": [
-      {
-        "instance": "supabase-db",
-        "database": "postgres",
-        "tables": [
-          "drive_files",
-          "drive_folders",
-          "drive_profiles"
-        ],
-        "note": "created by adapters/local.py and profiles.py"
-      }
-    ]
+    "on_uninstall": "prompt"
   },
   "observability": {
     "sentry_platform": "python"
@@ -192,5 +143,8 @@
         "CUSTOM_BUFFER_DRIVE": "8000"
       }
     }
+  },
+  "cli": {
+    "fallback": "cli"
   }
 }

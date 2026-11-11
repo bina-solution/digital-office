@@ -1,0 +1,114 @@
+# ci-runner — «מריץ CI»: the office's GitHub Actions runner as an office app (DGO-1797). The owner, 2026-11-10: the
+# Dell runs only the office, what runs in it and a browser; the runner is an app he sees and switches, not a host
+# service installed by hand. Two services, one volume:
+#   ci-runner        the screen, the API and the CLI (server.py) — reads what the agent records, writes the pause
+#   ci-runner-agent  GitHub's runner (Dockerfile.agent, its version and sha256 pinned), the office's door in front of
+#                    every job (prejob.sh) and a record after it (postjob.sh)
+# Shipped DISABLED: an office enables it in platform.state.yaml, and the agent starts only with a registration on
+# its volume (agent.sh says how it waits without one).
+services:
+  ci-runner:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: ci-runner-${DEPLOYMENT_NAME:-bina-deployment}
+    hostname: ci-runner
+    restart: unless-stopped
+    environment:
+      - CI_RUNNER_STATE=/state
+      - CI_RUNNER_REPO=${CI_RUNNER_REPO:-bina-solution/digital-office}
+      - CI_RUNNER_LABELS=${CI_RUNNER_LABELS:-self-hosted,portable}
+      # the event stream (flow.v1, DGO-1402) rides the office redis: `dgo:flow:ci-runner`
+      - REDIS_PASSWORD=${REDIS_PASSWORD:-}
+      # the job door (door.py, DGO-1797 package 9): the linked offices this office takes named jobs from — empty is
+      # nobody; each office decides in its .env. A request must also carry the link door's signature.
+      - CI_RUNNER_ACCEPT_FROM=${CI_RUNNER_ACCEPT_FROM:-}
+    volumes:
+      - ci_runner_state:/state
+      # the office's ONE flow.v1 publisher (DGO-1402) — the platform's file, never a copy of it here
+      - ../../platform-base/redis/flowpub.py:/opt/dgo/flowpub.py:ro
+      # the platform's ONE verifier of the link door's signature, and of the pair's secret in the vault
+      - ../../platform-base/connections/link_identity.py:/opt/dgo/link_identity.py:ro
+    networks:
+      - traefik-network
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request,sys;sys.exit(0 if urllib.request.urlopen('http://localhost:8988/healthz',timeout=8).status==200 else 1)"]
+      interval: ${HEALTHCHECK_INTERVAL:-30s}
+      timeout: ${HEALTHCHECK_TIMEOUT:-10s}
+      retries: 3
+      start_period: 10s
+    deploy:
+      resources:
+        limits:
+          # a page, five routes and a file it reads
+          cpus: '0.1'
+          memory: 96M
+    logging:
+      driver: ${LOGGING_DRIVER:-json-file}
+      options:
+        max-size: 5m
+        max-file: '3'
+
+  ci-runner-agent:
+    build:
+      context: .
+      dockerfile: Dockerfile.agent
+    container_name: ci-runner-agent-${DEPLOYMENT_NAME:-bina-deployment}
+    restart: unless-stopped
+    # a stop sends the listener's group SIGTERM (agent.sh) and gives it this long; a JOB still running when it ends
+    # is lost — pause first (`./bbox ci-runner pause`) and stop the agent between jobs
+    stop_grace_period: 60s
+    environment:
+      - CI_RUNNER_STATE=/state
+      - CI_RUNNER_WORK=${CI_RUNNER_WORK:-/var/lib/dgo-ci-runner/work}
+      # the jobs bring the stack up on THIS office's engine, through its socket (exposure-lint's JUSTIFIED). No
+      # office secret is in this environment: every job step inherits it (the flow events are the server's).
+      - DOCKER_HOST=unix:///var/run/docker.sock
+      # (the office's ONE heavy-job slot — scripts/lib.sh heavy_admit's flock — is held by each job from prejob.sh to
+      # postjob.sh through scripts/ops/heavy-hold.sh, so a CI job never runs beside a bbox build, a recreate or the
+      # emulator, DGO-1797 package 6. Its paths are set inside those two hooks, NEVER here: every job step inherits
+      # this environment, and a test a job ran found the office's real slot through it.)
+      # the job door's worker (door.py) runs a named job's bbox verb in the office's own checkout, mounted below at
+      # the host's path (app-management's pattern: compose and the engine resolve the same paths)
+      - CI_RUNNER_DOOR_REPO=${BBOX_REPO_HOST:-/repo}
+    volumes:
+      # the registration, the tool cache, the job records, the heartbeat and the pause flag
+      - ci_runner_state:/state
+      # THE WORK FOLDER, ON THE HOST AND AT THE SAME PATH: a job's bind mount goes to the engine through the
+      # socket and is resolved on the host, so $RUNNER_TEMP and the checkout must be where the host sees them
+      - ${CI_RUNNER_WORK:-/var/lib/dgo-ci-runner/work}:${CI_RUNNER_WORK:-/var/lib/dgo-ci-runner/work}
+      - ${BBOX_DOCKER_SOCK:-/var/run/docker.sock}:/var/run/docker.sock
+      # the office's one source for "how much memory is enough" (classes.yaml names the class, this the figure)
+      - ../../scripts/ops/admission-thresholds.sh:/opt/dgo/admission-thresholds.sh:ro
+      # the slot's directory (written: the lock and the holder line), the holder and the readiness rule — the
+      # platform's files, never copies — and the desk reading, read-only
+      - ../../data/.locks:/data/locks
+      - ../../scripts/ops/heavy-hold.sh:/opt/dgo/heavy-hold.sh:ro
+      - ../../scripts/ops/heavy-ready.sh:/opt/dgo/heavy-ready.sh:ro
+      - ../../data/power:/data/power:ro
+      # the office's checkout, for the job door's worker, READ-ONLY: the door's v1 verbs only read, and a job step —
+      # which sees this container's files — can never write the office's code or .env through it (a verb that
+      # needs to write fails and says so); its path is the worker's alone (agent.sh drops it before the listener)
+      - ../../:${BBOX_REPO_HOST:-/repo}:ro
+    networks:
+      - traefik-network
+    deploy:
+      resources:
+        limits:
+          # the steps a job runs IN this container (a go test, the static gates) live under this ceiling; what a
+          # job starts THROUGH the socket (docker run, a build, a stack) runs beside it on the engine and is NOT
+          # bounded here — the door (prejob.sh) is what keeps one heavy job at a time on the Dell (DGO-1797)
+          cpus: '2.0'
+          memory: 4G
+    logging:
+      driver: ${LOGGING_DRIVER:-json-file}
+      options:
+        max-size: 10m
+        max-file: '3'
+
+volumes:
+  ci_runner_state:
+
+networks:
+  traefik-network:
+    external: true

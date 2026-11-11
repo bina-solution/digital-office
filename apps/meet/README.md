@@ -257,7 +257,7 @@ form (`POST /api/recordings/<session>/<file>/to-plane` on the machines' door, on
 `MEET_PLANE_API_URL`'s `/uploads`); the workflow tells Plane the file arrived. A store that does not
 answer leaves the recording for the next run, which attaches it to the same item.
 
-## Never again betrayed by a silent recording (fireplace, 2026-10-26)
+## Never again betrayed by a silent recording (examplef, 2026-10-26)
 
 Two failures in one day, both silent: the owner joined from a Mac Chrome that had never been allowed
 the microphone (the permission was "prompt"), Jitsi made no audio track, the bridge got 0 kbps and
@@ -317,11 +317,11 @@ least `MEET_LIVE_CAPTIONS_MIN_CORES` (4) cores AND the recorder is healthy; a fi
 
 Measured on this 2-core box, forced on for a 4-minute test call (host and guest speaking English
 TTS, the recorder recording, two synthetic Chromes on the same machine; `qa/captionsC.sh`, room
-fpgwatchd):
+exfwatchd):
 
 | What | Measured |
 |---|---|
-| Captions posted | 4 lines, text correct («This is the fireplace office recording check…», the counting, the alphabet) |
+| Captions posted | 4 lines, text correct («This is the examplef office recording check…», the counting, the alphabet) |
 | Transcription time per 30-s segment | 125 s (first: the whisper model had to load), then 82, 49, 31, 34 s |
 | Lag behind the meeting | 78–137 s, median 126 s; 4 of 12 segments dropped as backlog |
 | The recorder meanwhile | 0.31–0.49 cores, **0 of 3634 periods throttled**, pace never under 0.98, no «⚠️» |
@@ -339,10 +339,10 @@ the meeting by 30–60 s, which is what this design promises. Two things to set 
 recordings' workflow keeps warm instead of paying a model switch for the first segment. Sub-second
 captions remain a GPU feature.
 
-## Load, measured on the 2-core office (fireplace, 2026-10-27)
+## Load, measured on the 2-core office (examplef, 2026-10-27)
 
 The owner: «שיחות עם ווידאו חי, קול דיבור, שיתוף מסך ומספר הולך וגדל של משתתפים … לדעת בדיוק מתי מגיעים לקצה».
-Ramps against the live office from a laptop (`%TEMP%\fpgsr` on the owner's machine: `ramp.py`, `light.js`,
+Ramps against the live office from a laptop (`%TEMP%\exfsr` on the owner's machine: `ramp.py`, `light.js`,
 `lightctl.py`, `analyze.py`; the server side `/root/sampler.sh` → `/root/meet-load/<tag>.csv`): one full Jitsi
 page as host (its real microphone track captioned by the browser) plus lightweight participants — lib-jitsi-meet
 tabs on the meeting's own origin, each with a moving camera, ITS OWN Hebrew speech (FLEURS sentences taking turns,
@@ -429,7 +429,7 @@ The recorder is the second participant, so jicofo (media at two) starts a lone h
 start is only in prosody's log. One recording at a time. `/a/meet/recordings` lists and plays them.
 `prosody/mod_meet_share_notice.lua` (DGO-832) tells the sharer, in a chat message only they get,
 that the screen is shared (and recorded), and when it stops. `mod_meet_silent_mic.lua` (DGO-959,
-and fireplace 2026-10-26) reads the bridge's `/debug` every 5 s and each person's SourceInfo: (1) no
+and examplef 2026-10-26) reads the bridge's `/debug` every 5 s and each person's SourceInfo: (1) no
 audio track at all (no browser permission, no device) → told `MEET_NO_MIC_SECONDS` (10) after the
 bridge has their media connected, with the fix (lock icon → Microphone → Allow), and the room is told
 whose voice is missing; (2) unmuted
@@ -438,7 +438,7 @@ nothing for `MEET_SILENT_MIC_SECONDS` (20; 0 = all off) → the Android advice. 
 when audio arrives. `web/plugin.head.html` shows the same as a red banner on the page (never on the
 recorder's page) with an «Enable microphone» button that asks the browser again.
 
-**The recorder's watchdog** (`jibri/watch.py`, an s6 longrun inside meet-jibri, `jibri/s6/`; fireplace
+**The recorder's watchdog** (`jibri/watch.py`, an s6 longrun inside meet-jibri, `jibri/s6/`; examplef
 2026-10-26: a recorder starved to 0.48 core lost 40 % of every second and told nobody). While Jibri
 is BUSY it measures every 5 s: ffmpeg's pace between two progress lines (Δtime/Δwall; ffmpeg's own
 `speed=` is an average since the start), the lag behind the clock, the share of cgroup periods the
@@ -459,6 +459,36 @@ Jibri records) into 30-s 16 kHz WAVs, sends each through meet-start to the trans
 as a quiet chat line from «כתוביות» (a delay stamp: no pop-up, no sound; the page shows the newest
 over the video) and appends it to `<room>_<time>.live.txt`. Silent segments are not sent. On this
 2-core box auto = off: see README «Live captions, measured».
+
+## The meeting page says what is happening, why, and until when (DGO-1325, 2026-11-05)
+
+The owner, on bs101's page during its transcription (2026-11-03): «שאני אוכל לראות מה בדיוק קורה ולמה אני לא מקבל עדיין
+כתוביות» · «כל החלק התחתון לא באמת נפתח כלפי מעלה». Measured then on vps1: no live captions (the watchdog: `auto: 2 cores
+< 4`, said only in its log), the ivrit pass 97 minutes at rtf 0.99, the whisper pass queued behind it; the page said
+«עיבוד ראשון», promised the transcript «יחליף את זה», and showed no progress, reason or time. Now:
+
+- **One status line** under a one-row header (`flow/status.js`, pure, tested by `start/test_flow_client.mjs`): one
+  sentence and one number — «מתמלל את הפגישה · צפוי ~15:20 · 42%», «בתור לתמלול · צפוי ~17:10», «התמלול מוכן — הנושאים
+  והמשימות מחכים ל«קדימה»», «מעובדת — 11 פריטים מחכים לאישור»; a tap lists every step with its reason and time. The
+  palette's legend: sky in motion, lime waiting, violet needs a person, olive done, plum failed.
+- **The steps come from what measures them** (`server.py` `flow_stages`, tested by `start/test_flow_status.py`): the
+  recording's size and length; live captions' words, or why there were none — the watchdog writes its decision into
+  `capture.json` `captions_live` (`on`, `why`: off · cores · recorder · memory · pressure, with its numbers), and a
+  recording from before that is read by the same rule from `MEET_LIVE_CAPTIONS` and the cores; each transcription
+  pass from the speech service's own job (`/speechJobs`, kept 10 s): queued (how many before it), processing (how far,
+  and when it ends at its own measured pace), done, or failed (why, and when the workflow tries again).
+- **One title** (`meeting_title`): the full processing's title, else the room. The state is never in it.
+- **The page takes new data in by itself**: it asks `meeting.json` every 15 s; its `rev` changes when the transcript
+  lands or the full processing comes, and the page reloads its data in place, keeping the moment played.
+- **A phone gets a bottom sheet** (`flow/sheet.js`, nothing in it knows meetings): peek (the tab bar), half (the
+  default) and full (all but a 56-px mini-player that keeps playing); it drags by its grabber and its tab bar, Back and
+  Esc leave full, `?sheet=` and the store keep it over a reload. Five tabs fit 390 px: תמלול · סקירה · עבודה (החלטות ·
+  משימות · שאלות) · מסכים · עוד (ציר זמן · קבצים · יומן). **A desktop** gets two panes with a divider (320–720 px, kept).
+- **The simulation** (AGENTS.md rule 11): `digital-office/sim/meet-flow-mock.py` runs the real `mf.css`/`mf.js` on
+  fixtures (bs101's numbers), his screenshot as frame one, before/after, phone/desktop, light/dark, with shots.
+
+Live captions on vps1 stay off: two cores cannot transcribe in time beside the recorder (measured above, «Live
+captions, measured»). Their place is the herd's transcriber over the link (DGO-945); until then the page says why.
 
 ## «קדימה» after a meeting — its full processing, one path (MEET-48, DGO-1134, 2026-11-02)
 

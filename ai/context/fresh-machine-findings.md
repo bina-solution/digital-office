@@ -84,6 +84,10 @@ the failure is silent by construction: G18 statically, and a live probe audit in
 
 ## 5. Docker 29 breaks all routing, silently
 
+> **Corrected 2026-11-10 (DGO-1803):** the cap below did not hold when measured — Docker 29.3.1 started with
+> `DOCKER_MIN_API_VERSION=1.24` passed the baseline, and 29.1.3 on the Dell routed with the variable unrecorded.
+> The current statement is running-the-stack.md, «Docker and traefik». The finding as written:
+
 Traefik v3.3 compiles its docker client against API 1.24. Docker 29 raised the daemon's *hard*
 minimum to 1.40 and capped `DOCKER_MIN_API_VERSION` there, so the documented workaround is accepted
 and does nothing. Traefik starts, reports healthy, discovers **zero** routers, and every

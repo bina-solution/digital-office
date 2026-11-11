@@ -166,7 +166,7 @@
     { id: '512987654', name: 'אגן שיווק' },
     { id: '513765432', name: 'ישראל קרטון' },
     { id: '515443322', name: 'דגן תעשיות בע״מ' },
-    { id: '500001078', name: 'מ. פרידמן בע״מ' },
+    { id: '500000484', name: 'מ. פרידמן בע״מ' },
   ];
 
 
@@ -185,10 +185,10 @@
   function ILCG(seed) { var x = seed >>> 0; return function () { x = (x * 1664525 + 1013904223) >>> 0; return x / 4294967296; }; }
   var GEN_CO = [
     ['סבח סוכנויות בע״מ', '514236789'], ['אגן שיווק', '512987654'], ['ישראל קרטון', '513765432'],
-    ['דגן תעשיות בע״מ', '515443322'], ['מ. פרידמן בע״מ', '500001078'], ['חברת חשמל לישראל', '500001234'],
+    ['דגן תעשיות בע״מ', '515443322'], ['מ. פרידמן בע״מ', '500000484'], ['חברת חשמל לישראל', '500001234'],
     ['בזק בינלאומי', '520043215'], ['ספק הענן בע״מ', '514998877'], ['נכסי הרצל', '511223344'],
-    ['דפי הדפסה בע״מ', '513004455'], ['מי אביבים', '500001086'], ['פלאפון', '520011223'],
-    ['ביטוח לאומי', '500000001'], ['בנק הפועלים', '520000118'], ['בנק לאומי', '500001094'],
+    ['דפי הדפסה בע״מ', '513004455'], ['מי אביבים', '500000492'], ['פלאפון', '520011223'],
+    ['ביטוח לאומי', '500000001'], ['בנק הפועלים', '520000118'], ['בנק לאומי', '500000500'],
     ['אמזון AWS', '999000111'], ['Google Workspace', '999000222'], ['מוסך מרכזי חיפה', '514667788']
   ];
   var GEN_DTYPE = [
@@ -256,7 +256,7 @@
     { ID: 'SHP-33012', NAME: 'תעודת משלוח 33012 - ישראל קרטון', COMPANY_ID: '513765432', COMPANY_NAME: 'ישראל קרטון', SHORT_DOC_ID: '33012', TYPE: 'SHIPMENT', STATUS: 'NEEDS_REVIEW', REQUIRED_ACTION: 'בדיקת התאמת סכום', DOC_DATE: '2026-07-20', DOC_TOTAL_AMOUNT: 0, SOURCE_TYPE: 'GOOGLE_DRIVE_FILE', TIMESTAMP: isoAgo(3600000) },
     { ID: 'INV-58244', NAME: 'חשבונית 58244 - סבח סוכנויות', COMPANY_ID: '514236789', COMPANY_NAME: 'סבח סוכנויות בע״מ', SHORT_DOC_ID: '58244', TYPE: 'INVOICE', STATUS: 'IN_PROGRESS', REQUIRED_ACTION: null, DOC_DATE: '2026-07-21', DOC_TOTAL_AMOUNT: 8760.25, SOURCE_TYPE: 'GMAIL', TIMESTAMP: isoAgo(20 * 60000) },
     { ID: 'INV-58198', NAME: 'חשבונית 58198 - דגן תעשיות', COMPANY_ID: '515443322', COMPANY_NAME: 'דגן תעשיות בע״מ', SHORT_DOC_ID: '58198', TYPE: 'INVOICE', STATUS: 'EXTRACTION_FAILED', REQUIRED_ACTION: 'בדיקה ידנית - OCR נכשל', DOC_DATE: '2026-07-15', DOC_TOTAL_AMOUNT: 0, SOURCE_TYPE: 'GMAIL', TIMESTAMP: isoAgo(6 * 86400000) },
-    { ID: 'ORD-77355', NAME: 'הזמנה 77355 - מ. פרידמן', COMPANY_ID: '500001078', COMPANY_NAME: 'מ. פרידמן בע״מ', SHORT_DOC_ID: '77355', TYPE: 'ORDER', STATUS: 'COMPLETED', REQUIRED_ACTION: null, DOC_DATE: '2026-07-14', DOC_TOTAL_AMOUNT: 3120, SOURCE_TYPE: 'GOOGLE_DRIVE_FILE', TIMESTAMP: isoAgo(7 * 86400000) },
+    { ID: 'ORD-77355', NAME: 'הזמנה 77355 - מ. פרידמן', COMPANY_ID: '500000484', COMPANY_NAME: 'מ. פרידמן בע״מ', SHORT_DOC_ID: '77355', TYPE: 'ORDER', STATUS: 'COMPLETED', REQUIRED_ACTION: null, DOC_DATE: '2026-07-14', DOC_TOTAL_AMOUNT: 3120, SOURCE_TYPE: 'GOOGLE_DRIVE_FILE', TIMESTAMP: isoAgo(7 * 86400000) },
     { ID: 'SHP-33067', NAME: 'תעודת משלוח 33067 - אגן שיווק', COMPANY_ID: '512987654', COMPANY_NAME: 'אגן שיווק', SHORT_DOC_ID: '33067', TYPE: 'SHIPMENT', STATUS: 'NEEDS_REVIEW', REQUIRED_ACTION: 'חסר קישור להזמנה', DOC_DATE: '2026-07-19', DOC_TOTAL_AMOUNT: 0, SOURCE_TYPE: 'GOOGLE_DRIVE_FILE', TIMESTAMP: isoAgo(5 * 3600000) },
   ];
   // Pull the shared business spine's incoming supplier documents into this repo, so a supplier invoice
@@ -395,7 +395,7 @@
   }
 
   // ----------------------------------------------------------------- auth
-  var AUTH_ME = { authenticated: true, username: 'demo', email: 'demo@hacohen.local', groups: ['admin'], is_admin: true };
+  var AUTH_ME = { authenticated: true, username: 'demo', email: 'demo@example.local', groups: ['admin'], is_admin: true };
 
   // ---------------------------------------------------------------- dashboard
   function computeDashboard() {
@@ -830,8 +830,8 @@
     { key: 'q_v3_routing', value: JSON.stringify(QUERIES.q_v3_routing) },
   ];
   var COMPANIES = [
-    { id: '1', 'שם חברה': 'סבח סוכנויות בע״מ', 'מזהה 1': '514236789', 'מזהה 2': '', 'מייל 1': 'person116@example.com', 'מייל 2': '', 'שם ספק מפריוריטי': 'SABAH', 'הוראות לAI לחילוץ דוח גיול': '', TRUSTED_SOURCE_TYPES: 'gmail,drive', extra: '', created_at: '2026-01-12' },
-    { id: '2', 'שם חברה': 'אגן שיווק', 'מזהה 1': '512987654', 'מזהה 2': '', 'מייל 1': 'person117@example.com', 'מייל 2': '', 'שם ספק מפריוריטי': 'AGAN', 'הוראות לAI לחילוץ דוח גיול': '', TRUSTED_SOURCE_TYPES: 'drive', extra: '', created_at: '2026-02-03' },
+    { id: '1', 'שם חברה': 'סבח סוכנויות בע״מ', 'מזהה 1': '514236789', 'מזהה 2': '', 'מייל 1': 'person122@example.com', 'מייל 2': '', 'שם ספק מפריוריטי': 'SABAH', 'הוראות לAI לחילוץ דוח גיול': '', TRUSTED_SOURCE_TYPES: 'gmail,drive', extra: '', created_at: '2026-01-12' },
+    { id: '2', 'שם חברה': 'אגן שיווק', 'מזהה 1': '512987654', 'מזהה 2': '', 'מייל 1': 'person123@example.com', 'מייל 2': '', 'שם ספק מפריוריטי': 'AGAN', 'הוראות לAI לחילוץ דוח גיול': '', TRUSTED_SOURCE_TYPES: 'drive', extra: '', created_at: '2026-02-03' },
     { id: '3', 'שם חברה': 'ישראל קרטון', 'מזהה 1': '513765432', 'מזהה 2': '', 'מייל 1': '', 'מייל 2': '', 'שם ספק מפריוריטי': '', 'הוראות לAI לחילוץ דוח גיול': '', TRUSTED_SOURCE_TYPES: 'drive', extra: '', created_at: '2026-03-21' },
   ];
   var TAG_RULES = [
@@ -918,7 +918,7 @@
       name: 'indox-agan-shivuk', backend: 'gsheet', primary_key: 'ID', columns: AGAN_COLUMNS,
       priority_sync_columns: ['STATUS'],
       active: true, poll_interval_seconds: 60,
-      gsheet: { sheet_name: 'INDOX_AGAN', spreadsheet_id: '1REDACTEDdrivexxxxxx0091', spreadsheet_title: 'אגן שיווק — מסמכים נכנסים', gid: 0, editors: ['person117@example.com'] },
+      gsheet: { sheet_name: 'INDOX_AGAN', spreadsheet_id: '1REDACTEDdrivexxxxxx0092', spreadsheet_title: 'אגן שיווק — מסמכים נכנסים', gid: 0, editors: ['person123@example.com'] },
       created_at: isoAgo(11 * 86400000), updated_at: isoAgo(5 * 3600000),
     },
     docs: AGAN_DOCS, history: AGAN_HISTORY,
@@ -943,8 +943,8 @@
       { key: 'q_v3_routing', value: JSON.stringify(AGAN_QUERIES.q_v3_routing) },
     ],
     companies: [
-      { id: '1', 'שם חברה': 'אגן שיווק', 'מזהה 1': '512987654', 'מזהה 2': '', 'מייל 1': 'person117@example.com', 'מייל 2': '', 'שם ספק מפריוריטי': 'AGAN', 'הוראות לAI לחילוץ דוח גיול': '', TRUSTED_SOURCE_TYPES: 'drive', extra: '', created_at: '2026-02-03' },
-      { id: '2', 'שם חברה': 'ספקי אריזה בע״מ', 'מזהה 1': '517889900', 'מזהה 2': '', 'מייל 1': 'person118@example.com', 'מייל 2': '', 'שם ספק מפריוריטי': 'ARIZOT', 'הוראות לAI לחילוץ דוח גיול': '', TRUSTED_SOURCE_TYPES: 'drive', extra: '', created_at: '2026-05-14' },
+      { id: '1', 'שם חברה': 'אגן שיווק', 'מזהה 1': '512987654', 'מזהה 2': '', 'מייל 1': 'person123@example.com', 'מייל 2': '', 'שם ספק מפריוריטי': 'AGAN', 'הוראות לAI לחילוץ דוח גיול': '', TRUSTED_SOURCE_TYPES: 'drive', extra: '', created_at: '2026-02-03' },
+      { id: '2', 'שם חברה': 'ספקי אריזה בע״מ', 'מזהה 1': '517889900', 'מזהה 2': '', 'מייל 1': 'person124@example.com', 'מייל 2': '', 'שם ספק מפריוריטי': 'ARIZOT', 'הוראות לAI לחילוץ דוח גיול': '', TRUSTED_SOURCE_TYPES: 'drive', extra: '', created_at: '2026-05-14' },
     ],
     tagRules: [
       { id: '1', EVENT: 'on_ingest', KEY: 'TYPE', LABEL: 'סיווג הזמנת רכש', RULE: 'contains:הזמנת רכש->ORDER', TYPE: 'classify', 'VALIDATION STATUS': 'ok', 'VALIDATION ERRORS': '', created_at: '2026-02-05', row_number: 1, label_id: '' },

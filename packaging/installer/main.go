@@ -46,7 +46,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/solomonBoltin/deployment-hacohen/packaging/trust"
+	"github.com/bina-solution/digital-office/packaging/trust"
 )
 
 // rootKeys is the committed roots.txt: the release roots' PUBLIC keys, the whole of what a stub trusts.

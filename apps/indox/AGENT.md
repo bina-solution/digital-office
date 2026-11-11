@@ -14,7 +14,7 @@ client's books.
 ## From inside the office network (`http://incoming-documents:8080/incomingDocuments`)
 
 **Always pass `?instance=<id>`.** A call without it is NOT refused. It acts on schema `public`, whose
-views are the first production instance (hacohen).
+views are the first production instance (example).
 
 ```bash
 GET  /instances · /repos · /repos/<repo>/stats              # what exists, and its numbers

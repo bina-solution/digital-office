@@ -1,0 +1,38 @@
+#!/usr/bin/env bash
+#: probe — does any known way around the sign-in reach an app? (DGO-1656) From two machines:
+#:   on the office to be probed:  ./bbox security probe --targets
+#:       prints «<its public ipv4> <host>[:<public-prefix>] …», every HTTPS host it routes and each public prefix
+#:   on any OTHER machine:        ./bbox security probe <ipv4> <host>[:<public-prefix>] …
+#:       GET only, the shapes of the 2025–2026 forward-auth advisories (scripts/ops/edge-bypass-probe.sh)
+#:       exit 0 every line held · 1 a LOOK (a way in) · 3 something got no answer
+#: Never from the office itself: its own address answers it as the private docker bridge.
+set -uo pipefail
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
+. "${REPO_ROOT}/scripts/lib.sh"
+PROBE="${REPO_ROOT}/scripts/ops/edge-bypass-probe.sh"
+case "${1:-}" in
+  ""|-h|--help) sed -n 's/^#: //p' "${BASH_SOURCE[0]}"; exit 0 ;;
+  --targets)
+    domain="$(read_env_value DEPLOYMENT_DOMAIN)"
+    [ -n "${domain}" ] || die "DEPLOYMENT_DOMAIN is empty in .env: no public names to probe"
+    # the address the world reaches: console.<domain> as resolved here, refused when it is not a public one
+    ip="$(python3 -c '
+import ipaddress, socket, sys
+a = socket.gethostbyname(sys.argv[1])
+sys.exit(1) if not ipaddress.ip_address(a).is_global else print(a)' "console.${domain}" 2>/dev/null)" \
+      || die "console.${domain} does not resolve here to a public address: give the probe the office's public IPv4 by hand"
+    targets="$(docker ps -q | xargs docker inspect | bash "${PROBE}" --targets "${domain}")" && [ -n "${targets}" ] \
+      || die "could not read this office's routers"
+    printf '%s %s\n' "${ip}" "$(tr '\n' ' ' <<<"${targets}")"
+    exit 0 ;;
+esac
+# Never at this machine itself: its own address answers the probe as the private docker bridge, so every «private
+# only» rule would let it in and the run would prove nothing. Its addresses, and console.<domain> as named here.
+own="$( { ip -o -4 addr show 2>/dev/null | awk '{ split($4, a, "/"); print a[1] }'; ifconfig 2>/dev/null | awk '$1 == "inet" { print $2 }'; } | sort -u)"
+domain="$(read_env_value DEPLOYMENT_DOMAIN 2>/dev/null || true)"
+[ -n "${domain}" ] && own="${own} $(python3 -c 'import socket, sys; print(socket.gethostbyname(sys.argv[1]))' "console.${domain}" 2>/dev/null || true)"
+for a in ${own}; do
+  [ "${a}" = "${1}" ] && die "${1} is this machine's own address: run the probe from another machine (here it would answer as the docker bridge)"
+done
+exec bash "${PROBE}" "$@"

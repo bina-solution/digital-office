@@ -8,8 +8,8 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/solomonBoltin/deployment-hacohen/packaging/dgo/internal/pyval"
-	"github.com/solomonBoltin/deployment-hacohen/packaging/dgo/internal/yamlish"
+	"github.com/bina-solution/digital-office/packaging/dgo/internal/pyval"
+	"github.com/bina-solution/digital-office/packaging/dgo/internal/yamlish"
 )
 
 // maxBriefBytes mirrors MAX_BRIEF_BYTES: an app's AGENT.md is injected into every agent session.
@@ -18,12 +18,18 @@ const maxBriefBytes = 6000
 // strengths mirrors STRENGTHS.
 var strengths = map[string]bool{"requires": true, "wants": true, "requisite": true, "binds_to": true, "conflicts": true}
 
+// yamlNonTextIDs mirrors YAML_NON_TEXT_IDS: ids the pattern allows that YAML 1.1 does not read as text (a
+// boolean, or null), so the state file can never name them (DGO-612).
+var yamlNonTextIDs = map[string]bool{"yes": true, "no": true, "on": true, "off": true, "true": true, "false": true, "null": true}
+
 // Validate mirrors validate(cat): structural validation against platform/schema/app.schema.json
 // without a jsonschema library — the same checks, the same sentences. It returns the error lines and
 // the capability → providers map. Only what reconcile.py enforces is enforced: required and unknown
 // top-level fields, declared types and enums at every depth, a sub-object's required keys at the top
 // level, layer and kind, use[] strengths, route and tile conflicts, the agent's brief (present, inside
-// the app, within budget), the compose file (present; forbidden for a blueprint or a library).
+// the app, within budget), the compose file (present; forbidden for a blueprint or a library), and since
+// DGO-612 a capability with no name and an id YAML does not read as text (yes/no/on/off/true/false/null),
+// each said by name where both used to die.
 // `pattern`, `minimum`, `minItems`, `oneOf` in the schema are documentation to the Python validator,
 // and so they are here.
 func Validate(repo string, cat *Catalog) ([]string, map[string][]string, error) {
@@ -42,6 +48,10 @@ func Validate(repo string, cat *Catalog) ([]string, map[string][]string, error) 
 	kindEnum := []any{}
 	if kindSpec, ok := props["kind"].(map[string]any); ok {
 		kindEnum, _ = kindSpec["enum"].([]any)
+	}
+	opsSpec := map[string]any{} // schema["properties"]["ops"]["items"]
+	if s, ok := props["ops"].(map[string]any); ok {
+		opsSpec, _ = s["items"].(map[string]any)
 	}
 
 	var errs []string
@@ -98,6 +108,9 @@ func Validate(repo string, cat *Catalog) ([]string, map[string][]string, error) 
 			checkEnums(aid, v, spec, path, &errs)
 			checkTypes(aid, v, spec, path, &errs)
 		}
+		if yamlNonTextIDs[aid] { // reconcile.py YAML_NON_TEXT_IDS (DGO-612)
+			errs = append(errs, fmt.Sprintf("%s: id '%s' is a word YAML does not read as text (yes/no/on/off/true/false/null) — platform.state.yaml could never name the app; choose another id", aid, aid))
+		}
 		layerOK := false // `a.get("layer") not in (1, 2, 3)` compares by ==: 1.0 and true are 1
 		for _, l := range []int64{1, 2, 3} {
 			layerOK = layerOK || pyEqual(a.Raw["layer"], l)
@@ -116,14 +129,13 @@ func Validate(repo string, cat *Catalog) ([]string, map[string][]string, error) 
 			return nil, nil, err
 		}
 		for i, c := range caps {
+			// no name is said here, a name that is not text the type check above has said; neither is
+			// registered (DGO-612: reconcile.py died on both, and this died with it)
 			name, ok := c["name"]
 			if !ok {
-				return nil, nil, died("%s: capabilities[%d] has no name", aid, i)
+				errs = append(errs, fmt.Sprintf("%s: capabilities[%d] has no name — nothing can `use` it", aid, i))
+				continue
 			}
-			if _, ok := pyKey(name); !ok {
-				return nil, nil, died("%s: capabilities[%d].name is %s, which cannot name anything", aid, i, pyval.Repr(name))
-			}
-			// a name that is not text fails the type check above, so the OK line never lists it
 			if s, isText := name.(string); isText {
 				provided[s] = append(provided[s], aid)
 			}
@@ -141,6 +153,8 @@ func Validate(repo string, cat *Catalog) ([]string, map[string][]string, error) 
 				errs = append(errs, fmt.Sprintf("%s: use[%s] bad strength '%s'", aid, pyval.Str(pyGet(u, "capability", nil)), pyval.Str(s)))
 			}
 		}
+		checkOps(aid, a, opsSpec, &errs) // _check_ops (DGO-1244), where validate() calls it
+
 		if routing := a.Raw["routing"]; truthy(routing) { // `a.get("routing") or []`
 			items, ok := pyIter(routing)
 			if !ok {
@@ -199,12 +213,12 @@ func Validate(repo string, cat *Catalog) ([]string, map[string][]string, error) 
 		}
 		comp := a.Raw["compose"]
 		if truthy(comp) {
-			s, ok := comp.(string)
-			if !ok { // the path join raises
-				return nil, nil, died("%s: compose is %s, not a path", aid, pyval.Repr(comp))
-			}
-			if _, err := os.Stat(joinPath(a.Dir, s)); err != nil {
-				errs = append(errs, fmt.Sprintf("%s: compose '%s' not found", aid, s))
+			// a compose that is not text is the type check's to say (DGO-612: the path join raised, and this
+			// died with it)
+			if s, ok := comp.(string); ok {
+				if _, err := os.Stat(joinPath(a.Dir, s)); err != nil {
+					errs = append(errs, fmt.Sprintf("%s: compose '%s' not found", aid, s))
+				}
 			}
 			if kind, _ := a.Raw["kind"].(string); kind == "blueprint" || kind == "library" {
 				errs = append(errs, fmt.Sprintf("%s: kind=%s must not declare compose", aid, kind))

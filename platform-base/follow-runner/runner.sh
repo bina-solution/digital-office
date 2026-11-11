@@ -32,8 +32,11 @@ say() { printf '%s [follow] %s\n' "$(date -u '+%F %T')" "$*"; }
 # the office declares DGO_FOLLOW (its .env, read through the read-only mount); otherwise there is nothing to start
 declared() { grep -Eq '^DGO_FOLLOW=[^[:space:]]' "${REPO}/.env" 2>/dev/null; }
 
-start_cycle() {
-  local img st code sg who=() cred=() git=(-e GIT_CONFIG_COUNT=1 -e GIT_CONFIG_KEY_0=safe.directory -e GIT_CONFIG_VALUE_0='*')
+start_cycle() {   # [heal]: `follow.sh heal`, the heal a cycle starts with and nothing after it
+  local verb="${1:-}" bound=6h img st code sg who=() cred=() git=(-e GIT_CONFIG_COUNT=1 -e GIT_CONFIG_KEY_0=safe.directory -e GIT_CONFIG_VALUE_0='*')
+  # a heal reads state and recreates a few containers at most: 3 minutes (and 60 s to die) ends a hung one before the
+  # next heal is due, where a take's 6 h would refuse every cycle beside it (the host unit's own bound, scripts/follow.sh)
+  [ -z "${verb}" ] || bound=3m
   # an engine that does not answer is not "no cycle": nothing is started, and nothing removed, on a guess
   if ! st="$("${DOCKER}" ps -a --filter "name=^${NAME}\$" --format '{{.State}}' 2>/dev/null)"; then
     say "the engine did not answer \`docker ps\` — no cycle started"; return 1
@@ -73,24 +76,33 @@ start_cycle() {
        -w "${REPO}" -e HOME=/tmp/follow-home -e REPO_ROOT="${REPO}" \
        -e BBOX_REPO_HOST="${REPO}" -e BBOX_DOCKER_SOCK=/var/run/docker.sock -e BBOX_HOST_DOCKER_SOCK="${SOCK_HOST}" \
        -e BBOX_HOST_TZ="${BBOX_HOST_TZ:-UTC}" -e DEPLOYMENT_NAME="${DN}" \
-       "${img}" timeout -k 60 6h bash "${REPO}/scripts/follow.sh" >/dev/null; then
-    say "cycle started (${NAME})"
+       "${img}" timeout -k 60 "${bound}" bash "${REPO}/scripts/follow.sh" ${verb:+"${verb}"} >/dev/null; then
+    say "${verb:+${verb} }cycle started (${NAME})"
   else
     say "the engine refused to start a cycle (${NAME})"; return 1
   fi
 }
 
 if [ "${FOLLOW_ONCE:-0}" = 1 ]; then          # one decision, then exit (tests/test_runner.sh)
-  declared || { say "DGO_FOLLOW is not declared in ${REPO}/.env — nothing to follow"; exit 0; }
+  declared || { say "DGO_FOLLOW is not declared in ${REPO}/.env — nothing to follow, the heal only"; start_cycle heal; exit $?; }
   start_cycle; exit $?
 fi
+TICK="${FOLLOW_TICK:-30}"                     # the wait's real step; the schedule counts 30 s per step (tests: shorter)
 touch "${BEAT}"
+# The heal on its own, soon after the engine starts this service. The first full cycle waits FOLLOW_FIRST so a booting
+# host is not loaded with a take, and the door waited with it: the HP's dgo-link stayed shut 45 minutes on 2026-11-05.
+# FOLLOW_HEAL_AT lists seconds after the start, in steps of 30. At the first, the engine may still be restoring
+# containers; the second heals what the first could not yet rejoin (DGO-1393).
 waited=0
-while [ "${waited}" -lt "${FOLLOW_FIRST:-900}" ]; do sleep 30; waited=$((waited + 30)); touch "${BEAT}"; done
+while [ "${waited}" -lt "${FOLLOW_FIRST:-900}" ]; do
+  sleep "${TICK}"; waited=$((waited + 30)); touch "${BEAT}"
+  case " ${FOLLOW_HEAL_AT:-180 480} " in *" ${waited} "*) start_cycle heal ;; esac
+done
 while :; do
   touch "${BEAT}"
-  declared && start_cycle
+  # following or not, every cycle heals first (follow.sh office_heal); where DGO_FOLLOW is not declared, that is all
+  if declared; then start_cycle; else start_cycle heal; fi
   # every EVERY seconds, plus up to five minutes, so offices on one dgo-stable do not all pull at once
   waited=0; pause=$((EVERY + RANDOM % 300))
-  while [ "${waited}" -lt "${pause}" ]; do sleep 30; waited=$((waited + 30)); touch "${BEAT}"; done
+  while [ "${waited}" -lt "${pause}" ]; do sleep "${TICK}"; waited=$((waited + 30)); touch "${BEAT}"; done
 done

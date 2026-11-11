@@ -11,7 +11,7 @@ Run once a minute by office-watch.timer (low priority: nice 19, idle IO). Each r
              for longer than that profile's OFFSITE_MAX_AGE_H;
   * stale mounts — an office container whose bind mount still points at a folder the server replaced
              (MOUNT_WATCH, the rendered .generated/ folders): it is RESTARTED, which binds the live folder,
-             and told (FPG-497: the credential broker kept a deleted registry and refused every lease).
+             and told (EXF-497: the credential broker kept a deleted registry and refused every lease).
 Each event is told ONCE when it opens (level error) and ONCE when it clears (level info,
 «back to normal»), as one row per event in the notice centre — the same upsert-by-(source,
 source_id) contract meet-start's say() and X-17's notify() use:
@@ -37,7 +37,7 @@ import urllib.request
 from datetime import datetime, timezone
 
 DEFAULTS = {
-    "OFFICE": "fireplace",
+    "OFFICE": "examplef",
     "SOURCE": "office-watch",
     "NOTICE_URL": "",            # empty → http://<NOTICE_CONTAINER IP>:<NOTICE_PORT> (the X-17 way)
     "NOTICE_CONTAINER": "",      # empty → notifications-<OFFICE>
@@ -50,14 +50,14 @@ DEFAULTS = {
     "CPU_CLEAR_MIN": "2",        # back under the limit this long → «back to normal»
     "PSI_PCT": "80",             # PSI cpu some avg60 that also counts (0 = off)
     "WATCH_PROJECT": "",         # empty → OFFICE (compose project label)
-    "WATCH_EXTRA": "site-fireplace-guys site-fireplace-guys-forms",
+    "WATCH_EXTRA": "site-examplef-guys site-examplef-guys-forms",
     "IGNORE": "*-init-*",        # globs of container names never told about
     "SERVICE_RUNS": "2",         # checks in a row before a service is «down» (autoheal gets the first)
     "EXITED_ZERO_OK": "1",       # a container that exited 0 finished its job (one-shot init)
     "DISK_PATHS": "/",
     "DISK_PCT": "90",
     "DISK_FREE_GB": "5",
-    "OFFSITE_LOG": "/var/backups/fpg-offsite/offsite.log",   # empty = off
+    "OFFSITE_LOG": "/var/backups/exf-offsite/offsite.log",   # empty = off
     "OFFSITE_MAX_AGE_H": "core=26 full=194",
     "MOUNT_WATCH": "*/.generated/*",   # host folders whose replacement leaves a container blind (empty = off)
     "HEAL_STALE": "1",           # restart such a container (0 = only tell)
@@ -393,7 +393,7 @@ def stale_mounts(c, pid):
 
 
 def check_mounts(c, st, now, check_only=False):
-    """A running office container whose bind mount points at a folder the server replaced (FPG-497). It keeps the
+    """A running office container whose bind mount points at a folder the server replaced (EXF-497). It keeps the
     deleted folder — empty, or the old copy — and still looks healthy: on 2026-10-29 a hand-made «restore» deleted
     and re-extracted .generated/ at 08:45:54Z, the credential broker went on reading the deleted registry, and every
     app that (re)started after it was refused its connections. A restart binds the live folder, so the watch

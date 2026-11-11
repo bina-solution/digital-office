@@ -1,0 +1,67 @@
+#!/bin/sh
+# /usr/local/bin/slack-signin-browser <url> — this desktop's browser, for ONE thing: Slack's own sign-in (DGO-1264;
+# the pattern and its reasons are bina-claude's, DGO-1506: apps/bina-claude/desktop/signin-browser). desktop/autostart
+# names it the http/https handler, and $BROWSER.
+#
+# Slack's desktop signs in through a browser: it opens a page of slack.com (or the workspace's own
+# <name>.slack.com, which may send on to the company's identity provider) and waits for a slack:// link, which
+# desktop/open-link hands to the running Slack. So the browser opens Slack's own addresses only; a link in a
+# message to anywhere else opens on the owner's own computer, not on this screen (it is logged by host only).
+#
+# ONLY THE SIGN-IN. The browser runs without Chromium's sandbox (the container denies it the namespaces), as the
+# desktop user. So the window lives at most SLACK_SIGNIN_MAX_S seconds (15 min), in a throwaway profile deleted
+# when it closes, and the policy (browser-policy.json) blocks downloads. A new press closes an earlier window.
+# The log names a host and a path, never the query.
+set -u
+LOG="${HOME:-/config}/.slack-open-url.log"
+BIN="${SLACK_BROWSER_BIN:-chromium}"
+TMP="${TMPDIR:-/tmp}"
+PREFIX="slack-signin."
+MAX_S="${SLACK_SIGNIN_MAX_S:-900}"
+
+note() {
+  if [ -f "$LOG" ] && [ "$(wc -l < "$LOG")" -gt 400 ]; then
+    tail -n 200 "$LOG" > "$LOG.new" 2>/dev/null && mv -f "$LOG.new" "$LOG" 2>/dev/null
+  fi
+  printf '%s %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$*" >> "$LOG" 2>/dev/null || true
+}
+clean() { printf '%s' "$1" | tr -d '\000-\037\177'; }
+
+url="${1:-}"
+case "$url" in
+  https://*) ;;
+  *) note "refused: not an https address"; exit 2 ;;
+esac
+case "$url" in
+  *\\*|*" "*) note "refused: not a plain web address"; exit 2 ;;
+esac
+if [ "$(printf '%s' "$url" | LC_ALL=C tr -d '!-~'; printf x)" != x ]; then
+  note "refused: not a plain web address"; exit 2
+fi
+rest="${url#*://}"
+noq="${rest%%[?#]*}"
+host="${noq%%/*}"
+host="${host##*@}"
+host="$(clean "${host%%:*}" | tr 'A-Z' 'a-z')"
+path="/${noq#*/}"; [ "$path" = "/$noq" ] && path="/"
+path="$(clean "$path")"
+case "$host" in
+  slack.com|*.slack.com) ;;
+  *) note "not opened link ${host}: this desktop's browser opens only Slack's own sign-in"; exit 0 ;;
+esac
+if pkill -f -- "--user-data-dir=${TMP}/${PREFIX}" 2>/dev/null; then
+  note "closed an earlier sign-in's window"
+fi
+profile="$(mktemp -d "${TMP}/${PREFIX}XXXXXX")" || { note "failed sign-in https://${host}${path}: no profile folder"; exit 1; }
+id="${profile##*.}"
+note "opened sign-in https://${host}${path} window=${id}"
+cap=""; command -v timeout >/dev/null 2>&1 && cap="timeout -k 5 ${MAX_S}"
+(
+  $cap "$BIN" --no-sandbox --disable-gpu --disable-breakpad --password-store=basic \
+    --user-data-dir="$profile" --no-first-run --no-default-browser-check --start-maximized --new-window \
+    "$url" >/dev/null 2>&1
+  rc=$?
+  rm -rf "$profile"
+  note "closed sign-in window=${id} (browser exit ${rc})"
+) </dev/null >/dev/null 2>&1 &
+exit 0

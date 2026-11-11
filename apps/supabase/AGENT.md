@@ -23,9 +23,16 @@ off, and in the herd it belongs on the HP.
 
 ## Traps
 
-- **The gateway is published.** kong is routed by the edge at `SUPABASE_BASE_URL` (and
-  `supabase.localhost`) on plain HTTP, with no SSO in front. Its own key checks are the only gate,
-  so never add a route to `kong.yml`.
+- **Publication is a declaration, and it is https only** (DGO-1557). The public API host is not
+  written in this app's compose any more: `routing[0]` in app.json declares `https_only` (no
+  plain-http twin at all) and `publish: "domain"` (the public routers exist only where the office
+  names a real host). An office that publishes NOTHING says so with its host variable —
+  `SUPABASE_BASE_URL=supabase.localhost` (Exampleu) renders the `supabase.localhost` twin and nothing
+  else. Measured before the fix, on Exampleu: `/rest/v1/` and `/pg/` answered 401 to a keyless request
+  from the internet — the API was ASKED, its keys were the only lock — while the https addresses the
+  app hands to browsers (`STORAGE_PUBLIC_URL`) answered 404 for want of a router.
+  What has not changed: kong's own key checks are still the only gate on that host, so never add a
+  route to `kong.yml`, and never publish the API to "test" it.
 - The storage route has no key check at the gateway: the storage service verifies each request
   itself (a JWT or an S3 signature).
 - `kong.yml` routes `/auth`, `/realtime` and `/functions` to services this compose does not run, so

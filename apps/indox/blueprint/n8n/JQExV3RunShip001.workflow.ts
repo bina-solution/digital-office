@@ -58,7 +58,9 @@ export class Jqexv3RunShipmentWorkflow {
         httpMethod: 'POST',
         path: 'jqexv3-run-shipment',
         responseMode: 'responseNode',
-        options: {},
+        // DGO-1603 (G97): internal caller only (extraction.py → http://n8n-webhook:5678); the edge
+        // publishes /webhook/* on the public host, so the office's own ranges are the answer.
+        options: { ipWhitelist: '10.0.0.0/8,172.16.0.0/12,192.168.0.0/16,127.0.0.1,::1' },
     };
 
     @node({

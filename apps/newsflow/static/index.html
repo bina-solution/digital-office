@@ -1,0 +1,353 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>זרימת חדשות</title>
+<style>
+/* @bina-theme-tokens:start */
+/* OLIVE GROVE — the one palette of the office (the owner, 2026-10-07 · DGO-450). Four hues, sampled
+   from his mock-up, and the ground they stand on. A screen never writes a colour: it names one of
+   these. Each hue is the colour itself (a FILL — a button, a bar, a dot), «-d» for text and thin
+   lines on the ground (4.5:1 or more), «-soft» and «-line» for a tint and its hairline, and «-ink»
+   for what is written ON the fill. The role names every screen already uses point at them:
+   (no backtick in this block: one of its copies lives inside a script's template string)
+     olive  the brand and the main action · what is well, what is done
+     sky    what is in motion, what only informs · a link
+     lime   look here — a warning, something waiting
+     plum   a person must act — a failure, a removal, the one final action
+   Contrast, measured (WCAG): ink on the ground 13.7 · muted 4.65 · light text on olive 5.51 and on
+   plum 9.54 · ink on lime 6.88 · its ink on sky 6.32 · sky-d 4.61 · lime-d 4.70 · violet 5.32 ·
+   on the desk: its ink 6.32 (dark: 13.96), and 11.2 where the sky pales (dark: 5.12). */
+:root,:root[data-theme="light"]{
+  color-scheme:light;
+  accent-color:var(--accent);   /* the browser's OWN controls - a checkbox, a radio, a range, a progress bar - on both grounds: said once, here (it was said for eight single controls, and every other one was the browser's blue) */
+  --bg:#f3f5f7; --surface:#fff; --surface-2:#f9fafb; --ink:#1f2a17; --muted:#6a7068; --line:#dcdfde;
+  --olive:#56693f; --olive-d:#475734; --olive-soft:#e7eae4; --olive-line:#bfc6b6; --olive-ink:#f3f5f7;
+  --sky:#7baae3; --sky-d:#2a6fc4; --sky-soft:#edf3fb; --sky-line:#cddff4; --sky-ink:#13263f;
+  --lime:#a9b84c; --lime-d:#69732e; --lime-soft:#f3f5e6; --lime-line:#dee4bb; --lime-ink:#1f2a17;
+  --plum:#5b3349; --plum-d:#4a303b; --plum-soft:#e8e2e6; --plum-line:#c1b1ba; --plum-ink:#f3f5f7;
+  --accent:var(--olive); --accent-d:var(--olive-d); --accent-soft:var(--olive-soft); --accent-ink:var(--olive-ink);
+  --blue:var(--sky-d); --amber:var(--lime-d); --red:var(--plum);
+  --violet:#7c5c6d;   /* plum, lifted a fifth toward white: someone has to look — nothing has failed */
+  --ok:var(--olive); --warn:var(--lime-d); --danger:var(--plum); --info:var(--sky-d);
+  --ok-soft:var(--olive-soft); --warn-soft:var(--lime-soft); --danger-soft:var(--plum-soft); --info-soft:var(--sky-soft);
+  --red-soft:var(--plum-soft); --amber-soft:var(--lime-soft); --blue-soft:var(--sky-soft); --violet-soft:var(--plum-soft);
+  --side:var(--olive); --side-ink:#f3f5f7; --side-mut:#dce1da; --side-line:#788765;
+  --desk:var(--sky); --desk-ink:var(--sky-ink);   /* desktop mode's ground is the sky (the owner, DGO-452), and what is written straight on it */
+  --scrim:rgba(31,42,23,.5);                      /* what dims a screen behind a pop-up */
+  --shadow:0 1px 3px rgba(31,42,23,.08),0 6px 24px rgba(31,42,23,.06);
+  --shadow-lg:0 20px 60px rgba(31,42,23,.28);
+  /* ONE COLOUR AND ONE ANIMAL PER OFFICE (the owner, 2026-10-09 · flt-002). When offices are linked,
+     a person reads WHICH office a thing belongs to without opening it, so each office gets a hue of
+     its own. The hue is an IDENTITY and never a health state: an office that stopped answering keeps
+     its colour, and the quiet mark is the one that says "not answering". Each is an ALIAS of the
+     palette's own hue — no fourth value is invented, and because the ground re-points the hue, the
+     office mark follows the ground by itself. Each office's animal (elephant, deer, eagle) is a
+     glyph of bina-icons.js. */
+  --office-hp:var(--muted);   /* hp · elephant — grey: the heavy laptop at home, in the palette's own grey */
+  --office-mac:var(--lime);   /* macbook · deer — yellow: the palette has one yellow and it is lime. A FILL, so what is written ON it is --lime-ink, never this */
+  --office-vps:var(--sky-d);  /* vps · eagle — deep sky blue, «the eagle in the clouds». THE OWNER'S OWN CHOICE (2026-10-09, in writing: vps = נשר + כחול-שמיים) — this line is the colour he picked, not a default kept for him */
+}
+
+/* ── A LINKED OFFICE'S MARK, BY NAME (flt-004) ───────────────────────────────────────────────
+   The link carries a NAME — mark: {color, animal} in the catalog, from the office's own identity
+   — and never a value: the office that DRAWS a linked tile owns the pixels, so it paints the name
+   with its own palette. These seven rules are that translation, one per family above; a screen sets
+   data-office-hue="lime" and paints var(--office-hue).
+   A name this file does not know paints nothing, which is why the vocabulary in
+   apps/dgo-extend/identity.py may only name families that exist here — and why --red and --ok
+   are not among them: they mean «danger» and «it is well» on every screen in the office. */
+[data-office-hue="grey"]   { --office-hue:var(--muted); }
+[data-office-hue="lime"]   { --office-hue:var(--lime); }
+[data-office-hue="sky"]    { --office-hue:var(--sky-d); }
+[data-office-hue="olive"]  { --office-hue:var(--olive-d); }
+[data-office-hue="plum"]   { --office-hue:var(--plum); }
+[data-office-hue="blue"]   { --office-hue:var(--blue); }
+[data-office-hue="violet"] { --office-hue:var(--violet); }
+/* the dark ground is the same four hues on the palette's own ink, and the SAME legend. Olive on that
+   ink is 2.5:1, so its text step there is olive LIFTED — its own hue and saturation, lighter (7.14
+   on a card, 4.82 on its own tint) — and the brand, the main action and «it is well» take that step.
+   Lime stays «look here» and the sky «in motion», as on the light ground: were lime the accent here
+   (it was, for a day), a warning, a selection and «it is well» were one colour. Each «-d» on its
+   own «-soft» there, measured: olive 4.82 · sky 4.62 · lime 4.63 · plum 4.71. */
+@media (prefers-color-scheme:dark){
+  :root{ color-scheme:dark;
+         --bg:#141b0f; --surface:#1f2a17; --surface-2:#192213; --ink:#f3f5f7; --muted:#a2a8a2; --line:#414a3b;
+         --olive-d:#a5ba8c; --olive-soft:#384629; --olive-line:#56693f;
+         --sky-d:#7baae3; --sky-soft:#2e3f38; --sky-line:#4d6a8c;
+         --lime-d:#a9b84c; --lime-soft:#3b4622; --lime-line:#69732e;
+         --plum-d:#ad99a4; --plum-soft:#402f33; --plum-line:#7c5c6d;
+         --accent:var(--olive-d); --accent-ink:var(--surface);
+         --red:#ad99a4; --violet:#bdadb6; --danger:#ad99a4; --ok:var(--olive-d); --side:var(--surface);
+         --desk:var(--sky-ink); --desk-ink:var(--ink); --scrim:rgba(0,0,0,.6);
+         --shadow:0 1px 3px rgba(0,0,0,.4),0 6px 24px rgba(0,0,0,.3);
+         --shadow-lg:0 20px 60px rgba(0,0,0,.55); }
+}
+:root[data-theme="midnight"]{
+  color-scheme:dark;
+  --bg:#141b0f; --surface:#1f2a17; --surface-2:#192213; --ink:#f3f5f7; --muted:#a2a8a2; --line:#414a3b;
+  --olive-d:#a5ba8c; --olive-soft:#384629; --olive-line:#56693f;
+  --sky-d:#7baae3; --sky-soft:#2e3f38; --sky-line:#4d6a8c;
+  --lime-d:#a9b84c; --lime-soft:#3b4622; --lime-line:#69732e;
+  --plum-d:#ad99a4; --plum-soft:#402f33; --plum-line:#7c5c6d;
+  --accent:var(--olive-d); --accent-ink:var(--surface);
+  --red:#ad99a4; --violet:#bdadb6; --danger:#ad99a4; --ok:var(--olive-d); --side:var(--surface);
+  --desk:var(--sky-ink); --desk-ink:var(--ink); --scrim:rgba(0,0,0,.6);
+  --shadow:0 1px 3px rgba(0,0,0,.4),0 6px 24px rgba(0,0,0,.3);
+  --shadow-lg:0 20px 60px rgba(0,0,0,.55);
+}
+/* THE KEYBOARD'S RING - what the browser draws around the stop the keyboard is on, in the palette, wherever
+   a part draws none of its own. It has no specificity at all (:where), so any rule of a part wins. Two
+   screens said this for themselves; on the others nearly every stop wore the browser's ring (DGO-455).
+   A field keeps the offset it has - fourteen rules draw a field's own outline and say no offset. An area
+   (a scroll box, a table) takes the ring inside, where nothing clips it; a control takes it outside,
+   where a filled button does not hide it. */
+:where(:focus-visible){outline:2px solid var(--accent)}
+:where(:focus-visible:not(a,button,summary,[role=button],input,select,textarea)){outline-offset:-2px}
+:where(a,button,summary,[role=button]):focus-visible{outline-offset:2px}
+/* HEBREW AT A HEAVY WEIGHT - on Windows, where the first family of --font is installed. "Segoe UI" has its
+   Hebrew in Light, Regular, Semibold and Bold. Asked for 800 or 900 the browser takes the family's Black
+   face, which has none, and so has every family after it - so the Hebrew of every title at 800 was drawn in
+   the system's last-resort serif, thin, beside Latin in Black: «חשבונות ומראות» at 20px is 150px wide at 700
+   and 120px at 800 (Chrome 154; the screens ask for 800 in 167 places, the question's title among them).
+   These faces give the family's HEBREW RANGE the faces that have it. A family a sheet names is no longer the
+   system's for those characters, so every weight and both styles are named, each as the system resolves it:
+   measured, only upright 800 and 900 change. Any other character is not theirs and goes on to the next
+   family the screen names - system-ui in --font, on Windows the same faces, Black included - which is why
+   G27 asks that system-ui follows wherever a screen names this family itself. Where the family is not
+   installed nothing here resolves and nothing changes. */
+@font-face{font-family:"Segoe UI";src:local("Segoe UI Light");font-weight:100 300;unicode-range:U+0590-05FF,U+FB1D-FB4F}
+@font-face{font-family:"Segoe UI";src:local("Segoe UI");font-weight:400;unicode-range:U+0590-05FF,U+FB1D-FB4F}
+@font-face{font-family:"Segoe UI";src:local("Segoe UI Semibold");font-weight:500 600;unicode-range:U+0590-05FF,U+FB1D-FB4F}
+@font-face{font-family:"Segoe UI";src:local("Segoe UI Bold");font-weight:700 900;unicode-range:U+0590-05FF,U+FB1D-FB4F}
+@font-face{font-family:"Segoe UI";src:local("Segoe UI Light Italic");font-weight:100 300;font-style:italic;unicode-range:U+0590-05FF,U+FB1D-FB4F}
+@font-face{font-family:"Segoe UI";src:local("Segoe UI Italic");font-weight:400;font-style:italic;unicode-range:U+0590-05FF,U+FB1D-FB4F}
+@font-face{font-family:"Segoe UI";src:local("Segoe UI Semibold Italic");font-weight:500 600;font-style:italic;unicode-range:U+0590-05FF,U+FB1D-FB4F}
+@font-face{font-family:"Segoe UI";src:local("Segoe UI Bold Italic");font-weight:700 900;font-style:italic;unicode-range:U+0590-05FF,U+FB1D-FB4F}
+/* @bina-theme-tokens:end */
+  /* Kan-11-level layout, the office's own colours: system canvas, the palette's accent, its red for flashes
+     (G82: one palette, the block above). Everything is relative: the console serves this under /a/newsflow/
+     and injects <base href>. */
+  :root { color-scheme: light dark; --flash: var(--red); --line: color-mix(in srgb, CanvasText 14%, transparent); }
+  * { box-sizing: border-box; }
+  body { margin: 0; padding-bottom: 68px; font: 15px/1.5 "Segoe UI", system-ui, -apple-system, "Noto Sans Hebrew", "Assistant", Arial, sans-serif;
+         background: Canvas; color: CanvasText; }
+  header { position: sticky; top: 0; z-index: 5; background: Canvas; border-bottom: 1px solid var(--line); }
+  .bar { display: flex; align-items: center; gap: 10px; padding: 10px 14px; }
+  .logo { font-weight: 800; font-size: 19px; letter-spacing: -0.3px; }
+  .logo span { color: var(--accent); }
+  .grow { flex: 1; }
+  .icon { border: 0; background: transparent; color: inherit; font-size: 18px; padding: 6px 9px; border-radius: 10px; cursor: pointer; }
+  .icon:hover { background: color-mix(in srgb, CanvasText 8%, transparent); }
+  .search { display: none; flex: 1; align-items: center; gap: 6px; border: 1px solid var(--line); border-radius: 999px; padding: 6px 12px; }
+  .search input { border: 0; background: transparent; color: inherit; font: inherit; width: 100%; outline: none; }
+  .tabs { display: flex; gap: 6px; overflow-x: auto; padding: 0 12px 10px; scrollbar-width: none; }
+  .tabs::-webkit-scrollbar { display: none; }
+  .tab { white-space: nowrap; padding: 7px 14px; border-radius: 999px; border: 1px solid var(--line); background: transparent;
+         color: inherit; font: inherit; font-size: 14px; cursor: pointer; }
+  .tab[aria-selected="true"] { background: CanvasText; color: Canvas; border-color: CanvasText; font-weight: 600; }
+  main { padding: 14px; max-width: 860px; margin: 0 auto; }
+  .hero { display: block; text-decoration: none; color: inherit; margin-bottom: 18px; }
+  .hero .shot { width: 100%; aspect-ratio: 16/9; border-radius: 16px; margin-bottom: 12px; overflow: hidden;
+                background-color: color-mix(in srgb, CanvasText 8%, Canvas); }
+  .hero .shot img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .hero h1 { margin: 0 0 8px; font-size: 26px; line-height: 1.22; font-weight: 800; padding-inline-start: 12px;
+             border-inline-start: 4px solid var(--accent); }
+  .hero .meta, .card .meta { font-size: 12.5px; opacity: .65; display: flex; gap: 8px; flex-wrap: wrap; }
+  .flashes { border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); margin: 0 0 18px; }
+  .flashes h2 { font-size: 13px; letter-spacing: .3px; opacity: .8; margin: 0; padding: 10px 4px 6px; display: flex; align-items: center; gap: 8px; }
+  .badge { background: var(--flash); color: var(--surface); border-radius: 7px; font-weight: 800; font-size: 12px; padding: 1px 7px; }
+  .flash { display: flex; gap: 10px; padding: 9px 4px; border-top: 1px solid var(--line); text-decoration: none; color: inherit; }
+  .flash time { color: var(--flash); font-variant-numeric: tabular-nums; font-size: 13px; font-weight: 700; min-width: 44px; }
+  .flash p { margin: 0; font-size: 14.5px; }
+  ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 14px; }
+  .card { display: grid; grid-template-columns: minmax(0, 1fr) 108px; gap: 12px; align-items: start;
+          padding-bottom: 14px; border-bottom: 1px solid var(--line); }
+  .card .body { display: grid; gap: 6px; min-width: 0; }
+  .card a { color: inherit; text-decoration: none; font-size: 17px; font-weight: 650; line-height: 1.35; }
+  .thumb { width: 108px; height: 78px; border-radius: 12px; overflow: hidden; background-color: color-mix(in srgb, CanvasText 8%, Canvas); }
+  .thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .mono { display: grid; place-items: center; color: var(--olive-ink); font-weight: 800; font-size: 19px; letter-spacing: .5px; }
+  .card a:hover { text-decoration: underline; }
+  .empty, .err { padding: 40px 16px; text-align: center; opacity: .75; }
+  nav.bottom { position: fixed; inset-inline: 0; bottom: 0; display: flex; justify-content: space-around; padding: 8px 6px max(8px, env(safe-area-inset-bottom));
+                background: Canvas; border-top: 1px solid var(--line); }
+  nav.bottom button { background: none; border: 0; color: inherit; font: inherit; font-size: 12px; opacity: .7; display: grid; gap: 3px; justify-items: center; cursor: pointer; }
+  nav.bottom button b { font-size: 17px; font-weight: 400; }
+  nav.bottom button[aria-current="true"] { opacity: 1; font-weight: 600; }
+  @media (min-width: 760px) { .search { display: flex; } .hero h1 { font-size: 32px; } nav.bottom { display: none; } body { padding-bottom: 24px; } }
+  /* A wide screen is not a stretched phone (Kan-11 splits it the same way): the stories run in one column,
+     and the short list that a reader scans first — מבזקים — stands beside them, stuck to the top. */
+  @media (min-width: 1000px) {
+    main { max-width: 1120px; display: grid; grid-template-columns: minmax(0, 1fr) 330px;
+           grid-template-areas: "hero side" "list side"; gap: 26px 30px; align-items: start; }
+    .hero { grid-area: hero; }
+    #flashes { grid-area: side; position: sticky; top: 76px; border-top: 0; padding-inline-start: 18px;
+               border-inline-start: 1px solid var(--line); }
+    #list { grid-area: list; }
+  }
+</style>
+</head>
+<body>
+<header>
+  <div class="bar">
+    <div class="logo">זרימת<span>·</span>חדשות</div>
+    <div class="grow"></div>
+    <div class="search"><span>⌕</span><input id="q" type="search" placeholder="חיפוש בכותרות" aria-label="חיפוש"></div>
+    <button class="icon" id="go" type="button" title="אסוף עכשיו">↻</button>
+  </div>
+  <div class="tabs" id="tabs"></div>
+</header>
+<main>
+  <a class="hero" id="hero" href="#" hidden>
+    <div class="shot" id="heroShot" data-cls="shot"></div>
+    <h1 id="heroTitle"></h1>
+    <div class="meta" id="heroMeta"></div>
+  </a>
+  <section class="flashes" id="flashes" hidden>
+    <h2><span class="badge">!</span> מבזקים</h2>
+    <div id="flashList"></div>
+  </section>
+  <ul id="list"></ul>
+</main>
+<nav class="bottom">
+  <button data-act="top" aria-current="true"><b>⌂</b>בית</button>
+  <button data-act="collect"><b>↻</b>אסוף</button>
+  <button data-act="status"><b>≡</b>מצב</button>
+</nav>
+
+<script>
+const $ = (s) => document.querySelector(s);
+let cat = "", cats = [];
+
+const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const hhmm = (iso) => { try { return new Date(iso).toLocaleTimeString("he-IL", { hour: "2-digit", minute: "2-digit" }); } catch { return ""; } };
+const ago = (iso) => {
+  const m = Math.round((Date.now() - new Date(iso).getTime()) / 60000);
+  if (!isFinite(m)) return "";
+  if (m < 60) return `לפני ${m} דק׳`;
+  if (m < 1440) return `לפני ${Math.round(m / 60)} שעות`;
+  return new Date(iso).toLocaleDateString("he-IL");
+};
+async function j(url, opt) {
+  const r = await fetch(url, opt);
+  if (!r.ok) throw new Error((await r.text()).slice(0, 200));
+  return r.json();
+}
+
+function paintTabs() {
+  const tabs = $("#tabs");
+  tabs.innerHTML = "";
+  const mk = (id, label) => {
+    const b = document.createElement("button");
+    b.className = "tab"; b.type = "button"; b.dataset.cat = id; b.textContent = label;
+    b.setAttribute("aria-selected", String(id === cat));
+    b.onclick = () => { cat = id; paintTabs(); load(); };
+    tabs.append(b);
+  };
+  mk("", "ראשי");
+  for (const c of cats) mk(c.id, c.he);
+}
+
+// A card without a picture still has to look deliberate: the source's own initials on a colour that never
+// changes for that source. Kan-11's feed is image-first (315 images on its homepage, measured 2026-11-05),
+// and a grey hole where a picture belongs is what made ours read as the lesser product.
+const hue = (s) => { let h = 0; for (const ch of String(s || "")) h = (h * 31 + ch.charCodeAt(0)) % 360; return h; };
+const initials = (s) => String(s || "?").replace(/[^\p{L}\p{N}]/gu, "").slice(0, 2).toUpperCase() || "?";
+// The colour is one of the palette's fills that keep its light ink readable on both grounds (G82: no hue of
+// our own), the same one for a source every time.
+const MONO_FILLS = ["--olive", "--plum", "--sky-ink", "--lime-ink"];
+const monoStyle = (s) => `background:var(${MONO_FILLS[hue(s) % MONO_FILLS.length]});`;
+
+function paintShot(el, it) {
+  // One element, two states: the picture, or the source's monogram. A picture that fails to load
+  // (a hot-link guard, an expired URL) falls back to the monogram instead of leaving a hole.
+  if (!el) return;
+  el.className = el.dataset.cls || "shot";
+  el.textContent = "";
+  if (it.image) {
+    const img = new Image();
+    img.loading = "lazy"; img.decoding = "async"; img.alt = "";
+    img.referrerPolicy = "no-referrer";
+    img.onerror = () => { el.className = el.dataset.cls + " mono"; el.style.cssText = monoStyle(it.source);
+                          el.textContent = initials(it.source); };
+    img.src = it.image;
+    el.style.cssText = "";
+    el.append(img);
+  } else {
+    el.className = el.dataset.cls + " mono";
+    el.style.cssText = monoStyle(it.source);
+    el.textContent = initials(it.source);
+  }
+}
+
+function paintNews(items) {
+  const list = $("#list"), hero = $("#hero");
+  if (!items.length) {
+    hero.hidden = true; $("#flashes").hidden = true;
+    list.innerHTML = `<li class="empty">אין עדיין כתבות${cat ? " בקטגוריה הזו" : ""} — לחץ ↻ לאיסוף.</li>`;
+    return;
+  }
+  const [top, ...rest] = items;
+  $("#heroTitle").textContent = top.title;
+  paintShot($("#heroShot"), top);
+  $("#heroMeta").innerHTML = `<span>${esc(top.category_he)}</span><span>${esc(top.source)}</span><span>${hhmm(top.found_at)} · ${ago(top.found_at)}</span>`;
+  hero.href = top.url; hero.target = "_blank"; hero.rel = "noopener"; hero.hidden = false;
+
+  const newest = items.slice(0, 5);
+  $("#flashList").innerHTML = newest.map((it) => `
+    <a class="flash" href="${esc(it.url)}" target="_blank" rel="noopener">
+      <time>${hhmm(it.found_at)}</time>
+      <p>${esc(it.title)}</p>
+    </a>`).join("");
+  $("#flashes").hidden = false;
+
+  list.innerHTML = rest.map((it) => `
+    <li class="card">
+      <div class="body">
+        <a href="${esc(it.url)}" target="_blank" rel="noopener">${esc(it.title)}</a>
+        <div class="meta"><span>${esc(it.category_he)}</span><span>${esc(it.source)}</span><span>${ago(it.found_at)}</span></div>
+      </div>
+      <div class="thumb" data-cls="thumb" data-src="${esc(it.image || "")}" data-source="${esc(it.source)}"></div>
+    </li>`).join("");
+  list.querySelectorAll(".thumb").forEach((el) => paintShot(el, { image: el.dataset.src, source: el.dataset.source }));
+}
+
+async function load() {
+  try {
+    const q = ($("#q").value || "").trim().toLowerCase();
+    const [d, c, st] = await Promise.all([
+      j("api/news?limit=60" + (cat ? "&category=" + encodeURIComponent(cat) : "")),
+      j("api/categories"),
+      j("api/status"),
+    ]);
+    cats = c.categories || [];
+    const items = q ? d.items.filter((i) => (i.title + " " + i.source + " " + i.category_he).toLowerCase().includes(q)) : d.items;
+    paintTabs();
+    paintNews(items);
+    document.title = `זרימת חדשות · ${st.articles} כתבות`;
+  } catch (e) {
+    $("#list").innerHTML = `<li class="err">לא הצלחתי לטעון: ${esc(e.message || e)}</li>`;
+  }
+}
+
+$("#q").oninput = () => load();
+$("#go").onclick = () => collect();
+document.querySelectorAll("nav.bottom button").forEach((b) => {
+  b.onclick = () => (b.dataset.act === "collect" ? collect() : load());
+});
+async function collect() {
+  const b = $("#go");
+  b.disabled = true; b.textContent = "…";
+  try {
+    const r = await j("api/collect", { method: "POST", headers: { "content-type": "application/json" }, body: "{}" });
+    console.info(`[newsflow] pass ${r.run}: +${r.added}, ${r.sources_ok}/${r.sources_tried} sources, flow ${r.flow}`);
+  } catch (e) { console.error("collect failed", e); }
+  b.disabled = false; b.textContent = "↻";
+  load();
+}
+load();
+</script>
+</body>
+</html>

@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""test_env_step — a fresh office gets its OWN .env, with its vault key minted (FPG-8, S26).
+"""test_env_step — a fresh office gets its OWN .env, with its vault key minted (EXF-8, S26).
 
 `debian-install.sh` (run by the engine step, which comes before env) copies `.env.ex` to `.env`, so
 step_env used to find a file on every fresh machine, never ran `ci-env.sh`, and the office came up on
-the template's placeholder secrets and its home domain — measured on fireplace, 2026-10-22. And no
+the template's placeholder secrets and its home domain — measured on examplef, 2026-10-22. And no
 generator minted CONNECTIONS_ROOT_KEY, so compose fell back to CHANGE_ME. These run the two scripts
 step_env sends to the machine (`TEMPLATE_CHECK`, `ENV_MERGE`) in a scratch folder.
 
@@ -11,7 +11,9 @@ Run: python3 apps/dgo-extend/tests/test_env_step.py  (inside the app's image, or
 """
 from __future__ import annotations
 
+import importlib.util
 import os
+import re
 import subprocess
 import sys
 import tempfile
@@ -21,7 +23,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 import converge  # noqa: E402
 
-TEMPLATE = ("COMPANY_SLUG=hacohen\nDEPLOYMENT_DOMAIN=${COMPANY_SLUG}.digital-office.co.il\n"
+TEMPLATE = ("COMPANY_SLUG=example\nDEPLOYMENT_DOMAIN=${COMPANY_SLUG}.digital-office.co.il\n"
             "POSTGRES_PASSWORD=change-this-postgres\nN8N_ENCRYPTION_KEY=template-n8n-key\n"
             "MAIL_BASE_URL=mail.${DEPLOYMENT_DOMAIN}\n")
 FAIL = []
@@ -32,12 +34,17 @@ def check(cond, what):
         FAIL.append(what)
 
 
-def run(script, env_text, mint=None, rename=None, aside=None):
+def run(script, env_text, mint=None, rename=None, aside=None, template=None, generator=None):
     """(facts printed, .env afterwards) of one of step_env's scripts, run where the files are.
-    `rename` = (old, new) domains; `aside` collects the files the script left beside .env."""
+    `rename` = (old, new) domains; `aside` collects the files the script left beside .env; `template` and
+    `generator` stand in the checkout's `.env.ex` and scripts/env-secrets.py (default: the made-up template
+    and no generator)."""
     with tempfile.TemporaryDirectory() as d:
-        Path(d, ".env.ex").write_text(TEMPLATE)
-        Path(d, ".env").write_text(env_text)
+        Path(d, ".env.ex").write_text(TEMPLATE if template is None else template, encoding="utf-8")
+        if generator is not None:
+            Path(d, "scripts").mkdir()
+            Path(d, "scripts", "env-secrets.py").write_text(generator, encoding="utf-8")
+        Path(d, ".env").write_text(env_text, encoding="utf-8")
         extra = {} if mint is None else {"DGO_MINT": mint}
         if rename:
             extra |= {"DGO_RENAME_FROM": rename[0], "DGO_RENAME_TO": rename[1]}
@@ -52,7 +59,7 @@ def run(script, env_text, mint=None, rename=None, aside=None):
 def main() -> int:
     copy = run(converge.TEMPLATE_CHECK, TEMPLATE)[0]
     check(copy.get("TEMPLATE") == "1", f"the installer's copy of .env.ex reads as a copy: {copy}")
-    normalised = TEMPLATE.replace("mail.${DEPLOYMENT_DOMAIN}", "mail.hacohen.digital-office.co.il")
+    normalised = TEMPLATE.replace("mail.${DEPLOYMENT_DOMAIN}", "mail.example.digital-office.co.il")
     check(run(converge.TEMPLATE_CHECK, normalised)[0].get("TEMPLATE") == "1",
           "a copy whose URLs an earlier merge normalised is still a copy")
     generated = TEMPLATE.replace("change-this-postgres", "9f1c…random").replace("template-n8n-key", "3ab…random")
@@ -61,6 +68,49 @@ def main() -> int:
     half = TEMPLATE.replace("template-n8n-key", "3ab…random")
     check(run(converge.TEMPLATE_CHECK, half)[0].get("TEMPLATE") == "0",
           "one secret changed by hand is an office's file, not the template")
+
+    # The REAL template and generator (DGO-1495): since DGO-1220 part 2 the template carries its secrets empty,
+    # and a check of literal values alone read the installer's copy as an office's own file (examplef again).
+    # The made-up template above has values, which is why this was never seen.
+    repo = Path(__file__).resolve().parents[3]
+    real = (repo / ".env.ex").read_text(encoding="utf-8")
+    gen_src = (repo / "scripts" / "env-secrets.py").read_text(encoding="utf-8")
+    spec = importlib.util.spec_from_file_location("env_secrets", repo / "scripts" / "env-secrets.py")
+    gen = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(gen)
+    empty = [k for k in gen.TABLE if re.search(rf"^{k}=[ \t]*$", real, re.M)]
+    check(len(empty) >= 20, f"the real template leaves the generator's keys empty: {len(empty)} of {len(gen.TABLE)}")
+
+    def filled(text, keys):
+        return re.sub(rf"^({'|'.join(keys)})=[ \t]*$", lambda m: f"{m.group(1)}=own-{m.group(1).lower()}", text,
+                      flags=re.M)
+    facts = run(converge.TEMPLATE_CHECK, real, template=real, generator=gen_src)[0]
+    check(facts.get("TEMPLATE") == "1" and facts.get("LIT") == "0",
+          f"the installer's copy of the real template reads as a copy, matched by no literal value: {facts}")
+    check(run(converge.TEMPLATE_CHECK, TEMPLATE)[0].get("LIT") == "2",
+          "a template that carries values says how many it matched")
+    check(run(converge.TEMPLATE_CHECK, filled(real, empty[:1]), template=real,
+              generator=gen_src)[0].get("TEMPLATE") == "0",
+          "the real template with one minted key filled is an office's own file")
+    check(run(converge.TEMPLATE_CHECK, filled(real, empty), template=real,
+              generator=gen_src)[0].get("TEMPLATE") == "0",
+          "a .env whose every minted key is filled (ci-env.sh, `bbox run`) is never taken for the template")
+    pasted = [k for k in gen.EXTERNAL if re.search(rf"^{k}=[ \t]*$", real, re.M)][:1]
+    check(pasted and run(converge.TEMPLATE_CHECK, filled(real, pasted), template=real,
+                         generator=gen_src)[0].get("TEMPLATE") == "0",
+          f"a copy the owner pasted a provider's key into is his own file, not the template: {pasted}")
+    short = re.sub(rf"^{empty[0]}=[ \t]*\n", "", real, flags=re.M)
+    check(run(converge.TEMPLATE_CHECK, short, template=real, generator=gen_src)[0].get("TEMPLATE") == "1",
+          "a copy of an older template, without a key the generator added since, is still a copy")
+    # with no literal value and no generator there is nothing to compare: the check stops the step, loudly —
+    # «not a copy» would let ENV_MERGE fill the copy's secrets, and it would read as the office's own forever
+    with tempfile.TemporaryDirectory() as d:
+        Path(d, ".env.ex").write_text(real, encoding="utf-8")
+        Path(d, ".env").write_text(real, encoding="utf-8")
+        out = subprocess.run([sys.executable, "-"], input=converge.TEMPLATE_CHECK, text=True, capture_output=True,
+                             cwd=d, timeout=30)
+    check(out.returncode != 0 and "cannot be told" in out.stderr and "TEMPLATE=" not in out.stdout,
+          f"an empty template without the generator fails the check instead of answering: {out.returncode}")
 
     facts, env, stdout = run(converge.ENV_MERGE, generated, mint="1")
     key = next((ln.split("=", 1)[1] for ln in env.splitlines() if ln.startswith("CONNECTIONS_ROOT_KEY=")), "")
@@ -124,8 +174,8 @@ def main() -> int:
           and values[0] == values[1] != "CHANGE_ME",
           f"a key listed twice gets one value on every line: {len(values)} line(s)")
 
-    # FPG-33: an installed office moves to another domain, from exactly the one its .env names
-    old, new = "thefireplaceguys.digital-office.co.il", "fpg.digital-office.co.il"
+    # EXF-33: an installed office moves to another domain, from exactly the one its .env names
+    old, new = "theexamplefguys.digital-office.co.il", "exf.digital-office.co.il"
     office_env = (f"DEPLOYMENT_DOMAIN={old}\nCONSOLE_BASE_URL=console.{old}\nAUTH_EXTERNAL_URL=auth.{old}\n"
                   f"PLANE_OWNER_EMAIL=owner@{old}\nN8N_BASE_URL=https://n8n.{old}/\n"
                   f"OTHER_SITE=x{old}\nSITE_URL=https://{old}.example.net/\nDB_PASSWORD=s3cr3t-{new}-like\n"
@@ -159,7 +209,7 @@ def main() -> int:
     facts, env5, _ = run(converge.ENV_MERGE, nested, mint="0", rename=("x.co.il", "staging.x.co.il"))
     check(not facts.get("RENAMED") and "console.staging.x.co.il\n" in env5,
           "a rename into a subdomain of the old name (or out of one) is not attempted")
-    composed = "COMPANY_SLUG=thefireplaceguys\nDEPLOYMENT_DOMAIN=${COMPANY_SLUG}.digital-office.co.il\n" \
+    composed = "COMPANY_SLUG=theexamplefguys\nDEPLOYMENT_DOMAIN=${COMPANY_SLUG}.digital-office.co.il\n" \
                "MAIL_BASE_URL=mail.${DEPLOYMENT_DOMAIN}\n"
     facts, env4, _ = run(converge.ENV_MERGE, composed, mint="0", rename=(old, new))
     check(facts.get("DOMAIN") == new and f"DEPLOYMENT_DOMAIN={new}\n" in env4 and f"MAIL_BASE_URL=mail.{new}" in env4,
@@ -193,7 +243,7 @@ def main() -> int:
               f"a linked .env: the real file renamed, still 0600, the link kept, the leftover gone: {out.stderr[-300:]}")
 
     # the office's data decides whether the template copy may be replaced (the second reader, 2026-10-22)
-    office = {"id": "fireplace", "path": "/opt/digital-office/fireplace", "machine": "m", "domain": "x.example"}
+    office = {"id": "examplef", "path": "/opt/digital-office/examplef", "machine": "m", "domain": "x.example"}
     seen = []
     real_exec, real_must = converge.exec_on, converge.must
     try:
@@ -214,9 +264,20 @@ def main() -> int:
         try:
             converge.step_env(office, {}, lambda *_: None)
             check(False, "a template .env over existing data must stop the step")
-        except converge.StepFailed:
+        except converge.StepFailed as e:
             check(not any(c.startswith("cd") and " mv .env" in c for c in moved),
                   "…and nothing is moved or regenerated over the data")
+            check("לסובב" in e.action, f"…and a copy that matched the template's values asks to rotate: {e.action}")
+        # a copy of a template with no secret of its own, over data: the office's own .env is missing — restore
+        # it; "rotate, or delete the data and reinstall" would be the wrong words (the second reader, DGO-1495)
+        moved = []
+        converge.must = lambda m, cmd, t, why: moved.append(cmd) or "TEMPLATE=1\nLIT=0\n"
+        try:
+            converge.step_env(office, {}, lambda *_: None)
+            check(False, "a secret-less template copy over existing data must stop the step")
+        except converge.StepFailed as e:
+            check("מגיבוי" in e.action and "למחוק" not in e.action and not any(" mv .env" in c for c in moved),
+                  f"…with the restore-from-backup words, and nothing moved: {e.action}")
         ran = []
         converge.exec_on = lambda m, cmd, t=0: {"code": 1 if cmd.startswith("test -s") else 0, "stdout": "2\n"}
         converge.must = lambda m, cmd, t, why: ran.append(cmd) or ""

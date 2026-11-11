@@ -243,6 +243,13 @@ async def connections_select(payload: dict):
 
 @app.delete("/connections/{instance_id}")
 async def connections_delete(instance_id: str):
+    # only one of THIS app's accounts: the vault's DELETE takes any instance id, and this route is no door to
+    # another app's credentials (a mail account, the telegram app's bot token) — DGO-1798, the second reader
+    insts, err = await asyncio.to_thread(accounts.list_instances)   # a slow vault must not hold the event loop
+    if err:
+        raise HTTPException(status_code=503, detail=err)
+    if not any(i.get("id") == instance_id for i in insts):
+        raise HTTPException(status_code=404, detail="חשבון לא נמצא")
     ok, err = accounts.delete_instance(instance_id)
     if not ok:
         raise HTTPException(status_code=502, detail=err or "מחיקת החשבון נכשלה")

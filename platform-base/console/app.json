@@ -61,6 +61,7 @@
         "group": "ראשי",
         "icon": "home",
         "embed": false,
+        "path_mount": true,
         "name": "המרכז",
         "desc": "מסך הבית של הלשכה — כל האפליקציות במקום אחד",
         "alias": "console-home"
@@ -75,7 +76,7 @@
     }
   },
   "data": {
-    "volumes": [],
+    "volumes": ["console_links"],
     "on_uninstall": "keep"
   },
   "observability": {
@@ -83,12 +84,17 @@
   },
   "reserved_paths": [
     "/api/me",
+    "/api/signout",
     "/api/version",
     "/api/modules",
     "/api/connections",
     "/api/conn",
     "/api/svc",
     "/api/office",
+    "/api/frame-check",
+    "/api/handoffs",
+    "/api/links",
+    "/api/language",
     "/healthz",
     "/a"
   ]

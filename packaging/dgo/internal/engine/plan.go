@@ -120,7 +120,7 @@ func (m *machine) planMac(p *planner) {
 	}
 	p.step("the power agent keeps the Mac awake by the console's policy, tied to the guest's host agent (none with BBOX_POWER_AGENT=0)",
 		"nohup /usr/bin/python3 "+m.root+"/packaging/macos/power-agent.py --repo "+m.root+" --watch-pid <the guest's ha.pid> &")
-	p.step("the hand-off: everything below runs inside the guest, as root, at the same path (the Mac's LAN address and UDP port go along only when this engine forwards one)",
+	p.step("the hand-off: everything below runs inside the guest, as root, at the same path (the Mac's LAN address and UDP port go along only when this engine forwards one, DGO_GIT_OVERRIDE only when it is set)",
 		lima+" shell --workdir "+m.root+" "+m.inst+" -- sudo --preserve-env=OVERLAYS,BBOX_DOCKER_HOST,BBOX_WITH_BROWSER42,FORCE,PERFORMANCE_PROFILE env BBOX_IN_GUEST=1 "+handoff+"./bbox run")
 	m.planInside(p, m.root)
 	p.step("after the run, one look at the pair tunnel's UDP forward (post_run_udp_note) — said only when .env publishes a port the Mac holds no socket for")
@@ -185,16 +185,42 @@ func (m *machine) planInside(p *planner, root string) {
 	p.step("only when lib.sh picked nothing: the selection again after the socket step; still nothing: the socket step and the selection once more, then the refusal: " +
 		notReachable(sock) + m.here(m.dockerHost == "", "nothing answers now, so bbox run takes this way", "skipped, lib.sh picked "+m.dockerHost))
 	p.sub("then heavy_admit \"bbox run\": one heavy job at a time on this engine, admitted when memory allows (bbox's, not the engine's)")
-	gen := "bash scripts/ci-env.sh"
-	if m.goos == "darwin" || m.inGuest {
+	gen := "CI_DEPLOYMENT_NAME=local bash scripts/ci-env.sh"
+	switch {
+	case m.goos == "darwin" || m.inGuest:
 		gen = "CI_DEPLOYMENT_NAME=local CI_EDGE_PORT=8080 bash scripts/ci-env.sh"
+	case m.sandbox:
+		gen = "bash scripts/ci-env.sh"
 	}
+	pn := m.project
+	if pn == "" {
+		pn = "<the checkout's compose project>"
+	}
+	label := "label=com.docker.compose.project=" + pn
 	skip := ".env exists"
-	if !m.envFile {
-		skip = "neither a sandbox nor the macOS guest"
+	runs := "it runs (" + m.generated() + ")"
+	if m.holds == holdsUnasked && !m.envFile {
+		runs = "bbox run asks once its engine answers — none: it runs (" + m.generated() + "); some: refused"
 	}
-	p.step("no .env, on a cloud sandbox (a MITM proxy CA) or in the macOS guest: a secretless one is generated, and bbox run starts over"+
-		m.here(m.generatesEnv(), "it runs", skip), "cd "+root+" && "+gen, "exec ./bbox run")
+	switch {
+	case m.envFile:
+	case m.holds == holdsUnreached:
+		skip = "not reached: bbox run stops at need_docker first"
+	case m.holds == holdsData:
+		skip = "refused: this checkout's office (" + pn + ") already has containers or volumes — its .env is missing, not new"
+	case m.holds == holdsUnsaid:
+		skip = "refused: the engine did not say whether this checkout's office (" + pn + ") " + unsaidTail
+	}
+	p.step("no .env, on ANY machine (DGO-1782): first, does this checkout's office already hold containers or volumes (lib.sh "+
+		"office_holds_data) — some: refused, «its .env is missing, not new. "+heldFix+"»; the engine silent: refused («… "+
+		unsaidTail+"»); none: one is generated — in the macOS guest a local one on :8080, on a cloud sandbox (a MITM "+
+		"proxy CA) a secretless one, anywhere else a LOCAL office (DEPLOYMENT_NAME=local, every app at <name>.localhost) — and "+
+		"bbox run starts over"+m.here(m.generatesEnv(), runs, skip),
+		"docker ps -aq --filter "+label, "docker volume ls -q --filter "+label, "cd "+root+" && "+gen, "exec ./bbox run")
+	p.step("with a .env that names no office — BUSINESS_NAME empty and DEPLOYMENT_DOMAIN beginning with «.» (lib.sh office_unnamed): " +
+		"refused, «" + unnamedSaid + "»" + m.here(m.envFile && m.unnamed, "refused", "it names one, or there is none yet"))
+	p.sub("then ensure_secrets (DGO-1220): the office's own secrets, filled only while this machine holds none of the office's data volumes; with data nothing is written, and the keys still empty or still a value the template published are named",
+		"cd "+root+" && python3 scripts/env-secrets.py --env .env --if-fresh")
 	p.sub("then the stack's own first steps: ensure_rendered (the compiler renders .generated/), ensure_network")
 	m.planProfile(p)
 	p.sub("then the stack's again: foreign_containers (a name this stack needs, held by another compose project, stops the run), run_app_hooks prepare")
@@ -202,7 +228,8 @@ func (m *machine) planInside(p *planner, root string) {
 	p.step("no proxy CA, and the default bridge cannot resolve names: first-party images are built one at a time over the host network (ccr_build_serial); "+
 		"bbox run probes it itself, with containers — no probe with BBOX_ASSUME_DNS_OK set"+m.here(!m.sandbox, "probed by bbox run", "the proxy step below applies instead"),
 		"timeout 60 docker run --rm busybox:latest nslookup deb.debian.org", "timeout 30 docker run --rm busybox:latest true")
-	p.step("a MITM proxy CA (PROXY_CA, else " + sandboxCA + ") and CCR_BASES_READY not 1: every base image re-tagged with it (ccr_shadow_bases) — one that cannot be pulled stops the run: " +
+	p.step("a MITM proxy CA (PROXY_CA, else " + sandboxCA + ") and CCR_BASES_READY not 1: every base image re-tagged with it (ccr_shadow_bases) — one that cannot be pulled stops the run, said by docker's own words (ccr_pull_base): " +
+		"on a full disk base images unavailable — the disk is full (see above): free space, then re-run 'bbox run'; on a network or registry error " +
 		"base images unavailable — fix the environment's network policy (see hint above), then re-run 'bbox run' — then the first-party images built one at a time over the host network (ccr_build_serial)" +
 		m.here(m.sandbox, "it runs", "no proxy CA, nothing to do"))
 	p.sub("then the stack itself, which is not the engine's: docker compose up -d --build --wait, the remaining hooks, convergence")
@@ -214,8 +241,6 @@ func (m *machine) planProfile(p *planner) {
 	here := m.here(pr.set, "PERFORMANCE_PROFILE="+pr.name+" is in .env", pr.name+" is appended to .env")
 	switch {
 	case !m.asked:
-	case pr.stop != nil:
-		here = " — here: no answer and none in .env, so bbox run stops at this line"
 	case pr.generated:
 		here = " — here: PERFORMANCE_PROFILE=" + pr.name + " comes with the .env scripts/ci-env.sh writes, so it is kept"
 	}

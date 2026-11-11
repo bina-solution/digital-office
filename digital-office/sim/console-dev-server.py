@@ -38,6 +38,30 @@ def load_modules():
     return sorted(mods, key=lambda m: m.get("order", 999))
 
 
+def apps_list():
+    """app-management's /api/apps as far as the console's screen search reads it (otherApps, DGO-1760): every
+    manifest with a host, its launch url, its module and `screen` — app.py's own rule, a routing entry that
+    declares a module. On: what platform.state.default.yaml switches on, so the search is a fresh office's."""
+    import glob
+    rb = 'require "yaml"; require "json"; puts JSON.dump((YAML.load_file(ARGV[0]) || {})["apps"] || {})'
+    state = json.loads(subprocess.check_output(["ruby", "-e", rb, os.path.join(REPO, "platform.state.default.yaml")]))
+    on = {a for a, e in state.items() if isinstance(e, dict) and (e.get("enabled") is True or e.get("state") == "enabled")}
+    out = []
+    for path in sorted(glob.glob(os.path.join(REPO, "apps/*/app.json")) + glob.glob(os.path.join(REPO, "platform-base/*/app.json"))):
+        with open(path, encoding="utf-8") as fh:
+            m = json.load(fh)
+        routing = m.get("routing") or [{}]
+        r = next((x for x in routing if x.get("module")), routing[0])
+        if not r.get("host"):
+            continue
+        t, mod = m.get("title") or {}, r.get("module") or {}
+        out.append({"id": m["id"], "enabled": m["id"] in on, "name": t.get("he") or t.get("en") or m["id"],
+                    "name_en": t.get("en") or m["id"], "summary": (m.get("summary") or {}).get("he", ""),
+                    "launch": {"url": f"http://{r['host']}.localhost:{PORT}", "module": mod.get("id") or m["id"],
+                               "screen": bool(r.get("module"))}})
+    return {"apps": out}
+
+
 MODULES = load_modules()
 BY_ALIAS = {m["embed"].strip("/").split("/")[1]: m for m in MODULES if m.get("embed")}
 
@@ -181,6 +205,8 @@ class H(BaseHTTPRequestHandler):
             alias, rest = mm.group(1), (mm.group(2) or "/")
             if alias == "any-concurrency" and rest.startswith("/api/spans"):
                 return self._send(200, spans(parse_qs(u.query)))
+            if alias == "app-management" and rest == "/api/apps":
+                return self._send(200, apps_list())
             if rest.startswith("/api/"):
                 return self._send(200, {})
             return self._send(200, app_page(alias, rest.strip("/")), "text/html; charset=utf-8")

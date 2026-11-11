@@ -18,6 +18,7 @@ import {
   RepoConfig,
   RepoView,
   api,
+  defaultInstanceId,
   repoSource,
 } from '../api';
 import { EMBEDDED } from '../App';
@@ -30,6 +31,7 @@ import {
   typeLabel,
 } from '../vocab';
 import DataGrid, {
+  DEFAULT_PAGE_SIZES,
   GRID_MONTH_NONE,
   GridColumn,
   GridFilterValue,
@@ -313,10 +315,13 @@ function buildColumns(cfg: RepoConfig, view: RepoView | null): GridColumn[] {
 // ── add/upsert drawer (unchanged behaviour — kept for the grid's ＋ שורה) ─────
 function UpsertDrawer({
   cfg,
+  table,
   onDone,
   onClose,
 }: {
   cfg: RepoConfig;
+  /** the table the grid shows (its columns are `cfg`'s): the write names it, so the BFF refuses another table */
+  table: string | null;
   onDone: () => void;
   onClose: () => void;
 }) {
@@ -346,7 +351,7 @@ function UpsertDrawer({
         }
         payload = [row];
       }
-      const res = await api.upsertRows(cfg.name, payload);
+      const res = await api.upsertRows(cfg.name, payload, table);
       push('ok', `${res.stats.created} נוצרו, ${res.stats.updated} עודכנו, ${res.stats.noop} ללא שינוי`);
       onDone();
     } catch (e: unknown) {
@@ -641,7 +646,7 @@ function DispatchModal({ n, onCancel, onConfirm }: {
     <BulkOpModal
       title="הרצת פעולה ישירה (Action Router)"
       n={n}
-      confirmLabel="שגר"
+      confirmLabel="הרץ"
       disabled={!action}
       onCancel={onCancel}
       onConfirm={() => onConfirm(action as DispatchAction)}
@@ -656,8 +661,8 @@ function DispatchModal({ n, onCancel, onConfirm }: {
         </select>
       </div>
       <p className="small" style={{ margin: '0 0 10px', lineHeight: 1.6 }}>
-        שיגור ישיר לראוטר, בלי decide באמצע — במנות של 5 (תקרת החילוץ), עם חותם{' '}
-        <span className="mono">console_manual</span> ביומן השיגורים. קריאה ארוכה: על קבוצה גדולה
+        הרצה ישירה בראוטר, בלי decide באמצע — במנות של 5 (תקרת החילוץ), עם חותם{' '}
+        <span className="mono">console_manual</span> ביומן הפעולות. קריאה ארוכה: על קבוצה גדולה
         זה ירוץ דקות; אל תסגרו את הלשונית.
       </p>
     </BulkOpModal>
@@ -886,13 +891,13 @@ export default function DocumentBrowserPage() {
   const tableParam = params.get('table') || null;
   const [instanceTables, setInstanceTables] = useState<{ name: string; rows?: number | null }[]>([]);
   const [instances, setInstances] = useState<
-    { id: string; schema_name: string; label?: string; enabled?: boolean }[]
+    { id: string; schema_name: string; label?: string; enabled?: boolean; purpose?: string }[]
   >([]);
   useEffect(() => {
     let alive = true;
     const inst = instanceParam;
     api
-      .instanceTables(inst || (instances.find((x) => x.enabled)?.id ?? ''), true)
+      .instanceTables(inst || (defaultInstanceId(instances) ?? ''), true)
       .then((r) => {
         if (alive) setInstanceTables(r.tables || []);
       })
@@ -924,7 +929,9 @@ export default function DocumentBrowserPage() {
     q: params.get('q') ?? '',
     sort: params.get('sort') ?? '',
     page: Math.max(0, parseInt(params.get('page') ?? '1', 10) - 1 || 0),
-    size: parseInt(params.get('size') ?? '', 10) || 50,
+    /* only a size the grid offers [DGO-234]: `?size=1000` asked for 1000 rows, the API (capped at 500)
+       returned 500, the grid paged by 1000, and rows 500–999 were never shown */
+    size: ((n: number) => (DEFAULT_PAGE_SIZES.includes(n) ? n : 50))(parseInt(params.get('size') ?? '', 10)),
     view: params.get('view') === 'cards' ? ('cards' as const) : ('table' as const),
   }).current;
   const initialSorting = useMemo(() => {
@@ -1220,10 +1227,12 @@ export default function DocumentBrowserPage() {
   const onCellEdit = useCallback(
     async (rowId: string, key: string, value: unknown) => {
       if (!repoName) throw new Error('no repo');
-      await api.patchDocument(repoName, rowId, { [key]: value });
+      // the table on screen: the BFF refuses a write to any table but the repo's own, instead of writing the
+      // repo's row that merely shares this id (DGO-1815)
+      await api.patchDocument(repoName, rowId, { [key]: value }, tableParam);
       loadRows(); // refresh so the grid's optimistic overlay reconciles
     },
-    [repoName, loadRows],
+    [repoName, loadRows, tableParam],
   );
 
   // ── selection + pipeline commands ─────────────────────────────────────────
@@ -1311,6 +1320,12 @@ export default function DocumentBrowserPage() {
   const resetSel = useCallback(() => {
     setSel({ kind: 'ids', ids: [] });
   }, []);
+  /* A selection belongs to the table and the instance it was made in. The page stays mounted
+     across a switch of either, and ids are only unique inside one table of one instance, so a
+     selection carried over would name other rows there (DGO-1815). */
+  useEffect(() => {
+    resetSel();
+  }, [instanceParam, tableParam, resetSel]);
   /* A 404/501 from the bulk path means the server predates it — the buttons go quiet with
      a reason rather than a raw error on every selection. Any other failure is a real one. */
   const [bulkUnavailable, setBulkUnavailable] = useState<string | null>(null);
@@ -1322,7 +1337,7 @@ export default function DocumentBrowserPage() {
     async (status: DocumentStatus) => {
       if (!repoName) throw new Error('no repo');
       try {
-        const res = await api.bulkPatchDocuments(repoName, selPayload(), { STATUS: status });
+        const res = await api.bulkPatchDocuments(repoName, selPayload(), { STATUS: status }, tableParam);
         setBulkAsk(null);
         resetSel();
         if (res.failed.length) {
@@ -1343,13 +1358,13 @@ export default function DocumentBrowserPage() {
         throw e;
       }
     },
-    [repoName, loadRows, selPayload, resetSel, push],
+    [repoName, loadRows, selPayload, resetSel, push, tableParam],
   );
 
   const runDrain = useCallback(async () => {
     const n = selCount;
     try {
-      const res = await api.startDrain({ mode: 'ids', repo: repoName ?? undefined, ...selPayload() });
+      const res = await api.startDrain({ mode: 'ids', repo: repoName ?? undefined, ...selPayload() }, tableParam);
       setDrainAsk(false);
       resetSel();
       /* the accepted drain's OWN fields (`execution_id` / `n8n_url`) — the old read of a
@@ -1365,26 +1380,26 @@ export default function DocumentBrowserPage() {
       }
       throw e;
     }
-  }, [repoName, selPayload, resetSel, selCount, push]);
+  }, [repoName, selPayload, resetSel, selCount, push, tableParam]);
 
   const runDispatch = useCallback(async (action: DispatchAction) => {
     if (!repoName) throw new Error('no repo');
-    const res = await api.dispatchDocuments(repoName, selPayload(), action);
+    const res = await api.dispatchDocuments(repoName, selPayload(), action, tableParam);
     setDispatchAsk(false);
     resetSel();
     const failN = res.failed.reduce((s, f) => s + f.ids.length, 0);
     const text =
-      `שוגרו ${res.dispatched.toLocaleString('he-IL')} מסמכים לפעולה ${action}` +
+      `${res.dispatched.toLocaleString('he-IL')} מסמכים נשלחו להרצת הפעולה ${action}` +
       (failN ? ` · ${failN} נכשלו (${res.failed[0]?.message})` : '') +
       (res.missing.length ? ` · ${res.missing.length} לא נמצאו` : '') +
       ' — עקבו ביומן הפעולות (חותם console_manual).';
     push(failN || res.missing.length ? (res.dispatched ? 'warn' : 'bad') : 'ok', text);
     loadRows();
-  }, [repoName, loadRows, selPayload, resetSel, push]);
+  }, [repoName, loadRows, selPayload, resetSel, push, tableParam]);
 
   const runFieldPatch = useCallback(async (col: string, value: string) => {
     if (!repoName) throw new Error('no repo');
-    const res = await api.bulkPatchDocuments(repoName, selPayload(), { [col]: value });
+    const res = await api.bulkPatchDocuments(repoName, selPayload(), { [col]: value }, tableParam);
     setFieldAsk(false);
     resetSel();
     // an emptied field says so — "written" for both write and clear hides which one happened
@@ -1396,7 +1411,7 @@ export default function DocumentBrowserPage() {
       push('ok', `${verb}${res.ok.toLocaleString('he-IL')} מסמכים.`);
     }
     loadRows();
-  }, [repoName, loadRows, selPayload, resetSel, push, colLabel]);
+  }, [repoName, loadRows, selPayload, resetSel, push, colLabel, tableParam]);
 
   /* [archive 2026-08-24] ONE move, both directions: on the live repo the selection goes
      INTO the twin; on the -archive repo it comes BACK. One server transaction either way;
@@ -1404,8 +1419,8 @@ export default function DocumentBrowserPage() {
   const runArchiveMove = useCallback(async () => {
     if (!repoName) throw new Error('no repo');
     const res = isArchiveRepo
-      ? await api.unarchiveDocuments(repoName, selPayload())
-      : await api.archiveDocuments(repoName, selPayload());
+      ? await api.unarchiveDocuments(repoName, selPayload(), tableParam)
+      : await api.archiveDocuments(repoName, selPayload(), tableParam);
     setArchiveAsk(false);
     resetSel();
     const verb = res.direction === 'archive' ? 'הועברו לארכיון' : 'שוחזרו מהארכיון';
@@ -1416,7 +1431,7 @@ export default function DocumentBrowserPage() {
       ` — היעד: ${res.destination}.`;
     push(res.conflicts.length || res.missing.length ? 'warn' : 'ok', text);
     loadRows();
-  }, [repoName, isArchiveRepo, selPayload, resetSel, loadRows, push]);
+  }, [repoName, isArchiveRepo, selPayload, resetSel, loadRows, push, tableParam]);
 
   /* SERVER-SIDE export: the whole selection, not the visible page. The server walks the
      same selector the bulk endpoints receive and streams the CSV, so 39,283 selected rows
@@ -1427,7 +1442,7 @@ export default function DocumentBrowserPage() {
     setExporting(true);
     try {
       const n = selCount;
-      const res = await api.exportDocumentsCsv(repoName, selPayload());
+      const res = await api.exportDocumentsCsv(repoName, selPayload(), undefined, tableParam);
       const url = URL.createObjectURL(res.blob);
       const a = document.createElement('a');
       a.href = url;
@@ -1443,7 +1458,7 @@ export default function DocumentBrowserPage() {
     } finally {
       setExporting(false);
     }
-  }, [repoName, exporting, selCount, selPayload, push]);
+  }, [repoName, exporting, selCount, selPayload, push, tableParam]);
 
   /* url-view-state: removing a chip also removes its URL param — a copied link never
      claims a filter the operator already dismissed. */
@@ -1495,6 +1510,7 @@ export default function DocumentBrowserPage() {
       {showUpsert && (
         <UpsertDrawer
           cfg={cfg}
+          table={tableParam}
           onDone={() => loadRows()}
           onClose={() => setShowUpsert(false)}
         />
@@ -1678,7 +1694,7 @@ export default function DocumentBrowserPage() {
                   </button>
                   <button
                     className="btn ghost sm"
-                    title="שיגור פעולה ספציפית ישירות לראוטר, בלי decide"
+                    title="הרצת פעולה ספציפית ישירות בראוטר, בלי decide"
                     onClick={() => setDispatchAsk(true)}
                   >
                     הרץ פעולה…

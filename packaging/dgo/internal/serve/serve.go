@@ -2,7 +2,7 @@
 // apps screen, the install wizard and every linked office talk to — as a process of the one binary:
 // `dgo be-child control`. Step 3 of ai/context/core-native-plan.md, its first slice.
 //
-// THE CONTRACT IS app.py's. Every route it declares — the 22 that gate G85 enumerates — is in the table
+// THE CONTRACT IS app.py's. Every route it declares — the 23 that gate G85 enumerates — is in the table
 // below under the same method and rule. A route that needs no docker engine and no network is answered
 // here, from the files reconcile.py reads, through internal/compiler: the office record, the remote
 // block, the health line. Every other route is handed to app-management's container unchanged, and
@@ -43,14 +43,17 @@ import (
 	"net/http/httputil"
 	"net/url"
 	"os"
+	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
 
-	"github.com/solomonBoltin/deployment-hacohen/packaging/dgo/internal/compiler"
-	"github.com/solomonBoltin/deployment-hacohen/packaging/dgo/internal/yamlish"
+	"github.com/bina-solution/digital-office/packaging/dgo/internal/compiler"
+	"github.com/bina-solution/digital-office/packaging/dgo/internal/screen"
+	"github.com/bina-solution/digital-office/packaging/dgo/internal/yamlish"
 )
 
 // officeHeader is app.py's OFFICE_HEADER: written by the link's door, the office a request came from.
@@ -70,6 +73,8 @@ type route struct {
 
 var routes = []route{
 	{method: "POST", rule: "/api/reconcile", fn: "api_reconcile", linked: "a linked office does not converge this office"},
+	// the write is reconcile.py's `lang` and a render (DGO-971)
+	{method: "POST", rule: "/api/language", fn: "api_language_set", linked: "a linked office does not switch this office's language"},
 	{method: "GET", rule: "/api/apps/<aid>/room", fn: "api_room"},                               // the ENGINE machine's memory, load and disk, as seen from inside it
 	{method: "GET", rule: "/api/apps/<aid>/job", fn: "api_job", answer: (*server).jobInMachine}, // a bring-up job lives in the container's own process — or the phone's machine (machine.go)
 	{method: "POST", rule: "/api/apps/<aid>/archive", fn: "api_archive", linked: "a linked office does not archive this office's apps"},
@@ -77,21 +82,23 @@ var routes = []route{
 	{method: "POST", rule: "/api/apps/<aid>/enable", fn: "api_enable", when: plainSwitchOn, answer: (*server).enableInMachine,
 		linked: "a linked office brings an app here only with its data — a plain switch-on of this office's apps is this office's own decision"},
 	{method: "POST", rule: "/api/apps/<aid>/apply", fn: "api_apply", linked: "a linked office does not apply this office's apps"},
+	{method: "GET", rule: "/api/network", fn: "api_network_get"},
+	{method: "PUT", rule: "/api/network", fn: "api_network_put", linked: "a linked office does not open this office's doors"},
 	{method: "GET", rule: "/api/remote", fn: "api_remote_get", answer: (*server).remote},
 	{method: "PUT", rule: "/api/remote", fn: "api_remote_put", linked: "a linked office does not declare what this office shows of others"},
 	{method: "POST", rule: "/api/apps/<aid>/move", fn: "api_move", linked: "a move is never handed on from a request that itself arrived over a link"},
 	{method: "POST", rule: "/api/apps/<aid>/disable", fn: "api_disable", linked: "a linked office does not switch this office's apps off", answer: (*server).disableInMachine},
 	{method: "POST", rule: "/api/apps/<aid>/uninstall", fn: "api_uninstall", linked: "a linked office does not uninstall this office's apps"},
-	{method: "GET", rule: "/api/catalog", fn: "api_catalog_index"},            // the office's own signed index (`?ref=` not read since DGO-604)
-	{method: "POST", rule: "/api/catalog/preview", fn: "api_catalog_preview"}, // fetches and stages: the container refuses a linked caller (DGO-604)
+	{method: "GET", rule: "/api/catalog", fn: "api_catalog_index"},                                                                                // the office's own signed index (`?ref=` not read since DGO-604)
+	{method: "POST", rule: "/api/catalog/preview", fn: "api_catalog_preview", linked: "a linked office does not preview installs in this office"}, // it fetches and stages (DGO-604)
 	{method: "POST", rule: "/api/catalog/install", fn: "api_catalog_install", linked: "a linked office does not install into this office"},
 	{method: "GET", rule: "/api/office", fn: "api_office_get", answer: (*server).office},
 	{method: "PUT", rule: "/api/office", fn: "api_office_put", linked: "a linked office does not write this office's identity", answer: (*server).officePut},
 	{method: "GET", rule: "/healthz", fn: "healthz", answer: (*server).healthz},
 	{method: "GET", rule: "/readyz", fn: "readyz"},                             // asks the docker engine
 	{method: "GET", rule: "/api/apps", fn: "api_apps", answer: (*server).apps}, // live container state, so here only where there is no engine (apps.go)
-	{method: "GET", rule: "/", fn: "index"}, // the screen as the container's image carries it
-	{method: "GET", rule: "/<path:path>", fn: "static_files"},
+	{method: "GET", rule: "/", fn: "index", answer: (*server).screen},          // the screen as the container's image carries it
+	{method: "GET", rule: "/<path:path>", fn: "static_files", answer: (*server).screen},
 }
 
 // match is the route Werkzeug's router picks for a method (upper case, as Werkzeug makes it) and a path
@@ -189,8 +196,24 @@ func (s *server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 		}
+		// THE CONTROL PLANE'S OWN SCREEN (DGO-1338). On the phone this process IS app-management — there is no
+		// container to serve its page — and every page it was asked for fell through to the container and came
+		// back as Absent's «the machine is not on this phone» while this same process answered /api/apps with
+		// 200. The screen is the office root's, sent as the container's static/ sends it (internal/screen), and
+		// only on the engineless core: an office with its container keeps answering from the container.
+		if s.engineless && page(r) && !strings.HasPrefix(r.URL.Path, "/api/") {
+			if screen.Serve(w, r, filepath.Join(s.repo, "platform-base", "app-management", "static")) {
+				return
+			}
+		}
 	}
 	s.upstream.ServeHTTP(w, r)
+}
+
+// page is a request a browser makes for a screen: a GET or a HEAD (an API call is a GET too, and it is
+// answered by the routes above or refused as not_found, never as a screen).
+func page(r *http.Request) bool {
+	return r.Method == http.MethodGet || r.Method == http.MethodHead
 }
 
 // ── the boundary: who may ask at all ─────────────────────────────────────────────────────────────
@@ -285,7 +308,7 @@ const maxGuardBody = 64 << 10
 // peer comes here for, a move placing an app with its data. Decided here only where Python cannot
 // answer otherwise: an empty body, a body not typed as JSON, a JSON document whose `restore` is not an
 // object (whatever Python makes of bytes Go cannot read, it refuses those too). An object `restore`, a
-// truthy document that is not an object (app.py fails on it) and bytes Go's strict decoder cannot read
+// truthy document that is not an object (app.py refuses it by name, 400 — DGO-607) and bytes Go's strict decoder cannot read
 // but Python's lenient one may (a BOM, NaN, UTF-16) are the container's to decide. The body is put back
 // for it either way.
 func plainSwitchOn(r *http.Request) bool {
@@ -513,24 +536,71 @@ func toContainer(target *url.URL, logger *log.Logger, absent http.Handler) http.
 // («app-management's container did not answer at http://127.0.0.1:9 …», «the console container did not
 // answer»). A page where a page was asked for, JSON where JSON was, 503 either way, and the machine's own
 // reason (the app's refusal) or what it is doing toward the machine (its step), when it says one.
+//
+// A page also ASKS for the machine, as the edge's waiting page does for a machine app's host (native.go's
+// wake), and loads itself again every few seconds — the app it stands for, once the machine is up. Without
+// the ask, nothing on the phone started the fetch: only a container app's enable asked (down), so the owner
+// who opened «אפליקציות» on a thin APK saw "not on this phone yet" for ever, its 648 MB never fetched
+// (DGO-1089, 2026-11-03). While the app's refusal holds, the page shows it and asks nothing (wake's rule: a
+// page that reloads must not restart what failed); a script's call asks nothing either. Only the signed-in
+// owner gets here: the console's host is gated.
 func Absent(m Machine) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		why := ""
+		page := wantsPage(r)
+		why, refused, up := "", false, false
+		var asked error
 		if m != nil {
-			if why = m.Refused(); why == "" {
+			if why = m.Refused(); why != "" {
+				refused = true
+			} else {
+				if port, _ := m.Up(); port > 0 {
+					up = true // the machine runs: it is this app's container that does not answer yet
+				} else if page {
+					// the app answers within a second: its step, or its refusal. Asked at every reload, as
+					// the edge's wake asks: the app starts nothing twice (a fetch under way, a machine booting)
+					asked = m.Want()
+				}
 				why = m.Step()
 			}
 		}
 		w.Header().Set("Cache-Control", "no-store")
-		if !wantsPage(r) {
+		if !page {
+			// a woken host's API call answers here too (edge.Waiting): when to ask again, as the edge's own did
+			w.Header().Set("Retry-After", "5")
 			reply(w, http.StatusServiceUnavailable, object("error", "machine_absent", "message", absentEnglish, "detail", why))
 			return
 		}
-		detail := ""
-		if why != "" {
-			detail = `<p class="en">` + html.EscapeString(why) + "</p>"
+		head, said, pct := absentHebrew(why, refused, up, m != nil)
+		if asked != nil {
+			head, said, pct, why = "מכונת הלשכה לא התבקשה", "הבקשה לא נכתבה, והסיבה למטה. הדף ינסה שוב בעוד 5 שניות.", -1, asked.Error()
 		}
-		body := fmt.Sprintf(absentPage, detail)
+		// a phone with no machine and a door to the business's offices (DGO-1328): the app is not missing here,
+		// it runs THERE — said so, with the door one tap away, never «install a new version»
+		door := ""
+		if d := phoneDoor(); d != "" && refused && noMachine.MatchString(why) {
+			door = fmt.Sprintf(`<p><a class="door" href="%s" target="_top">פתיחה בלשכות של העסק, דרך הדלת</a></p>`, html.EscapeString(d))
+			head = "האפליקציה הזו רצה בלשכות של העסק"
+			said = "בטלפון הזה אין מכונה, ואין צורך בה: האפליקציות של העסק נפתחות דרך הדלת, בלשכה שבה הן רצות."
+		}
+		bar := ""
+		if pct >= 0 {
+			bar = fmt.Sprintf(`<progress max="100" value="%d">%d%%</progress>`, pct, pct)
+		}
+		raw := "" // the app's own words: a raw token, never the sentence the owner reads
+		if why != "" {
+			raw = `<p class="raw" dir="ltr">` + html.EscapeString(why) + "</p>"
+		}
+		// «מכולות» not installed (DGO-1723): nothing failed, so no raw words — the one way on, the phone's own
+		// status screen, where the owner's button installs them (a link never installs anything by itself)
+		if refused && notInstalled.MatchString(why) {
+			raw = `<p><a class="door" href="dgo://status" target="_top">התקנת מכולות</a></p>`
+		}
+		body := fmt.Sprintf(absentPage, html.EscapeString(head), bar, html.EscapeString(said), door+raw)
+		if door != "" { // nothing here will change by itself: no reload under the owner's finger
+			body = strings.Replace(strings.Replace(body, absentReload, "", 1), absentAgain, "", 1)
+		} else {
+			w.Header().Set("Retry-After", "5")
+		}
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		w.Header().Set("Content-Length", strconv.Itoa(len(body)))
 		w.WriteHeader(http.StatusServiceUnavailable)
@@ -538,15 +608,107 @@ func Absent(m Machine) http.Handler {
 	})
 }
 
+// absentReload and absentAgain are absentPage's reload and its line saying so, left out where nothing reloads.
+const (
+	absentReload = `<meta http-equiv="refresh" content="5">`
+	absentAgain  = `<p class="again">הדף מתעדכן לבד כל 5 שניות.</p>`
+)
+
+// noMachine is the app's refusal for an APK that carries no machine and names none to fetch.
+var noMachine = regexp.MustCompile(`not on this phone yet|carries no machine`)
+
+// notInstalled is the app's refusal while the owner has not installed «מכולות» (Office.NOT_INSTALLED, DGO-1723):
+// the machine is fetched only by the owner's button on the status screen, never by a page that loads itself.
+var notInstalled = regexp.MustCompile(`containers are not installed`)
+
+// PhoneDoor is phoneDoor for the core's other apps (internal/extend says it on «הרחבת הלשכה»).
+func PhoneDoor() string { return phoneDoor() }
+
+// phoneDoor is the business's door the phone's app names (NativeService: DGO_PHONE_DOOR, from the build's
+// BuildConfig.DOOR_URL) — an https URL, or "" (a phone of no herd, and every other office).
+func phoneDoor() string {
+	d := os.Getenv("DGO_PHONE_DOOR")
+	if u, err := url.Parse(d); err != nil || u.Scheme != "https" || u.Host == "" || u.User != nil {
+		return ""
+	}
+	return d
+}
+
+// absentSays are the app's refusals (NativeService's say), each matched by words of its own and told in
+// Hebrew: the owner reads Hebrew, and the app's English stays beside it as a raw token. GB counts are
+// carried over from the app's sentence. A refusal not here is told as one, with its raw words.
+var absentSays = []struct {
+	match *regexp.Regexp
+	he    string
+}{
+	{regexp.MustCompile(`(\d+) GB to fetch and the phone's network is metered`),
+		"הטלפון על חבילת גלישה, והמכונה ($1 GB) מורדת רק ברשת Wi-Fi. חברו את הטלפון לרשת Wi-Fi ופתחו את האפליקציה שוב."},
+	{regexp.MustCompile(`phone has (\d+) GB free, and the machine needs (\d+) GB`),
+		"אין בטלפון מספיק מקום: פנויים $1 GB, והמכונה צריכה $2 GB. פנו מקום ופתחו את האפליקציה שוב."},
+	{regexp.MustCompile(`not on this phone yet|carries no machine`),
+		"הגרסה הזו של האפליקציה הותקנה בלי המכונה ובלי כתובת להורדתה, ולכן אפליקציה שרצה במכונה לא יכולה לעלות. צריך להתקין גרסה חדשה."},
+	{regexp.MustCompile(`own office is running on this phone`),
+		"המשרד של המכונה עצמה כבר רץ בטלפון הזה. עצרו אותו מההתראה שלו, ואז פתחו כאן שוב."},
+	{regexp.MustCompile(`three times running`),
+		"המכונה נעצרה מיד אחרי שעלתה, שלוש פעמים ברצף. פתחו את האפליקציה שוב כדי לנסות פעם נוספת."},
+	{regexp.MustCompile(`on no network`),
+		"הטלפון לא מחובר לרשת עכשיו. פתחו את האפליקציה שוב כשהוא מחובר לרשת Wi-Fi."},
+	{regexp.MustCompile(`could not be (fetched|unpacked)`),
+		"ההורדה או הפריסה של המכונה נכשלה. מה שכבר ירד נשמר; פתחו את האפליקציה שוב כדי להמשיך."},
+}
+
+// absentHebrew is the page in Hebrew — its heading, the sentence under it, and the percent its bar shows
+// (-1: no bar) — from what the app says: its refusal, or its step ("the office's machine is being fetched:
+// 34%", "… being unpacked: 12%", NativeService's unpackThenStart), or nothing yet (asked, or starting); up:
+// the machine runs, and the app's own container is what has not answered yet.
+func absentHebrew(why string, refused, up, asked bool) (head, said string, pct int) {
+	pct = -1
+	if s, ok := strings.CutSuffix(strings.TrimSpace(why), "%"); ok && !refused {
+		i := len(s)
+		for i > 0 && s[i-1] >= '0' && s[i-1] <= '9' {
+			i--
+		}
+		if n, err := strconv.Atoi(s[i:]); err == nil && n <= 100 {
+			pct = n
+		}
+	}
+	const opens = "האפליקציה תיפתח כאן לבד כשהמכונה מוכנה."
+	switch {
+	case refused && notInstalled.MatchString(why):
+		return "האפליקציה הזו רצה על «מכולות»",
+			"«מכולות» עוד לא מותקנות בטלפון הזה. מתקינים אותן פעם אחת, במסך מצב הלשכה — ואז האפליקציה נפתחת כאן מעצמה.", -1
+	case refused:
+		for _, s := range absentSays {
+			if g := s.match.FindStringSubmatchIndex(why); g != nil {
+				return "מכונת הלשכה לא עולה כרגע", string(s.match.ExpandString(nil, s.he, why, g)), -1
+			}
+		}
+		return "מכונת הלשכה לא עולה כרגע", "האפליקציה אומרת למה, במילים שלה:", -1
+	case up:
+		return "מכונת הלשכה פועלת", "האפליקציה הזו עוד עולה בתוך המכונה. " + opens, -1
+	case pct >= 0 && strings.Contains(why, "being fetched"):
+		return fmt.Sprintf("מורידים את מכונת הלשכה: %d%%", pct),
+			"ההורדה ממשיכה גם כשהמסך כבוי, ומה שירד נשמר. אחריה המכונה נפרסת ועולה. " + opens, pct
+	case pct >= 0 && strings.Contains(why, "being unpacked"):
+		return fmt.Sprintf("פורסים את מכונת הלשכה: %d%%", pct), "ההורדה הושלמה. אחרי הפריסה המכונה עולה. " + opens, pct
+	case why != "":
+		return "מכונת הלשכה בדרך לטלפון", opens, pct
+	case asked:
+		return "מכונת הלשכה עולה", "המכונה התבקשה. ההורדה, הפריסה וההפעלה יופיעו כאן כשיתחילו. " + opens, -1
+	}
+	return "האפליקציה הזו רצה על מכונת הלשכה", "והמכונה עוד לא נמצאת בטלפון הזה.", -1
+}
+
 const absentEnglish = "This app runs on the office's machine, which is not on this phone yet."
 
 // absentPage names no colour of its own (the palette is theme-tokens.css's alone, G82): the WebView's own
-// colours, a system font, the Hebrew first and the English beside it.
+// colours, light or dark, and a system font; the Hebrew is the page, the app's own words a raw LTR token
+// under it. It loads itself again every 5 s.
 const absentPage = `<!doctype html>
 <html lang="he" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<title>הלשכה</title><style>body{font-family:system-ui,sans-serif;margin:0;padding:2rem 1.25rem;line-height:1.6}p{max-width:32rem;margin:0 0 1rem}.en{direction:ltr;text-align:left;opacity:.7}</style>
-</head><body><p>האפליקציה הזו רצה על מכונת הלשכה, והמכונה עוד לא נמצאת בטלפון הזה.</p>
-<p class="en">` + absentEnglish + `</p>%s</body></html>
+<meta name="color-scheme" content="light dark"><meta http-equiv="refresh" content="5">
+<title>הלשכה</title><style>body{font-family:system-ui,"Noto Sans Hebrew",sans-serif;margin:0;padding:2rem 1.25rem;font-size:15px;line-height:1.6}h1{font-size:17px;font-weight:700;margin:0 0 .75rem;font-variant-numeric:tabular-nums}p,progress{max-width:32rem}p{margin:0 0 .75rem}progress{display:block;width:100%%;height:.75rem;margin:0 0 .75rem}.raw{font:12px/1.5 ui-monospace,monospace;direction:ltr;unicode-bidi:isolate;text-align:start;opacity:.6;overflow-wrap:anywhere}.again{font-size:12px;opacity:.6}</style>
+</head><body><h1>%s</h1>%s<p>%s</p>%s<p><a href="dgo://status" target="_top">מצב הלשכה בטלפון — כל השלבים, המספרים והלוג</a></p><p class="again">הדף מתעדכן לבד כל 5 שניות.</p></body></html>
 `
 
 // wantsPage is a request for a page — a navigation, or a frame's — rather than a script's call.
@@ -673,7 +835,7 @@ func newServer(repo, upstream, plane string, logger *log.Logger) (*server, error
 	}
 	project, set := os.LookupEnv("COMPOSE_PROJECT") // os.getenv's default only when it is not set at all
 	if !set {
-		project = "deployment-hacohen"
+		project = "digital-office"
 	}
 	return &server{repo: repo, container: plane == "container", upstream: toContainer(u, logger, nil), log: logger,
 		project: project, now: time.Now, stamps: map[[2]string][2]string{}}, nil

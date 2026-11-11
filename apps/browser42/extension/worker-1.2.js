@@ -16,6 +16,31 @@ async function ensureOffscreen() {
   });
 }
 
+// What this extension keeps of an address: origin and path, never the query or the fragment (DGO-1336).
+// `lastUrl` is how a tab is found again after a sleep, and a sign-in's query carries its state on the
+// way out and its one-time code on the way back — kept here, they sat in the browser profile's storage.
+// Host and path are what recovery needs: it matches the exact address first, then the origin.
+function bareUrl(url) {
+  try {
+    const u = new URL(url);
+    return /^https?:$/.test(u.protocol) ? u.origin + u.pathname : '';
+  } catch (_) {
+    return '';
+  }
+}
+
+// …and what an older build of this file already kept is made bare once, at every start.
+async function bareStoredAddresses() {
+  const all = await chrome.storage.local.get(null);
+  const changed = {};
+  for (const [key, value] of Object.entries(all)) {
+    if (key.startsWith('session_') && value && typeof value.lastUrl === 'string' && value.lastUrl !== bareUrl(value.lastUrl)) {
+      changed[key] = { ...value, lastUrl: bareUrl(value.lastUrl) };
+    }
+  }
+  if (Object.keys(changed).length) await chrome.storage.local.set(changed);
+}
+
 async function ownerForTab(tabId) {
   const result = await chrome.storage.local.get(`owner_${tabId}`);
   return result[`owner_${tabId}`] || null;
@@ -117,7 +142,7 @@ async function allocate(command) {
       policy: command.policy || 'single',
       generation,
       ownedTabIds: existing?.session?.ownedTabIds || [tab.id],
-      lastUrl: command.url            // kept current by onUpdated; how frontSession finds the tab after a sleep
+      lastUrl: bareUrl(command.url)   // kept current by onUpdated; how frontSession finds the tab after a sleep
     }
   });
   await claimTab(tab.id, command.slug);
@@ -186,7 +211,7 @@ async function recoverSession(slug, stored, command) {
     if (!Number.isInteger(tab.groupId) || tab.groupId < 0) return '';
     try { return (await chrome.tabGroups.get(tab.groupId)).title || ''; } catch (_) { return ''; }
   };
-  const wanted = [stored?.lastUrl, command.url].filter(Boolean);
+  const wanted = [stored?.lastUrl, command.url].map(bareUrl).filter(Boolean);   // compared bare: bareUrl
   const free = [];
   for (const tab of await chrome.tabs.query({})) {
     const owner = await ownerForTab(tab.id);
@@ -198,11 +223,11 @@ async function recoverSession(slug, stored, command) {
   let chosen = null;
   const named = free.filter(entry => entry.title === slug);
   if (named.length) {
-    chosen = named.find(entry => wanted.includes(entry.tab.url)) || named[0];
+    chosen = named.find(entry => wanted.includes(bareUrl(entry.tab.url))) || named[0];
   } else {
     const originOf = (url) => { try { return new URL(url).origin; } catch (_) { return null; } };
     for (const url of wanted) {
-      const exact = free.filter(entry => entry.tab.url === url);
+      const exact = free.filter(entry => bareUrl(entry.tab.url) === url);
       if (exact.length > 1) return null;                   // ambiguous: say so, do not guess
       if (exact.length === 1) { chosen = exact[0]; break; }
       const origin = originOf(url);
@@ -231,7 +256,7 @@ async function recoverSession(slug, stored, command) {
     policy: stored?.policy || 'single',
     generation: stored?.generation || crypto.randomUUID(),
     ownedTabIds: owned.length ? owned : [found.id],
-    lastUrl: found.url
+    lastUrl: bareUrl(found.url)
   };
   await chrome.storage.local.set({ [`session_${slug}`]: session });
   for (const id of session.ownedTabIds) await claimTab(id, slug);
@@ -325,7 +350,7 @@ chrome.tabs.onUpdated.addListener(async (tabId, changeInfo) => {
     // id and no tag, and its last address is the only way frontSession finds it again.
     const current = (await chrome.storage.local.get(key))[key];
     if (current && current.tabId === tabId) {
-      current.lastUrl = changeInfo.url;
+      current.lastUrl = bareUrl(changeInfo.url);
       await chrome.storage.local.set({ [key]: current });
     }
   }
@@ -387,3 +412,4 @@ chrome.runtime.onStartup.addListener(ensureOffscreen);
 chrome.alarms.create('browser42-offscreen', { periodInMinutes: 0.5 });
 chrome.alarms.onAlarm.addListener(ensureOffscreen);
 ensureOffscreen();
+bareStoredAddresses().catch(() => {});

@@ -7,8 +7,8 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/solomonBoltin/deployment-hacohen/packaging/dgo/internal/pyval"
-	"github.com/solomonBoltin/deployment-hacohen/packaging/dgo/internal/yamlish"
+	"github.com/bina-solution/digital-office/packaging/dgo/internal/pyval"
+	"github.com/bina-solution/digital-office/packaging/dgo/internal/yamlish"
 )
 
 // hard mirrors HARD: the strengths that pull a provider in.
@@ -17,6 +17,34 @@ var hard = map[string]bool{"requires": true, "requisite": true, "binds_to": true
 // Hard reports whether a use[] strength pulls its provider in — asked by the store's resolver
 // (internal/store) so the set stays one.
 func Hard(strength string) bool { return hard[strength] }
+
+// ContainerRuntime mirrors CONTAINER_RUNTIME: the capability an app that runs in containers requires, whose
+// one provider is «מכולות» (platform-base/containers; DGO-1723, native-plan.md D2).
+const ContainerRuntime = "container-runtime"
+
+// usesOf mirrors uses_of(a): an app's use[] as the resolver reads it — as declared, and the container
+// runtime its compose implies; an app that provides the runtime, or declares its own use of it, as written.
+func usesOf(a *App) ([]map[string]any, error) {
+	uses, err := a.entries("use")
+	if err != nil || !truthy(a.Raw["compose"]) {
+		return uses, err
+	}
+	caps, err := a.entries("capabilities")
+	if err != nil {
+		return nil, err
+	}
+	for _, c := range caps {
+		if pyEqual(pyGet(c, "name", nil), ContainerRuntime) {
+			return uses, nil
+		}
+	}
+	for _, u := range uses {
+		if pyEqual(pyGet(u, "capability", nil), ContainerRuntime) {
+			return uses, nil
+		}
+	}
+	return append(append([]map[string]any(nil), uses...), map[string]any{"capability": ContainerRuntime, "strength": "requires"}), nil
+}
 
 // Diag is one resolver diagnostic: level "error" or "info", and the message reconcile.py prints.
 type Diag struct {
@@ -56,8 +84,10 @@ func Resolve(repo string, cat *Catalog, st *State, roots []string) ([]string, []
 		}
 		enabled = ids
 		for _, aid := range st.Apps.Keys() {
-			if _, ok := cat.Apps[aid]; !ok {
-				diags = append(diags, Diag{"info", fmt.Sprintf("%s: in state but not yet migrated to apps/ (legacy lane)", aid)})
+			key := st.Apps.TypedKey(aid) // `on:` is True to Python: never in the catalog, and said as "True" (DGO-612)
+			_, isText := key.(string)
+			if _, ok := cat.Apps[aid]; !ok || !isText {
+				diags = append(diags, Diag{"info", fmt.Sprintf("%s: in state but not yet migrated to apps/ (legacy lane)", pyval.Str(key))})
 			}
 		}
 	}
@@ -124,7 +154,7 @@ func Resolve(repo string, cat *Catalog, st *State, roots []string) ([]string, []
 	for len(frontier) > 0 {
 		aid := frontier[len(frontier)-1]
 		frontier = frontier[:len(frontier)-1]
-		uses, err := cat.Apps[aid].entries("use")
+		uses, err := usesOf(cat.Apps[aid])
 		if err != nil {
 			return nil, nil, err
 		}
@@ -244,7 +274,7 @@ func Resolve(repo string, cat *Catalog, st *State, roots []string) ([]string, []
 	// conflicts: "these two cannot both be enabled", reported naming both, never resolved by guessing
 	wantSorted := sortedKeys(want)
 	for _, aid := range wantSorted {
-		uses, err := cat.Apps[aid].entries("use")
+		uses, err := usesOf(cat.Apps[aid])
 		if err != nil {
 			return nil, nil, err
 		}
@@ -279,7 +309,7 @@ func Resolve(repo string, cat *Catalog, st *State, roots []string) ([]string, []
 	edges := map[string]map[string]bool{}
 	for _, aid := range wantSorted {
 		edges[aid] = map[string]bool{}
-		uses, err := cat.Apps[aid].entries("use")
+		uses, err := usesOf(cat.Apps[aid])
 		if err != nil {
 			return nil, nil, err
 		}

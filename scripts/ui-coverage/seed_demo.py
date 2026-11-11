@@ -35,21 +35,21 @@ BUSINESS = {
     "name": "בינה פתרונות בע\"מ",
     "company_id": "514789234",
     "address": "הרכס 35, מודיעין",
-    "email": "person94@example.com",
-    "phone": "08-0000013",
+    "email": "person100@example.com",
+    "phone": "08-0000022",
 }
 
 CUSTOMERS = [
-    {"name": "מ.ש. הכהנים בע\"מ", "company_id": "500001011", "city": "מודיעין",
-     "email": "person97@example.com", "phone": "08-0000016"},
-    {"name": "סבח סוכנויות בע\"מ", "company_id": "500000153", "city": "משמר השבעה",
-     "email": "person98@example.com", "phone": "03-0000017"},
-    {"name": "פוליראן תעשיות", "company_id": "500000187", "city": "אשדוד",
-     "email": "person99@example.com", "phone": "08-0000018"},
+    {"name": "מ.ש. הדוגמה בע\"מ", "company_id": "500000401", "city": "מודיעין",
+     "email": "person103@example.com", "phone": "08-0000025"},
+    {"name": "סבח סוכנויות בע\"מ", "company_id": "500000138", "city": "משמר השבעה",
+     "email": "person104@example.com", "phone": "03-0000026"},
+    {"name": "פוליראן תעשיות", "company_id": "500000161", "city": "אשדוד",
+     "email": "person105@example.com", "phone": "08-0000027"},
     {"name": "אגן שיווק", "company_id": "500000062", "city": "פתח תקווה",
-     "email": "person95@example.com", "phone": "03-0000014"},
-    {"name": "ישראל קרטון", "company_id": "500001003", "city": "חיפה",
-     "email": "person96@example.com", "phone": "04-0000015"},
+     "email": "person101@example.com", "phone": "03-0000023"},
+    {"name": "ישראל קרטון", "company_id": "500000393", "city": "חיפה",
+     "email": "person102@example.com", "phone": "04-0000024"},
 ]
 
 ITEMS = [

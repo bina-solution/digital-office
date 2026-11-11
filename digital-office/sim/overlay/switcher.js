@@ -39,8 +39,7 @@
     var acctApi = isMail || isChat || isIndox;
     var API = isIndox ? '/incomingDocuments/' : 'api/';
     var side = document.querySelector('aside.side');
-    // Single, TOP-LEVEL switcher: mount into the console's top service bar (#acctBar) in the same-origin
-    // parent (the console's own per-service bar is disabled). Fall back to the app sidebar if unreachable.
+    // ONE switcher, in the app's own side (below says why the console's bar is no longer a place for it).
     var pdoc = null, pbar = null, embedwrap = null;
     /* Mount target, in order of preference:
          1. the console's own TOP BAR (.tb-right) — the row that already carries the global
@@ -49,16 +48,13 @@
        The band was a full-width strip whose entire job was to hold one chip: it cost every app
        ~56px of vertical space forever so that ~15% of one row could be used. The top bar has the
        room already. */
+    /* …SINCE DGO-1624 (0ef50561b, the owner: «התפריט הזה אמור להיות נקי, בלי החשבון של הדרייב או החשבון של המייל … בתוך
+       הכותרת של האפליקציה, לא הכותרת של כל האפליקציות») the office's bar carries no app's account, live — so the
+       simulation mounts none there either: an app's accounts are its own screen's, its side (DGO-162, phase 0). It was
+       also the «exactly one frame» assumption: in desktop mode every window wrote the shell's one chip, and the last
+       to load won. The top-bar branches below stay unreached; the chip a page left there is taken off above. */
     var ptop = null;
-    try {
-      if (window.parent && window.parent !== window) {
-        pdoc = window.parent.document;
-        ptop = pdoc.querySelector('.topbar .tb-right');
-        pbar = pdoc.getElementById('acctBar');
-        embedwrap = pdoc.getElementById('embedwrap');
-      }
-    } catch (e) {}
-    var topMode = !!(ptop || pbar);
+    var topMode = false;
     if (!topMode && !side) return;
     var mdoc = topMode ? pdoc : document;
 

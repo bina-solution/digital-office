@@ -5,6 +5,7 @@
     "en": "Connections"
   },
   "layer": 1,
+  "people": "admins",
   "kind": "service",
   "version": "1.0.0",
   "system": true,
@@ -41,6 +42,12 @@
   ],
   "use": [
     {
+      "capability": "kv",
+      "strength": "wants",
+      "after": false,
+      "dependency": "weak"
+    },
+    {
       "capability": "identity",
       "strength": "requires",
       "after": true
@@ -53,6 +60,9 @@
       "host": "connections",
       "port": 8990,
       "auth": "sso",
+      "auth_exclude": [
+        "/oauth/relay"
+      ],
       "emit_labels": false,
       "module": {
         "group": "הגדרות",

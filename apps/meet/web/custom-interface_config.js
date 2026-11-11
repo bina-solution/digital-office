@@ -20,7 +20,7 @@ interfaceConfig.DISPLAY_WELCOME_PAGE_ADDITIONAL_CARD = true;
 interfaceConfig.DEFAULT_LOCAL_DISPLAY_NAME = 'אני';
 interfaceConfig.DEFAULT_REMOTE_DISPLAY_NAME = 'משתתף';
 
-// The recorder's page draws no blurred copy of the big video behind it (fireplace, 2026-10-27, load ramps): in a box
+// The recorder's page draws no blurred copy of the big video behind it (examplef, 2026-10-27, load ramps): in a box
 // with no GPU that CSS blur is redrawn in software every frame, and the recorder spent ~1.25 cores drawing a meeting
 // with a shared screen. People's own pages keep it.
 if (typeof location !== 'undefined' && /iAmRecorder=true/.test(location.hash || '')) {

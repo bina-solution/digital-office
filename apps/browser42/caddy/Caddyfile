@@ -22,22 +22,22 @@
 #
 # WHICH provider is the office's one switch, `DGO_IDENTITY` (.env) — the value the edge's own
 # middleware reads (platform-base/traefik/config/authentik-forwardauth.yaml) — so this door asks
-# whoever the edge asks (r030-002). It is resolved when Caddy reads this file: a value with no
-# snippet below is a Caddyfile that does not load, so the door stays shut rather than open.
+# whoever the edge asks (r030-002). A value with no provider behind it keeps the door shut.
+#
+# …AND THE LINK (DGO-1336). A linked office's console reaches this app through the link proxy, after
+# its OWN edge signed the person in, carrying that office's cookie — which this office's provider
+# cannot read: every such request was refused (400, measured 2026-11-05 from vps1), and the office
+# browser could be seen from no office but this one. So the gate's question goes to the hand-off
+# server (`/gate`, handoff.py), which admits the link proxy by its ADDRESS — Caddy writes the TCP peer
+# into X-Browser42-Peer, replacing anything a client sent, the way bina-claude's door reads the socket
+# — and asks the provider above, with the request's own headers, about everyone else, returning its
+# answer whole (the 302 to the sign-in and its cookie included). The provider's endpoints live there.
 (gate) {
-	import gate-{$DGO_IDENTITY:authentik}
-}
-
-(gate-authentik) {
-	forward_auth http://authentik-server:9000 {
-		uri /outpost.goauthentik.io/auth/traefik
-		import gate-headers
-	}
-}
-
-(gate-forward-auth) {
-	forward_auth http://forward-auth:9078 {
-		uri /auth/traefik
+	forward_auth {$BROWSER42_UPSTREAM}:8767 {
+		uri /gate
+		header_up X-Browser42-Peer {http.request.remote.host}
+		header_up X-Browser42-Handoff {$MCP_TOKEN}
+		header_up X-Browser42-Identity {$DGO_IDENTITY:authentik}
 		import gate-headers
 	}
 }
@@ -87,7 +87,13 @@
 		# still ran the page from before it. `no-cache` means REVALIDATE, never "don't store": with
 		# Last-Modified the answer is a 304, and no fix depends on a human reloading by hand.
 		header Cache-Control "no-cache"
-		reverse_proxy {$BROWSER42_UPSTREAM}:6080
+		# `route` keeps the order as written: the mark below is set only once the gate has let the request
+		# through, so the card (handle_errors, below) answers for the browser and never for the gate — a
+		# provider that cannot be reached keeps its own refusal.
+		route {
+			vars b42_screen yes
+			reverse_proxy {$BROWSER42_UPSTREAM}:6080
+		}
 	}
 	# noVNC opens its websocket back to /websockify on the same origin. This is a keyboard and a
 	# mouse on the shared browser, so it is gated like the screen it belongs to; a websocket
@@ -131,6 +137,36 @@
 		}
 	}
 
+	# WHEN THE BROWSER DOES NOT ANSWER (DGO-437): its container is stopped, restarting or recreated, so the screen's
+	# files get no answer and Caddy's default was an empty 502 — a blank tile, or noVNC's own English page if it had
+	# loaded before. The office's card answers instead, with the error's own status (file_server keeps it here), and
+	# asks for the screen again by itself until it answers (../viewer/screen-down.html). Only for a request that
+	# reached the screen's own route past its gate (`b42_screen`, set above); every other error stays as it was.
+	handle_errors {
+		@screen_down {
+			vars b42_screen yes
+			expression `{err.status_code} in [502, 503, 504]`
+		}
+		handle @screen_down {
+			root * /srv/browser42-viewer
+			rewrite * /screen-down.html
+			# A browser that had the screen open asks for it again WITH ITS COPY'S DATE (the screen's files are
+			# `no-cache`: revalidate). file_server would answer that question about this card's own file, and
+			# its «not modified» went out as an empty 502 — a blank frame (measured, DGO-437 proof walk).
+			request_header -If-Modified-Since
+			request_header -If-None-Match
+			header Cache-Control "no-store"
+			templates
+			file_server
+		}
+	}
+	# The logo wall the card stands on, at the one address every surface that draws the card serves it at (the card
+	# asks for /bina-wall.svg; behind the console that is the console's own copy). Shapes only, nothing of the office.
+	handle /bina-wall.svg {
+		root * /srv/browser42-viewer
+		file_server
+	}
+
 	# Bare / -> the live view.
 	redir / /view/
 
@@ -154,12 +190,17 @@
 #          `b42 task` got 502 (measured 2026-10-22 from the Mac and inside dgo-link-hp). The host's own
 #          127.0.0.1:8931 is this container's :80, the site above, so nothing here collides with it.
 # The task runner is a container of its own (8766): this site hands it that one path and nothing else; the
-# screen (/view), the hand-off and the MCP stay on the site above. The design is the Mac session's (FPG-29).
+# screen (/view), the hand-off and the MCP stay on the site above. The design is the Mac session's (EXF-29).
 # The runner asks no credential and already sits on the shared network, so this door reaches nothing a
 # container there could not; through the link every office of ours drives every verb, `login` included —
-# the owner's decision: one browser, in the HP, that all our offices use (FPG-29, DGO-570).
+# the owner's decision: one browser, in the HP, that all our offices use (EXF-29, DGO-570).
 :8766, :8931 {
 	handle /v1/task {
+		reverse_proxy browser42-task-runner:8766
+	}
+	# Which hand-offs are open (DGO-1336): the console of an office that shows this browser asks, to
+	# bring the browser to a person while an app waits for him. Records only — no address, no tab.
+	handle /v1/handoffs {
 		reverse_proxy browser42-task-runner:8766
 	}
 	respond 404

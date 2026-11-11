@@ -136,4 +136,21 @@ let cases = 0;
   assert.equal(state.tabs[0].active, true);
   cases++;
 }
+// G. A sign-in's address is kept BARE (DGO-1336): an older build's stored query is made bare at start, and
+//    a tab on the same page with a different query is still found again by its address.
+{
+  const SIGNIN = "https://claude.ai/login/popup-google-auth";
+  const state = { nextGroup: 10,
+    tabs: [{ id: 701, url: SIGNIN + "?code=c2&state=desktop:u.n2", groupId: -1, windowId: 1 }], groups: {},
+    storage: { "session_claude-signin": stale(17, { lastUrl: SIGNIN + "?code=c1&state=desktop:u.n1" }) } };
+  const w = worker(state);
+  await new Promise((resolve) => setTimeout(resolve, 0));          // the start-up pass runs first
+  assert.equal(state.storage["session_claude-signin"].lastUrl, SIGNIN, "what an older build kept is made bare");
+  const r = await w.frontSession({ slug: "claude-signin", url: SIGNIN, label: "claude-signin" });
+  assert.deepEqual([r.ok, r.tabId, r.recovered], [true, 701, true]);
+  assert.equal(state.storage["session_claude-signin"].lastUrl, SIGNIN, "the recovered tab's address is kept bare");
+  assert.equal(JSON.stringify(state.storage).includes("code="), false, "no code anywhere in the extension's storage");
+  assert.equal(w.bareUrl("chrome://newtab/"), "", "a browser page is no address");
+  cases++;
+}
 console.log(`worker recoverSession rules: ${cases} cases ok`);

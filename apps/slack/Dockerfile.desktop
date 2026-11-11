@@ -1,0 +1,84 @@
+# slack-desktop — Slack's own Linux client, streamed into the console with Selkies (DGO-1264). Built from
+# apps/_template-wrapped (ai/context/wrapped-official-app.md); the worked example is apps/bina-claude.
+#
+# The base is linuxserver's Selkies image, PINNED BY DIGEST, the same pin as the other wraps. No gate checks a
+# FROM line's pin; a bump is a deliberate edit of this line.
+FROM ghcr.io/linuxserver/baseimage-selkies:debiantrixie@sha256:51461db2f6c9ff821ba58773e989b8f83ce0a4fcaac7497649dd76c4e819e327
+
+# The keyring and the session bus keep the client's sign-in. Fonts that render Hebrew and emoji. node runs the
+# front door (desktop/gate.mjs).
+RUN apt-get update && apt-get install -y --no-install-recommends \
+      ca-certificates curl gnupg dbus-x11 gnome-keyring libsecret-1-0 libsecret-tools \
+      fonts-noto-core fonts-noto-color-emoji culmus nodejs \
+ && rm -rf /var/lib/apt/lists/*
+
+# SLACK'S OWN PACKAGE. Slack publishes no apt repository and no checksum on its page (slack.com/help, «Download
+# Slack for Linux»); it publishes the release (slack.com/api/desktop.latestRelease?arch=x64&variant=deb) and the
+# .deb on its own CDN. So the version is pinned and the file is checked against the sha256 measured when it was
+# pinned (2026-11-10, 96,988,654 bytes): a different file fails the build, and a bump is a deliberate edit of
+# these three lines. amd64 only: Slack ships no arm64 build for Linux, so this image builds on the HP, vps1 and
+# GitHub's runner, not on the MacBook's arm64 engine.
+# The package's own maintainer script adds Slack's repository to apt (a .list or a deb822 .sources file, its
+# key, /etc/default/slack) and a cron job that re-adds it: all of it is removed, so the image never pulls an
+# unpinned Slack later (the image is the version) — and the build FAILS if any apt source still names Slack.
+ARG SLACK_VERSION=4.53.276
+ARG SLACK_SHA256=8974c6a9b3ffd4ef09ced4403acaa444d743d113a185504d5a1dc405be46e746
+RUN [ "$(dpkg --print-architecture)" = amd64 ] || { echo "Slack ships amd64 only for Linux; this is $(dpkg --print-architecture)" >&2; exit 1; } \
+ && curl -fsSLo /tmp/slack.deb "https://downloads.slack-edge.com/desktop-releases/linux/x64/${SLACK_VERSION}/slack-desktop-${SLACK_VERSION}-amd64.deb" \
+ && echo "${SLACK_SHA256}  /tmp/slack.deb" | sha256sum -c - \
+ && apt-get update && apt-get install -y --no-install-recommends /tmp/slack.deb \
+ && rm -f /tmp/slack.deb /etc/apt/sources.list.d/slack* /etc/cron.daily/slack /etc/default/slack \
+          /etc/apt/trusted.gpg.d/slack* /usr/share/keyrings/slack* \
+ && ! grep -rqis 'slack' /etc/apt/sources.list /etc/apt/sources.list.d/ \
+ && rm -rf /var/lib/apt/lists/* \
+ && command -v slack \
+ && grep -q 'x-scheme-handler/slack' /usr/share/applications/slack.desktop
+
+# THE DESKTOP'S OWN BROWSER, FOR THE SIGN-IN ONLY (bina-claude's DGO-1506 pattern). Slack signs in through a
+# browser and comes back on a slack:// link. Both ends would be broken here: no browser, and the package's link
+# handler starts Slack without --no-sandbox, which dies in a container. So:
+#   slack-signin-browser  Chromium on the streamed screen, for Slack's own addresses only (slack.com and
+#                         <workspace>.slack.com), in a throwaway profile, 15 minutes at most
+#   slack-open-link       the handler the package's .desktop file now runs: the link, with this container's flags,
+#                         to the RUNNING Slack
+# The policy keeps the browser plain (no downloads, no Chromium sign-in, no sync, no saved passwords). The checks:
+# the binary the handler runs is the package's, the .desktop file declares slack:// and now points at the handler.
+RUN apt-get update && apt-get install -y --no-install-recommends \
+      chromium procps xdg-utils libglib2.0-bin coreutils jq \
+ && rm -rf /var/lib/apt/lists/* \
+ && dpkg-query -W chromium
+COPY desktop/signin-browser /usr/local/bin/slack-signin-browser
+COPY desktop/open-link /usr/local/bin/slack-open-link
+COPY desktop/browser-policy.json /etc/chromium/policies/managed/slack.json
+RUN chmod 755 /usr/local/bin/slack-signin-browser /usr/local/bin/slack-open-link \
+ && printf '%s\n' '[Desktop Entry]' 'Type=Application' 'Name=Browser' \
+      'Exec=/usr/local/bin/slack-signin-browser %u' 'NoDisplay=true' 'Terminal=false' \
+      'MimeType=x-scheme-handler/http;x-scheme-handler/https;' \
+      > /usr/share/applications/slack-web.desktop \
+ && test -x /usr/lib/slack/slack \
+ && d=/usr/share/applications/slack.desktop \
+ && sed -i 's|^Exec=[^ ]*|Exec=/usr/local/bin/slack-open-link|' "$d" \
+ && ! grep '^Exec=' "$d" | grep -vq '^Exec=/usr/local/bin/slack-open-link' \
+ && command -v ps && command -v pkill && command -v xdg-mime && command -v gio && command -v timeout \
+ && jq -e '.DownloadRestrictions == 3 and .BrowserSignin == 0' /etc/chromium/policies/managed/slack.json
+
+# What the session runs: the autostart only names the launcher, and the launcher lives in the image.
+COPY desktop/autostart /usr/local/bin/slack-desktop-session
+RUN chmod 755 /usr/local/bin/slack-desktop-session \
+ && printf '/usr/local/bin/slack-desktop-session\n' > /defaults/autostart
+
+# THE FRONT DOOR: nginx on the container's loopback, gate.mjs on :3000 for the edge, the console and the link
+# proxy only. The checks fail the build if linuxserver changes the lines the sed edits.
+RUN sed -i -e 's/^\(\s*\)listen 3000 default_server;/\1listen 127.0.0.1:3000 default_server;/' \
+           -e 's/^\(\s*\)listen 3001 ssl;/\1listen 127.0.0.1:3001 ssl;/' \
+           -e '/listen \[::\]/d' /defaults/default.conf \
+ && grep -q 'listen 127.0.0.1:3000 default_server;' /defaults/default.conf \
+ && grep -q 'listen 127.0.0.1:3001 ssl;' /defaults/default.conf \
+ && ! grep -qE 'listen (\[::\]:)?300[01]' /defaults/default.conf
+COPY desktop/gate.mjs /opt/slack/gate.mjs
+COPY desktop/svc-gate /etc/s6-overlay/s6-rc.d/svc-slack-gate
+RUN echo longrun > /etc/s6-overlay/s6-rc.d/svc-slack-gate/type \
+ && mkdir -p /etc/s6-overlay/s6-rc.d/svc-slack-gate/dependencies.d \
+ && touch /etc/s6-overlay/s6-rc.d/svc-slack-gate/dependencies.d/init-services \
+ && touch /etc/s6-overlay/s6-rc.d/user/contents.d/svc-slack-gate \
+ && chmod 755 /etc/s6-overlay/s6-rc.d/svc-slack-gate/run

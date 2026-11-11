@@ -8,8 +8,9 @@ import (
 )
 
 // loadAndValidate is what reconcile.py's main() does before every verb that is not an early one:
-// the catalog, the state (ensure_state's side effects included), then validate(cat) — printing
-// "MANIFEST VALIDATION FAILED:" and each error, and refusing, when a manifest is wrong.
+// the catalog, the state (ensure_state's side effects included), then validate(cat) with the state's
+// language_errors() before its lines — printing "MANIFEST VALIDATION FAILED:" and each error, and
+// refusing, when a manifest or the language is wrong.
 func loadAndValidate(repo string, stdout, stderr io.Writer) (*Catalog, *State, map[string][]string, int) {
 	cat, err := LoadCatalog(repo)
 	if err != nil {
@@ -26,6 +27,7 @@ func loadAndValidate(repo string, stdout, stderr io.Writer) (*Catalog, *State, m
 		fmt.Fprintln(stderr, err)
 		return nil, nil, nil, 1
 	}
+	errs = append(languageErrors(st.Doc), errs...) // the state's one value validate() does not read
 	if len(errs) > 0 {
 		fmt.Fprintln(stdout, "MANIFEST VALIDATION FAILED:")
 		for _, e := range errs {

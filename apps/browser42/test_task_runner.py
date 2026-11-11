@@ -30,6 +30,14 @@ class TaskRunnerTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 MODULE.validate_arguments(arguments)
 
+    def test_tab_takes_a_verb_and_up_to_three_arguments(self):
+        # DGO-1251: `tab list` … `tab type <id> <text> <selector>`; the verb's own arity is group-manager's
+        self.assertEqual(MODULE.validate_arguments(["tab", "list"]), ["tab", "list"])
+        self.assertEqual(len(MODULE.validate_arguments(["tab", "type", "C2C2C2C2", "hi", "textarea"])), 5)
+        for arguments in (["tab"], ["tab", "type", "C2C2C2C2", "hi", "textarea", "more"]):
+            with self.assertRaises(ValueError):
+                MODULE.validate_arguments(arguments)
+
     def test_rejects_unknown_command(self):
         with self.assertRaises(ValueError):
             MODULE.validate_arguments(["rm", "-rf", "/"])
@@ -181,6 +189,25 @@ class RunnerTokenTests(unittest.TestCase):
         MODULE.TASK_AUTH = "refuse"
         with urlopen(self.url + "/healthz", timeout=10) as r:
             self.assertEqual(r.status, 200)
+
+    def test_the_handoffs_are_open_and_say_who_waits_never_where(self):
+        """DGO-1336: a console that shows this browser asks which app waits for a person in it."""
+        import sys
+        from urllib.request import urlopen
+        sys.path.insert(0, str(PATH.parent))
+        import handoff                                    # the runner imports it the same way (mounted beside it)
+        MODULE.TASK_AUTH = "refuse"
+        with patch.object(handoff, "DATA", Path(self.dir)):
+            handoff.write_record("claude-signin", "needed", app="bina-claude", sentence="בחרו חשבון")
+            (Path(self.dir) / "handoffs" / "claude-signin.json").write_text(json.dumps({
+                **json.loads((Path(self.dir) / "handoffs" / "claude-signin.json").read_text(encoding="utf-8")),
+                "url": "https://claude.com/x?hop_nonce=leak"}), encoding="utf-8")
+            with urlopen(self.url + "/v1/handoffs", timeout=10) as r:
+                answer = json.loads(r.read())
+                self.assertEqual(r.status, 200)
+        self.assertEqual([(h["slug"], h["for"], h["state"]) for h in answer["handoffs"]],
+                         [("claude-signin", "bina-claude", "needed")])
+        self.assertNotIn("leak", json.dumps(answer))
 
 
 if __name__ == "__main__":

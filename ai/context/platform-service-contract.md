@@ -83,12 +83,17 @@ the noun; the protocol is derived from (provider × auth method). The catalog mu
 ```jsonc
 provider: { id:"google_drive", name:"Google Drive", icon,
             auth_methods:[ {id:"oauth", label:"התחברות עם Google", protocol:"drive_google_oauth",
-                            needs:[], recommended:true},
+                            needs:[], recommended:true,
+                            start_url:"oauth/google/start", grant:"google-workspace-grant"},
                            {id:"service_account", label:"חשבון שירות", protocol:"drive_google_sa",
                             needs:["json_key"], help_url} ] }
 ```
 One provider may offer several auth methods; each maps to exactly one protocol. `local` is a
-first-class provider, listed first, never hidden as a fallback.
+first-class provider, listed first, never hidden as a fallback. A consent way (a `start_url` with no
+`needs`, `direct` not false — not a hand-off such as WhatsApp's QR) also names its `grant`: the consent
+it opens, by connections' catalog id. A screen where the app's own relayed
+start is not available asks connections' own start by that name — a protocol is no catalog id
+(EXU-19: `drive_google_oauth` was answered 404 «not an oauth connection»).
 
 **The flow — every step visible, reversible, and resolving to a state:**
 1. **Provider** — cards. What it is, not how it authenticates.

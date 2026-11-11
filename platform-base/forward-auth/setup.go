@@ -7,7 +7,6 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
-	"html/template"
 	"io"
 	"log"
 	"net/http"
@@ -259,42 +258,26 @@ func importUsers(usersFile string, in io.Reader, out io.Writer) int {
 	return 0
 }
 
-var setupPage = template.Must(template.New("setup").Parse(`<!doctype html>
-<html lang="he" dir="rtl"><head><meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<title>הלשכה החדשה</title></head><body>
-<main>
-<h1>ברוכים הבאים ללשכה</h1>
-{{if .Code}}
-<p>בחרו שם משתמש וסיסמה לבעלים של הלשכה.</p>
-{{if .Error}}<p role="alert">{{.Error}}</p>{{end}}
-<form method="post" action="/setup">
-<input type="hidden" name="code" value="{{.Code}}">
-<input type="hidden" name="rd" value="{{.ReturnTo}}">
-<p><label>שם משתמש <input name="user" autocomplete="username" pattern="[a-z0-9][a-z0-9._\-]{0,31}" value="{{.User}}" required autofocus></label></p>
-<p><label>אימייל (לא חובה) <input type="email" name="email" autocomplete="email" value="{{.Email}}"></label></p>
-<p><label>סיסמה <input type="password" name="password" autocomplete="new-password" minlength="12" required></label></p>
-<p><label>שוב הסיסמה <input type="password" name="again" autocomplete="new-password" minlength="12" required></label></p>
-<p><button type="submit">יצירת הבעלים</button></p>
-</form>
-{{else}}
-<p>ללשכה הזאת עוד אין בעלים. פתחו את הקישור שהמכשיר שהפעיל אותה הציג.</p>
-{{end}}
-</main></body></html>
-`))
-
+// The first owner's page is ui/pages.html `setup` — the client's first screen in their own office, so
+// it is THE card on the logo wall like every other page here (DGO-1501; it was an unstyled form).
 type setupForm struct {
 	Code, ReturnTo, User, Email, Error string
 }
 
 func (s *server) renderSetup(w http.ResponseWriter, status int, f setupForm) {
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	w.Header().Set("X-Frame-Options", "DENY")
-	w.Header().Set("Cache-Control", "no-store")
-	// the code is in this page's URL: it must not leave in a Referer to anywhere
+	// the code is in this page's URL: it must not leave in a Referer to anywhere — not even in the
+	// request for the page's own stylesheet
 	w.Header().Set("Referrer-Policy", "no-referrer")
-	w.WriteHeader(status)
-	_ = setupPage.Execute(w, f)
+	renderPage(w, status, "setup", f)
+}
+
+// setupFailed is a setup that could not be saved. Opening the link again is right either way: while
+// the office has no owner it shows the form, and once it has one it leads on to the sign-in page.
+func setupFailed(w http.ResponseWriter) {
+	renderProblem(w, http.StatusInternalServerError, problem{
+		Title: "הבעלים לא נוצר", Sub: "השמירה נכשלה",
+		Text: "הלשכה לא הצליחה לשמור את הבעלים. פתחו שוב את הקישור ונסו בעוד רגע.",
+	})
 }
 
 func (s *server) setupHandler(w http.ResponseWriter, r *http.Request) {
@@ -309,7 +292,12 @@ func (s *server) setupHandler(w http.ResponseWriter, r *http.Request) {
 			http.Redirect(w, r, rd, http.StatusFound)
 			return
 		}
-		http.NotFound(w, r)
+		// a form sent again after the owner exists (a second tab, a double press): said, not a bare 404
+		renderProblem(w, http.StatusNotFound, problem{
+			Title: "ללשכה כבר יש בעלים", Sub: "ההגדרה הראשונה הסתיימה",
+			Text:   "הבעלים של הלשכה כבר נוצר, ואין צורך ליצור אותו שוב. נכנסים מדף הכניסה.",
+			Action: s.external + "/login", ActionText: "לדף הכניסה",
+		})
 		return
 	}
 	switch r.Method {
@@ -381,14 +369,15 @@ func (s *server) doSetup(w http.ResponseWriter, r *http.Request) {
 	}
 	hash, err := hashPassword(password)
 	if err != nil {
-		http.Error(w, "forward-auth: could not hash the password", http.StatusInternalServerError)
+		log.Printf("forward-auth: first-run setup could not hash the password: %v", err)
+		setupFailed(w)
 		return
 	}
 	// name email display uid groups hash — the display is the name (the file is whitespace-separated)
 	line := strings.Join([]string{f.User, email, f.User, randomToken(16), setupGroups, hash}, " ")
 	if err := s.firstRun.finish(line); err != nil {
 		log.Printf("forward-auth: first-run setup could not write the users file: %v", err)
-		http.Error(w, "forward-auth: could not write the users file", http.StatusInternalServerError)
+		setupFailed(w)
 		return
 	}
 	log.Printf("forward-auth: first-run setup done: owner=%q ip=%q", f.User, clientIP(r))

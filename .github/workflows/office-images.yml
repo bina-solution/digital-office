@@ -22,7 +22,7 @@ name: office-images
 #
 # Services: dgo-extend and dgo-carry by name, and any other whose own compose service — in
 # apps/<service>/docker-compose.yml or platform-base/<service>/docker-compose.yml — names the image
-# `ghcr.io/solomonboltin/digital-office/<service>:…` and builds it plainly (context `.`, the Dockerfile, no
+# `ghcr.io/bina-solution/digital-office/<service>:…` and builds it plainly (context `.`, the Dockerfile, no
 # args, no target). A build that needs the office's values (args from .env, another Dockerfile, a target) is
 # refused here, not built wrong: a compose `up` without a build takes the file's image as it is
 # (`pull_policy: missing`).
@@ -56,7 +56,7 @@ jobs:
       MSG: ${{ github.event.head_commit.message }}
       SERVICES_IN: ${{ inputs.services }}
       PLATFORM: ${{ inputs.platform || 'linux/arm64' }}
-      REG: ghcr.io/solomonboltin/digital-office
+      REG: ghcr.io/bina-solution/digital-office
       BINFMT: tonistiigi/binfmt:qemu-v10.2.3@sha256:400a4873b838d1b89194d982c45e5fb3cda4593fbfd7e08a02e76b03b21166f0
     steps:
       - uses: actions/checkout@v4

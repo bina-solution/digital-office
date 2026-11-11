@@ -30,6 +30,11 @@ BOT_UA = re.compile(
     r"curl/|wget/|headlesschrome|facebookexternalhit|whatsapp|telegrambot|uptimerobot|"
     r"monitoring|pingdom|lighthouse|google-inspectiontool|gptbot|claudebot|ccbot|bytespider)",
     re.I)
+#: The office's OWN checks (checks/http.py `UA`) are not traffic at all — not a visitor, not a bot, not a hit:
+#: the uptime probe alone is 1,440 requests a day, and it was a "visitor" in every site's numbers. Both
+#: counts leave it out: `aggregate` here (a machine's log) and public._count_visit (a site the office
+#: serves), so «ביקורים» means the same in both (DGO-1591).
+OWN_UA = "BinaOfficeSites/"
 
 #: The office's own log format, written by the nginx conf the pattern renders (runtime.render_nginx).
 _JSON_KEYS = ("t", "ip", "m", "u", "s", "b", "r", "a", "h", "rt")
@@ -106,7 +111,7 @@ def aggregate(lines: list[str], host: str = "") -> dict:
     hours: dict[int, dict] = {}
     for raw in lines:
         hit = parse_line(raw)
-        if not hit:
+        if not hit or (hit.get("a") or "").startswith(OWN_UA):
             continue
         ts = hit["ts"]
         if not ts:

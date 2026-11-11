@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# test_runner.sh — runner.sh starts ONE follow cycle in a container of its own, only when the office declares
-# DGO_FOLLOW, never beside one that still runs, never on an engine that does not answer, and keeps how the last one
-# ended.
+# test_runner.sh — runner.sh starts ONE follow cycle in a container of its own (the heal alone where the office does
+# not declare DGO_FOLLOW, and twice in its first minutes), never beside one that still runs, never on an engine that
+# does not answer, and keeps how the last one ended.
 #
 #     bash platform-base/follow-runner/test_runner.sh
 #
@@ -40,8 +40,9 @@ runner() { bash "${HERE}/runner.sh" > "${T}/out" 2>&1; }
 ran() { grep -c '^run ' "${CALLS}"; }
 run_line() { grep '^run ' "${CALLS}"; }
 
-fresh ""; runner
-ok "DGO_FOLLOW not declared: no cycle, not even asked" '[ "$(ran)" = 0 ] && grep -q "not declared" "${T}/out"'
+fresh ""; runner; line="$(run_line)"
+ok "DGO_FOLLOW not declared: the heal alone, in a cycle of its own (DGO-1393)" \
+   '[ "$(ran)" = 1 ] && grep -q "not declared" "${T}/out" && grep -q "bash ${T}/office/scripts/follow.sh heal$" <<<"${line}"'
 
 fresh dgo-stable; runner; line="$(run_line)"
 ok "declared: one cycle started" '[ "$(ran)" = 1 ] && grep -q "cycle started" "${T}/out"'
@@ -53,6 +54,7 @@ ok "the host zone handed on (what its bbox run compiles)" 'grep -q -- "-e BBOX_H
 ok "bounded: timeout 6h around follow.sh, from its own image" 'grep -q "sha256:image timeout -k 60 6h bash ${T}/office/scripts/follow.sh" <<<"${line}" && grep -q "binaos.max-age=21600" <<<"${line}"'
 ok "on the stack network (egress where the default bridge has none)" 'grep -q -- "--network traefik-network" <<<"${line}"'
 ok "no git credential when none is declared" '! grep -q "git-credentials" <<<"${line}" && grep -q "GIT_CONFIG_COUNT=1 " <<<"${line}"'
+ok "declared: the whole cycle, not the heal alone" 'grep -q "bash ${T}/office/scripts/follow.sh$" <<<"${line}"'
 
 fresh dgo-stable; FOLLOW_USER=1000:1000 runner; line="$(run_line)"
 ok "FOLLOW_USER declares the writer, with the socket's group" 'grep -q -- "--user 1000:1000 --group-add $(stat -c %g "${T}/sock")" <<<"${line}"'
@@ -79,6 +81,19 @@ ok "its own image unreadable: no cycle, said" '[ "$(ran)" = 0 ] && grep -q "cann
 
 fresh dgo-stable; touch "${STUB}/refuse"; runner; rc=$?
 ok "the engine refuses: said, and a failing exit" '[ "${rc}" != 0 ] && grep -q "refused" "${T}/out"'
+
+# the loop itself, in short steps (FOLLOW_TICK; the schedule still counts 30 s a step): after a start, the heal alone at
+# 3 and at 8 minutes, then the first full cycle at FOLLOW_FIRST — the door after a reboot does not wait for it (DGO-1393)
+loop() {   # runs the loop until three cycles were started (at most 5 s), then stops it; prints how each one ended its line
+  FOLLOW_ONCE=0 FOLLOW_TICK=0.02 FOLLOW_HEARTBEAT="${T}/beat" bash "${HERE}/runner.sh" > "${T}/out" 2>&1 & local p=$!
+  for _ in $(seq 1 50); do [ "$(ran)" -ge 3 ] && break; sleep 0.1; done
+  kill "${p}" 2>/dev/null; wait "${p}" 2>/dev/null
+  run_line | sed -E 's/.*follow\.sh( heal)?$/cycle\1/' | tr '\n' ' '
+}
+fresh dgo-stable; seq3="$(loop)"
+ok "a start: the heal alone at 3 and 8 minutes, then the whole cycle" '[ "${seq3}" = "cycle heal cycle heal cycle " ] && [ -e "${T}/beat" ]'
+fresh ""; seq3="$(loop)"
+ok "a start where nothing is followed: the heal, and every cycle after it the heal again" '[ "${seq3}" = "cycle heal cycle heal cycle heal " ]'
 
 echo
 [ "${fails}" = 0 ] && echo "test_runner: all passed" || echo "test_runner: ${fails} FAILED"

@@ -27,7 +27,7 @@ import { workflow, node, links } from '@n8n-as-code/transformer';
 // =====================================================================
 
 @workflow({
-    /*__n8n__*/ description: "HTTP front for mailview's doc-context join: GET /webhook/mail-api/doc-context?source_id=<gmail id> -> indoxApiRouter01 GET (SOURCE_ID contains) -> {found, docs}. Keeps the architecture rule: apps never touch the DB, only the API layer does. Network-internal caller (mailview -> http://n8n:5678).",
+    /*__n8n__*/ description: "HTTP front for mailview's doc-context join: GET /webhook/mail-api/doc-context?source_id=<gmail id> -> indoxApi01 GET (SOURCE_ID contains) -> {found, docs}. Keeps the architecture rule: apps never touch the DB, only the API layer does. Network-internal caller (mailview -> http://n8n:5678).",
     /*__n8n__*/ isArchived: false,
     /*__n8n__*/ connections: {"Webhook":{"main":[[{"node":"Build Get","type":"main","index":0}]]},"Build Get":{"main":[[{"node":"Call Indox Api","type":"main","index":0}]]},"Call Indox Api":{"main":[[{"node":"Shape","type":"main","index":0}]]},"Shape":{"main":[[{"node":"Respond","type":"main","index":0}]]}},
     /*__n8n__*/ tags: [{"updatedAt":"2026-08-05T22:56:59.007Z","createdAt":"2026-08-05T22:56:59.007Z","id":"333960da-8376-4dd1-8b39-c3d4b448ca86","name":"mail-app"},{"updatedAt":"2026-08-16T14:20:49.737Z","createdAt":"2026-08-16T14:20:49.737Z","id":"cf994cba-b6d0-53fa-8729-2b8d0c21b28f","name":"app:mail"},{"updatedAt":"2026-08-05T22:56:59.007Z","createdAt":"2026-08-05T22:56:59.007Z","id":"51804d94-1071-4213-980b-a06491a07895","name":"role:api"}],
@@ -40,7 +40,7 @@ import { workflow, node, links } from '@n8n-as-code/transformer';
     name: 'indox doc-context api',
     active: true,
     description:
-        "HTTP front for mailview's doc-context join: GET /webhook/mail-api/doc-context?source_id=<gmail id> -> indoxApiRouter01 GET (SOURCE_ID contains) -> {found, docs}. Keeps the architecture rule: apps never touch the DB, only the API layer does. Network-internal caller (mailview -> http://n8n:5678).",
+        "HTTP front for mailview's doc-context join: GET /webhook/mail-api/doc-context?source_id=<gmail id> -> indoxApi01 GET (SOURCE_ID contains) -> {found, docs}. Keeps the architecture rule: apps never touch the DB, only the API layer does. Network-internal caller (mailview -> http://n8n:5678).",
     isArchived: false,
     tags: ['mail-app', 'app:mail', 'role:api'],
     settings: {
@@ -67,7 +67,10 @@ export class IndoxDocContextApiWorkflow {
         httpMethod: 'GET',
         path: 'mail-api/doc-context',
         responseMode: 'responseNode',
-        options: {},
+        // DGO-1603: every caller is inside the office — mailview at http://n8n:5678, indoxHealth at
+        // http://n8n-webhook:5678 — and the edge publishes /webhook/* on the public host. Same list as
+        // meetRecordings01, whose refusal of a public caller was measured from outside (403).
+        options: { ipWhitelist: '10.0.0.0/8,172.16.0.0/12,192.168.0.0/16,127.0.0.1,::1' },
     };
 
     @node({

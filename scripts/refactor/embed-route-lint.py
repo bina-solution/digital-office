@@ -31,9 +31,19 @@ owed by the same work item.
 
 AN OFFICE, NOT THE ESTATE. Only the modules this office compiled are asked about. Nothing compiled
 here: NOT CHECKED, never a pass.
+
+A LINKED OFFICE'S TILES TOO (DGO-569, the owner: «הדפדפן גם תומך בתת קישורים … ככה אני אוכל לפתוח את
+הקישור מכל מקום בשנייה»). A tile another office gives (`remote` in the compiled module) was skipped
+outright, so the deep link into it — `#/m/browser42.hp-laptop/view/`, handed to that office's host —
+was a contract nobody checked. Its app is the same app, from the same tree, so it is asked the same
+question by the alias the far office names (`remote.alias`). STAGED, as every tightening is: a remote
+tile that does not keep its screen in its URL is a WARN now, and the gate refuses it once the warnings
+of every office have been read (AGENTS.md, non-negotiable 8). A tile whose app is not in this tree (a
+client's own app) is said by name, never passed in silence.
 """
 from __future__ import annotations
 
+import functools
 import json
 import re
 import sys
@@ -76,6 +86,11 @@ ALLOWED = {
                         "state — which conversation, which project — lives inside that app, which "
                         "has no URL of its own to read or write. Its sessions are addressed through "
                         "the CLI instead (`./bbox bina-claude sessions|show <id>`)",
+    "apps/browser42": "ONE live screen — the office browser's, as pixels (noVNC): which tab, which page is the "
+                      "browser's own state, not the viewer's. Its addresses are SERVER paths the app's Caddyfile "
+                      "routes, so the tail of a link lands with no router in the page: `/view/` the screen, "
+                      "`/handoff/<slug>` a group's tab brought to the front and then the screen (handoff.py). "
+                      "The page reads its query (`?lost=<slug>`), never a path. Read 2026-11-10 (DGO-569)",
     "apps/cad": "FreeCAD's own window, streamed as pixels by linuxserver's KasmVNC image (DGO-1076): the "
                 "model being edited lives inside FreeCAD, which has no URL of its own to read or write. "
                 "The parametric families are addressed through cad-api and its CLI instead "
@@ -93,15 +108,10 @@ ALLOWED = {
 #: THE ALLOWANCE IS CONDITIONAL, and that is what keeps this declaration honest: it holds only
 #: while the compiled module declares `external`. Mount one of these same-origin under
 #: `/a/<alias>/` and the gate asks about it again — proven by the self-test, not promised here.
+#: (apps/meet was named here until 2026-11-09: its tile was a redirect into Jitsi. Its tile is «פגישות»
+#: now, meet-start's own page, which reads and writes its own URL, so it is mounted same-origin again
+#: and the static probe answers for it — DGO-1502.)
 ALLOWED_WHILE_EXTERNAL = {
-    "apps/meet": "the tile's own page is a redirect into Jitsi Meet on its own host — upstream's SPA, "
-                 "which routes itself (a room IS its path, meet.<domain>/<room>, and that is the "
-                 "link people send), and the one page this app owns, the recordings list, selects "
-                 "nothing. It IS a screen on another host, so the allowance is conditional on that "
-                 "being said: the module declares `external: true` on meet-start.<host> (2026-10-26, "
-                 "the same block obsidian's and plane's carry), and mounting the module same-origin "
-                 "under `/a/meet/` puts the question back to the static probe. Read 2026-10-20 "
-                 "(DGO-826), made conditional 2026-10-26",
     "apps/obsidian": "the front end is Ignis (nobbe/ignis), which runs the REAL Obsidian: what this "
                      "repo holds is a frame shim, and the app is `external: true` on obsidian.<host>. "
                      "The screen IS in its URL — the image's own `shim-loader.js` reads "
@@ -126,11 +136,38 @@ if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8")
 
 
-def modules() -> list[dict]:
+def is_remote(module: dict) -> bool:
+    return bool(module.get("remote") or module.get("office"))
+
+
+def modules(remote: bool = False) -> list[dict]:
+    """The embedded modules this office compiled: its own, or (`remote`) the tiles its linked offices give."""
     import yaml
     data = yaml.safe_load(REGISTRY.read_text(encoding="utf-8"))
     mods = data.get("modules") if isinstance(data, dict) else data
-    return [m for m in (mods or []) if m.get("embed") and not (m.get("remote") or m.get("office"))]
+    return [m for m in (mods or []) if m.get("embed") and is_remote(m) == remote]
+
+
+def remote_alias(module: dict) -> str:
+    """The alias of the app a linked office's tile is: the far office names it (`remote.alias`); the
+    embed's last segment is the same name when it does not."""
+    far = module.get("remote") if isinstance(module.get("remote"), dict) else {}
+    return far.get("alias") or (module.get("embed") or "").strip("/").split("/")[-1]
+
+
+def remote_rows(mods: list[dict], by_alias: dict[str, str]) -> tuple[list[tuple[str, str]], list[str], set[str]]:
+    """(tile id, directory) for every linked office's tile whose app is in this tree; the ids of those whose
+    app is not; and the directories whose tile is `external` (another origin: the mirror back is impossible)."""
+    rows, absent, external = [], [], set()
+    for module in mods:
+        directory = by_alias.get(remote_alias(module), "")
+        if not directory:
+            absent.append(module.get("id", ""))
+            continue
+        rows.append((module.get("id", ""), directory))
+        if module.get("external"):
+            external.add(directory)
+    return rows, absent, external
 
 
 def apps_by_alias() -> dict[str, str]:
@@ -149,6 +186,7 @@ def apps_by_alias() -> dict[str, str]:
     return found
 
 
+@functools.lru_cache(maxsize=None)   # one walk per app directory: 58 remote tiles name a dozen of them again and again
 def routes_its_url(directory: str) -> bool:
     """Does this app's own front end read a route out of its URL and write one back?"""
     reads = writes = False
@@ -229,6 +267,18 @@ def main() -> int:
              if (r[1] in ALLOWED) or (r[1] in ALLOWED_WHILE_EXTERNAL and r[1] in external)]
     print(f"G83 PASS — all {len(rows)} embedded app(s) keep their screen in their own URL"
           f" ({len(rows) - len(named)} routing, {len(named)} allowed by name)")
+
+    # the linked offices' tiles (DGO-569) — WARN, not yet refuse: see the module's docstring
+    far, absent, far_external = remote_rows(modules(remote=True), by_alias)
+    far_bad = unrouted(far, far_external)
+    for tile, directory in far_bad:
+        print(f"WARN  {tile}: a linked office's tile whose app ({directory}) does not keep its screen in its "
+              f"own URL — a link into it opens the app and loses the screen (refused once this stage ends)")
+    for tile in absent:
+        print(f"note  {tile}: a linked office's tile whose app is not in this tree — not checked here")
+    far_named = [r for r in far if r not in far_bad and not routes_its_url(r[1])]
+    print(f"G83 remote — {len(far) + len(absent)} linked office tile(s): {len(far) - len(far_bad) - len(far_named)} "
+          f"routing, {len(far_named)} allowed by name, {len(far_bad)} warned, {len(absent)} not in this tree")
     return 0
 
 
@@ -242,6 +292,17 @@ def self_test() -> int:
          unrouted([("obsidian", "apps/obsidian")], {"apps/obsidian"}), []),
         ("the same app is named again the moment it is no longer external",
          unrouted([("obsidian", "apps/obsidian")]), [("obsidian", "apps/obsidian")]),
+        # DGO-569: a linked office's tile is counted, by the alias the far office names
+        ("a linked office's tile is asked about its app, found by the far office's alias",
+         remote_rows([{"id": "browser42.hp-laptop", "embed": "/a/browser42/", "external": True,
+                       "remote": {"alias": "browser42"}}], {"browser42": "apps/browser42"}),
+         ([("browser42.hp-laptop", "apps/browser42")], [], {"apps/browser42"})),
+        ("…and one whose app is not in this tree is named, never passed",
+         remote_rows([{"id": "x.examplef", "embed": "/a/x/", "remote": {"alias": "x"}}], {}),
+         ([], ["x.examplef"], set())),
+        ("a remote tile is not one of this office's own, and an own tile is not remote",
+         (is_remote({"remote": {"alias": "a"}}), is_remote({"office": "hp-laptop"}), is_remote({"id": "drive"})),
+         (True, True, False)),
     ]
     bad = 0
     for name, got, want in cases:

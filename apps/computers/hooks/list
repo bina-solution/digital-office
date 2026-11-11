@@ -1,0 +1,3 @@
+#!/usr/bin/env bash
+#: list — the fleet: every computer this office can act on, with its id (no SSH round trip): [--json]
+exec bash "$(dirname "${BASH_SOURCE[0]}")/../tools/verb" list "$@"

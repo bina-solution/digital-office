@@ -1,0 +1,41 @@
+{
+  "id": "containers",
+  "title": {
+    "he": "מכולות",
+    "en": "Containers"
+  },
+  "layer": 1,
+  "people": "admins",
+  "kind": "service",
+  "version": "1.0.0",
+  "system": true,
+  "summary": {
+    "he": "המנוע שמריץ כל אפליקציה שרצה במכולות — בכל מערכת הפעלה",
+    "en": "The engine every container app runs on — on every OS"
+  },
+  "capabilities": [
+    {
+      "name": "container-runtime",
+      "type": "protocol",
+      "endpoint": "unix:///var/run/docker.sock",
+      "required_ops": [
+        "run",
+        "pull",
+        "build",
+        "logs",
+        "exec"
+      ]
+    }
+  ],
+  "use": [],
+  "connections": [],
+  "compose": null,
+  "routing": [],
+  "health": {
+    "structural": "auto"
+  },
+  "data": {
+    "volumes": [],
+    "on_uninstall": "keep"
+  }
+}

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""G33 app-coupling-lint — chassis must not know the apps it carries.
+"""G102 app-coupling-lint — chassis must not know the apps it carries.
 
 THE RULE. Layer 1 and 2 are the platform; layer 2 and 3 are things installed ON it. A chassis app
 that names an installable app by id has inverted that: installing a new app now requires editing
@@ -8,7 +8,7 @@ to learn what exists from app.json manifests, `platform.state.yaml` and the comp
 .generated/ — never from a name written into its own source.
 
 The concrete failure this exists to prevent: data-management (the backup service) discovered
-postgres instances with a hardcoded table of logins — supabase_admin/postgres, hacohen/n8n,
+postgres instances with a hardcoded table of logins — supabase_admin/postgres, example/n8n,
 authentik/authentik, glitchtip/glitchtip. Every entry was another app's private credential, so a
 newly installed app with its own database was simply NOT BACKED UP until somebody remembered to add
 a row. It now reads POSTGRES_USER from the container, which is both decoupled and more accurate.
@@ -21,6 +21,10 @@ layer 2 and layer 3 ids are checked.
 RATCHET, not retrofit. platform/app-coupling-waivers.yaml records the coupling that existed when
 this gate was introduced, so the build is green today and NEW coupling fails. Each waiver is a
 decision someone can revisit; deleting one and making the gate pass is always an improvement.
+
+G102 since batch 30 (2026-11-09); it was G93 from 2026-11-03 and G33 before that. `state-writer-lint` declares G33 in the house
+form and GATES.md's G33 row names it, so that one keeps the number; see GATES.md's "two numbers
+claimed twice" for why the collision was invisible until the day this line changed.
 """
 from __future__ import annotations
 
@@ -104,10 +108,10 @@ def main():
 
     if not found:
         n = sum(1 for v in apps.values() if v["layer"] in (1, 2))
-        print(f"G33 PASS — {n} chassis app(s) name no layer-2/3 app")
+        print(f"G102 PASS — {n} chassis app(s) name no layer-2/3 app")
         return 0
 
-    print(f"G33 FAIL — {len(found)} new chassis->app coupling(s):")
+    print(f"G102 FAIL — {len(found)} new chassis->app coupling(s):")
     for (aid, t), where in sorted(found.items()):
         print(f"  {aid} references '{t}'  ({len(where)}x)  e.g. {where[0]}")
     print("  -> resolve it from the manifests/registries instead, or record the decision in")

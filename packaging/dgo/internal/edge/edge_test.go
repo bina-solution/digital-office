@@ -402,6 +402,41 @@ func TestUnroutedHostsWaitForTheMachine(t *testing.T) {
 	}
 }
 
+// The phone's core sets its own waiting page (serve.Absent, DGO-1723): a woken host's owner gets that page — the
+// machine asked for first, as before — and an anonymous caller still signs in first, starting nothing.
+func TestAWokenHostAnswersTheSetWaitingPage(t *testing.T) {
+	var asked http.Header
+	auth := fakeAuth(t, &asked)
+	hits := 0
+	s := edgeFor(t, auth.URL, fakeApp(t, &hits).URL, auth.URL)
+	s.Machine = func() (int, string) { return 0, "" }
+	woke := 0
+	s.Wake = func(host string, ask bool) (string, bool) {
+		if ask {
+			woke++
+		}
+		return "containers are not installed", host == "n8n.localhost"
+	}
+	s.Waiting = http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusServiceUnavailable)
+		_, _ = io.WriteString(w, "the phone's own page")
+	})
+	if w := get(s, "n8n.localhost:8080", "/", nil, map[string]string{"Accept": "text/html"}); w.Code != http.StatusFound || woke != 0 {
+		t.Fatalf("anonymous = %d (woke %d), want the sign-in and nothing started", w.Code, woke)
+	}
+	owner := &http.Cookie{Name: "dgo_session", Value: "ok"}
+	w := get(s, "n8n.localhost:8080", "/", owner, map[string]string{"Accept": "text/html"})
+	if w.Code != http.StatusServiceUnavailable || woke != 1 || w.Body.String() != "the phone's own page" {
+		t.Fatalf("the owner's page = %d (woke %d) %q, want the set page", w.Code, woke, w.Body.String())
+	}
+	if strings.Contains(w.Body.String(), "containers are not installed") {
+		t.Fatal("the edge's own page (the app's raw step) answered instead of the set one")
+	}
+	if hits != 0 {
+		t.Fatal("the console's upstream was asked for the machine's host")
+	}
+}
+
 // A gated host cannot be declared without the identity service to ask.
 func TestAGatedHostNeedsTheIdentityService(t *testing.T) {
 	_, err := New(map[string]Route{"console.localhost": {Upstream: mustURL(t, "http://127.0.0.1:1"), Gated: true}}, "", t.Logf)

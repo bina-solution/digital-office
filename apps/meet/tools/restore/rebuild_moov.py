@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# Rebuild a Jibri mp4 whose ffmpeg was killed before it wrote its moov (no index): MEET-48, fireplace
+# Rebuild a Jibri mp4 whose ffmpeg was killed before it wrote its moov (no index): MEET-48, examplef
 # 2026-11-01 — the server froze on memory, Jibri's graceful stop timed out, ffmpeg got SIGKILL (137),
 # and the file kept its media (mdat) and no index, so no player opened it and no sound was taken.
 # issues/meet-a-frozen-server-killed-the-recorder-s-ffmpeg-and-left-an-mp4-with-no-index.yaml
@@ -18,8 +18,8 @@
 # The two configs (avcC, AAC) come from REFERENCE, a healthy recording of the same recorder; without
 # one, from the newest healthy .mp4 beside the broken one (the recordings folder, two levels up).
 #
-# Proven: a healthy recording with its moov cut off (fpg106 2026-10-28 19-16-43) → 882 video samples
-# and 2,527 sound frames, its own index's numbers; fpg107 (MEET-48) → 3,998 + 266.5 s of sound, 0 errors.
+# Proven: a healthy recording with its moov cut off (exf106 2026-10-28 19-16-43) → 882 video samples
+# and 2,527 sound frames, its own index's numbers; exf107 (MEET-48) → 3,998 + 266.5 s of sound, 0 errors.
 #
 # usage: rebuild_moov.py BROKEN.mp4 OUT.mp4 [REFERENCE.mp4]
 #   exit 0 = OUT written from the whole file; 3 = written, but a part could not be read (said on stderr);
@@ -36,7 +36,7 @@ AUD = (0x21, 0xde)
 # frames) find every sample of a healthy stretch and almost no false one; the wide ones (an IDR of a
 # detailed full-HD screen share is far over 400 KB; ffmpeg's interleaver writes sound alone once video
 # lags past max_interleave_delta, 10 s ≈ 160 KB of AAC — what a frozen server produces) are tried only
-# where the strict ones find nothing: used everywhere, they let random bytes chain (measured on fpg107:
+# where the strict ones find nothing: used everywhere, they let random bytes chain (measured on exf107:
 # 3,862 video samples and a decode error instead of 3,998 and none).
 STRICT = (400_000, 4000)
 WIDE = (8 << 20, 400_000)

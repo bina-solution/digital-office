@@ -25,6 +25,9 @@ Env: CDP (default http://browser42-browser:9222)
 Verbs:
   session [name]   resolve/mint the stable slug; write manifest; print it
     open <slug> <url> get-or-use the grouped direct-site tab; print the attach snippet
+  handoff-open <app> <url> [--slug S] [--sentence T]
+                   a page a PERSON must act on: awake, the slug's tabs closed, one tab opened, the
+                   hand-off recorded `needed` for <app> (`bbox b42 open`; handoff.py, DGO-1336)
   list             list groups + live tab counts
   close <slug>     close exactly this group's tabs; remove its manifest
   gc [--stale N]   close + remove groups idle > N hours (default 24)
@@ -34,6 +37,7 @@ import hashlib
 import os
 import re
 import shutil
+import signal
 import sys
 import time
 import uuid
@@ -668,60 +672,25 @@ def broker_command(command):
     raise RuntimeError(last_error or "browser42 broker is unavailable")
 
 
+def bare(url: str) -> str:
+    """The address a manifest keeps — scheme, host and path, never the query or the fragment: a sign-in's
+    query carries its state on the way out and its one-time code on the way back (DGO-1336). The rule is
+    handoff.bare_url's; the fallback only covers a container recreated without /handoff.py."""
+    if handoff is not None:
+        return handoff.bare_url(url)
+    parts = urlparse(url or "")
+    return f"{parts.scheme}://{parts.netloc}{parts.path}" if parts.scheme and parts.netloc else ""
+
+
 def cmd_open(slug, url=None):
+    if url == "-":
+        url = sys.stdin.readline().strip()     # an address that may carry a query: never in a process list
     if url:
-        # --- URL provided: allocate a native Chrome Tab Group via the extension broker ---
-        if not slug:
-            raise ValueError("group requires an explicit slug")
-        # A slug that belongs to a TASK cannot host a standing session tab: the reaper closes any tab
-        # whose slug is a terminal task (`is_terminal_slug`), so the tab would vanish about 30 seconds
-        # later without a word. Measured 2026-10-14 — that is exactly what happened to a session
-        # opened on the WhatsApp pairing slug after its task timed out, and only measuring caught it.
-        # Refuse by name instead, and name the way out.
-        record = task_path(slug)
-        if record.exists():
-            try:
-                state = json.loads(record.read_text()).get("state", "?")
-            except Exception:                                  # noqa: BLE001 — a corrupt record is still a record
-                state = "?"
-            raise ValueError(
-                f"slug '{slug}' belongs to a task (state={state}); the reaper would close a session "
-                f"tab on it within ~30s. Use a different slug for the standing tab.")
-        parsed = urlparse(url)
-        if parsed.scheme not in {"http", "https"} or not parsed.netloc:
-            raise ValueError("group requires a direct http(s) website URL")
-        tag = PREFIX + slug
-        digest = hashlib.sha256(slug.encode()).digest()
-        color = COLORS[digest[0] % len(COLORS)]
-        allocation = broker_command({
-            "action": "allocate",
-            "slug": slug,
-            "label": slug,
-            "color": color,
-            "url": url,
-        })
-        p, b = reconnect()
+        opened = open_group(slug, url)
         try:
-            tabs = []
-            for _ in range(150):
-                tabs = group_tabs(b, slug)
-                if tabs:
-                    break
-                b.contexts[0].pages[0].wait_for_timeout(100)
-            if not tabs:
-                broker_command({"action": "close", "slug": slug})
-                raise RuntimeError(f"allocated tab {tag} did not acquire ownership")
-            data = touch(slug)
-            data.update({
-                "url": url,
-                "color": color,
-                "tab_id": allocation.get("tabId"),
-                "group_id": allocation.get("groupId"),
-            })
-            manifest(slug).write_text(json.dumps(data, indent=2))
-            print(f"GROUP={tag}  TABS={len(tabs)}")
+            print(f"GROUP={opened['tag']}  TABS={opened['tabs']}")
             print("# copy-paste attach snippet (work on `me` only; end with os._exit(0)):")
-            print(SNIPPET.format(TAG=tag))
+            print(SNIPPET.format(TAG=opened["tag"]))
         finally:
             sys.stdout.flush()
             os._exit(0)  # never tear down shared state
@@ -739,7 +708,7 @@ def cmd_open(slug, url=None):
             pg.evaluate(f"window.name = {tag!r}")
             tabs = [pg]
         data = touch(slug)
-        data["url"] = data.get("url", tabs[0].url)
+        data["url"] = bare(data.get("url") or tabs[0].url)
         manifest(slug).write_text(json.dumps(data, indent=2))
         print(f"GROUP={tag}  TABS={len(tabs)}")
         print("# copy-paste attach snippet (work on `me` only; end with os._exit(0)):")
@@ -747,6 +716,192 @@ def cmd_open(slug, url=None):
     finally:
         sys.stdout.flush()
         os._exit(0)
+
+
+def open_group(slug, url) -> dict:
+    """Allocate the group's anchor tab at `url` through the extension broker and wait until it is ours.
+
+    Returns {tag, tabs, tab_id, group_id, color}. Raises — by name — when the slug or the address cannot
+    host a standing tab, or when the allocated tab never acquired ownership. That last refusal used to
+    be raised inside the caller's `finally: os._exit(0)`, so it ended the process with exit 0 and no
+    word: an opener was told it had opened. The manifest keeps the BARE address (`bare`): what the
+    hand-off needs to find the tab again after a sleep is its host and path, never its query."""
+    if not slug:
+        raise ValueError("group requires an explicit slug")
+    # A slug that belongs to a TASK cannot host a standing session tab: the reaper closes any tab
+    # whose slug is a terminal task (`is_terminal_slug`), so the tab would vanish about 30 seconds
+    # later without a word. Measured 2026-10-14 — that is exactly what happened to a session
+    # opened on the WhatsApp pairing slug after its task timed out, and only measuring caught it.
+    # Refuse by name instead, and name the way out.
+    record = task_path(slug)
+    if record.exists():
+        try:
+            state = json.loads(record.read_text()).get("state", "?")
+        except Exception:                                  # noqa: BLE001 — a corrupt record is still a record
+            state = "?"
+        raise ValueError(
+            f"slug '{slug}' belongs to a task (state={state}); the reaper would close a session "
+            f"tab on it within ~30s. Use a different slug for the standing tab.")
+    parsed = urlparse(url)
+    if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+        raise ValueError("group requires a direct http(s) website URL")
+    tag = PREFIX + slug
+    digest = hashlib.sha256(slug.encode()).digest()
+    color = COLORS[digest[0] % len(COLORS)]
+    allocation = broker_command({
+        "action": "allocate",
+        "slug": slug,
+        "label": slug,
+        "color": color,
+        "url": url,
+    })
+    p, b = reconnect()
+    tabs = []
+    for _ in range(150):
+        tabs = group_tabs(b, slug)
+        if tabs:
+            break
+        b.contexts[0].pages[0].wait_for_timeout(100)
+    if not tabs:
+        broker_command({"action": "close", "slug": slug})
+        raise RuntimeError(f"allocated tab {tag} did not acquire ownership")
+    data = touch(slug)
+    data.update({
+        "url": bare(url),
+        "color": color,
+        "tab_id": allocation.get("tabId"),
+        "group_id": allocation.get("groupId"),
+    })
+    manifest(slug).write_text(json.dumps(data, indent=2))
+    return {"tag": tag, "tabs": len(tabs), "tab_id": allocation.get("tabId"),
+            "group_id": allocation.get("groupId"), "color": color}
+
+
+#: What a person reads on the hand-off while an app waits for him (handoff.write_record): said once
+#: here for an app that names nothing of its own.
+HANDOFF_SENTENCE = "דפדפן הלשכה פתח את הדף ש{app} צריך — המשיכו בו, והאפליקציה תמשיך מעצמה."
+
+
+#: How long an open (or a close by episode) waits for the slug's lock, and how long a whole open may run —
+#: inside the opener's own 300 s, so an open its caller gave up on never holds the slug after it.
+HANDOFF_LOCK_S = float(os.environ.get("BROWSER42_HANDOFF_LOCK_SECONDS") or 150)
+HANDOFF_OPEN_S = int(os.environ.get("BROWSER42_HANDOFF_OPEN_SECONDS") or 270)
+
+
+@contextmanager
+def handoff_lock(slug: str, wait: float | None = None):
+    """ONE `open` of a slug at a time. A second press during a cold wake (up to 69 s) started a second
+    open of the same tabs, and whichever finished last decided which attempt's page was in front — the
+    watcher of the other waited on a tab that would never answer it (the second reader of DGO-1336). A
+    lock not had within `wait` seconds is a refusal by name (`busy`), never a wait without end."""
+    path = DATA / "handoffs" / f".{slug}.lock"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    deadline = time.monotonic() + (HANDOFF_LOCK_S if wait is None else wait)
+    with path.open("a+") as handle:
+        while fcntl is not None:
+            try:
+                fcntl.flock(handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+                break
+            except OSError:
+                if time.monotonic() >= deadline:
+                    raise BrowserTaskError("busy", f"another open of '{slug}' has held it for "
+                                                   f"{HANDOFF_LOCK_S if wait is None else wait:g} s — try again") from None
+                time.sleep(0.5)
+        try:
+            yield
+        finally:
+            if fcntl is not None:
+                fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
+
+
+def _open_deadline(_signum, _frame):
+    raise BrowserTaskError("open_deadline", f"the open did not finish in {HANDOFF_OPEN_S} s — it stopped here")
+
+
+def cmd_handoff_open(argv: list) -> None:
+    """`bbox b42 open <app> <url|-> [--slug <slug>] [--sentence <text>] [--episode <id>]` — a page a PERSON
+    must act on. `-` reads the address from stdin, so a sign-in's query is never in a process list.
+    `--episode` is the id the CALLER minted for this press: it knows its episode even when this process
+    never answers (killed at its caller's timeout), so it can always end the hand-off it opened.
+
+    The office's way for an app to say «a person is needed in the browser» (DGO-1336): the app's own
+    «Continue with Google» opens here, and every console that shows this browser brings it to whoever is
+    looking (handoff.py's records, GET /handoff/ and the runner's GET /v1/handoffs). In order:
+      1. the record written `needed`, for <app>, with the sentence the person reads — FIRST: a sleeping
+         browser takes up to 69 s to wake (measured on the HP), and the person who pressed the button is
+         brought to the browser now; the hand-off route shows its waking page until the tab is there;
+      2. the browser AWAKE — closing a group while the browser sleeps is a no-op, and the tab a wake
+         restores carries its old `window.name`, so a sign-in once sat on the previous attempt's page
+         while the opener said it had opened (measured on the HP, 2026-11-04);
+      3. every tab tagged with the slug closed — the extension's session and a restored tab alike;
+      4. the group opened at the address (open_group), exactly one tab of it left.
+    A refusal on the way leaves the record `needed`: its caller retries or ends it (`handoff <slug>
+    --failed`), and a record nobody ends stops being news after its TTL (handoff.NEEDED_TTL_S).
+    Prints one JSON object; the address itself is never printed, kept or logged here."""
+    args = list(argv)
+    app = args.pop(0) if args else ""
+    url = args.pop(0) if args else ""
+    if url == "-":
+        url = sys.stdin.readline().strip()    # the address on stdin: never in an argv a process list shows
+    given = {"--slug": "", "--sentence": "", "--episode": None}
+    while args:
+        flag = args.pop(0)
+        if flag in given and args:
+            given[flag] = args.pop(0)
+        else:
+            raise BrowserTaskError("usage", "open <app> <url> [--slug <slug>] [--sentence <text>] [--episode <id>]")
+    slug, sentence, episode = given["--slug"], given["--sentence"], given["--episode"]
+    if not app or app != slugify(app):
+        raise BrowserTaskError("usage", "open <app> <url> …: <app> is the app's id (lowercase kebab-case)")
+    if urlparse(url).scheme not in {"http", "https"} or not urlparse(url).netloc:
+        raise ValueError("open requires a direct http(s) address")
+    if handoff is None:
+        raise BrowserTaskError("no_handoff_module", "/handoff.py is not mounted here — recreate browser42-browser")
+    slug = canonical_slug(slug or f"{app}-signin")
+    try:
+        record = handoff.write_record(slug, "needed", app=app, episode=episode,
+                                      sentence=sentence or HANDOFF_SENTENCE.format(app=app))
+    except handoff.RecordError as error:
+        raise BrowserTaskError("usage", str(error)) from None
+
+    def superseded():
+        if handoff.current_episode(slug) != record["id"]:
+            raise BrowserTaskError("superseded", f"a newer attempt opened '{slug}' — this one leaves it as it is")
+
+    signal.signal(signal.SIGALRM, _open_deadline)
+    signal.alarm(HANDOFF_OPEN_S)
+    try:
+        with handoff_lock(slug):
+            superseded()                   # a newer press, waiting for this lock, owns the tabs now
+            # The previous attempt's manifest goes NOW, before the wake: while it is there the hand-off
+            # route would front that old tab — and wake the browser itself, beside this wake (two launches).
+            shutil.rmtree(manifest(slug).parent, ignore_errors=True)
+            if not handoff.wake():
+                raise BrowserTaskError("browser_not_awake", "the office browser did not wake (hooks/sleep) — nothing was opened")
+            superseded()
+            clear_group(slug)
+            _, b = connect()
+            for page in group_tabs(b, slug):
+                try:
+                    page.close()
+                except Exception:                          # noqa: BLE001 — a tab already gone is the goal
+                    pass
+            opened = open_group(slug, url)
+            _, b = reconnect()
+            extra = group_tabs(b, slug)
+            if len(extra) != 1:
+                raise BrowserTaskError("not_one_tab", f"group '{slug}' holds {len(extra)} tabs after it was opened — "
+                                                      f"nothing was handed to a person")
+    except Exception as error:                             # noqa: BLE001 — every refusal names its episode
+        # …whatever stopped it (a refusal, a CDP error, the deadline): whoever ends the hand-off ends THIS
+        # episode, never a newer one. Only the error's name and code travel; a page's address never does.
+        signal.alarm(0)
+        ours = isinstance(error, (BrowserTaskError, RuntimeError, ValueError))   # this module's own sentences
+        done({"ok": False, "episode": record["id"], "error": {
+            "code": error_code(error), "message": str(error) if ours else type(error).__name__}}, 2)
+    signal.alarm(0)
+    emit({"ok": True, "slug": slug, "for": app, "tab_id": opened["tab_id"], "group_id": opened["group_id"],
+          "handoff": record, "link": handoff.handoff_link(slug)})
 
 
 def cmd_list():
@@ -786,9 +941,27 @@ def clear_group(slug):
     return result
 
 
-def cmd_close(slug):
+def cmd_close(slug, rest=()):
+    """`close <slug> [--episode <id>]`. With an episode (a hand-off's watcher closing the tab of the sign-in
+    it ended, DGO-1336) the group is closed only while that episode is still the slug's current one, under
+    the slug's open lock: a press made a moment after must keep its tab (exit 3, `superseded`)."""
     if not slug:
-        print("usage: group-manager.py close <slug>", file=sys.stderr)
+        print("usage: group-manager.py close <slug> [--episode <id>]", file=sys.stderr)
+        sys.exit(2)
+    rest = list(rest)
+    if rest[:1] == ["--episode"] and len(rest) == 2:
+        if handoff is None:
+            emit({"ok": False, "error": {"code": "no_handoff_module", "message": "/handoff.py is not mounted here"}}, 2)
+        with handoff_lock(slug, wait=60):
+            if handoff.current_episode(slug) != rest[1]:
+                emit({"ok": False, "error": {"code": "superseded", "message":
+                      f"'{slug}' belongs to a newer attempt now — its tab stays"}}, 3)
+            result = clear_group(slug)
+        print(f"closed {result.get('closed', 0)} tab(s) for {PREFIX}{slug} (episode {rest[1]})")
+        sys.stdout.flush()
+        os._exit(0)
+    if rest:
+        print("usage: group-manager.py close <slug> [--episode <id>]", file=sys.stderr)
         sys.exit(2)
     try:
         result = clear_group(slug)
@@ -888,6 +1061,205 @@ def owned_page(browser, slug: str, timeout: int = 2000):
 def task_connection(slug: str):
     playwright, browser = connect()
     return playwright, browser, owned_page(browser, slug)
+
+
+# ── tabs by their id (DGO-1251): what only the MCP or noVNC could do ──────────────────────────────────
+#
+# A task acts on ITS tab (its slug's group). These verbs act on any tab the browser holds, named by the
+# CDP target id that `tab list` prints, never «the current tab»: in a browser shared by agents and the
+# owner, that is whichever tab was clicked last. They take the same runner slot as the task verbs (one
+# at a time, the 300 s budget, the link's door). The group is still the boundary: a tab someone holds (an
+# ACTIVE task, a person waited for in a hand-off, or an owner whose tag cannot be read) is only read here
+# (snapshot, shot), and every other verb is refused by name. Page 0 (the /view anchor) and a window's last
+# page are never closed. Addresses come back bare, with no query, as the manifests keep them (a sign-in's
+# query carries its codes).
+TAB_ARITY = {"list": (0, 0), "navigate": (2, 2), "click": (2, 2), "type": (2, 3), "eval": (2, 2),
+             "text": (1, 2), "snapshot": (1, 1), "shot": (1, 2), "close": (1, 1)}
+# what a tab someone holds (an active task, a person waited for, an owner that cannot be read) still allows:
+# reads that neither scroll nor run anything in the page (`text` walks its scroll container: `task read`)
+TAB_OWNED_READS = {"snapshot", "shot"}
+TAB_USAGE = ("tab list | navigate <id> <url> | click <id> <selector> | type <id> <text> [selector] | "
+             "eval <id> <expression> | text <id> [max-chars] | snapshot <id> | shot <id> [full] | close <id>")
+
+
+def _target_info(page) -> dict:
+    """The page's CDP target (targetId, title, url), read without running anything in the page, or {}."""
+    try:
+        session = page.context.new_cdp_session(page)
+        try:
+            return session.send("Target.getTargetInfo").get("targetInfo", {}) or {}
+        finally:
+            try:
+                session.detach()
+            except Exception:
+                pass
+    except Exception:
+        return {}
+
+
+def _tab_tag(page):
+    """The tab's group as the tab verbs read it: its slug; '' when no group tagged it; None when the tag
+    cannot be read (a page between documents) or is not a slug this browser mints (a page writes its own
+    window.name). _name's '' on a failed read would make a task's tab look free. A wedged renderer does not
+    answer at all (Runtime.evaluate has no timeout): only the verb aimed at that tab waits, see _tab_rows."""
+    try:
+        session = page.context.new_cdp_session(page)
+        try:
+            value = session.send("Runtime.evaluate", {"expression": "window.name", "returnByValue": True}
+                                 ).get("result", {}).get("value")
+        finally:
+            try:
+                session.detach()
+            except Exception:
+                pass
+    except Exception:
+        return None
+    if not isinstance(value, str) or not value.startswith(PREFIX):
+        return ""
+    slug = value[len(PREFIX):]
+    return slug if slug and len(slug) <= 120 and slug == slugify(slug) else None
+
+
+def _tab_rows(browser, want: str = "") -> list:
+    """The tabs: page, CDP target, index in its context, how many pages that context has, and group. With
+    `want` (an id or its first characters) only the tabs whose id matches are kept, matched on the target
+    (read by the browser, not the page) before any tag is read: one wedged renderer must not stall a verb
+    on another tab."""
+    rows = []
+    for ctx in browser.contexts:
+        pages = list(ctx.pages)
+        for i, pg in enumerate(pages):
+            target = _target_info(pg)
+            if want and not (target.get("targetId") or "").upper().startswith(want.upper()):
+                continue
+            rows.append({"page": pg, "target": target, "index": i, "siblings": len(pages), "group": _tab_tag(pg)})
+    return rows
+
+
+def _tab_owner(group) -> str:
+    """Who holds a tab: 'task' (an active task), 'handoff' (a person is waited for there), 'unknown' (its
+    tag could not be read), or '' for no one. Anything that cannot be told counts as held."""
+    if group is None:
+        return "unknown"
+    if not group:
+        return ""
+    try:
+        if task_path(group).exists() and read_task(group).get("state") in ACTIVE_STATES:
+            return "task"
+    except Exception:
+        return "task"
+    try:
+        if handoff is not None and handoff.waiting(group, DATA):
+            return "handoff"
+    except Exception:
+        return "handoff"
+    return ""
+
+
+def _find_tab(browser, ident: str) -> dict:
+    """The one tab whose CDP id is `ident` or starts with it (at least 8 hex characters)."""
+    if not re.fullmatch(r"[0-9A-Fa-f]{8,64}", ident or ""):
+        raise BrowserTaskError("usage", f"a tab is named by the id `tab list` prints (hex, its first 8 characters or more), not '{ident}'")
+    rows = _tab_rows(browser, ident)
+    if len(rows) != 1:
+        raise BrowserTaskError("no_such_tab" if not rows else "ambiguous_tab",
+                               f"{len(rows)} tabs have an id starting with {ident}: `tab list` names them")
+    return rows[0]
+
+
+def type_into(page, text: str, selector: str = "") -> None:
+    """Keyboard into the page with no handle (task `type`, `tab type`). Where the keystrokes land, in
+    order: the selector the caller named, clicked to focus it; the element the page already has focused,
+    if it is editable; the LAST empty visible editable field (a form's new row is appended at the bottom).
+    With no field at all it refuses by name instead of typing into whatever had focus (DGO-1033)."""
+    if selector:
+        page.locator(selector).first.click(timeout=15000)
+    else:
+        target = page.evaluate("""() => {
+            const editable = e => e && (e.isContentEditable || /^(INPUT|TEXTAREA)$/.test(e.tagName))
+                && !e.disabled && !e.readOnly && e.type !== 'hidden';
+            const visible = e => { const r = e.getBoundingClientRect();
+                return r.width > 1 && r.height > 1; };
+            if (editable(document.activeElement) && visible(document.activeElement)) return 'active';
+            const fields = [...document.querySelectorAll('input, textarea, [contenteditable="true"]')]
+                .filter(e => editable(e) && visible(e));
+            if (!fields.length) return 'none';
+            const empty = fields.filter(e => !((e.value ?? e.textContent ?? '').trim()));
+            const chosen = (empty.length ? empty : fields)[(empty.length ? empty : fields).length - 1];
+            chosen.focus();
+            return 'field';
+        }""")
+        if target == "none":
+            raise BrowserTaskError("no_editable_field", "the page shows no editable field and no selector was given — pass a selector, or use `js` for this page")
+    page.keyboard.type(text, delay=20)
+
+
+def tab_command(argv: list) -> dict:
+    """`tab <verb> …` (DGO-1251): one verb on one tab named by its id. See the block above."""
+    verb, args = (argv[0] if argv else ""), list(argv[1:])
+    bounds = TAB_ARITY.get(verb)
+    if bounds is None:
+        raise BrowserTaskError("usage", TAB_USAGE)
+    if not bounds[0] <= len(args) <= bounds[1]:
+        raise BrowserTaskError("usage", f"tab {verb}: {TAB_USAGE}")
+    _, browser = connect()
+    if verb == "list":
+        tabs = []
+        for r in _tab_rows(browser):
+            tabs.append({"id": r["target"].get("targetId", ""), "title": str(r["target"].get("title") or "")[:120],
+                         "url": bare(r["target"].get("url") or ""), "group": r["group"] if r["group"] is not None else "?",
+                         "held_by": _tab_owner(r["group"]), "anchor": r["index"] == 0})
+        return {"ok": True, "tabs_open": len(tabs), "list": tabs}
+    if verb == "shot" and len(args) > 1 and args[1] != "full":
+        raise BrowserTaskError("usage", f"tab shot <id> [full], not '{args[1]}'")
+    if verb == "text" and len(args) > 1 and not args[1].isdigit():
+        raise BrowserTaskError("usage", f"tab text <id> [max-chars], not '{args[1]}'")
+    row = _find_tab(browser, args[0])
+    page, ident, group = row["page"], row["target"].get("targetId", ""), row["group"]
+    owner = _tab_owner(group)
+    if owner and verb not in TAB_OWNED_READS:
+        why = {"task": (f"is task '{group}'s, which is active: act on it with `task <verb> {group} …`"
+                        + (f" (its text: `task read {group}`)" if verb == "text" else "")),
+               "handoff": f"waits for a person (hand-off '{group}'): nothing acts on it until that hand-off ends",
+               "unknown": "has an owner that cannot be read (its tag did not answer, or is not one this browser mints)"}[owner]
+        raise BrowserTaskError(f"tab_owned_by_{owner}" if owner != "unknown" else "tab_owner_unknown",
+                               f"tab {ident} {why}; here only snapshot and shot read it")
+    if verb == "close" and (row["index"] == 0 or row["siblings"] == 1):
+        # the reaper and clear_group never close page 0 either; a window's last page closed ends the browser
+        raise BrowserTaskError("tab_is_anchor", f"tab {ident} is its window's first or last page (the /view anchor): it is never closed")
+    answer = {"ok": True, "tab": {"id": ident, "group": group}}
+    try:
+        if verb == "navigate":
+            page.goto(direct_url(args[1]), wait_until="domcontentloaded", timeout=30000)
+        elif verb == "click":
+            page.locator(args[1]).first.click(timeout=15000)
+        elif verb == "type":
+            type_into(page, args[1], args[2] if len(args) > 2 else "")
+        elif verb == "eval":
+            answer["result"] = page.evaluate(args[1])
+        elif verb == "text":
+            answer["read"] = _read_whole(page, int(args[1]) if len(args) > 1 else 120000, lambda step: step())
+        elif verb == "snapshot":
+            # the accessibility tree as YAML (the MCP's browser_snapshot): roles, names and states, no pixels
+            snap = getattr(page.locator("body"), "aria_snapshot", None)
+            if snap is None:
+                raise BrowserTaskError("snapshot_unavailable", "this browser's Playwright has no aria_snapshot (1.49 or later): use `tab text` or `tab shot`")
+            answer["snapshot"] = snap(timeout=15000)
+        elif verb == "shot":
+            path = DATA / "tabs" / ident[:16].lower() / f"{time.strftime('%Y%m%dT%H%M%S')}-{uuid.uuid4().hex[:6]}.png"
+            path.parent.mkdir(parents=True, exist_ok=True)
+            page.screenshot(path=str(path), full_page=len(args) > 1, timeout=30000)
+            answer["screenshot"] = {"path": str(path.relative_to(DATA)), "sha256": hashlib.sha256(path.read_bytes()).hexdigest()}
+        elif verb == "close":
+            page.close()
+            answer["closed"] = True
+            return answer
+        answer["tab"]["url"] = bare(page.url)
+    except BrowserTaskError:
+        raise
+    except Exception as error:                       # the task verbs' codes: operation_timeout, detached_target …
+        raise BrowserTaskError(error_code(error), f"tab {verb}: {error}") from None
+    return answer
 
 
 # ── site logins: the credential comes from the credential PLANE, never from argv ────────────────
@@ -1349,6 +1721,7 @@ def task_action(slug: str, action: dict) -> dict:
     _, browser, page = task_connection(slug)
     try:
         operation = action.get("op")
+        js_result = None  # only `js` sets it; the response always carries the key
         if operation == "goto":
             retry_safe(task, "navigating", lambda: page.goto(direct_url(action.get("url", "")), wait_until="domcontentloaded", timeout=30000))
         elif operation == "click":
@@ -1359,6 +1732,19 @@ def task_action(slug: str, action: dict) -> dict:
             locate(page, action.get("handle", "")).press(str(action.get("key", "Enter")), timeout=15000)
         elif operation == "wait":
             retry_safe(task, "waiting", lambda: page.wait_for_timeout(min(max(int(action.get("timeout_ms", 500)), 100), 15000)))
+        elif operation == "type":
+            # Typing without a handle: a page is allowed to hide its form from `inspect` (a portal's
+            # editable table row, claude.ai's composer), and until 2026-10-22 that meant the office could
+            # not type a character there (DGO-1033). Where the keystrokes land: type_into.
+            text = str(action.get("text", ""))
+            selector = str(action.get("selector") or "").strip()
+            retry_safe(task, "typing", lambda: type_into(page, text, selector))
+        elif operation == "js":
+            # The escape hatch: a page whose DOM `inspect` cannot enumerate is still a page the office
+            # must act on. Runs inside the task's own lease so it never contends with the shared browser
+            # the way the outside-the-protocol ui-driver does.
+            expression = str(action.get("expression", ""))
+            js_result = retry_safe(task, "evaluating", lambda: page.evaluate(expression))
         elif operation == "screenshot":
             name = re.sub(r"[^a-z0-9-]+", "-", str(action.get("name", "evidence")).lower()).strip("-") or "evidence"
             path = task_path(slug).parent / "screenshots" / f"{name}.png"
@@ -1377,10 +1763,12 @@ def task_action(slug: str, action: dict) -> dict:
             records = retry_safe(task, "extracting", lambda: root.evaluate("""element => [element, ...element.querySelectorAll('a, [role=link]')].slice(0, 50).map(link => ({text: (link.innerText || link.getAttribute('aria-label') || '').trim(), url: link.href || ''})).filter(record => record.text && record.url)"""))
             task["evidence"]["extractions"].append(records)
         else:
-            raise ValueError("unsupported action; use goto, click, fill, press, wait, screenshot, or extract")
-        stage = {"extract": "extracting", "screenshot": "capturing"}.get(operation, "acting")
+            raise ValueError("unsupported action; use goto, click, fill, type, js, press, wait, screenshot, or extract")
+        stage = {"extract": "extracting", "screenshot": "capturing", "js": "evaluating", "type": "typing"}.get(operation, "acting")
         transition(task, "active", "acted", stage=stage, action=operation, url=page.url)
-        return {"ok": True, "slug": slug, "state": task["state"], "url": page.url, "extracted": task["evidence"]["extractions"][-1] if operation == "extract" else None}
+        return {"ok": True, "slug": slug, "state": task["state"], "url": page.url,
+                "extracted": task["evidence"]["extractions"][-1] if operation == "extract" else None,
+                "result": js_result if operation == "js" else None}
     finally:
         pass
 
@@ -1983,8 +2371,17 @@ def task_page_read(slug: str, max_chars: int) -> dict:
     if task["state"] not in ACTIVE_STATES:
         raise BrowserTaskError("task_not_active", f"task '{slug}' is not active ({task['state']})")
     _, _, page = task_connection(slug)
+    read = _read_whole(page, max_chars, lambda step: retry_safe(task, "reading", step))
+    transition(task, task["state"], "acted", stage="acting", action="read", url=page.url)
+    return {"ok": True, "slug": slug, "url": page.url, "title": retry_safe(task, "reading", page.title),
+            "read": read}
+
+
+def _read_whole(page, max_chars: int, call) -> dict:
+    """The walk `task read` and `tab text` share: each browser step runs through `call`, a task's
+    retry_safe or a plain call for a tab (which has no task to retry under, DGO-1251)."""
     limit = max(4000, min(int(max_chars or 120000), 600000))
-    root = retry_safe(task, "reading", lambda: page.evaluate(READ_ROOT_JS)) or {}
+    root = call(lambda: page.evaluate(READ_ROOT_JS)) or {}
     # the page's own scroller is the document (READ_TEXT_JS then reads the whole page at every step),
     # or no scroller at all (the document again, read once)
     document = not root.get("found") or root.get("node") in ("html", "body")
@@ -1992,10 +2389,10 @@ def task_page_read(slug: str, max_chars: int) -> dict:
     steps = 0
     stopped = "bottom"
     if root.get("found"):
-        retry_safe(task, "reading", lambda: page.evaluate(READ_SCROLL_JS, 0))
+        call(lambda: page.evaluate(READ_SCROLL_JS, 0))
         time.sleep(0.35)
     while steps < 80:
-        chunk = retry_safe(task, "reading", lambda: page.evaluate(READ_TEXT_JS)) or ""
+        chunk = call(lambda: page.evaluate(READ_TEXT_JS)) or ""
         collected = _stitch(collected, chunk, document=document)
         steps += 1
         if len(collected) >= limit:
@@ -2005,7 +2402,7 @@ def task_page_read(slug: str, max_chars: int) -> dict:
         if not root.get("found"):
             stopped = "no_scroll"
             break
-        position = retry_safe(task, "reading", lambda: page.evaluate("""() => {
+        position = call(lambda: page.evaluate("""() => {
                 const element = document.querySelector('[data-b42-read]') || document.scrollingElement;
                 return {top: Math.round(element.scrollTop), height: element.clientHeight,
                         total: element.scrollHeight};
@@ -2013,16 +2410,14 @@ def task_page_read(slug: str, max_chars: int) -> dict:
         if position.get("top", 0) + position.get("height", 0) >= position.get("total", 0) - 2:
             break
         target = min(position.get("total", 0), position.get("top", 0) + max(120, int(position.get("height", 300) * 0.8)))
-        retry_safe(task, "reading", lambda: page.evaluate(READ_SCROLL_JS, target))
+        call(lambda: page.evaluate(READ_SCROLL_JS, target))
         time.sleep(0.28)
     else:
         stopped = "steps"
     collected = re.sub(r"\n{3,}", "\n\n", collected).strip()
-    transition(task, task["state"], "acted", stage="acting", action="read", url=page.url)
-    return {"ok": True, "slug": slug, "url": page.url, "title": retry_safe(task, "reading", page.title),
-            "read": {"chars": len(collected), "steps": steps, "stopped": stopped,
-                     "scroll": {"node": root.get("node", ""), "height": root.get("scrollHeight", 0)},
-                     "text": collected}}
+    return {"chars": len(collected), "steps": steps, "stopped": stopped,
+            "scroll": {"node": root.get("node", ""), "height": root.get("scrollHeight", 0)},
+            "text": collected}
 
 
 def task_login(slug: str, site: str) -> dict:
@@ -2552,10 +2947,13 @@ def main():
             cmd_session(sys.argv[2] if len(sys.argv) > 2 else None)
         elif verb == "open":
             cmd_open(sys.argv[2] if len(sys.argv) > 2 else None, sys.argv[3] if len(sys.argv) > 3 else None)
+        elif verb == "handoff-open":
+            # `bbox b42 open <app> <url>`: a page a PERSON must act on, handed to every console (DGO-1336)
+            cmd_handoff_open(sys.argv[2:])
         elif verb == "list":
             cmd_list()
         elif verb == "close":
-            cmd_close(sys.argv[2] if len(sys.argv) > 2 else None)
+            cmd_close(sys.argv[2] if len(sys.argv) > 2 else None, sys.argv[3:])
         elif verb == "await":
             # The STANDING human handoff: a session tab has no task, no watchdog and no task budget,
             # so a wait for a person can be an hour in one call (see cmd_await).
@@ -2582,6 +2980,13 @@ def main():
                 done(task_action(slug, {"op": "click", "handle": sys.argv[4]}))
             if command == "fill":
                 done(task_action(slug, {"op": "fill", "handle": sys.argv[4], "value": sys.argv[5]}))
+            if command == "type":
+                # Keyboard with NO handle: `fill` needs an element `inspect` found first, and a portal's
+                # table row and claude.ai's composer both answer `inspect` with zero controls (DGO-1033).
+                done(task_action(slug, {"op": "type", "text": sys.argv[4],
+                                        "selector": sys.argv[5] if len(sys.argv) > 5 else ""}))
+            if command == "js":
+                done(task_action(slug, {"op": "js", "expression": sys.argv[4]}))
             if command == "login":
                 # argv carries the SITE only. The credential is leased from the credential plane
                 # inside task_login and typed into the page there — it never passes through here,
@@ -2631,6 +3036,12 @@ def main():
                 done(task_heartbeat(slug))
             if command == "goal":
                 done(task_goal(slug, sys.argv[4] if len(sys.argv) > 4 else "", sys.argv[5] if len(sys.argv) > 5 else "", 5))
+            if command == "tab":
+                # one verb on one tab named by its CDP id (DGO-1251); its lane in כל מקביל is the tab's
+                ident = sys.argv[4] if len(sys.argv) > 4 else ""
+                _CLI["slug"] = "tab-list" if slug == "list" else f"tab-{ident[:8].lower()}"
+                _CLI["command"] = f"tab {slug}"
+                done(tab_command(sys.argv[3:]))
             raise ValueError("unknown task command")
         else:
             print(__doc__)

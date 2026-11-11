@@ -2322,13 +2322,19 @@ for (const [k, cands] of groups) {
 // candidate already MERGED) must STILL be stamped, or the decide gate sees an
 // unstamped key and re-dispatches resolve_double on every sweep forever - the _noop
 // path writes no ACTION_LOG, so the max-iterations guard never trips either.
+// [DGO-277, 2026-11-10] This loop had stamped nothing since 2026-08-23 (8412ce19). That commit
+// prefixed every key (groupKeyOf: 'biz'|'hash'|'comp' + SEP + …), and the lookup below still built
+// the bare COMPANY_ID + SEP + doc-id. It never matched, so t was always undefined and the
+// continue fired. A quarantined or all-merged target was then never stamped: resolve_double was
+// re-dispatched every sweep, and its doc lock was held until its TTL, which is exactly what the
+// paragraph above warns about. The lookup now uses the one key function. The stamp also carries
+// __instance, read the way the MERGE item reads it: 'Upsert (central)' is a PASSTHROUGH into
+// indoxApi01, which refuses an item without one ("request carries no __instance").
+let _instStamp = '';
+try { _instStamp = String(($('When Called').first().json || {}).__instance || ''); } catch (e) { _instStamp = ''; }
 for (const k of targets) {
   if (groups.has(k)) continue;
-  const t = trig.find(x => {
-    const v = bizDocIdOf(x);
-    return v !== null && !isBlank(x.COMPANY_ID)
-        && (String(x.COMPANY_ID).trim() + SEP + v) === k;
-  });
+  const t = trig.find(x => groupKeyOf(x) === k);
   if (!t || !t.ID) continue;
   out.push({ json: { ID: String(t.ID),
     // [2026-08-23] DUP_CAUSE, not just the context blob. This branch has always stamped
@@ -2340,7 +2346,8 @@ for (const k of targets) {
     // above predicts, reached through the one branch that was not updated with the gate.
     DUP_CAUSE: 'BAD_DOC_ID',
     DOUBLE_LINE_CONTEXT: JSON.stringify({ merge_sig: 'none', merge_key: k,
-      unadjudicable: 'no eligible candidate group (quarantined doc-id, or all candidates merged)' }) } });
+      unadjudicable: 'no eligible candidate group (quarantined doc-id, or all candidates merged)' }),
+    __instance: _instStamp } });
 }
 if (!out.length) return [{ json: { _noop: true } }];
 return out;`,

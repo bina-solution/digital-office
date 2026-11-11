@@ -12,7 +12,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/solomonBoltin/deployment-hacohen/packaging/dgo/internal/yamlish"
+	"github.com/bina-solution/digital-office/packaging/dgo/internal/yamlish"
 )
 
 // file answers a path of the shell as app.py's spa() does — `/` (the shell, or the install wizard on
@@ -64,13 +64,20 @@ func (s *Server) file(w http.ResponseWriter, r *http.Request) bool {
 		return false
 	}
 	// flask-compress runs after the conditional answer: a 200 of a compressible type, 500 bytes or
-	// more and not already encoded is streamed compressed — and its ETag says by what. The ETag the
-	// client gets back is then never the one make_conditional compares with, so a compressed file
-	// never revalidates to a 304 in app.py; kept, because this is app.py's answer.
+	// more and not already encoded is streamed compressed — and its ETag says by what. app.py then answers
+	// a shell file conditionally again, on THAT ETag (its `_shell_file_revalidates`, after flask-compress,
+	// DGO-611): a client revalidating with the compressed ETag it was given gets a 304,
+	// where it used to get the whole file again on every load. The same make_conditional, so an If-Match
+	// that held for the file and not for its compressed ETag is the 412 app.py answers too.
 	coding := ""
 	if status == http.StatusOK && enc == "" && compressible[typ] && size >= minSize {
 		if coding, ok = choose(streamedEncodings, ae); !ok {
 			return false
+		}
+		if coding != "" {
+			if status, ok = conditional(r, etag+":"+coding, lastMod); !ok {
+				return false
+			}
 		}
 	}
 
@@ -89,7 +96,9 @@ func (s *Server) file(w http.ResponseWriter, r *http.Request) bool {
 	set("Accept-Ranges", "bytes")
 	set("Vary", "Accept-Encoding")
 	if coding != "" {
-		set("Content-Encoding", coding)
+		if status != http.StatusNotModified { // werkzeug's remove_entity_headers on a 304, Content-Encoding among them
+			set("Content-Encoding", coding)
+		}
 		delete(h, "Content-Length")
 		etag += ":" + coding
 	}

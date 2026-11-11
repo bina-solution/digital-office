@@ -13,20 +13,28 @@
     while (id && m[id] && !seen.has(id)) { seen.add(id); out.unshift(m[id]); id = m[id].parent || ""; }
     return out;
   };
-  const childFolders = (id) => state.folders.filter((f) => (f.parent || "") === (id || ""));
+  /* a folder somebody shared with this account has no parent it can see: it is in «שותפו איתי», not at the top */
+  const childFolders = (id) => state.folders.filter((f) => (f.parent || "") === (id || "") && !(!id && f.shared));
 
+  /* an answer about a drive the window has already left is dropped, not drawn: its folder ids would go out
+     with the next drive's connection_id (the move dialog) */
+  const shown = () => state.route.drive || "";
   async function loadFolders() {
-    const d = await api("api/folders");
+    const asked = shown(), d = await api("api/folders");
+    if (shown() !== asked) return;
     set({ folders: (d.folders || []).map((f) => ({ ...f, kind: "folder" })), connection: d.connection || null });
   }
-  async function loadStorage() { try { set({ storage: await api("api/storage") }); } catch (e) { /* the meter waits */ } }
+  async function loadStorage() {
+    const asked = shown();
+    try { const s = await api("api/storage"); if (shown() === asked) set({ storage: s }); } catch (e) { /* the meter waits */ }
+  }
   async function loadOpenWith() {
     try { const d = await api("extensions?slot=open-with"); set({ openWith: d.extensions || [] }); }
     catch (e) { set({ openWith: [] }); }
   }
 
   const MEDIA = { photos: "visual", videos: "video", music: "audio" };
-  const keyOf = (r) => [r.view, r.id || "", r.q || ""].join("␟");
+  const keyOf = (r) => [r.drive || "", r.view, r.id || "", r.q || ""].join("␟");
 
   async function loadList(force) {
     const r = state.route, key = keyOf(r);
@@ -41,9 +49,10 @@
       if (r.view === "folder") {
         d = await api("api/files?folder=" + encodeURIComponent(r.id || ""), { signal });
         d.folders = childFolders(r.id);
-      } else if (r.view === "recent" || r.view === "starred") {
+      } else if (r.view === "recent" || r.view === "starred" || r.view === "shared") {
         d = await api("api/files?view=" + r.view, { signal });
-        d.folders = r.view === "starred" ? state.folders.filter((f) => f.starred) : [];
+        d.folders = r.view === "starred" ? state.folders.filter((f) => f.starred)
+          : r.view === "shared" ? (d.folders || state.folders.filter((f) => f.shared)).map((f) => ({ ...f, kind: "folder" })) : [];
       } else if (r.view === "trash") {
         d = await api("api/files?trash=1", { signal });
         d.folders = (d.folders || []).map((f) => ({ ...f, kind: "folder" }));
@@ -127,7 +136,9 @@
     const a = document.createElement("a");
     a.href = contentUrl(it.id, true); a.download = it.name; document.body.appendChild(a); a.click(); a.remove();
   }
-  const copyLink = (it) => copyText(it.link, L("הקישור הועתק — מי שמקבל אותו יכול להוריד את הקובץ", "Link copied — anyone who has it can download the file"));
+  const copyLink = (it) => copyText(it.link, state.connection && state.connection.protocol && state.connection.protocol !== "drive_local"
+    ? L("הקישור הועתק — הוא נפתח ב־Google Drive, למי שיש לו גישה לקובץ", "Link copied — it opens in Google Drive, for whoever has access to the file")
+    : L("הקישור הועתק — מי שמקבל אותו יכול להוריד את הקובץ", "Link copied — anyone who has it can download the file"));
   async function copyPath(it) {
     try {
       const p = it.kind === "folder" ? (await api("api/folder/" + encodeURIComponent(it.id) + "/path")).path
@@ -136,6 +147,8 @@
     } catch (e) { tell(e.message, "bad"); }
   }
 
+  // keyOf: which list a route shows — asked by the screen QA (tests/ui) instead of a copy of it, which went stale
+  // when the drive became part of the key (DGO-1582)
   F.data = { loadFolders, loadStorage, loadOpenWith, loadList, refresh, watch, folderById, folderPath, childFolders,
-    newFolder, rename, move, trash, restore, destroy, emptyTrash, star, download, copyLink, copyPath };
+    newFolder, rename, move, trash, restore, destroy, emptyTrash, star, download, copyLink, copyPath, keyOf };
 })();

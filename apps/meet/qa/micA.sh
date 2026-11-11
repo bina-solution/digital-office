@@ -12,7 +12,7 @@ K() { docker exec meet-test pkill -f "prof-$1" >/dev/null 2>&1; }
 J() { docker exec meet-test python3 /t/cdp.py "$1" "$2" 2>/dev/null; }
 CHAT='(function(){var s=APP.store.getState();var m=(s["features/chat"]||{}).messages||[];var b=document.getElementById("meet-mic-banner");return JSON.stringify({n:m.length,banner:b?b.getAttribute("data-state"):null,joined:APP.conference.isJoined(),muted:APP.conference.isLocalAudioMuted(),msgs:m.map(function(x){return (x.displayName||"?")+": "+String(x.message).slice(0,70)})})})()'
 unmute() { J "$1" 'APP.conference.isJoined() && APP.conference.isLocalAudioMuted() ? (APP.conference.muteAudio(false), "unmuted") : "ok"'; }
-conferences() { docker exec meet-jvb-fireplace curl -s localhost:8080/colibri/stats | python3 -c 'import json,sys;print(json.load(sys.stdin)["conferences"])'; }
+conferences() { docker exec meet-jvb-examplef curl -s localhost:8080/colibri/stats | python3 -c 'import json,sys;print(json.load(sys.stdin)["conferences"])'; }
 at() { local want=$1; shift; local now=$(( $(date +%s) - T0 )); [ $now -lt $want ] && sleep $(( want - now )); log "$*"; }
 seen=""
 poll() {   # chat + banner of every page, said only when something changes
@@ -38,10 +38,10 @@ for i in $(seq 1 90); do
   c=$(conferences); [ "$c" != "1" ] && [ "$c" != "0" ] && { log "ANOTHER CONFERENCE APPEARED ($c) — stopping the test"; break; }
 done
 # the bridge's view of the endpoints (shape of the debug document), and prosody's word
-docker exec meet-jvb-fireplace curl -s localhost:8080/debug > "$out/jvb-debug.json" 2>/dev/null
+docker exec meet-jvb-examplef curl -s localhost:8080/debug > "$out/jvb-debug.json" 2>/dev/null
 cid=$(python3 -c 'import json,sys;d=json.load(open(sys.argv[1]));print(list(d.get("conferences",{}).keys())[0] if d.get("conferences") else "")' "$out/jvb-debug.json")
-[ -n "$cid" ] && docker exec meet-jvb-fireplace curl -s "localhost:8080/debug/$cid" > "$out/jvb-conference.json" 2>/dev/null
+[ -n "$cid" ] && docker exec meet-jvb-examplef curl -s "localhost:8080/debug/$cid" > "$out/jvb-conference.json" 2>/dev/null
 log "final chats:"; poll
 K host; K silent; K nomic; sleep 3; docker exec meet-test pkill -f google-chrome >/dev/null 2>&1
-docker logs meet-prosody-fireplace --since 6m 2>&1 | grep -E "meet_silent_mic|meet_recorder_watch" | grep -v "asks http" | cut -c1-260 | tee -a "$out/timeline.log"
+docker logs meet-prosody-examplef --since 6m 2>&1 | grep -E "meet_silent_mic|meet_recorder_watch" | grep -v "asks http" | cut -c1-260 | tee -a "$out/timeline.log"
 log "done"

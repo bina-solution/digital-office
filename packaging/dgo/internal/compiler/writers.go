@@ -8,23 +8,24 @@ import (
 	"path/filepath"
 	"regexp"
 	"slices"
+	"sort"
 	"strings"
 	"unicode/utf8"
 
-	"github.com/solomonBoltin/deployment-hacohen/packaging/dgo/internal/pyval"
-	"github.com/solomonBoltin/deployment-hacohen/packaging/dgo/internal/yamlish"
+	"github.com/bina-solution/digital-office/packaging/dgo/internal/pyval"
+	"github.com/bina-solution/digital-office/packaging/dgo/internal/yamlish"
 )
 
 // The writers of platform.state.yaml — reconcile.py's set_disposition, set_office and set_remote —
 // and the three verbs main() answers with them: `set-state`, `office-set`, `remote-set`. They write
-// and print what reconcile.py writes and prints, byte for byte, refusals and exit statuses included,
-// with what reconcile.py does not do, on purpose:
-//   - the plan's rule 3, one writer per fact behind a lock: a native write holds the advisory lock
-//     data/.locks/platform.state from its read to its replace (and, as Python takes none, a lock that
-//     cannot be taken stops nothing — lockState);
-//   - the file is replaced atomically (written beside it, renamed over it), where Python's write_text
-//     truncates it first and leaves it empty when the write fails half way — yet refused, or written
-//     in place, wherever Python's in-place write would be (writeState);
+// and print what reconcile.py writes and prints, byte for byte, refusals and exit statuses included:
+//   - the plan's rule 3, one writer per fact behind a lock: a write holds the advisory lock
+//     data/.locks/platform.state from its read to its replace — reconcile.py too since DGO-616, and on
+//     both sides a lock that cannot be taken stops nothing (lockState; only this side says so);
+//   - the file is replaced atomically (written beside it, renamed over it) — as reconcile.py's
+//     _write_state does since DGO-616 — yet refused, or written in place, where an in-place write
+//     would be (writeState);
+// and with what reconcile.py does not do, on purpose:
 //   - a block is written only if the next native verb reads it back as written (MarshalReadBack), and
 //     the remote block only if it nests no deeper than maxNesting.
 
@@ -41,13 +42,27 @@ func SetStateCmd(repo string, args []string, stdout, stderr io.Writer) int {
 		return 2
 	}
 	if !utf8.ValidString(a.App) || !utf8.ValidString(a.By) {
-		// Python would write the undecodable bytes back as surrogates and fail half way through the
-		// write, leaving an empty state file; nothing is touched here.
+		// Python would carry the undecodable bytes as surrogates and fail to encode them (before DGO-616
+		// that failure emptied the state file; now the old file stays whole); nothing is touched here.
 		fmt.Fprintln(stderr, "  ERROR --app and --by must be UTF-8 text — nothing written")
 		return 1
 	}
 	lock := lockState(repo)
 	defer lock.release()
+	// the host's hardware the app drives (requires_host, DGO-1797): refused before the state file is read, as
+	// set_disposition() refuses it (inside its lock, after the disposition's own check)
+	if a.State == "enabled" {
+		missing, err := missingHostDevices(repo, a.App)
+		if err != nil {
+			fmt.Fprintln(stderr, err)
+			return 1
+		}
+		if len(missing) > 0 {
+			fmt.Fprintf(stderr, "  ERROR %s needs %s (app.json requires_host.devices), which this machine does not "+
+				"have — not enabled, nothing written\n", a.App, strings.Join(missing, ", "))
+			return 1
+		}
+	}
 	text, err := readText(statePath(repo))
 	var d *dies
 	if errors.As(err, &d) && d.codec != "" {
@@ -78,6 +93,116 @@ func SetStateCmd(repo string, args []string, stdout, stderr io.Writer) int {
 	}
 	fmt.Fprintf(stdout, "%s is already %s — nothing to change\n", a.App, have)
 	return 0
+}
+
+// appDirID is APP_DIR_ID: an app id as the manifests name their folders, the only ids looked up for requires_host
+var appDirID = regexp.MustCompile(`^[a-z0-9][a-z0-9-]*$`)
+
+// missingHostDevices is missing_host_devices(aid): the devices app aid's manifest says it needs on this machine
+// (requires_host.devices) that are not here. A manifest that cannot be read declares nothing — but one that only
+// this reader cannot read (an unpaired surrogate escape) is its gap, never a guess.
+func missingHostDevices(repo, aid string) ([]string, error) {
+	if !appDirID.MatchString(aid) {
+		return nil, nil
+	}
+	for _, root := range []string{"platform-base", "apps"} {
+		p := filepath.Join(repo, root, aid, "app.json")
+		if !isRegular(p) {
+			continue
+		}
+		text, err := readText(p)
+		if err != nil {
+			return nil, nil // OSError or UnicodeDecodeError: declares nothing
+		}
+		v, err := yamlish.LoadJSON(text)
+		if errors.Is(err, yamlish.ErrUnpairedSurrogate) {
+			return nil, &gapError{root + "/" + aid + "/app.json", err}
+		}
+		if err != nil {
+			return nil, nil
+		}
+		man, _ := v.(*yamlish.Map)
+		need, _ := get(man, "requires_host").(*yamlish.Map)
+		devices, ok := get(need, "devices").([]any)
+		if !ok {
+			return nil, nil
+		}
+		// on the host its own /dev is the truth; inside a container a device it cannot see is missing only when the
+		// host's last render recorded it absent (host_device_facts)
+		facts, inside := hostDeviceFacts(repo), inContainer()
+		var missing []string
+		for _, d := range devices {
+			if s, isText := d.(string); isText && s != "" {
+				if _, err := os.Stat(s); err != nil {
+					if seen, said := facts[s]; !inside || (said && !seen) {
+						missing = append(missing, s)
+					}
+				}
+			}
+		}
+		return missing, nil
+	}
+	return nil, nil
+}
+
+// hostDevices is HOST_DEVICES: the host's devices as the compiler saw them on the host, in .generated/.
+const hostDevices = "host-devices.json"
+
+// inContainer is in_container(): Docker's /.dockerenv or Podman's /run/.containerenv — its /dev is not the host's.
+// A variable, so a test answers it either way (the oracle itself runs in a container).
+var inContainer = func() bool {
+	return pathExists("/.dockerenv") || pathExists("/run/.containerenv")
+}
+
+// pathExists is os.path.exists: anything at the path, following links.
+func pathExists(p string) bool { _, err := os.Stat(p); return err == nil }
+
+// hostDeviceFacts is host_device_facts(): {device: present} as the last render on the host recorded it.
+func hostDeviceFacts(repo string) map[string]bool {
+	out := map[string]bool{}
+	text, err := readText(filepath.Join(repo, genDir, hostDevices))
+	if err != nil {
+		return out
+	}
+	v, err := yamlish.LoadJSON(text)
+	m, isMap := v.(*yamlish.Map)
+	if err != nil || !isMap {
+		return out
+	}
+	for _, k := range m.Keys() {
+		if b, isBool := get(m, k).(bool); isBool {
+			out[k] = b
+		}
+	}
+	return out
+}
+
+// renderHostDevices is render_host_devices(cat): on the HOST only, whether each device an app declares
+// (requires_host.devices) is here; inside a container nothing is written (its /dev is not the host's).
+func renderHostDevices(gen string, cat *Catalog) error {
+	if inContainer() {
+		return nil
+	}
+	set := map[string]bool{}
+	for _, id := range cat.Order {
+		need, _ := get(cat.Apps[id].doc, "requires_host").(*yamlish.Map)
+		listed, _ := get(need, "devices").([]any)
+		for _, d := range listed {
+			if s, isText := d.(string); isText && s != "" {
+				set[s] = true
+			}
+		}
+	}
+	names := make([]string, 0, len(set))
+	for s := range set {
+		names = append(names, s)
+	}
+	sort.Strings(names)
+	doc := yamlish.NewMap()
+	for _, s := range names {
+		doc.Set(s, pathExists(s))
+	}
+	return write(filepath.Join(gen, hostDevices), yamlish.IndentJSON(doc)+"\n")
 }
 
 // entryOf finds `  <id>: { … }` — whitespace (newlines included, as `\s` reads them) before the id
@@ -585,9 +710,9 @@ func failed(err error, stderr io.Writer) int {
 // stateLock is the advisory lock every native writer of platform.state.yaml holds from its read to its
 // replace: data/.locks/platform.state, beside the heavy-job lock bbox keeps in the same directory
 // (scripts/lib.sh heavy_admit); the kernel releases it when this process ends, crashes included.
-// reconcile.py takes no lock, so one that cannot be taken stops nothing: as heavy_admit does, the
-// writer goes on without it — and says so when, and only when, it writes, so a verb that changes
-// nothing answers exactly as reconcile.py does.
+// reconcile.py takes the same lock (DGO-616, _state_lock). One that cannot be taken stops nothing on
+// either side: as heavy_admit does, the writer goes on without it — and this side says so when, and
+// only when, it writes, so a verb that changes nothing answers exactly as reconcile.py does.
 type stateLock struct {
 	f      *os.File
 	missed error // why the lock is not held; nil while it is
@@ -630,26 +755,29 @@ func (l *stateLock) release() {
 	}
 }
 
-// write is writeState under the lock — or, where it could not be taken, after a warning that says why.
+// write is writeState under the lock — or, where it could not be taken, followed by a warning that says why
+// (only once the file is written: a refused write left nothing to warn about).
 func (l *stateLock) write(repo, text string, stderr io.Writer) error {
+	if err := writeState(repo, text, stderr); err != nil {
+		return err // nothing was written: no warning about how it was written
+	}
 	if l.missed != nil {
 		fmt.Fprintf(stderr, "warning: %s is written without its lock (%v)\n", stateName, l.missed)
 	}
-	return writeState(repo, text, stderr)
+	return nil
 }
 
 // writeState replaces platform.state.yaml with text: written beside it and renamed over it, so a
-// reader sees the old file or the new one and a failed write leaves the old one. Python writes in
-// place; where a rename would answer otherwise, the file's own permissions decide, as for write_text:
+// reader sees the old file or the new one and a failed write leaves the old one — reconcile.py's
+// _write_state, the same rules (DGO-616):
 //   - a state file this user may not write (a freeze: chmod 444) is refused with Python's
 //     PermissionError — a rename would ask only the directory;
 //   - where only the replace is refused — a directory this user may not write in, or on Windows a
 //     file another process holds open without sharing its deletion (Go's os.Open, most editors) — the
-//     file is written in place, as Python writes it, and a warning says so.
+//     file is written in place, and this side says so in a warning.
 //
-// The old file's mode, and its owner where this process may set it, carry over, as they do when
-// Python writes in place: a writer running as root in a container must not leave the office a file it
-// cannot edit.
+// The old file's mode, and its owner where this process may set it, carry over, as on the Python
+// side: a writer running as root in a container must not leave the office a file it cannot edit.
 func writeState(repo, text string, stderr io.Writer) error {
 	path := statePath(repo)
 	if real, err := filepath.EvalSymlinks(path); err == nil {

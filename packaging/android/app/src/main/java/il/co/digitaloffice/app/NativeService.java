@@ -91,6 +91,21 @@ public class NativeService extends Service {
         return new File(new File(c.getFilesDir(), "auth"), "first-run-link");
     }
 
+    /**
+     * That link, or null: only the office's own sign-in host's setup page, with its code, is ever taken. While
+     * there is no owner it is the one sign-in this phone has (DGO-1723) — the app opens it first, and any page
+     * that would send the owner to /setup without a code goes to it instead (OfficeActivity).
+     */
+    static String firstRunUrl(Context c) {
+        File f = firstRunLink(c);
+        try {
+            String link = f.isFile() ? new String(Files.readAllBytes(f.toPath()), StandardCharsets.UTF_8).trim() : "";
+            return link.startsWith(SIGNIN + "/setup?code=") ? link : null;
+        } catch (IOException e) {
+            return null;
+        }
+    }
+
     static boolean installed(Context c) {
         File lib = new File(c.getApplicationInfo().nativeLibraryDir);
         return new File(lib, "libdgo.so").exists() && new File(lib, "libforward-auth.so").exists();
@@ -100,14 +115,7 @@ public class NativeService extends Service {
     public int onStartCommand(Intent intent, int flags, int startId) {
         NotificationManager nm = getSystemService(NotificationManager.class);
         nm.createNotificationChannel(new NotificationChannel(CHANNEL, getString(R.string.engine), NotificationManager.IMPORTANCE_LOW));
-        PendingIntent open = PendingIntent.getActivity(this, 0, getPackageManager().getLaunchIntentForPackage(getPackageName()),
-                PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT);
-        PendingIntent stop = PendingIntent.getService(this, 1, new Intent(this, NativeService.class).setAction(STOP),
-                PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT);
-        Notification n = new Notification.Builder(this, CHANNEL).setSmallIcon(R.drawable.ic_launcher_foreground)
-                .setContentTitle(getString(R.string.engine_running)).setOngoing(true).setContentIntent(open)
-                .addAction(new Notification.Action.Builder(null, getString(R.string.engine_stop), stop).build())
-                .build();
+        Notification n = notification(shown != null ? shown : "הבסיס עולה");
         if (Build.VERSION.SDK_INT >= 34) startForeground(2, n, ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE);
         else startForeground(2, n);
         if (intent != null && STOP.equals(intent.getAction())) {
@@ -125,6 +133,37 @@ public class NativeService extends Service {
         }
         new Thread(this::run).start();
         return START_NOT_STICKY;
+    }
+
+    private volatile String shown;   // the notification's line now (Office.line)
+
+    /**
+     * The office's notification (DGO-1723, the mock's «ההתראה»): «הלשכה פועלת» and one line of what runs — the
+     * base, the apps, «מכולות» — with «מצב» and «עצירה». A tap opens the app.
+     */
+    private Notification notification(String line) {
+        PendingIntent open = PendingIntent.getActivity(this, 0, getPackageManager().getLaunchIntentForPackage(getPackageName()),
+                PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT);
+        PendingIntent stop = PendingIntent.getService(this, 1, new Intent(this, NativeService.class).setAction(STOP),
+                PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT);
+        return new Notification.Builder(this, CHANNEL).setSmallIcon(R.drawable.ic_launcher_foreground)
+                .setContentTitle(getString(R.string.engine_running)).setContentText(line).setOngoing(true).setContentIntent(open)
+                .setOnlyAlertOnce(true)
+                .addAction(new Notification.Action.Builder(null, getString(R.string.status), EngineService.status(this)).build())
+                .addAction(new Notification.Action.Builder(null, getString(R.string.engine_stop), stop).build())
+                .build();
+    }
+
+    /** The notification's line again, when it changed (from the core's loop, every few seconds). */
+    private void sayNotification() {
+        synchronized (LOCK) {   // a stop under way (or done) has removed it: never posted again behind it
+            if (stopping || core == null || !core.isAlive()) return;
+        }
+        String line = Office.line(this);
+        if (line.equals(shown)) return;
+        shown = line;
+        NotificationManager nm = getSystemService(NotificationManager.class);
+        if (nm != null) nm.notify(2, notification(line));
     }
 
     /**
@@ -167,6 +206,7 @@ public class NativeService extends Service {
             if (log.length() > (1 << 20)) log.renameTo(new File(files, "native.log.1"));   // one MiB, and the one before it
             File office = unpackRoot(files);
             File run = own(new File(files, "run"));
+            if (!EngineService.running()) EngineService.timesFile(this).delete();   // this start's stages, measured anew
             // what an earlier core left (an ask it made in its last second, a process killed mid-unpack):
             // this one asks anew, for itself
             new File(run, "machine-wanted").delete();
@@ -206,6 +246,11 @@ public class NativeService extends Service {
                     .directory(files).redirectErrorStream(true).redirectOutput(ProcessBuilder.Redirect.appendTo(log(this)));
             dgo.environment().put("DGO_OFFICE_ROOT", office.getAbsolutePath());
             dgo.environment().put("TMPDIR", getCacheDir().getAbsolutePath());
+            // The business's door (DGO-1332): an app this phone cannot run is opened THERE, with one tap
+            // (serve.PhoneDoor). Compiled in from DGO_PHONE_DOOR; empty on a phone of no herd, and then the
+            // absence page says the plain fact and nothing is offered.
+            String door = BuildConfig.DOOR_URL == null ? "" : BuildConfig.DOOR_URL.trim();
+            if (!door.isEmpty()) dgo.environment().put("DGO_PHONE_DOOR", door);
             synchronized (LOCK) {
                 if (stopping) return;
                 a = fa.start();
@@ -215,12 +260,20 @@ public class NativeService extends Service {
                 core = c;
                 starting = false;
             }
+            // «מכולות» chosen and not on the phone yet (an install pressed while no core ran, or while this one was
+            // starting — its ask was cleared above — or one cut short by a stop, a crash or an update): asked for
+            // here, whether or not the office has apps that run in the machine (DGO-1723)
+            // …and the owner's «הפעלה» / «לנסות שוב» pressed while no core ran (Office.askFile), once
+            boolean asked = Office.askFile(this).delete();
+            if (asked || (Office.chosenFile(this).isFile() && !EngineService.guest(this).exists())) wantMachine(run);
             // either one ending ends the other: a core without its identity service answers nobody — and the
             // control plane's ask for the machine (a container app chosen) is answered here, once a second
             File wanted = new File(run, "machine-wanted");
+            int beat = 0;
             while (!c.waitFor(1, TimeUnit.SECONDS)) {
                 if (!a.isAlive()) break;
                 if (wanted.exists() && wanted.delete()) wantMachine(run);
+                if (beat++ % 5 == 0) sayNotification();   // what runs, in the notification (DGO-1723)
             }
         } catch (Exception e) {
             try (OutputStream o = new FileOutputStream(log(this), true)) {
@@ -235,7 +288,12 @@ public class NativeService extends Service {
             synchronized (LOCK) {
                 if (c == null) starting = false;
                 last = core == c && !starting;
-                if (core == c) core = null;
+                if (core == c) {
+                    // the status screen's file (the core's, DGO-1723): a killed core leaves it saying it is up — gone
+                    // with this core only, never from under the next one a start made meanwhile
+                    new File(new File(getFilesDir(), "run"), "status.json").delete();
+                    core = null;
+                }
                 if (auth == a) auth = null;
                 if (last) stopping = false;
             }
@@ -264,7 +322,11 @@ public class NativeService extends Service {
         } else if (!EngineService.installed(this)) {
             refused = "this app carries no machine (DGO-1089): a container app cannot start";
         } else if (!EngineService.guest(this).exists()) {
-            if (!Guest.inApk(this) && !Guest.fetchable()) {
+            // «מכולות» is the owner's to install (DGO-1723): the core asks for the machine at every start while
+            // the office has apps that run in it, and a phone that only opened the app must not fetch ~2 GB for it
+            if (!Office.chosen(this)) {
+                refused = Office.NOT_INSTALLED;
+            } else if (!Guest.inApk(this) && !Guest.fetchable()) {
                 refused = "the machine is not on this phone yet (DGO-1089): a container app cannot start";
             } else if (!Guest.busy()) {
                 new Thread(() -> unpackThenStart(run)).start();
@@ -274,8 +336,25 @@ public class NativeService extends Service {
             }
         } else {
             refused = startMachine();
+            bootFiles();
         }
         say(run, refused, refused != null ? refused : "the machine is starting, behind the core");
+    }
+
+    /**
+     * The machine's AVF kernel and initrd, fetched in the background where the phone would run AVF and the
+     * machine here lacks them (DGO-1328): this start runs under QEMU, the next one under AVF.
+     */
+    private void bootFiles() {
+        Virt.Choice c = Virt.choose(this);
+        if (!c.avf.ok || !c.unprotected.ok || Guest.busy() || (Virt.kernel(this).isFile() && Virt.initrd(this).isFile())) return;
+        new Thread(() -> {
+            try {
+                Guest.bootIfMissing(this, () -> true);
+            } catch (Exception e) {
+                EngineService.say(this, "[the app] the machine's AVF kernel was not fetched: " + e);
+            }
+        }, "boot-files").start();
     }
 
     /**
@@ -289,9 +368,10 @@ public class NativeService extends Service {
         int[] last = {-1};
         boolean[] mine = {true};   // a Busy one leaves the running unpack's step alone
         // a core runs (or is starting: the one that asked may have been restarted meanwhile), and no stop
+        // …and the owner still wants «מכולות»: «עצירת ההתקנה» removes the choice, and the fetch stops (DGO-1723)
         java.util.function.BooleanSupplier ours = () -> {
             synchronized (LOCK) {
-                return (starting || (core != null && core.isAlive())) && !stopping;
+                return (starting || (core != null && core.isAlive())) && !stopping && Office.chosen(this);
             }
         };
         android.os.PowerManager.WakeLock awake = getSystemService(android.os.PowerManager.class)
@@ -325,7 +405,18 @@ public class NativeService extends Service {
         } catch (Guest.Busy e) {
             mine[0] = false;   // another unpack is under way: its end starts the machine, or says why not
         } catch (Guest.Cancelled e) {
-            say(run, null, "the machine's unpack stopped with the core");
+            if (!Office.chosen(this)) {
+                say(run, Office.NOT_INSTALLED, "the owner stopped the install of «מכולות»: what came down stays");
+            } else {
+                say(run, null, "the machine's unpack stopped with the core");
+                // …or the owner chose again while this one was stopping: its ask found this one busy and returned,
+                // so it is asked once more, for the loop to answer (a core that stopped answers nothing)
+                try {
+                    place(new File(run, "machine-wanted"), "1\n", false);
+                } catch (IOException ignored) {
+                    // the next core start asks again (run)
+                }
+            }
         } catch (Guest.Absent e) {
             say(run, "the machine is not on this phone yet (DGO-1089): a container app cannot start", null);
         } catch (Guest.Metered e) {
@@ -343,6 +434,14 @@ public class NativeService extends Service {
 
     /** EngineService behind the core; null, or why Android did not let it start now. */
     private String startMachine() {
+        // an APK with no QEMU (x86_64, DGO-1723) has AVF alone, and EngineService runs AVF only where all four of
+        // its checks are green (Virt): asked before that — the grant not given, the kernel not here, a failed boot
+        // of this APK — the machine would end at once and read as a crash loop below. The first check that is
+        // not green is the answer, and the ask after it is green starts it (wantMachine fetches the kernel).
+        if (!EngineService.hasQemu(this)) {
+            Virt.Choice c = Virt.choose(this);
+            if (!c.hardware) return "this app has no QEMU, and AVF cannot run the machine here yet: " + c.why;
+        }
         // a machine that ends right after it starts, again and again (its disk, QEMU), is not started a fourth
         // time — every ask would boot it anew, and the waiting page asks every few seconds. A start is asked only
         // while no machine runs, so one asked within two minutes of the last is a machine that ended within them;
@@ -410,6 +509,28 @@ public class NativeService extends Service {
             place(new File(run, "machine-wanted"), "1\n", false);
         } catch (IOException ignored) {
             // the wizard's next enable asks again
+        }
+    }
+
+    /**
+     * The owner's «התקנת מכולות» (Office.install): the refusal that said they are not installed goes, and the
+     * machine is asked for at once — the core asked at its start and was refused, and asks again only when an
+     * app of the machine's is opened. A core not running asks by itself when it starts.
+     */
+    static void wantNow(Context c) {
+        if (!running()) return;
+        File run = new File(c.getFilesDir(), "run");
+        synchronized (LOCK) {   // the owner's ask: a held loop's count starts over, as inFront's does
+            quick = 0;
+            lastStart = 0;
+            looped = false;
+            refusalPlaced = false;
+        }
+        new File(run, "machine-refused").delete();
+        try {
+            place(new File(run, "machine-wanted"), "1\n", false);
+        } catch (IOException ignored) {
+            // the next page of a container app asks again
         }
     }
 

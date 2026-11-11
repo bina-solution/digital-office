@@ -99,6 +99,8 @@ COPY browser-navigation.js /usr/local/share/browser42/browser-navigation.js
 COPY browser-clipboard.js /usr/local/share/browser42/browser-clipboard.js
 # The phone's keyboard: a tap on the screen focuses noVNC's keyboard input (DGO-575). Touch-only.
 COPY browser42-keyboard.js /usr/local/share/browser42/browser-keyboard.js
+# The card over the screen when it does not connect (DGO-437): the stylesheet browser-navigation.js draws it with.
+COPY viewer/card.css /usr/local/share/browser42/browser-card.css
 COPY start-browser.sh /usr/local/bin/start-browser.sh
 COPY extension/ /extension/
 RUN chmod +x /usr/local/bin/start-browser.sh /usr/local/bin/localhost-forward.py /usr/local/bin/browser42-broker.py

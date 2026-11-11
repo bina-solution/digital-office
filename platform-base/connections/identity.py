@@ -74,13 +74,38 @@ class _UnixHTTPConnection(http.client.HTTPConnection):
         self.sock = s
 
 
+def _connection(timeout):
+    """The Docker API's transport for DOCKER_SOCK: `tcp://host:port` — a read-only socket proxy, so this container
+    holds no socket at all (DGO-1794) — or a unix socket's path (`unix://` optional). Anything else is refused
+    rather than guessed: a typo must not silently fall back to the host's own socket."""
+    where = DOCKER_SOCK.strip()
+    if any(ch.isspace() or ord(ch) < 32 for ch in where):     # urlsplit would drop a tab inside a port silently
+        raise OSError(f"DOCKER_SOCK holds whitespace or a control character: {where!r}")
+    if where.startswith("tcp://"):
+        try:                                                    # a bad port or host raises ValueError/InvalidURL:
+            u = urllib.parse.urlsplit(where)                    # every malformed value is a refusal, never a crash
+            if not u.hostname or not u.port or u.path not in ("", "/") or u.username or u.query:
+                raise ValueError("not host:port")
+            return http.client.HTTPConnection(u.hostname, u.port, timeout=timeout)
+        except (ValueError, http.client.HTTPException) as e:
+            raise OSError(f"DOCKER_SOCK is not tcp://host:port: {where!r} ({e})") from None
+    if where.startswith("unix://"):
+        where = where[len("unix://"):]
+    if not where.startswith("/"):
+        raise OSError(f"DOCKER_SOCK is neither tcp://host:port nor an absolute socket path: {where!r}")
+    return _UnixHTTPConnection(where, timeout=timeout)
+
+
 def _docker_get(path, timeout=3.0):
     """GET one Docker API path. Returns parsed JSON, or None when the daemon is not reachable.
 
     GET ONLY. This module never mutates the daemon, and keeping that literally true (rather than
     "we only happen to call GETs") is what lets the README state the blast radius of the socket
     mount precisely."""
-    conn = _UnixHTTPConnection(DOCKER_SOCK, timeout=timeout)
+    try:
+        conn = _connection(timeout)
+    except OSError:
+        return None
     try:
         conn.request("GET", f"/{API_VERSION}{path}")
         r = conn.getresponse()
@@ -102,7 +127,10 @@ def _docker_get_raw(path, timeout=5.0, limit=1 << 20):
 
     Still GET ONLY: the one body that is not JSON is the archive of a single file
     (`GET /containers/<id>/archive`), which is how `agent_token` reads a file without exec."""
-    conn = _UnixHTTPConnection(DOCKER_SOCK, timeout=timeout)
+    try:
+        conn = _connection(timeout)
+    except OSError:
+        return None
     try:
         conn.request("GET", f"/{API_VERSION}{path}")
         r = conn.getresponse()

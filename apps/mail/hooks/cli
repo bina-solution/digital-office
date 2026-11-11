@@ -1,0 +1,43 @@
+#!/usr/bin/env bash
+#: «מייל» from the shell — every mailbox of the office (Gmail, the office's own addresses). Reads, and labels:
+#:   ./bbox mail profile list                       every mailbox, and the default (*)
+#:   ./bbox mail -p office@example.com inbox [N]    the newest N in the inbox
+#:   ./bbox mail -p office@example.com find "<gmail query>" [N]   ·   read <message id>
+#:   ./bbox mail -p office@example.com thread <message id>   ·   labels
+#:   ./bbox mail -p office@example.com mark <message id>… starred|important|unread|archived [--off]
+#:   ./bbox mail -p office@example.com tag <message id> +<label>… -<label>…
+#: A write needs -p, once: it never lands in a mailbox nobody named. Sending stays with the screen.
+#
+# The app's one door to the shell (app.json `cli.fallback`): `bbox mail <anything>` and `dgo mail <anything>`
+# that is not a hook of its own lands here, `-p <mailbox>` first or anywhere. apps/mail/cli.py is piped from the
+# checkout (no image rebuild) into the screen's own container when this office runs the mail, else into the
+# credential plane's container (every office has one, on the office network where the link's names resolve)
+# against the door of the office the herd names (scripts/herd_home.py): from the MacBook, vps1's mail. What a
+# sender wrote goes through apps/mail/operatives/lines.py, which flattens it so it cannot forge a line.
+set -uo pipefail
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
+. "${REPO_ROOT}/scripts/lib.sh"
+VERB=""; skip=""
+for a in "$@"; do
+  if [ -n "${skip}" ]; then skip=""; continue; fi
+  case "${a}" in -p|--profile|--mailbox|--connection) skip=1 ;; -h|--help) VERB=help; break ;; -*) ;; *) VERB="${a}"; break ;; esac
+done
+case "${VERB}" in ""|help) sed -n 's/^#: //p' "${BASH_SOURCE[0]}"; exit 0 ;; esac
+
+if running "mailview-${DN}"; then
+  IN=mailview; API=""
+else
+  WHERE="$(python3 "$(npath "${REPO_ROOT}/scripts/herd_home.py")" mail "$(read_env_value DGO_OFFICE_ID)")"
+  API="${WHERE#* }"; [ "${API}" != "${WHERE}" ] || API=""
+  [ -n "${API}" ] || die "[mail] the mail does not run on this office, and no linked office's mail may be used from here"
+  IN=connections
+  echo "[mail] the mail runs on a linked office — ${API}" >&2
+fi
+run() { dcx exec -T -e "MAIL_API=${API}" "${IN}" python3 - "$@" < "$(npath "${REPO_ROOT}")/apps/mail/cli.py"; }
+LINES="$(npath "${REPO_ROOT}/apps/mail/operatives/lines.py")"
+case "${VERB}" in
+  inbox|find|thread) run "$@" | python3 "${LINES}" ;;
+  read)       run "$@" | python3 "${LINES}" --one ;;
+  *)          run "$@" ;;
+esac

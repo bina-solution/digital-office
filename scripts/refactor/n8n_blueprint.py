@@ -61,6 +61,39 @@ def _cleanup():
 
 atexit.register(_cleanup)
 
+#: An extraction dir is removed at exit — unless the run is KILLED first. Every gate that reads a
+#: blueprint runs under a timeout (run-gates, cmp harnesses, CI), and a process cut down by SIGTERM
+#: never reaches atexit: measured on the HP 2026-11-09 (DGO-1393), 129 `n8n-bp-*` dirs (171 MB in all,
+#: ~1.3 MB each) had accumulated since 05:05 from exactly that. They are pure temp data, so the fix is to
+#: sweep the stale ones when the module loads. The cutoff is 12 hours: a run's own dir is seconds
+#: old, and only a run that has sat for half a day can lose the dir it is using.
+STALE_AFTER_HOURS = 12
+
+
+def prune_stale(max_age_h: float = STALE_AFTER_HOURS, now: float | None = None) -> list[str]:
+    """Delete `n8n-bp-*` dirs last touched more than `max_age_h` hours ago; return what went.
+
+    A janitor may never be the reason a gate dies: a temp directory that cannot even be LISTED (an
+    odd TMPDIR, a container with no /tmp) returns an empty list, and the import goes on."""
+    import time as _time
+    removed = []
+    try:
+        cutoff = (_time.time() if now is None else now) - max_age_h * 3600
+        candidates = list(pathlib.Path(tempfile.gettempdir()).glob("n8n-bp-*"))
+    except OSError:
+        return removed
+    for d in candidates:
+        try:
+            if d.is_dir() and d.stat().st_mtime < cutoff:
+                shutil.rmtree(d, ignore_errors=True)
+                removed.append(str(d))
+        except OSError:            # a dir another run owns and is rewriting: leave it
+            continue
+    return removed
+
+
+prune_stale()
+
 
 def _node():
     """Find a node binary. PATH is not enough: a gate invoked from a hook or a test harness

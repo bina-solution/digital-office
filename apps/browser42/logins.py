@@ -22,7 +22,9 @@ THE MODEL (decided, not implied — the design is this paragraph)
     * Both directions run on every sync:
         - MATERIALIZE  plane → Chrome, so Chrome autofills the login.
         - HARVEST      Chrome → plane, so what he saves in the browser becomes a credential of its
-                       own (a multi-field custom one) without anyone typing it twice.
+                       own (a multi-field custom one) without anyone typing it twice. A row with no
+                       user name or no password is skipped and said in `skipped` as {origin, reason};
+                       the rest are harvested (DGO-1490).
     * CONFLICTS are resolved by "which side moved since the last sync", not by guessing. Both values
       are fingerprinted (HMAC, never the value) in /data/browser-logins.json:
          plane changed only   → Chrome is updated
@@ -35,6 +37,15 @@ THE MODEL (decided, not implied — the design is this paragraph)
       Chrome — but only rows this bridge wrote, tracked in the state file. Removing a row from Chrome
       never deletes an office credential: a browser-side spring-clean must not be able to destroy the
       copy the office depends on.
+        - "the row this bridge wrote" is exact: origin + "/" and the user name it wrote (`wrote` in the
+          state), as it wrote it; his own rows for the site are never deleted. Only sync and
+          materialize delete; harvest never does.
+        - a deleted credential does not come back: what Chrome still holds for that origin is kept out
+          of harvest until it changes in Chrome after the deletion.
+        - a plane answer that lists no credential while the state holds some decides nothing (no
+          deletion, no harvest of those origins), and says so.
+      Chrome-only changes are taken only from the entry's own account, never from another account
+      Chrome holds for the same site, and never an empty password.
 
 CRYPTO (why this is short)
     The container has no keyring, so Chromium falls back to its **basic** store: the key is DERIVED
@@ -74,7 +85,9 @@ USAGE (host wrapper: ./bbox b42 logins <verb> [args])
 
 from __future__ import annotations
 
+import atexit
 import datetime
+import fcntl
 import hashlib
 import hmac
 import json
@@ -97,6 +110,18 @@ STATE_FILE = os.path.join(DATA, "browser-logins.json")
 CONNECTIONS_URL = os.environ.get("CONNECTIONS_URL", "http://connections:8990").rstrip("/")
 CREDENTIAL_PREFIX = "browser42-login-"
 CUSTOM_PREFIX = "browser-login-"
+#: A credential deleted in the plane also deletes the Chrome row the bridge wrote for it — ONLY when an office opts in
+#: (BROWSER42_LOGINS_DELETE=1). By default nothing in Chrome is ever deleted by the bridge: a credential also leaves
+#: the plane's listing when its value stops resolving or the plane is restored from an older backup, and the Chrome
+#: row was then the last copy (the bridge's fourth reader). The cost is a stale row in Chrome, said on every sync.
+DELETE_IN_CHROME = os.environ.get("BROWSER42_LOGINS_DELETE") == "1"
+#: …and even then a credential absent from two listings in a row is deleted only when its first absence is this old: a
+#: wrapper that runs the sync twice in one command (offline, then at the browser's start) is not two looks (the fifth
+#: reader).
+MISSING_MIN_SECONDS = 3600
+#: The id of a password kept aside (plane_keep_aside): `<custom id>-kept-<UTC second>[-n]` — exactly, so a real site
+#: whose name has a `kept` in it (www.kept.co.il) is never taken for one (the sixth reader).
+KEPT_ID = re.compile(r"^" + re.escape(CUSTOM_PREFIX) + r".+-kept-\d{14}(-\d)?$")
 #: How long `await` waits for a person before it reports that it did not happen, and how often it
 #: looks. Five minutes of polling every two seconds is a sign-in with a 2FA code on a phone; the
 #: caller can say otherwise as the second argument.
@@ -155,10 +180,20 @@ def _openssl(args: list, blob: bytes) -> bytes:
     return done.stdout
 
 
+_COPIES: list = []                       # the copies of the password store this process made, removed when it ends
+
+
+@atexit.register
+def _drop_copies() -> None:
+    for directory in _COPIES:
+        shutil.rmtree(directory, ignore_errors=True)
+
+
 def _login_db_copy() -> str:
     if not os.path.exists(LOGIN_DB):
         fail("no_login_db", f"{LOGIN_DB} does not exist — this profile has never saved a password")
     tmp = tempfile.mkdtemp(prefix="b42logins-")
+    _COPIES.append(tmp)                    # a copy of every password: never left in /tmp (the fifth reader)
     target = os.path.join(tmp, "Login Data")
     shutil.copy(LOGIN_DB, target)
     for suffix in ("-journal", "-wal", "-shm"):
@@ -215,13 +250,73 @@ def chrome_rows() -> dict:
     return out_rows
 
 
-def chrome_raw_origins() -> list:
-    """Every origin_url Chrome holds, as written — the input to the stale-variant cleanup."""
+def chrome_account_rows() -> dict:
+    """{(origin, username): {username, password, modified, raw}} — the newest row of EACH ACCOUNT per origin.
+
+    chrome_rows answers «the newest row per origin», across accounts: a person who saves his personal account
+    after the owner's made the owner's look gone, and a change he typed for the owner's account was then
+    overwritten by the plane (the bridge's second reader). What the sync decides for a credential, it decides on
+    that credential's own account."""
     db = sqlite3.connect(_login_db_copy())
-    return [row[0] for row in db.execute("select origin_url from logins").fetchall()]
+    rows = db.execute("select origin_url, username_value, password_value, date_password_modified "
+                      "from logins where blacklisted_by_user = 0").fetchall()
+    out_rows = {}
+    for origin_url, username, blob, modified in rows:
+        blob = blob or b""
+        if not blob or blob[:3] != b"v10":
+            continue
+        key = (browser_origin(origin_url), username or "")
+        previous = out_rows.get(key)
+        if previous is None or (modified or 0) >= (previous["modified"] or 0):
+            out_rows[key] = {"username": username or "", "modified": modified or 0,
+                             "password": _openssl(["-d"], blob[3:]).decode("utf-8", errors="replace"),
+                             "raw": normalize_origin(origin_url)}
+    return out_rows
 
 
-def chrome_put(origin: str, username: str, password: str) -> str:
+def chrome_written_rows() -> dict:
+    """{(origin_url, username): password} for every row filed as chrome_put files its own (origin_url ending in "/").
+
+    chrome_rows answers «the newest row per origin», across accounts. The DELETION rule needs a different
+    question: the password of the ONE row the bridge wrote (origin + "/", the user name it wrote), whichever
+    account is newest there. A row is the bridge's only in chrome_put's own shape — its form's fields empty: a login
+    he saved from a site's HOME page is filed under origin + "/" too, with the form's field names, and taking it for
+    the bridge's made a vault deletion delete his only copy (the bridge's third reader)."""
+    db = sqlite3.connect(_login_db_copy())
+    found = {}
+    for origin_url, username, blob in db.execute("select origin_url, username_value, password_value from logins "
+                                                 "where blacklisted_by_user = 0 and origin_url like '%/' "
+                                                 "and ifnull(action_url, '') = '' and ifnull(username_element, '') = '' "
+                                                 "and ifnull(password_element, '') = ''"):
+        blob = blob or b""
+        if blob[:3] == b"v10":
+            found[(origin_url, username or "")] = _openssl(["-d"], blob[3:]).decode("utf-8", errors="replace")
+    return found
+
+
+def chrome_raw_rows() -> list:
+    """(origin_url, username) of every saved row (not a «never save» one), as written — the input to the
+    stale-variant cleanup, which moves one account and never another."""
+    db = sqlite3.connect(_login_db_copy())
+    return [(row[0], row[1] or "") for row in db.execute("select origin_url, username_value from logins "
+                                                         "where blacklisted_by_user = 0").fetchall()]
+
+
+def chrome_delete_variant(raw: str, username: str) -> int:
+    """Delete the rows of ONE account filed under an address variant this browser cannot use — that origin_url,
+    that user name, never a «never save» row. Returns how many went (0: Chrome held the store, said by the caller)."""
+    try:
+        db = sqlite3.connect(LOGIN_DB, timeout=8)
+        gone = db.execute("delete from logins where origin_url = ? and username_value = ? and blacklisted_by_user = 0",
+                          (raw, username)).rowcount
+        db.commit()
+        db.close()
+        return gone
+    except sqlite3.OperationalError:
+        return 0
+
+
+def chrome_put(origin: str, username: str, password: str, same_account: tuple = ()) -> str:
     """Write/replace Chrome's saved login for `origin`, in Chrome's own encoding and schema.
 
     ⚠ `signon_realm` carries the TRAILING SLASH (`http://n8n.localhost/`), because that is what
@@ -235,7 +330,17 @@ def chrome_put(origin: str, username: str, password: str) -> str:
     url = origin if origin.endswith("/") else origin + "/"
     try:
         db = sqlite3.connect(LOGIN_DB, timeout=8)
-        db.execute("delete from logins where origin_url = ? or signon_realm = ?", (url, origin))
+        # the bridge's own row, AND a row Chrome saved itself for the SAME ACCOUNT (filed under the slashed
+        # realm with the login page as origin_url): the plane's user name, or the one of the harvested row a
+        # declared row now shadows (`same_account`). Another account Chrome holds for the origin exists
+        # nowhere else and is never touched, nor a «never save» row (DGO-1488 and its second reader).
+        # Only these accounts, wherever they are filed for the origin — the site's root included: Chromium files a
+        # login whose form is on the home page under `origin/` too, and «every row at origin/» was his other
+        # account with it (the bridge's second reader, on its rewrite).
+        accounts = sorted({username, *same_account})
+        db.execute("delete from logins where (origin_url = ? or signon_realm in (?, ?)) and blacklisted_by_user = 0"
+                   " and username_value in (%s)" % ",".join("?" * len(accounts)),
+                   (url, url.rstrip("/"), url, *accounts))
         db.execute(
             "insert into logins (origin_url, action_url, username_element, username_value, "
             "password_element, password_value, submit_element, signon_realm, date_created, "
@@ -264,6 +369,23 @@ def chrome_delete(origin: str) -> None:
         db.close()
     except sqlite3.OperationalError:
         pass
+
+
+def chrome_delete_written(origin: str, username: str) -> int:
+    """Delete the ONE row chrome_put wrote for `origin` and `username` — its exact identity, origin_url with the
+    trailing slash and that user name — and nothing else: not his other accounts under the same realm, not a
+    «never save» row. Returns how many rows went (0 when it was not there, or Chrome held the store), so a
+    deletion that did not happen is never reported as one (the second reader of the first attempt)."""
+    url = origin if origin.endswith("/") else origin + "/"
+    try:
+        db = sqlite3.connect(LOGIN_DB, timeout=8)
+        gone = db.execute("delete from logins where origin_url = ? and username_value = ? and blacklisted_by_user = 0",
+                          (url, username)).rowcount
+        db.commit()
+        db.close()
+        return gone
+    except sqlite3.OperationalError:
+        return 0
 
 
 # ── the credential plane ────────────────────────────────────────────────────────────────────────
@@ -298,6 +420,8 @@ def plane_entries() -> dict:
         cid = str(row.get("id") or row.get("credential") or "")
         if not cid:
             continue
+        if KEPT_ID.search(cid):
+            continue          # a password kept aside (plane_keep_aside) is a record, never a site's login (fifth reader)
         detail = _call(f"/api/cred/{cid}")
         fields = {f["key"]: f for f in (detail.get("fields") or [])}
         app = detail.get("app") or {}
@@ -322,15 +446,139 @@ def plane_entries() -> dict:
                 if not field.get("secret") and _USER_FIELD.search(key) and field.get("clear"):
                     username = str(field["clear"]).strip()
                     break
+        # A row an app DECLARES for an origin wins over one harvested from Chrome (`browser-login-*`) for the
+        # same origin, whichever the listing gives last: a password Chrome once saved by hand must not hide
+        # the row the app tells its owner to keep up to date (DGO-1488, the second reader of DGO-1473). The
+        # shadowed row's user name rides along, so its Chrome copy is replaced (chrome_put `same_account`);
+        # it is decided BEFORE a password is revealed, so a shadowed row's secret is never read for nothing.
+        held = entries.get(origin)
+        if held and cid.startswith(CUSTOM_PREFIX) and not held["cid"].startswith(CUSTOM_PREFIX):
+            if username:
+                held.setdefault("shadowed", []).append(username)
+                held.setdefault("shadowed_cid", {})[username] = cid   # where its newest password is kept first
+            continue
         password = (_call(f"/api/reveal/{cid}", {"field": password_field}) or {}).get("value")
         if not password:
             continue
-        entries[origin] = {"cid": cid, "username": username, "password": password, "url": url}
+        shadowed = list((held or {}).get("shadowed") or [])
+        shadowed_cid = dict((held or {}).get("shadowed_cid") or {})
+        if held and held["cid"].startswith(CUSTOM_PREFIX) and held.get("username"):
+            shadowed.append(held["username"])
+            shadowed_cid[held["username"]] = held["cid"]
+        # where a password from Chrome is written: the field it was read from — None when that is the primary value
+        # (/api/set's default); a companion by its name. The primary was written always, and a credential whose
+        # password is a companion had its main value (an API key) overwritten (the fifth reader).
+        write_field = None if fields[password_field].get("primary") else password_field
+        entries[origin] = {"cid": cid, "username": username, "password": password, "url": url,
+                           "password_field": write_field,
+                           **({"shadowed": shadowed, "shadowed_cid": shadowed_cid} if shadowed else {})}
     return entries
+
+
+def plane_secret(cid: str) -> str | None:
+    """The password field of one credential, or None when it cannot be read."""
+    try:
+        detail = _call(f"/api/cred/{cid}")
+        field = next((f["key"] for f in (detail.get("fields") or [])
+                      if f.get("secret") and _SECRET_FIELD.search(f.get("key") or "")), None)
+        return (_call(f"/api/reveal/{cid}", {"field": field}) or {}).get("value") if field else None
+    except SystemExit:                                       # _call's fail(): not a reason to end the sync here
+        return None
 
 
 def plane_write(cid: str, field: str | None, value: str) -> None:
     _call(f"/api/set/{cid}", {"value": value, **({"field": field} if field else {})})
+
+
+class PlaneIdTaken(Exception):
+    """The id a harvested login would take is already a credential of the plane's: nothing is written."""
+
+
+def custom_id(origin: str) -> tuple[str, str]:
+    """(credential id, env prefix) of a harvested login: the host, its port, and its scheme when that is not https —
+    `http://shop.test` and `https://shop.test` are two sites, and one id for both overwrote one with the other (the
+    bridge's fourth reader). An https site keeps the id it always had."""
+    scheme, _, rest = origin.partition("://")
+    slug = re.sub(r"[^a-z0-9]+", "-", rest.lower()).strip("-")
+    if scheme.lower() != "https":
+        slug = f"{scheme.lower()}-{slug}"
+    return CUSTOM_PREFIX + slug, "BROWSER_LOGIN_" + slug.replace("-", "_").upper()
+
+
+def plane_exists(cid: str) -> bool:
+    """Is `cid` a credential of the plane already? An answer that is not a clear «no» counts as yes."""
+    request = Request(CONNECTIONS_URL + f"/api/cred/{cid}", method="GET")
+    try:
+        with urlopen(request, timeout=20):
+            return True
+    except HTTPError as error:
+        return error.code != 404
+    except URLError:
+        return True
+
+
+def plane_keep_aside(origin: str, username: str, password: str, source: str = "chrome") -> str | None:
+    """A password the bridge is about to replace, kept in the plane first as a credential of its own
+    (`…-kept-<when>`): Chrome's (`source="chrome"`, a row that was the only copy — a credential that came back after a
+    deletion, an account Chrome saved by hand, a newer password a restored vault would overwrite) or the plane's own
+    (`source="plane"`, when Chrome's newer one goes over it). The id carries the second, and an id that exists is
+    never written over. Returns the id, or None when nothing could be kept (then nothing is replaced). Once the
+    credential exists the password IS kept: its user name and address are written after it, best effort — an empty
+    user name is not written at all (the plane refuses one, and the kept copy was said to fail and made again on every
+    sync — the fifth reader)."""
+    base, env_base = custom_id(origin)
+    stamp = time.strftime("%Y%m%d%H%M%S", time.gmtime())
+    where = "מהכרום" if source == "chrome" else "מהכספת"
+    instead = "בסיסמה מהכספת" if source == "chrome" else "בסיסמה מהכרום"
+    # two kept in one second (two syncs back to back, the real-Chromium run) take the next free id — never one taken
+    for n in range(1, 10):
+        tail = stamp if n == 1 else f"{stamp}-{n}"
+        cid, prefix = f"{base}-kept-{tail}", f"{env_base}_KEPT_{tail.replace('-', '_')}"
+        try:
+            if not plane_exists(cid):
+                break
+        except SystemExit:
+            return None
+    else:
+        return None
+    try:
+        _call("/api/add", {
+            "id": cid, "value": password, "kind": "password",
+            "title": f"כניסה ל-{origin.split('://')[-1]} — נשמרה {where} לפני החלפה",
+            "env": prefix + "_PASSWORD", "envs_extra": [prefix + "_USER", prefix + "_URL"],
+            "wizard": f"הסיסמה שהייתה {where.replace('מה', 'ב', 1)} לפני שהגשר החליף אותה; אפשר למחוק אחרי שבדקת",
+            "now": f"נשמרה {where} ({origin}) לפני שהוחלפה {instead}",
+        })
+    except SystemExit:                                    # _call's fail(): not kept, so nothing is replaced
+        return None
+    for field, value in ((prefix + "_USER", username), (prefix + "_URL", origin + "/")):
+        if not value:
+            continue
+        try:
+            plane_write(cid, field, value)
+        except SystemExit:
+            note(f"kept {cid}, but its {field.rsplit('_', 1)[-1].lower()} field could not be written")
+    return cid
+
+
+ALREADY_KEPT = "already kept"
+
+
+def keep_once(state: dict, origin: str, username: str, password: str, source: str = "chrome") -> str | None:
+    """plane_keep_aside, once per password: what was kept is remembered by its fingerprint (the state's `kept`, per
+    origin, the last 20) and the state is saved AT ONCE — a sync that stops after the copy (the store held by Chrome)
+    and the offline sync the wrapper runs next keep a password once, not twice (the sixth reader). ALREADY_KEPT when it
+    was kept before; the id; or None when it could not be kept (then nothing is replaced)."""
+    fp = fingerprint(state, password)
+    held = state.setdefault("kept", {}).setdefault(origin, [])
+    if fp in held:
+        return ALREADY_KEPT
+    cid = plane_keep_aside(origin, username, password, source=source)
+    if cid:
+        held.append(fp)
+        del held[:-20]
+        save_state(state)
+    return cid
 
 
 def plane_create_custom(origin: str, username: str, password: str) -> str:
@@ -340,10 +588,12 @@ def plane_create_custom(origin: str, username: str, password: str) -> str:
     names are derived from the id, so the connections screen labels the three fields in Hebrew like
     any other credential (שם משתמש / סיסמה / כתובת) and edits them through the ordinary routes.
     """
-    slug = re.sub(r"[^a-z0-9]+", "-", origin.split("://", 1)[-1].lower()).strip("-")
-    cid = CUSTOM_PREFIX + slug
-    prefix = "BROWSER_LOGIN_" + slug.replace("-", "_").upper()
+    cid, prefix = custom_id(origin)
     url = origin + "/"
+    if plane_exists(cid):
+        # /api/add has no check of its own: it would overwrite whatever holds this id — another site's password
+        # (http and https of one host had one id; the bridge's fourth reader). Never: the row stays in Chrome.
+        raise PlaneIdTaken(cid)
     _call("/api/add", {
         "id": cid, "value": password, "kind": "password",
         "title": f"כניסה ל-{origin.split('://')[-1]}",
@@ -359,22 +609,66 @@ def plane_create_custom(origin: str, username: str, password: str) -> str:
 # ── sync state: fingerprints only, never values ─────────────────────────────────────────────────
 
 def load_state() -> dict:
+    """The sync's memory. No file is a first run. A file that cannot be read is NOT a first run: starting fresh would
+    take every credential for new (the plane overwriting what he typed in Chrome) and forget every deletion marker (a
+    deleted credential harvested back) — the bridge's third reader. The sync stops instead, and says so."""
     try:
         with open(STATE_FILE, encoding="utf-8") as handle:
             state = json.load(handle)
-        if isinstance(state, dict) and state.get("key"):
-            return state
-    except (OSError, json.JSONDecodeError):
-        pass
-    return {"key": hashlib.sha256(os.urandom(32)).hexdigest(), "entries": {}}
+    except FileNotFoundError:
+        return {"key": hashlib.sha256(os.urandom(32)).hexdigest(), "entries": {}}
+    except (OSError, json.JSONDecodeError) as error:
+        fail("state_unreadable", f"{STATE_FILE} cannot be read ({error}); nothing is synced until it is fixed or "
+                                 f"removed by a person — a fresh state would take every login for new")
+    if not (isinstance(state, dict) and state.get("key") and isinstance(state.get("entries"), dict)):
+        fail("state_unreadable", f"{STATE_FILE} is not the sync's state; nothing is synced until a person looks")
+    return state
 
 
 def save_state(state: dict) -> None:
-    directory = os.path.dirname(STATE_FILE)
-    if directory:
-        os.makedirs(directory, exist_ok=True)
-    with open(STATE_FILE, "w", encoding="utf-8") as handle:
-        json.dump(state, handle, indent=1, sort_keys=True)
+    """Whole or not at all: a temporary file, flushed to the disk, then renamed over the old one."""
+    directory = os.path.dirname(STATE_FILE) or "."
+    os.makedirs(directory, exist_ok=True)
+    # a name of its own (two writers never share one temporary file — the fifth reader), beside the state, renamed
+    fd, tmp = tempfile.mkstemp(prefix=".logins-state-", dir=directory)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as handle:
+            json.dump(state, handle, indent=1, sort_keys=True)
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(tmp, STATE_FILE)
+    except BaseException:
+        try:
+            os.unlink(tmp)
+        except OSError:
+            pass
+        raise
+
+
+def sync_lock() -> None:
+    """One sync at a time: the boot sync, a `bbox b42 logins sync` and a retried one never read and write the state
+    and the two stores together (the fifth reader). Held until the process ends; a second asks and is refused."""
+    if _LOCKS:
+        return                             # this process holds it already (a verb that syncs twice)
+    try:
+        os.makedirs(os.path.dirname(STATE_FILE) or ".", exist_ok=True)
+        handle = open(STATE_FILE + ".lock", "a")
+    except OSError as error:               # no place for the lock: the state cannot be written either, and says so
+        note(f"no lock beside the sync's state ({error.strerror})")
+        return
+    try:
+        fcntl.flock(handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except BlockingIOError:
+        handle.close()
+        fail("sync_running", "another sync of the logins is running now; nothing was done — ask again in a moment")
+    except OSError as error:               # a mount that takes no locks (ENOLCK): said, and the sync goes on unlocked
+        handle.close()
+        note(f"the sync's lock cannot be taken here ({error.strerror}): it runs unlocked")
+        return
+    _LOCKS.append(handle)
+
+
+_LOCKS: list = []
 
 
 def fingerprint(state: dict, value: str) -> str:
@@ -624,65 +918,250 @@ def cmd_export(site: str) -> None:
         password_len=len(row["password"]))
 
 
+def _shadowed_safe(origin: str, entry: dict, own: dict, report: dict) -> tuple:
+    """The shadowed accounts (DGO-1488) whose Chrome rows chrome_put may replace: those whose Chrome password the
+    plane already holds, so replacing the row loses nothing. When the two differ, neither side is known to be the
+    newer one — he may have changed it in Chrome since the harvest (the second reader: the row's replacement lost
+    it), or in the plane's screen (the third reader: writing Chrome's over it lost the plane's) — so nothing is
+    overwritten anywhere: the row stays in Chrome beside the declared one, and the sync says so. One whose credential
+    cannot be read is left in Chrome too."""
+    safe = []
+    for username in entry.get("shadowed") or ():
+        row = own.get((origin, username))
+        cid = (entry.get("shadowed_cid") or {}).get(username)
+        if row is None or not row["password"]:
+            safe.append(username)                             # nothing of it in Chrome to lose
+            continue
+        held = plane_secret(cid) if cid else None
+        # the account by its credential's id, never its user name: a report is printed (the fifth reader)
+        if held is None:
+            report["skipped"].append({"origin": origin, "reason": f"a harvested account (credential {cid}) is kept in "
+                                      "Chrome: its credential could not be read"})
+            continue
+        if held != row["password"]:
+            report["skipped"].append({"origin": origin, "reason": f"a harvested account (credential {cid}) differs "
+                                      "between Chrome and its credential: kept in both, nothing overwritten — a person "
+                                      "picks"})
+            continue
+        safe.append(username)
+    return tuple(safe)
+
+
 def cmd_sync(materialize: bool = True, harvest: bool = True) -> None:
     """Both directions, with the conflict rules from the module docstring."""
+    sync_lock()
     state = load_state()
     report = {"to_chrome": [], "to_plane": [], "created": [], "deleted": [], "skipped": []}
     rows = chrome_rows()
     entries = plane_entries()
+    written = []                                              # chrome_written_rows(), read once and only if needed
+
+    def bridge_row(origin: str, username: str):
+        if not written:
+            written.append(chrome_written_rows())
+        return written[0].get((origin + "/", username))
 
     if materialize:
+        own = chrome_account_rows()
+        settled = set()                    # origins whose account this run left filed where this browser looks
         for origin, entry in entries.items():
-            row = rows.get(origin)
+            # the credential's OWN account: never the newest row of another one (the bridge's second reader)
+            row = own.get((origin, entry["username"]))
             known = state["entries"].get(origin) or {}
+            # The fingerprints are of ONE account (`account`). When the plane's credential now names another, they
+            # say nothing of this one's Chrome row: comparing them read «Chrome moved», and Chrome's stale password
+            # overwrote the one he had just set in the plane (the bridge's third reader). Nothing is taken from
+            # Chrome then: the plane's account is written, as for a credential seen the first time.
+            # An entry with fingerprints and NO account (a harvest before the field, or from an older bridge) says
+            # nothing of which account they are: unclear the same way (the fifth reader).
+            if (known.get("plane") or known.get("chrome")) and known.get("account") != entry["username"]:
+                report["skipped"].append({"origin": origin, "reason": "its credential names another account than the "
+                                          "sync's memory (or the memory names none): the plane's is written to "
+                                          "Chrome, nothing is taken from Chrome"})
+                known = {k: v for k, v in known.items() if k == "wrote"}
+            account = {"account": entry["username"]}
             plane_fp = fingerprint(state, entry["password"])
             chrome_fp = fingerprint(state, row["password"]) if row else None
             # "Already identical" has to mean identical INCLUDING the stored URL, otherwise a row
             # filed under `:8080` is left in place forever while Chromium refuses to match it.
-            if row and row["password"] == entry["password"] and row["username"] == entry["username"] \
-                    and row.get("raw") == origin + "/":
-                state["entries"][origin] = {"plane": plane_fp, "chrome": plane_fp}
+            # (`raw` is normalize_origin's, which never ends in "/": compared with `origin + "/"` this was
+            # never true, so every sync rewrote every login — DGO-1488's second reader)
+            # `wrote`: the user name THIS bridge wrote the Chrome row with (chrome_put) — the one row the DELETION
+            # rule may remove. An entry from before the field has none, and nothing it names is ever deleted.
+            keep = {"wrote": known["wrote"]} if known.get("wrote") else {}
+            if row and row["password"] == entry["password"] and row.get("raw") == origin:
+                # an entry from before `wrote`, whose Chrome row IS the one the bridge files: it is the bridge's,
+                # so a deletion in the plane can take it (otherwise no such row would ever be deleted)
+                # (never for a credential harvested from Chrome: its row is his, whatever its shape)
+                if not keep and not entry["cid"].startswith(CUSTOM_PREFIX) \
+                        and bridge_row(origin, entry["username"]) == entry["password"]:
+                    keep = {"wrote": entry["username"]}
+                state["entries"][origin] = {"plane": plane_fp, "chrome": plane_fp, **keep, **account}
+                settled.add(origin)
                 continue
+            # The row is this credential's own account (chrome_account_rows): another account's password is never
+            # taken for it — that wrote a personal account's password over the owner's, in the plane and then in
+            # Chrome (the second reader of the first attempt). An empty one is never taken either: the plane
+            # refuses it, and fail() ends the whole sync.
+            takeable = bool(row) and bool(row["password"])
             if row and known.get("chrome") and chrome_fp != known["chrome"] \
                     and plane_fp == known.get("plane"):
-                # Only Chrome moved since the last sync — harvest owns this one.
-                report["skipped"].append(origin)
+                if not takeable:
+                    report["skipped"].append({"origin": origin, "reason": "Chrome's row for this account is empty: "
+                                              "not taken for this credential"})
+                    continue
+                # Only Chrome moved since the last sync: he typed it in the browser, and that is intent (the
+                # CONFLICTS table). This was left to harvest, which skips every origin the plane already has, so a
+                # password changed in Chrome never arrived.
+                report["to_plane"].append(origin)
+                plane_write(entry["cid"], entry.get("password_field"), row["password"])
+                state["entries"][origin] = {"plane": chrome_fp, "chrome": chrome_fp, **keep, **account}
                 continue
-            if row and known.get("chrome") and known.get("plane") \
+            if takeable and known.get("chrome") and known.get("plane") \
                     and chrome_fp != known["chrome"] and plane_fp != known["plane"]:
-                report["to_plane"].append(origin)      # both moved: Chrome wins, and we say so
-                plane_write(entry["cid"], None, row["password"])
-                state["entries"][origin] = {"plane": fingerprint(state, row["password"]),
-                                            "chrome": fingerprint(state, row["password"])}
+                # both moved: Chrome wins, and we say so — the plane's value kept aside first (the fifth reader)
+                kept = keep_once(state, origin, entry["username"], entry["password"], source="plane")
+                if kept is None:
+                    report["skipped"].append({"origin": origin, "reason": "both sides changed, and the plane's "
+                                              "password could not be kept first: nothing replaced"})
+                    continue
+                if kept != ALREADY_KEPT:
+                    report.setdefault("kept", []).append({"origin": origin, "credential": kept})
+                report["to_plane"].append(origin)
+                plane_write(entry["cid"], entry.get("password_field"), row["password"])
+                state["entries"][origin] = {"plane": chrome_fp, "chrome": chrome_fp, **keep, **account}
                 continue
-            chrome_put(origin, entry["username"], entry["password"])
+            if row and row["password"] and row["password"] != entry["password"]:
+                # Chrome holds another password for this account — one the bridge never recorded, or the one it did
+                # when it is the plane that moved (a vault restored from an older backup moves back: Chrome's is the
+                # newer, the fifth reader). Replacing it would lose it: kept in the plane first.
+                kept = keep_once(state, origin, entry["username"], row["password"])
+                if kept is None:
+                    report["skipped"].append({"origin": origin, "reason": "Chrome holds another password for this "
+                                              "account, which could not be kept in the plane first: nothing replaced"})
+                    continue
+                if kept != ALREADY_KEPT:
+                    report.setdefault("kept", []).append({"origin": origin, "credential": kept})
+            chrome_put(origin, entry["username"], entry["password"], _shadowed_safe(origin, entry, own, report))
             report["to_chrome"].append(origin)
-            state["entries"][origin] = {"plane": plane_fp, "chrome": plane_fp}
+            state["entries"][origin] = {"plane": plane_fp, "chrome": plane_fp, "wrote": entry["username"], **account}
+            settled.add(origin)
         # Rows filed under a variant this browser cannot address (the old `:8080` rows) are dead
         # weight: Chromium will never match them, and leaving them means two rows per site forever.
         # Compare NORMALISED forms: a plain trailing slash (`https://www.facebook.com/`) is the same
         # origin, not a variant — only a dropped PORT makes a row unreachable by this browser.
-        for raw in chrome_raw_origins():
-            if normalize_origin(raw) != browser_origin(raw) and browser_origin(raw) in entries:
-                chrome_delete(raw)
-                report.setdefault("migrated", []).append(raw)
+        # Only the account the plane holds is moved: its row was just filed under the address this browser uses.
+        # Another account of his under the old address is the only copy of that password, and stays (a real Login
+        # Data, the second reader: «migrated» deleted every row of the variant, his other n8n account with it).
+        # And only when this run left that account filed at the browser's address (written now, or found there
+        # identical): a credential skipped on this run has no other copy of its old row (the second reader).
+        for raw, username in chrome_raw_rows():
+            origin = browser_origin(raw)
+            if normalize_origin(raw) != origin and origin in settled and username == entries[origin]["username"]:
+                if chrome_delete_variant(raw, username):
+                    report.setdefault("migrated", []).append(raw)
+                else:
+                    report["skipped"].append({"origin": raw, "reason": "its old-address row could not be removed "
+                                              "now (the browser holds the store?): tried again on the next sync"})
+
+    # DELETION — a credential that left the plane: in the state, no longer an entry. Decided BEFORE harvest, which
+    # otherwise found its Chrome row on the same run and created the credential again (and the old loop skipped
+    # every origin still in Chrome, which is every row it existed for). The rules:
+    #   - the plane listed NOTHING while the state holds credentials: no decision at all on that answer — not a
+    #     deletion (a wiped or half-restored plane would take every row the bridge wrote, the only copy left),
+    #     and not a harvest of those origins either;
+    #   - the row this bridge wrote (origin + "/", the user name in `wrote`), as it wrote it: deleted, exactly that
+    #     row, and only by a verb that writes Chrome (sync, materialize) — harvest never deletes;
+    #   - anything else there (his own rows, the bridge's row changed in Chrome since, an entry from before `wrote`)
+    #     is never deleted by the bridge. What Chrome holds for the origin at that moment is fingerprinted
+    #     (`deleted_in_plane`) and kept out of harvest until Chrome changes after the deletion: a credential
+    #     deleted in the plane does not come back by itself.
+    held = not entries and bool(state["entries"])
+    if held:
+        report["skipped"].append({"origin": "*", "reason": "the plane listed no credential while the state holds "
+                                  f"{len(state['entries'])}: nothing is deleted or harvested back on that answer"})
+    pending = set()                                           # origins harvest leaves alone on this run
+    for origin, known in list(state["entries"].items()):
+        if origin in entries:
+            known.pop("missing", None)                        # listed again: a later absence starts over
+            continue
+        if held:
+            pending.add(origin)
+            continue
+        row = rows.get(origin)
+        if row is None:                                       # nothing saved for it in Chrome any more
+            del state["entries"][origin]
+            continue
+        pending.add(origin)
+        marker = known.get("deleted_in_plane")
+        if marker is None and not known.get("missing"):
+            # Missing from ONE listing decides nothing yet: a plane restored from an older backup lists the older
+            # credentials only, and every row the bridge wrote for a newer one would go — perhaps the last copy (the
+            # bridge's third reader). Still missing on a sync MISSING_MIN_SECONDS later, it is a deletion. `missing`
+            # is when it was first missed (a state from before says 1: long ago).
+            known["missing"] = int(time.time())
+            report["skipped"].append({"origin": origin, "reason": "missing from the plane's listing: decided on a "
+                                      "later sync, if it is still missing then"})
+            continue
+        if marker is None and time.time() - float(known.get("missing") or 0) < MISSING_MIN_SECONDS:
+            report["skipped"].append({"origin": origin, "reason": "still missing from the plane's listing, but first "
+                                      "missed less than an hour ago: decided on a later sync"})
+            continue
+        mine = bridge_row(origin, known["wrote"]) if known.get("wrote") and marker is None else None
+        if mine is not None and fingerprint(state, mine) == known.get("chrome") and not DELETE_IN_CHROME:
+            # The bridge never deletes a Chrome row by itself (the fourth reader: a credential leaves the plane's
+            # listing for reasons that are not a deletion — a value that stopped resolving, a plane restored from an
+            # older backup — and the row was the last copy). It is said, kept out of harvest, and stays in Chrome.
+            report["skipped"].append({"origin": origin, "reason": "gone from the plane: its Chrome row is kept "
+                                      "(the bridge deletes nothing by itself) and is not harvested back"})
+            known["deleted_in_plane"] = fingerprint(state, row["username"] + "\n" + row["password"])
+            continue
+        if mine is not None and fingerprint(state, mine) == known.get("chrome"):
+            if not materialize:
+                continue                                      # harvest only: decided by the next sync
+            if chrome_delete_written(origin, known["wrote"]):
+                report["deleted"].append(origin)
+                state["entries"][origin] = {"deleted_in_plane": "next"}   # fingerprinted on the next run
+            else:                                             # 0 rows: never reported as deleted
+                report["skipped"].append({"origin": origin, "reason": "its Chrome row could not be deleted now "
+                                          "(the browser holds the store?): tried again on the next sync"})
+            continue
+        seen = fingerprint(state, row["username"] + "\n" + row["password"])
+        if marker is None:
+            if mine is not None:
+                report["skipped"].append({"origin": origin, "reason": "deleted in the plane, and changed in Chrome "
+                                          "since the last sync: left in Chrome, not brought back"})
+            known["deleted_in_plane"] = seen
+        elif marker == "next":
+            known["deleted_in_plane"] = seen
+        elif marker != seen:
+            del state["entries"][origin]                      # Chrome changed after the deletion: harvest takes it
+            pending.discard(origin)
 
     if harvest:
         for origin, row in rows.items():
-            if origin in entries:
+            if origin in entries or origin in pending:
                 continue
-            cid = plane_create_custom(origin, row["username"], row["password"])
+            # A row with no user name or no password cannot become a credential: the plane refuses an empty
+            # field (/api/set → 400 «value required»), and that refusal ended the WHOLE harvest at the first
+            # such row (the HP, 2026-11-08: an empty user name saved for the sign-in host, DGO-1490). It is
+            # skipped and said, before anything is written for it, and the rest are harvested.
+            missing = [what for what, empty in (("user name", not row["username"].strip()),
+                                                ("password", not row["password"])) if empty]
+            if missing:
+                report["skipped"].append({"origin": origin, "reason": "no " + " and no ".join(missing)})
+                continue
+            try:
+                cid = plane_create_custom(origin, row["username"], row["password"])
+            except PlaneIdTaken as taken:
+                report["skipped"].append({"origin": origin, "reason": f"its credential id {taken} is another "
+                                          "credential's already: nothing written, the row stays in Chrome"})
+                continue
             report["created"].append({"origin": origin, "credential": cid})
+            # with its ACCOUNT: an entry without one had a later account change in the plane read as «both moved»,
+            # and Chrome's old password went over the new one (the fifth reader)
             state["entries"][origin] = {"plane": fingerprint(state, row["password"]),
-                                        "chrome": fingerprint(state, row["password"])}
-
-    # A credential deleted in the plane must not linger in Chrome — but only rows this bridge wrote.
-    for origin in list(state["entries"]):
-        if origin in entries or origin in rows:
-            continue
-        chrome_delete(origin)
-        report["deleted"].append(origin)
-        del state["entries"][origin]
+                                        "chrome": fingerprint(state, row["password"]), "account": row["username"]}
 
     save_state(state)
     out(verb="sync", plane_logins=len(entries), chrome_logins=len(rows), **report)

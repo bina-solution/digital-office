@@ -233,6 +233,15 @@ def scan():
         except Exception:
             doc = None
 
+        # An authentik blueprint entry with `state: absent` is a tombstone: it deletes an object
+        # that is already gone by its old name, and stays true whether or not any app is installed,
+        # so it is not wiring. zzz-migrations.yaml removes bina-claude's terminal provider by its
+        # display name, «Bina Claude terminal Provider» (DGO-1684); hp-dgo's `terminal` app
+        # (a shell on the office's machines) made the word «terminal» look like a reference to it.
+        if isinstance(doc, dict) and isinstance(doc.get("entries"), list):
+            doc = dict(doc, entries=[e for e in doc["entries"]
+                                     if not (isinstance(e, dict) and e.get("state") == "absent")])
+
         if doc is not None and not is_wf:
             # A service NAME is a mapping key, and _walk only ever yields leaf VALUES with the key
             # they hang off — so a base compose could declare a whole service called after a layer-3

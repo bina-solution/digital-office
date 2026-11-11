@@ -1,0 +1,255 @@
+{
+ "month": "2026-11",
+ "taken_at": "2026-11-10 04:35 UTC",
+ "interfaces": {
+  "data-gov-il": {
+   "status": 200,
+   "where": "https://data.gov.il/api/3/action/package_list?limit=1",
+   "state": "ok",
+   "shape": [
+    "help",
+    "result",
+    "result.[]",
+    "success"
+   ]
+  },
+  "boi-exchange-public-api": {
+   "status": 200,
+   "where": "https://boi.org.il/PublicApi/GetExchangeRates?asXml=false",
+   "state": "ok",
+   "shape": [
+    "exchangeRates",
+    "exchangeRates.[]",
+    "exchangeRates.[]currentChange",
+    "exchangeRates.[]currentExchangeRate",
+    "exchangeRates.[]key",
+    "exchangeRates.[]lastUpdate",
+    "exchangeRates.[]unit"
+   ]
+  },
+  "boi-exchange-sdmx": {
+   "status": 200,
+   "where": "https://edge.boi.gov.il/FusionEdgeServer/sdmx/v2/data/dataflow/BOI.STATISTICS/EXR/1.0/RER_USD_ILS?startperiod=2026-11-01",
+   "state": "ok",
+   "shape": [
+    "StructureSpecificData",
+    "DataSet",
+    "Header"
+   ]
+  },
+  "boi-open-banking": {
+   "status": 200,
+   "where": "https://www.boi.org.il/en/economic-roles/supervision-and-regulation/open-banking/",
+   "state": "blocked",
+   "note": "Radware Page"
+  },
+  "btl": {
+   "status": 200,
+   "where": "https://www.btl.gov.il:443/Pages/default.aspx",
+   "state": "ok",
+   "title": "דף הבית, הביטוח הלאומי",
+   "headings": [
+    "מחלה ונכות",
+    "פגיעה",
+    "הריון ולידה",
+    "משפחה וילדים",
+    "הפסקת עבודה",
+    "שירות צבאי ושחרור",
+    "הגיל השלישי",
+    "פטירה והתאלמנות",
+    "הוקרה",
+    "שהות בחוץ לארץ",
+    "פניות בנושאים נפוצים",
+    "פניות בנושאים נוספים",
+    "לוגו, הביטוח הלאומי, לצידך ברגעים החשובים של החיים - קישור לדף הבית",
+    "עוד באתר",
+    "אמהוּת, לידה וילדים",
+    "הפסקת עבודה",
+    "פגיעה",
+    "מחלה ונכות",
+    "פטירה והתאלמנות",
+    "הגיל השלישי",
+    "דמי ביטוח",
+    "עובד במשק בית",
+    "עצמאי",
+    "מעסיק",
+    "שהות בחו\"ל",
+    "חיילים משוחררים ומסיימי שרות לאומי - אזרחי",
+    "עוד באתר"
+   ],
+   "headings_sha": "31549423bc94b1b6",
+   "text_sha": "1e8b115f7d1d3f78"
+  },
+  "ica-corporations": {
+   "status": 200,
+   "where": "https://ica.justice.gov.il/GenericCorporarionInfo/SearchCorporation?unit=8",
+   "state": "ok",
+   "title": "מידע ושרותים מקוונים - תאגידים ברשת (תאגידים ONLINE)",
+   "headings": [
+    "תפריט נגישות",
+    "קיצור דרך למשתמשי מקלדת",
+    "גודל גופן",
+    "שונות",
+    "מידע ושרותים מקוונים",
+    "תוצאות חיפוש",
+    "לא נמצאו תוצאות לחיפוש המבוקש"
+   ],
+   "headings_sha": "3420d2d6d992887d",
+   "text_sha": "738ed33c194e90df"
+  },
+  "login-gov-il": {
+   "status": 200,
+   "where": "https://login.gov.il/nidp/",
+   "state": "ok",
+   "title": "The Goverment Identification System",
+   "headings": [],
+   "headings_sha": "e3b0c44298fc1c14",
+   "text_sha": "a8eccca30f097236"
+  },
+  "my-gov-il": {
+   "status": 200,
+   "where": "https://my.gov.il/landing/",
+   "state": "ok",
+   "title": "LandingPage",
+   "headings": [],
+   "headings_sha": "e3b0c44298fc1c14",
+   "text_sha": "1d7f73ba16e5ab34"
+  },
+  "tax-authority": {
+   "status": 403,
+   "where": "https://www.gov.il/he/departments/israel_tax_authority",
+   "state": "blocked",
+   "note": "Just a moment..."
+  },
+  "israel-invoices": {
+   "status": 403,
+   "where": "https://www.gov.il/he/departments/topics/israel-invoices",
+   "state": "blocked",
+   "note": "Just a moment..."
+  },
+  "whatsapp-pricing": {
+   "status": 200,
+   "where": "https://developers.facebook.com/documentation/business-messaging/whatsapp/pricing",
+   "state": "ok",
+   "title": "Pricing on the WhatsApp Business Platform | Meta for Developers",
+   "headings": [
+    "Pricing on the WhatsApp Business Platform",
+    "How Meta charges for messages",
+    "Message categories",
+    "Charges by message category",
+    "Pricing example",
+    "Markets",
+    "What Meta charges for messages",
+    "Rate cards and volume tiers",
+    "Currencies",
+    "Comparing Meta Business Agent to service messages",
+    "When Meta may update pricing",
+    "Pricing calendar",
+    "When Meta does not charge",
+    "Ways Meta provides value via pricing",
+    "Free entry point window (FEP)",
+    "Free tier of monthly service messages",
+    "Volume tiers for utility and authentication messages",
+    "Other pricing mechanics",
+    "Customer service window (CSW)",
+    "Authentication-international rates",
+    "Pricing regions on the rate card (country calling codes)",
+    "Prior updates to pricing and rates",
+    "Ongoing",
+    "Prior updates",
+    "Other pricing topics",
+    "Marketing – Max-price feature for Marketing Messages API for WhatsApp",
+    "Service – Pricing policy for AI Providers leveraging WhatsApp Business Platform",
+    "Service - Pricing policy for eligible governments and non-profits using the WhatsApp Business Platform",
+    "Calling – WhatsApp Business Calling API pricing",
+    "Conversation-based pricing",
+    "Analytics",
+    "Pricing webhooks",
+    "Billing",
+    "Billing attribution with multiple Messaging accounts"
+   ],
+   "headings_sha": "6584b9ca5d9b123d",
+   "text_sha": "61a38f4ea9a0ae0b"
+  },
+  "morning-api": {
+   "status": 200,
+   "where": "https://developers.morning.co/api",
+   "state": "ok",
+   "title": "Morning API Documentation",
+   "headings": [
+    "Build on morning",
+    "Two ways to build on morning",
+    "Bring your morning data into your AI assistant.",
+    "What's coming",
+    "Ask in plain language",
+    "Your documents, clients and expenses",
+    "On your own API key",
+    "Your assistant, your editor",
+    "Claude Code",
+    "Cursor",
+    "VS Code",
+    "Gemini",
+    "ChatGPT",
+    "And more",
+    "FAQ",
+    "Can't wait?",
+    "Page not found"
+   ],
+   "headings_sha": "e2988e9d0708307f",
+   "text_sha": "c252a8058bb5f311"
+  },
+  "rami-levy-online": {
+   "status": 200,
+   "where": "https://www.rami-levy.co.il/he",
+   "state": "ok",
+   "title": "רמי לוי באינטרנט - אתר קניות אונליין הגדול והזול בישראל!",
+   "headings": [],
+   "headings_sha": "e3b0c44298fc1c14",
+   "text_sha": "a99f68c3355f05cd"
+  },
+  "shufersal-online": {
+   "status": 200,
+   "where": "https://www.shufersal.co.il/online/he/",
+   "state": "ok",
+   "title": "שופרסל אונליין : סופרמרקט, פארם קוסמטיקה והכל בית – כל מה שצריך במשלוח עד הבית | Shufersal",
+   "headings": [
+    "הסל שלי",
+    "סיכום הזמנה",
+    "הסל שלי",
+    "סיכום הזמנה",
+    "לרוקן את סל הקניות?",
+    "שנתחיל לקנות?",
+    "SUPER SALE +",
+    "שוברים שיאים במבצעים",
+    "מבצעי פארם וניקיון",
+    "מבצעי בישום, קוסמטיקה וויטמינים",
+    "מזמינים מוצרים לבית ולמטבח ומקבלים ישירות עם המשלוח מהסופר",
+    "NOVEMBER SALE מבצעים מטורפים כולל משלוח חינם!",
+    "יועץ קניה חכם",
+    "קופונים אישיים",
+    "רשימות והזמנות",
+    "הזמנת סופרמרקט ופארם",
+    "החלף הכל",
+    "שיתוף עם חבר",
+    "הזנת קוד קופון"
+   ],
+   "headings_sha": "792d31593fa08e1e",
+   "text_sha": "d3c4c21f37d2b5ff"
+  },
+  "israel-post": {
+   "status": 200,
+   "where": "https://israelpost.co.il/",
+   "state": "ok",
+   "title": "Israel Post | דואר ישראל",
+   "headings": [
+    "שולחים עם ECO POST במחיר משתלם!",
+    "שולחים כסף?",
+    "ביטוח רכב עושים בדואר ביטוח",
+    "ביטוח נסיעות עושים בדואר ביטוח",
+    "החנות המקוונת של דואר ישראל"
+   ],
+   "headings_sha": "9bb772c0c52ee049",
+   "text_sha": "c5c3f80eda77bb71"
+  }
+ }
+}

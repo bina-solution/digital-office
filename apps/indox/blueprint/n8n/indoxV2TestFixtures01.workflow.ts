@@ -329,7 +329,7 @@ return rows.map(r=>({json:{INLINE_ACTION:'TABLE_UPSERT', table:'settings', insta
 -- Guarded: fires only when the whole table is mail-less (a real deployment never is).
 -- id is GENERATED ALWAYS (see fixtures/schema.sql) — never supply it.
 insert into {{ (() => { const i = String($('When Called').first().json.__instance || ''); if (!/^[a-z][a-z0-9_]*$/.test(i)) { throw new Error('indoxV2TestFixtures01: no valid __instance — public fallback removed at the 2026-08-31 cutover'); } return 'indox_' + i; })() }}.companies ("instance", "שם חברה", "מזהה 1", "מייל 1")
-select 'incoming-documents-main', 'SV3S Sender Co', '900001041', 'person78-x-x@example.com'
+select 'incoming-documents-main', 'SV3S Sender Co', '900000449', 'person84-x-x@example.com'
 -- the guard is per-instance too: "does a mail-carrying company already exist" has to mean
 -- "...for THIS instance". Left global, the first instance's rows satisfy it forever and every
 -- later instance silently never receives its fixture — a suite that then fails for a reason
@@ -354,14 +354,14 @@ where not exists (select 1 from {{ (() => { const i = String($('When Called').fi
         operation: 'executeQuery',
         options: {},
         query: `=insert into {{ (() => { const i = String($('When Called').first().json.__instance || ''); if (!/^[a-z][a-z0-9_]*$/.test(i)) { throw new Error('indoxV2TestFixtures01: no valid __instance — public fallback removed at the 2026-08-31 cutover'); } return 'indox_' + i; })() }}.companies ("instance", "שם חברה", "מזהה 1")
-values ('incoming-documents-main', 'בניאס סחר בע"מ', '500000179'),
-       ('incoming-documents-main', 'כהן פור ש.א. בע"מ', '500000146'),
+values ('incoming-documents-main', 'בניאס סחר בע"מ', '500000153'),
+       ('incoming-documents-main', 'כהן פור ש.א. בע"מ', '500000120'),
        ('incoming-documents-main', 'אלקטרה מוצרי בנייה בע"מ', '511234567'),
        ('incoming-documents-main', 'אגן מפעלי הנדסה (1988) בע"מ', '500000062'),
-       ('incoming-documents-main', 'דלתות תייר בע"מ', '500000161'),
-       ('incoming-documents-main', 'דיאור יבוא ושיווק בע"מ', '500000138'),
-       ('incoming-documents-main', 'פולירון תעשיות בע"מ', '500000187'),
-       ('incoming-documents-main', 'מפעל מתכת כפר מנחם בע"מ', '500000153')
+       ('incoming-documents-main', 'דלתות תייר בע"מ', '500000146'),
+       ('incoming-documents-main', 'דיאור יבוא ושיווק בע"מ', '500000112'),
+       ('incoming-documents-main', 'פולירון תעשיות בע"מ', '500000161'),
+       ('incoming-documents-main', 'מפעל מתכת כפר מנחם בע"מ', '500000138')
 on conflict ("instance", "מזהה 1") do nothing;
 -- [fixed certainty 2026-09-02, owner Decision 8] THREE of the eight synthetic companies carry the
 -- per-company FIXED certainty (90) so the pipeline suite proves SelectType01's max(computed, fixed)
@@ -370,7 +370,7 @@ on conflict ("instance", "מזהה 1") do nothing;
 -- Idempotent: set on every seed.
 update {{ (() => { const i = String($('When Called').first().json.__instance || ''); if (!/^[a-z][a-z0-9_]*$/.test(i)) { throw new Error('indoxV2TestFixtures01: no valid __instance'); } return 'indox_' + i; })() }}.companies
    set "SELECTION_CERTAINTY" = 90
- where "instance" = 'incoming-documents-main' and "מזהה 1" in ('500000179', '500000146', '511234567');`,
+ where "instance" = 'incoming-documents-main' and "מזהה 1" in ('500000153', '500000120', '511234567');`,
     };
 
     // =====================================================================

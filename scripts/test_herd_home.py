@@ -57,7 +57,7 @@ def registry(*entries):
 HERD_FILE = os.path.join(tempfile.mkdtemp(), "herd.yaml")
 with open(HERD_FILE, "w", encoding="utf-8") as f:
     f.write(HERD)
-FPG = ("fireplace", "plane", "project-pln", 9006)
+EXF = ("examplef", "plane", "project-pln", 9006)
 HP = ("hp-laptop", "plane", "project-pln", 9005)
 
 
@@ -67,17 +67,17 @@ def home(app, me, *entries):
 
 class Cases:
     def test_a_herd_office_never_takes_the_clients_plane(self):
-        ours, url, why = home("project-pln", "macbook", FPG)
+        ours, url, why = home("project-pln", "macbook", EXF)
         self.assertEqual((ours, url), (True, ""))
-        self.assertIn("never another office's (fireplace)", why)
+        self.assertIn("never another office's (examplef)", why)
 
     def test_the_named_office_wins_over_the_first_one(self):
-        self.assertEqual(home("project-pln", "macbook", FPG, HP)[1], "http://plane.hp-laptop:9005")
-        self.assertEqual(home("project-pln", "fireplace", FPG, HP)[1], "http://plane.hp-laptop:9005")
+        self.assertEqual(home("project-pln", "macbook", EXF, HP)[1], "http://plane.hp-laptop:9005")
+        self.assertEqual(home("project-pln", "examplef", EXF, HP)[1], "http://plane.hp-laptop:9005")
 
     def test_a_client_office_keeps_its_only_plane(self):
-        self.assertEqual(home("project-pln", "fireplace", FPG), (False, "http://plane.fireplace:9006", ""))
-        self.assertEqual(home("project-pln", None, FPG), (False, "http://plane.fireplace:9006", ""))
+        self.assertEqual(home("project-pln", "examplef", EXF), (False, "http://plane.examplef:9006", ""))
+        self.assertEqual(home("project-pln", None, EXF), (False, "http://plane.examplef:9006", ""))
 
     def test_an_alias_is_the_office(self):
         self.assertEqual(home("ollama", "macbook", ("portable-ubuntu", "ollama", "ollama", 9003))[1],
@@ -86,23 +86,23 @@ class Cases:
 
     def test_ours_is_read_from_the_offices_block_only(self):
         for me in ("chat", "vps", "mac.*", "hub", "shared", "label", "aliases"):
-            self.assertFalse(home("project-pln", me, FPG)[0], me)
+            self.assertFalse(home("project-pln", me, EXF)[0], me)
         for me in ("macbook", "hp-laptop", "dell", "portable-ubuntu", "vps1"):
             self.assertTrue(home("project-pln", me, HP)[0], me)
 
     def test_no_guess_between_two_the_herd_does_not_name(self):
-        ours, url, why = home("drive", "fireplace", ("fireplace", "drive", "drive", 1), ("acme", "drive", "drive", 2))
+        ours, url, why = home("drive", "examplef", ("examplef", "drive", "drive", 1), ("acme", "drive", "drive", 2))
         self.assertEqual(url, "")
         self.assertIn("2 linked offices publish drive", why)
 
     def test_nothing_published(self):
-        self.assertEqual(home("drive", "fireplace"), (False, "", ""))
+        self.assertEqual(home("drive", "examplef"), (False, "", ""))
         ours, url, why = home("project-pln", "macbook")
         self.assertEqual((ours, url), (True, ""))
         self.assertNotIn("never another", why)
 
     def test_on_the_office_that_runs_it(self):
-        ours, url, why = home("project-pln", "hp-laptop", FPG)
+        ours, url, why = home("project-pln", "hp-laptop", EXF)
         self.assertEqual((ours, url), (True, ""))
         self.assertIn("on this office (hp-laptop), and it is not running here", why)
 
@@ -119,7 +119,7 @@ class BrokenYaml(unittest.TestCase):
         fake.safe_load = safe_load
         sys.modules["yaml"] = fake
         try:
-            return home("project-pln", "macbook", FPG, HP)
+            return home("project-pln", "macbook", EXF, HP)
         finally:
             if saved == "absent":
                 sys.modules.pop("yaml", None)

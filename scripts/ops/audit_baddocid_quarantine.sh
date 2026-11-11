@@ -2,7 +2,7 @@
 # Did my quarantine suppress REAL duplicates? For each quarantined doc-id, are its rows actually
 # the same document (shared HASH, or same date+amount)? If yes, the quarantine is hiding a merge.
 DK="docker -H unix:///run/bbox-docker.sock"
-$DK exec -i supabase-db-shlomo-laptop psql -U postgres -tAf - <<'SQL'
+$DK exec -i supabase-db-owner-laptop psql -U postgres -tAf - <<'SQL'
 SET statement_timeout='240s';
 WITH bad AS (
   SELECT btrim("DOC_ID") AS did FROM public.incoming_documents

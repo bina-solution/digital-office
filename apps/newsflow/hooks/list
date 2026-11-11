@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+#: list [category] [N] — the newest items:  ./bbox newsflow list [ai] [40]
+set -uo pipefail
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+cat="${1:-}"; n="${2:-60}"
+out="$("${SCRIPT_DIR}/_call" GET "/api/news?limit=${n}${cat:+&category=${cat}}")" || exit $?
+printf '%s' "${out}" | python3 -c '
+import json,sys
+for it in json.load(sys.stdin)["items"]:
+    print("%s  %-8s %-18s %s" % (it["found_at"][:16].replace("T"," "), it["category_he"], it["source"], it["title"][:90]))
+    print("      " + it["url"])'

@@ -1,0 +1,13 @@
+{
+  "name": "@bina/dsh-office-shell-env",
+  "description": "The office's deliberately given, scoped service tokens in the agent's shell, as declared DSH_* facts (the harness scrubs *TOKEN* names from a child's environment)",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "lib/index.js",
+  "exports": {
+    ".": "./lib/index.js",
+    "./package.json": "./package.json"
+  },
+  "license": "MIT"
+}

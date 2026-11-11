@@ -27,6 +27,11 @@ COVERAGE VERDICTS (the reason anyone runs this)
                             disabled app's data on purpose, so the export carries it too (cmd_export
                             step 2b). Until that step existed these volumes were silently dropped —
                             this verdict was "NOT BACKED UP (app disabled)" and it was correct.
+    covered (declarations)  the office's own state file and outbox (DECLARATION_PATHS), carried always
+    NOT BACKED UP (link not visible)
+                            a carried path that is a link whose target this process cannot see (a
+                            packaged office's .env -> /etc/binaos); the export refuses it rather than
+                            writing an archive without it. `link_to` names the target.
     UNCLAIMED               on the host, no app.json declares it. Would not be in a backup at all.
                             The ONLY remaining way for live data to miss an archive.
 """
@@ -75,7 +80,7 @@ def project_name() -> str:
             return ARCHIVER.project_name()
         except Exception:                                 # noqa: BLE001
             pass
-    return os.environ.get("COMPOSE_PROJECT_NAME", "deployment-hacohen")
+    return os.environ.get("COMPOSE_PROJECT_NAME", "digital-office")
 
 
 def deployment_name() -> str:
@@ -184,7 +189,7 @@ def live_volumes(project):
 # allowed in this file are storage technologies it has to speak in order to dump them — postgres,
 # redis, docker. Never n8n, authentik, glitchtip, indox.
 #
-# This list used to be a table of (user, database) logins: supabase_admin/postgres, hacohen/n8n,
+# This list used to be a table of (user, database) logins: supabase_admin/postgres, example/n8n,
 # authentik/authentik, glitchtip/glitchtip. Every one of those pairs is an app's private
 # credential, and a new app with its own database was simply invisible until someone remembered to
 # come back here. Each of them is also recoverable from the container itself — POSTGRES_USER and
@@ -193,8 +198,8 @@ def live_volumes(project):
 PG_IMAGE_HINTS = ("postgres", "pgvector", "timescale")
 KV_IMAGE_HINTS = ("redis", "valkey", "keydb")
 
-# The -d is load-bearing: postgres defaults dbname to the username, so a bare `psql -U hacohen`
-# fails with "database hacohen does not exist" and that store renders as an error, not an inventory.
+# The -d is load-bearing: postgres defaults dbname to the username, so a bare `psql -U example`
+# fails with "database example does not exist" and that store renders as an error, not an inventory.
 PG_FALLBACK_LOGINS = (("postgres", "postgres"),)
 
 
@@ -326,8 +331,16 @@ def stateful_binds():
 
 def secret_paths():
     rows = []
-    for rel in (getattr(ARCHIVER, "SECRET_PATHS", []) if ARCHIVER else []):
+    carried = [(rel, "secrets") for rel in (getattr(ARCHIVER, "SECRET_PATHS", []) if ARCHIVER else [])]
+    carried += [(rel, "declarations") for rel in (getattr(ARCHIVER, "DECLARATION_PATHS", []) if ARCHIVER else [])]
+    for rel, kind in carried:
         p = REPO / rel
+        # A link whose target this process cannot see (a packaged office's .env -> /etc/binaos) is
+        # NOT "absent": the file exists, the export cannot read it, and it refuses (carried_source).
+        if p.is_symlink() and not p.exists():
+            rows.append({"path": rel, "exists": True, "bytes": None, "link_to": os.path.realpath(p),
+                         "coverage": "NOT BACKED UP (link not visible)"})
+            continue
         exists = p.exists()
         size = None
         if exists:
@@ -341,13 +354,13 @@ def secret_paths():
         # coverage here. "absent" is a statement of fact, not a warning: a deployment that never
         # enabled portainer has no portainer_password.txt to lose.
         rows.append({"path": rel, "exists": exists, "bytes": size,
-                     "coverage": "covered (secrets)" if exists else "absent"})
+                     "coverage": ("covered (%s)" % kind) if exists else "absent"})
     return rows
 
 
 # ── the join ────────────────────────────────────────────────────────────────────────────────────
 
-# Cheap first, expensive last — the order the UI reveals them in. Measured on shlomo-laptop
+# Cheap first, expensive last — the order the UI reveals them in. Measured on owner-laptop
 # 2026-08-12: apps 1.6s, volumes 9.6s, databases 8.3s, redis 1.1s, secrets 0.2s, binds 91.6s.
 # Binds dominate by an order of magnitude (compose config + walking a 16.5GB tree over /mnt/c),
 # so a view that waits for everything shows a blank page for ~110s. Hence the generator.
@@ -547,7 +560,12 @@ def _summary(o):
         "bind_bytes": sum(b["bytes"] or 0 for b in binds),
         "databases": sum(len(i["databases"]) for i in dbs),
         "db_bytes": sum((d["bytes"] or 0) for i in dbs for d in i["databases"]),
-        "secrets": len([s for s in o["secret_paths"] if s.get("exists")]),
+        # What the archive CARRIES, not what exists: a link whose target the export cannot read
+        # exists and is not kept (DGO-1510), and the state file is a declaration, not a secret.
+        "secrets": len([s for s in o["secret_paths"] if s.get("coverage") == "covered (secrets)"]),
+        "declarations": len([s for s in o["secret_paths"] if s.get("coverage") == "covered (declarations)"]),
+        "secrets_not_backed_up": len([s for s in o["secret_paths"]
+                                      if str(s.get("coverage") or "").startswith("NOT BACKED UP")]),
         # The headline number of the whole app-centric model: stores that exist on this host and
         # belong to no app. They still travel in a whole-host archive, but they cannot be exported
         # or restored per app — and if one is genuinely orphaned, nothing will notice it is gone.

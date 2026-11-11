@@ -18,7 +18,17 @@ DELETE /api/notifications/<id>          ·   POST /api/notifications/clear-read
 ```
 
 The same `source` + `source_id` updates one notice instead of adding another: give a recurring
-problem a stable `source_id`. From the shell: `./bbox notifications list|show <id>|unread|stats`
+problem a stable `source_id`.
+
+**The stream.** A notice that is news is also an event on `dgo:flow:notifications` (flow.v1, through the
+ONE publisher flowpub): `notice.<level>`, `data.new` true when it is created; a notice that surfaces again
+is told at most every 15 minutes. A refresh with nothing new is not an event. The relay to the owner's group
+reads it (DGO-1329). `meta.actions` are a notice's answers, which travel with its event (`flow.py` checks
+them): `[{"id": "block", "label": "חסום", "op": "security.ban", "args": {"ip": "…"}}]`, at most 4, each
+with an `<app>.<op>`. Args are at most 512 bytes: an address or an id, never a secret, because every
+agent reads the stream. The app that owns the op executes it. A malformed list is refused (400), never
+trimmed. The body travels cut and scrubbed; a GlitchTip notice is named, never quoted. `/healthz` reports
+the stream's state (`flow`) without judging it. From the shell: `./bbox notifications list|show <id>|unread|stats`
 (reads), and `./bbox notifications verify` (healthy: the database, the GlitchTip poller and its token). The screen is `/a/alerts/`, and a phone subscribes to push from
 it.
 

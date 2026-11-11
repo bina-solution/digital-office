@@ -8,7 +8,7 @@ when:
   - האם הדריין של אינדוקס רץ
   - מה מצב הצינור של אינדוקס
   - indox pipeline status
-inputs: {instance: "the INDOX instance id the person named, e.g. hacohen; none for every enabled instance"}
+inputs: {instance: "the INDOX instance id the person named, e.g. example; none for every enabled instance"}
 reaches_people: false
 check: 'per instance: whether a drain runs now and whether its gate is open, documents not done, restarts asked, dispatched in 5 min; n8n errors in an hour once — or which source did not answer'
 ---

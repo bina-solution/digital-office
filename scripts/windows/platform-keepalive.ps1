@@ -326,7 +326,7 @@ function Invoke-GracefulShutdown {
     # why it stops nothing now.)
     #
     # SINCE 2026-10-15 (DGO-634): a CHECKPOINT in each of this office's Postgres servers, and nothing is
-    # stopped. The first version stopped containers by name - n8n-postgres-shlomo-laptop and its
+    # stopped. The first version stopped containers by name - n8n-postgres-owner-laptop and its
     # neighbours, another deployment's names, so on this office it stopped nothing - and stopping is the
     # wrong tool anyway: `docker stop` marks a container manually stopped, and restart: unless-stopped then
     # leaves it DOWN after the very reboot it was stopped for. A CHECKPOINT writes every dirty page now, so
@@ -375,8 +375,31 @@ function Write-HostFacts {
         $os  = Get-CimInstance Win32_OperatingSystem
         $doc = '{"updated_at":' + [DateTimeOffset]::UtcNow.ToUnixTimeSeconds() +
                ',"os":"windows","mem_total":' + ([int64]$os.TotalVisibleMemorySize * 1024) +
-               ',"mem_free":' + ([int64]$os.FreePhysicalMemory * 1024) + '}'
+               ',"mem_free":' + ([int64]$os.FreePhysicalMemory * 1024) + (Get-DiskFacts) + '}'
         [System.IO.File]::WriteAllText((Join-Path $dir 'host.json'), $doc, (New-Object System.Text.UTF8Encoding($false)))
+    } catch { }
+}
+
+function Get-DiskFacts {
+    # C: and the distro's .vhdx, as only this side sees them (DGO-1393): platform-disk-facts.ps1 says why. Its own
+    # file, like the power hold, so that a fault in it can never break this one: whatever it does not answer well is
+    # left out of host.json, never guessed.
+    try {
+        $f = Join-Path $PSScriptRoot 'platform-disk-facts.ps1'
+        if (-not (Test-Path $f)) { return '' }
+        $s = [string](& $f -Distro $Distro)
+        # only pairs that make a JSON object of their own (a {GUID} in a path is fine; a torn answer is not)
+        if ($s.StartsWith(',"')) { $null = ConvertFrom-Json ('{' + $s.Substring(1) + '}'); return $s }
+    } catch { }
+    return ''
+}
+
+function Invoke-DiskTrim {
+    # C: BACK FROM THE DISTRO'S SPARSE .VHDX (DGO-1393): platform-disk-trim.ps1 says when and why. Its own file, like
+    # the power hold, so that a fault in it can never break this one; every failure is swallowed here on purpose.
+    try {
+        $f = Join-Path $PSScriptRoot 'platform-disk-trim.ps1'
+        if (Test-Path $f) { & $f -Distro $Distro -MinFreeGB $MinFreeGB | Out-Null }
     } catch { }
 }
 
@@ -398,6 +421,7 @@ function Invoke-PowerHold {
 function Invoke-HealthCheck {
     Write-HostFacts     # first, and on every tick: it must not depend on anything below succeeding
     Invoke-PowerHold    # second, for the same reason - a host that sleeps takes the office with it
+    Invoke-DiskTrim     # third: a full C: stops the VM from outside (DGO-625, DGO-1393)
     # WHY: nothing told anyone the platform was down. The 2026-08-12 outage ran 4h37m and was found
     # by chance. This writes to the Windows EVENT LOG (durable, survives the session, greppable)
     # rather than only to a file nobody opens, and raises a desktop notification on transition.
@@ -423,7 +447,7 @@ function Invoke-HealthCheck {
     try {
         $count = Get-ContainerCount
         # THE PIPELINE, WHERE THIS OFFICE HAS ONE. Its database is found by its compose SERVICE, not by a
-        # container name: a name carries the deployment (this file asked for n8n-postgres-shlomo-laptop
+        # container name: a name carries the deployment (this file asked for n8n-postgres-owner-laptop
         # until 2026-10-15, on an office whose containers end in -hp, so every tick would have read
         # "No such container" as a failed check), and an office that does not run n8n has no pipeline
         # to stall.
@@ -440,7 +464,7 @@ function Invoke-HealthCheck {
             # the checker, not the stack. Worth keeping the fail-loud behaviour, but not the bug.
             $q = 'select count(*) from execution_entity where \"startedAt\" > now() - interval ''15 minutes'';'
             $r = & wsl.exe -d $Distro -u root -e docker -H unix:///run/bbox-docker.sock `
-                    exec -i $db psql -U hacohen -d n8n -t -A -c $q 2>&1
+                    exec -i $db psql -U example -d n8n -t -A -c $q 2>&1
             $execs = [int](($r | Where-Object { $_ -match '^\s*\d+\s*$' } | Select-Object -First 1))
             # Zero executions in 15 minutes with a healthy container count means the stack is UP but
             # the pipeline is DEAD - the failure mode that looks fine to every container-level check.

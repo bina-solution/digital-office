@@ -1,24 +1,54 @@
 name: go-test
 
-# The office's native binaries are tested on every push and pull request, not only on a release tag.
-# Until this workflow, `go test` ran in release-binaries.yml alone (a v* tag or a manual dispatch), so
-# a Go change that broke a test could sit on a branch unseen until the next release (plan step 0,
-# ai/context/dgo-architecture-2026.md §6, DGO-594).
+# The office's native binaries are tested on every push that can change them, and on every pull
+# request — not only on a release tag. Until this workflow, `go test` ran in release-binaries.yml
+# alone (a v* tag or a manual dispatch), so a Go change that broke a test could sit on a branch unseen
+# until the next release (plan step 0, ai/context/dgo-architecture-2026.md §6, DGO-594). "That can
+# change them" is the path list below and it is why it exists: `every push` was 90 pushes a day on one
+# 2-core runner, and the gates of a released batch waited ten hours behind them (DGO-1619).
 #
 # packaging/dgo's tests include ORACLE tests: they run platform/manager/reconcile.py (and the other
 # Python originals a slice ports) beside the Go code on the same input and require identical answers.
 # They skip themselves when no Python with PyYAML is on PATH, which on a runner would read as a pass
 # while proving nothing — so PyYAML and Flask are ensured first, and a skipped oracle fails the job.
 
+# WHICH PUSHES ASK FOR A GO TEST (DGO-1619). It used to be every push of every branch: on 2026-11-09
+# alone that was 20 pushes on hp-dgo and 70 on mac-dgo, and each one queued this file's five-module
+# matrix on the ONE runner (the Dell, 2 cores) — behind which a dgo-stable batch's gates waited ten
+# hours. What runs `go test` reads MORE of the checkout than it looks: the oracles run the checkout's
+# own Python, its schema and its state files, they exec `bbox` and `scripts/lib.sh`, and the console
+# package is an oracle on `platform-base/console/`. An ALLOW-LIST of "the paths that matter" was the
+# first draft and it was wrong in a way that fails open: one forgotten path (platform-base/console/**,
+# platform.state.core.yaml, .env.ex, bbox) and a push that changes them runs NO Go test at all — and
+# the only other `go test` in the repo is release-binaries.yml on a v* tag, which is the "sits on a
+# branch unseen until the next release" this file was written to end.
+# So the filter is a DENY-LIST of trees no Go code can observe. A file that is not inert in a way
+# somebody checked runs the matrix: the wrong answer costs a queued job, never a silent green.
 on:
   push:
+    # A push that changes nothing a Go test reads takes no turn on the Dell's one runner, the runner the
+    # release gates wait on. Measured 2026-11-09: go-test took ~512 runner-minutes in 24 h, and 26 of 51
+    # mac-dgo pushes touched only these trees. None of them is read by packaging/dgo: no Go file names
+    # them (git grep, 0 hits each). Briefs (AGENT.md) and ai/context ARE read by the compiler, so they
+    # stay in. GitHub skips the run only when EVERY changed file matches.
+    paths-ignore:
+      - 'research_notes/**'
+      - 'reports/**'
+      - 'issues/**'
+      - 'apps/project-pln/plans/**'
+      - 'apps/digital-assets/content/**'
   pull_request:
   workflow_dispatch:
 
-# A run is never cancelled by a newer push: one runs, and only the NEWEST push waits behind it (GitHub
-# replaces a pending run of the group with the next one). Cancelling kept mac-dgo with no result at all —
-# measured 2026-11-02, 20:39–20:49Z: five pushes in ten minutes, every run cancelled, against a run of
-# ~20 min, so no Go change on the branch was ever tested (r030-003). The Dell runs as many as before.
+# ONE RUN PER BRANCH, AND THE RUNNING ONE FINISHES: a newer push replaces only the run still WAITING in the
+# group (GitHub's rule for `cancel-in-progress: false`), so a branch always gets the verdict of the proof
+# that started, then of its newest head. This is the SECOND time it is chosen, each time on a measurement:
+# `false` on 2026-11-02 (five pushes in ten minutes cancelled every run, r030-003); then cancelling in place
+# for every branch but dgo-stable, which on 2026-11-10 — seven lanes pushing mac-dgo every ~1.5 minutes —
+# cancelled 60 of 63 go-test runs since 12:00Z and left the branch with almost no verdict, and never a green one
+# (issues/the-branch-seven-lanes-…yaml, DGO-1797). The price: a running branch run now drains, and the one
+# runner has no priorities, so a dgo-stable run queued behind it waits. dgo-stable's RUNNING run was never
+# cancelled and still is not; its waiting one, like every branch's, is replaced by a newer one.
 concurrency:
   group: go-test-${{ github.ref }}
   cancel-in-progress: false

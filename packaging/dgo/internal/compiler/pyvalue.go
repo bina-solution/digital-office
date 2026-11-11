@@ -6,7 +6,7 @@ import (
 	"sort"
 	"strconv"
 
-	"github.com/solomonBoltin/deployment-hacohen/packaging/dgo/internal/yamlish"
+	"github.com/bina-solution/digital-office/packaging/dgo/internal/yamlish"
 )
 
 // ── values as Python holds them ────────────────────────────────────────────────────────────────────

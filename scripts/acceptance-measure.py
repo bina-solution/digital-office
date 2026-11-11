@@ -7,7 +7,7 @@ BS-line completion, system-at-rest, and errors. Reusable for every acceptance ru
 """
 import subprocess
 
-DB = ["docker", "exec", "supabase-db-shlomo-laptop", "psql", "-U", "postgres", "-d", "postgres", "-tAF,", "-c"]
+DB = ["docker", "exec", "supabase-db-owner-laptop", "psql", "-U", "postgres", "-d", "postgres", "-tAF,", "-c"]
 
 
 def q(sql):

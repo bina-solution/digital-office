@@ -6,25 +6,46 @@
 # runs on this office and on every linked office (each one's own `machine`, through its door), and
 # prints each difference. A change of target is made HERE, in one commit — never in a session's notes.
 
+# The herd's own name — what its offices declare as `DGO_HERD` (.env.ex, DGO-1003). Where the key below cannot be
+# read (a CLI verb on the host: `bbox apps enable`, scripts/herd_enable_guard.py, DGO-579), an office whose
+# `DGO_HERD` names another herd is not taken as one of these, whatever it is called; one that names none is.
+herd: Bina Solutions
+
+# Each office's WireGuard PUBLIC key (`wg_public_key`: what every pairing shows; never a secret): the herd's hub
+# joins the pairs of these offices at its relay without a key pasted into its `.env` (DGO-1355). The hub's
+# `link_host` is its door — `wss://<link_host>/relay` is every other office's relay, with nothing in their `.env`
+# either. The key is also what makes an office this herd's: an office is taken as one of these only when its
+# own key is the one written here, never by its name alone (a client's machine may be called `portable`).
+# AN OFFICE WHOSE KEY IS MADE AGAIN (a fresh install, a wiped tunnel) STOPS BEING THE HERD'S until its line here
+# carries the new key: no relay join, and its door reads lose the herd's mark (`x-dgo-herd`, give.herd_peer), so
+# what narrows by that mark treats it as any linked office (DGO-1800). Re-keying is one reviewed commit here.
 offices:
   macbook:
     label: MacBook
+    wg_public_key: '+0B1Hc+7nYPESAjx/uu3JSDeuYQYadu7dvV0eb/C5B8='
     role:
       he: 'השולחן — הממשק: קונסול, קישורים ו-Claude; בלי נתונים עסקיים'
       en: 'the desk — the interface: console, links and Claude; no business data'
   hp-laptop:
     label: HP
+    wg_public_key: 'OUBWvxLVZJDWW19J9sZPePVPi3i1rickvdqcXagbbns='
+    alert_after_s: 300              # always on: its silence is told after five minutes, not ten (DGO-922)
     role:
       he: 'המשרד — דלוק תמיד: כל אפליקציה עסקית, כל אוטומציה וכל הנתונים'
       en: 'the office — always on: every business app, every automation, all the data'
   dell:
     label: Dell
     aliases: [portable-ubuntu, portable]     # the office id the Dell declares is matched by any of these
+    wg_public_key: 'goMFvhsFv7EUbKsnI2PGwdBOnEFdhdIzMBBp8axs4Vg='
     role:
       he: 'בית המלאכה — עבודה כבדה שרצה לפעמים: מודלים, תמלול, OCR, CI ומאגר הגיבוי'
       en: 'the workshop — heavy work that runs sometimes: models, transcription, OCR, CI, the backup store'
   vps1:
     label: vps1
+    wg_public_key: 'ka9qFHK11KwtSPR1MDftp9Kpd9yb8Y6rvmf2ESWLHgQ='
+    link_host: link.staging.digital-office.co.il
+    public: true                    # on the internet: never given another office's admin surfaces by `*`
+    alert_after_s: 300              # always on, like the HP (DGO-922)
     role:
       he: 'החלון והדלת — ציבורי: אתרים, Meet, דואר והכניסה לכל העדר'
       en: 'the storefront and the door — public: websites, Meet, mail, the entrance to the whole herd'
@@ -35,6 +56,79 @@ offices:
 # the offices at home THROUGH the hub: `bbox via <hub> …` runs a command there, and project-pln falls
 # back to it by itself when the office that runs Plane does not answer directly (apps/project-pln/where.sh).
 hub: vps1
+# …and the hub's console: where every link a PERSON is given opens — `https://<hub_console>/go/<ref>` (DGO-1433,
+# platform-base/console/links.py), built by `bbox console link`. The one console the owner reaches from anywhere,
+# his phone included; a `.localhost` console is the reader's own machine (RFC 6761), never a link.
+hub_console: console.staging.digital-office.co.il
+
+# What `*` never gives the hub (public), an office marked `public: true`, or an office that is not one of the
+# offices above (a client's, a sandbox): the vault, root commands and terminals, app management, git, security,
+# the console, the full-access agents, the office browser, the machine and its routes and backups, and the
+# admin consoles of the engine and its stores, and n8n (its Execute Command node is a shell) (DGO-1360). Such an
+# office gets one of them only by name, in the giving office's `serve.only.<office>` or in `give:` below. Since
+# DGO-863 (2026-11-11) the offices above too, from an office listed in `admin_by_name` below: `*` gives it none of
+# these — the home offices held each other's vault and root commands with nobody naming them (an office not listed
+# yet keeps `*` for the home offices until its door is measured). Measured 2026-11-05: a fresh join gave vps1 the
+# MacBook's vault, root commands and GitHub proxy by `*`. A DENY list: an app that can act as an administrator is
+# added here when it is added (dgo-extend: an office's links, `serve:` and pairing).
+# `claude-terminal` stays listed after its deletion (DGO-1684) until every office has taken that change: an
+# office that still runs it must not give it away by `*` meanwhile.
+admin_apps: [connections, computers, app-management, git, security, console, claude-terminal, terminal, bina-ds,
+             bina-claude, openhands, browser42, machine, office-routes, data-management, portainer, redisinsight,
+             n8n, domain-internic, dgo-extend]   # domain-internic writes the company's DNS (DGO-1473)
+
+# What an office ALWAYS gives another, BY NAME — whatever its own `serve:` says (DGO-1433). `serve:` lives in the
+# giving office's dgo-extend volume, and any writer replaces it whole: on 2026-11-06 at 12:56 the HP's group answerer
+# «declared» seven apps and bina, bina-claude and browser42 left every office, under the owner's links. What is
+# written here is read ON TOP of `serve:` and never into it (apps/dgo-extend/give.py): no writer of the volume can
+# withdraw it, and taking a line out of this file — one reviewed commit — withdraws it again. By key, like the
+# relay: only between offices whose keys are the ones above. Names are app ids or aliases, as in `serve.only`.
+# REACH: an app given here is NAMED in the giving office's map, so a plain app reaches every office that map's
+# `only` does not narrow; an ADMIN app (above) reaches only the office its line names — the withholding takes it
+# out for every other office (DGO-863) — and an office `only` narrows gets exactly what is written here for it.
+# vps1 is the owner's console away from home (his phone); the MacBook is his desk and runs `bbox agent --office
+# hp-laptop` (bina-ds), `bbox via hp-laptop` (computers) and `bbox project-pln` (project-pln) against the HP.
+# THE ADMIN LINES ARE MEASURED (DGO-863, 2026-11-11): every door's served requests for 72 h, read through each
+# office's security app — each admin app a home office really opened at another is named here (requests in 72 h):
+# HP by the MacBook computers 12,325, machine 561, bina-ds 85, bina-claude 22, security 11, browser42 5; HP by the
+# Dell security 254, machine 122, office-routes 4; MacBook by the HP computers 8,914, git 806, security 11; MacBook
+# by the Dell security 93, git 51 (`bbox follow` through the MacBook's git); vps1 by the MacBook computers 16,619,
+# machine 1,016, security 499; vps1 by the HP computers 10,714, machine 1,523, security 93. NOT named, so withheld:
+# connections (the vault) and app-management, opened once or twice in 72 h. NOT MEASURED: an agent's port (bina-ds's,
+# browser42's, bina-claude's adapter) is a raw splice with no access record, so each agent stays named wherever a
+# home office could reach it before.
+# apps/dgo-extend/tests/test_admin_withheld.py holds every measured pair open and the vault closed.
+give:
+  hp-laptop:
+    vps1: [bina-ds, bina-claude, browser42, telegram, newsflow, project-pln]
+    macbook: [bina-ds, bina-claude, browser42, computers, project-pln, machine, security]
+    dell: [security, machine, office-routes, bina-ds, bina-claude, browser42]
+  macbook:
+    vps1: [domain-internic]       # the InterNIC provider of vps1's domains (DGO-1473)
+    hp-laptop: [computers, git, security, bina-ds]
+    dell: [security, git, bina-ds]
+  vps1:
+    macbook: [computers, machine, security, bina-ds, bina-claude]
+    hp-laptop: [computers, machine, security, bina-ds, bina-claude]
+
+# STAGED (DGO-863, AGENTS rule 8): the offices that give admin apps to the home offices BY NAME only. An office not
+# listed keeps `*` for the home offices, as before, until its own door is measured — the Dell's could not be read
+# from the MacBook (its security app is not given to it), so it is not here yet. (The hub, a public office and a
+# foreign one are withheld from by every office, listed or not: DGO-1360.)
+admin_by_name: [macbook, hp-laptop, vps1]
+
+# A company's office we set up is linked to ours ONE WAY while we do (DGO-964, DGO-1636): we see and manage it, it
+# sees nothing of ours. At hand-over the link is cut FIRST (unpair, from either screen), THEN its line below goes:
+# removing the line only stops asking and lifts the narrowing, it never unpairs. It runs DGO Extend of its own, so
+# it is a JOIN pair (DGO-1363): each office of ours in `by` (by its key above, never by name) asks the client's link
+# door to join, asking `use`, and the owner approves it once on the client's screen — the fingerprint shown there is
+# `pin`. Our side takes only the client's `serve`, and gives the client nothing (apps/dgo-extend/clients.py).
+clients:
+  exampleu:
+    herd: Exampleu
+    door: https://link.exampleu.digital-office.co.il
+    pin: CHANGE_ME
+    by: [macbook]
 
 # Every office runs these: its own door and its own guard. Running them everywhere is not duplication.
 base: [traefik, authentik, forward-auth, console, connections, app-management, dgo-extend, security,
@@ -65,6 +159,8 @@ apps:
   supabase: hp-laptop
   indox: hp-laptop
   drive: hp-laptop
+  drive-local: hp-laptop         # «קבצים»'s engines run beside it: drive requires both (DGO-1500, apps/drive/ENGINES.md)
+  drive-google: hp-laptop
   project-pln: hp-laptop
   bina-ds: hp-laptop             # one Azaria; it operates the other offices through the links (DGO-926)
   browser42: hp-laptop
@@ -72,6 +168,7 @@ apps:
   digital-assets: hp-laptop
   social-list: hp-laptop
   telegram-tv: hp-laptop         # or retired — decided on DGO-936
+  telegram: hp-laptop            # the owner's Telegram and its event stream — the owner, DGO-1300
   chat: hp-laptop                # its webhooks enter at vps1's edge and cross the link
   git: hp-laptop                 # if it holds what GitHub lacks — decided on DGO-935
   glitchtip: hp-laptop           # or retired — decided on DGO-927
@@ -83,6 +180,11 @@ apps:
   ollama: dell
   sites: vps1
   domains: vps1
+  # a provider app runs where the account it drives lives — where its credential is typed and its browser
+  # signs in. The MacBook (DGO-1473, 2026-11-08): the HP's browser holds an InterNIC session but no office
+  # can reach the HP to run anything there, so the app signs in by itself on the MacBook with the credential
+  # typed once in its חיבורים ומפתחות; vps1's domains reaches it through the link (give:, below)
+  domain-internic: macbook
   mail: vps1
   meet: vps1
 

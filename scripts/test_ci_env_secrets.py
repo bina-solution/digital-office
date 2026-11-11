@@ -51,6 +51,8 @@ def make_env(**env):
     os.makedirs(os.path.join(d, "scripts"))
     os.makedirs(os.path.join(d, "platform-base", "postgres", "hooks"))
     shutil.copy(os.path.join(REPO, "scripts", "ci-env.sh"), os.path.join(d, "scripts"))
+    for f in ("env-secrets.py", "env-secrets.public-sha256"):     # part 2: the one generator ci-env.sh calls
+        shutil.copy(os.path.join(REPO, "scripts", f), os.path.join(d, "scripts"))
     for f in (".env.ex", "platform.state.default.yaml"):
         shutil.copy(os.path.join(REPO, f), d)
     shutil.copy(os.path.join(REPO, "platform-base", "postgres", "hooks", "keygen.py"),

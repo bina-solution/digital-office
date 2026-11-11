@@ -62,7 +62,12 @@ N8N_SET = [
     "noop-success-lint",
     "n8n-loop-order-lint",
     "legacy-ref-lint",
-    "tracked-secret-lint",      # G92 - no private key or provider token in a tracked file (.env.ex's 4 declared until DGO-1220)
+    "tracked-secret-lint",      # G92 - no private key or provider token in a tracked file (.env.ex', a secret's shape)
+    "env-template-secret-lint",  # G93 - the template carries no secret; env-secrets.py names every secret key (DGO-1220)
+    "webhook-auth-lint",        # G97 - an ACTIVE webhook the edge publishes authenticates or is closed to
+                                #       the internet (DGO-1603). Red on arrival: 12 active open webhooks in the
+                                #       tree; see KNOWN_RED.
+    "checkout-owner-lint",      # G94 - the checkout's owner can write every path a session writes (DGO-1324); one owner passes
     # G42 direct-db-write-lint / G43 single-identity-lint RETIRED 2026-08-07 — they mandated
     # `indoxDataGateway01` / `indoxIdentity01`, an agent-invented design the owner rejected and
     # which was disarmed. See GATES.md.
@@ -109,12 +114,14 @@ N8N_SET = [
                                 #       baseline). Its GATES.md row claimed lanes "ci,
                                 #       fresh" while NO runner invoked it - a promise in
                                 #       the file that nothing kept, found by unwired_gates().
-    "app-coupling-lint",        # G33 (by its own docstring) - an app may not name another app's
+    "app-coupling-lint",        # G102 (by its own docstring; it declared G33 until 2026-11-03, when
+                                #       the duplicate-number check learned to read this spelling —
+                                #       G33 is state-writer-lint's) - an app may not name another app's
                                 #       id in code; waivers live in platform/app-coupling-waivers.yaml.
                                 #       Written 2026-08-12, wired 2026-09-03: found by unwired_gates()
                                 #       and RED on arrival (console→chat, data-management→indox/n8n),
                                 #       so it is KNOWN_RED below rather than silently green.
-    "decide-lane-reachability-lint",  # (no number yet) - every Action Router lane must have a decide
+    "decide-lane-reachability-lint",  # G104 - every Action Router lane must have a decide
                                 #       that returns it, and every decide return must have a lane.
                                 #       Written 2026-08-30, wired 2026-09-03, RED on arrival: 10 router
                                 #       lanes no decide feeds (11 before source_feedback, fed by a
@@ -237,6 +244,16 @@ LIVE_SET = [
                                  #       screen in desktop mode's window, as opened and at its smallest,
                                  #       photographed) and `connect` are RUN against the office. A suite
                                  #       is run by whoever remembers it: `connect` was red for a day.
+    "webhook-auth-lint",         # G97 — here with --live (LIVE_ARGS): the same rule on the office's own
+                                 #       n8n rows, the published bodies it runs. The tree is what a push
+                                 #       WOULD publish; the database is what the edge publishes now, and
+                                 #       a workflow with no blueprint is only there (DGO-1603 step 3).
+    "public-route-lint",         # G116 — here with --live (LIVE_ARGS): every router the office's edge
+                                 #       serves (its running containers' labels and traefik's file
+                                 #       provider) is behind the sign-in, serves nothing, is one of the
+                                 #       platform's own doors, or has hosts the office's `public:` names.
+                                 #       The manifests are what it could serve; the edge is what it does
+                                 #       (DGO-1177 stage 2: vps1's 13 open routers, the MacBook's 0).
 ]
 
 # What a gate is given in the live lane ON TOP of GATE_ARGS: the same script asked the question
@@ -244,6 +261,8 @@ LIVE_SET = [
 LIVE_ARGS = {
     "plane-tests-lint": ["--in-images"],
     "desktop-windows-lint": ["--live"],
+    "webhook-auth-lint": ["--live"],
+    "public-route-lint": ["--live"],
 }
 
 # Extra flags a gate needs, mirroring how ci-verify.yml invokes it.
@@ -274,31 +293,21 @@ KNOWN_RED = {
     # across mutually-exclusive output indices. Sitting on this roster is what let a real
     # user-visible bug read as background noise for weeks. A gate parked here must have a reason
     # that survives someone actually investigating it — these did not.
-    # G67 reports 9 reachability findings across 4 unauthenticated webhook paths. It is red
-    # because the finding is REAL, not because the gate is wrong: /webhook/indox-manage takes no
-    # authentication and its Action switch routes RESET into IndoxResetFull01, whose 'Clear Table'
-    # empties public.incoming_documents — a table whose production baseline is ~39,000 client
-    # documents. Exactly one of the nine is proven routable end to end; the rest are an
-    # over-approximation the gate's own docstring labels as such.
-    #
-    # It stays red deliberately, and the reason survives investigation (which is what this roster
-    # demands): closing it is a PAIRED change. Setting `authentication` on the webhook breaks every
-    # caller that does not send the credential, and the BFF's _svc_call sends none today — so the
-    # webhook and the BFF must move together. Whether that ships before release also depends on
-    # whether the VPS is reachable from outside, which is an owner decision still open at the time
-    # of writing. Un-park this the moment that answer lands; do not let it become background noise,
-    # which is the failure mode this roster's own comment above warns about.
-    "open-destructive-webhook-lint",
-    "swallowed-subcall-lint",    # G53 — 22 sub-calls whose failure nothing reads. Each needs its
-                                 #       owner's verdict (deliberate fire-and-forget, or a failure
-                                 #       nobody has ever seen); seeding 22 invented reasons to make
-                                 #       it green would be the false-clean it exists to prevent.
-    "dead-fallback-lint",        # G59 — 1 finding, and it is the one the gate was written for:
-                                 #       syncV3Deliver0001's `Proj Kind` gmail fallback, with
-                                 #       `Label Req` behind it, is unreachable because every
-                                 #       inbound already requires src_kind=='drive'. Real dead
-                                 #       code; deleting it is another lane's call, and the
-                                 #       finding is the gate working, not a regression.
+    # G97 webhook-auth-lint — red on arrival for a REAL reason (DGO-1603): measured on vps1 from its
+    # own n8n database, eight active webhook nodes over seven paths answered the public host with
+    # `authentication: none` — INDOX's `incoming_document` (create and read), `mail-api/doc-context`
+    # (a client's document context, 21 runs in 30 days), `meet-recordings` (1911 runs: it fetches an
+    # audio URL and writes Plane items) and three `sync-*-e2e-lane` runners. It is parked rather than
+    # fixed here for G67's reason exactly: closing each one is a change to that app's own blueprint
+    # with a caller to name first, and the sweep belongs with the session that holds those files. The
+    # gate counts 12 in the TREE because an office imports only the subset it runs. The sweeps landed:
+    # un-parked 2026-11-11 (below) — the live lane never excused it (known_red_for), the tree now does not.
+    # G67 open-destructive-webhook-lint left this list on 2026-11-10 (the release, DGO-969): DGO-433's five
+    # (indox-manage, query, mail-api/doc-context, sync-kernel-e2e-lane, sync-sources-e2e-lane → indoxApi01's
+    # 'PG Delete', which runs only on INLINE_ACTION='DELETE' and no caller sends) are its KNOWN_REACH now, in
+    # the gate, where the CI's gates.sh reads them — this list is not read there, so CI stayed red. The
+    # measurement and the paired change that closes them (authentication with the BFF's _svc_call, the owner's
+    # word on the VPS's exposure) are DGO-1759.
     "mail-connection-lint",      # G62 — 3 n8n call sites as read on 2026-10-07. From 2026-08-16
                                  #       until then its n8n half globbed `*.json`, scanned zero
                                  #       workflows, and this gate PASSED while sitting on this
@@ -335,16 +344,20 @@ KNOWN_RED = {
                                  #       defensive totality justifies a provably-dead
                                  #       branch is a house-style call, not the gate being
                                  #       wrong. Left red until that is decided.
-    "dropped-signal-lint",       # G50 — 2 dropped signals in api/__init__.py's _move_items,
-                                 #       owned by another lane. Remove this entry when they land;
-                                 #       the gate is green everywhere else in the tree today.
-    "app-coupling-lint",         # G33 — 3 cross-app references (console→chat, data-management→
+    "app-coupling-lint",         # G102 — 3 cross-app references (console→chat, data-management→
                                  #       indox/n8n), unwaived. Wired 2026-09-03 red rather than
                                  #       left unwired green; each needs a waiver with a reason or
                                  #       a manifest lookup — not this release's scope.
     "decide-lane-reachability-lint",  # 11 dead router lanes + 12 advisory no-lane returns,
-                                 #       measured 2026-09-03 the day the gate was wired. Each is an
-                                 #       owner decision (remove the lane / restore the branch).
+                                 #       measured 2026-09-03 the day the gate was wired (10 dead
+                                 #       lanes on 2026-11-11). Each is an owner decision (remove
+                                 #       the lane / restore the branch).
+    # G97 webhook-auth-lint, G53 swallowed-subcall-lint, G59 dead-fallback-lint and G50 dropped-signal-lint
+    # left this roster on 2026-11-11 (core-android, deep-scan row 4): measured GREEN on mac-dgo's head with
+    # node in a vps1 probe (the TypeScript blueprints compiled by apps/n8n/tooling) — G97 «every active webhook
+    # either authenticates or is closed» (94 blueprints, 29 active webhook nodes: the sweeps landed), G53 84
+    # swallowing sub-calls every one read, G59 no unreachable branch, G50 every dropped signal declared. On
+    # this roster a regression in any of them would have read as background noise; off it, it is red.
     # G41 switch-fallback-lint and G46 drive-connection-lint were listed KNOWN FAILING in
     # GATES.md but measured GREEN on 2026-08-06 — left off this list so they stay enforced.
     # G44 dead-activation-lint went green the same day (whatsappSendDoc01 deactivated).
@@ -375,7 +388,19 @@ NOT_A_GATE = {"n8n-layout", "n8n-position-restore",
               # a library is not a check.
               "n8n_blueprint",
               # How a gate looks at a running office with a browser (G79, G81): also a library.
-              "office_browser"}
+              "office_browser",
+              # G116's live edge (public-route-lint.py --live imports it): the edge's readers and judge, a library
+              # with no __main__ of its own. Listed unwired from dc7e0c778 until this line (DGO-1177).
+              "public_route_live",
+              # A REPORT, not a gate (its docstring says why): how much of a UI's Hebrew the language
+              # runtime can translate. Thousands of strings are not wrapped yet, so a gate would be red on
+              # arrival (DGO-971 lands the runtime a slice at a time).
+              "lang-coverage",
+              # A MEASURE, not yet a gate (its docstring says why): every mention of the `bbox` CLI by shape,
+              # with the files it read (DGO-1235, for the rename to `dgo`, DGO-1236). Until the rename starts,
+              # every new brief still writes `./bbox`, so a ratchet would be red for doing the right thing; its
+              # --check against bbox-caller-baseline.json gets a number of its own when the counts start to fall.
+              "bbox-caller-lint"}
 
 
 def gate_number(stem: str) -> str:
@@ -385,16 +410,32 @@ def gate_number(stem: str) -> str:
         head = (GATE_DIR / f"{stem}.py").read_text(encoding="utf-8", errors="replace")[:2000]
     except OSError:
         return "?"
-    m = re.search(r"\bG(\d{1,2})\b", head)
+    # `\d{1,3}`: the registry is past G99 now, and a two-digit pattern made the label of G102/G103/G104
+    # the first OLD number their docstring happens to mention (measured 2026-11-09: `red* G33
+    # app-coupling-lint`, whose own output said G102). The declared-number parser already read three
+    # digits; this one — the display — did not.
+    m = re.search(r"\bG(\d{1,3})\b", head)
     return f"G{m.group(1)}" if m else "?"
+
+
+#: THE TWO SPELLINGS of a declared gate number, both read off LINE ONE of the docstring only:
+#:
+#:     \"\"\"<stem> — gate G48: <the claim>.\"\"\"      the house form — the number after the word `gate`
+#:     \"\"\"G<n> <stem> — <the claim>.\"\"\"          the same claim written the other way round
+#:
+#: A declaration is a title line: the number is introduced by `gate ` and followed by a colon, or it
+#: OPENS the line and the line goes on to say what the gate is (`"""G42 (re-pointed) -- …` is that
+#: same opening written with a note after the number). Anything not anchored that way on line one is
+#: prose — a citation, a history, "gate G9's business, not this one's" — and is deliberately not read.
+DECLARED_AFTER_GATE = re.compile(r"\bgate\s+G(\d{1,3})\s*:")
+DECLARED_AS_TITLE = re.compile(r"^G(\d{1,3})(?!\d)")
 
 
 def declared_number(stem: str) -> str | None:
     """The gate number a script DECLARES, from the FIRST LINE of its module docstring.
 
-    The house form is `\"\"\"<stem> — gate G48: <the claim>.\"\"\"`, and this matches only that:
-    `gate G<n>` followed by a colon, on line one of the docstring, parsed with `ast` rather than
-    read off the raw text.
+    Both spellings above are accepted, and NOTHING ELSE: line one of the docstring, parsed with
+    `ast` rather than read off the raw text.
 
     EVERY ONE OF THOSE NARROWINGS IS PAID FOR. The first version of this function scanned the first
     2000 characters of the FILE for `gate G<n>`, and on its first real run it reported three
@@ -403,15 +444,32 @@ def declared_number(stem: str) -> str | None:
     one's", and a sibling lane's gate was credited with a number it had already renumbered away
     from. A collision report that cannot be trusted is worse than no report, because the next
     person to see one assumes it is noise — which is exactly how the duplicate numbering survived
-    this long. Citations live in prose; declarations live on line one with a colon.
+    this long. Citations live in prose; declarations live on line one.
+
+    THE SECOND FORM WAS MISSED, AND IT COST THE SAME THING AGAIN. Three gates open the other way
+    round — `G33 app-coupling-lint —`, `G65 node-coverage-gate —`, `G42 (re-pointed) --` — and a
+    parser that read only the house form answered None for each of them. So `duplicate_numbers()`
+    returned {} while G33 named two different gates and G65 named two more (measured 2026-11-03):
+    a guard that cannot see a claim is a guard that cannot see a collision, and the registry's
+    whole purpose — "G<n> failed" names exactly one gate — was broken while this check reported
+    clean. Both forms are titles, so both are read; a number anywhere else still is not.
     """
     try:
         src = (GATE_DIR / f"{stem}.py").read_text(encoding="utf-8", errors="replace")
         doc = ast.get_docstring(ast.parse(src)) or ""
-    except (OSError, SyntaxError):
+    except (OSError, SyntaxError, ValueError) as e:
+        # Named, not swallowed: a file the registry cannot read is a fact about the tree, and the
+        # defect this catches (an AppleDouble `._x.py` beside the gates, batch 30) is exactly what
+        # a silent None would hide.
+        print(f"[numbering] {stem}.py cannot be read as python ({e.__class__.__name__}) — "
+              f"not counted as a gate's declaration", file=sys.stderr)
+        # ValueError: a file this directory holds that is not python at all — measured 2026-11-09
+        # (batch 30's merge): a macOS AppleDouble `._<name>.py` beside the gates made `ast.parse`
+        # raise "source code string cannot contain null bytes" and took the WHOLE numbering check
+        # down with it. A registry that crashes on junk is a registry that reports nothing.
         return None
     first = doc.strip().splitlines()[0] if doc.strip() else ""
-    m = re.search(r"gate\s+G(\d{1,3})\s*:", first)
+    m = DECLARED_AFTER_GATE.search(first) or DECLARED_AS_TITLE.match(first)
     return f"G{m.group(1)}" if m else None
 
 
@@ -473,6 +531,13 @@ def unwired_gates() -> list[str]:
     return [s for s in discover_all() if s not in wired and s not in ci]
 
 
+def known_red_for(live: bool) -> set:
+    """A KNOWN_RED reason is about the question the static lane asks. A gate given LIVE_ARGS asks the
+    OFFICE a different one (G97: the tree's twelve open blueprints vs the rows this office runs), so
+    the tree's reason cannot excuse a red there: in the live lane it is a regression."""
+    return {s for s in KNOWN_RED if not (live and s in LIVE_ARGS)}
+
+
 def run_one(stem: str, live: bool = False) -> subprocess.CompletedProcess:
     return subprocess.run(
         [sys.executable, str(GATE_DIR / f"{stem}.py"), *GATE_ARGS.get(stem, []),
@@ -491,8 +556,10 @@ def self_test() -> int:
     # THE NUMBERING CHECK, PROVEN — not promised. `run-gates.py` exited 1 with every gate green for
     # as long as `counted-plural-lint` and `identity-header-lint` both declared G86 (fixed 2026-10-26
     # by moving the former to G89), and the check that says so is derived from the filesystem, so it
-    # can be proven here without the real tree: two scripts that declare one number must come back
-    # named, each of them, under that number.
+    # can be proven here without the real tree: scripts that declare one number must come back
+    # named, every one of them, under that number — IN EITHER SPELLING, because on 2026-11-03 two
+    # real gates (G33, G65) were claimed twice and this check said {} only because they wrote the
+    # number first. A self-test that proves one spelling is a self-test of one spelling.
     import shutil
     import tempfile
     tmp = pathlib.Path(tempfile.mkdtemp())
@@ -500,20 +567,25 @@ def self_test() -> int:
         for stem in ("alpha-lint", "beta-lint"):
             (tmp / f"{stem}.py").write_text(f'"""{stem} — gate G86: a fake, for this self-test."""\n',
                                             encoding="utf-8")
+        (tmp / "gamma-lint.py").write_text(
+            '"""G86 gamma-lint — the same number, written the other way round."""\n', encoding="utf-8")
         global GATE_DIR
         saved, GATE_DIR = GATE_DIR, tmp
         try:
             dupes = duplicate_numbers()
             (tmp / "beta-lint.py").write_text(
                 '"""beta-lint — gate G99: the same script, a number of its own."""\n', encoding="utf-8")
+            (tmp / "gamma-lint.py").write_text(
+                '"""G98 gamma-lint — a number of its own, in its own spelling."""\n', encoding="utf-8")
             dupes_after = duplicate_numbers()
         finally:
             GATE_DIR = saved
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
-    d_ok = dupes == {"G86": ["alpha-lint", "beta-lint"]} and dupes_after == {}
-    print(f"  [{'ok ' if d_ok else 'FAIL'}] two gates declaring one number are named, both of them "
-          f"({dupes}), and one number each is silent ({dupes_after})")
+    d_ok = (dupes == {"G86": ["alpha-lint", "beta-lint", "gamma-lint"]}
+            and dupes_after == {})
+    print(f"  [{'ok ' if d_ok else 'FAIL'}] gates declaring one number are all named, in both "
+          f"spellings ({dupes}), and one number each is silent ({dupes_after})")
     ok = ok and d_ok
     print("\nrun-gates self-test: " + ("2/2 passed" if ok else "FAILED — "
           "subprocess status is unreliable here too, or the numbering check stopped catching"))
@@ -551,18 +623,19 @@ def main() -> int:
 
     regressions: list[str] = []
     known: list[str] = []
+    known_red = known_red_for(a.live)
     for stem in gates:
         p = run_one(stem, a.live)
         out = (p.stdout or "") + (p.stderr or "")
         first = next((ln for ln in out.strip().splitlines() if ln.strip()), "")
         red = p.returncode != 0
-        tag = "PASS" if not red else ("FAIL" if (a.strict or stem not in KNOWN_RED) else "red*")
+        tag = "PASS" if not red else ("FAIL" if (a.strict or stem not in known_red) else "red*")
         print(f"{tag:<5} {gate_number(stem):>4}  {stem:<30} rc={p.returncode}  {first[:96]}")
         if a.verbose or (red and tag == "FAIL"):
             for ln in out.strip().splitlines()[1:20]:
                 print(f"          | {ln[:150]}")
         if red:
-            (known if (stem in KNOWN_RED and not a.strict) else regressions).append(stem)
+            (known if (stem in known_red and not a.strict) else regressions).append(stem)
 
     dupes = duplicate_numbers()
     unwired = unwired_gates()

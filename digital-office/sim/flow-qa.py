@@ -11,6 +11,7 @@ a screenshot cannot catch, and every one of those has actually shipped here at l
     python3 digital-office/sim/flow-qa.py --mobile           # every flow at 390x844
     python3 digital-office/sim/flow-qa.py windows            # every screen in a desktop-mode WINDOW
     python3 digital-office/sim/flow-qa.py windows --tiles alerts,apps   # …these tiles only
+    python3 digital-office/sim/flow-qa.py windows --profile ultrawide   # …on the 3440×1440 screen, then eight open together
     python3 digital-office/sim/flow-qa.py --url https://…    # run the SAME suite against the LIVE
                                                              # platform, to prove parity after a port
 
@@ -18,9 +19,24 @@ The viewport matters: on a phone both rails move behind a drawer and the details
 fixed overlay, so the same flow travels a different path and can break in ways the desktop run
 never touches.
 
-Exit code is non-zero if any flow fails or any JS error is raised, so it can gate CI.
+EXIT CODE — THE RUN'S VERDICT, IN THREE STATES (rel-2). A release gate reads the exit code, so the code
+has to say which of three things happened and not two: otherwise a run that is "green WITH artifacts"
+and a clean green are the same number, and rel-2's criterion — "a green baseline in both offices" — can
+be met by a run that skipped the errors it could not read. The states are:
+
+    0   CLEAN — no flow failed and no JS error was raised. This, and only this, is a baseline.
+    2   NO REAL FAILURE, BUT ARTIFACTS — the run address caused errors that were counted and printed
+        under their own names, and NOT a baseline. Artifacts exist only when the address has nothing
+        under it (`lan_run()` below): aimed at a real domain `LAN is None`, nothing is an artifact, and
+        2 cannot occur — only 0 and 1.
+    1   RED — a flow failed, or a JS error that is not the address's was raised. Unchanged.
+
+The state is printed as one `VERDICT: …` line as well (clean / artifacts N — not a baseline / red), so
+nobody has to infer it from a count, and an artifact is never subtracted from a failure: it is named and
+printed with the browser's own reason, and it is excluded from nothing but its own tally. The reasoning
+behind what counts as an artifact is in `lan_run()` and `artifact()`.
 """
-import json, pathlib, sys, time
+import json, pathlib, re, sys, time, urllib.parse
 from playwright.sync_api import sync_playwright
 
 SIM = pathlib.Path(__file__).resolve().parent.parent / 'platform-sim.html'
@@ -28,6 +44,61 @@ SIM = pathlib.Path(__file__).resolve().parent.parent / 'platform-sim.html'
 # here is measured or photographed on a fixed wait alone (scripts/ui-coverage/drawn.py says why).
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[2] / 'scripts' / 'ui-coverage'))
 import drawn  # noqa: E402
+
+# ── THE EXIT CONTRACT, IN ONE PLACE (and it is a NUMBER, never a string) ────────────────────────
+# `sys.exit("<text>")` prints the text and exits **1** — the SAME 1 as "RED, a flow failed" (the
+# contract in the docstring above) — so "nobody could sign the browser in" and "the office broke"
+# were one number to every CI job and gate that reads this run's code. The codes are declared here
+# once and used here; the producer that mints the session
+# (`scripts/ui-coverage/flow-qa-session.py`) carries the same pair in its own head, because a run of
+# this file and a run of that one must answer the same way about the same fact:
+#   3  NO SESSION — no storage_state was obtained, so there is nothing to sign in WITH.
+#      This file can only carry 3 of the pair: it does not sign in, it reads the file it was handed.
+#   4  SIGNED IN, TARGET REFUSED — declared for the pair (the producer's); not reachable from here.
+#   5  BAD INVOCATION — a flag given with no value (the argv sweep in `main()`). Not a verdict on the
+#      office at all, so it must not share 1 (RED) or 2 (artifacts-only).
+# The success path is untouched: `verdict()` and `artifact()` still decide 0/1/2 and nothing else.
+EXIT_NO_SESSION = 3
+EXIT_TARGET_REFUSED = 4
+EXIT_BAD_ARG = 5
+
+
+def refuse(msg, code=EXIT_NO_SESSION):
+    """Say it on stderr and leave with an EXIT CODE that means it — one helper, so no path invents a
+    string exit (the defect this replaces: a missing storage_state answered 1, measured 2026-11-09)."""
+    print(msg, file=sys.stderr)
+    sys.exit(code)
+
+
+PROFILES_YAML = pathlib.Path(__file__).resolve().parents[2] / 'scripts' / 'ui-coverage' / 'view-profiles.yaml'
+
+
+def run_profile():
+    """(name, profile) when the run names a view profile (`--profile <name>`, view-profiles.yaml) — its size,
+    touch and user agent become the run's viewport. This is how a profile kept for one question is asked for:
+    the ultrawide of desktop mode (DGO-1789), which no map run captures by itself. None: 1440×900, or `--mobile`.
+    PyYAML is read only here, so a run that names no profile needs nothing it did not need before."""
+    given = [a for a in sys.argv if a == '--profile' or a.startswith('--profile=')]
+    if not given:
+        return None
+    if '--mobile' in sys.argv:                                   # two answers to one question: neither is guessed
+        refuse(f'--profile and --mobile both name the viewport — give one (exit {EXIT_BAD_ARG})', EXIT_BAD_ARG)
+    if given[0].startswith('--profile='):
+        name = given[0].split('=', 1)[1]
+    else:
+        i = sys.argv.index('--profile')
+        name = sys.argv[i + 1] if i + 1 < len(sys.argv) else ''
+    if not name or name.startswith('-'):
+        refuse(f'--profile: a value is required — a profile of {PROFILES_YAML.name} (exit {EXIT_BAD_ARG})', EXIT_BAD_ARG)
+    try:
+        import yaml
+        prof = ((yaml.safe_load(PROFILES_YAML.read_text(encoding='utf-8')) or {}).get('profiles') or {}).get(name)
+    except Exception as e:                                        # noqa: BLE001 — said, with the code that means it
+        refuse(f'--profile {name}: {PROFILES_YAML.name} could not be read ({type(e).__name__}: {e}) (exit {EXIT_BAD_ARG})',
+               EXIT_BAD_ARG)
+    if not prof:
+        refuse(f'--profile {name!r}: no such profile in {PROFILES_YAML.name} (exit {EXIT_BAD_ARG})', EXIT_BAD_ARG)
+    return name, prof
 
 
 def target_url():
@@ -39,6 +110,49 @@ def target_url():
         if a.startswith('--url='):
             return a.split('=', 1)[1].rstrip('/')
     return SIM.as_uri()
+
+
+def _no_nested_host(h):
+    """Can ANY name exist under this one? `console:8000` and `*.localhost` cannot — `plane.console:8000`
+    is a name nobody resolves and `.localhost` is its own site — and `console.staging.digital-office.co.il`
+    can. This is not a new rule invented here: it is the SAME predicate the shell asks of its own
+    hostname before it nests an app's host under it (`platform-base/console/static/app.js`,
+    `noNestedHost()`), copied so that the suite judges the shell's host by the shell's own rule."""
+    return (bool(re.match(r'(^|\.)localhost$', h))          # the localhost family
+            or '.' not in h                                  # a bare service name, or nothing
+            or bool(re.match(r'\d{1,3}(\.\d{1,3}){3}$', h))   # an IPv4 address
+            or ':' in h)                                     # an IPv6 address
+
+
+def lan_run():
+    """The host the suite is aimed at, WHEN NOTHING CAN EXIST UNDER IT — else None.
+
+    WHY THIS EXISTS (rel-2). `bbox flow-qa <suite> --live` aims the suite at the address the console
+    answers on INSIDE the office network, `http://console:8000` — a service name with no domain. The
+    console there derives an app's own host from its own hostname (`externalUrl()` nests it:
+    `plane.hp-laptop.console:8000`), which is exactly right under a real domain and points at nothing
+    under this one. So a live run inherits two errors that belong to the ADDRESS and not to the
+    office: a request to a name under it (ERR_NAME_NOT_RESOLVED), and a framed app refusing to be
+    framed by a parent origin the office's own CSP can never name (`frame-ancestors 'self'
+    https://console.<domain>` while the top page is `console:8000`). Reported as failures they read as
+    a regression in the console, which is the one thing a green suite must not lie about either way —
+    so they are NAMED, counted and printed, never disappeared (see the summary).
+
+    On a real address (`https://console.staging.digital-office.co.il`, or `*.localhost`, where every
+    label is its own site) this returns None and NOTHING is an artifact: every error stays a failure,
+    and such a run can only end at exit 0 (clean) or exit 1 (red) — `2` is unreachable there. This is
+    also the reason the address is decided BEFORE the run starts and not from what it happened to see.
+    """
+    u = target_url()
+    if not u.startswith('http'):
+        return None                                   # the simulation: one file, no host at all
+    h = (urllib.parse.urlsplit(u).hostname or '').lower()
+    return h if h and _no_nested_host(h) else None
+
+
+# The browser's own words for "this page may not be framed here" — X-Frame-Options from the app, or
+# a CSP `frame-ancestors` that lists the console's real origin and not the one it is running on.
+FRAMING_REFUSED = re.compile(r"X-Frame-Options|frame-ancestors", re.I)
 
 
 def tiles(ids):
@@ -74,6 +188,67 @@ def check(name, cond, detail=""):
     RESULTS.append((name, bool(cond), detail))
     print(("  PASS  " if cond else "  FAIL  ") + name + ((" — " + str(detail)) if detail and not cond else ""))
 
+# ── A FAULT OF THE ADDRESS IS NOT A FAULT OF THE OFFICE (rel-2) ─────────────────────────────────
+# The two lists below are how the suite can tell them apart. `RAW` keeps each JS error's own evidence
+# (the browser's words, not a guess made afterwards), and `artifact()` names the ones the run address
+# is responsible for — the full reasoning is in `lan_run()` above. What matters here is the shape of
+# the answer: an artifact is COUNTED AND PRINTED WITH THE TALLY, under its own name, and never
+# subtracted from a failure. The run is red for every flow that failed and every error that is not one
+# of the two named kinds — and when artifacts were skipped the run exits 2, not 0, so a green with a
+# filter in it can never read as a clean baseline (see the module docstring's three states).
+LAN = None                       # the run address's host when nothing can exist under it (main())
+RAW = {}                         # msg -> (kind, url-or-text, why) — what the browser actually said
+
+
+def _host_of(u):
+    return (urllib.parse.urlsplit(u).hostname or '').lower()
+
+
+def _under(u, h):
+    """Is this address a STRICT subdomain of `h`? `h` itself is the office this suite came from (a
+    request to it failing IS a failure); a name under it cannot exist when `h` has no domain."""
+    return _host_of(u).endswith('.' + h)
+
+
+def _quoted_url(text):
+    m = re.search(r"'([^']+)'", text or '')
+    return m.group(1) if m else ''
+
+
+def framing_refusals():
+    """The hosts whose framing this run was refused for, in the browser's own words."""
+    return {_host_of(_quoted_url(t)) for k, t, _w in RAW.values()
+            if k == 'console' and FRAMING_REFUSED.search(t or '')} - {''}
+
+
+def artifact(msg):
+    """Is this JS error the RUN ADDRESS's, rather than the office's? Two named kinds, nothing more —
+    and answered only when the address has no domain under it, so the same error on a real host
+    (`https://console.staging.digital-office.co.il`) stays a failure.
+
+      1. a `fetch`/`xhr`/`document` request to a STRICT subdomain of the run address: the console
+         nests an app's own host under its own (`externalUrl()`), which is right under a domain and
+         is a name nobody resolves under `console:8000`.
+      2. a framing refusal — `X-Frame-Options`, or a CSP `frame-ancestors` that names the console's
+         real origin — of an app framed by an origin no app's policy can name, and the DOCUMENT that
+         refusal blocked (the frame's own load, `ERR_BLOCKED_BY_RESPONSE`).
+
+    What the answer MEANS for the run is the module docstring's three states: a message this names is
+    an artifact — printed with its reason, and the run then exits 2 ("artifacts N — not a baseline"),
+    never 0. It is the ONLY thing that can lift a run from 1 to 2, and nothing here can lift a failure
+    to anything: `artifact()` is asked about one error, and a failed flow is red whatever it answers.
+    """
+    if not LAN:
+        return ''
+    kind, what, why = RAW.get(msg, ('', '', ''))
+    if kind in ('fetch', 'xhr', 'document') and _under(what, LAN):
+        return f'a name under {LAN}, which has nothing under it'
+    if kind == 'console' and FRAMING_REFUSED.search(what or ''):
+        return f'{_host_of(_quoted_url(what)) or "an app"} refuses a frame opened from {LAN}'
+    if kind == 'document' and 'ERR_BLOCKED_BY_RESPONSE' in (why or '') and _host_of(what) in framing_refusals():
+        return f'the frame {_host_of(what)} refused to be loaded into'
+    return ''
+
 def open_side(pg, fl):
     """Both apps put their rail behind a drawer on a phone. `is_visible()` is NOT the test — an
     element inside a translated-off-screen drawer still has a box — so go by the drawer's own open
@@ -92,10 +267,63 @@ def open_side(pg, fl):
             pass
 
 
-def rail(pg, fl, sel):
-    """Click a rail entry, opening the drawer first when the viewport put the rail behind one."""
+def first_ready(fl, sels, wait=2500):
+    """The first of a screen's own handles that answers — the ladder VIEW_TITLE describes: the front
+    the office runs NOW first, the one the offline simulation was built from last. Returns the handle,
+    so the caller goes on asserting exactly what it asserted; nothing is skipped when none answers
+    (the first handle comes back, and the failure names the app's current one)."""
+    for sel in sels:
+        try:
+            fl.locator(sel).first.wait_for(state='visible', timeout=wait)
+            return sel
+        except Exception:
+            continue
+    return sels[0]
+
+
+PLACE_FRONTS = [
+    # ONE RUNG PER FRONT, in `TITLE_SELECTORS`' order: the first rung is the front the office runs NOW
+    # (2026-10-30, the LIVE office), the second the simulation's build of the one before it. Handle AND
+    # name travel together inside a rung, and a rung's INDEX is the front it speaks for — so a caller can
+    # accept this place's name in the front that answered and in no other. Where the two fronts agree on
+    # a word the name is simply repeated, rather than a rung left out: a shorter list would make the
+    # index mean something else for that place alone, which is how the union crept in.
+    [('home', 'בית'), ('home', 'בית')],                       # both fronts call it «בית»
+    [('files', 'הקבצים שלי'), ('mydrive', 'הדרייב שלי')],
+    [('recent', 'נפתחו לאחרונה'), ('recent', 'לאחרונה')],
+    [('starred', 'מסומנים בכוכב'), ('starred', 'מסומן בכוכב')],
+    [('trash', 'אשפה'), ('trash', 'אשפה')],                   # both fronts call it «אשפה»
+]
+
+
+def place_rung(fl, rungs, wait=2500):
+    """(front, handle) — the rung of this place the page answered with, and its handle.
+
+    Where the fronts spell a place's handle their own way (`files` / `mydrive`) the handle that answers
+    IS the front, and its index comes back. Where they spell it the same (`home`, `recent`, `starred`,
+    `trash`) the handle says only that the place is drawn and nothing about WHICH front drew it, so the
+    front comes back None and the caller asks the title's own selector (`title_of`) — never the union.
+    The first rung's handle comes back when none answers, so the failure names the app's CURRENT handle
+    and not the old one."""
+    handles = [h for h, _ in rungs]
+    speaks = len(set(handles)) == len(handles)     # no two fronts share this place's handle
+    for i, handle in enumerate(handles):
+        try:
+            fl.locator(f'[data-place="{handle}"]').first.wait_for(state='visible', timeout=wait)
+            return (i if speaks else None), handle
+        except Exception:
+            continue
+    return 0, handles[0]
+
+
+def rail(pg, fl, sel, *alts):
+    """Click a rail entry, opening the drawer first when the viewport put the rail behind one.
+
+    `alts` are the SAME entry's handles in an older front (VIEW_TITLE): the live office runs the
+    drive's frontend of 2026-10-30 and the simulation is a build of the one before it, and the suite is
+    aimed at either without being told which — so the entry is the ladder, in the order of the fronts."""
     open_side(pg, fl)
-    fl.locator(sel).first.click(timeout=8000)
+    fl.locator(first_ready(fl, (sel, *alts)) if alts else sel).first.click(timeout=8000)
 
 
 def open_app(pg, mod, wait=2600):
@@ -110,6 +338,45 @@ def pick(row, **how):
     on a phone the name is most of the row."""
     row.locator('.ficon').first.click(**how)
 
+
+TITLE_SELECTORS = ('.crumbs .crumb[aria-current="page"]',   # the app's frontend since 2026-10-30 — the LIVE office
+                   '#viewTitle')                            # the same title before it — the simulation's build (2026-10-15)
+
+
+def VIEW_TITLE(fl, wait=2000):
+    """The drive's own title for what is open — the current crumb of the breadcrumb in the top bar.
+
+    It was `#viewTitle` until the app took its new frontend (2026-10-28): that id is gone from
+    `apps/drive/static/` entirely (`grep -rn viewTitle apps/drive/static/` finds nothing, measured
+    2026-11-07), and the top bar draws the place, or the folder, as `.crumbs .crumb[aria-current=page]`.
+
+    ONE question with two answers, asked in the order of the fronts it names. The live office runs the
+    new frontend and the offline simulation is a BUILD (2026-10-15) of the old one, and the suite is
+    aimed at either without being told which (`--url`): so the selector is a ladder — the app's own
+    handle first, the one it had before it second — and the first that is on the page wins. Both ids
+    are the app's own words, so nothing here weakens what the check asserts: it still reads the
+    drive's TITLE and still compares it to the place the rail was told to open.
+    """
+    return title_of(fl, wait)[1]
+
+
+def title_of(fl, wait=2000):
+    """(front, locator) — the drive's title, and WHICH FRONT's handle answered for it (`TITLE_SELECTORS`'
+    index, and so `PLACE_FRONTS`' rung index too).
+
+    The front is not decoration. The two fronts give the same place DIFFERENT words, so a check that
+    accepts either front's word passes a title written by the front that is NOT on the page — the same
+    green for a place the run never proved the app can open. The index comes back with the locator so
+    the caller accepts exactly one name. Returns the app's CURRENT handle when neither answers, so the
+    failure names what the app has now and not what it had before."""
+    for i, sel in enumerate(TITLE_SELECTORS):
+        loc = fl.locator(sel)
+        try:
+            loc.first.wait_for(state='visible', timeout=wait)
+            return i, loc
+        except Exception:
+            continue
+    return 0, fl.locator(TITLE_SELECTORS[0])
 
 def row_act(pg, fl, row, act):
     """One of a row's own actions: its button where there is a hover and room for buttons, its «⋮»
@@ -127,15 +394,38 @@ def drive_flows(pg, errs):
     fl = open_app(pg, '/m/drive')
     print("\nDRIVE")
 
-    # places
-    for place, label in [('mydrive', 'הדרייב שלי'), ('recent', 'לאחרונה'),
-                         ('starred', 'מסומן בכוכב'), ('shared', 'שיתפו איתי'), ('trash', 'אשפה')]:
-        rail(pg, fl, f'[data-place="{place}"]'); pg.wait_for_timeout(900)
-        check(f'drive/place {place}', label in fl.locator('#viewTitle').inner_text(),
-              fl.locator('#viewTitle').inner_text())
+    # ── THE PLACES, BY THE NAMES THE DRIVE ITSELF GIVES THEM ────────────────────────────────────
+    # This loop used to ask for `[data-place="mydrive"]` and «הדרייב שלי», which is what the drive's
+    # OLD frontend (`apps/drive/static/app.js`) wrote. The app took a new one on 2026-10-28 and the
+    # handle is now the app's own word for the view: `placeOf()` in `apps/drive/static/js/shell.js`
+    # maps `folder → files` and passes every other view through, so the rail carries
+    # `home · files · recent · starred · photos · music · videos · trash` (measured on the live office,
+    # 2026-11-07: exactly these eight, and no `shared` at all). «שיתפו איתי» is therefore not a place
+    # here and is no longer asked for — a check for a screen the app does not have is a failure of the
+    # CHECK. The title is the breadcrumb's current crumb (`.crumbs .crumb[aria-current=page]`), which
+    # is what the top bar draws for a place AND for a folder; `#viewTitle` was the old frontend's.
+    # …and each place is a LADDER over the two fronts (`PLACE_FRONTS`): the handle and the name come
+    # from the front that answered, so the rail is the OLD one's on the simulation and the new one's on
+    # the office, and what is asserted is the same thing on both — the title the place is given.
+    for rungs in PLACE_FRONTS:
+        front, handle = place_rung(fl, rungs)
+        alts = [f'[data-place="{h}"]' for h, _ in rungs[1:] if h != handle]
+        rail(pg, fl, f'[data-place="{handle}"]', *alts); pg.wait_for_timeout(900)
+        title_front, title_loc = title_of(fl)
+        title = title_loc.inner_text()
+        # …and the place is opened under the name of THE FRONT THAT ANSWERED, and of no other. Accepting
+        # the rungs as a set — which this check did — passes a title naming the front that is NOT on the
+        # page: the same place, the other front's word for it, and a green that measured nothing. `front`
+        # is the rung whose handle answered; where the two fronts spell that handle the same, the handle
+        # cannot tell them apart and the title's own selector does. A title naming ANOTHER place, or an
+        # empty title, holds neither name and still fails.
+        if front is None:
+            front = title_front
+        name = rungs[min(front, len(rungs) - 1)][1]
+        check(f'drive/place {handle}', name in title, title)
 
     # breadcrumb depth + back-navigation
-    rail(pg, fl, '[data-place="mydrive"]'); pg.wait_for_timeout(800)
+    rail(pg, fl, '[data-place="files"]', '[data-place="mydrive"]'); pg.wait_for_timeout(800)
     fl.locator('[data-folder]').first.click(); pg.wait_for_timeout(900)
     depth2 = fl.locator('#crumbs .cb').count()
     check('drive/breadcrumb grows', depth2 >= 2, depth2)
@@ -160,7 +450,7 @@ def drive_flows(pg, errs):
     row.locator('.rstar').click(); pg.wait_for_timeout(700)
     now_on = 'on' in (fl.locator(f'tr[data-id="{fid}"] .rstar').get_attribute('class') or '')
     check('drive/star toggles', now_on != was_on)
-    rail(pg, fl, '[data-place="mydrive"]'); pg.wait_for_timeout(700)
+    rail(pg, fl, '[data-place="files"]', '[data-place="mydrive"]'); pg.wait_for_timeout(700)
     rail(pg, fl, '[data-place="recent"]'); pg.wait_for_timeout(900)
     persisted = 'on' in (fl.locator(f'tr[data-id="{fid}"] .rstar').get_attribute('class') or '')
     check('drive/star persists', persisted == now_on)
@@ -230,7 +520,7 @@ def drive_flows(pg, errs):
           and fl.locator('tr[data-id]').count() == left - 1, fl.locator('tr[data-id]').count())
 
     # rename round-trip
-    rail(pg, fl, '[data-place="mydrive"]'); pg.wait_for_timeout(900)
+    rail(pg, fl, '[data-place="files"]', '[data-place="mydrive"]'); pg.wait_for_timeout(900)
     row_act(pg, fl, fl.locator('tr[data-id]').first, 'rename'); pg.wait_for_timeout(600)
     fl.locator('#mInput').fill('קובץ_בדיקה_QA.pdf')
     fl.locator('#mFoot .primary').click(); pg.wait_for_timeout(1100)
@@ -311,8 +601,8 @@ def mail_flows(pg, errs):
     check('mail/a count of four digits or more is written with its separator, over the list and under it',
           len(told['t']) > 12 and not told['bare'], told['t'][:90])
 
-    # star round-trip through the backend
-    rid = fl.locator('.gm-row').first.get_attribute('data-id')
+    # star round-trip through the backend (a MESSAGE's row: the delivery failures' row has no id — DGO-1507)
+    rid = fl.locator('.gm-row[data-id]').first.get_attribute('data-id')
     fl.locator(f'.gm-row[data-id="{rid}"] .gm-star').click(); pg.wait_for_timeout(900)
     view('starred', 1300)
     check('mail/star reaches the starred view',
@@ -322,14 +612,20 @@ def mail_flows(pg, errs):
     # ONE TICKED MESSAGE IS SAID AS ONE. The toolbar said «1 נבחרו»; the office's table says «נבחרה 1». Pressed as a
     # person presses it: a finger's tap on a phone.
     press = (lambda b: b.tap(timeout=4000)) if pg.viewport_size['width'] < 700 else (lambda b: b.click(timeout=4000))
-    press(fl.locator('.gm-row .gm-cb').first); pg.wait_for_timeout(500)
+    # (on a phone a row's checkbox is its avatar, Gmail's — DGO-1507; the box is the wide screen's)
+    narrow = pg.viewport_size['width'] <= 820
+    pick = '.gm-row[data-id] [data-pick]' if narrow else '.gm-row .gm-cb'
+    press(fl.locator(pick).first); pg.wait_for_timeout(500)
     said = ' '.join(fl.locator('.gm-selinfo').inner_text().split()) if fl.locator('.gm-selinfo').count() else ''
     check('mail/one ticked message is said as one', said == 'נבחרה 1', said)
     if fl.locator('[data-bulk="clear"]').count():
         fl.locator('[data-bulk="clear"]').click(timeout=4000); pg.wait_for_timeout(400)
 
     # select-all predicate + bulk archive + undo. (The predicate is «מסומנים בכוכב»: read and unread are
-    # offered only where the mailbox can report them, and this one - Gmail's - cannot.)
+    # offered only where the mailbox can report them, and this one - Gmail's - cannot.) On a phone the
+    # list's toolbar is the selection's bar: it is there once a row is picked.
+    if narrow:
+        press(fl.locator(pick).first); pg.wait_for_timeout(400)
     fl.locator('#gmAllCaret').click(); pg.wait_for_timeout(400)
     fl.locator('[data-sel="starred"]').click(); pg.wait_for_timeout(700)
     nsel = fl.locator('.gm-cb.on[data-cb]').count()
@@ -345,7 +641,7 @@ def mail_flows(pg, errs):
           f'{rows_before} vs {fl.locator(".gm-row").count()}')
 
     # reading pane replaces the list; ‹ › walks; back returns
-    fl.locator('.gm-row .gm-sub').first.click(); pg.wait_for_timeout(1300)
+    fl.locator('.gm-row[data-id] .gm-sub').first.click(); pg.wait_for_timeout(1300)
     check('mail/reader opens', fl.locator('#reader:not(.hidden)').count() == 1)
     check('mail/list is replaced, not covered', fl.locator('#msgTable.hidden').count() == 1)
     subj1 = fl.locator('#rSubject').inner_text()
@@ -366,7 +662,7 @@ def mail_flows(pg, errs):
         fl.locator('#rClose').click(); pg.wait_for_timeout(700)
 
     # label add / remove round-trip
-    fl.locator('.gm-row .gm-sub').first.click(); pg.wait_for_timeout(1300)
+    fl.locator('.gm-row[data-id] .gm-sub').first.click(); pg.wait_for_timeout(1300)
     tags_before = fl.locator('#rTags .chip').count()
     fl.locator('#addTag').click(); pg.wait_for_timeout(700)
     if fl.locator('#mBody .pick').count():
@@ -410,7 +706,7 @@ def mail_flows(pg, errs):
         gap = w.evaluate('e => { const r = e.getBoundingClientRect(); return [Math.round(r.left), Math.round(innerWidth - r.right), innerWidth]; }')
         check("mail/the compose sheet is the screen's width on a phone, and inset from the reading side on a wider screen",
               gap[:2] == [0, 0] if gap[2] <= 640 else gap[1] == 24, gap)
-        w.locator('[data-to]').fill('person113@example.com')
+        w.locator('[data-to]').fill('person119@example.com')
         w.locator('[data-subj]').fill('בדיקת QA — הודעה חדשה')
         w.locator('[data-body]').fill('גוף ההודעה לבדיקה.')
         w.locator('.mlc-send').click(); pg.wait_for_timeout(1200)
@@ -3422,12 +3718,18 @@ def window_flows(pg, errs):
     if size['width'] < 1024:
         print("  (desktop mode is a wide screen's: not run at this size)")
         return
-    shots = OUT / ('windows-live' if target_url().startswith('http') else 'windows')
+    # A NAMED PROFILE WIDER THAN A LAPTOP keeps its own screen (`--profile ultrawide`, DGO-1789): the screen desktop
+    # mode was designed for, where its windows stand together — asked below, after each one has been looked at
+    named = run_profile()
+    wide = bool(named) and size['width'] > 1294
+    shots = OUT / (('windows-live' if target_url().startswith('http') else 'windows') + (f'-{named[0]}' if wide else ''))
     shots.mkdir(exist_ok=True)
-    pg.set_viewport_size({'width': 1294, 'height': 810})        # a laptop: the size the windows are small at
+    if not wide:
+        pg.set_viewport_size({'width': 1294, 'height': 810})    # a laptop: the size the windows are small at
     pg.goto(target_url()); pg.wait_for_timeout(900)
     on = pg.evaluate("() => { if (!window.BinaDesktop) return false; BinaDesktop.reset(); BinaDesktop.enable(); return BinaDesktop.isOn(); }")
-    check('windows/desktop mode comes up on a laptop screen', on)
+    screen = f"a {size['width']}x{size['height']} screen" if wide else 'a laptop screen'
+    check(f'windows/desktop mode comes up on {screen}', on)
     # every screen THIS office offers, by the shell's own list — so the suite reads a live office too
     mods = tiles(pg.evaluate("() => MODULES.filter(m => !m.remote).map(m => m.id)")) if on else []
     took, unasked = {}, []                                      # beside the photographs: each one's time to drawn
@@ -3531,6 +3833,28 @@ def window_flows(pg, errs):
             win.query_selector('[data-a="close"]').click(); pg.wait_for_timeout(250)
         if unasked:
             print(f"  (the office's question was not asked in {len(unasked)} window(s) - their page does not carry it: {', '.join(unasked)})")
+        if wide and on:
+            # …AND TOGETHER (DGO-1789's acceptance): the loop above closes each window once it has been looked at,
+            # so on the wide screen eight are opened and LEFT open — where the desktop places them (its focus zone
+            # cascades new windows) — and the desktop is photographed whole: every one its own window, and not one
+            # error while they stand
+            # Counted by WHICH windows: the one each opening focused, still standing at the end — a window the loop
+            # above left behind (one that never had a frame) cannot stand in for one that did not open here
+            e0, want, ids = len(errs), mods[:8], []
+            for m in want:
+                t0 = time.monotonic()
+                pg.evaluate("x => location.hash = '/m/' + x", m)
+                drawn.wait(pg.evaluate, pg.wait_for_timeout, since=t0, at_least_ms=1200)
+                wid = pg.evaluate("() => { const w = document.querySelector('.dk-win.focused'); return w ? w.dataset.id : null; }")
+                if wid and wid not in ids:
+                    ids.append(wid)
+            n = pg.evaluate("ids => ids.filter(i => document.querySelector('.dk-win[data-id=\"' + i + '\"]')).length", ids)
+            pg.screenshot(path=str(shots / 'together.png'))
+            check(f'windows/eight windows stand open together on {screen}', len(want) == 8 and n == 8,
+                  f'{n} of {len(want)} asked stand open: {", ".join(want)}')
+            # …and the run ADDRESS's own errors are left to the verdict, which files them apart (artifact())
+            fresh = [e for e in errs[e0:] if not artifact(e)]
+            check(f'windows/no JS error while they stand open on {screen}', not fresh, fresh[:3])
     finally:
         (shots / 'drawn-log.json').write_text(json.dumps(took, ensure_ascii=False, indent=1), encoding='utf-8')
         pg.evaluate("() => { if (window.BinaDesktop) { BinaDesktop.reset(); BinaDesktop.disable(); } }")
@@ -3546,7 +3870,63 @@ SUITES = {'drive': drive_flows, 'mail': mail_flows, 'indox': indox_flows,
 LIVE_ONLY = {'connect'}
 
 
+def verdict(bad, real, arts, lan):
+    """(the verdict line, the exit code) — the module docstring's three states, decided in ONE place so
+    the line a person reads and the code a gate reads can never drift apart.
+
+    `bad` are the failed checks, `real` the JS errors that are not the address's, `arts` the ones that
+    are (`artifact()`), `lan` the run address when nothing can exist under it. It is asked as data and
+    not as a browser, so the contract is testable on its own — and the ORDER below is the guarantee
+    that nothing turns a failure green: a failed flow or a real JS error is 1, first, and artifacts
+    only ever speak for a run with no failure in it. `artifact()` answers nothing at all when `lan` is
+    None, so `arts` is empty on a real address and 2 is unreachable there.
+    """
+    failed = f'{len(bad)} failed flow(s)' if bad else ''
+    raised = f"{len(real)} JS error(s) that are not the address's" if real else ''
+    if bad or real:
+        return f"VERDICT: red — {' and '.join(x for x in (failed, raised) if x)}", 1
+    if arts:
+        return (f'VERDICT: artifacts {len(arts)} — not a baseline: no flow failed and no JS error was the '
+                f"office's, but {len(arts)} was the address's (`{lan}`) and was skipped, so this run cannot "
+                f'stand in for a clean baseline'), 2
+    return 'VERDICT: clean — every flow passed and no JS error was raised: a baseline', 0
+
+
+def auth_state():
+    """`--auth <file>` / `--storage-state <file>`: the cookies a live office's sign-in ALREADY granted,
+    handed to the context as they are. The producer of that file is
+    `scripts/ui-coverage/flow-qa-session.py` (it says which door signs in, and from which approval).
+
+    WHY THIS EXISTS (rel-2). On a real address — `https://console.staging.digital-office.co.il` — the
+    office answers 302 to its sign-in, the browser lands on the login form, the rail is empty, and every
+    flow that needs a destination fails. That was not a broken office: it was a browser nobody signed
+    into. A session is the ONE thing this flag supplies. It skips no check, moves no threshold and
+    reads no rule of `lan_run()`: without the flag the run is EXACTLY the run it always was (the
+    simulation and `--live` alike), which is why the flag is opt-in and printed as `auth: …`."""
+    for i, a in enumerate(sys.argv):
+        for flag in ('--auth', '--storage-state'):
+            if a == flag:
+                # A bare flag used to answer None here — "no session at all" — while the caller
+                # believed it had handed one over, and the run went out SIGNED OUT with nobody told.
+                if i + 1 >= len(sys.argv) or sys.argv[i + 1].startswith('-'):
+                    refuse(f'auth: {flag} needs a storage_state path and was given none — nothing '
+                           f'was handed to the browser (exit {EXIT_NO_SESSION})', EXIT_NO_SESSION)
+                if sys.argv[i + 1] in SUITES and not pathlib.Path(sys.argv[i + 1]).exists():
+                    # A suite's name is never a path: the value was lost and the SUITE was about to be.
+                    refuse(f'auth: {flag} was given the suite name {sys.argv[i + 1]!r} — that is not a '
+                           f'storage_state path, and the flag is not read as it (exit {EXIT_NO_SESSION})',
+                           EXIT_NO_SESSION)
+                return pathlib.Path(sys.argv[i + 1])
+            if a.startswith(flag + '='):
+                if not a.split('=', 1)[1]:
+                    refuse(f'auth: {flag}= needs a storage_state path and was given none — nothing '
+                           f'was handed to the browser (exit {EXIT_NO_SESSION})', EXIT_NO_SESSION)
+                return pathlib.Path(a.split('=', 1)[1])
+    return None
+
+
 def main():
+    global LAN                       # the run address's verdict, decided once, before any error arrives
     with sync_playwright() as p:
         # executable_path=None is not the same as omitting it, so only pass it when resolved.
         _launch = {'args': ['--allow-file-access-from-files']}
@@ -3554,10 +3934,36 @@ def main():
             _launch['executable_path'] = CHROME
         b = p.chromium.launch(**_launch)
         phone = '--mobile' in sys.argv
-        ctx = b.new_context(viewport={'width': 390, 'height': 844} if phone else {'width': 1440, 'height': 900},
-                            is_mobile=phone, has_touch=phone, device_scale_factor=1)
+        # THE SIGNED-IN BROWSER (rel-2) — the ONE place a context is made, so the ONE place a session is
+        # handed over. A storage_state that cannot be read stops here (exit 3): never a silent run that
+        # is signed out while the caller believes it is signed in.
+        state = auth_state()
+        if state is not None:
+            if not state.is_file():
+                refuse(f'auth: no storage_state at {state} — mint one with '
+                       f'`python3 scripts/ui-coverage/flow-qa-session.py` (exit {EXIT_NO_SESSION})',
+                       EXIT_NO_SESSION)
+            try:
+                _cookies = json.loads(state.read_text(encoding='utf-8')).get('cookies') or []
+            except Exception as e:
+                refuse(f'auth: {state} is not a storage_state ({type(e).__name__}: {e}) '
+                       f'(exit {EXIT_NO_SESSION})', EXIT_NO_SESSION)
+            print(f"auth: {state} — {len(_cookies)} cookie(s) for {sorted({c.get('domain') for c in _cookies})}")
+        named = run_profile()
+        if named:                                                # a named profile is the whole viewport
+            _p = named[1]
+            ctx = b.new_context(viewport={'width': int(_p['width']), 'height': int(_p['height'])},
+                                is_mobile=bool(_p.get('is_mobile')), has_touch=bool(_p.get('has_touch')),
+                                device_scale_factor=1,
+                                **({'user_agent': _p['user_agent']} if _p.get('user_agent') else {}),
+                                **({'storage_state': str(state)} if state is not None else {}))
+        else:
+            ctx = b.new_context(viewport={'width': 390, 'height': 844} if phone else {'width': 1440, 'height': 900},
+                                is_mobile=phone, has_touch=phone, device_scale_factor=1,
+                                **({'storage_state': str(state)} if state is not None else {}))
         pg = ctx.new_page()
-        print(f"viewport: {'390x844 (phone)' if phone else '1440x900 (desktop)'}")
+        print(f"viewport: {named[1]['width']}x{named[1]['height']} ({named[0]})" if named
+              else f"viewport: {'390x844 (phone)' if phone else '1440x900 (desktop)'}")
         errs, where, first_stack = [], {}, {}
 
         def err(msg, stack=''):
@@ -3578,11 +3984,27 @@ def main():
             tile may frame a page that is not the office's own to fix (G81 reads this)."""
             u = (m.location or {}).get('url', '')
             return f"[{u.split('//', 1)[1].partition('/')[2].split('?')[0][:60]}] " if u.startswith('http') else ''
-        pg.on('console', lambda m: err('console:' + said_by(m) + m.text)
+
+        def logged(m):
+            """A page's own error line. Its words are kept beside the message: `artifact()` reads what
+            the browser said (which origin it refused, for instance) rather than a pattern invented here."""
+            msg = 'console:' + said_by(m) + m.text
+            RAW[msg] = ('console', m.text, '')
+            err(msg)
+
+        pg.on('console', lambda m: logged(m)
               if m.type == 'error' and 'Failed to load resource' not in m.text else None)
+
+        # …and what the browser refused to load at all. The failure's REASON is kept: it is the whole
+        # difference between a name that cannot exist from here and a service that did not answer.
+        def failed(r):
+            u, why = r.url, str(r.failure or '')
+            msg = f'not loaded ({r.resource_type}): {u[-100:]}'
+            RAW[msg] = (r.resource_type, u, why)
+            err(msg)
         # …but not the address a check itself stands in for an app's own host (OWN_HOST: the discard
         # port, which refuses on purpose), nor a load the page gave up by navigating on.
-        pg.on('requestfailed', lambda r: err(f'not loaded ({r.resource_type}): {r.url[-100:]}')
+        pg.on('requestfailed', lambda r: failed(r)
               if 'ERR_ABORTED' not in str(r.failure) and not r.url.startswith('http://127.0.0.1:9/') else None)
         # THE BROWSER'S OWN DIALOG (confirm / alert / prompt) is a fault wherever it opens: outside the page, English
         # buttons left to right, one line of text and nothing about what is at stake. With nobody listening the
@@ -3592,11 +4014,34 @@ def main():
         pg.on('dialog', lambda d: d.accept() if d.type == 'beforeunload'
               else (native.append(f'{d.type} «{d.message[:60]}»'), d.dismiss()))
         argv = sys.argv[1:]
-        for flag in ('--url', '--tiles'):        # drop each flag AND its value (a tile may be named as a suite is)
-            if flag in argv:
-                i = argv.index(flag); argv = argv[:i] + argv[i + 2:]
+        # …and `--auth` / `--storage-state`, whose value is a path that could otherwise be read as a suite.
+        # THE FLAG AND ITS VALUE GO TOGETHER, AND ONLY WHEN THERE IS A VALUE. `--auth` with nothing
+        # after it used to drop the NEXT WORD — a SUITE NAME — without a word said: `flow-qa drive
+        # --auth` ran neither `drive` nor any session, and reported the default set as if that were
+        # what was asked (measured 2026-11-10; `auth_state()` refuses the same case above). So the
+        # value is checked before it is dropped, and a missing one stops the run by name.
+        for flag in ('--url', '--tiles', '--auth', '--storage-state', '--profile'):
+            while flag in argv:                        # every occurrence, flag AND its value
+                i = argv.index(flag)
+                value = argv[i + 1] if i + 1 < len(argv) else None
+                # A path is never a suite's name, so a suite name here means the value was lost.
+                lost = (value is None or value.startswith('-')
+                        or (flag in ('--auth', '--storage-state') and value in SUITES))
+                if lost:
+                    code = EXIT_NO_SESSION if flag in ('--auth', '--storage-state') else EXIT_BAD_ARG
+                    missing = ('none was given' if value is None
+                               else f'{value!r} is not one for it')
+                    refuse(f'{flag}: a value is required and {missing} — refusing to read the next '
+                           f'word as it, so nothing is dropped silently (exit {code})', code)
+                argv = argv[:i] + argv[i + 2:]
         wanted = [a for a in argv if a in SUITES] or [n for n in SUITES if n not in LIVE_ONLY]
         print(f"target: {target_url()}")
+        # The address is decided ONCE, before any error can arrive, so what counts as a real failure
+        # never depends on what the run happened to see (see `lan_run()`).
+        LAN = lan_run()
+        if LAN:
+            print(f"address: `{LAN}` has nothing under it — a name the console nests under it cannot "
+                  f"exist, and an app it frames cannot name it; those errors are counted as artifacts below")
         for name in wanted:
             asked = len(native)
             try:
@@ -3609,13 +4054,18 @@ def main():
         b.close()
 
     bad = [r for r in RESULTS if not r[1]]
+    # The errors are split ONCE, here, so that everything printed below is the truth of one decision:
+    # `real` is what failed, `arts` is what the run address caused. Nothing is removed from the tally —
+    # an artifact is printed under its own name, with the browser's reason for it.
+    arts = [e for e in errs if artifact(e)]
+    real = [e for e in errs if not artifact(e)]
     print(f"\n{len(RESULTS) - len(bad)}/{len(RESULTS)} flows passed")
     for n, _, d in bad:
         print('  FAILED:', n, '—', d)
-    print('JS errors:', len(errs))
+    print('JS errors:', len(real))
     # Each DIFFERENT error once, with how often: ten copies of one line said nothing about the rest.
     kinds = {}
-    for e in errs:
+    for e in real:
         kinds[e] = kinds.get(e, 0) + 1
     for e, n in sorted(kinds.items(), key=lambda kv: -kv[1])[:12]:
         print(f'    x{n}  {e[:200]}' + (f'   [first after: {where[e]}]' if e in where else ''))
@@ -3623,7 +4073,22 @@ def main():
             frames = [f.strip() for f in first_stack[e].splitlines() if f.strip() and 'Error' not in f[:20]]
             for frame in frames[:3]:
                 print(f'         at {frame[:160]}')
-    sys.exit(1 if bad or errs else 0)
+    # …and the artifacts, said out loud. A filter that hides is worse than a red run: this line is
+    # printed on EVERY run against a domain-less address, a zero included, so "0" and "not looked for"
+    # can never read the same. On a real address the line is absent and every error is above it.
+    if LAN:
+        print(f'artifacts: {len(arts)} (lan host `{LAN}` — the address, not the office)')
+        akinds = {}
+        for e in arts:
+            akinds[e] = akinds.get(e, 0) + 1
+        for e, n in sorted(akinds.items(), key=lambda kv: -kv[1])[:12]:
+            print(f'    x{n}  {e[:150]}  — {artifact(e)}')
+    # ── THE VERDICT, NAMED (rel-2) ───────────────────────────────────────────────────────────────
+    # Three states and not two, because rel-2's criterion is "a green baseline in both offices" and a
+    # single number cannot tell a clean run from one that skipped the errors its own address caused.
+    line, code = verdict(bad, real, arts, LAN)
+    print(line)
+    sys.exit(code)
 
 
 main()

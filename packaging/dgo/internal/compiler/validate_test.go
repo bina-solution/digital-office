@@ -116,6 +116,27 @@ func TestValidateKindAndStrength(t *testing.T) {
 		"a: use[db] bad strength 'maybe'")
 }
 
+// TestValidatePage: the page of the product an app names (DGO-1042) is one of the owner's twelve — the same
+// line as reconcile.py (test_validate_refusals.py) for a page he did not name; no page at all is valid.
+func TestValidatePage(t *testing.T) {
+	pages := "meetings|tasks|mail|drive|ai|notes|services|documents|recording|browser|concurrency|base"
+	errs := validation(t, map[string]string{
+		"apps/a/app.json": manifest("a", 3, `"page":"gallery"`),
+		"apps/b/app.json": manifest("b", 3, `"page":"Meetings"`),
+		"apps/c/app.json": manifest("c", 3, `"page":["ai"]`),
+		"apps/d/app.json": manifest("d", 3, `"page":"recording"`),
+		"apps/e/app.json": manifest("e", 3, ``),
+		"apps/f/app.json": manifest("f", 3, `"page":""`),
+		"apps/g/app.json": manifest("g", 3, `"page":null`),
+	})
+	expectErrs(t, errs,
+		"a: field 'page' must be one of "+pages+", got 'gallery'",
+		"b: field 'page' must be one of "+pages+", got 'Meetings'",
+		"c: field 'page' must be string, got list",
+		"f: field 'page' must be one of "+pages+", got ''",
+		"g: field 'page' must be string, got NoneType")
+}
+
 func TestValidateRouteAndTileConflicts(t *testing.T) {
 	errs := validation(t, map[string]string{
 		"apps/a/app.json": manifest("a", 3, `"routing":[{"host":"x.localhost","module":{"id":"m"}}]`),

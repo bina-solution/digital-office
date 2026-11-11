@@ -122,8 +122,8 @@ if (!processed_label) throw new Error('mail01: the organizer settings carry no P
   + ' — the completion marker is what keeps a handled mail out of the next search; restore the row.');
 const query = '-in:scheduled -label:' + processed_label.replace(/ /g, '-');
 
-// [reachable mailboxes only, one run per mailbox — measured 2026-09-02 11:15 on hacohen-prod]
-// The registry held 10 connections: the client's Gmail, TWO entries for person3@example.com
+// [reachable mailboxes only, one run per mailbox — measured 2026-09-02 11:15 on example-prod]
+// The registry held 10 connections: the client's Gmail, TWO entries for person4@example.com
 // (an env-configured one and an app-password one) and SEVEN local-mailserver test mailboxes whose
 // IMAP login fails on that host. Every tick dispatched all ten: the seven dead ones each ended in
 // the engine's bootstrap lane creating the PROCESSED label through a mailbox it cannot log into

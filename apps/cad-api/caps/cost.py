@@ -13,7 +13,7 @@ import math
 import os
 
 HERE = os.path.join(os.path.dirname(__file__), "prices")
-DEFAULT = "fpg-2026-11-02"
+DEFAULT = "exf-2026-11-02"
 
 
 def load(pid: str = DEFAULT) -> dict:

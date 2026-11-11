@@ -1,0 +1,97 @@
+{
+  "id": "android-emulator",
+  "title": {
+    "he": "אמולטור אנדרואיד",
+    "en": "Android emulator"
+  },
+  "layer": 3,
+  "kind": "service",
+  "page": "base",
+  "version": "0.1.0",
+  "summary": {
+    "he": "טלפון אנדרואיד מדומה בלשכה: רואים אותו ומפעילים אותו מהמסך, מתקינים עליו APK, והחום של המחשב שומר עליו",
+    "en": "An Android phone emulated in the office: seen and used from its screen, APKs installed on it, kept cool by the machine's heat"
+  },
+  "capabilities": [
+    {
+      "name": "android-device",
+      "type": "service",
+      "endpoint": "http://android-emulator:8080",
+      "required_ops": [
+        "status",
+        "start",
+        "stop",
+        "install",
+        "screenshot"
+      ]
+    }
+  ],
+  "use": [],
+  "connections": [],
+  "compose": "docker-compose.yml",
+  "agent": {
+    "context": "AGENT.md",
+    "order": 90
+  },
+  "people": "admins",
+  "requires_host": {
+    "devices": [
+      "/dev/kvm"
+    ]
+  },
+  "routing": [
+    {
+      "host": "android-emulator",
+      "port": 6080,
+      "auth": "sso",
+      "emit_labels": false,
+      "module": {
+        "group": "תשתית",
+        "icon": "monitor",
+        "embed": true,
+        "alias": "android-emulator",
+        "id": "android-emulator",
+        "name": "אמולטור אנדרואיד",
+        "desc": "טלפון אנדרואיד מדומה: התצוגה החיה, ומפעילים אותו בנגיעה ובמקלדת",
+        "order": 270,
+        "service": "android-emulator",
+        "url": "http://android-emulator:6080/",
+        "passthrough": [
+          {
+            "path": "/websockify",
+            "transport": "websocket",
+            "strip_mount_prefix": true
+          }
+        ]
+      },
+      "sso": {
+        "slug": "android-emulator",
+        "base_url_env": "ANDROID_EMULATOR_BASE_URL",
+        "default_host": "android-emulator.localhost",
+        "display_name": "Android emulator",
+        "local_twin": false
+      }
+    }
+  ],
+  "health": {
+    "structural": "auto",
+    "probe": {
+      "http": "http://android-emulator:8080/healthz",
+      "interval": "60s"
+    }
+  },
+  "data": {
+    "volumes": [
+      "android_emulator_avd",
+      "android_emulator_apks"
+    ],
+    "cache": [
+      "android_emulator_avd"
+    ],
+    "on_uninstall": "prompt"
+  },
+  "resources": {
+    "cpus": "2.0",
+    "memory": "5g"
+  }
+}

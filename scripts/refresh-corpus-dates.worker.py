@@ -30,17 +30,12 @@ import requests
 from PIL import Image, ImageDraw, ImageFont
 
 OCR_URL = 'http://127.0.0.1:8080/documentOcr?cache=false'
-# apitools rasterises PDFs at APITOOLS_PDF_DPI — src/pdf_core/pdf_to_jpg.py:
-#     PDF_OCR_DPI = int(os.getenv('APITOOLS_PDF_DPI', '300'))
-# The env var is normally unset, so the default IS the value; get it wrong and every
-# raster-OCR box maps to the wrong place on the page. (scripts/gen-unique-corpus.py still
-# falls back to 200 here — stale, and worth fixing when that script is next touched.)
-try:
-    sys.path.insert(0, '/app')
-    from src.pdf_core.pdf_to_jpg import PDF_OCR_DPI as _DPI   # authoritative
-    PDF_DPI = float(_DPI)
-except Exception:
-    PDF_DPI = float(os.environ.get('APITOOLS_PDF_DPI') or 300.0)
+# apitools rasterises PDFs at its product constant PDF_OCR_DPI (src/pdf_core/pdf_to_jpg.py; DGO-216:
+# a fixed value, no env knob). Get it wrong and every raster-OCR box maps to the wrong place on the page.
+# This worker runs inside the apitools container, so it imports the constant itself.
+sys.path.insert(0, '/app')
+from src.pdf_core.pdf_to_jpg import PDF_OCR_DPI as _DPI   # noqa: E402 — the one value, never a copy
+PDF_DPI = float(_DPI)
 MIME = {'pdf': 'application/pdf', 'png': 'image/png', 'jpg': 'image/jpeg',
         'jpeg': 'image/jpeg'}
 

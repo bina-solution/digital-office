@@ -18,7 +18,7 @@
 3. Writes <outdir>/provision.json — the resolved connection ids + folder ids gen_corpus.py needs.
 
 Run inside WSL with DOCKER_HOST=unix:///run/bbox-docker.sock exported.
-Usage: python3 provision.py --outdir <dir> [--deployment-name shlomo-laptop]
+Usage: python3 provision.py --outdir <dir> [--deployment-name owner-laptop]
 """
 import argparse
 import json
@@ -108,7 +108,7 @@ def write_registry(dn, entries):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--outdir", required=True)
-    ap.add_argument("--deployment-name", default="shlomo-laptop")
+    ap.add_argument("--deployment-name", default="owner-laptop")
     ap.add_argument("--force", action="store_true", help="re-provision even if e2e-* entries already exist")
     a = ap.parse_args()
     dn = a.deployment_name

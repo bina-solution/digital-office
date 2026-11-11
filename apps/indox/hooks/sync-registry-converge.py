@@ -61,6 +61,7 @@ import json
 import os
 import subprocess
 import sys
+import urllib.parse
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.normpath(os.path.join(HERE, "..", "..", ".."))
@@ -226,11 +227,15 @@ DEFAULT_INSTANCE = "incoming-documents-main"
 #: — the registry carries purpose exactly so tools can skip the standing test tenant when
 #: defaulting, and TWO production tenants is genuinely ambiguous, so it refuses.
 _TENANT_SCHEMA = None
+#: …and its id, which every BFF call names as `?instance=` (DGO-1815): the reads above go to the resolved tenant's
+#: schema, so a write that named none landed on the BFF's default instance — on an office with two tenants, the
+#: registry read from one and written to the other.
+_TENANT_ID = None
 
 
 def resolve_tenant(dn, want=None):
-    global _TENANT_SCHEMA
-    if _TENANT_SCHEMA:
+    global _TENANT_SCHEMA, _TENANT_ID
+    if _TENANT_SCHEMA and _TENANT_ID:
         return _TENANT_SCHEMA
     want = want or os.environ.get("INDOX_INSTANCE")
     rows = [r.split("|") for r in psql(
@@ -242,7 +247,7 @@ def resolve_tenant(dn, want=None):
             raise SystemExit(f"converge: instance '{want}' is not enabled/registered "
                              f"(have: {' '.join(r[0] for r in rows)})")
         print(f"converge: acting on instance '{want}'", file=sys.stderr)
-        _TENANT_SCHEMA = hit[0][1]
+        _TENANT_ID, _TENANT_SCHEMA = hit[0][0], hit[0][1]
         return _TENANT_SCHEMA
     prod = [r for r in rows if (r[2] if len(r) > 2 else '') != 'test']
     if len(prod) != 1:
@@ -250,8 +255,17 @@ def resolve_tenant(dn, want=None):
                          f"({' '.join(r[0] for r in prod)}) — name one with --instance/INDOX_INSTANCE")
     print(f"converge: no instance named — defaulting to the sole production tenant "
           f"'{prod[0][0]}'", file=sys.stderr)
-    _TENANT_SCHEMA = prod[0][1]
+    _TENANT_ID, _TENANT_SCHEMA = prod[0][0], prod[0][1]
     return _TENANT_SCHEMA
+
+
+def bff_url(dn, path):
+    """The BFF address for `path`, naming the resolved tenant — the same one `read_live` reads."""
+    if not (_TENANT_ID and _TENANT_SCHEMA):
+        resolve_tenant(dn)
+    if not _TENANT_ID:
+        raise SystemExit("converge: the tenant's id was not resolved — no BFF call names a default instance")
+    return BFF_BASE + path + ("&" if "?" in path else "?") + "instance=" + urllib.parse.quote(_TENANT_ID, safe="")
 
 
 def read_live(dn, instance=DEFAULT_INSTANCE):
@@ -280,7 +294,7 @@ def bff(dn, method, path, body=None):
         "import json,urllib.request,urllib.error\n"
         f"body={body!r}\n"
         f"data=json.dumps(body).encode() if body is not None else None\n"
-        f"req=urllib.request.Request({BFF_BASE + path!r},data=data,method={method!r},"
+        f"req=urllib.request.Request({bff_url(dn, path)!r},data=data,method={method!r},"
         "headers={'Content-Type':'application/json'})\n"
         "try:\n"
         "    r=urllib.request.urlopen(req,timeout=900)\n"
@@ -398,7 +412,7 @@ def converge(dn, dry_run):
         print(f"[sync-registry] create {s.get('name')} -> http {res.get('http')}"
               f"{' ' + str(res.get('err'))[:160] if res.get('err') else ''}")
     for name, m in updates:
-        res = bff(dn, "PATCH", f"/sync/registry/{name}", config_only(m))
+        res = bff(dn, "PATCH", f"/sync/registry/{urllib.parse.quote(name, safe='')}", config_only(m))
         print(f"[sync-registry] update {name} -> http {res.get('http')}"
               f"{' ' + str(res.get('err'))[:160] if res.get('err') else ''}")
 

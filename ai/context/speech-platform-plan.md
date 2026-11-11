@@ -301,7 +301,7 @@ Open, and not mine to decide alone: `.generated/cpu-budget.yml` is stale (`perf-
 not been re-run), so this new service is currently the **only** container whose declared CPU cap is
 not scaled by the budget overlay. Gates that already failed before this change and still do:
 `image-pin-lint` (four apps on a floating `:latest`), `memory-budget-lint` G30 (≈7 GiB over before,
-9.1 GiB after), `cpu-budget-lint` G65 (21.35 → 22.35 vCPU over), `app-coupling-lint` G33 (8
+9.1 GiB after), `cpu-budget-lint` G65 (21.35 → 22.35 vCPU over), `app-coupling-lint` G93 (8
 chassis→app references in `platform-base/`). Everything else in the app gate set passes:
 compile G12, healthcheck G18, capability-use G25, data-volumes G26, compose-invocation G7,
 profile-passthrough G31, registry-drift G8, engine-bypass G32, layering, theme-token.

@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+#: relay-group — every new message in ONE Telegram group, handed to ONE agent session as a «TG:» line:  ./bbox telegram relay-group --chat "Bina Solutions Main" --session <id>
+# The reader and its filter are apps/telegram/relay/relay_group.py (its header is the whole argument, DGO-1339).
+# The office runs it as a container on `traefik-network` (a container reaches redis's port; the host cannot), so
+# this hook is the same program, reachable from the shell when something has to be read or replayed by hand.
+set -uo pipefail
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
+. "${REPO_ROOT}/scripts/lib.sh"
+# npath: this path is handed to a NATIVE python3, so a Windows host needs its own form of it (G10)
+exec python3 "$(npath "${SCRIPT_DIR}/../relay/relay_group.py")" "$@"

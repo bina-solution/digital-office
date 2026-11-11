@@ -85,7 +85,7 @@ if [ -n "$N8N" ] && assert n8n health-n8n 600 "n8n healthy" is_up "$N8N"; then
   # deliberately absent from n8n. That made this check fail with "workflows 80 < 84" for a system
   # behaving exactly as designed. `reconcile.py blueprints` is the same source of truth the push
   # hook stages from, so the check and the push can no longer disagree.
-  BP_DIRS=$(cd "${REPO_ROOT}" && python3 platform/manager/reconcile.py blueprints 2>/dev/null | tr -d '' | cut -f2)
+  BP_DIRS=$(cd "${REPO_ROOT}" && python3 platform/manager/reconcile.py blueprints 2>/dev/null | tr -d '\r' | cut -f2)
   # blueprints are CODE (*.workflow.ts) with legacy *.json still honoured mid-migration
   WF_WANT=$(cd "${REPO_ROOT}" && { for d in ${BP_DIRS}; do ls "${d}"/*.workflow.ts "${d}"/*.json 2>/dev/null; done; } | sed 's/\.workflow\.ts$//; s/\.json$//' | sort -u | wc -l | tr -d ' ')
   CRED_WANT=$(ls "${REPO_ROOT}/apps/n8n/credentials"/*.json 2>/dev/null | wc -l | tr -d ' ')
@@ -175,6 +175,22 @@ except Exception: print(-1)" 2>/dev/null || echo -1)
   # $N8N_WEBHOOK_USER/PASS via blueprint credential_overrides, so it decrypts under any
   # key). Retry briefly (the webhook registers on n8n's post-push restart).
   WH_USER="$(read_env N8N_WEBHOOK_USER)"; WH_PASS="$(read_env N8N_WEBHOOK_PASS)"
+  # DGO-1574: the probe is ACTIVATED ONLY WHERE CI RUNS (apps/n8n/hooks/push, gate_ci_hello:
+  # a CI runner, or CI_HELLO_ENABLED=true). On every other office it is committed
+  # `active: false` and stays inactive, so this step has nothing to poke — say that, and say it as a
+  # pass rather than a failure, because a probe nobody asked for is not a missing webhook.
+  WH_ACTIVE=$(pg "$N8N_PG" "$N8N_PW" "$N8N_U" "$N8N_DB" "SELECT coalesce(active,false) FROM workflow_entity WHERE id='ciHelloWebhook01';")
+  # THREE states, not two: `t` = probe it, `f` = the probe is off here BY DECLARATION (gate_ci_hello),
+  # and EMPTY = the database did not answer at all. `pg()` swallows stderr into/through a pipe, so a
+  # dead postgres, a wrong container name or a missing row all read as empty — treating that as
+  # "inactive" would turn a broken office into a green skip, which is the defect this whole item is
+  # about (DGO-1574).
+  case "${WH_ACTIVE}" in
+    t) ;;
+    f) ok n8n integration-n8n-active-workflow-webhook "SKIPPED (not failed): the CI probe (ciHelloWebhook01) is INACTIVE on this office — it is activated only where CI runs (gate_ci_hello: CI_HELLO_ENABLED=true, or a CI runner). Nothing was poked." ;;
+    *) ko n8n integration-n8n-active-workflow-webhook "could not read the CI probe's state from n8n's database (got '${WH_ACTIVE}') — the office's n8n database did not answer, so this step is UNVERIFIED, not skipped" ;;
+  esac
+  if [ "${WH_ACTIVE}" = "t" ]; then
   WH_OK=0; WH_BODY=""
   for i in $(seq 1 12); do
     WH_BODY=$(curl -s -m 10 -u "${WH_USER}:${WH_PASS}" -H "Host: n8n.localhost" "http://127.0.0.1/webhook/ci-hello" 2>/dev/null)
@@ -187,6 +203,7 @@ except Exception: print(-1)" 2>/dev/null || echo -1)
     ok n8n integration-n8n-active-workflow-webhook "GET /webhook/ci-hello (CICD basic-auth) -> hello-from-n8n-ci; no-auth rejected (HTTP ${WH_NOAUTH}) — a real active, secured workflow responded"
   else
     ko n8n integration-n8n-active-workflow-webhook "webhook probe failed (authed body='${WH_BODY:0:40}', no-auth HTTP ${WH_NOAUTH}) — no active/secured webhook responding"
+  fi
   fi
 else [ -z "$N8N" ] && ko n8n health-n8n "n8n container not found"; fi
 ghend
@@ -212,9 +229,14 @@ if [ -n "$GT" ] && assert glitchtip health-glitchtip 600 "/_health green (DB + m
   GT_PUB=$(echo "$KEYINFO" | awk '{print $2}'); GT_PID=$(echo "$KEYINFO" | awk '{print $3}')
   GT_EID=$(python3 -c "import uuid;print(uuid.uuid4().hex)" 2>/dev/null)
   if [ -n "$GT_PUB" ] && [ -n "$GT_PID" ]; then
-    GT_CODE=$(curl -s -o /dev/null -w '%{http_code}' -m 12 -X POST "http://127.0.0.1/api/${GT_PID}/store/" \
-      -H "Host: glitchtip.localhost" -H "X-Sentry-Auth: Sentry sentry_key=${GT_PUB}, sentry_version=7" \
-      -H "Content-Type: application/json" -d "{\"event_id\":\"${GT_EID}\",\"message\":\"ci-verify ingest probe\",\"level\":\"error\",\"platform\":\"other\"}" 2>/dev/null)
+    # the path every reporter takes — glitchtip:8000 on the docker network, past no router — and not the edge's
+    # glitchtip.localhost, whose screen is behind the office's sign-in (DGO-1729)
+    GT_CODE=$(docker exec "$GT" python -c "import json, urllib.request
+r = urllib.request.Request('http://127.0.0.1:8000/api/${GT_PID}/store/', data=json.dumps({'event_id': '${GT_EID}', 'message': 'ci-verify ingest probe', 'level': 'error', 'platform': 'other'}).encode(), headers={'X-Sentry-Auth': 'Sentry sentry_key=${GT_PUB}, sentry_version=7', 'Content-Type': 'application/json'})
+try:
+    print(urllib.request.urlopen(r, timeout=12).status)
+except Exception as e:
+    print(getattr(e, 'code', 0))" 2>/dev/null)
     { [ "$GT_CODE" = 200 ] && ok glitchtip integration-glitchtip-ingest "DSN ingest accepted (HTTP 200, project ${GT_PID}) — apps route errors out of the box"; } \
       || ko glitchtip integration-glitchtip-ingest "ingest HTTP ${GT_CODE} (project ${GT_PID})"
   else

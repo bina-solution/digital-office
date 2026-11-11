@@ -1,0 +1,13 @@
+#!/usr/bin/env bash
+#: review-queue [N] [category] — what still waits for a reviewer:  ./bbox newsflow review-queue 30
+set -uo pipefail
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+n="${1:-30}"; cat="${2:-}"
+out="$("${SCRIPT_DIR}/_call" GET "/api/review/queue?limit=${n}${cat:+&category=${cat}}")" || exit $?
+printf '%s' "${out}" | python3 -c '
+import json,sys
+d=json.load(sys.stdin)
+print("%d waiting for review; the newest %d:" % (d["waiting"], d["count"]))
+for it in d["items"]:
+    print("%s  %-10s %-14s %s" % (it["found_at"][:10], it["section_hint"], it["source"], it["title"][:90]))
+    print("      " + it["url"])'

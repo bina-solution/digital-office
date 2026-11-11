@@ -1,0 +1,70 @@
+# domain-internic — the InterNIC provider of the generic `domains` app (ai/context/provider-apps.md).
+#
+# Everything that is InterNIC's lives here and nowhere else: the portal's script (portal.py), the zone
+# editor (browser_ops.py), the browser contract client (browser_session.py), the sign-in (login.py). The
+# generic app finds this one by its name (`domain-*` in the compiled registry) and calls its
+# domain-provider.v1 ops; it holds no InterNIC code of its own.
+#
+# NO SECRET IS IN THIS FILE, IN .env OR IN THIS APP. The portal's user name and password are the row
+# `domain-internic-login` in the credential plane; the office browser mirrors it into its own password
+# store (apps/browser42/logins.py), and the sign-in picks it there. This container never holds them.
+services:
+  domain-internic:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: domain-internic-${DEPLOYMENT_NAME:-bina-deployment}
+    hostname: domain-internic
+    restart: unless-stopped
+    environment:
+      - SENTRY_DSN=${DOMAIN_INTERNIC_SENTRY_DSN:-}
+      - DEPLOYMENT_NAME=${DEPLOYMENT_NAME:-bina-deployment}
+      - CONNECTIONS_URL=${CONNECTIONS_URL:-http://connections:8990}
+      - DOMAINS_STATE_DIR=/data
+      # The office BROWSER (apps/browser42), through its MCP only — reading, clicking, picking the login its
+      # own password store holds (login.py). Its DevTools port stays the browser's own (DGO-983).
+      - BROWSER_SESSION_ENDPOINT=${BROWSER_SESSION_ENDPOINT:-http://browser42-caddy:80/mcp}
+      - BROWSER42_MCP_TOKEN=${BROWSER42_MCP_TOKEN:-}
+      # The mailbox InterNIC sends its sign-in codes to: a connection id of the office's mail (mail.v1).
+      # Empty = no mailbox named, and a code request stops with `needs_mail_code` and the live view.
+      - MAIL_URL=${MAIL_URL:-http://mailapi:8970}
+      - DOMAIN_INTERNIC_MAIL_CONNECTION=${DOMAIN_INTERNIC_MAIL_CONNECTION:-}
+      # The office's event stream (flow.v1): dgo:flow:domain-internic on the office redis.
+      - REDIS_HOST_INTERNAL=${REDIS_HOST_INTERNAL:-redis}
+      - REDIS_PASSWORD=${REDIS_PASSWORD:-}
+      # The fixture panel the zone editor's selftest drives (served by the generic domains app).
+      - DOMAINS_FIXTURE_URL=${DOMAINS_FIXTURE_URL:-http://domains:8980/internal/fixture/panel}
+    volumes:
+      - domain_internic_state:/data
+      # the office's ONE flow.v1 publisher (DGO-1402) — the platform's file, never a copy of it here
+      - ../../platform-base/redis/flowpub.py:/opt/dgo/flowpub.py:ro
+    networks:
+      - traefik-network
+    healthcheck:
+      # python, never curl: python:3.12-slim has no curl (gate G18).
+      test: ["CMD", "python", "-c", "import urllib.request,sys;sys.exit(0 if urllib.request.urlopen('http://localhost:8981/healthz',timeout=8).status==200 else 1)"]
+      interval: ${HEALTHCHECK_INTERVAL:-30s}
+      timeout: ${HEALTHCHECK_TIMEOUT:-10s}
+      retries: 3
+      start_period: 15s
+    deploy:
+      resources:
+        limits:
+          # It drives a browser that runs elsewhere; it holds no browser, no build, no index.
+          cpus: '0.2'
+          memory: 160M
+        reservations:
+          cpus: '0.02'
+          memory: 32M
+    logging:
+      driver: ${LOGGING_DRIVER:-json-file}
+      options:
+        max-size: 5m
+        max-file: '3'
+
+volumes:
+  domain_internic_state:
+
+networks:
+  traefik-network:
+    external: true

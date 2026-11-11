@@ -1,0 +1,2261 @@
+{
+ "updated": "2026-11-10",
+ "page_list": {
+  "do": [
+   "https://digital-office.co.il/",
+   "https://digital-office.co.il/about.html",
+   "https://digital-office.co.il/apps/",
+   "https://digital-office.co.il/apps/any-concurrency.html",
+   "https://digital-office.co.il/apps/apitools.html",
+   "https://digital-office.co.il/apps/app-management.html",
+   "https://digital-office.co.il/apps/authentik.html",
+   "https://digital-office.co.il/apps/browser42.html",
+   "https://digital-office.co.il/apps/chat.html",
+   "https://digital-office.co.il/apps/connections.html",
+   "https://digital-office.co.il/apps/console.html",
+   "https://digital-office.co.il/apps/drive.html",
+   "https://digital-office.co.il/apps/glitchtip.html",
+   "https://digital-office.co.il/apps/google-workspace-agent.html",
+   "https://digital-office.co.il/apps/indox.html",
+   "https://digital-office.co.il/apps/machine.html",
+   "https://digital-office.co.il/apps/mail.html",
+   "https://digital-office.co.il/apps/my-docs.html",
+   "https://digital-office.co.il/apps/n8n.html",
+   "https://digital-office.co.il/apps/notifications.html",
+   "https://digital-office.co.il/apps/ollama.html",
+   "https://digital-office.co.il/apps/openhands.html",
+   "https://digital-office.co.il/apps/portainer.html",
+   "https://digital-office.co.il/apps/postgres.html",
+   "https://digital-office.co.il/apps/redis.html",
+   "https://digital-office.co.il/apps/redisinsight.html",
+   "https://digital-office.co.il/apps/supabase.html",
+   "https://digital-office.co.il/apps/traefik.html",
+   "https://digital-office.co.il/business-model.html",
+   "https://digital-office.co.il/business.html",
+   "https://digital-office.co.il/community.html",
+   "https://digital-office.co.il/creators.html",
+   "https://digital-office.co.il/demo.html",
+   "https://digital-office.co.il/docs/",
+   "https://digital-office.co.il/docs/declarative.html",
+   "https://digital-office.co.il/features.html",
+   "https://digital-office.co.il/hi-tech.html",
+   "https://digital-office.co.il/license.html",
+   "https://digital-office.co.il/personal.html",
+   "https://digital-office.co.il/pricing.html",
+   "https://digital-office.co.il/real-estate.html",
+   "https://digital-office.co.il/retail.html",
+   "https://digital-office.co.il/services.html",
+   "https://digital-office.co.il/vision.html"
+  ],
+  "bina": [
+   "https://www.bina-solutions.co.il/",
+   "https://www.bina-solutions.co.il/404.html",
+   "https://www.bina-solutions.co.il/about/",
+   "https://www.bina-solutions.co.il/careers/",
+   "https://www.bina-solutions.co.il/case-studies/",
+   "https://www.bina-solutions.co.il/content/careers/en/js-developer-1/",
+   "https://www.bina-solutions.co.il/content/careers/en/js-developer-2/",
+   "https://www.bina-solutions.co.il/content/careers/en/n8n-developer-1/",
+   "https://www.bina-solutions.co.il/content/careers/en/n8n-developer-2/",
+   "https://www.bina-solutions.co.il/content/careers/en/n8n-developer-3/",
+   "https://www.bina-solutions.co.il/content/careers/en/python-developer-1/",
+   "https://www.bina-solutions.co.il/content/careers/en/python-developer-2/",
+   "https://www.bina-solutions.co.il/content/careers/he/js-developer-1/",
+   "https://www.bina-solutions.co.il/content/careers/he/js-developer-2/",
+   "https://www.bina-solutions.co.il/content/careers/he/n8n-developer-1/",
+   "https://www.bina-solutions.co.il/content/careers/he/python-developer-1/",
+   "https://www.bina-solutions.co.il/content/case-studies/en/derech-tzadikim-ticketing/",
+   "https://www.bina-solutions.co.il/content/case-studies/en/incoming-documents-payment-automation/",
+   "https://www.bina-solutions.co.il/content/case-studies/en/linshom-referral-campaign/",
+   "https://www.bina-solutions.co.il/content/case-studies/he/derech-tzadikim-ticketing/",
+   "https://www.bina-solutions.co.il/content/case-studies/he/incoming-documents-payment-automation/",
+   "https://www.bina-solutions.co.il/content/case-studies/he/linshom-referral-campaign/",
+   "https://www.bina-solutions.co.il/content/news/en/2025-04-10-automation-roi/",
+   "https://www.bina-solutions.co.il/content/news/en/2025-04-30-llm-eval/",
+   "https://www.bina-solutions.co.il/content/news/en/2025-05-18-customer-support-automation/",
+   "https://www.bina-solutions.co.il/content/news/en/2025-06-05-inventory-agents/",
+   "https://www.bina-solutions.co.il/content/news/en/2025-06-20-cpq-automation/",
+   "https://www.bina-solutions.co.il/content/news/en/2025-07-05-sheets-automations/",
+   "https://www.bina-solutions.co.il/content/news/en/2025-07-25-privacy-self-hosted/",
+   "https://www.bina-solutions.co.il/content/news/en/2025-08-10-whatsapp-bots/",
+   "https://www.bina-solutions.co.il/content/news/en/2025-08-30-agents-in-crm/",
+   "https://www.bina-solutions.co.il/content/news/en/2025-09-15-llm-costs/",
+   "https://www.bina-solutions.co.il/content/news/en/2025-10-01-ai-trends/",
+   "https://www.bina-solutions.co.il/content/news/en/2026-09-19-beautiful-open-source/",
+   "https://www.bina-solutions.co.il/content/news/he/2025-06-05-inventory-agents/",
+   "https://www.bina-solutions.co.il/content/news/he/2025-06-20-cpq-automation/",
+   "https://www.bina-solutions.co.il/content/news/he/2025-07-05-sheets-automations/",
+   "https://www.bina-solutions.co.il/content/news/he/2025-07-25-privacy-self-hosted/",
+   "https://www.bina-solutions.co.il/content/news/he/2025-08-10-whatsapp-bots/",
+   "https://www.bina-solutions.co.il/content/news/he/2025-08-30-agents-in-crm/",
+   "https://www.bina-solutions.co.il/content/news/he/2025-10-01-ai-trends/",
+   "https://www.bina-solutions.co.il/content/news/he/2026-09-19-beautiful-open-source/",
+   "https://www.bina-solutions.co.il/content/tutorials/google-sheets/en/01-setup/",
+   "https://www.bina-solutions.co.il/content/tutorials/google-sheets/en/02-crud/",
+   "https://www.bina-solutions.co.il/content/tutorials/google-sheets/en/03-formulas-ai/",
+   "https://www.bina-solutions.co.il/content/tutorials/google-sheets/en/04-apps-script/",
+   "https://www.bina-solutions.co.il/content/tutorials/google-sheets/en/05-integrations/",
+   "https://www.bina-solutions.co.il/content/tutorials/google-sheets/he/01-setup/",
+   "https://www.bina-solutions.co.il/content/tutorials/google-sheets/he/02-crud/",
+   "https://www.bina-solutions.co.il/content/tutorials/google-sheets/he/03-formulas-ai/",
+   "https://www.bina-solutions.co.il/content/tutorials/google-sheets/he/04-apps-script/",
+   "https://www.bina-solutions.co.il/content/tutorials/google-sheets/he/05-integrations/",
+   "https://www.bina-solutions.co.il/content/tutorials/n8n/en/01-introduction/",
+   "https://www.bina-solutions.co.il/content/tutorials/n8n/en/02-triggers-nodes/",
+   "https://www.bina-solutions.co.il/content/tutorials/n8n/en/03-error-handling/",
+   "https://www.bina-solutions.co.il/content/tutorials/n8n/en/04-auth-integrations/",
+   "https://www.bina-solutions.co.il/content/tutorials/n8n/en/05-data-transformations/",
+   "https://www.bina-solutions.co.il/content/tutorials/n8n/en/06-persistence-queues/",
+   "https://www.bina-solutions.co.il/content/tutorials/n8n/en/07-observability/",
+   "https://www.bina-solutions.co.il/content/tutorials/n8n/en/08-llm-agents/",
+   "https://www.bina-solutions.co.il/content/tutorials/n8n/en/09-deploy-scale/",
+   "https://www.bina-solutions.co.il/content/tutorials/n8n/en/10-best-practices/",
+   "https://www.bina-solutions.co.il/content/tutorials/n8n/he/01-introduction/",
+   "https://www.bina-solutions.co.il/content/tutorials/n8n/he/02-triggers-nodes/",
+   "https://www.bina-solutions.co.il/content/tutorials/n8n/he/03-error-handling/",
+   "https://www.bina-solutions.co.il/content/tutorials/n8n/he/04-auth-integrations/",
+   "https://www.bina-solutions.co.il/content/tutorials/n8n/he/05-data-transformations/",
+   "https://www.bina-solutions.co.il/content/tutorials/n8n/he/06-persistence-queues/",
+   "https://www.bina-solutions.co.il/content/tutorials/n8n/he/07-observability/",
+   "https://www.bina-solutions.co.il/content/tutorials/n8n/he/08-llm-agents/",
+   "https://www.bina-solutions.co.il/content/tutorials/n8n/he/09-deploy-scale/",
+   "https://www.bina-solutions.co.il/content/tutorials/n8n/he/10-best-practices/",
+   "https://www.bina-solutions.co.il/content/tutorials/productivity/en/agents-in-operations/",
+   "https://www.bina-solutions.co.il/content/tutorials/productivity/en/business-automation-roadmap/",
+   "https://www.bina-solutions.co.il/content/tutorials/productivity/en/cpq-automation/",
+   "https://www.bina-solutions.co.il/content/tutorials/productivity/en/crm-automation/",
+   "https://www.bina-solutions.co.il/content/tutorials/productivity/en/crm-hygiene/",
+   "https://www.bina-solutions.co.il/content/tutorials/productivity/en/inventory-management/",
+   "https://www.bina-solutions.co.il/content/tutorials/productivity/en/llm-evaluation/",
+   "https://www.bina-solutions.co.il/content/tutorials/productivity/en/mcp-integrations/",
+   "https://www.bina-solutions.co.il/content/tutorials/productivity/en/whatsapp-bots/",
+   "https://www.bina-solutions.co.il/content/tutorials/productivity/en/whatsapp-commerce/",
+   "https://www.bina-solutions.co.il/content/tutorials/productivity/he/agents-in-operations/",
+   "https://www.bina-solutions.co.il/content/tutorials/productivity/he/business-automation-roadmap/",
+   "https://www.bina-solutions.co.il/content/tutorials/productivity/he/cpq-automation/",
+   "https://www.bina-solutions.co.il/content/tutorials/productivity/he/crm-automation/",
+   "https://www.bina-solutions.co.il/content/tutorials/productivity/he/crm-hygiene/",
+   "https://www.bina-solutions.co.il/content/tutorials/productivity/he/inventory-management/",
+   "https://www.bina-solutions.co.il/content/tutorials/productivity/he/llm-evaluation/",
+   "https://www.bina-solutions.co.il/content/tutorials/productivity/he/mcp-integrations/",
+   "https://www.bina-solutions.co.il/content/tutorials/productivity/he/whatsapp-bots/",
+   "https://www.bina-solutions.co.il/content/tutorials/productivity/he/whatsapp-commerce/",
+   "https://www.bina-solutions.co.il/news/",
+   "https://www.bina-solutions.co.il/privacy/",
+   "https://www.bina-solutions.co.il/search/",
+   "https://www.bina-solutions.co.il/terms/",
+   "https://www.bina-solutions.co.il/tutorials/"
+  ]
+ },
+ "read": [
+  "https://digital-office.co.il/",
+  "https://digital-office.co.il/about.html",
+  "https://digital-office.co.il/apps/",
+  "https://digital-office.co.il/apps/any-concurrency.html",
+  "https://digital-office.co.il/apps/apitools.html",
+  "https://digital-office.co.il/apps/app-management.html",
+  "https://digital-office.co.il/apps/authentik.html",
+  "https://digital-office.co.il/apps/browser42.html",
+  "https://digital-office.co.il/apps/chat.html",
+  "https://digital-office.co.il/apps/connections.html",
+  "https://digital-office.co.il/apps/console.html",
+  "https://digital-office.co.il/apps/drive.html",
+  "https://digital-office.co.il/apps/glitchtip.html",
+  "https://digital-office.co.il/apps/google-workspace-agent.html",
+  "https://digital-office.co.il/apps/indox.html",
+  "https://digital-office.co.il/apps/machine.html",
+  "https://digital-office.co.il/apps/mail.html",
+  "https://digital-office.co.il/apps/my-docs.html",
+  "https://digital-office.co.il/apps/n8n.html",
+  "https://digital-office.co.il/apps/notifications.html",
+  "https://digital-office.co.il/apps/ollama.html",
+  "https://digital-office.co.il/apps/openhands.html",
+  "https://digital-office.co.il/apps/portainer.html",
+  "https://digital-office.co.il/apps/postgres.html",
+  "https://digital-office.co.il/apps/redis.html",
+  "https://digital-office.co.il/apps/redisinsight.html",
+  "https://digital-office.co.il/apps/supabase.html",
+  "https://digital-office.co.il/apps/traefik.html",
+  "https://digital-office.co.il/business-model.html",
+  "https://digital-office.co.il/business.html",
+  "https://digital-office.co.il/community.html",
+  "https://digital-office.co.il/creators.html",
+  "https://digital-office.co.il/demo.html",
+  "https://digital-office.co.il/docs/",
+  "https://digital-office.co.il/docs/declarative.html",
+  "https://digital-office.co.il/features.html",
+  "https://digital-office.co.il/hi-tech.html",
+  "https://digital-office.co.il/license.html",
+  "https://digital-office.co.il/personal.html",
+  "https://digital-office.co.il/pricing.html",
+  "https://digital-office.co.il/real-estate.html",
+  "https://digital-office.co.il/retail.html",
+  "https://digital-office.co.il/services.html",
+  "https://digital-office.co.il/vision.html",
+  "https://github.com/bina-solution/digital-office#readme",
+  "https://www.bina-solutions.co.il/",
+  "https://www.bina-solutions.co.il/404.html",
+  "https://www.bina-solutions.co.il/about/",
+  "https://www.bina-solutions.co.il/careers/",
+  "https://www.bina-solutions.co.il/case-studies/",
+  "https://www.bina-solutions.co.il/content/careers/en/js-developer-1/",
+  "https://www.bina-solutions.co.il/content/careers/en/js-developer-2/",
+  "https://www.bina-solutions.co.il/content/careers/en/n8n-developer-1/",
+  "https://www.bina-solutions.co.il/content/careers/en/n8n-developer-2/",
+  "https://www.bina-solutions.co.il/content/careers/en/n8n-developer-3/",
+  "https://www.bina-solutions.co.il/content/careers/en/python-developer-1/",
+  "https://www.bina-solutions.co.il/content/careers/en/python-developer-2/",
+  "https://www.bina-solutions.co.il/content/careers/he/js-developer-1/",
+  "https://www.bina-solutions.co.il/content/careers/he/js-developer-2/",
+  "https://www.bina-solutions.co.il/content/careers/he/n8n-developer-1/",
+  "https://www.bina-solutions.co.il/content/careers/he/python-developer-1/",
+  "https://www.bina-solutions.co.il/content/case-studies/en/derech-tzadikim-ticketing/",
+  "https://www.bina-solutions.co.il/content/case-studies/en/incoming-documents-payment-automation/",
+  "https://www.bina-solutions.co.il/content/case-studies/en/linshom-referral-campaign/",
+  "https://www.bina-solutions.co.il/content/case-studies/he/derech-tzadikim-ticketing/",
+  "https://www.bina-solutions.co.il/content/case-studies/he/incoming-documents-payment-automation/",
+  "https://www.bina-solutions.co.il/content/case-studies/he/linshom-referral-campaign/",
+  "https://www.bina-solutions.co.il/content/news/en/2025-04-10-automation-roi/",
+  "https://www.bina-solutions.co.il/content/news/en/2025-04-30-llm-eval/",
+  "https://www.bina-solutions.co.il/content/news/en/2025-05-18-customer-support-automation/",
+  "https://www.bina-solutions.co.il/content/news/en/2025-06-05-inventory-agents/",
+  "https://www.bina-solutions.co.il/content/news/en/2025-06-20-cpq-automation/",
+  "https://www.bina-solutions.co.il/content/news/en/2025-07-05-sheets-automations/",
+  "https://www.bina-solutions.co.il/content/news/en/2025-07-25-privacy-self-hosted/",
+  "https://www.bina-solutions.co.il/content/news/en/2025-08-10-whatsapp-bots/",
+  "https://www.bina-solutions.co.il/content/news/en/2025-08-30-agents-in-crm/",
+  "https://www.bina-solutions.co.il/content/news/en/2025-09-15-llm-costs/",
+  "https://www.bina-solutions.co.il/content/news/en/2025-10-01-ai-trends/",
+  "https://www.bina-solutions.co.il/content/news/en/2026-09-19-beautiful-open-source/",
+  "https://www.bina-solutions.co.il/content/news/he/2025-06-05-inventory-agents/",
+  "https://www.bina-solutions.co.il/content/news/he/2025-06-20-cpq-automation/",
+  "https://www.bina-solutions.co.il/content/news/he/2025-07-05-sheets-automations/",
+  "https://www.bina-solutions.co.il/content/news/he/2025-07-25-privacy-self-hosted/",
+  "https://www.bina-solutions.co.il/content/news/he/2025-08-10-whatsapp-bots/",
+  "https://www.bina-solutions.co.il/content/news/he/2025-08-30-agents-in-crm/",
+  "https://www.bina-solutions.co.il/content/news/he/2025-10-01-ai-trends/",
+  "https://www.bina-solutions.co.il/content/news/he/2026-09-19-beautiful-open-source/",
+  "https://www.bina-solutions.co.il/content/tutorials/google-sheets/en/01-setup/",
+  "https://www.bina-solutions.co.il/content/tutorials/google-sheets/en/02-crud/",
+  "https://www.bina-solutions.co.il/content/tutorials/google-sheets/en/03-formulas-ai/",
+  "https://www.bina-solutions.co.il/content/tutorials/google-sheets/en/04-apps-script/",
+  "https://www.bina-solutions.co.il/content/tutorials/google-sheets/en/05-integrations/",
+  "https://www.bina-solutions.co.il/content/tutorials/google-sheets/he/01-setup/",
+  "https://www.bina-solutions.co.il/content/tutorials/google-sheets/he/02-crud/",
+  "https://www.bina-solutions.co.il/content/tutorials/google-sheets/he/03-formulas-ai/",
+  "https://www.bina-solutions.co.il/content/tutorials/google-sheets/he/04-apps-script/",
+  "https://www.bina-solutions.co.il/content/tutorials/google-sheets/he/05-integrations/",
+  "https://www.bina-solutions.co.il/content/tutorials/n8n/en/01-introduction/",
+  "https://www.bina-solutions.co.il/content/tutorials/n8n/en/02-triggers-nodes/",
+  "https://www.bina-solutions.co.il/content/tutorials/n8n/en/03-error-handling/",
+  "https://www.bina-solutions.co.il/content/tutorials/n8n/en/04-auth-integrations/",
+  "https://www.bina-solutions.co.il/content/tutorials/n8n/en/05-data-transformations/",
+  "https://www.bina-solutions.co.il/content/tutorials/n8n/en/06-persistence-queues/",
+  "https://www.bina-solutions.co.il/content/tutorials/n8n/en/07-observability/",
+  "https://www.bina-solutions.co.il/content/tutorials/n8n/en/08-llm-agents/",
+  "https://www.bina-solutions.co.il/content/tutorials/n8n/en/09-deploy-scale/",
+  "https://www.bina-solutions.co.il/content/tutorials/n8n/en/10-best-practices/",
+  "https://www.bina-solutions.co.il/content/tutorials/n8n/he/01-introduction/",
+  "https://www.bina-solutions.co.il/content/tutorials/n8n/he/02-triggers-nodes/",
+  "https://www.bina-solutions.co.il/content/tutorials/n8n/he/03-error-handling/",
+  "https://www.bina-solutions.co.il/content/tutorials/n8n/he/04-auth-integrations/",
+  "https://www.bina-solutions.co.il/content/tutorials/n8n/he/05-data-transformations/",
+  "https://www.bina-solutions.co.il/content/tutorials/n8n/he/06-persistence-queues/",
+  "https://www.bina-solutions.co.il/content/tutorials/n8n/he/07-observability/",
+  "https://www.bina-solutions.co.il/content/tutorials/n8n/he/08-llm-agents/",
+  "https://www.bina-solutions.co.il/content/tutorials/n8n/he/09-deploy-scale/",
+  "https://www.bina-solutions.co.il/content/tutorials/n8n/he/10-best-practices/",
+  "https://www.bina-solutions.co.il/content/tutorials/productivity/en/agents-in-operations/",
+  "https://www.bina-solutions.co.il/content/tutorials/productivity/en/business-automation-roadmap/",
+  "https://www.bina-solutions.co.il/content/tutorials/productivity/en/cpq-automation/",
+  "https://www.bina-solutions.co.il/content/tutorials/productivity/en/crm-automation/",
+  "https://www.bina-solutions.co.il/content/tutorials/productivity/en/crm-hygiene/",
+  "https://www.bina-solutions.co.il/content/tutorials/productivity/en/inventory-management/",
+  "https://www.bina-solutions.co.il/content/tutorials/productivity/en/llm-evaluation/",
+  "https://www.bina-solutions.co.il/content/tutorials/productivity/en/mcp-integrations/",
+  "https://www.bina-solutions.co.il/content/tutorials/productivity/en/whatsapp-bots/",
+  "https://www.bina-solutions.co.il/content/tutorials/productivity/en/whatsapp-commerce/",
+  "https://www.bina-solutions.co.il/content/tutorials/productivity/he/agents-in-operations/",
+  "https://www.bina-solutions.co.il/content/tutorials/productivity/he/business-automation-roadmap/",
+  "https://www.bina-solutions.co.il/content/tutorials/productivity/he/cpq-automation/",
+  "https://www.bina-solutions.co.il/content/tutorials/productivity/he/crm-automation/",
+  "https://www.bina-solutions.co.il/content/tutorials/productivity/he/crm-hygiene/",
+  "https://www.bina-solutions.co.il/content/tutorials/productivity/he/inventory-management/",
+  "https://www.bina-solutions.co.il/content/tutorials/productivity/he/llm-evaluation/",
+  "https://www.bina-solutions.co.il/content/tutorials/productivity/he/mcp-integrations/",
+  "https://www.bina-solutions.co.il/content/tutorials/productivity/he/whatsapp-bots/",
+  "https://www.bina-solutions.co.il/content/tutorials/productivity/he/whatsapp-commerce/",
+  "https://www.bina-solutions.co.il/news/",
+  "https://www.bina-solutions.co.il/privacy/",
+  "https://www.bina-solutions.co.il/search/",
+  "https://www.bina-solutions.co.il/terms/",
+  "https://www.bina-solutions.co.il/tutorials/"
+ ],
+ "sitemap_valid": {
+  "do": true,
+  "bina": false
+ },
+ "readme_read": true,
+ "edges": [
+  {
+   "from": "https://www.bina-solutions.co.il/",
+   "to": "https://digital-office.co.il/",
+   "kind": "bina→do",
+   "first_seen": "2026-11-10",
+   "last_seen": "2026-11-10"
+  },
+  {
+   "from": "https://www.bina-solutions.co.il/404.html",
+   "to": "https://digital-office.co.il/",
+   "kind": "bina→do",
+   "first_seen": "2026-11-10",
+   "last_seen": "2026-11-10"
+  },
+  {
+   "from": "https://www.bina-solutions.co.il/about/",
+   "to": "https://digital-office.co.il/",
+   "kind": "bina→do",
+   "first_seen": "2026-11-10",
+   "last_seen": "2026-11-10"
+  },
+  {
+   "from": "https://www.bina-solutions.co.il/careers/",
+   "to": "https://digital-office.co.il/",
+   "kind": "bina→do",
+   "first_seen": "2026-11-10",
+   "last_seen": "2026-11-10"
+  },
+  {
+   "from": "https://www.bina-solutions.co.il/case-studies/",
+   "to": "https://digital-office.co.il/",
+   "kind": "bina→do",
+   "first_seen": "2026-11-10",
+   "last_seen": "2026-11-10"
+  },
+  {
+   "from": "https://www.bina-solutions.co.il/content/careers/en/js-developer-1/",
+   "to": "https://digital-office.co.il/",
+   "kind": "bina→do",
+   "first_seen": "2026-11-10",
+   "last_seen": "2026-11-10"
+  },
+  {
+   "from": "https://www.bina-solutions.co.il/content/careers/en/js-developer-2/",
+   "to": "https://digital-office.co.il/",
+   "kind": "bina→do",
+   "first_seen": "2026-11-10",
+   "last_seen": "2026-11-10"
+  },
+  {
+   "from": "https://www.bina-solutions.co.il/content/careers/en/n8n-developer-1/",
+   "to": "https://digital-office.co.il/",
+   "kind": "bina→do",
+   "first_seen": "2026-11-10",
+   "last_seen": "2026-11-10"
+  },
+  {
+   "from": "https://www.bina-solutions.co.il/content/careers/en/n8n-developer-2/",
+   "to": "https://digital-office.co.il/",
+   "kind": "bina→do",
+   "first_seen": "2026-11-10",
+   "last_seen": "2026-11-10"
+  },
+  {
+   "from": "https://www.bina-solutions.co.il/content/careers/en/n8n-developer-3/",
+   "to": "https://digital-office.co.il/",
+   "kind": "bina→do",
+   "first_seen": "2026-11-10",
+   "last_seen": "2026-11-10"
+  },
+  {
+   "from": "https://www.bina-solutions.co.il/content/careers/en/python-developer-1/",
+   "to": "https://digital-office.co.il/",
+   "kind": "bina→do",
+   "first_seen": "2026-11-10",
+   "last_seen": "2026-11-10"
+  },
+  {
+   "from": "https://www.bina-solutions.co.il/content/careers/en/python-developer-2/",
+   "to": "https://digital-office.co.il/",
+   "kind": "bina→do",
+   "first_seen": "2026-11-10",
+   "last_seen": "2026-11-10"
+  },
+  {
+   "from": "https://www.bina-solutions.co.il/content/careers/he/js-developer-1/",
+   "to": "https://digital-office.co.il/",
+   "kind": "bina→do",
+   "first_seen": "2026-11-10",
+   "last_seen": "2026-11-10"
+  },
+  {
+   "from": "https://www.bina-solutions.co.il/content/careers/he/js-developer-2/",
+   "to": "https://digital-office.co.il/",
+   "kind": "bina→do",
+   "first_seen": "2026-11-10",
+   "last_seen": "2026-11-10"
+  },
+  {
+   "from": "https://www.bina-solutions.co.il/content/careers/he/n8n-developer-1/",
+   "to": "https://digital-office.co.il/",
+   "kind": "bina→do",
+   "first_seen": "2026-11-10",
+   "last_seen": "2026-11-10"
+  },
+  {
+   "from": "https://www.bina-solutions.co.il/content/careers/he/python-developer-1/",
+   "to": "https://digital-office.co.il/",
+   "kind": "bina→do",
+   "first_seen": "2026-11-10",
+   "last_seen": "2026-11-10"
+  },
+  {
+   "from": "https://www.bina-solutions.co.il/content/case-studies/en/derech-tzadikim-ticketing/",
+   "to": "https://digital-office.co.il/",
+   "kind": "bina→do",
+   "first_seen": "2026-11-10",
+   "last_seen": "2026-11-10"
+  },
+  {
+   "from": "https://www.bina-solutions.co.il/content/case-studies/en/incoming-documents-payment-automation/",
+   "to": "https://digital-office.co.il/",
+   "kind": "bina→do",
+   "first_seen": "2026-11-10",
+   "last_seen": "2026-11-10"
+  },
+  {
+   "from": "https://www.bina-solutions.co.il/content/case-studies/en/linshom-referral-campaign/",
+   "to": "https://digital-office.co.il/",
+   "kind": "bina→do",
+   "first_seen": "2026-11-10",
+   "last_seen": "2026-11-10"
+  },
+  {
+   "from": "https://www.bina-solutions.co.il/content/case-studies/he/derech-tzadikim-ticketing/",
+   "to": "https://digital-office.co.il/",
+   "kind": "bina→do",
+   "first_seen": "2026-11-10",
+   "last_seen": "2026-11-10"
+  },
+  {
+   "from": "https://www.bina-solutions.co.il/content/case-studies/he/incoming-documents-payment-automation/",
+   "to": "https://digital-office.co.il/",
+   "kind": "bina→do",
+   "first_seen": "2026-11-10",
+   "last_seen": "2026-11-10"
+  },
+  {
+   "from": "https://www.bina-solutions.co.il/content/case-studies/he/linshom-referral-campaign/",
+   "to": "https://digital-office.co.il/",
+   "kind": "bina→do",
+   "first_seen": "2026-11-10",
+   "last_seen": "2026-11-10"
+  },
+  {
+   "from": "https://www.bina-solutions.co.il/content/news/en/2025-04-10-automation-roi/",
+   "to": "https://digital-office.co.il/",
+   "kind": "bina→do",
+   "first_seen": "2026-11-10",
+   "last_seen": "2026-11-10"
+  },
+  {
+   "from": "https://www.bina-solutions.co.il/content/news/en/2025-04-30-llm-eval/",
+   "to": "https://digital-office.co.il/",
+   "kind": "bina→do",
+   "first_seen": "2026-11-10",
+   "last_seen": "2026-11-10"
+  },
+  {
+   "from": "https://www.bina-solutions.co.il/content/news/en/2025-05-18-customer-support-automation/",
+   "to": "https://digital-office.co.il/",
+   "kind": "bina→do",
+   "first_seen": "2026-11-10",
+   "last_seen": "2026-11-10"
+  },
+  {
+   "from": "https://www.bina-solutions.co.il/content/news/en/2025-06-05-inventory-agents/",
+   "to": "https://digital-office.co.il/",
+   "kind": "bina→do",
+   "first_seen": "2026-11-10",
+   "last_seen": "2026-11-10"
+  },
+  {
+   "from": "https://www.bina-solutions.co.il/content/news/en/2025-06-20-cpq-automation/",
+   "to": "https://digital-office.co.il/",
+   "kind": "bina→do",
+   "first_seen": "2026-11-10",
+   "last_seen": "2026-11-10"
+  },
+  {
+   "from": "https://www.bina-solutions.co.il/content/news/en/2025-07-05-sheets-automations/",
+   "to": "https://digital-office.co.il/",
+   "kind": "bina→do",
+   "first_seen": "2026-11-10",
+   "last_seen": "2026-11-10"
+  },
+  {
+   "from": "https://www.bina-solutions.co.il/content/news/en/2025-07-25-privacy-self-hosted/",
+   "to": "https://digital-office.co.il/",
+   "kind": "bina→do",
+   "first_seen": "2026-11-10",
+   "last_seen": "2026-11-10"
+  },
+  {
+   "from": "https://www.bina-solutions.co.il/content/news/en/2025-08-10-whatsapp-bots/",
+   "to": "https://digital-office.co.il/",
+   "kind": "bina→do",
+   "first_seen": "2026-11-10",
+   "last_seen": "2026-11-10"
+  },
+  {
+   "from": "https://www.bina-solutions.co.il/content/news/en/2025-08-30-agents-in-crm/",
+   "to": "https://digital-office.co.il/",
+   "kind": "bina→do",
+   "first_seen": "2026-11-10",
+   "last_seen": "2026-11-10"
+  },
+  {
+   "from": "https://www.bina-solutions.co.il/content/news/en/2025-09-15-llm-costs/",
+   "to": "https://digital-office.co.il/",
+   "kind": "bina→do",
+   "first_seen": "2026-11-10",
+   "last_seen": "2026-11-10"
+  },
+  {
+   "from": "https://www.bina-solutions.co.il/content/news/en/2025-10-01-ai-trends/",
+   "to": "https://digital-office.co.il/",
+   "kind": "bina→do",
+   "first_seen": "2026-11-10",
+   "last_seen": "2026-11-10"
+  },
+  {
+   "from": "https://www.bina-solutions.co.il/content/news/en/2026-09-19-beautiful-open-source/",
+   "to": "https://digital-office.co.il/",
+   "kind": "bina→do",
+   "first_seen": "2026-11-10",
+   "last_seen": "2026-11-10"
+  },
+  {
+   "from": "https://www.bina-solutions.co.il/content/news/he/2025-06-05-inventory-agents/",
+   "to": "https://digital-office.co.il/",
+   "kind": "bina→do",
+   "first_seen": "2026-11-10",
+   "last_seen": "2026-11-10"
+  },
+  {
+   "from": "https://www.bina-solutions.co.il/content/news/he/2025-06-20-cpq-automation/",
+   "to": "https://digital-office.co.il/",
+   "kind": "bina→do",
+   "first_seen": "2026-11-10",
+   "last_seen": "2026-11-10"
+  },
+  {
+   "from": "https://www.bina-solutions.co.il/content/news/he/2025-07-05-sheets-automations/",
+   "to": "https://digital-office.co.il/",
+   "kind": "bina→do",
+   "first_seen": "2026-11-10",
+   "last_seen": "2026-11-10"
+  },
+  {
+   "from": "https://www.bina-solutions.co.il/content/news/he/2025-07-25-privacy-self-hosted/",
+   "to": "https://digital-office.co.il/",
+   "kind": "bina→do",
+   "first_seen": "2026-11-10",
+   "last_seen": "2026-11-10"
+  },
+  {
+   "from": "https://www.bina-solutions.co.il/content/news/he/2025-08-10-whatsapp-bots/",
+   "to": "https://digital-office.co.il/",
+   "kind": "bina→do",
+   "first_seen": "2026-11-10",
+   "last_seen": "2026-11-10"
+  },
+  {
+   "from": "https://www.bina-solutions.co.il/content/news/he/2025-08-30-agents-in-crm/",
+   "to": "https://digital-office.co.il/",
+   "kind": "bina→do",
+   "first_seen": "2026-11-10",
+   "last_seen": "2026-11-10"
+  },
+  {
+   "from": "https://www.bina-solutions.co.il/content/news/he/2025-10-01-ai-trends/",
+   "to": "https://digital-office.co.il/",
+   "kind": "bina→do",
+   "first_seen": "2026-11-10",
+   "last_seen": "2026-11-10"
+  },
+  {
+   "from": "https://www.bina-solutions.co.il/content/news/he/2026-09-19-beautiful-open-source/",
+   "to": "https://digital-office.co.il/",
+   "kind": "bina→do",
+   "first_seen": "2026-11-10",
+   "last_seen": "2026-11-10"
+  },
+  {
+   "from": "https://www.bina-solutions.co.il/content/tutorials/google-sheets/en/01-setup/",
+   "to": "https://digital-office.co.il/",
+   "kind": "bina→do",
+   "first_seen": "2026-11-10",
+   "last_seen": "2026-11-10"
+  },
+  {
+   "from": "https://www.bina-solutions.co.il/content/tutorials/google-sheets/en/02-crud/",
+   "to": "https://digital-office.co.il/",
+   "kind": "bina→do",
+   "first_seen": "2026-11-10",
+   "last_seen": "2026-11-10"
+  },
+  {
+   "from": "https://www.bina-solutions.co.il/content/tutorials/google-sheets/en/03-formulas-ai/",
+   "to": "https://digital-office.co.il/",
+   "kind": "bina→do",
+   "first_seen": "2026-11-10",
+   "last_seen": "2026-11-10"
+  },
+  {
+   "from": "https://www.bina-solutions.co.il/content/tutorials/google-sheets/en/04-apps-script/",
+   "to": "https://digital-office.co.il/",
+   "kind": "bina→do",
+   "first_seen": "2026-11-10",
+   "last_seen": "2026-11-10"
+  },
+  {
+   "from": "https://www.bina-solutions.co.il/content/tutorials/google-sheets/en/05-integrations/",
+   "to": "https://digital-office.co.il/",
+   "kind": "bina→do",
+   "first_seen": "2026-11-10",
+   "last_seen": "2026-11-10"
+  },
+  {
+   "from": "https://www.bina-solutions.co.il/content/tutorials/google-sheets/he/01-setup/",
+   "to": "https://digital-office.co.il/",
+   "kind": "bina→do",
+   "first_seen": "2026-11-10",
+   "last_seen": "2026-11-10"
+  },
+  {
+   "from": "https://www.bina-solutions.co.il/content/tutorials/google-sheets/he/02-crud/",
+   "to": "https://digital-office.co.il/",
+   "kind": "bina→do",
+   "first_seen": "2026-11-10",
+   "last_seen": "2026-11-10"
+  },
+  {
+   "from": "https://www.bina-solutions.co.il/content/tutorials/google-sheets/he/03-formulas-ai/",
+   "to": "https://digital-office.co.il/",
+   "kind": "bina→do",
+   "first_seen": "2026-11-10",
+   "last_seen": "2026-11-10"
+  },
+  {
+   "from": "https://www.bina-solutions.co.il/content/tutorials/google-sheets/he/04-apps-script/",
+   "to": "https://digital-office.co.il/",
+   "kind": "bina→do",
+   "first_seen": "2026-11-10",
+   "last_seen": "2026-11-10"
+  },
+  {
+   "from": "https://www.bina-solutions.co.il/content/tutorials/google-sheets/he/05-integrations/",
+   "to": "https://digital-office.co.il/",
+   "kind": "bina→do",
+   "first_seen": "2026-11-10",
+   "last_seen": "2026-11-10"
+  },
+  {
+   "from": "https://www.bina-solutions.co.il/content/tutorials/n8n/en/01-introduction/",
+   "to": "https://digital-office.co.il/",
+   "kind": "bina→do",
+   "first_seen": "2026-11-10",
+   "last_seen": "2026-11-10"
+  },
+  {
+   "from": "https://www.bina-solutions.co.il/content/tutorials/n8n/en/02-triggers-nodes/",
+   "to": "https://digital-office.co.il/",
+   "kind": "bina→do",
+   "first_seen": "2026-11-10",
+   "last_seen": "2026-11-10"
+  },
+  {
+   "from": "https://www.bina-solutions.co.il/content/tutorials/n8n/en/03-error-handling/",
+   "to": "https://digital-office.co.il/",
+   "kind": "bina→do",
+   "first_seen": "2026-11-10",
+   "last_seen": "2026-11-10"
+  },
+  {
+   "from": "https://www.bina-solutions.co.il/content/tutorials/n8n/en/04-auth-integrations/",
+   "to": "https://digital-office.co.il/",
+   "kind": "bina→do",
+   "first_seen": "2026-11-10",
+   "last_seen": "2026-11-10"
+  },
+  {
+   "from": "https://www.bina-solutions.co.il/content/tutorials/n8n/en/05-data-transformations/",
+   "to": "https://digital-office.co.il/",
+   "kind": "bina→do",
+   "first_seen": "2026-11-10",
+   "last_seen": "2026-11-10"
+  },
+  {
+   "from": "https://www.bina-solutions.co.il/content/tutorials/n8n/en/06-persistence-queues/",
+   "to": "https://digital-office.co.il/",
+   "kind": "bina→do",
+   "first_seen": "2026-11-10",
+   "last_seen": "2026-11-10"
+  },
+  {
+   "from": "https://www.bina-solutions.co.il/content/tutorials/n8n/en/07-observability/",
+   "to": "https://digital-office.co.il/",
+   "kind": "bina→do",
+   "first_seen": "2026-11-10",
+   "last_seen": "2026-11-10"
+  },
+  {
+   "from": "https://www.bina-solutions.co.il/content/tutorials/n8n/en/08-llm-agents/",
+   "to": "https://digital-office.co.il/",
+   "kind": "bina→do",
+   "first_seen": "2026-11-10",
+   "last_seen": "2026-11-10"
+  },
+  {
+   "from": "https://www.bina-solutions.co.il/content/tutorials/n8n/en/09-deploy-scale/",
+   "to": "https://digital-office.co.il/",
+   "kind": "bina→do",
+   "first_seen": "2026-11-10",
+   "last_seen": "2026-11-10"
+  },
+  {
+   "from": "https://www.bina-solutions.co.il/content/tutorials/n8n/en/10-best-practices/",
+   "to": "https://digital-office.co.il/",
+   "kind": "bina→do",
+   "first_seen": "2026-11-10",
+   "last_seen": "2026-11-10"
+  },
+  {
+   "from": "https://www.bina-solutions.co.il/content/tutorials/n8n/he/01-introduction/",
+   "to": "https://digital-office.co.il/",
+   "kind": "bina→do",
+   "first_seen": "2026-11-10",
+   "last_seen": "2026-11-10"
+  },
+  {
+   "from": "https://www.bina-solutions.co.il/content/tutorials/n8n/he/02-triggers-nodes/",
+   "to": "https://digital-office.co.il/",
+   "kind": "bina→do",
+   "first_seen": "2026-11-10",
+   "last_seen": "2026-11-10"
+  },
+  {
+   "from": "https://www.bina-solutions.co.il/content/tutorials/n8n/he/03-error-handling/",
+   "to": "https://digital-office.co.il/",
+   "kind": "bina→do",
+   "first_seen": "2026-11-10",
+   "last_seen": "2026-11-10"
+  },
+  {
+   "from": "https://www.bina-solutions.co.il/content/tutorials/n8n/he/04-auth-integrations/",
+   "to": "https://digital-office.co.il/",
+   "kind": "bina→do",
+   "first_seen": "2026-11-10",
+   "last_seen": "2026-11-10"
+  },
+  {
+   "from": "https://www.bina-solutions.co.il/content/tutorials/n8n/he/05-data-transformations/",
+   "to": "https://digital-office.co.il/",
+   "kind": "bina→do",
+   "first_seen": "2026-11-10",
+   "last_seen": "2026-11-10"
+  },
+  {
+   "from": "https://www.bina-solutions.co.il/content/tutorials/n8n/he/06-persistence-queues/",
+   "to": "https://digital-office.co.il/",
+   "kind": "bina→do",
+   "first_seen": "2026-11-10",
+   "last_seen": "2026-11-10"
+  },
+  {
+   "from": "https://www.bina-solutions.co.il/content/tutorials/n8n/he/07-observability/",
+   "to": "https://digital-office.co.il/",
+   "kind": "bina→do",
+   "first_seen": "2026-11-10",
+   "last_seen": "2026-11-10"
+  },
+  {
+   "from": "https://www.bina-solutions.co.il/content/tutorials/n8n/he/08-llm-agents/",
+   "to": "https://digital-office.co.il/",
+   "kind": "bina→do",
+   "first_seen": "2026-11-10",
+   "last_seen": "2026-11-10"
+  },
+  {
+   "from": "https://www.bina-solutions.co.il/content/tutorials/n8n/he/09-deploy-scale/",
+   "to": "https://digital-office.co.il/",
+   "kind": "bina→do",
+   "first_seen": "2026-11-10",
+   "last_seen": "2026-11-10"
+  },
+  {
+   "from": "https://www.bina-solutions.co.il/content/tutorials/n8n/he/10-best-practices/",
+   "to": "https://digital-office.co.il/",
+   "kind": "bina→do",
+   "first_seen": "2026-11-10",
+   "last_seen": "2026-11-10"
+  },
+  {
+   "from": "https://www.bina-solutions.co.il/content/tutorials/productivity/en/agents-in-operations/",
+   "to": "https://digital-office.co.il/",
+   "kind": "bina→do",
+   "first_seen": "2026-11-10",
+   "last_seen": "2026-11-10"
+  },
+  {
+   "from": "https://www.bina-solutions.co.il/content/tutorials/productivity/en/business-automation-roadmap/",
+   "to": "https://digital-office.co.il/",
+   "kind": "bina→do",
+   "first_seen": "2026-11-10",
+   "last_seen": "2026-11-10"
+  },
+  {
+   "from": "https://www.bina-solutions.co.il/content/tutorials/productivity/en/cpq-automation/",
+   "to": "https://digital-office.co.il/",
+   "kind": "bina→do",
+   "first_seen": "2026-11-10",
+   "last_seen": "2026-11-10"
+  },
+  {
+   "from": "https://www.bina-solutions.co.il/content/tutorials/productivity/en/crm-automation/",
+   "to": "https://digital-office.co.il/",
+   "kind": "bina→do",
+   "first_seen": "2026-11-10",
+   "last_seen": "2026-11-10"
+  },
+  {
+   "from": "https://www.bina-solutions.co.il/content/tutorials/productivity/en/crm-hygiene/",
+   "to": "https://digital-office.co.il/",
+   "kind": "bina→do",
+   "first_seen": "2026-11-10",
+   "last_seen": "2026-11-10"
+  },
+  {
+   "from": "https://www.bina-solutions.co.il/content/tutorials/productivity/en/inventory-management/",
+   "to": "https://digital-office.co.il/",
+   "kind": "bina→do",
+   "first_seen": "2026-11-10",
+   "last_seen": "2026-11-10"
+  },
+  {
+   "from": "https://www.bina-solutions.co.il/content/tutorials/productivity/en/llm-evaluation/",
+   "to": "https://digital-office.co.il/",
+   "kind": "bina→do",
+   "first_seen": "2026-11-10",
+   "last_seen": "2026-11-10"
+  },
+  {
+   "from": "https://www.bina-solutions.co.il/content/tutorials/productivity/en/mcp-integrations/",
+   "to": "https://digital-office.co.il/",
+   "kind": "bina→do",
+   "first_seen": "2026-11-10",
+   "last_seen": "2026-11-10"
+  },
+  {
+   "from": "https://www.bina-solutions.co.il/content/tutorials/productivity/en/whatsapp-bots/",
+   "to": "https://digital-office.co.il/",
+   "kind": "bina→do",
+   "first_seen": "2026-11-10",
+   "last_seen": "2026-11-10"
+  },
+  {
+   "from": "https://www.bina-solutions.co.il/content/tutorials/productivity/en/whatsapp-commerce/",
+   "to": "https://digital-office.co.il/",
+   "kind": "bina→do",
+   "first_seen": "2026-11-10",
+   "last_seen": "2026-11-10"
+  },
+  {
+   "from": "https://www.bina-solutions.co.il/content/tutorials/productivity/he/agents-in-operations/",
+   "to": "https://digital-office.co.il/",
+   "kind": "bina→do",
+   "first_seen": "2026-11-10",
+   "last_seen": "2026-11-10"
+  },
+  {
+   "from": "https://www.bina-solutions.co.il/content/tutorials/productivity/he/business-automation-roadmap/",
+   "to": "https://digital-office.co.il/",
+   "kind": "bina→do",
+   "first_seen": "2026-11-10",
+   "last_seen": "2026-11-10"
+  },
+  {
+   "from": "https://www.bina-solutions.co.il/content/tutorials/productivity/he/cpq-automation/",
+   "to": "https://digital-office.co.il/",
+   "kind": "bina→do",
+   "first_seen": "2026-11-10",
+   "last_seen": "2026-11-10"
+  },
+  {
+   "from": "https://www.bina-solutions.co.il/content/tutorials/productivity/he/crm-automation/",
+   "to": "https://digital-office.co.il/",
+   "kind": "bina→do",
+   "first_seen": "2026-11-10",
+   "last_seen": "2026-11-10"
+  },
+  {
+   "from": "https://www.bina-solutions.co.il/content/tutorials/productivity/he/crm-hygiene/",
+   "to": "https://digital-office.co.il/",
+   "kind": "bina→do",
+   "first_seen": "2026-11-10",
+   "last_seen": "2026-11-10"
+  },
+  {
+   "from": "https://www.bina-solutions.co.il/content/tutorials/productivity/he/inventory-management/",
+   "to": "https://digital-office.co.il/",
+   "kind": "bina→do",
+   "first_seen": "2026-11-10",
+   "last_seen": "2026-11-10"
+  },
+  {
+   "from": "https://www.bina-solutions.co.il/content/tutorials/productivity/he/llm-evaluation/",
+   "to": "https://digital-office.co.il/",
+   "kind": "bina→do",
+   "first_seen": "2026-11-10",
+   "last_seen": "2026-11-10"
+  },
+  {
+   "from": "https://www.bina-solutions.co.il/content/tutorials/productivity/he/mcp-integrations/",
+   "to": "https://digital-office.co.il/",
+   "kind": "bina→do",
+   "first_seen": "2026-11-10",
+   "last_seen": "2026-11-10"
+  },
+  {
+   "from": "https://www.bina-solutions.co.il/content/tutorials/productivity/he/whatsapp-bots/",
+   "to": "https://digital-office.co.il/",
+   "kind": "bina→do",
+   "first_seen": "2026-11-10",
+   "last_seen": "2026-11-10"
+  },
+  {
+   "from": "https://www.bina-solutions.co.il/content/tutorials/productivity/he/whatsapp-commerce/",
+   "to": "https://digital-office.co.il/",
+   "kind": "bina→do",
+   "first_seen": "2026-11-10",
+   "last_seen": "2026-11-10"
+  },
+  {
+   "from": "https://www.bina-solutions.co.il/news/",
+   "to": "https://digital-office.co.il/",
+   "kind": "bina→do",
+   "first_seen": "2026-11-10",
+   "last_seen": "2026-11-10"
+  },
+  {
+   "from": "https://www.bina-solutions.co.il/privacy/",
+   "to": "https://digital-office.co.il/",
+   "kind": "bina→do",
+   "first_seen": "2026-11-10",
+   "last_seen": "2026-11-10"
+  },
+  {
+   "from": "https://www.bina-solutions.co.il/search/",
+   "to": "https://digital-office.co.il/",
+   "kind": "bina→do",
+   "first_seen": "2026-11-10",
+   "last_seen": "2026-11-10"
+  },
+  {
+   "from": "https://www.bina-solutions.co.il/terms/",
+   "to": "https://digital-office.co.il/",
+   "kind": "bina→do",
+   "first_seen": "2026-11-10",
+   "last_seen": "2026-11-10"
+  },
+  {
+   "from": "https://www.bina-solutions.co.il/tutorials/",
+   "to": "https://digital-office.co.il/",
+   "kind": "bina→do",
+   "first_seen": "2026-11-10",
+   "last_seen": "2026-11-10"
+  },
+  {
+   "from": "https://www.bina-solutions.co.il/",
+   "to": "https://github.com/bina-solution/digital-office",
+   "kind": "bina→repo",
+   "first_seen": "2026-11-10",
+   "last_seen": "2026-11-10"
+  },
+  {
+   "from": "https://www.bina-solutions.co.il/404.html",
+   "to": "https://github.com/bina-solution/digital-office",
+   "kind": "bina→repo",
+   "first_seen": "2026-11-10",
+   "last_seen": "2026-11-10"
+  },
+  {
+   "from": "https://www.bina-solutions.co.il/about/",
+   "to": "https://github.com/bina-solution/digital-office",
+   "kind": "bina→repo",
+   "first_seen": "2026-11-10",
+   "last_seen": "2026-11-10"
+  },
+  {
+   "from": "https://www.bina-solutions.co.il/careers/",
+   "to": "https://github.com/bina-solution/digital-office",
+   "kind": "bina→repo",
+   "first_seen": "2026-11-10",
+   "last_seen": "2026-11-10"
+  },
+  {
+   "from": "https://www.bina-solutions.co.il/case-studies/",
+   "to": "https://github.com/bina-solution/digital-office",
+   "kind": "bina→repo",
+   "first_seen": "2026-11-10",
+   "last_seen": "2026-11-10"
+  },
+  {
+   "from": "https://www.bina-solutions.co.il/content/careers/en/js-developer-1/",
+   "to": "https://github.com/bina-solution/digital-office",
+   "kind": "bina→repo",
+   "first_seen": "2026-11-10",
+   "last_seen": "2026-11-10"
+  },
+  {
+   "from": "https://www.bina-solutions.co.il/content/careers/en/js-developer-2/",
+   "to": "https://github.com/bina-solution/digital-office",
+   "kind": "bina→repo",
+   "first_seen": "2026-11-10",
+   "last_seen": "2026-11-10"
+  },
+  {
+   "from": "https://www.bina-solutions.co.il/content/careers/en/n8n-developer-1/",
+   "to": "https://github.com/bina-solution/digital-office",
+   "kind": "bina→repo",
+   "first_seen": "2026-11-10",
+   "last_seen": "2026-11-10"
+  },
+  {
+   "from": "https://www.bina-solutions.co.il/content/careers/en/n8n-developer-2/",
+   "to": "https://github.com/bina-solution/digital-office",
+   "kind": "bina→repo",
+   "first_seen": "2026-11-10",
+   "last_seen": "2026-11-10"
+  },
+  {
+   "from": "https://www.bina-solutions.co.il/content/careers/en/n8n-developer-3/",
+   "to": "https://github.com/bina-solution/digital-office",
+   "kind": "bina→repo",
+   "first_seen": "2026-11-10",
+   "last_seen": "2026-11-10"
+  },
+  {
+   "from": "https://www.bina-solutions.co.il/content/careers/en/python-developer-1/",
+   "to": "https://github.com/bina-solution/digital-office",
+   "kind": "bina→repo",
+   "first_seen": "2026-11-10",
+   "last_seen": "2026-11-10"
+  },
+  {
+   "from": "https://www.bina-solutions.co.il/content/careers/en/python-developer-2/",
+   "to": "https://github.com/bina-solution/digital-office",
+   "kind": "bina→repo",
+   "first_seen": "2026-11-10",
+   "last_seen": "2026-11-10"
+  },
+  {
+   "from": "https://www.bina-solutions.co.il/content/careers/he/js-developer-1/",
+   "to": "https://github.com/bina-solution/digital-office",
+   "kind": "bina→repo",
+   "first_seen": "2026-11-10",
+   "last_seen": "2026-11-10"
+  },
+  {
+   "from": "https://www.bina-solutions.co.il/content/careers/he/js-developer-2/",
+   "to": "https://github.com/bina-solution/digital-office",
+   "kind": "bina→repo",
+   "first_seen": "2026-11-10",
+   "last_seen": "2026-11-10"
+  },
+  {
+   "from": "https://www.bina-solutions.co.il/content/careers/he/n8n-developer-1/",
+   "to": "https://github.com/bina-solution/digital-office",
+   "kind": "bina→repo",
+   "first_seen": "2026-11-10",
+   "last_seen": "2026-11-10"
+  },
+  {
+   "from": "https://www.bina-solutions.co.il/content/careers/he/python-developer-1/",
+   "to": "https://github.com/bina-solution/digital-office",
+   "kind": "bina→repo",
+   "first_seen": "2026-11-10",
+   "last_seen": "2026-11-10"
+  },
+  {
+   "from": "https://www.bina-solutions.co.il/content/case-studies/en/derech-tzadikim-ticketing/",
+   "to": "https://github.com/bina-solution/digital-office",
+   "kind": "bina→repo",
+   "first_seen": "2026-11-10",
+   "last_seen": "2026-11-10"
+  },
+  {
+   "from": "https://www.bina-solutions.co.il/content/case-studies/en/incoming-documents-payment-automation/",
+   "to": "https://github.com/bina-solution/digital-office",
+   "kind": "bina→repo",
+   "first_seen": "2026-11-10",
+   "last_seen": "2026-11-10"
+  },
+  {
+   "from": "https://www.bina-solutions.co.il/content/case-studies/en/linshom-referral-campaign/",
+   "to": "https://github.com/bina-solution/digital-office",
+   "kind": "bina→repo",
+   "first_seen": "2026-11-10",
+   "last_seen": "2026-11-10"
+  },
+  {
+   "from": "https://www.bina-solutions.co.il/content/case-studies/he/derech-tzadikim-ticketing/",
+   "to": "https://github.com/bina-solution/digital-office",
+   "kind": "bina→repo",
+   "first_seen": "2026-11-10",
+   "last_seen": "2026-11-10"
+  },
+  {
+   "from": "https://www.bina-solutions.co.il/content/case-studies/he/incoming-documents-payment-automation/",
+   "to": "https://github.com/bina-solution/digital-office",
+   "kind": "bina→repo",
+   "first_seen": "2026-11-10",
+   "last_seen": "2026-11-10"
+  },
+  {
+   "from": "https://www.bina-solutions.co.il/content/case-studies/he/linshom-referral-campaign/",
+   "to": "https://github.com/bina-solution/digital-office",
+   "kind": "bina→repo",
+   "first_seen": "2026-11-10",
+   "last_seen": "2026-11-10"
+  },
+  {
+   "from": "https://www.bina-solutions.co.il/content/news/en/2025-04-10-automation-roi/",
+   "to": "https://github.com/bina-solution/digital-office",
+   "kind": "bina→repo",
+   "first_seen": "2026-11-10",
+   "last_seen": "2026-11-10"
+  },
+  {
+   "from": "https://www.bina-solutions.co.il/content/news/en/2025-04-30-llm-eval/",
+   "to": "https://github.com/bina-solution/digital-office",
+   "kind": "bina→repo",
+   "first_seen": "2026-11-10",
+   "last_seen": "2026-11-10"
+  },
+  {
+   "from": "https://www.bina-solutions.co.il/content/news/en/2025-05-18-customer-support-automation/",
+   "to": "https://github.com/bina-solution/digital-office",
+   "kind": "bina→repo",
+   "first_seen": "2026-11-10",
+   "last_seen": "2026-11-10"
+  },
+  {
+   "from": "https://www.bina-solutions.co.il/content/news/en/2025-06-05-inventory-agents/",
+   "to": "https://github.com/bina-solution/digital-office",
+   "kind": "bina→repo",
+   "first_seen": "2026-11-10",
+   "last_seen": "2026-11-10"
+  },
+  {
+   "from": "https://www.bina-solutions.co.il/content/news/en/2025-06-20-cpq-automation/",
+   "to": "https://github.com/bina-solution/digital-office",
+   "kind": "bina→repo",
+   "first_seen": "2026-11-10",
+   "last_seen": "2026-11-10"
+  },
+  {
+   "from": "https://www.bina-solutions.co.il/content/news/en/2025-07-05-sheets-automations/",
+   "to": "https://github.com/bina-solution/digital-office",
+   "kind": "bina→repo",
+   "first_seen": "2026-11-10",
+   "last_seen": "2026-11-10"
+  },
+  {
+   "from": "https://www.bina-solutions.co.il/content/news/en/2025-07-25-privacy-self-hosted/",
+   "to": "https://github.com/bina-solution/digital-office",
+   "kind": "bina→repo",
+   "first_seen": "2026-11-10",
+   "last_seen": "2026-11-10"
+  },
+  {
+   "from": "https://www.bina-solutions.co.il/content/news/en/2025-08-10-whatsapp-bots/",
+   "to": "https://github.com/bina-solution/digital-office",
+   "kind": "bina→repo",
+   "first_seen": "2026-11-10",
+   "last_seen": "2026-11-10"
+  },
+  {
+   "from": "https://www.bina-solutions.co.il/content/news/en/2025-08-30-agents-in-crm/",
+   "to": "https://github.com/bina-solution/digital-office",
+   "kind": "bina→repo",
+   "first_seen": "2026-11-10",
+   "last_seen": "2026-11-10"
+  },
+  {
+   "from": "https://www.bina-solutions.co.il/content/news/en/2025-09-15-llm-costs/",
+   "to": "https://github.com/bina-solution/digital-office",
+   "kind": "bina→repo",
+   "first_seen": "2026-11-10",
+   "last_seen": "2026-11-10"
+  },
+  {
+   "from": "https://www.bina-solutions.co.il/content/news/en/2025-10-01-ai-trends/",
+   "to": "https://github.com/bina-solution/digital-office",
+   "kind": "bina→repo",
+   "first_seen": "2026-11-10",
+   "last_seen": "2026-11-10"
+  },
+  {
+   "from": "https://www.bina-solutions.co.il/content/news/en/2026-09-19-beautiful-open-source/",
+   "to": "https://github.com/bina-solution/digital-office",
+   "kind": "bina→repo",
+   "first_seen": "2026-11-10",
+   "last_seen": "2026-11-10"
+  },
+  {
+   "from": "https://www.bina-solutions.co.il/content/news/he/2025-06-05-inventory-agents/",
+   "to": "https://github.com/bina-solution/digital-office",
+   "kind": "bina→repo",
+   "first_seen": "2026-11-10",
+   "last_seen": "2026-11-10"
+  },
+  {
+   "from": "https://www.bina-solutions.co.il/content/news/he/2025-06-20-cpq-automation/",
+   "to": "https://github.com/bina-solution/digital-office",
+   "kind": "bina→repo",
+   "first_seen": "2026-11-10",
+   "last_seen": "2026-11-10"
+  },
+  {
+   "from": "https://www.bina-solutions.co.il/content/news/he/2025-07-05-sheets-automations/",
+   "to": "https://github.com/bina-solution/digital-office",
+   "kind": "bina→repo",
+   "first_seen": "2026-11-10",
+   "last_seen": "2026-11-10"
+  },
+  {
+   "from": "https://www.bina-solutions.co.il/content/news/he/2025-07-25-privacy-self-hosted/",
+   "to": "https://github.com/bina-solution/digital-office",
+   "kind": "bina→repo",
+   "first_seen": "2026-11-10",
+   "last_seen": "2026-11-10"
+  },
+  {
+   "from": "https://www.bina-solutions.co.il/content/news/he/2025-08-10-whatsapp-bots/",
+   "to": "https://github.com/bina-solution/digital-office",
+   "kind": "bina→repo",
+   "first_seen": "2026-11-10",
+   "last_seen": "2026-11-10"
+  },
+  {
+   "from": "https://www.bina-solutions.co.il/content/news/he/2025-08-30-agents-in-crm/",
+   "to": "https://github.com/bina-solution/digital-office",
+   "kind": "bina→repo",
+   "first_seen": "2026-11-10",
+   "last_seen": "2026-11-10"
+  },
+  {
+   "from": "https://www.bina-solutions.co.il/content/news/he/2025-10-01-ai-trends/",
+   "to": "https://github.com/bina-solution/digital-office",
+   "kind": "bina→repo",
+   "first_seen": "2026-11-10",
+   "last_seen": "2026-11-10"
+  },
+  {
+   "from": "https://www.bina-solutions.co.il/content/news/he/2026-09-19-beautiful-open-source/",
+   "to": "https://github.com/bina-solution/digital-office",
+   "kind": "bina→repo",
+   "first_seen": "2026-11-10",
+   "last_seen": "2026-11-10"
+  },
+  {
+   "from": "https://www.bina-solutions.co.il/content/tutorials/google-sheets/en/01-setup/",
+   "to": "https://github.com/bina-solution/digital-office",
+   "kind": "bina→repo",
+   "first_seen": "2026-11-10",
+   "last_seen": "2026-11-10"
+  },
+  {
+   "from": "https://www.bina-solutions.co.il/content/tutorials/google-sheets/en/02-crud/",
+   "to": "https://github.com/bina-solution/digital-office",
+   "kind": "bina→repo",
+   "first_seen": "2026-11-10",
+   "last_seen": "2026-11-10"
+  },
+  {
+   "from": "https://www.bina-solutions.co.il/content/tutorials/google-sheets/en/03-formulas-ai/",
+   "to": "https://github.com/bina-solution/digital-office",
+   "kind": "bina→repo",
+   "first_seen": "2026-11-10",
+   "last_seen": "2026-11-10"
+  },
+  {
+   "from": "https://www.bina-solutions.co.il/content/tutorials/google-sheets/en/04-apps-script/",
+   "to": "https://github.com/bina-solution/digital-office",
+   "kind": "bina→repo",
+   "first_seen": "2026-11-10",
+   "last_seen": "2026-11-10"
+  },
+  {
+   "from": "https://www.bina-solutions.co.il/content/tutorials/google-sheets/en/05-integrations/",
+   "to": "https://github.com/bina-solution/digital-office",
+   "kind": "bina→repo",
+   "first_seen": "2026-11-10",
+   "last_seen": "2026-11-10"
+  },
+  {
+   "from": "https://www.bina-solutions.co.il/content/tutorials/google-sheets/he/01-setup/",
+   "to": "https://github.com/bina-solution/digital-office",
+   "kind": "bina→repo",
+   "first_seen": "2026-11-10",
+   "last_seen": "2026-11-10"
+  },
+  {
+   "from": "https://www.bina-solutions.co.il/content/tutorials/google-sheets/he/02-crud/",
+   "to": "https://github.com/bina-solution/digital-office",
+   "kind": "bina→repo",
+   "first_seen": "2026-11-10",
+   "last_seen": "2026-11-10"
+  },
+  {
+   "from": "https://www.bina-solutions.co.il/content/tutorials/google-sheets/he/03-formulas-ai/",
+   "to": "https://github.com/bina-solution/digital-office",
+   "kind": "bina→repo",
+   "first_seen": "2026-11-10",
+   "last_seen": "2026-11-10"
+  },
+  {
+   "from": "https://www.bina-solutions.co.il/content/tutorials/google-sheets/he/04-apps-script/",
+   "to": "https://github.com/bina-solution/digital-office",
+   "kind": "bina→repo",
+   "first_seen": "2026-11-10",
+   "last_seen": "2026-11-10"
+  },
+  {
+   "from": "https://www.bina-solutions.co.il/content/tutorials/google-sheets/he/05-integrations/",
+   "to": "https://github.com/bina-solution/digital-office",
+   "kind": "bina→repo",
+   "first_seen": "2026-11-10",
+   "last_seen": "2026-11-10"
+  },
+  {
+   "from": "https://www.bina-solutions.co.il/content/tutorials/n8n/en/01-introduction/",
+   "to": "https://github.com/bina-solution/digital-office",
+   "kind": "bina→repo",
+   "first_seen": "2026-11-10",
+   "last_seen": "2026-11-10"
+  },
+  {
+   "from": "https://www.bina-solutions.co.il/content/tutorials/n8n/en/02-triggers-nodes/",
+   "to": "https://github.com/bina-solution/digital-office",
+   "kind": "bina→repo",
+   "first_seen": "2026-11-10",
+   "last_seen": "2026-11-10"
+  },
+  {
+   "from": "https://www.bina-solutions.co.il/content/tutorials/n8n/en/03-error-handling/",
+   "to": "https://github.com/bina-solution/digital-office",
+   "kind": "bina→repo",
+   "first_seen": "2026-11-10",
+   "last_seen": "2026-11-10"
+  },
+  {
+   "from": "https://www.bina-solutions.co.il/content/tutorials/n8n/en/04-auth-integrations/",
+   "to": "https://github.com/bina-solution/digital-office",
+   "kind": "bina→repo",
+   "first_seen": "2026-11-10",
+   "last_seen": "2026-11-10"
+  },
+  {
+   "from": "https://www.bina-solutions.co.il/content/tutorials/n8n/en/05-data-transformations/",
+   "to": "https://github.com/bina-solution/digital-office",
+   "kind": "bina→repo",
+   "first_seen": "2026-11-10",
+   "last_seen": "2026-11-10"
+  },
+  {
+   "from": "https://www.bina-solutions.co.il/content/tutorials/n8n/en/06-persistence-queues/",
+   "to": "https://github.com/bina-solution/digital-office",
+   "kind": "bina→repo",
+   "first_seen": "2026-11-10",
+   "last_seen": "2026-11-10"
+  },
+  {
+   "from": "https://www.bina-solutions.co.il/content/tutorials/n8n/en/07-observability/",
+   "to": "https://github.com/bina-solution/digital-office",
+   "kind": "bina→repo",
+   "first_seen": "2026-11-10",
+   "last_seen": "2026-11-10"
+  },
+  {
+   "from": "https://www.bina-solutions.co.il/content/tutorials/n8n/en/08-llm-agents/",
+   "to": "https://github.com/bina-solution/digital-office",
+   "kind": "bina→repo",
+   "first_seen": "2026-11-10",
+   "last_seen": "2026-11-10"
+  },
+  {
+   "from": "https://www.bina-solutions.co.il/content/tutorials/n8n/en/09-deploy-scale/",
+   "to": "https://github.com/bina-solution/digital-office",
+   "kind": "bina→repo",
+   "first_seen": "2026-11-10",
+   "last_seen": "2026-11-10"
+  },
+  {
+   "from": "https://www.bina-solutions.co.il/content/tutorials/n8n/en/10-best-practices/",
+   "to": "https://github.com/bina-solution/digital-office",
+   "kind": "bina→repo",
+   "first_seen": "2026-11-10",
+   "last_seen": "2026-11-10"
+  },
+  {
+   "from": "https://www.bina-solutions.co.il/content/tutorials/n8n/he/01-introduction/",
+   "to": "https://github.com/bina-solution/digital-office",
+   "kind": "bina→repo",
+   "first_seen": "2026-11-10",
+   "last_seen": "2026-11-10"
+  },
+  {
+   "from": "https://www.bina-solutions.co.il/content/tutorials/n8n/he/02-triggers-nodes/",
+   "to": "https://github.com/bina-solution/digital-office",
+   "kind": "bina→repo",
+   "first_seen": "2026-11-10",
+   "last_seen": "2026-11-10"
+  },
+  {
+   "from": "https://www.bina-solutions.co.il/content/tutorials/n8n/he/03-error-handling/",
+   "to": "https://github.com/bina-solution/digital-office",
+   "kind": "bina→repo",
+   "first_seen": "2026-11-10",
+   "last_seen": "2026-11-10"
+  },
+  {
+   "from": "https://www.bina-solutions.co.il/content/tutorials/n8n/he/04-auth-integrations/",
+   "to": "https://github.com/bina-solution/digital-office",
+   "kind": "bina→repo",
+   "first_seen": "2026-11-10",
+   "last_seen": "2026-11-10"
+  },
+  {
+   "from": "https://www.bina-solutions.co.il/content/tutorials/n8n/he/05-data-transformations/",
+   "to": "https://github.com/bina-solution/digital-office",
+   "kind": "bina→repo",
+   "first_seen": "2026-11-10",
+   "last_seen": "2026-11-10"
+  },
+  {
+   "from": "https://www.bina-solutions.co.il/content/tutorials/n8n/he/06-persistence-queues/",
+   "to": "https://github.com/bina-solution/digital-office",
+   "kind": "bina→repo",
+   "first_seen": "2026-11-10",
+   "last_seen": "2026-11-10"
+  },
+  {
+   "from": "https://www.bina-solutions.co.il/content/tutorials/n8n/he/07-observability/",
+   "to": "https://github.com/bina-solution/digital-office",
+   "kind": "bina→repo",
+   "first_seen": "2026-11-10",
+   "last_seen": "2026-11-10"
+  },
+  {
+   "from": "https://www.bina-solutions.co.il/content/tutorials/n8n/he/08-llm-agents/",
+   "to": "https://github.com/bina-solution/digital-office",
+   "kind": "bina→repo",
+   "first_seen": "2026-11-10",
+   "last_seen": "2026-11-10"
+  },
+  {
+   "from": "https://www.bina-solutions.co.il/content/tutorials/n8n/he/09-deploy-scale/",
+   "to": "https://github.com/bina-solution/digital-office",
+   "kind": "bina→repo",
+   "first_seen": "2026-11-10",
+   "last_seen": "2026-11-10"
+  },
+  {
+   "from": "https://www.bina-solutions.co.il/content/tutorials/n8n/he/10-best-practices/",
+   "to": "https://github.com/bina-solution/digital-office",
+   "kind": "bina→repo",
+   "first_seen": "2026-11-10",
+   "last_seen": "2026-11-10"
+  },
+  {
+   "from": "https://www.bina-solutions.co.il/content/tutorials/productivity/en/agents-in-operations/",
+   "to": "https://github.com/bina-solution/digital-office",
+   "kind": "bina→repo",
+   "first_seen": "2026-11-10",
+   "last_seen": "2026-11-10"
+  },
+  {
+   "from": "https://www.bina-solutions.co.il/content/tutorials/productivity/en/business-automation-roadmap/",
+   "to": "https://github.com/bina-solution/digital-office",
+   "kind": "bina→repo",
+   "first_seen": "2026-11-10",
+   "last_seen": "2026-11-10"
+  },
+  {
+   "from": "https://www.bina-solutions.co.il/content/tutorials/productivity/en/cpq-automation/",
+   "to": "https://github.com/bina-solution/digital-office",
+   "kind": "bina→repo",
+   "first_seen": "2026-11-10",
+   "last_seen": "2026-11-10"
+  },
+  {
+   "from": "https://www.bina-solutions.co.il/content/tutorials/productivity/en/crm-automation/",
+   "to": "https://github.com/bina-solution/digital-office",
+   "kind": "bina→repo",
+   "first_seen": "2026-11-10",
+   "last_seen": "2026-11-10"
+  },
+  {
+   "from": "https://www.bina-solutions.co.il/content/tutorials/productivity/en/crm-hygiene/",
+   "to": "https://github.com/bina-solution/digital-office",
+   "kind": "bina→repo",
+   "first_seen": "2026-11-10",
+   "last_seen": "2026-11-10"
+  },
+  {
+   "from": "https://www.bina-solutions.co.il/content/tutorials/productivity/en/inventory-management/",
+   "to": "https://github.com/bina-solution/digital-office",
+   "kind": "bina→repo",
+   "first_seen": "2026-11-10",
+   "last_seen": "2026-11-10"
+  },
+  {
+   "from": "https://www.bina-solutions.co.il/content/tutorials/productivity/en/llm-evaluation/",
+   "to": "https://github.com/bina-solution/digital-office",
+   "kind": "bina→repo",
+   "first_seen": "2026-11-10",
+   "last_seen": "2026-11-10"
+  },
+  {
+   "from": "https://www.bina-solutions.co.il/content/tutorials/productivity/en/mcp-integrations/",
+   "to": "https://github.com/bina-solution/digital-office",
+   "kind": "bina→repo",
+   "first_seen": "2026-11-10",
+   "last_seen": "2026-11-10"
+  },
+  {
+   "from": "https://www.bina-solutions.co.il/content/tutorials/productivity/en/whatsapp-bots/",
+   "to": "https://github.com/bina-solution/digital-office",
+   "kind": "bina→repo",
+   "first_seen": "2026-11-10",
+   "last_seen": "2026-11-10"
+  },
+  {
+   "from": "https://www.bina-solutions.co.il/content/tutorials/productivity/en/whatsapp-commerce/",
+   "to": "https://github.com/bina-solution/digital-office",
+   "kind": "bina→repo",
+   "first_seen": "2026-11-10",
+   "last_seen": "2026-11-10"
+  },
+  {
+   "from": "https://www.bina-solutions.co.il/content/tutorials/productivity/he/agents-in-operations/",
+   "to": "https://github.com/bina-solution/digital-office",
+   "kind": "bina→repo",
+   "first_seen": "2026-11-10",
+   "last_seen": "2026-11-10"
+  },
+  {
+   "from": "https://www.bina-solutions.co.il/content/tutorials/productivity/he/business-automation-roadmap/",
+   "to": "https://github.com/bina-solution/digital-office",
+   "kind": "bina→repo",
+   "first_seen": "2026-11-10",
+   "last_seen": "2026-11-10"
+  },
+  {
+   "from": "https://www.bina-solutions.co.il/content/tutorials/productivity/he/cpq-automation/",
+   "to": "https://github.com/bina-solution/digital-office",
+   "kind": "bina→repo",
+   "first_seen": "2026-11-10",
+   "last_seen": "2026-11-10"
+  },
+  {
+   "from": "https://www.bina-solutions.co.il/content/tutorials/productivity/he/crm-automation/",
+   "to": "https://github.com/bina-solution/digital-office",
+   "kind": "bina→repo",
+   "first_seen": "2026-11-10",
+   "last_seen": "2026-11-10"
+  },
+  {
+   "from": "https://www.bina-solutions.co.il/content/tutorials/productivity/he/crm-hygiene/",
+   "to": "https://github.com/bina-solution/digital-office",
+   "kind": "bina→repo",
+   "first_seen": "2026-11-10",
+   "last_seen": "2026-11-10"
+  },
+  {
+   "from": "https://www.bina-solutions.co.il/content/tutorials/productivity/he/inventory-management/",
+   "to": "https://github.com/bina-solution/digital-office",
+   "kind": "bina→repo",
+   "first_seen": "2026-11-10",
+   "last_seen": "2026-11-10"
+  },
+  {
+   "from": "https://www.bina-solutions.co.il/content/tutorials/productivity/he/llm-evaluation/",
+   "to": "https://github.com/bina-solution/digital-office",
+   "kind": "bina→repo",
+   "first_seen": "2026-11-10",
+   "last_seen": "2026-11-10"
+  },
+  {
+   "from": "https://www.bina-solutions.co.il/content/tutorials/productivity/he/mcp-integrations/",
+   "to": "https://github.com/bina-solution/digital-office",
+   "kind": "bina→repo",
+   "first_seen": "2026-11-10",
+   "last_seen": "2026-11-10"
+  },
+  {
+   "from": "https://www.bina-solutions.co.il/content/tutorials/productivity/he/whatsapp-bots/",
+   "to": "https://github.com/bina-solution/digital-office",
+   "kind": "bina→repo",
+   "first_seen": "2026-11-10",
+   "last_seen": "2026-11-10"
+  },
+  {
+   "from": "https://www.bina-solutions.co.il/content/tutorials/productivity/he/whatsapp-commerce/",
+   "to": "https://github.com/bina-solution/digital-office",
+   "kind": "bina→repo",
+   "first_seen": "2026-11-10",
+   "last_seen": "2026-11-10"
+  },
+  {
+   "from": "https://www.bina-solutions.co.il/news/",
+   "to": "https://github.com/bina-solution/digital-office",
+   "kind": "bina→repo",
+   "first_seen": "2026-11-10",
+   "last_seen": "2026-11-10"
+  },
+  {
+   "from": "https://www.bina-solutions.co.il/privacy/",
+   "to": "https://github.com/bina-solution/digital-office",
+   "kind": "bina→repo",
+   "first_seen": "2026-11-10",
+   "last_seen": "2026-11-10"
+  },
+  {
+   "from": "https://www.bina-solutions.co.il/search/",
+   "to": "https://github.com/bina-solution/digital-office",
+   "kind": "bina→repo",
+   "first_seen": "2026-11-10",
+   "last_seen": "2026-11-10"
+  },
+  {
+   "from": "https://www.bina-solutions.co.il/terms/",
+   "to": "https://github.com/bina-solution/digital-office",
+   "kind": "bina→repo",
+   "first_seen": "2026-11-10",
+   "last_seen": "2026-11-10"
+  },
+  {
+   "from": "https://www.bina-solutions.co.il/tutorials/",
+   "to": "https://github.com/bina-solution/digital-office",
+   "kind": "bina→repo",
+   "first_seen": "2026-11-10",
+   "last_seen": "2026-11-10"
+  },
+  {
+   "from": "https://digital-office.co.il/",
+   "to": "https://bina-solutions.co.il",
+   "kind": "do→bina",
+   "first_seen": "2026-11-10",
+   "last_seen": "2026-11-10"
+  },
+  {
+   "from": "https://digital-office.co.il/about.html",
+   "to": "https://bina-solutions.co.il",
+   "kind": "do→bina",
+   "first_seen": "2026-11-10",
+   "last_seen": "2026-11-10"
+  },
+  {
+   "from": "https://digital-office.co.il/apps/",
+   "to": "https://bina-solutions.co.il",
+   "kind": "do→bina",
+   "first_seen": "2026-11-10",
+   "last_seen": "2026-11-10"
+  },
+  {
+   "from": "https://digital-office.co.il/apps/any-concurrency.html",
+   "to": "https://bina-solutions.co.il",
+   "kind": "do→bina",
+   "first_seen": "2026-11-10",
+   "last_seen": "2026-11-10"
+  },
+  {
+   "from": "https://digital-office.co.il/apps/apitools.html",
+   "to": "https://bina-solutions.co.il",
+   "kind": "do→bina",
+   "first_seen": "2026-11-10",
+   "last_seen": "2026-11-10"
+  },
+  {
+   "from": "https://digital-office.co.il/apps/app-management.html",
+   "to": "https://bina-solutions.co.il",
+   "kind": "do→bina",
+   "first_seen": "2026-11-10",
+   "last_seen": "2026-11-10"
+  },
+  {
+   "from": "https://digital-office.co.il/apps/authentik.html",
+   "to": "https://bina-solutions.co.il",
+   "kind": "do→bina",
+   "first_seen": "2026-11-10",
+   "last_seen": "2026-11-10"
+  },
+  {
+   "from": "https://digital-office.co.il/apps/browser42.html",
+   "to": "https://bina-solutions.co.il",
+   "kind": "do→bina",
+   "first_seen": "2026-11-10",
+   "last_seen": "2026-11-10"
+  },
+  {
+   "from": "https://digital-office.co.il/apps/chat.html",
+   "to": "https://bina-solutions.co.il",
+   "kind": "do→bina",
+   "first_seen": "2026-11-10",
+   "last_seen": "2026-11-10"
+  },
+  {
+   "from": "https://digital-office.co.il/apps/connections.html",
+   "to": "https://bina-solutions.co.il",
+   "kind": "do→bina",
+   "first_seen": "2026-11-10",
+   "last_seen": "2026-11-10"
+  },
+  {
+   "from": "https://digital-office.co.il/apps/console.html",
+   "to": "https://bina-solutions.co.il",
+   "kind": "do→bina",
+   "first_seen": "2026-11-10",
+   "last_seen": "2026-11-10"
+  },
+  {
+   "from": "https://digital-office.co.il/apps/drive.html",
+   "to": "https://bina-solutions.co.il",
+   "kind": "do→bina",
+   "first_seen": "2026-11-10",
+   "last_seen": "2026-11-10"
+  },
+  {
+   "from": "https://digital-office.co.il/apps/glitchtip.html",
+   "to": "https://bina-solutions.co.il",
+   "kind": "do→bina",
+   "first_seen": "2026-11-10",
+   "last_seen": "2026-11-10"
+  },
+  {
+   "from": "https://digital-office.co.il/apps/google-workspace-agent.html",
+   "to": "https://bina-solutions.co.il",
+   "kind": "do→bina",
+   "first_seen": "2026-11-10",
+   "last_seen": "2026-11-10"
+  },
+  {
+   "from": "https://digital-office.co.il/apps/indox.html",
+   "to": "https://bina-solutions.co.il",
+   "kind": "do→bina",
+   "first_seen": "2026-11-10",
+   "last_seen": "2026-11-10"
+  },
+  {
+   "from": "https://digital-office.co.il/apps/machine.html",
+   "to": "https://bina-solutions.co.il",
+   "kind": "do→bina",
+   "first_seen": "2026-11-10",
+   "last_seen": "2026-11-10"
+  },
+  {
+   "from": "https://digital-office.co.il/apps/mail.html",
+   "to": "https://bina-solutions.co.il",
+   "kind": "do→bina",
+   "first_seen": "2026-11-10",
+   "last_seen": "2026-11-10"
+  },
+  {
+   "from": "https://digital-office.co.il/apps/my-docs.html",
+   "to": "https://bina-solutions.co.il",
+   "kind": "do→bina",
+   "first_seen": "2026-11-10",
+   "last_seen": "2026-11-10"
+  },
+  {
+   "from": "https://digital-office.co.il/apps/n8n.html",
+   "to": "https://bina-solutions.co.il",
+   "kind": "do→bina",
+   "first_seen": "2026-11-10",
+   "last_seen": "2026-11-10"
+  },
+  {
+   "from": "https://digital-office.co.il/apps/notifications.html",
+   "to": "https://bina-solutions.co.il",
+   "kind": "do→bina",
+   "first_seen": "2026-11-10",
+   "last_seen": "2026-11-10"
+  },
+  {
+   "from": "https://digital-office.co.il/apps/ollama.html",
+   "to": "https://bina-solutions.co.il",
+   "kind": "do→bina",
+   "first_seen": "2026-11-10",
+   "last_seen": "2026-11-10"
+  },
+  {
+   "from": "https://digital-office.co.il/apps/openhands.html",
+   "to": "https://bina-solutions.co.il",
+   "kind": "do→bina",
+   "first_seen": "2026-11-10",
+   "last_seen": "2026-11-10"
+  },
+  {
+   "from": "https://digital-office.co.il/apps/portainer.html",
+   "to": "https://bina-solutions.co.il",
+   "kind": "do→bina",
+   "first_seen": "2026-11-10",
+   "last_seen": "2026-11-10"
+  },
+  {
+   "from": "https://digital-office.co.il/apps/postgres.html",
+   "to": "https://bina-solutions.co.il",
+   "kind": "do→bina",
+   "first_seen": "2026-11-10",
+   "last_seen": "2026-11-10"
+  },
+  {
+   "from": "https://digital-office.co.il/apps/redis.html",
+   "to": "https://bina-solutions.co.il",
+   "kind": "do→bina",
+   "first_seen": "2026-11-10",
+   "last_seen": "2026-11-10"
+  },
+  {
+   "from": "https://digital-office.co.il/apps/redisinsight.html",
+   "to": "https://bina-solutions.co.il",
+   "kind": "do→bina",
+   "first_seen": "2026-11-10",
+   "last_seen": "2026-11-10"
+  },
+  {
+   "from": "https://digital-office.co.il/apps/supabase.html",
+   "to": "https://bina-solutions.co.il",
+   "kind": "do→bina",
+   "first_seen": "2026-11-10",
+   "last_seen": "2026-11-10"
+  },
+  {
+   "from": "https://digital-office.co.il/apps/traefik.html",
+   "to": "https://bina-solutions.co.il",
+   "kind": "do→bina",
+   "first_seen": "2026-11-10",
+   "last_seen": "2026-11-10"
+  },
+  {
+   "from": "https://digital-office.co.il/business-model.html",
+   "to": "https://bina-solutions.co.il",
+   "kind": "do→bina",
+   "first_seen": "2026-11-10",
+   "last_seen": "2026-11-10"
+  },
+  {
+   "from": "https://digital-office.co.il/business.html",
+   "to": "https://bina-solutions.co.il",
+   "kind": "do→bina",
+   "first_seen": "2026-11-10",
+   "last_seen": "2026-11-10"
+  },
+  {
+   "from": "https://digital-office.co.il/community.html",
+   "to": "https://bina-solutions.co.il",
+   "kind": "do→bina",
+   "first_seen": "2026-11-10",
+   "last_seen": "2026-11-10"
+  },
+  {
+   "from": "https://digital-office.co.il/creators.html",
+   "to": "https://bina-solutions.co.il",
+   "kind": "do→bina",
+   "first_seen": "2026-11-10",
+   "last_seen": "2026-11-10"
+  },
+  {
+   "from": "https://digital-office.co.il/docs/",
+   "to": "https://bina-solutions.co.il",
+   "kind": "do→bina",
+   "first_seen": "2026-11-10",
+   "last_seen": "2026-11-10"
+  },
+  {
+   "from": "https://digital-office.co.il/docs/declarative.html",
+   "to": "https://bina-solutions.co.il",
+   "kind": "do→bina",
+   "first_seen": "2026-11-10",
+   "last_seen": "2026-11-10"
+  },
+  {
+   "from": "https://digital-office.co.il/features.html",
+   "to": "https://bina-solutions.co.il",
+   "kind": "do→bina",
+   "first_seen": "2026-11-10",
+   "last_seen": "2026-11-10"
+  },
+  {
+   "from": "https://digital-office.co.il/hi-tech.html",
+   "to": "https://bina-solutions.co.il",
+   "kind": "do→bina",
+   "first_seen": "2026-11-10",
+   "last_seen": "2026-11-10"
+  },
+  {
+   "from": "https://digital-office.co.il/license.html",
+   "to": "https://bina-solutions.co.il",
+   "kind": "do→bina",
+   "first_seen": "2026-11-10",
+   "last_seen": "2026-11-10"
+  },
+  {
+   "from": "https://digital-office.co.il/personal.html",
+   "to": "https://bina-solutions.co.il",
+   "kind": "do→bina",
+   "first_seen": "2026-11-10",
+   "last_seen": "2026-11-10"
+  },
+  {
+   "from": "https://digital-office.co.il/pricing.html",
+   "to": "https://bina-solutions.co.il",
+   "kind": "do→bina",
+   "first_seen": "2026-11-10",
+   "last_seen": "2026-11-10"
+  },
+  {
+   "from": "https://digital-office.co.il/real-estate.html",
+   "to": "https://bina-solutions.co.il",
+   "kind": "do→bina",
+   "first_seen": "2026-11-10",
+   "last_seen": "2026-11-10"
+  },
+  {
+   "from": "https://digital-office.co.il/retail.html",
+   "to": "https://bina-solutions.co.il",
+   "kind": "do→bina",
+   "first_seen": "2026-11-10",
+   "last_seen": "2026-11-10"
+  },
+  {
+   "from": "https://digital-office.co.il/services.html",
+   "to": "https://bina-solutions.co.il",
+   "kind": "do→bina",
+   "first_seen": "2026-11-10",
+   "last_seen": "2026-11-10"
+  },
+  {
+   "from": "https://digital-office.co.il/vision.html",
+   "to": "https://bina-solutions.co.il",
+   "kind": "do→bina",
+   "first_seen": "2026-11-10",
+   "last_seen": "2026-11-10"
+  },
+  {
+   "from": "https://digital-office.co.il/",
+   "to": "https://github.com/bina-solution/digital-office",
+   "kind": "do→repo",
+   "first_seen": "2026-11-10",
+   "last_seen": "2026-11-10"
+  },
+  {
+   "from": "https://digital-office.co.il/about.html",
+   "to": "https://github.com/bina-solution/digital-office",
+   "kind": "do→repo",
+   "first_seen": "2026-11-10",
+   "last_seen": "2026-11-10"
+  },
+  {
+   "from": "https://digital-office.co.il/apps/",
+   "to": "https://github.com/bina-solution/digital-office",
+   "kind": "do→repo",
+   "first_seen": "2026-11-10",
+   "last_seen": "2026-11-10"
+  },
+  {
+   "from": "https://digital-office.co.il/apps/any-concurrency.html",
+   "to": "https://github.com/bina-solution/digital-office",
+   "kind": "do→repo",
+   "first_seen": "2026-11-10",
+   "last_seen": "2026-11-10"
+  },
+  {
+   "from": "https://digital-office.co.il/apps/apitools.html",
+   "to": "https://github.com/bina-solution/digital-office",
+   "kind": "do→repo",
+   "first_seen": "2026-11-10",
+   "last_seen": "2026-11-10"
+  },
+  {
+   "from": "https://digital-office.co.il/apps/app-management.html",
+   "to": "https://github.com/bina-solution/digital-office",
+   "kind": "do→repo",
+   "first_seen": "2026-11-10",
+   "last_seen": "2026-11-10"
+  },
+  {
+   "from": "https://digital-office.co.il/apps/authentik.html",
+   "to": "https://github.com/bina-solution/digital-office",
+   "kind": "do→repo",
+   "first_seen": "2026-11-10",
+   "last_seen": "2026-11-10"
+  },
+  {
+   "from": "https://digital-office.co.il/apps/browser42.html",
+   "to": "https://github.com/bina-solution/digital-office",
+   "kind": "do→repo",
+   "first_seen": "2026-11-10",
+   "last_seen": "2026-11-10"
+  },
+  {
+   "from": "https://digital-office.co.il/apps/chat.html",
+   "to": "https://github.com/bina-solution/digital-office",
+   "kind": "do→repo",
+   "first_seen": "2026-11-10",
+   "last_seen": "2026-11-10"
+  },
+  {
+   "from": "https://digital-office.co.il/apps/connections.html",
+   "to": "https://github.com/bina-solution/digital-office",
+   "kind": "do→repo",
+   "first_seen": "2026-11-10",
+   "last_seen": "2026-11-10"
+  },
+  {
+   "from": "https://digital-office.co.il/apps/console.html",
+   "to": "https://github.com/bina-solution/digital-office",
+   "kind": "do→repo",
+   "first_seen": "2026-11-10",
+   "last_seen": "2026-11-10"
+  },
+  {
+   "from": "https://digital-office.co.il/apps/drive.html",
+   "to": "https://github.com/bina-solution/digital-office",
+   "kind": "do→repo",
+   "first_seen": "2026-11-10",
+   "last_seen": "2026-11-10"
+  },
+  {
+   "from": "https://digital-office.co.il/apps/glitchtip.html",
+   "to": "https://github.com/bina-solution/digital-office",
+   "kind": "do→repo",
+   "first_seen": "2026-11-10",
+   "last_seen": "2026-11-10"
+  },
+  {
+   "from": "https://digital-office.co.il/apps/google-workspace-agent.html",
+   "to": "https://github.com/bina-solution/digital-office",
+   "kind": "do→repo",
+   "first_seen": "2026-11-10",
+   "last_seen": "2026-11-10"
+  },
+  {
+   "from": "https://digital-office.co.il/apps/indox.html",
+   "to": "https://github.com/bina-solution/digital-office",
+   "kind": "do→repo",
+   "first_seen": "2026-11-10",
+   "last_seen": "2026-11-10"
+  },
+  {
+   "from": "https://digital-office.co.il/apps/machine.html",
+   "to": "https://github.com/bina-solution/digital-office",
+   "kind": "do→repo",
+   "first_seen": "2026-11-10",
+   "last_seen": "2026-11-10"
+  },
+  {
+   "from": "https://digital-office.co.il/apps/mail.html",
+   "to": "https://github.com/bina-solution/digital-office",
+   "kind": "do→repo",
+   "first_seen": "2026-11-10",
+   "last_seen": "2026-11-10"
+  },
+  {
+   "from": "https://digital-office.co.il/apps/my-docs.html",
+   "to": "https://github.com/bina-solution/digital-office",
+   "kind": "do→repo",
+   "first_seen": "2026-11-10",
+   "last_seen": "2026-11-10"
+  },
+  {
+   "from": "https://digital-office.co.il/apps/n8n.html",
+   "to": "https://github.com/bina-solution/digital-office",
+   "kind": "do→repo",
+   "first_seen": "2026-11-10",
+   "last_seen": "2026-11-10"
+  },
+  {
+   "from": "https://digital-office.co.il/apps/notifications.html",
+   "to": "https://github.com/bina-solution/digital-office",
+   "kind": "do→repo",
+   "first_seen": "2026-11-10",
+   "last_seen": "2026-11-10"
+  },
+  {
+   "from": "https://digital-office.co.il/apps/ollama.html",
+   "to": "https://github.com/bina-solution/digital-office",
+   "kind": "do→repo",
+   "first_seen": "2026-11-10",
+   "last_seen": "2026-11-10"
+  },
+  {
+   "from": "https://digital-office.co.il/apps/openhands.html",
+   "to": "https://github.com/bina-solution/digital-office",
+   "kind": "do→repo",
+   "first_seen": "2026-11-10",
+   "last_seen": "2026-11-10"
+  },
+  {
+   "from": "https://digital-office.co.il/apps/portainer.html",
+   "to": "https://github.com/bina-solution/digital-office",
+   "kind": "do→repo",
+   "first_seen": "2026-11-10",
+   "last_seen": "2026-11-10"
+  },
+  {
+   "from": "https://digital-office.co.il/apps/postgres.html",
+   "to": "https://github.com/bina-solution/digital-office",
+   "kind": "do→repo",
+   "first_seen": "2026-11-10",
+   "last_seen": "2026-11-10"
+  },
+  {
+   "from": "https://digital-office.co.il/apps/redis.html",
+   "to": "https://github.com/bina-solution/digital-office",
+   "kind": "do→repo",
+   "first_seen": "2026-11-10",
+   "last_seen": "2026-11-10"
+  },
+  {
+   "from": "https://digital-office.co.il/apps/redisinsight.html",
+   "to": "https://github.com/bina-solution/digital-office",
+   "kind": "do→repo",
+   "first_seen": "2026-11-10",
+   "last_seen": "2026-11-10"
+  },
+  {
+   "from": "https://digital-office.co.il/apps/supabase.html",
+   "to": "https://github.com/bina-solution/digital-office",
+   "kind": "do→repo",
+   "first_seen": "2026-11-10",
+   "last_seen": "2026-11-10"
+  },
+  {
+   "from": "https://digital-office.co.il/apps/traefik.html",
+   "to": "https://github.com/bina-solution/digital-office",
+   "kind": "do→repo",
+   "first_seen": "2026-11-10",
+   "last_seen": "2026-11-10"
+  },
+  {
+   "from": "https://digital-office.co.il/business-model.html",
+   "to": "https://github.com/bina-solution/digital-office",
+   "kind": "do→repo",
+   "first_seen": "2026-11-10",
+   "last_seen": "2026-11-10"
+  },
+  {
+   "from": "https://digital-office.co.il/business.html",
+   "to": "https://github.com/bina-solution/digital-office",
+   "kind": "do→repo",
+   "first_seen": "2026-11-10",
+   "last_seen": "2026-11-10"
+  },
+  {
+   "from": "https://digital-office.co.il/community.html",
+   "to": "https://github.com/bina-solution/digital-office",
+   "kind": "do→repo",
+   "first_seen": "2026-11-10",
+   "last_seen": "2026-11-10"
+  },
+  {
+   "from": "https://digital-office.co.il/creators.html",
+   "to": "https://github.com/bina-solution/digital-office",
+   "kind": "do→repo",
+   "first_seen": "2026-11-10",
+   "last_seen": "2026-11-10"
+  },
+  {
+   "from": "https://digital-office.co.il/docs/",
+   "to": "https://github.com/bina-solution/digital-office",
+   "kind": "do→repo",
+   "first_seen": "2026-11-10",
+   "last_seen": "2026-11-10"
+  },
+  {
+   "from": "https://digital-office.co.il/docs/declarative.html",
+   "to": "https://github.com/bina-solution/digital-office",
+   "kind": "do→repo",
+   "first_seen": "2026-11-10",
+   "last_seen": "2026-11-10"
+  },
+  {
+   "from": "https://digital-office.co.il/features.html",
+   "to": "https://github.com/bina-solution/digital-office",
+   "kind": "do→repo",
+   "first_seen": "2026-11-10",
+   "last_seen": "2026-11-10"
+  },
+  {
+   "from": "https://digital-office.co.il/hi-tech.html",
+   "to": "https://github.com/bina-solution/digital-office",
+   "kind": "do→repo",
+   "first_seen": "2026-11-10",
+   "last_seen": "2026-11-10"
+  },
+  {
+   "from": "https://digital-office.co.il/license.html",
+   "to": "https://github.com/bina-solution/digital-office",
+   "kind": "do→repo",
+   "first_seen": "2026-11-10",
+   "last_seen": "2026-11-10"
+  },
+  {
+   "from": "https://digital-office.co.il/personal.html",
+   "to": "https://github.com/bina-solution/digital-office",
+   "kind": "do→repo",
+   "first_seen": "2026-11-10",
+   "last_seen": "2026-11-10"
+  },
+  {
+   "from": "https://digital-office.co.il/pricing.html",
+   "to": "https://github.com/bina-solution/digital-office",
+   "kind": "do→repo",
+   "first_seen": "2026-11-10",
+   "last_seen": "2026-11-10"
+  },
+  {
+   "from": "https://digital-office.co.il/real-estate.html",
+   "to": "https://github.com/bina-solution/digital-office",
+   "kind": "do→repo",
+   "first_seen": "2026-11-10",
+   "last_seen": "2026-11-10"
+  },
+  {
+   "from": "https://digital-office.co.il/retail.html",
+   "to": "https://github.com/bina-solution/digital-office",
+   "kind": "do→repo",
+   "first_seen": "2026-11-10",
+   "last_seen": "2026-11-10"
+  },
+  {
+   "from": "https://digital-office.co.il/services.html",
+   "to": "https://github.com/bina-solution/digital-office",
+   "kind": "do→repo",
+   "first_seen": "2026-11-10",
+   "last_seen": "2026-11-10"
+  },
+  {
+   "from": "https://digital-office.co.il/vision.html",
+   "to": "https://github.com/bina-solution/digital-office",
+   "kind": "do→repo",
+   "first_seen": "2026-11-10",
+   "last_seen": "2026-11-10"
+  }
+ ]
+}

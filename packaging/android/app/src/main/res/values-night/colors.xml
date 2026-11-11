@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- «Olive Grove» dark: theme-tokens.css's [data-theme=midnight] values (DGO-1723); the light ones and why
+         they are copied are in values/colors.xml. The icon's colours are the same in both. -->
+    <color name="bg">#141b0f</color>
+    <color name="surface">#1f2a17</color>
+    <color name="surface_2">#192213</color>
+    <color name="text">#f3f5f7</color>
+    <color name="muted">#a2a8a2</color>
+    <color name="line">#414a3b</color>
+    <color name="accent">#a5ba8c</color>
+    <color name="accent_ink">#1f2a17</color>
+    <color name="ok">#a5ba8c</color>
+    <color name="ok_soft">#384629</color>
+    <color name="info">#7baae3</color>
+    <color name="info_soft">#2e3f38</color>
+    <color name="warn">#a9b84c</color>
+    <color name="warn_soft">#3b4622</color>
+    <color name="danger">#ad99a4</color>
+    <color name="danger_soft">#402f33</color>
+</resources>

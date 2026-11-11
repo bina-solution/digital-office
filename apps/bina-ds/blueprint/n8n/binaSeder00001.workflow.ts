@@ -45,7 +45,14 @@ import { workflow, node, links } from '@n8n-as-code/transformer';
     /*__n8n__*/ staticData: null,
     id: 'binaSeder00001',
     name: 'Bina — three cycles (סדרים)',
-    active: true,
+    // OFF BY THE OWNER'S RULING, 2026-11-03 («כרגע גם השחרית ערבית וכל זה זה דיי נסיוני ולא באמת מקדם
+    // עדיין כלום … כרגע אנחנו פשוט מנהלים הכל מהפקודה קדימה»). Three autonomous sessions a day at a
+    // time when nothing was measuring what they cost; the office is driven from the command forward
+    // until automatic progress has a design. The declaration stays (the clock, the door, the day
+    // folder) so the decision is one flag away from being reversed — and the door now refuses a real
+    // cycle while the day's spend cannot be measured against the ₪1/day ceiling (server.mjs,
+    // `seder-budget`). DGO-1292.
+    active: false,
     isArchived: false,
     tags: ['app:bina-ds', 'role:infra'],
     settings: { errorWorkflow: 'errorHandler01', executionOrder: 'v1', timezone: 'Asia/Jerusalem' },

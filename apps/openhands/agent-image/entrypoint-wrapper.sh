@@ -7,13 +7,14 @@ export OPENAI_API_KEY="${OPENAI_API_KEY:-$LLM_API_KEY}"
 export DEEPSEEK_API_KEY="${DEEPSEEK_API_KEY:-$LLM_API_KEY}"
 export GEMINI_API_KEY="${GEMINI_API_KEY:-}"
 export LITELLM_PROXY_API_KEY="${LITELLM_PROXY_API_KEY:-$LLM_API_KEY}"
-echo "[agent] Keys ready: DS=${DEEPSEEK_API_KEY:0:8}... OAI=${OPENAI_API_KEY:0:8}... GEM=${GEMINI_API_KEY:0:8}..."
+# set/unset only: a key's first characters in a log are part of the key (DGO-1792)
+echo "[agent] Keys ready: DS=${DEEPSEEK_API_KEY:+set} OAI=${OPENAI_API_KEY:+set} GEM=${GEMINI_API_KEY:+set} (empty = unset)"
 
 export DOCKER_HOST="${DOCKER_HOST:-tcp://host.docker.internal:2375}"
 echo "[agent] DOCKER_HOST=$DOCKER_HOST"
 
 git config --global --add safe.directory /workspace/project 2>/dev/null || true
-git config --global --add safe.directory /root/deployment-hacohen 2>/dev/null || true
+git config --global --add safe.directory /root/digital-office 2>/dev/null || true
 git config --global --add safe.directory /workspace 2>/dev/null || true
 echo "[agent] Workspace: $(ls /workspace/ 2>/dev/null | head -3 | tr '\n' ' ')"
 

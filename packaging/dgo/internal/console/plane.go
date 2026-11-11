@@ -65,8 +65,14 @@ func newPlane(path string, logf func(string, ...any)) http.Handler {
 // `.` or `..` segment and no encoded slash, which app.py's werkzeug would read its own way (those stay
 // the container's).
 func planeRequest(r *http.Request) bool {
+	return ownSpelling(r, planePrefix)
+}
+
+// ownSpelling is a request under prefix whose path is its own spelling: no `.` or `..` segment and no
+// encoded slash, which an app's server would read its own way.
+func ownSpelling(r *http.Request, prefix string) bool {
 	p := r.URL.Path
-	if !strings.HasPrefix(p, planePrefix) || strings.Contains(strings.ToLower(r.URL.EscapedPath()), "%2f") {
+	if !strings.HasPrefix(p, prefix) || strings.Contains(strings.ToLower(r.URL.EscapedPath()), "%2f") {
 		return false
 	}
 	for _, seg := range strings.Split(p, "/") {
@@ -75,6 +81,70 @@ func planeRequest(r *http.Request) bool {
 		}
 	}
 	return true
+}
+
+// doorOf is the app a request is for when this office answers that app in its own process — the phone's
+// core, whose apps have no container to proxy to (Config.Doors, DGO-1328) — and the handler, or "" and nil.
+// The app's handler sees what the console container's app_proxy hands an app: the request at "/" + the
+// rest of the path, the query verbatim, X-Forwarded-Prefix /a/<id>; the shell's own page only, as at the
+// control plane's door, and a path of its own spelling only (anything else is the container's, which on a
+// phone is Absent's page).
+func (s *Server) doorOf(r *http.Request) (string, http.Handler) {
+	rest, ok := strings.CutPrefix(r.URL.Path, "/a/")
+	if !ok {
+		return "", nil
+	}
+	id, _, ok := strings.Cut(rest, "/")
+	h := s.doors[id]
+	if !ok || h == nil || !ownSpelling(r, "/a/"+id+"/") {
+		return "", nil
+	}
+	return id, h
+}
+
+// throughDoor hands r to an app answered in this process (doorOf), as newPlane hands one to the control plane.
+func throughDoor(id string, h http.Handler, w http.ResponseWriter, r *http.Request) {
+	why := ""
+	switch {
+	case !shellsPage(r):
+		why = "this app answers no page but the shell's"
+	case pageCouldSend(r):
+		why = "this app takes a change as JSON — any page could send this one"
+	}
+	if why != "" {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusForbidden)
+		_, _ = w.Write([]byte(`{"error":"` + why + `"}` + "\n"))
+		return
+	}
+	prefix := "/a/" + id
+	out := r.Clone(r.Context())
+	out.URL.Path = strings.TrimPrefix(r.URL.Path, prefix)
+	out.URL.RawPath = ""
+	out.RequestURI = ""
+	for _, k := range []string{"Origin", "Referer", "Sec-Fetch-Site", "Sec-Fetch-Mode", "Sec-Fetch-User"} {
+		out.Header.Del(k)
+	}
+	out.Header.Set("X-Forwarded-Prefix", prefix)
+	h.ServeHTTP(w, out)
+}
+
+// pageCouldSend is a write any page could send without asking first, for the browser that names neither
+// its Origin nor its Sec-Fetch-Site (serve.formable's rule, which the control plane runs behind its door —
+// a door's app has no such guard of its own once the door drops those headers): a POST, the one write
+// method a form or a no-cors fetch can send, with no Content-Type or a form's own (form-urlencoded,
+// multipart, text/plain). The apps' screens send their writes as JSON; serve.formable's X-DGO-Request way
+// out is not one here, the console having removed a client's X-DGO-* before any door.
+func pageCouldSend(r *http.Request) bool {
+	if !strings.EqualFold(r.Method, http.MethodPost) {
+		return false
+	}
+	mt, _, _ := strings.Cut(strings.Join(r.Header.Values("Content-Type"), ","), ";")
+	switch strings.ToLower(strings.TrimSpace(mt)) {
+	case "", "application/x-www-form-urlencoded", "multipart/form-data", "text/plain":
+		return true
+	}
+	return false
 }
 
 // shellsPage is a request the shell's own page sent, as the browser names its page: an Origin of this

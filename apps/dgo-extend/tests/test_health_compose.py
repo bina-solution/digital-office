@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """test_health_compose — the health step asks compose itself whether the office's project is valid.
 
-rel10 on fireplace: every container healthy, the health step green, and every `dc` failing («service
+rel10 on examplef: every container healthy, the health step green, and every `dc` failing («service
 "chimney-services" has neither an image nor a build context specified») — the step counted containers
 and never asked compose. The HEALTH script, run for real in bash against a scratch `scripts/dc` that
 answers as compose and dc do: the line kept is compose's own (or dc's error), never a warning or a bbox

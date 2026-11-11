@@ -1,0 +1,48 @@
+{
+  "id": "calculator",
+  "title": { "he": "מחשבון", "en": "Calculator" },
+  "layer": 3,
+  "kind": "service",
+  "page": "services",
+  "version": "0.1.0",
+  "summary": {
+    "he": "מחשבון קטן של הלשכה — נולד מבקשה, לא מהתקנה",
+    "en": "The office's small calculator — born from a request, not from an installation"
+  },
+  "capabilities": [],
+  "use": [],
+  "connections": [],
+  "compose": "docker-compose.yml",
+  "agent": { "context": "AGENT.md", "order": 40 },
+  "routing": [
+    {
+      "host": "calculator",
+      "port": 8997,
+      "auth": "sso",
+      "module": {
+        "group": "ראשי",
+        "icon": "grid",
+        "embed": true,
+        "alias": "calculator",
+        "id": "calculator",
+        "name": "מחשבון",
+        "desc": "מחשבון מהיר — ארבע פעולות, מקלדת, היסטוריה קצרה",
+        "order": 9,
+        "service": "calculator",
+        "url_env": "CALCULATOR_URL",
+        "url": "http://calculator:8997",
+        "passthrough": [{ "path": "/", "match": "prefix", "transport": "http", "strip_mount_prefix": true }]
+      },
+      "sso": {
+        "slug": "calculator",
+        "display_name": "Calculator",
+        "default_host": "calculator.localhost",
+        "base_url_env": "CALCULATOR_BASE_URL",
+        "local_twin": true
+      },
+      "external": true
+    }
+  ],
+  "health": { "structural": "auto", "probe": { "http": "http://calculator:8997/healthz", "interval": "30s" } },
+  "resources": { "cpus": "0.1", "memory": "64M" }
+}

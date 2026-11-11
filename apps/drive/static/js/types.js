@@ -35,8 +35,15 @@
     db:      { icon: "db",        he: "מסד נתונים",  en: "Database",     viewer: null },
     program: { icon: "app",       he: "תוכנה",       en: "Program",      viewer: null },
     torrent: { icon: "magnet",    he: "טורנט",       en: "Torrent",      viewer: "torrent" },
+    // a Google Doc, Sheet or Slides file has no bytes of its own: the server exports it — a PDF to look at,
+    // the matching Office file to download (adapters/google.py content)
+    gdoc:    { icon: "file-text", he: "מסמך Google",  en: "Google Doc",    thumb: true, viewer: "pdf", doc: true },
+    gsheet:  { icon: "sheet",     he: "גיליון Google", en: "Google Sheet",  thumb: true, viewer: "pdf" },
+    gslides: { icon: "slides",    he: "מצגת Google",  en: "Google Slides", thumb: true, viewer: "pdf", doc: true },
+    gother:  { icon: "file",      he: "קובץ Google",  en: "Google file",   thumb: true, viewer: "pdf" },
     other:   { icon: "file",      he: "קובץ",        en: "File",         viewer: null },
   };
+  const GOOGLE_NATIVE = { document: "gdoc", spreadsheet: "gsheet", presentation: "gslides" };
 
   // extension → kind. The browser draws `image` itself; `raster` needs the server's picture.
   const EXT = {};
@@ -76,6 +83,7 @@
     if (!it) return "other";
     if (it.kind === "folder" || it.isFolder) return "folder";
     const m = String(it.mime || "");
+    if (m.startsWith("application/vnd.google-apps.")) return GOOGLE_NATIVE[m.slice(28)] || "gother";
     // a container can hold sound only — a recorded .webm, an audio .mp4: the type says so, the name does not
     if (m.startsWith("audio/")) return "audio";
     const k = EXT[extOf(it.name)];
@@ -92,7 +100,8 @@
   const icon = (it) => info(it).icon;
   // a short tag over a glyph: the extension itself, as people say it
   const badge = (it) => { const e = extOf(it.name); return e && e.length <= 5 ? e.toUpperCase() : ""; };
-  const hasThumb = (it) => !!info(it).thumb;
+  // the kind can be pictured, or the drive says it has a picture of this file (Google draws one of most)
+  const hasThumb = (it) => !!(info(it).thumb || it.thumb);
   const isMedia = (it) => info(it).media || "";
   const viewerOf = (it) => info(it).viewer;
 

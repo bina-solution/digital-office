@@ -1,0 +1,157 @@
+#!/usr/bin/env bash
+#: signed-in [--json] — is the office's Claude REALLY signed in, and if not, why:  ./bbox bina-claude signed-in
+#:   «בינה קלוד», the official Claude Desktop app — the ONE sign-in of Bina Claude (there is no terminal):
+#:   its claude.ai session cookie, and from its own log when it last started, whether it was signed in then,
+#:   and the last sign-in attempt and its end
+# `status` once answered this from the app's config (`lastKnownAccountUuid`), which outlives a sign-out — it said
+# «signed in» while the owner was looking at a sign-out screen (DGO-1347). The answer here is asked from the
+# thing a sign-out removes. Nothing secret is read out or printed — presence, dates and fixed words only.
+# Exit: 0 signed in · 3 signed out (the line says why) · 1 the app is not running, or its state is unknown.
+set -uo pipefail
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
+. "${REPO_ROOT}/scripts/lib.sh"
+case "${1:-}" in -h|--help) sed -n 's/^#: //p' "${BASH_SOURCE[0]}"; exit 0 ;; esac
+JSON=0; [ "${1:-}" = "--json" ] && JSON=1
+DN="$(read_env_value DEPLOYMENT_NAME)"; DN="${DN:-bina-deployment}"
+DESK="bina-claude-desktop-${DN}"
+running() { docker ps --format '{{.Names}}' | grep -qx "$1"; }
+
+# ── the desktop app, as its own user: the cookie (presence), and its log's last start and last sign-in try ──
+DESKTOP='{"running": false}'
+# What became of the last «Continue with Google» is read by one awk program, kept beside the app.
+SIGNIN_AWK="$(cat "${SCRIPT_DIR}/../signin-log.awk" 2>/dev/null)"
+if running "${DESK}"; then
+  DESKTOP="$(docker exec -u abc "${DESK}" sh -c '
+    f=/config/.config/Claude/Cookies; log=/config/.config/Claude/logs/main.log; hop=/config/.claude-open-url.log
+    # No store at all is an app that never signed in here (a fresh office): signed out, not «unknown».
+    # A store that is there but cannot be read stays unknown.
+    cookie=false; changed=""
+    if [ -e "$f" ]; then
+      changed=$(TZ=UTC stat -c %y "$f" 2>/dev/null | cut -c1-19)
+      if [ ! -r "$f" ]; then cookie=null
+      elif grep -q -a sessionKey "$f" 2>/dev/null; then cookie=true; else cookie=false; fi
+    fi
+    # The app writes its log in the clock of its container: every time read from it is said in that zone.
+    tz="${TZ:-$(date +%Z)}"
+    start=""; at_start=null; at_exit=null; stale=""; attempt=""; how=""; token=""
+    if [ -r "$log" ]; then
+      # The app that RAN: a link handed over (desktop/claude-desktop) starts a second instance that logs its
+      # own «Starting app {» and quits before it is ready, with no sign-in state. So the last start is the
+      # one before the last [startup-sign-in] block.
+      # A log with no such block at all (an older app) falls back to its last start.
+      s=$(grep -n "\[startup-sign-in\] state: {" "$log" | tail -n 1 | cut -d: -f1)
+      if [ -n "$s" ]; then n=$(head -n "$s" "$log" | grep -n "\] Starting app {" | tail -n 1 | cut -d: -f1)
+      else n=$(grep -n "\] Starting app {" "$log" | tail -n 1 | cut -d: -f1); fi
+      if [ -n "$n" ]; then
+        start=$(sed -n "${n}p" "$log" | cut -c1-19)
+        blk=$(tail -n +"$n" "$log" | sed -n "/\[startup-sign-in\] state: {/,/^}/p" | head -n 12)
+        at_start=$(printf "%s\n" "$blk" | sed -n "s/^ *sign_in_cookie_present: *\([a-z]*\).*/\1/p" | head -n 1)
+        at_exit=$(printf "%s\n" "$blk" | sed -n "s/^ *signed_in_at_last_exit: *\([a-z]*\).*/\1/p" | head -n 1)
+        t=$(tail -n +"$n" "$log" | grep -m1 "\[oauth-v2\]")
+        case "$t" in *"no persisted token"*) token="none kept";; *"fresh /authorize"*) token="asked again (/authorize)";; "") token="";; *) token="kept";; esac
+      fi
+      stale=$(grep "session_stale_relogin" "$log" | tail -n 1 | cut -c1-19)
+      a=$(grep "\[Auth\] Using system browser for:" "$log" | tail -n 1)
+      attempt=$(printf "%s" "$a" | cut -c1-19)
+      case "$a" in *google*) how="Continue with Google";; "") how="";; *) how="a sign-in in the browser";; esac
+    fi
+    # The sign-in window (desktop/signin-browser) and the answer coming back (desktop/claude-desktop) write
+    # one log: the last sign-in opened, and what became of it. An older office (the hand-off to the office
+    # browser on the HP, DGO-1336) wrote other words in the same file; its last line is read as before.
+    handoff=""; h=""
+    if [ -r "$hop" ]; then
+      # $1 is apps/bina-claude/signin-log.awk, handed in by the host (the test feeds it lines too).
+      r=$(awk "$1" "$hop" 2>/dev/null)
+      case "$r" in
+        *" delivered") handoff="the answer from Google reached the app";;
+        *" failed") handoff="the answer from Google came back, but the app did not take it: press the button again";;
+        *" dropped") handoff="the answer from Google came while the app was restarting: press the button again";;
+        *" closed") handoff="the sign-in window closed before Google answered";;
+        *" opened") handoff="the sign-in window is open on the app screen, waiting for Google";;
+        *)
+          # No sign-in through this desktop browser yet. A log in the older words (the hand-off on the HP) is
+          # read by its last line; a log in these words has nothing more to say.
+          if ! grep -q -E " (opened sign-in|not opened link|refused: not a web address|delivered (link|sign-in)|failed to deliver|dropped (link|sign-in))" "$hop"; then
+            h=$(grep -v "^ *$" "$hop" | tail -n 1)
+          fi
+          case "$h" in
+            *busy*) handoff="the office browser was busy and did not open the sign-in";;
+            *"exit 124"*|*timeout*|*"did not hold"*) handoff="the office browser did not answer in time";;
+            *"not completed"*) handoff="the sign-in was not completed in the office browser";;
+            *deliver*) handoff="the office browser handed the answer back to the app";;
+            "") handoff="";; *) handoff="see /config/.claude-open-url.log";;
+          esac;;
+      esac
+      [ -n "$handoff" ] && handoff="$(printf "%s" "${r:-$h}" | cut -c1-20) $handoff"
+    fi
+    jq -cn --argjson cookie "${cookie:-null}" --arg changed "$changed" --arg start "$start" --arg tz "$tz" \
+      --arg at_start "${at_start:-}" --arg at_exit "${at_exit:-}" --arg stale "$stale" --arg attempt "$attempt" \
+      --arg how "$how" --arg token "$token" --arg handoff "$handoff" \
+      "{running: true, cookie: \$cookie, store_changed: \$changed, log_tz: \$tz, last_start: \$start,
+        signed_in_at_start: (\$at_start | if . == \"true\" then true elif . == \"false\" then false else null end),
+        signed_in_at_last_exit: (\$at_exit | if . == \"true\" then true elif . == \"false\" then false else null end),
+        token_at_start: \$token, stale_relogin_at: \$stale, signin_attempt_at: \$attempt, signin_attempt_how: \$how,
+        signin_handoff: \$handoff}"' sh "${SIGNIN_AWK}" 2>/dev/null)" || DESKTOP='{"running": true, "cookie": null}'
+  [ -n "${DESKTOP}" ] || DESKTOP='{"running": true, "cookie": null}'
+fi
+
+# ── one answer: per Claude a sentence a person acts on, and the exit code ──
+DESKTOP_JSON="${DESKTOP}" JSON="${JSON}" DESK="${DESK}" python3 - <<'PY'
+import json, os, sys
+
+def load(name):
+    try:
+        return json.loads(os.environ.get(name) or "{}")
+    except ValueError:
+        return {"running": True, "unreadable": True}
+
+d = load("DESKTOP_JSON")
+desk_name = os.environ["DESK"]
+
+def desktop_answer(d):
+    if not d.get("running"):
+        return None, f"{desk_name} is not running"
+    cookie = d.get("cookie")
+    # File times are read in UTC; the app's log is in its container's clock, named by `log_tz`.
+    tz = d.get("log_tz") or "the container's clock"
+    store = f"store changed {d['store_changed']} UTC" if d.get("store_changed") else "no cookie store yet"
+    if cookie is True:
+        return True, f"the app holds a claude.ai session cookie ({store})"
+    if cookie is None:
+        return None, "the app's cookie store could not be read"
+    # No cookie on disk is a sign-out only when the app STARTED without one: the running app takes it off the
+    # disk while it stays signed in and its sessions answer (measured on Exampleu 2026-11-09, DGO-1684) — unless
+    # claude.ai refused the sign-in after that start.
+    refused = d.get("stale_relogin_at") and d.get("last_start") and d["stale_relogin_at"] >= d["last_start"]
+    if d.get("signed_in_at_start") is True and not refused:
+        return None, (f"signed in at its last start ({d['last_start']} {tz}); its claude.ai session cookie has since "
+                      f"left the disk ({store}) — the app works now, and a restart would ask for the sign-in again")
+    why = [f"no claude.ai session cookie in the app ({store})"]
+    if d.get("last_start"):
+        why.append(f"it last started {d['last_start']} {tz} "
+                   + ("signed out" if d.get("signed_in_at_start") is False else "signed in" if d.get("signed_in_at_start") else "")
+                   + (", already signed out when it last quit" if d.get("signed_in_at_last_exit") is False else ""))
+    if d.get("stale_relogin_at"):
+        why.append(f"claude.ai refused to renew the sign-in as too old (session_stale_relogin) at {d['stale_relogin_at']} {tz}")
+    if d.get("signin_attempt_at"):
+        why.append(f"the last sign-in attempt ({d.get('signin_attempt_how') or 'browser'}) was at {d['signin_attempt_at']} {tz}"
+                   + (f" — {d['signin_handoff']}" if d.get("signin_handoff") else ""))
+    why.append("sign in from the «בינה קלוד» tile: «Continue with Google» opens Google's page on the same screen "
+               "(computer or phone); or «Continue with email», open the e-mail's link in the phone's browser, and "
+               "type the code it shows into the app")
+    return False, "; ".join(w.strip() for w in why if w.strip())
+
+desk_ok, desk_why = desktop_answer(d)
+code = 1 if desk_ok is None else (0 if desk_ok else 3)
+
+if os.environ.get("JSON") == "1":
+    print(json.dumps({
+        "logged_in": desk_ok, "why": desk_why,
+        "desktop": {"logged_in": desk_ok, "why": desk_why, "facts": d},
+    }, ensure_ascii=False))
+else:
+    word = {True: "signed in", False: "SIGNED OUT", None: "unknown"}
+    print(f"«בינה קלוד» (the Claude Desktop app)  {word[desk_ok]}: {desk_why}")
+sys.exit(code)
+PY

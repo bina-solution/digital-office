@@ -4,14 +4,17 @@ There is **one** way to run this stack on Windows. If you find another set of in
 (a different doc, a comment, an old habit) — they are wrong; this is the only path.
 
 ```
-git clone <repo> C:\path\you\like\deployment-hacohen
-cd C:\path\you\like\deployment-hacohen
+git clone https://github.com/bina-solution/digital-office C:\path\you\like\digital-office
+cd C:\path\you\like\digital-office
+bbox.cmd install windows
 bbox.cmd run
 ```
 
-Run it from a normal `CMD` or PowerShell prompt, in the repo directory. That's the whole setup.
-`bbox run` brings up a healthy, fully routed stack; see [CLAUDE.md](../../CLAUDE.md) for what to run
-against it afterward.
+Run it from a normal `CMD` or PowerShell prompt, in the repo directory. Before the first time, once per
+machine: WSL2 with an `Ubuntu` distro (`wsl --install -d Ubuntu` from an administrator PowerShell, restart,
+open Ubuntu once), and `bbox.cmd install windows` (it may ask for one `wsl --shutdown` and a second run).
+`bbox run` brings up a healthy, fully routed stack; see [running-the-stack.md](running-the-stack.md) for
+what to run against it afterward.
 
 ## The words, so nothing below is ambiguous
 
@@ -39,7 +42,7 @@ the project engine, minus the data. Not worth it; deliberately not done.
 
 It is a thin forwarder: it resolves the directory it's sitting in to a WSL path and hands the rest of
 the command line to the real `bbox` (a bash script) inside the `Ubuntu` distro, running against that
-same directory — not a copy, not a clone. Whatever you edit in your `C:\...\deployment-hacohen`
+same directory — not a copy, not a clone. Whatever you edit in your `C:\...\digital-office`
 checkout is exactly what `bbox run` builds and serves.
 
 ```
@@ -54,7 +57,7 @@ place, and there is nothing to keep in sync.
 Docker's engine is Linux-only. Windows has no native equivalent, so *something* Linux has to run it.
 WSL2 is that something — a lightweight Linux VM Windows ships with. Docker Desktop is one way to put
 an engine inside that VM; **this project supplies its own instead** (Docker CE via `apt`, pinned to
-28.x — see the Docker-29 note in [CLAUDE.md](../../CLAUDE.md)), so Docker Desktop is never required
+28.x — see «Docker and traefik» in [running-the-stack.md](running-the-stack.md)), so Docker Desktop is never required
 and, if present, is deliberately not used.
 
 `bbox run` provisions everything the project engine needs the first time it's missing: it installs
@@ -112,7 +115,7 @@ Opening Docker Desktop re-bound the conventional path. Traefik — which back th
 path — followed Desktop's engine, found none of this stack's labels, and served 404 for every
 `*.localhost` while reporting healthy. Stopping Desktop's stray containers took the whole site down,
 with all 39 real containers up and healthy the entire time. It reads exactly like the Docker-29 trap
-in [CLAUDE.md](../../CLAUDE.md); it is a completely different cause, reached through the socket mount
+in [running-the-stack.md](running-the-stack.md); it is a completely different cause, reached through the socket mount
 rather than the API version.
 
 To check which engine anything is really talking to:
@@ -260,7 +263,7 @@ work than before it: the measurement was right, the deployment had evaporated.
 
 ```bash
 # fine for a probe — gone on the next recreate
-docker cp app.js console-shlomo-laptop:/app/static/app.js && docker restart console-shlomo-laptop
+docker cp app.js console-owner-laptop:/app/static/app.js && docker restart console-owner-laptop
 
 # an actual deployment
 ./scripts/dc build console && ./scripts/dc up -d --force-recreate console
@@ -269,7 +272,7 @@ docker cp app.js console-shlomo-laptop:/app/static/app.js && docker restart cons
 Verify the IMAGE serves it, not the container you patched:
 
 ```bash
-curl -s "http://$(docker inspect -f '{{range $k,$v := .NetworkSettings.Networks}}{{$v.IPAddress}}{{end}}' console-shlomo-laptop):8000/app.js" | grep -c <something-you-added>
+curl -s "http://$(docker inspect -f '{{range $k,$v := .NetworkSettings.Networks}}{{$v.IPAddress}}{{end}}' console-owner-laptop):8000/app.js" | grep -c <something-you-added>
 ```
 
 ## 2. `docker compose -f apps/<app>/docker-compose.yml` forks a second project
@@ -279,7 +282,7 @@ creates a **separate project** whose containers claim the same `container_name` 
 stack. Nothing complains until `bbox run` next tries to create one:
 
 ```
-Conflict. The container name "/mailserver-shlomo-laptop" is already in use by container …
+Conflict. The container name "/mailserver-owner-laptop" is already in use by container …
 ```
 
 A name conflict aborts the whole `up`, not just that service — and Docker can leave containers running
@@ -287,7 +290,9 @@ under `<hash>_<name>` because it could not cleanly replace them. Those decorated
 anything that looks a container up by name, including healthchecks and capture tooling, which is a
 second failure that looks nothing like the first.
 
-Always drive the stack through `bbox`/`scripts/dc` so the project name stays `deployment-hacohen`.
+Always drive the stack through `bbox`/`scripts/dc` so the project name stays the one compose derives from the
+clone's folder name (`digital-office` for a public clone; scripts/lib.sh says how a name that derives to nothing
+is handled).
 If decorated names appear, they are leftovers — remove them and recreate:
 
 ```bash

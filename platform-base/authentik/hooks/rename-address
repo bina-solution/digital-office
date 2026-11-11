@@ -8,7 +8,7 @@
 #
 # authentik allows two users one address, so users who ALREADY shared <local>@<old> move together; a move
 # is refused only when the new address belongs to someone who was not on the old domain — a different
-# person (FPG-34's third reader). Through authentik's own shell (`ak shell`, its Django), one transaction.
+# person (EXF-34's third reader). Through authentik's own shell (`ak shell`, its Django), one transaction.
 # authentik being DOWN is a failure, not "nothing to move"; the dry run rolls back and exits non-zero when
 # the real run would refuse. Usernames (akadmin) are not addresses and are not touched. No secret is read.
 set -uo pipefail

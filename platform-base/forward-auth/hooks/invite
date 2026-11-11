@@ -1,0 +1,54 @@
+#!/usr/bin/env bash
+#: invite — bring a person into this office: a one-time link where they choose their own password (7 days):  ./bbox forward-auth invite tamar tamar@example.com תמר   (--list · --revoke <user>)
+# invite — the owner's door for a second person (DGO-1751, platform-base/forward-auth/invite.go).
+#
+#   bbox forward-auth invite <user> <email> [display]   print the person's one-time link
+#   bbox forward-auth invite --list                      the live invitations (never a code)
+#   bbox forward-auth invite --revoke <user>             drop a person's invitation
+#
+# The service keeps only the code's SHA-256; the code goes to ONE place, this terminal, as the link. Send it
+# to the person yourself. A new invitation for the same person replaces the old link. The person becomes a
+# user of the group `people`: every app behind the sign-in opens for them but the office's admins' apps (an
+# app.json's `people: admins`), which answer 403 (DGO-1755). Runs the image's own binary on the service's own volume
+# (`dc run`, the prepare hook's way: a scratch image has no shell to write with).
+set -euo pipefail
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
+dc="${REPO_ROOT}/scripts/dc"
+
+run() { "${dc}" run --rm --no-deps -T forward-auth "$@"; }
+
+case "${1:-}" in
+  ""|-h|--help)
+    sed -n '5,8p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,3\}//'
+    exit 2 ;;
+  --list)
+    run -invites
+    exit $? ;;
+  --revoke)
+    [ -n "${2:-}" ] || { echo "usage: bbox forward-auth invite --revoke <user>" >&2; exit 2; }
+    printf '%s\n' "$2" | run -revoke-invite
+    exit $? ;;
+esac
+
+[ $# -ge 2 ] && [ $# -le 3 ] || { echo "usage: bbox forward-auth invite <user> <email> [display]" >&2; exit 2; }
+# the service's last line is the code, or its refusal (compose's own warnings come before it)
+code="$(printf '%s\n' "$*" | run -invite 2>&1 | tr -d '\r' | tail -n 1 || true)"
+case "${code}" in
+  *forward-auth:*|"")
+    echo "[forward-auth] no invitation: ${code#*-invite: }" >&2
+    exit 1 ;;
+esac
+[[ "${code}" =~ ^[A-Za-z0-9_-]{32,}$ ]] || { echo "[forward-auth] no invitation: the service answered something else" >&2; exit 1; }
+
+env_of() { sed -n "s/^[[:space:]]*$1=//p" "${REPO_ROOT}/.env" 2>/dev/null | tail -1; }
+proto="$(env_of AUTH_PROTOCOL)"
+signin="$(env_of FORWARD_AUTH_BASE_URL)"
+console="$(env_of CONSOLE_BASE_URL)"
+domain="$(env_of DEPLOYMENT_DOMAIN)"
+# .env.ex's values interpolate ${DEPLOYMENT_DOMAIN}; compose does that, this resolves the one it uses
+signin="${signin//\$\{DEPLOYMENT_DOMAIN\}/${domain:-localhost}}"
+console="${console//\$\{DEPLOYMENT_DOMAIN\}/${domain:-localhost}}"
+proto="${proto:-http}"
+echo "[forward-auth] the invitation for $1: ${proto}://${signin:-signin.localhost}/invite?code=${code}&rd=${proto}://${console:-console.localhost}/"
+echo "[forward-auth]   send it to the person; it works once, for 7 days, and a new invitation replaces it"
+echo "[forward-auth]   they open the office's work apps, not its admins' (computers, apps, connections, n8n, agents, the owner's accounts — app.json people: admins), nor a linked office's (DGO-1755)"

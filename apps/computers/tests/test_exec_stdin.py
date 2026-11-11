@@ -2,7 +2,7 @@
 """test_exec_stdin — `exec` hands a secret to the machine on standard input, never on a command line.
 
 The command travels as an argument: in this container's `ssh` argv and in the far side's `bash -c` argv,
-where any local user reads /proc/<pid>/cmdline. A key DGO Extend's off-server backup carries (FPG-26) must
+where any local user reads /proc/<pid>/cmdline. A key DGO Extend's off-server backup carries (EXF-26) must
 therefore go as stdin. ssh itself is stood in for; what is tested is what this app gives it, and what the
 route answers and logs.
 
@@ -37,6 +37,7 @@ class P:
 
 def main() -> int:
     seen = {}
+    app.flowpub = None                           # run in a live container, the route would publish these test runs
     app.ensure_key = lambda: True
     app._key_path_for = lambda secret: "/tmp/k"
     app.subprocess.run = lambda cmd, **kw: (seen.update(cmd=cmd, kw=kw), P())[1]
@@ -49,9 +50,10 @@ def main() -> int:
     import asyncio
     import json
 
-    class Req:                                   # the route reads only .body() and .json()
+    class Req:                                   # the route reads .body(), .json() and .state (who asked)
         def __init__(self, body):
             self._b = json.dumps(body).encode()
+            self.state = type("S", (), {})()     # a request nobody identified, as Starlette gives one
 
         async def body(self):
             return self._b

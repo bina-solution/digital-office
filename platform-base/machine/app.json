@@ -5,7 +5,9 @@
     "en": "Machine"
   },
   "layer": 2,
+  "people": "admins",
   "kind": "service",
+  "page": "base",
   "version": "1.0.0",
   "summary": {
     "he": "מדדי מארח ו-Docker — מכולות, אחסון, משאבים",

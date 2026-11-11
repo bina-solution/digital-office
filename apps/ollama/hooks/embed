@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+#: embed — the vector of a text, from a local model:  ./bbox ollama embed "<text>" -m <model> [--office <office>] [--json]
+# apps/ollama/llm.py does the asking (POST /api/embed): through this office's front, or a linked office's Ollama with
+# --office. Prints the dimensions and the first values; --json the whole answer. A text of "-" is read from stdin.
+set -uo pipefail
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
+. "${REPO_ROOT}/scripts/lib.sh"
+case "${1:-}" in -h|--help) sed -n 's/^#: //p' "${BASH_SOURCE[0]}"; exit 0 ;; esac
+front=""; running "ollama-screen-${DN}" && front="ollama-screen-${DN}"
+OLLAMA_FRONT="${front}" exec python3 "$(npath "${REPO_ROOT}")/apps/ollama/llm.py" embed "$@"

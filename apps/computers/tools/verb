@@ -1,0 +1,37 @@
+#!/usr/bin/env bash
+# verb — run one computers.v1 CLI verb (tools/api_verbs.py) inside this office's computers container: the
+# hooks list/status/probe/audit/exec/add/rm/transfer are each one line that execs this (DGO-1257).
+# A secret never crosses a command line: `--key @file` / `--door @file` are read HERE and piped in on stdin
+# (the verb sees --key-stdin / --door-stdin). stdin is attached only then, so `while read id; do … status
+# "$id"; done < ids` keeps its own stdin. Exit: the verb's (0/1/2/3, or exec's own); 3 when the app is not here.
+set -uo pipefail
+HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+CONTAINER="$(docker ps --filter 'name=^computers-' --format '{{.Names}}' 2>/dev/null | head -1)"
+[ -n "${CONTAINER}" ] || { echo "computers is not running here (./bbox apps enable computers && ./bbox run)" >&2; exit 3; }
+CODE="$(cat "${HERE}/api_verbs.py" 2>/dev/null)" && [ -n "${CODE}" ] \
+  || { echo "computers: tools/api_verbs.py could not be read" >&2; exit 3; }
+ARGS=() SECRET=""
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --key|--door)
+      case "${2:-}" in
+        @?*) SECRET="${2#@}"; ARGS+=("$1-stdin"); shift 2; continue ;;
+        *) echo "computers: $1 takes @<file> — a secret is never an argument" >&2; exit 2 ;;
+      esac ;;
+    --key-stdin|--door-stdin)
+      [ -t 0 ] && { echo "computers: $1 reads stdin, and stdin is a terminal — use $(echo "$1" | sed 's/-stdin//') @<file>" >&2; exit 2; }
+      SECRET="-"; ARGS+=("$1"); shift; continue ;;
+  esac
+  ARGS+=("$1"); shift
+done
+run() { docker exec "$@" "${CONTAINER}" python3 -c "${CODE}" ${ARGS[@]+"${ARGS[@]}"}; }
+if [ -z "${SECRET}" ]; then
+  run; rc=$?
+elif [ "${SECRET}" = - ]; then
+  run -i; rc=$?
+else
+  [ -r "${SECRET}" ] || { echo "computers: cannot read ${SECRET}" >&2; exit 2; }
+  run -i < "${SECRET}"; rc=$?
+fi
+[ "${rc}" -eq 125 ] && { echo "computers: docker could not run the verb in ${CONTAINER}" >&2; exit 3; }
+exit "${rc}"

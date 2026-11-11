@@ -84,6 +84,8 @@
     refresh: '<path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/>',
     bot: '<path d="M12 8V4H8"/><rect width="16" height="12" x="4" y="8" rx="2"/><path d="M2 14h2"/><path d="M20 14h2"/><path d="M15 13v2"/><path d="M9 13v2"/>',
     lock: '<rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>',
+    users: '<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>',
+    key: '<path d="m15.5 7.5 2.3 2.3a1 1 0 0 0 1.4 0l2.1-2.1a1 1 0 0 0 0-1.4L19 4"/><path d="m21 2-9.6 9.6"/><circle cx="7.5" cy="15.5" r="5.5"/>',
     wrap: '<line x1="3" x2="21" y1="6" y2="6"/><path d="M3 12h15a3 3 0 1 1 0 6h-4"/><polyline points="16 16 14 18 16 20"/><line x1="3" x2="10" y1="18" y2="18"/>',
     sparkles: '<path d="m12 3-1.9 5.8a2 2 0 0 1-1.3 1.3L3 12l5.8 1.9a2 2 0 0 1 1.3 1.3L12 21l1.9-5.8a2 2 0 0 1 1.3-1.3L21 12l-5.8-1.9a2 2 0 0 1-1.3-1.3Z"/>',
   };
@@ -144,6 +146,7 @@
   const listeners = new Set();
   const state = {
     route: { view: "home" }, folders: [], storage: null, connection: null,
+    drives: { list: [], active: null, acting: null, loaded: false, error: "" },
     list: { key: "", files: [], folders: [], loading: true, error: "" },
     sel: [], anchor: null, layout: localGet("layout") || "list", sort: localGet("sort", { key: "date", dir: -1 }),
     details: false, viewer: null, menu: null, dialog: null, drawer: false, searching: false,
@@ -191,16 +194,20 @@
     else if (parts[0] === "trash") r.view = "trash";
     else if (parts[0] === "search") r.view = "search", r.q = q.get("q") || "";
     else if (parts[0] === "p") r.view = parts[1] || "home";
+    // which drive (accounts.js): absent = the office's default, so a link written without it opens there
+    if (q.get("drive")) r.drive = q.get("drive");
     return r;
   }
   function pathOf(r) {
+    const drive = r.drive !== undefined ? r.drive : state.route.drive;
+    const withDrive = (p) => (drive ? p + (p.includes("?") ? "&" : "?") + "drive=" + encodeURIComponent(drive) : p);
     switch (r.view) {
-      case "folder": return r.id ? "folder/" + encodeURIComponent(r.id) + (r.file ? "/file/" + encodeURIComponent(r.file) : "") : "files";
-      case "open": return "open/" + encodeURIComponent(r.file);
-      case "trash": return "trash";
-      case "search": return "search?q=" + encodeURIComponent(r.q || "");
-      case "home": return "";
-      default: return "p/" + r.view;
+      case "folder": return withDrive(r.id ? "folder/" + encodeURIComponent(r.id) + (r.file ? "/file/" + encodeURIComponent(r.file) : "") : "files");
+      case "open": return withDrive("open/" + encodeURIComponent(r.file));
+      case "trash": return withDrive("trash");
+      case "search": return withDrive("search?q=" + encodeURIComponent(r.q || ""));
+      case "home": return withDrive("");
+      default: return withDrive("p/" + r.view);
     }
   }
   /* the address bar follows the screen — where a document may not change its address (a srcdoc
@@ -211,8 +218,22 @@
     catch (e) { /* no address to write here */ }
   }
   function go(r, opts) {
-    setUrl(r, opts && opts.replace);
+    r = { ...r };
+    if (r.drive === undefined) r.drive = state.route.drive || "";   // a place is in the drive shown
+    setUrl(r, opts && opts.replace);          // "" here is the default drive: no `drive=` in the address
+    if (!r.drive) delete r.drive;
     set({ route: r, drawer: false });
+  }
+
+  /* every call is about the drive shown — sent along, never moved on the server (accounts.js). Not the
+     drive-less questions (the drives themselves, the providers, the sign-in), and not «הקלטות»: the
+     recorder always saves to the office's own drive, whatever another window shows. */
+  const UNSCOPED = /^(connections|providers|engine\/|engines|readyz|extensions|oauth\/|manifest)/;
+  function scoped(path, drive) {
+    const d = drive !== undefined ? drive : state.route.drive;
+    if (!d || UNSCOPED.test(path) || document.documentElement.dataset.surface === "recorder") return path;
+    const i = path.indexOf("#"), p = i >= 0 ? path.slice(0, i) : path;
+    return p + (p.includes("?") ? "&" : "?") + "connection_id=" + encodeURIComponent(d) + (i >= 0 ? path.slice(i) : "");
   }
 
   /* the API: relative to the app's own base (works under /a/drive/ and at the app's own host);
@@ -221,7 +242,7 @@
     opt = opt || {};
     let r;
     try {
-      r = await fetch(BASE + path, {
+      r = await fetch(BASE + scoped(path, opt.drive), {
         method: opt.method || (opt.body !== undefined ? "POST" : "GET"),
         headers: opt.body !== undefined && !(opt.body instanceof Blob) ? { "Content-Type": "application/json" } : (opt.headers || {}),
         body: opt.body === undefined ? undefined : (opt.body instanceof Blob ? opt.body : JSON.stringify(opt.body)),
@@ -240,8 +261,8 @@
     }
     return body || {};
   }
-  const contentUrl = (id, dl) => BASE + "api/file/" + encodeURIComponent(id) + "/content" + (dl ? "?dl=1" : "");
-  const thumbUrl = (it, s) => BASE + "api/file/" + encodeURIComponent(it.id) + "/thumb?s=" + (s || 256) + "&v=" + String(it.md5 || it.size || "").slice(0, 8);
+  const contentUrl = (id, dl) => BASE + scoped("api/file/" + encodeURIComponent(id) + "/content" + (dl ? "?dl=1" : ""));
+  const thumbUrl = (it, s) => BASE + scoped("api/file/" + encodeURIComponent(it.id) + "/thumb?s=" + (s || 256) + "&v=" + String(it.md5 || it.size || "").slice(0, 8));
 
   /* notices and questions are the office's own (bina-ask.js, stamped into app.js): the page's own
      dialog, never the browser's — `confirm()` is not a question this office asks */
@@ -260,6 +281,6 @@
     h, render, html, Fragment, hooks, L, ic, P,
     fmtSize, fmtWhen, fmtMonth, fmtDur, asDate, splitName,
     state, set, useStore, localGet, localSet,
-    BASE, parse, go, setUrl, pathOf, api, contentUrl, thumbUrl, tell, ask, copyText, count, sawBuild, NewVersion,
+    BASE, parse, go, setUrl, pathOf, api, scoped, contentUrl, thumbUrl, tell, ask, copyText, count, sawBuild, NewVersion,
   };
 })();

@@ -19,7 +19,7 @@ services:
     # fetched only when it is not here already, so a checkout that has built it is untouched;
     # the `build:` below stays as the fallback. Needs the GHCR package readable — a package made
     # from a private repo is private, so `docker login ghcr.io` on a machine that must pull.
-    image: ghcr.io/solomonboltin/digital-office/sites:${IMAGE_TAG:-latest}
+    image: ghcr.io/bina-solution/digital-office/sites:${IMAGE_TAG:-latest}
     pull_policy: missing
     build:
       context: .
@@ -32,6 +32,8 @@ services:
       - DEPLOYMENT_NAME=${DEPLOYMENT_NAME:-bina-deployment}
       # the fleet — every site action is a call to this service, never a direct ssh
       - COMPUTERS_URL=${COMPUTERS_URL:-http://computers:8977}
+      # who this app is to `computers`, whose writes answer only a known caller (DGO-1304)
+      - COMPUTERS_EXEC_TOKEN=${COMPUTERS_EXEC_TOKEN:-}
       - NOTIFICATIONS_URL=${NOTIFICATIONS_URL:-http://notifications:8977}
       - SITES_RENDER_URL=${SITES_RENDER_URL:-http://sites-render:8981}
       - SITES_STATE_DIR=/data
@@ -54,12 +56,19 @@ services:
       - DOMAINS_URL=${DOMAINS_URL:-http://domains:8980}
       - DIGITAL_ASSETS_URL=${DIGITAL_ASSETS_URL:-http://digital-assets:8985}
       - DIGITAL_ASSETS_HOST=${DIGITAL_ASSETS_HOST:-}
+      # IndexNow (indexnow.py): a site the office serves on https tells the search engines which pages changed —
+      # a POST to api.indexnow.org. 0 turns it off for the whole office; a site says `public.indexnow: false`.
+      - SITES_INDEXNOW=${SITES_INDEXNOW:-1}
+      # the event stream (flow.v1, DGO-1402) rides the office redis: `dgo:flow:sites`
+      - REDIS_PASSWORD=${REDIS_PASSWORD:-}
     volumes:
       # the sites registry, the uptime samples, the visits and the findings. Losing it loses the
       # history, not the sites: everything it says about a machine can be re-read from the machine.
       - sites_state:/data
       # the rendered screenshots, shared read-only with the renderer that writes them
       - sites_renders:/renders:ro
+      # the office's ONE flow.v1 publisher (DGO-1402) — the platform's file, never a copy of it here
+      - ../../platform-base/redis/flowpub.py:/opt/dgo/flowpub.py:ro
     networks:
       - traefik-network
     healthcheck:

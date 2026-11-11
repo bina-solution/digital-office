@@ -19,7 +19,7 @@ Covers:
 
 Does NOT touch: my-docs, connections, machine, notifications, any-concurrency, console, or
 anything without the QA_E2E_ tag. Never touches the real client mailbox
-(mail_imap_app_password-51185288 / person9@example.com) — mail cleanup only ever calls mailapi with
+(mail_imap_app_password-51185288 / person10@example.com) — mail cleanup only ever calls mailapi with
 the LOCAL engine's own connection_ids.
 
 Run:

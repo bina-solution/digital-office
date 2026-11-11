@@ -22,6 +22,8 @@ import requests
 log = logging.getLogger("sites.machines")
 
 COMPUTERS_URL = os.environ.get("COMPUTERS_URL", "http://computers:8977").rstrip("/")
+#: this app's proof of who it is to `computers`, whose writes answer only a known caller (DGO-1304)
+COMPUTERS_EXEC_TOKEN = os.environ.get("COMPUTERS_EXEC_TOKEN") or ""
 LIST_TIMEOUT = float(os.environ.get("SITES_MACHINE_LIST_TIMEOUT", "25"))
 DEFAULT_TIMEOUT = int(os.environ.get("SITES_EXEC_TIMEOUT", "120"))
 MAX_TIMEOUT = 600
@@ -83,6 +85,7 @@ def exec_on(machine_id: str, command: str, timeout: int = DEFAULT_TIMEOUT) -> di
     try:
         r = requests.post(f"{COMPUTERS_URL}/api/computers/{machine_id}/exec",
                           json={"command": command, "timeout": timeout},
+                          headers={"authorization": f"Bearer {COMPUTERS_EXEC_TOKEN}"} if COMPUTERS_EXEC_TOKEN else {},
                           timeout=timeout + 20)
     except requests.RequestException as e:
         return {"code": None, "stdout": "", "stderr": str(e), "timed_out": False, "state": "error",

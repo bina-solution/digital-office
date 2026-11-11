@@ -1,0 +1,2552 @@
+{
+ "checked": "2026-11-05",
+ "competitors": [
+  {
+   "id": "morning",
+   "name_he": "מורנינג (חשבונית ירוקה)",
+   "name_en": "morning (Green Invoice)",
+   "url": "https://www.greeninvoice.co.il/",
+   "segment": "invoicing",
+   "what_they_sell_he": "מערכת ענן להפקת חשבוניות, קבלות והצעות מחיר, לניהול הכנסות והוצאות ולסנכרון מקוון עם רואה החשבון. בחבילות הגבוהות יותר יש גם העלאת הוצאות עם סריקה אוטומטית, API ו-webhooks, תשלום בכרטיס אשראי וניהול של כמה עסקים.",
+   "target_customers_he": "עצמאים ובעלי עסקים קטנים בישראל, ומשרדי הנהלת חשבונות שעובדים מולם.",
+   "pricing": [
+    {
+     "plan": "Basic: עד 20 מסמכים בחודש, מסמך נוסף 1.00 ₪, עסק אחד",
+     "price": "29 ₪ לחודש (בתשלום אחד של 348 ₪, לפני מע״מ)",
+     "currency": "ILS",
+     "period": "annual billing (אין מחיר חודשי נפרד בדף)",
+     "source_url": "https://www.greeninvoice.co.il/pricing",
+     "date": "2026-11-05"
+    },
+    {
+     "plan": "Best: עד 50 מסמכים בחודש, מסמך נוסף 1.00 ₪, עד 2 עסקים, API ו-webhooks, סליקת אשראי",
+     "price": "45 ₪ לחודש (בתשלום אחד של 540 ₪, לפני מע״מ)",
+     "currency": "ILS",
+     "period": "annual billing",
+     "source_url": "https://www.greeninvoice.co.il/pricing",
+     "date": "2026-11-05"
+    },
+    {
+     "plan": "Best: תשלום חודשי",
+     "price": "54 ₪ לחודש (648 ₪ לשנה, לפני מע״מ; מתחדש מדי חודש)",
+     "currency": "ILS",
+     "period": "monthly billing",
+     "source_url": "https://www.greeninvoice.co.il/pricing",
+     "date": "2026-11-05"
+    },
+    {
+     "plan": "Extra: עד 200 מסמכים בחודש, מסמך נוסף 0.50 ₪, עד 3 עסקים",
+     "price": "74 ₪ לחודש (בתשלום אחד של 888 ₪, לפני מע״מ)",
+     "currency": "ILS",
+     "period": "annual billing",
+     "source_url": "https://www.greeninvoice.co.il/pricing",
+     "date": "2026-11-05"
+    },
+    {
+     "plan": "Extra: תשלום חודשי",
+     "price": "89 ₪ לחודש (1068 ₪ לשנה, לפני מע״מ; מתחדש מדי חודש)",
+     "currency": "ILS",
+     "period": "monthly billing",
+     "source_url": "https://www.greeninvoice.co.il/pricing",
+     "date": "2026-11-05"
+    },
+    {
+     "plan": "Prime: עד 500 מסמכים בחודש, מסמך נוסף 0.15 ₪, עד 5 עסקים",
+     "price": "129 ₪ לחודש (בתשלום אחד של 1,548 ₪, לפני מע״מ)",
+     "currency": "ILS",
+     "period": "annual billing",
+     "source_url": "https://www.greeninvoice.co.il/pricing",
+     "date": "2026-11-05"
+    },
+    {
+     "plan": "Prime: תשלום חודשי",
+     "price": "155 ₪ לחודש במינוי חודשי",
+     "currency": "ILS",
+     "period": "monthly billing",
+     "source_url": "https://www.greeninvoice.co.il/pricing",
+     "date": "2026-11-05"
+    }
+   ],
+   "customers": {
+    "low": 150000,
+    "high": 170000,
+    "unit": "self-employed people and business owners (company wording; not a count of paying accounts)",
+    "scope": "israel",
+    "grade": "C",
+    "source_url": "https://www.greeninvoice.co.il/magazine/חברת-team-system-רוכשת-את-morning/",
+    "source_date": "2024-12-23",
+    "note": "Company announcement of 2024-12-23: about 150,000 self-employed and business owners; the homepage (opened 2026-11-05, undated) says 170,000. The range joins the two company statements."
+   },
+   "ownership_funding": "נרכשה על ידי חברת TeamSystem האיטלקית, לפי הודעת החברה מ-23.12.2024; ההודעה לא מציינת מחיר ואומרת שהמבנה והצוות נשארים. החברה מונה מעל 100 עובדים; ליאור (מנכ״לית) ורמי גבאי (סמנכ״ל טכנולוגיות) מתוארים כמייסדים. הערכות מחיר בעיתונות לא נפתחו.",
+   "hebrew_rtl": true,
+   "integrations": [
+    "API ו-webhooks (חבילות Best ומעלה)",
+    "תשלום בכרטיס אשראי וארנקים דיגיטליים",
+    "סנכרון מקוון עם רואה החשבון",
+    "סליקה מהנייד (פוסט במגזין)",
+    "הקדמת תשלום על חשבוניות פתוחות (פיצ׳ר חדש, פוסט ללא תאריך)"
+   ],
+   "recent_news": [],
+   "recent_news_note": "לא נמצא עדכון חברה ב-90 הימים האחרונים (גוגל ניוז, בינג, מגזין morning). באתר, ללא תאריך, באנר על אכיפת מספרי הקצאה מ-1.6.2026 לחשבוניות מעל 5,000 ₪. הקשר ענפי: גלובס 9.8.2026 על תוכנית רשות המסים למע״מ בזמן אמת (https://www.globes.co.il/news/article.aspx?did=1001551762).",
+   "overlap_with_dgo_he": "חפיפה חלקית. לפי FACTS יש ב-DGO את «מסמכים שלי» למסמכי העסק עצמו, כמו חשבוניות, ואת «כלי מסמכים» שמבצע OCR ומחלץ ערכים ממסמכים עסקיים סרוקים. FACTS לא מציין הפקת חשבוניות עם מספר הקצאה, ואין לטעון שהלשכה היא תוכנת חשבוניות מאושרת על ידי רשות המסים.",
+   "sources": [
+    {
+     "url": "https://www.greeninvoice.co.il/pricing",
+     "date": null,
+     "what": "Pricing page opened 2026-11-05: four plans, annual and monthly prices excluding VAT, document limits; no customer count, owner or address on the page",
+     "grade": "C"
+    },
+    {
+     "url": "https://www.greeninvoice.co.il/magazine/חברת-team-system-רוכשת-את-morning/",
+     "date": "2024-12-23",
+     "what": "Company announcement: acquired by TeamSystem (Italy), ~150,000 customers, 100+ employees, no price",
+     "grade": "C"
+    },
+    {
+     "url": "https://greeninvoice.co.il/",
+     "date": null,
+     "what": "Homepage: 170,000 independent business owners; banner on allocation numbers enforced from 2026-06-01 for invoices above 5,000 NIS",
+     "grade": "C"
+    },
+    {
+     "url": "https://www.greeninvoice.co.il/magazine/",
+     "date": null,
+     "what": "Magazine listing opened: no dated company news; post on a new advance-payment feature",
+     "grade": "C"
+    }
+   ],
+   "verified_at": "2026-11-05"
+  },
+  {
+   "id": "monday-com",
+   "name_he": "monday.com (מאנדיי)",
+   "name_en": "monday.com",
+   "url": "https://monday.com/",
+   "segment": "work-management",
+   "what_they_sell_he": "פלטפורמת ענן לניהול עבודה, פרויקטים ותהליכים, עם מוצרים נפרדים ל-CRM, שירות ופיתוח, וסוכני בינה מלאכותית. באוקטובר 2026 הושקו Harmony (סוכני קול למכירות) ו-Frontier (שירותים מנוהלים ומהנדסי הטמעה ללקוחות גדולים), והחברה מתארת מעבר מתמחור לפי מושבים לתמהיל של מושבים וקרדיטים.",
+   "target_customers_he": "צוותים בארגונים בכל גודל. חבילת Free מוגבלת ל-2 מושבים; Frontier מכוון ללקוחות mid-market ומעלה; Harmony מכוון לצוותי מכירות בארה״ב, בריטניה, אוסטרליה וסינגפור.",
+   "pricing": [
+    {
+     "plan": "monday work management: Free (עד 2 מושבים)",
+     "price": "$0 (free forever)",
+     "currency": "USD (סימן $; הדף לא מציין קוד מטבע)",
+     "period": "free",
+     "source_url": "https://monday.com/pricing",
+     "date": "2026-11-05"
+    },
+    {
+     "plan": "monday work management: Basic",
+     "price": "$9 seat / month",
+     "currency": "USD (סימן $; הדף לא מציין קוד מטבע)",
+     "period": "billed annually",
+     "source_url": "https://monday.com/pricing",
+     "date": "2026-11-05"
+    },
+    {
+     "plan": "monday work management: Standard",
+     "price": "$12 seat / month",
+     "currency": "USD (סימן $; הדף לא מציין קוד מטבע)",
+     "period": "billed annually",
+     "source_url": "https://monday.com/pricing",
+     "date": "2026-11-05"
+    },
+    {
+     "plan": "monday work management: Pro",
+     "price": "$19 seat / month",
+     "currency": "USD (סימן $; הדף לא מציין קוד מטבע)",
+     "period": "billed annually",
+     "source_url": "https://monday.com/pricing",
+     "date": "2026-11-05"
+    },
+    {
+     "plan": "monday work management: Enterprise",
+     "price": "custom price (Get a quote)",
+     "currency": "n/a",
+     "period": "quote",
+     "source_url": "https://monday.com/pricing",
+     "date": "2026-11-05"
+    },
+    {
+     "plan": "monday CRM: Basic / Standard / Pro (תצוגת 3 מושבים)",
+     "price": "$18 ו-$12 / $25 ו-$17 / $41 ו-$28 למושב לחודש (הדף מציג שני מחירים לכל חבילה ולא מסמן איזה מהם מחוק)",
+     "currency": "USD (סימן $)",
+     "period": "yearly view, SAVE 33%",
+     "source_url": "https://monday.com/pricing",
+     "date": "2026-11-05"
+    },
+    {
+     "plan": "monday service: Standard / Pro (תצוגת 3 מושבים)",
+     "price": "$31 / $45 seat / month",
+     "currency": "USD (סימן $)",
+     "period": "billed annually",
+     "source_url": "https://monday.com/pricing",
+     "date": "2026-11-05"
+    },
+    {
+     "plan": "monday dev: Basic / Standard / Pro (תצוגת 3 מושבים)",
+     "price": "$9 / $12 / $20 seat / month",
+     "currency": "USD (סימן $)",
+     "period": "billed annually",
+     "source_url": "https://monday.com/pricing",
+     "date": "2026-11-05"
+    }
+   ],
+   "customers": {
+    "low": 250000,
+    "high": null,
+    "unit": "customers",
+    "scope": "worldwide",
+    "grade": "A",
+    "source_url": "https://www.sec.gov/Archives/edgar/data/0001845338/000117891326000870/zk2634436.htm",
+    "source_date": "2026-03-13",
+    "note": "Form 20-F FY2025 (taken from the existing index, opened there): over 250,000 customers at 2025-12-31, all products combined. The pricing page (opened 2026-11-05) repeats '250,000+ customers worldwide'. Q2 2026: 4,834 customers above $50K ARR and 2,019 above $100K (Funder, 2026-08-10)."
+   },
+   "ownership_funding": "חברה ציבורית (NASDAQ: MNDY) שמטה הראשי שלה בתל אביב לפי דוח 20-F. מנכ״לים משותפים: רועי מן וארן זינמן (Yahoo Finance, 28.10.2026). בגלובס מדווח על פיטורי כ-20% מהעובדים (כ-620 איש) ועל שווי שוק של כ-4.5 מיליארד דולר ב-25.10.2026.",
+   "hebrew_rtl": null,
+   "integrations": [
+    "monday CRM",
+    "monday service",
+    "monday dev",
+    "סוכני AI",
+    "Harmony (סוכני קול)",
+    "Frontier (הטמעה ושירותים מנוהלים)"
+   ],
+   "recent_news": [
+    {
+     "date": "2026-10-28",
+     "title": "monday.com Unveils Frontier to Drive Enterprise AI Deployment and Consumption Growth",
+     "url": "https://finance.yahoo.com/technology/ai/articles/monday-com-unveils-frontier-drive-220424925.html",
+     "summary_he": "החברה הכריזה על Frontier: צוות מהנדסים ושירותים מנוהלים שמלווה לקוחות mid-market וגדולים בהטמעת AI, עם תוכנית להרחבה עד 2027. המנכ״ל המשותף מתאר מודל תמחור היברידי של מושבים וקרדיטים."
+    },
+    {
+     "date": "2026-10-25",
+     "title": "אפקט ה-AI: הפיטורים והשקת הסוכנים החכמים שהטיסו את מאנדיי ב-80% מהשפל",
+     "url": "https://www.globes.co.il/news/article.aspx?did=1001560639",
+     "summary_he": "גלובס מדווח על פיטורי כ-20% מהעובדים (כ-620), על שינוי הפלטפורמה לכזו שמבצעת עבודה באמצעות סוכני AI ועל עלייה של כ-81% במניה מאז השפל של אפריל."
+    },
+    {
+     "date": "2026-10-19",
+     "title": "Voice AI Platform Harmony Launches to Convert Customer Conversations into Revenue",
+     "url": "https://ir.monday.com/news-and-events/news-releases/news-details/2026/Voice-AI-Platform-Harmony-Launches-to-Convert-Customer-Conversations-into-Revenue/default.aspx",
+     "summary_he": "הודעת החברה: Harmony היא פלטפורמת סוכני קול שמנהלים שיחות מכירה חיות באמצעות מודלי שפה קטנים ומתמחים, ומיועדת לצוותי מכירות בארבע מדינות."
+    },
+    {
+     "date": "2026-08-10",
+     "title": "מאנדיי מציגה שיא ברווח התפעולי וצמיחה של 22% בהכנסות ברבעון השני ל-364.6 מיליון דולר",
+     "url": "https://www.funder.co.il/article/207143",
+     "summary_he": "דוחות הרבעון השני 2026: הכנסות של 364.6 מיליון דולר, רווח תפעולי non-GAAP של 61.1 מיליון דולר, ותחזית הכנסות שנתית של 1,466 עד 1,474 מיליון דולר."
+    }
+   ],
+   "notes_he": "דוחות הרבעון השלישי מתוכננים ל-9.11.2026 (הודעת החברה, natlawreview). RTL: לא נמצא מסמך רשמי על ממשק עברי עם RTL; בפורום הקהילה של monday קיימות בקשות לשיפור תמיכת RTL (community.monday.com), ולכן השדה נשאר null.",
+   "overlap_with_dgo_he": "חפיפה חלקית בניהול משימות ופרויקטים: לפי FACTS רצה ב-DGO אפליקציית Plane בעברית (build בשם plane-he) לניהול פרויקטים ופריטי עבודה, ולצידה סוכני הלשכה (עזריה) ואוטומציה ב-n8n. FACTS אינו מציין מוצר CRM; מוצר שירות לקוחות (Chatwoot) מופיע שם רק ברשימת החבילות המתוכננות, שעליהן יש לומר שהן בדרך לחנות של DGO.",
+   "sources": [
+    {
+     "url": "https://monday.com/pricing",
+     "date": null,
+     "what": "Pricing page opened 2026-11-05: plans and per-seat prices in $, '250,000+ customers worldwide'",
+     "grade": "C"
+    },
+    {
+     "url": "https://www.sec.gov/Archives/edgar/data/0001845338/000117891326000870/zk2634436.htm",
+     "date": "2026-03-13",
+     "what": "Form 20-F FY2025 (existing index): Tel Aviv address; over 250,000 customers",
+     "grade": "A"
+    },
+    {
+     "url": "https://www.globes.co.il/news/article.aspx?did=1001560639",
+     "date": "2026-10-25",
+     "what": "Globes: layoffs of ~20%, voice agents, share move since April",
+     "grade": "B"
+    },
+    {
+     "url": "https://www.funder.co.il/article/207143",
+     "date": "2026-08-10",
+     "what": "Funder: Q2 2026 results and guidance",
+     "grade": "B"
+    },
+    {
+     "url": "https://ir.monday.com/news-and-events/news-releases/news-details/2026/Voice-AI-Platform-Harmony-Launches-to-Convert-Customer-Conversations-into-Revenue/default.aspx",
+     "date": "2026-10-19",
+     "what": "Company release: Harmony",
+     "grade": "B"
+    },
+    {
+     "url": "https://finance.yahoo.com/technology/ai/articles/monday-com-unveils-frontier-drive-220424925.html",
+     "date": "2026-10-28",
+     "what": "Yahoo Finance: Frontier, co-CEO quotes",
+     "grade": "B"
+    },
+    {
+     "url": "https://natlawreview.com/press-releases/mondaycom-announce-third-quarter-2026-financial-results-monday-november-9",
+     "date": "2026-10-19",
+     "what": "Release: Q3 2026 results on 2026-11-09",
+     "grade": "B"
+    }
+   ],
+   "verified_at": "2026-11-05"
+  },
+  {
+   "id": "priority-software",
+   "name_he": "פריוריטי (Priority Software)",
+   "name_en": "Priority Software",
+   "url": "https://www.priority-software.com/",
+   "segment": "erp",
+   "what_they_sell_he": "מערכת ERP בענן לעסקים בינוניים וגדולים, עם חבילות לפי סוג עסק: מסחר, ייצור, קופה (POS), קופה ו-ERP משולבים, וניהול מלונות (Optima PMS). במאי 2026 הוכרז על ERP שבנוי סביב AI, עם מלווה מובנה וסוכנים ייעודיים, וביוני 2026 נרכשה הסטארטאפ Obol לניהול תזרים מזומנים.",
+   "target_customers_he": "חברות בינוניות וגדולות בישראל ובעולם בענפי מסחר, ייצור, קמעונאות ומלונאות. המחיר נמסר רק בהצעה.",
+   "pricing": [
+    {
+     "plan": "Commercial / Manufacturing / POS Software / All-in-one POS & ERP / Optima PMS",
+     "price": "אין מחיר מפורסם: כל חבילה נושאת כפתור 'Speak to a Sales Expert' ובשאלות הנפוצות נאמר שנציג יציע הצעת מחיר מותאמת",
+     "currency": "n/a",
+     "period": "quote",
+     "source_url": "https://www.priority-software.com/pricing/",
+     "date": "2026-11-05"
+    }
+   ],
+   "customers": {
+    "low": 75000,
+    "high": 75000,
+    "unit": "customers",
+    "scope": "worldwide",
+    "grade": "B",
+    "source_url": "https://www.calcalistech.com/ctechnews/article/h1q9sb5mme",
+    "source_date": "2026-06-25",
+    "note": "CTech (2026-06-25) relays the company's claim of about 75,000 customers across 70 countries and ~660 employees. The company site itself says only 'thousands of companies' and its counters did not render."
+   },
+   "ownership_funding": "קרן Blackstone רכשה במאי 2024 כ-70% מהחברה מקרנות Fortissimo ו-TA Associates לפי שווי של 800 מיליון דולר; שתי הקרנות מחזיקות יחד כ-30% (CTech, 25.6.2026). יפעת אורון מקרן Blackstone היא יו״ר החברה. Obol היא הרכישה הרביעית מאז כניסת Blackstone.",
+   "hebrew_rtl": null,
+   "integrations": [
+    "Optima PMS (ניהול מלונות)",
+    "POS Software",
+    "All-in-one POS & ERP",
+    "מלווה aiERP וסוכני AI"
+   ],
+   "recent_news": [],
+   "recent_news_note": "בדף החדשות של החברה אין פריט חדש מ-90 הימים האחרונים. האחרונים: 25.6.2026 רכישת Obol (https://www.priority-software.com/blog/news/priority-strengthens-its-product-offering-with-obol-acquisition/) ו-20.5.2026 הכרזה על ERP שמבוסס AI (https://www.priority-software.com/blog/news/priority-software-unveils-prioritys-ai-first-erp-powered/).",
+   "notes_he": "קיימת גרסת אתר בעברית (hreflang he) בכתובת https://www.priority-software.com/il/pricing/ , אבל ממשק המוצר ו-RTL לא נבדקו ולכן hebrew_rtl הוא null. במספר ספקים אחרים בדוסייה יש חיבור לפריוריטי (PayPlus, Dokka, VirtuAc, Cadmon, Konimbo).",
+   "overlap_with_dgo_he": "חפיפה קטנה כיום. FACTS מונה את Odoo רק ברשימת החבילות המתוכננות: יש לומר שהחבילה בדרך לחנות של DGO ולא לטעון התקנה בלחיצה. יתר היכולות של DGO (מסמכים, מייל, צ׳אט, אוטומציה) משלימות מערכת ERP ולא מחליפות אותה.",
+   "sources": [
+    {
+     "url": "https://www.priority-software.com/pricing/",
+     "date": null,
+     "what": "Pricing page opened 2026-11-05: five plans, quote only, no prices",
+     "grade": "C"
+    },
+    {
+     "url": "https://www.priority-software.com/news/",
+     "date": null,
+     "what": "News page opened: dated items from 2025-09-03 to 2026-06-25",
+     "grade": "C"
+    },
+    {
+     "url": "https://www.calcalistech.com/ctechnews/article/h1q9sb5mme",
+     "date": "2026-06-25",
+     "what": "CTech: Obol acquisition, ~75,000 customers, ~660 employees, Blackstone 70% at $800M",
+     "grade": "B"
+    },
+    {
+     "url": "https://www.priority-software.com/",
+     "date": null,
+     "what": "Homepage: 'thousands of companies', counters did not render",
+     "grade": "C"
+    }
+   ],
+   "verified_at": "2026-11-05"
+  },
+  {
+   "id": "tabit",
+   "name_he": "טאביט",
+   "name_en": "Tabit",
+   "url": "https://www.tabit.cloud/",
+   "segment": "pos",
+   "what_they_sell_he": "מערכת קופה וניהול למסעדות: Tabit PAD מחליפה את הקופה הרושמת, Tabit Guest לשיבוץ והזמנות מקום, Tabit Order להזמנות ומשלוחים, Tabit Pay לתשלום בסריקת QR על החשבון, וכן כרטיסי מתנה, מסכי מטבח, סידור עבודה ואנליטיקה. במאי 2026 הושקה בשיתוף Fiserv הקופה Clover Reserve על בסיס Tabit.",
+   "target_customers_he": "מסעדות ובתי קפה בישראל, בארה״ב ובאוסטרליה, כולל מסעדות במלונות ורשתות.",
+   "pricing": [],
+   "customers": null,
+   "ownership_funding": "חברה פרטית. כתבת Refresh Miami מ-15.6.2021 מציינת סבב B של 35 מיליון דולר בהובלת Vertex Ventures Israel (אפריל 2020) ומטה אמריקאי במיאמי; בדף הבית היום מופיעה כתובת באוונטורה, פלורידה. סיכום מימון עדכני לא נמצא במקור שנפתח.",
+   "hebrew_rtl": true,
+   "integrations": [
+    "Fiserv Clover (Clover Reserve powered by Tabit)",
+    "הזמנות דרך Google",
+    "OpenTable (שותפות 2023, ממצא חיפוש)",
+    "חיוב מלונאות"
+   ],
+   "recent_news": [],
+   "recent_news_note": "אין פריט ב-90 הימים האחרונים. האחרון שנמצא: 12.5.2026, Fiserv מכריזה על Clover Reserve powered by Tabit (https://uk.finance.yahoo.com/news/fiserv-expands-clover-restaurant-portfolio-123000163.html).",
+   "notes_he": "אין מחירון ציבורי. באתר הישראלי (tabit.cloud/il) מוני הלקוחות מוצגים כ-0 בטקסט שנקרא, ולכן אין ספירת לקוחות. ב-2021 הצהירה החברה על נתח שוק של מעל 45% בישראל (Refresh Miami); נתון ישן שלא נבדק מחדש.",
+   "overlap_with_dgo_he": "אין חפיפה: FACTS אינו מציין אפליקציית קופה או ניהול מסעדות ב-DGO.",
+   "sources": [
+    {
+     "url": "https://tabit.cloud/il/",
+     "date": null,
+     "what": "Hebrew site opened: product lines, press links, counters rendered as 0, no prices",
+     "grade": "C"
+    },
+    {
+     "url": "https://www.tabit.cloud/",
+     "date": null,
+     "what": "Homepage: markets USA, Europe, Israel, Australia; office address Aventura, FL",
+     "grade": "C"
+    },
+    {
+     "url": "https://refreshmiami.com/news/on-heels-of-explosive-growth-top-israeli-hospitality-tech-startup-tabit-plans-expansion-in-miami/",
+     "date": "2021-06-15",
+     "what": "Refresh Miami: $35M Series B (Vertex, April 2020), >45% Israeli market-share claim, Miami HQ",
+     "grade": "D"
+    },
+    {
+     "url": "https://uk.finance.yahoo.com/news/fiserv-expands-clover-restaurant-portfolio-123000163.html",
+     "date": "2026-05-12",
+     "what": "Yahoo Finance: Clover Reserve powered by Tabit",
+     "grade": "B"
+    }
+   ],
+   "verified_at": "2026-11-05"
+  },
+  {
+   "id": "beecomm",
+   "name_he": "ביקום",
+   "name_en": "Beecomm",
+   "url": "https://www.beecomm.com/",
+   "segment": "pos",
+   "what_they_sell_he": "מערכות קופה למסעדות, בתי קפה ומלונות: קופת ענן על אייפד, קופת PC (גם במודל השכרה), עמדות הזמנה עצמית, ניהול תפריטים ומבצעים, וחיבורים למשלוחים ולצדדים שלישיים ללא עמלת חיבור, לפי האתר.",
+   "target_customers_he": "מסעדות, בתי קפה, בתי מלון, פיצריות ובתי אוכל בישראל.",
+   "pricing": [],
+   "customers": {
+    "low": 3000,
+    "high": null,
+    "unit": "customers (company wording: 'לקוחות מרוצים' and 'עסקים')",
+    "scope": "israel",
+    "grade": "C",
+    "source_url": "https://www.beecomm.com/",
+    "source_date": null,
+    "note": "Homepage claim 'over 3,000 satisfied customers' and '20+ years'; undated; no breakdown."
+   },
+   "ownership_funding": "לא נמצא מקור: האתר אינו מציין בעלים או מימון, והחיפוש לא החזיר רכישה או גיוס. כתובת לא מצוינת, רק תל אביב-יפו בכותרת העמוד.",
+   "hebrew_rtl": true,
+   "integrations": [
+    "תן ביס",
+    "משלוחה",
+    "אופטימה (מלונאות)"
+   ],
+   "recent_news": [],
+   "recent_news_note": "לא נמצאו כתבות על החברה ב-90 הימים האחרונים (גוגל ניוז, בינג); באתר אין עמוד חדשות.",
+   "notes_he": "אין מחירון ציבורי: האתר מציין רק 'מחיר אטרקטיבי' ללא סכום.",
+   "overlap_with_dgo_he": "אין חפיפה: FACTS אינו מציין קופה או ניהול מסעדות ב-DGO.",
+   "sources": [
+    {
+     "url": "https://www.beecomm.com/",
+     "date": null,
+     "what": "Homepage opened: POS lines, delivery integrations, '3000+ customers', 20+ years, Tel Aviv-Yafo in the title",
+     "grade": "C"
+    }
+   ],
+   "verified_at": "2026-11-05"
+  },
+  {
+   "id": "nayax",
+   "name_he": "נאייקס",
+   "name_en": "Nayax",
+   "url": "https://www.nayax.com/",
+   "segment": "payments",
+   "what_they_sell_he": "פתרונות תשלום ללא מזומן וניהול מכשירים לנקודות מכירה לא מאוישות: מכונות אוטומטיות, עמדות טעינה לרכב חשמלי, חניה ותחנות דלק, עם מסופים, פלטפורמת ניהול ושירותי סליקה. באוקטובר 2026 הושלמה רכישת IPS Group (טכנולוגיית חניה) ב-350 מיליון דולר במזומן.",
+   "target_customers_he": "מפעילי מכונות אוטומטיות ונקודות מכירה לא מאוישות, תחנות טעינה ותחנות דלק ורשויות חניה, בכ-120 מדינות לפי הדיווח.",
+   "pricing": [],
+   "customers": {
+    "low": 125000,
+    "high": 125000,
+    "unit": "customers",
+    "scope": "worldwide",
+    "grade": "B",
+    "source_url": "https://finance.yahoo.com/markets/stocks/articles/nayax-ltd-nyax-q2-2026-210115030.html",
+    "source_date": "2026-08-10",
+    "note": "Q2 2026 earnings-call summary: customer base 125,000 and over 1.55 million devices. Form 20-F said about 115,000 customers at 2025-12-31 (grade A, from the existing index). Funder (2026-11-01) also writes 125,000 customers in 120+ countries."
+   },
+   "ownership_funding": "חברה ציבורית (NASDAQ ובורסת תל אביב: NYAX). יאיר נחמד הוא מנכ״ל ויו״ר (Funder, 1.11.2026). את IPS Group רכשה מקרן Windjammer Capital תמורת 350 מיליון דולר במזומן. ב-20-F מופיעה כתובת הרצליה.",
+   "hebrew_rtl": null,
+   "integrations": [
+    "Getnet (Santander): שותפות בצ׳ילה, ובהמשך ספרד, פורטוגל, ברזיל, מקסיקו וארגנטינה",
+    "Allied Electronics: הפצת מסוף VPOS Media 5 לתחנות דלק בארה״ב",
+    "IPS Group (חניה חכמה)"
+   ],
+   "recent_news": [
+    {
+     "date": "2026-11-01",
+     "title": "125 אלף לקוחות ביותר מ-120 מדינות: נאייקס שמה את הלקוח במרכז ויוצרת לראשונה תפקיד חדש בהנהלה הבכירה",
+     "url": "https://www.funder.co.il/article/213340",
+     "summary_he": "Funder: נאייקס מינתה את משה אורנשטיין לסמנכ״ל חוויית הלקוח הגלובלית, תפקיד חדש שמאחד קליטה, תמיכה, הטמעה ושימור. הכתבה מציינת מעל 125 אלף לקוחות ויותר מ-120 מדינות."
+    },
+    {
+     "date": "2026-10-06",
+     "title": "נאייקס מכוונת לשוק של 450 מיליארד דולר: נכנסת לתחום התשלומים בתחנות הדלק בארה״ב",
+     "url": "https://www.funder.co.il/article/211155",
+     "summary_he": "שותפות הפצה עם Allied Electronics שתמכור את מסוף התשלום VPOS Media 5 לקמעונאי דלק בארה״ב, שוק של כ-450 מיליארד דולר מכירות דלק ב-2025."
+    },
+    {
+     "date": "2026-10-02",
+     "title": "Nayax Closes $350 Million Acquisition of IPS Group",
+     "url": "https://finance.yahoo.com/markets/stocks/articles/nayax-closes-350-million-acquisition-213150056.html",
+     "summary_he": "נאייקס סיימה לרכוש את IPS Group, ספקית טכנולוגיית ניהול חניה, מקרן Windjammer תמורת 350 מיליון דולר במזומן. ההסכם הוכרז ב-25.8.2026."
+    },
+    {
+     "date": "2026-09-29",
+     "title": "נאייקס חוברת לחברת הסליקה הגדולה ביותר באמריקה הלטינית ומרחיבה פעילותה באזור",
+     "url": "https://www.funder.co.il/article/210665",
+     "summary_he": "שותפות אסטרטגית עם Getnet של קבוצת סנטנדר: חיבור מסופי נאייקס לרשת של Getnet, בהתחלה בצ׳ילה ובהמשך בספרד, פורטוגל, ברזיל, מקסיקו וארגנטינה, בדגש על מסחר לא מאויש."
+    },
+    {
+     "date": "2026-08-10",
+     "title": "Nayax Ltd (NYAX) (Q2 2026) Earnings Call Highlights: Revenue Surges 28% on EV and Fintech",
+     "url": "https://finance.yahoo.com/markets/stocks/articles/nayax-ltd-nyax-q2-2026-210115030.html",
+     "summary_he": "דוחות הרבעון השני 2026: הכנסות של כ-123 מיליון דולר, עלייה של 28% (צמיחה אורגנית 21%); בסיס מותקן של מעל 1.55 מיליון מכשירים ו-125 אלף לקוחות."
+    }
+   ],
+   "notes_he": "דוחות הרבעון השלישי מתוכננים ל-11.11.2026 (Yahoo Finance, 26.10.2026; לא נפתח). אין מחירון ציבורי. האתר nayax.com חוסם גישה אוטומטית (403) ולכן נתוני מוצר נלקחו מדוחות וחדשות.",
+   "overlap_with_dgo_he": "אין חפיפה: FACTS אינו מציין סליקה או מסופי תשלום ב-DGO. ב-browser42 תשלום או התחברות ממתינים לבעלים, וזה לא מוצר תשלומים.",
+   "sources": [
+    {
+     "url": "https://finance.yahoo.com/markets/stocks/articles/nayax-ltd-nyax-q2-2026-210115030.html",
+     "date": "2026-08-10",
+     "what": "Q2 2026 call summary: revenue +28% to ~$123M, 125,000 customers, 1.55M devices",
+     "grade": "B"
+    },
+    {
+     "url": "https://www.funder.co.il/article/213340",
+     "date": "2026-11-01",
+     "what": "Funder: new executive role, 125k customers in 120+ countries",
+     "grade": "B"
+    },
+    {
+     "url": "https://finance.yahoo.com/markets/stocks/articles/nayax-closes-350-million-acquisition-213150056.html",
+     "date": "2026-10-02",
+     "what": "Yahoo: IPS Group closed, $350M cash from Windjammer",
+     "grade": "B"
+    },
+    {
+     "url": "https://www.funder.co.il/article/211155",
+     "date": "2026-10-06",
+     "what": "Funder: Allied Electronics distribution partnership",
+     "grade": "B"
+    },
+    {
+     "url": "https://www.funder.co.il/article/210665",
+     "date": "2026-09-29",
+     "what": "Funder: Getnet partnership",
+     "grade": "B"
+    },
+    {
+     "url": "https://www.sec.gov/Archives/edgar/data/0001901279/000117891326000779/zk2634476.htm",
+     "date": "2025-12-31",
+     "what": "Form 20-F FY2025 (existing index): ~115,000 customers; Herzliya address; Nasdaq and TASE",
+     "grade": "A"
+    }
+   ],
+   "verified_at": "2026-11-05"
+  },
+  {
+   "id": "tranzila",
+   "name_he": "טרנזילה",
+   "name_en": "Tranzila (Interspace-Tranzila)",
+   "url": "https://www.tranzila.com/",
+   "segment": "payments",
+   "what_they_sell_he": "סולק ושער תשלומים: סליקה באינטרנט, בחנות ובטלפון, מסופי EMV, דפי תשלום, הוראות קבע בנקאיות (מס״ב) וחיובים חוזרים, חשבוניות דיגיטליות, קופה רושמת ואפליקציית סליקה בנייד. בסוף אוגוסט 2026 נחתם הסכם למכירת 70% מהחברה למיכפל טכנולוגיות.",
+   "target_customers_he": "עסקים קטנים ובינוניים וגם חברות וארגונים גדולים, חנויות ב-Shopify, Wix ו-WooCommerce.",
+   "pricing": [
+    {
+     "plan": "סליקה מהנייד (אפליקציה וקורא כרטיסים)",
+     "price": "החל מ-29 ₪ לחודש",
+     "currency": "ILS",
+     "period": "monthly (עמלת סליקה לעסקה אינה מצוינת בדף)",
+     "source_url": "https://www.tranzila.com/",
+     "date": "2026-11-05"
+    }
+   ],
+   "customers": {
+    "low": 2000,
+    "high": 9000,
+    "unit": "businesses (reading of 'thousands of small and medium businesses' plus larger firms)",
+    "scope": "israel",
+    "grade": "B",
+    "source_url": "https://www.bizportal.co.il/capitalmarket/news/article/20040479",
+    "source_date": "2026-08-26",
+    "note": "Bizportal (2026-08-26), relaying Michpal's description: 'thousands of small and medium businesses as well as large companies and organizations'. The numeric range is our reading of 'thousands'. The Tranzila site gives no customer count."
+   },
+   "ownership_funding": "מיכפל טכנולוגיות חתמה (26.8.2026) על רכישת 70% ממניות Interspace, הבעלים של טרנזילה, תמורת 56 מיליון ₪, לפי שווי של 80 מיליון ₪; ההשלמה מותנית באישור הממונה על התחרות. למיכפל אופציית רכישה ולמוכרים אופציית מכירה על 30% הנותרים; המייסד איציק נוסצקי נשאר שותף. נתוני 2025 לפי מיכפל: הכנסות של כ-31.2 מיליון ₪ ורווח תפעולי מתואם של כ-8.7 מיליון ₪.",
+   "hebrew_rtl": true,
+   "integrations": [
+    "Shopify",
+    "Wix",
+    "WooCommerce / WordPress",
+    "Make (דף תוסף)",
+    "Base44",
+    "Lovable",
+    "Apple Pay",
+    "Google Pay",
+    "PayPal",
+    "Bit",
+    "הוראות קבע במס״ב"
+   ],
+   "recent_news": [
+    {
+     "date": "2026-08-26",
+     "title": "מיכפל נכנסת לפינטק: רוכשת 70% מאינטרספייס-טרנזילה לפי שווי של 80 מיליון שקל",
+     "url": "https://www.bizportal.co.il/capitalmarket/news/article/20040479",
+     "summary_he": "מיכפל טכנולוגיות קונה 70% מחברת Interspace, בעלת מערכת הסליקה טרנזילה, ב-56 מיליון ₪ (שווי 80 מיליון ₪). ההכנסות ב-2025 כ-31.2 מיליון ₪; העסקה מחכה לאישור רשות התחרות."
+    },
+    {
+     "date": "2026-08-19",
+     "title": "רשות ניירות ערך נתנה ל-37 חברות רישיון לתשלומים, לרבות גוגל ופייפאל",
+     "url": "https://www.bizportal.co.il/capitalmarket/news/article/20039545",
+     "summary_he": "רשות ניירות ערך העניקה רישיונות ל-37 חברות תשלומים שעברו לפיקוחה; 'טרנזילה' ברשימה, לצד קארדקום סליקה, גרואו פיימנטס ונאייקס ישראל. פריט ענפי."
+    }
+   ],
+   "notes_he": "רישוי (מהאינדקס הקיים, שם נפתחו המקורות): היתר סולק קבוע מבנק ישראל ב-18.7.2024, ורישיון חברת תשלומים מרשות ניירות ערך מ-2.12.2025. באתר: דף חדשות ומדיה, מאמרים והודעות (announcement.html).",
+   "overlap_with_dgo_he": "אין חפיפה בסליקה: FACTS אינו מציין תשלומים ב-DGO. חפיפה קטנה בחשבוניות דיגיטליות מול «מסמכים שלי» (מסמכי העסק עצמו, כמו חשבוניות); FACTS לא מציין חיבור לסליקה.",
+   "sources": [
+    {
+     "url": "https://www.tranzila.com/",
+     "date": null,
+     "what": "Homepage opened: product list, 'from 29 NIS per month' for mobile clearing, integrations, news links",
+     "grade": "C"
+    },
+    {
+     "url": "https://www.bizportal.co.il/capitalmarket/news/article/20040479",
+     "date": "2026-08-26",
+     "what": "Bizportal: Michpal buys 70% of Interspace-Tranzila, valuation NIS 80M, 2025 financials",
+     "grade": "B"
+    },
+    {
+     "url": "https://boi.org.il/en/communication-and-publications/press-releases/the-bank-of-israel-grants-a-permanent-acquirer-s-license-to-tranzila-ltd-as-part-of-the-steps-to-advance-competition-in-the-israeli-payment-and-settlement-market/",
+     "date": "2024-07-18",
+     "what": "BoI release: permanent acquirer licence (existing index)",
+     "grade": "A"
+    },
+    {
+     "url": "https://www.new.isa.gov.il/nav-index/supervised-information-payments/tax-tax-payments-faqs-6873706a7eb22",
+     "date": "2025-12-02",
+     "what": "ISA register: Tranzila Ltd. payment-company licence (existing index)",
+     "grade": "A"
+    }
+   ],
+   "verified_at": "2026-11-05"
+  },
+  {
+   "id": "cardcom",
+   "name_he": "קארדקום",
+   "name_en": "Cardcom",
+   "url": "https://www.cardcom.solutions/",
+   "segment": "payments",
+   "what_they_sell_he": "סולק ושער תשלומים: סליקה אונליין (Shopify, WooCommerce), דפי תשלום וקישורי תשלום, אפליקציה, מסופי PAX ו-Tap on Phone, חשבוניות דיגיטליות, הוראות קבע, Bit לעסקים ו-Apple/Google Pay, ו-API למפתחים. בפברואר 2026 דווח על רישיון חדש מרשות ניירות ערך להנפקת כרטיסי אשראי ועל ארנק דיגיטלי בהטמעה.",
+   "target_customers_he": "עסקים בכל הגדלים בישראל, כולל עסקי אונליין ולקוחות אירועים כמו מוכר הכרטיסים זיגו, שמוזכר בקלקליסט.",
+   "pricing": [],
+   "customers": {
+    "low": 20000,
+    "high": 90000,
+    "unit": "businesses (our reading of the company's 'tens of thousands of businesses')",
+    "scope": "israel",
+    "grade": "C",
+    "source_url": "https://www.cardcom.solutions/",
+    "source_date": null,
+    "note": "Homepage header and closing call to action: 'עשרות אלפי עסקים'. Undated. In July 2023 ICE wrote 'thousands of merchants'."
+   },
+   "ownership_funding": "חברה פרטית שנוסדה ב-1994 (ICE, 19.7.2023). מנכ״ל: אודי בורנשטיין (קלקליסט, 1.2.2026). לפי אתר hon.co.il (שמצטט את הודעת בנק ישראל מ-2023; ההודעה המקורית חסומה לגישה אוטומטית) קארדקום בע״מ בבעלות אייל, יעל ויניב עבו (איות השם משתנה בדף). המקור צד שלישי ולא נבדק מול רישום החברות.",
+   "hebrew_rtl": true,
+   "integrations": [
+    "Shopify",
+    "WooCommerce",
+    "WordPress",
+    "Zapier",
+    "Bit לעסקים",
+    "Apple Pay",
+    "Google Pay",
+    "PAX",
+    "Tap on Phone"
+   ],
+   "recent_news": [
+    {
+     "date": "2026-08-19",
+     "title": "הרשות לניירות ערך העניקה רישיונות לחברות התשלומים שעברו לפיקוחה במסגרת הסדרת שוק התשלומים בישראל",
+     "url": "https://www.funder.co.il/article/207953",
+     "summary_he": "רשות ניירות ערך העניקה רישיונות ל-37 חברות תשלומים שעברו לפיקוחה; ברשימה 'קארדקום סליקה בע״מ', לצד טרנזילה, גרואו פיימנטס ונאייקס ישראל."
+    }
+   ],
+   "recent_news_note": "פריט ענפי בלבד (רישיונות) במקום הודעת חברה. דף העיתונות של החברה מגיע עד 11.2.2026 (מעריב על סליקה במגזר החרדי; https://www.maariv.co.il/economy/israel/article-1283848) ו-1.2.2026 (קלקליסט על הרישיון והארנק; https://www.calcalist.co.il/article/bkqpqf2ibe). לא נמצא פריט ב-90 הימים האחרונים.",
+   "notes_he": "אין מחירון ציבורי באתר. רישוי (מהאינדקס הקיים): היתר סולק קבוע מבנק ישראל ב-2023 ורישיון חברת תשלומים מרשות ניירות ערך מ-2.12.2025. באתר: /media/ ו-/blog/.",
+   "overlap_with_dgo_he": "אין חפיפה בסליקה: FACTS אינו מציין תשלומים ב-DGO. חפיפה קטנה בחשבוניות דיגיטליות מול «מסמכים שלי».",
+   "sources": [
+    {
+     "url": "https://www.cardcom.solutions/",
+     "date": null,
+     "what": "Homepage opened: product list, 'tens of thousands of businesses', HQ Holon, press and blog links",
+     "grade": "C"
+    },
+    {
+     "url": "https://www.cardcom.solutions/media/",
+     "date": null,
+     "what": "Press page opened: dated items from 2018 to 2026-02-11",
+     "grade": "C"
+    },
+    {
+     "url": "https://www.calcalist.co.il/article/bkqpqf2ibe",
+     "date": "2026-02-01",
+     "what": "Calcalist: new ISA licence, own cards, wallet in implementation, CEO Udi Bornstein",
+     "grade": "B"
+    },
+    {
+     "url": "https://www.ice.co.il/finance/news/article/972749",
+     "date": "2023-07-19",
+     "what": "ICE: permanent clearing licence, founded 1994, CEO at the time",
+     "grade": "B"
+    },
+    {
+     "url": "https://www.hon.co.il/%D7%A9%D7%97%D7%A7%D7%9F-%D7%97%D7%93%D7%A9-%D7%91%D7%AA%D7%97%D7%95%D7%9D-%D7%94%D7%A1%D7%9C%D7%99%D7%A7%D7%94-%D7%A7%D7%90%D7%A8%D7%93%D7%A7%D7%95%D7%9D-%D7%94%D7%AA%D7%97%D7%A8%D7%95%D7%AA/",
+     "date": null,
+     "what": "hon.co.il guide: Cardcom Ltd. owned by Eyal, Yael and Yaniv Avo (quotes the 2023 BoI release)",
+     "grade": "D"
+    },
+    {
+     "url": "https://www.funder.co.il/article/207953",
+     "date": "2026-08-19",
+     "what": "Funder: ISA licences to 37 payment companies, 'Cardcom Clearing Ltd.' named",
+     "grade": "B"
+    }
+   ],
+   "verified_at": "2026-11-05"
+  },
+  {
+   "id": "payplus",
+   "name_he": "פיי פלוס",
+   "name_en": "PayPlus",
+   "url": "https://www.payplus.co.il/",
+   "segment": "payments",
+   "what_they_sell_he": "שער תשלומים ופתרונות סליקה לאתרים וחנויות: דפי תשלום, קישורי תשלום, בקשות תשלום ב-SMS, חיובים חוזרים, מסופי EMV ו-Tap on Phone, ופתרונות ייעודיים למלונאות (Oracle), לקופות על SAP, למכונות אוטומטיות ולחניה חכמה, וכן מודול חשבוניות (Invoices+).",
+   "target_customers_he": "עסקים קמעונאיים וחנויות אונליין, רשתות (באתר לוגואים של כ-18 מותגים), מלונות ומפעילי מכונות.",
+   "pricing": [],
+   "customers": {
+    "low": 20000,
+    "high": 90000,
+    "unit": "businesses (our reading of the company's 'tens of thousands of businesses')",
+    "scope": "israel",
+    "grade": "C",
+    "source_url": "https://www.payplus.co.il/",
+    "source_date": null,
+    "note": "Homepage wording 'עשרות אלפי עסקים'; undated; no exact count."
+   },
+   "ownership_funding": "לא נמצא מקור: בתחתית האתר מופיע PayPlus LTD ומספר חברה, ללא קבוצת בעלים. בשני מרשמי רשות ניירות ערך שנקראו באינדקס הקיים לא נמצא רישיון על שם PayPlus, והאתר אינו מצהיר על רישיון.",
+   "hebrew_rtl": true,
+   "integrations": [
+    "Shopify",
+    "Wix",
+    "WooCommerce",
+    "Dynamics 365",
+    "SAP Business One (קופה)",
+    "Oracle (מלונאות)",
+    "Magento",
+    "OpenCart",
+    "PrestaShop",
+    "Apple Pay",
+    "Google Pay",
+    "Bit",
+    "העברה בנקאית"
+   ],
+   "recent_news": [],
+   "recent_news_note": "לא נמצאו כתבות ב-90 הימים האחרונים; באתר אין בלוג או דף חדשות (נמצא רק מרכז ידע /faq ותיעוד מפתחים).",
+   "notes_he": "אין מחירון ציבורי. גרסה באנגלית באתר בנתיב /en. בשמות 37 החברות שקיבלו רישיון מרשות ניירות ערך ב-19.8.2026 (ביזפורטל, פאנדר) לא נמצא שם פיי פלוס; ההתאמה לפי שם בעברית.",
+   "overlap_with_dgo_he": "אין חפיפה בסליקה: FACTS אינו מציין תשלומים ב-DGO. חפיפה קטנה בחשבוניות (Invoices+) מול «מסמכים שלי».",
+   "sources": [
+    {
+     "url": "https://www.payplus.co.il/",
+     "date": null,
+     "what": "Homepage opened: solutions, integrations, 'tens of thousands of businesses', PayPlus LTD footer, no prices",
+     "grade": "C"
+    },
+    {
+     "url": "https://www.new.isa.gov.il/nav-index/supervised-information-payments/tax-tax-payments-faqs-6873706a7eb22",
+     "date": null,
+     "what": "ISA registers read in the existing index: PayPlus not among licensees",
+     "grade": "A"
+    }
+   ],
+   "verified_at": "2026-11-05"
+  },
+  {
+   "id": "grow-meshulam",
+   "name_he": "גרואו (משולם)",
+   "name_en": "Grow Payments (formerly Meshulam)",
+   "url": "https://grow.business/",
+   "segment": "payments",
+   "what_they_sell_he": "פלטפורמת סליקה ותשלומים לעסקים קטנים: אפליקציה, בקשות תשלום, חשבוניות, דפי מכירה, מסוף ותשלום בנגיעה בנייד, Bit, PayBox, Apple/Google Pay, וכן חשבון Grow ו-Grow Payout (ניאו-בנק לעסקים), API ותוספים ל-WordPress, Shopify, Wix ו-Magento.",
+   "target_customers_he": "עצמאים ועסקים קטנים בישראל.",
+   "pricing": [
+    {
+     "plan": "Grow (מנוי שנתי): כולל 100 עסקאות ו-100 מסמכים בחודש, כל עסקה או מסמך נוספים 0.5 ₪",
+     "price": "0.75% לעסקה + 59 ₪ לחודש (708 ₪ מראש); במנוי חודשי 69 ₪ לחודש; המחירים לא כוללים מע״מ",
+     "currency": "ILS",
+     "period": "annual (monthly option 69 ₪)",
+     "source_url": "https://grow.business/fees/",
+     "date": "2026-11-05"
+    },
+    {
+     "plan": "Grow Light (מנוי שנתי): כולל 20 עסקאות ו-20 מסמכים בחודש, כל נוספת 1 ₪",
+     "price": "1% לעסקה + 29 ₪ לחודש (348 ₪ מראש); תוספת 0.4% דרך Wix ו-0.6% דרך Shopify; עמלת מינימום 0.5 ₪ לעסקה; זיכוי עסקה 6.90 ₪ לפעולה; אימות 3DS 2.5 ₪ לפעולה; העברה נכנסת 1 ₪ (המחירים לא כוללים מע״מ)",
+     "currency": "ILS",
+     "period": "annual",
+     "source_url": "https://grow.business/fees/",
+     "date": "2026-11-05"
+    },
+    {
+     "plan": "עמלות תפעול כלליות",
+     "price": "חיוב חוזר (chargeback) 55 ₪ לבקשה; אחזור או הנפקת מסמך 25 ₪ (הנפקה דרך אתר העסק בחינם); ללא דמי הקמה; חשבון עמותה 399 ₪ חד-פעמי; תוסף WordPress 299 ₪",
+     "currency": "ILS",
+     "period": "per event",
+     "source_url": "https://grow.business/fees/",
+     "date": "2026-11-05"
+    }
+   ],
+   "customers": {
+    "low": 100000,
+    "high": null,
+    "unit": "businesses",
+    "scope": "israel",
+    "grade": "B",
+    "source_url": "https://www.calcalist.co.il/article/bkoix41owe",
+    "source_date": "2026-02-15",
+    "note": "Calcalist (2026-02-15, 'Grow crosses 100,000 customers in Israel'): more than 100,000 businesses in Israel work with Grow, annual payment turnover above NIS 6 billion. The homepage repeats '+100,000 businesses'."
+   },
+   "ownership_funding": "לפי עמוד About של החברה, פלטפורמת 'משולם' הושקה ב-2013 לתשלומי ועדי בתים, ובשנת 2024 הוכרז ניאו-בנק לעסקים. הגוף המפעיל: גרואו פיימנטס בע״מ (ח.פ. 500000211), שבתחתית האתר מצוין כבעלת רישיון חברת תשלומים מרשות ניירות ערך וגם רישיון אשראי מרשות שוק ההון. בתחתית האתר מזוכה ״פיתוח קוד וליבה בע״מ״ כספקית פיתוח. בעלים, מנכ״ל ומשקיעים לא נמצאו במקורות שנפתחו.",
+   "hebrew_rtl": true,
+   "integrations": [
+    "WordPress",
+    "Shopify",
+    "Wix",
+    "Magento",
+    "Apple Pay",
+    "Google Pay",
+    "Bit לעסקים",
+    "PayBox",
+    "API"
+   ],
+   "recent_news": [
+    {
+     "date": "2026-08-19",
+     "title": "רשות ניירות ערך נתנה ל-37 חברות רישיון לתשלומים, לרבות גוגל ופייפאל",
+     "url": "https://www.bizportal.co.il/capitalmarket/news/article/20039545",
+     "summary_he": "רשות ניירות ערך העניקה רישיונות ל-37 חברות תשלומים שעברו לפיקוחה; גרואו פיימנטס ברשימה, לצד טרנזילה, קארדקום סליקה ונאייקס ישראל."
+    }
+   ],
+   "recent_news_note": "פריט ענפי בלבד (רישיונות) במקום הודעת חברה. האחרון שנמצא על החברה עצמה: קלקליסט, 15.2.2026, חציית 100 אלף עסקים. באתר מופיע קובץ PDF בשם 'הודעת הסדר פשרה לפרסום באתר' שהועלה באוקטובר 2026 (נוצר ב-25.10.2026); הטקסט לא נקרא (קובץ דחוס), ולכן תוכנו לא מדווח.",
+   "notes_he": "עמוד העלויות עצמו נושא תאריך רק בסעיף ריבית הפריים (5% נכון ל-9.7.2026). בלוג: /magazine/.",
+   "overlap_with_dgo_he": "אין חפיפה בסליקה: FACTS אינו מציין תשלומים ב-DGO. חפיפה קטנה בחשבוניות (חלק ממסלולי Grow) מול «מסמכים שלי».",
+   "sources": [
+    {
+     "url": "https://grow.business/fees/",
+     "date": null,
+     "what": "Fees page opened: Grow and Grow Light prices, VAT note, operational fees",
+     "grade": "C"
+    },
+    {
+     "url": "https://grow.business/",
+     "date": null,
+     "what": "Homepage opened: '+100,000 businesses', products, footer with operating company",
+     "grade": "C"
+    },
+    {
+     "url": "https://www.calcalist.co.il/article/bkoix41owe",
+     "date": "2026-02-15",
+     "what": "Calcalist: 100,000+ businesses, NIS 6B+ annual turnover, neobank announced in 2024",
+     "grade": "B"
+    },
+    {
+     "url": "https://grow.business/about/",
+     "date": null,
+     "what": "About page opened: Meshulam launched 2013 for building-committee payments, neobank, footer licences",
+     "grade": "C"
+    },
+    {
+     "url": "https://www.bizportal.co.il/capitalmarket/news/article/20039545",
+     "date": "2026-08-19",
+     "what": "Bizportal: ISA licences to 37 payment companies, Grow Payments named",
+     "grade": "B"
+    },
+    {
+     "url": "https://www.new.isa.gov.il/nav-index/supervised-information-payments/tax-tax-payments-faqs-6873706a7eb22",
+     "date": "2026-05-25",
+     "what": "ISA register: Grow Payments Ltd. licence (existing index)",
+     "grade": "A"
+    }
+   ],
+   "verified_at": "2026-11-05"
+  },
+  {
+   "id": "hyp-ezcount",
+   "name_he": "הייפ (EZcount, CreditGuard)",
+   "name_en": "Hyp (EZcount, CreditGuard)",
+   "url": "https://hyp.co.il/",
+   "segment": "payments",
+   "what_they_sell_he": "חברת תשלומים שמציעה סליקת אונליין ובחנות, דפי תשלום, מסופי אשראי וקופות (כספיט פרו, קופת שירות עצמי), כרטיסי מתנה, חנות מקוונת ומערכת חשבוניות דיגיטליות (EZcount) עם סליקה מתוך המסמך.",
+   "target_customers_he": "עסקים קטנים ובינוניים בישראל, בעלי חנויות אונליין וקופות, ועצמאים שזקוקים לחשבוניות.",
+   "pricing": [
+    {
+     "plan": "חבילת גבעול: עד 50 מסמכים בחודש, משתמש אחד, מסמך נוסף 0.75 ₪",
+     "price": "תשלום חודשי: 24 ₪ לחודש; תשלום שנתי: 21 ₪ לחודש (252 ₪ בתשלום שנתי); המחירים לפני מע״מ",
+     "currency": "ILS",
+     "period": "monthly or annual",
+     "source_url": "https://hyp.co.il/digital-invoice-pricing/",
+     "date": "2026-11-05"
+    },
+    {
+     "plan": "חבילת שתיל: עד 100 מסמכים בחודש, 5 משתמשים, מסמך נוסף 0.75 ₪",
+     "price": "תשלום חודשי: 36 ₪ לחודש; תשלום שנתי: 29 ₪ לחודש (348 ₪ בתשלום שנתי); לפני מע״מ",
+     "currency": "ILS",
+     "period": "monthly or annual",
+     "source_url": "https://hyp.co.il/digital-invoice-pricing/",
+     "date": "2026-11-05"
+    },
+    {
+     "plan": "חבילת מטע: עד 300 מסמכים בחודש, 10 משתמשים, מסמך נוסף 0.25 ₪",
+     "price": "תשלום חודשי: 49 ₪ לחודש; תשלום שנתי: 40 ₪ לחודש (480 ₪ בתשלום שנתי); לפני מע״מ",
+     "currency": "ILS",
+     "period": "monthly or annual",
+     "source_url": "https://hyp.co.il/digital-invoice-pricing/",
+     "date": "2026-11-05"
+    },
+    {
+     "plan": "חבילת פרדס: מסמכים ללא הגבלה וסליקת אשראי; דמי הקמה ועמלות סליקה אינם כלולים",
+     "price": "79 ₪ לחודש (לפני מע״מ)",
+     "currency": "ILS",
+     "period": "monthly",
+     "source_url": "https://hyp.co.il/digital-invoice-pricing/",
+     "date": "2026-11-05"
+    }
+   ],
+   "customers": {
+    "low": 62524,
+    "high": 62524,
+    "unit": "customers",
+    "scope": "israel",
+    "grade": "C",
+    "source_url": "https://hyp.co.il/",
+    "source_date": null,
+    "note": "Homepage counter '62,524+ לקוחות שעובדים איתנו' (read 2026-11-05; looks like a live counter). The same page: 43,858+ active registers and terminals, 1,820,386+ digital invoices per month. EZcount's own site says '5000 satisfied customers' and 150,000 invoices per month; the two sites differ."
+   },
+   "ownership_funding": "הגוף: הייפ פתרונות תשלום בע״מ (ז׳בוטינסקי 9 בני ברק). ב-13.6.2021 דווח (הודעת משרד גורניצקי) ש-Max Group, בשליטת Warburg Pincus, רכשה את EZcount וריכזה את פעילות התשלומים בקבוצת Hyp בניהול אוהד מימון; באוגוסט 2022 הודיע אותו משרד על מכירת Max ו״חברת האחות Hyp״ ל-Clal ביטוח. השלמת העסקה לגבי Hyp ובעלות נוכחית לא אומתו במקור שנפתח. קישור ל-CreditGuard: Nuvei מכרה את CreditGuard ל-Max Group (Commercial Payments International, ללא תאריך בדף); האתר של Hyp אינו מזכיר את CreditGuard.",
+   "hebrew_rtl": true,
+   "integrations": [
+    "Wix",
+    "WordPress",
+    "Magento",
+    "Shopify",
+    "Apple Pay",
+    "Google Pay",
+    "PayPal",
+    "Bit",
+    "Cibus",
+    "10bis",
+    "API"
+   ],
+   "recent_news": [],
+   "recent_news_note": "לא נמצאו כתבות ב-90 הימים האחרונים; בבלוג של Hyp (hyp.co.il/blog) מדריכים בלבד, כולל 'מספר הקצאה לכל חשבונית' מאוגוסט 2026 לפי תיקיית ההעלאה של התמונה.",
+   "notes_he": "אין מחירון סליקה ציבורי; המחירון שלמעלה הוא של החשבונית הדיגיטלית. בדף הבית לא מצוין רישיון, ובמרשם רשות ניירות ערך שנקרא באינדקס הקיים Hyp לא נמצאה; גם ברשימת 37 החברות שקיבלו רישיון ב-19.8.2026 (ביזפורטל, פאנדר) אין שם הייפ (ההתאמה לפי שם בעברית).",
+   "overlap_with_dgo_he": "חפיפה חלקית בחשבוניות דיגיטליות מול «מסמכים שלי» (מסמכי העסק עצמו, כמו חשבוניות) ו«כלי מסמכים». אין חפיפה בסליקה או בקופות: FACTS אינו מציין אותן ב-DGO.",
+   "sources": [
+    {
+     "url": "https://hyp.co.il/",
+     "date": null,
+     "what": "Homepage opened: counters, product list, integrations, legal entity, no CreditGuard mention",
+     "grade": "C"
+    },
+    {
+     "url": "https://hyp.co.il/digital-invoice-pricing/",
+     "date": null,
+     "what": "Digital invoice pricing page opened: four plans, monthly and annual, before VAT",
+     "grade": "C"
+    },
+    {
+     "url": "https://www.ezcount.co.il/",
+     "date": null,
+     "what": "EZcount homepage opened: counters and Hyp copyright",
+     "grade": "C"
+    },
+    {
+     "url": "https://www.gornitzky.com/another-acquisition-for-max-group-ezcount/",
+     "date": "2021-06-13",
+     "what": "Law-firm notice: Max Group (Warburg Pincus) acquires EZcount; payments activities under Hyp",
+     "grade": "B"
+    },
+    {
+     "url": "https://gornitzky.com/?p=18387",
+     "date": "2022-08-21",
+     "what": "Law-firm notice: Warburg Pincus selling Max and sister company Hyp to Clal",
+     "grade": "B"
+    },
+    {
+     "url": "https://www.commercialpaymentsinternational.com/?p=4960",
+     "date": null,
+     "what": "Nuvei sells CreditGuard to Max Group (no date on page; Hyp not mentioned)",
+     "grade": "D"
+    }
+   ],
+   "verified_at": "2026-11-05"
+  },
+  {
+   "id": "shopify",
+   "name_he": "שופיפיי (Shopify)",
+   "name_en": "Shopify (Israel)",
+   "url": "https://www.shopify.com/il",
+   "segment": "ecommerce",
+   "what_they_sell_he": "פלטפורמת מסחר מקוון: בניית חנות, קופה לחנויות פיזיות (POS Pro כתוספת בתשלום), תשלומים וערוצי מכירה, כולל מכירה דרך עוזרי AI. עמוד המחירים לישראל מוצג באנגלית ובעברית, במחירי דולר, ועמלת ספק תשלום חיצוני נקבעת לפי החבילה.",
+   "target_customers_he": "בעלי חנויות מקוונות ומותגים מכל גודל, מחבילת Basic ועד Plus לארגונים; סוכנויות ושותפים דרך תוכנית השותפים.",
+   "pricing": [
+    {
+     "plan": "Basic (עמלה על ספק תשלום צד שלישי: 2%)",
+     "price": "US$29/mo ; בתשלום חודשי: $39 USD/mo",
+     "currency": "USD",
+     "period": "yearly rate on card; monthly rate in comparison table",
+     "source_url": "https://www.shopify.com/il/pricing",
+     "date": "2026-11-05"
+    },
+    {
+     "plan": "Grow (עמלה על ספק צד שלישי: 1%)",
+     "price": "US$79/mo ; בתשלום חודשי: $105 USD/mo",
+     "currency": "USD",
+     "period": "yearly rate on card; monthly rate in comparison table",
+     "source_url": "https://www.shopify.com/il/pricing",
+     "date": "2026-11-05"
+    },
+    {
+     "plan": "Advanced (עמלה על ספק צד שלישי: 0.6%)",
+     "price": "US$299/mo ; בתשלום חודשי: $399 USD/mo",
+     "currency": "USD",
+     "period": "yearly rate on card; monthly rate in comparison table",
+     "source_url": "https://www.shopify.com/il/pricing",
+     "date": "2026-11-05"
+    },
+    {
+     "plan": "Plus (עמלה על ספק צד שלישי: 0.2%)",
+     "price": "from US$2,300/mo",
+     "currency": "USD",
+     "period": "monthly",
+     "source_url": "https://www.shopify.com/il/pricing",
+     "date": "2026-11-05"
+    },
+    {
+     "plan": "POS Pro (תוספת לחנויות פיזיות)",
+     "price": "+US$89/mo",
+     "currency": "USD",
+     "period": "monthly add-on",
+     "source_url": "https://www.shopify.com/il/pricing",
+     "date": "2026-11-05"
+    }
+   ],
+   "customers": {
+    "low": 1000000,
+    "high": null,
+    "unit": "businesses (Shopify's own wording: 'Millions of businesses in 175+ countries')",
+    "scope": "worldwide",
+    "grade": "B",
+    "source_url": "https://www.shopify.com/news/shopify-q3-2026-financial-results",
+    "source_date": "2026-11-03",
+    "note": "Boilerplate of the Q3 2026 release. The release gives GMV of $119 billion for the quarter. No Israel figure found: StoreLeads page returned 404 and BuiltWith asked for a human check."
+   },
+   "ownership_funding": "חברה ציבורית שמפרסמת דוחות רבעוניים. דוחות הרבעון השלישי 2026 (3.11.2026): צמיחה של 32% בהכנסות, GMV של 119 מיליארד דולר ושולי תזרים חופשי של 22%. לפי דיווח מ-4.11.2026 (Trending Topics) שילמה החברה כ-99 מיליון דולר על הדומיין shop.com.",
+   "hebrew_rtl": true,
+   "integrations": [
+    "POS Pro",
+    "ספקי תשלום חיצוניים: Grow (תוספת 0.6% דרך Shopify), Tranzila, Cardcom, PayPlus, Hyp (לפי אתרי הספקים)",
+    "ערוצי AI: ChatGPT, Copilot ופתיחת Shop Pay לסוכן Muse של Meta (Bizportal)"
+   ],
+   "recent_news": [
+    {
+     "date": "2026-11-04",
+     "title": "How we’re evolving the Shopify Partner Program for agencies (2026)",
+     "url": "https://www.shopify.com/partners/blog/shopify-partner-program-tiers",
+     "summary_he": "Shopify מפשטת את דרגות תוכנית השותפים לסוכנויות: כל דרגה תדרוש יעד GMV מיוחס וגם מספר חנויות מיוחסות; הדרגות Select, Premier ו-Plus מוחלפות ב-Silver, Gold, Platinum ו-Diamond, בתוקף מ-1.1.2027."
+    },
+    {
+     "date": "2026-11-04",
+     "title": "Shopify Paid $99 Million for Shop.com, a Record for a Domain Name",
+     "url": "https://www.trendingtopics.eu/shopify-shop-com-99-million-domain-record/",
+     "summary_he": "לפי דיווח על הדוח לרשות ניירות הערך האמריקאית, Shopify שילמה כ-99 מיליון דולר על shop.com ותעביר אליו את פלטפורמת הצרכנים Shop."
+    },
+    {
+     "date": "2026-11-03",
+     "title": "Shopify Sustains Rapid Growth with Revenue Up 32% and Free Cash Flow Margin of 22%",
+     "url": "https://www.shopify.com/news/shopify-q3-2026-financial-results",
+     "summary_he": "דוחות הרבעון השלישי 2026: צמיחה של 32% בהכנסות, GMV של 119 מיליארד דולר ושולי תזרים חופשי של 22%. הנהלת החברה מדגישה בניית מסחר בכל משטח ובכל סוכן."
+    },
+    {
+     "date": "2026-10-06",
+     "title": "שופיפיי מזנקת 6% אחרי שדרוג: סוכני ה-AI כבר קונים בחנויות שלה",
+     "url": "https://www.bizportal.co.il/globalmarkets/news/article/20044085",
+     "summary_he": "ביזפורטל: המניה עלתה כ-6% אחרי שדרוג של ברוקרית אמריקאית; הכתבה מזכירה פתיחת Shop Pay לסוכן Muse של Meta ומכירות של מוצרי סוחרים דרך ChatGPT ו-Copilot."
+    }
+   ],
+   "notes_he": "RTL: ב-Help Center של Shopify עברית מופיעה ברשימת שפות ממשק הניהול (admin), ולא נבדקה שפת חזית החנות והקופה; לכן hebrew_rtl הוא true רק לממשק הניהול ולאתר השיווקי בעברית.",
+   "overlap_with_dgo_he": "חפיפה קטנה: «אתרים» ב-DGO מארחת ומנטרת אתרים של העסק (זמינות, ביקורים, אבטחה, SEO וציון יופי) ו«נכסים דיגיטליים» מארגנת לוגו, טקסטים ומדיה ומפיצה לערוצים. FACTS אינו מציין בונה חנויות, עגלת קניות או תשלומים.",
+   "sources": [
+    {
+     "url": "https://www.shopify.com/il/pricing",
+     "date": null,
+     "what": "Pricing page for Israel opened: plans in USD, third-party payment rates, POS Pro add-on",
+     "grade": "C"
+    },
+    {
+     "url": "https://www.shopify.com/news/shopify-q3-2026-financial-results",
+     "date": "2026-11-03",
+     "what": "Company release: Q3 2026 results",
+     "grade": "B"
+    },
+    {
+     "url": "https://www.shopify.com/partners/blog/shopify-partner-program-tiers",
+     "date": "2026-11-04",
+     "what": "Company blog: Partner Program tiers from 2027-01-01",
+     "grade": "B"
+    },
+    {
+     "url": "https://www.trendingtopics.eu/shopify-shop-com-99-million-domain-record/",
+     "date": "2026-11-04",
+     "what": "Trending Topics: $99M for shop.com",
+     "grade": "B"
+    },
+    {
+     "url": "https://www.bizportal.co.il/globalmarkets/news/article/20044085",
+     "date": "2026-10-06",
+     "what": "Bizportal: upgrade and AI-agent commerce",
+     "grade": "B"
+    },
+    {
+     "url": "https://help.shopify.com/en/manual/your-account/languages",
+     "date": null,
+     "what": "Help Center: Hebrew listed among admin languages",
+     "grade": "C"
+    }
+   ],
+   "verified_at": "2026-11-05"
+  },
+  {
+   "id": "wix-base44",
+   "name_he": "וויקס (Wix) ו-Base44",
+   "name_en": "Wix (Israel) and Base44",
+   "url": "https://www.wix.com/",
+   "segment": "ecommerce",
+   "what_they_sell_he": "בונה אתרים וחנויות מקוונות עם כלי AI. Wix Studio מיועד לסוכנויות ולפרילנסרים (ב-2.11.2026 הושק Studio Two, עורך פתוח שמעביר קוד פנימה והחוצה), Symphony הוא כלי רב-סוכנים לעסקים קטנים, ו-Base44 בונה אפליקציות מתיאור בטקסט ובנובמבר 2025 דווח על 2 מיליון משתמשים. ב-28.9.2026 הושק Base Code לעבודה על מאגרי GitHub.",
+   "target_customers_he": "עסקים קטנים ובעלי חנויות אונליין, סוכנויות ופרילנסרים (Studio), ומפתחים וצוותי מוצר (Base44).",
+   "pricing": [
+    {
+     "plan": "Wix: חבילות אתר (Light, Core, Business, Business Elite)",
+     "price": "לא נמצא מחיר לישראל: דף החבילות שנפתח מחוץ לישראל הציג מחירי דולר 'לעיון בלבד' ומטבע לפי מיקום; בפתיחה מהמחשב המקומי המחירים לא נטענו לטקסט",
+     "currency": "n/a",
+     "period": "unknown",
+     "source_url": "https://www.wix.com/plans",
+     "date": "2026-11-05"
+    },
+    {
+     "plan": "Base44: Free (25 message credits, 100 integration credits בחודש)",
+     "price": "$0",
+     "currency": "USD",
+     "period": "free",
+     "source_url": "https://base44.com/pricing",
+     "date": "2026-11-05"
+    },
+    {
+     "plan": "Base44: Starter (100 message credits, 2,000 integration credits)",
+     "price": "$16/mo",
+     "currency": "USD",
+     "period": "billed annually",
+     "source_url": "https://base44.com/pricing",
+     "date": "2026-11-05"
+    },
+    {
+     "plan": "Base44: Builder (250 message credits, 10,000 integration credits)",
+     "price": "$40/mo",
+     "currency": "USD",
+     "period": "billed annually",
+     "source_url": "https://base44.com/pricing",
+     "date": "2026-11-05"
+    },
+    {
+     "plan": "Base44: Pro (500 message credits, 20,000 integration credits)",
+     "price": "$80/mo",
+     "currency": "USD",
+     "period": "billed annually",
+     "source_url": "https://base44.com/pricing",
+     "date": "2026-11-05"
+    },
+    {
+     "plan": "Base44: Elite (1,200 message credits, 50,000 integration credits)",
+     "price": "$160/mo",
+     "currency": "USD",
+     "period": "billed annually",
+     "source_url": "https://base44.com/pricing",
+     "date": "2026-11-05"
+    }
+   ],
+   "customers": {
+    "low": 304200000,
+    "high": 304200000,
+    "unit": "registered users (all Wix products, including Base44)",
+    "scope": "worldwide",
+    "grade": "A",
+    "source_url": "https://www.sec.gov/Archives/edgar/data/1576789/000162828026015222/wix-20251231.htm",
+    "source_date": "2025-12-31",
+    "note": "Form 20-F FY2025, figure taken from the existing index (quoted there from a search excerpt of the filing; not re-read in this pass). wix.com/about/us (opened 2026-11-05) says 'over 300 million users worldwide'. Base44: 2 million users per CTech 2025-11-19."
+   },
+   "ownership_funding": "חברה ציבורית (NASDAQ: WIX) עם קמפוס בלב תל אביב, נוסדה ב-2006 (עמוד About של Wix). Base44 נרכשה ביוני 2025 (CTech, 19.11.2025: 2 מיליון משתמשים ו-ARR צפוי של 50 מיליון דולר עד סוף 2025).",
+   "hebrew_rtl": true,
+   "integrations": [
+    "Base44",
+    "Wix Studio",
+    "Symphony עם ארנק Link של Stripe (אישור בעלים לכל רכישה)",
+    "K Health PatientGPT",
+    "ספקי סליקה בישראל עם דפי תוסף ל-Wix: Tranzila, Grow (תוספת 0.4%), PayPlus, Hyp"
+   ],
+   "recent_news": [
+    {
+     "date": "2026-11-02",
+     "title": "וויקס משיקה עורך אתרים חדש: בונים עם AI ומעבירים את הקוד לכלים אחרים",
+     "url": "https://www.bizportal.co.il/globalmarkets/news/article/20047045",
+     "summary_he": "וויקס משיקה עורך (סטודיו טו) לסוכנויות ופרילנסרים: בנייה בעזרת AI, עריכה ויזואלית ועריכת קוד באותו פרויקט, עם יכולת להעביר פרויקטים פנימה והחוצה."
+    },
+    {
+     "date": "2026-10-22",
+     "title": "Wix.com Enters Into Partnership With K Health to Expand Clinical AI Tool",
+     "url": "https://finance.yahoo.com/technology/ai/articles/wix-com-enters-partnership-k-140540803.html",
+     "summary_he": "שותפות עם K Health להרחבת PatientGPT, כלי AI קליני, עם חוויות אינטרנט מותאמות ודינמיות."
+    },
+    {
+     "date": "2026-10-15",
+     "title": "Wix.com Lets Symphony AI Agents Pay Bills Through Stripe's Link Wallet",
+     "url": "https://finance.yahoo.com/small-business/articles/wix-com-lets-symphony-ai-141150012.html",
+     "summary_he": "Symphony של וויקס מתחבר לארנק Link של Stripe, וסוכני ה-AI יכולים לשלם לספקים; כל רכישה דורשת אישור הבעלים ונעשית בכרטיס וירטואלי חד-פעמי."
+    },
+    {
+     "date": "2026-09-28",
+     "title": "Wix's Base44 launches Base Code to take on Claude Code and Cursor",
+     "url": "https://www.calcalistech.com/ctechnews/article/28rupo2bt",
+     "summary_he": "Base44 משיקה את Base Code, מוצר ענן עצמאי שמחבר מאגרי GitHub לסביבת פיתוח משותפת; שינויים שמוצעים בצ׳אט עוברים סקירת pull request של הארגון."
+    }
+   ],
+   "notes_he": "דוחות הרבעון השלישי של Wix מתוכננים ל-10.11.2026 (כותרת GlobeNewswire מ-22.10.2026, נראתה בתוצאות חיפוש; הדף נחסם). דוחות הרבעון השני פורסמו ב-4.8.2026, מעט לפני חלון ה-90 יום. RTL: דף החבילות נטען עם lang=he, וממשק העורך לא נבדק.",
+   "overlap_with_dgo_he": "חפיפה קטנה: «אתרים» ב-DGO מארחת ומנטרת את אתרי העסק, ו«נכסים דיגיטליים» מארגנת לוגו, טקסטים ומדיה ודוחפת לכל ערוץ. FACTS אינו מציין בונה אתרים חזותי או בונה אפליקציות מתיאור בטקסט.",
+   "sources": [
+    {
+     "url": "https://www.wix.com/about/us",
+     "date": null,
+     "what": "About page opened: over 300 million users, Tel Aviv campus, founded 2006",
+     "grade": "C"
+    },
+    {
+     "url": "https://www.wix.com/plans",
+     "date": null,
+     "what": "Plans page opened from outside Israel: USD reference prices only, regional notice",
+     "grade": "C"
+    },
+    {
+     "url": "https://base44.com/pricing",
+     "date": null,
+     "what": "Base44 pricing page opened: five plans, annual billing",
+     "grade": "C"
+    },
+    {
+     "url": "https://www.sec.gov/Archives/edgar/data/1576789/000162828026015222/wix-20251231.htm",
+     "date": "2025-12-31",
+     "what": "Form 20-F FY2025 (existing index): 304.2M registered users",
+     "grade": "A"
+    },
+    {
+     "url": "https://www.calcalistech.com/ctechnews/article/sy194qsg11g",
+     "date": "2025-11-19",
+     "what": "CTech: Base44 2 million users, $50M ARR expected",
+     "grade": "B"
+    },
+    {
+     "url": "https://www.bizportal.co.il/globalmarkets/news/article/20047045",
+     "date": "2026-11-02",
+     "what": "Bizportal: Studio Two",
+     "grade": "B"
+    },
+    {
+     "url": "https://www.calcalistech.com/ctechnews/article/28rupo2bt",
+     "date": "2026-09-28",
+     "what": "CTech: Base Code",
+     "grade": "B"
+    }
+   ],
+   "verified_at": "2026-11-05"
+  },
+  {
+   "id": "konimbo",
+   "name_he": "קונימבו",
+   "name_en": "Konimbo",
+   "url": "https://konimbo.co.il/",
+   "segment": "ecommerce",
+   "what_they_sell_he": "פלטפורמה ישראלית להקמה וניהול חנות אינטרנטית בעברית, בשירות מלא: עיצוב, העלאת מוצרים ממאגר קונימבו, ניהול הזמנות ומוצרים, כלים לקידום ו-SEO, וחיבורים למערכות ERP, חשבוניות, חברות שילוח והשוואת מחירים.",
+   "target_customers_he": "עסקים ישראליים שרוצים חנות אינטרנטית עם ליווי מלא; האתר מציג לקוחות בתחומי חשמל, יין, ילדים, חיות ועוד.",
+   "pricing": [],
+   "customers": {
+    "low": 1200,
+    "high": null,
+    "unit": "businesses (company wording: 'עסקים')",
+    "scope": "israel",
+    "grade": "C",
+    "source_url": "https://konimbo.co.il/",
+    "source_date": null,
+    "note": "Homepage: 'מעל 1200 עסקים'. Undated."
+   },
+   "ownership_funding": "לא נמצא מקור: האתר ועמוד ה-About אינם נטענים לטקסט מלא, והחיפוש לא החזיר רכישה או גיוס.",
+   "hebrew_rtl": true,
+   "integrations": [
+    "iCount",
+    "ריווחית",
+    "טמל",
+    "Comax",
+    "Priority",
+    "SAP",
+    "ביגייט",
+    "Boxit (שילוח)",
+    "ZAP (השוואת מחירים)",
+    "Azrieli BUY2",
+    "PayPal"
+   ],
+   "recent_news": [],
+   "recent_news_note": "לא נמצא פריט ב-90 הימים האחרונים. האחרון שנמצא: ערוץ 10, 19.10.2025, 'קונימבו וטריפיק חוברות' (נראה בתוצאות חיפוש).",
+   "notes_he": "אין מחירון ציבורי; האתר מציע פגישת ייעוץ. לא נמצאה תוכנית שותפים עם מחירון.",
+   "overlap_with_dgo_he": "חפיפה קטנה, כמו מול Shopify: «אתרים» ב-DGO מארחת ומנטרת אתרים; FACTS אינו מציין בונה חנויות או עגלת קניות.",
+   "sources": [
+    {
+     "url": "https://konimbo.co.il/",
+     "date": null,
+     "what": "Homepage opened locally: services, integrations list, '1200+ businesses', no prices",
+     "grade": "C"
+    }
+   ],
+   "verified_at": "2026-11-05"
+  },
+  {
+   "id": "make",
+   "name_he": "Make (לשעבר Integromat)",
+   "name_en": "Make (formerly Integromat), part of Celonis",
+   "url": "https://www.make.com/",
+   "segment": "automation",
+   "what_they_sell_he": "פלטפורמה ויזואלית לבניית אוטומציות וסוכני AI. ב-Waves '26 (20.10.2026) הוכרזו MakeOS להפעלה ופיקוח על סוכנים וכלי Process Intelligence (כריית משימות וכריית תהליכים), וגם שדרוג ל-Maia, עוזרת ה-AI שבונה תרחישים.",
+   "target_customers_he": "צוותים בעסקים מכל גודל; בישראל פועלים משווקים ושותפים מוסמכים כמו AutomationIL (Platinum) ו-Cadmon Systems (Gold).",
+   "pricing": [
+    {
+     "plan": "Free",
+     "price": "1,000 credits per month (בלי מחיר)",
+     "currency": "n/a",
+     "period": "free",
+     "source_url": "https://www.make.com/en/pricing",
+     "date": "2026-11-05"
+    },
+    {
+     "plan": "Core / Pro / Teams / Enterprise",
+     "price": "מחירי החבילות לא נטענו לטקסט הדף שנקרא; אתרי צד שלישי מציגים מחירי דולר סותרים ולכן לא נרשמו",
+     "currency": "n/a",
+     "period": "unknown",
+     "source_url": "https://www.make.com/en/pricing",
+     "date": "2026-11-05"
+    },
+    {
+     "plan": "Start-up plan",
+     "price": "50% הנחה על חבילת Business לחברות עד 20 עובדים",
+     "currency": "n/a",
+     "period": "discount",
+     "source_url": "https://www.make.com/en/pricing",
+     "date": "2026-11-05"
+    }
+   ],
+   "customers": {
+    "low": 500000,
+    "high": null,
+    "unit": "customers / companies (company wording '500k Customers')",
+    "scope": "worldwide",
+    "grade": "C",
+    "source_url": "https://www.make.com/en/about",
+    "source_date": null,
+    "note": "About page: '500,000+ companies'. The blog and Waves '26 pages say 'Join 4,000+ companies', so the company's own figures conflict. Undated."
+   },
+   "ownership_funding": "חלק מקבוצת Celonis (עמוד About של Make); מטה בפראג, שנת הקמה לא מצוינת בעמוד; 380+ עובדים לפי העמוד. לא נמצא סכום רכישה במקור שנפתח.",
+   "hebrew_rtl": null,
+   "integrations": [
+    "3,000+ native apps (עמוד הבלוג)",
+    "Maia",
+    "MakeOS",
+    "Make Endpoints"
+   ],
+   "recent_news": [
+    {
+     "date": "2026-10-20",
+     "title": "Waves '26: The glass box for the agentic era",
+     "url": "https://www.make.com/blog/waves26-the-glass-box-for-the-agentic-era",
+     "summary_he": "אירוע Waves '26: עדכונים בארבעה תחומים (גילוי, בנייה, שליטה ותצפית) שנועדו להפוך את עבודת הסוכנים לגלויה, מוגבלת בהרשאות וניתנת לביטול; הוכרז MakeOS ורבים מהתכונות עדיין ברשימת המתנה."
+    },
+    {
+     "date": "2026-10-20",
+     "title": "Plan and build better workflows with Maia by Make, upgraded",
+     "url": "https://www.make.com/blog/plan-and-build-better-workflows-with-maia-by-make-upgraded",
+     "summary_he": "Maia קיבלה מצב Plan שבודק גישה לפני שינוי תרחיש, זיכרון להעדפות משתמש, צירוף תמונות לבנייה משרטוט וכלי שמציע תיקוני שגיאות מנתוני ריצה."
+    }
+   ],
+   "notes_he": "make.com חוסם גישה אוטומטית (403) ולכן דפים נקראו דרך כלי הדפדפן-אינטרנט. במקורות צד שלישי שנמצאו Make מופיעה גם כ-Integromat (G2: make-formerly-integromat).",
+   "overlap_with_dgo_he": "חפיפה באוטומציית תהליכים: לפי FACTS רצה ב-DGO אפליקציית n8n (רישיון Sustainable Use, שאינו קוד פתוח לפי OSI; מתוכנן להוציאה מהליבה כתוסף אופציונלי), וכן browser42 לאוטומציה בדפדפן. Make הוא שירות ענן חיצוני ואילו n8n ב-DGO רץ על המכונה של העסק.",
+   "sources": [
+    {
+     "url": "https://www.make.com/en/about",
+     "date": null,
+     "what": "About page opened: HQ Prague, part of Celonis, 500k customers claim, 380+ employees",
+     "grade": "C"
+    },
+    {
+     "url": "https://www.make.com/en/pricing",
+     "date": null,
+     "what": "Pricing page opened: Free plan 1,000 credits; paid prices not in the page text",
+     "grade": "C"
+    },
+    {
+     "url": "https://www.make.com/blog/waves26-the-glass-box-for-the-agentic-era",
+     "date": "2026-10-20",
+     "what": "Make blog: Waves '26",
+     "grade": "B"
+    },
+    {
+     "url": "https://www.make.com/blog/plan-and-build-better-workflows-with-maia-by-make-upgraded",
+     "date": "2026-10-20",
+     "what": "Make blog: Maia upgrade",
+     "grade": "B"
+    },
+    {
+     "url": "https://www.make.com/en/blog",
+     "date": null,
+     "what": "Blog listing opened: 'Join 4,000+ companies', 3,000+ native apps",
+     "grade": "C"
+    }
+   ],
+   "verified_at": "2026-11-05"
+  },
+  {
+   "id": "zapier",
+   "name_he": "זאפייר (Zapier)",
+   "name_en": "Zapier",
+   "url": "https://zapier.com/",
+   "segment": "automation",
+   "what_they_sell_he": "פלטפורמת אוטומציה שמחברת מעל 9,000 אפליקציות, עם סוכני AI ושרת MCP אחד שמחבר כלי AI שונים ליישומי העסק. התמחור נקבע לפי מספר משימות (tasks) בחודש.",
+   "target_customers_he": "עסקים בכל גודל וצוותי שיווק, מכירות ותפעול, ללא צורך בקוד.",
+   "pricing": [
+    {
+     "plan": "Free: 100 tasks/mo",
+     "price": "Free",
+     "currency": "USD",
+     "period": "free",
+     "source_url": "https://zapier.com/pricing",
+     "date": "2026-11-05"
+    },
+    {
+     "plan": "Professional: 750 tasks/mo",
+     "price": "$19.99 לחודש בחיוב שנתי; $29.99 בחיוב חודשי",
+     "currency": "USD",
+     "period": "annual or monthly",
+     "source_url": "https://zapier.com/pricing",
+     "date": "2026-11-05"
+    },
+    {
+     "plan": "Professional: 2,000 tasks/mo",
+     "price": "$49.00 לחודש בחיוב שנתי; $73.50 בחיוב חודשי",
+     "currency": "USD",
+     "period": "annual or monthly",
+     "source_url": "https://zapier.com/pricing",
+     "date": "2026-11-05"
+    },
+    {
+     "plan": "Professional: 10,000 tasks/mo",
+     "price": "$129.00 לחודש בחיוב שנתי; $193.50 בחיוב חודשי",
+     "currency": "USD",
+     "period": "annual or monthly",
+     "source_url": "https://zapier.com/pricing",
+     "date": "2026-11-05"
+    },
+    {
+     "plan": "Team: 2,000 tasks/mo",
+     "price": "$69.00 לחודש בחיוב שנתי; $103.50 בחיוב חודשי",
+     "currency": "USD",
+     "period": "annual or monthly",
+     "source_url": "https://zapier.com/pricing",
+     "date": "2026-11-05"
+    },
+    {
+     "plan": "Team: 10,000 tasks/mo",
+     "price": "$169.00 לחודש בחיוב שנתי; $253.50 בחיוב חודשי",
+     "currency": "USD",
+     "period": "annual or monthly",
+     "source_url": "https://zapier.com/pricing",
+     "date": "2026-11-05"
+    },
+    {
+     "plan": "Enterprise",
+     "price": "מחיר מותאם דרך מכירות",
+     "currency": "n/a",
+     "period": "quote",
+     "source_url": "https://zapier.com/pricing",
+     "date": "2026-11-05"
+    }
+   ],
+   "customers": {
+    "low": 3000000,
+    "high": null,
+    "unit": "businesses (company wording: 'Trusted by 3 million+ businesses')",
+    "scope": "worldwide",
+    "grade": "C",
+    "source_url": "https://zapier.com/",
+    "source_date": null,
+    "note": "Homepage wording, undated. The About page gives no customer count."
+   },
+   "ownership_funding": "חברה פרטית שעובדת מרחוק מיום הקמתה, עם 800+ עובדים ב-38 מדינות (עמוד About, ללא תאריך). משקיעים ושנת הקמה לא מצוינים בעמוד שנפתח.",
+   "hebrew_rtl": null,
+   "integrations": [
+    "9,000+ אפליקציות",
+    "שרת MCP אחד לכלי AI שונים (פוסט בבלוג)",
+    "אינטגרציות AI: Gemini, Grok, Claude (פוסטים בבלוג)"
+   ],
+   "recent_news": [
+    {
+     "date": "2026-10-08",
+     "title": "Zapier explores extra pay for employees driving AI gains",
+     "url": "https://www.techtarget.com/news/Zapier-explores-extra-pay-for-employees-driving-AI-gains/846353/",
+     "summary_he": "Zapier מתכננת פיילוט של שלושה עד שישה חודשים שבו משווקים נבחרים יקבלו תשלום לפי צנרת מכירות מוסמכת שהם מייצרים בעזרת כלי AI."
+    }
+   ],
+   "notes_he": "אין הכרזות מוצר מתוארכות ב-90 הימים האחרונים בבלוג של Zapier (נקרא ב-5.11.2026); הכתבה היחידה שנמצאה על החברה עצמה היא של TechTarget. מחירים נקבעים בדולר ומחויבים ב-19 מטבעות בשער היום. עברית: דף הבית לא מזכיר תמיכה בעברית.",
+   "overlap_with_dgo_he": "חפיפה באוטומציית תהליכים, כמו מול Make: לפי FACTS רצה ב-DGO אפליקציית n8n על מכונת העסק, וכן browser42. Zapier הוא שירות ענן חיצוני.",
+   "sources": [
+    {
+     "url": "https://zapier.com/pricing",
+     "date": null,
+     "what": "Pricing page opened: tiers by task volume, USD, 19 billing currencies, '9,000+ apps'",
+     "grade": "C"
+    },
+    {
+     "url": "https://zapier.com/",
+     "date": null,
+     "what": "Homepage opened: 'Trusted by 3 million+ businesses'",
+     "grade": "C"
+    },
+    {
+     "url": "https://zapier.com/about",
+     "date": null,
+     "what": "About page opened: remote since day one, 800+ people in 38 countries",
+     "grade": "C"
+    },
+    {
+     "url": "https://zapier.com/blog/",
+     "date": null,
+     "what": "Blog listing opened: no dated company news in the last 90 days",
+     "grade": "C"
+    },
+    {
+     "url": "https://www.techtarget.com/news/Zapier-explores-extra-pay-for-employees-driving-AI-gains/846353/",
+     "date": "2026-10-08",
+     "what": "TechTarget: pay pilot",
+     "grade": "B"
+    }
+   ],
+   "verified_at": "2026-11-05"
+  },
+  {
+   "id": "n8n",
+   "name_he": "n8n",
+   "name_en": "n8n",
+   "url": "https://n8n.io/",
+   "segment": "automation",
+   "what_they_sell_he": "פלטפורמת אוטומציה ו-AI שהקוד שלה זמין תחת רישיון fair-code (Sustainable Use License): אפשר לארח בעצמך או להשתמש בענן של n8n. גרסה 3.0 בבטא מאוקטובר 2026 עם שינויים שוברים ומיקוד ביציבות ואבטחה, ויציבה צפויה בתחילת דצמבר.",
+   "target_customers_he": "מפתחים, צוותי תפעול ו-IT וארגונים גדולים; האתר מציג גם 'Fortune 500' ומאות אלפי משתמשים בקהילה.",
+   "pricing": [
+    {
+     "plan": "Starter: 2.5K הרצות, עד 5 במקביל, ענן n8n בלבד",
+     "price": "20€/mo, billed annually",
+     "currency": "EUR",
+     "period": "annual",
+     "source_url": "https://n8n.io/pricing",
+     "date": "2026-11-05"
+    },
+    {
+     "plan": "Pro: 10K הרצות, עד 50 במקביל, ענן n8n בלבד",
+     "price": "50€/mo, billed annually",
+     "currency": "EUR",
+     "period": "annual",
+     "source_url": "https://n8n.io/pricing",
+     "date": "2026-11-05"
+    },
+    {
+     "plan": "Business: 40K הרצות, אירוח עצמי בלבד (ענן ברשימת המתנה)",
+     "price": "667€/mo, billed annually",
+     "currency": "EUR",
+     "period": "annual",
+     "source_url": "https://n8n.io/pricing",
+     "date": "2026-11-05"
+    },
+    {
+     "plan": "Enterprise: הרצות מותאמות, 200+ במקביל, ענן או אירוח עצמי",
+     "price": "Contact Sales",
+     "currency": "n/a",
+     "period": "quote",
+     "source_url": "https://n8n.io/pricing",
+     "date": "2026-11-05"
+    },
+    {
+     "plan": "Community Edition: גרסה לאירוח עצמי ב-GitHub",
+     "price": "לא מצוין מחיר בעמוד (גרסה סטנדרטית לאירוח עצמי ב-GitHub)",
+     "currency": "n/a",
+     "period": "self-hosted",
+     "source_url": "https://n8n.io/pricing",
+     "date": "2026-11-05"
+    }
+   ],
+   "customers": {
+    "low": 1400,
+    "high": null,
+    "unit": "enterprise customers",
+    "scope": "worldwide",
+    "grade": "B",
+    "source_url": "https://www.verdict.co.uk/news/sap-invests-n8n/",
+    "source_date": "2026-05-13",
+    "note": "Verdict (2026-05-13): more than 1,400 enterprise customers and 1.7 million active developers per month. n8n.io says 'Join 250k+ developers in our community' and 'Top 50 Github project with 209.5k stars'; its press page says 'thousands of organizations'."
+   },
+   "ownership_funding": "חברה פרטית, מטה בברלין, נוסדה ב-2019 על ידי יאן אוברהאוזר (מנכ״ל). לפי עמוד העיתונות: 240 מיליון דולר גויסו עד היום, בנוסף להשקעה אסטרטגית של SAP במאי 2026 לפי שווי של 5.2 מיליארד דולר (בסבב קודם, פחות משנה לפני כן, 2.5 מיליארד). הסכום לא נחשף רשמית; heise מציינת כ-1.3% מההון לפי רשם החברות, ו-Handelsblatt (בציטוט heise) כ-60 מיליון דולר.",
+   "hebrew_rtl": null,
+   "integrations": [
+    "SAP Joule Studio (תוכנית הטמעה לפי הודעת SAP)",
+    "ZoomInfo (צומת מקורי דרך GTM.AI, אוקטובר 2026)",
+    "NVIDIA DGX Spark להרצה מקומית (פוסט בבלוג)"
+   ],
+   "recent_news": [
+    {
+     "date": "2026-10-27",
+     "title": "Introducing n8n 3.0",
+     "url": "https://blog.n8n.io/introducing-n8n-v3/",
+     "summary_he": "n8n 3.0 מתמקדת באמינות, יציבות ואבטחה: הסרת יכולות ישנות, הקשחת ברירות מחדל ועבודה מחדש על חלקים מסביבת ההרצה. יש שינויים שוברים; הבטא זמינה והיציבה צפויה בתחילת דצמבר."
+    },
+    {
+     "date": "2026-10-12",
+     "title": "ZoomInfo Launches Native Integration With n8n Through GTM.AI",
+     "url": "https://finance.yahoo.com/technology/ai/articles/zoominfo-launches-native-integration-n8n-123000540.html",
+     "summary_he": "ZoomInfo הוסיפה צומת ל-n8n שמושך נתוני חברות ואנשי קשר לתוך תהליכים וסוכנים, עם אישורי הגישה של המשתמש."
+    },
+    {
+     "date": "2026-09",
+     "title": "n8n boss: 'Our goal is to get to 1bn users with fewer than 1,000 employees'",
+     "url": "https://sifted.eu/articles/n8n-boss-1bn-users-fewer-than-1000-employees",
+     "summary_he": "ראיון ב-Sifted (ספטמבר 2026, לפי רשימת הכתבות בעמוד העיתונות של n8n; הכתבה עצמה לא נפתחה) עם מנכ״ל n8n על יעד של מיליארד משתמשים עם פחות מ-1,000 עובדים."
+    }
+   ],
+   "notes_he": "הרישיון: fair-code (Sustainable Use License), לא קוד פתוח לפי OSI. SAP השקיעה במאי 2026 (Verdict, heise, עמוד העיתונות של n8n); אירוע חריג במחזור החדשות של 90 הימים הוא 3.0 בבטא.",
+   "overlap_with_dgo_he": "n8n הוא רכיב בתוך DGO, לא רק מתחרה: לפי FACTS הוא אחת מ-18 האפליקציות הרצות ב-DGO, ברישיון Sustainable Use ('fair-code') שאינו קוד פתוח לפי הגדרת OSI, ויש תוכנית להוציאו מהליבה ולהפוך אותו לתוסף אופציונלי. DGO מספקת מסביבו את הכספת «חיבורים ומפתחות» וגיבוי לכל אפליקציה, כולל מפתח ההצפנה של n8n.",
+   "sources": [
+    {
+     "url": "https://n8n.io/pricing",
+     "date": null,
+     "what": "Pricing page opened: Starter, Pro, Business, Enterprise, Community Edition",
+     "grade": "C"
+    },
+    {
+     "url": "https://n8n.io/press/",
+     "date": null,
+     "what": "Press page opened: Berlin, founded 2019, $240M raised, $5.2B valuation, fair-code",
+     "grade": "C"
+    },
+    {
+     "url": "https://n8n.io/",
+     "date": null,
+     "what": "Homepage opened: 250k+ developers in community, 209.5k GitHub stars",
+     "grade": "C"
+    },
+    {
+     "url": "https://www.verdict.co.uk/news/sap-invests-n8n/",
+     "date": "2026-05-13",
+     "what": "Verdict: SAP invests at $5.2bn, 1,400+ enterprise customers",
+     "grade": "B"
+    },
+    {
+     "url": "https://www.heise.de/en/news/SAP-invests-n8n-becomes-one-of-the-most-valuable-German-AI-startups-11294028.html",
+     "date": "2026-05-13",
+     "what": "heise: SAP stake ~1.3%, ~$60M per Handelsblatt, Berlin",
+     "grade": "B"
+    },
+    {
+     "url": "https://blog.n8n.io/introducing-n8n-v3/",
+     "date": "2026-10-27",
+     "what": "n8n blog: 3.0 beta",
+     "grade": "B"
+    },
+    {
+     "url": "https://finance.yahoo.com/technology/ai/articles/zoominfo-launches-native-integration-n8n-123000540.html",
+     "date": "2026-10-12",
+     "what": "Yahoo Finance: ZoomInfo node",
+     "grade": "B"
+    }
+   ],
+   "verified_at": "2026-11-05"
+  },
+  {
+   "id": "bizibox",
+   "name_he": "ביזיבוקס (bizibox)",
+   "name_en": "bizibox (iFact)",
+   "url": "https://www.bizibox.biz/",
+   "segment": "documents",
+   "what_they_sell_he": "פלטפורמה לאוטומציה של הנהלת חשבונות ותזרים מזומנים: משיכת נתונים מחשבונות בנק ומחברות כרטיסי אשראי, מעקב אחרי חשבוניות חסרות ותנועות פתוחות או לא מותאמות, וייצוא דפי בנק ואשראי לתוכנת הנהלת החשבונות. יש חבילות לעסקים (Budget management, Business, Business+) ומוצר למשרדי רואי חשבון; קריאת מסמכים ב-OCR אינה מוזכרת בדפים שנפתחו.",
+   "target_customers_he": "בעלי עסקים ומשרדי הנהלת חשבונות ורואי חשבון בישראל.",
+   "pricing": [
+    {
+     "plan": "Budget management / Business / Business+",
+     "price": "אין מחיר באתר; מוצע ניסיון חינם של 30 יום",
+     "currency": "n/a",
+     "period": "30-day free trial",
+     "source_url": "https://bizibox.biz/en/our-packages/business",
+     "date": "2026-11-05"
+    }
+   ],
+   "customers": {
+    "low": 2000,
+    "high": 9000,
+    "unit": "business owners (our reading of the company's 'Join the thousands'); plus 'hundreds of offices' (accountants)",
+    "scope": "israel",
+    "grade": "C",
+    "source_url": "https://bizibox.biz/en/about",
+    "source_date": null,
+    "note": "About page: 'Join the thousands' of business owners; the homepage (existing index) also says hundreds of accounting offices. No exact count, undated."
+   },
+   "ownership_funding": "מופעלת על ידי I Fact LTD (iFact), שנוסדה ב-2011 על ידי אייל חזות (CTO), מוטי כספי (מנכ״ל) וגרשון ברושי (יו״ר). כתובת: תובל 40, רמת גן. בעלים ומשקיעים לא מצוינים בדפי האתר שנפתחו.",
+   "hebrew_rtl": true,
+   "integrations": [
+    "חשבונות בנק",
+    "חברות כרטיסי אשראי וחברות סליקה",
+    "תוכנת הנהלת חשבונות (ללא שם מוצר בדף)",
+    "ישראכרט עסקים (שותפות מ-2021, גלובס, כותרת בלבד)"
+   ],
+   "recent_news": [],
+   "recent_news_note": "לא נמצאו כתבות ב-90 הימים האחרונים; באתר אין בלוג או דף חדשות. הכתבות שנמצאו ישנות (האחרונה: 19.6.2024, mnews).",
+   "notes_he": "מחירון לא נמצא באתר. ביקורת של צד שלישי (Financa) הופיעה בתוצאות חיפוש עם סכומים של כ-174 ו-233 ₪ לחודש, אך הדף לא נקרא ולכן הסכומים לא נרשמו. לפי עמוד המשרדים, המערכת זמינה בעברית בלבד.",
+   "overlap_with_dgo_he": "חפיפה חלקית בעולם הכספי: לפי FACTS קולטת «מסמכים» (INDOX) מסמכים נכנסים מקצה לקצה (סנכרון, חילוץ, תיוק ותצוגה), «כלי מסמכים» מבצע OCR וחילוץ ערכים ממסמכים סרוקים, ו«מייל» מחבר Gmail ו-IMAP. FACTS אינו מציין חיבור לחשבונות בנק, לסליקת אשראי או התאמות בנק.",
+   "sources": [
+    {
+     "url": "https://bizibox.biz/en/about",
+     "date": null,
+     "what": "About page opened: iFact, founders, Tuval 40 Ramat Gan, 'Join the thousands'",
+     "grade": "C"
+    },
+    {
+     "url": "https://bizibox.biz/en/accountants",
+     "date": null,
+     "what": "Accountants page opened: bank and credit extraction, missing invoices, Hebrew only, 30-day trial",
+     "grade": "C"
+    },
+    {
+     "url": "https://bizibox.biz/en/our-packages/business",
+     "date": null,
+     "what": "Business+ page opened: features, no prices, 30-day trial",
+     "grade": "C"
+    }
+   ],
+   "verified_at": "2026-11-05"
+  },
+  {
+   "id": "dokka",
+   "name_he": "דוקה (DOKKA)",
+   "name_en": "DOKKA",
+   "url": "https://dokka.com/",
+   "segment": "documents",
+   "what_they_sell_he": "פלטפורמת אוטומציה חשבונאית מבוססת סוכנים שיושבת מעל ה-ERP: DOKKA AP לעיבוד חשבוניות ספק מהקליטה ועד ה-ERP, ו-DOKKA Close לאוטומציה של סגירת חודש. מתחברת ל-NetSuite, SAP Business One, Acumatica, QuickBooks ו-Priority.",
+   "target_customers_he": "מנהלי כספים, בקרים ומנהלי חשבונות ספקים בחברות בינוניות. אחד ממקרי הלקוח באתר הוא זו ארץ, רשת חנויות חיות ישראלית עם כ-200 עובדים ו-SAP Business One.",
+   "pricing": [],
+   "customers": {
+    "low": 3500,
+    "high": null,
+    "unit": "finance teams (company wording: 'Trusted by 3,500+ finance teams worldwide')",
+    "scope": "worldwide",
+    "grade": "C",
+    "source_url": "https://dokka.com/",
+    "source_date": null,
+    "note": "Homepage claim, undated. Not split by country."
+   },
+   "ownership_funding": "חברה ישראלית פרטית: מטה ברמת גן ונוסדה באוקטובר 2017, לפי פרופיל Startupim (מקור צד שלישי); הפרופיל מציין את Peregrine Ventures כמשקיעה, סכום לא נחשף, ו-68 עובדים בספטמבר 2026. האתר של החברה אינו מציין מטה, משקיעים או מימון.",
+   "hebrew_rtl": null,
+   "integrations": [
+    "NetSuite",
+    "SAP Business One",
+    "Acumatica",
+    "QuickBooks",
+    "Priority"
+   ],
+   "recent_news": [],
+   "recent_news_note": "לא נמצאו כתבות ב-90 הימים האחרונים בגוגל ניוז ובבינג (שאילתות בעברית ובאנגלית); האתר מפנה לבלוג (https://dokka.com/blog/) שלא נקרא.",
+   "notes_he": "האתר באנגלית ואינו מזכיר עברית או חשבשבת. תקני אבטחה שמוצגים בו: ISO 27001, SOC 2 ו-GDPR.",
+   "overlap_with_dgo_he": "חפיפה חלקית בקליטת חשבוניות: לפי FACTS קולטת «מסמכים» (INDOX) מסמכים נכנסים מקצה לקצה (סנכרון, חילוץ, תיוק ותצוגה) ו«כלי מסמכים» מבצע OCR וחילוץ ערכים. FACTS אינו מציין חיבור ל-ERP, תהליכי אישור או סגירת חודש.",
+   "sources": [
+    {
+     "url": "https://dokka.com/",
+     "date": null,
+     "what": "Homepage opened: AP and Close, 3,500+ finance teams, integrations incl. Priority, no prices",
+     "grade": "C"
+    },
+    {
+     "url": "https://dokka.com/how-dokka-helped-zoo-eretz-streamline-ap/",
+     "date": null,
+     "what": "Case study opened: Zoo Eretz, Israeli pet chain, SAP Business One, 1,000+ vendors",
+     "grade": "C"
+    },
+    {
+     "url": "https://startupim.com/company/dokka",
+     "date": null,
+     "what": "Startupim profile: Ramat Gan HQ, founded 2017, Peregrine Ventures, 68 employees (2026-09)",
+     "grade": "D"
+    }
+   ],
+   "verified_at": "2026-11-05"
+  },
+  {
+   "id": "virtuac",
+   "name_he": "VirtuAc",
+   "name_en": "VirtuAc",
+   "url": "https://virtuac-site.pages.dev/",
+   "segment": "documents",
+   "what_they_sell_he": "תוכנה כשירות לניהול חשבוניות ספק לרואי חשבון ועסקים בישראל: אוספת חשבוניות מ-Gmail, Outlook, WhatsApp ו-Telegram, קוראת אותן ב-OCR בעברית ומייצאת נתונים בפורמט שחשבשבת ופריוריטי קולטות ישירות.",
+   "target_customers_he": "משרדי רואי חשבון ועסקים מקומיים בישראל בלבד, לפי האתר.",
+   "pricing": [
+    {
+     "plan": "Starter",
+     "price": "Free forever (לפי האתר)",
+     "currency": "n/a",
+     "period": "free",
+     "source_url": "https://virtuac-site.pages.dev/about",
+     "date": "2026-11-05"
+    },
+    {
+     "plan": "Pro",
+     "price": "אין מחיר בדף; מוצע ניסיון של 14 יום",
+     "currency": "n/a",
+     "period": "14-day trial",
+     "source_url": "https://virtuac-site.pages.dev/about",
+     "date": "2026-11-05"
+    }
+   ],
+   "customers": null,
+   "ownership_funding": "לא נמצא מקור: האתר אינו מנקוב בשמות מייסדים, בעלים או מימון; מצוין מטה בתל אביב והתחלת פיתוח ב-2024. האתר מאוחסן על תת-דומיין pages.dev.",
+   "hebrew_rtl": null,
+   "integrations": [
+    "Gmail",
+    "Outlook",
+    "WhatsApp",
+    "Telegram",
+    "חשבשבת",
+    "פריוריטי"
+   ],
+   "recent_news": [],
+   "recent_news_note": "לא נמצאו כתבות על החברה; נראית רק בתוצאות חיפוש כללי.",
+   "notes_he": "בחירת הדוסייה: נבחרה מבין השחקנים הישראליים שנמצאו עם מוצר ייעודי לקליטת חשבוניות; הנראות שלה נמוכה יחסית (אתר באנגלית על pages.dev, ללא ספירת לקוחות). שחקנים נוספים שנצפו ולא נבנו להם דוסייה: Billix Technologies (פרופיל Startup Nation Central, הוקמה ב-9.2025), Docuorb, וכן Autodocs (כתבה בכתובת הסעיף 'mumlazim' של ישראל היום מ-15.10.2026; הדף חוסם גישה אוטומטית ולכן לא נקרא).",
+   "overlap_with_dgo_he": "חפיפה ישירה יחסית: לפי FACTS «מייל» מחבר Gmail ו-IMAP, «צ׳אט» מחבר WhatsApp ו-Telegram, ו«מסמכים» (INDOX) קולטת מסמכים נכנסים, מחלצת, מתייקת ומציגה, כאשר «כלי מסמכים» מבצע OCR. FACTS אינו מציין ייצוא לחשבשבת או לפריוריטי.",
+   "sources": [
+    {
+     "url": "https://virtuac-site.pages.dev/about",
+     "date": null,
+     "what": "About page opened: Tel Aviv, started 2024, Hashavshevet and Priority, Starter free, Pro 14-day trial",
+     "grade": "C"
+    }
+   ],
+   "verified_at": "2026-11-05"
+  },
+  {
+   "id": "automationil-callbox",
+   "name_he": "AutomationIL / קולבוקס",
+   "name_en": "AutomationIL by Callbox",
+   "url": "https://automationil.co.il/",
+   "segment": "automation",
+   "what_they_sell_he": "משרד אוטומציה ישראלי שבנוי על Make: רישוי Make Enterprise וקליטה, אפיון ומפת דרכים לאוטומציה, מימוש תהליכים מורכבים בין מערכות, פיתוח מודולים ייעודיים ב-Make, הדרכות והסמכות וניהול שוטף. מפעיל קהילה של 24,000+ אנשי מקצוע לפי פרופיל השותף ב-Make.",
+   "target_customers_he": "ארגונים גדולים עם מערכות ERP, CRM ושיווק: Dynamics 365, NetSuite, Salesforce ו-SAP.",
+   "pricing": [],
+   "customers": null,
+   "ownership_funding": "AutomationIL היא חטיבה של Callbox לפי האתר. לפי פרופיל Make יש משרדים בקנדה, ישראל, איחוד האמירויות, בריטניה וארה״ב וצוות פיתוח בסרביה. אין מידע על מימון או בעלים במקורות שנפתחו.",
+   "hebrew_rtl": true,
+   "integrations": [
+    "Make",
+    "Dynamics 365",
+    "NetSuite",
+    "Salesforce",
+    "SAP"
+   ],
+   "recent_news": [],
+   "recent_news_note": "לא נמצא פריט ב-90 הימים האחרונים. הכתבה שנמצאה: מעריב, 12.3.2023, Callbox מכריזה על שיתוף פעולה עם Make כמפיצה הראשונה שמינתה Make בישראל ובעולם.",
+   "notes_he": "סיבת הבחירה לדוסייה: פרופיל שותף Platinum בספריית Make, שמתאר אותה 'מפיצה ראשונה בעולם ושותפת Enterprise של השנה 2022', וכתבה במעריב. אין מחירון ציבורי.",
+   "overlap_with_dgo_he": "משלימה יותר ממתחרה: DGO מתפרסמת בקוד פתוח תחת AGPL v3, ו-FACTS קובע שכל אחד רשאי למכור שירותים מעליה; בתוך DGO האוטומציה רצה ב-n8n ולא ב-Make. FACTS אינו מציין שותפויות עם ספקי אוטומציה.",
+   "sources": [
+    {
+     "url": "https://www.make.com/en/partners-directory/callbox",
+     "date": null,
+     "what": "Make partner profile opened: Platinum, offices, Hebrew, services, 24,000+ community",
+     "grade": "D"
+    },
+    {
+     "url": "https://www.maariv.co.il/business/tech/Article-987532",
+     "date": "2023-03-12",
+     "what": "Maariv: Callbox partners with Make, first reseller in Israel",
+     "grade": "B"
+    },
+    {
+     "url": "https://automationil.co.il/",
+     "date": null,
+     "what": "Own Hebrew site: Make projects, training, Netanya address (existing index)",
+     "grade": "C"
+    }
+   ],
+   "verified_at": "2026-11-05"
+  },
+  {
+   "id": "cadmon-systems",
+   "name_he": "קדמון סיסטמס",
+   "name_en": "Cadmon Systems",
+   "url": "https://cadmonsystems.com",
+   "segment": "automation",
+   "what_they_sell_he": "חברת אינטגרציה ואוטומציה ישראלית: חיבורי Priority ERP, אוטומציות ב-Make, סוכני AI, הטמעת monday.com ותמיכה שוטפת. הפרויקט טיפוסי נמשך 4 עד 8 שבועות, והצעד הראשון הוא שיחת היכרות של 30 דקות.",
+   "target_customers_he": "עסקים עם תהליכי רכש, כספים, מכירות ותפעול (RFQ, הצעות מחיר, אישורים, דיווח). לקוחות שמוזכרים באתר: BDO, AppsFlyer, Fiverr, Benda Magnetics, TopGum ו-Max Barney.",
+   "pricing": [],
+   "customers": null,
+   "ownership_funding": "לא נמצא מקור: האתר אינו מציין בעלים או מימון. משרדים בישראל ובבריטניה לפי פרופיל Make; האתר בעברית עם גרסה באנגלית.",
+   "hebrew_rtl": true,
+   "integrations": [
+    "Make",
+    "Priority ERP",
+    "monday.com",
+    "WooCommerce",
+    "Salesforce",
+    "Airtable",
+    "Zoho",
+    "Google Workspace",
+    "WhatsApp"
+   ],
+   "recent_news": [],
+   "recent_news_note": "לא נמצאו כתבות על החברה.",
+   "notes_he": "סיבת הבחירה לדוסייה: שותף Gold בספריית Make (ישראל ובריטניה, עברית ואנגלית). האתר טוען ללקוחות ב-26 מדינות, ל-100+ ביקורות של 5 כוכבים ב-Fiverr ול-19 לקוחות שחזרו לפרויקט נוסף; הנתונים ללא תאריך. אין מחירון ציבורי.",
+   "overlap_with_dgo_he": "משלימה יותר ממתחרה, כמו Callbox: FACTS קובע שכל אחד רשאי למכור שירותים מעל DGO (AGPL v3). בתוך DGO האוטומציה רצה ב-n8n. FACTS אינו מציין חיבור ל-Priority.",
+   "sources": [
+    {
+     "url": "https://www.make.com/en/partners-directory/cadmon-systems",
+     "date": null,
+     "what": "Make partner profile opened: Gold, Israel and UK offices, Hebrew and English",
+     "grade": "D"
+    },
+    {
+     "url": "https://cadmonsystems.com",
+     "date": null,
+     "what": "Homepage opened: Priority, Make, AI agents, monday, named clients, 4-8 week projects",
+     "grade": "C"
+    }
+   ],
+   "verified_at": "2026-11-05"
+  },
+  {
+   "id": "achiya-automation",
+   "name_he": "אחיה אוטומציה",
+   "name_en": "Achiya Automation",
+   "url": "https://achiya-automation.com",
+   "segment": "automation",
+   "what_they_sell_he": "סטודיו קטן לבוטים של וואטסאפ ולאוטומציות לעסקים קטנים: מענה ללידים, קביעת תורים, חשבוניות ותזכורות תשלום, בוט מותאם או מוכן, סוכן AI, תיבת צוות משותפת, בוט קולי, חיבורי CRM ודוחות אוטומטיים. הכלים: n8n, Airtable, יומנים, תוכנות חשבוניות ו-Google Drive.",
+   "target_customers_he": "עסקים קטנים בישראל (קליניקה, ספק אלומיניום ועוד לפי דוגמאות באתר).",
+   "pricing": [
+    {
+     "plan": "הקמה",
+     "price": "מ־₪1,200",
+     "currency": "ILS",
+     "period": "one-time",
+     "source_url": "https://achiya-automation.com",
+     "date": "2026-11-05"
+    },
+    {
+     "plan": "בוט וואטסאפ מותאם",
+     "price": "מ־₪3,500",
+     "currency": "ILS",
+     "period": "one-time",
+     "source_url": "https://achiya-automation.com",
+     "date": "2026-11-05"
+    },
+    {
+     "plan": "תפעול",
+     "price": "₪100–300 לחודש",
+     "currency": "ILS",
+     "period": "monthly",
+     "source_url": "https://achiya-automation.com",
+     "date": "2026-11-05"
+    },
+    {
+     "plan": "בוט מוכן (ללא הקמה)",
+     "price": "מ־₪249 לחודש",
+     "currency": "ILS",
+     "period": "monthly",
+     "source_url": "https://achiya-automation.com",
+     "date": "2026-11-05"
+    },
+    {
+     "plan": "סוכן AI",
+     "price": "מ־₪6,500",
+     "currency": "ILS",
+     "period": "one-time",
+     "source_url": "https://achiya-automation.com",
+     "date": "2026-11-05"
+    },
+    {
+     "plan": "תיבת צוות משותפת",
+     "price": "₪150 לחודש",
+     "currency": "ILS",
+     "period": "monthly",
+     "source_url": "https://achiya-automation.com",
+     "date": "2026-11-05"
+    }
+   ],
+   "customers": {
+    "low": 50,
+    "high": null,
+    "unit": "completed automation projects (company claim)",
+    "scope": "israel",
+    "grade": "C",
+    "source_url": "https://achiya-automation.com",
+    "source_date": null,
+    "note": "Homepage: '50+' completed projects and a 5.0 Google rating from 27 reviews (company claims, undated). Not a customer count."
+   },
+   "ownership_funding": "עסק קטן; בעלים ומימון לא מצוינים. האתר בעברית ולא מצביע על עיר; במדריך הספקים הקיים צוינה אשדוד (הסקה מהאתר, לא רישום חברות). מייסד האתר מציין כתיבה ל-Times of Israel והופעה ב-MarketingSherpa.",
+   "hebrew_rtl": true,
+   "integrations": [
+    "n8n",
+    "WhatsApp",
+    "Airtable",
+    "Google Drive",
+    "CRM",
+    "תוכנות חשבוניות",
+    "Priority (מדריך באתר)"
+   ],
+   "recent_news": [],
+   "recent_news_note": "אין עמוד חדשות; לא נמצאו כתבות ב-90 הימים האחרונים.",
+   "notes_he": "סיבת הבחירה לדוסייה: בחיפוש באנגלית על שירותי n8n בישראל (5.11.2026) זה הסטודיו הישראלי הראשון שהופיע בתוצאות, והאתר מפרסם מחירים בשקלים; הנתונים כאן מהאתר עצמו (דרגה C), בלי הערכת איכות.",
+   "overlap_with_dgo_he": "חפיפה בצד הצ׳אט והאוטומציה: לפי FACTS «צ׳אט» ב-DGO מחבר WhatsApp ו-Telegram דרך חיבורים ומאפשר בוטים שמתחברים לכל חיבור, ו-n8n רץ ב-DGO. הסטודיו מוכר שירות ולא תוכנה, וכל אחד רשאי למכור שירותים מעל DGO לפי FACTS.",
+   "sources": [
+    {
+     "url": "https://achiya-automation.com",
+     "date": null,
+     "what": "Homepage opened 2026-11-05: services, prices in NIS, 50+ projects, 5.0 Google rating from 27 reviews",
+     "grade": "C"
+    },
+    {
+     "url": "https://achiya-automation.com/pricing/",
+     "date": null,
+     "what": "Pricing page linked from the homepage (not opened)",
+     "grade": "C"
+    }
+   ],
+   "verified_at": "2026-11-05"
+  }
+ ],
+ "watchlist": [
+  {
+   "id": "morning",
+   "names": [
+    "חשבונית ירוקה",
+    "מורנינג",
+    "מורנינג של חשבונית ירוקה",
+    "morning",
+    "Green Invoice",
+    "greeninvoice",
+    "morning by Green Invoice"
+   ],
+   "domains": [
+    "greeninvoice.co.il"
+   ],
+   "keywords": [
+    "חשבונית ירוקה",
+    "morning חשבוניות",
+    "TeamSystem morning",
+    "חשבוניות ישראל",
+    "מספר הקצאה"
+   ],
+   "news_pages": [
+    "https://www.greeninvoice.co.il/magazine/"
+   ]
+  },
+  {
+   "id": "monday-com",
+   "names": [
+    "monday.com",
+    "מאנדיי",
+    "mondaycom",
+    "monday work management",
+    "MNDY"
+   ],
+   "domains": [
+    "monday.com",
+    "ir.monday.com",
+    "support.monday.com"
+   ],
+   "keywords": [
+    "monday CRM",
+    "monday dev",
+    "monday service",
+    "monday Harmony",
+    "monday Frontier",
+    "monday AI agents",
+    "MNDY earnings"
+   ],
+   "news_pages": [
+    "https://ir.monday.com/news-and-events/news-releases/default.aspx",
+    "https://monday.com/blog"
+   ]
+  },
+  {
+   "id": "priority-software",
+   "names": [
+    "Priority Software",
+    "פריוריטי",
+    "פריוריטי תוכנה",
+    "Priority ERP",
+    "פריוריטי ERP"
+   ],
+   "domains": [
+    "priority-software.com"
+   ],
+   "keywords": [
+    "Priority Cloud ERP",
+    "aiERP",
+    "Optima PMS",
+    "Obol Priority",
+    "Blackstone Priority"
+   ],
+   "news_pages": [
+    "https://www.priority-software.com/news/",
+    "https://www.priority-software.com/blog/"
+   ]
+  },
+  {
+   "id": "tabit",
+   "names": [
+    "Tabit",
+    "טאביט",
+    "Tabit Technologies"
+   ],
+   "domains": [
+    "tabit.cloud"
+   ],
+   "keywords": [
+    "Tabit PAD",
+    "Tabit Pay",
+    "Tabit Order",
+    "Tabit Guest",
+    "Clover Reserve"
+   ],
+   "news_pages": [
+    "https://tabit.cloud/il/"
+   ]
+  },
+  {
+   "id": "beecomm",
+   "names": [
+    "Beecomm",
+    "ביקום",
+    "ביקום קופות",
+    "ביקום מערכות"
+   ],
+   "domains": [
+    "beecomm.com"
+   ],
+   "keywords": [
+    "ביקום קופת ענן",
+    "Beecomm POS",
+    "קופה למסעדות ביקום"
+   ],
+   "news_pages": []
+  },
+  {
+   "id": "nayax",
+   "names": [
+    "Nayax",
+    "נאייקס",
+    "נאיקס",
+    "Nayax Ltd",
+    "Nayax Israel"
+   ],
+   "domains": [
+    "nayax.com",
+    "ir.nayax.com"
+   ],
+   "keywords": [
+    "NYAX",
+    "Nayax IPS Group",
+    "Nayax Getnet",
+    "Nayax Allied Electronics",
+    "VPOS Media 5"
+   ],
+   "news_pages": [
+    "https://ir.nayax.com/news/default.aspx",
+    "https://www.nayax.com/news"
+   ]
+  },
+  {
+   "id": "tranzila",
+   "names": [
+    "Tranzila",
+    "טרנזילה",
+    "טרנזילה פייטק",
+    "Interspace",
+    "אינטרספייס",
+    "Interspace-Tranzila"
+   ],
+   "domains": [
+    "tranzila.com"
+   ],
+   "keywords": [
+    "מיכפל טרנזילה",
+    "Michpal Tranzila",
+    "סליקה מהנייד טרנזילה"
+   ],
+   "news_pages": [
+    "https://www.tranzila.com/announcement.html"
+   ]
+  },
+  {
+   "id": "cardcom",
+   "names": [
+    "Cardcom",
+    "קארדקום",
+    "קארדקום סליקה",
+    "Cardcom Acquiring"
+   ],
+   "domains": [
+    "cardcom.solutions"
+   ],
+   "keywords": [
+    "קארדקום ארנק",
+    "קארדקום דיינרס",
+    "אודי בורנשטיין קארדקום"
+   ],
+   "news_pages": [
+    "https://www.cardcom.solutions/media/",
+    "https://www.cardcom.solutions/blog/"
+   ]
+  },
+  {
+   "id": "payplus",
+   "names": [
+    "PayPlus",
+    "פיי פלוס",
+    "פייפלוס"
+   ],
+   "domains": [
+    "payplus.co.il"
+   ],
+   "keywords": [
+    "PayPlus סליקה",
+    "פיי פלוס Tap on Phone"
+   ],
+   "news_pages": []
+  },
+  {
+   "id": "grow-meshulam",
+   "names": [
+    "Grow",
+    "גרואו",
+    "Grow Payments",
+    "גרואו פיימנטס",
+    "משולם",
+    "Meshulam"
+   ],
+   "domains": [
+    "grow.business"
+   ],
+   "keywords": [
+    "Grow Light",
+    "Grow Payout",
+    "Grow ניאו-בנק",
+    "גרואו סליקה"
+   ],
+   "news_pages": [
+    "https://grow.business/magazine/"
+   ]
+  },
+  {
+   "id": "hyp-ezcount",
+   "names": [
+    "Hyp",
+    "הייפ",
+    "היפ",
+    "Hyp Payment Solutions",
+    "הייפ פתרונות תשלום",
+    "EZcount",
+    "איזיקאונט",
+    "CreditGuard",
+    "קרדיטגארד"
+   ],
+   "domains": [
+    "hyp.co.il",
+    "ezcount.co.il"
+   ],
+   "keywords": [
+    "Hyp סליקה",
+    "EZcount חשבונית דיגיטלית",
+    "כספיט פרו"
+   ],
+   "news_pages": [
+    "https://hyp.co.il/blog/",
+    "https://www.ezcount.co.il/blog"
+   ]
+  },
+  {
+   "id": "shopify",
+   "names": [
+    "Shopify",
+    "שופיפיי",
+    "שופיפיי ישראל"
+   ],
+   "domains": [
+    "shopify.com"
+   ],
+   "keywords": [
+    "Shopify Israel",
+    "Shopify Plus",
+    "Shop Pay",
+    "Shopify Editions",
+    "Shopify Partner Program",
+    "Shopify GMV"
+   ],
+   "news_pages": [
+    "https://www.shopify.com/news",
+    "https://www.shopify.com/partners/blog"
+   ]
+  },
+  {
+   "id": "wix-base44",
+   "names": [
+    "Wix",
+    "וויקס",
+    "Wix.com",
+    "Wix Studio",
+    "Base44",
+    "בייס44",
+    "בייס 44"
+   ],
+   "domains": [
+    "wix.com",
+    "base44.com",
+    "investors.wix.com"
+   ],
+   "keywords": [
+    "Wix Studio Two",
+    "Base Code",
+    "Wix Symphony",
+    "Base44 ARR",
+    "WIX earnings"
+   ],
+   "news_pages": [
+    "https://www.wix.com/press-room/home",
+    "https://investors.wix.com/",
+    "https://base44.com/blog",
+    "https://www.wix.com/blog"
+   ]
+  },
+  {
+   "id": "konimbo",
+   "names": [
+    "Konimbo",
+    "קונימבו"
+   ],
+   "domains": [
+    "konimbo.co.il"
+   ],
+   "keywords": [
+    "קונימבו חנות אינטרנטית",
+    "מאגר קונימבו",
+    "קונימבו RetailOS"
+   ],
+   "news_pages": [
+    "https://konimbo.co.il/pages/338-posts"
+   ]
+  },
+  {
+   "id": "make",
+   "names": [
+    "Make",
+    "Make.com",
+    "Integromat",
+    "Celonis Make"
+   ],
+   "domains": [
+    "make.com"
+   ],
+   "keywords": [
+    "Make Waves",
+    "MakeOS",
+    "Maia by Make",
+    "Make Process Intelligence",
+    "Make Celonis"
+   ],
+   "news_pages": [
+    "https://www.make.com/en/blog"
+   ]
+  },
+  {
+   "id": "zapier",
+   "names": [
+    "Zapier",
+    "זאפייר"
+   ],
+   "domains": [
+    "zapier.com"
+   ],
+   "keywords": [
+    "Zapier MCP",
+    "Zapier AI agents",
+    "Zapier tasks pricing"
+   ],
+   "news_pages": [
+    "https://zapier.com/blog/"
+   ]
+  },
+  {
+   "id": "n8n",
+   "names": [
+    "n8n",
+    "n8n.io",
+    "n8n GmbH"
+   ],
+   "domains": [
+    "n8n.io",
+    "blog.n8n.io"
+   ],
+   "keywords": [
+    "n8n 3.0",
+    "n8n SAP",
+    "n8n Sustainable Use License",
+    "n8n fair-code",
+    "n8n valuation"
+   ],
+   "news_pages": [
+    "https://blog.n8n.io/",
+    "https://n8n.io/press/"
+   ]
+  },
+  {
+   "id": "bizibox",
+   "names": [
+    "bizibox",
+    "ביזיבוקס",
+    "iFact",
+    "I Fact"
+   ],
+   "domains": [
+    "bizibox.biz"
+   ],
+   "keywords": [
+    "ביזיבוקס תזרים",
+    "ביזיבוקס רואי חשבון"
+   ],
+   "news_pages": []
+  },
+  {
+   "id": "dokka",
+   "names": [
+    "DOKKA",
+    "Dokka",
+    "Dokka AI"
+   ],
+   "domains": [
+    "dokka.com"
+   ],
+   "keywords": [
+    "DOKKA AP",
+    "DOKKA Close"
+   ],
+   "news_pages": [
+    "https://dokka.com/blog/"
+   ]
+  },
+  {
+   "id": "virtuac",
+   "names": [
+    "VirtuAc"
+   ],
+   "domains": [
+    "virtuac-site.pages.dev"
+   ],
+   "keywords": [
+    "VirtuAc invoices",
+    "קליטת חשבוניות וואטסאפ חשבשבת"
+   ],
+   "news_pages": []
+  },
+  {
+   "id": "automationil-callbox",
+   "names": [
+    "AutomationIL",
+    "Automation IL",
+    "Callbox",
+    "קולבוקס"
+   ],
+   "domains": [
+    "automationil.co.il",
+    "automationil.com"
+   ],
+   "keywords": [
+    "מקצועני האוטומציה",
+    "Make Enterprise ישראל",
+    "Callbox Make"
+   ],
+   "news_pages": []
+  },
+  {
+   "id": "cadmon-systems",
+   "names": [
+    "Cadmon Systems",
+    "קדמון סיסטמס",
+    "Cadmon"
+   ],
+   "domains": [
+    "cadmonsystems.com"
+   ],
+   "keywords": [
+    "Cadmon Priority Make",
+    "קדמון אינטגרציה Priority"
+   ],
+   "news_pages": []
+  },
+  {
+   "id": "achiya-automation",
+   "names": [
+    "Achiya Automation",
+    "אחיה אוטומציה",
+    "achiya-automation"
+   ],
+   "domains": [
+    "achiya-automation.com"
+   ],
+   "keywords": [
+    "בוט וואטסאפ n8n",
+    "אחיה אוטומציה n8n"
+   ],
+   "news_pages": [
+    "https://achiya-automation.com/blog"
+   ]
+  }
+ ],
+ "sector_watch": {
+  "invoicing_rules_he": [
+   "חשבוניות ישראל",
+   "מספר הקצאה",
+   "מע״מ בזמן אמת",
+   "רשות המסים חשבוניות",
+   "חוק הסדרים 2027 מע״מ"
+  ],
+  "payments_regulation_he": [
+   "רשות ניירות ערך חברות תשלומים רישיון",
+   "חוק שירותי תשלום",
+   "סליקה בנק ישראל סולק"
+  ],
+  "automation_en": [
+   "n8n fair-code license",
+   "Make Celonis",
+   "Zapier agents"
+  ]
+ },
+ "notes": "Method: Google News and Bing News RSS (Hebrew and English, 90 and 365 days) for dated news; WebFetch of each vendor's own pricing/about/press pages; existing indexes israeli-business-software.json and israeli-payment-providers.json reused for licences, 20-F figures and earlier counts (marked 'existing index'). Window for recent_news: 2026-08-05 to 2026-11-05; competitors with no item in the window carry an empty list and a recent_news_note with the latest older item. Prices are quoted as shown on 2026-11-05; Wix (Israel) and Make paid-plan prices could not be read and are not recorded. Customer figures keep the source's unit (customers, businesses, registered users, finance teams). Not given a dossier: Autodocs (Israel Hayom 'mumlazim' article, page blocked), 'אלופים בחשבוניות' (free invoicing app by one founder, mako 2026-11-04, nearly 1,000 testers registered, article says it has Tax Authority approval; unverified), Billix Technologies, Docuorb, Stampli, Tipalti. Upcoming dated events for the news collector: monday.com Q3 results 2026-11-09, Wix Q3 results 2026-11-10 (headline seen in search results), Nayax Q3 results 2026-11-11 (search result)."
+}

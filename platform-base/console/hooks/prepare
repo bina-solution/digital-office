@@ -3,13 +3,13 @@
 # prepare — the console's own bring-up step. Invoked generically by `bbox run` for every enabled app
 # that has one; bbox does not name this app.
 #
-# The console's compose file routes the office's BARE domain (https://fpg.digital-office.co.il — what
+# The console's compose file routes the office's BARE domain (https://exf.digital-office.co.il — what
 # a person types; the owner did on 2026-10-22 and got NET::ERR_CERT_AUTHORITY_INVALID) to the console,
 # with a Let's Encrypt certificate of its own. Those routers match ${DGO_APEX_HOST:-apex.invalid}, so
 # they are CLOSED unless this hook decides the bare domain really points at this office: a router —
 # and so a certificate order — for an apex that points elsewhere, or nowhere, is refused by Let's
 # Encrypt on every configuration reload, DGO-901's storm again. vps1's `staging.digital-office.co.il`
-# has no A record at all; fpg's apex points at fireplace (measured 2026-10-22, the second reader).
+# has no A record at all; exf's apex points at examplef (measured 2026-10-22, the second reader).
 #
 # The decision: OPEN when the bare domain's A records equal the console host's (sorted SETS — a
 # round-robin answer rotates its order); CLOSED when they differ or either name has no address. Only a

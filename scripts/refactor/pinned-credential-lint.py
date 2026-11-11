@@ -7,7 +7,7 @@
     python3 scripts/refactor/pinned-credential-lint.py --fix [file…]   # strip what it finds
 
 WHY THIS EXISTS (DGO-980). A webhook trigger's pinned test data (`pinData`) is the request it
-captured, headers included. Three INDOX workflows exported from the hacohen office's n8n
+captured, headers included. Three INDOX workflows exported from the example office's n8n
 (`apps/indox/app/incoming_documents/context-collection/n8n-workflows/`) kept the caller's
 `authorization: Basic …` header there: a working webhook password, in the private repo, and in the
 public one, bina-solution/digital-office, from 2026-10-19 until the export's second reader found it

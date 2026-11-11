@@ -79,6 +79,8 @@ func TestRequestsOutsideTheProofAreTheContainers(t *testing.T) {
 		fetch("/healthz"), fetch("/index.html"), fetch("/api/connections"),
 		fetch("/api/conn/oauth/google/start"), fetch("/api/svc/drive/manifest"), fetch("/api/svc/drive/connections/x"),
 		fetch("/api/anything"), fetch("/a/drive/"), fetch("/a/drive/api/files?x=1"), fetch("/a/drive"), fetch("/a/"),
+		// a person's link (DGO-1433): resolved by app.py against the live registry, never a file of the shell
+		fetch("/go/DGO-1433"), fetch("/go/meet/exu101"), fetch("/go"), fetch("/go/"),
 		// paths werkzeug redirects or Python resolves its own way
 		fetch("/sub/"), fetch("/sub//app.js"), fetch("/./app.js"), fetch("/../app.py"), fetch("/caf%C3%A9.js"), fetch("/x:y.js"),
 		fetch("/back%5Cslash.js"), fetch("/tab%09.js"), fetch("/%2e%2e/secret.txt"), fetch("/a%5c..%5csecret.txt"),

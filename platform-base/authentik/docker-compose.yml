@@ -114,6 +114,8 @@ services:
     - traefik.http.routers.authentik-https.tls=true
     - traefik.http.routers.authentik-https.tls.certresolver=${TRAEFIK_CERTRESOLVER-myresolver}
     - traefik.http.routers.authentik-https.service=authentik-server
+    # the sign-in host pins https for the whole domain — it is the first page a person meets (DGO-1595)
+    - traefik.http.routers.authentik-https.middlewares=hsts@file
     - traefik.http.services.authentik-server.loadbalancer.server.port=9000
     # traefik's own probe of the one sign-in server marks it down — 503 for every sign-in — on a single slow answer.
     # It reads the office's probe knobs like every docker healthcheck here (perf-profiles.yml: 90s/30s on a starved
@@ -158,7 +160,7 @@ services:
       AUTHENTIK_DISABLE_UPDATE_CHECK: ${AUTHENTIK_DISABLE_UPDATE_CHECK:-true}
       AUTHENTIK_DISABLE_STARTUP_ANALYTICS: ${AUTHENTIK_DISABLE_STARTUP_ANALYTICS:-true}
       # How many celery processes the worker forks (authentik's default: 2). Each is ~190 MiB
-      # resident — measured 2026-10-26 on fireplace (2 vCPU / 8 GiB, one admin): 327 MiB for the
+      # resident — measured 2026-10-26 on examplef (2 vCPU / 8 GiB, one admin): 327 MiB for the
       # pair, the fourth-largest resident set on a box 4 GiB into swap. Sized by the performance
       # profile (platform/profiles/perf-profiles.yml); a profile that says nothing keeps the default.
       AUTHENTIK_WORKER__CONCURRENCY: ${AUTHENTIK_WORKER_CONCURRENCY:-2}
@@ -219,7 +221,7 @@ services:
       - /outpost-ready.py
       # 10 s is the bring-up cadence: the rest of the stack waits on this container being healthy.
       # After bring-up it is `sleep infinity`, and the probe is a python interpreter plus an API
-      # call to the sign-in — at 10 s, 8 640 a day. Measured 2026-10-26 on fireplace (2 vCPU): 877
+      # call to the sign-in — at 10 s, 8 640 a day. Measured 2026-10-26 on examplef (2 vCPU): 877
       # throttled periods in 8 minutes at its 0.15 cap, the busiest "idle" container on the box.
       # The performance profile of a small machine sets a minute; the default keeps the cadence.
       interval: ${AUTHENTIK_BOOTSTRAP_PROBE_INTERVAL:-10s}

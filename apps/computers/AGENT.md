@@ -15,8 +15,8 @@ owner has approved the public half in that machine's `authorized_keys`.
 ```bash
 # the fleet, with live state (hostname/os/load/mem/disk) — ?probe=0 skips the SSH round trip
 curl -s http://computers:8977/api/computers
-# run a command ON a machine — the only correct way to act on the host or on a remote server
-curl -s -X POST http://computers:8977/api/computers/<id>/exec \
+# run a command ON a machine (a write: it needs the token, DGO-1304; never print it, no curl -v)
+curl -s -X POST http://computers:8977/api/computers/<id>/exec -H "authorization: Bearer $DSH_COMPUTERS_EXEC_TOKEN" \
      -H 'content-type: application/json' -d '{"command":"df -h /","timeout":60}'
 curl -s http://computers:8977/api/computers/<id>/status
 ```
@@ -43,30 +43,8 @@ curl -s http://computers:8977/api/hosts/vps1/security/api/summary?hours=24  # it
 
 ## Moving a volume between two machines — `stream`
 
-```bash
-# a docker volume from one machine to another, RESUMABLE and with live progress.
-# `transfer` is the same door under its older name.
-curl -s -X POST http://computers:8977/api/computers/<src>/stream -H 'content-type: application/json' \
-     -d '{"to":"<dst>","volume":"drive_uploads","dest_volume":"deployment-hacohen_drive_uploads"}'
-curl -s http://computers:8977/api/transfers/<job>          # phase, bytes, done_bytes, total, percent, rate, eta
-curl -s -X POST http://computers:8977/api/transfers/<job>/cancel   # pause: the staging file stays
-```
-
-Body flags: `restart` (wipe a previous attempt and start over), `verify` (sha256 of the archive against
-the source, default `true`), `measure` (measure the archive on the source first, default `true`),
-`resume:false` (stream straight into the destination volume — no staging file, so **no resume**, and it
-is the only shape that fits when the destination cannot hold the archive twice).
-
-How it behaves, and the three things an `ok` means:
-
-- The archive in flight lives in ONE file on the destination (`/var/lib/bina-transfer/<src>__<dst>.tar`);
-  the destination's volume is untouched until the archive is complete and verified.
-- A dropped link — or this app restarting — resumes at that file's own size (`tail -c +N+1` at the
-  source, `cat >>` at the destination). `cancel` is therefore a **pause**, not a discard.
-- A resume is refused when the source volume changed since the first attempt (its fingerprint is stored
-  beside the staging file); `restart:true` is the deliberate override.
-- `ok` = the staging file reached the measured total, its bytes matched the source's own `tar`
-  byte-for-byte, and it extracted. Fewer than all three is reported as a failure, not as "mostly done".
+`POST /api/computers/<src>/stream {"to","volume","dest_volume"}` moves a volume, resumable and verified;
+`GET /api/transfers/<job>` follows it, `POST …/cancel` pauses it. Its flags and what an `ok` means: README.md.
 
 ## Sharing a computer with another office — `shares`
 
@@ -74,6 +52,24 @@ How it behaves, and the three things an `ok` means:
 machine over HTTPS and returns the `door` (`wss://<host>/share/<token>`, shown ONCE); the borrower
 adds it with `POST /api/computers {"door",…}` and exec/probe/stream then go through it. Revoke:
 `DELETE /api/shares/<sid>` (lists at `GET /api/shares`). No SSO on that one path — never widen it.
+
+## A terminal on a machine — the shell routes and the screen (DGO-1800)
+
+- `POST /api/computers/<id>/shell` opens a login shell; `…/shell/<sid>/input`, `GET …/shell/<sid>?cursor=<n>`,
+  `DELETE …/shell/<sid>`. The calls and their limits: README.md.
+- The screen is this app's: `/a/computers/terminal?machine=<id>` — «טרמינל» on a machine's row and in the host
+  view. (apps/terminal relayed it from its own container, which this app rightly does not believe; it is retired.)
+- Writes pass the same caller check as `exec`; a session belongs to whoever opened it (another caller's answers as
+  one that does not exist); a caller that claims an office and fails the claim is refused in every mode.
+
+## Machines a linked office shares — `<machine>.<office>` (DGO-553)
+
+- `GET /api/computers` lists, from each linked office, the ONE machine it gives (its own, `computer_local-local`) as
+  `computer_local-local.<office>`, and `shared_from` says which office answered and which did not.
+- Anything for `/api/computers/<machine>.<office>/…` goes to that office through the link's door and is answered as
+  it answers — only a command, a terminal and its poll, from an identified caller; a request that came through a
+  door is not passed on to a third office. That office runs it with ITS key under ITS caller check.
+- `./bbox computers callers` counts the reads other offices make here through the link (README.md).
 
 ## Traps
 

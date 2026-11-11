@@ -27,13 +27,16 @@ _state=platform.state.yaml; [ -f "${_state}" ] || _state=platform.state.default.
 _on() { [ -f "${_state}" ] && grep -Eq "^  $1:[[:space:]]*\{[^}]*(enabled:[[:space:]]*true|state:[[:space:]]*enabled)" "${_state}"; }
 IDENTITY=authentik
 if _on forward-auth && ! _on authentik; then IDENTITY=forward-auth; fi
-OVR='DEPLOYMENT_NAME|DEPLOYMENT_DOMAIN|DEV_DOMAIN|AUTH_EXTERNAL_URL|AUTH_PROTOCOL|AUTHENTIK_SECRET_KEY|AUTHENTIK_POSTGRES_PASSWORD|AUTHENTIK_BOOTSTRAP_USER|AUTHENTIK_BOOTSTRAP_PASSWORD|AUTHENTIK_BOOTSTRAP_TOKEN|AUTHENTIK_BOOTSTRAP_EMAIL|POSTGRES_PASSWORD|REDIS_PASSWORD|N8N_USER_MANAGEMENT_JWT_SECRET|N8N_ENCRYPTION_KEY|N8N_OWNER_EMAIL|N8N_OWNER_PASSWORD|N8N_RUNNERS_AUTH_TOKEN|N8N_SECURE_COOKIE|GLITCHTIP_SECRET_KEY|GLITCHTIP_DB_PASSWORD|GLITCHTIP_ENABLE_ORG_CREATION|GLITCHTIP_ADMIN_EMAIL|GLITCHTIP_ADMIN_PASSWORD|PORTAINER_ADMIN_PASSWORD|BROWSER42_MCP_TOKEN|BROWSER42_VNC_PASSWORD|DRIVE_BACKEND|GMAIL_BACKEND|GMAIL_IMAP_MODE|LOCALMAIL_USER|LOCALMAIL_PW|SUPABASE_JWT_SECRET|SUPABASE_ANON_KEY|SUPABASE_SERVICE_KEY|SUPABASE_DB_PASSWORD|SUPABASE_DASHBOARD_PASSWORD|SUPABASE_COOKIE_KEY|PLANE_DB_PASSWORD|PLANE_S3_SECRET_KEY|PLANE_OWNER_EMAIL|PLANE_OWNER_PASSWORD|PLANE_OWNER_FIRSTNAME|PLANE_OWNER_LASTNAME|PERFORMANCE_PROFILE|INCOMING_DOCS_SUPABASE_URL|APITOOLS_DB_HOST|FORWARD_AUTH_SECRET|DGO_IDENTITY|CHAT_AUTH_PASS|BS_WEBHOOK_PASS|N8N_WEBHOOK_PASS|SETTINGS_AUTH_PASS|MCP_AUTH_TOKEN|AGENT_RUNNER_TOKEN|DISPATCHER_TOKEN|N8N_API_KEY|CONNECTIONS_ROOT_KEY|OPENHANDS_JWT_SECRET|SUPABASE_POSTGRES_PASSWORD|SUPABASE_AUTHENTICATOR_PASSWORD'
+OVR='BUSINESS_NAME|DEPLOYMENT_NAME|DEPLOYMENT_DOMAIN|DEV_DOMAIN|AUTH_EXTERNAL_URL|AUTH_PROTOCOL|AUTHENTIK_SECRET_KEY|AUTHENTIK_POSTGRES_PASSWORD|AUTHENTIK_BOOTSTRAP_USER|AUTHENTIK_BOOTSTRAP_PASSWORD|AUTHENTIK_BOOTSTRAP_TOKEN|AUTHENTIK_BOOTSTRAP_EMAIL|POSTGRES_PASSWORD|REDIS_PASSWORD|N8N_USER_MANAGEMENT_JWT_SECRET|N8N_ENCRYPTION_KEY|N8N_OWNER_EMAIL|N8N_OWNER_PASSWORD|N8N_RUNNERS_AUTH_TOKEN|N8N_SECURE_COOKIE|GLITCHTIP_SECRET_KEY|GLITCHTIP_DB_PASSWORD|GLITCHTIP_ENABLE_ORG_CREATION|GLITCHTIP_ADMIN_EMAIL|GLITCHTIP_ADMIN_PASSWORD|PORTAINER_ADMIN_PASSWORD|BROWSER42_MCP_TOKEN|BROWSER42_VNC_PASSWORD|DRIVE_BACKEND|GMAIL_BACKEND|GMAIL_IMAP_MODE|LOCALMAIL_USER|LOCALMAIL_PW|SUPABASE_JWT_SECRET|SUPABASE_ANON_KEY|SUPABASE_SERVICE_KEY|SUPABASE_DB_PASSWORD|SUPABASE_DASHBOARD_PASSWORD|SUPABASE_COOKIE_KEY|PLANE_DB_PASSWORD|PLANE_S3_SECRET_KEY|PLANE_OWNER_EMAIL|PLANE_OWNER_PASSWORD|PLANE_OWNER_FIRSTNAME|PLANE_OWNER_LASTNAME|PERFORMANCE_PROFILE|INCOMING_DOCS_SUPABASE_URL|APITOOLS_DB_HOST|FORWARD_AUTH_SECRET|DGO_IDENTITY|CHAT_AUTH_PASS|BS_WEBHOOK_PASS|N8N_WEBHOOK_PASS|SETTINGS_AUTH_PASS|MCP_AUTH_TOKEN|AGENT_RUNNER_TOKEN|DISPATCHER_TOKEN|N8N_API_KEY|CONNECTIONS_ROOT_KEY|OPENHANDS_JWT_SECRET'
 # OVR is every key the block's echo lines write (the *_BASE_URL/*_ROOT_URL/FORGE_* lines it derives
 # have filters of their own): .env.ex's line for it is dropped, or the key is in .env twice
 # and a reader that takes the FIRST line (perf-profile-apply) gets the template's empty value. 5b663f1d
 # put PERFORMANCE_PROFILE= in .env.ex, and from then on no .env made here applied its profile — the
 # phone's machine ran every native CPU cap and 10 s probes under emulation (DGO-1084). Checked below.
 {
+  # CI_BUSINESS_NAME: the office's name, which .env.ex leaves EMPTY on purpose (an office with a domain writes
+  # its own; `bbox run` refuses an empty one). A generated office is a local one or CI's, and names itself.
+  echo "BUSINESS_NAME=${CI_BUSINESS_NAME:-Local office}"
   # CI_DEPLOYMENT_NAME: the container-name suffix. "ci" on the runners; the macOS engine passes
   # "local" so a laptop stack is not labelled as a CI one (`n8n-local`, not `n8n-ci`).
   echo "DEPLOYMENT_NAME=${CI_DEPLOYMENT_NAME:-ci}"
@@ -111,7 +114,7 @@ OVR='DEPLOYMENT_NAME|DEPLOYMENT_DOMAIN|DEV_DOMAIN|AUTH_EXTERNAL_URL|AUTH_PROTOCO
   echo "DGO_IDENTITY=${CI_IDENTITY:-${IDENTITY}}"
   echo "N8N_USER_MANAGEMENT_JWT_SECRET=$(rnd)"
   echo "N8N_ENCRYPTION_KEY=${N8N_ENCRYPTION_KEY_SECRET:-$(rnd)}"
-  echo "N8N_OWNER_EMAIL=${ADMIN:-person5@example.com}"
+  echo "N8N_OWNER_EMAIL=${ADMIN:-person6@example.com}"
   echo "N8N_OWNER_PASSWORD=Ci$(rnd)9X"
   echo "N8N_RUNNERS_AUTH_TOKEN=$(rnd)"
   # CI is http-only (*.localhost over http): n8n's secure cookie would block the UI.
@@ -119,7 +122,7 @@ OVR='DEPLOYMENT_NAME|DEPLOYMENT_DOMAIN|DEV_DOMAIN|AUTH_EXTERNAL_URL|AUTH_PROTOCO
   echo "GLITCHTIP_SECRET_KEY=$(rnd)"
   echo "GLITCHTIP_DB_PASSWORD=$(rnd)"
   echo "GLITCHTIP_ENABLE_ORG_CREATION=true"
-  echo "GLITCHTIP_ADMIN_EMAIL=${ADMIN:-person5@example.com}"
+  echo "GLITCHTIP_ADMIN_EMAIL=${ADMIN:-person6@example.com}"
   # Random always, CI included. An office made without an admin address got a FIXED password here,
   # published with this file; the HP was made that way (DGO-980). Every reader takes it from .env.
   echo "GLITCHTIP_ADMIN_PASSWORD=G$(rnd)9x!"
@@ -130,8 +133,8 @@ OVR='DEPLOYMENT_NAME|DEPLOYMENT_DOMAIN|DEV_DOMAIN|AUTH_EXTERNAL_URL|AUTH_PROTOCO
   # shared them with every other and with whoever holds the template (DGO-1220, measured 2026-11-03:
   # 10 of them in each fresh .env, and vps1 runs on them). Minted per office like the rest. N8N_API_KEY
   # is n8n's to issue (apps/n8n/hooks/push-app ensure_api_key makes one when there is none), the vault's
-  # root key is secret-zero (platform-base/connections), and the two dead SUPABASE_*_PASSWORD keys are
-  # stripped above, so keygen.py below writes fresh ones.
+  # root key is secret-zero (platform-base/connections), and the two SUPABASE_*_PASSWORD keys are written by
+  # nothing since DGO-1495: no service read them (every database role takes SUPABASE_DB_PASSWORD).
   echo "CHAT_AUTH_PASS=$(rnd)"
   echo "BS_WEBHOOK_PASS=$(rnd)"
   echo "N8N_WEBHOOK_PASS=$(rnd)"
@@ -161,7 +164,7 @@ if [ -n "${OFFICE_DOMAIN:-}" ]; then echo "LOCALMAIL_PW=$(rnd)"; else echo "LOCA
   # lines: the first is quoted as it stands by packaging/dgo (engine.go ciEnvRE, oracle_test.go).
   [ -n "${OFFICE_DOMAIN:-}" ] || echo "PERFORMANCE_PROFILE=ci-small"
   [ -z "${OFFICE_DOMAIN:-}" ] || echo "PERFORMANCE_PROFILE="
-  # supabase compose reads THESE names (keygen writes SUPABASE_POSTGRES_PASSWORD — different var)
+  # supabase compose reads THESE names; every database role's password is SUPABASE_DB_PASSWORD (roles.sql)
   echo "SUPABASE_DB_PASSWORD=$(rnd)"
   echo "SUPABASE_DASHBOARD_PASSWORD=$(rnd)"
   echo "SUPABASE_COOKIE_KEY=$(rnd)"
@@ -175,7 +178,7 @@ if [ -n "${OFFICE_DOMAIN:-}" ]; then echo "LOCALMAIL_PW=$(rnd)"; else echo "LOCA
   # so a fresh instance is unusable until an admin exists: the hook creates one from these values on
   # the first `bbox run`, which is what makes Plane work out of the box like every other app here.
   # The email is the same human as everywhere else, so it defaults to n8n's owner.
-  echo "PLANE_OWNER_EMAIL=${ADMIN:-person5@example.com}"
+  echo "PLANE_OWNER_EMAIL=${ADMIN:-person6@example.com}"
   echo "PLANE_OWNER_PASSWORD=Pl$(rnd)9X"
   echo "PLANE_OWNER_FIRSTNAME=${ADMIN:+Admin}"
   echo "PLANE_OWNER_LASTNAME="
@@ -190,9 +193,11 @@ if [ -n "${OFFICE_DOMAIN:-}" ]; then echo "LOCALMAIL_PW=$(rnd)"; else echo "LOCA
 # A key twice means OVR is behind .env.ex again: said, with the keys (a warning for now, not a refusal).
 twice="$(grep -oE '^[A-Za-z0-9_]+=' .env | sort | uniq -d | tr -d '=' | tr '\n' ' ' || true)"
 [ -z "${twice}" ] || echo "ci-env.sh: WARNING — .env holds these keys twice, the template's line and this script's; add them to OVR: ${twice}" >&2
-# real supabase JWTs (the .env.ex placeholders are not valid tokens — storage rejects them);
-# keygen fills ONLY missing keys, which is why the placeholders are stripped above.
+# the Supabase JWT secret and its two JWTs, signed with it (keygen fills a key that is missing or empty).
 python3 platform-base/postgres/hooks/keygen.py
+# …and every other secret of the office that the lines above do not write (the template carries them all
+# empty since DGO-1220): the one table, the one generator, the same one bbox run and every installer use.
+python3 scripts/env-secrets.py --env .env --fill
 python3 scripts/perf-profile-apply || true
 # The file is named in full: "CI .env generated (261 keys)." was true on the day it replaced a live
 # office's file, and gave whoever read the transcript no hint of which file that had been.

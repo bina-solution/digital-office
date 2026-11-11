@@ -84,7 +84,7 @@ def key_blob(public_key: str) -> str | None:
     return blob if PUBKEY_RE.match(blob) else None
 
 
-# A key appended to a file whose last line has no newline joins THAT line, as its comment: on FPG's server
+# A key appended to a file whose last line has no newline joins THAT line, as its comment: on EXF's server
 # (2026-11-02) office-key@hp sat inside office-key@local's line and the HP was never authorized (DGO-1231).
 # So every append here first ends the file's last line, when it has one that is not ended.
 END_LAST_LINE = '{ [ -z "$(tail -c1 ~/.ssh/authorized_keys 2>/dev/null)" ] || echo >> ~/.ssh/authorized_keys; }'

@@ -7,18 +7,112 @@ name: gates-hosted
 # (2026-10-31): GitHub's hosted runner, «this mac stays the command center», with the Dell's runner paused.
 # The same proof the release probes ran on the MacBook's engine: python 3.12 with PyYAML, node for the .mjs
 # tests (else G72 reads them NOT RUN), the n8n tooling's own packages for its compile gate. Only on request:
-# a push to mac-dgo or dgo-stable whose head commit says "[gates]".
+# a push to mac-dgo or dgo-stable whose head commit ASKS for it (see `scripts/ci/gates-asked`).
 
 on:
   push:
     branches: [mac-dgo, dgo-stable]
+  workflow_dispatch:
+
+# ONE GATES JOB AND ONE CARRIER JOB PER BRANCH, AND NO RUNNING PROOF IS EVER THE ONE THAT DIES, on any branch
+# (since 2026-11-10, DGO-1797): a newer asking push replaces only the job still WAITING in the group. Stopping a
+# superseded mac-dgo proof where it stood was tried, and with seven lanes pushing every ~1.5 minutes it left the
+# branch with almost no verdict (since 12:00Z that day: 5 of 41 gates runs, 36 cancelled, almost all before a step
+# ran). The price, chosen: a running mac-dgo proof now drains — and a single self-hosted runner has no queue
+# priorities, so a dgo-stable job queued after it waits for it. dgo-stable's own rule is unchanged: its RUNNING
+# proof is never cancelled (DGO-1619), a WAITING one can be replaced by a newer stable run that asks too — whose
+# tree contains it. `decide` is grouped on an office branch since 2026-11-11 (its own comment, below): ungrouped,
+# every asking push queued one on the one runner behind a running proof (7 waiting at 23:45Z behind batch 36's).
+#
+# The group sits on the JOBS that run a proof (gates, carrier), not on the workflow: at the workflow level
+# EVERY push joined it — one that asked for no gates too — so on a branch six lanes push to, a mac-dgo
+# proof was cancelled by the next lane's docs commit before it could finish (the release's merge of batch
+# 33, d67f16eb, 2026-11-10: cancelled four minutes in). A job whose `if` answers no never queues, so it
+# never takes the group: only a run that RUNS the gates supersedes one that does.
 
 permissions:
   contents: read
 
 jobs:
+  # THE QUESTION, asked once, in git's own words. It used to be `contains(head_commit.message,
+  # '[gates]')` — a substring — so a commit that merely QUOTED the marker started a full gates run
+  # (7bb4397b, 2026-11-09). The marker is a TRAILER now (`Gates: run`), parsed by
+  # `git interpret-trailers`, and the old `[gates]` ending a subject is still accepted for one release,
+  # on dgo-stable and on an office branch, with a warning — every batch and six lanes still end their
+  # subjects with it (DGO-1619 closes that window: then `[gates]` is refused on both).
+  #
+  # It costs the runner a job on every push to those two branches — since 2026-11-10 a sparse, blob-less
+  # checkout of the one script it runs, no longer the ~570 MB tree that let 25 runs pile up behind it on
+  # the Dell (DGO-1797) — so it does not run at all unless the message could plausibly ask: `Gates: run`
+  # (not any `Gates:` — «gates: …» subjects passed and asked nothing, 13 in 300 commits), or the legacy marker
+  # (on BOTH branches for one release: six lanes still end their subjects with it, and a tightening is
+  # staged — warn first, then refuse, AGENTS.md rule 8; release lane, 2026-11-10). That pre-filter is a
+  # cheap substring and is NOT the decision: the decision is gates-asked, and a marker quoted in prose
+  # passes the pre-filter and still answers no.
+  decide:
+    if: >-
+      github.event_name == 'workflow_dispatch'
+      || contains(github.event.head_commit.message, 'Gates: run')
+      || contains(github.event.head_commit.message, '[gates]')
+    # AT MOST TWO decides per office branch — the one holding the group (queued for the runner, or running) and
+    # one pending — where every asking push used to queue its own (measured 2026-11-11 23:45Z: with lanes pushing
+    # `[gates]` every ~1.5 minutes, 7 mac-dgo decides stood on the Dell's one runner behind dgo-stable batch 36's
+    # gates, and drained before its green job). A newer push to the branch replaces the PENDING one, whose tree it
+    # holds; the holder is never replaced. The price, chosen: a push that only QUOTES the marker can replace a
+    # pending decide that asked, and that stretch of the branch is proved by the next asking push — on mac-dgo
+    # usually minutes, not a bound (a burst can end on a quote). A replaced run reads «cancelled», its jobs skipped.
+    # Not grouped — each run its own group, nothing replaced: dgo-stable (every push there is a batch that asks)
+    # and a hand-run (`workflow_dispatch`: an explicit ask a later push must not drop; the second reader).
+    concurrency:
+      group: ${{ (github.ref == 'refs/heads/dgo-stable' || github.event_name == 'workflow_dispatch') && format('gates-hosted-decide-run-{0}', github.run_id) || format('gates-hosted-decide-{0}', github.ref) }}
+      cancel-in-progress: false
+    runs-on: [self-hosted, portable]
+    # 5 for the checkout + up to 45 that ops/prejob_waitfree.sh may hold the runner (memory, heat, a
+    # fresh boot) — the same allowance the carrier and green jobs carry.
+    timeout-minutes: 50
+    outputs:
+      gates: ${{ steps.marker.outputs.gates }}
+    steps:
+      # The one file it runs, not the tree: the commit (for its message) and scripts/ci/gates-asked's blob,
+      # sparse and blob-less, in a directory of its own — the gates job's full checkout of the workspace is
+      # never turned sparse or partial by it.
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          filter: blob:none
+          sparse-checkout: scripts/ci/gates-asked
+          sparse-checkout-cone-mode: false
+          path: .decide
+          persist-credentials: false
+
+      - id: marker
+        name: Does this commit ask for the gates?
+        run: |
+          set -euo pipefail
+          if [ "${GITHUB_EVENT_NAME}" = "workflow_dispatch" ]; then
+            echo "gates=true" >> "$GITHUB_OUTPUT"
+            echo "::notice::asked for by hand (workflow_dispatch)"
+            exit 0
+          fi
+          # true|false on stdout, the reason it answered on stderr — a skipped run must be able to
+          # say WHICH path answered (the trailer? the one-release legacy marker?), or nobody can
+          # close the one-release window with evidence.
+          reason="$(mktemp)"
+          answer="$(git -C .decide log -1 --format=%B | bash .decide/scripts/ci/gates-asked --branch "${GITHUB_REF_NAME}" 2>"${reason}")"
+          echo "gates=${answer}" >> "$GITHUB_OUTPUT"
+          echo "::notice::gates=${answer} — $(tr -d '\n' < "${reason}") (head ${GITHUB_SHA}, branch ${GITHUB_REF_NAME})"
+          # the legacy marker answered: say so where the lane will see it, so the window can close
+          if grep -q "^reason=legacy" "${reason}"; then
+            echo "::warning::this commit asked for the gates with «[gates]» in its subject — still honoured for one release; write the trailer «Gates: run» on its own line above Co-Authored-By"
+          fi
+
   gates:
-    if: contains(github.event.head_commit.message, '[gates]')
+    needs: decide
+    if: needs.decide.outputs.gates == 'true'
+    # the running proof finishes; a newer asking push replaces only the one still waiting (the header above)
+    concurrency:
+      group: gates-hosted-gates-${{ github.ref }}
+      cancel-in-progress: false
     runs-on: [self-hosted, portable]
     timeout-minutes: 90
     steps:
@@ -51,7 +145,11 @@ jobs:
   # build, and go-test.yml runs on the Dell's runner (paused since 2026-10-21, DGO-830) over other modules:
   # a change to the carrier had no gate at all (measured 2026-11-01, DGO-1097). Standard library only.
   carrier:
-    if: contains(github.event.head_commit.message, '[gates]')
+    needs: decide
+    if: needs.decide.outputs.gates == 'true'
+    concurrency:
+      group: gates-hosted-carrier-${{ github.ref }}
+      cancel-in-progress: false
     runs-on: [self-hosted, portable]
     timeout-minutes: 60   # 15 for the job + up to 45 that ops/prejob_waitfree.sh may hold it (memory, heat, a fresh boot)
     defaults:
@@ -74,3 +172,44 @@ jobs:
           unformatted="$(gofmt -l .)"
           if [ -n "${unformatted}" ]; then echo "::error::not gofmt-formatted: ${unformatted}"; gofmt -d .; exit 1; fi
           CGO_ENABLED=0 go test -count=1 -timeout 10m ./...
+
+  # GREEN AS GIT DATA (r030-205, DGO-1233). An office follows dgo-stable by taking its newest commit whose gates
+  # passed (scripts/follow.sh). Reading that from this workflow's runs takes a GitHub token, and an office that
+  # reaches git only through a linked office's git proxy (the HP, through the Mac's) has none. So when both jobs
+  # pass on dgo-stable, refs/green/dgo-stable is moved to that commit, and an office that cannot read this
+  # workflow's runs reads it through whatever git path it has. Forward only: a push without --force of a commit that
+  # does not descend from the ref is refused, so a late run of an older commit never moves it back (said). Any other
+  # refusal fails THIS job, loudly — never the run: continue-on-error keeps the gates' own verdict, which is what
+  # the offices that read the API take a commit on. The one job that writes.
+  green:
+    needs: [decide, gates, carrier]
+    # a PUSH only: a hand-run (`workflow_dispatch`) proves the gates, and publishing refs/green from a
+    # hand-run is a different act — the offices that follow it treat that ref as "this batch passed".
+    if: github.event_name == 'push' && github.ref == 'refs/heads/dgo-stable' && needs.decide.outputs.gates == 'true' 
+    runs-on: [self-hosted, portable]
+    continue-on-error: true
+    timeout-minutes: 60   # 5 for the push + up to 45 that ops/prejob_waitfree.sh may hold it (as the carrier's)
+    permissions:
+      contents: write
+    steps:
+      # each step bounded on its own: a step past its limit FAILS (which continue-on-error covers), where the job's own
+      # limit would CANCEL the run and leave the gates' verdict unread
+      - uses: actions/checkout@v4
+        timeout-minutes: 10
+        with:
+          fetch-depth: 0
+          persist-credentials: true   # the push below authenticates with this job's own token
+
+      - name: refs/green/dgo-stable → this commit
+        timeout-minutes: 5
+        run: |
+          set -uo pipefail
+          if out="$(git push origin "${GITHUB_SHA}:refs/green/dgo-stable" 2>&1)"; then
+            echo "refs/green/dgo-stable is ${GITHUB_SHA}"
+          elif grep -q 'non-fast-forward' <<<"${out}"; then
+            echo "::notice::refs/green/dgo-stable already holds a newer green commit; ${GITHUB_SHA} is not moved over it"
+          else
+            printf '%s\n' "${out}"
+            echo "::error::refs/green/dgo-stable could not be moved to ${GITHUB_SHA}: an office that reads it would stay behind"
+            exit 1
+          fi

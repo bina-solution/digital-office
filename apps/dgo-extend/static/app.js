@@ -60,6 +60,8 @@ const BINA_ICONS = {
   box:       '<path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/>',
   shield:    '<path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/>',
   external:  '<path d="M15 3h6v6"/><path d="M10 14 21 3"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>',
+  globe:     '<circle cx="12" cy="12" r="10"/><path d="M2 12h20"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>',
+  logout:    '<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="m16 17 5-5-5-5"/><path d="M21 12H9"/>',
   chevron:   '<path d="m6 9 6 6 6-6"/>',
   back:      '<path d="M5 12h14"/><path d="m12 5 7 7-7 7"/>',
   layers:    '<path d="m12 2 9 5-9 5-9-5z"/><path d="m3 12 9 5 9-5"/><path d="m3 17 9 5 9-5"/>',
@@ -167,6 +169,7 @@ var binaAsk, binaTell;
     + "@media (pointer:coarse){.bask-btn{height:44px}.bask-field input{height:44px}}"
     + "@media (max-height:399px){.bask{padding:8px}.bask-card{padding:12px}.bask-acts{margin-top:10px}}"   // the side menu's own short frame
     + "#bina-tell{position:fixed;inset-block-end:16px;inset-inline-start:16px;z-index:2147483001;display:grid;gap:8px;max-width:min(420px,calc(100vw - 32px))}"
+    + "#bina-tell[data-at~=top]{inset-block-start:16px;inset-block-end:auto}#bina-tell[data-at~=end]{inset-inline-start:auto;inset-inline-end:16px}"   // where it covers nothing (place())
     + ".btell{--c:var(--ok);padding:10px 14px;border-radius:12px;background:color-mix(in srgb,var(--c) 14%,var(--surface));color:var(--ink);border:1px solid color-mix(in srgb,var(--c) 38%,var(--surface));border-inline-start:4px solid var(--c);font:13px/1.45 var(--font,system-ui,sans-serif);box-shadow:var(--shadow-lg);cursor:pointer;text-align:start}"
     + ".btell.warn{--c:var(--lime)}.btell.bad{--c:var(--red)}"   // --ok and --red, not the bare hues: they are the steps that are lifted on the dark ground
     + ".btell small{display:block;margin-top:2px;font-size:11.5px;color:var(--muted);overflow-wrap:anywhere;unicode-bidi:plaintext}"
@@ -271,6 +274,47 @@ var binaAsk, binaTell;
     });
   };
 
+  // The notice never sits on a control of the page (DGO-618): it keeps its corner while that covers nothing, and
+  // otherwise takes the first corner that does — at every frame size, a desktop window of 380 x 260 included,
+  // where the bottom corner is where a window keeps its buttons. With no corner free at its full width, the corners
+  // again at two thirds and at half of it (a narrower notice fits over a title, beside a window's ✕); with none
+  // free at all, the place that covers fewest.
+  var CONTROLS = "button,a[href],input:not([type=hidden]),select,textarea,summary,[role=button],[tabindex]:not([tabindex='-1'])";
+  function covered(box) {
+    var b = box.getBoundingClientRect(), n = 0;
+    if (b.width < 2 || b.height < 2) return 0;
+    doc.querySelectorAll(CONTROLS).forEach(function (c) {
+      var r = c.getBoundingClientRect();     // the cheap test first: on a screen of thousands of rows most are far away
+      if (Math.min(b.right, r.right) - Math.max(b.left, r.left) <= 1 || Math.min(b.bottom, r.bottom) - Math.max(b.top, r.top) <= 1) return;
+      // inside the notice, in a part of the page made inert (a window the page put over it), or not drawn: not a control here
+      if (box.contains(c) || c.closest("[inert]") || (c.checkVisibility && !c.checkVisibility({ checkVisibilityCSS: true }))) return;
+      n++;
+    });
+    return n;
+  }
+  function put(box, at, w) {
+    if (at) box.setAttribute("data-at", at); else box.removeAttribute("data-at");
+    box.style.maxWidth = w;
+    // a top spot lets go of the bottom, written on the element: a page's own rule that lifts the notice off its bar
+    // (`body:has(…) #bina-tell{inset-block-end:…}`) out-ranks the attribute, and the box stretched to the full height
+    box.style.insetBlockEnd = at.indexOf("top") < 0 ? "" : "auto";
+  }
+  function place(box) {
+    var best = null;
+    ["", "min(280px,calc((100vw - 32px) * .66))", "min(210px,calc((100vw - 32px) * .5))"].some(function (w) {
+      return ["", "end", "top", "top end"].some(function (at) {
+        put(box, at, w);
+        var n = covered(box);
+        if (!best || n < best.n) best = { at: at, w: w, n: n };
+        return n === 0;
+      });
+    });
+    put(box, best.at, best.w);
+  }
+  var placing = 0;
+  function replace() { var box = doc.getElementById("bina-tell"); if (box && box.firstChild) place(box); }
+  window.addEventListener("resize", function () { clearTimeout(placing); placing = setTimeout(replace, 120); });
+
   // The third word is how long the notice stays (ms) — or what more it carries: { ms, more, act, stay }.
   //   more  the service's own sentence, on a line of its own under the notice's words
   //   act   [label, fn] — one way on from the notice (an undo, a refresh): pressing it runs fn and takes the notice down
@@ -287,12 +331,13 @@ var binaAsk, binaTell;
     if (o.act) {
       var go = el("button", "", o.act[0]);
       go.setAttribute("type", "button");
-      go.addEventListener("click", function (e) { e.stopPropagation(); n.remove(); o.act[1](); });
+      go.addEventListener("click", function (e) { e.stopPropagation(); n.remove(); replace(); o.act[1](); });
       n.appendChild(go);
     }
-    n.addEventListener("click", function () { n.remove(); });
+    n.addEventListener("click", function () { n.remove(); replace(); });
     box.appendChild(n);
-    if (!o.stay) setTimeout(function () { n.remove(); }, o.ms || (kind === "bad" ? 9000 : 5200));
+    place(box);
+    if (!o.stay) setTimeout(function () { n.remove(); replace(); }, o.ms || (kind === "bad" ? 9000 : 5200));
     return n;
   };
 })();
@@ -370,7 +415,11 @@ async function loadContext() {
   // …and the button the sentence speaks of says the same thing: it was drawn exactly like its
   // enabled neighbour, right over a note that it does nothing here.
   $("btnAdd").disabled = !!h.error;
-  if (h.error) $("btnAdd").title = "אינה זמינה מכאן: ללשכה הזאת אין גישה למחשב שהיא רצה עליו";
+  if (h.error) $("btnAdd").title = h.refused ? h.error : "אינה זמינה מכאן: ללשכה הזאת אין גישה למחשב שהיא רצה עליו";
+  if (h.refused) {   // an office that refuses linking in words (a phone, DGO-1328): its own sentence, not the one below
+    $("home").innerHTML = `<div class="callout warn subline">${ticks(h.error)}</div>`;
+    return;
+  }
   if (h.error) {
     $("home").innerHTML = `<div class="callout warn subline" title="${esc(h.error)}"><b>ללשכה הזאת אין גישה למחשב שהיא רצה עליו.</b>
       לכן הגרסה שלה אינה ידועה ו„התקנת לשכה על מחשב” אינה זמינה מכאן. צימוד לשכה עובד בלי זה, ואפליקציה חדשה של לשכה מחוברת מופיעה כאן כאריח מעצמה.</div>`;
@@ -379,9 +428,9 @@ async function loadContext() {
   $("home").innerHTML = `<div class="meta">
     <div><div class="k">מאגר</div><div class="v mono small">${repoCell(h.repo)}</div></div>
     <div><div class="k">ענף</div><div class="v mono">${esc(h.branch)}</div></div>
-    <div><div class="k">גרסה</div><div class="v mono">${esc((h.commit || "").slice(0, 10))}</div></div>
+    <div><div class="k">גרסה</div><div class="v" title="${esc(h.commit || "")}"><bdi>${esc(h.subject || "—")}</bdi></div></div>
     <div><div class="k">פורסמה ל־origin</div><div class="v">${h.pushed ? "כן" : "<span style='color:var(--red)'>לא — לשכה מרוחקת לא תוכל למשוך אותה</span>"}</div></div>
-  </div><div class="small muted subline">${esc(h.subject || "")}${h.dirty ? ` · ${h.dirty} שינויים שלא נשמרו ב־git (לא יגיעו ללשכה מרוחקת)` : ""}</div>`;
+  </div>${h.dirty ? `<div class="small muted subline">${h.dirty} שינויים שלא נשמרו ב־git (לא יגיעו ללשכה מרוחקת)</div>` : ""}`;
 }
 
 async function revealLogin(oid, btn) {
@@ -472,7 +521,8 @@ function pairedCard(p, link, giving) {
 async function loadList() {
   const [{ items: all }, pairs, link, giving] = await Promise.all([
     api("api/office"),
-    api("api/pair").catch(() => ({ items: [] })),          // an office on older code has no pairing yet
+    // an office on older code has no pairing yet; one that REFUSES it in words (409: a phone, DGO-1328) is said so
+    api("api/pair").catch((e) => ({ items: [], refused: e.status === 409 })),
     api("api/link").catch(() => ({ items: [] })),
     api("api/pair/giving").catch(() => null),              // …and which office is given less than the rest
   ]);
@@ -486,10 +536,14 @@ async function loadList() {
   const herdOf = (id) => (linkOf(id) || {}).herd || ownHerd;
   const cards = paired.map((p) => ({ herd: herdOf(p.office), html: pairedCard(p, linkOf(p.office), giving) }));
   if (!items.length && !cards.length) {
-    $("list").innerHTML = `<div class="callout">עדיין אין לשכות מחוברות. <b>צימוד לשכה</b> מחבר לשכה שכבר מותקנת; <b>התקנת לשכה על מחשב</b> מקימה אחת חדשה על מחשב מחובר.</div>`;
+    // the two verbs are offered only where they are not refused (the office's card says why they are)
+    $("list").innerHTML = pairs.refused
+      ? `<div class="callout">עדיין אין לשכות מחוברות.</div>`
+      : `<div class="callout">עדיין אין לשכות מחוברות. <b>צימוד לשכה</b> מחבר לשכה שכבר מותקנת; <b>התקנת לשכה על מחשב</b> מקימה אחת חדשה על מחשב מחובר.</div>`;
     return;
   }
-  const mname = (id) => ((CTX?.machines || []).find((m) => m.id === id) || {}).label || id;
+  // a machine is its label; one with none is «מחשב» — never its instance id in the reading line (DGO-387)
+  const mname = (id) => ((CTX?.machines || []).find((m) => m.id === id) || {}).label || "מחשב";
   cards.push(...items.map((o) => ({ herd: herdOf(o.id), html: officeCard(o, mname) })));
   $("list").innerHTML = herdGroups(cards, ownHerd);
 }
@@ -510,13 +564,23 @@ function herdGroups(cards, own) {
   }).join("");
 }
 
+// A version is said against this office's own (UI law 3, DGO-387): «כמו כאן» or «גרסה אחרת» — the commit itself is
+// the hover, never the reading line. A version this office cannot compare (its own unknown) is said as given.
+function versionCell(commit) {
+  const c = String(commit || ""), here = String(CTX?.home?.commit || "");
+  if (!c) return "לא נמסרה";
+  if (!here) return `<span title="${esc(c)}">לא הושוותה</span>`;
+  const same = here.startsWith(c) || c.startsWith(here.slice(0, 7));
+  return `<span title="${esc(c)}">${same ? "כמו כאן" : "גרסה אחרת"}</span>`;
+}
+
 function officeCard(o, mname) {
   const r = o.run || {};
   const behind = CTX?.home?.commit && o.source?.commit && !CTX.home.commit.startsWith(o.source.commit) && !o.source.commit.startsWith(CTX.home.commit.slice(0, 7));
   const mark = officeMark(o);
   return `<div class="ocard"${mark.hue}><div class="top">
     <div><h4 title="${esc(o.id)}">${mark.animal}${esc(o.label || o.id)}</h4>
-      <div class="small muted" title="${esc(o.path)}">${esc(mname(o.machine))}</div></div>
+      <div class="small muted" title="${esc([o.machine, o.path].filter(Boolean).join(" · "))}">${esc(mname(o.machine))}</div></div>
     <div class="rowacts">${pill(r.status)}
       <button class="btn sm" data-run="${esc(o.id)}" title="מביא את הלשכה הזאת למצב שהוצהר כאן">הפעלה</button>
       <a class="btn ghost sm" href="https://console.${esc(o.domain)}/" target="_blank" rel="noopener" title="פותח את המסוף של הלשכה בלשונית חדשה">פתיחה</a>
@@ -525,11 +589,11 @@ function officeCard(o, mname) {
       <button class="btn ghost danger sm" data-forget="${esc(o.id)}" data-label="${esc(o.label || o.id)}" title="מוחק רק את ההצהרה מכאן — המחשב והלשכה שעליו נשארים כמו שהם">מחיקת ההצהרה</button></div></div>
     <div class="meta">
       <div><div class="k">דומיין</div><div class="v mono small">${esc(o.domain)}</div></div>
-      <div><div class="k">גרסה מוצהרת</div><div class="v mono">${esc((o.source?.commit || "").slice(0, 10))}${behind ? ` <span class="pill warn">שונה מכאן</span>` : ""}</div></div>
+      <div><div class="k">גרסה מוצהרת</div><div class="v">${behind ? `<span class="pill warn" title="${esc(o.source.commit)}">שונה מכאן</span>` : versionCell(o.source?.commit)}</div></div>
       <div><div class="k">הפעלה אחרונה</div><div class="v small">${when(r.ended || r.started)}</div></div>
       <div><div class="k">קונטיינרים</div><div class="v">${r.health ? `${esc(r.health.healthy)}/${esc(r.health.total)} בריאים` : "—"}</div></div>
     </div>
-    ${behind ? `<div class="small" style="margin-top:8px"><span class="link" data-upgrade="${esc(o.id)}">שדרוג לגרסה של הלשכה הזו (${esc(CTX.home.commit.slice(0, 10))})</span></div>` : ""}
+    ${behind ? `<div class="small" style="margin-top:8px"><span class="link" data-upgrade="${esc(o.id)}" title="${esc(CTX.home.commit)}">שדרוג לגרסה של הלשכה הזו</span></div>` : ""}
   </div>`;
 }
 
@@ -620,7 +684,7 @@ function mapSide(n, appId, own) {
   const box = app ? `<div class="appbox">
       <div class="hpanel-h"><h5>${esc(app.title || app.alias)}</h5><span class="tok">${esc(app.alias)}</span></div>
       <div>${esc(app.desc || "האפליקציה לא מסרה תיאור")}</div>
-      <div class="meta">${cell("רצה על", esc(n.label || n.office))}${cell("גרסה", commit ? `<span class="tok">${esc(commit.slice(0, 10))}</span>` : "לא נמסרה")}
+      <div class="meta">${cell("רצה על", esc(n.label || n.office))}${cell("גרסה", versionCell(commit))}
         ${cell("דלת API", app.api ? "יש — סוכן ו-CLI מלשכה מקושרת" : "מסך בלבד")}${cell("מי רואה אותה", n.herd === own ? "הלשכות של העדר" : "רק אנחנו, דרך הקישור")}</div></div>`
     : `<div class="small muted">בחרו אפליקציה כדי לראות מה יש בה, באיזו גרסה היא רצה ואם יש לה דלת API.</div>`;
   const hops = (n.shared || []).map((s) => `<div class="hop"><b>${esc(s.label || s.office)}</b> נתנה לה: ${esc((s.apps || []).map((a) => a.title || a.alias).join(" · ") || "כלום")}</div>`).join("");
@@ -629,7 +693,7 @@ function mapSide(n, appId, own) {
     <div class="meta">
       ${cell("המחשב", esc([m.hostname, m.arch].filter(Boolean).join(" · ") || "לא נמסר לכאן"))}
       ${cell("מערכת ומשאבים", mapMachine(m) || "לא נמסר לכאן")}
-      ${cell("גרסה", commit ? `<span class="tok">${esc(commit.slice(0, 10))}</span>` : "לא נמסרה")}
+      ${cell("גרסה", n.home ? (commit ? `<span title="${esc(commit)}">הגרסה של כאן</span>` : "לא נמסרה") : versionCell(commit))}
       ${cell("הקישור", n.home ? "הלשכה הזאת" : esc([MAP_DIR[n.direction], n.transport ? n.transport.toUpperCase() : ""].filter(Boolean).join(" · ") || "—"))}
       ${n.home ? "" : cell("הכתובת", n.endpoint ? `<span class="tok">${esc(n.endpoint)}</span>` : "דרך לשכה אחרת")}
     </div>
@@ -721,7 +785,7 @@ async function inspect() {
     if (r.domain) $("fDomain").value = r.domain;
     if (r.repo) $("fRepo").value = r.repo.replace(/https:\/\/[^@/]+@/, "https://");
     Object.entries(r.apps || {}).forEach(([k, v]) => { const c = document.querySelector(`#fApps input[data-app="${k}"]`); if (c && !c.disabled) c.checked = v === "enabled"; });
-    $("inspectOut").innerHTML = `<div class="callout ok"><b>נמצאה לשכה קיימת</b> — דומיין <span class="mono">${esc(r.domain)}</span>, גרסה <span class="mono">${esc((r.commit || "").slice(0, 10))}</span> (${esc(r.branch)}). האפליקציות שמופעלות שם סומנו. הגרסה המוצהרת נשארת זו שבחרת — הפעלה תשדרג אליה; שינויים מקומיים יישמרו ב־git stash, ה־.env וה־volumes נשמרים.</div>`;
+    $("inspectOut").innerHTML = `<div class="callout ok"><b>נמצאה לשכה קיימת</b> — דומיין <span class="mono">${esc(r.domain)}</span>, גרסה: ${versionCell(r.commit)}${r.branch && r.branch !== "HEAD" ? `, בענף <bdi>${esc(r.branch)}</bdi>` : r.branch === "HEAD" ? ", מנותקת מענף" : ""}. האפליקציות שמופעלות שם סומנו. הגרסה המוצהרת נשארת זו שבחרת — הפעלה תשדרג אליה; שינויים מקומיים יישמרו ב־git stash, ה־.env וה־volumes נשמרים.</div>`;
     if (!$("fPath").value.trim()) $("fPath").value = path;
   } catch (e) { $("inspectOut").innerHTML = `<div class="callout bad">${esc(e.message)}</div>`; }
 }
@@ -1005,7 +1069,10 @@ async function boot() {
     $("self").innerHTML = refused
       ? `<div class="callout warn" id="selfRefused">${ticks(e.message)}</div>`
       : `<div class="callout bad"><b>פרטי הלשכה לא נטענו:</b> ${esc(e.message)}</div>`;
-    if (refused) { $("btnRename").classList.add("hidden"); $("btnGive").classList.add("hidden"); }
+    if (refused) {
+      // …and every verb refused the same way: a phone pairs and installs nothing (DGO-1328)
+      for (const id of ["btnRename", "btnGive", "btnConnect", "btnAdd"]) $(id)?.classList.add("hidden");
+    }
   });
   loadJoin();
   try { await loadList(); }

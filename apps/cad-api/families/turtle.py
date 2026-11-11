@@ -1,6 +1,6 @@
 """Turtle Top — a hipped shell over an open screen, on a single-flashing bottom.
 
-The pieces are Alan's own rules (The Fireplace Guys, MEET-41, 2026-10-30), the same ones the services
+The pieces are Alan's own rules (The Examplef Guys, MEET-41, 2026-10-30), the same ones the services
 app's sheet calculator cuts by. What he has not said is marked ASSUMED in the notes, never filled in
 silently. The 3D model is the ANATOMY of those pieces — every blank laid out flat and exploded — and
 not a folded shell: the fold lines of the hip were never described.

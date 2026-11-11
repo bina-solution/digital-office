@@ -1,20 +1,17 @@
 #!/usr/bin/env bash
-# bina-claude's entrypoint: the account's home on the volume, the agent.v1 adapter, then the web terminal.
+# bina-claude's entrypoint: the agent.v1 adapter over the official Claude Desktop app — and nothing else.
+# Bina Claude is ONLY the desktop app, with ONE sign-in; there is no terminal (the owner, 2026-11-09, DGO-1684:
+# «Delete the terminal and make sure nobody gets mixed up again»).
 set -euo pipefail
 
 STATE="${BINA_CLAUDE_STATE:-/data/bina-claude}"
 OFFICE="${BBOX_REPO_HOST:-/workspace/office}"
 mkdir -p "${HOME}" "${STATE}"
 # The desktop app's home (bina-claude-desktop mounts this folder of the volume as its /config; a volume
-# subpath must exist before it is mounted), owned by the desktop's user (PUID 1000).
-mkdir -p /data/desktop && chown 1000:1000 /data/desktop
-
-# /workspace/office is the short, ASCII spelling of the checkout (mounted at its HOST path, which on the
-# Mac has a Hebrew name and a trailing space) — the same symlink bina-ds keeps.
-if [ "${OFFICE}" != /workspace/office ] && [ -d "${OFFICE}" ]; then
-  mkdir -p /workspace && ln -sfn "${OFFICE}" /workspace/office
-fi
-git config --global --get-all safe.directory | grep -qxF '*' || git config --global --add safe.directory '*'
+# subpath must exist before it is mounted), owned by the desktop's user — the checkout's owner, declared per
+# office (BINA_CLAUDE_DESKTOP_PUID/PGID, docker-compose.yml says why; 1000 by default).
+DUID="${BINA_CLAUDE_DESKTOP_PUID:-1000}"; DGID="${BINA_CLAUDE_DESKTOP_PGID:-1000}"
+mkdir -p /data/desktop && chown "${DUID}:${DGID}" /data/desktop
 
 # The action token of the agent.v1 door: minted once, root-only, read by `bbox agent` through the engine
 # (AGENT_TOKEN_FILE), never an .env value — the contract's rule (ai/context/agent-contract.md).
@@ -25,45 +22,37 @@ if [ ! -s "${TOKEN_FILE}" ]; then
 fi
 chmod 600 "${TOKEN_FILE}"
 
-# The brief Claude reads in every session it starts here: who it is in this office and how it reaches
-# the others. The repo's AGENTS.md is the office's own entry file; this only points Claude at it.
-# Written into BOTH homes: this container's (the terminal, the API) and the desktop app's (/data/desktop,
-# its /config), whose sessions otherwise knew nothing of the office (DGO-1275, the owner's phone: "not
-# sure what dgo means"). The desktop runs no docker, so its `bbox` lives in the terminal tile.
-brief() {   # brief <where> — the text; <where> is "terminal" or "desktop"
+# The brief every session of the desktop app reads: who it is in this office and how it reaches the others.
+# The repo's AGENTS.md is the office's own entry file; this only points Claude at it (DGO-1275, the owner's
+# phone: "not sure what dgo means").
+brief() {
   cat <<EOF
 # Bina Claude — the office's Claude
 
-You run inside the digital office (DGO) of this machine, as the app \`bina-claude\`. The office is
-its checkout, \`/workspace/office\` — work there, whatever folder this session opened in; its entry
+Bina Claude is ONLY the official Claude Desktop app, with ONE sign-in. There is no terminal: never propose
+/login, /remote-control or a terminal to anyone.
+
+You run inside the digital office (DGO) of this machine, in the desktop app of \`bina-claude\`. The office
+is its checkout, \`/workspace/office\` — work there, whatever folder this session opened in; its entry
 file is \`/workspace/office/AGENTS.md\`. Read it before you change anything, and keep its
 non-negotiables (production, \`./scripts/dc\` never bare \`docker compose\`, explain a dangerous command
-first, commit only on this office's own branch).
+first, commit only on this office's own branch). \`./bbox\` and \`./scripts/dc\` run here: this app has
+the office's docker.
 
 The other agents of the office are a CLI away:
 - Azaria (bina-ds): \`./bbox agent list\`, \`./bbox agent new -F "<text>"\`, \`./bbox agent send <id> "<text>"\`
 - yourself, as other callers see you: \`./bbox agent --app bina-claude list\`
 - work items: \`./bbox project-pln tasks show <REF>\`
 EOF
-  if [ "$1" = desktop ]; then
-    cat <<EOF
-
-This is the DESKTOP app (Claude Desktop, streamed into the office console). You read and edit the
-checkout here; this container has no docker, so \`./bbox\` and \`./scripts/dc\` do not run in it. They run
-in the office's Bina Claude terminal (the tile «בינה קלוד · מסוף», the same checkout, with docker) — say
-the exact command there, or hand it to Azaria.
-EOF
-  fi
 }
-mkdir -p "${HOME}/.claude"
-brief terminal > "${HOME}/.claude/CLAUDE.md"
-# The desktop's home belongs to the desktop's user (uid 1000), and so does every write into it: as root, a
-# link that user left there (CLAUDE.md → /var/run/docker.sock) would have root write or chown whatever it
-# points at, in the container that holds docker and the API token (the second reader). As 1000, a link
-# reaches nothing 1000 could not already write. Each file goes to a temp name, then is renamed into place.
-as_desktop() { setpriv --reuid=1000 --regid=1000 --clear-groups "$@"; }
+# The desktop's home belongs to the desktop's user, and so does every write into it: as root, a link that
+# user left there (CLAUDE.md → /var/run/docker.sock) would have root write or chown whatever it points at, in
+# the container that holds docker and the API token (the second reader). As that user, a link reaches nothing
+# the user could not already write (where the user is root, the app already holds the engine's socket).
+# Each file goes to a temp name, then is renamed into place.
+as_desktop() { setpriv --reuid="${DUID}" --regid="${DGID}" --clear-groups "$@"; }
 if as_desktop mkdir -p /data/desktop/.claude; then
-  brief desktop | as_desktop sh -c 'cat > "$1.new" && mv -f "$1.new" "$1"' _ /data/desktop/.claude/CLAUDE.md \
+  brief | as_desktop sh -c 'cat > "$1.new" && mv -f "$1.new" "$1"' _ /data/desktop/.claude/CLAUDE.md \
     || echo "[bina-claude] desktop brief not written" >&2
   # …and the office itself in reach of every desktop session, whatever folder the app opened it in: Claude
   # Desktop has no documented default folder for a new Code session, but reads the CLI's settings files,
@@ -81,22 +70,27 @@ s.env = { ...(s.env && typeof s.env === "object" ? s.env : {}), CLAUDE_CODE_ADDI
 fs.writeFileSync(file + ".new", JSON.stringify(s, null, 2) + "\n");
 fs.renameSync(file + ".new", file);
 JS
+  # …and the office is a TRUSTED folder of the app, so a new session can open IN it and the folder picker
+  # offers it (DGO-1684; the owner, 2026-11-09: «i want to be able to choos the dgo folder … or if it can be
+  # by default as the workspace folder for the claude session like we did here on the mac»). Claude records
+  # trust in ~/.claude.json, `projects[<path>].hasTrustDialogAccepted` — measured on the Mac's own app, where
+  # the office's checkout is trusted exactly so. Merged, never written over: the app keeps the rest.
+  as_desktop node - /data/desktop/.claude.json "${OFFICE}" <<'JS' || echo "[bina-claude] desktop trust not merged" >&2
+const fs = require("fs"), [file, office] = process.argv.slice(2);
+let c = {};
+try { c = JSON.parse(fs.readFileSync(file, "utf8")); } catch (e) { if (e.code !== "ENOENT") process.exit(1); }
+if (!c || typeof c !== "object" || Array.isArray(c)) process.exit(1);
+c.projects = c.projects && typeof c.projects === "object" ? c.projects : {};
+for (const p of new Set(["/workspace/office", office])) {
+  const had = c.projects[p] && typeof c.projects[p] === "object" ? c.projects[p] : {};
+  c.projects[p] = { allowedTools: [], ...had, hasTrustDialogAccepted: true };
+}
+fs.writeFileSync(file + ".new", JSON.stringify(c, null, 2) + "\n");
+fs.renameSync(file + ".new", file);
+JS
 else
   echo "[bina-claude] the desktop's home is not writable as its user — brief and settings skipped" >&2
 fi
 
-# The adapter is restarted if it ever stops: the terminal is PID 1's child, the API must not die with
-# a crash of its own.
-( while :; do node /opt/bina-claude/adapter/server.mjs || true; sleep 2; done ) &
-# …and so is the terminal's front door (adapter/gate.mjs): ttyd itself listens on loopback only.
-( while :; do node /opt/bina-claude/adapter/gate.mjs || true; sleep 2; done ) &
-
-# The web terminal: ONE tmux session, created on the first visit and re-attached by every later one
-# (and by `./bbox bina-claude attach`). Claude Code starts in it; when it exits, a shell remains, and
-# `claude` brings it back. ttyd listens on the container's loopback; the only way in is gate.mjs on
-# :7681, which admits the edge and the console by address. The header check (-H) stays as a second lock.
-cd "${OFFICE}" 2>/dev/null || cd /
-exec ttyd --port 7682 --interface 127.0.0.1 --writable \
-  --auth-header "${BINA_CLAUDE_AUTH_HEADER:-X-authentik-username}" \
-  -t titleFixed="Bina Claude" -t disableLeaveAlert=true \
-  tmux new-session -A -s main -c "${OFFICE}" "claude; exec bash -l"
+# The adapter, brought back if it ever stops: the container lives as long as this loop.
+while :; do node /opt/bina-claude/adapter/server.mjs || true; sleep 2; done

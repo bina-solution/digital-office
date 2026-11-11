@@ -38,6 +38,8 @@ const BINA_ICONS = {
   box:       '<path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/>',
   shield:    '<path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/>',
   external:  '<path d="M15 3h6v6"/><path d="M10 14 21 3"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>',
+  globe:     '<circle cx="12" cy="12" r="10"/><path d="M2 12h20"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>',
+  logout:    '<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="m16 17 5-5-5-5"/><path d="M21 12H9"/>',
   chevron:   '<path d="m6 9 6 6 6-6"/>',
   back:      '<path d="M5 12h14"/><path d="m12 5 7 7-7 7"/>',
   layers:    '<path d="m12 2 9 5-9 5-9-5z"/><path d="m3 12 9 5 9-5"/><path d="m3 17 9 5 9-5"/>',
@@ -135,6 +137,7 @@ var binaAsk, binaTell;
     + "@media (pointer:coarse){.bask-btn{height:44px}.bask-field input{height:44px}}"
     + "@media (max-height:399px){.bask{padding:8px}.bask-card{padding:12px}.bask-acts{margin-top:10px}}"   // the side menu's own short frame
     + "#bina-tell{position:fixed;inset-block-end:16px;inset-inline-start:16px;z-index:2147483001;display:grid;gap:8px;max-width:min(420px,calc(100vw - 32px))}"
+    + "#bina-tell[data-at~=top]{inset-block-start:16px;inset-block-end:auto}#bina-tell[data-at~=end]{inset-inline-start:auto;inset-inline-end:16px}"   // where it covers nothing (place())
     + ".btell{--c:var(--ok);padding:10px 14px;border-radius:12px;background:color-mix(in srgb,var(--c) 14%,var(--surface));color:var(--ink);border:1px solid color-mix(in srgb,var(--c) 38%,var(--surface));border-inline-start:4px solid var(--c);font:13px/1.45 var(--font,system-ui,sans-serif);box-shadow:var(--shadow-lg);cursor:pointer;text-align:start}"
     + ".btell.warn{--c:var(--lime)}.btell.bad{--c:var(--red)}"   // --ok and --red, not the bare hues: they are the steps that are lifted on the dark ground
     + ".btell small{display:block;margin-top:2px;font-size:11.5px;color:var(--muted);overflow-wrap:anywhere;unicode-bidi:plaintext}"
@@ -239,6 +242,47 @@ var binaAsk, binaTell;
     });
   };
 
+  // The notice never sits on a control of the page (DGO-618): it keeps its corner while that covers nothing, and
+  // otherwise takes the first corner that does — at every frame size, a desktop window of 380 x 260 included,
+  // where the bottom corner is where a window keeps its buttons. With no corner free at its full width, the corners
+  // again at two thirds and at half of it (a narrower notice fits over a title, beside a window's ✕); with none
+  // free at all, the place that covers fewest.
+  var CONTROLS = "button,a[href],input:not([type=hidden]),select,textarea,summary,[role=button],[tabindex]:not([tabindex='-1'])";
+  function covered(box) {
+    var b = box.getBoundingClientRect(), n = 0;
+    if (b.width < 2 || b.height < 2) return 0;
+    doc.querySelectorAll(CONTROLS).forEach(function (c) {
+      var r = c.getBoundingClientRect();     // the cheap test first: on a screen of thousands of rows most are far away
+      if (Math.min(b.right, r.right) - Math.max(b.left, r.left) <= 1 || Math.min(b.bottom, r.bottom) - Math.max(b.top, r.top) <= 1) return;
+      // inside the notice, in a part of the page made inert (a window the page put over it), or not drawn: not a control here
+      if (box.contains(c) || c.closest("[inert]") || (c.checkVisibility && !c.checkVisibility({ checkVisibilityCSS: true }))) return;
+      n++;
+    });
+    return n;
+  }
+  function put(box, at, w) {
+    if (at) box.setAttribute("data-at", at); else box.removeAttribute("data-at");
+    box.style.maxWidth = w;
+    // a top spot lets go of the bottom, written on the element: a page's own rule that lifts the notice off its bar
+    // (`body:has(…) #bina-tell{inset-block-end:…}`) out-ranks the attribute, and the box stretched to the full height
+    box.style.insetBlockEnd = at.indexOf("top") < 0 ? "" : "auto";
+  }
+  function place(box) {
+    var best = null;
+    ["", "min(280px,calc((100vw - 32px) * .66))", "min(210px,calc((100vw - 32px) * .5))"].some(function (w) {
+      return ["", "end", "top", "top end"].some(function (at) {
+        put(box, at, w);
+        var n = covered(box);
+        if (!best || n < best.n) best = { at: at, w: w, n: n };
+        return n === 0;
+      });
+    });
+    put(box, best.at, best.w);
+  }
+  var placing = 0;
+  function replace() { var box = doc.getElementById("bina-tell"); if (box && box.firstChild) place(box); }
+  window.addEventListener("resize", function () { clearTimeout(placing); placing = setTimeout(replace, 120); });
+
   // The third word is how long the notice stays (ms) — or what more it carries: { ms, more, act, stay }.
   //   more  the service's own sentence, on a line of its own under the notice's words
   //   act   [label, fn] — one way on from the notice (an undo, a refresh): pressing it runs fn and takes the notice down
@@ -255,12 +299,13 @@ var binaAsk, binaTell;
     if (o.act) {
       var go = el("button", "", o.act[0]);
       go.setAttribute("type", "button");
-      go.addEventListener("click", function (e) { e.stopPropagation(); n.remove(); o.act[1](); });
+      go.addEventListener("click", function (e) { e.stopPropagation(); n.remove(); replace(); o.act[1](); });
       n.appendChild(go);
     }
-    n.addEventListener("click", function () { n.remove(); });
+    n.addEventListener("click", function () { n.remove(); replace(); });
     box.appendChild(n);
-    if (!o.stay) setTimeout(function () { n.remove(); }, o.ms || (kind === "bad" ? 9000 : 5200));
+    place(box);
+    if (!o.stay) setTimeout(function () { n.remove(); replace(); }, o.ms || (kind === "bad" ? 9000 : 5200));
     return n;
   };
 })();
@@ -277,19 +322,8 @@ function mIcon(name) {
     // The fallback was then `key`, chosen for that wizard (no icon = a credential = a key) — and it
     // leaked into the module rail, where an app whose icon name this set lacked (bina-ds asked for
     // "sparkles" before it existed) showed the same glyph as the connections tile. The generic mark
-    // is `app`: a neutral window that says "a tile" and nothing else. The wizard keeps its own
-    // explicit `p.icon || "key"` default, so providers still read as credentials.
+    // is `app`: a neutral window that says "a tile" and nothing else.
     : `<svg class="ic-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${BINA_ICONS.app}</svg>`;
-}
-// BANK-STANDARD re-entrancy guard: disable a button while its write is in flight so a double-click /
-// slow response can't fire the same mutation twice. Always re-enables (and restores its label) in finally.
-async function guard(btn, fn, loadingLabel) {
-  if (!btn || btn.disabled) return;
-  const orig = btn.textContent;
-  btn.disabled = true; btn.setAttribute("aria-busy", "true");
-  if (loadingLabel) btn.textContent = loadingLabel;
-  try { return await fn(); }
-  finally { btn.disabled = false; btn.removeAttribute("aria-busy"); if (loadingLabel) btn.textContent = orig; }
 }
 let MODULES = [], ME = null;
 
@@ -321,14 +355,28 @@ function externalUrl(m) {
 //    failure — while the same console answered the app on its own origin.
 // On a real domain the nested host resolves and shares a registrable domain with the identity
 // provider, so it works — and this is asked of the hostname, once.
+function localhostFamily(hostname) {
+  return /(^|\.)localhost$/.test(String(hostname || "").toLowerCase());
+}
 function noNestedHost(hostname) {
   const h = String(hostname || "").toLowerCase();
-  return /(^|\.)localhost$/.test(h)             // the localhost family
+  return localhostFamily(h)                    // the localhost family
     || !h.includes(".")                          // a bare name (or nothing at all)
     || /^\d{1,3}(\.\d{1,3}){3}$/.test(h)         // an IPv4 address
     || h.includes(":");                          // an IPv6 address
 }
 const NO_NESTED_HOST = noNestedHost(location.hostname);
+// …and of those, the consoles under whose name a nested name cannot even be LOOKED UP: a bare service
+// name or an address has no names under it (`bina.hp-laptop.console:8000` and `n8n.192.168.16.102` are DNS
+// failures, measured 2026-11-02), while every name under `localhost` is answered by the browser itself, so
+// on `console.localhost` a top-level trip to a nested host IS a sign-in (6adb272d) — to this office's own
+// app behind the office's sign-in (DGO-1594: `n8n.console.localhost`) and to a linked office's on its own
+// host (DGO-1502: Meet on vps1, Plane on the HP, another office's agent, which had become the «כתובת
+// מספרית» card with nothing to press). The localhost family is the one whose nested names resolve.
+function noNestedName(hostname) {
+  return noNestedHost(hostname) && !localhostFamily(hostname);
+}
+const NO_NESTED_NAME = noNestedName(location.hostname);
 
 // …and the remote apps that have ONLY their own host there. The registry gives a remote app this
 // console's own path (`proxy`) when it can live under one; an app that owns its origin — the
@@ -353,38 +401,46 @@ async function ownHostState(m) {
 // then with this page again, at the tile's own route. Once a minute per host and one trip per page:
 // a host that still asks after that gets the card, whose button is the same trip.
 // …and a trip with nowhere to go is not a trip. On a console whose own hostname has nothing under it
-// (noNestedHost, above) the name this trip would load cannot exist from here: `<alias>.<office>.console:8000`
+// (noNestedName, above) the name this trip would load cannot exist from here: `<alias>.<office>.console:8000`
 // is a DNS failure, not a sign-in — measured 2026-11-02 on the live `console` run, where opening a
 // linked office's tile was a top-level load of `bina.hp-laptop.console:8000` and the browser drew
 // «This site can't be reached» in place of the whole shell. The trip is refused HERE, once, so every
 // caller of it (the shell's own host, a desktop window) is covered by one answer, and `openOwnHost`
 // then draws the card that says the name does not exist from this address.
-function leaveFor(url) { if (NO_NESTED_HOST) return; location.assign(url); }
+// -> whether the browser is on its way. Refused only where the name cannot be LOOKED UP (NO_NESTED_NAME: a
+// bare name or an address), never on the localhost family or a real domain: this office's own app behind the
+// office's sign-in (DGO-1594 — refusing it left the n8n tile with «the office is open at a numeric address»
+// and nothing to press) and a linked office's app on its own host (DGO-1502) both take the trip.
+function leaveFor(url) {
+  if (NO_NESTED_NAME) return false;
+  location.assign(url);
+  return true;                                  // …and the browser is on its way
+}
 function enterUrl(m) {
   const at = (parseModuleHash() || [])[1] === m.id ? location.hash.slice(1) : "/m/" + m.id;
   return externalUrl(m) + m.enter + at;
 }
 function enterOwnHost(m) {
-  if (enterOwnHost.gone) return true;           // this page is already on its way to one
+  if (enterOwnHost.gone) return false;          // this page has already tried: the card stands
   const key = "do-enter:" + m.id;
   try {
     if (!m.enter || Date.now() - (+sessionStorage.getItem(key) || 0) < 60000) return false;
     sessionStorage.setItem(key, String(Date.now()));
   } catch (e) { return false; }                 // private mode: no memory of a trip, so no trip
-  enterOwnHost.gone = true;
-  leaveFor(enterUrl(m));
-  return true;
+  enterOwnHost.gone = true;                     // one attempt per page, however it ends
+  return leaveFor(enterUrl(m));
 }
 let OWN_HOST_WAITING = "";   // the tile whose own host asked for a sign-in (the card is showing)
 async function openOwnHost(m, url) {
   const state = await ownHostState(m);
   const cur = parseModuleHash();
   if (!cur || cur[1] !== m.id) return;          // the person moved on while the host was asked
-  if (state === "signin" && enterOwnHost(m)) {
-    // …but a trip that `leaveFor` refused (NO_NESTED_HOST) went nowhere, and a shell left standing on
-    // the screen it had is not an answer: say the name does not exist from this address, with nothing
-    // to press (the same card a measured `address` already draws).
-    if (NO_NESTED_HOST) renderExternalNotice(m, url, "address");
+  if (state === "signin" && enterOwnHost(m)) return;   // the trip's door takes it from here
+  if (state === "signin" && NO_NESTED_NAME) {
+    // …but a trip that `leaveFor` refused (NO_NESTED_NAME) went nowhere, and a shell left standing on the
+    // screen it had is not an answer: say the name does not exist from this address, with nothing to press
+    // (the same card a measured `address` already draws).
+    renderExternalNotice(m, url, "address");
     return;
   }
   OWN_HOST_WAITING = state === "signin" ? m.id : "";
@@ -525,6 +581,7 @@ function askAnyway(id) {
 // "address", or nothing — the frame was tried and did not come up.
 function renderExternalNotice(m, url, need) {
   $("#embedwrap").classList.add("hidden"); $("#content").classList.remove("hidden");
+  applyRail();                      // a card is the console's own view: the rail as the console's (DGO-160)
   setActive(m.id); setViewTitle(m);
   $("#content").innerHTML = externalNotice(m, url, need);
 }
@@ -535,7 +592,13 @@ function externalNotice(m, url, need, why) {
   const where = r ? esc(r.label) + " · " : "";
   const lead = r ? `האפליקציה הזאת רצה בלשכת <b>${esc(r.label)}</b> ו` : "האפליקציה הזאת ";
   let sub, body, action = `<a class="btn" href="${esc(url)}" target="_blank" rel="noopener">פתיחה בחלון נפרד</a>`;
-  if (need === "signin") {
+  if (need === "old") {
+    sub = `${where}הלשכה הזו עדיין לא מאפשרת את זה כאן`;
+    body = `${lead}אינה מעודכנת לגרסה שמאפשרת לפתוח אותה בתוך הקונסול הזה.
+       הקישור עצמו תקין — <b>אחרי עדכון אותה לשכה</b> האריח ייפתח כאן במלואו.
+       בינתיים אפשר לפתוח אותה בחלון נפרד.`;
+    action = `<a class="btn" href="${esc(url)}" target="_blank" rel="noopener">פתיחה בחלון נפרד</a>`;
+  } else if (need === "signin") {
     sub = `${where}נדרשת כניסה`;
     body = `${lead}נפתחת כאן בכתובת משלה, והכתובת הזאת מבקשת את הכניסה ללשכה.
        לחיצה אחת עוברת דרך מסך הכניסה וחוזרת לכאן, אל האפליקציה.`;
@@ -635,18 +698,26 @@ function moduleMatches(m, typed) {
     .join(" ").toLocaleLowerCase();
   if (hay.includes(q)) return true;
   // Every typed WORD on its own, in any order — and a Hebrew word that differs only in its ending:
-  // the owner typed «שירותים» for «שירותי צ׳ימני» (FPG, C2 2:25:05; the construct form drops the ־ם).
+  // the owner typed «שירותים» for «שירותי צ׳ימני» (EXF, C2 2:25:05; the construct form drops the ־ם).
   // A typed word finds a word that begins with it, or a word of 4+ letters that it begins with.
   const words = hay.split(/[\s·,.:;()\/\-–—]+/).filter(Boolean);
   return q.split(/\s+/).every(w => words.some(x => x.startsWith(w) || (x.length >= 4 && w.startsWith(x))));
 }
 // EVERY INSTALLED APP IS FOUND (OP-12). The palette reads MODULES — the apps this console FRAMES — and
 // an app whose UI lives only on its own host (`embed: false`, e.g. the services apps) has no tile
-// there, while the apps screen lists it: «אני עושה חיפוש אני לא מוצא את האפליקציה של השירותים» (FPG,
+// there, while the apps screen lists it: «אני עושה חיפוש אני לא מוצא את האפליקציה של השירותים» (EXF,
 // C2 2:25:05). So the search also reads the apps screen's OWN list (app-management's /api/apps,
 // through this console's proxy — one answer to "what is installed") and opens such an app the way
 // that screen does (app-management openApp): a window on the desktop, a new tab anywhere else.
 let OTHER_APPS = { at: 0, list: [], p: null };
+// A screen the search (and the desktop's «כל האפליקציות») may offer from app-management's list: on, with a
+// launch address, not already a tile — and DECLARED a screen. `launch.screen` false is a service whose host
+// is all it has (forward-auth's sign-in, traefik's dashboard): they read as «two sign-in apps» (DGO-1760, the
+// owner: «כפל זה חמור»). A list from an app-management before that field (no `screen`) is read as before.
+function offersScreen(a, known) {
+  return !!(a && a.enabled && a.launch && a.launch.url && a.launch.screen !== false
+            && !known.has(a.id) && !known.has(a.launch.module));
+}
 function otherApps() {
   if (OTHER_APPS.p) return OTHER_APPS.p;
   if (Date.now() - OTHER_APPS.at < 60000) return Promise.resolve(OTHER_APPS.list);
@@ -654,7 +725,7 @@ function otherApps() {
     .then(j => {
       const known = new Set(MODULES.map(m => m.id));
       const list = ((j && j.apps) || [])
-        .filter(a => a && a.enabled && a.launch && a.launch.url && !known.has(a.id) && !known.has(a.launch.module))
+        .filter(a => offersScreen(a, known))
         .map(a => ({ id: a.id, name: a.name || a.id, name_en: a.name_en || "", desc: a.summary || "",
                      icon: a.icon || "app", url: a.launch.url, outside: true }));
       OTHER_APPS = { at: j ? Date.now() : 0, list, p: null };
@@ -767,15 +838,28 @@ async function refreshModules(reroute = true) {
 }
 
 async function boot() {
+  // Before the first answer arrives: an address that names an app — or names nothing, which opens the first tile —
+  // will be an app, so the rail is already the one it will be and does not fold under the person's eyes once the
+  // tiles are in (DGO-160). route() below settles it by the view it actually shows.
+  const addressesApp = () => /^(#\/?)?$|^#\/m\/(?!settings(?:[/?#]|$))/.test(location.hash);   // settings is the console's own
+  applyRail(addressesApp());
   ME = await fetch("/api/me").then(r => r.json()).catch(() => ({ name: "אורח" }));
   $("#userBox").innerHTML = `מחובר/ת<br><b>${esc(ME.name)}</b>`;
+  signoutUrl();   // read once, early: desktop mode's office menu draws its «התנתקות» from it (DGO-1621)
+  // the office's mark and the «מחובר/ת» line open the account menu (DGO-1621)
+  for (const t of [$("#userBox"), document.querySelector(".brand .logo")].filter(Boolean)) {
+    t.setAttribute("role", "button"); t.tabIndex = 0; t.title = "החשבון שלך: מי מחובר, והתנתקות";
+    t.setAttribute("aria-haspopup", "menu"); t.setAttribute("aria-expanded", "false");
+    t.onclick = () => meMenu(t);
+    t.onkeydown = (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); meMenu(t); } };
+  }
   STAMP = await stamp(true);
   // …and the same answer names the build in the side nav (an unknown one leaves the placeholder).
   if (STAMP && STAMP.version) $("#buildVer").textContent = "digital-office " + STAMP.version;
   await refreshModules(false);
-  applyRail();
+  applyRail(inApp() || addressesApp());
   const rt = $("#railToggle"); if (rt) rt.onclick = toggleRail;
-  const pb = $("#paletteBtn"); if (pb) pb.onclick = openPalette;
+  const pb = $("#paletteBtn"); if (pb) pb.onclick = shellSearch;
   focusInit();
   buildBottomNav();
   // The palette (theme) menu that used to be built here is gone with the top bar's other two
@@ -789,16 +873,105 @@ async function boot() {
   // Desktop mode (desktop.js, opt-in from the settings view) mounts before the first route, so that
   // route() opens a WINDOW for the addressed module instead of filling the single frame.
   if (window.BinaDesktop) BinaDesktop.boot();
+  // A link that names the CONSOLE and is clicked INSIDE an app's frame is the shell's to open —
+  // the frame would otherwise navigate itself and the desk would not move (frame-links.js says why,
+  // measured 2026-10-12). The shell's own navigation is the hash, in both modes: route() turns it
+  // into the content frame or into a window.
+  if (window.BinaFrameLinks) {
+    BinaFrameLinks.watch((href) => {
+      let hash = "";
+      try { hash = new URL(href).hash; } catch (e) { return; }
+      if (hash) location.hash = hash;
+    });
+  }
   // First-run is the SERVER's decision now (app.py spa(): a fresh office — no `installed_at` in the
   // control plane's record — is served install.html instead of this shell), so a bare visit that
   // reaches this line is an installed office, and it opens on its first tile.
   route();
+  // An app that needs the person in another app's screen — a sign-in waiting in the office browser —
+  // brings him there and back (handoffs.js, DGO-1336; the desktop's window beside it, DGO-1434). It asks
+  // WHERE HE IS here, by the one grammar this file owns: on the phone the tile the address names; on the
+  // desktop the focused window, with every open window in view — a press inside a window on an app's own
+  // host moves neither the focus nor the address, so the address alone missed the window he pressed in.
+  // …once per tab: a console view inside a desktop window (`?bare`) runs this shell too, and a second poller
+  // would share the trip's memory with the top page (the second reader of DGO-1434).
+  const tileOfWin = w => (w && !w.native && !w.sleeping ? String(w.mid).replace(/^ext:/, "") : "");
+  if (window.BinaHandoffs && !new URLSearchParams(location.search).has("bare")) BinaHandoffs.start(() => {
+    const dm = parseModuleHash();
+    const m = dm ? BinaModuleRef.resolve(MODULES, dm[1]) : null;
+    const addressed = m ? m.id : "";
+    if (!(window.BinaDesktop && BinaDesktop.isOn())) return { front: addressed, seen: [], addressed };
+    return { front: tileOfWin(BinaDesktop.wm.focused()), seen: BinaDesktop.wm.wins().map(tileOfWin).filter(Boolean), addressed };
+  }, { name: id => (MODULES.find(x => x.id === id) || {}).name || "" });
 }
 window.addEventListener("hashchange", () => { route(); freshen(true); });
 window.addEventListener("message", e => {
   if (e.origin !== location.origin) return;
   if (!e.data || e.data.type !== "platform:modules-changed") return;
   refreshModules();
+});
+
+/* ── ONE SEARCH ON THE SCREEN (DGO-1507) ────────────────────────────────────────────────────────
+ * The owner's phone, 2026-11-09: mail under the console showed this bar's «חיפוש» (the palette: find
+ * a SCREEN) and, a row lower, the app's own magnifier (find MAIL) — two searches, and the one at the top
+ * was not the one he wanted inside mail. Google's shell has one: in Gmail its search searches mail.
+ * So an app that has a search offers it, and while the frame shows that app the bar's search IS the
+ * app's: it says what the app calls it («חיפוש בדואר») and a press opens the app's own search. The app
+ * steps its magnifier aside only when the shell answers, so an app under an older console keeps it.
+ * Ctrl/⌘ K stays the palette everywhere, and so does the button wherever no app offered.
+ *   in   { type: 'bina:search-offer', app, label }   — only from the document #frame shows
+ *   out  { type: 'bina:search-taken' }  ·  { type: 'bina:search-released' }  ·  { type: 'bina:find' }
+ * The offer belongs to that DOCUMENT: the frame's window stays the same object across navigations,
+ * its document does not, so another app in the same frame never inherits a search it did not offer.
+ * …and it is taken only while this bar is ON the screen: full screen (`html.bare`) hides the bar, its
+ * search and the phone's tab bar, so the shell gives the search back (`bina:search-released`) and takes
+ * it again when the bar returns; a console inside a desktop window (`?bare`) has no bar and never takes
+ * it. An app that had stepped its magnifier aside brings it back (the second reader of DGO-1507). */
+var SEARCH_OFFER = null;                        // { doc, label } — `var`: showContent may ask before this line has run
+function shellBarShown() {
+  return !document.documentElement.classList.contains("bare") && !new URLSearchParams(location.search).has("bare");
+}
+/* tell the app that offered whether the bar is over it now (after full screen comes or goes) */
+function searchToFrame() {
+  const o = offeredSearch(); if (!o) return;
+  try { $("#frame").contentWindow.postMessage({ type: shellBarShown() ? "bina:search-taken" : "bina:search-released" }, location.origin); }
+  catch (err) { /* gone */ }
+}
+function offeredSearch() {
+  if (!SEARCH_OFFER) return null;
+  try {
+    const f = $("#frame");
+    if (!f || $("#embedwrap").classList.contains("hidden")) return null;
+    return f.contentWindow.document === SEARCH_OFFER.doc ? SEARCH_OFFER : null;
+  } catch (err) { return null; }                // the frame went to another host
+}
+function syncShellSearch() {
+  const pb = $("#paletteBtn"); if (!pb) return;
+  const o = offeredSearch();
+  const label = pb.querySelector("span:not(.kbd)");
+  if (label) label.textContent = o ? o.label : "חיפוש";
+  pb.title = o ? `${o.label} (Ctrl+K: חיפוש מסך)` : "חיפוש מסך (Ctrl+K)";
+}
+function shellSearch() {
+  const o = offeredSearch();
+  if (!o) { openPalette(); return; }
+  try { $("#frame").contentWindow.postMessage({ type: "bina:find" }, location.origin); }
+  catch (err) { openPalette(); }
+}
+window.addEventListener("message", e => {
+  if (e.origin !== location.origin || !e.data || e.data.type !== "bina:search-offer") return;
+  let doc = null;
+  try {
+    const f = $("#frame");
+    if (f && e.source === f.contentWindow) doc = f.contentWindow.document;
+  } catch (err) { return; }
+  if (!doc) return;                             // a desktop window, a widget: not the bar's frame
+  const label = String(e.data.label || "").trim().slice(0, 40) || "חיפוש";
+  SEARCH_OFFER = { doc, label };
+  if (shellBarShown()) {
+    try { e.source.postMessage({ type: "bina:search-taken" }, location.origin); } catch (err) { /* gone */ }
+  }
+  syncShellSearch();
 });
 
 // ── phone mode ────────────────────────────────────────────────────────────────
@@ -815,6 +988,58 @@ const PHONE = window.matchMedia("(max-width: 640px)");
 //
 // The tiles come from MODULES — the compiled registry — so a newly installed app appears here by
 // itself, and the four pinned ids in the bottom bar are the only hard-coded thing left.
+// THE ACCOUNT, AND THE WAY OUT (DGO-1621 — the owner, 2026-11-09: «אין לי אפשרות להתנתקות … אתה לוחץ על האייקון של
+// הלשכה הדיגיטלית, ואז … ניהול חשבון … תחשוב טוב טוב איפה לשים את זה … שיהיה נקי»; he cleared the browser's site
+// data to leave). One small menu, opened from the office's mark and from the «מחובר/ת» line (on a phone, from the
+// home screen's header): who is signed in, and «התנתקות» — the office's own sign-out (/api/signout), told to
+// come back to this console. A visitor nobody signed in is told there is nothing to leave.
+let SIGNOUT = null;   // the office's sign-out page (/api/signout), read once; "" = none here
+async function signoutUrl() {
+  if (SIGNOUT === null) SIGNOUT = await fetch("/api/signout").then((r) => r.json()).then((d) => d.url || "").catch(() => "");
+  return SIGNOUT;
+}
+let meOpen = null;   // { menu, from } while the menu stands
+function meClose(focusBack) {
+  if (!meOpen) return;
+  const { menu, from } = meOpen;
+  meOpen = null;
+  menu.remove();
+  from.setAttribute("aria-expanded", "false");
+  document.removeEventListener("pointerdown", meOutside, true);
+  document.removeEventListener("keydown", meKey, true);
+  if (focusBack) from.focus();
+}
+function meOutside(e) { if (meOpen && !meOpen.menu.contains(e.target) && !meOpen.from.contains(e.target)) meClose(false); }
+function meKey(e) { if (meOpen && e.key === "Escape") { e.stopPropagation(); e.preventDefault(); meClose(true); } }
+let meAsking = null;   // the anchor whose menu waits for /api/signout: a second press meanwhile opens nothing more
+async function meMenu(anchor) {
+  const was = meOpen && meOpen.from;
+  meClose(false);
+  if (was === anchor || meAsking) return;   // a second press on what opened it closes it
+  meAsking = anchor;
+  const url = await signoutUrl();
+  meAsking = null;
+  const m = el("div", "me-menu");
+  m.setAttribute("role", "menu");
+  const back = encodeURIComponent(location.origin + "/");
+  m.innerHTML = `<div class="me-who" title="${esc(ME.email || "")}">מחובר/ת בתור<b>${esc(ME.name)}</b></div>` +
+    (url
+      ? `<a class="me-out" role="menuitem" href="${esc(url + (url.includes("?") ? "&" : "?") + "rd=" + back)}"
+           title="יוצא מהלשכה בכל האפליקציות; הכניסה הבאה תבקש סיסמה">${mIcon("logout")}<span>התנתקות</span></a>`
+      : `<div class="me-none">בלשכה הזאת אין התנתקות מכאן</div>`);
+  document.body.appendChild(m);
+  // beside what opened it, inside the window: under it in the top half, above it in the bottom half
+  const r = anchor.getBoundingClientRect(), w = m.offsetWidth, h = m.offsetHeight;
+  m.style.top = `${Math.max(8, Math.min(r.top < innerHeight / 2 ? r.bottom + 6 : r.top - h - 6, innerHeight - h - 8))}px`;
+  m.style.left = `${Math.max(8, Math.min(r.right - w, innerWidth - w - 8))}px`;
+  meOpen = { menu: m, from: anchor };
+  anchor.setAttribute("aria-expanded", "true");
+  document.addEventListener("pointerdown", meOutside, true);
+  document.addEventListener("keydown", meKey, true);
+  const out = m.querySelector(".me-out");
+  if (out) out.focus();
+}
+
 function renderHome() {
   setActive(null);
   setViewTitle(null);
@@ -835,6 +1060,8 @@ function renderHome() {
       <div class="home-clock num" id="homeClock"></div>
       <div class="home-brand"><b>הלשכה הדיגיטלית</b>
         <small>${one(MODULES.length, "אפליקציה אחת מותקנת", "אפליקציות מותקנות")}</small></div>
+      <button class="icon-btn home-me" id="homeMe" type="button" title="החשבון שלך: מי מחובר, והתנתקות"
+        aria-label="החשבון שלך" aria-haspopup="menu" aria-expanded="false">${esc(((ME && ME.name) || "?").trim().charAt(0) || "?")}</button>
     </div>
     ${groups.map((g) => `${g.name ? `<div class="home-group">${esc(g.name)}</div>` : ""}
       <div class="home-grid">${g.mods.map(tile).join("")}</div>`).join("")}
@@ -845,6 +1072,7 @@ function renderHome() {
     el.textContent = new Date().toLocaleTimeString("he-IL", { hour: "2-digit", minute: "2-digit" });
   };
   tick();
+  const me = $("#homeMe"); if (me) me.onclick = () => meMenu(me);
   clearInterval(renderHome._t);
   renderHome._t = setInterval(tick, 20000);
 }
@@ -889,18 +1117,61 @@ function buildNav() {
 // same question in JS. The old version hid the labels with a second copy of the rail's rules in the
 // media query, which is exactly the duplication bina-nav.css exists to remove.
 const RAIL_BAND = window.matchMedia("(max-width:1024px) and (min-width:641px)");
-function applyRail() {
-  const collapsed = localStorage.getItem("railCollapsed") === "1" || RAIL_BAND.matches;
+// WHILE AN APP IS OPEN, THE RAIL GETS OUT OF ITS WAY (DGO-160 · ai/context/platform-navigation-design.md §3.9 — the
+// owner: «should be perfect and auto collaps when using the apps»). On a desktop the rail is the whole menu on the
+// console's own views (#content: the home, install, connections, a card) and folds to its icons the moment a view
+// is an app (#embedwrap), so the app has the width; it comes back when the view is the console's again. That is
+// the desktop's DEFAULT, and the person's pin beats it: the toggle pins the opposite of what is shown, and a pin
+// that equals the default of the view it was set on is no pin (so one more press is «automatic» again). The tablet
+// band is a rail whatever is pinned (the full menu does not fit there). Evaluated on a change of VIEW (showEmbed,
+// showContent, a card) and of band only — never on the app's own navigation inside its frame, so the rail does not
+// breathe while one moves around inside an app; folding moves the grid's column, never the frame, so nothing reloads.
+const RAIL_PIN = "nav.pin.desktop";   // "rail" | "open" | absent (the default above)
+// The pin is read from storage ONCE and held: a browser that reads but cannot write (a full quota, a private
+// window) would otherwise keep answering the old value, and the toggle would do nothing (the second reader).
+let railPinHeld;
+function railPin() {
+  if (railPinHeld !== undefined) return railPinHeld;
+  railPinHeld = null;
+  try {
+    // the toggle's old key meant «always folded» when it was "1": carried over once as that pin
+    const old = localStorage.getItem("railCollapsed");
+    railPinHeld = localStorage.getItem(RAIL_PIN) || (old === "1" ? "rail" : null);
+    if (old !== null) {
+      if (railPinHeld) localStorage.setItem(RAIL_PIN, railPinHeld);
+      localStorage.removeItem("railCollapsed");
+    }
+  } catch (e) { /* no storage: the default, held as null */ }
+  return railPinHeld;
+}
+function setRailPin(pin) {
+  railPinHeld = pin;
+  try {
+    if (pin) localStorage.setItem(RAIL_PIN, pin); else localStorage.removeItem(RAIL_PIN);
+  } catch (e) { /* held above for this page's life */ }
+}
+function inApp() {
+  const w = document.getElementById("embedwrap");
+  return !!w && !w.classList.contains("hidden");
+}
+function applyRail(app = inApp()) {
+  const pin = railPin();
+  // A phone has no rail at all (the side is hidden, the tab bar is the menu): `.rail-collapsed`'s 56px column there
+  // would squeeze the whole app into it, since that rule outweighs the phone's one column (the second reader).
+  const collapsed = !PHONE.matches && (RAIL_BAND.matches || (pin ? pin === "rail" : app));
   // ONE class on the shell. `.rail-host` is the component's own trigger, so what a rail looks
   // like is defined in bina-nav.css for every app — the shell only says whether it is one.
   document.getElementById("app").classList.toggle("rail-host", collapsed);
   document.getElementById("app").classList.toggle("rail-collapsed", collapsed);
   const t = $("#railToggle"); if (t) t.setAttribute("aria-expanded", String(!collapsed));
 }
-if (RAIL_BAND.addEventListener) RAIL_BAND.addEventListener("change", applyRail);
+if (RAIL_BAND.addEventListener) RAIL_BAND.addEventListener("change", () => applyRail());
+if (PHONE.addEventListener) PHONE.addEventListener("change", () => applyRail());
 function toggleRail() {
-  const now = localStorage.getItem("railCollapsed") === "1";
-  localStorage.setItem("railCollapsed", now ? "0" : "1");
+  // a rail here whatever is pinned (or, on a phone, no rail): a press would only hide a pin for the desktop
+  if (RAIL_BAND.matches || PHONE.matches) return;
+  const want = document.getElementById("app").classList.contains("rail-collapsed") ? "open" : "rail";
+  setRailPin(want === (inApp() ? "rail" : "open") ? null : want);
   applyRail();
 }
 
@@ -937,6 +1208,7 @@ function applyFocus(on, opts) {
   }
   if (save) { try { localStorage.setItem(FOCUS_KEY, on ? "1" : "0"); } catch (e) { /* private mode */ } }
   focusToFrame(on);
+  searchToFrame();                          // the bar's search goes with the bar, and comes back with it (DGO-1507)
   if (!on) leaveFullscreen();
 }
 // The embedded app's own navigation is the app's to hide — and it is the other half of the same
@@ -1036,6 +1308,8 @@ function officeTarget(href, base, modules, here) {
     }
     return null;
   }
+  // a person's link (DGO-1433): `/go/<ref>`, which this console resolves into one of its own routes
+  if (/^\/go(\/|$)/.test(u.pathname)) return { go: u.pathname + u.search };
   const route = /^#\/m\/([^/?#]+)([/?].*)?$/.exec(u.hash || "");
   if (route) {
     const m = (modules || []).find(x => x.id === route[1]);
@@ -1043,6 +1317,16 @@ function officeTarget(href, base, modules, here) {
     return null;
   }
   return null;
+}
+
+// …a `/go/<ref>` is asked of this console's own resolver, which answers the route as JSON when asked for JSON
+// (app.py `go`), and the shell moves its own route: navigated as it is, the FRAME would load the shell again
+// inside itself. A console that cannot answer: the address itself, as a top-level page.
+function goTo(path) {
+  fetch(path, { headers: { Accept: "application/json" }, credentials: "same-origin", redirect: "manual" })
+    .then(r => (r.ok ? r.json() : null))
+    .then(j => { if (j && typeof j.to === "string" && j.to.startsWith("/#/m/")) location.hash = j.to.slice(1); else location.assign(path); })
+    .catch(() => location.assign(path));
 }
 
 // …and the listener that uses it, on the APP's document (the frame is replaced on every navigation,
@@ -1061,6 +1345,7 @@ function officeLinksIntoFrame() {
     if (!t) return;
     e.preventDefault();
     e.stopPropagation();
+    if (t.go) { goTo(t.go); return; }
     location.hash = "#/m/" + t.module + (t.path || "");
   }, true);
 }
@@ -1131,15 +1416,23 @@ function openPalette() {
 }
 function closePalette() { const o = document.querySelector(".pal-ov"); if (o) o.remove(); }
 window.addEventListener("keydown", e => {
-  if ((e.metaKey || e.ctrlKey) && (e.key === "k" || e.key === "K")) { e.preventDefault(); openPalette(); }
+  // not behind an open dialog: it opens over the desktop now (DGO-1634), and the palette would open unseen under
+  // it — the key is still this page's (not the browser's address bar), it only waits for the dialog to close
+  if ((e.metaKey || e.ctrlKey) && (e.key === "k" || e.key === "K")) {
+    e.preventDefault();
+    if (!document.querySelector(".modal-ov")) openPalette();
+  }
 });
 
 // ── mobile bottom tab bar (shown < 640px via CSS; the rail is hidden there) ──
+const BOTTOM_PICKS = 4;   // the bar holds seven: «בית», four apps, «פתוחים», «עוד» (the four it always had)
 function buildBottomNav() {
   const old = document.querySelector(".bottomnav"); if (old) old.remove();
-  // The four business apps, in rail order — the same four a phone user actually opens. Any pick
-  // that isn't installed is dropped rather than rendered dead.
-  const picks = ["drive", "mail", "chat", "incoming"].map(id => MODULES.find(m => m.id === id)).filter(Boolean);
+  // The apps that ASK for a place here (`routing[].module.tab: true` in their app.json, carried by the
+  // compiler), in rail order, at most four — the console names no app above it (gate G9; DGO-1800). An app
+  // that is not installed has no tile and so no place. A linked office's `remote:` tile carries no `tab`; an app
+  // PLACED on this office from another (dgo-extend) keeps the tile its own app.json gives, `tab` included.
+  const picks = GROUPS.flatMap(g => MODULES.filter(m => m.group === g && m.tab === true)).slice(0, BOTTOM_PICKS);
   const bn = el("div", "bottomnav");
   // Home first, always: on a phone it is the only way to the twelve apps the three picks below
   // do not cover. `#/` renders the launcher (see route()).
@@ -1263,8 +1556,11 @@ function route() {
 
 // "/a/incoming/" + "/repos/x?y=1" → "/a/incoming/repos/x?y=1"; a bare "?y=1" appends to the root.
 function joinEmbed(embed, rest) {
-  if (!rest) return embed;
-  return rest.startsWith("?") ? embed + rest : embed.replace(/\/+$/, "") + rest;
+  // `dgoUrl` (mount.js) keeps an embed inside the mount when this shell is served from another
+  // office's console (`/a/console-home.<office>/`); at home it is the identity function.
+  var base = (typeof dgoUrl === "function") ? dgoUrl(embed) : embed;
+  if (!rest) return base;
+  return rest.startsWith("?") ? base + rest : base.replace(/\/+$/, "") + rest;
 }
 
 // The embedded app reports its inner route after every in-app navigation (same-origin
@@ -1305,10 +1601,12 @@ function renderNoSuchScreen(id) {
 
 function showContent() {
   $("#content").classList.remove("hidden"); $("#embedwrap").classList.add("hidden");
-  $("#acctChip").classList.add("hidden");   // the chip belongs to an embedded service, not to a console view
+  syncShellSearch();                        // …and so does the bar's search, when an app had offered its own
+  applyRail();                              // the console's own view: the whole menu, unless pinned (DGO-160)
 }
 function showEmbed(url, service) {
   $("#embedwrap").classList.remove("hidden"); $("#content").classList.add("hidden");
+  applyRail();                              // an app: the rail folds to its icons, unless pinned (DGO-160)
   const f = $("#frame");
   // Skip the reload only when the frame is ALREADY THERE — compared against the frame's
   // LIVE location, never the src attribute. SPA navigation moves the frame without
@@ -1318,15 +1616,18 @@ function showEmbed(url, service) {
   // (measured live 2026-08-24). Same-origin, so reading the location is ours to do.
   let cur = null;
   try { cur = f.contentWindow.location.pathname + f.contentWindow.location.search; } catch (err) { /* not ours */ }
-  const chip = $("#acctChip");
-  chip.classList.toggle("hidden", !service);
-  if (cur === url) { watchFrameRoute(); return; } // already there — and the account bar is already rendered too
-  if (service) renderAccountBar(service, chip); else chip.innerHTML = "";
+  // No app's account in the office's bar (DGO-1624, DGO-1641 — the owner: «התפריט הזה אמור להיות נקי, בלי החשבון
+  // של הדרייב או החשבון של המייל … בתוך הכותרת של האפליקציה, לא הכותרת של כל האפליקציות»). Every app that has
+  // accounts shows, switches and connects them in its own screen (drive's «כוננים», mail's mailboxes, git's
+  // «חשבונות ומראות», computers, digital assets, the registrar's session), so the bar keeps the screen's name,
+  // the search and full screen. `service` still names whose account switches reload this frame.
+  if (cur === url) { watchFrameRoute(); return; } // already there
   // the app arrives with the shell's theme already applied — set it on load, not after, so the app
   // never paints light for a frame and then flips
-  f.onload = () => { themeIntoFrame(); watchFrameRoute(); officeLinksIntoFrame(); };
+  f.onload = () => { themeIntoFrame(); watchFrameRoute(); officeLinksIntoFrame(); syncShellSearch(); };
   f.src = url;
   watchFrameRoute();
+  syncShellSearch();                        // the app that offered is leaving: the bar is the palette until the next one offers
 }
 
 /* ── the app's route IS the shell's route ────────────────────────────────────────────────────────
@@ -1472,7 +1773,33 @@ function renderSwitcher() {
   });
 }
 
+// A LINKED OFFICE'S «המרכז» THAT CARRIES NO DOOR is an office whose console cannot be mounted: its
+// `/mount.js` is not JavaScript there, so the tile can only reach the nested host — another SITE on
+// `*.localhost`, where a frame can neither sign a browser in nor be inspected (measured 2026-11-01:
+// the MacBook's `/mount.js` answered `text/html` — its own SPA). That is a RELEASE, not a sign-in
+// problem, and it has to be answered BEFORE the own-host flow: that flow would try to sign the person
+// in and end in a card about «כניסה» or «כתובת», sending the owner to look for the wrong thing.
+//
+// ONE RULE, BOTH SURFACES: the desktop draws the same card for the same window and calls this through
+// the window (desktop.js:askOwnHost), because a fix that reaches only the framed view leaves the other
+// one lying. The own-host flow stays right for every OTHER remote app that owns its origin (Plane,
+// בינה) — those keep it.
+function staleRemoteConsole(m) {
+  return !!(NO_NESTED_HOST && m && m.remote && !m.door && m.remote.module_id === "console");
+}
+window.staleRemoteConsole = staleRemoteConsole;
+
 function openModule(m, rest) {
+  // A tile that opens AS THE PAGE (`top`): the business's door on a phone (DGO-1328) — another site, whose
+  // sign-in and cookies work only first-party; a frame of it (the content frame or a desktop window) on a
+  // localhost console could not sign in. An https address only — a peer's tile is copied as its office
+  // wrote it — and its own address alone, no inner path. The tile's hash goes first, so the phone's back
+  // lands on the launcher, not on a route that would leave for the door again.
+  if (m.top && m.external && /^https:\/\/[^/]/i.test(m.url || "")) {
+    history.replaceState(null, "", location.pathname + location.search);
+    location.assign(m.url);
+    return;
+  }
   // Desktop mode: every module is a window on the desktop, not the content of the one frame. For an
   // app of its own host the window IS that host (desktop.js's openExternal), so nothing is proxied.
   if (window.BinaDesktop && BinaDesktop.isOn()) return BinaDesktop.openModule(m, rest);
@@ -1484,7 +1811,15 @@ function openModule(m, rest) {
     // (2026-10-04: the owner's only sign that a tunnel had been dead for fifteen hours).
     const asked = ASKED_ANYWAY === m.id; ASKED_ANYWAY = "";
     if (isOff(m) && !asked) return renderExternalNotice(m, url);
+    if (staleRemoteConsole(m)) return renderExternalNotice(m, url, "old");
     if (NO_NESTED_HOST && m.signed_in) return openOwnHost(m, url);
+    // A REMOTE APP WITH NO DOOR ON A `*.localhost` OFFICE cannot be framed at all: its tile carries
+    // no `door` (the linked office publishes it as own-host-only), so the frame would open the
+    // nested host — another SITE here — and that frame can neither sign a browser in nor be
+    // inspected (a cross-origin frame is by definition "loaded"), so the person sees a dead pane
+    // with no explanation (DGO-553: the «המרכז» tile of an office that has not been updated yet).
+    // Saying so beats a blank frame: the link is fine, the other office is older.
+    if (NO_NESTED_HOST && m.remote && !m.door) return renderExternalNotice(m, url, "old");
     showEmbed(url);
     setTimeout(() => externalFallback(m, url), 2500);   // card only when nothing rendered
     watchOwnHost(m, url);                               // …and the host itself, once the frame had its chance
@@ -1501,1077 +1836,9 @@ function openModule(m, rest) {
 // the app-management app (#/m/apps embeds /a/app-management/), which owns launching AND lifecycle
 // (enable/disable/install/uninstall) in one place. The old renderApps was removed here.
 
-// ── account bar (platform services: drive :8975 / mail :8970) ───────────────────
-// A platform service owns N connections (accounts) + ONE active pointer; every op it runs — for the
-// embedded app AND for n8n — goes to the active one. So the bar is the single place a human answers
-// "which account is this working on right now?". Contract (ai/context/platform-service-contract.md §2):
-//   GET  /connections        -> {active, connections:[{id,protocol,label,account_hint,status}]}
-//   POST /connections/select {id} · POST /connections {protocol,label,secret} · DELETE /connections/<id>
-//   GET  /readyz             -> 200 {ready:true} | 503 {ready:false, reason}
-// Reached through the console's same-origin /api/svc/<service>/… proxy (SSO already applied).
-const SVC_HE = { drive: "דרייב", mail: "דואר", chat: "צ׳אט" };
-
-// ══ PROVIDER CATALOG — fetched from the SERVICE, never authored here ═════════════════════════
-// §4b: "Users pick a PROVIDER, not a protocol." A protocol (`chat_tg_bot`) is capability + auth
-// method — a derived string, never a thing a human chose.
-//
-// This used to be a hardcoded map in this file, with a generic username/password card as the
-// fallback for any protocol it did not know. Its own header said to delete it "the moment drive
-// (:8975) and mail (:8970) serve GET /providers". All three services serve it — drive app.py:1020,
-// mail service.py:573, chat server.js:231 — and the map was never deleted. What that cost, measured
-// live 2026-09-02:
-//
-//   · TELEGRAM: no card, so the fallback asked for username+password and POSTed {username,password}.
-//     The chat adapter wants {token}. The operator got "connection chat_tg_bot-…: secret needs
-//     {token}" — their correct token rejected as if THEY had mistyped it. The service had been
-//     serving needs:['token'] the whole time.
-//   · WHATSAPP: no card, so the fallback offered a CREDENTIAL FORM for a pairing that is a browser
-//     ceremony. There is no secret to type; the connection was created anyway, baileys ran out of
-//     QR regenerations and the operator got baileys' own "QR refs attempts ended".
-//
-// A fallback that invents a form the service cannot accept is worse than no card at all: it turns
-// "this console does not know that protocol" into "your credentials are wrong". So there is no
-// fallback now — the service is the authority on what it can connect and what each method needs,
-// and a protocol absent from its own catalog is simply not offered.
-//
-// Service shape (identical across drive/mail/chat):
-//   { id, name, icon, builtin?, description,
-//     auth_methods: [{ id, label, protocol, needs:[<field key>], recommended,
-//                      direct?, can, explain?, help_url?, start_url? }] }
-
-// The one thing that IS the console's to own: how a field key is PRESENTED. The service says it
-// needs "token"; what that is called in Hebrew, whether it masks, and what a valid one looks like is
-// this screen's business. An unknown key still renders — as a plain text field under its own name —
-// because a new field the service asks for must never be silently undisplayable.
-const FIELD_HE = {
-  token: { label: "Bot Token", type: "password", placeholder: "123456789:AA…",
-           hint: "הטוקן ש-BotFather מחזיר כשיוצרים בוט." },
-  username: { label: "שם משתמש / כתובת", type: "text", is_hint: true },
-  password: { label: "סיסמה / מפתח גישה", type: "password" },
-  service_account_json: { label: "מפתח חשבון שירות (JSON)", type: "textarea",
-                          hint: "הקובץ שמורידים מ-Google Cloud ← IAM ← חשבונות שירות." },
-};
-const fieldSpec = (key) => ({ key, label: key, type: "text", ...(FIELD_HE[key] || {}) });
-
-// service -> the catalog it served, and a flat protocol index the account bar reads.
-const _PROV = {};
-const PROTO_INDEX = {};
-
-/** Fetch and cache one service's catalog. Returns null when the service could not answer — the
- *  caller must SAY so rather than substituting a guess. */
-async function loadProviders(service) {
-  const r = await svcJson(service, "/providers");
-  const list = (r && r.ok && r.d && Array.isArray(r.d.providers)) ? r.d.providers : null;
-  if (!list) return null;
-  _PROV[service] = list;
-  for (const p of list) {
-    for (const m of (p.auth_methods || [])) {
-      if (!m.protocol) continue;
-      PROTO_INDEX[m.protocol] = {
-        provider_name: p.name, method_label: m.label,
-        // "always on" is the service's `builtin` — a provider whose engine the deployment runs
-        // itself. Derived from the catalog, never from the shape of an id.
-        always_on: !!p.builtin || (!m.needs || !m.needs.length) && !m.start_url && m.direct !== true,
-      };
-    }
-  }
-  return list;
-}
-
-/** The service's catalog -> the wizard's card shape. The ONLY mapper. */
-function providerCards(service) {
-  const list = _PROV[service] || [];
-  return list.map(p => ({
-    id: p.id, name: p.name, icon: p.icon || "key", desc: p.description || "",
-    always_on: !!p.builtin,
-    methods: (p.auth_methods || []).map(m => ({
-      protocol: m.protocol,
-      provider_name: p.name,
-      auth_method_id: m.id,
-      auth_method_label: m.label,
-      auth_desc: m.explain || (m.needs && m.needs.length
-        ? `נדרשים: ${m.needs.join(", ")}.` : "לא נדרשים פרטי גישה."),
-      grants: m.can || "ההרשאות נקבעות על ידי השירות.",
-      needs: (m.needs || []).map(fieldSpec),
-      recommended: !!m.recommended,
-      help_url: m.help_url || null,
-      start_url: m.start_url || null,
-      // THREE shapes, and the service distinguishes them — this console must not guess:
-      //   always_on  nothing to provide (a private engine we run)
-      //   oauth      a consent window we open        (start_url + no needs)
-      //   handoff    a ceremony elsewhere            (start_url + direct === false) ← WhatsApp's QR
-      //   form       fields the operator types       (needs[])
-      always_on: !!p.builtin,
-      oauth: !!m.start_url && m.direct !== false && !(m.needs || []).length,
-      handoff: m.direct === false && !!m.start_url,
-    })).sort((a, b) => (b.recommended ? 1 : 0) - (a.recommended ? 1 : 0)),
-  })).sort((a, b) => (b.always_on ? 1 : 0) - (a.always_on ? 1 : 0));   // §4b: local listed first
-}
-
-const protoHe = p => (PROTO_INDEX[p] ? PROTO_INDEX[p].provider_name : (p || ""));
-const protoFullHe = p => {
-  const c = PROTO_INDEX[p];
-  return c ? `${c.provider_name} · ${c.method_label}` : (p || "");
-};
-// A connection ON A PRIVATE ENGINE — one whose process the deployment runs itself. It is never
-// removable from here: on a private engine you do not disconnect an account, you delete a PROFILE,
-// and that is an operation in the owning app (deleting the mailbox removes its connection with it).
-//
-// Derived from the catalogue's own `always_on`, not from the shape of the id. It used to be
-// `/-local$/`, which worked only while each private engine had exactly ONE synthetic connection
-// called `<proto>-local`. Mail's private engine now has N real vault instances
-// (`mail_imap_local-<8hex>`, one per declared profile), so the id says nothing — and reading an id
-// as a data structure is precisely the habit that made every profile of every app read as "מקומי".
-// `-local` is kept as a SECOND signal, not as the definition: drive and chat still synthesise a
-// `<proto>-local` row, and this console serves every service at once. Either signal is enough.
-const isLocalConn = c => !!((PROTO_INDEX[(c && c.protocol) || ""] || {}).always_on)
-                      || /-local$/.test((c && c.id) || "");
-// N profiles on one private engine means the NAME has to be the profile's. "מקומי" for all of them
-// would render the switcher as a column of identical rows.
-const connHe = c => (c && c.label) || protoHe(c && c.protocol) || (c && c.id) || "";
-// The hint is a SECOND line of identity (the Google address). When a connection is labelled by its
-// address — which is exactly what the OAuth broker does — label and hint are the same string, and
-// echoing it twice reads as a rendering bug. Show it only when it actually adds something.
-const connHint = c => {
-  const h = c.account_hint;
-  // NOT for a private-engine profile: its hint is its id ("admin" printed under «מנהל» in the top
-  // bar of every screen) — the office's word, not an address a person recognises. Two such profiles
-  // are told apart by their names; the id is one hover away (`connId`, in the chip's title).
-  return h && h !== connHe(c) && !c.is_private ? h : null;
-};
-const connId = c => (c && c.is_private && c.account_hint && c.account_hint !== connHe(c) ? "פרופיל " + c.account_hint : "");
-
-// One fetch shape for the whole plane: a service that is down and a service that returns an error
-// body must both degrade to "not available", never to a thrown render.
-async function svcJson(service, path, opt) {
-  try {
-    const r = await fetch(`/api/svc/${service}${path}`, opt);
-    return { ok: r.ok, d: await r.json().catch(() => null) };
-  } catch (e) { return { ok: false, d: null }; }
-}
-const svcPost = (service, path, body) => svcJson(service, path,
-  { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
-
-function closeAcctMenus(keep) {
-  document.querySelectorAll(".acct-menu").forEach(m => {
-    if (m === keep) return;
-    m.classList.add("hidden");
-    // the trigger's aria-expanded is part of the menu's state, not decoration: leaving it "true" on
-    // a closed menu tells a screen reader the opposite of what the screen shows.
-    const b = m.parentNode && m.parentNode.querySelector(".acct-btn");
-    if (b) b.setAttribute("aria-expanded", "false");
-  });
-}
-// click-away closes any open account menu; clicks INSIDE a switch are its own business
-document.addEventListener("click", e => { if (!e.target.closest(".acct-switch")) closeAcctMenus(); });
-// C14.1 — layered Escape: the menu is the innermost layer, so it takes Escape before anything else
-// and returns focus to the chip that opened it.
-document.addEventListener("keydown", e => {
-  if (e.key !== "Escape") return;
-  const open = document.querySelector(".acct-menu:not(.hidden)");
-  if (!open) return;
-  e.preventDefault(); e.stopPropagation();
-  closeAcctMenus();
-  const b = open.parentNode && open.parentNode.querySelector(".acct-btn");
-  if (b) b.focus();
-}, true);
-
-// ── live state chips (§4b) ──────────────────────────────────────────────────────
-// Four states, one vocabulary, everywhere a connection is shown. "בבדיקה" is a REAL state, not a
-// spinner: it is what a write looks like between "sent" and "confirmed by the probe" — the console
-// never renders a write as done on the strength of a 200 alone.
-const CHIP_HE = { ok: "מחובר", checking: "בבדיקה", action: "דורש טיפול", error: "שגיאה" };
-const CHIP_CLS = { ok: "healthy", checking: "checking", action: "needs_action", error: "degraded" };
-const chipHtml = (st, title) =>
-  `<span class="chip ${CHIP_CLS[st]}"${title ? ` title="${esc(title)}"` : ""}>` +
-  `<span class="dot ${CHIP_CLS[st]}"></span>${CHIP_HE[st]}</span>`;
-
-// /readyz is the ONLY readiness truth (§2) — n8n reads the same endpoint, so the operator's chip and
-// the automation layer's view of "usable" can never disagree. Distinguish the two failures: the
-// service ANSWERED that it isn't ready (it knows why -> דורש טיפול) vs. it didn't answer at all
-// (nobody knows why -> שגיאה). They need different actions, so they must not share a chip.
-function readyState(ready) {
-  if (ready.ok && ready.d && ready.d.ready) return "ok";
-  if (ready.d && ready.d.ready === false) return "action";
-  return "error";
-}
-function readyReason(ready, st) {
-  if (st === "ok") return "החשבון מחובר, והשירות מאמת זאת מול הספק.";
-  if (ready.d && ready.d.reason) return ready.d.reason;          // the service's OWN words
-  if (ready.d && ready.d.message) return ready.d.message;
-  // Third case, and it is NOT "no answer": the service replied, but without the `ready` the contract
-  // (§2) requires, so nothing here can say whether it is usable. Saying "לא השיב" instead would be a
-  // plain falsehood, and it sends the reader to look at the wrong thing — a restarting container
-  // rather than a service answering off-contract.
-  if (ready.d) return "השירות השיב לבדיקת המוכנות בלי לדווח על מצבו. ייתכן שגרסת השירות ישנה מזו של המסך.";
-  return "השירות לא השיב לבדיקת המוכנות. ייתכן שהוא מופעל מחדש כרגע.";
-}
-const hhmm = t => new Date(t).toLocaleTimeString("he-IL", { hour: "2-digit", minute: "2-digit" });
-
-// The chip in its pending state: shown while a write is in flight, BEFORE any probe confirms it.
-function acctChipChecking(mount, text) {
-  mount.innerHTML = `<button class="acct-btn" type="button" disabled aria-busy="true">` +
-    `<span class="dot checking"></span>` +
-    `<span class="acct-tx"><b class="acct-lbl muted">${esc(text)}</b></span></button>`;
-}
-
-// C4 — everything the health panel needs, captured at the moment the chip last rendered. Kept so the
-// panel reports the same probe the chip is showing rather than issuing a second, later one that could
-// disagree with the dot the person just clicked.
-let _acct = null;
-
-// The worst state across every connection: the ACTIVE one's live verdict, plus the last-known status
-// of the rest. One definition, used by both the menu entry and the panel header, so the badge and the
-// summary sentence can never contradict each other.
-function acctWorst(conns, activeSt) {
-  if (activeSt === "error") return "error";
-  if (activeSt !== "ok") return "action";
-  return conns.some(c => c.status && c.status !== "ok") ? "action" : "ok";
-}
-
-// C3/C15 — one switcher, in the top bar. The chip is deliberately small: avatar-free, dot + name +
-// chevron. Everything that used to sprawl across the band — the connect button, the last-checked
-// stamp, the refresh, the service's reason — moves into the menu, where there is room to say it in
-// words instead of abbreviating it to fit a row.
-async function renderAccountBar(service, mount) {
-  acctChipChecking(mount, "טוען חשבונות…");
-  const [conn, ready, man] = await Promise.all([
-    svcJson(service, "/connections"), svcJson(service, "/readyz"), svcJson(service, "/manifest"),
-  ]);
-  const at = Date.now();
-  mount.innerHTML = "";
-  if (!conn.ok || !conn.d || !Array.isArray(conn.d.connections)) {
-    _acct = null;
-    const b = el("button", "acct-btn bad",
-      `<span class="dot degraded"></span><span class="acct-tx"><b>שירות החשבונות אינו זמין</b></span>` +
-      `<span class="acct-chev">${mIcon("refresh")}</span>`);
-    b.title = "לא ניתן לקרוא את רשימת החשבונות. לחצו לבדיקה חוזרת.";
-    b.onclick = () => renderAccountBar(service, mount);
-    mount.appendChild(b);
-    return;
-  }
-  const conns = conn.d.connections;
-  const active = conns.find(c => c.id === conn.d.active) || null;
-  const st = active ? readyState(ready) : "action";
-  const reason = active ? readyReason(ready, st) : "לא נבחר חשבון פעיל — בחרו חשבון או חברו חשבון חדש.";
-  // Populate PROTO_INDEX before the rows render — protoFullHe/isLocalConn read it, and an
-  // unloaded index would print raw protocol ids and mark every account as removable.
-  if (!_PROV[service]) await loadProviders(service);
-  const protos = ((man.d && man.d.protocols) || [])
-    .map(p => (typeof p === "string" ? p : (p && (p.id || p.protocol))))
-    .filter(Boolean);
-  _acct = { service, conns, active, st, reason, at, mount };
-
-  // ── the chip ──
-  const sw = el("div", "acct-switch");
-  const b = el("button", "acct-btn",
-    `<span class="dot ${CHIP_CLS[st]}"></span>` +
-    `<span class="acct-tx"><b class="acct-lbl">${esc(active ? connHe(active) : "לא נבחר חשבון")}</b>` +
-    (active && connHint(active) ? `<small class="acct-hint">${esc(connHint(active))}</small>` : "") +
-    `</span><span class="acct-chev">${mIcon("chevron")}</span>`);
-  b.title = [`${CHIP_HE[st]} — ${reason}`, connId(active)].filter(Boolean).join(" · ");
-  b.setAttribute("aria-haspopup", "menu");
-  b.setAttribute("aria-expanded", "false");
-  b.setAttribute("aria-label", `חשבון פעיל: ${active ? connHe(active) : "לא נבחר"} — ${CHIP_HE[st]}. החלפת חשבון`);
-
-  // ── the menu ──
-  const menu = el("div", "acct-menu hidden");
-  menu.setAttribute("role", "menu");
-  const others = conns.filter(c => !active || c.id !== active.id);
-  if (!others.length) menu.appendChild(el("div", "acct-empty", "אין חשבונות נוספים"));
-  for (const c of others) {
-    const item = el("div", "acct-item");
-    // A non-active connection cannot be probed — /readyz probes the ACTIVE one only (§2). So its chip
-    // reports the instance's own last-known status, and says so, rather than implying a live check.
-    const cst = c.status === "ok" ? "ok" : "action";
-    const ctitle = c.status === "ok"
-      ? "מצב אחרון מהשירות. בדיקה חיה מתבצעת רק על החשבון הפעיל."
-      : "השירות סימן את החשבון הזה כדורש טיפול.";
-    // Three facts about this account — name, address, how it connects — STACKED. Side by side they
-    // compete for one 290px row and all three lose: the name truncates to two letters, the address to an
-    // ellipsis, and the row answers nothing. Vertical costs a few pixels of menu height and keeps
-    // every one of them readable.
-    const pick = el("button", "acct-pick",
-      `<span class="acct-tx2">` +
-        `<span class="acct-l1">${chipHtml(cst, ctitle)}<b>${esc(connHe(c))}</b></span>` +
-        (connHint(c) ? `<small class="acct-hint">${esc(connHint(c))}</small>` : "") +
-        `<small class="acct-proto">${esc(protoFullHe(c.protocol))}</small>` +
-      `</span>`);
-    pick.setAttribute("role", "menuitemradio"); pick.setAttribute("aria-checked", "false");
-    pick.onclick = () => svcSelect(service, c.id, mount);
-    item.appendChild(pick);
-    if (!isLocalConn(c)) {   // the synthetic local account is the floor of the service — never removable
-      const rm = el("button", "acct-rm icon-btn", mIcon("trash"));
-      rm.title = "הסר חשבון";
-      rm.onclick = () => svcRemove(service, c, mount);
-      item.appendChild(rm);
-    }
-    menu.appendChild(item);
-  }
-  menu.appendChild(el("div", "acct-sep"));
-
-  // ── connection health (C4) ──
-  // The entry summarises EVERY connection, so its dot is the worst of them — not the active one's.
-  // Keying the badge off the active state instead would hide the one case the badge exists for: the
-  // account you are not looking at is the broken one.
-  const worst = acctWorst(conns, st);
-  const hp = el("button", "acct-act",
-    `<span class="dot ${CHIP_CLS[worst]}"></span><span>מצב החיבורים</span>` +
-    (worst === "ok" ? "" : `<span class="acct-badge ${CHIP_CLS[worst]}" role="img" aria-label="דורש טיפול" title="דורש טיפול">${mIcon("bang")}</span>`));
-  hp.setAttribute("role", "menuitem");
-  hp.onclick = () => { closeAcctMenus(); healthPanel(); };
-  menu.appendChild(hp);
-
-  // ── connect a new account — a GUIDED flow, never a jump to an authorize_url (§4b) ──
-  // The manifest says which protocols this service can connect; the wizard turns them into PROVIDER
-  // cards. Local is NOT filtered out here: it is a first-class provider, and "make the local account
-  // the active one" is a legitimate thing to walk a human through.
-  if (protos.length) {
-    const ab = el("button", "acct-act add", `<span class="acct-plus">${mIcon("plus")}</span><span>חיבור חשבון חדש</span>`);
-    ab.setAttribute("role", "menuitem");
-    ab.onclick = () => { closeAcctMenus(); openConnectWizard(service, protos, mount); };
-    menu.appendChild(ab);
-  }
-
-  // ── last-checked + refresh, at the foot of the menu where there is room for the full sentence ──
-  const foot = el("div", "acct-foot",
-    `<span class="acct-when">${mIcon("clock")} נבדק ב-${esc(hhmm(at))}</span>`);
-  const rt = el("button", "acct-recheck", "בדיקה מחדש");
-  rt.onclick = () => renderAccountBar(service, mount);
-  foot.appendChild(rt);
-  menu.appendChild(foot);
-  if (st !== "ok") menu.appendChild(el("div", "acct-warn", esc(reason)));
-
-  b.onclick = () => {
-    closeAcctMenus(menu);
-    const openNow = menu.classList.toggle("hidden") === false;
-    b.setAttribute("aria-expanded", openNow ? "true" : "false");
-  };
-  sw.appendChild(b); sw.appendChild(menu);
-  mount.appendChild(sw);
-}
-
-// ── C4 · connection health: every connection's state, its reason, and what to do about it ────────
-// The chip answers "which account, and is it up?". This answers "what is wrong with WHICH one" — the
-// question you have when something is wrong, which is the only time you open it.
-//
-// One honesty rule runs through it: §2 lets the service probe the ACTIVE connection only. So exactly
-// one card here carries a live verdict and the rest carry the service's last-known status, and the
-// panel SAYS which is which. A grid of confident green ticks, only one of which was actually checked,
-// is worse than no panel at all.
-function healthPanel() {
-  if (!_acct) return;
-  closeModal();
-  const { service, conns, active, st, reason, at } = _acct;
-  const svcName = SVC_HE[service] || service;
-  const worst = acctWorst(conns, st);
-  const summary = worst === "ok" ? "כל החיבורים תקינים"
-    : worst === "error" ? "חיבור אחד או יותר דורשים טיפול" : "חיבור אחד או יותר דורשים תשומת לב";
-
-  const card = c => {
-    const isActive = !!active && c.id === active.id;
-    const cst = isActive ? st : (c.status === "ok" ? "ok" : "action");
-    const line = isActive ? reason
-      : (c.status === "ok" ? "מצב אחרון שדיווח השירות." : "השירות סימן את החשבון הזה כדורש טיפול.");
-    return `<div class="hc${isActive ? " on" : ""}">` +
-      `<div class="hc-h">` +
-        `<span class="hc-tx"><b>${esc(connHe(c))}</b>` +
-        (connHint(c) ? `<small>${esc(connHint(c))}</small>` : "") + `</span>` +
-        chipHtml(cst) +
-      `</div>` +
-      `<div class="hc-proto">${esc(protoFullHe(c.protocol))}</div>` +
-      `<div class="hc-reason${cst === "ok" ? "" : " bad"}">${esc(line)}</div>` +
-      `<div class="hc-meta">` +
-        (isActive
-          ? `${mIcon("check")} נבדק חי מול השירות ב-${esc(hhmm(at))}`
-          : `${mIcon("clock")} לא נבדק — בדיקה חיה מתבצעת על החשבון הפעיל בלבד`) +
-      `</div></div>`;
-  };
-
-  const ov = el("div", "modal-ov");
-  const box = el("div", "modal wide");
-  box.innerHTML =
-    `<div class="modal-h"><h3>מצב החיבורים</h3><button class="ghost" id="mX">${mIcon("x")}</button></div>` +
-    `<div class="cw-body">` +
-      `<div class="sub">${esc(svcName)} · ${one(conns.length, "חשבון אחד", "חשבונות")} · ${esc(summary)}</div>` +
-      `<div class="hlist">${conns.map(card).join("")}</div>` +
-      // The sim's panel carries a per-connection event log. No platform service serves one, and a
-      // panel that invents a plausible history is worse than one that admits the gap — so this says
-      // where the history actually lives instead of manufacturing rows.
-      `<div class="cw-msg soft">${mIcon("alert")} יומן אירועים לכל חיבור עדיין לא נשמר בשירותים. ` +
-        `אירועי חיבור מלאים זמינים במסך <b>חיבורים ומפתחות</b>.</div>` +
-      `<div class="cw-foot"><button class="btn ghost" id="hRe">${mIcon("refresh")} בדיקה מחדש</button>` +
-        `<span class="grow"></span><button class="btn" id="hX">סגירה</button></div>` +
-    `</div>`;
-  ov.appendChild(box); document.body.appendChild(ov);
-  box.querySelector("#mX").onclick = closeModal;
-  box.querySelector("#hX").onclick = closeModal;
-  box.querySelector("#hRe").onclick = async () => {
-    await renderAccountBar(service, _acct.mount);
-    healthPanel();          // re-open on the FRESH probe, so the panel never shows a stale verdict
-  };
-  ov.onclick = e => { if (e.target === ov) closeModal(); };
-}
-
-// Writes are pending → confirmed-by-probe, never optimistic (§4b): show "בבדיקה" the moment the write
-// leaves, and let the re-render's /readyz decide what the bar ends up saying.
-async function svcSelect(service, id, mount) {
-  closeAcctMenus();
-  acctChipChecking(mount, "מחליפים חשבון ומאמתים מול השירות…");
-  const r = await svcPost(service, "/connections/select", { id });
-  if (!r.ok) {
-    mount.innerHTML = "";
-    const bar = el("div", "acctbar", chipHtml("error") +
-      `<span class="acct-lbl">החלפת החשבון נכשלה</span>` +
-      `<span class="acct-warn">${esc((r.d && (r.d.reason || r.d.error || r.d.message)) || "השירות דחה את הבקשה.")}</span>`);
-    const rt = el("button", "icon-btn acct-refresh", mIcon("refresh"));
-    rt.title = "בדיקה מחדש"; rt.onclick = () => renderAccountBar(service, mount);
-    bar.appendChild(rt); mount.appendChild(bar); return;
-  }
-  renderAccountBar(service, mount);   // re-read: select also changes what /readyz reports
-  reloadEmbeddedApp(service);         // …and tell the app, which is showing the OLD account's data
-}
-
-/**
- * Re-load the embedded app after the SHELL has changed its active account.
- *
- * The chip and the app both act on ONE server-side pointer, and nothing connected them: switching
- * from the chip changed the pointer, the chip re-read and showed the new account, and the iframe —
- * which had already fetched everything — went on showing the previous account's conversations, its
- * own switcher still naming the old connection. Two controls disagreeing about which account you are
- * on, with the data belonging to neither.
- *
- * Reloading the frame rather than posting a message, deliberately: every embedded service (drive,
- * mail, chat) re-reads its whole world on boot, so one line here fixes all of them and any future
- * one, with no per-app protocol to define, version and keep in sync. The cost is a re-fetch the user
- * asked for anyway by switching accounts.
- *
- * `src = src` is not a no-op on an iframe — assigning src reloads it even when the value is
- * unchanged, which is what we want, because the URL does not encode the account.
- */
-function reloadEmbeddedApp(service) {
-  // desktop mode: every window showing this service re-reads it, not the (hidden) single frame
-  if (window.BinaDesktop && BinaDesktop.isOn()) return BinaDesktop.reloadService(service);
-  const f = $("#frame");
-  if (!f || !f.src || $("#embedwrap").classList.contains("hidden")) return;
-
-  // ASK FIRST, RELOAD IF UNANSWERED.
-  //
-  // An app that knows how to re-read a connection switch does it in place: no white flash, no lost
-  // scroll position, no re-download. One that does not — or is mid-navigation, or predates this —
-  // simply never answers, and the reload below still puts it right. So the fast path is an
-  // optimisation and the correct path is the fallback, which is the order that cannot regress.
-  //
-  // Same-origin: the app is proxied under /a/<name>/ on this very host, so targetOrigin is our own
-  // origin and no cross-origin trust is being extended to anything.
-  // THE CONTRACT — must stay identical to the listener in apps/chat/src/api/ui/chat.ejs:
-  //   out  { type: 'platform:connection-changed', service: <app id> }
-  //   in   { type: 'platform:reload-ack',         service: <app id> }
-  // `platform:` rather than `console:` because this is the shell↔app boundary generally, not one
-  // console feature, and every embedded service is expected to answer it eventually. `service` is
-  // sent so an app that shares a frame with others can ignore a broadcast meant for a sibling.
-  //
-  // The message carries NO connection id, deliberately: the shell knows THAT the pointer moved,
-  // never where to. The app re-asks the service, which owns the pointer — so a compromised or buggy
-  // shell cannot point an app at a connection nobody selected.
-  let acked = false;
-  const onAck = (e) => {
-    if (e.origin !== location.origin) return;
-    if (e.source === f.contentWindow && e.data && e.data.type === "platform:reload-ack") acked = true;
-  };
-  window.addEventListener("message", onAck);
-  try {
-    f.contentWindow.postMessage({ type: "platform:connection-changed", service }, location.origin);
-  } catch { /* cross-origin or not yet loaded — the reload covers it */ }
-
-  setTimeout(() => {
-    window.removeEventListener("message", onAck);
-    if (!acked) f.src = f.src;
-  }, 400);
-}
-
-async function svcRemove(service, c, mount) {
-  closeAcctMenus();
-  if (!await binaAsk({ title: "להסיר את החשבון?", body: "הפעולה מוחקת את פרטי הגישה שלו.", ok: "הסרה", danger: true,
-                       facts: [["חשבון", connHe(c)]] })) return;
-  acctChipChecking(mount, "מסירים את החשבון…");
-  const r = await svcJson(service, "/connections/" + encodeURIComponent(c.id), { method: "DELETE" });
-  if (!r.ok) binaTell("הסרת החשבון נכשלה — " +
-    ((r.d && (r.d.reason || r.d.error || r.d.message)) || "השירות דחה את הבקשה."), "bad");
-  renderAccountBar(service, mount);
-  // Removing the ACTIVE account moves the pointer too (the service clears it), so the app is now
-  // showing data for an account that no longer exists. Same reload, same reason as svcSelect.
-  if (r.ok) reloadEmbeddedApp(service);
-}
-
-// ══ GUIDED CONNECT FLOW (§4b) ═════════════════════════════════════════════════
-// The anti-pattern this replaces: "חבר חשבון חדש" → straight to an authorize_url. No provider
-// choice, no auth-method choice, no explanation, no waiting state, no verification — a flow that
-// can fail silently. Here every step is a named state with a visible outcome and a way back.
-//
-//   provider → method → provide → verify → done
-//                          │         └─ probing → ok | fail          (never "added", only "verified")
-//                          └─ oauth: intro → waiting → timeout|error (consent can simply not happen)
-const CW_STEPS = ["provider", "method", "provide", "verify", "done"];
-const CW_STEP_HE = { provider: "ספק", method: "אופן חיבור", provide: "פרטי גישה",
-                     verify: "אימות", done: "שם והפעלה" };
-const CW_WAIT_MS = 180000;   // 3 min: long enough to pick an account + read a consent screen
-
-let _cw = null;   // the open wizard's state (one at a time, like the QR modal)
-
-async function openConnectWizard(service, protocols, mount) {
-  closeAcctMenus(); closeModal();
-  // The catalog is the SERVICE's. Fetch before rendering: a wizard that opened on a guess is how
-  // the operator ends up typing a real Telegram token into a field named "password".
-  const list = await loadProviders(service);
-  _cw = { service, mount, providers: list ? providerCards(service) : [], step: "provider", sub: null,
-          catalogErr: list ? null : "לא ניתן לקרוא מהשירות אילו ספקים אפשר לחבר. נסו שוב בעוד רגע.",
-          provider: null, method: null, secret: null, hint: null, label: "", connId: null,
-          prevActive: null, poll: null, deadline: 0, verify: null, err: null, authUrl: null };
-  const ov = el("div", "modal-ov cw-ov");
-  ov.appendChild(el("div", "modal wide"));
-  document.body.appendChild(ov);
-  ov.onclick = e => { if (e.target === ov) closeConnectWizard(); };
-  cwRender();
-}
-
-function cwStopPoll() { if (_cw && _cw.poll) { clearInterval(_cw.poll); _cw.poll = null; } }
-function closeConnectWizard() {
-  cwStopPoll();          // MUST precede clearing _cw — cwStopPoll reads the timer off it
-  const s = _cw; _cw = null;
-  const ov = document.querySelector(".cw-ov"); if (ov) ov.remove();
-  // Re-render the bar rather than trusting whatever the wizard did: the bar re-probes, so the state
-  // the operator is left looking at is confirmed, not assumed.
-  if (s) renderAccountBar(s.service, s.mount);
-}
-function cwGo(step, sub) { if (!_cw) return; cwStopPoll(); _cw.step = step; _cw.sub = sub || null; cwRender(); }
-
-function cwRender() {
-  if (!_cw) return;
-  const box = document.querySelector(".cw-ov .modal"); if (!box) return;
-  const i = CW_STEPS.indexOf(_cw.step);
-  box.innerHTML =
-    `<div class="modal-h"><h3>חיבור חשבון · ${esc(SVC_HE[_cw.service] || _cw.service)}</h3>` +
-    `<button class="ghost" id="cwX" title="סגירה" aria-label="סגירה">${mIcon("x")}</button></div>` +
-    `<div class="cw-steps" role="list">` +
-    CW_STEPS.map((s, n) => `<span class="cw-step${n < i ? " done" : n === i ? " cur" : ""}" role="listitem">` +
-      `${n + 1}. ${esc(CW_STEP_HE[s])}</span>`).join("") + `</div>` +
-    `<div class="cw-body" id="cwBody"></div><div class="cw-foot" id="cwFoot"></div>`;
-  $("#cwX").onclick = closeConnectWizard;
-  const body = $("#cwBody"), foot = $("#cwFoot");
-  ({ provider: cwProvider, method: cwMethod, provide: cwProvide,
-     verify: cwVerify, done: cwDone })[_cw.step](body, foot);
-}
-
-// every step that isn't the first offers a way back — "no dead ends" is structural, not per-screen
-function cwBackBtn(foot, step, sub, label) {
-  const b = el("button", "btn ghost sm", `${mIcon("back")} ${label || "חזרה"}`);
-  b.onclick = () => cwGo(step, sub);
-  foot.appendChild(b);
-}
-
-async function cwList() {
-  const r = await svcJson(_cw.service, "/connections");
-  return (r.ok && r.d && Array.isArray(r.d.connections)) ? r.d : null;
-}
-
-// ── step 1: provider — "what it is, not how it authenticates" ──
-function cwProvider(body, foot) {
-  if (_cw.catalogErr) {
-    body.innerHTML = `<div class="cw-msg err">${esc(_cw.catalogErr)}</div>`;
-    foot.appendChild(el("span", "cw-note grow", "אין קטלוג מקומי לנפול אליו — הספקים נקראים מהשירות."));
-    return;
-  }
-  body.innerHTML = `<div class="sub">מאיפה להביא את ה${esc(SVC_HE[_cw.service] || _cw.service)}? ` +
-                   `בוחרים ספק — על אופן ההתחברות נחליט בשלב הבא.</div>`;
-  if (!_cw.providers.length) {
-    body.appendChild(el("div", "cw-msg err",
-      "השירות לא מדווח על אף ספק שאפשר לחבר. ייתכן שהוא מופעל מחדש — נסו שוב בעוד רגע."));
-    const r = el("button", "btn", "סגירה"); r.onclick = closeConnectWizard; foot.appendChild(r);
-    return;
-  }
-  const grid = el("div", "cw-grid");
-  for (const p of _cw.providers) {
-    const card = el("button", "cw-card",
-      `<div class="cw-ic">${mIcon(p.icon)}</div>` +
-      `<div class="cw-t">${esc(p.name)}</div>` +
-      `<div class="cw-d">${esc(p.desc)}</div>` +
-      (p.always_on ? `<span class="pill ok">זמין תמיד</span>`
-                   : p.methods.length > 1 ? `<span class="cw-ways">${p.methods.length} דרכי חיבור</span>` : ``));
-    card.onclick = () => { _cw.provider = p; cwGo("method"); };
-    grid.appendChild(card);
-  }
-  body.appendChild(grid);
-  foot.appendChild(el("span", "cw-note", "שלב 1 מתוך 5 · אפשר לחזור אחורה בכל שלב."));
-}
-
-// ── step 2: how to connect — what each method needs, and what it will be able to do ──
-function cwMethod(body, foot) {
-  const p = _cw.provider;
-  body.innerHTML = `<div class="sub">איך להתחבר אל <b>${esc(p.name)}</b>?</div>`;
-  for (const m of p.methods) {
-    const row = el("button", "cw-m",
-      `<div class="cw-m-h"><span class="cw-m-ic">${mIcon(m.icon_method || (m.oauth ? "shield" : m.always_on ? "check" : "key"))}</span>` +
-      `<b>${esc(m.auth_method_label)}</b>` +
-      (m.recommended ? `<span class="pill ok">מומלץ</span>` : ``) + `</div>` +
-      `<div class="cw-m-d"><b>מה נדרש:</b> ${esc(m.auth_desc)}</div>` +
-      `<div class="cw-m-d"><b>מה זה מאפשר:</b> ${esc(m.grants)}</div>` +
-      (m.needs && m.needs.length
-        ? `<div class="cw-m-need">${m.needs.map(f => `<span>${esc(f.label)}</span>`).join("")}</div>` : ``));
-    row.onclick = () => { _cw.method = m; _cw.err = null; cwGo("provide", m.oauth ? "intro" : null); };
-    body.appendChild(row);
-  }
-  cwBackBtn(foot, "provider", null, "חזרה לבחירת ספק");
-  foot.appendChild(el("span", "cw-note grow", "כל דרך מייצרת חשבון נפרד — אפשר להחזיק כמה במקביל."));
-}
-
-// ── step 3: provide ──────────────────────────────────────────────────────────
-function cwProvide(body, foot) {
-  const m = _cw.method;
-  if (m.always_on) return cwProvideLocal(body, foot);
-  if (m.oauth) return cwProvideOauth(body, foot);
-  if (m.handoff) return cwProvideHandoff(body, foot);
-  if (!m.needs.length) return cwProvideLocal(body, foot);
-  return cwProvideForm(body, foot);
-}
-
-// A pairing that is a browser CEREMONY somewhere else — WhatsApp's QR, which is scanned on the
-// חיבורים ומפתחות screen where connections proxies the code from the bot. There is no secret to
-// type, so this step hands over instead of rendering a form. It used to render the generic
-// username/password form, which created a credential-less connection and left the operator reading
-// baileys' "QR refs attempts ended" with nothing to do about it.
-function cwProvideHandoff(body, foot) {
-  const m = _cw.method;
-  body.innerHTML =
-    `<div class="sub">${esc(m.provider_name)} · ${esc(m.auth_method_label)}</div>` +
-    `<div class="cw-msg">${esc(m.auth_desc)}</div>` +
-    `<div class="cw-msg soft">${mIcon("shield")} אין כאן מה להקליד: הקישור נעשה בסריקת קוד מהטלפון, ` +
-    `והקוד מוצג במסך «חיבורים ומפתחות». לאחר הסריקה החשבון יופיע ברשימה כאן.</div>` +
-    (_cw.err ? `<div class="cw-msg err">${esc(_cw.err)}</div>` : ``);
-  cwBackBtn(foot, "method");
-  const go = el("button", "btn grow", "פתחו את מסך הקישור");
-  go.onclick = () => {
-    const target = m.start_url || "#/m/connections";
-    closeConnectWizard();
-    if (/^#/.test(target)) location.hash = target; else window.open(target, "_blank", "noopener");
-  };
-  foot.appendChild(go);
-}
-
-// local: there is nothing to provide — say so plainly instead of showing an empty form
-function cwProvideLocal(body, foot) {
-  body.innerHTML =
-    `<div class="sub">אין מה להזין — ${esc(_cw.provider.name)} כבר קיים במערכת.</div>` +
-    `<div class="cw-msg">החשבון המקומי נוצר עם ההתקנה ואינו דורש פרטי גישה. בשלב הבא נאמת שהוא ` +
-    `אכן עונה, ואז תוכלו להפוך אותו לחשבון הפעיל.</div>` +
-    (_cw.err ? `<div class="cw-msg err">${esc(_cw.err)}</div>` : ``);
-  cwBackBtn(foot, "method");
-  const go = el("button", "btn grow", "המשך לאימות");
-  go.onclick = () => guard(go, cwUseLocal, "בודקים…");
-  foot.appendChild(go);
-}
-
-async function cwUseLocal() {
-  const d = await cwList();
-  if (!_cw) return;
-  if (!d) { _cw.err = "לא ניתן לקרוא את רשימת החשבונות מהשירות. נסו שוב בעוד רגע."; return cwRender(); }
-  _cw.prevActive = d.active;
-  const local = d.connections.find(c => isLocalConn(c) && c.protocol === _cw.method.protocol)
-             || d.connections.find(c => isLocalConn(c));
-  if (!local) {
-    _cw.err = "החשבון המקומי אינו מופיע ברשימת החשבונות של השירות. ייתכן שהשירות עולה כרגע.";
-    return cwRender();
-  }
-  _cw.connId = local.id; _cw.label = connHe(local); _cw.hint = local.account_hint || null;
-  cwGo("verify"); cwVerifyRun();
-}
-
-// oauth: explain what is about to happen BEFORE anything opens — the consent window is the one place
-// the user leaves our UI, so they must know what to expect when they get there.
-function cwProvideOauth(body, foot) {
-  const m = _cw.method;
-  if (_cw.sub === "waiting") return cwProvideOauthWaiting(body, foot);
-  if (_cw.sub === "timeout") return cwProvideOauthTimeout(body, foot);
-  body.innerHTML =
-    `<div class="sub">חיבור אל <b>${esc(_cw.provider.name)}</b> באמצעות ${esc(m.auth_method_label)}.</div>` +
-    `<div class="cw-msg"><b>מה יקרה עכשיו</b><ol class="cw-ol">` +
-    `<li>ייפתח חלון חדש של Google.</li>` +
-    `<li>תבחרו חשבון ותאשרו את ההרשאות: ${esc(m.grants)}</li>` +
-    `<li>Google יחזיר אתכם לשירות החיבורים, והחשבון ייווצר אוטומטית.</li>` +
-    `<li>המסך הזה ימתין ויזהה את החשבון החדש לבד — אין צורך לרענן.</li></ol></div>` +
-    `<div class="cw-msg soft">${mIcon("shield")} הסיסמה שלכם לא מוזנת כאן ולא עוברת דרך המסך הזה. ` +
-    `אסימוני הגישה נשמרים בשירות החיבורים בלבד.</div>` +
-    (_cw.err ? `<div class="cw-msg err">${esc(_cw.err)}</div>` : ``);
-  cwBackBtn(foot, "method");
-  const go = el("button", "btn grow", "פתחו את חלון ההרשאה");
-  go.onclick = () => guard(go, cwOauthStart, "פותחים…");
-  foot.appendChild(go);
-}
-
-async function cwOauthStart() {
-  const d = await cwList();
-  if (!_cw) return;
-  if (!d) { _cw.err = "לא ניתן לקרוא את רשימת החשבונות מהשירות, ולכן גם לא לזהות חשבון חדש. נסו שוב."; return cwRender(); }
-  _cw.before = d.connections.map(c => c.id);
-  _cw.prevActive = d.active;
-  // as_instance=1 = "the callback should CREATE a connection instance holding these tokens" instead
-  // of injecting them into n8n (§1). Same broker + same registered redirect URI as the install wizard.
-  const r = await connectOauth(_cw.method.grant_cid || _cw.method.protocol, { as_instance: "1" });
-  if (!_cw) return;
-  // frame the broker's own words (often English, from its API) so they read as an explanation rather
-  // than as a leaked error string — but never replace them: they are the only real diagnosis we have.
-  if (!r.ok) { _cw.err = "לא ניתן לפתוח את מסך ההרשאה — " + r.error; return cwRender(); }
-  _cw.authUrl = r.authorize_url; _cw.err = null;
-  _cw.sub = "waiting"; _cw.deadline = Date.now() + CW_WAIT_MS;
-  cwRender(); cwPoll();
-}
-
-// THE state the anti-pattern had no room for: consent may simply never arrive, and the UI has to be
-// able to say so. Bounded (it times out), cancellable, and it names the ways it can fail.
-function cwProvideOauthWaiting(body, foot) {
-  body.innerHTML =
-    `<div class="sub">ממתינים לאישור בחלון של Google…</div>` +
-    `<div class="cw-msg wait">${chipHtml("checking")} <span id="cwWaitLeft">${esc(cwLeftHe())}</span></div>` +
-    `<div class="cw-msg soft"><b>אם שום דבר לא קורה, בדרך כלל זו אחת מאלה:</b><ul class="cw-ul">` +
-    `<li>חלון ההרשאה נסגר לפני האישור — פתחו אותו שוב.</li>` +
-    `<li>הדפדפן חסם את החלון הקופץ — אשרו חלונות קופצים לאתר, או פתחו ידנית בקישור למטה.</li>` +
-    `<li>ההרשאה נדחתה במסך של Google — נסו שוב ואשרו את כל ההרשאות.</li>` +
-    `<li>כתובת ההחזרה (redirect URI) אינה תואמת את המוגדר ב-Google — יש לתקן בהגדרות ה-OAuth.</li>` +
-    `</ul></div>` +
-    (_cw.authUrl ? `<div class="cw-msg soft">${mIcon("link")} <a href="${esc(_cw.authUrl)}" target="_blank" ` +
-      `rel="noopener">לא נפתח חלון? פתחו את מסך ההרשאה ידנית</a></div>` : ``);
-  const cancel = el("button", "btn ghost sm", "ביטול");
-  cancel.onclick = () => cwGo("provide", "intro");
-  foot.appendChild(cancel);
-  const again = el("button", "btn ghost sm", "פתחו שוב");
-  again.onclick = () => guard(again, cwOauthReopen, "פותחים…");
-  foot.appendChild(again);
-  const now = el("button", "btn grow", "בדקו עכשיו");
-  now.onclick = () => guard(now, cwPollOnce, "בודקים…");
-  foot.appendChild(now);
-}
-function cwLeftHe() {
-  const s = Math.max(0, Math.round((_cw.deadline - Date.now()) / 1000));
-  return `נפסיק להמתין בעוד ${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
-}
-async function cwOauthReopen() {
-  const r = await connectOauth(_cw.method.grant_cid || _cw.method.protocol, { as_instance: "1" });
-  if (!_cw) return;
-  if (!r.ok) { _cw.err = "לא ניתן לפתוח את מסך ההרשאה — " + r.error; return cwGo("provide", "intro"); }
-  _cw.authUrl = r.authorize_url; _cw.deadline = Date.now() + CW_WAIT_MS; cwRender();
-}
-
-// Poll for the instance the CALLBACK creates: the broker mints it server-side, so a new id appearing
-// in the service's own list is the only honest signal that consent actually completed.
-function cwPoll() {
-  cwStopPoll();
-  _cw.poll = setInterval(async () => {
-    if (!_cw || _cw.sub !== "waiting") return cwStopPoll();
-    if (await cwPollOnce(true)) return;
-    if (!_cw || _cw.sub !== "waiting") return;
-    if (Date.now() > _cw.deadline) { cwStopPoll(); _cw.sub = "timeout"; return cwRender(); }
-    const t = document.getElementById("cwWaitLeft"); if (t) t.textContent = cwLeftHe();
-  }, 2000);
-}
-async function cwPollOnce(quiet) {
-  const d = await cwList();
-  if (!_cw) return false;
-  if (!d) return false;
-  const fresh = d.connections.filter(c => !_cw.before.includes(c.id));
-  if (!fresh.length) {
-    if (!quiet) { const t = document.getElementById("cwWaitLeft"); if (t) t.textContent = "עדיין אין חשבון חדש… " + cwLeftHe(); }
-    return false;
-  }
-  cwStopPoll();
-  const inst = fresh[0];
-  _cw.connId = inst.id; _cw.label = inst.label || _cw.provider.name; _cw.hint = inst.account_hint || null;
-  cwGo("verify"); cwVerifyRun();
-  return true;
-}
-
-// timeout is a first-class state, not a stuck spinner
-function cwProvideOauthTimeout(body, foot) {
-  body.innerHTML =
-    `<div class="sub">לא זוהה חשבון חדש.</div>` +
-    `<div class="cw-msg err">חיכינו שלוש דקות ולא נוצר חשבון חדש בשירות. סימן שהאישור לא הושלם.</div>` +
-    `<div class="cw-msg soft"><b>מה לבדוק:</b><ul class="cw-ul">` +
-    `<li>האם חלון ההרשאה נפתח בכלל? אם לא — הדפדפן חסם אותו.</li>` +
-    `<li>האם הגעתם למסך "connections: … connected ✓"? אם לא, האישור לא הסתיים.</li>` +
-    `<li>אם ראיתם שגיאת redirect_uri_mismatch — כתובת ההחזרה ב-Google אינה תואמת להגדרה.</li>` +
-    `</ul></div>`;
-  cwBackBtn(foot, "method", null, "חזרה לאופן החיבור");
-  const retry = el("button", "btn grow", "נסו שוב");
-  retry.onclick = () => cwGo("provide", "intro");
-  foot.appendChild(retry);
-}
-
-// key / password: a real form — labels, hints, and a link to where the value comes from
-function cwProvideForm(body, foot) {
-  const m = _cw.method;
-  body.innerHTML = `<div class="sub">פרטי הגישה עבור <b>${esc(_cw.provider.name)}</b> · ${esc(m.auth_method_label)}</div>`;
-  const f = el("div", "cw-form");
-  for (const fld of m.needs) {
-    const row = el("div", "cw-field",
-      `<span class="cw-f-l">${esc(fld.label)}</span>` +
-      (fld.hint ? `<span class="cw-f-h">${esc(fld.hint)}</span>` : ``));
-    const control = el(fld.type === "textarea" ? "textarea" : "input");
-    if (fld.type !== "textarea") control.type = fld.type || "text";
-    control.dataset.k = fld.key; control.placeholder = fld.placeholder || "";
-    control.autocomplete = fld.type === "password" ? "new-password" : "off";
-    if (fld.type === "textarea") {
-      control.rows = 7; control.dir = "ltr";
-      const fileId = "cwFile_" + Math.random().toString(36).slice(2, 9);
-      const picker = el("input", "cw-file-input");
-      picker.id = fileId; picker.type = "file";
-      picker.accept = ".json,application/json,text/plain";
-      const load = el("label", "btn ghost sm cw-file-load", `${mIcon("upload")} בחירת קובץ JSON`);
-      load.htmlFor = fileId; load.title = "בחירת קובץ JSON";
-      picker.addEventListener("change", () => {
-        const file = picker.files?.[0];
-        if (!file) return;
-        const reader = new FileReader();
-        reader.onload = event => {
-          if (typeof event.target?.result === "string") control.value = event.target.result;
-        };
-        reader.onerror = () => { _cw.err = "שגיאה בקריאת הקובץ."; cwRender(); };
-        reader.readAsText(file);
-      });
-      row.appendChild(load); row.appendChild(picker);
-    }
-    row.appendChild(control); f.appendChild(row);
-  }
-  const nameRow = el("label", "cw-field",
-    `<span class="cw-f-l">שם לתצוגה</span><span class="cw-f-h">איך החשבון ייקרא במערכת. אפשר לשנות בשלב הבא.</span>`);
-  const nameInp = el("input"); nameInp.type = "text"; nameInp.id = "cwLabel";
-  nameInp.placeholder = "לדוגמה: תיבת החשבוניות"; nameInp.value = _cw.label || "";
-  nameRow.appendChild(nameInp); f.appendChild(nameRow);
-  body.appendChild(f);
-  if (m.help_url)
-    body.insertAdjacentHTML("beforeend",
-      `<div class="cw-msg soft">${mIcon("link")} <a href="${esc(m.help_url)}" target="_blank" rel="noopener">` +
-      `מהיכן משיגים את הערך הזה?</a></div>`);
-  body.insertAdjacentHTML("beforeend",
-    `<div class="cw-msg soft">${mIcon("shield")} הערכים נשמרים בכספת של שירות החיבורים ומועברים לשירות ` +
-    `${esc(SVC_HE[_cw.service] || _cw.service)} בלבד. הם לא נשמרים בדפדפן ואינם מוחזרים לרשימת החשבונות.</div>`);
-  if (_cw.err) body.insertAdjacentHTML("beforeend", `<div class="cw-msg err">${esc(_cw.err)}</div>`);
-  cwBackBtn(foot, "method");
-  const go = el("button", "btn grow", "שמרו ואמתו");
-  go.onclick = () => guard(go, () => cwCreateFromForm(f), "שומרים…");
-  foot.appendChild(go);
-}
-
-async function cwCreateFromForm(f) {
-  const m = _cw.method, secret = {};
-  let hint = null, missing = null;
-  for (const fld of m.needs) {
-    const inp = f.querySelector(`[data-k="${fld.key}"]`);
-    const v = (inp && inp.value || "").trim();
-    if (!v) { missing = missing || fld.label; continue; }
-    secret[fld.key] = v;
-    if (fld.is_hint) hint = v;
-  }
-  if (missing) { _cw.err = `חסר ערך בשדה "${missing}".`; return cwRender(); }
-  const label = ($("#cwLabel") && $("#cwLabel").value.trim()) || hint || m.provider_name;
-  const d = await cwList();
-  if (!_cw) return;
-  _cw.prevActive = d ? d.active : null;
-  const r = await svcPost(_cw.service, "/connections",
-    { protocol: m.protocol, label, account_hint: hint, secret });
-  if (!_cw) return;
-  if (!r.ok || !(r.d && r.d.id)) {
-    _cw.err = (r.d && (r.d.error || r.d.message)) || "השירות לא הצליח לשמור את החשבון. בדקו את הערכים ונסו שוב.";
-    return cwRender();
-  }
-  // keep the secret in memory ONLY until the wizard closes — the rename in step 5 needs it (there is
-  // no rename endpoint; see cwFinish). Never persisted, never sent anywhere but this service.
-  _cw.secret = secret; _cw.hint = hint; _cw.label = label; _cw.connId = r.d.id;
-  cwGo("verify"); cwVerifyRun();
-}
-
-// ── step 4: verify — "a connection is never merely added; it is VERIFIED" ────────
-// /readyz probes the ACTIVE connection only (§2) and there is no per-connection probe endpoint. So
-// verification necessarily selects the new connection first. If the operator then declines to make it
-// active, cwFinish restores the previous pointer — the probe must not silently repoint the service.
-async function cwVerifyRun() {
-  if (!_cw) return;
-  _cw.verify = { state: "probing" }; cwRender();
-  const sel = await svcPost(_cw.service, "/connections/select", { id: _cw.connId });
-  if (!_cw) return;
-  if (!sel.ok) {
-    _cw.verify = { state: "fail", at: Date.now(),
-      reason: (sel.d && (sel.d.reason || sel.d.error || sel.d.message)) || "השירות לא הצליח לבחור את החשבון." };
-    return cwRender();
-  }
-  const ready = await svcJson(_cw.service, "/readyz");
-  if (!_cw) return;
-  const list = await cwList();
-  if (!_cw) return;
-  const inst = list && list.connections.find(c => c.id === _cw.connId);
-  const st = readyState(ready);
-  _cw.verify = { state: st === "ok" ? "ok" : "fail", at: Date.now(), reason: readyReason(ready, st), inst };
-  if (inst && inst.label) _cw.label = inst.label;
-  if (inst && inst.account_hint) _cw.hint = inst.account_hint;
-  cwRender();
-}
-
-function cwVerify(body, foot) {
-  const v = _cw.verify || { state: "probing" };
-  if (v.state === "probing") {
-    body.innerHTML = `<div class="sub">מאמתים את החשבון מול השירות…</div>` +
-      `<div class="cw-msg wait">${chipHtml("checking")} השירות מנסה להתחבר בפועל עם הפרטים שנשמרו. ` +
-      `זו אותה בדיקה (/readyz) שהאוטומציה מסתמכת עליה — לכן חשבון שעובר אותה עובד גם בתהליכים.</div>`;
-    foot.appendChild(el("span", "cw-note", "רגע…"));
-    return;
-  }
-  if (v.state === "ok") {
-    body.innerHTML = `<div class="sub">החשבון אומת.</div>` +
-      `<div class="cw-msg ok">${chipHtml("ok")} ${esc(v.reason)}</div>` +
-      `<div class="cw-msg soft">` +
-      `<div><b>חשבון:</b> ${esc(_cw.label)}${_cw.hint && _cw.hint !== _cw.label ? " · " + esc(_cw.hint) : ""}</div>` +
-      `<div><b>אופן חיבור:</b> ${esc(_cw.method.auth_method_label)}</div>` +
-      `<div><b>נבדק:</b> ${esc(hhmm(v.at))}</div></div>`;
-    const go = el("button", "btn grow", "המשך");
-    go.onclick = () => cwGo("done");
-    foot.appendChild(go);
-    return;
-  }
-  // failure names what to fix, in the SERVICE's own words — never a stack trace, never a dead end
-  body.innerHTML = `<div class="sub">האימות נכשל.</div>` +
-    `<div class="cw-msg err">${chipHtml("error")} <b>השירות מדווח:</b> ${esc(v.reason)}</div>` +
-    (_cw.method.fix_hint ? `<div class="cw-msg soft"><b>מה לבדוק:</b> ${esc(_cw.method.fix_hint)}</div>` : ``) +
-    `<div class="cw-msg soft">החשבון נשמר, אך הוא לא עובד כרגע — אפשר לתקן ולנסות שוב, או להסיר אותו.</div>`;
-  const retry = el("button", "btn ghost sm", `${mIcon("refresh")} בדקו שוב`);
-  retry.onclick = () => cwVerifyRun();
-  foot.appendChild(retry);
-  if (_cw.secret) cwBackBtn(foot, "provide", null, "תיקון פרטי הגישה");
-  else cwBackBtn(foot, "method", null, "חזרה לאופן החיבור");
-  if (!_cw.method.always_on) {
-    const rm = el("button", "btn ghost sm cw-danger", `${mIcon("trash")} הסירו את החשבון`);
-    rm.onclick = () => guard(rm, cwDropConn, "מסירים…");
-    foot.appendChild(rm);
-  }
-  const anyway = el("button", "btn grow", "המשך בכל זאת");
-  anyway.title = "החשבון יישמר במצב 'דורש טיפול'";
-  anyway.onclick = () => cwGo("done");
-  foot.appendChild(anyway);
-}
-
-async function cwDropConn() {
-  if (!_cw || !_cw.connId) return;
-  await svcJson(_cw.service, "/connections/" + encodeURIComponent(_cw.connId), { method: "DELETE" });
-  if (!_cw) return;
-  if (_cw.prevActive) await svcPost(_cw.service, "/connections/select", { id: _cw.prevActive });
-  closeConnectWizard();
-}
-
-// ── step 5: name + activate ──────────────────────────────────────────────────
-function cwDone(body, foot) {
-  const v = _cw.verify || {};
-  const ok = v.state === "ok";
-  // The contract has POST/DELETE only — no rename endpoint (§1/§2). We can honour a rename exactly
-  // where the console still holds the secret (a key/password account, created moments ago): recreate
-  // + drop the old one. An OAuth account's tokens never reach the browser (§5) and the local account
-  // has no secret at all, so their names stay as the service set them — and the field says so.
-  const canRename = !!_cw.secret;
-  body.innerHTML =
-    `<div class="sub">כמעט סיימנו — שם לתצוגה, והאם זה החשבון שהמערכת תעבוד מולו.</div>` +
-    (ok ? `<div class="cw-msg ok">${chipHtml("ok")} החשבון אומת ב-${esc(hhmm(v.at))}.</div>`
-        : `<div class="cw-msg err">${chipHtml("action")} החשבון נשמר אך לא עבר אימות: ${esc(v.reason || "")}</div>`);
-  const f = el("div", "cw-form");
-  const row = el("label", "cw-field",
-    `<span class="cw-f-l">שם לתצוגה</span>` +
-    `<span class="cw-f-h">${canRename ? "כך החשבון ייקרא בכל מקום במערכת."
-      : _cw.method.always_on ? "לחשבון המקומי יש שם קבוע שנקבע על ידי השירות."
-      : "השם נקבע לפי החשבון שאישרתם אצל הספק, ולא ניתן לשנותו מכאן."}</span>`);
-  const inp = el("input"); inp.type = "text"; inp.id = "cwName"; inp.value = _cw.label || "";
-  inp.disabled = !canRename;
-  row.appendChild(inp); f.appendChild(row);
-  body.appendChild(f);
-  const act = el("label", "cw-check");
-  act.innerHTML = `<input type="checkbox" id="cwActive" checked>` +
-    `<span><b>הפוך לחשבון הפעיל</b><small>כל פעולה של ${esc(SVC_HE[_cw.service] || _cw.service)} — גם ` +
-    `במסך וגם באוטומציה — תרוץ מול החשבון הפעיל.</small></span>`;
-  body.appendChild(act);
-  if (_cw.prevActive && _cw.prevActive !== _cw.connId)
-    body.insertAdjacentHTML("beforeend",
-      `<div class="cw-msg soft">אם לא תסמנו, נחזיר את החשבון הפעיל הקודם.</div>`);
-  if (_cw.err) body.insertAdjacentHTML("beforeend", `<div class="cw-msg err">${esc(_cw.err)}</div>`);
-  cwBackBtn(foot, "verify");
-  const fin = el("button", "btn grow", "סיום");
-  fin.onclick = () => guard(fin, cwFinish, "שומרים…");
-  foot.appendChild(fin);
-}
-
-async function cwFinish() {
-  if (!_cw) return;
-  const inp = $("#cwName");
-  const makeActive = !!($("#cwActive") && $("#cwActive").checked);
-  const newLabel = inp && !inp.disabled ? inp.value.trim() : null;
-  if (inp && !inp.disabled && !newLabel) { _cw.err = "נא לתת שם לחשבון."; return cwRender(); }
-  _cw.err = null;
-  if (newLabel && _cw.secret && newLabel !== _cw.label) {   // rename = recreate (no rename endpoint)
-    const mk = await svcPost(_cw.service, "/connections",
-      { protocol: _cw.method.protocol, label: newLabel, account_hint: _cw.hint, secret: _cw.secret });
-    if (!_cw) return;
-    if (!mk.ok || !(mk.d && mk.d.id)) {
-      _cw.err = "שינוי השם נכשל, והחשבון נשאר בשם הקודם. אפשר לסיים כך ולנסות שוב מאוחר יותר.";
-      return cwRender();
-    }
-    const old = _cw.connId;
-    _cw.connId = mk.d.id; _cw.label = newLabel;
-    await svcJson(_cw.service, "/connections/" + encodeURIComponent(old), { method: "DELETE" });
-    if (!_cw) return;
-  }
-  const target = makeActive ? _cw.connId : (_cw.prevActive || _cw.connId);
-  const s = await svcPost(_cw.service, "/connections/select", { id: target });
-  if (!_cw) return;
-  if (!s.ok) {
-    _cw.err = "עדכון החשבון הפעיל נכשל: " +
-      ((s.d && (s.d.reason || s.d.error || s.d.message)) || "השירות דחה את הבקשה.");
-    return cwRender();
-  }
-  const service = _cw.service;
-  closeConnectWizard();   // the bar re-probes on close — the final state is confirmed, not claimed
-  if (makeActive) reloadEmbeddedApp(service);
-}
-
-
-
-
-function closeModal() {
-  cwStopPoll();   // a wizard removed by this generic close must not leave its consent poll running
-  const ov = document.querySelector(".modal-ov"); if (ov) ov.remove();
-}
-// Esc closes the connect wizard (the palette has the same affordance) — a modal you can't dismiss
-// with the keyboard is its own small dead end.
-window.addEventListener("keydown", e => {
-  if (e.key === "Escape" && _cw) { e.preventDefault(); closeConnectWizard(); }
-});
-
-
-// `params` (optional) rides through to the broker — the console's /api/conn/oauth/<cid>/start proxy
-// forwards the query string. No params = grant → inject (the credential plane's default); the connect
-// wizard passes as_instance=1 (grant → new connection instance).
-//
-// Returns {ok, authorize_url} | {ok:false, error} — it must never just do nothing. Silently
-// swallowing a broker failure here IS the console→connections 404 bug (§4b): a primary CTA that
-// looks like it worked and didn't. Callers are responsible for showing `error`.
-async function connectOauth(id, params) {
-  const q = params ? "?" + new URLSearchParams(params) : "";
-  let d = null, err = null;
-  try {
-    const r = await fetch("/api/conn/oauth/" + id + "/start" + q);
-    d = await r.json().catch(() => null);
-    if (!r.ok) err = (d && (d.message || d.error)) || `שירות החיבורים החזיר שגיאה (${r.status})`;
-  } catch (e) { err = "שירות החיבורים אינו זמין כרגע."; }
-  if (!err && !(d && d.authorize_url)) err = "לא התקבלה כתובת הרשאה משירות החיבורים.";
-  if (err) return { ok: false, error: err };
-  // NOTE: with "noopener" the browser returns null by design, so the handle says nothing about
-  // whether a popup blocker ate it — callers offer the URL as a plain link instead of guessing.
-  window.open(d.authorize_url, "_blank", "noopener");
-  return { ok: true, authorize_url: d.authorize_url, client_id_present: d.client_id_present };
-}
-
+// An app's accounts are the app's own (DGO-1624, DGO-1641): drive's «כוננים», mail's mailboxes, git's «חשבונות
+// ומראות» list, switch, connect and remove them in their own screens, so the shell keeps no account bar, no
+// health panel and no connect wizard of its own (they were removed with the chip, DGO-1621).
 
 function esc(s) { return (s == null ? "" : String(s)).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c])); }
 boot();

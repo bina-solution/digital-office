@@ -20,7 +20,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/solomonBoltin/deployment-hacohen/packaging/trust"
+	"github.com/bina-solution/digital-office/packaging/dgo/internal/pyoracle"
+	"github.com/bina-solution/digital-office/packaging/trust"
 )
 
 // TestMain keeps the trust memory of a test run in a fresh directory, never the user's ~/.dgo.
@@ -58,14 +59,15 @@ func repoRoot(t *testing.T) string {
 var python = func() func(*testing.T) []string {
 	var once sync.Once
 	var found []string
-	return func(*testing.T) []string {
+	return func(t *testing.T) []string {
 		once.Do(func() {
-			for _, c := range [][]string{{"python3"}, {"python"}, {"py", "-3"}} {
+			for _, c := range pyoracle.Candidates { // 3.12 first, as the compiler's oracles (DGO-1108)
 				if _, err := exec.LookPath(c[0]); err != nil {
 					continue
 				}
 				if exec.Command(c[0], append(c[1:], "-c", "import yaml")...).Run() == nil {
 					found = c
+					t.Log(pyoracle.Pinned(c))
 					return
 				}
 			}
@@ -836,6 +838,175 @@ func TestALinkIsNeverFollowed(t *testing.T) {
 			t.Errorf("a symlink on disk, %s: members %s, links %v", what, got, sortedKeys(p.links))
 		}
 		agree(t, p) // catalog.py leaves it out and names it too
+	}
+}
+
+// A folder on the way is a link (DGO-639): git tracks apps/a/static/x.txt, and the working tree has swapped the
+// folder static for a link to a folder outside the app. The file's own Lstat says a regular file, so a check of
+// the last part alone packed the bytes from outside. Both builds leave it out and name it.
+func TestAFolderSwappedForALinkIsNotFollowed(t *testing.T) {
+	t.Parallel()
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("no git on PATH")
+	}
+	src := tree(t, map[string]string{"apps/a/app.json": manifest("a", ""), "apps/a/static/x.txt": "x",
+		"outside/x.txt": "TOKEN=1"})
+	git(t, src, "", "init", "-q")
+	git(t, src, "", "add", "apps/a/app.json", "apps/a/static/x.txt")
+	if err := os.RemoveAll(filepath.Join(src, "apps", "a", "static")); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(filepath.Join(src, "outside"), filepath.Join(src, "apps", "a", "static")); err != nil {
+		t.Skipf("no symlink on disk here (%v)", err)
+	}
+	p := both(t, src, nil)
+	if got := members(t, filepath.Join(p.out, artifactsDir, "a-0.0.0.zip")); got != "a/app.json 644" ||
+		!p.links["a/static/x.txt"] || len(p.links) != 1 {
+		t.Errorf("a file under a folder swapped for a link: members %s, links %v", got, sortedKeys(p.links))
+	}
+	agree(t, p) // catalog.py leaves it out and names it too
+}
+
+// An app's own folder is a link (DGO-1735). Linked outside the repository, catalog.py's walk packed what was
+// there (an untracked .env) while this build stopped on git's error; linked inside it, both followed the link.
+// Now both leave that app out, name it, and build the rest.
+func TestAnAppFolderThatIsALinkIsLeftOut(t *testing.T) {
+	t.Parallel()
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("no git on PATH")
+	}
+	outside := tree(t, map[string]string{"b/app.json": manifest("b", ""), "b/.env": "TOKEN=1"})
+	for what, target := range map[string]string{"outside the repository": filepath.Join(outside, "b"),
+		"inside the repository": ""} {
+		src := tree(t, map[string]string{"apps/a/app.json": manifest("a", ""), "other/b/app.json": manifest("b", ""),
+			"other/b/x.txt": "x"})
+		git(t, src, "", "init", "-q")
+		git(t, src, "", "add", "apps/a/app.json", "other/b/app.json", "other/b/x.txt")
+		if target == "" {
+			target = filepath.Join(src, "other", "b")
+		}
+		if err := os.Symlink(target, filepath.Join(src, "apps", "b")); err != nil {
+			t.Skipf("no symlink on disk here (%v)", err)
+		}
+		p := both(t, src, nil)
+		_, err := os.Stat(filepath.Join(p.out, artifactsDir, "b-0.0.0.zip"))
+		if err == nil || !p.links["b/"] || len(p.links) != 1 {
+			t.Errorf("an app folder linked %s: artifact made %v, links %v", what, err == nil, sortedKeys(p.links))
+		}
+		if got := members(t, filepath.Join(p.out, artifactsDir, "a-0.0.0.zip")); got != "a/app.json 644" {
+			t.Errorf("an app folder linked %s: the rest is built as before, got %s", what, got)
+		}
+		agree(t, p) // catalog.py leaves it out and names it too
+	}
+}
+
+// Behind a link, the app folder is left out before its manifest is read (DGO-1742). Before, this build loaded and
+// validated it first, so a manifest the compiler refuses stopped the whole build where catalog.py built the rest.
+func TestALinkedAppFolderIsLeftOutBeforeItsManifestIsRead(t *testing.T) {
+	t.Parallel()
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("no git on PATH")
+	}
+	for name, body := range map[string]string{
+		"a manifest whose id is not the link's name": manifest("other", ""),
+		"a manifest that is not JSON":                `{"id":"b",`,
+		"a manifest that is not layer 3":             `{"id":"b","layer":2,"title":{"he":"x"},"kind":"service"}`,
+		"a manifest the compiler refuses":            manifest("b", `"bogus":1`),
+	} {
+		outside := tree(t, map[string]string{"b/app.json": body, "b/.env": "TOKEN=1"})
+		src := tree(t, map[string]string{"apps/a/app.json": manifest("a", "")})
+		git(t, src, "", "init", "-q")
+		git(t, src, "", "add", "apps/a/app.json")
+		if err := os.Symlink(filepath.Join(outside, "b"), filepath.Join(src, "apps", "b")); err != nil {
+			t.Skipf("no symlink on disk here (%v)", err)
+		}
+		p := both(t, src, nil) // goIndex fails the test if the build stops
+		if !p.links["b/"] || len(p.links) != 1 || len(entries(p.ix)) != 1 {
+			t.Errorf("%s behind a link: links %v, %d entries", name, sortedKeys(p.links), len(entries(p.ix)))
+		}
+		agree(t, p)
+	}
+}
+
+// Nothing is built when apps/ itself is a link, or when the only app is one (DGO-1742): by this build and by
+// catalog.py, which packed the walk of a linked apps/ (untracked files included) and signed an empty index.
+func TestNothingIsBuiltBehindALinkedAppsFolder(t *testing.T) {
+	t.Parallel()
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("no git on PATH")
+	}
+	py := oracle(t)
+	outside := tree(t, map[string]string{"apps/b/app.json": manifest("b", ""), "apps/b/.env": "TOKEN=1"})
+	linkedApps := tree(t, map[string]string{"platform-base/README": "x"})
+	git(t, linkedApps, "", "init", "-q")
+	onlyLink := tree(t, map[string]string{"apps/README": "x"})
+	git(t, onlyLink, "", "init", "-q")
+	if err := os.Symlink(filepath.Join(outside, "apps"), filepath.Join(linkedApps, "apps")); err != nil {
+		t.Skipf("no symlink on disk here (%v)", err)
+	}
+	if err := os.Symlink(filepath.Join(outside, "apps", "b"), filepath.Join(onlyLink, "apps", "b")); err != nil {
+		t.Fatal(err)
+	}
+	for _, c := range []struct{ name, src, says string }{
+		{"apps/ itself a link", linkedApps, "apps/ is a link — links are never followed, so nothing was built"},
+		{"the only app a link", onlyLink, "holds no app — an empty index is never built"},
+	} {
+		around := t.TempDir()
+		if _, err := Build(Options{Root: repoRoot(t), Source: c.src, Out: filepath.Join(around, "dgo", "index")}); err == nil || !strings.Contains(err.Error(), c.says) {
+			t.Errorf("%s: err = %v, want it to say %q", c.name, err, c.says)
+		}
+		if py != nil {
+			text, code, err := catalogPy(repoRoot(t), py, "build", "--out", filepath.Join(around, "py", "index"), "--unsigned", "--source", filepath.Join(c.src, "apps"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if code == 0 || !strings.Contains(text, c.says) {
+				t.Errorf("%s: catalog.py exit %d, want a refusal that says %q:\n%s", c.name, code, c.says, text)
+			}
+		}
+		filepath.Walk(around, func(p string, info os.FileInfo, err error) error {
+			if err == nil && !info.IsDir() {
+				t.Errorf("%s: a refused build wrote %s", c.name, p)
+			}
+			return nil
+		})
+	}
+}
+
+// An app folder that cannot be read is not a link, and the build stops on it, naming it (DGO-1742): an index signed
+// without it is a store missing an app, which the build used to report in a link's words.
+func TestAnUnreadableAppFolderStopsTheBuild(t *testing.T) {
+	t.Parallel()
+	if os.Geteuid() == 0 || os.PathSeparator == '\\' {
+		t.Skip("root reads a folder whatever its mode, and Windows keeps no such mode; catalog_selftest.py injects the error on every OS")
+	}
+	// the glob that lists the apps passes over a folder it cannot open: the build must not (the second reader)
+	py := oracle(t)
+	src := tree(t, map[string]string{"apps/a/app.json": manifest("a", ""), "apps/b/app.json": manifest("b", "")})
+	locked := filepath.Join(src, "apps", "b")
+	if err := os.Chmod(locked, 0); err != nil {
+		t.Fatal(err)
+	}
+	defer os.Chmod(locked, 0o755)
+	const says = "b/ cannot be read (permission denied) — nothing was built"
+	around := t.TempDir()
+	if _, err := Build(Options{Root: repoRoot(t), Source: src, Out: filepath.Join(around, "dgo", "index")}); err == nil || !strings.Contains(err.Error(), says) {
+		t.Errorf("err = %v, want it to say %q", err, says)
+	}
+	if py != nil {
+		text, code, err := catalogPy(repoRoot(t), py, "build", "--out", filepath.Join(around, "py", "index"), "--unsigned", "--source", filepath.Join(src, "apps"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if code == 0 || !strings.Contains(text, says) {
+			t.Errorf("catalog.py exit %d, want a refusal that says %q:\n%s", code, says, text)
+		}
+	}
+	if _, err := folderIsLink(filepath.Join(locked, "x")); err == nil || !strings.Contains(err.Error(), "x/ cannot be read (permission denied)") {
+		t.Errorf("err = %v, want the folder named as unreadable", err)
+	}
+	if link, err := folderIsLink(filepath.Join(t.TempDir(), "missing")); link || err != nil {
+		t.Errorf("a missing folder: link %v, err %v — its own read decides", link, err)
 	}
 }
 

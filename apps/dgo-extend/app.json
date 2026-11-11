@@ -5,8 +5,13 @@
     "en": "Office extension"
   },
   "layer": 3,
+  "people": "admins",
   "core": true,
   "kind": "service",
+  "page": "base",
+  "share": {
+    "local": "Its API is this office's offices, links, pairing and stored logins, never handed to a peer (DGO-624); a linked office gets only its catalog, on the link's own control door."
+  },
   "version": "0.1.0",
   "summary": {
     "he": "יצירה, חיבור והרצה של לשכות דיגיטליות נוספות — הכל מוצהר מכאן: לשכה היא הצהרה, קישור הוא אמון חד־כיווני, ואפליקציה שמונחת בלשכה אחרת מופיעה כאן כחיבור נוסף של אותה יכולת",
@@ -44,9 +49,21 @@
       "strength": "wants",
       "after": false,
       "dependency": "weak"
+    },
+    {
+      "capability": "identity",
+      "strength": "wants",
+      "after": false,
+      "dependency": "weak"
     }
   ],
-  "connections": [],
+  "connections": [
+    {
+      "id": "computers-exec-token",
+      "required": false,
+      "note": "converge and move run commands and transfers through computers (DGO-1304)"
+    }
+  ],
   "compose": "docker-compose.yml",
   "routing": [
     {

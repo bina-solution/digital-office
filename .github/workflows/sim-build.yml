@@ -1,0 +1,113 @@
+name: sim-build
+
+# THE SIMULATION, REBUILT FROM TODAY'S SOURCES AND DRIVEN, on GitHub's own runner (DGO-459).
+#
+# digital-office/platform-sim.html is the single-file simulation of the platform (digital-office/sim/README.md):
+# every app's LIVE frontend, embedded, with a mock of the service it talks to. It is the specification the
+# live screens are ported against, so a stale build tells the owner about an office that no longer exists.
+# The build needs node and the INDOX fork's vite toolchain; its proof needs Chromium. The MacBook builds
+# nothing (the command centre), and the Dell's runner is the one the release gates wait on. So this runs
+# here and pushes NOTHING. It leaves three things:
+#   · `platform-sim` — the simulation built from the commit that triggered the run, uploaded ONLY when the
+#     build and its verify passed (a partial file is written before the build exits 1: it is never offered);
+#   · `sim-verdicts` — always: the verify, the flow suites per size (desktop at 1440 with every suite, its
+#     desktop-mode windows included; phone with --mobile at 390x844), each as its own log, so «which size
+#     broke» is one file away;
+#   · in the same verdicts, the map of every panel at every view profile and its fit (DGO-158): which screens
+#     scroll sideways on a phone and a tablet (ui-map/fit.json), warn only for now.
+# A person (or a session) commits the rebuilt file with the verdicts it was built against:
+#   gh run download <run> -n platform-sim -n sim-verdicts
+#
+# The trigger is what the simulation EMBEDS (build.mjs's APPS, the shared UI files it inlines) and what drives
+# it (scripts/ui-coverage): an edit to a live frontend is how the simulation goes stale. A newer push cancels
+# an older run of the same branch.
+
+on:
+  push:
+    paths:
+      - 'digital-office/sim/**'
+      - 'apps/drive/static/**'
+      - 'apps/mail/mailview/static/**'
+      - 'apps/my-docs/static/**'
+      - 'apps/any-concurrency/static/**'
+      - 'apps/apitools/feature-validation/**'
+      - 'apps/indox/blueprint/schema/display.json'
+      - 'platform-base/console/static/**'
+      - 'platform-base/notifications/static/**'
+      - 'platform-base/machine/static/**'
+      - 'platform-base/app-management/static/**'
+      - 'platform-base/connections/ui.html'
+      - 'platform-base/bina-ui/**'
+      - 'scripts/ui-coverage/**'
+      - '.github/workflows/sim-build.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: sim-build-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Build the simulation from this commit
+        id: build
+        working-directory: digital-office
+        run: |
+          set -euo pipefail
+          node sim/build.mjs
+          ls -la platform-sim.html
+          node sim/verify-sim.mjs 2>&1 | tee ../sim-verify.txt
+
+      - name: The flow suites per size, and the map with its fit (each one's verdict kept)
+        run: |
+          set -uo pipefail
+          pip install --quiet playwright pillow pyyaml
+          python -m playwright install --with-deps chromium >/dev/null
+          rc=0
+          # no suite named = every suite but the live-only ones, the desktop-mode windows included
+          python digital-office/sim/flow-qa.py            > flow-desktop.log 2>&1 || rc=1
+          python digital-office/sim/flow-qa.py --mobile   > flow-phone.log   2>&1 || rc=1
+          # every panel at every profile (scripts/ui-coverage/view-profiles.yaml), photographed AND measured:
+          # which screens scroll sideways on a phone and a tablet (DGO-158; warn only, for now)
+          python digital-office/sim/ui-map.py --all       > ui-map.log       2>&1 || rc=1
+          for f in flow-desktop.log flow-phone.log; do echo "== $f"; tail -15 "$f"; done
+          echo "== ui-map.log (fit)"; sed -n '/^fit (DGO-158)/,$p' ui-map.log
+          exit $rc
+
+      - name: Keep the simulation (a good build only)
+        if: steps.build.outcome == 'success'
+        uses: actions/upload-artifact@v4
+        with:
+          name: platform-sim
+          path: digital-office/platform-sim.html
+          retention-days: 14
+
+      - name: Keep the verdicts (always)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: sim-verdicts
+          path: |
+            sim-verify.txt
+            flow-desktop.log
+            flow-phone.log
+            ui-map.log
+            digital-office/sim/ui-map/fit.json
+            digital-office/sim/ui-map/*/ui-map.png
+          if-no-files-found: warn
+          retention-days: 14

@@ -1,0 +1,47 @@
+{
+  "id": "documents",
+  "title": { "he": "מסמכים", "en": "Documents" },
+  "summary": {
+    "he": "כל המסמכים של העסק ברשימה אחת — מה שהעסק הנפיק ומה שנכנס מהמייל ומהדרייב — בחיפוש אחד, בלי להעביר נתונים",
+    "en": "Every document of the business in one list — what it issued and what came in by mail and Drive — one search, no data moved"
+  },
+  "layer": 3,
+  "kind": "service",
+  "page": "documents",
+  "version": "0.1.0",
+  "capabilities": [
+    {
+      "name": "documents",
+      "type": "service",
+      "interface": "documents.v1",
+      "endpoint": "http://documents:8080",
+      "contract": "platform-service.v1",
+      "required_ops": ["list", "get", "search", "types", "providers", "sync"]
+    }
+  ],
+  "use": [
+    { "capability": "identity", "strength": "requires", "after": true },
+    { "capability": "ledger", "strength": "wants", "after": false, "dependency": "weak" },
+    { "capability": "indox-api", "strength": "wants", "after": false, "dependency": "weak" },
+    { "capability": "kv", "strength": "wants", "after": false, "dependency": "weak" }
+  ],
+  "compose": "docker-compose.yml",
+  "routing": [
+    {
+      "host": "documents",
+      "port": 8080,
+      "auth": "sso",
+      "sso": {
+        "slug": "documents",
+        "display_name": "Documents",
+        "default_host": "documents.localhost",
+        "base_url_env": "DOCUMENTS_BASE_URL",
+        "local_twin": true
+      }
+    }
+  ],
+  "data": { "volumes": ["documents_data"], "on_uninstall": "keep" },
+  "resources": { "cpus": "0.2", "memory": "96M" },
+  "health": { "structural": "auto", "probe": { "http": "http://documents:8080/healthz", "interval": "30s" } },
+  "agent": { "context": "AGENT.md", "order": 19 }
+}

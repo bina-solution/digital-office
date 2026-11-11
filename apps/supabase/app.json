@@ -5,7 +5,12 @@
     "en": "Supabase"
   },
   "layer": 3,
+  "people": "admins",
   "kind": "tool",
+  "page": "base",
+  "share": {
+    "local": "The database's own studio and REST API reach every table of this office, unscoped: data crosses a link only through an app's own API."
+  },
   "version": "1.0.0",
   "summary": {
     "he": "עיון וניהול בסיס הנתונים — טבלאות, אחסון ו-API",
@@ -67,9 +72,18 @@
     {
       "host": "supabase",
       "port": 8000,
-      "auth": "none",
       "service": "kong",
-      "emit_labels": false
+      "url_env": "SUPABASE_BASE_URL",
+      "auth": "sso",
+      "https_only": true,
+      "publish": "domain",
+      "sso": {
+        "slug": "supabase",
+        "display_name": "Supabase gateway",
+        "default_host": "supabase.localhost",
+        "base_url_env": "SUPABASE_BASE_URL",
+        "local_twin": true
+      }
     },
     {
       "host": "supabase-studio",

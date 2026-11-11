@@ -21,7 +21,7 @@
 # so an account forward-auth knows is an account here, and one it drops is gone here on the next request.
 services:
   lan-signin:
-    image: ghcr.io/solomonboltin/digital-office/forward-auth:${IMAGE_TAG:-latest}
+    image: ghcr.io/bina-solution/digital-office/forward-auth:${IMAGE_TAG:-latest}
     pull_policy: missing
     container_name: lan-signin-${DEPLOYMENT_NAME:-bina-deployment}
     hostname: lan-signin
@@ -65,7 +65,8 @@ services:
       - traefik.http.routers.lan-console-signin.service=lan-signin
       - traefik.http.routers.lan-console-signin.middlewares=lan-signin-rate
       - traefik.http.routers.lan-console-signin.priority=96
-      - traefik.http.routers.lan-console-signin-pages.rule=Host(`auth.${LAN_DOMAIN:-lan.invalid}`) && (Path(`/login`) || Path(`/logout`))
+      # …and the two files those pages are drawn with (DGO-1501): their stylesheet and the logo wall behind the card
+      - traefik.http.routers.lan-console-signin-pages.rule=Host(`auth.${LAN_DOMAIN:-lan.invalid}`) && (Path(`/login`) || Path(`/logout`) || Path(`/ui/page.css`) || Path(`/bina-wall.svg`))
       - traefik.http.routers.lan-console-signin-pages.entrypoints=lan
       - traefik.http.routers.lan-console-signin-pages.service=lan-signin
       - traefik.http.routers.lan-console-signin-pages.priority=95
@@ -99,12 +100,16 @@ services:
       - traefik.http.routers.lan-console-dgo.service=noop@internal
       - traefik.http.routers.lan-console-dgo.priority=90
       # the console, behind the sign-in, with the same headers as on console.<domain>; this middleware is
-      # also the one the compiler puts in front of every shared app's `…-console-lan` router
+      # also the one the compiler puts in front of the shell's question and way in on a shared app's LAN form
       - traefik.http.middlewares.lan-auth.forwardauth.address=http://lan-signin:9078/auth/traefik
       # every X-authentik-* name is LISTED, so traefik deletes a client's own before the console sees it —
       # the six forward-auth never answers included: listing them is what strips a forged one
       - traefik.http.middlewares.lan-auth.forwardauth.trustForwardHeader=false
       - traefik.http.middlewares.lan-auth.forwardauth.authResponseHeaders=X-authentik-username,X-authentik-groups,X-authentik-email,X-authentik-name,X-authentik-uid,X-authentik-jwt,X-authentik-meta-jwks,X-authentik-meta-outpost,X-authentik-meta-provider,X-authentik-meta-app,X-authentik-meta-version
+      # …and in front of the router that REACHES a linked office's app (`…-console-lan`): its admins' (DGO-1755)
+      - traefik.http.middlewares.lan-auth-admins.forwardauth.address=http://lan-signin:9078/auth/traefik/admins
+      - traefik.http.middlewares.lan-auth-admins.forwardauth.trustForwardHeader=false
+      - traefik.http.middlewares.lan-auth-admins.forwardauth.authResponseHeaders=X-authentik-username,X-authentik-groups,X-authentik-email,X-authentik-name,X-authentik-uid,X-authentik-jwt,X-authentik-meta-jwks,X-authentik-meta-outpost,X-authentik-meta-provider,X-authentik-meta-app,X-authentik-meta-version
       - traefik.http.routers.lan-console.rule=Host(`console.${LAN_DOMAIN:-lan.invalid}`) && PathPrefix(`/`)
       - traefik.http.routers.lan-console.entrypoints=lan
       - traefik.http.routers.lan-console.middlewares=lan-auth

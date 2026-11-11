@@ -23,7 +23,12 @@ if [ -n "${OFFICE}" ]; then
   # Ask that office's machine, through the one door to machines. The reply is PUBLIC material only.
   # `exit`, not `exec`: an `exec` inside a pipeline replaces only that pipeline's subshell, and the
   # script went on to print THIS machine's identity after the other office's.
+  # who is asking (DGO-1304): `computers:8977` resolves only on the office network — where `bbox` runs inside
+  # the office agent's container (the HP), which holds the services' token. Run from a bare host, the token is
+  # empty and the write is counted as an unknown caller. The header goes in a curl config read from a pipe
+  # (-K), never in argv.
   curl -fsS -m 60 -X POST "http://computers:8977/api/computers/${OFFICE}/exec" \
+    -K <(printf 'header = "authorization: Bearer %s"\n' "${COMPUTERS_EXEC_TOKEN:-}") \
     -H 'content-type: application/json' \
     -d "{\"command\":\"cd ${REPO_ROOT} && ./bbox dgo identity ${VERB}\",\"timeout\":120}" \
     | python3 -c 'import json,sys;d=json.load(sys.stdin);print(d.get("stdout","").strip() or d.get("reason",""));sys.exit(0 if d.get("code")==0 else 1)'

@@ -1,0 +1,9 @@
+# telegram — six packages. telethon is the account (an MTProto USER client: the owner's groups and his
+# BotFather, which a bot cannot see); segno draws the login QR without Pillow; redis writes the office's event
+# stream (flow.v1).
+fastapi==0.115.6
+uvicorn[standard]==0.34.0
+requests==2.32.3
+telethon==1.45.0
+segno==1.6.6
+redis==5.2.1

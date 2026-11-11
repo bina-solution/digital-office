@@ -14,9 +14,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/solomonBoltin/deployment-hacohen/packaging/dgo/internal/compiler"
-	"github.com/solomonBoltin/deployment-hacohen/packaging/dgo/internal/edge"
-	"github.com/solomonBoltin/deployment-hacohen/packaging/dgo/internal/yamlish"
+	"github.com/bina-solution/digital-office/packaging/dgo/internal/compiler"
+	"github.com/bina-solution/digital-office/packaging/dgo/internal/edge"
+	"github.com/bina-solution/digital-office/packaging/dgo/internal/yamlish"
 )
 
 // Machine is the phone's machine as the native core sees it (native.go, android-path.md "the machine on
@@ -116,7 +116,7 @@ func (s *server) down(w http.ResponseWriter, r *http.Request, again bool) bool {
 		s.machine.Forget()
 	}
 	if why := s.machine.Refused(); why != "" {
-		reply(w, http.StatusServiceUnavailable, object("ok", false, "error", why))
+		reply(w, http.StatusServiceUnavailable, object("ok", false, "error", refusalSaid(why)))
 		return true
 	}
 	if err := s.machine.Want(); err != nil {
@@ -128,6 +128,15 @@ func (s *server) down(w http.ResponseWriter, r *http.Request, again bool) bool {
 	}
 	reply(w, http.StatusAccepted, object("ok", true, "step", step))
 	return true
+}
+
+// refusalSaid is the app's refusal as the owner's dialog shows it: «מכולות» not installed (DGO-1723) is no failure
+// but a step of his, said in Hebrew with where to take it; any other refusal is the app's own words, as before.
+func refusalSaid(why string) string {
+	if notInstalled.MatchString(why) {
+		return "האפליקציה הזו רצה על «מכולות», שעוד לא מותקנות בטלפון הזה. מתקינים אותן פעם אחת במסך מצב הלשכה (dgo://status)."
+	}
+	return why
 }
 
 // enableInMachine is a container app's enable on the phone's core: handed to the machine's app-management
@@ -163,7 +172,7 @@ func (s *server) disableInMachine(w http.ResponseWriter, r *http.Request) bool {
 	if port == 0 {
 		s.waiting.take(aid) // the owner wants it off: an enable asked before the machine was up is not handed on
 		if why := s.machine.Refused(); why != "" {
-			reply(w, http.StatusServiceUnavailable, object("ok", false, "error", why))
+			reply(w, http.StatusServiceUnavailable, object("ok", false, "error", refusalSaid(why)))
 			return true
 		}
 		if err := s.machine.Want(); err != nil {

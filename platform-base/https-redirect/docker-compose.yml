@@ -1,0 +1,51 @@
+# https-redirect — the office's port-80 answer (DGO-1595).
+#
+# One job: a request that arrives on traefik's `web` entrypoint on a SERVER office is answered
+# 308 to the same host and path over https, so the method and the body survive (traefik's own
+# redirect middlewares can only answer 301/302 — measured, and there is no 308 in v3 at all).
+#
+# NO HOST OF ITS OWN, no published port, no volume, no secret: nothing is meant to reach this
+# service except traefik's forwardAuth call, from the office network. `dgo-port80` — the router
+# that carries it — is rendered by the compiler into traefik's file provider
+# (platform-base/traefik/config/zz-https.yaml) for server offices only: on a `*.localhost` office
+# there is no certificate, so port 80 is the office's only door and nothing may redirect it.
+services:
+  https-redirect:
+    image: ghcr.io/bina-solution/digital-office/https-redirect:${IMAGE_TAG:-latest}
+    pull_policy: missing
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: https-redirect-${DEPLOYMENT_NAME:-bina-deployment}
+    hostname: https-redirect
+    restart: unless-stopped
+    environment:
+      - SENTRY_DSN=${HTTPS_REDIRECT_SENTRY_DSN:-}
+      - HTTPS_REDIRECT_PORT=8079
+      # the only hosts a Location may point at: this office's own name (the router's rule already
+      # names it; this is the belt, for a caller that reaches 8079 from inside the office network)
+      - HTTPS_REDIRECT_SUFFIX=${DEPLOYMENT_DOMAIN:-localhost}
+    networks:
+      - traefik-network
+    logging:
+      driver: ${LOGGING_DRIVER:-json-file}
+      options:
+        max-size: 2m
+        max-file: '2'
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8079/healthz', timeout=3).status==200 else 1)"]
+      interval: ${HEALTHCHECK_INTERVAL:-30s}
+      timeout: ${HEALTHCHECK_TIMEOUT:-5s}
+      retries: 3
+      start_period: 5s
+    deploy:
+      resources:
+        limits:
+          cpus: '0.2'
+          memory: 64M
+        reservations:
+          memory: 16M
+
+networks:
+  traefik-network:
+    external: true

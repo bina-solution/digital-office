@@ -277,18 +277,15 @@
     .bcard p:last-child{margin-bottom:0}
     .hidden{display:none}
 
-    /* toast */
-    #toast{position:fixed;bottom:20px;inset-inline-start:20px;background:var(--ink);color:var(--surface);padding:11px 18px;border-radius:12px;font-size:13px;font-weight:600;z-index:100;opacity:0;transform:translateY(12px);transition:.28s cubic-bezier(.2,.9,.3,1);box-shadow:var(--shadow-lg);pointer-events:none;display:flex;align-items:center;gap:9px}
-    #toast.show{opacity:1;transform:translateY(0)}
-    #toast .ok{font-weight:800;display:inline-flex}
     /* a MARK of the page (`mark()` below): drawn at the size of the text it sits in — as the live chat */
     .mk{width:1em;height:1em;flex:none;vertical-align:-.14em}
     .tick{display:inline-flex}
     .tick.read .mk{stroke-width:3.2}   /* read is also HEAVIER than delivered — not told by colour alone */
+    .pickhint{display:block;margin-top:3px;font-size:11px;font-weight:600;color:var(--muted)}.pickhint[hidden]{display:none}
+    .brow{flex-wrap:wrap}.brow .pickhint{flex:1 0 100%}   /* the hint is a line of its own under the row, never a squeezed column */
   </style>
 </head>
 <body>
-  <div id="toast"></div>
   <div class="chat">
     <aside class="side">
       <div class="brand">
@@ -364,7 +361,31 @@
     function ago(m){ if(m==null)return''; if(m<1)return'עכשיו'; if(m<60)return m+' דק׳'; if(m<1440){return Math.floor(m/60)+' שע׳';} var d=Math.round(m/1440); return d===1?'אתמול':d+' ימים'; }
     function clock(m){ var total=(9*60)-m; if(total<0)total+=24*60; var hh=Math.floor(total/60)%24, mm=((total%60)+60)%60; return (hh<10?'0':'')+hh+':'+(mm<10?'0':'')+mm; }
     function daylabel(m){ var d=Math.floor(m/1440); return d===0?'היום':d===1?'אתמול':'לפני '+d+' ימים'; }
-    function toast(msg){ var t=$('#toast'); t.innerHTML='<span class="ok">'+mark('check')+'</span>'+esc(msg); t.classList.add('show'); clearTimeout(t._h); t._h=setTimeout(function(){t.classList.remove('show');},2400); }
+    // (the live page says it through the office's notice too — one stack, so a page's toast and a refusal never overlap)
+    function toast(msg){ binaTell(msg,'ok'); }
+    // A closed select's arrows and letters move what it SHOWS — Chrome on Windows and Linux fires `change` on every
+    // press, and each one attached a bot to a live connection (DGO-618). Enter saves it; Esc or leaving it gives back
+    // what is saved. A pick from the open list saves at once: a `change` that does not come in the same tick as a key
+    // is a pick (on a Mac ↓ OPENS the list, and the pick comes later), and the list opens on what is saved.
+    function onPick(sel,commit){
+      var saved=sel.value, keyed=false, live=false, at=sel.closest('.selwrap')||sel,
+          hint=at.parentNode.querySelector('.pickhint');
+      if(!hint){ hint=document.createElement('small'); hint.className='pickhint'; hint.textContent='Enter לשמירה · Esc לביטול'; at.after(hint); }
+      function say(on){ hint.hidden=!on; }
+      function back(){ sel.value=saved; keyed=false; say(false); }
+      say(false);
+      sel.onpointerdown=function(){ if(keyed) back(); };
+      // (what is saved is what the select showed when the keys began — after a save, or a refusal the page drew back)
+      sel.onkeydown=function(e){
+        live=true; setTimeout(function(){ live=false; });
+        if(e.key==='Enter'){ if(keyed){ e.preventDefault(); keyed=false; say(false); if(sel.value!==saved) commit(); } return; }
+        if(e.key==='Escape'){ if(keyed){ if(sel.value!==saved){ e.preventDefault(); e.stopPropagation(); } back(); } return; }
+        if(e.key===' '||e.key==='F4'||(e.altKey&&/^Arrow(Up|Down)$/.test(e.key))){ if(keyed) back(); return; }
+        if(e.key.length===1||/^(Arrow|Page)|^(Home|End)$/.test(e.key)){ if(!keyed) saved=sel.value; keyed=true; }
+      };
+      sel.onchange=function(){ if(keyed&&live){ say(sel.value!==saved); return; } keyed=false; say(false); commit(); };
+      sel.onblur=function(){ if(keyed) back(); };
+    }
 
     var STCOL={ok:'var(--ok)',warning:'var(--lime)',error:'var(--red)'};   // the palette's: well · look here · failed
     var STHE={ok:'מחובר',warning:'דורש תשומת לב',error:'שגיאת חיבור'};
@@ -423,7 +444,7 @@
       if(!a){sel.innerHTML='';return;}
       sel.innerHTML=S.bots.map(function(b){return '<option value="'+b.id+'"'+(b.id===a.activeBot?' selected':'')+'>'+esc(b.name)+'</option>';}).join('');
       var cur=S.bots.filter(function(b){return b.id===a.activeBot;})[0]; $('#botDesc').textContent=cur?cur.desc:'';
-      sel.onchange=function(){ setBot(a.id,sel.value); };
+      onPick(sel,function(){ setBot(a.id,sel.value); });
     }
     /** Attach `bot` to `connId`, then read the connections again: the service owns that mapping, not a select — this
      *  panel's and the bots' window's alike (the live page's setBot). A refusal is said in the service's words (or the
@@ -547,14 +568,14 @@
           }).join('')+'</select></div>';
       }).join('')||'<div class="acct-empty">'+noRows('אין חיבורים')+'</div>';
       host.querySelectorAll('select').forEach(function(sel){
-        sel.onchange=function(){ sel.disabled=true; var cid=sel.getAttribute('data-conn');
+        onPick(sel,function(){ sel.disabled=true; var cid=sel.getAttribute('data-conn');
           // what the select shows afterwards is what is attached — a refused choice does not stay in it — and the
           // keyboard that changed it has it again (a select made disabled under the focus gave the focus to the page)
           setBot(cid,sel.value).then(function(){ var c=S.accounts.filter(function(x){return x.id===cid;})[0];
             if(c) sel.value=c.activeBot; sel.disabled=false;
             if(!document.activeElement||document.activeElement===document.body) sel.focus();
             pickBotConn(cid,true); });
-        };
+        });
       });
       host.querySelectorAll('.brow').forEach(function(row){
         var pick=function(){ pickBotConn(row.getAttribute('data-conn')); };
