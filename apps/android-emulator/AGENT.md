@@ -1,15 +1,17 @@
 # Operating «אמולטור אנדרואיד» (the `android-emulator` app)
 
 An emulated Android phone in the office (x86_64 Android 35 with arm64 translation, on the host's KVM). The owner
-sees it and uses it from its tile: the live display through noVNC, touch and keyboard. It ships off, and it is
-refused on a machine without /dev/kvm (app.json `requires_host`). In the herd it belongs on the Dell.
+sees it and uses it from its tile — the app's own screen on :6080 (`server/screen/index.html`): the state and why,
+the heat, «הפעל» / «כבה», and the live display (noVNC's RFB; touch and keyboard). It ships off, and it is refused
+on a machine without /dev/kvm (app.json `requires_host`). In the herd it belongs on the Dell; other offices see
+it through their links (staging frames it on its own host).
 
 ## One owner of the device
 
 `server/supervisor.py` is the only thing that starts the emulator. Ask it; never start one by hand:
 
 ```bash
-GET  http://android-emulator:8080/api/status        # off | waiting | booting | running | paused, who asked, °C
+GET  http://android-emulator:8080/api/status        # off|waiting|booting|running|paused|stopping, code, who, °C
 POST http://android-emulator:8080/api/start  {"by": "<who>"}
 POST http://android-emulator:8080/api/stop
 GET  http://android-emulator:8080/api/apks/<name>.apk?bytes=N   # would a PUT be kept? ask first: a refused
@@ -23,6 +25,16 @@ GET  http://android-emulator:8080/api/screenshot      # PNG, only while running
 install-check that android-install-check.yml runs when its job is in the office: first install, first open,
 «מצב», and with `--machine` the machine. It stops the device only if it started it.
 
+The screen's door (:6080) carries the page, noVNC's files (`vnc/`), the display's websocket (`websockify`, spliced
+to websockify on 127.0.0.1:6081) and only status/start/stop — never install, shell or the drop folder.
+
+## Quick boot and the idle rule
+
+A stop of a RUNNING device saves its snapshot first (`adb emu kill`; state `stopping`, two minutes at most), so the
+next start loads it in seconds — a cold boot took 246 s on the Dell. A device nobody used for 20 minutes
+(`ANDROID_EMULATOR_IDLE_STOP_MIN`, 0 = never) stops by itself, `code: idle`: a verb of the door or bytes moving on
+an open display are a use; an open tab on a dark screen is not.
+
 ## The heat rule (server/governor.py)
 
 The Dell switched itself off at 92°C under an emulator (2026-11-09). So: it starts only under 80°C, is paused
@@ -31,6 +43,9 @@ sibling). A paused device does not answer adb: wait, do not retry. Under 20 GB f
 stopped too. Each start, pause, resume and stop is on «כל מקביל» (`dgo:flow:android-emulator`).
 
 ## Traps
+
+- The door on :8080 has no sign-in: it is reached only inside the office. Its capability names an `interface`, not an
+  `endpoint`, so the compiler derives no agent door and no link splices it (a linked office gets the screen alone).
 
 - The image is heavy (the SDK and one system image): it is built on the Dell's office, one heavy job at a time.
 - It maps the host's /dev/kvm (ANDROID_KVM_DEVICE names another node); where there is none, it is not enabled.

@@ -65,7 +65,8 @@ def render(d, gaps_only=False):
 
     if gaps_only:
         unc = d.get("unclaimed") or []
-        if not risk and not unc:
+        anon = d.get("anonymous_volumes") or {}
+        if not risk and not unc and not anon.get("count"):
             print("nothing at risk — every store on this host is claimed and goes into a backup")
         for v in risk:
             print(f"{v['why']:<30} {v['volume']:<38} {v.get('size') or '?':>9}  "
@@ -73,6 +74,9 @@ def render(d, gaps_only=False):
         for u in sorted(unc, key=lambda r: -(r.get("bytes") or 0)):
             print(f"{'UNCLAIMED (' + u['kind'] + ')':<30} {u['name']:<38} "
                   f"{human(u.get('bytes')):>9}  {u.get('why', '')}")
+        if anon.get("count"):
+            print(f"{'UNCLAIMED (anonymous)':<30} {str(anon['count']) + ' volume(s)':<38} "
+                  f"{human(anon.get('bytes')):>9}  no name to declare — no backup carries them")
         return
 
     W = 98
@@ -84,7 +88,9 @@ def render(d, gaps_only=False):
     print(f"   BACKUP FOOTPRINT {human((s.get('volume_bytes') or 0) + (s.get('bind_bytes') or 0))}"
           f"   = volumes {human(s.get('volume_bytes'))} + binds {human(s.get('bind_bytes'))}")
     print(f"   (databases {human(s.get('db_bytes'))} are INSIDE those volumes — not added again)")
-    print(f"   volumes {s.get('volumes')}   at risk {s.get('volumes_at_risk')}   "
+    foreign = (f" (+{s['foreign_volumes']} of other projects, +{s.get('anonymous_volumes') or 0} anonymous)"
+               if s.get("foreign_volumes") or s.get("anonymous_volumes") else "")
+    print(f"   volumes {s.get('volumes')}{foreign}   at risk {s.get('volumes_at_risk')}   "
           f"binds {s.get('binds')}   databases {s.get('databases')}")
     print(f"   apps {s.get('apps_enabled')}/{s.get('apps_total')} enabled, "
           f"{s.get('apps_with_hooks')} with backup hooks")

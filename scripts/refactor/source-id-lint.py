@@ -19,7 +19,7 @@ NOT HYPOTHETICAL. Five live writers shipped the wrong thing:
     SOURCE_ID.
   These four workflow names are exactly the ones `_default_processor()` in incoming_documents/api/
   __init__.py wires up as the PRODUCTION `processor_wf` for a Console-authored sync-v3 pipe — this
-  was not a dead code path. Measured against the live DB (2026-08-05): 6,250 rows, only 579 distinct
+  was not a dead code path. Measured against the live DB (2026-08-05): N rows, only 579 distinct
   SOURCE_ID values; named (non-bulk-import) pipe rows for `drive-gdoc` and `gmail-doc` showed the
   exact same folder id / sender email repeated across different documents.
 

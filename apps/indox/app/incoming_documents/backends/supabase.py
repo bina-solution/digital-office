@@ -51,7 +51,7 @@ _DEFAULT_ORDER: tuple[tuple[str, str], ...] = (("created_at", "desc"),)
 #: is the one canonical doc number"). They were dropped from the live table and the
 #: fixture — but survived as DECLARATIONS in the repo registry, and on 2026-08-24
 #: provisioning a NEW table (the archive) faithfully re-materialised them:
-#: `ux_incoming_documents_archive_HASH` then aborted a 15,364-row archive move on the
+#: `ux_incoming_documents_archive_HASH` then aborted a N-row archive move on the
 #: first legitimate duplicate hash. Every table passes through ensure_table /
 #: ensure_schema, so the refusal lives here: whatever a config file says, these are
 #: never created again. Skips are logged loudly, never silent.

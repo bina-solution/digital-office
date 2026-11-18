@@ -60,7 +60,7 @@ import { workflow, node, links } from '@n8n-as-code/transformer';
     /*__n8n__*/ meta: {"templateCredsSetupCompleted":true},
     /*__n8n__*/ pinData: {},
     /*__n8n__*/ staticData: null,
-    /*__n8n__*/ shared: [{"updatedAt":"2026-07-31T01:00:42.729Z","createdAt":"2026-07-31T01:00:42.729Z","role":"workflow:owner","workflowId":"errorHandler01","projectId":"2xKn4WH08LyAOk2y","project":{"updatedAt":"2026-07-30T23:40:17.073Z","createdAt":"2026-07-30T23:33:30.049Z","id":"2xKn4WH08LyAOk2y","name":"Admin User <person2@example.com>","type":"personal","icon":null,"description":null,"creatorId":"544b7ec6-5907-4ee2-a94b-c5676e56835c"}}],
+    /*__n8n__*/ shared: [{"updatedAt":"2026-07-31T01:00:42.729Z","createdAt":"2026-07-31T01:00:42.729Z","role":"workflow:owner","workflowId":"errorHandler01","projectId":"exampleProject02","project":{"updatedAt":"2026-07-30T23:40:17.073Z","createdAt":"2026-07-30T23:33:30.049Z","id":"exampleProject02","name":"Admin User <person2@example.com>","type":"personal","icon":null,"description":null,"creatorId":"544b7ec6-5907-4ee2-a94b-c5676e56835c"}}],
     id: 'errorHandler01',
     name: 'Error Handler',
     active: true,
@@ -95,7 +95,7 @@ export class ErrorHandlerWorkflow {
         credentials: { telegramApi: { id: 'EmuwriU7cnK5nZTM', name: 'N8N TG LOGGER [env-managed]' } },
     })
     Telegram = {
-        chatId: '=-1002488442473',
+        chatId: '=-1001234567891',
         text: `=Workflow: <pre>{{ JSON.stringify($('Error Trigger').item.json.workflow, null, 2).slice(0, 150).replace(/</g, '&lt;').replace(/>/g, '&gt;') }}</pre>
 
 Execution: <pre>{{ JSON.stringify($('Error Trigger').item.json.execution, null, 2).slice(0, 3500).replace(/</g, '&lt;').replace(/>/g, '&gt;') }}</pre>
@@ -540,7 +540,7 @@ return [{ json: sentryEvent }];`,
     @node({
         id: 'b1a7c2e0-11aa-4c31-9d70-2f5a6c0e11a5',
         name: 'Send To GlitchTip',
-        /*__n8n__*/ notes: "RCA 2026-08-05: URL project id must match the project that owns sentry_key ba06c13f8350cf7e77b6d6246278f2d2. .generated/glitchtip.projects.yml provisions projects alphabetically; 'n8n' is the 11th of 13 -> project id 11 on a freshly-provisioned GlitchTip DB (verified live: projects_projectkey.project_id=11 for this key). The old hardcoded '/api/1/store/' pointed at project 1 (any-concurrency), so GlitchTip correctly rejected every event all day with 401 'Invalid DSN' -- the reporter was never actually reaching GlitchTip. If the app roster ever changes alphabetical order before 'n8n', this id needs updating again; consider resolving it dynamically instead of hardcoding.",
+        /*__n8n__*/ notes: "RCA 2026-08-05: URL project id must match the project that owns sentry_key 00000000000000000000000000000000. .generated/glitchtip.projects.yml provisions projects alphabetically; 'n8n' is the 11th of 13 -> project id 11 on a freshly-provisioned GlitchTip DB (verified live: projects_projectkey.project_id=11 for this key). The old hardcoded '/api/1/store/' pointed at project 1 (any-concurrency), so GlitchTip correctly rejected every event all day with 401 'Invalid DSN' -- the reporter was never actually reaching GlitchTip. If the app roster ever changes alphabetical order before 'n8n', this id needs updating again; consider resolving it dynamically instead of hardcoding.",
         /*__n8n__*/ notesInFlow: false,
         type: 'n8n-nodes-base.httpRequest',
         version: 4.3,
@@ -561,7 +561,7 @@ return [{ json: sentryEvent }];`,
                 },
                 {
                     name: 'X-Sentry-Auth',
-                    value: 'Sentry sentry_version=7, sentry_client=n8n-workflow/1.0, sentry_key=ba06c13f8350cf7e77b6d6246278f2d2',
+                    value: 'Sentry sentry_version=7, sentry_client=n8n-workflow/1.0, sentry_key=00000000000000000000000000000000',
                 },
             ],
         },

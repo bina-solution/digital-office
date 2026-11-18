@@ -1,0 +1,13 @@
+#!/usr/bin/env bash
+#: set-record <domain> <type> <name> <new value> --from <value now> --consent "<who>: <why>" — give ONE existing record (A, AAAA, CNAME) a new value through the InterNIC portal and read the zone back:  ./bbox domain-internic set-record examplex.co.il A @ 93.184.216.5 --from 93.184.216.15 --consent "…"
+# Pipes the app's own CLI (apps/domain-internic/cli.py) into its container, or — on an office that does not
+# run it — into the credential plane's container, at the linked office's door (../where.sh).
+# An update rewrites what already serves traffic, so it needs --from (the value it has now) and --consent — the
+# person who decided, and why, kept with the write — EVERY time, never once for all (EXX-29, DGO-1837).
+set -uo pipefail
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
+. "${REPO_ROOT}/scripts/lib.sh"
+case "${1:-}" in -h|--help|"") sed -n 's/^#: //p' "${BASH_SOURCE[0]}"; exit 0 ;; esac
+. "${SCRIPT_DIR}/../where.sh"
+di_cli set-record "$@"

@@ -15,7 +15,7 @@ A repo-wide search for FROM_OFFICE matches **36,995 occurrences across 209 files
 (measured 2026-08-06). Only ~156 of them are live code. The rest are DATA that must
 never be rewritten, and a `sed -i` across the tree would silently corrupt all of it:
 
-    apps/indox/storage/.../incoming-documents-main.json     12,443   live DB snapshot
+    apps/indox/storage/.../incoming-documents-main.json     many   live DB snapshot
     apps/apitools/feature-validation/.../benchmark-*.json    8,496   4 frozen benchmarks
     .claude/worktrees/fervent-mestorf-*/**                   ~4,000  another worktree
     data/_wf_backup/**, data/exclude/**, data/_runs/**       ~3,500  backups/exports
@@ -55,7 +55,7 @@ schema.sql IS DELIBERATELY NOT IN SCOPE
 ────────────────────────────────────────────────────────────────────────────────
 "FROM_WAREHOUSE"/"FROM_WAREHOUSE_CHECK" already exist there (and live in the DB).
 The legacy "FROM_OFFICE"/"FROM_OFFICE_CHECK" declarations must SURVIVE this rename —
-they hold all 5,697/5,719 populated values until the backfill has run and been
+they hold all the populated values until the backfill has run and been
 verified. Dropping them is the final, separate phase. See
 scripts/ops/indox-column-consolidation.sql §4.
 

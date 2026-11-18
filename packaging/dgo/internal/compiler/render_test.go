@@ -704,6 +704,18 @@ func TestRenderMatchesPython(t *testing.T) {
 				"apps/zz-ceil/app.json": manifestJSON("zz-ceil", `"compose":"docker-compose.yml","resources":{"memory":"512m"}`),
 				"apps/zz-ceil/docker-compose.yml": "services:\n  zz-ceil:\n    image: x\n" +
 					"    deploy: {resources: {limits: {memory: \"${ZZ_CEIL_MEM:-256M}\"}}}\n"}},
+		// an .env value an app declares holds its resources for ever (DGO-1848): said for a value that starts with the
+		// declared text (a quoted one too, and with no `unless`: no hint); nothing for one that does not, or for the
+		// machine that says it is there for the app (a value with spaces around its 1)
+		{name: "an .env value that holds an app's resources for ever: said, unless the machine is there for it (DGO-1848)", argv: render,
+			state: withApps(t, withApps(t, state, "enabled", "zz-held"), "enabled", "zz-kept"),
+			files: map[string]string{".env": "DEPLOYMENT_NAME=bina\nZZ_HELD_KEEP=\"-1\"\nZZ_KEPT_KEEP=-5m\nZZ_KEPT_DEDICATED= 1 \nZZ_SHORT=10m\n",
+				"apps/zz-held/app.json": manifestJSON("zz-held", `"resources":{"memory":"1g","forever":[`+
+					`{"env":"ZZ_HELD_KEEP","starts_with":"-","why":"a model stays loaded for ever","unless":"ZZ_HELD_DEDICATED"},`+
+					`{"env":"ZZ_SHORT","starts_with":"-","why":"never said"},`+
+					`{"env":"ZZ_HELD_KEEP","starts_with":"-1","why":"no unless: said with no hint"}]}`),
+				"apps/zz-kept/app.json": manifestJSON("zz-kept", `"resources":{"forever":[`+
+					`{"env":"ZZ_KEPT_KEEP","starts_with":"-","why":"held","unless":"ZZ_KEPT_DEDICATED"}]}`)}},
 		{name: "a linked office's tiles with a null order and a word beside numbers: 900, and the whole render (DGO-627)", argv: render,
 			state: withoutRemote(state) + strings.NewReplacer("order: 2.5", "order: null", "order: 260", "order: soon").Replace(remoteShapes)},
 		{name: "every app enabled, a real domain, a CRLF .env with a stale slug and bytes that are not UTF-8", argv: render, state: all,

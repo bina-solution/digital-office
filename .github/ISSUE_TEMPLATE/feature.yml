@@ -1,0 +1,22 @@
+name: Idea or new app · רעיון או אפליקציה חדשה
+description: Something DGO should do, or an app it should have · משהו ש-DGO צריכה לעשות, או אפליקציה שחסרה
+labels: [enhancement]
+body:
+  - type: textarea
+    id: need
+    attributes:
+      label: The need · הצורך
+      description: Who needs it, and what they do today without it · מי צריך את זה, ומה עושים היום בלעדיו
+    validations:
+      required: true
+  - type: textarea
+    id: shape
+    attributes:
+      label: What it would look like · איך זה ייראה
+      description: The screen, the command, or the app — and whether an open-source tool already does it · המסך, הפקודה או האפליקציה — והאם כלי קוד פתוח כבר עושה את זה
+  - type: checkboxes
+    id: help
+    attributes:
+      label: Taking part · השתתפות
+      options:
+        - label: I would like to build it myself, with guidance · אשמח לבנות את זה בעצמי, עם הכוונה

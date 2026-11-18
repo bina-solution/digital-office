@@ -4,7 +4,7 @@ tls:
     default:
       alpnProtocols:
         - acme-tls/1
-        - http/1.1
         - h2
+        - http/1.1
         - postgresql
         - redis

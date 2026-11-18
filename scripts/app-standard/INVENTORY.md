@@ -72,7 +72,7 @@ Lifecycle hooks, not counted as CLI: backup, busy, facts, onboard, prepare, refr
 | `newsflow` | service | ✓ newsflow(emb) · 0v | ✓ news-feed 9 routes | ✓ 9 verbs | ✗ | ✓ newsflow | ✓ 2668B | ✓ G27 · 2 tests | 6/7 |
 | `cad-api` | service | ✗ 0v | ✓ 4 routes | ✓ 3 verbs | ✗ | ✗ | ✓ 2272B | ✓ G27 · 3 tests | 4/7 |
 | `calculator` | service | ✓ calculator(emb) · 0v | ✗ | ✗ | ✗ | ✓ calculator | ✓ 736B | ✓ G27 | 4/7 |
-| `chimney-services` | service | ✗ 0v | ✓ 121 routes | ✗ | ✗ | ✓ services | ✓ 3908B | ✓ G27 · 28 tests | 4/7 |
+| `examplech-services` | service | ✗ 0v | ✓ 121 routes | ✗ | ✗ | ✓ services | ✓ 3908B | ✓ G27 · 28 tests | 4/7 |
 | `cad` | service | ✓ cad(ext) · 1v | ✗ | ✗ | ✗ | ✓ cad | ✓ 1334B | ✗ | 3/7 |
 
 ### documents

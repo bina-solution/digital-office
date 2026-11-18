@@ -52,8 +52,8 @@ const DEFAULT_PAGE = 100;
  * re-reads every dispatch row in the table before it can print a single number. Measured against
  * the live BFF, uncached, 2026-08-23:
  *
- *     win=today  6.67s   35,867 rows   rows_capped=false
- *     win=all   25.88s  250,000 rows   rows_capped=TRUE
+ *     win=today  6.67s   N rows   rows_capped=false
+ *     win=all   25.88s  N rows   rows_capped=TRUE
  *
  * So the wide window costs four times the wait AND comes back capped — the `250,000` it prints is
  * the ceiling it stopped at, not a count, which is exactly what the `סריקה חלקית` badge means. It
@@ -79,7 +79,7 @@ const DEFAULT_WIN = 'today';
      נסגרו בכפייה  a duration of 65 minutes or more. Measured on the live table (2026-08-23):
               120 rows land inside 65.1–65.2 minutes — a bulk close on a fixed cadence, not work
               that happened to take an hour — and 56,146 more sit between 4.5 and 94 HOURS. That
-              is 18% of 308,956 rows. A row like that is the fingerprint of a killed router
+              is 18% of N rows. A row like that is the fingerprint of a killed router
               execution whose bracket was closed later; reading it as "this action took four
               hours" is the misreading this filter exists to end. */
 const REAPED_MIN = 65;
@@ -114,7 +114,7 @@ interface ScanResult {
 const rowKeyOf = (r: ActionEntry) => `${r.ts}:${r.id}:${r.label}:${r.exec ?? ''}`;
 /** Bound on the CSV export. The window can hold hundreds of thousands of actions; an export
  *  button that silently hands over the first page would be worse than none, and one that tries
- *  to stream 430,000 rows through 860 round trips would hang the tab. So it takes the newest
+ *  to stream N rows through 860 round trips would hang the tab. So it takes the newest
  *  `EXPORT_MAX` matching actions, and says exactly that before it starts. */
 const EXPORT_MAX = 5000;
 const EXPORT_PAGE = 500; // rows a request: ten at most for EXPORT_MAX (the endpoint allows 1000 since 2026-08-16)
@@ -586,7 +586,7 @@ export default function ActionLogPage() {
 
   /* AUTO-REFRESH ONLY ON PAGE 1. A timeline that reorders under you while you are reading page 4
      is worse than a stale one: the row you were looking at moves. The interval follows what the
-     server can actually recompute — a narrow window re-scans ~1,300 documents (cached 10s), the
+     server can actually recompute — a narrow window re-scans ~N documents (cached 10s), the
      wide ones re-scan the whole 19.7 MB table (cached 60s), so polling those faster would only
      queue round trips through the console's single-threaded proxy to be handed the same
      snapshot back. */
@@ -1077,7 +1077,7 @@ export default function ActionLogPage() {
 
               The old sub-line said "written to redis, kept 24 hours". Both halves were wrong: the
               brackets are POSTGRES rows (the redis wording survived an earlier draft), and the
-              live table holds 308,956 rows going back to 2026-08-17 — six days, measured
+              live table holds N rows going back to 2026-08-17 — six days, measured
               2026-08-23, not one. */}
           <div className="sub">
             פעולות אמיתיות של הראוטר — שורה אחת לכל (מסמך · פעולה · ריצה), נפתחת לפני
@@ -1141,7 +1141,7 @@ export default function ActionLogPage() {
         <div className="atl-chips">
           {/* THE DOUBLE-RUN ALARM. It says PAIRS, and a pair is not a row — 31,728 pairs on a
               window holding hundreds of thousands of rows is a different (and much larger) fact
-              than 31,728 rows, and the chip used to make the reader guess which. Both numbers
+              than N rows, and the chip used to make the reader guess which. Both numbers
               are on it now, the tooltip says what a pair IS, and clicking shows exactly those
               rows grouped so the claim can be read row by row. */}
           <button

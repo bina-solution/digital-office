@@ -49,7 +49,7 @@ TAGS_LIVE=$(pgq "select count(*) from tag_entity;"); TAGS_LIVE=${TAGS_LIVE:-?}
 # a different key, so it read "DRIFT" forever while the fact that matters was fine. That fact is
 # whether the RUNNING instance can still decrypt its credentials after the next boot, i.e. whether
 # it matches the key the stack starts with — .env's. Measured on hp 2026-10-09: instance
-# 7baad35cb7d9bfbe = .env 7baad35cb7d9bfbe (consistent), blueprint 77aee1e843d268cd (the
+# 0123456789abcdef = .env 0123456789abcdef (consistent), blueprint 77aee1e843d268cd (the
 # template's), reported as drift with nothing wrong.
 KEY="$(docker exec "${N8N}" printenv N8N_ENCRYPTION_KEY 2>/dev/null | tr -d '\r' || true)"
 _fp() { printf '%s' "$1" | { command -v sha256sum >/dev/null 2>&1 && sha256sum || shasum -a 256; } | cut -c1-16; }

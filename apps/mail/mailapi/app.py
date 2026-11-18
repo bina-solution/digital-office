@@ -247,7 +247,7 @@ def _labels_from(b):
 #   label:DOC_TO_SYNC                      ->        0
 #   label:"אינדוקס - מסמכים כללי - טופל"    ->        0   ← the CORRECT name, quoted. still zero.
 #   label:אינדוקס---מסמכים-כללי---טופל      ->       70   ← same label, spaces hyphenized
-#   label:אוטומציה-שמירת-מסמכים-טופל         ->   15,575   ← the name the label engine actually stamps
+#   label:אוטומציה-שמירת-מסמכים-טופל         ->   many     ← the name the label engine actually stamps
 #
 # Two independent faults stack, and each one alone is enough to produce a believable zero:
 #
@@ -955,7 +955,7 @@ class GmailBackend:
         nothing on this mailbox is a 422 — never a 200 with `total: 0`. See the vocabulary note
         above `rewrite_label_terms` for the measurements; the short version is that BOTH
         `label:SYNCED_DOC` (a rule KEY, not a name) and `label:"<name with spaces>"` (the right
-        name, unhyphenized) returned a clean zero on this account while 15,575 messages carried the
+        name, unhyphenized) returned a clean zero on this account while thousands of messages carried the
         label. Zero is also what a drained pipe returns, so every "this pipe is empty" conclusion
         drawn from this endpoint was unfalsifiable. It is now: a zero from here means the search ran
         against a label that demonstrably exists. Every response carries `label_terms` showing what
@@ -1035,7 +1035,7 @@ class GmailBackend:
             # the server. Every INDOX gmail pipe searches by LABEL NAME, and this client's label
             # names are Hebrew (`לטיפול-אוטומציה-שמירת-מסמכים`, `אוטומציה-שמירת-מסמכים-נכשל`, …),
             # so `X-GM-RAW label:"<hebrew>"` was a hard 500 on the real mailbox — measured, not
-            # inferred: `POST /search` with connection_id=<hachohen gmail> returned 500 for all six
+            # inferred: `POST /search` with connection_id=<example gmail> returned 500 for all six
             # configured label names while the same call against the ASCII-only local test mailbox
             # returned 200. The board's mail columns therefore could never show a client message.
             #

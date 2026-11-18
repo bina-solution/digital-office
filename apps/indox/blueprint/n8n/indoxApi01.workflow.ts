@@ -105,7 +105,7 @@ import { workflow, node, links } from '@n8n-as-code/transformer';
     /*__n8n__*/ meta: null,
     /*__n8n__*/ pinData: {},
     /*__n8n__*/ staticData: {"node:Keepalive":{"recurrenceRules":[0]}},
-    /*__n8n__*/ shared: [{"updatedAt":"2026-08-12T19:30:21.402Z","createdAt":"2026-08-12T19:30:21.402Z","role":"workflow:owner","workflowId":"indoxApi01","projectId":"2xKn4WH08LyAOk2y","project":{"updatedAt":"2026-07-30T23:40:17.073Z","createdAt":"2026-07-30T23:33:30.049Z","id":"2xKn4WH08LyAOk2y","name":"Admin User <person2@example.com>","type":"personal","icon":null,"description":null,"creatorId":"544b7ec6-5907-4ee2-a94b-c5676e56835c"}}],
+    /*__n8n__*/ shared: [{"updatedAt":"2026-08-12T19:30:21.402Z","createdAt":"2026-08-12T19:30:21.402Z","role":"workflow:owner","workflowId":"indoxApi01","projectId":"exampleProject02","project":{"updatedAt":"2026-07-30T23:40:17.073Z","createdAt":"2026-07-30T23:33:30.049Z","id":"exampleProject02","name":"Admin User <person2@example.com>","type":"personal","icon":null,"description":null,"creatorId":"544b7ec6-5907-4ee2-a94b-c5676e56835c"}}],
     id: 'indoxApi01',
     name: 'indox api',
     active: true,
@@ -432,7 +432,7 @@ const SEP='';
 // (SOURCE_TYPE, SOURCE_ID) is a Drive FILE, but for mail SOURCE_ID is the MESSAGE id and a
 // message can hold several documents. Keyed on the handle alone, the first attachment claimed
 // the key and every sibling logicalMatch'd onto it, so a two-attachment mail could only ever
-// become one row. Measured on gmail-bs 1a039e97bc1d04e1: Run Mail Processor returned 2, both
+// become one row. Measured on gmail-bs 0000000000000003: Run Mail Processor returned 2, both
 // files were uploaded, Resolve IDs folded 2 -> 1.
 // So the handle index is now keyed by (SOURCE_TYPE, SOURCE_ID, NAME) and the handle-only index
 // is KEPT alongside it, used only for rows that carry no NAME — those cannot be told apart, and
@@ -592,7 +592,7 @@ return ($__out).map(function (it) {
   // Measured 2026-08-13 00:30-00:40Z: 23 indox api failures in one window, surfaced when the
   // sync retry queue began feeding previously-unreachable mail items into the downloaders.
   // Stripped, not mapped -- this is a nested runtime object, while the real "ERROR" diagnostic
-  // string is written explicitly elsewhere (6,143 rows carry one) and must not be clobbered.
+  // string is written explicitly elsewhere (N rows carry one) and must not be clobbered.
   delete j.error; delete j.errorResponse;
   // [column-shape 2026-08-13] ONLY REAL COLUMN NAMES SURVIVE THE WRITE BOUNDARY.
   // PG Upsert uses autoMapInputData, so every key becomes a column and one stray key rejects the
@@ -607,10 +607,10 @@ return ($__out).map(function (it) {
   // a direct write to it is discarded (demonstrated live -- set it to '2020-01-01' and the row
   // comes back holding the DOC_DATE-derived value). Carrying it across the write boundary bought
   // nothing and cost plenty: a timestamptz read back through n8n serialises as
-  // "2026-05-10T00:00:00.000Z", and 2,036 rows ended up with that string in DOC_DATE itself,
+  // "2026-05-10T00:00:00.000Z", and N rows ended up with that string in DOC_DATE itself,
   // which Map Request then truncated to "2026-00Z" and posted to the ERP. Selection owns
   // DOC_DATE and its format; the database derives the rest.
-  // [2026-08-28] 'סימון כרטסת עדכנית' dropped: a Sheets-era marker, 0 non-null of 25,982 rows.
+  // [2026-08-28] 'סימון כרטסת עדכנית' dropped: a Sheets-era marker, 0 non-null of N rows.
   var __COL_OK = { created_at:1, updated_at:1, priority_sync:1 };
   for (var __k in j) {
     if (!Object.prototype.hasOwnProperty.call(j, __k)) continue;
@@ -628,7 +628,7 @@ return ($__out).map(function (it) {
     @node({
         id: 'api-bulk-upsert-build-01',
         name: 'Build Bulk Upsert SQL',
-        /*__n8n__*/ notes: "[bulk upsert 2026-08-17, owner order] The API call was always batched (one call per action group) but the old 'PG Upsert' node (operation:upsert) wrote ONE STATEMENT PER ITEM — measured 0.77s/row, 996s for a 1,300-row OLD group, the whole cycle's dominant wall. This node groups the batch by field-shape (each action's Build emits one shape, so 1-3 shapes per call) and emits ONE INSERT..ON CONFLICT DO UPDATE statement per shape via jsonb_array_elements — same match-on-ID semantics, one round-trip instead of 1,300. Casts come from the live information_schema map (non-text columns only); updated_at is owned by trg_incdoc_touch and is never written. [content-twin guard 2026-08-17] A NEW ID carrying a HASH that already belongs to another doc used to abort the whole statement on uq_incdoc_hash (pre-existed in the old per-row node too: execs 3365596/3367253/3367904 died the same way at 10:51-12:02, batch only widened the blast). Now: in-batch twins dedupe in JS, table-level twins skip via NOT EXISTS mirroring the partial-index predicate — the DO NOTHING semantics schema.sql P0a documents. Same-ID-twice merges last-wins (one INSERT may not touch a row twice).",
+        /*__n8n__*/ notes: "[bulk upsert 2026-08-17, owner order] The API call was always batched (one call per action group) but the old 'PG Upsert' node (operation:upsert) wrote ONE STATEMENT PER ITEM — measured 0.77s/row, 996s for a N-row OLD group, the whole cycle's dominant wall. This node groups the batch by field-shape (each action's Build emits one shape, so 1-3 shapes per call) and emits ONE INSERT..ON CONFLICT DO UPDATE statement per shape via jsonb_array_elements — same match-on-ID semantics, one round-trip instead of 1,300. Casts come from the live information_schema map (non-text columns only); updated_at is owned by trg_incdoc_touch and is never written. [content-twin guard 2026-08-17] A NEW ID carrying a HASH that already belongs to another doc used to abort the whole statement on uq_incdoc_hash (pre-existed in the old per-row node too: execs 3365596/3367253/3367904 died the same way at 10:51-12:02, batch only widened the blast). Now: in-batch twins dedupe in JS, table-level twins skip via NOT EXISTS mirroring the partial-index predicate — the DO NOTHING semantics schema.sql P0a documents. Same-ID-twice merges last-wins (one INSERT may not touch a row twice).",
         type: 'n8n-nodes-base.code',
         version: 2,
         position: [400, 128],
@@ -800,7 +800,7 @@ return out.length ? out : [{ json: { sql: 'SELECT 1', payload: '[]', n: 0 } }];
 //                      per page, hence opt-in.
 //                      (A window count(*) over() would be WRONG here: under a keyset cursor the
 //                      filtered set is only the rows AFTER the cursor, so it shrinks page by page
-//                      and reports 999 on the last page of a 39,000-row table.)
+//                      and reports 999 on the last page of a N-row table.)
 //
 // after/cursor and page/offset are MUTUALLY EXCLUSIVE. A caller that sends both does not know
 // which one it means, and quietly honouring one of them is exactly how a pager skips rows.
@@ -811,7 +811,7 @@ return out.length ? out : [{ json: { sql: 'SELECT 1', payload: '[]', n: 0 } }];
 // that. Its own honest trade: rows inserted with an "ID" BELOW the cursor mid-sweep are not seen
 // by THIS sweep (the next one picks them up); rows above it are.
 //
-// WHY KEYSET IS THE ADVICE - COST, measured on this table at 38,999 rows (EXPLAIN ANALYZE):
+// WHY KEYSET IS THE ADVICE - COST, measured on this table at N rows (EXPLAIN ANALYZE):
 //   keyset  ("ID" > cursor, limit 1001)   Index Scan using incoming_documents_pkey  ->   1.0 ms
 //   offset  (limit 1001 offset 37000)     Parallel Seq Scan + external merge Sort
 //                                         spilling 19-25 MB to DISK per worker      -> 389.0 ms
@@ -984,7 +984,7 @@ return kept.concat([{ json: {
 //   j.ID      scalar                  -> "ID" = $1
 //
 // WHY j.filters exists: callers used to ask GET_ALL and match in JS. That shipped every row of
-// incoming_documents into the worker (45,839 rows / 37MB raw -> hundreds of MB of JS objects, copied
+// incoming_documents into the worker (the whole table raw -> hundreds of MB of JS objects, copied
 // again at each executeWorkflow boundary) and reliably blew the 1536MB worker heap. j.filters pushes
 // the caller's N lookups down into ONE bounded query.
 //
@@ -1102,7 +1102,7 @@ if (j.ids) {
 // arrives as UNDEFINED rather than as null. Every consumer that reads a value is unaffected
 // (j.FOO is falsy either way, and the callers guard with bad()/COALESCE), but a consumer
 // that tests for the KEY is not. Exactly one existed -- indoxV2Driver01 :: 'If NOT UNDEFINED
-// NAME' ({{ $json.NAME === undefined }}) -- and it failed 7 rows of one 2,000-row batch on
+// NAME' ({{ $json.NAME === undefined }}) -- and it failed 7 rows of one N-row batch on
 // 2026-08-20 because 194 documents legitimately carry NAME null. That node is DISABLED as of
 // this change (owner order), which is what makes this safe. Before adding any new key-presence
 // test on a row column, remember it will be reading a stripped payload.
@@ -1378,7 +1378,7 @@ sql+=' returning *'; return {json:{sql,params}};`,
     @node({
         id: 'indox-poll-q',
         name: 'Get Changed Docs',
-        /*__n8n__*/ notes: "THE BACKOFF GATE (2026-08-07, redrive-loop lane). This node is the ONLY active driver of indoxV2Driver01 (graph-traced: the sole executeWorkflow node in the fleet targeting it, in an active workflow, is this workflow's 'Process Changed Doc'). It therefore decides, alone, whether errorHandler01's 'Backoff + Dead-letter' means anything at all -- and until this clause it read NEITHER \"NEXT_RETRY_AT\" NOR \"RETRY_COUNT\". Two mechanisms in THIS SAME FILE disagreed: 'Terminalize Stalled' already carried `(\"NEXT_RETRY_AT\" is null or \"NEXT_RETRY_AT\" <= now())` and honoured the backoff; the pickup did not, so a scheduled retry was ignored and a dead-lettered document was re-driven anyway. The loop was self-sustaining by construction: trg_incdoc_touch (BEFORE UPDATE) bumps updated_at on EVERY row write, so the dead-letter's own UPDATE put the row back inside `updated_at > now() - interval '150 seconds'` and the next 30s tick picked it up again. Measured live: doc_msi5h17vzra0ds reached RETRY_COUNT=646 and was still in this node's output, eligible via that branch alone; 2 documents produced 242 of 1,707 attributed driver executions (14.2%) in one 6.7h window. NOTE THE ASYMMETRY that makes this clause safe: it can only ever REMOVE rows, never add them, so nothing that is picked up today stops being picked up except while a backoff it already earned is pending -- no wake-up branch was added on purpose, because 169 rows currently carry a stale PAST \"NEXT_RETRY_AT\" (94 of them COMPLETED) and a `NEXT_RETRY_AT <= now()` wake branch would re-drive every one of them every 30s forever, which is the same loop with a new door. `or \"STATUS\" = 'ACTION_RESTART'` keeps the operator Retry button (DocumentDetailPage.tsx: PATCH STATUS -> ACTION_RESTART) working on a dead-lettered document -- one attempt per click, since RETRY_COUNT is already past the threshold and the next failure re-seals it.",
+        /*__n8n__*/ notes: "THE BACKOFF GATE (2026-08-07, redrive-loop lane). This node is the ONLY active driver of indoxV2Driver01 (graph-traced: the sole executeWorkflow node in the fleet targeting it, in an active workflow, is this workflow's 'Process Changed Doc'). It therefore decides, alone, whether errorHandler01's 'Backoff + Dead-letter' means anything at all -- and until this clause it read NEITHER \"NEXT_RETRY_AT\" NOR \"RETRY_COUNT\". Two mechanisms in THIS SAME FILE disagreed: 'Terminalize Stalled' already carried `(\"NEXT_RETRY_AT\" is null or \"NEXT_RETRY_AT\" <= now())` and honoured the backoff; the pickup did not, so a scheduled retry was ignored and a dead-lettered document was re-driven anyway. The loop was self-sustaining by construction: trg_incdoc_touch (BEFORE UPDATE) bumps updated_at on EVERY row write, so the dead-letter's own UPDATE put the row back inside `updated_at > now() - interval '150 seconds'` and the next 30s tick picked it up again. Measured live: doc_example0000003 reached RETRY_COUNT=646 and was still in this node's output, eligible via that branch alone; 2 documents produced 242 of 1,707 attributed driver executions (14.2%) in one 6.7h window. NOTE THE ASYMMETRY that makes this clause safe: it can only ever REMOVE rows, never add them, so nothing that is picked up today stops being picked up except while a backoff it already earned is pending -- no wake-up branch was added on purpose, because 169 rows currently carry a stale PAST \"NEXT_RETRY_AT\" (94 of them COMPLETED) and a `NEXT_RETRY_AT <= now()` wake branch would re-drive every one of them every 30s forever, which is the same loop with a new door. `or \"STATUS\" = 'ACTION_RESTART'` keeps the operator Retry button (DocumentDetailPage.tsx: PATCH STATUS -> ACTION_RESTART) working on a dead-lettered document -- one attempt per click, since RETRY_COUNT is already past the threshold and the next failure re-seals it.",
         type: 'n8n-nodes-base.postgres',
         version: 2.5,
         position: [-880, 1536],
@@ -1424,7 +1424,7 @@ sql+=' returning *'; return {json:{sql,params}};`,
 -- by the global \`limit 120\`.
 --
 -- MEASURED 2026-08-12 02:0xZ by dry-running THIS query against the live table: s_recov's pool
--- was 1,218 rows and the six documents actually sitting in ACTION_RESTART drew ranks
+-- was N rows and the six documents actually sitting in ACTION_RESTART drew ranks
 -- 188 / 475 / 537 / 597 / 606 / 1147. Only ranks <= 120 enter the union at all, and of those
 -- roughly 14 survive the global cut, so a given restart had about a 1% chance per poll. At one
 -- poll every 5 minutes that is a MEAN WAIT NEAR SEVEN HOURS, and the live evidence matched it
@@ -1503,7 +1503,7 @@ sql+=' returning *'; return {json:{sql,params}};`,
 -- [per-type starvation 2026-08-11] THE BINDING CONSTRAINT WAS A SLICE THAT COULD NOT REACH ITS OWN ROWS.
 -- Upload and base are no longer the limit: measured 2026-08-11 06:4xZ, Upload Doc To API TOOLS ran
 -- 548/hr and Base Document Extraction 508/hr, both ahead of ~296/hr intake. The three per-type
--- wrappers (InvoiceDocEx01 / ShipmentDocEx01 / BsDocEx01) ran a COMBINED 192/hr against 2,545
+-- wrappers (InvoiceDocEx01 / ShipmentDocEx01 / BsDocEx01) ran a COMBINED 192/hr against N
 -- documents queued for per-type -- a 13-hour drain, and the actual ceiling on COMPLETED (~70/hr).
 -- Nothing there is slow: the Gemini extractor behind them does 840/hr at 11.9s, and the wrappers
 -- themselves return in 12-15s. They were STARVED OF DISPATCH by this node.
@@ -1519,7 +1519,7 @@ sql+=' returning *'; return {json:{sql,params}};`,
 -- four times to remove, reintroduced inside s_recov. 1,658 of the 2,545 per-type-ready documents
 -- (65%) carry a recovery STATUS -- 972 NEEDS_REVIEW, 217 MISSING_COMPANY_ID, 102 API_TOOLS_FAILED,
 -- 95 MISSING_TYPE -- so \`not recov\` excludes them from s_live/s_stale and s_recov is their ONLY
--- slice. s_recov ordered by \`needs_base desc\` as its PRIMARY key. Its pool is 2,777 rows of which
+-- slice. s_recov ordered by \`needs_base desc\` as its PRIMARY key. Its pool is N rows of which
 -- just 34 are needs_base, and its interleave weight (rn*6.0) buys ~16 slots per poll -- so those 34
 -- rows sat in front of all 16 slots, every poll, forever. Dry-run of s_recov's top 16: 15
 -- await_upload + 1 await_base, ZERO await_pertype. The rn<=120 cap never bound; the weight did.
@@ -1530,14 +1530,14 @@ sql+=' returning *'; return {json:{sql,params}};`,
 -- predicate is BYTE-FOR-BYTE UNCHANGED (only a computed flag is added to elig's select list), so
 -- every row eligible before is eligible now and no extra work is dispatched:
 --   1. s_recov drops the \`needs_base desc\` key and the needs_base rows, keeping its rn*6.0 share
---      and pure md5 rotation -- its ~16 slots now sweep the 2,743 rows it exists to serve.
+--      and pure md5 rotation -- its ~16 slots now sweep the N rows it exists to serve.
 --   2. s_recovbase is those 34 needs_base rows, given their own bounded share at rn*24.0 (~3.6
 --      slots/poll = full coverage every 10 polls). They are not abandoned, just not privileged.
 --   3. s_pertype is the missing slice: every per-type-ready document (uploaded, base done, typed,
 --      per-type NOT done, selection NOT done) regardless of STATUS, so it spans BOTH the s_live
 --      and the s_recov populations. rn*5.0 + rotation at the 300s poll bucket. Funded by s_new
 --      4.0 -> 6.0 and s_old 12.0 -> 14.0, the two slices whose pool is 100% await_upload (6,192
---      of 6,192 rows) -- the stage that was over-served.
+--      of N rows) -- the stage that was over-served.
 --
 -- VERIFIED BY DRY-RUN before deploy, same method and same minute as the baseline above:
 --     await_upload 32 | await_base 4 | await_pertype 57 | await_selection 21 | await_completion 5
@@ -1564,7 +1564,7 @@ sql+=' returning *'; return {json:{sql,params}};`,
 --                     153: !SEARCH_IN_DRIVE_COMPLETED && SHORT_DOC_ID && COMPANY_NAME), i.e.
 --                     a real Drive search that can recover the file. The other 16 have
 --                     already been searched and answer 'no_action_link_not_found' -- HONEST
---                     COST, stated rather than hidden: 16 rows of no-op in a 2,216-row slice
+--                     COST, stated rather than hidden: 16 rows of no-op in a N-row slice
 --                     (0.7%), too small to earn a fence like \`not stamped_double\`, which
 --                     exists for a 168-row case.
 --
@@ -1589,7 +1589,7 @@ sql+=' returning *'; return {json:{sql,params}};`,
 --
 -- v1 (01:09 UTC) fixed the first plug: this was \`order by updated_at asc limit 40\`, and
 -- updated_at is bumped by every successful step, so the moment a document advanced it was sent
--- to the BACK of a 6,932-row queue behind every never-touched row. A document needs several
+-- to the BACK of a N-row queue behind every never-touched row. A document needs several
 -- visits to reach COMPLETED (base -> company/name -> per-type -> selection -> COMPLETED), so
 -- once ingestion outran pickup (2026-08-09 ~17:48) no document could ever get its SECOND step.
 -- Measured: the 481 rows that had finished base extraction sat at positions 4,659-6,932 while
@@ -1653,7 +1653,7 @@ sql+=' returning *'; return {json:{sql,params}};`,
 --
 -- WIDTH IS DELIBERATELY UNCHANGED AT 40. The premise that the host has spare capacity does not
 -- survive measurement: 6 cores at load average 21, swap 94% consumed (377 MB free of 6 GiB), and
--- an n8n queue already 1,268 executions deep (1,013 running + 255 new) at a 3.4% error rate.
+-- an n8n queue already N executions deep (1,013 running + 255 new) at a 3.4% error rate.
 -- Picking more rows per poll lengthens that queue; it does not raise the completion rate. This
 -- change buys no extra work -- it spends the SAME 40 dispatches on documents that can convert.
 --
@@ -1667,7 +1667,7 @@ sql+=' returning *'; return {json:{sql,params}};`,
 -- changed rows, and each became its own Process Changed Doc -> indoxV2Driver01 invocation, so every
 -- downstream splitInBatches (Loop Over Items5 @100, Lines Batching Loop @20000, Loop Over Items -
 -- Extract AI @30) received a single item and paid a full round-trip for it: maximum per-invocation
--- overhead, zero batching benefit, ~24,000 executions/hour drowning 16 execution slots. At 2 minutes
+-- overhead, zero batching benefit, ~N executions/hour drowning 16 execution slots. At 2 minutes
 -- the same changed rows accumulate into one dispatch and batch through the routers properly.
 -- SUPERSEDED by [one-knob 2026-08-10] below. This used to read: "INVARIANT: the change-window
 -- (150s) must stay LONGER than the poll interval (120s) ... 30s of overlap." That coupling is gone
@@ -1688,7 +1688,7 @@ sql+=' returning *'; return {json:{sql,params}};`,
 -- burst misses.
 --
 -- Both jobs were being served by one undifferentiated ordering, and the backstop drowned the
--- burst. Measured 09:59 UTC: 7,193 rows eligible, 0 of them changed in the last 150s, 15 in the
+-- burst. Measured 09:59 UTC: N rows eligible, 0 of them changed in the last 150s, 15 in the
 -- last 10 minutes -- and a just-changed document ranked ~1,200th within its own slice because
 -- s_live/s_fin ordered by updated_at ASC (oldest first), which sorts a document that JUST made
 -- progress to the BACK of its slice. So every cascade died after exactly one step, the write rate
@@ -1714,7 +1714,7 @@ sql+=' returning *'; return {json:{sql,params}};`,
 -- Eligibility admitted only IN_PROGRESS / TO_EXTRACT / null / '' (plus the decaying 150s
 -- window and the dup-set). Every other status was unreachable BY CONSTRUCTION -- not
 -- terminal, not deliberately excluded, simply never named. Measured 2026-08-10 13:2xZ:
--- 2,516 documents sat in statuses docBaseDecide has live forward paths for, and 2,220 of
+-- N documents sat in statuses docBaseDecide has live forward paths for, and 2,220 of
 -- them (88%) had genuine work queued behind that wall:
 --     NEEDS_REVIEW 1,077 (1,069 with real work)   MISSING_COMPANY_ID 526 (323)
 --     EXTRACTION_FAILED 330 (330)                 DOUBLE 320 (320)
@@ -1789,7 +1789,7 @@ sql+=' returning *'; return {json:{sql,params}};`,
 -- bull:jobs:wait drained to ZERO and stayed there across consecutive samples. The
 -- pipeline is now dispatch-starved rather than saturated.
 -- Compounding it: the poll moved 2m -> 5m without width moving, so dispatch fell from
--- 30 polls/hr x 40 = 1,200 rows/hr to 12 x 40 = 480. 120 restores 1,440/hr and uses the
+-- 30 polls/hr x 40 = N rows/hr to 12 x 40 = 480. 120 restores 1,440/hr and uses the
 -- queue as the buffer, which is the intended shape: enqueue a batch, let the workers
 -- drain it across the interval.
 -- IF bull:jobs:wait starts sitting deep again, THIS is the number to bring back down --
@@ -2037,7 +2037,7 @@ for (const it of $input.all()) {
   // doc_ id and inserted; 'on conflict do nothing' guards the PRIMARY KEY, and a brand-new id never
   // conflicts, so the guard has never once stopped a duplicate. Every re-delivery of a file the
   // table already held became a second row -- and re-delivery is normal, because the scanner
-  // re-reads folders (13,968 rows on this table were picked up out of a pipe's own 'synced' folder).
+  // re-reads folders (N rows on this table were picked up out of a pipe's own 'synced' folder).
   //
   // The check is deliberately ARTIFACT-only, the same two certain keys 'Resolve IDs' now uses:
   // the same bytes (HASH), or the same handle at the same source (SOURCE_TYPE, SOURCE_ID). It does
@@ -2053,7 +2053,7 @@ for (const it of $input.all()) {
   // (SOURCE_TYPE, SOURCE_ID) identifies a Drive FILE, but for mail SOURCE_ID is the MESSAGE id,
   // and one message can carry several documents. With the handle alone as an identity key the
   // first attachment created a row and every sibling was declined as "already delivered" --
-  // measured on gmail-bs message 1a039e97bc1d04e1 (aging report + invoice): Find Balance Doc
+  // measured on gmail-bs message 0000000000000003 (aging report + invoice): Find Balance Doc
   // emitted 2, both uploaded to Drive, ONE row survived, and it was a chimera carrying the
   // invoice's NAME/HASH beside a LINK pointing at the aging report's file. That contradicts the
   // owner's ruling for multi-attachment mail: filter garbage, deliver everything else.
@@ -2173,9 +2173,9 @@ return $('Build Deliver').all().map(i=>({json:{sql:i.json.fetch_sql,params:i.jso
 //
 // WHY: 'Resolve IDs' only ever probes existingIds / byHash / bySrc with keys taken from the
 // incoming rows. So loading only the rows that share one of those keys is EXACTLY equivalent to
-// loading the whole table — and it is the difference between 45,839 rows on every single UPSERT and
+// loading the whole table — and it is the difference between N rows on every single UPSERT and
 // a few dozen. The unbounded version (\`select ... from {{ $json.__instance ? 'indox_' + $json.__instance : 'public' }}.incoming_documents\` with no WHERE) was fine at
-// 100 rows and fatal at 45,839: it ran on every writeback and blew the 1536MB worker heap.
+// 100 rows and fatal at N: it ran on every writeback and blew the 1536MB worker heap.
 const rows = $input.all().map(i => i.json);
 const bad = v => v === undefined || v === null || v === '' || v === 'unknown' || v === 'ACTION_REQUIRED';
 const params = [];
@@ -2224,7 +2224,7 @@ return { json: { sql, params } };
         jsCode: `// Fail loudly instead of silently truncating or silently OOM-ing.
 //
 // Both GET and GET_ALL select CAP+1 rows. Getting CAP+1 back means the caller asked for more of
-// incoming_documents than a 1536MB worker can hold as JS objects (the table is 45,839 rows / 37MB raw
+// incoming_documents than a 1536MB worker can hold as JS objects (the table is N rows / 37MB raw
 // and every executeWorkflow hop copies it). Truncating would quietly return wrong answers, so we
 // refuse. A caller that hits this must narrow its query — GET with \`filters\` pushes N lookups into one
 // bounded round-trip.
@@ -2239,7 +2239,7 @@ return { json: { sql, params } };
 // Corpus was 17,361 and rising ~355/hr when this was raised (~7h of headroom left at 20000).
 // (original note) CAP=20000 (raised from 5000 on 2026-08-05): GET_ALL ('PG Get All') now deliberately reads the WHOLE
 // incoming_documents table (ORDER BY "ID", LIMIT 20000) so the dedup sweep sees every row instead of an
-// unordered partial sample — see that node's comment. Table was 6,203 rows at the time; 20000 gives
+// unordered partial sample — see that node's comment. Table was N rows at the time; 20000 gives
 // ~3.2x headroom. This guard is shared with the narrow GET path ('Build Get SQL', its own CAP=5000
 // bounds the query it builds to 5001 rows), so raising this threshold also raises where THAT path's
 // overflow gets caught — accepted because Build Get SQL only ever runs targeted ID/HASH/company+doc
@@ -2473,7 +2473,7 @@ return out;`,
     @node({
         id: 'mg-emit-ids-0001',
         name: 'Merge Emit IDs',
-        /*__n8n__*/ notes: "The documents this MERGE touched -- the set whose doc_action locks must now be released. Mirrors 'API Emit IDs' on the upsert path; that node's own note calls the upsert 'the one step every action necessarily ends with', which is true of every action EXCEPT this one. A merge ends here, at PG Merge Write, and nothing on this branch unlocked. Audited 2026-08-23: 977 of 1,203 live doc_action locks were ::action_merge_doubles and 364 of 400 sampled sat on a CLOSED dispatch bracket -- 81% of the lock population held by actions that had already finished, expiring only by TTL (measured up to 4,358s). Reads _ops from 'Build Merge Read' rather than this node's input, the same source 'Merge Result' trusts. Emits winner AND losers: the driver dispatched on the group MAIN and pickWinner may have made it either one, and a doc-scoped unlock on a document holding no lock is a no-op.",
+        /*__n8n__*/ notes: "The documents this MERGE touched -- the set whose doc_action locks must now be released. Mirrors 'API Emit IDs' on the upsert path; that node's own note calls the upsert 'the one step every action necessarily ends with', which is true of every action EXCEPT this one. A merge ends here, at PG Merge Write, and nothing on this branch unlocked. Audited 2026-08-23: 977 of N live doc_action locks were ::action_merge_doubles and 364 of 400 sampled sat on a CLOSED dispatch bracket -- 81% of the lock population held by actions that had already finished, expiring only by TTL (measured up to 4,358s). Reads _ops from 'Build Merge Read' rather than this node's input, the same source 'Merge Result' trusts. Emits winner AND losers: the driver dispatched on the group MAIN and pickWinner may have made it either one, and a doc-scoped unlock on a document holding no lock is a no-op.",
         type: 'n8n-nodes-base.code',
         version: 2,
         position: [144, 1360],

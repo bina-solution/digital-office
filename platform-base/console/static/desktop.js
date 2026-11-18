@@ -1261,7 +1261,7 @@
     if (!bar) return;
     const n = bar.querySelector(".dk-appname");
     // For a remote app the bar names the OFFICE as well: the bar is the one place that says what the
-    // focused window IS, and "בינה ודעת" is two different windows on two different machines. The
+    // focused window IS, and "עזריה" is two different windows on two different machines. The
     // office's MARK rides on that second half (flt-004) — the animal beside its name, the hue on the
     // name itself — so the answer is in the bar itself and not only in a tooltip.
     const r = focused ? remoteOfWin(focused) : null;

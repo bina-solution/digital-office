@@ -28,8 +28,9 @@ import urllib.parse
 import urllib.request
 
 DOOR = os.environ.get("ANDROID_DEVICE_DOOR") or "http://android-emulator:8080"
-RUNNING, PAUSED, OFF = "running", "paused", "off"
+RUNNING, PAUSED, OFF, STOPPING = "running", "paused", "off", "stopping"
 INSTALL_WAIT_S = 1860                                # the door's 30 min for adb install, and its answer
+SAVE_WAIT_S = 150                                    # the door's 120 s for a stopping device's snapshot, and some
 
 
 class DeviceError(RuntimeError):
@@ -82,6 +83,13 @@ class Door:
         code, doc = self.json("POST", "/api/stop")
         if code != 200:
             raise DeviceError(f"the door did not stop it ({code}): {doc.get('error', '')}")
+        # a running device saves its quick-boot snapshot before it exits (the door's `stopping`): wait for «off»
+        end = self.clock() + SAVE_WAIT_S
+        while doc.get("state") == STOPPING and self.clock() < end:
+            self.sleep(2)
+            doc = self.status()
+        if doc.get("state") == STOPPING:
+            raise DeviceError(f"the device is still saving its snapshot after {SAVE_WAIT_S} s")
         if doc.get("pid"):                     # «off» with a pid: the stop could not end the emulator (DGO-1817)
             raise DeviceError(f"the emulator (pid {doc['pid']}) did not stop: {doc.get('why', '')}")
         return doc

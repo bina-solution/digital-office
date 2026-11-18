@@ -55,7 +55,7 @@ class Snapshot(unittest.TestCase):
             "/api/executions?hours=1": [{"status": "success"}, {"status": "error"}, {"status": "running"}],
             "/api/notifications?unread=1&level=error&limit=50": {"notifications": [{"title": "n8n לא עונה"}]},
             "/flow/api/meetings": {"meetings": [{"title": "bs101 · תכנון", "room": "bs101", "started": "2026-11-04T09:30"}]},
-            "/api/bans": {"mode": "observe", "active": [{"ip": "93.184.216.13", "until": NOW * 10}], "history": []},
+            "/api/bans": {"mode": "observe", "active": [{"ip": "93.184.216.9", "until": NOW * 10}], "history": []},
         }
         snapshot._last.update(at=0.0, doc=None)
 

@@ -119,6 +119,67 @@ class DeclaredWins(unittest.TestCase):
         self.assertEqual(self.revealed, ["domain-internic-login"])
 
 
+class AWithheldLoginIsLeftAlone(unittest.TestCase):
+    """DGO-1825: the office's Google password is revealed only to the office browser's own containers. Asked from any
+    other caller the plane refuses it; that row is skipped — and its ORIGIN is withheld, so the sync never harvests
+    Chrome's copy of it into a new, ungated row (the second reader of DGO-1825)."""
+
+    def test_a_refused_reveal_skips_the_row_and_withholds_its_origin(self):
+        rows = {"browser42-login-google": {"app": {}, "fields": [
+                    {"key": "BROWSER42_LOGIN_GOOGLE_PASSWORD", "secret": True, "primary": True},
+                    {"key": "BROWSER42_LOGIN_GOOGLE_USER", "secret": False, "clear": "person7.x@example.com"},
+                    {"key": "BROWSER42_LOGIN_GOOGLE_URL", "secret": False, "clear": "https://accounts.google.com/",
+                     "fixed": True}]}}
+
+        def call(path, data=None):
+            if path == "/api/connections":
+                return {"connections": [{"id": "browser42-login-google"}]}
+            if path.startswith("/api/cred/"):
+                return rows[path.rsplit("/", 1)[1]]
+            if path.startswith("/api/reveal/"):
+                logins.WITHHELD.add(path.rsplit("/", 1)[1])   # what _call does on «revealed only to»
+                return None
+            raise AssertionError(path)
+        original = logins._call
+        logins._call = call
+        self.addCleanup(setattr, logins, "_call", original)
+        self.addCleanup(logins.WITHHELD.clear)
+        self.addCleanup(logins.WITHHELD_ORIGINS.clear)
+        got = logins.plane_entries()
+        self.assertEqual(got, {})
+        self.assertEqual(logins.WITHHELD_ORIGINS, {logins.browser_origin("https://accounts.google.com/")})
+
+    def test_a_copy_harvested_before_is_not_put_back_into_chrome(self):
+        # a `browser-login-*` row Chrome gave for the same origin before the Google row was withheld, listed FIRST:
+        # it must not stay an entry (it would be materialized into Chrome and revealed to the browser)
+        rows = {"browser-login-accounts-google-com": {"app": {}, "fields": [
+                    {"key": "PASSWORD", "secret": True, "primary": True},
+                    {"key": "USERNAME", "secret": False, "clear": "person8@example.com"},
+                    {"key": "URL", "secret": False, "clear": "https://accounts.google.com/"}]},
+                "browser42-login-google": {"app": {}, "fields": [
+                    {"key": "BROWSER42_LOGIN_GOOGLE_PASSWORD", "secret": True, "primary": True},
+                    {"key": "BROWSER42_LOGIN_GOOGLE_URL", "secret": False, "clear": "https://accounts.google.com/",
+                     "fixed": True}]}}
+
+        def call(path, data=None):
+            if path == "/api/connections":
+                return {"connections": [{"id": "browser-login-accounts-google-com"}, {"id": "browser42-login-google"}]}
+            if path.startswith("/api/cred/"):
+                return rows[path.rsplit("/", 1)[1]]
+            if path == "/api/reveal/browser-login-accounts-google-com":
+                return {"value": "harvested-before"}
+            if path.startswith("/api/reveal/"):
+                logins.WITHHELD.add(path.rsplit("/", 1)[1])
+                return None
+            raise AssertionError(path)
+        original = logins._call
+        logins._call = call
+        self.addCleanup(setattr, logins, "_call", original)
+        self.addCleanup(logins.WITHHELD.clear)
+        self.addCleanup(logins.WITHHELD_ORIGINS.clear)
+        self.assertEqual(logins.plane_entries(), {})
+
+
 class HarvestSkipsAnEmptyRow(unittest.TestCase):
     """DGO-1490: one Chrome row with an empty user name (the HP, 2026-11-08) ended the WHOLE harvest — the
     plane refused the empty value (/api/set → 400 «value required») and fail() exited. Now that row is

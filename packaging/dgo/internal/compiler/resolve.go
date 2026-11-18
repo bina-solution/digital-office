@@ -271,6 +271,23 @@ func Resolve(repo string, cat *Catalog, st *State, roots []string) ([]string, []
 		}
 	}
 
+	// A SERVER OFFICE'S PORT-80 ANSWER IS NOT AN OPTION (DGO-1595) — the Python twin's rule, in the
+	// same words: platform-base/https-redirect IS the answer on port 80 of a public office (its own
+	// brief), so the compiler pulls it in for a server office instead of trusting a state line nobody
+	// wrote; measured 2026-11-09, after the app shipped, vps1 still served `http://meet.staging…/` 200
+	// and its zz-https.yaml carried only the hsts middleware. `HTTPS_REDIRECT=off` is the owner's
+	// deliberate closing, and a `roots` lane (`--for indox`) is a question about the graph, not about
+	// the edge, so it is left alone.
+	if len(roots) == 0 && !want["https-redirect"] {
+		if env, err := readDotenv(repo); err == nil && serverOffice(env) &&
+			strings.TrimSpace(pyLower(env.value("HTTPS_REDIRECT"))) != "off" {
+			if _, known := cat.Apps["https-redirect"]; known {
+				want["https-redirect"] = true
+				diags = append(diags, Diag{"info", "https-redirect: pulled in as the port-80 answer of a server office"})
+			}
+		}
+	}
+
 	// conflicts: "these two cannot both be enabled", reported naming both, never resolved by guessing
 	wantSorted := sortedKeys(want)
 	for _, aid := range wantSorted {

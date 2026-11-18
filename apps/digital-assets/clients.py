@@ -7,6 +7,9 @@ This app never speaks to a platform itself. Social accounts are the `social` cap
 from __future__ import annotations
 
 import os
+import threading
+import time
+from typing import Any, Callable
 
 import requests
 
@@ -14,9 +17,52 @@ SOCIAL_URL = os.environ.get("SOCIAL_URL", "http://social-list:8986").rstrip("/")
 SITES_URL = os.environ.get("SITES_URL", "http://sites:8979").rstrip("/")
 TIMEOUT = 20
 
+# ── an ABSENT optional service must cost a screen nothing ────────────────────────────────────────
+# `social` is `wants`: the app works without it, and its absence is a sentence on the screen. But an absent service
+# is not free: with no social-list in the office, resolving its name costs ~15 s, and the overview the screen awaits
+# before it draws anything paid 7.5 s of it (measured on EXF's office 2026-11-05, its e52b414; DGO-1839). So a read the
+# screen waits on has a DEADLINE, and a FAILURE — an absent or silent service — is remembered for OPTIONAL_FAIL_TTL:
+# the first screen pays at most the deadline, the ones after it nothing. An answer is never remembered (EXF's took both
+# for two minutes): a service that answers is read fresh, so an account connected a moment ago is on the next screen.
+OPTIONAL_DEADLINE = 2.0
+OPTIONAL_FAIL_TTL = 60.0
+_optional_lock = threading.Lock()
+_optional_failed: dict[str, tuple[float, Exception]] = {}
+
 
 class Unavailable(Exception):
     """The other service did not answer (not: it answered no)."""
+
+
+def optional(key: str, read: Callable[[], Any], deadline: float = OPTIONAL_DEADLINE) -> Any:
+    """`read()`, or Unavailable within `deadline` seconds — and a failure is remembered for OPTIONAL_FAIL_TTL."""
+    with _optional_lock:
+        hit = _optional_failed.get(key)
+    if hit and hit[0] > time.monotonic():
+        raise hit[1]
+    box: list[tuple[str, Any]] = []
+    done = threading.Event()
+
+    def run() -> None:
+        try:
+            box.append(("ok", read()))
+        except Unavailable as e:
+            box.append(("err", e))
+        except Exception:                       # noqa: BLE001 — a foreign failure is «it did not answer»
+            box.append(("err", Unavailable("לא ענה")))
+        finally:
+            done.set()
+
+    threading.Thread(target=run, name=f"optional:{key}", daemon=True).start()
+    kind, value = box[0] if done.wait(deadline) else ("err", Unavailable("לא ענה בזמן"))
+    with _optional_lock:
+        if kind == "err":
+            _optional_failed[key] = (time.monotonic() + OPTIONAL_FAIL_TTL, value)
+        else:
+            _optional_failed.pop(key, None)
+    if kind == "err":
+        raise value
+    return value
 
 
 def _req(method: str, url: str, **kw):
@@ -49,6 +95,11 @@ def social_overview() -> dict:
 
 
 def social_accounts() -> list[dict]:
+    # the overview and the channels screen wait for this one, and `social` is optional: see `optional()`
+    return optional("social_accounts", _social_accounts)
+
+
+def _social_accounts() -> list[dict]:
     code, body = _req("GET", f"{SOCIAL_URL}/api/accounts")
     if code >= 400:
         raise Unavailable(_said(code, body))

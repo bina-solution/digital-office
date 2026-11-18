@@ -91,7 +91,7 @@ import { workflow, node, links } from '@n8n-as-code/transformer';
     /*__n8n__*/ meta: {},
     /*__n8n__*/ pinData: {},
     /*__n8n__*/ staticData: null,
-    /*__n8n__*/ shared: [{"updatedAt":"2026-07-30T23:42:27.037Z","createdAt":"2026-07-30T23:42:27.037Z","role":"workflow:owner","workflowId":"sv3Inject3x001","projectId":"2xKn4WH08LyAOk2y","project":{"updatedAt":"2026-07-30T23:40:17.073Z","createdAt":"2026-07-30T23:33:30.049Z","id":"2xKn4WH08LyAOk2y","name":"Admin User <person2@example.com>","type":"personal","icon":null,"description":null,"creatorId":"544b7ec6-5907-4ee2-a94b-c5676e56835c"}}],
+    /*__n8n__*/ shared: [{"updatedAt":"2026-07-30T23:42:27.037Z","createdAt":"2026-07-30T23:42:27.037Z","role":"workflow:owner","workflowId":"sv3Inject3x001","projectId":"exampleProject02","project":{"updatedAt":"2026-07-30T23:40:17.073Z","createdAt":"2026-07-30T23:33:30.049Z","id":"exampleProject02","name":"Admin User <person2@example.com>","type":"personal","icon":null,"description":null,"creatorId":"544b7ec6-5907-4ee2-a94b-c5676e56835c"}}],
     id: 'sv3Inject3x001',
     name: 'sv3 Inject 3x Every Registry Source',
     active: false,
@@ -226,7 +226,7 @@ for(const m of Object.keys(map).sort()){
   const c2=map[m]; const ids=((cos[c2]||{}).identifiers)||[];
   if(ids.length && !/no-?reply/i.test(m)){ sender=m; senderCo=c2; senderCid=String(ids[0]); break; }
 }
-if(!sender){ sender='person85-x@example.com'; senderCo=null; senderCid=null; }
+if(!sender){ sender='person71-x@example.com'; senderCo=null; senderCid=null; }
 const tok=String($execution.id||'0').replace(/\\D/g,'').slice(-5).padStart(5,'4');
 const out=[];
 for(const e of reg){
@@ -860,7 +860,7 @@ return [{json:{__instance:'test', registry_key:'sv3i_registry', lock_key:'sv3i_'
         operation: 'executeQuery',
         query: `-- TEARDOWN. Removes the two CONFIG rows this run installed: its registry and its label rules.
 -- Exact keys, never a pattern -- these are client configuration tables and a pattern standing in
--- for identity is what cost 2,432 client documents on 2026-08-06 (see
+-- for identity is what cost client documents on 2026-08-06 (see
 -- scripts/test-fixture-prefixes.yaml).
 -- The DOCUMENT rows stay: they are the point of an injector, they are marked \`sv3i_\`, and
 -- apps/indox/hooks/fixture-sweep.py removes them from outside n8n -- which is also what removes

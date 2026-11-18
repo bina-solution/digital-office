@@ -34,22 +34,22 @@ import urllib.request
 BUSINESS = {
     "name": "בינה פתרונות בע\"מ",
     "company_id": "514789234",
-    "address": "הרכס 35, מודיעין",
-    "email": "person100@example.com",
-    "phone": "08-0000022",
+    "address": "הרחוב הראשי 1, מודיעין",
+    "email": "person95@example.com",
+    "phone": "08-0000020",
 }
 
 CUSTOMERS = [
-    {"name": "מ.ש. הדוגמה בע\"מ", "company_id": "500000401", "city": "מודיעין",
-     "email": "person103@example.com", "phone": "08-0000025"},
-    {"name": "סבח סוכנויות בע\"מ", "company_id": "500000138", "city": "משמר השבעה",
-     "email": "person104@example.com", "phone": "03-0000026"},
-    {"name": "פוליראן תעשיות", "company_id": "500000161", "city": "אשדוד",
-     "email": "person105@example.com", "phone": "08-0000027"},
-    {"name": "אגן שיווק", "company_id": "500000062", "city": "פתח תקווה",
-     "email": "person101@example.com", "phone": "03-0000023"},
-    {"name": "ישראל קרטון", "company_id": "500000393", "city": "חיפה",
-     "email": "person102@example.com", "phone": "04-0000024"},
+    {"name": "א.ב. הדוגמה בע\"מ", "company_id": "500000278", "city": "מודיעין",
+     "email": "person96@example.com", "phone": "08-0000021"},
+    {"name": "פלוני סוכנויות בע\"מ", "company_id": "500000047", "city": "מושב הדוגמה",
+     "email": "person97@example.com", "phone": "03-0000022"},
+    {"name": "ספק כף תעשיות", "company_id": "500000070", "city": "אשדוד",
+     "email": "person98@example.com", "phone": "08-0000023"},
+    {"name": "אלמוני שיווק", "company_id": "500000013", "city": "פתח תקווה",
+     "email": "person99@example.com", "phone": "03-0000024"},
+    {"name": "ספק יוד", "company_id": "500000302", "city": "חיפה",
+     "email": "person100@example.com", "phone": "04-0000025"},
 ]
 
 ITEMS = [

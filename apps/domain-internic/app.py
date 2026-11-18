@@ -229,9 +229,13 @@ def write_record(body: dict) -> dict:
     if not domain:
         return {"ok": False, "state": "invalid", "error": "חסר domain"}
     consented_by = (body.get("consented_by") or "").strip() or None
-    rec = {"domain": domain, "type": (body.get("type") or "A").upper(), "name": body.get("name") or "@",
+    # an update names its record: no default to the apex (the second reader of EXX-29)
+    rec = {"domain": domain, "type": (body.get("type") or "A").upper(),
+           "name": body.get("name") or ("" if action == "update" else "@"),
            "value": body.get("value") if body.get("value") is not None else body.get("content"),
-           "ttl": body.get("ttl")}
+           "ttl": body.get("ttl"),
+           # update: which record of that name and type, by its value now, when the zone holds more than one
+           "from": body.get("from")}
     res = portal.run_write(PORTAL, action, rec, None, bool(consented_by))
     # only a write that CHANGED the zone and whose guard RAN vouches for the writer: a record that was
     # already there proves nothing, and an "unavailable" guard showed nothing (DGO-1032's third reader)

@@ -110,7 +110,7 @@ def chat_id_of(title: str, explicit: str) -> str:
     if not watched:
         sys.exit("say-group: the office watches no chat called «%s»" % title)
     # A group that became a supergroup keeps BOTH ids watched for their history; the live one is the supergroup.
-    # The supergroup's id is the NEGATIVE of the old one with -100 in front (`-4303648995` -> `-1004303648995`),
+    # The supergroup's id is the NEGATIVE of the old one with -100 in front (`-1234567890` -> `-1001234567890`),
     # so a numeric max picks the DEAD id and Telegram answers «group chat was upgraded» (measured 2026-11-06).
     # The prefix is the signal, not the magnitude.
     supers = [w for w in watched if str(w.get("id", "")).startswith("-100")]

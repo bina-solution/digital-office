@@ -4,7 +4,7 @@
 
 The template (.env.ex) held real values, and ci-env.sh copied every key it did not mint itself: each office it
 made shared those secrets with every other office and with whoever holds the template (measured 2026-11-03: 10
-of them in each fresh .env; vps1 runs on them). Asked here, in a scratch copy of the files ci-env.sh reads (it
+of them in each fresh .env). Asked here, in a scratch copy of the files ci-env.sh reads (it
 never writes a real .env), for the CI form and for a real office (OFFICE_DOMAIN):
   - no secret-named key keeps a template value that looks generated (hex, a JWT, a long random string);
   - no key is written twice; n8n's API key is left for n8n to issue;

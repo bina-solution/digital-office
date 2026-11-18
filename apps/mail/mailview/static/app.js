@@ -623,7 +623,7 @@ async function showList(o) {
 
 /* ── system views ──────────────────────────────────────────────────────────────────────────────
    Fixed, frequency-ordered. NO counts: the mail service reports none, and a number computed from
-   the loaded page of a 10,000-message box is a plausible-looking lie. No "snoozed": there is no
+   the loaded page of a N-message box is a plausible-looking lie. No "snoozed": there is no
    snooze in the backend model, so there is no such place for mail to be. */
 const SYS_VIEWS = [
   { id: 'inbox',   he: 'דואר נכנס',   icon: 'inbox', primary: true },
@@ -763,7 +763,7 @@ async function openMailbox(c) {
 }
 
 /* where mail can be — a fixed, frequency-ordered list, the tail kept behind "הצג עוד". No counts:
-   the mail service reports none, and a number computed from the loaded page of a 10,000-message box
+   the mail service reports none, and a number computed from the loaded page of a N-message box
    is a plausible-looking lie. No "snoozed": there is no snooze in the backend model. */
 function viewItems() {
   return SYS_VIEWS.map(v => ({

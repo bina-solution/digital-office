@@ -215,5 +215,64 @@ class TaskWatchdogTests(unittest.TestCase):
         self.assertEqual(posts, [])
 
 
+class RetentionTests(unittest.TestCase):
+    """Nothing the browser writes stays forever (DGO-1921)."""
+
+    def test_old_undriven_tasks_and_old_output_go_and_everything_else_stays(self):
+        import os
+        now = 2_000_000_000
+        old = now - 15 * 86400
+        with tempfile.TemporaryDirectory() as tmp, \
+                patch.object(MODULE, "TASKS", Path(tmp) / "tasks"), patch.object(MODULE, "OUTPUT", Path(tmp) / "output"), \
+                patch.object(MODULE, "PRUNED", Path(tmp) / ".pruned"), \
+                patch.object(MODULE, "TASK_KEEP_DAYS", 14), patch.object(MODULE, "OUTPUT_KEEP_DAYS", 7):
+            tasks = Path(tmp) / "tasks"
+            gone = [write_task(tasks, s, {"slug": s, "state": st}) for s, st in
+                    (("done", "finished"), ("verified", "accepted"), ("dead", "stalled"))]
+            driven = write_task(tasks, "driven", {"slug": "driven", "state": "active"})
+            recent = write_task(tasks, "recent", {"slug": "recent", "state": "finished"})
+            for path in gone + [driven]:
+                os.utime(path, (old, old))
+            os.utime(recent, (now - 86400, now - 86400))
+            output = Path(tmp) / "output"
+            output.mkdir()
+            (output / "console-old.log").write_text("x")
+            (output / "console-new.log").write_text("x")
+            (output / ".gitkeep").write_text("")      # the checkout's: a second reader caught it pruned
+            for name in ("console-old.log", ".gitkeep"):
+                os.utime(output / name, (old, old))
+            os.utime(output / "console-new.log", (now, now))
+            (Path(tmp) / ".pruned" / "cut-short-1" / "screenshots").mkdir(parents=True)   # an unfinished delete
+            removed = MODULE.prune(now)
+            self.assertEqual(removed, {"tasks": 3, "output": 1})
+            self.assertTrue(all(not p.parent.exists() for p in gone))
+            self.assertTrue(driven.exists())
+            self.assertTrue(recent.exists())
+            self.assertEqual(sorted(p.name for p in tasks.iterdir()), ["driven", "recent"])
+            self.assertFalse((Path(tmp) / ".pruned" / "cut-short-1").exists())
+            self.assertEqual(sorted(p.name for p in output.iterdir()), [".gitkeep", "console-new.log"])
+
+    def test_one_pass_removes_at_most_its_limit(self):
+        import os
+        with tempfile.TemporaryDirectory() as tmp, \
+                patch.object(MODULE, "TASKS", Path(tmp) / "tasks"), patch.object(MODULE, "OUTPUT", Path(tmp) / "none"), \
+                patch.object(MODULE, "PRUNED", Path(tmp) / ".pruned"), patch.object(MODULE, "TASK_KEEP_DAYS", 14):
+            for i in range(5):
+                os.utime(write_task(Path(tmp) / "tasks", f"t{i}", {"slug": f"t{i}", "state": "finished"}), (0, 0))
+            self.assertEqual(MODULE.prune(2_000_000_000, limit=2)["tasks"], 2)
+            self.assertEqual(len(list((Path(tmp) / "tasks").iterdir())), 3)
+
+    def test_zero_keeps_everything(self):
+        import os
+        with tempfile.TemporaryDirectory() as tmp, \
+                patch.object(MODULE, "TASKS", Path(tmp)), patch.object(MODULE, "OUTPUT", Path(tmp) / "none"), \
+                patch.object(MODULE, "PRUNED", Path(tmp) / ".pruned"), \
+                patch.object(MODULE, "TASK_KEEP_DAYS", 0), patch.object(MODULE, "OUTPUT_KEEP_DAYS", 0):
+            path = write_task(tmp, "done", {"slug": "done", "state": "finished"})
+            os.utime(path, (0, 0))
+            self.assertEqual(MODULE.prune(), {"tasks": 0, "output": 0})
+            self.assertTrue(path.exists())
+
+
 if __name__ == "__main__":
     unittest.main()

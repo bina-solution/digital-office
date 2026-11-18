@@ -6,4 +6,5 @@ set -uo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
 case "${1:-}" in ""|-h|--help) sed -n 's/^#: //p' "${BASH_SOURCE[0]}"; [ -n "${1:-}" ]; exit $? ;; esac
-exec "${REPO_ROOT}/bbox" agent --app bina-claude new -F "$@"
+# This copy's door: bina-claude, or an instance's (bbox sets DGO_INSTANCE_ID, DGO-1920).
+exec "${REPO_ROOT}/bbox" agent --app "${DGO_INSTANCE_ID:-bina-claude}" new -F "$@"

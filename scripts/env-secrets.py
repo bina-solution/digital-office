@@ -220,8 +220,29 @@ def fill(path, may=None):
     return filled
 
 
+def owner_for(real):
+    """(uid, gid) the rewritten file keeps: the old file's owner, unless that was root — then the owner of the
+    directory the file is in (the checkout, for an office's .env). The new file is created by whoever runs this,
+    and on an office with two writers that is often root (the follow cycle, bina-ds), while the office's own user
+    (Bina Claude) runs bbox as itself: measured on the HP, 2026-11-12 18:36Z, the follow cycle's write left .env
+    root:root 0600, and from then on every bbox the office user ran read no .env — DEPLOYMENT_NAME fell back to
+    bina-deployment, Plane «does not run on this office», no DGO_BRANCH (DGO-1863). None when nothing is to be
+    changed (no fchown here, or root's file in root's directory)."""
+    if not hasattr(os, "fchown"):
+        return None
+    try:
+        st = os.stat(real)
+        if st.st_uid != 0:
+            return st.st_uid, st.st_gid
+    except FileNotFoundError:
+        pass
+    d = os.stat(os.path.dirname(real))
+    return (d.st_uid, d.st_gid) if d.st_uid != 0 else None
+
+
 def write(path, text, backup=True):
     real = os.path.realpath(path)
+    owner = owner_for(real)
     if backup and os.path.exists(real):
         stamp = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
         for n in range(1000):        # two writes in one second (a rotation and its restore) never collide
@@ -236,6 +257,11 @@ def write(path, text, backup=True):
     tmp = f"{real}.{os.getpid()}.tmp"
     with os.fdopen(os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600), "w", encoding="utf-8") as fh:
         fh.write(text)
+        if owner:
+            try:
+                os.fchown(fh.fileno(), *owner)   # the open file, never a path that could be swapped meanwhile
+            except OSError:                      # not root (EPERM), an unmapped id (EINVAL): the writer owns what it
+                pass                             # wrote and may read it, and the write itself must not fail here
     os.replace(tmp, real)
 
 
@@ -319,8 +345,8 @@ def public_outside_table(path, known=None):
 
 
 #: How a key is rotated (DGO-1015), first match wins. A TABLE key named nowhere — and not LOCKED_BY data, nor
-#: copied into n8n's credentials (N8N_COPIES) — is a TOKEN: no stored data behind it, and the only class the
-#: verb rotates itself.
+#: copied into n8n's credentials (N8N_COPIES) — is a TOKEN: no stored data behind it. The verb rotates a token, and an
+#: n8n-copy key (a token n8n also keeps, re-seeded with it).
 ROTATION = {
     # an identity others verify: chat's relay signs every event with it, and a new key makes every event already
     # signed unverifiable (apps/chat/app.json: "must stay stable … never re-minted")
@@ -336,23 +362,48 @@ ROTATION = {
     "app-made": set(APP_MADE),
     "external": set(EXTERNAL),
 }
+#: The signing class, in the order it is minted: the secret first, then the two keys signed with the NEW secret.
+SIGNING = ("SUPABASE_JWT_SECRET", "SUPABASE_ANON_KEY", "SUPABASE_SERVICE_KEY")
+# The database's OWN copy (app.settings.jwt_secret, written once at init by volumes/db/jwt.sql) is NOT moved: nothing
+# in this stack reads it — PostgREST sets that setting on every request from its own environment
+# (PGRST_APP_SETTINGS_JWT_SECRET, apps/supabase/docker-compose.yml), and GoTrue and realtime do not run — and the
+# `postgres` role may not ALTER DATABASE … SET on supabase/postgres once its init demoted it (the signing class's
+# reader). db is still recreated with the rest: compose gives it the secret, so leaving it would be a restart of the
+# platform database at the next deploy instead of this planned one.
 #: Secret-SHAPED names that are not secrets this office keeps: lists of which keys travel, an address GlitchTip
 #: issues (a DSN carries its project key, and GlitchTip makes it again).
 NOT_SECRETS = re.compile(r"^DGO_(SERVE|TAKE)_SECRETS$|_SENTRY_DSN$")
 #: Files that COPY a key into n8n's own database: the env-managed credentials `bbox n8n push` re-PATCHes, which a
 #: recreate does not (apps/n8n/app.json). A key they name rotates only with that push — not by the token step.
 N8N_COPIES = re.compile(r"^apps/n8n/(blueprint\.yml$|credentials/)")
+#: The copies that push re-PATCHes from .env (its step 1.5) are the `  <id>: {json}` lines after
+#: `credential_overrides:` in the blueprint, each `${VAR}` in its data's strings — and only those: a copy in
+#: apps/n8n/credentials/ is imported once and never re-seeded. `--reseed-only` runs that step alone (DGO-1015).
+N8N_BLUEPRINT = "apps/n8n/blueprint.yml"
+N8N_OVERRIDE = re.compile(r"^\s{2}([A-Za-z0-9_-]+):\s*(\{.*\})\s*$")
+N8N_RESEED = ("apps", "n8n", "hooks", "push")
+#: What the re-seed says that may be repeated: its own summary lines — credential ids, variable names and counts,
+#: never a value nor n8n's answer body.
+RESEED_SAID = re.compile(r"reseeded \d+/\d+ .*|reseed-only: .*|SKIP [A-Za-z0-9_-]+|could not log in as owner|"
+                         r"reseed [A-Za-z0-9_-]+ HTTP \d+|is BEHIND its office's branch|'[A-Za-z0-9_.-]+' not running|"
+                         r"LOCKED — another push is already running|still locked after \d+m|"
+                         r"n8n push refused[^.]*\. Nothing was changed|"
+                         r"N8N_ENCRYPTION_KEY in \.env does not match the running instance")
 STEPS = {
     "token": "mint a new value; recreate every consumer below together (./scripts/dc up -d <services>); --check",
     "locked": "data on this office was made with it (LOCKED_BY): its own app's step, not this verb's",
-    "n8n-copy": "n8n keeps a copy in its credentials: mint, write .env, recreate the readers AND `bbox n8n push` "
-                "(it re-PATCHes the env-managed credentials) — not built yet",
+    "n8n-copy": "n8n keeps a copy in its env-managed credentials: the re-seed proven on today's .env, mint, write "
+                ".env, recreate the readers, then `bbox n8n push all --reseed-only` re-PATCHes the copy (nothing "
+                "restarted) — or all of it is undone, n8n's copy included; a key n8n itself reads goes with "
+                "`bbox n8n push all`",
     "app-made": "the app issues it (its own hook or API: n8n push-app, meet's prepare, plane's, portainer's): rotate "
                 "through that app, never mint it here",
     "db-role": "verified backup; ALTER ROLE … PASSWORD inside the database; write .env; recreate the consumers; --check",
     "redis": "the release lane's recreate moves it to a secret file (DGO-1651)",
-    "signing": "mint the secret; re-sign SUPABASE_ANON_KEY and SUPABASE_SERVICE_KEY from it; recreate every consumer "
-               "of the three — n8n credentials that hold a key included",
+    "signing": "the three rotate together, whichever is named (a key re-signed with the same secret leaves the old one "
+               "valid): mint the secret, sign both keys with the new one, recreate every reader of the three (db "
+               "included: a planned restart of the platform database), re-seed n8n's copy of the service key — or "
+               "undo all of it",
     "account": "change it through the app's own CLI or API first, then .env; recreate the app",
     "encryption": "LAST, after a verified backup: decrypt what it protects inside its container, swap the key, "
                   "re-encrypt; nothing on screen",
@@ -484,8 +535,13 @@ def rotation_plan(key, root=None):
     cls = rotation_class(key, root)
     if cls is None:
         return [f"{key}: not a secret this office keeps — nothing to rotate"]
-    c = consumers(key, root)
-    lines = [f"{key} — {cls}: {STEPS[cls]}",
+    keys = list(SIGNING) if cls == "signing" else [key]   # the signing class's readers are those of all three
+    per = [consumers(k, root) for k in keys]
+    c = {b: sorted({x for p in per for x in p[b]}) for b in per[0]}
+    lines = [f"{key} — {cls}: {STEPS[cls]}"]
+    if len(keys) > 1:
+        lines.append(f"  rotates with: {', '.join(k for k in keys if k != key)} — the readers below are all three's")
+    lines += [
              f"  compose services that read it ({len(c['services'])}):"] + [f"    {s}" for s in c["services"]]
     lines += [f"  services that load a whole env file, and so read it too ({len(c['whole_env'])}):"] + \
         [f"    {s}" for s in c["whole_env"]]
@@ -494,28 +550,135 @@ def rotation_plan(key, root=None):
     return lines
 
 
+def n8n_overrides(root):
+    """{credential id: the ${VAR}s its data names} — n8n's env-managed credentials as the push hook's step 1.5 reads
+    them: each line after `credential_overrides:` shaped `  <id>: {json}`, the names in its data's strings; an entry
+    whose JSON does not parse is dropped, as the hook drops it."""
+    try:
+        with open(os.path.join(root, N8N_BLUEPRINT), encoding="utf-8") as fh:
+            lines = fh.read().split("\n")
+    except OSError:
+        return {}
+    out, on = {}, False
+    for ln in lines:
+        on = on or ln.startswith("credential_overrides:")
+        m = N8N_OVERRIDE.match(ln) if on else None
+        if not m:
+            continue
+        try:
+            spec = json.loads(m.group(2))
+        except ValueError:
+            continue
+        data = spec.get("data") if isinstance(spec, dict) else None
+        names = set()
+        for v in (data.values() if isinstance(data, dict) else ()):
+            if isinstance(v, str):
+                names.update(re.findall(r"\$\{([A-Za-z0-9_]+)\}", v))
+        out[m.group(1)] = names
+    return out
+
+
+def lease_readers(key, root):
+    """The services that LEASE `key` from connections when they start (an app's `broker`: its blank_env names the
+    key, its entrypoint asks connections for it). Compose blanks the key in them, so its dry run never sees them
+    change: a rotation recreates them itself, after connections serves the new value."""
+    import glob
+    out = set()
+    for f in glob.glob(os.path.join(root, "apps", "*", "app.json")) + \
+            glob.glob(os.path.join(root, "platform-base", "*", "app.json")):
+        try:
+            with open(f, encoding="utf-8") as fh:
+                app = json.load(fh)
+            broker = app.get("broker") or {}
+        except (OSError, ValueError, AttributeError):
+            continue
+        if isinstance(broker, dict) and key in (broker.get("blank_env") or []):
+            # the compiler's own fallback for a broker that names no service: its first route's, then the app's id
+            # (platform/manager/reconcile.py, the Go twin render.go)
+            routing = app.get("routing") or [{}]
+            service = broker.get("service") or (routing[0].get("service") if isinstance(routing[0], dict) else None) \
+                or app.get("id")
+            if service:
+                out.add(service)
+    return sorted(out)
+
+
+def _env_resolved(lines, name):
+    """read_env's value (scripts/lib.sh), which the push hook hands its re-seed: the FIRST `name=` line, `${X}` and
+    `${X:-default}` resolved leftmost first, 20 at most — so «set» means here what it means there."""
+    def raw(n):
+        return next((ln[len(n) + 1:].replace("\r", "") for ln in lines if ln.startswith(n + "=")), "")
+    v = raw(name)
+    for _ in range(20):                                # read_env's own steps, an unclosed `${` included
+        i = v.find("${")
+        if i < 0:
+            break
+        pre, rest = v[:i], v[i + 2:]
+        j = rest.find("}")
+        sub, rest = (rest[:j], rest[j + 1:]) if j >= 0 else (rest, rest)
+        ref, dflt = sub.split(":-", 1) if ":-" in sub else (sub, "")
+        v = pre + (raw(ref) or dflt) + rest
+    return v
+
+
+def _n8n_gap(key, root, lines):
+    """Why the re-seed would leave n8n's copy of `key` on the old value — None when it would not: no
+    credential_overrides entry names it, or one that does names another variable .env leaves empty (the hook SKIPS
+    that whole credential rather than blank it, and calls the run fine)."""
+    mine = {cid: names for cid, names in n8n_overrides(root).items() if key in names}
+    if not mine:
+        return f"n8n's copy is not one the re-seed reaches (no credential_overrides entry in {N8N_BLUEPRINT} names it)"
+    empty = sorted({n for names in mine.values() for n in names if n != key and not _env_resolved(lines, n)})
+    if empty:
+        return (f"the re-seed would SKIP n8n's credential {', '.join(sorted(mine))} and leave it on the old value — "
+                f"{', '.join(empty)} empty in .env")
+    return None
+
+
 def rotate(path, key, root=None, run=subprocess.run, popen=subprocess.Popen, killpg=os.killpg):
-    """Rotate ONE key of the TOKEN class on this office (DGO-1015) → (exit code, one sentence, names only).
+    """Rotate ONE key of the TOKEN or N8N-COPY class — or the SIGNING class's three together — on this office (DGO-1015)
+    → (exit code, one sentence, names only). The signing secret and the two keys it signs go as one (a key re-signed
+    with the same secret leaves the old key valid): every reader of the three recreated together, then n8n's copy of
+    the service key re-seeded; a failure at any step undoes every step before it. The database's own init-time copy
+    is not moved — nothing here reads it (see SIGNING).
 
     A token has no stored data behind it: a new value in .env (backed up by write()), and every RUNNING, enabled
     service that reads it — interpolated, or through the office's whole .env — recreated together and waited on
     until healthy. Or nothing: any failure, a refused proof, Ctrl-C, SIGTERM or SIGHUP puts the key's own lines back
-    and recreates the same services with them. Refused, writing nothing: another class (--plan names its steps); a
-    key a blueprint or n8n's credentials hold a copy of; another file than the office's own .env; a key .env sets in
-    another form than `KEY=` (export, indent); a reader restarting or paused; a reader whose container is not what the
-    compose says now (it would deploy that too). Proof, from compose itself — the repo's own stale check
-    (scripts/lib.sh stale_containers): `--dry-run up -d --no-build --no-deps <readers>` names NO container to
-    recreate before the write, and EVERY reader after it. A caller outside this office that kept the old value is
-    not seen here: --plan's code list is where to look first."""
+    and recreates the same services with them. An n8n-copy key is a token n8n also keeps in an env-managed
+    credential: the re-seed (`apps/n8n/hooks/push --reseed-only`, no restart) runs once on today's .env as its own
+    proof, then after the readers it re-PATCHes that copy from the new .env; if it does not take, everything is
+    undone and it runs again on the old .env (a cut-off one waited out inside n8n first) — said, on a signal too.
+    Refused, writing nothing: another class (--plan names its steps); a key a blueprint holds a copy of; an n8n copy
+    the re-seed does not reach or would SKIP (another variable of that credential empty); a key n8n itself reads (its
+    restart is the full push's); n8n present but not running, or under another project; a re-seed that does not run
+    on today's .env; another file
+    than the office's own .env; a key .env sets in another form than `KEY=` (export, indent); a reader restarting or
+    paused; a reader whose container is not what the compose says now (it would deploy that too). Proof, from compose
+    itself — the repo's own stale check (scripts/lib.sh stale_containers): `--dry-run up -d --no-build --no-deps
+    <readers>` names NO container to recreate before the write, and EVERY reader after it. A caller outside this
+    office that kept the old value is not seen here: --plan's code list is where to look first."""
     root = root or ROOT
     cls = rotation_class(key, root)
-    if cls != "token" or key not in TABLE:
-        return 2, f"{key}: class {cls} — only the token class rotates by this verb so far; --plan says its steps"
+    if cls not in ("token", "n8n-copy", "signing") or key not in TABLE:
+        return 2, (f"{key}: class {cls} — only the token, n8n-copy and signing classes rotate by this verb so far; "
+                   f"--plan says its steps")
     if os.path.realpath(path) != os.path.realpath(os.path.join(root, ".env")):
         return 2, f"{key}: compose reads the office's own .env, not {path}; nothing written"
-    c = consumers(key, root)
-    if c["blueprints"] or c["n8n_copies"]:
-        return 2, f"{key}: a blueprint or n8n's credentials hold a copy this cannot reach; nothing written"
+    # the signing class rotates WHOLE: a key re-signed with the same secret leaves the old key valid, so the secret
+    # and both keys it signs go together, whichever of the three was named
+    keys = list(SIGNING) if cls == "signing" else [key]
+    per = {k: consumers(k, root) for k in keys}
+    c = {b: sorted({x for k in keys for x in per[k][b]}) for b in per[keys[0]]}
+    c["seeded_keys"] = [k for k in keys if per[k]["n8n_copies"]]
+    c["lease"] = sorted({s for k in keys for s in lease_readers(k, root)})
+    key = keys[0]
+    if c["blueprints"]:
+        return 2, f"{key}: a blueprint holds a copy this cannot reach; nothing written"
+    beyond = [p for p in c["n8n_copies"] if p != N8N_BLUEPRINT]
+    if beyond:
+        return 2, (f"{key}: {', '.join(beyond)} holds a copy the re-seed never reaches (only {N8N_BLUEPRINT}'s "
+                   f"credential_overrides are re-seeded); nothing written")
     import fcntl
     lock = open(os.path.realpath(path) + ".rotate.lock", "a")
     try:
@@ -524,7 +687,7 @@ def rotate(path, key, root=None, run=subprocess.run, popen=subprocess.Popen, kil
         lock.close()
         return 1, f"{key}: another rotation holds this office's .env; nothing written"
     try:
-        return _rotate_locked(path, key, root, c, run, popen, killpg)
+        return _rotate_locked(path, keys, root, c, run, popen, killpg)
     finally:
         lock.close()
 
@@ -608,12 +771,53 @@ def _recreates(run, dc, targets):
     return names
 
 
+def _relet(popen, killpg, dc, services, timeout=900):
+    """Lease readers recreated even though compose sees no change in them, so each asks connections again at start."""
+    return _group(popen, killpg, [dc, "up", "-d", "--no-build", "--no-deps", "--force-recreate", "--wait",
+                                  "--wait-timeout", "180", *services], timeout) == 0
+
+
 def _up_wait(popen, killpg, dc, targets, timeout=900):
-    """`up -d --no-deps --wait` in a process group of its own: an interruption stops ALL of it (dc runs compose in
-    a subshell, which a plain kill of dc leaves running) and waits for it before anything is restored."""
+    """`up -d --no-deps --wait`, in a process group of its own (_group) → whether it came up."""
+    return _group(popen, killpg, [dc, "up", "-d", "--no-build", "--no-deps", "--wait", "--wait-timeout", "180",
+                                  *targets], timeout) == 0
+
+
+def _reseed(popen, killpg, root, timeout=1200):
+    """`apps/n8n/hooks/push --reseed-only` (DGO-1015): n8n's env-managed credentials re-PATCHed from .env as it is
+    now, nothing restarted; strict — a credential that does not take, or no owner session, exits 3 → (taken, what it
+    said: its own summary lines, names and counts only, whether it ENDED by itself). The limit is past the hook's own
+    15-minute wait for its lock, so a held lock is said in the hook's words."""
+    import tempfile
+    with tempfile.TemporaryFile("w+", encoding="utf-8", errors="replace") as fh:
+        rc = _group(popen, killpg, ["bash", os.path.join(root, *N8N_RESEED), "--reseed-only"], timeout, out=fh)
+        fh.seek(0)
+        said = [m.group(0) for m in map(RESEED_SAID.search, fh.read().split("\n")) if m]
+    tail = f", exit {rc}" if rc else f", no answer in {timeout} s — stopped" if rc is None else ""
+    return rc == 0, ("; ".join(said[-3:]) or "nothing said") + tail, rc is not None
+
+
+#: A re-seed cut off from outside (a signal, the limit) still runs INSIDE n8n — `docker exec`'s process outlives its
+#: client — and its PATCHes of the new value could land after the undo's of the old one: waited out first (2 min).
+#: Matched by the marker the hook puts FIRST in the re-seed's node script (`/*dgo-reseed*/`): busybox's pgrep reads only
+#: the first 1023 bytes of a command line, and a phrase deeper in the script is never seen.
+RESEED_SETTLE = ('command -v pgrep >/dev/null 2>&1 || exit 2; i=0; '
+                 'while pgrep -f "[d]go-reseed" >/dev/null 2>&1; do '
+                 'i=$((i+1)); [ "$i" -ge 120 ] && exit 1; sleep 1; done')
+
+
+def _reseed_settled(run, dc):
+    """Whether no cut-off re-seed still runs inside n8n (False: one still runs, or it cannot be told)."""
+    return _sh(run, [dc, "exec", "-T", "n8n", "sh", "-c", RESEED_SETTLE], timeout=180)[0] == 0
+
+
+def _group(popen, killpg, cmd, timeout, out=None):
+    """`cmd` in a process group of its own → its exit code, None when it overran `timeout`: an interruption stops
+    ALL of it (dc runs compose in a subshell, which a plain kill of dc leaves running) and waits for it before
+    anything is restored. `out`, a file: its stdout and stderr; none: both dropped."""
     import signal
-    p = popen([dc, "up", "-d", "--no-build", "--no-deps", "--wait", "--wait-timeout", "180", *targets],
-              stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
+    p = popen(cmd, stdout=out if out is not None else subprocess.DEVNULL,
+              stderr=subprocess.STDOUT if out is not None else subprocess.DEVNULL, start_new_session=True)
 
     def stop():
         for s in (signal.SIGINT, signal.SIGTERM, signal.SIGHUP):   # a second signal must not cut the stop short:
@@ -629,59 +833,120 @@ def _up_wait(popen, killpg, dc, targets, timeout=900):
             except subprocess.TimeoutExpired:
                 continue
     try:
-        return p.wait(timeout=timeout) == 0
+        return p.wait(timeout=timeout)
     except subprocess.TimeoutExpired:
         stop()
-        return False
+        return None
     except BaseException:
         stop()
         raise
 
 
-def _rotate_locked(path, key, root, c, run, popen, killpg):
+def _rotate_locked(path, keys, root, c, run, popen, killpg):
     import signal
     dc = os.path.join(root, "scripts", "dc")
-    plain = re.compile(r"^%s=" % re.escape(key))
+    key = keys[0]                                        # what a sentence names: the one key, or the signing secret
+    plains = {k: re.compile(r"^%s=" % re.escape(k)) for k in keys}
+
+    def whose(ln):
+        return next((k for k in keys if plains[k].match(ln)), None)
     lines = read(path)                                   # read UNDER the lock
-    if any(re.match(r"^\s*(export\s+)?%s\s*=" % re.escape(key), ln) and not plain.match(ln) for ln in lines):
-        return 2, f"{key}: .env sets it in a form other than `{key}=…` (export, indent, spaces); nothing written"
-    old = [ln for ln in lines if plain.match(ln)]
-    if not old:
-        return 2, f"{key}: not in the office's .env; nothing written"
+    for k in keys:
+        if any(re.match(r"^\s*(export\s+)?%s\s*=" % re.escape(k), ln) and not plains[k].match(ln) for ln in lines):
+            return 2, f"{k}: .env sets it in a form other than `{k}=…` (export, indent, spaces); nothing written"
+    old = {k: [ln for ln in lines if plains[k].match(ln)] for k in keys}
+    missing = [k for k in keys if not old[k]]
+    if missing:
+        return 2, f"{', '.join(missing)}: not in the office's .env; nothing written"
     rc, out = _sh(run, [dc, "config", "--services"])
     seen = _states(run, dc)
     if rc != 0 or seen is None:
         return 1, f"{key}: the office's services could not be read (./scripts/dc config / ps); nothing written"
     states, service_of = seen
-    readers = sorted({s.split(": ", 1)[1] for s in c["services"] + c["whole_env"]} & set(out.split()))
+    # a lease reader takes the key from connections at start (lease_readers): out of compose's proof, recreated by
+    # this verb itself after connections serves the new value
+    lease = sorted(set(c.get("lease", [])) & set(out.split()))
+    readers = sorted(({s.split(": ", 1)[1] for s in c["services"] + c["whole_env"]} & set(out.split())) - set(lease))
     # a container that exists and is not running keeps the env it was made with: `docker start`, a restart
     # policy or a boot brings it back on the OLD value while .env says the new one — so it is refused, as a
     # restarting or paused one is. A reader with no container at all is made fresh, with the new value.
-    unsettled = [s for s in readers if states.get(s) not in (None, "running")]
+    unsettled = [s for s in readers + lease if states.get(s) not in (None, "running")]
     if unsettled:
         return 2, (f"{key}: {', '.join(unsettled)} exists but is not running (it would come back on the old value) "
                    f"— start it or remove it first; nothing written")
+    leased = [s for s in lease if states.get(s) == "running"]
+    if leased and states.get("connections") != "running":
+        return 2, (f"{key}: {', '.join(leased)} lease(s) it from connections, which is not running here — start it "
+                   f"first; nothing written")
+    seed = bool(c["n8n_copies"])                       # n8n keeps a copy: the re-seed is the rotation's last step
+    n8n_up = False
+    if seed:
+        for k in c["seeded_keys"]:
+            gap = _n8n_gap(k, root, lines)
+            if gap:
+                return 2, f"{k}: {gap}; nothing written"
+        # n8n itself reading it means recreating n8n: in-flight chains killed and their doc_step locks left held —
+        # the full push restarts the runners after it and sweeps those locks (apps/n8n/hooks/push), this does not
+        if any(s.startswith("apps/n8n/") for s in c["services"] + c["whole_env"]):
+            return 2, (f"{key}: n8n itself reads it, so its rotation restarts n8n — that is `bbox n8n push all`'s "
+                       f"(the runners after it, the doc_step locks swept), not this verb's; nothing written")
+        if states.get("n8n") not in (None, "running"):
+            return 2, (f"{key}: n8n exists but is not running (it would come back holding the old copy) — start it "
+                       f"or remove it first; nothing written")
+        if "n8n" not in states:
+            elsewhere = _foreign(run, dc, ["n8n"])
+            if elsewhere is None:
+                return 1, f"{key}: the engine could not be asked which containers it holds; nothing written"
+            if elsewhere:
+                return 2, (f"{key}: n8n runs under another compose project ({', '.join(elsewhere)}) — its copy would "
+                           f"stay on the old value; nothing written")
+        n8n_up = states.get("n8n") == "running"
     targets = [s for s in readers if states.get(s) == "running"]
-    absent = [s for s in readers if s not in states]   # no container compose lists — unless another project has one
+    absent = [s for s in readers + lease if s not in states]   # no container compose lists — unless another
+    if leased and "connections" not in targets:                 # project has one; a lease reader asks connections,
+        return 2, (f"{key}: {', '.join(leased)} lease(s) it from connections, which this rotation would not recreate "
+                   f"— it would keep serving the old value; nothing written")   # which must serve the new value
     foreign = _foreign(run, dc, absent)
     if foreign is None:
         return 1, f"{key}: the engine could not be asked which containers it holds; nothing written"
     if foreign:
         return 2, (f"{key}: {', '.join(foreign)} runs under another compose project (it keeps the old value) — "
                    f"bbox status names it; nothing written")
-    if targets:
-        pending = _recreates(run, dc, targets)
+    if targets or leased:                              # a lease reader's force-recreate would deploy what it has pending
+        pending = _recreates(run, dc, targets + leased)
         if pending is None:
             return 1, f"{key}: compose's dry run did not answer; nothing written"
         if pending:
             return 2, (f"{key}: {', '.join(sorted(pending))} would be recreated already — deploy that first, so the "
                        f"rotation carries the key alone; nothing written")
-    mine = f"{key}={make(key, {})}"                    # a token's kind (hex, urlsafe, pw) needs no other value
+    if n8n_up:
+        # the re-seed proves itself on the .env as it is, before anything moves: its push guard, its lock, n8n's key
+        # fingerprint, the owner's session and EVERY env-managed credential taking — an office where it cannot run
+        # is told now, not after the readers were recreated twice (it PATCHes today's values again: a push's own step)
+        handlers = {s: signal.getsignal(s) for s in (signal.SIGTERM, signal.SIGHUP, signal.SIGINT)}
+        try:
+            ok, hook, _ = _reseed(popen, killpg, root)
+        finally:                                       # a proof stopped at its limit leaves them ignored (_group's
+            for s, h in handlers.items():              # stop): put back, so the rotation — or the next — can be
+                signal.signal(s, h if h is not None else signal.SIG_DFL)   # stopped and undone
+        if not ok:
+            return 1, (f"{key}: n8n's re-seed does not run on this office as it is ({hook}) — fix that first, so the "
+                       f"rotation can carry n8n's copy; nothing written")
+    new = {}
+    for k in keys:                                     # in order: the signing secret first, then the keys signed
+        new[k] = make(k, new)                          # with the NEW one; a token's kind needs no other value
+    mine = {k: f"{k}={new[k]}" for k in keys}
+    del new
+
+    relet = []                                         # the lease readers were recreated: lease the old value again
 
     def restore(up=True):
-        cur, olds = read(path), iter(old)
-        write(path, "\n".join(next(olds, ln) if ln == mine else ln for ln in cur), backup=False)  # the rotation's
-        return (not targets) or (not up) or _up_wait(popen, killpg, dc, targets)                 # backup holds it
+        cur, olds, back = read(path), {k: iter(old[k]) for k in keys}, {v: k for k, v in mine.items()}
+        write(path, "\n".join(next(olds[back[ln]], ln) if ln in back else ln for ln in cur), backup=False)  # the
+        ok = (not targets) or (not up) or _up_wait(popen, killpg, dc, targets)              # rotation's backup holds it
+        if up and relet:                               # after connections is back on the old value
+            ok = _relet(popen, killpg, dc, leased) and ok
+        return ok
 
     sigs = (signal.SIGTERM, signal.SIGHUP, signal.SIGINT)
 
@@ -697,10 +962,43 @@ def _rotate_locked(path, key, root, c, run, popen, killpg):
     def calm():                                        # the restore itself is not cut off by a second signal
         for s in sigs:
             signal.signal(s, signal.SIG_IGN)
+    reseeded = []                                      # the re-seed started: its PATCHes may have taken — undo them too
+
+    def unseed(ended):
+        """n8n back on the restored .env → what to say of it. A re-seed cut off from outside may still PATCH inside
+        n8n: waited out first, and said when it could not be."""
+        settled = ended or _reseed_settled(run, dc)
+        if not _reseed(popen, killpg, root)[0]:
+            return "; n8n could NOT be re-seeded with the old one: run `bbox n8n push all --reseed-only` now"
+        if not settled:
+            return (", n8n re-seeded with the old one — but the cut-off re-seed could not be seen to end inside n8n: "
+                    "run `bbox n8n push all --reseed-only` again in two minutes")
+        return ", n8n re-seeded with the old one"
+
+    def seeded(said):
+        """An n8n-copy key's last step: n8n's copy follows the new .env — or the rotation is undone, n8n's copy
+        included (the re-seed runs again on the restored .env)."""
+        if not seed:
+            return 0, said
+        if not n8n_up:
+            return 0, (f"{said}; n8n has no container here — once it runs, `bbox n8n push all --reseed-only` gives its "
+                       f"credentials the new value")
+        reseeded.append(True)
+        ok, hook, ended = _reseed(popen, killpg, root)
+        if ok:
+            return 0, f"{said}; n8n's credentials re-seeded ({hook})"
+        calm()
+        back = restore()
+        untouched = "Nothing was changed" in hook       # its push guard refused before any PATCH: n8n holds the old
+        return 1, (f"{key}: n8n's credentials did not take the new value ({hook}) — .env restored"
+                   + (f", {', '.join(targets + (leased if relet else []))} recreated with the old one "
+                      f"({'healthy' if back else 'NOT healthy: look at them now'})" if targets else "")
+                   + (", n8n untouched (its re-seed was refused before any PATCH)" if untouched else unseed(ended)))
     try:
-        write(path, "\n".join(mine if plain.match(ln) else ln for ln in read(path)))   # the newest .env, its key
+        write(path, "\n".join(mine.get(whose(ln), ln) for ln in read(path)))   # the newest .env, its key(s)
         if not targets:
-            return 0, f"{key}: rotated; no service that reads it has a container yet — it is made with the new value"
+            return seeded(f"{key}: rotated; no service that reads it has a container yet — it is made with the new "
+                          f"value")
         after = _recreates(run, dc, targets)
         recreated = {service_of.get(n) for n in after or ()}
         missed = [t for t in targets if after is None or t not in recreated]
@@ -710,14 +1008,36 @@ def _rotate_locked(path, key, root, c, run, popen, killpg):
             return 1, (f"{key}: compose would not recreate {', '.join(missed)} with the new value — it never reached "
                        f"it; .env restored, nothing recreated")
         if _up_wait(popen, killpg, dc, targets):
-            return 0, f"{key}: rotated; {len(targets)} service(s) recreated and healthy: {', '.join(targets)}"
+            signed = f" with the two keys it signs ({', '.join(keys[1:])})" if len(keys) > 1 else ""
+            said = f"{key}: rotated{signed}; {len(targets)} service(s) recreated and healthy: {', '.join(targets)}"
+            if leased:                                 # connections serves the new value now: they lease it again
+                relet.append(True)
+                if not _relet(popen, killpg, dc, leased):
+                    calm()
+                    back = restore()
+                    return 1, (f"{key}: {', '.join(leased)} did not come back healthy on the new lease — .env restored, "
+                               f"{', '.join(targets + leased)} recreated with the old one "
+                               f"({'healthy' if back else 'NOT healthy: look at them now'})")
+                said += (f"; {', '.join(leased)} leased it again from connections (a value SAVED in connections' "
+                         f"vault would win over .env for them — issues/a-connections-vault-override-wins-over-a-"
+                         f"rotated-key-for-its-lease-readers.yaml)")
+            return seeded(said)
         calm()
         back = restore()
         return 1, (f"{key}: {', '.join(targets)} did not come back healthy with the new value — .env restored and they "
                    f"were recreated with the old one ({'healthy' if back else 'NOT healthy: look at them now'})")
     except BaseException:
         calm()
-        restore()
+        back = restore()
+        if reseeded or relet:                              # n8n and the lease readers back on the old one, SAID
+            try:
+                said = unseed(False) if reseeded else ""
+            except Exception:                              # noqa: BLE001 — the first error is the one raised
+                said = "; n8n could NOT be re-seeded with the old one: run `bbox n8n push all --reseed-only` now"
+            print(f"env-secrets: {key}: stopped — .env restored"
+                  + (f", {', '.join(targets + (leased if relet else []))} recreated with the old one "
+                     f"({'healthy' if back else 'NOT healthy: look at them now'})" if targets else "")
+                  + said, file=sys.stderr)
         raise
     finally:
         for s, h in previous.items():
@@ -798,7 +1118,12 @@ def main(argv):
                       file=sys.stderr)
                 return 2
             rc = 0
+            done = set()
             for key in keys:
+                whole = rotation_class(key) == "signing"     # the class rotates as one: once, whichever are named
+                if (whole and "signing" in done) or key in done:
+                    continue
+                done.add("signing" if whole else key)
                 code, said = rotate(path, key)
                 print(f"env-secrets: {said}", file=sys.stderr if code else sys.stdout)
                 rc = max(rc, code)

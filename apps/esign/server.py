@@ -366,6 +366,13 @@ def routes(app: Flask) -> Flask:
         return ok("retry", drive=put, notice=notice)
 
     # ── the signer's half: the one public path ────────────────────────────────────────────────────
+    # The signer pages' stylesheet lives on that path too: /static/ sits behind the office's sign-in, so a signer with
+    # no session got the pages unstyled — and the office's mark beside its name (DGO-1846) as wide as the page (the
+    # second reader). A rule with no variable wins over «<token>».
+    @app.get(PUBLIC_PREFIX + "esign.css")
+    def public_css():
+        return send_file(os.path.join(current_app.static_folder, "esign.css"), mimetype="text/css", max_age=3600)
+
     @app.get(PUBLIC_PREFIX + "<token>")
     def signer_page(token: str):
         env, state = _public_env(token)

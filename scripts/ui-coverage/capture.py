@@ -215,6 +215,10 @@ def open_gated(page, url: str) -> bool:
         settle(page)
         if not on_ak_wall(page):
             return True
+        if os.getenv("UI_STORAGE_STATE"):
+            # signed in by the state (DGO-1813): a sign-in page here is the session failing — a failure to report,
+            # never the office's real sign-in to type the bootstrap password into
+            return False
         ak_login(page)
     return not on_ak_wall(page)
 
@@ -581,7 +585,12 @@ def resolve_params(page, app: str, proxy: str, base: str = "") -> dict:
     subs = {}
     try:
         if PARAMS_FILE.exists():
-            subs.update(json.loads(PARAMS_FILE.read_text(encoding="utf-8")).get(app, {}))
+            params = json.loads(PARAMS_FILE.read_text(encoding="utf-8"))
+            # The file holds an app's lookups AND top-level LITERALS that belong to no app (`{hours}`,
+            # `{section}`) — route-runtime-qa.py merges both, this reader took only the app's, so a
+            # literal-filled route stayed SKIPPED in the pixel capture (EXF's c5c1943; DGO-1839).
+            subs.update({k: v for k, v in params.items() if not isinstance(v, dict)})
+            subs.update(params.get(app, {}))
     except Exception:
         pass
     for placeholder, api, keys in PARAM_APIS.get(app, []):
@@ -1018,9 +1027,20 @@ def main() -> int:
             # console's "no screen to show" card — while the same tile through the edge renders 462
             # nodes for the signed-in owner. The five values are the ones this stack's own SSO-off
             # mode writes, for the account the capture signs in as.
+            #
+            # SIGNED IN THROUGH THE EDGE (DGO-1813): with UI_STORAGE_STATE — a Playwright state minted by
+            # `bbox flow-qa-session` through the office's own sign-in — the run reaches the office's REAL console
+            # address (ui-env.json, run_capture.sh) through traefik, which writes the identity itself, and nothing
+            # is forged. The console believes a forged groups header only until DGO-1813's stage two; until then it
+            # names every forged run in its log (console-unproved-admin).
+            if os.getenv("UI_STORAGE_STATE"):
+                signed_in = {"storage_state": os.environ["UI_STORAGE_STATE"]}
+            else:
+                print("[ui-map] note: no UI_STORAGE_STATE — the admin identity is FORGED in headers (refused by the "
+                      "console from DGO-1813's stage two; mint a session with `bbox flow-qa-session`)", flush=True)
+                signed_in = {"extra_http_headers": _edge_identity()}
             ctx = browser.new_context(ignore_https_errors=True, viewport=VIEWPORT,
-                                      locale="he-IL", extra_http_headers=_edge_identity(),
-                                      **CTX_KWARGS)
+                                      locale="he-IL", **signed_in, **CTX_KWARGS)
         except Exception:
             ctx = browser.contexts[0]
         page = ctx.new_page()

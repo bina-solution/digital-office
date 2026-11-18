@@ -104,8 +104,10 @@ def _public_origin(app_id: str, host: str, base_url_env: str | None) -> str:
 PROJECT = os.getenv("COMPOSE_PROJECT", "digital-office")
 STATE = os.path.join(REPO, "platform.state.yaml")
 RECONCILE = os.path.join(REPO, "platform", "manager", "reconcile.py")
-# apps/ holds layer 3 (installable); platform-base/ holds layers 1-2 (core, protected).
-ROOTS = {"apps": 3, "platform-base": 12}
+# apps/ holds layer 3 (installable); platform-base/ holds layers 1-2 (core, protected); instances/ holds an
+# app's further copies (DGO-1920), generated from platform.state.yaml `app_instances:` by instances.py.
+ROOTS = {"apps": 3, "platform-base": 12, "instances": 3}
+INSTANCES = os.path.join(REPO, "platform", "manager", "instances.py")
 # One lifecycle op at a time: edits to platform.state.yaml + a reconcile render + the container
 # apply must not interleave, or two clicks could corrupt the state file or race the compile.
 _LIFECYCLE = threading.Lock()
@@ -203,6 +205,37 @@ def _load_state():
     except Exception:
         st = {}
     return (st.get("apps") or {})
+
+
+_INSTANCE_RULE = []   # [the rule] once read, [None] when it cannot be
+
+
+def _instances_ok(m):
+    """Whether the office may add a copy of this app (DGO-1920): instances.refusal, the ONE rule (the manifest's
+    word and its compose file's), read from the compiler's folder once — never a second copy of it here. False
+    when it cannot be read."""
+    if not _INSTANCE_RULE:
+        try:
+            sys.path.insert(0, os.path.join(REPO, "platform", "manager"))
+            import instances as _instances
+            _INSTANCE_RULE.append(_instances.refusal)
+        except Exception:
+            _INSTANCE_RULE.append(None)
+    rule = _INSTANCE_RULE[0]
+    try:
+        return bool(rule) and rule(m) == ""
+    except Exception:
+        return False
+
+
+def _instances_why(m):
+    """The rule's own sentence for an app that has no copies — '' when it cannot be read."""
+    _instances_ok(m)
+    rule = _INSTANCE_RULE[0] if _INSTANCE_RULE else None
+    try:
+        return rule(m) if rule else ""
+    except Exception:
+        return ""
 
 
 #: What a compose file declares is read ONCE, until the file changes. One /api/apps answer asked for
@@ -1211,15 +1244,23 @@ def _run_hook(m, verb, timeout):
     business (`prepare` before its containers start, `onboard` once they answer), and this plane
     only decides WHEN. Best-effort like every caller of these hooks: a failed bootstrap is reported
     with its last words, never swallowed and never fatal to the lifecycle that called it."""
-    hook = os.path.join(m.get("_dir", ""), "hooks", verb)
+    # An instance (DGO-1920) runs its TEMPLATE's hooks as itself, told who it is as bbox tells it — only when the
+    # template says its code reads that (`multi_instance: true`): another's `uninstall` would clear the FIRST copy.
+    of = m.get("instance_of")
+    home = _manifest(of) if of else None
+    if of and (home or {}).get("multi_instance") is not True:
+        return None
+    hook = os.path.join((home or m).get("_dir", ""), "hooks", verb)
     if not os.path.exists(hook):
         return None
     if not os.access(hook, os.X_OK):                 # the rule `run_app_hooks` has: said, not skipped
         return {"ran": False, "rc": 126, "out": f"hooks/{verb} is there and is not executable — not run"}
+    who = ({"DGO_INSTANCE_ID": m.get("id", ""), "DGO_INSTANCE_OF": of, "DGO_INSTANCE_KEY": m.get("instance_key", "")}
+           if of else {})
     try:
         r = subprocess.run(["bash", hook], cwd=REPO, capture_output=True, text=True, timeout=timeout,
                            encoding="utf-8", errors="replace",
-                           env={**os.environ, "APP_ID": m.get("id", ""), "COMPOSE_PROJECT_NAME": PROJECT})
+                           env={**os.environ, "APP_ID": m.get("id", ""), "COMPOSE_PROJECT_NAME": PROJECT, **who})
         return {"ran": True, "rc": r.returncode, "out": (r.stdout or r.stderr or "").strip()[-400:]}
     except Exception as e:
         return {"ran": True, "rc": -1, "out": str(e)[:200]}
@@ -2382,6 +2423,10 @@ def api_move(aid):
     if m.get("_root") == "platform-base":
         return jsonify(error="core platform app — it is part of every office and does not move",
                        id=aid), 403
+    if m.get("instance_of"):
+        # a copy is a row of THIS office's state (DGO-1920); the office on the other side has no row for it
+        return jsonify(error="מופע של אפליקציה לא עובר ללשכה אחרת (עדיין): הוסף שם מופע משלה, והעבר את הנתונים",
+                       id=aid), 409
     if docker_sdk is None:
         return jsonify(error="docker socket unavailable"), 503
     asked, bad = _json_object()
@@ -2502,10 +2547,123 @@ def api_uninstall(aid):
         if purge:
             removed_vols, vol_errs = _remove_volumes((m.get("data") or {}).get("volumes") or [])
 
+        # An instance (DGO-1920) is not kept in the catalog: its row and its folder go, and so does its tile.
+        # Its data stays unless purged above — the same promise every app's uninstall makes.
+        undeclared = None
+        if m.get("instance_of"):
+            r = subprocess.run(["python3", INSTANCES, "remove", aid, "--by", "user"], cwd=REPO,
+                               capture_output=True, text=True, timeout=60)
+            undeclared = r.returncode == 0
+            if not undeclared:
+                why = (r.stderr or r.stdout or "").strip().splitlines()
+                return jsonify(error="המופע כובה והמכולות שלו הוסרו, אבל הרשומה שלו לא נמחקה: "
+                                     + (why[-1] if why else "no reason given"), id=aid,
+                               removed_containers=removed_containers), 500
+            try:
+                _render()
+            except Exception as e:
+                return jsonify(error=f"the instance is removed, but the recompile failed: {e}", id=aid), 500
+
     return jsonify(ok=True, id=aid, purged=purge, policy=policy,
                    removed_containers=removed_containers, removed_volumes=removed_vols,
                    volume_errors=vol_errs, hook=hook,
-                   note="uninstalled; the app stays in the catalog as available to install")
+                   **({"instance_removed": undeclared} if undeclared is not None else {}),
+                   note=("the instance is removed" + ("" if purge else "; its data (volumes) is kept")
+                         if undeclared else "uninstalled; the app stays in the catalog as available to install"))
+
+
+# ── app instances («מופעים», DGO-1920) ────────────────────────────────────────
+# A further copy of an app: its own containers, data, address, tile and sign-in (three Claude Desktops, each its own
+# account). The row is written in platform.state.yaml by instances.py — the one writer, as reconcile.py is of
+# `apps:` — which also generates instances/<id>/; then the copy is brought up exactly as an app is enabled here.
+_INSTANCE_KEY_RE = re.compile(r"^[a-z0-9](?:[a-z0-9-]{0,14}[a-z0-9])?$")
+
+
+@app.get("/api/instances")
+def api_instances():
+    """The copies facts the apps screen draws (DGO-1920), apart from /api/apps — whose answer the native core's twin
+    gives byte for byte, and which has no Python to make a copy with: there this route is not, and the screen
+    shows no «מופע נוסף». `can`: the apps a copy can be added of; `of`: each copy's app and key."""
+    try:
+        mans = _load_manifests()
+    except Exception as e:
+        return jsonify(error=str(e)), 500
+    of = {m["id"]: {"of": m["instance_of"], "key": m.get("instance_key")} for m in mans
+          if m.get("id") and m.get("instance_of")}
+    can, at = _copyable()
+    return jsonify(can=can, of=of, measured_at=at)
+
+
+# The rule reads every eligible app's files (refusal: its hooks, its mounts, what its files address) — 30 to 70 s on
+# the HP's checkout, measured by the second reader of DGO-1920. So it is never computed while a screen waits: one
+# thread measures the whole catalog, at most every 15 minutes, and the route answers with the last measure (none,
+# for the first minute after a start: the screen then offers no copy until it is in).
+_COPYABLE = {"can": [], "at": 0.0, "busy": False}
+_COPYABLE_LOCK = threading.Lock()
+COPYABLE_EVERY_S = 900
+
+
+def _copyable():
+    with _COPYABLE_LOCK:
+        due = not _COPYABLE["busy"] and time.time() - _COPYABLE["at"] > COPYABLE_EVERY_S
+        if due:
+            _COPYABLE["busy"] = True
+    if due:
+        threading.Thread(target=_measure_copyable, daemon=True, name="copyable").start()
+    return list(_COPYABLE["can"]), _COPYABLE["at"] or None
+
+
+def _measure_copyable():
+    try:
+        can = sorted(m["id"] for m in _load_manifests() if m.get("id") and not m.get("_broken")
+                     and m.get("_root") != "platform-base" and _instances_ok(m))
+        with _COPYABLE_LOCK:
+            _COPYABLE.update(can=can, at=time.time())
+    except Exception:                                   # noqa: BLE001 — the next request measures again
+        pass
+    finally:
+        with _COPYABLE_LOCK:
+            _COPYABLE["busy"] = False
+
+
+@app.post("/api/apps/<aid>/instances")
+def api_add_instance(aid):
+    """Add a copy of `aid` and bring it up. Body (all optional): {key, title_he, title_en}. The key defaults
+    to the next free number (bina-claude-2, -3…). 201 with the new id and the bring-up's own answer."""
+    if request.headers.get(OFFICE_HEADER):
+        return jsonify(error="a linked office does not add apps to this office"), 403
+    m = _manifest(aid)
+    if not m:
+        return jsonify(error="unknown app", id=aid), 404
+    if m.get("_root") == "platform-base" or not _instances_ok(m):
+        why = _instances_why(m)
+        return jsonify(error="לאפליקציה הזאת אין מופע נוסף בלשכה" + (f" — {why}" if why else ""), id=aid), 409
+    body, bad = _json_object()
+    if bad:
+        return bad
+    argv = ["python3", INSTANCES, "add", aid, "--by", "user"]
+    key = str(body.get("key") or "").strip().lower()
+    if key:
+        if not _INSTANCE_KEY_RE.match(key):
+            return jsonify(error="the key is a-z, 0-9 and '-', at most 16", id=aid), 400
+        argv += ["--key", key]
+    for f in ("title_he", "title_en"):
+        if body.get(f):
+            argv.append(f"--{f.replace('_', '-')}={body[f]}")   # one word: a title that starts with '-' is a title
+    with _LIFECYCLE:
+        r = subprocess.run(argv, cwd=REPO, capture_output=True, text=True, timeout=60)
+    if r.returncode != 0:
+        why = (r.stderr or r.stdout or "").strip().splitlines()
+        return jsonify(error=(why[-1] if why else "the instance was not added").removeprefix("instances: "),
+                       id=aid), 409 if r.returncode == 2 else 500
+    m2 = re.search(r"^\s*(\S+)\s+added", r.stdout or "", re.M)
+    iid = m2.group(1) if m2 else None
+    if not iid or not _manifest(iid):
+        return jsonify(error="the instance was declared but its folder is missing", id=aid), 500
+    started = _lifecycle(iid, True)
+    payload, code = (started if isinstance(started, tuple) else (started, 200))
+    out = payload.get_json(silent=True) if hasattr(payload, "get_json") else None
+    return jsonify(ok=code < 400, id=iid, of=aid, bringup=out), (201 if code < 400 else code)
 
 
 # ── install-by-reference (the signed catalog) ────────────────────────────────
@@ -2708,6 +2866,197 @@ def api_catalog_install():
     data["installed_from"] = st["prov"].get("how")
     data["verified"] = bool(st["prov"].get("verified"))
     return jsonify(**data), code
+
+
+# ── business templates: the cases the store offers, as a template one installs (DGO-1689) ─────
+#
+# A template is the BUSINESS DOMAIN a client lives in, and what this office already answers it
+# with: `templates/<id>.yaml` names the needs and the app that already does each one, plus the app
+# set to install. It is DATA — a new case is one file, read on every request, so nothing is
+# compiled, registered or restarted to add one.
+#
+# Why here and not in the compiler: this IS the store. The apps screen is this app's surface and an
+# install is this app's lifecycle, so a second writer of the same store would be exactly the drift
+# the catalog module exists to prevent. What a template is NOT is a new install mechanism —
+# installing one runs the same `_apply` a person's "install" click runs, app after app, and an app
+# that is already on is skipped, so installing twice is not an event.
+#
+# What it refuses, loudly, is a template that cannot be installed as written: an app that is not in
+# this repo, a core platform app (the base is nobody's vertical, and "installing" it is a lie), an
+# empty app set, or a `needs` row whose app is not in `apps`. Such a template is still LISTED — with
+# the sentence that says why — and the install route answers 409 instead of doing half of it.
+TEMPLATES = os.path.join(REPO, "platform-base", "app-management", "templates")
+_TEMPLATE_ID = re.compile(r"^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$")
+
+
+def _template_problems(t, stem, by_id):
+    """Every complaint one template earns, as sentences a person can act on (empty = installable)."""
+    p = []
+    if t.get("id") != stem:
+        p.append(f"ה-id '{t.get('id')}' אינו שם הקובץ '{stem}' — השניים חייבים להיות זהים")
+    if not _TEMPLATE_ID.match(str(t.get("id") or "")):
+        p.append("ה-id חייב להיות lowercase-kebab (a-z, 0-9 ומקפים)")
+    if not (t.get("title") or {}).get("he"):
+        p.append("אין `title.he` — לתבנית בלי שם אין כרטיס במסך")
+    apps = t.get("apps") or []
+    if not apps:
+        p.append("`apps` ריק — תבנית שאינה מתקינה דבר אינה תבנית")
+    for aid in apps:
+        a = by_id.get(aid)
+        if a is None:
+            p.append(f"האפליקציה '{aid}' אינה במאגר הזה")
+        elif a.get("core"):
+            p.append(f"'{aid}' היא אפליקציית ליבה — אף תחום עסקי אינו מתקין את התשתית")
+    # EVERY need names who answers it, and that answer is part of what gets installed. A row that
+    # points outside `apps` is the half-installed template this validation exists to prevent.
+    for row in t.get("needs") or []:
+        if row.get("app") not in apps:
+            p.append(f"הצורך «{row.get('need') or '—'}» מפנה ל-'{row.get('app')}', שאינו ב-`apps`")
+    return p
+
+
+def _template_read(path, by_id):
+    """One template, normalised and validated. A file that will not parse is a template with problems."""
+    stem = os.path.basename(path)[:-5]
+    try:
+        with open(path, encoding="utf-8") as fh:
+            raw = yaml.safe_load(fh) or {}
+    except Exception as e:                                   # noqa: BLE001 — reported, never raised
+        return {"id": stem, "title": {}, "who": "", "promise": "", "needs": [], "apps": [],
+                "problems": [f"הקובץ אינו YAML קריא — {e}"]}
+    if not isinstance(raw, dict):
+        return {"id": stem, "title": {}, "who": "", "promise": "", "needs": [], "apps": [],
+                "problems": ["הקובץ אינו מקרה עסקי: הוא לא מפה"]}
+    title = raw.get("title") if isinstance(raw.get("title"), dict) else {}
+    needs = [{"need": str(n.get("need") or "").strip(), "app": str(n.get("app") or "").strip(),
+              "how": str(n.get("how") or "").strip()}
+             for n in (raw.get("needs") or []) if isinstance(n, dict)]
+    t = {"id": str(raw.get("id") or "").strip(),
+         "title": {"he": str(title.get("he") or "").strip(), "en": str(title.get("en") or "").strip()},
+         "who": str(raw.get("who") or "").strip(),
+         "promise": str(raw.get("promise") or "").strip(),
+         "needs": needs,
+         "apps": [str(a).strip() for a in (raw.get("apps") or []) if str(a).strip()]}
+    t["problems"] = _template_problems(t, stem, by_id)
+    return t
+
+
+def _templates(cat=None):
+    """Every case in the store, read from disk now — a new file needs no restart and no compile."""
+    cat = _catalog() if cat is None else cat
+    by_id = {a["id"]: a for a in cat}
+    return [_template_read(path, by_id)
+            for path in sorted(glob.glob(os.path.join(TEMPLATES, "*.yaml")))]
+
+
+def _template_row(aid, cat_by_id):
+    """One app of a template, as the plan reads it: what is here, and what pressing install does."""
+    a = cat_by_id.get(aid) or {}
+    enabled = bool(a.get("enabled"))
+    installed = bool(a.get("installed")) or enabled
+    # "installed" = on and left alone; "enable" = already here, containers exist, switched off;
+    # "install" = comes up from nothing (created, then the same bring-up every install gets).
+    action = "installed" if enabled else ("enable" if installed else "install")
+    return {"id": aid, "name": a.get("name") or aid, "installed": installed, "enabled": enabled,
+            "state": a.get("state") or "", "action": action}
+
+
+def _template_json(t, cat=None):
+    cat = _catalog() if cat is None else cat
+    by_id = {a["id"]: a for a in cat}
+    rows = [_template_row(aid, by_id) for aid in t["apps"]]
+    return {**t,
+            "ready": not t["problems"],
+            "name": t["title"].get("he") or t["id"],
+            "assets": [{**n, **(by_id.get(n["app"]) or {})} for n in t["needs"]],
+            "plan": rows,
+            "counts": {k: sum(1 for r in rows if r["action"] == k)
+                       for k in ("installed", "enable", "install")}}
+
+
+def _template_install(t):
+    """The job a template install runs: this app's own bring-up, app after app, in the order the
+    case declares. An app already on is skipped; a failure stops nothing that comes after it — the
+    answer says which one failed, and the rest of the case is still brought up."""
+    def work(step):
+        done, skipped, failed = [], [], []
+        for aid in t["apps"]:
+            step(aid)
+            if _disposition(_load_state().get(aid)) == "enabled":
+                skipped.append(aid)
+                continue
+            m = _manifest(aid)
+            if not m:
+                failed.append({"id": aid, "error": "unknown app"})
+                continue
+            payload, code = _apply(aid, m, True, lambda name, _a=aid: step(f"{_a} · {name}"))
+            if code == 200 and payload.get("ok"):
+                done.append(aid)
+            else:
+                why = payload.get("error") or "; ".join(payload.get("create_errors") or []) or f"HTTP {code}"
+                failed.append({"id": aid, "error": why})
+        return ({"ok": not failed, "template": t["id"], "installed": done,
+                 "skipped": skipped, "failed": failed}, 200 if not failed else 500)
+    return work
+
+
+@app.get("/api/templates")
+def api_templates():
+    """The business cases, each with every app's live state — the reading the screen draws."""
+    cat = _catalog()
+    return jsonify(templates=[_template_json(t, cat) for t in _templates(cat)], at=time.time())
+
+
+@app.get("/api/templates/<tid>")
+def api_template(tid):
+    cat = _catalog()
+    t = next((x for x in _templates(cat) if x["id"] == tid), None)
+    if not t:
+        return jsonify(error="unknown template", id=tid), 404
+    return jsonify(**_template_json(t, cat))
+
+
+@app.get("/api/templates/<tid>/job")
+def api_template_job(tid):
+    job = _JOBS.get(f"template:{tid}")
+    if not job:
+        return jsonify(error="no install of this template was run here", id=tid), 404
+    return _job_answer(f"template:{tid}", job, 0)
+
+
+@app.post("/api/templates/<tid>/install")
+def api_template_install(tid):
+    """Install a business case: the app set it declares, through the one lifecycle there is.
+
+    Installing a template ENABLES APPS, which is the owner's decision (not this API's), so the
+    request must NAME the template it confirms — a call that does not is refused. `dry_run` says
+    what would happen and writes nothing. A request that crossed a link is refused outright (§9):
+    an office's app set is its own.
+    """
+    if request.headers.get(OFFICE_HEADER):
+        return jsonify(error="a linked office does not install into this office"), 403
+    body = request.get_json(silent=True) or {}
+    cat = _catalog()
+    t = next((x for x in _templates(cat) if x["id"] == tid), None)
+    if not t:
+        return jsonify(error="unknown template", id=tid), 404
+    view = _template_json(t, cat)
+    if not view["ready"]:
+        return jsonify(error="the template cannot be installed as written — nothing was changed",
+                       id=tid, refused=view["problems"]), 409
+    if body.get("dry_run"):
+        return jsonify(ok=True, id=tid, dry_run=True, plan=view["plan"], counts=view["counts"],
+                       install=[r["id"] for r in view["plan"] if r["action"] != "installed"]), 200
+    if str(body.get("confirm") or "") != tid:
+        return jsonify(error="installing a template turns apps on — the owner's decision: send "
+                             f"confirm={tid} to install it", id=tid), 400
+    if docker_sdk is None:
+        return jsonify(error="docker socket unavailable"), 503
+    key = f"template:{tid}"
+    job = _JOBS.get(key)
+    if not job or job["finished"].is_set():          # a second install joins the one in flight
+        job = _start_job(key, _template_install(t))
+    return _job_answer(key, job, BRINGUP_WAIT_S)
 
 
 # ── this office's own record — the install wizard's ONE write ─────────────────────────────────

@@ -182,7 +182,7 @@ class Client:
         return bytes(msg.file.size)
 
 
-CHAT, OLD_CHAT, TITLE = -1004303648995, -4303648995, "בינה פיתרונות ראשי"   # a group and the supergroup it became
+CHAT, OLD_CHAT, TITLE = -1001234567890, -1234567890, "בינה פיתרונות ראשי"   # a group and the supergroup it became
 BIG = 100 * 1024 * 1024 + 4321                               # 100 MB and change: the last piece is a short one
 CLIENT = Client([Msg(825, BIG), Msg(826, 300_000, kind="photo", mime="image/jpeg"), Msg(827, 9_000_000),
                  Msg(828, 5_000_000, kind="document", name="דוח/רבעון 3‮gpj.exe", mime="application/pdf"),

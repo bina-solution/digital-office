@@ -15,6 +15,9 @@
 #   ./bbox engine provision [--apply]   engine.yaml's provision blocks this engine was made without; --apply
 #                              runs the ones marked `# bbox: live-apply` in the running guest (start does too)
 #   ./bbox engine power [status|start|stop]   the Mac-side keep-awake agent (policy: console settings)
+#   ./bbox engine health       one line: is the guest's systemd (PID 1) alive, or frozen so nothing can start
+#   ./bbox engine recover [--force]   boot a FROZEN engine again: dockerd stopped gently, the disk synced, the VM
+#                              stopped and started (the power agent does this by itself; --force: any engine)
 #   ./bbox engine destroy --force   delete the guest and EVERYTHING in it (images, volumes)
 #
 # `./bbox <anything else>` on macOS is handed here as `engine.sh exec -- ./bbox …` by bbox itself
@@ -127,12 +130,27 @@ cmd_start() {
       # only a Stopped engine is edited: a Broken or Starting one may be another process's boot in progress
       [ "${st}" = Stopped ] && resize_if_declared
       say "starting the engine (${st})…"
-      lima start --tty=false "${INSTANCE}" || die "the engine did not start. Diagnose: ${LIMACTL} --debug start ${INSTANCE}" ;;
+      # An engine made before a probe fix keeps the old probe (its lima.yaml is the one it was created with): this
+      # Mac's still formats `docker version` with Go-template braces that Lima renders to «<no value>», so the probe
+      # never passes and `limactl start` waits its full 10 minutes for a «running» it never sends, while the VM runs
+      # and dockerd answers (2026-11-17 22:02–22:12 +03, DGO-1964). The engine's readiness is dockerd answering,
+      # asked right below; a running VM whose start did not report ready goes on to that question, after 4 minutes.
+      lima start --tty=false --timeout=4m "${INSTANCE}" || {
+        [ "$(state)" = Running ] || die "the engine did not start. Diagnose: ${LIMACTL} --debug start ${INSTANCE}"
+        say "${cy}lima did not report the engine ready, but it runs — asking dockerd directly (${LIMA_HOME}/${INSTANCE}/ha.stderr.log)${c0}"
+      } ;;
   esac
-  # The template's probe already waited for dockerd; prove it from here once more, in one line.
-  local v; v="$(lima shell "${INSTANCE}" sudo docker version --format '{{.Server.Version}}' 2>/dev/null || true)"
+  # The template's probe already waited for dockerd; prove it from here once more. A start that went on without
+  # Lima's word (above) may be a slow boot, so dockerd is asked for two minutes before this says it does not answer.
+  local v="" i
+  for i in $(seq 1 24); do
+    v="$(lima shell --workdir / "${INSTANCE}" sudo docker version --format '{{.Server.Version}}' 2>/dev/null || true)"
+    [ -n "${v}" ] && break
+    sleep 5
+  done
   [ -n "${v}" ] || die "engine is up but dockerd does not answer inside it"
   ok "project engine: Docker ${v}  socket: $(host_socket)"
+  start_link_stack
   # The template's blocks that this engine was made without, applied live (see provision_converge). Among them
   # the guest's SSH host keys kept across restarts (DGO-1359: Lima boots every start as a new cloud-init
   # instance, and cloud-init's ssh module regenerated the keys, so this office's Computers app read «the host
@@ -606,6 +624,140 @@ cmd_destroy() {
   ensure_runtime; [ -n "$(state)" ] || { say "engine not created"; return 0; }
   lima delete --force "${INSTANCE}"; ok "engine deleted (${LIMA_HOME}/${INSTANCE})"
 }
+
+# ── a frozen engine: the guest's systemd (PID 1) stopped for good, and nothing in the guest can start ───────────
+# Measured 2026-11-14 → 11-17 (DGO-1964). An unattended libc6 upgrade re-executed systemd at 03:06Z while the home
+# mount was stalled (DGO-1838), and the new systemd went into its freeze(): every file of its own closed, blocked in
+# waitid() reaping children, nothing else. Running containers ran on, but none could START (runc asks PID 1 over
+# D-Bus for a cgroup: «Failed to activate service 'org.freedesktop.systemd1': timed out»). So the link stack that a
+# peer's catalog change recreated on 11-15 09:09Z stayed in «Created», every link of this Mac was down for 2 days
+# 10 hours, and the other offices' agents told the owner to come to the Mac. No signal or systemctl reaches a frozen
+# PID 1; only a boot ends it. The check reads /proc only, so it answers while systemd does not: a live systemd waits
+# in epoll with ~150 files open, a frozen one in do_wait with 3. Both are required, because a live systemd also
+# blocks in waitid for a moment while it runs its generators.
+# Every call into the guest here runs from / (`limactl shell` otherwise first cd's to the caller's folder, which is on
+# the home mount — the mount whose stall began the freeze of 11-14) and under a time limit in the guest, so a stalled
+# mount or a hung guest says «unknown» and leaves no session behind (the second reader of DGO-1964).
+pid1_state() {   # → "ok: …" | "frozen: …" (status 3) | "unknown: …" (status 1)
+  [ "$(state)" = Running ] || { echo "unknown: the engine is not running"; return 1; }
+  local out fds wchan
+  out="$(lima shell --workdir / "${INSTANCE}" sudo timeout -k 5 20 sh -c 'echo "$(ls /proc/1/fd | wc -l) $(cat /proc/1/wchan)"' 2>/dev/null || true)"
+  fds="${out%% *}"; wchan="${out##* }"
+  case "${fds}" in ''|*[!0-9]*) echo "unknown: the guest did not answer"; return 1 ;; esac
+  if [ "${fds}" -lt 8 ] && [ "${wchan}" = do_wait ]; then
+    echo "frozen: the guest's systemd (PID 1) holds ${fds} open files and waits in ${wchan}; no container can start until the engine boots again"
+    return 3
+  fi
+  echo "ok: the guest's systemd holds ${fds} open files and waits in ${wchan}"
+}
+cmd_health() { ensure_runtime; pid1_state; }
+
+# The office's door (dgo-net, and dgo-link and dgo-carry in its network namespace) when compose CREATED it and
+# nothing started it: its start was refused while PID 1 was frozen, and a boot does not start it (dockerd brings
+# back only what was running), so every link of this Mac stayed down after the boot until a hand started it
+# (2026-11-17). The office's heal (follow.sh heal → netns_rejoin) rejoins dgo-link/dgo-carry only once dgo-net
+# runs, so dgo-net goes first. ONLY the link plane and its door, only «created», only this office's own (the compose
+# project of its link plane, dgo-extend — the running one, else the one created beside the door, as a `bbox run`
+# during a freeze recreates both; never a one-off `compose run`, never another project's): the Mac also keeps
+# containers a `bbox run` created and the owner never wanted running (n8n's workers, 2026-11-17 — a first version that
+# started every created container with a restart policy started six of them; they were stopped a minute later), and
+# a door that was STOPPED is somebody's decision.
+start_link_stack() {
+  lima shell --workdir / "${INSTANCE}" sudo timeout -k 5 120 bash -s <<'SH' || true
+proj="$(docker ps --filter label=com.docker.compose.service=dgo-extend --filter label=com.docker.compose.oneoff=False \
+  --format '{{.Label "com.docker.compose.project"}}' | head -1)"
+[ -n "${proj}" ] || proj="$(docker ps -a --filter status=created --filter label=com.docker.compose.service=dgo-extend \
+  --filter label=com.docker.compose.oneoff=False --format '{{.Label "com.docker.compose.project"}}' | head -1)"
+[ -n "${proj}" ] || { echo "  this office has no link plane (dgo-extend): its door is left as it is"; exit 0; }
+for svc in dgo-extend dgo-net dgo-link dgo-carry; do
+  for id in $(docker ps -aq --filter status=created --filter "label=com.docker.compose.project=${proj}" \
+      --filter "label=com.docker.compose.service=${svc}" --filter label=com.docker.compose.oneoff=False); do
+    name="$(docker inspect -f '{{.Name}}' "${id}")"
+    if docker start "${id}" >/dev/null; then echo "  started ${name#/} (created, never ran)"; else echo "  could not start ${name#/}"; fi
+  done
+done
+SH
+}
+
+# recover [--force]: boot a frozen engine again, gently. dockerd is stopped first (systemctl cannot stop it while
+# PID 1 is frozen): it stops every container within its shutdown timeout and records them as running, so the
+# `unless-stopped` ones come back at the boot. Then the disk is synced and the VM stopped from outside, because a
+# frozen PID 1 never shuts down. 2026-11-17 by hand: dockerd gone in 45 s, the office back 2 minutes after the
+# boot. A healthy engine is left alone unless --force, and then it is stopped the ordinary way (its systemd would
+# start a SIGTERMed dockerd again in 2 s); an engine whose state cannot be read is left alone too. The power agent
+# runs this by itself when it finds PID 1 frozen twice (power-agent.py, ENGINE_*), so a freeze no longer waits for
+# the owner at the Mac. One recovery at a time (RECOVER_PID), and the stamp the agent spaces its recoveries by
+# (data/power/engine-recover.json) is written here, at the stop, so only a boot that really happens counts.
+RECOVER_PID="${BBOX_MACOS_HOME}/engine-recover.pid"
+recover_stamp() {   # <why> — data/power/engine-recover.json: when this recovery stopped the engine, and why
+  mkdir -p "${REPO_ROOT}/data/power" &&
+  /usr/bin/python3 -c 'import json, sys, time
+json.dump({"started_at": int(time.time()), "pid": int(sys.argv[3]), "why": sys.argv[2],
+           "log": "data/power/engine-recover.log"}, open(sys.argv[1], "w"), ensure_ascii=False)' \
+    "${REPO_ROOT}/data/power/engine-recover.json" "$1" "$$"
+}
+recover_lock() {   # 0: this run holds the lock (made atomically); 1: another `engine.sh recover` holds it
+  local other i
+  for i in 1 2; do
+    if ( set -C; echo "$$" > "${RECOVER_PID}" ) 2>/dev/null; then return 0; fi
+    other="$(cat "${RECOVER_PID}" 2>/dev/null || true)"
+    # alive AND a recovery: a pid the system reused after the owner of a left-behind lock was killed is neither
+    if [ -n "${other}" ] && ps -p "${other}" -o command= 2>/dev/null | grep -q 'engine\.sh'; then return 1; fi
+    rm -f "${RECOVER_PID}"
+  done
+  return 1
+}
+cmd_recover() {
+  ensure_runtime
+  local why rc=0
+  recover_lock || die "a recovery is already running (pid $(cat "${RECOVER_PID}" 2>/dev/null || echo '?'))"
+  trap 'rm -f "${RECOVER_PID}"' EXIT
+  why="$(pid1_state)" || rc=$?
+  if [ "${rc}" != 3 ] && [ "${1:-}" != --force ]; then
+    [ "${rc}" = 0 ] && { ok "nothing to recover — ${why#ok: } (--force boots it anyway)"; return 0; }
+    die "${why#unknown: } — nothing done (--force boots it anyway)"
+  fi
+  # Whatever happens below, the office's host helpers come back: a start that dies half-way must not leave this Mac
+  # with no keep-awake and no doors until somebody runs bbox (each one is a no-op when it already runs).
+  trap 'rm -f "${RECOVER_PID}"; power_agent_start >/dev/null 2>&1 || true; lan_door_start || true; console_door_start || true' EXIT
+  say "recovering the engine — ${why}"
+  # The power agent's keep-awake goes with it (power_agent_stop below), and this Mac idle-sleeps after one minute
+  # (pmset `sleep 1`): a recovery that the Mac sleeps through is a boot frozen half-way. Held only while this runs.
+  /usr/bin/caffeinate -i -w "$$" >/dev/null 2>&1 &
+  # No stop without the stamp: it is what keeps the power agent from booting the engine in a loop.
+  local nostamp="could not write data/power/engine-recover.json — not stopping the engine without it"
+  if [ "${rc}" != 3 ]; then
+    # --force on an engine whose systemd answers, or that did not answer in time (alive but slow is possible): the
+    # ordinary stop, since a live systemd would start a SIGTERMed dockerd again in 2 s and the cut would hit it
+    recover_stamp "forced: ${why}" || die "${nostamp}"
+    power_agent_stop; lan_door_stop
+    lima stop "${INSTANCE}" >/dev/null 2>&1 || lima stop --force "${INSTANCE}" >/dev/null 2>&1 \
+      || die "the engine did not stop: ${LIMACTL} stop --force ${INSTANCE}"
+  else
+    # Bounded from here too: a guest that does not answer at all must not hold the boot that ends it (macOS has no
+    # `timeout`, so the call runs beside a 5-minute watch; the guest's own wait for dockerd is 4 minutes). The PID
+    # is the host dockerd's own file: `pidof` would also name a dockerd in another namespace.
+    lima shell --workdir / "${INSTANCE}" sudo bash -s <<'SH' &
+p="$(cat /run/docker.pid 2>/dev/null || true)"
+[ -n "${p}" ] && kill -TERM "${p}"
+for i in $(seq 1 48); do [ -n "${p}" ] && kill -0 "${p}" 2>/dev/null || break; sleep 5; done
+if [ -n "${p}" ] && kill -0 "${p}" 2>/dev/null; then echo "  dockerd still running after 240 s"; else echo "  dockerd stopped"; fi
+sync
+echo "  disk synced"
+SH
+    local stopping=$! i
+    for i in $(seq 1 60); do kill -0 "${stopping}" 2>/dev/null || break; sleep 5; done
+    if kill "${stopping}" 2>/dev/null; then say "${cy}the guest did not finish the graceful stop in 5 minutes; stopping the engine anyway${c0}"; fi
+    recover_stamp "${why}" || die "${nostamp}"
+    power_agent_stop; lan_door_stop
+    lima stop --force "${INSTANCE}" >/dev/null 2>&1 || die "the engine did not stop: ${LIMACTL} stop --force ${INSTANCE}"
+  fi
+  ok "engine stopped"
+  cmd_start
+  why="$(pid1_state)" || true
+  say "after the boot: ${why}"
+  case "${why}" in ok:*) return 0 ;; *) return 1 ;; esac
+}
 cmd_doctor() {
   ensure_runtime
   echo "macOS $(sw_vers -productVersion) $(uname -m) · $(sysctl -n hw.ncpu) cores · $(host_mem_gib) GiB"
@@ -719,7 +871,9 @@ case "${cmd}" in
   forwards) cmd_forwards "$@" ;;
   provision) cmd_provision "$@" ;;
   power)   cmd_power "$@" ;;
+  health)  cmd_health ;;
+  recover) cmd_recover "$@" ;;
   destroy) cmd_destroy "$@" ;;
-  ""|-h|--help|help) sed -n '2,17p' "$0" ;;
-  *) die "unknown: bbox engine ${cmd}  (start|stop|status|shell|socket|doctor|forwards|power|destroy)" ;;
+  ""|-h|--help|help) sed -n '2,20p' "$0" ;;
+  *) die "unknown: bbox engine ${cmd}  (start|stop|status|shell|socket|doctor|forwards|power|health|recover|destroy)" ;;
 esac

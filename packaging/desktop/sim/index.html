@@ -1,0 +1,224 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8"/>
+<title>הלשכה הדיגיטלית · הדמיית האפליקציה למחשב</title>
+<link rel="stylesheet" href="../src/ui/shell.css"/>
+<!--
+  THE DESKTOP APP, SIMULATED (DGO-1972; the owner's rule: a display change comes back as an interactive simulation and
+  its screenshots). The app's own screens are the REAL files of src/ui/ — the first run and the office rail — loaded
+  in frames that ask `parent.dgoSim` what the app's bridge (src/preload-shell.js) would answer; the address rules are
+  the real src/offices.js. Drawn here and nowhere in the app: the computer around the window, the window's frame, the
+  tray's menu (the system draws it; its words are i18n.js's, the items main.js's refreshTray() builds) and the
+  office's screen, which in the app is the office's own console.
+
+  Serve the repository's root and open this page (frames of one origin):
+      python3 -m http.server 8197 --bind 127.0.0.1   →   http://127.0.0.1:8197/packaging/desktop/sim/
+  ?scene=first|connect|offices|tray|local       the scene to start in (the buttons on top switch it too)
+  &office=<url>&office-wide=<url>&signin=<url>  pictures of a real office's screen (a console signed in, at
+                                                1216×768 beside the rail and 1280×768 alone; its sign-in page) —
+                                                none are kept in the repository: an office's screen is a client's data
+-->
+<style>
+  body{margin:0;width:1440px;height:900px;overflow:hidden;background:var(--desk);position:relative}
+  .scenes{position:absolute;top:10px;inset-inline-end:10px;display:flex;gap:6px;z-index:5}
+  .scenes button{padding:5px 10px;border-radius:8px;border:1px solid var(--line);background:var(--surface);cursor:pointer;font-size:13px}
+  .scenes button[aria-pressed="true"]{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+  .win{position:absolute;left:80px;top:46px;width:1280px;height:800px;border-radius:8px;overflow:hidden;box-shadow:var(--shadow-lg);background:var(--bg);border:1px solid var(--line)}
+  .bar{height:32px;display:flex;align-items:center;gap:8px;padding:0 0 0 10px;background:var(--surface-2);border-bottom:1px solid var(--line);direction:ltr;font-size:12px}
+  .bar .logo{width:16px;height:16px}
+  .bar .title{flex:1;direction:rtl;text-align:left;white-space:nowrap;overflow:hidden}
+  .bar .ctl{width:46px;height:32px;display:grid;place-items:center;color:var(--muted)}
+  .content{position:relative;width:1280px;height:768px}
+  .content iframe{position:absolute;top:0;border:0;height:768px}
+  #welcome{left:0;width:1280px;z-index:2}
+  #rail{right:0;width:64px}
+  .office{position:absolute;top:0;left:0;height:768px;overflow:hidden;background:var(--surface)}
+  .office img{width:100%;height:100%;object-fit:cover;object-position:top right;display:block}
+  .office .placeholder{height:100%;display:grid;place-items:center;color:var(--muted);font-size:18px;text-align:center}
+  .taskbar{position:absolute;left:0;right:0;bottom:0;height:48px;background:var(--surface-2);border-top:1px solid var(--line);display:flex;align-items:center;justify-content:center;direction:ltr}
+  .taskbar .app{width:40px;height:40px;border-radius:8px;display:grid;place-items:center;background:var(--surface)}
+  .taskbar .app .logo{width:26px;height:26px}
+  .taskbar .app::after{content:"";position:absolute;bottom:3px;width:16px;height:3px;border-radius:2px;background:var(--accent)}
+  .tray{position:absolute;right:12px;top:0;height:48px;display:flex;align-items:center;gap:12px;font-size:12px;color:var(--ink)}
+  .tray button{width:28px;height:28px;border:0;border-radius:6px;background:transparent;cursor:pointer;display:grid;place-items:center;position:relative}
+  .tray button .logo{width:16px;height:16px}
+  .tray .count{position:absolute;top:0;right:0;min-width:12px;height:12px;border-radius:6px;background:var(--danger);color:var(--plum-ink);font-size:9px;line-height:12px}
+  .menu{position:absolute;right:60px;bottom:54px;min-width:250px;padding:6px;border-radius:8px;background:var(--surface);border:1px solid var(--line);box-shadow:var(--shadow-lg);font-size:13px;z-index:4}
+  .menu div{padding-block:6px;padding-inline:28px 12px;border-radius:4px;position:relative;cursor:default}
+  .menu div.item:hover{background:var(--accent-soft)}
+  .menu div.off{color:var(--muted)}
+  .menu div.on::before{content:"●";position:absolute;right:10px;font-size:9px;top:9px}
+  .menu hr{border:0;border-top:1px solid var(--line);margin:4px 0}
+  .menu .key{float:left;color:var(--muted);direction:ltr}
+</style>
+</head>
+<body>
+<nav class="scenes" id="scenes"></nav>
+<div class="win">
+  <div class="bar"><span class="logo" id="barMark"></span><span class="title" id="winTitle"></span><span class="ctl">—</span><span class="ctl">▢</span><span class="ctl">✕</span></div>
+  <div class="content" id="content">
+    <div class="office" id="office"></div>
+    <iframe id="rail" title="rail" src="about:blank"></iframe>
+    <iframe id="welcome" title="welcome" src="about:blank"></iframe>
+  </div>
+</div>
+<div class="taskbar">
+  <span class="app" title="הלשכה הדיגיטלית"><span class="logo" id="taskMark"></span></span>
+  <div class="tray"><button id="trayBtn" type="button" title="הלשכה הדיגיטלית"><span class="logo" id="trayMark"></span><span class="count" id="trayCount" hidden></span></button><span id="clock">10:24</span></div>
+</div>
+<div class="menu" id="menu" hidden></div>
+
+<script>window.module = { exports: {} };          // offices.js is the main process's module: borrow its exports</script>
+<script src="../src/offices.js"></script>
+<script>window.officeRules = window.module.exports; delete window.module;   // …and let i18n.js define dgoWords</script>
+<script src="../src/ui/i18n.js"></script>
+<script>
+'use strict';
+const O = window.officeRules;
+const t = window.dgoWords('he');
+const q = new URLSearchParams(location.search);
+const pics = { office: q.get('office'), wide: q.get('office-wide') || q.get('office'), signin: q.get('signin') };
+const $ = (id) => document.getElementById(id);
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+// ── the app's state, as main.js keeps it ─────────────────────────────────────────────────────────────────────────
+const sim = { offices: [], current: null, adding: false, badges: {}, signedIn: new Set(), local: { running: false, installed: true, starting: false } };
+const listeners = {};
+const emit = (ev, data) => (listeners[ev] || []).forEach((cb) => cb(data));
+
+function officesOut() {
+  return { current: sim.current, offices: sim.offices.map((origin) => {
+    const { local, label } = O.labelOf(origin);
+    return { origin, label, local, running: local && sim.local.running, badge: sim.badges[origin] || 0 };
+  }) };
+}
+
+// ── the bridge the app's screens talk to (src/preload-shell.js), answered here ───────────────────────────────────
+window.dgoSim = {
+  locale: 'he', version: '0.1.0',
+  offices: async () => officesOut(),
+  async probe(address) {
+    let tries;
+    try { tries = O.candidates(address); } catch (e) { return { error: e.message }; }
+    await sleep(700);
+    // the simulation's internet: an office answers with its sign-in's redirect, as vps1 and the HP do (measured)
+    const origin = tries.find((o) => /console\./.test(o));
+    if (/nothing|example\.com/.test(address) || !origin) return { kind: 'not-office' };
+    return { kind: 'signin', origin };
+  },
+  async connect(origin) { if (!sim.offices.includes(origin)) sim.offices.push(origin); open(origin); },
+  async open(origin) { open(origin); },
+  async addOffice() { sim.adding = true; loadWelcome(); render(); },
+  async back() { sim.adding = false; render(); },
+  local: {
+    status: async () => localOut(),
+    async start() {
+      sim.local.starting = true; emit('local-state', localOut());
+      for (const line of SIM_LINES) { await sleep(450); emit('local-line', line); }
+      sim.local.starting = false; sim.local.running = true; emit('local-state', localOut()); render();
+      return localOut();
+    },
+    async install() { alert('נפתח בדפדפן: https://digital-office.co.il/ — הורדת הלשכה למחשב הזה'); },
+  },
+  on(ev, cb) { (listeners[ev] = listeners[ev] || []).push(cb); },
+};
+// what `dgo run` prints is the platform's; these lines only stand in for it in the simulation
+const SIM_LINES = ['$ dgo run', '[bbox] the engine: up', '[bbox] the office: 38 services, compiled from apps/*/app.json',
+  '[bbox] waiting for the console…', '[bbox] the console answers — ready'];
+const HERE = O.candidates('localhost')[0];      // this computer's office, by the app's own address rule (local.js)
+const localOut = () => ({ ...sim.local, origin: HERE });
+
+function open(origin) {
+  sim.current = origin; sim.adding = false; render();
+}
+
+// ── drawing the window as main.js's layout() does ────────────────────────────────────────────────────────────────
+function officeScreen(origin, wide) {
+  const pic = sim.signedIn.has(origin) ? (wide ? pics.wide : pics.office) : pics.signin;
+  if (pic) return `<img alt="" src="${pic}">`;
+  return `<div class="placeholder">${sim.signedIn.has(origin) ? 'מסך הלשכה' : 'דף הכניסה של הלשכה'}<br>${origin}</div>`;
+}
+
+function render() {
+  const welcome = sim.adding || !sim.offices.length;
+  const railOn = !welcome && sim.offices.length >= 2;
+  $('welcome').style.display = welcome ? '' : 'none';
+  $('rail').style.display = railOn ? '' : 'none';
+  const office = $('office');
+  office.style.display = welcome ? 'none' : '';
+  office.style.width = `${railOn ? 1216 : 1280}px`;
+  if (!welcome) office.innerHTML = officeScreen(sim.current, !railOn);
+  $('winTitle').textContent = welcome ? t.title : sim.signedIn.has(sim.current) ? 'הלשכה הדיגיטלית · ניהול תהליכים עסקיים' : 'כניסה · הלשכה הדיגיטלית';
+  emit('offices', officesOut());
+  const total = Object.values(sim.badges).reduce((a, b) => a + b, 0);
+  $('trayCount').hidden = !total; $('trayCount').textContent = total;
+  drawMenu();
+}
+
+function drawMenu() {
+  const out = officesOut();
+  const rows = [`<div class="item">${t.trayOpen}</div>`, '<hr>',
+    ...out.offices.map((o, i) => `<div class="item ${o.origin === out.current ? 'on' : ''}">${o.local ? t.thisComputer : o.label}${o.badge ? ` (${o.badge})` : ''}<span class="key">Ctrl+${i + 1}</span></div>`),
+    ...(out.offices.length ? ['<hr>'] : []),
+    `<div class="off">${t.thisComputer}: ${sim.local.running ? t.trayOn : t.trayOff}</div>`,
+    ...(!sim.local.running && sim.local.installed ? [`<div class="item">${t.start}</div>`] : []),
+    `<div class="item">${t.addOffice}…</div>`, '<hr>', `<div class="item">${t.quit}</div>`];
+  $('menu').innerHTML = rows.join('');
+}
+
+function loadWelcome() { $('welcome').src = '../src/ui/welcome.html'; }
+
+// ── the scenes ───────────────────────────────────────────────────────────────────────────────────────────────────
+const SCENES = {
+  first: { label: '1 · הפעלה ראשונה', run() { reset(); loadWelcome(); } },
+  connect: { label: '2 · התחברות ללשכה', async run() {
+    reset(); loadWelcome();
+    await new Promise((r) => $('welcome').addEventListener('load', r, { once: true }));
+    await sleep(300);
+    const d = $('welcome').contentDocument;
+    d.getElementById('addr').value = 'staging.digital-office.co.il';
+    d.getElementById('connect').click();
+  } },
+  offices: { label: '3 · שלוש לשכות', run() { reset(); threeOffices(); render(); } },
+  tray: { label: '4 · המגש', run() { reset(); threeOffices(); render(); $('menu').hidden = false; } },
+  local: { label: '5 · הלשכה במחשב הזה', async run() {
+    reset(); loadWelcome();
+    await new Promise((r) => $('welcome').addEventListener('load', r, { once: true }));
+    await sleep(400);
+    $('welcome').contentDocument.getElementById('localBtn').click();
+  } },
+};
+function reset() {
+  Object.assign(sim, { offices: [], current: null, adding: false, badges: {}, signedIn: new Set() });
+  sim.local = { running: false, installed: true, starting: false };
+  $('menu').hidden = true;
+  render();
+}
+function threeOffices() {
+  sim.offices = [HERE, 'https://console.staging.digital-office.co.il', 'https://console.exampleu.example.co.il'];
+  sim.current = sim.offices[0];
+  sim.local.running = true;
+  sim.signedIn = new Set(sim.offices.slice(0, 1));
+  sim.badges = { 'https://console.staging.digital-office.co.il': 3 };
+}
+
+for (const [key, s] of Object.entries(SCENES)) {
+  const b = document.createElement('button');
+  b.type = 'button'; b.textContent = s.label; b.dataset.scene = key;
+  b.onclick = () => { for (const x of $('scenes').children) x.setAttribute('aria-pressed', String(x === b)); s.run(); };
+  $('scenes').append(b);
+}
+$('trayBtn').onclick = () => { $('menu').hidden = !$('menu').hidden; };
+document.addEventListener('click', (e) => {
+  if (![$('menu'), $('trayBtn'), $('scenes')].some((el) => el.contains(e.target))) $('menu').hidden = true;
+});
+for (const id of ['barMark', 'taskMark', 'trayMark']) {
+  $(id).innerHTML = '<img alt="" src="../../../platform-base/console/static/icons/icon-192.png" style="width:100%;height:100%">';
+}
+$('rail').src = '../src/ui/rail.html';        // only now: the rail asks dgoSim as it loads
+const start = SCENES[q.get('scene')] ? q.get('scene') : 'first';
+document.querySelector(`[data-scene="${start}"]`).click();
+</script>
+</body>
+</html>

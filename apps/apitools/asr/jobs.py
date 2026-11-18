@@ -388,7 +388,7 @@ class Jobs:
 
         # A LONG RECORDING IS TRANSCRIBED IN PIECES. faster-whisper decodes a file whole and computes
         # its features whole: a 68-minute meeting took the worker past its 2.5 GB cap within seconds,
-        # every attempt (vps1, 2026-10-22: the Chimney Guys call, killed by the kernel five times). A
+        # every attempt (vps1, 2026-10-22: the Example shop call, killed by the kernel five times). A
         # recording longer than SPEECH_CHUNK_SECONDS and a half is decoded a piece at a time (_pieces:
         # each cut at a quiet moment), each piece transcribed alone and its times moved by its offset,
         # so memory holds one piece, whatever the length.

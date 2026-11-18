@@ -893,8 +893,8 @@ def _paged_select(transport, *, table: str, select=None, max_rows: int = 200_000
 # indox_dashboard_stats — the dashboard's read model, maintained on write.
 #
 # GET /dashboard/stats used to be `_paged_select` over the WHOLE document table, on every
-# request, followed by an in-process aggregate — flat-ish at 6,250 rows, unbounded past it
-# (INDOX-UNIFIED-N8N-SPEC.md §5: "at 180,000 rows the UI lives or dies here"). The schema in
+# request, followed by an in-process aggregate — flat-ish at N rows, unbounded past it
+# (INDOX-UNIFIED-N8N-SPEC.md §5: "at N rows the UI lives or dies here"). The schema in
 # scripts/ops/dashboard-stats-schema.sql adds a statement-level trigger on every
 # incoming_documents* table that does ONE thing on write: flips `indox_dashboard_stats.dirty`
 # — an indexed upsert, not a recompute, so a 500-row n8n batch write costs the trigger ONE
@@ -1035,7 +1035,7 @@ def _dash_win_since(win: str | None, tz_off_min, now: float | None = None) -> st
 # prove it rather than trusting what it asked for.
 #
 # WHICH COLUMNS ARE OFFERED, AND WHY THE OTHERS ARE NOT.
-# Every date-ish column in the table was measured against the live 16,237-row
+# Every date-ish column in the table was measured against the live N-row
 # table (2026-08-10). Two things disqualify a column: mixed value formats, and
 # day-granularity.
 #
@@ -1080,7 +1080,7 @@ def _dash_win_since(win: str | None, tz_off_min, now: float | None = None) -> st
 #   already navigates by, so it is the one worth a column.
 #
 # WHY `DOC_DATE` ITSELF STILL CANNOT BE A BASIS, AND WHY THE FIX IS A COLUMN.
-# `DOC_DATE` is TEXT in three live shapes (measured 2026-08-10 on 16,264 rows:
+# `DOC_DATE` is TEXT in three live shapes (measured 2026-08-10 on N rows:
 # 8,360 filled = 5,114 ISO + 2,806 DD/MM/YYYY + 440 DD/MM/YY). Lexicographic
 # `>=` across those is not merely imprecise, it is BACKWARDS for the 39% in
 # slash form: '25/06/2026' > '2026-08-10' (they differ at index 1, '5' > '0'),
@@ -1119,7 +1119,7 @@ def _dash_win_since(win: str | None, tz_off_min, now: float | None = None) -> st
 #  3. THE WINDOW'S RIGHT EDGE IS OPEN, and on THIS basis that is visible for the
 #     first time. Every window here is `col >= since` with no upper bound —
 #     which has always been harmless because an ARRIVAL instant cannot be in the
-#     future (measured: 0 of 16,264 rows have `created_at` or `updated_at` ahead
+#     future (measured: 0 of N rows have `created_at` or `updated_at` ahead
 #     of now()). A BUSINESS date can, and does: 97 of the 8,353 parseable
 #     `DOC_DATE` values are future-dated extraction errors (10/07/2094,
 #     31/12/2050, …). So "היום" on this basis means "dated today OR LATER", and
@@ -1450,7 +1450,7 @@ def _compute_dashboard_stats_payload(transport, doc_table: str,
     same single-key dict, same value — so an absent `basis` changes nothing.
     Every offered basis is btree-indexed, which is what keeps this an index
     scan instead of the sequential scan it used to be (measured on the live
-    16,237-row table: 40.4 ms / 2,211 buffers before, 2.4 ms / 171 after).
+    N-row table: 40.4 ms / 2,211 buffers before, 2.4 ms / 171 after).
 
     `tz_off_min` is the viewer's `getTimezoneOffset()`, needed ONLY by the
     business-day basis (see `_dash_since_for_basis`), which has to know which
@@ -1478,7 +1478,7 @@ def _compute_dashboard_stats_payload(transport, doc_table: str,
     by_type: dict = {}
     # WHERE the documents came from — SOURCE_TYPE, the column literally named "source".
     # SYNC_NAME (the specific pipe) was the other candidate and is the wrong one for a
-    # distribution: measured live, 10,680 of 22,968 rows carry no SYNC_NAME at all, so
+    # distribution: measured live, N of N rows carry no SYNC_NAME at all, so
     # nearly half the board would be one "(ללא)" bar. SOURCE_TYPE is populated on all but
     # 159 rows. Same `(ריק)`-style bucket for those, for the same reason by_status has one:
     # a missing value is a fact about the pipe, not a row to drop.
@@ -1650,7 +1650,7 @@ def _dashboard_stats_write_error(transport, doc_table: str, error: str) -> None:
 _DASH_STATS_MIN_INTERVAL = 3.0    # never recompute more often than this, however fast writes land
 #: Forced from-scratch refresh even when NOT dirty — pure drift repair, since the trigger already
 #: keeps `dirty` accurate on every real write (a DB trigger cannot silently miss a write the way a
-#: polling loop can). 30 minutes, not 5: measured at 180,000 rows this recompute alone takes
+#: polling loop can). 30 minutes, not 5: measured at N rows this recompute alone takes
 #: several minutes of serial paged reads, so a short reconcile interval means the "drift repair"
 #: pass is running back-to-back with itself in practice at that scale, which is pure waste when
 #: nothing has actually drifted.
@@ -1801,7 +1801,7 @@ _ACTION_SORT_KEYS = {
 }
 
 
-#: Rows the coarse pre-filter may pull. 32,506 rows carry a log today, so `all` fits whole;
+#: Rows the coarse pre-filter may pull. N rows carry a log today, so `all` fits whole;
 #: the cap is what stops an ERP-scale table from turning one request into an unbounded read.
 _ACTIONS_SCAN_ROWS = int(os.getenv("INDOX_ACTIONS_SCAN_ROWS", "60000"))
 #: Stamps RETAINED (the newest N). 24h is ~151k, so a day fits; `month`/`all` (~427k) do not,
@@ -1811,7 +1811,7 @@ _ACTIONS_MAX = int(os.getenv("INDOX_ACTIONS_MAX", "200000"))
 #: Page sizes. Bounded so one request can never be asked to serialise the whole window.
 _ACTIONS_LIMIT_DEFAULT = 100
 _ACTIONS_LIMIT_MAX = 1000              # raised 2026-08-16: the log page offers 500/1000-row pages
-#: Narrow windows re-scan cheaply (≤1,348 rows), so they track the dashboard's 15s poll. The
+#: Narrow windows re-scan cheaply (≤N rows), so they track the dashboard's 15s poll. The
 #: wide ones cost a 13-19 MB read + parse, so one scan a minute is the honest ceiling; paging
 #: and filtering are served from the same scan and cost nothing.
 _TTL_DASH_ACTIONS = 10.0
@@ -1855,7 +1855,7 @@ def _actions_cached(key: str, ttl: float, build):
 # — those never reach the dispatcher). The execution id is in the PRIMARY KEY on purpose:
 # a second completed row for the same (doc, action) is a real double-run, surfaced loudly.
 _ACTIONS_PG_TABLE = "indox_action_execution_log"
-_ACTIONS_PG_MAX_ROWS = 250_000                  # a full day at ~6,300 dispatches/h is ~151k rows
+_ACTIONS_PG_MAX_ROWS = 250_000                  # a full day at ~N dispatches/h is ~151k rows
 _ACTIONS_LIVE_CACHE_S = 10                      # one read serves every poll in a 10s window
 _actions_redis_cli = None
 
@@ -3513,7 +3513,7 @@ def _pipeline_indox_numbers(doc_table: str | None, instance: str,
 def _pipeline_n8n_numbers() -> dict | None:
     """Live drain + driver + error counts from n8n's own database, or None.
 
-    `deletedAt IS NULL` is load-bearing, not defensive: 3,687 of 23,690 execution
+    `deletedAt IS NULL` is load-bearing, not defensive: N of N execution
     rows were soft-deleted on 2026-08-23, and counting one as a live drain would
     wedge the drain button behind an execution that no longer exists.
     """
@@ -4437,7 +4437,7 @@ def create_blueprint(
 
         count(*), never pg_stat_user_tables.n_live_tup: that statistic reads 0 for any table
         autovacuum has not visited, and during the tenancy migration it reported 15 tables empty
-        when three of them held 36,762 / 32,565 / 9,622 rows. A table browser that says "0 rows"
+        when three of them held 36,762 / 32,565 / N rows. A table browser that says "0 rows"
         about a table with 36k in it is worse than one that says nothing."""
         if not _SAFE_ID.match(instance or ""):
             raise ValidationError(f"not a valid instance id: {instance!r}")
@@ -5786,7 +5786,7 @@ def create_blueprint(
     #
     # Used to be one paged read of the WHOLE live supabase table, aggregated in Python, on every
     # request — see the `indox_dashboard_stats` block comment above `_compute_dashboard_stats_payload`
-    # for the full story (measured 1.2-2.2s at 6,250 rows; unbounded past it). This is now one
+    # for the full story (measured 1.2-2.2s at N rows; unbounded past it). This is now one
     # primary-key SELECT into that maintained table. Degrades gracefully (never 500).
     @bp.get("/dashboard/stats")
     def dashboard_stats():

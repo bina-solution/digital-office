@@ -14,6 +14,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"sort"
 	"strings"
 	"testing"
 	"time"
@@ -260,6 +261,145 @@ func TestTheShippedStateAddsWhatTheOfficeLacks(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(odd, ShippedState)); err != nil {
 		t.Errorf("the APK's state was dropped before it could be merged: %v", err)
+	}
+}
+
+// The core asks for the machine at its start only for the apps the office runs there for the owner, never for
+// its plumbing alone (DGO-1818: a phone with «מכולות» installed booted its machine under TCG at every start for
+// the four apps its own state enables). The plumbing is still the machine's, and its hosts still wake it.
+func TestOnlyTheOwnersAppsBringTheMachineAtStart(t *testing.T) {
+	root, dir := t.TempDir(), t.TempDir()
+	plumbing := map[string]string{}
+	for _, id := range []string{"connections", "computers", "notifications", "dgo-extend"} {
+		plumbing["apps/"+id+"/app.json"] = `{"id": "` + id + `", "layer": 3, "compose": "docker-compose.yml", "routing": [{"host": "` + id + `"}]}`
+	}
+	plumbing["apps/notes/app.json"] = `{"id": "notes", "layer": 3, "compose": "docker-compose.yml", "routing": [{"host": "notes"}]}`
+	files(t, root, plumbing)
+	state := func(apps string) {
+		if err := os.WriteFile(filepath.Join(root, "platform.state.yaml"), []byte("schema_version: 1\napps:\n"+apps), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	core := "  connections: { state: enabled, by: core }\n  computers: { state: enabled, by: core }\n" +
+		"  notifications: { state: enabled, by: core }\n  dgo-extend: { state: enabled, by: core }\n"
+	state(core)
+	if on := machineApps(root); len(on) != 4 {
+		t.Fatalf("the plumbing is the machine's: %v", on)
+	}
+	if on := startApps(root); len(on) != 0 {
+		t.Fatalf("the plumbing alone brought the machine at start: %v", on)
+	}
+	m := coreMachine{wanted: filepath.Join(dir, MachineWanted), refused: filepath.Join(dir, MachineRefused)}
+	if _, has := m.wake(root, "localhost")("dgo-extend.localhost", false); !has {
+		t.Fatal("the link's host no longer wakes the machine")
+	}
+	// a fresh phone's state says no `by` at all: the same
+	state("  connections: { enabled: true }\n  dgo-extend: { enabled: true }\n")
+	if on := startApps(root); len(on) != 0 {
+		t.Fatalf("the plumbing (no by) brought the machine at start: %v", on)
+	}
+	// an app the owner runs there brings it back; so does plumbing the owner or the machine enabled
+	state(core + "  notes: { state: enabled, by: owner }\n")
+	if on := startApps(root); strings.Join(on, ",") != "notes" {
+		t.Fatalf("at start = %v, want notes", on)
+	}
+	state("  dgo-extend: { state: enabled, by: machine }\n  computers: { state: enabled, by: owner }\n")
+	if on := startApps(root); strings.Join(on, ",") != "dgo-extend,computers" {
+		t.Fatalf("at start = %v, want dgo-extend (by: machine) and computers (by: owner)", on)
+	}
+}
+
+// What Open itself does at the start: the app's ask file is written for the owner's container app, and not for
+// the core's own plumbing alone — a reverted call site (machineApps at the start again) fails here.
+func TestTheCoresStartAsksForTheMachineOnlyForTheOwnersApps(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("the native core is the phone's: its sockets' modes are Unix ones")
+	}
+	for _, k := range []string{"BBOX_CONTROL_PLANE", "DGO_CONSOLE", "BUILD_VERSION", "CONSOLE_OFFICE_TTL_S"} {
+		t.Setenv(k, "")
+		os.Unsetenv(k)
+	}
+	asked := func(apps string) bool {
+		t.Helper()
+		root := t.TempDir()
+		fs := map[string]string{
+			".dgo-office-root":                         "dgo office root\n",
+			"platform.state.yaml":                      "schema_version: 1\napps:\n  console: { enabled: true }\n" + apps,
+			"platform-base/console/app.json":           `{"id": "console", "layer": 2}`,
+			".generated/registry/console.modules.yaml": "[]\n",
+			"apps/notes/app.json":                      `{"id": "notes", "layer": 3, "compose": "docker-compose.yml", "routing": [{"host": "notes"}]}`,
+		}
+		for id := range machinePlumbing {
+			fs["apps/"+id+"/app.json"] = `{"id": "` + id + `", "layer": 3, "compose": "docker-compose.yml", "routing": [{"host": "` + id + `"}]}`
+		}
+		files(t, root, fs)
+		static := filepath.Join(t.TempDir(), "static")
+		files(t, static, map[string]string{"index.html": "the console\n", "install.html": "the install wizard\n"})
+		dir, err := os.MkdirTemp("", "nat") // short: a socket's path has a limit of ~100 bytes
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer os.RemoveAll(dir)
+		c, err := Open(root, Options{Dir: dir, Domain: "localhost", Static: static, Console: "http://127.0.0.1:9", Apps: "http://127.0.0.1:9"},
+			log.New(io.Discard, "", 0))
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer c.Close(context.Background())
+		_, err = os.Stat(filepath.Join(dir, MachineWanted))
+		return err == nil
+	}
+	plumbing := "  connections: { enabled: true }\n  computers: { enabled: true }\n  notifications: { enabled: true }\n  dgo-extend: { enabled: true }\n"
+	if asked(plumbing) {
+		t.Error("the core asked for the machine at its start for its own plumbing alone")
+	}
+	if !asked(plumbing + "  notes: { state: enabled, by: owner }\n") {
+		t.Error("the core did not ask for the machine at its start for the owner's container app")
+	}
+}
+
+// The plumbing named by hand is exactly what the core's shipped state enables in containers: a later
+// platform.state.core.yaml that enables another container app is seen here, not on a phone.
+func TestThePlumbingIsWhatTheCoreStateRunsInContainers(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("links to the checkout")
+	}
+	repo, _ := os.Getwd()
+	for {
+		if _, err := os.Stat(filepath.Join(repo, "platform.state.core.yaml")); err == nil {
+			break
+		}
+		parent := filepath.Dir(repo)
+		if parent == repo {
+			t.Skip("not inside the checkout: no platform.state.core.yaml above here")
+		}
+		repo = parent
+	}
+	core, err := os.ReadFile(filepath.Join(repo, "platform.state.core.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	root := t.TempDir()
+	if err := os.WriteFile(filepath.Join(root, "platform.state.yaml"), core, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	for _, d := range []string{"apps", "platform-base", "platform"} {
+		if err := os.Symlink(filepath.Join(repo, d), filepath.Join(root, d)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	on := machineApps(root)
+	sort.Strings(on)
+	var want []string
+	for id := range machinePlumbing {
+		want = append(want, id)
+	}
+	sort.Strings(want)
+	if strings.Join(on, ",") != strings.Join(want, ",") {
+		t.Fatalf("the core state's container apps = %v, machinePlumbing = %v: name the new one, or say why it is not plumbing", on, want)
+	}
+	if got := startApps(root); len(got) != 0 {
+		t.Fatalf("the core state alone asks for the machine at start: %v", got)
 	}
 }
 

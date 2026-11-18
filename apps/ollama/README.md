@@ -140,7 +140,8 @@ curl https://ollama.example.bina-solutions.co.il/api/tags
 | `OLLAMA_KV_CACHE_TYPE` | q8_0 | The context's cache at half of f16 (needs flash attention) |
 | `OLLAMA_NUM_PARALLEL` | 1 | Number of parallel requests per model; each one holds its own context in memory |
 | `OLLAMA_MAX_LOADED_MODELS` | 1 | Maximum models loaded in memory |
-| `OLLAMA_KEEP_ALIVE` | 10m | How long to keep models in memory (`-1`: always, on a machine that is there for its models) |
+| `OLLAMA_KEEP_ALIVE` | 10m | How long a model stays in memory after its last request. A negative value (`-1`) keeps it for ever: render warns, unless `OLLAMA_DEDICATED=1` says the machine is there for its models |
+| `OLLAMA_DEDICATED` | (empty) | 1 on a machine that runs nothing but its models: a keep-alive for ever is then meant |
 | `OLLAMA_MODELS_DIR` | (the `ollama_data` volume) | A host path for the models, e.g. a disk of their own |
 | `OLLAMA_CPUS` / `OLLAMA_MEMORY` | 1.5 / 6G | The container's caps |
 
@@ -148,8 +149,13 @@ curl https://ollama.example.bina-solutions.co.il/api/tags
 
 Default limits are `OLLAMA_CPUS=1.5` and `OLLAMA_MEMORY=6G`. A machine dedicated to its models
 gives it every core and most of its memory. The Dell (DGO-825: i7-5500U, 2 cores / 4 threads,
-15 GiB, no usable GPU) runs `lfm2.5:8b` with `OLLAMA_CPUS=4.0`, `OLLAMA_MEMORY=11G` and
-`OLLAMA_KEEP_ALIVE=-1`.
+15 GiB, no usable GPU) runs `lfm2.5:8b` with `OLLAMA_CPUS=4.0` and `OLLAMA_MEMORY=11G`, and the default
+keep-alive of `10m`. It once ran with `OLLAMA_KEEP_ALIVE=-1` and a ceiling of 9G beside the office's other
+work: a model never left memory, and the machine froze for two hours (DGO-1797). A machine that runs other
+work keeps the default; only one that is there for its models alone sets `OLLAMA_DEDICATED=1`, and then may
+keep its model loaded. A request can ask the same for itself (`"keep_alive": -1` in its body), and no render
+sees that: `leaderboard/run-all.sh` reloads its `KEEP=<model>` that way when its run ends — give `KEEP` only on a
+machine that is there for its models.
 
 For production with GPU, consider:
 - CPU: 8 cores

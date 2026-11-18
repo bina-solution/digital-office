@@ -1,4 +1,4 @@
-"""cli — «פגישות וידאו» for agents and for the person at the server's shell.
+"""cli — «פגישות לשכה» for agents and for the person at the server's shell.
 
 Runs INSIDE the meet-start container (the hooks call `dcx exec -T meet-start python /app/cli.py …`)
 and reuses server.py's own functions — importing it starts nothing: its doors and threads start only

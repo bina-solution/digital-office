@@ -26,6 +26,10 @@
   color-scheme:light;
   accent-color:var(--accent);   /* the browser's OWN controls - a checkbox, a radio, a range, a progress bar - on both grounds: said once, here (it was said for eight single controls, and every other one was the browser's blue) */
   --bg:#f3f5f7; --surface:#fff; --surface-2:#f9fafb; --ink:#1f2a17; --muted:#6a7068; --line:#dcdfde;
+  /* THE OFFICE'S LOGO HAS THESE THREE COLOURS AND NO OTHER, on every ground and in every theme (the owner, 2026-11-15,
+     group msgs 1103-1104: «From now on this is the only colors you use in logo replace evrywhere and never use diffrent
+     colors» - the logo of digital-office.co.il; DGO-1908). The dark blocks below do not redefine them on purpose. */
+  --mark-tile:#1b5e4a; --mark-glyph:#fbfcfc; --mark-accent:#7ecfad;
   --olive:#56693f; --olive-d:#475734; --olive-soft:#e7eae4; --olive-line:#bfc6b6; --olive-ink:#f3f5f7;
   --sky:#7baae3; --sky-d:#2a6fc4; --sky-soft:#edf3fb; --sky-line:#cddff4; --sky-ink:#13263f;
   --lime:#a9b84c; --lime-d:#69732e; --lime-soft:#f3f5e6; --lime-line:#dee4bb; --lime-ink:#1f2a17;
@@ -233,6 +237,11 @@ button{font-family:inherit;cursor:pointer;border:none;background:none}
 .src.unset{background:transparent;color:var(--muted);border:1px dashed var(--line)}
 .chev{color:var(--muted);font-size:15px;line-height:0;transition:transform .15s;justify-self:center}
 .item.open .chev{transform:rotate(180deg);color:var(--accent-d)}
+/* AN ENTRY EVERY OFFICE HAS (its provider says `pin: true`, DGO-1825): the office's own Google account. It stands
+   above the list on every tab, with what it is for in one line, so it is never searched for. */
+.tbl.pin{margin-bottom:14px}
+.pinline{padding:0 16px 11px;padding-inline-start:66px;font-size:12px;color:var(--muted);line-height:1.45}
+.fv .fixed{font-size:12.5px;color:var(--ink)}
 
 /* ── expanded field editor ── */
 .exp{padding:6px 16px 18px;background:var(--surface-2);border-top:1px solid var(--line)}
@@ -287,6 +296,7 @@ button{font-family:inherit;cursor:pointer;border:none;background:none}
   .thead{display:none}
   .row{grid-template-columns:34px minmax(0,1fr) 30px;grid-template-areas:"t n c" "t v c" "t s c"}
   .row .tile{grid-area:t}.row .nm{grid-area:n}.row .val{grid-area:v;justify-content:flex-start}.row .src{grid-area:s;justify-self:start}.row .chev{grid-area:c}
+  .pinline{padding-inline-start:62px}
   .fld{grid-template-columns:1fr;gap:6px}
 }
 .ci{width:1em;height:1em;vertical-align:-.14em;display:inline-block;flex:none}
@@ -867,6 +877,7 @@ button{font-family:inherit;cursor:pointer;border:none;background:none}
   <div class="bar">
     <div class="grow"></div>
     <div class="abtns">
+      <button class="btn sm" onclick="addLogin()" title="כתובת, שם משתמש וסיסמה — והדפדפן של הלשכה מציע אותם">סיסמה חדשה</button>
       <button class="btn sm" onclick="addSecret()" title="שמירת סוד חדש בכספת"><svg class="ci" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg> סוד חדש</button>
       <button class="btn ghost sm" onclick="load()"><svg class="ci" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/></svg> רענון</button>
       <button class="btn ghost sm" onclick="openAudit()"><svg class="ci" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l4 2"/></svg> יומן</button>
@@ -1152,6 +1163,7 @@ async function api(p,m,b){
   if(!r.ok&&typeof d==='object')d.ok=false;return d;
 }
 function aboutText(r){
+  if(r.about_he) return esc(r.about_he);   // the provider's own words for what this entry is (DGO-1825)
   const app=r.app, nm=esc((app&&app.name)||r.title_he||r.title||r.id);
   if(r.pillar==='app-password') return `סיסמת הכניסה שלך ל־<b>${nm}</b>. כאן אפשר לצפות בשם המשתמש ובסיסמה, לשנות אותם, או לפתוח את האפליקציה — בלי לגעת בקבצי המערכת.`;
   if(r.pillar==='auth'){const svc=(r.consumers&&r.consumers.length)?` עבור <b>${esc(r.consumers.join(', '))}</b>`:'';return `חיבור <b>${PROTO_LABEL[r.protocol]||'אימות'}</b>${svc}. חבר, בדוק או החלף את פרטי החיבור מכאן.`;}
@@ -1215,17 +1227,21 @@ function render(){
   // an unread list is not searched, filtered or called empty: a row of the menu pressed over a silent service
   // would have answered «אין סודות בקטגוריה זו.» (while the first answer is awaited the page's «טוען…» stands)
   if(READ!==true){if(READ===false)document.getElementById('body').innerHTML='<div class="empty">החיבורים לא נטענו — «רענון» קורא אותם שוב.</div>';return;}
-  let rows=ROWS.filter(r=>r.pillar===TAB);
+  // the entries every office has (`pin` from their provider, DGO-1825) stand above the list on every tab — not
+  // searched for, not filtered away — and are not listed again below
+  const pins=ROWS.filter(r=>r.pin), pinned=pins.length?`<div class="tbl pin">${pins.map(itemHtml).join('')}</div>`:'';
+  let rows=ROWS.filter(r=>r.pillar===TAB&&!r.pin);
   if(ATTN) rows=rows.filter(r=>['needs_action','missing','degraded'].includes(r.status));
   if(q) rows=rows.filter(r=>((r.title_he||'')+' '+(r.title||'')+' '+r.id+' '+((r.app&&r.app.name)||'')).toLowerCase().includes(q));
   rows.sort((a,b)=>(a.title_he||a.title||a.id).localeCompare(b.title_he||b.title||b.id,'he'));
   if(!rows.length){
-    document.getElementById('body').innerHTML=`<div class="tbl"><div class="empty"><span class="ic"><svg class="ci" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg></span>${q||ATTN?'אין תוצאות התואמות לסינון.':'אין סודות בקטגוריה זו.'}</div></div>`;
+    document.getElementById('body').innerHTML=`${pinned}<div class="tbl"><div class="empty"><span class="ic"><svg class="ci" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg></span>${q||ATTN?'אין תוצאות התואמות לסינון.':'אין סודות בקטגוריה זו.'}</div></div>`;
+    if(OPEN && pins.some(r=>r.id===OPEN)) openCred(OPEN,true);
     return;
   }
   const head=`<div class="thead"><span></span><span>שם</span><span>ערך</span><span>מקור</span><span></span></div>`;
-  document.getElementById('body').innerHTML=`<div class="tbl">${head}${rows.map(itemHtml).join('')}</div>`;
-  if(OPEN && rows.some(r=>r.id===OPEN)) openCred(OPEN,true);
+  document.getElementById('body').innerHTML=`${pinned}<div class="tbl">${head}${rows.map(itemHtml).join('')}</div>`;
+  if(OPEN && (rows.some(r=>r.id===OPEN)||pins.some(r=>r.id===OPEN))) openCred(OPEN,true);
 }
 
 function nameSub(r){
@@ -1265,6 +1281,7 @@ function itemHtml(r){
       <div class="src ${r.source}">${SRC[r.source]||r.source}</div>
       <div class="chev"><svg class="ci" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg></div>
     </div>
+    ${r.pin&&r.purpose_he?`<div class="pinline">${esc(r.purpose_he)}</div>`:''}
     <div class="exp hidden" id="ex_${r.id}"></div>
   </div>`;
 }
@@ -1300,12 +1317,16 @@ function fldHtml(cid,f){
   let control;
   if(f.derived){
     control=`<div class="fv"><span class="shown" style="color:var(--muted);font-style:italic">נגזר אוטומטית ממפתח אחר</span></div>`;
+  } else if(f.fixed){
+    // a value the provider fixes (the address a login is for): said, not edited
+    control=`<div class="fv"><span class="fixed mono">${esc(f.clear==null?'':f.clear)}</span></div>`;
   } else if(!f.secret){
     control=`<div class="fv"><input id="fi_${cid}_${f.key}" value="${esc(f.clear==null?'':f.clear)}" placeholder="לא מוגדר" oninput="dirty('${cid}','${f.key}')">
       <span id="fs_${cid}_${f.key}"></span></div>`;
   } else {
+    // a secret revealed only to the services it names (DGO-1825) offers no «גלה»: it is written, never read back here
     control=`<div class="fv"><span class="dots" id="fv_${cid}_${f.key}">••••••••</span>
-      <button class="ib" title="גלה" onclick="revealField('${cid}','${f.key}',${f.primary})"><svg class="ci" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg></button>
+      ${f.reveal===false?'':`<button class="ib" title="גלה" onclick="revealField('${cid}','${f.key}',${f.primary})"><svg class="ci" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg></button>`}
       <button class="ib" title="ערוך" onclick="editField('${cid}','${f.key}')"><svg class="ci" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg></button></div>`;
   }
   return `<div class="fld" id="fld_${cid}_${f.key}">
@@ -1338,7 +1359,9 @@ async function revealField(cid,key,primary){
 function editField(cid,key){
   const fld=document.getElementById('fld_'+cid+'_'+key);
   const fv=fld.querySelector('.fv');
-  fv.innerHTML=`<input class="mono" id="fi_${cid}_${key}" placeholder="ערך חדש" autocomplete="off">
+  // a password is typed unseen (DGO-1825: the office's own Google password goes in here); a key pasted stays visible
+  const pw=/PASSWORD|_PW$|_PASS$/i.test(key);
+  fv.innerHTML=`<input class="mono" id="fi_${cid}_${key}" type="${pw?'password':'text'}" placeholder="${pw?'הסיסמה':'ערך חדש'}" autocomplete="off">
     <button class="ib" title="שמור" onclick="saveField('${cid}','${key}')" style="color:var(--accent-d)"><svg class="ci" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg></button>
     <button class="ib" title="בטל" onclick="openCred('${cid}')"><svg class="ci" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></button>`;
   fv.querySelector('input').focus();
@@ -1392,6 +1415,36 @@ async function wipeVault(){
   if(r&&r.ok){const w=r.wiped||{};binaTell(`נמחקו — ערכים: ${w.overrides||0} · חשבונות: ${w.instances||0} · מפתחות: ${w.minted||0}`);load();}
   else binaTell('המחיקה נכשלה','bad');
 }
+// ── a LOGIN card (DGO-1640) ──────────────────────────────────────────────────────────────────────
+// The owner's sentence, as a form: «הקישור, באיזה דף זה מופעל … השם משתמש … הסיסמה … ואז כל פעם שאני
+// נכנס בדפדפן … זה פשוט אמור להציע לי את זה». One call (`POST /api/logins`) so the card is never left
+// half-made, and the address is REQUIRED — a password with no address is a password for a guess.
+function addLogin(prefAddress){
+  const ov=document.createElement('div');ov.className='ov';ov.onclick=e=>{if(e.target===ov)ov.remove();};
+  ov.innerHTML=`<div class="modal"><h3>הוספת סיסמה לאתר</h3>
+    <label>כתובת דף הכניסה<input id="al_addr" placeholder="https://internic.co.il/login" autocomplete="off" value="${esc(prefAddress||'')}"></label>
+    <label>שם משתמש<input id="al_user" placeholder="הדוא״ל או שם המשתמש" autocomplete="off"></label>
+    <label>סיסמה<input id="al_pw" type="password" autocomplete="new-password" placeholder="הסיסמה"></label>
+    <label class="row" style="display:flex;gap:8px;align-items:center">
+      <input id="al_fill" type="checkbox" checked style="width:auto"> <span>להציע בדפדפן הלשכה (מילוי אוטומטי בכניסה)</span>
+    </label>
+    <p class="mbody" style="font-size:12px;color:var(--muted)">הסיסמה נשמרת מוצפנת בכספת. הדפדפן של הלשכה ממלא אותה
+    בעצמו, והסוכן נכנס איתה בלי לראות אותה. בלי הסימון: היא נשארת בכספת ולא נשמרת בדפדפן.</p>
+    <div class="mf"><button class="btn ghost sm" data-x>ביטול</button><button class="btn sm" data-ok>שמור</button></div></div>`;
+  ov.querySelector('[data-x]').onclick=()=>ov.remove();
+  ov.querySelector('[data-ok]').onclick=async()=>{
+    const address=ov.querySelector('#al_addr').value.trim();
+    const username=ov.querySelector('#al_user').value.trim();
+    const password=ov.querySelector('#al_pw').value;
+    const autofill=ov.querySelector('#al_fill').checked;
+    if(!address||!password){binaTell('צריך כתובת וסיסמה','warn');return;}
+    const d=await api('api/logins','POST',{address,username,password,autofill});
+    if(!d||!d.ok)return binaTell((d&&d.error)||'השמירה נכשלה','bad');
+    ov.remove();binaTell('נשמר — הדפדפן יציע את הכניסה');TAB='app-password';renderTabs();load();
+  };
+  document.body.appendChild(ov);ov.querySelector('#al_addr').focus();
+}
+
 function addSecret(){
   const ov=document.createElement('div');ov.className='ov';ov.onclick=e=>{if(e.target===ov)ov.remove();};
   ov.innerHTML=`<div class="modal"><h3>הוספת סוד חדש</h3>

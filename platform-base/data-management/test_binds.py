@@ -5,7 +5,7 @@
 The inventory's last section asks the archiver (`scripts/deployment-archive.py::stateful_binds`)
 which writable host directories hold files git does not track, and how big they are. On hp-laptop,
 2026-10-07, that question took 39 of an inventory sweep's 54 seconds: the browser's profile is
-mounted by five services, so its 2,008 files were walked five times, with two questions to a
+mounted by five services, so its N files were walked five times, with two questions to a
 Windows mount about every entry. The answer is the same when the directory is walked once — this
 holds both: the answer (per file, so a tracked sentinel cannot hide a tree), and the one walk.
 

@@ -706,7 +706,7 @@ def offsite_home(office: dict) -> str:
 
 
 #: A store reached as a user who is NOT root but may run docker (DGO-1508: the Dell's sshd says `PermitRootLogin no`,
-#: `AllowUsers shlomy`, and shlomy is in the docker group). Its volumes' files are root's, so what reads, marks or
+#: `AllowUsers owner`, and owner is in the docker group). Its volumes' files are root's, so what reads, marks or
 #: removes a copy there runs in a throwaway container of this image, the copy mounted at /m. A store reached as root
 #: is served exactly as before.
 OFFSITE_HELPER = os.environ.get("DGO_OFFSITE_HELPER", "alpine:3.20")
@@ -1217,7 +1217,7 @@ print('LIT=%d' % len(lit))
 ENV_MERGE = r"""
 import os, re, sys, datetime, secrets, shutil
 # THE RENAME (EXF-33): an installed office moves to another domain (the owner, DGO-1032: examplef from
-# theexamplefguys.digital-office.co.il to exf.digital-office.co.il). The declaration carries both names
+# exampleshop.digital-office.co.il to exf.digital-office.co.il). The declaration carries both names
 # (the record keeps `renamed_from` when its domain changes), and the rename happens only while this
 # .env still names exactly the previous one: any other domain is refused below, as before. ci-env.sh
 # wrote every host out in full (63 keys on examplef), so every value naming the old domain as a whole
@@ -1710,7 +1710,7 @@ echo "OFF=$EXTRA"
 # stopping that would take postgres, redis and authentik down with the app.
 #
 # ...and only THIS OFFICE'S containers. A compose service name is not unique on an engine: a machine
-# that already runs another stack (the WB Corp VPS carries the old layout of this same repo, whose
+# that already runs another stack (the Example Corp VPS carries the old layout of this same repo, whose
 # services are also called n8n / ollama / portainer / redisinsight) would have had its production
 # containers stopped by an office that merely declares those apps off. Found by reading this script
 # before its first run there, 2026-10-05 — the working-directory label is what ties a container to

@@ -171,7 +171,7 @@ class InternicWriteTests(unittest.TestCase):
         self.addCleanup(setattr, portal, "VERIFIED_FILE", original_file)
 
     def write(self, allow=True, **record):
-        params = {"domain": DOMAIN, "type": "A", "name": "exf", "value": "93.184.216.13", **record}
+        params = {"domain": DOMAIN, "type": "A", "name": "exf", "value": "93.184.216.9", **record}
         return portal.run_write("internic", "create", params, None, allow)
 
     def test_a_record_lands_in_a_new_row_and_every_other_record_is_untouched(self):
@@ -212,13 +212,34 @@ class InternicWriteTests(unittest.TestCase):
         self.assertEqual(self.panel.clicks, [])
 
     def test_update_and_delete_are_refused_by_name_never_reported_done(self):
-        for action in ("update", "delete"):
-            res = portal.run_write("internic", action, {"domain": DOMAIN, "type": "A", "name": "exf",
-                                                       "value": "93.184.216.13"}, None, True)
-            self.assertEqual(res["state"], "not_scripted", (action, res))
+        # delete is still not scripted; update is (EXX-29, 2026-11-12) — and a record the zone does not hold is
+        # refused by name, nothing clicked
+        res = portal.run_write("internic", "delete", {"domain": DOMAIN, "type": "A", "name": "exf",
+                                                     "value": "93.184.216.9"}, None, True)
+        self.assertEqual(res["state"], "not_scripted", res)
+        res = portal.run_write("internic", "update", {"domain": DOMAIN, "type": "A", "name": "exf",
+                                                     "value": "93.184.216.9"}, None, True)
+        self.assertFalse(res["ok"], res)
+        self.assertIn("לא נכתב דבר", res["error"])
         self.assertEqual(self.panel.clicks, [])
         self.assertEqual(portal.write_state("internic")["actions"],
-                         {"create": True, "update": False, "delete": False})
+                         {"create": True, "update": True, "delete": False})
+
+    def test_an_update_needs_a_name_its_value_now_and_a_consent_every_time(self):
+        # the second reader of EXX-29: after one approved update, «update» was the office's own, and any container
+        # could re-point any domain's apex with no name and no `from`
+        upd = lambda allow=True, **r: portal.run_write("internic", "update", {"domain": DOMAIN, "type": "A",
+                                                                             "value": "93.184.216.16", **r}, None, allow)
+        portal.mark_verified("internic", "update", "owner@office", {"name": "@"})
+        res = upd(allow=False, name="@", **{"from": "93.184.216.5"})
+        self.assertEqual(res["state"], "needs_consent", res)
+        self.assertEqual(upd(name="", **{"from": "93.184.216.5"})["state"], "invalid")
+        self.assertEqual(upd(name="@")["state"], "invalid")                     # no `from`
+        # a new value another record of that name and type already holds would make the read-back prove nothing
+        self.panel.saved.append({"name": "digital-office.co.il.", "type": "A", "content": "93.184.216.16", "ttl": "86400"})
+        res = upd(name="@", **{"from": "93.184.216.5"})
+        self.assertEqual(res["state"], "conflict", res)
+        self.assertEqual(self.panel.clicks, [])
 
     def test_a_name_is_written_as_the_panel_writes_it(self):
         self.assertEqual(portal.fqdn("exf", DOMAIN), "exf.digital-office.co.il.")
@@ -248,8 +269,8 @@ class InternicWriteTests(unittest.TestCase):
                              r["name"].startswith("app.")), 1, "a retry wrote the record again")
 
     def test_a_name_the_panel_shows_short_is_the_same_record(self):
-        self.panel.saved.append({"name": "exg", "type": "A", "content": "93.184.216.13", "ttl": "3600"})
-        res = self.write(name="exg.digital-office.co.il.", value="93.184.216.13")
+        self.panel.saved.append({"name": "exg", "type": "A", "content": "93.184.216.9", "ttl": "3600"})
+        res = self.write(name="exg.digital-office.co.il.", value="93.184.216.9")
         self.assertTrue(res.get("unchanged"), res)
         self.assertNotIn("add", self.panel.clicks)
 
@@ -328,7 +349,13 @@ class InternicWriteTests(unittest.TestCase):
         res = self.write(type="TXT", name="@", value="v=spf1 a -all")
         self.assertTrue(res["ok"], res)
         self.assertEqual(self.panel.saved[-1]["content"], '"v=spf1 a -all"')
-        long = self.write(type="TXT", name="dkim", value="k" * 256)
+        # a 2048-bit DKIM key (420 characters) goes in as one quoted string, as the panel keeps its own (measured
+        # 2026-11-12, DGO-1837); past TXT_MAX it is still refused by name
+        dkim = "v=DKIM1; h=sha256; k=rsa; p=" + "M" * 392
+        res = self.write(type="TXT", name="staging._domainkey", value=dkim)
+        self.assertTrue(res["ok"], res)
+        self.assertEqual(self.panel.saved[-1]["content"], f'"{dkim}"')
+        long = self.write(type="TXT", name="dkim", value="k" * (portal.TXT_MAX + 1))
         self.assertEqual(long["state"], "not_scripted")
 
     def test_a_cname_is_never_written_beside_other_records_nor_another_beside_a_cname(self):
@@ -391,7 +418,8 @@ class RoundFourTests(InternicWriteTests.__bases__[0]):
         self.assertNotIn("save", self.panel.clicks)
 
     def test_a_txt_is_measured_in_octets(self):
-        res = self.write(type="TXT", name="he", value="א" * 200)       # 200 letters, 400 octets
+        # letters under TXT_MAX, octets over it (TXT_MAX 1024 since 2026-11-12, DGO-1837 — was 200 letters / 400 octets)
+        res = self.write(type="TXT", name="he", value="א" * 600)       # 600 letters, 1200 octets
         self.assertEqual(res["state"], "not_scripted")
 
     def test_a_ttl_of_zero_is_written_as_zero(self):
@@ -688,9 +716,14 @@ class WatchedOnceTests(unittest.TestCase):
                                                                  "value": "1.1.1.1"})["state"], "needs_verification")
         portal.mark_verified("internic", "create", "owner@office", {"name": "a1"})
         state = portal.write_state("internic")
-        self.assertTrue(state["enabled"], state)
         self.assertTrue(state["watched"]["create"])
-        self.assertIn("עריכת רשומה", state["missing"])
+        # every scripted action is watched once before the screen says «the office writes» (update is scripted
+        # since EXX-29) — create alone runs meanwhile, as below
+        self.assertFalse(state["enabled"], state)
+        portal.mark_verified("internic", "update", "owner@office", {"name": "@"})
+        state = portal.write_state("internic")
+        self.assertTrue(state["enabled"], state)
+        self.assertIn("מחיקת רשומה", state["missing"])
         res = portal.run_write("internic", "create", {"domain": DOMAIN, "type": "A", "name": "a2",
                                                       "value": "93.184.216.16"})
         self.assertTrue(res["ok"], res)

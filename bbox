@@ -251,7 +251,7 @@ ensure_rendered() {
 # token), so it polls nothing. `glitchtip-push` closes both, but it was only ever invoked from
 # scripts/ci-verify.sh — never from bring-up. So every non-CI deployment ran with a decorative
 # GlitchTip: containers healthy, dashboards up, alert path dead. That is exactly what bit us on
-# 2026-07-17 — ~1,700 real errors, התראות showed 0.
+# 2026-07-17 — ~N real errors, התראות showed 0.
 #
 # So provision it from bring-up, with the same guarantee ensure_network gives.
 # Idempotent by construction: the ORM work is get_or_create and the DSN public keys are
@@ -503,7 +503,10 @@ run_verdict() {
 # `#:` is the convention for a hook's one-line summary — its first line after the shebang. Hooks
 # without one still work; they simply appear without a description.
 
-#: app_resolve <token> -> "<root> <id> <fallback-or-id>", non-zero when the token is not an app
+#: app_resolve <token> -> "<root> <id> <fallback-or-id> <instance-or-> <key-or-> <aware-or->", non-zero when the
+#: token is not an app. An INSTANCE (instances/<id>/, DGO-1920) answers with its TEMPLATE's root and id — its verbs
+#: are the template's hooks — then its own id and key, which the dispatch hands the hook as DGO_INSTANCE_*, and 1
+#: when the template says its hooks read them (multi_instance: true), else 0.
 app_resolve() {
   local tok="${1:?}"
   # npath: this path is an ARGUMENT to a native binary, and on Windows python3 mis-resolves the
@@ -511,13 +514,22 @@ app_resolve() {
   python3 - "$(npath "${REPO_ROOT}")" "${tok}" <<'PY' 2>/dev/null
 import json, pathlib, sys
 repo, tok = pathlib.Path(sys.argv[1]), sys.argv[2]
-for root in ("apps", "platform-base"):
+for root in ("apps", "platform-base", "instances"):
     for m in sorted((repo / root).glob("*/app.json")):
         try: d = json.loads(m.read_text(encoding="utf-8"))
         except Exception: continue
         cli = d.get("cli") or {}
         if tok == d.get("id") or tok == cli.get("alias"):
-            print(f"{root} {d['id']} {cli.get('fallback') or d['id']}")
+            of = d.get("instance_of")
+            if not of:
+                print(f"{root} {d['id']} {cli.get('fallback') or d['id']} - - -")
+                raise SystemExit(0)
+            home = next((r for r in ("apps", "platform-base") if (repo / r / of / "app.json").is_file()), None)
+            if home is None:
+                raise SystemExit(1)
+            try: aware = json.loads((repo / home / of / "app.json").read_text(encoding="utf-8")).get("multi_instance") is True
+            except Exception: aware = False
+            print(f"{home} {of} {cli.get('fallback') or of} {d['id']} {d.get('instance_key') or '-'} {int(aware)}")
             raise SystemExit(0)
 raise SystemExit(1)
 PY
@@ -607,6 +619,8 @@ ${c1}Lifecycle${c0}
   bbox stop               bring the stack down (containers removed, data volumes KEPT)
   bbox reset [--force]     ${cr}DESTROY all data${c0} (docker compose down -v) — asks to confirm
   bbox status             deployment health overview (containers + n8n + creds)
+  bbox context [app] [--json]  what this office (or one app) is and does NOW: each app's brief, commands and state,
+                          read live; the office page says where the whole network of offices is read
   bbox agent <verb>       the office agent from the terminal: list|new|send|follow|watch|show|log|wait|cancel|
                           rename|fork|cmd|goal|model|presets|upload|login|doctor  (bbox agent --help)
   bbox remote [office [alias [path]]]  the apps of a LINKED office, and one call through the link
@@ -680,6 +694,9 @@ ${c1}Healthy baseline${c0}  (the one-command fresh proof — ai/context/healthy-
   bbox flow-qa [suite…]   drive every flow and assert its effect (digital-office/sim/flow-qa.py)
                           — the offline simulation by default, or the RUNNING office with --live.
                           Runs in the image that declares the browser, so nothing is installed by hand.
+  bbox route-runtime-qa   open EVERY screen the inventory declares in the console and require it DRAWN
+                          at its own address (the runtime half of G83). Resolves its own route
+                          parameters first, so a fresh clone measures them instead of skipping them.
   bbox flow-qa-session    mint the signed-in browser those runs need on a real address: writes a
                           storage_state for \`--auth <file>\` from .env's owner account (gitignored path,
                           chmod 600). Exit 3 = no session minted, 4 = signed in but the target refused.
@@ -691,6 +708,7 @@ ${c1}n8n${c0}  (LIVE is the source of truth; blueprints are CODE — *.workflow.
   bbox n8n push <app> <wfId ...>   push exactly those via the n8n API (no restart, hot triggers)
   bbox n8n push <app> [--all]      changed-only (sha cache) / force whole app
   bbox n8n push all                FULL reconciler: owner+creds+schema+import+publish+RESTART
+  bbox n8n push all --reseed-only  re-seed the env-managed credentials from .env, then stop (no restart; non-zero = not taken)
   bbox n8n status                  co-op sync: who changed what live, drift, published, creds, key
   bbox n8n test <app> <wfId>       trigger + verdict (exit 0=inform/don't block, 1=fix+iterate)
   bbox n8n plan <app> <wfId>       infer how to test + suggested payload (--json)
@@ -757,18 +775,18 @@ case "${cmd}" in
     # A host whose kernel STACKS the container's AppArmor profile (Ubuntu 26.04 / 7.0.0-42+) denies
     # signals between a container's own processes, and every postgres-backed app then hangs with no
     # error that says why (DGO-1604: gosu spins at 80% CPU, autovacuum cancelled, `docker stop` is a
-    # kill). Nothing here can fix it — loading a host profile is the owner's act — so say it NOW,
-    # before an hour of red checks, and bring up nothing differently. The probe image may be fetched
+    # kill). A run never changes the host's policy on its own, so say it NOW — with the one verb that cures it
+    # and gets root by itself (scripts/as-host-root.sh) — before an hour of red checks, and bring up nothing differently. The probe image may be fetched
     # (this same run pulls far more), but for 20 s at most, so a host with no egress is not held up.
     _aa_rc=0; AA_PULL=1 AA_PULL_TIMEOUT=20 bash "${SCRIPTS}/apparmor-host.sh" check >/dev/null 2>&1 || _aa_rc=$?
     if [ "${_aa_rc}" = 1 ]; then
       say "${cy}this host STACKS the container's AppArmor label (docker-default//&unconfined) and denies"
       say "signals inside a container: every postgres-backed app will hang (DGO-1604)."
-      say "  what it is:  ./bbox apparmor status      fix (the owner's act): sudo ./bbox apparmor install${c0}"
+      say "  what it is:  ./bbox apparmor status      fix: ./bbox apparmor install   (it gets root itself: sudo, or this host's docker)${c0}"
     fi
     # A LAPTOP that runs an office powers itself off when it overheats, sleeps when its lid closes, and sits
     # dead after a freeze — the Dell, again and again (DGO-1750). Said here, like the profile above; the fix is
-    # host policy, so it is the owner's act.
+    # host policy, an explicit verb that gets root itself.
     # Only on the host itself, where systemd runs and this is no container (bbox inside bina-ds sees the
     # host's /sys and its battery, and could never install a unit), and not WSL (Windows owns its power).
     if [ "$(uname -s)" = Linux ] && [ -d /run/systemd/system ] && ! systemd-detect-virt -q -c 2>/dev/null \
@@ -776,7 +794,7 @@ case "${cmd}" in
        && ls /sys/class/power_supply/BAT* >/dev/null 2>&1 \
        && ! bash "${SCRIPTS}/host-power.sh" status >/dev/null 2>&1; then
       say "${cy}this host is a laptop without its power posture: it can overheat, sleep or freeze and stay off (DGO-1750)."
-      say "  what it is:  ./bbox host-power status     fix (the owner's act): sudo ./bbox host-power install${c0}"
+      say "  what it is:  ./bbox host-power status     fix: ./bbox host-power install   (it gets root itself: sudo, or this host's docker)${c0}"
     fi
     # No .env yet → generate one and re-exec so DN and every read_env pick it up; an existing .env is never
     # overwritten (ci-env.sh refuses). A fresh cloud sandbox gets the secretless cloud one (localhost/http).
@@ -1043,6 +1061,10 @@ for s in (d.get("services") or {}).values():
     if n and not n.endswith("-"+dn): print(n)' 2>/dev/null \
       | while read -r c; do [ -n "$c" ] && docker rm -f -v "$c" >/dev/null 2>&1 || true; done
     say "reset done. 'bbox run' for a fresh stack, then 'bbox n8n push' + 'bbox onboarding'." ;;
+  context)
+    # what an agent or a person needs to know about this office or one app, built NOW from the office itself — each
+    # app's own brief and manifest joined with what runs (scripts/context.py, DGO-1960): never a hand-written fact
+    exec python3 "$(npath "${REPO_ROOT}/scripts/context.py")" "$@" ;;
   agent)
     # the office agent, through the agent.v1 contract (ai/context/agent-contract.md) — provider-agnostic.
     # No docker probe: the CLI speaks HTTP to the provider on the host's loopback; only `login` (once)
@@ -1273,6 +1295,8 @@ for s in (d.get("services") or {}).values():
     # while the migration is in progress, and says which one it ran.
     aid="${1:-}"; verb="${2:-}"; shift 2 2>/dev/null || true
     [ -n "${aid}" ] && [ -n "${verb}" ] || die "usage: bbox app <id> <verb> [args]"
+    # an app of apps/ or platform-base/ is never a copy: what a copy's container carries is not passed on (DGO-1920)
+    unset DGO_INSTANCE_ID DGO_INSTANCE_OF DGO_INSTANCE_KEY
     hook=""
     for root in apps platform-base; do
       for ext in "" .sh .py .mjs; do
@@ -1407,6 +1431,13 @@ for s in (d.get("services") or {}).values():
     # The offline simulation by default; `--live` aims the SAME assertions at the office running here.
     need_docker; heavy_admit "flow-qa $*" "${BBOX_FLOWQA_MIN_MB:-600}"; disk_admit "flow-qa $*" || exit 1; bash "${SCRIPTS}/ui-coverage/flow-qa.sh" "$@" ;;
 
+  route-runtime-qa)
+    # the runtime half of G83 — every view the inventory declares, opened in the console and required to be DRAWN
+    # at its own address. The wrapper resolves the route parameters on the HOST first (resolve_params.py; the driver
+    # runs in the browser image and cannot), so one command covers a fresh clone (EXF's 7c2d70f; DGO-1839).
+    need_docker; heavy_admit "route-runtime-qa $*" "${BBOX_FLOWQA_MIN_MB:-600}"; disk_admit "route-runtime-qa $*" || exit 1
+    bash "${SCRIPTS}/ui-coverage/route-runtime-qa.sh" "$@" ;;
+
   flow-qa-session)
     # the signed-in browser the suite needs on a REAL address (rel-2): `bbox flow-qa … --auth <file>`
     # reads a Playwright storage_state, and this mints one from an approval the office ALREADY holds
@@ -1425,18 +1456,31 @@ for s in (d.get("services") or {}).values():
   apparmor)
     # THE HOST CONDITION that makes a container's own processes unable to signal each other
     # (Ubuntu 26.04 kernels stack the profile: docker-default//&unconfined), and the one profile that
-    # lifts it WITHOUT weakening the host. Reading is free; `install`/`uninstall` write a host policy
-    # and are the OWNER's act — which is why nothing here is automatic. DGO-1604.
+    # lifts it WITHOUT weakening the host. Reading is free; `install`/`uninstall` write a host policy — an
+    # explicit act, never automatic — and get root themselves (scripts/as-host-root.sh: root, passwordless sudo,
+    # or this host's own docker engine): on the company's own machines the agents run it with the owner's standing
+    # word (DGO-1822), never hand it to him as a command. DGO-1604.
     _aaS="${1:-status}"; shift || true
     _force=(); [ "${FORCE}" = "1" ] && _force=(--force)   # the dispatcher strips it; hand it back
-    bash "${SCRIPTS}/apparmor-host.sh" "${_aaS}" "$@" "${_force[@]+"${_force[@]}"}" ;;
+    case "${_aaS}" in
+      install|uninstall)
+        DGO_HOST_ROOT_VIA_DOCKER="${DGO_HOST_ROOT_VIA_DOCKER:-$(read_env_value DGO_HOST_ROOT_VIA_DOCKER)}" \
+        AS_ROOT_ENV="AA_PULL AA_PULL_TIMEOUT BBOX_APPARMOR_PROBE_IMAGE BBOX_APPARMOR_MAX_ENGINE" \
+          bash "${SCRIPTS}/as-host-root.sh" bash "${SCRIPTS}/apparmor-host.sh" "${_aaS}" "$@" "${_force[@]+"${_force[@]}"}" ;;
+      *) bash "${SCRIPTS}/apparmor-host.sh" "${_aaS}" "$@" "${_force[@]+"${_force[@]}"}" ;;
+    esac ;;
 
   host-power)
     # A LAPTOP that runs an office: no sleep, a heat guard, a restart after a freeze, the wake alarm
-    # (scripts/host-power.sh, DGO-1750). `status` is a read; `install`/`uninstall` write host policy and
-    # are the OWNER's act (sudo), as with the AppArmor profile above.
+    # (scripts/host-power.sh, DGO-1750). `status` is a read; `install`/`uninstall` write host policy and get
+    # root themselves (scripts/as-host-root.sh), as with the AppArmor profile above.
     _hpS="${1:-status}"; shift || true
-    bash "${SCRIPTS}/host-power.sh" "${_hpS}" "$@" ;;
+    case "${_hpS}" in
+      install|uninstall)
+        DGO_HOST_ROOT_VIA_DOCKER="${DGO_HOST_ROOT_VIA_DOCKER:-$(read_env_value DGO_HOST_ROOT_VIA_DOCKER)}" \
+        AS_ROOT_ENV="HOST_POWER_FORCE" bash "${SCRIPTS}/as-host-root.sh" bash "${SCRIPTS}/host-power.sh" "${_hpS}" "$@" ;;
+      *) bash "${SCRIPTS}/host-power.sh" "${_hpS}" "$@" ;;
+    esac ;;
 
   test)
     # bbox test <app> [args] — ONE way to test any app. Every app that has tests exposes them at
@@ -1552,7 +1596,40 @@ for s in (d.get("services") or {}).values():
           say "${cy}  run 'bbox run', or use the apps screen, which does the whole lifecycle.${c0}"
         fi ;;
       install) ( cd "${REPO_ROOT}" && exec python3 "$(npath "${REPO_ROOT}/platform/manager/appinstall.py")" "$@" ) ;;
-      *) die "unknown: bbox apps ${sub}  (list|validate|enable|disable|install)" ;;
+      # An app's further copies — its instances, «מופעים» (DGO-1920, ai/context/app-instances.md): each one its own
+      # containers, data, address, tile and sign-in. The row is platform.state.yaml `app_instances:`; the folder
+      # instances/<id>/ is generated from it (instances.py), and every render writes it again.
+      #   bbox apps instance list [--json]
+      #   bbox apps instance add <app> [--key <key>] [--title-he <t>] [--title-en <t>]   (key: the next free number)
+      #   bbox apps instance remove <instance-id>      stopped, then undeclared; its data (volumes) is kept
+      #   bbox apps instance sync [--check]
+      instance|instances)
+        _isub="${1:-list}"; shift || true
+        case "${_isub}" in
+          list|sync) ( cd "${REPO_ROOT}" && exec python3 platform/manager/instances.py "${_isub}" "$@" ) ;;
+          add)
+            [ $# -gt 0 ] || die "usage: bbox apps instance add <app> [--key <key>] [--title-he <t>] [--title-en <t>]"
+            ( cd "${REPO_ROOT}" && python3 platform/manager/instances.py add "$@" ) || die "no instance was added (the line above says why)"
+            ( cd "${REPO_ROOT}" && python3 platform/manager/reconcile.py render ) >/dev/null \
+              || die "the instance is declared, but the render failed — run: ./bbox reconcile render"
+            say "${cy}declared, enabled and compiled. Its containers come up with 'bbox run', or the apps screen.${c0}" ;;
+          remove)
+            [ $# -eq 1 ] || die "usage: bbox apps instance remove <instance-id>"
+            ( cd "${REPO_ROOT}" && python3 platform/manager/instances.py list --json ) \
+              | python3 -c 'import json,sys; sys.exit(0 if any(r["id"] == sys.argv[1] for r in json.load(sys.stdin)) else 1)' "$1" \
+              || die "'$1' is not an instance of this office (bbox apps instance list)"
+            # Stopped FIRST, while the compiled compose still names its services — the road `apps disable` takes.
+            ( cd "${REPO_ROOT}" && python3 platform/manager/reconcile.py set-state --app "$1" --state disabled --by cli ) \
+              || die "could not switch '$1' off"
+            ( cd "${REPO_ROOT}" && python3 platform/manager/reconcile.py render ) >/dev/null || die "the render failed — '$1' is still declared"
+            if docker info >/dev/null 2>&1; then stop_off_apps "$1" || die "'$1' did not stop (above) — it is still declared"; fi
+            ( cd "${REPO_ROOT}" && python3 platform/manager/instances.py remove "$1" ) || die "'$1' was stopped but not removed"
+            ( cd "${REPO_ROOT}" && python3 platform/manager/reconcile.py render ) >/dev/null \
+              || die "'$1' is removed, but the render failed — run: ./bbox reconcile render"
+            say "${cy}'$1' is removed; its data (volumes) is kept.${c0}" ;;
+          *) die "unknown: bbox apps instance ${_isub}  (list|add|remove|sync)" ;;
+        esac ;;
+      *) die "unknown: bbox apps ${sub}  (list|validate|enable|disable|install|instance)" ;;
     esac ;;
 
   catalog)
@@ -1579,8 +1656,20 @@ for s in (d.get("services") or {}).values():
   # fallback "state", so `bbox b42 dump` runs `hooks/state dump` without four files of boilerplate.
   *)
     _res="$(app_resolve "${cmd}")" || die "unknown command '${cmd}'. Run 'bbox help'."
-    _root="${_res%% *}"; _aid="${_res#* }"; _aid="${_aid%% *}"; _fb="${_res##* }"
+    read -r _root _aid _fb _inst _ikey _aware <<<"${_res}"
     [ "${_fb}" = "${_aid}" ] && _fb=""
+    # An instance (DGO-1920) runs its template's hooks AS ITSELF: the hook reads who it is from these three,
+    # as the instance's own containers do (instances.py writes the same three into each of them). Only for a
+    # template that says it reads them (`multi_instance: true`): another's hooks would act on the FIRST copy.
+    # A plain app clears them — a session inside a copy carries them, and `./bbox bina-claude …` there means
+    # the first copy.
+    _app="${_aid}"
+    if [ "${_inst}" != "-" ]; then
+      export DGO_INSTANCE_ID="${_inst}" DGO_INSTANCE_OF="${_aid}" DGO_INSTANCE_KEY="${_ikey}"
+      _app="${_inst}"
+    else
+      unset DGO_INSTANCE_ID DGO_INSTANCE_OF DGO_INSTANCE_KEY
+    fi
     verb="${1:-}"; shift || true
     hook=""
     if [ -n "${verb}" ]; then
@@ -1598,11 +1687,11 @@ for s in (d.get("services") or {}).values():
     # linked office's app is `bbox remote <office> <alias> <path>`. An app's own hooks/api wins, and comes first.
     if [ -z "${hook}" ] && [ "${verb}" = "api" ]; then
       if [ $# -eq 0 ] || [ "${1#-}" != "${1}" ]; then
-        exec python3 "$(npath "${REPO_ROOT}/scripts/remote.py")" . "${_aid}" "$@"
+        exec python3 "$(npath "${REPO_ROOT}/scripts/remote.py")" . "${_app}" "$@"
       fi
       [ $# -ge 2 ] || die "usage: bbox ${cmd} api <METHOD> <path> [-d @file | --data-raw …] [--capability <door>] [--json]"
       _m="$1"; _p="$2"; shift 2
-      exec python3 "$(npath "${REPO_ROOT}/scripts/remote.py")" . "${_aid}" "${_p}" -X "${_m}" "$@"
+      exec python3 "$(npath "${REPO_ROOT}/scripts/remote.py")" . "${_app}" "${_p}" -X "${_m}" "$@"
     fi
     # `bbox <app>` with no verb runs the app's declared fallback with no arguments — a short name is a
     # command (`bbox dgo`), not a usage error. Only an app that declares `cli.fallback` gets this;
@@ -1612,6 +1701,8 @@ for s in (d.get("services") or {}).values():
       hook="${REPO_ROOT}/${_root}/${_aid}/hooks/${_fb}"; set -- "${verb}" "$@"
     fi
     [ -n "${hook}" ] && [ -e "${hook}" ] || die "unknown: bbox ${cmd} ${verb}$(app_verbs_line "${_root}" "${_aid}")"
+    [ "${_inst}" = "-" ] || [ "${_aware}" = 1 ] \
+      || die "${_inst} is a copy of ${_aid}, whose verbs do not know copies yet: they would act on ${_aid} itself (its app.json says multi_instance: true once they read DGO_INSTANCE_ID). 'bbox ${_inst} api …' reaches the copy."
     case "${hook}" in
       *.py)  exec python3 "$(npath "${hook}")" "$@" ;;
       *.mjs) exec node "$(npath "${hook}")" "$@" ;;

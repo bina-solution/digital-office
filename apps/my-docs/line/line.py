@@ -79,19 +79,21 @@ SPEC = ("obj", {
 P = {"ink": "#1f2a17", "muted": "#6a7068", "line": "#dcdfde", "bg": "#f3f5f7", "white": "#fff",
      "olive": "#56693f", "olive_d": "#475734", "olive_soft": "#e7eae4", "olive_line": "#bfc6b6",
      "lime": "#a9b84c", "lime_d": "#69732e", "lime_soft": "#f3f5e6", "lime_line": "#dee4bb",
-     "plum": "#5b3349", "plum_soft": "#e8e2e6"}
+     "plum": "#5b3349", "plum_soft": "#e8e2e6",
+     # the logo's own three — --mark-tile/-glyph/-accent, and no other colour in a logo (the owner, DGO-1908)
+     "mark_tile": "#1b5e4a", "mark_glyph": "#fbfcfc", "mark_accent": "#7ecfad"}
 
 # The i0 mark (digital-office/brand/io/final/logo-1.svg's geometry) on a light tile, as on the bs101 cover.
 MARK = (
     '<svg viewBox="53.57 53.57 892.86 892.86" role="img" aria-label="הלשכה הדיגיטלית">'
-    '<rect fill="{bg}" x="53.57" y="53.57" width="892.86" height="892.86" rx="196.43"/>'
-    '<rect x="267.32" y="276.79" width="71.25" height="71.25" rx="19.24" fill="{lime}"/>'
-    '<rect x="267.32" y="419.29" width="71.25" height="285" rx="19.24" fill="{olive}"/>'
+    '<rect fill="{mark_tile}" x="53.57" y="53.57" width="892.86" height="892.86" rx="196.43"/>'
+    '<rect x="267.32" y="276.79" width="71.25" height="71.25" rx="19.24" fill="{mark_accent}"/>'
+    '<rect x="267.32" y="419.29" width="71.25" height="285" rx="19.24" fill="{mark_glyph}"/>'
     '<path d="M429.06 276.79H675.59A19.24 19.24 0 0 1 694.82 296.02V685.05A19.24 19.24 0 0 1 675.59 704.29H429.06'
     'A19.24 19.24 0 0 1 409.82 685.05V296.02A19.24 19.24 0 0 1 429.06 276.79ZM500.31 348.04A19.24 19.24 0 0 0 481.07'
     ' 367.27V613.8A19.24 19.24 0 0 0 500.31 633.04H604.34A19.24 19.24 0 0 0 623.57 613.8V367.27A19.24 19.24 0 0 0'
-    ' 604.34 348.04Z" fill="{olive}"/>'
-    '<rect x="516.7" y="419.29" width="71.25" height="142.5" rx="19.24" fill="{lime}"/></svg>')
+    ' 604.34 348.04Z" fill="{mark_glyph}"/>'
+    '<rect x="516.7" y="419.29" width="71.25" height="142.5" rx="19.24" fill="{mark_accent}"/></svg>')
 
 CSS = """
 @page {

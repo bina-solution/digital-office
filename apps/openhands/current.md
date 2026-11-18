@@ -42,7 +42,7 @@ or via the Dispatcher Web UI — and it runs, develops, debugs, and grows the
 entire deployment for you:
 
 - "what services are running?" → answers itself (no heavy session).
-- "clone ktivayehudit.co.il into our machine" → opens an OpenHands session,
+- "clone examplek.co.il into our machine" → opens an OpenHands session,
   pilots it, streams progress, returns "done, live at <url>".
 - "here's a screenshot, this page is broken — file an issue and fix it" →
   vision + issue tracker + dev session.

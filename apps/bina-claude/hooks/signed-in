@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #: signed-in [--json] — is the office's Claude REALLY signed in, and if not, why:  ./bbox bina-claude signed-in
-#:   «בינה קלוד», the official Claude Desktop app — the ONE sign-in of Bina Claude (there is no terminal):
+#:   «קלוד דסקטופ», the official Claude Desktop app — the ONE sign-in of each copy (there is no terminal):
 #:   its claude.ai session cookie, and from its own log when it last started, whether it was signed in then,
 #:   and the last sign-in attempt and its end
 # `status` once answered this from the app's config (`lastKnownAccountUuid`), which outlives a sign-out — it said
@@ -14,7 +14,8 @@ REPO_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
 case "${1:-}" in -h|--help) sed -n 's/^#: //p' "${BASH_SOURCE[0]}"; exit 0 ;; esac
 JSON=0; [ "${1:-}" = "--json" ] && JSON=1
 DN="$(read_env_value DEPLOYMENT_NAME)"; DN="${DN:-bina-deployment}"
-DESK="bina-claude-desktop-${DN}"
+# This copy's desktop: an instance's (`./bbox bina-claude-2 signed-in`) is bina-claude-2-desktop (DGO-1920).
+DESK="${DGO_INSTANCE_ID:-bina-claude}-desktop-${DN}"
 running() { docker ps --format '{{.Names}}' | grep -qx "$1"; }
 
 # ── the desktop app, as its own user: the cookie (presence), and its log's last start and last sign-in try ──
@@ -96,9 +97,18 @@ if running "${DESK}"; then
   [ -n "${DESKTOP}" ] || DESKTOP='{"running": true, "cookie": null}'
 fi
 
+# The tile a person signs in from: this copy's own name in the console (its manifest's tile, DGO-1920).
+MAN="${REPO_ROOT}/apps/bina-claude/app.json"; [ -n "${DGO_INSTANCE_ID:-}" ] && MAN="${REPO_ROOT}/instances/${DGO_INSTANCE_ID}/app.json"
+TILE="$(python3 -c 'import json, sys
+m = json.load(open(sys.argv[1], encoding="utf-8"))
+print(next((r["module"]["name"] for r in m.get("routing") or [] if (r.get("module") or {}).get("name")), m["title"]["he"]))' \
+  "$(npath "${MAN}")" 2>/dev/null)" || TILE=""
+
 # ── one answer: per Claude a sentence a person acts on, and the exit code ──
-DESKTOP_JSON="${DESKTOP}" JSON="${JSON}" DESK="${DESK}" python3 - <<'PY'
+DESKTOP_JSON="${DESKTOP}" JSON="${JSON}" DESK="${DESK}" TILE="${TILE:-קלוד דסקטופ}" python3 - <<'PY'
 import json, os, sys
+
+TILE = os.environ.get("TILE") or "קלוד דסקטופ"
 
 def load(name):
     try:
@@ -137,7 +147,7 @@ def desktop_answer(d):
     if d.get("signin_attempt_at"):
         why.append(f"the last sign-in attempt ({d.get('signin_attempt_how') or 'browser'}) was at {d['signin_attempt_at']} {tz}"
                    + (f" — {d['signin_handoff']}" if d.get("signin_handoff") else ""))
-    why.append("sign in from the «בינה קלוד» tile: «Continue with Google» opens Google's page on the same screen "
+    why.append(f"sign in from the «{TILE}» tile: «Continue with Google» opens Google's page on the same screen "
                "(computer or phone); or «Continue with email», open the e-mail's link in the phone's browser, and "
                "type the code it shows into the app")
     return False, "; ".join(w.strip() for w in why if w.strip())
@@ -152,6 +162,6 @@ if os.environ.get("JSON") == "1":
     }, ensure_ascii=False))
 else:
     word = {True: "signed in", False: "SIGNED OUT", None: "unknown"}
-    print(f"«בינה קלוד» (the Claude Desktop app)  {word[desk_ok]}: {desk_why}")
+    print(f"«{TILE}» (the Claude Desktop app)  {word[desk_ok]}: {desk_why}")
 sys.exit(code)
 PY

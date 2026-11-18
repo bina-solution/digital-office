@@ -1,0 +1,77 @@
+{
+  "id": "dgo-cloud",
+  "title": {
+    "he": "DGO Cloud",
+    "en": "DGO Cloud"
+  },
+  "layer": 3,
+  "kind": "service",
+  "version": "0.1.0",
+  "summary": {
+    "he": "לשכה דיגיטלית מנוהלת בענן בתוך דקה: הרשמה (Google או מייל), תשלום חודשי ב-Cardcom, שרת Hostinger מוכן מראש, נתב מודלים עם קרדיט — וניהול כל הלקוחות והשרתים",
+    "en": "A managed DGO in the cloud in a minute: sign-up (Google or e-mail), monthly payment by Cardcom, a Hostinger server ready in advance, an LLM router with credit — and the management of every client and server"
+  },
+  "capabilities": [],
+  "use": [],
+  "connections": [
+    {
+      "id": "deepseek-key",
+      "required": false,
+      "note": "the router's DeepSeek models; OpenAI and Anthropic come from OPENAI_API_KEY / ANTHROPIC_API_KEY the same way"
+    }
+  ],
+  "compose": "docker-compose.yml",
+  "agent": {
+    "context": "AGENT.md",
+    "order": 41
+  },
+  "routing": [
+    {
+      "host": "dgo-cloud",
+      "port": 8080,
+      "auth": "none",
+      "emit_labels": true,
+      "module": {
+        "group": "עסק",
+        "icon": "server",
+        "embed": true,
+        "alias": "dgo-cloud",
+        "id": "dgo-cloud",
+        "name": "DGO Cloud",
+        "desc": "לקוחות הענן: מנויים, תשלומים, שרתים ונתב המודלים",
+        "order": 8,
+        "service": "dgo-cloud",
+        "url": "http://dgo-cloud:8080",
+        "url_env": "DGOCLOUD_URL"
+      }
+    },
+    {
+      "name": "dgo-llm",
+      "host": "dgo-llm",
+      "port": 8080,
+      "auth": "none",
+      "service": "dgo-cloud",
+      "emit_labels": true,
+      "url_env": "DGOCLOUD_LLM_BASE_URL"
+    },
+    {
+      "name": "dgo-cloud-apex",
+      "host": "dgo-cloud-apex",
+      "port": 8080,
+      "auth": "none",
+      "service": "dgo-cloud",
+      "emit_labels": true,
+      "url_env": "DGOCLOUD_APEX_BASE_URL"
+    }
+  ],
+  "data": {
+    "volumes": [
+      "dgo_cloud_data"
+    ],
+    "on_uninstall": "keep"
+  },
+  "resources": {
+    "cpus": "0.5",
+    "memory": "256M"
+  }
+}

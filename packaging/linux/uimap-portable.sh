@@ -19,7 +19,7 @@
 # against the engine that stack runs on — ours, not the host's.
 set -uo pipefail
 
-REPO="${1:-/home/shlomy/binaos-repo}"
+REPO="${1:-/home/owner/binaos-repo}"
 LOG=/tmp/binaos-uimap.log
 exec > >(tee "${LOG}") 2>&1
 echo "=== $(date -u +%FT%TZ) ui-map on $(hostname) ==="

@@ -33,6 +33,14 @@ on:
 permissions:
   contents: write   # the draft release, and nothing else
 
+# A VERSION'S PROOF GOES FIRST (DGO-1819). The guest takes the Dell's one runner for an hour and more, and GitHub has
+# no queue priorities: on 2026-11-11 a dispatch from mac-dgo took it ahead of a version's proof queued before it. So
+# the guest job asks scripts/ci/step-aside first on any branch but dgo-stable — with --dispatch-too, because every
+# run of this workflow off dgo-stable is a dispatch: while a gates-hosted run of dgo-stable is queued or running, the
+# run cancels itself in seconds and says to dispatch it again once that run has ended — never while the qemu job
+# (GitHub's runner, beside the guest) is in progress: the guard reads the run's jobs first, and the cancel would stop
+# it too. Only the guest job has `actions: write`; the qemu job keeps the workflow's permissions.
+
 jobs:
   # The guest the engine boots: the MacBook engine's own (packaging/macos/engine.yaml's pinned Ubuntu 24.04
   # arm64 image and provisioning), with the office in it, made here so a phone never provisions under
@@ -55,10 +63,29 @@ jobs:
       group: android-engine-guest-${{ github.ref }}${{ inputs.arch == 'amd64' && '-amd64' || '' }}
       cancel-in-progress: true
     runs-on: [self-hosted, portable, ssd]
+    permissions:
+      contents: write   # the draft release (the workflow's)
+      actions: write    # scripts/ci/step-aside: whether a version's proof is waiting, this run's jobs, and its cancel
     timeout-minutes: 600   # the office's images built for arm64 through emulation on 2–3 of the Dell's 4 CPUs, an hour's wait for room
     env:
       GUEST_ARCH: ${{ inputs.arch || 'arm64' }}   # guest-box.sh's and guest.sh's; every file below is named by it
     steps:
+      # its own directory, gone before the checkout below: nothing of it reaches the guest disk
+      - uses: actions/checkout@v4
+        if: startsWith(github.ref, 'refs/heads/') && github.ref != 'refs/heads/dgo-stable'
+        with:
+          fetch-depth: 1
+          filter: blob:none
+          sparse-checkout: scripts/ci/step-aside
+          sparse-checkout-cone-mode: false
+          path: .step-aside
+          persist-credentials: false
+      - name: A version's proof goes first (scripts/ci/step-aside)
+        if: startsWith(github.ref, 'refs/heads/') && github.ref != 'refs/heads/dgo-stable'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: bash .step-aside/scripts/ci/step-aside --dispatch-too && rm -rf .step-aside
+
       # no token left in .git/config: this checkout is copied, .git and all, into the published guest disk
       - uses: actions/checkout@v4
         with:

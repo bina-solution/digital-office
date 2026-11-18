@@ -14,7 +14,7 @@ were never sent.
 `indoxDocBatchUpsert01.json`'s trigger ("When Executed by Another Workflow", `jsonExample` mode) was
 missing `CONNECTION`, `NEXT_RETRY_AT` and `RETRY_COUNT` — all three real columns on
 `public.incoming_documents` (`apps/indox/blueprint/fixtures/schema.sql`). Measured against the live
-DB (2026-08-05): `NEXT_RETRY_AT` is populated on **0 of 6,207 rows** — retry scheduling has never
+DB (2026-08-05): `NEXT_RETRY_AT` is populated on **0 of N rows** — retry scheduling has never
 once worked, silently, because every caller's `NEXT_RETRY_AT` value was discarded at the trigger
 before the upsert code ever ran. (`THUMBNAIL` / `THUMBNAIL_COMPLETED` were the same defect and had
 already been fixed by the time this gate was written — the fix is the same one-line addition to the
@@ -336,7 +336,7 @@ def self_test() -> int:
 #
 #   committed indoxDocBatchUpsert01 trigger : 96 fields, includes `priority_sync`
 #   LIVE n8n indoxDocBatchUpsert01 trigger  : 95 fields, `priority_sync` ABSENT
-#   public.incoming_documents               : priority_sync non-null on 3 of 6,341 rows
+#   public.incoming_documents               : priority_sync non-null on 3 of N rows
 #
 # The repo had already been fixed; the fix had never been pushed. Parts 1-2 pass, `schema.sql` has
 # the column, and the running system silently discards it on every single write. Only a check
@@ -513,7 +513,7 @@ def main() -> int:
     print(
         "\n  A table column missing from the trigger's schema means every caller's value for that\n"
         "  field is discarded before the sub-workflow ever sees it — no error, just gone (this is\n"
-        "  exactly how NEXT_RETRY_AT ended up populated on 0 of 6,207 rows). Add the missing field(s)\n"
+        "  exactly how NEXT_RETRY_AT ended up populated on 0 of N rows). Add the missing field(s)\n"
         "  to the trigger's jsonExample / fields list, or to the schema.sql migration if the trigger\n"
         "  is right and the table definition is what's stale."
     )

@@ -7,7 +7,7 @@ A recording whose sound is **chopped into short bursts separated by exact digita
 filled the missing time with zeros (Jibri's command: `-f pulse -i default -acodec aac -b:a 128k -ar 44100
 -af aresample=async=1`). Symptoms: the meeting item's transcript is a handful of words and "תודה רבה" lines;
 in the waveform every word is a picket fence of 30–75 ms bursts with 30–50 ms holes, plus longer holes.
-Reference case: `exf103_2026-10-26-13-10-48` and `exf104allanwilliam_2026-10-26-13-26-15` on the EXF office
+Reference case: `exf103_2026-10-26-13-10-48` and `exf104call_2026-10-26-13-26-15` on the EXF office
 (root cause and fix: `issues/meet-recorder-throttled-to-half-a-core-recordings-lose-sound-and-time.yaml`).
 
 Diagnose first (any machine with Python + numpy + soundfile):

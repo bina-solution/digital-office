@@ -257,6 +257,18 @@ async function resolveId(idOrPrefix) {
 
 const address = (sessionId) => ({ kind: "session", sessionId });
 
+// DGO-1250: a session moved to the archive, or brought back. The harness keeps the archive in its WORKSPACE
+// registry — workspace/archiveSession | unarchiveSession({sessionId}), idempotent (an id already there is no
+// error) — and answers with the whole archived set; its session namespace has no archive, and no delete at all
+// (dsh 0.1.6, read from its typert.remote-client.d.ts). What it says comes back measured: archived or not.
+async function archiveSession(id, archived) {
+  const v = await rpc(archived ? "workspace/archiveSession" : "workspace/unarchiveSession", { request: { sessionId: id } });
+  const ids = Array.isArray(v?.archivedSessionIds) ? v.archivedSessionIds : [];
+  // an id given as a bare uuid is the harness's `session-<uuid>` (FULL_ID takes both forms)
+  const same = (x) => x === id || x === `session-${id}` || `session-${x}` === id;
+  return { id, archived: ids.some(same), archived_ids: ids };
+}
+
 async function prompt(id, text, files, steer) {
   const content = [];
   if (text && String(text).trim()) content.push({ type: "text", text: String(text) });
@@ -990,6 +1002,10 @@ async function route(req, res) {
     if (!b.title) throw new Fail(400, "title", "title is required");
     await rpc("session/rename", { request: { sessionId: id, title: String(b.title) } }); live.refreshList(true);
     return [200, { id, title: String(b.title) }];
+  }
+  if ((sub === "archive" || sub === "unarchive") && req.method === "POST") {
+    const r = await archiveSession(id, sub === "archive"); live.refreshList(true);
+    return [200, r];
   }
   if (sub === "fork" && req.method === "POST") {
     const b = await jsonBody(req);

@@ -66,7 +66,7 @@ def _state() -> dict:
 
 
 def _manifest(app_id: str) -> dict:
-    for base in ("apps", "platform-base"):
+    for base in ("apps", "platform-base", "instances"):   # instances/: an app's further copies (DGO-1920)
         p = REPO / base / app_id / "app.json"
         try:
             return json.loads(p.read_text(encoding="utf-8"))
@@ -552,7 +552,8 @@ def _app_provider(app_id: str) -> Optional[dict]:
     contract under a name of its own (bina-claude: `claude-agent`), so it never competes for the
     default. Addressed by id, any capability with `interface: agent.v1` is its door. From a container
     on the office network the door is the service itself; from the host it is the loopback port the
-    compose file publishes, which every agent app publishes under the same number.
+    compose file publishes, which every agent app publishes under the same number — except an INSTANCE
+    (DGO-1920), whose port the engine picked: `docker port` says which.
     """
     j = _manifest(app_id)
     for c in j.get("capabilities") or []:
@@ -561,7 +562,33 @@ def _app_provider(app_id: str) -> Optional[dict]:
             if not m:
                 continue
             service, port = m.group(1), int(m.group(2) or 80)
-            return {"app": j["id"], "service": service, "port": port, "url": f"http://{_peer_host(service)}:{port}"}
+            host, hport = _peer_host(service), port
+            # the HOST's loopback (not the provider's own, where its container port answers as declared)
+            if host == "127.0.0.1" and j.get("instance_of") and socket.gethostname() != service:
+                hport = _published_port(service, port) or port
+            return {"app": j["id"], "service": service, "port": hport, "url": f"http://{host}:{hport}"}
+    return None
+
+
+def _published_port(service: str, port: int) -> Optional[int]:
+    """The host port the engine published `service`'s container port on (an instance's, DGO-1920), or None —
+    asked of THIS office's container (`<service>-<DEPLOYMENT_NAME>`), never of another project on the engine."""
+    office = ""
+    try:
+        for line in (REPO / ".env").read_text(encoding="utf-8").splitlines():
+            if line.startswith("DEPLOYMENT_NAME="):
+                office = line.split("=", 1)[1].strip().strip("'\"")
+    except OSError:
+        pass
+    try:
+        out = subprocess.run(["docker", "port", f"{service}-{office or 'bina-deployment'}", f"{port}/tcp"],
+                             capture_output=True, text=True, timeout=15).stdout
+    except (OSError, subprocess.SubprocessError):
+        return None
+    for line in out.splitlines():
+        m = re.search(r":(\d+)\s*$", line.strip())
+        if m:
+            return int(m.group(1))
     return None
 
 

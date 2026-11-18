@@ -368,7 +368,9 @@ func routingLabels(appID string, r *yamlish.Map, framed string, env *dotenv, adm
 	srv := serverOffice(env)
 	mwFor := func(tls bool) []string {
 		if tls && srv {
-			return append(append([]string{}, ownChain...), "hsts@file")
+			// FIRST in the chain, as reconcile.py: a middleware that answers by itself (the sign-in's 302)
+			// ends the chain, and a pin after it was never written (DGO-1595, measured on vps1 2026-11-17)
+			return append([]string{"hsts@file"}, ownChain...)
 		}
 		return ownChain
 	}
@@ -461,7 +463,7 @@ func routingLabels(appID string, r *yamlish.Map, framed string, env *dotenv, adm
 			labels = append(labels, p+".service="+svc)
 			mids := subChain
 			if tls && srv { // hsts pins a CERTIFICATE's host: the https twin of this path only
-				mids = append(append([]string{}, subChain...), "hsts@file")
+				mids = append([]string{"hsts@file"}, subChain...) // first, as mwFor above
 			}
 			if len(mids) > 0 {
 				labels = append(labels, p+".middlewares="+strings.Join(mids, ","))

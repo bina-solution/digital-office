@@ -206,7 +206,24 @@ var coreServed = map[string]bool{"console": true, "app-management": true, "forwa
 // containers too (DGO-1328: «הרחבת הלשכה» on the phone is the Mac's, in the phone's machine). The office's
 // half that runs in the machine; a state the core cannot read holds none — the control plane says why,
 // where it reads it.
-func machineApps(root string) []string {
+func machineApps(root string) []string { return machineAppsFor(root, false) }
+
+// machinePlumbing are the core office's own container apps, the ones platform.state.core.yaml enables (DGO-1328):
+// the vault the machine's apps read, their notices, the commands the link runs, and the link. They run in the
+// machine and come up with it, but at the core's start they no longer call it up alone (DGO-1818, «fast and
+// efficient»): a phone with «מכולות» installed and only these on booted its machine under TCG — minutes of a
+// phone's CPU — at every start of the app. Now it boots when something needs it: any of their hosts opened wakes
+// it (m.wake), as does a container app the owner runs there (startApps). The cost, accepted: the link (dgo-extend)
+// of a phone in a herd comes up with the machine, not with the app; a phone that is not chosen «מכולות» is
+// refused by the app at its start, as before (NativeService).
+var machinePlumbing = map[string]bool{"connections": true, "computers": true, "notifications": true, "dgo-extend": true}
+
+// startApps are the machine's apps that bring it back when the core starts: those it enabled (`by: machine`),
+// every other container app the office runs there, and its plumbing only when something but the core enabled it
+// (not the core's own state: `by: core`, or no `by`).
+func startApps(root string) []string { return machineAppsFor(root, true) }
+
+func machineAppsFor(root string, start bool) []string {
 	doc, err := compiler.ReadState(root)
 	top, isMap := doc.(*yamlish.Map)
 	if err != nil || !isMap {
@@ -229,11 +246,12 @@ func machineApps(root string) []string {
 		if d, err := compiler.Disposition(entry); err != nil || d != "enabled" {
 			continue
 		}
-		if by, _ := e.Get("by"); by == "machine" {
+		by, _ := e.Get("by")
+		if by == "machine" {
 			on = append(on, aid)
 			continue
 		}
-		if coreServed[aid] || noCatalog {
+		if coreServed[aid] || noCatalog || (start && machinePlumbing[aid] && (by == nil || by == "" || by == "core")) {
 			continue
 		}
 		if cat == nil {
@@ -745,10 +763,10 @@ func Open(root string, o Options, logger *log.Logger) (*Core, error) {
 	// what the app's status screen reads, from now on (DGO-1723)
 	c.stop, c.done, c.status = make(chan struct{}), make(chan struct{}), filepath.Join(o.Dir, StatusFile)
 	go sayStatus(root, o.Dir, m, logger.Printf, c.stop, c.done)
-	// the office as it was: apps the machine runs bring the machine back with the core (a phone restarted,
-	// the app opened again) — asked for once here, every listener bound, and again by any of their hosts
-	// opened before it is up
-	if on := machineApps(root); len(on) > 0 {
+	// the office as it was: apps the machine runs for the owner bring the machine back with the core (a phone
+	// restarted, the app opened again) — asked for once here, every listener bound, and again by any of their
+	// hosts opened before it is up. Its plumbing alone does not (startApps, DGO-1818).
+	if on := startApps(root); len(on) > 0 {
 		logger.Printf("the office has apps in its machine (%s): asking the app for it", strings.Join(on, ", "))
 		if err := m.Want(); err != nil {
 			logger.Printf("could not ask for the machine: %v", err)

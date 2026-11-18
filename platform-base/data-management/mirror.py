@@ -62,7 +62,7 @@ DEADLINE = float(os.environ.get("DATA_MIRROR_DEADLINE") or 2 * 3600)       # one
 #                                       no longer than this, and the next night goes on from where it stopped)
 BUDGET = int(os.environ.get("DATA_MIRROR_BUDGET") or 50 * 10**9)           # bytes one pull may fetch
 MAX_TOTAL = int(os.environ.get("DATA_MIRROR_MAX_TOTAL") or 200 * 10**9)    # bytes one mirror may hold
-LIST_MAX_BYTES = 16 << 20                             # ~180,000 rows: a repository of ~3 TB in 16 MiB packs
+LIST_MAX_BYTES = 16 << 20                             # ~N rows: a repository of ~3 TB in 16 MiB packs
 LIST_MAX_ROWS = 200_000
 CONFIG_MAX = 64 << 10                                 # restic's config is a few hundred bytes
 CHUNK = 1 << 20

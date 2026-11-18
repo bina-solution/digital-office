@@ -206,7 +206,7 @@ services:
     - traefik.http.routers.supabase-studio-https.tls=true
     - traefik.http.routers.supabase-studio-https.tls.certresolver=${TRAEFIK_CERTRESOLVER-myresolver}
     - traefik.http.routers.supabase-studio-https.service=supabase-studio
-    - traefik.http.routers.supabase-studio-https.middlewares=authentik-admins@file,hsts@file
+    - traefik.http.routers.supabase-studio-https.middlewares=hsts@file,authentik-admins@file
     - traefik.http.services.supabase-studio.loadbalancer.server.port=3000
 volumes:
   supabase_storage_data: null

@@ -129,7 +129,7 @@ services:
     - traefik.http.routers.apitools-https.tls=true
     - traefik.http.routers.apitools-https.service=apitools
     - traefik.http.routers.apitools-https.tls.certresolver=${TRAEFIK_CERTRESOLVER-myresolver}
-    - traefik.http.routers.apitools-https.middlewares=authentik@file,apitools-retry@docker,hsts@file
+    - traefik.http.routers.apitools-https.middlewares=hsts@file,authentik@file,apitools-retry@docker
     - traefik.http.routers.apitools-http.middlewares=authentik@file,apitools-retry@docker
     # SSO on the -local twin too. app.json declares auth:sso for this host and apitools has no auth of
     # its own, yet this router carried only the retry middleware — and traefik routes ANY request whose

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # test_client_apps.sh — scripts/client-apps.sh on a throwaway checkout and a local «private» repository (DGO-1819).
-# Run: bash scripts/test_client_apps.sh   (git and rsync; no network, nothing outside a temp directory)
+# Run: bash scripts/test_client_apps.sh   (git and tar; no network, nothing outside a temp directory)
 set -uo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
 T="$(mktemp -d "${TMPDIR:-/tmp}/client-apps-test.XXXXXX")"
@@ -85,4 +85,77 @@ check '! grep -q "s3cr3t" "${T}/st2" && grep -q "https://git.example.invalid/acm
   "a credential in the URL is never said"
 printf 'DGO_CLIENT_APPS_REPO=%s\nDGO_CLIENT_APPS_REF=--upload-pack=x\n' "${P}" > "${O}/.env"
 check '! run pull >/dev/null 2>&1' "a ref that is an option is refused"
+# a client's server with no rsync (Exampleu's, 2026-11-11): the pull places and compares all the same
+mkdir -p "${T}/norsync"; printf '#!/bin/sh\necho "rsync: command not found" >&2; exit 127\n' > "${T}/norsync/rsync"
+chmod +x "${T}/norsync/rsync"
+( cd "${P}" && mkdir -p apps/shelf/static && echo '{"id":"shelf","layer":3}' > apps/shelf/app.json \
+  && echo "<p>shelf</p>" > apps/shelf/static/index.html && printf '#!/bin/sh\n' > apps/shelf/run.sh \
+  && chmod +x apps/shelf/run.sh && ln -s static/index.html apps/shelf/home.html && g add -A && g commit -qm shelf )
+printf 'DGO_CLIENT_APPS_REPO=%s\n' "${P}" > "${O}/.env"
+( cd "${O}" && PATH="${T}/norsync:${PATH}" REPO_ROOT="${O}" DGO_CLIENT_APPS_DIR="${T}/side" bash scripts/client-apps.sh pull ) > "${T}/out8" 2>&1
+rc8=$?
+( cd "${O}" && PATH="${T}/norsync:${PATH}" REPO_ROOT="${O}" DGO_CLIENT_APPS_DIR="${T}/side" bash scripts/client-apps.sh status ) > "${T}/st8" 2>&1
+check '[ "${rc8}" = 0 ] && [ "$(cat "${O}/apps/shelf/static/index.html")" = "<p>shelf</p>" ] && [ -x "${O}/apps/shelf/run.sh" ] && [ "$(readlink "${O}/apps/shelf/home.html")" = static/index.html ]' \
+  "no rsync on the server: the pull places the files, the exec bit and a link as a link"
+check 'grep -q "shelf: placed, as the clone has it" "${T}/st8"' "no rsync on the server: status compares by content"
+chmod -x "${O}/apps/shelf/run.sh"
+( cd "${O}" && PATH="${T}/norsync:${PATH}" REPO_ROOT="${O}" DGO_CLIENT_APPS_DIR="${T}/side" bash scripts/client-apps.sh status ) > "${T}/st9" 2>&1
+check 'grep -q "shelf: placed, DIFFERS" "${T}/st9"' "a lost exec bit is a difference"
+
+# the client's own documents (DGO-1873): context/<path> is placed at <path>, under ai/context/ and research_notes/ only
+rm -rf "${O}/apps/books"; run pull >/dev/null 2>&1    # settle: the KEPT folder above counts as a change on every pull
+mkdir -p "${O}/ai/context" && echo "the public index" > "${O}/ai/context/README.md"
+( cd "${O}" && g add ai/context/README.md && g commit -qm "public index" )
+mkdir -p "${O}/ai/context/acme" && echo "the office's own" > "${O}/ai/context/acme/own.md"
+echo "/ai/context/acme/own.md" >> "${O}/.git/info/exclude"
+( cd "${P}" && mkdir -p "context/ai/context/acme/research" "context/research_notes/Acme study 2026" context/scripts \
+  && echo "model v1" > context/ai/context/acme/model.md && echo "src" > context/ai/context/acme/research/src.md \
+  && echo "a study" > "context/research_notes/Acme study 2026/notes [v1].md" && echo "rm -rf /" > context/scripts/evil.sh \
+  && echo "theirs" > context/ai/context/README.md && echo "theirs" > context/ai/context/acme/own.md \
+  && echo "x" > context/.env.md && ln -s ../../../../.env context/ai/context/acme/env-link \
+  && echo "*.md -diff" > "context/research_notes/Acme study 2026/.gitattributes" \
+  && echo "*.tmp" > context/ai/context/acme/.gitignore && g add -A && g commit -qm context )
+: > "${T}/ran"; run pull > "${T}/c1" 2>&1; rc=$?
+check '[ "${rc}" = 0 ] && [ "$(cat "${O}/ai/context/acme/model.md")" = "model v1" ] && [ -f "${O}/ai/context/acme/research/src.md" ] && [ "$(cat "${O}/research_notes/Acme study 2026/notes [v1].md")" = "a study" ]' \
+  "the client's documents are placed at the paths they mirror (a space and a [ in a name included)"
+check '[ ! -e "${O}/scripts/evil.sh" ] && [ ! -e "${O}/.env.md" ] && grep -q "context/scripts/evil.sh is not under" "${T}/c1"' \
+  "a document outside ai/context/ and research_notes/ is never placed (said)"
+check '[ ! -e "${O}/ai/context/acme/env-link" ] && grep -q "env-link is not a plain file" "${T}/c1"' "a link in context/ is skipped (said)"
+check '[ ! -e "${O}/research_notes/Acme study 2026/.gitattributes" ] && [ ! -e "${O}/ai/context/acme/.gitignore" ] && grep -q "acme/.gitignore is not under" "${T}/c1"' \
+  "a part that starts with «.» (.gitignore, .gitattributes) is never placed (said)"
+check '[ "$(cat "${O}/ai/context/README.md")" = "the public index" ] && grep -q "public tree.s own file" "${T}/c1"' \
+  "a document the public tree tracks is never replaced (said)"
+check '[ "$(cat "${O}/ai/context/acme/own.md")" = "the office'"'"'s own" ] && grep -q "office.s own file" "${T}/c1"' \
+  "a file of the office's own that this did not place is left as it is (said)"
+check '[ -z "$(git -C "${O}" status --porcelain)" ]' "the checkout stays clean: each placed document is in the exclude block"
+check '[ ! -s "${T}/ran" ] && grep -q "documents: 3 changed" "${T}/c1"' "documents change no service: no bbox run"
+run status > "${T}/c2" 2>&1
+check 'grep -q "documents: 3 placed, as the clone has them" "${T}/c2"' "status compares the documents with the clone"
+( cd "${P}" && g rm -rq context/ai/context/acme/research && echo "model v2" > context/ai/context/acme/model.md && g add -A && g commit -qm v2 )
+run pull > "${T}/c3" 2>&1
+check '[ "$(cat "${O}/ai/context/acme/model.md")" = "model v2" ] && [ ! -e "${O}/ai/context/acme/research" ] && [ -d "${O}/ai/context/acme" ]' \
+  "a document the repository drops is removed, its empty folder with it; a changed one is replaced"
+check '[ -z "$(git -C "${O}" status --porcelain)" ] && ! grep -q "research/src.md" "${O}/.git/info/exclude"' \
+  "…and it leaves the exclude block; the checkout is clean"
+# the second reader's findings: a placed document the public tree tracks later is the public tree's — never removed
+( cd "${O}" && g add -f ai/context/acme/model.md && g commit -qm "the public tree takes model.md" )
+( cd "${P}" && g rm -q context/ai/context/acme/model.md && g commit -qm "model dropped" )
+run pull > "${T}/c5" 2>&1
+check '[ "$(cat "${O}/ai/context/acme/model.md")" = "model v2" ] && grep -q "public tree.s now" "${T}/c5" && [ -z "$(git -C "${O}" status --porcelain)" ]' \
+  "a placed document the public tree now tracks is left to it when the repository drops it (said), checkout clean"
+# …and a documents failure leaves the apps of the same pull named in the exclude and the record
+N="research_notes/Acme study 2026/notes [v1].md"
+rm -f "${O}/${N}" && mkdir -p "${O}/${N}" && echo "the office's" > "${O}/${N}/inside"
+( cd "${P}" && echo "a study v2" > "context/${N}" && mkdir -p apps/shelf2 && echo '{"id":"shelf2","layer":3}' > apps/shelf2/app.json \
+  && g add -A && g commit -qm "shelf2 + study v2" )
+run pull > "${T}/c6" 2>&1; rc6b=$?
+check '[ "${rc6b}" != 0 ] && [ -f "${O}/apps/shelf2/app.json" ] && grep -q "^/apps/shelf2/$" "${O}/.git/info/exclude" && grep -qx shelf2 "${O}/.git/info/client-apps" && grep -q "documents were NOT placed" "${T}/c6"' \
+  "a documents failure is said and fails the pull, but the apps of the same pull are placed, excluded and recorded"
+rm -rf "${O:?}/${N}"
+( cd "${P}" && g rm -rq context && g commit -qm "no documents" )
+run pull > "${T}/c4" 2>&1
+check '[ ! -e "${O}/ai/context/acme/research" ] && [ ! -e "${O}/research_notes/Acme study 2026" ] && [ -f "${O}/ai/context/README.md" ] && [ -f "${O}/ai/context/acme/own.md" ]' \
+  "no context/ left: every placed document removed, the public file and the office's own kept"
+check '[ ! -e "${O}/.git/info/client-apps.d/_context.files" ] && [ -z "$(git -C "${O}" status --porcelain)" ]' \
+  "…the record is gone and the checkout is clean"
 [ "${FAIL}" = 0 ] && echo "test_client_apps: OK" || { echo "test_client_apps: FAILED"; exit 1; }

@@ -27,6 +27,10 @@ export const THEME = `/* @bina-theme-tokens:start */
   color-scheme:light;
   accent-color:var(--accent);   /* the browser's OWN controls - a checkbox, a radio, a range, a progress bar - on both grounds: said once, here (it was said for eight single controls, and every other one was the browser's blue) */
   --bg:#f3f5f7; --surface:#fff; --surface-2:#f9fafb; --ink:#1f2a17; --muted:#6a7068; --line:#dcdfde;
+  /* THE OFFICE'S LOGO HAS THESE THREE COLOURS AND NO OTHER, on every ground and in every theme (the owner, 2026-11-15,
+     group msgs 1103-1104: «From now on this is the only colors you use in logo replace evrywhere and never use diffrent
+     colors» - the logo of digital-office.co.il; DGO-1908). The dark blocks below do not redefine them on purpose. */
+  --mark-tile:#1b5e4a; --mark-glyph:#fbfcfc; --mark-accent:#7ecfad;
   --olive:#56693f; --olive-d:#475734; --olive-soft:#e7eae4; --olive-line:#bfc6b6; --olive-ink:#f3f5f7;
   --sky:#7baae3; --sky-d:#2a6fc4; --sky-soft:#edf3fb; --sky-line:#cddff4; --sky-ink:#13263f;
   --lime:#a9b84c; --lime-d:#69732e; --lime-soft:#f3f5e6; --lime-line:#dee4bb; --lime-ink:#1f2a17;

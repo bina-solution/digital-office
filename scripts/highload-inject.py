@@ -25,8 +25,8 @@ CRED_DRIVE = 'KirWFwoFdEFmnN0R'
 # IMPORTANT: To-Process == BalanceSheetSourceFolder1 (same Drive folder id) -> anything dropped there is
 # typed BALANCE_SHEET by the BS Sync runner. General docs (invoice/shipment/unknown) MUST go to a
 # GeneralDocs source folder instead, or they get mis-typed as BS.
-BS_FOLDER = '1REDACTEDdrivexxxxxxxxxxxxxxx0002'        # BalanceSheetSourceFolder1 (== DocumentsToProcessFolder)
-GENERAL_FOLDER = '1REDACTEDdrivexxxxxxxxxxxxxxx0001'   # GeneralDocsSourceFolder1
+BS_FOLDER = '1REDACTEDdrivexxxxxxxxxxxxxxx0008'        # BalanceSheetSourceFolder1 (== DocumentsToProcessFolder)
+GENERAL_FOLDER = '1REDACTEDdrivexxxxxxxxxxxxxxx0009'   # GeneralDocsSourceFolder1
 TO_PROCESS = BS_FOLDER  # back-compat
 LABEL_DOC = 'Label_11'   # save-documents
 LABEL_BS = 'Label_10'    # save-aging-reports (BS)

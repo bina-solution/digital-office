@@ -40,7 +40,7 @@ logger = get_logger('apitools.tess_api')
 # level. The 176->31 collapse was _parse_cfg taking the FIRST --psm in a concatenated
 # config while the CLI honors the LAST ('--psm 11 --psm 7' ran as 11: the number-
 # recovery single-line probe read the whole page through a digits whitelist and
-# flooded the merge). Fixed (last-flag-wins) and re-proven on yhzkal: 251 calls both
+# flooded the merge). Fixed (last-flag-wins) and re-proven on person02: 251 calls both
 # paths, final token lists IDENTICAL (176), zoom fixes fire, 51.1s -> 29.9s (1.71x).
 TESS_API_ENABLED = os.getenv('APITOOLS_TESS_API', '1') == '1'
 

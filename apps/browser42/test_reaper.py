@@ -99,6 +99,34 @@ class ReaperLaneReconciliationTests(unittest.TestCase):
         self.assertEqual(closed, ["done"])
 
 
+class DeadArtifactsTests(unittest.TestCase):
+    def test_a_new_reaper_removes_what_a_dead_one_left_and_nothing_else(self):
+        with tempfile.TemporaryDirectory() as base, patch.object(MODULE.tempfile, "gettempdir", return_value=base):
+            (Path(base) / "playwright-artifacts-dead1").mkdir()
+            (Path(base) / "playwright-artifacts-dead2" / "x").mkdir(parents=True)
+            (Path(base) / "other").mkdir()
+            self.assertEqual(MODULE.remove_dead_artifacts(), 2)
+            self.assertEqual(sorted(p.name for p in Path(base).iterdir()), ["other"])
+
+
+class LiveTaskTests(unittest.TestCase):
+    """Only a task being driven keeps the browser awake (DGO-1921)."""
+
+    def live(self, *states):
+        with tempfile.TemporaryDirectory() as tmp, patch.object(MODULE, "TASKS_DIR", Path(tmp)):
+            for i, state in enumerate(states):
+                write_task(tmp, f"t{i}", {"slug": f"t{i}", "state": state})
+            return MODULE.live_task_exists()
+
+    def test_a_driven_task_holds_the_browser(self):
+        for state in ("allocated", "active", "verifying"):
+            self.assertTrue(self.live("finished", state), state)
+
+    def test_a_verified_task_nobody_finished_does_not(self):
+        """nf36-marketingweek sat in `accepted` from 2026-11-05 and the browser never slept again."""
+        self.assertFalse(self.live("accepted", "finished", "stalled", "closed", "rejected"))
+
+
 class SavedTabsTests(unittest.TestCase):
     """The tabs a sleep writes down (DGO-1336): a sign-in's state or one-time code never reaches the volume."""
 

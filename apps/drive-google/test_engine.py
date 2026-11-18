@@ -33,7 +33,7 @@ def check(cond, what):
 
 VAULT = [{"id": "drive_google_oauth-1", "protocol": "drive_google_oauth", "label": "g", "account_hint": "owner@example.com"},
          {"id": "drive_google_service_account-2", "protocol": "drive_google_service_account", "label": "sa",
-          "account_hint": "person29@example.com"}]
+          "account_hint": "person20@example.com"}]
 ADDED = []
 engine.cx.get_instance = lambda cid: next((i for i in VAULT if i["id"] == cid), None)
 engine.cx.add_instance = lambda proto, label, secret, hint=None: (ADDED.append((proto, label, secret, hint)) or {"id": proto + "-9"}, 201)
@@ -67,7 +67,7 @@ def main() -> int:
     body, st = E.connect({"protocol": "drive_google_service_account", "label": "sa",
                           "secret": {"service_account_json": json.dumps({"type": "authorized_user"})}})
     check(st == 400 and not ADDED, "…and a JSON that is not a service account")
-    key = {"type": "service_account", "client_email": "person29@example.com", "private_key": "-----BEGIN"}
+    key = {"type": "service_account", "client_email": "person20@example.com", "private_key": "-----BEGIN"}
     body, st = E.connect({"protocol": "drive_google_service_account", "label": "sa", "secret": {"service_account_json": json.dumps(key)}})
     check(st == 201 and ADDED[-1][2] == key and ADDED[-1][3] == key["client_email"],
           "a service account is added with its parsed key, under its own address")

@@ -95,7 +95,7 @@ services:
       - traefik.http.routers.console-https.tls=true
       - traefik.http.routers.console-https.tls.certresolver=${TRAEFIK_CERTRESOLVER-myresolver}
       - traefik.http.routers.console-https.service=console
-      - traefik.http.routers.console-https.middlewares=authentik@file,hsts@file
+      - traefik.http.routers.console-https.middlewares=hsts@file,authentik@file
       # [2026-10-22] THE OFFICE'S BARE DOMAIN OPENS ITS CONSOLE. The owner typed https://exf.digital-office.co.il
       # on his phone — the address a person types — and got NET::ERR_CERT_AUTHORITY_INVALID: nothing routed
       # the apex, so traefik answered it with its default certificate and a 404. Now the apex has its own
@@ -116,8 +116,9 @@ services:
       - traefik.http.routers.console-apex.tls=true
       - traefik.http.routers.console-apex.tls.certresolver=${DGO_APEX_CERTRESOLVER-${TRAEFIK_CERTRESOLVER-myresolver}}
       - traefik.http.routers.console-apex.service=noop@internal
-      # the apex redirects into the console, and its certificate pins https for the domain (DGO-1595)
-      - traefik.http.routers.console-apex.middlewares=console-apex,hsts@file
+      # the apex redirects into the console, and its certificate pins https for the domain (DGO-1595) —
+      # the pin FIRST: the redirect answers by itself, and a header after it was never written
+      - traefik.http.routers.console-apex.middlewares=hsts@file,console-apex
       - traefik.http.routers.console-apex-http.rule=Host(`${DGO_APEX_HOST:-apex.invalid}`)
       - traefik.http.routers.console-apex-http.entrypoints=web
       - traefik.http.routers.console-apex-http.priority=1

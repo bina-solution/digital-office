@@ -68,7 +68,7 @@ services:
       - traefik.http.routers.drive-ui-https.tls=true
       - traefik.http.routers.drive-ui-https.tls.certresolver=${TRAEFIK_CERTRESOLVER-myresolver}
       - traefik.http.routers.drive-ui-https.priority=1
-      - traefik.http.routers.drive-ui-https.middlewares=authentik@file,hsts@file
+      - traefik.http.routers.drive-ui-https.middlewares=hsts@file,authentik@file
       - traefik.http.routers.drive-ui-https.service=drive-ui
       # …and the public /file/d/ share links, which must keep their higher priority and stay
       # UNAUTHENTICATED (that is the point of a share link) on https too.

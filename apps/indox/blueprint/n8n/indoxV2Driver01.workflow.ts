@@ -133,7 +133,7 @@ import { workflow, node, links } from '@n8n-as-code/transformer';
     /*__n8n__*/ meta: {"templateCredsSetupCompleted":true},
     /*__n8n__*/ pinData: {},
     /*__n8n__*/ staticData: {},
-    /*__n8n__*/ shared: [{"updatedAt":"2026-07-30T23:42:27.037Z","createdAt":"2026-07-30T23:42:27.037Z","role":"workflow:owner","workflowId":"indoxV2Driver01","projectId":"2xKn4WH08LyAOk2y","project":{"updatedAt":"2026-07-30T23:40:17.073Z","createdAt":"2026-07-30T23:33:30.049Z","id":"2xKn4WH08LyAOk2y","name":"Admin User <person2@example.com>","type":"personal","icon":null,"description":null,"creatorId":"544b7ec6-5907-4ee2-a94b-c5676e56835c"}}],
+    /*__n8n__*/ shared: [{"updatedAt":"2026-07-30T23:42:27.037Z","createdAt":"2026-07-30T23:42:27.037Z","role":"workflow:owner","workflowId":"indoxV2Driver01","projectId":"exampleProject02","project":{"updatedAt":"2026-07-30T23:40:17.073Z","createdAt":"2026-07-30T23:33:30.049Z","id":"exampleProject02","name":"Admin User <person2@example.com>","type":"personal","icon":null,"description":null,"creatorId":"544b7ec6-5907-4ee2-a94b-c5676e56835c"}}],
     id: 'indoxV2Driver01',
     name: 'Incoming Documents v2',
     active: true,
@@ -775,9 +775,9 @@ return fromBody ? out : $input.all();`,
 // Measured 2026-08-18 on the scale-4 cycle: ALL FOUR drivers died within 91s, every one on this
 // node. Its input held 1,261 of 6,262 ids (20.1%) shaped {filter, matches: [], matchCount: 0}
 // instead of a line -- rows the pipeline had already moved to OLD, whose line is gone, and which a
-// status-flip drain legitimately re-offers. 6,262 rows of work were discarded per lane over that.
+// status-flip drain legitimately re-offers. N rows of work were discarded per lane over that.
 //
-// A row whose line cannot be found is not an error condition for the other 5,001 rows in the lane.
+// A row whose line cannot be found is not an error condition for the other N rows in the lane.
 // It is skipped and left in whatever status it already had -- nothing is mutated here.
 // FOLLOW-UP (owner call, deliberately NOT taken here): an id that can never resolve will be
 // re-offered by every future drain forever. Marking it terminal is a state-machine decision.
@@ -884,7 +884,7 @@ return out;`,
   -- but __CFG() reads $('Companies') or an injected _cfg, and NEITHER router has a Companies
   -- node and nothing injects _cfg -- so __CFG() is {} on the decide path and _priorityActive was
   -- ALWAYS false. Measured 2026-08-21: action_priority_sync has 0 dispatches all-time, and the
-  -- 4,749 rows carrying PRIORITY_SYNC_COMPLETED were written by the v1 processors, not by this
+  -- N rows carrying PRIORITY_SYNC_COMPLETED were written by the v1 processors, not by this
   -- action. Flipping activePrioritySync would have sent the client nothing, silently.
   -- Carried on the row like __merge_enabled and __source_feedback_enabled, for the same reason.
          COALESCE((SELECT lower(value) = 'true' FROM {{ (() => { const i = String($json.__instance || ''); if (!/^[a-z][a-z0-9_]*$/.test(i)) { throw new Error('indoxV2Driver01: no valid __instance — public fallback removed at the 2026-08-31 cutover'); } return 'indox_' + i; })() }}.settings
@@ -912,12 +912,12 @@ return out;`,
      doc-id is shared across 3+ companies rather than merge documents that only look alike. The
      DETECTOR did not know about it, and that asymmetry is a group with no terminal state: the
      driver raises it, the adjudicator refuses it, nothing is written, and it is raised again on
-     the next sweep. Five mains reached 146 action_merge_doubles dispatches this way.
+     the next sweep. Five mains reached many action_merge_doubles dispatches this way.
      Every one of the last 10 duplicate groups on the table was this and only this. The worst
      offender, DOC_ID 500000088, is a company registration number appearing under FIFTEEN
-     companies across 68 rows; another, 02-0000020, is a phone number under 5. They are not
+     companies across 68 rows; another, 02-0000018, is a phone number under 5. They are not
      duplicates -- they are different documents whose id was mis-extracted.
-     Table-wide: 49 such doc-ids, 258 rows.
+     Table-wide: a few such doc-ids.
      Quarantining at the KEY, not after grouping, is what gives them a terminal state: they simply
      stop being duplicates. A row still gets its hash or comp key, so a genuine duplicate hiding
      behind a bad doc-id is still caught by the tiers below -- this narrows the biz tier only.
@@ -1023,7 +1023,7 @@ return out;`,
   --
   -- Computed HERE, in the one SQL pass that already runs per batch, and never in decide. Two
   -- reasons, both measured: SOURCE_LIST is now the FATTEST COLUMN ON THE TABLE (26 MB total,
-  -- avg 692 B, 1.37 MB per 2,000-row decide slice), and the last time a fat column was parsed
+  -- avg 692 B, 1.37 MB per N-row decide slice), and the last time a fat column was parsed
   -- per row in the decide path it was ACTION_LOG, which is exactly what the 2026-08-17 slimming
   -- removed. Decide gets two scalars instead: an index and an identity.
   --
@@ -1033,7 +1033,7 @@ return out;`,
   -- two at once would let two executions upsert the same row concurrently, and the loser's
   -- SOURCE_LIST write would be clobbered; that source then re-decides, finds its own name
   -- already in ACTION_HISTORY with no restart between, and is parked as DOUBLE ACTION BLOCKED
-  -- forever. A document with three sources simply takes three sweeps. Only 1,025 of 39,160 rows
+  -- forever. A document with three sources simply takes three sweeps. Only N of N rows
   -- have more than one source, and the drain runs continuously.
   SELECT DISTINCT ON (b."ID") b."ID",
          (e.ord - 1)::int AS idx,
@@ -1106,7 +1106,7 @@ ORDER BY b."ID"`,
     @node({
         id: 'drv-get-action-history',
         name: 'Get Action History',
-        /*__n8n__*/ notes: "[action history 2026-08-20, owner order] The newest 16 dispatches per document, from public.indox_action_execution_log, as ACTION_HISTORY, each carrying the LINE_HASH the router stamped at dispatch time. This is what replaces reading the ACTION_LOG string: 'Dup Guard: Double Action' and decide's _log both key on it. DELIBERATELY ITS OWN NODE, not folded into 'Enrich Double Lines' -- that node answers 'is this row a duplicate DOCUMENT' (data quality, answered by a merge); this one answers 'what has this document already been DISPATCHED' (state-machine health). Same reason the two were renamed apart. Cost measured 2026-08-20: 33 ms for 2,000 documents (PK index, avg 8.4 rows/doc, p95 17, max 344). IDs are pipe-joined because n8n splits Query Parameters on commas. executeOnce: once for the batch, not once per row.",
+        /*__n8n__*/ notes: "[action history 2026-08-20, owner order] The newest 16 dispatches per document, from public.indox_action_execution_log, as ACTION_HISTORY, each carrying the LINE_HASH the router stamped at dispatch time. This is what replaces reading the ACTION_LOG string: 'Dup Guard: Double Action' and decide's _log both key on it. DELIBERATELY ITS OWN NODE, not folded into 'Enrich Double Lines' -- that node answers 'is this row a duplicate DOCUMENT' (data quality, answered by a merge); this one answers 'what has this document already been DISPATCHED' (state-machine health). Same reason the two were renamed apart. Cost measured 2026-08-20: 33 ms for N documents (PK index, avg 8.4 rows/doc, p95 17, max 344). IDs are pipe-joined because n8n splits Query Parameters on commas. executeOnce: once for the batch, not once per row.",
         type: 'n8n-nodes-base.postgres',
         version: 2.6,
         position: [-2256, 3040],
@@ -1175,7 +1175,7 @@ return rows.map(it => {
               __dispatches_since_restart: disp.get(String(it.json.ID)) || 0 };
   // [source feedback 2026-08-21] SOURCE_LIST NEVER ENTERS THE DECIDE PAYLOAD.
   // Measured today it is the FATTEST COLUMN ON THE TABLE -- 26 MB total, avg 692 B/row,
-  // 1.37 MB per 2,000-row slice -- and it is pure ballast here: 'Enrich Double Lines' has
+  // 1.37 MB per N-row slice -- and it is pure ballast here: 'Enrich Double Lines' has
   // already reduced it to the two scalars decide actually needs (__feedback_idx and
   // __feedback_key). This is the same trade the 2026-08-17 slimming made for ACTION_LOG, and
   // it matters for the same reason: the worker aborts at Node's 2,600 MB V8 ceiling long
@@ -1248,7 +1248,7 @@ return rows.map(it => {
     @node({
         id: '4d3bed48-4d48-450c-b300-84dc6cf387c7',
         name: 'Respond to Webhook',
-        /*__n8n__*/ notes: "POSITION IS LOAD-BEARING. executionOrder v1 runs sibling branches TOPMOST-FIRST, so this node's y must stay ABOVE 'Code in JavaScript' (2960) and 'Execution Data4' (2768) for the webhook to ACK BEFORE the pipeline runs. It sat at y=3152 -- the lowest sibling -- until 2026-08-21, which meant the caller's POST blocked for the WHOLE driver run. Measured: lanes of 2,000 documents took 206-388 s against the drainer's 30 s HTTP timeout, so every lane came back with no execution id, the pool could not track a single one, and backpressure silently degraded to firing every batch at once. The response is the drainer's ONLY handle on the lane it just started; it must arrive immediately. Renamed 'completed' -> 'accepted' because responding first makes 'completed' a lie.",
+        /*__n8n__*/ notes: "POSITION IS LOAD-BEARING. executionOrder v1 runs sibling branches TOPMOST-FIRST, so this node's y must stay ABOVE 'Code in JavaScript' (2960) and 'Execution Data4' (2768) for the webhook to ACK BEFORE the pipeline runs. It sat at y=3152 -- the lowest sibling -- until 2026-08-21, which meant the caller's POST blocked for the WHOLE driver run. Measured: lanes of N documents took 206-388 s against the drainer's 30 s HTTP timeout, so every lane came back with no execution id, the pool could not track a single one, and backpressure silently degraded to firing every batch at once. The response is the drainer's ONLY handle on the lane it just started; it must arrive immediately. Renamed 'completed' -> 'accepted' because responding first makes 'completed' a lie.",
         type: 'n8n-nodes-base.respondToWebhook',
         version: 1.1,
         position: [-4960, 2600],
@@ -1623,7 +1623,7 @@ return out;
 // per-action list of literal log anchors (', Extract Base Doc, ' and friends) ANDed with the row's
 // completion flag, because a log entry only appeared once the action's upsert had landed and was
 // therefore not trustworthy on its own. The dispatch log records the dispatch itself, so the
-// anchors have no job left -- every dispatch has a row. Dual-run before the switch: 6,354 rows
+// anchors have no job left -- every dispatch has a row. Dual-run before the switch: N rows
 // across two full cycles, ZERO disagreements with the old string logic.
 // [line-hash 2026-08-26, owner order] THE COMPLETION-FLAG TABLE IS GONE, AND WITH IT SIGNAL B.
 // RULES used to answer "the row still carries this action's completion evidence", as a second,
@@ -1636,7 +1636,7 @@ return out;
 // legitimate re-proposal was refused on evidence about a line that no longer exists.
 // The residue signal B was covering -- a repeat deeper than the fetched window -- is closed by
 // the window instead: 'Get Action History' now takes the newest 16 rather than 10, against a
-// 15-step epoch ceiling (measured 2026-08-20: 8 of 27,256 documents had their last restart
+// 15-step epoch ceiling (measured 2026-08-20: 8 of N documents had their last restart
 // deeper than 10, max 13).
 
 for (const item of $input.all()) {
@@ -1662,10 +1662,10 @@ for (const item of $input.all()) {
   // the way.
   //
   // This replaces EXISTENCE ONLY (2026-08-20), which could not tell those two apart and refused
-  // both. Measured 2026-08-26: an ad-hoc DOC_DATE normalisation (1 statement, 2,503 rows) left
+  // both. Measured 2026-08-26: an ad-hoc DOC_DATE normalisation (1 statement, N rows) left
   // 1,306 lines carrying a stale BASE_SELECTION_HASH, so decide re-proposed select_base every
   // sweep and this guard failed the lane every sweep -- 256 of 256 driver failures in 24 h,
-  // 7,216 blocked lines across 1,180 documents, and not one of them a real loop.
+  // 7,216 blocked lines across N documents, and not one of them a real loop.
   //
   // 'e' (ENDED_AT) is still never consulted for the VERDICT -- a crashed attempt buys no free
   // re-run, the 2026-08-20 law is untouched -- only below, to tell a live race from a stuck loop.

@@ -195,5 +195,164 @@ class Supervise(unittest.TestCase):
             self.assertNotIn("an older start", text)
 
 
+class StopsAndIdles(unittest.TestCase):
+    """A running device asked to stop saves its snapshot first (quick boot); one nobody watches or uses stops by
+    itself (the Dell's core and memory go back to the office). The clock is the test's."""
+
+    def setUp(self):
+        self.clock = [1000.0]
+        self.asked = []
+        self.temp = [60]
+        self.pub = Pub()
+
+    def make(self, ask_exit=None, idle_s=0, save_s=120):
+        sup = s.Supervisor([sys.executable, "-c", "import time; time.sleep(60)"], booted=lambda: True,
+                           temp=lambda: self.temp[0], pub=self.pub, taskset=False, ask_exit=ask_exit, idle_s=idle_s,
+                           save_s=save_s, now=lambda: self.clock[0])
+        self.addCleanup(lambda: sup.proc and sup.proc.poll() is None and sup.proc.kill())
+        return sup
+
+    def running(self, sup):
+        sup.start("owner")
+        self.assertEqual(sup.tick(), "start")
+        sup.tick()
+        self.assertEqual(sup.state, g.RUNNING)
+        return sup
+
+    def test_a_stop_saves_the_snapshot_and_ends_when_the_emulator_exits(self):
+        sup = None
+
+        def ask():                                    # the emulator, asked by `adb emu kill`, saves and exits
+            self.asked.append(True)
+            sup.proc.terminate()
+            return True
+
+        sup = self.running(self.make(ask_exit=ask))
+        st = sup.stop()
+        self.assertEqual((st["state"], self.asked), (g.STOPPING, [True]))
+        self.assertEqual(self.pub.events[-1][0], "start")             # the bar stays open while it saves
+        sup.proc.wait(timeout=10)
+        self.assertEqual(sup.tick(), "stopped")
+        self.assertEqual((sup.state, sup.code, sup.why), (g.OFF, "asked", "asked"))
+        self.assertEqual(self.pub.events[-1][0], "ended")
+        self.assertEqual((sup.status()["pid"], sup.status()["saved"]), (None, True))
+
+    def test_a_save_that_runs_late_is_killed_says_so_and_a_start_asked_meanwhile_is_kept(self):
+        sup = self.running(self.make(ask_exit=lambda: True, save_s=30))
+        self.assertEqual(sup.stop()["state"], g.STOPPING)
+        st = sup.start("check")                                     # no second emulator over a saving one…
+        self.assertEqual((st["state"], st["again"]), (g.STOPPING, True))
+        self.clock[0] += 10
+        self.assertIsNone(sup.tick())
+        self.clock[0] += 30
+        self.assertEqual(sup.tick(), "stopped")
+        self.assertEqual(self.pub.events[-1][0], "failed")          # the bar on «כל מקביל» says it, and why
+        self.assertIn("not saved in 30 s", self.pub.events[-1][2])
+        self.assertFalse(sup.saved)                                 # the screen will not say «saved»
+        self.assertIsNone(sup.proc)
+        self.assertEqual((sup.state, sup.asked_by), (g.WAITING, "check"))   # …but the start is not dropped
+
+    def test_the_heat_rules_a_save_too(self):
+        sup = self.running(self.make(ask_exit=lambda: True))
+        sup.stop()
+        self.temp[0] = 91
+        self.assertEqual(sup.tick(), "stop")
+        self.assertEqual((sup.state, sup.code, sup.saved), (g.OFF, "heat", False))
+        self.assertIn("while saving", sup.why)
+        self.assertEqual(sup.status()["temp"], 91)
+
+    def test_an_emulator_that_cannot_be_asked_is_stopped_plainly_and_the_lock_is_free_meanwhile(self):
+        seen = []
+        sup = None
+
+        def ask():                                    # the status answers while adb is being asked
+            seen.append(sup.status()["state"])
+            return False
+
+        sup = self.running(self.make(ask_exit=ask))
+        self.assertEqual(sup.stop()["state"], g.OFF)
+        self.assertEqual((seen, sup.saved), ([g.STOPPING], False))
+
+    def test_a_start_asked_while_a_stop_asks_in_vain_still_stands(self):
+        sup = None
+
+        def ask():                                    # a check asks for the device while adb is being asked
+            sup.start("check")
+            return False
+
+        sup = self.running(self.make(ask_exit=ask))
+        st = sup.stop()
+        self.assertEqual((st["state"], st["asked_by"], st["again"]), (g.WAITING, "check", False))
+
+    def test_stopping_a_device_that_never_ran_keeps_what_the_last_save_left(self):
+        sup = None
+
+        def ask():
+            sup.proc.terminate()
+            return True
+
+        sup = self.running(self.make(ask_exit=ask))
+        sup.stop()
+        sup.proc.wait(timeout=10)
+        sup.tick()
+        self.assertTrue(sup.saved)
+        self.temp[0] = 85                              # too hot to start: it waits, and is stopped while waiting
+        sup.start("owner")
+        self.assertEqual(sup.tick(), "wait")
+        sup.stop()
+        self.assertEqual((sup.state, sup.saved), (g.OFF, True))   # the snapshot is still there: say so
+
+    def test_a_device_not_running_is_ended_at_once_and_one_not_asked_is_killed(self):
+        sup = self.make(ask_exit=lambda: True)
+        sup.start("owner")
+        sup.tick()                                     # booting: nothing to save yet
+        sup.booted = lambda: False
+        sup.state = g.BOOTING
+        self.assertEqual(sup.stop()["state"], g.OFF)
+        refused = self.running(self.make(ask_exit=lambda: False))
+        self.assertEqual(refused.stop()["state"], g.OFF)           # the emulator was not reached: a plain stop
+
+    def test_nobody_watching_or_using_it_stops_it_and_a_use_keeps_it(self):
+        sup = self.running(self.make(idle_s=1200))
+        self.assertEqual(sup.status()["idle_in"], 1200)
+        self.clock[0] += 1100
+        sup.watch(+1)                                  # a display opened (or reconnected): counted, no use
+        self.assertEqual((sup.status()["viewers"], sup.status()["idle_in"]), (1, 100))
+        sup.touch()                                    # the display moved
+        self.clock[0] += 1000
+        sup.hold(+1)                                   # a verb of the door: in use for as long as it runs
+        self.clock[0] += 5000
+        self.assertIsNone(sup.tick())
+        sup.hold(-1)
+        self.clock[0] += 1199
+        self.assertIsNone(sup.tick())
+        self.assertEqual(sup.status()["idle_in"], 1)
+        self.clock[0] += 1                             # an open display on which nothing moved is no use
+        self.assertEqual(sup.tick(), "idle")           # …stopped from a thread of its own (the governor goes on)
+        sup.idle_thread.join(30)                       # joined, never guessed: a loaded runner only takes longer
+        self.assertFalse(sup.idle_thread.is_alive())
+        self.assertEqual((sup.state, sup.code, sup.why), (g.OFF, "idle", "nobody used it for 20 minutes"))
+        sup.watch(-1)
+        self.assertEqual(sup.status()["viewers"], 0)
+
+    def test_a_pause_for_the_heat_is_nobodys_idleness(self):
+        sup = self.running(self.make(idle_s=1200))
+        self.temp[0] = 86
+        self.assertEqual(sup.tick(), "pause")
+        self.clock[0] += 3000                          # paused for 50 minutes, its screen frozen
+        self.temp[0] = 70
+        self.assertEqual(sup.tick(), "resume")
+        self.assertIsNone(sup.tick())                  # not stopped as idle two seconds after it came back
+        self.assertEqual((sup.state, sup.status()["idle_in"]), (g.RUNNING, 1200))
+
+    def test_an_idle_rule_of_zero_never_stops_it(self):
+        sup = self.running(self.make(idle_s=0))
+        self.clock[0] += 10 ** 6
+        self.assertIsNone(sup.tick())
+        self.assertEqual(sup.state, g.RUNNING)
+        self.assertIsNone(sup.status()["idle_in"])
+        sup.stop("test over")
+
+
 if __name__ == "__main__":
     unittest.main()

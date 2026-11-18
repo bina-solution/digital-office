@@ -813,7 +813,7 @@
     "source_date": "2026-02-15",
     "note": "Calcalist (2026-02-15, 'Grow crosses 100,000 customers in Israel'): more than 100,000 businesses in Israel work with Grow, annual payment turnover above NIS 6 billion. The homepage repeats '+100,000 businesses'."
    },
-   "ownership_funding": "לפי עמוד About של החברה, פלטפורמת 'משולם' הושקה ב-2013 לתשלומי ועדי בתים, ובשנת 2024 הוכרז ניאו-בנק לעסקים. הגוף המפעיל: גרואו פיימנטס בע״מ (ח.פ. 500000211), שבתחתית האתר מצוין כבעלת רישיון חברת תשלומים מרשות ניירות ערך וגם רישיון אשראי מרשות שוק ההון. בתחתית האתר מזוכה ״פיתוח קוד וליבה בע״מ״ כספקית פיתוח. בעלים, מנכ״ל ומשקיעים לא נמצאו במקורות שנפתחו.",
+   "ownership_funding": "לפי עמוד About של החברה, פלטפורמת 'משולם' הושקה ב-2013 לתשלומי ועדי בתים, ובשנת 2024 הוכרז ניאו-בנק לעסקים. הגוף המפעיל: גרואו פיימנטס בע״מ (ח.פ. 500000138), שבתחתית האתר מצוין כבעלת רישיון חברת תשלומים מרשות ניירות ערך וגם רישיון אשראי מרשות שוק ההון. בתחתית האתר מזוכה ״פיתוח קוד וליבה בע״מ״ כספקית פיתוח. בעלים, מנכ״ל ומשקיעים לא נמצאו במקורות שנפתחו.",
    "hebrew_rtl": true,
    "integrations": [
     "WordPress",
@@ -927,7 +927,7 @@
     "grade": "C",
     "source_url": "https://hyp.co.il/",
     "source_date": null,
-    "note": "Homepage counter '62,524+ לקוחות שעובדים איתנו' (read 2026-11-05; looks like a live counter). The same page: 43,858+ active registers and terminals, 1,820,386+ digital invoices per month. EZcount's own site says '5000 satisfied customers' and 150,000 invoices per month; the two sites differ."
+    "note": "Homepage counter '62,524+ לקוחות שעובדים איתנו' (read 2026-11-05; looks like a live counter). The same page: 43,858+ active registers and terminals, 1,820,386+ digital invoices per month. EZcount's own site says '5000 satisfied customers' and N invoices per month; the two sites differ."
    },
    "ownership_funding": "הגוף: הייפ פתרונות תשלום בע״מ (ז׳בוטינסקי 9 בני ברק). ב-13.6.2021 דווח (הודעת משרד גורניצקי) ש-Max Group, בשליטת Warburg Pincus, רכשה את EZcount וריכזה את פעילות התשלומים בקבוצת Hyp בניהול אוהד מימון; באוגוסט 2022 הודיע אותו משרד על מכירת Max ו״חברת האחות Hyp״ ל-Clal ביטוח. השלמת העסקה לגבי Hyp ובעלות נוכחית לא אומתו במקור שנפתח. קישור ל-CreditGuard: Nuvei מכרה את CreditGuard ל-Max Group (Commercial Payments International, ללא תאריך בדף); האתר של Hyp אינו מזכיר את CreditGuard.",
    "hebrew_rtl": true,
@@ -1173,7 +1173,7 @@
      "date": "2026-11-05"
     },
     {
-     "plan": "Base44: Elite (1,200 message credits, 50,000 integration credits)",
+     "plan": "Base44: Elite (N message credits, 50,000 integration credits)",
      "price": "$160/mo",
      "currency": "USD",
      "period": "billed annually",

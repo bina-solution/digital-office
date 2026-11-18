@@ -74,7 +74,7 @@ services:
     - traefik.http.routers.glitchtip-https.tls=true
     - traefik.http.routers.glitchtip-https.tls.certresolver=${TRAEFIK_CERTRESOLVER-myresolver}
     - traefik.http.routers.glitchtip-https.service=glitchtip
-    - traefik.http.routers.glitchtip-https.middlewares=authentik-admins@file,hsts@file
+    - traefik.http.routers.glitchtip-https.middlewares=hsts@file,authentik-admins@file
     - traefik.http.services.glitchtip.loadbalancer.server.port=8000
     - traefik.http.services.glitchtip.loadbalancer.healthcheck.path=/_health/
     # the office's probe knobs, as platform-base/authentik's (a single slow answer must not 503 the app)

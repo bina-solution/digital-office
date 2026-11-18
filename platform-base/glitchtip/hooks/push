@@ -22,7 +22,7 @@ log() { echo "[glitchtip-push] $*"; }
 docker ps --format '{{.Names}}' | grep -Fxq "${GT}" || { echo "Error: '${GT}' not running." >&2; exit 1; }
 
 # Creds from .env, falling back to the shell environment (so CI / ad-hoc runs can pass them).
-ADMIN_EMAIL="$(read_env GLITCHTIP_ADMIN_EMAIL)"; ADMIN_EMAIL="${ADMIN_EMAIL:-${GLITCHTIP_ADMIN_EMAIL:-person98@example.com}}"
+ADMIN_EMAIL="$(read_env GLITCHTIP_ADMIN_EMAIL)"; ADMIN_EMAIL="${ADMIN_EMAIL:-${GLITCHTIP_ADMIN_EMAIL:-person89@example.com}}"
 ADMIN_PASS="$(read_env GLITCHTIP_ADMIN_PASSWORD)"; ADMIN_PASS="${ADMIN_PASS:-${GLITCHTIP_ADMIN_PASSWORD:-}}"
 SECRET="$(read_env GLITCHTIP_SECRET_KEY)"; SECRET="${SECRET:-${GLITCHTIP_SECRET_KEY:-}}"
 # read_env resolves ${BUSINESS_NAME} inside .env, so the org is the business, not a past client.

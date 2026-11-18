@@ -33,7 +33,7 @@ class AlignedAnnotations:
     def sorted_by_distance(self):
         # Perpendicular alignment must dominate raw distance. Sorting by btb_distance alone
         # lets a DIAGONAL neighbour beat a same-row value when it is merely closer: on
-        # "סה\"כ לתשלום | 4,626.00" with "מע\"מ | 705.66" one row up, 705.66 wins by
+        # "סה\"כ לתשלום | 2,000.00" with "מע\"מ | 300.00" one row up, 300.00 wins by
         # center-to-center distance (57 vs 63) despite 14px of vertical drift, and the
         # extractor returns the VAT instead of the total. Bucket the normalized
         # perpendicular error first (rounded, so near-equal drifts still fall through to

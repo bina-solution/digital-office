@@ -152,7 +152,7 @@ export const DOCUMENT_STATUS_VALUES = [
   'MERGED', 'GARBAGE',
   // [2026-08-12] FOUR STATUSES THE PIPELINE PRODUCES THAT THIS LIST DID NOT KNOW.
   // Measured on the live table: NEEDS_REVIEW 3,131 · IN_PROGRESS 1,711 · API_TOOLS_FAILED 56 ·
-  // ACTION_REQUIRED 7 — 4,905 documents, ~19% of the table. The consequences were not cosmetic:
+  // ACTION_REQUIRED 7 — N documents, ~19% of the table. The consequences were not cosmetic:
   // the grid's status dropdown could not express the state ~1 in 5 documents were IN, and
   // `validate` actively REJECTED those values as "ערך לא ברשימת הסטטוסים המוכרים" — so an
   // operator could open such a row and be refused permission to save the status it already had.
@@ -702,7 +702,7 @@ const CALL_TIMEOUT_MS = 12000;
  * Per-call override for the bound above, for the few endpoints whose work is genuinely large and
  * MEASURED — not as a way to paper over a slow one.
  *
- * `/dashboard/actions` under `הכל` parses every ACTION_LOG in the table: 32,530 rows, 19.9 MB,
+ * `/dashboard/actions` under `הכל` parses every ACTION_LOG in the table: N rows, 19.9 MB,
  * 440,525 stamps, measured at ~8s of server CPU on top of the read. Twelve seconds is the right
  * guard for a call that should take 300ms and the wrong one for this — it would abort a request
  * that was going to succeed, and the user would see a timeout error on a healthy stack. The

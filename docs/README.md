@@ -1,7 +1,8 @@
 # docs/ — the DGO documentation (docs.digital-office.co.il)
 
 The documentation site of הלשכה הדיגיטלית DGO, Hebrew first (DGO-1788). [Starlight](https://starlight.astro.build)
-on Astro; the pages are Markdown under `src/content/docs/he/`, one file per page, and the sidebar is the map in
+on Astro; the pages are Markdown under `src/content/docs/he/` and their English twins under `src/content/docs/en/`,
+one file per page, and the sidebar is the map in
 `astro.config.mjs`. Agents read it too: every page has a Markdown twin (`<page>.md`), and the build writes
 `llms.txt`.
 
@@ -9,7 +10,8 @@ on Astro; the pages are Markdown under `src/content/docs/he/`, one file per page
 
 | Path | What it is |
 |---|---|
-| `src/content/docs/he/` | the pages (Hebrew). English falls back to Hebrew until an English page exists. |
+| `src/content/docs/he/` | the pages (Hebrew), the source |
+| `src/content/docs/en/` | the English pages: one per Hebrew page, same path and slug, links to `/en/…`. A page changed in Hebrew is changed here in the same commit; a page with no English twin falls back to Hebrew |
 | `astro.config.mjs` | the site: its name, locales, sidebar, and two Markdown plugins: `withBase` (the preview's path prefix) and `shotPlaceholders` (a `![…](TODO-shot: …)` still to be made shows as a marked box) |
 | `src/styles/olive.css` | Starlight's colours mapped onto the office's one palette. `scripts/docs/pack.sh` copies `platform-base/bina-ui/theme-tokens.css` in at build time; no colour is written here. |
 | `src/routeData.ts`, `src/pages/` | the Markdown twins and their `<link rel="alternate">`; the root redirects to `he/` |

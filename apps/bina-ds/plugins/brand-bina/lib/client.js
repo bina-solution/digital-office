@@ -40,6 +40,28 @@ body[data-ds-dark-theme]{--dsw-specific-sidebar-fill:#192213;--dsw-specific-side
 `;
 		// The office's mark: its olive tile, and what is written on olive (the console's own logo tile).
 		const MARK = { background: "#56693f", color: "#f3f5f7" };
+		// The app's name is עזריה, the office agent's own (the owner, 2026-11-14, EXU-64: «rename the app
+		// to simply azaria … to עזריה»). One place says it: the sidebar, the hero mark and the tab title
+		// all read these two.
+		const NAME = "עזריה";
+		const GLYPH = "ע";
+		// The harness's layout writes `<session> — DeepSeek Harness` into the tab title (a literal in
+		// dsh-client-ui-layout, no slot), and its index.html ships `<title>DeepSeek Harness</title>`.
+		// The tab is the office agent's, so the vendor's words are replaced wherever they appear in it,
+		// on every write the layout makes.
+		const VENDOR_TITLE = "DeepSeek Harness";
+		function installTitle() {
+			if (typeof document === "undefined" || document.__azariaTitle) return;
+			document.__azariaTitle = true;
+			const fix = () => {
+				if (document.title.includes(VENDOR_TITLE)) document.title = document.title.split(VENDOR_TITLE).join(NAME);
+			};
+			fix();
+			const head = document.querySelector("head");
+			if (head && typeof MutationObserver !== "undefined") {
+				new MutationObserver(fix).observe(head, { subtree: true, childList: true, characterData: true });
+			}
+		}
 		function installHeroStyles() {
 			if (typeof document === "undefined" || document.getElementById("bina-hero-css")) return;
 			const tag = document.createElement("style");
@@ -52,11 +74,11 @@ body[data-ds-dark-theme]{--dsw-specific-sidebar-fill:#192213;--dsw-specific-side
 			return jsx("span", {
 				"aria-hidden": "true",
 				style: { display: "inline-flex", alignItems: "center", justifyContent: "center", width: size, height: size, borderRadius: "22%", ...MARK, fontWeight: 700, fontSize: Math.round((size || 24) * 0.58) + "px", lineHeight: 1 },
-				children: "ב",
+				children: GLYPH,
 			});
 		}
 		function BinaBrandName() {
-			return jsx("span", { lang: "he", style: { fontWeight: 700, letterSpacing: "-0.01em" }, children: "בינה" });
+			return jsx("span", { lang: "he", style: { fontWeight: 700, letterSpacing: "-0.01em" }, children: NAME });
 		}
 		function BinaHeroMark({ size, className }) {
 			// The blank-session hero: same glyph, host-requested size and class (the host animates it).
@@ -64,11 +86,12 @@ body[data-ds-dark-theme]{--dsw-specific-sidebar-fill:#192213;--dsw-specific-side
 				className,
 				"aria-hidden": "true",
 				style: { display: "inline-flex", alignItems: "center", justifyContent: "center", width: size, height: size, borderRadius: "22%", ...MARK, fontWeight: 700, fontSize: Math.round((size || 34) * 0.58) + "px", lineHeight: 1 },
-				children: "ב",
+				children: GLYPH,
 			});
 		}
 		function apply(ctx) {
 			installHeroStyles();
+			installTitle();
 			ctx.slots.inject("sidebar.brand.mark", () => ctx.slots.inject("sidebar.brand.name", function* () {
 				yield ctx.slots.register({ name: "sidebar.brand.mark" }, BinaBrandMark);
 				yield ctx.slots.register({ name: "sidebar.brand.name" }, BinaBrandName);

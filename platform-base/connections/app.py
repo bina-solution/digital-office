@@ -406,6 +406,123 @@ def _platform_protocols(prov):
     return [p] if p and str(p).startswith(_PLATFORM_CAPS) else []
 
 
+# ── a consent for ONE protocol, and an office that connects one READ-ONLY (EXU-24, from Exampleu's 9810127) ──
+# One Google grant backs Drive AND Gmail with full access. An office that reads a client's Drive must never be
+# able to write to it: it declares the protocol in OAUTH_READONLY_PROTOCOLS, and then every consent that would
+# mint that protocol's account asks Google for its read-only scopes alone. Offices that declare nothing are
+# untouched: a start by provider is the provider-wide grant, as before.
+def _readonly_protocols():
+    """Protocols this office connects READ-ONLY (`OAUTH_READONLY_PROTOCOLS` in .env, comma-separated)."""
+    return {p.strip() for p in os.environ.get("OAUTH_READONLY_PROTOCOLS", "").split(",") if p.strip()}
+
+
+def _oauth_provider(cid, hint=None):
+    """(provider, protocol) for an OAuth start or callback id, else (None, None). The id is a provider
+    (`google-workspace-grant`: one consent for every protocol it declares) or a PLATFORM PROTOCOL a provider
+    declares (`drive_google_oauth`: a consent for that protocol alone). `hint` is the protocol the app that asks
+    serves (the drive door names its engine's): with a provider id it narrows the start to that protocol only
+    where this office connects it read-only, so an office without the declaration gets the grant it always got."""
+    cat = catalog()
+    prov = cat.get(cid or "")
+    if prov and "oauth" in prov:
+        # honoured where this office connects one of the provider's protocols read-only: there every consent names
+        # what it is for (the drive door its Drive, read-only; mailview its Gmail, without Drive)
+        protos = _platform_protocols(prov)
+        if hint and hint in protos and set(protos) & _readonly_protocols():
+            return prov, hint
+        return prov, None
+    for p in cat.values():
+        if "oauth" in p and cid and cid in _platform_protocols(p):
+            return p, cid
+    return None, None
+
+
+def oauth_scopes(prov, proto=None):
+    """The scopes a consent asks for: the provider's list for a provider-wide start; `protocol_scopes[proto]`
+    for a protocol start — its `readonly` list where this office declares the protocol read-only. A read-only
+    declaration with no read-only list is REFUSED (ValueError), never widened to full access."""
+    o = prov["oauth"]
+    if not proto:
+        return list(o["scopes"])
+    per = (o.get("protocol_scopes") or {}).get(proto) or {}
+    ro = _readonly_protocols()
+    if proto in ro:
+        if not per.get("readonly"):
+            raise ValueError(f"{proto} is declared read-only here (OAUTH_READONLY_PROTOCOLS), but {prov['id']} "
+                             f"declares no read-only scopes for it")
+        return list(per["readonly"])
+    if not per.get("full"):
+        covered = sorted(set(_platform_protocols(prov)) & ro)
+        if covered:
+            # the provider's full list would reach the read-only protocol's scopes too (Drive write, for Gmail)
+            raise ValueError(f"{proto} declares no scopes of its own, and {prov['id']}'s full list would reach "
+                             f"{', '.join(covered)}, read-only here")
+    return list(per.get("full") or o["scopes"])
+
+
+_SCOPE_ALIAS = {"email": "https://www.googleapis.com/auth/userinfo.email",
+                "profile": "https://www.googleapis.com/auth/userinfo.profile"}
+
+
+def _scope_refusal(prov, proto, secret):
+    """Why a token of `proto` carries more than `proto` asks for (oauth_scopes), or None. Google answers
+    `email`/`profile` as their userinfo URLs; a token that states no scope is refused, never assumed narrow."""
+    try:
+        want = set(oauth_scopes(prov, proto))
+    except ValueError as e:
+        return str(e)
+    want |= {_SCOPE_ALIAS[s] for s in list(want) if s in _SCOPE_ALIAS}
+    raw = (secret or {}).get("scope") if isinstance(secret, dict) else None
+    got = set(raw.split()) if isinstance(raw, str) else set()
+    beyond = sorted(got - want)
+    if not got or beyond:
+        return (f"החשבון של {proto} נושא יותר ממה שהוא מבקש: "
+                f"{', '.join(beyond) if beyond else 'הרשאה שלא פורטה'} — שום דבר לא נשמר")
+    return None
+
+
+def readonly_refusal(prov, proto, tok=None):
+    """Why this start or grant would break the office's read-only declaration, or None.
+    1. A PROVIDER-WIDE consent of a provider that backs a read-only protocol asks for full access and mints that
+       protocol's account too — refused; the app's own «connect an account» (a protocol start) is the way in.
+    2. A PROTOCOL consent's token may carry no scope beyond what that protocol asks for — any protocol, not only a
+       read-only one: the scope in the consent's address is not signed, and Google can fold earlier grants into a
+       new token, so what was granted is checked, not assumed (a Gmail consent widened to Drive is refused too)."""
+    ro = _readonly_protocols()
+    if not proto:
+        covered = sorted(set(_platform_protocols(prov)) & ro)
+        if covered:
+            return (f"בלשכה הזו {', '.join(covered)} מחובר לקריאה בלבד (OAUTH_READONLY_PROTOCOLS), והסכמה של "
+                    f"{prov['id']} כולה הייתה נותנת גישה מלאה — מחברים את החשבון מתוך האפליקציה שלו («קבצים»), "
+                    f"או ב-/oauth/{covered[0]}/start?as_instance=1")
+        return None
+    if tok is None:
+        try:
+            oauth_scopes(prov, proto)
+        except ValueError as e:
+            return str(e)
+        return None
+    return _scope_refusal(prov, proto, tok)
+
+
+def secret_readonly_refusal(protocol, secret):
+    """Why a secret of `protocol` may not be stored or handed out here, or None. Where the office connects one of a
+    provider's protocols read-only, EVERY protocol of that provider is held to its own scopes (oauth_scopes): the
+    read-only one to its read-only list, a sibling to its own `full` list — a Gmail account from a provider-wide
+    consent made before the declaration carries Drive write too. Whichever way the secret comes (a consent, an
+    account added by hand, a renewal written back) or goes (an engine's read); such an account then reads «connect
+    again». An office that declares nothing is untouched."""
+    ro = _readonly_protocols()
+    if not ro or not protocol:
+        return None
+    prov = next((p for p in catalog().values() if "oauth" in p and protocol in _platform_protocols(p)), None)
+    if not prov:
+        return f"{protocol} is declared read-only here, but no OAuth provider declares it" if protocol in ro else None
+    if not set(_platform_protocols(prov)) & ro:
+        return None
+    return _scope_refusal(prov, protocol, secret)
+
+
 # ── multi-field credentials: a credential is its primary env + envs_extra companions.
 # The operator edits ALL of them here (n8n = email + password + names), never .env. ──
 _FIELD_LABELS = [("_TOTP", "סוד TOTP"), ("USERNAME", "שם משתמש"), ("_USER", "שם משתמש"), ("EMAIL", "אימייל"),
@@ -434,32 +551,101 @@ def _primary_is_secret(prov):
     return prov.get("kind") != "config"
 
 
+def _fixed(prov):
+    """{field: value} a provider FIXES — shown, given to whoever reads the credential (browser42 takes a login's
+    address from its `*_URL` field), never edited (DGO-1825: the Google sign-in address)."""
+    fixed = (prov or {}).get("fixed")
+    return {str(k): str(v) for k, v in fixed.items()} if isinstance(fixed, dict) else {}
+
+
+def _reveal_to(prov):
+    """The compose services a provider's secret is revealed to (`reveal_to:`), or an empty set: every caller, as
+    before. A row that names them says no character of its value anywhere else (`masked` is dots)."""
+    names = (prov or {}).get("reveal_to")
+    return {str(n) for n in names} if isinstance(names, list) else set()
+
+
+def _from_a_page(req):
+    """A request a WEB PAGE made: a browser always sends `Origin` or a `Sec-Fetch-*` header with a fetch, and a page
+    cannot remove them; urllib (logins.py, the task runner, the injector) sends neither (DGO-1825: the agent drives
+    the office browser, and a page it opens must not read what that browser's own container may)."""
+    if req is None:
+        return False
+    return bool(req.headers.get("Origin")) or any(k.lower().startswith("sec-fetch-") for k in req.headers.keys())
+
+
+def _may_have(prov, ident, req=None):
+    """May THIS caller be given a `reveal_to` secret? Only a caller the broker VERIFIED as one of the named services
+    (its container id matches its address — never an address alone, never in the broker's warn mode) of THIS office's
+    compose project (the office network is shared by every office on one docker host: another office's task runner
+    is the same service name — the fifth reader; /api/agent-token holds the same rule), or the operator inside this
+    container; never a request a page made. A vault that cannot tell its own project gives it to no container. A
+    provider that names no one: as before, yes."""
+    to = _reveal_to(prov)
+    if not to:
+        return True
+    ident = ident or {}
+    if ident.get("method") == "loopback":
+        return True
+    if _from_a_page(req) or not ident.get("ok") or ident.get("method") != "container-id+ip" \
+            or ident.get("service") not in to:
+        return False
+    project = identity.own_project()
+    return bool(project) and ident.get("project") == project
+
+
+def _login_user(cid, prov, store):
+    """A login's user name as saved HERE (its USER/EMAIL companion, never a secret) — shown on its row, as an app's
+    `user_env` is (DGO-1825: the Gmail address of the office's Google account)."""
+    for k in prov.get("envs_extra") or []:
+        if re.search(r"(USER|USERNAME|EMAIL)", k) and not _field_is_secret(k):
+            v = store.get(f"{cid}:{k}") or os.environ.get(k)
+            if v:
+                return {"name": None, "url": None, "user": v}
+    return None
+
+
+def _label(prov, key):
+    """A field's label: the provider's own words for it (`labels:`), else the one its name implies."""
+    labels = (prov or {}).get("labels")
+    return str(labels[key]) if isinstance(labels, dict) and labels.get(key) else _field_label(key)
+
+
 def _cred_fields(cid, prov, store):
     """Every editable field of a credential: primary (prov.env) + envs_extra companions.
-    Secret fields are masked + reveal-gated; non-secret fields (user/email/name) show clear."""
+    Secret fields are masked + reveal-gated; non-secret fields (user/email/name) show clear; a field the provider
+    fixes is its value, marked `fixed`, and is not stored."""
     out = []
+    fixed, hidden = _fixed(prov), bool(_reveal_to(prov))
+    # a secret revealed only to named services: no character of it here, and no «reveal» offered on the screen
+    shut = (lambda val: "•••" if val else None) if hidden else mask
     primary = prov.get("env")
     if primary:
         src, val = resolve(cid, prov, store)
         sec = _primary_is_secret(prov)
-        out.append({"key": primary, "label": _field_label(primary), "primary": True,
+        out.append({"key": primary, "label": _label(prov, primary), "primary": True,
                     "secret": sec, "source": src,
-                    "masked": mask(val) if sec else val,
+                    **({"reveal": False} if sec and hidden else {}),
+                    "masked": shut(val) if sec else val,
                     "clear": (None if sec else val),
                     "derived": str(val or "").startswith("derived:")})
     for k in prov.get("envs_extra", []) or []:
         dbv = store.get(f"{cid}:{k}")
-        if dbv is not None:
+        if k in fixed:
+            src, val = "env", fixed[k]
+        elif dbv is not None:
             src, val = "db", dbv
         elif os.environ.get(k):
             src, val = "env", os.environ[k]
         else:
             src, val = "unset", None
-        sec = _field_is_secret(k)
-        out.append({"key": k, "label": _field_label(k), "primary": False,
+        sec = _field_is_secret(k) and k not in fixed
+        out.append({"key": k, "label": _label(prov, k), "primary": False,
                     "secret": sec, "source": src,
-                    "masked": mask(val) if sec else val,
-                    "clear": (None if sec else val), "derived": False})
+                    **({"reveal": False} if sec and hidden else {}),
+                    "masked": shut(val) if sec else val,
+                    "clear": (None if sec else val), "derived": False,
+                    **({"fixed": True} if k in fixed else {})})
     return out
 
 
@@ -682,16 +868,22 @@ def _row(cid, prov, reqs, store, minted=frozenset()):
     is_derived = str(value or "").startswith("derived:")
     n_extra = len(prov.get("envs_extra", []) or [])
     return {"id": cid, "group": prov["group"], "pillar": pillar,
-            "protocol": _protocol(prov, pillar), "app": _resolve_app(prov),
+            "protocol": _protocol(prov, pillar),
+            "app": _resolve_app(prov) or (_login_user(cid, prov, store) if prov.get("pin") else None),
             "title": prov.get("title", cid), "title_he": prov.get("title_he"),
-            "kind": prov.get("kind"), "source": source, "masked": mask(value),
+            "kind": prov.get("kind"), "source": source,
+            # a value revealed only to named services says none of its characters here (the row is read by anyone)
+            "masked": ("•••" if value else None) if _reveal_to(prov) else mask(value),
             "secret": secret, "clear": (None if (secret or is_derived) else value),
             "fields_count": (1 if prov.get("env") else 0) + n_extra,
-            "reveal_ok": prov.get("reveal_ok", True) and not is_derived and prov.get("kind") != "totp",
+            "reveal_ok": prov.get("reveal_ok", True) and not is_derived and prov.get("kind") != "totp"
+                         and not _reveal_to(prov),
             "rotatable": ("automint" in prov) or bool(prov.get("rotate")),
             "impact": prov.get("impact") or cons, "rotate_warn": prov.get("rotate_warn"),
             "status": state, "detail": detail, "required": required, "optional": bool(prov.get("optional")),
-            "env": prov.get("env"), "consumers": cons, "now": prov.get("now", "").strip()}
+            "env": prov.get("env"), "consumers": cons, "now": prov.get("now", "").strip(),
+            # an entry every office has, shown first with what it is for (its provider's `pin`, DGO-1825)
+            "pin": bool(prov.get("pin")), "purpose_he": prov.get("purpose_he"), "about_he": prov.get("about_he")}
 
 
 def custom_catalog(store):
@@ -763,7 +955,9 @@ def api_resolve(cid):
     if not prov:
         return jsonify(error="unknown connection"), 404
     source, value = resolve(cid, prov, vault_read())
-    return jsonify(id=cid, source=source, masked=mask(value), resolved=bool(value))
+    # a value revealed only to named services says none of its characters to anyone (DGO-1825, the third reader)
+    shown = ("•••" if value else None) if _reveal_to(prov) else mask(value)
+    return jsonify(id=cid, source=source, masked=shown, resolved=bool(value))
 
 
 @app.get("/api/is-set/<cid>")
@@ -815,7 +1009,20 @@ def api_reveal(cid):
                          reason="a TOTP secret is written once and never revealed over the network")
             return jsonify(error="a TOTP secret is written once and never revealed over the network — "
                                  "GET /api/totp/<id> mints its code; to move it, re-enrol at the provider"), 403
+    reveal_to = _reveal_to(prov)
+    if reveal_to:
+        # REVEALED ONLY TO THE SERVICES IT NAMES (DGO-1825: the office's Google password goes to the office
+        # browser's own containers, verified by container id, and to no other — not an agent's container on the same
+        # network, not a page the browser opened, not a person's screen; it is written once). The operator inside
+        # this container still can.
+        ident = broker.caller()
+        if not _may_have(prov, ident, request):
+            broker.audit("reveal", "refuse", ident, connection=cid,
+                         reason=f"revealed only to {', '.join(sorted(reveal_to))}")
+            return jsonify(error=f"{cid} is revealed only to {', '.join(sorted(reveal_to))}"), 403
     field = (request.get_json(silent=True) or {}).get("field")
+    if field and field in _fixed(prov):            # a value the provider fixes is that value, wherever it is read
+        return jsonify(id=cid, field=field, source="env", value=_fixed(prov)[field], revealed=True)
     if field and field != prov.get("env"):        # companion field
         dbv = store.get(f"{cid}:{field}")
         src, value = ("db", dbv) if dbv is not None else \
@@ -908,6 +1115,9 @@ def api_set(cid):
         return jsonify(error="value required"), 400
     store = vault_read()
     prov = catalog().get(cid) or {}
+    if field and field in _fixed(prov):
+        # a value the provider FIXES (the address a login is for, DGO-1825) is not the operator's to change
+        return jsonify(error=f"{field} is fixed by its provider", id=cid, field=field), 400
     key = _field_store_key(cid, prov, field)
     kind = (prov or custom_catalog(store).get(cid) or {}).get("kind")    # a custom row has a kind too
     if kind == "totp" and key == cid:
@@ -920,7 +1130,9 @@ def api_set(cid):
             return jsonify(error=f"not a usable TOTP secret: {e}", id=cid, field=prov.get("env")), 400
     store[key] = v; vault_write(store)
     _audit("edit", cid, **({"field": field} if field else {}))
-    return jsonify(ok=True, id=cid, field=field, source="db", masked=mask(v))
+    return jsonify(ok=True, id=cid, field=field, source="db",
+                   masked="•••" if _reveal_to(prov) and (_field_is_secret(field) if field else _primary_is_secret(prov))
+                   else mask(v))
 
 
 @app.delete("/api/set/<cid>")
@@ -1019,7 +1231,7 @@ def api_export_all():
     return jsonify(count=len(out), keys=sorted(out.keys()))
 
 
-def export_env(service, only=None):
+def export_env(service, only=None, caller=None, req=None):
     """{ENV_KEY: value} for the connections `service` declares — the resolve chain, narrowed.
 
     `only` is the broker's authorization result: the subset of the service's declared connections
@@ -1034,13 +1246,16 @@ def export_env(service, only=None):
         prov = cat.get(r["id"])
         if not prov or prov.get("kind") == "totp":
             continue        # a totp secret never leaves the plane — GET /api/totp/<id> mints the code
+        if not _may_have(prov, caller, req):
+            continue        # a `reveal_to` secret goes only to a verified caller it names (DGO-1825), by every path
         prod = {}                                   # what this ONE connection produces (env -> value)
         _, val = resolve(r["id"], prov, store)
         if val and prov.get("env"):
             prod[prov["env"]] = val
         # companion keys (e.g. LOCALMAIL_PW, GMAIL_IMAP_USER): DB override "<id>:<KEY>" wins, else .env
         for k in prov.get("envs_extra", []) or []:
-            v = store.get(f"{r['id']}:{k}") or os.environ.get(k)
+            # a value the provider fixes is that value in a lease too (DGO-1825: one truth for a login's address)
+            v = _fixed(prov).get(k) or store.get(f"{r['id']}:{k}") or os.environ.get(k)
             if v:
                 prod[k] = v
         out.update(prod)
@@ -1065,7 +1280,7 @@ def api_export(service):
     except broker.Refusal as e:
         broker.audit("export", "refuse", broker.caller(), service_requested=service, reason=e.reason)
         return jsonify(error=e.reason, decision="refuse", mode=broker.MODE), e.status
-    out = export_env(service)
+    out = export_env(service, caller=ident, req=request)
     broker.audit("export", "allow", ident, service_requested=service,
                  connections=[r["id"] for r in service_requires(service)],
                  unidentified=not ident.get("ok"))
@@ -1252,6 +1467,9 @@ def api_instance_add():
     # the protocol is half the instance id, and the id is a URL path segment — keep it inert
     if set(str(protocol)) - _PROTO_CHARS:
         return jsonify(error="protocol must be lowercase [a-z0-9_]"), 400
+    refused = secret_readonly_refusal(protocol, secret)     # an account added by hand is held to it too (EXU-24)
+    if refused:
+        return jsonify(error=refused), 409
     try:
         return jsonify(id=create_instance(protocol, b.get("label"), secret, b.get("account_hint"),
                                           iid=b.get("id")))
@@ -1311,6 +1529,12 @@ def api_instance_secret(iid):
     rec = _instances(vault_read()).get(iid)
     if not rec:
         return jsonify(error="unknown instance"), 404
+    # a grant wider than this office's read-only declaration (one from before it) is never handed out (EXU-24)
+    refused = secret_readonly_refusal(rec.get("protocol"), rec.get("secret") or {})
+    if refused:
+        broker.audit("instance-secret", "refuse", broker.caller(), instance=iid,
+                     protocol=rec.get("protocol"), gated=False, reason="read-only")
+        return jsonify(error=refused + " — יש לחבר את החשבון מחדש, לקריאה בלבד", read_only=True), 409
     broker.audit("instance-secret", "allow", broker.caller(), instance=iid,
                  protocol=rec.get("protocol"), gated=False)
     return jsonify(protocol=rec.get("protocol"), secret=rec.get("secret") or {})
@@ -1401,7 +1625,18 @@ def api_instance_secret_put(iid):
             return jsonify(error="unknown instance"), 404
         # Assign the two fields rather than rec.update(the body): protocol/label/account_hint/
         # created_at are the instance's identity, and a token write must never be able to move them.
-        rec["secret"] = dict(secret) if replace else {**(rec.get("secret") or {}), **secret}
+        stored = rec.get("secret") or {}
+        merged = dict(secret) if replace else {**stored, **secret}
+        # a renewal from an older, wider grant (an engine that still held it) never widens a read-only account back;
+        # a write that brings ANOTHER refresh token is another grant, so it states its own scope — the record's
+        # read-only one would only label it
+        refused = secret_readonly_refusal(rec.get("protocol"), merged)
+        if not refused and secret.get("refresh_token") and secret.get("refresh_token") != stored.get("refresh_token"):
+            refused = secret_readonly_refusal(rec.get("protocol"), secret)
+        if refused:
+            _audit("instance-secret-refused", iid, protocol=rec.get("protocol"), keys=sorted(secret))   # store untouched
+            return jsonify(error=refused, read_only=True), 409
+        rec["secret"] = merged
         rec["updated_at"] = int(time.time())
         vault_write(store)
         # Inside the lock: _audit is itself a read-modify-write of the whole store, so from out here
@@ -1425,18 +1660,23 @@ def callback_base():
     return os.environ.get("CONNECTIONS_PUBLIC_URL", "https://connections.localhost").rstrip("/")
 
 
-def authorize_url(prov, as_instance=False, state=None, redirect_uri=None):
+def authorize_url(prov, as_instance=False, state=None, redirect_uri=None, proto=None):
     o = prov["oauth"]
     client_id = resolve_value(o["client_ref"] + "-id") or resolve_value(o["client_ref"]) \
         or os.environ.get("N8N_GOOGLE_OAUTH_CLIENT_ID", "")
     # `state` is the only channel that survives the round-trip to the provider, so the as_instance
     # choice rides in it (the callback is a bare provider redirect — it carries nothing of ours).
-    # A relayed consent (below) brings its own signed state and the relay's address.
+    # A relayed consent (below) brings its own signed state and the relay's address. A protocol start
+    # puts the PROTOCOL in it, so the callback mints that protocol's account only.
     params = {"client_id": client_id, "response_type": "code",
               "redirect_uri": redirect_uri or f"{callback_base()}/oauth/callback",
-              "scope": " ".join(o["scopes"]),
-              "state": state or (prov["id"] + ("|as_instance" if as_instance else ""))}
+              "scope": " ".join(oauth_scopes(prov, proto)),
+              "state": state or ((proto or prov["id"]) + ("|as_instance" if as_instance else ""))}
     params.update(o.get("extra", {}))
+    if proto:
+        # include_granted_scopes folds every scope this client was EVER granted by the account into the new
+        # token: a read-only start would come back with full access after any earlier full grant
+        params.pop("include_granted_scopes", None)
     from urllib.parse import urlencode
     return o["authorize_url"] + "?" + urlencode(params), client_id
 
@@ -1487,11 +1727,27 @@ def api_vault_wipe():
 @app.get("/oauth/<cid>/start")
 def oauth_start(cid):
     """Begin consent IN connections. ?go=1 issues the real 302 to the provider.
-    ?as_instance=1 makes the callback create connection instance(s) instead of injecting into n8n."""
-    prov = catalog().get(cid)
-    if not prov or "oauth" not in prov:
+    ?as_instance=1 makes the callback create connection instance(s) instead of injecting into n8n.
+    <cid> is a provider or one of its platform protocols (a consent for that protocol alone); ?protocol= is the
+    protocol the asking app serves, honoured where this office connects it read-only (_oauth_provider)."""
+    prov, proto = _oauth_provider(cid, (request.args.get("protocol") or "").strip())
+    if not prov:
         return jsonify(error="not an oauth connection"), 404
     as_instance = request.args.get("as_instance") == "1"
+
+    def said(text, status):     # a browser sent here (?go=1, the console's «חבר») reads a page, never raw JSON
+        if request.args.get("go") == "1":
+            return Response(f"<!doctype html><meta charset=utf-8><meta name=viewport content='width=device-width'>"
+                            f"<body dir=rtl style='font-family:system-ui,sans-serif;max-width:36em;margin:2em auto;"
+                            f"padding:0 1em;line-height:1.6'><p>{html.escape(text)}</p></body>",
+                            status=status, mimetype="text/html")
+        return jsonify(error=text), status
+    if proto and not as_instance:
+        # a protocol grant exists only to become that protocol's account — it is never injected into n8n
+        return said(f"a consent for {proto} alone connects an account: start it with as_instance=1", 400)
+    refused = readonly_refusal(prov, proto)
+    if refused:
+        return said(refused, 409)
     ret = (request.args.get("ret") or "").strip()
     if ret:
         # a RELAYED consent: an app of this office asks, and the browser comes back to that app (`ret`)
@@ -1519,15 +1775,19 @@ def oauth_start(cid):
                 _OAUTH_STATES.pop(k, None)
             while len(_OAUTH_STATES) >= _STATES_MAX:          # a flood of starts cannot grow it without end
                 _OAUTH_STATES.pop(next(iter(_OAUTH_STATES)))
-            _OAUTH_STATES[nonce] = {"c": cid, "r": ret, "t": exp, "b": bind}
-        state = sign_state(prov, {"c": cid, "i": 1 if as_instance else 0, "n": nonce, "r": ret, "u": redirect, "t": exp})
-        url, client_id = authorize_url(prov, as_instance, state=state, redirect_uri=redirect)
+            _OAUTH_STATES[nonce] = {"c": prov["id"], "p": proto or "", "r": ret, "t": exp, "b": bind}
+        # the provider's id, never a protocol's, in `c` (open_state finds the provider by it); the protocol in `p`
+        state = sign_state(prov, {"c": prov["id"], "p": proto or "", "i": 1 if as_instance else 0, "n": nonce,
+                                  "r": ret, "u": redirect, "t": exp})
+        url, client_id = authorize_url(prov, as_instance, state=state, redirect_uri=redirect, proto=proto)
         refused = _provider_refusal(url) if _real_client(client_id) else "no_client"
         if refused:
             return _refusal_answer(refused, redirect, client_id)
         return jsonify(id=cid, authorize_url=url, client_id_present=bool(client_id), redirect_uri=redirect,
-                       relayed=True, as_instance=as_instance, platform_protocols=_platform_protocols(prov))
-    url, client_id = authorize_url(prov, as_instance)
+                       relayed=True, as_instance=as_instance,
+                       platform_protocols=[proto] if proto else _platform_protocols(prov),
+                       read_only=bool(proto and proto in _readonly_protocols()))
+    url, client_id = authorize_url(prov, as_instance, proto=proto)
     # The broker's own consent is asked FIRST too (DGO-1634). The console's «חיבור חשבון חדש» comes here, and it
     # opened Google's English error page in a new window — «פתח חלון הרשאות … לא ברור לי מה זה אומר» on Exampleu,
     # where the office's client was gone at Google. Its return address is this office's own callback, which Google
@@ -1547,7 +1807,8 @@ def oauth_start(cid):
         return Response(status=302, headers={"Location": url})
     return jsonify(id=cid, authorize_url=url, client_id_present=bool(client_id),
                    redirect_uri=f"{callback_base()}/oauth/callback",
-                   as_instance=as_instance, platform_protocols=_platform_protocols(prov),
+                   as_instance=as_instance, platform_protocols=[proto] if proto else _platform_protocols(prov),
+                   read_only=bool(proto and proto in _readonly_protocols()),
                    note="the user is sent here BY connections and returns TO connections — n8n is never visited")
 
 
@@ -1558,15 +1819,24 @@ def oauth_callback():
     code = request.args.get("code")
     cid, _, flag = (request.args.get("state") or "").partition("|")
     as_instance = flag == "as_instance"
-    prov = catalog().get(cid or "")
-    if not code or not prov or "oauth" not in prov:
+    prov, proto = _oauth_provider(cid)      # this state is not signed: the declaration is checked again here
+    if not code or not prov or (proto and not as_instance):
         return Response("<h3>connections: invalid oauth callback</h3>", mimetype="text/html", status=400)
+    refused = readonly_refusal(prov, proto)
+    if refused:
+        return Response(f"<h3>connections: refused</h3><p>{html.escape(refused)}</p>", mimetype="text/html", status=409)
     tok, refused = _exchange(prov, code, f"{callback_base()}/oauth/callback")
     if refused:
         return Response(f"<h3>connections: token exchange {html.escape(refused)}</h3>", mimetype="text/html", status=502)
-    store = vault_read(); store[cid] = json.dumps(tok); vault_write(store)   # grant now owned by connections
+    refused = readonly_refusal(prov, proto, tok)
+    if refused:
+        return Response(f"<h3>connections: refused</h3><p>{html.escape(refused)}</p>", mimetype="text/html", status=409)
+    if not proto:
+        # the provider-wide grant is the provider's value; a protocol grant is narrower (one protocol, maybe
+        # read-only) and would pass for the full grant there and in /oauth/<id>/reinject: its one home is its account
+        store = vault_read(); store[prov["id"]] = json.dumps(tok); vault_write(store)   # grant now owned by connections
     if as_instance:
-        made = instances_from_grant(prov, tok)
+        made = instances_from_grant(prov, tok, [proto] if proto else None)
         if not made:
             return Response(f"<h3>connections: {cid} has no platform protocol</h3><p>the grant is vaulted, but "
                             f"the provider declares no platform_protocol(s) — nothing to create an instance of.</p>",
@@ -1784,12 +2054,13 @@ def oauth_relay():
                                          "Cache-Control": "no-store", "Referrer-Policy": "no-referrer"})
 
 
-def _upsert_grant_instances(prov, tok):
-    """One instance per platform protocol the grant covers (one Google consent is Drive AND Gmail). An
-    account connected again is the SAME instance with a fresh token, never a second row."""
+def _upsert_grant_instances(prov, tok, protocols=None):
+    """One instance per platform protocol the grant covers (one Google consent is Drive AND Gmail; `protocols`
+    narrows it to a protocol consent's own). An account connected again is the SAME instance with a fresh token,
+    never a second row."""
     hint = _grant_account_hint(prov, tok)
     made = []
-    for proto in _platform_protocols(prov):
+    for proto in (protocols or _platform_protocols(prov)):
         # the whole read-modify-write, its audit line included, under the vault's lock (api_instance_secret_put
         # says why: an audit written from outside it can put back a store without this token)
         with _vault_lock:
@@ -1824,8 +2095,15 @@ def oauth_relayed():
         return jsonify(ok=False, error=why), 400
     with _STATES_LOCK:
         mine = _OAUTH_STATES.pop(str(payload.get("n") or ""), None)
-    if not mine or mine["r"] != payload.get("r") or mine["c"] != payload.get("c"):
+    if not mine or mine["r"] != payload.get("r") or mine["c"] != payload.get("c") \
+            or mine.get("p", "") != str(payload.get("p") or ""):
         return jsonify(ok=False, error="this consent was not started on this office, or it was already used"), 409
+    proto = str(payload.get("p") or "") or None
+    if proto and proto not in _platform_protocols(prov):
+        return jsonify(ok=False, error=f"{proto} is not a protocol of {prov['id']}"), 400
+    refused = readonly_refusal(prov, proto)      # the declaration as it is NOW, not when the consent started
+    if refused:
+        return jsonify(ok=False, error=refused), 409
     secret = str(b.get("bind") or "")
     if not mine.get("b") or not secret or len(secret) > 200 or not hmac.compare_digest(
             hashlib.sha256(secret.encode("utf-8", "replace")).hexdigest(), mine["b"]):
@@ -1840,8 +2118,12 @@ def oauth_relayed():
     tok, refused = _exchange(prov, b["code"], payload["u"])
     if refused:
         return jsonify(ok=False, error=f"Google: the code was {refused}"), 502
-    made = _upsert_grant_instances(prov, tok)
-    return jsonify(ok=True, made=made, account_hint=(made[0]["account_hint"] if made else None))
+    refused = readonly_refusal(prov, proto, tok)
+    if refused:
+        return jsonify(ok=False, error=refused), 409
+    made = _upsert_grant_instances(prov, tok, [proto] if proto else None)
+    return jsonify(ok=True, made=made, account_hint=(made[0]["account_hint"] if made else None),
+                   read_only=bool(proto and proto in _readonly_protocols()))
 
 
 def _grant_account_hint(prov, tok):
@@ -1861,13 +2143,13 @@ def _grant_account_hint(prov, tok):
     return prov.get("id")
 
 
-def instances_from_grant(prov, tok):
+def instances_from_grant(prov, tok, protocols=None):
     """One instance per platform protocol the grant covers, each holding the same token dict — the
     single Google consent authorises Drive AND Gmail, and each platform service looks its own
-    protocol up independently."""
+    protocol up independently. `protocols` narrows it to a protocol consent's own."""
     hint = _grant_account_hint(prov, tok)
     return [create_instance(proto, f"{hint} ({proto.split('_')[0]})", dict(tok), hint)
-            for proto in _platform_protocols(prov)]
+            for proto in (protocols or _platform_protocols(prov))]
 
 
 def inject_into_n8n(prov, tok):
@@ -1916,6 +2198,9 @@ def oauth_reinject(cid):
     prov = catalog().get(cid or "")
     if not prov or "oauth" not in prov:
         return jsonify(error="not an oauth connection"), 404
+    refused = readonly_refusal(prov, None)      # a provider-wide grant kept from before a read-only declaration
+    if refused:
+        return jsonify(error=refused), 409
     store = vault_read(); raw = store.get(cid)
     if not raw:
         return jsonify(error="no vaulted grant for this connection"), 404
@@ -1928,7 +2213,10 @@ def oauth_reinject(cid):
 # Registered last so every dependency it is handed (service_requires, export_env) is defined. The
 # dependencies are passed IN rather than imported by broker.py, so the vault/catalog/resolve chain
 # stays owned by this file and the import graph stays one-way.
-broker.register(app, declared_for=service_requires, export_env=export_env)
+# …and every value the broker hands out (a lease, a token's redeem) is asked with THIS request's caller, so a
+# `reveal_to` secret reaches only a verified caller it names, by every path (DGO-1825)
+broker.register(app, declared_for=service_requires,
+                export_env=lambda service, only=None: export_env(service, only, caller=broker.caller(), req=request))
 
 
 PAGE = open(os.path.join(ROOT, "ui.html")).read() if os.path.exists(os.path.join(ROOT, "ui.html")) else ""

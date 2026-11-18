@@ -27,7 +27,7 @@ GUEST_PORT=2222
 GUEST_USER=binaos
 GUEST_PASS='CHANGE_ME'
 DISTRO=BinaOS
-REPO_SRC="${REPO_SRC:-/home/shlomy/binaos-repo}"
+REPO_SRC="${REPO_SRC:-/home/owner/binaos-repo}"
 
 gssh() { sshpass -p "${GUEST_PASS}" ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
            -o ConnectTimeout=20 -p "${GUEST_PORT}" "${GUEST_USER}@127.0.0.1" "$@"; }
@@ -91,8 +91,8 @@ case "${1:-}" in
   fetch)
     # `run` already staged the map on the Windows side from inside the distro, where quoting
     # behaves. All that is left here is a copy - no shell on the far end, nothing to escape.
-    gscp "${GUEST_USER}@127.0.0.1:C:/Users/${GUEST_USER}/ui-map-windows.png" /home/shlomy/vm/ui-map-windows.png || { echo "no map staged - run: uimap-in-guest.sh run"; exit 1; }
-    ls -lh /home/shlomy/vm/ui-map-windows.png
+    gscp "${GUEST_USER}@127.0.0.1:C:/Users/${GUEST_USER}/ui-map-windows.png" /home/owner/vm/ui-map-windows.png || { echo "no map staged - run: uimap-in-guest.sh run"; exit 1; }
+    ls -lh /home/owner/vm/ui-map-windows.png
     ;;
 
   *) sed -n '2,8p' "$0"; exit 2 ;;

@@ -443,9 +443,10 @@ services:
       MEET_JWT_SECRET: ${MEET_JWT_SECRET:-}
       MEET_HOST: ${MEET_BASE_URL:-meet.${DEPLOYMENT_DOMAIN:-localhost}}
       MEET_RECORDINGS: /recordings/recordings
-      # The only callers whose X-authentik-* headers are believed: the edge (it strips a browser's
-      # own and writes the signed-in person's) and the console's proxy (which carries them to the
-      # tile). By container name: that is what they answer to on the shared network.
+      # The callers whose X-authentik-* headers are believed: the edge (it strips a browser's own and
+      # writes the signed-in person's) and the console's proxy (which carries them to the tile) — and,
+      # for the username alone, the link door below. By container name: that is what they answer to
+      # on the shared network.
       MEET_TRUSTED_PEERS: traefik-${DEPLOYMENT_NAME:-bina-deployment},console-${DEPLOYMENT_NAME:-bina-deployment}
       # The machines' door (port 8001, routed by nobody): the recordings as data for the workflow
       # that transcribes them (blueprint/n8n, DGO-834). Only n8n's own containers get an answer.
@@ -454,7 +455,8 @@ services:
       # calls it when that is another office (the `recordings` door this office gives by name, DGO-945).
       # It is let in by the office check alone — the office Meet's workflows run in (hooks/prepare,
       # from `workflows:`), as the door writes it (x-dgo-office, the peer's own claim removed). None
-      # named: no linked office is.
+      # named: no linked office is. On the people's port the same door brings a LINKED office's person
+      # (its console's tile): the one username the door writes is believed from it (DGO-1895).
       MEET_LINK_PEERS: dgo-net-${DEPLOYMENT_NAME:-bina-deployment}
       MEET_WORKFLOWS_OFFICE: ${MEET_WORKFLOWS_OFFICE:-}
       # Whose recordings are tests (DGO-959): never handed to the workflow, so no work item is made.

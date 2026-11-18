@@ -123,6 +123,14 @@ def _():
     assert by["p_unlabelled"]["ours"] is True, rows
 
 
+@case("a declared volume is carried by its name, whatever its label: never named as left out")
+def _():
+    # _tar_volume carries `<project>_<short>`; a label of another project does not stop that (DGO-1510)
+    listing = [("p_data", "other", "1MB"), ("p_data2", "p", "1MB"), ("data", "", "1MB")]
+    rows, _anon = A.undeclared_volumes(listing, {"data", "data2"}, "p")
+    assert sorted(r["name"] for r in rows) == ["data"], rows
+
+
 @case("into an empty slot: a secret lands 0600, a declaration keeps its own mode (0640)")
 def _():
     repo = checkout()

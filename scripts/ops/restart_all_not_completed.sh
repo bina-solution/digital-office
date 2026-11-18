@@ -8,14 +8,14 @@
 #   OLD        superseded by a newer document for the same company. The state machine sets this
 #              deliberately, and 'Adjudicate Merge' says so in as many words: "a winner that is
 #              COMPLETED or OLD has finished its lifecycle and must not be dragged back into the
-#              pipeline". There are 18,654 of them -- restarting them would churn eighteen thousand
-#              documents through the whole pipeline to re-derive the same OLD.
+#              pipeline". On a working office they are most of the table -- restarting them would
+#              churn every one of them through the whole pipeline to re-derive the same OLD.
 #   GARBAGE    a deliberate terminal verdict, not a failure to retry.
 #   ACTION_RESTART already in flight.
 #
 # Everything else IS restarted: MISSING_LINK, MISSING_COMPANY_ID, DOUBLE, MISSING_TYPE,
-# UNKNOWN_COMPANY, EXTRACTION_FAILED, IN_PROGRESS -- roughly 4,400 documents that stopped somewhere
-# short of an answer. ACTION_RESTART is the state machine's only re-run, so this is the sanctioned
+# UNKNOWN_COMPANY, EXTRACTION_FAILED, IN_PROGRESS -- the documents that stopped somewhere short of
+# an answer. ACTION_RESTART is the state machine's only re-run, so this is the sanctioned
 # way to ask for one.
 #
 # "all not completed" read literally would include OLD and GARBAGE. It is read here as "everything
@@ -51,7 +51,7 @@ TERMINAL="'COMPLETED','MERGED','ACTION_RESTART','GARBAGE'"
 # declares a resting point on the third round no matter what the table is doing. The first version
 # did exactly that: `GROUP BY 1` on an expression that CONTAINS count(*) is a postgres error
 # ("aggregate functions are not allowed in GROUP BY"), the query returned nothing, and the loop
-# that read it was about to certify a table still moving 1,500 rows every three minutes.
+# that read it was about to certify a table still moving rows by the thousand every three minutes.
 census () {
   local out
   out=$($PSQL "SET statement_timeout='120s';

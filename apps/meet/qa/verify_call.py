@@ -14,7 +14,7 @@ no microphone joins beside it, and then every link the office promises is checke
               every page request and ICE server the office's own, no connection from the recorder, meet-start or
               the transcriber to anywhere outside, the captions path internal
   captions    the recorder's live captions came, as server captions (seconds behind, not instant), with the office's
-              words spelt its way («DGO fee», EXF-471)
+              words spelt its way («Office fee», EXF-471)
   silent mic  the guest with no microphone is told (a pop-up) and so is the host; the speaking host is never warned;
               when the host's microphone goes silent the notice is quiet and theirs alone
 
@@ -54,7 +54,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 # the checkout this office runs from (its .env, its bbox); MEET_VERIFY_REPO when the tool runs from a staging copy
 REPO = os.environ.get("MEET_VERIFY_REPO") or os.path.abspath(os.path.join(HERE, "..", "..", ".."))
 USER, USER_NAME = "meet-verify", "בדיקת שיחה"
-SENDER = "פגישות וידאו"                     # mod_meet_silent_mic's sender
+SENDER = "פגישות לשכה"                      # mod_meet_silent_mic's sender
 CAPTIONER = "כתוביות"                       # the recorder's captions
 GUEST_NAME = "Verify No Mic"
 

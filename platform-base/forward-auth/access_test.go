@@ -47,10 +47,10 @@ func ask(s *server, path string, c *http.Cookie) *httptest.ResponseRecorder {
 }
 
 func TestAnInvitedPersonIsRefusedTheAdminsAppsAndOpensTheOthers(t *testing.T) {
-	s := office(t, map[string][]string{"owner": {"admins"}, "tamar": {"people"}})
-	tamar := signedIn(t, s, "tamar")
+	s := office(t, map[string][]string{"owner": {"admins"}, "galit": {"people"}})
+	galit := signedIn(t, s, "galit")
 
-	w := ask(s, "/auth/traefik/admins", tamar)
+	w := ask(s, "/auth/traefik/admins", galit)
 	if w.Code != http.StatusForbidden {
 		t.Fatalf("an invited person at an admins' app = %d, want 403", w.Code)
 	}
@@ -64,8 +64,8 @@ func TestAnInvitedPersonIsRefusedTheAdminsAppsAndOpensTheOthers(t *testing.T) {
 		t.Errorf("a refusal may be kept by a proxy: Cache-Control %q", w.Header().Get("Cache-Control"))
 	}
 
-	w = ask(s, "/auth/traefik", tamar)
-	if w.Code != http.StatusOK || w.Header().Get("X-authentik-username") != "tamar" || w.Header().Get("X-authentik-groups") != "people" {
+	w = ask(s, "/auth/traefik", galit)
+	if w.Code != http.StatusOK || w.Header().Get("X-authentik-username") != "galit" || w.Header().Get("X-authentik-groups") != "people" {
 		t.Fatalf("an invited person at an everyone app = %d, user %q, groups %q", w.Code,
 			w.Header().Get("X-authentik-username"), w.Header().Get("X-authentik-groups"))
 	}
@@ -79,7 +79,7 @@ func TestAnInvitedPersonIsRefusedTheAdminsAppsAndOpensTheOthers(t *testing.T) {
 // A migrated office's file names no admin (authentik's «authentik Admins» cannot be written in it): every
 // account that was not invited counts as one, and is TOLD it is one; an invited person never is.
 func TestAnOfficeThatNamesNoAdminKeepsItsOwnPeopleAndRefusesTheInvited(t *testing.T) {
-	s := office(t, map[string][]string{"akadmin": nil, "owner": nil, "yossi": {"people"}})
+	s := office(t, map[string][]string{"akadmin": nil, "owner": nil, "moshe": {"people"}})
 	for _, name := range []string{"akadmin", "owner"} {
 		w := ask(s, "/auth/traefik/admins", signedIn(t, s, name))
 		if w.Code != http.StatusOK || w.Header().Get("X-authentik-groups") != "admins" {
@@ -91,7 +91,7 @@ func TestAnOfficeThatNamesNoAdminKeepsItsOwnPeopleAndRefusesTheInvited(t *testin
 				w.Header().Get("X-authentik-groups"))
 		}
 	}
-	if w := ask(s, "/auth/traefik/admins", signedIn(t, s, "yossi")); w.Code != http.StatusForbidden {
+	if w := ask(s, "/auth/traefik/admins", signedIn(t, s, "moshe")); w.Code != http.StatusForbidden {
 		t.Fatalf("an invited person on an office that names no admin = %d, want 403", w.Code)
 	}
 	// the file is not rewritten: the store's own line still says `-`
@@ -164,8 +164,8 @@ func TestTheAdminsGateSendsAStrangerToSignIn(t *testing.T) {
 
 // /whoami says the groups the gates go by.
 func TestWhoamiSaysTheGroupsTheGatesGoBy(t *testing.T) {
-	s := office(t, map[string][]string{"akadmin": nil, "yossi": {"people"}})
-	for name, want := range map[string][]string{"akadmin": {"admins"}, "yossi": {"people"}} {
+	s := office(t, map[string][]string{"akadmin": nil, "moshe": {"people"}})
+	for name, want := range map[string][]string{"akadmin": {"admins"}, "moshe": {"people"}} {
 		r := httptest.NewRequest("GET", "/whoami", nil)
 		r.AddCookie(signedIn(t, s, name))
 		w := httptest.NewRecorder()

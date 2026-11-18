@@ -68,7 +68,7 @@ GitHub, Luma (meetups), email.
 | Date | Beat | Gap | Source |
 |---|---|---|---|
 | 2019-03 | Founders quit their jobs; working prototype in ~1 month | — | [First Round](https://review.firstround.com/linears-path-to-product-market-fit/) |
-| 2019-04 (reported 04-18, secondary) | "Announcing Linear" Medium post + tweet + waitlist with a survey; ~10,000 emails; ~10 hand-picked invites/week | — | [First Round](https://review.firstround.com/linears-path-to-product-market-fit/) |
+| 2019-04 (reported 04-18, secondary) | "Announcing Linear" Medium post + tweet + waitlist with a survey; ~N emails; ~10 hand-picked invites/week | — | [First Round](https://review.firstround.com/linears-path-to-product-market-fit/) |
 | 2019-11-21 | $4.2M seed led by Sequoia | +217 d | [TechCrunch](https://techcrunch.com/2019/11/21/linear-lines-up-4-2m-led-by-sequoia-to-build-a-better-platform-for-software-developer-collaboration/) |
 | 2020-06-30 | Public launch; HN "Linear – A fast issue tracker", 491 pts | +439 d after beta | [HN](https://news.ycombinator.com/item?id=23693029) |
 | 2020-09-16 | "Linear Method" (practices for building) on HN | +78 d | [linear.app/method](https://linear.app/method) |
@@ -354,7 +354,7 @@ Linear (439 days) and Arc (462 days) both stayed invite-only for more than a yea
 *Channels:* website, email.  
 *Assets:* page form: email + 2-3 questions (use case, current tool, team size) ×1; email confirmation, 600 px, plain ×1; image og/link card 1200x630 ×1.  
 *Copy:* promise → 'why do you want it / what is your current problem?' → honest expectation (small weekly batches) → share link.  
-*Examples:* [Linear private beta: ~10,000 emails, ~10 hand-picked invites per week](https://review.firstround.com/linears-path-to-product-market-fit/); [Karri Saarinen on hand-picking waitlist invites](https://x.com/karrisaarinen/status/1785391264730669351); [Arc drops its waitlist at 1.0, 2023-07-25](https://9to5mac.com/2023/07/25/arc-browser-no-waitlist/).
+*Examples:* [Linear private beta: ~N emails, ~10 hand-picked invites per week](https://review.firstround.com/linears-path-to-product-market-fit/); [Karri Saarinen on hand-picking waitlist invites](https://x.com/karrisaarinen/status/1785391264730669351); [Arc drops its waitlist at 1.0, 2023-07-25](https://9to5mac.com/2023/07/25/arc-browser-no-waitlist/).
 
 **`cohort-invite-email` — Cohort invite + beta build note**  
 *Purpose:* Onboard a small batch, open a feedback loop, ship a new build per cohort. *Trigger:* New cohort selected. *Timing:* recurring:weekly during the beta.  
@@ -873,7 +873,7 @@ phases:
           - {kind: "image", spec: "og/link card 1200x630", count: 1}
         copy: "promise -> 'why do you want it / what is your current problem?' -> honest expectation (small weekly batches) -> share link"
         examples:
-          - "Linear private beta: ~10,000 emails, ~10 hand-picked invites per week - https://review.firstround.com/linears-path-to-product-market-fit/"
+          - "Linear private beta: ~N emails, ~10 hand-picked invites per week - https://review.firstround.com/linears-path-to-product-market-fit/"
           - "Karri Saarinen on hand-picking waitlist invites - https://x.com/karrisaarinen/status/1785391264730669351"
           - "Arc drops its waitlist at 1.0, 2023-07-25 - https://9to5mac.com/2023/07/25/arc-browser-no-waitlist/"
       - id: "cohort-invite-email"

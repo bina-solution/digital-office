@@ -8,7 +8,7 @@
 // THE LAW UNDER TEST (owner, 2026-08-26): a DOUBLE ACTION is the same action dispatched again
 // ON AN UNCHANGED LINE with no ACTION_RESTART between. Not "dispatched again" — that refused
 // legitimate work every sweep (measured 2026-08-26: 256 of 256 driver failures in 24 h, 7,216
-// blocked lines over 1,180 documents, none of them a real loop, all of them a field that had
+// blocked lines over N documents, none of them a real loop, all of them a field that had
 // legitimately changed underneath a decision).
 //
 //   ./bbox app indox dup-guard-test [--instance <id>]     the DEPLOYED guard + live cases

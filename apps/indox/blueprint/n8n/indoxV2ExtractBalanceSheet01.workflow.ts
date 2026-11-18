@@ -1,7 +1,7 @@
 import { workflow, node, links } from '@n8n-as-code/transformer';
 
 // <workflow-map>
-// Workflow : Balance Sheet Extractor - v2- shmuel
+// Workflow : Balance Sheet Extractor - v2- person06
 // Nodes   : 62  |  Connections: 64
 //
 // NODE INDEX
@@ -157,9 +157,9 @@ import { workflow, node, links } from '@n8n-as-code/transformer';
     /*__n8n__*/ meta: null,
     /*__n8n__*/ pinData: {},
     /*__n8n__*/ staticData: null,
-    /*__n8n__*/ shared: [{"updatedAt":"2026-07-31T00:59:54.840Z","createdAt":"2026-07-31T00:59:54.840Z","role":"workflow:owner","workflowId":"indoxV2ExtractBalanceSheet01","projectId":"2xKn4WH08LyAOk2y","project":{"updatedAt":"2026-07-30T23:40:17.073Z","createdAt":"2026-07-30T23:33:30.049Z","id":"2xKn4WH08LyAOk2y","name":"Admin User <person2@example.com>","type":"personal","icon":null,"description":null,"creatorId":"544b7ec6-5907-4ee2-a94b-c5676e56835c"}}],
+    /*__n8n__*/ shared: [{"updatedAt":"2026-07-31T00:59:54.840Z","createdAt":"2026-07-31T00:59:54.840Z","role":"workflow:owner","workflowId":"indoxV2ExtractBalanceSheet01","projectId":"exampleProject02","project":{"updatedAt":"2026-07-30T23:40:17.073Z","createdAt":"2026-07-30T23:33:30.049Z","id":"exampleProject02","name":"Admin User <person2@example.com>","type":"personal","icon":null,"description":null,"creatorId":"544b7ec6-5907-4ee2-a94b-c5676e56835c"}}],
     id: 'indoxV2ExtractBalanceSheet01',
-    name: 'Balance Sheet Extractor - v2- shmuel',
+    name: 'Balance Sheet Extractor - v2- person06',
     active: true,
     isArchived: false,
     tags: ['app:indox', 'indox-dev', 'sm-refactore-v2.1', 'dev', 'indox-app', 'sm-refactor-v2.1'],
@@ -170,7 +170,7 @@ import { workflow, node, links } from '@n8n-as-code/transformer';
         availableInMCP: false,
     },
 })
-export class BalanceSheetExtractorV2ShmuelWorkflow {
+export class BalanceSheetExtractorV2Person06Workflow {
     // =====================================================================
     // CONFIGURATION DES NOEUDS
     // =====================================================================
@@ -1100,10 +1100,10 @@ return $input.all();`,
     EvalStart = {
         dataTableId: {
             __rl: true,
-            value: 'E4fUDXr9nxDOv8o4',
+            value: 'ExampleTable0001',
             mode: 'list',
             cachedResultName: 'BALANCE_SHEET_EX_EVAL',
-            cachedResultUrl: '/projects/EChUnhWXmjrEc3fG/datatables/E4fUDXr9nxDOv8o4',
+            cachedResultUrl: '/projects/ExampleProject01/datatables/ExampleTable0001',
         },
         filterRows: true,
         filters: {
@@ -1126,7 +1126,7 @@ return $input.all();`,
     StickyNote9 = {
         content: `# Next steps
 
-Eval table: BALANCE_SHEET_EX_EVAL  - http://n8n:5678/projects/EChUnhWXmjrEc3fG/datatables/E4fUDXr9nxDOv8o4
+Eval table: BALANCE_SHEET_EX_EVAL  - http://n8n:5678/projects/ExampleProject01/datatables/ExampleTable0001
 
 ##  Complete evaluation setup
 - put the currect  Expected values in the eval table (where missing)
@@ -1159,10 +1159,10 @@ Eval table: BALANCE_SHEET_EX_EVAL  - http://n8n:5678/projects/EChUnhWXmjrEc3fG/d
     Evaluation1 = {
         dataTableId: {
             __rl: true,
-            value: 'E4fUDXr9nxDOv8o4',
+            value: 'ExampleTable0001',
             mode: 'list',
             cachedResultName: 'BALANCE_SHEET_EX_EVAL',
-            cachedResultUrl: '/projects/EChUnhWXmjrEc3fG/datatables/E4fUDXr9nxDOv8o4',
+            cachedResultUrl: '/projects/ExampleProject01/datatables/ExampleTable0001',
         },
         outputs: {
             values: [
@@ -2265,7 +2265,7 @@ return [{
             value: {
                 load_settings: false,
                 load_queries: false,
-                TRIGGERED_FROM: '=Balance Sheet Extractor - v2- shmuel: {{ $execution.id }}',
+                TRIGGERED_FROM: '=Balance Sheet Extractor - v2- person06: {{ $execution.id }}',
                 __instance:
                     "={{ $json.__instance || (() => { try { return ($('When Executed by Another Workflow').first().json || {}).__instance || ''; } catch (e) {} try { return (($('Webhook Trigger').first().json || {}).body || {}).__instance || ''; } catch (e) {} return ''; })() }}",
             },

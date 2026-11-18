@@ -1110,7 +1110,7 @@ def selftest() -> list[str]:
     which is the point: the gate checks the shape before a second office exists."""
     problems: list[str] = []
     registry = {"apps": [
-        {"app": "bina-ds", "alias": "bina", "name": "בינה ודעת", "name_en": "Bina", "icon": "bot",
+        {"app": "bina-ds", "alias": "bina", "name": "עזריה", "name_en": "Azaria", "icon": "bot",
          "group": "ראשי", "desc": "הסוכן של הלשכה", "order": 1, "port": 3080,
          "agent_api_port": 3081, "host": "bina.localhost",
          "module": {"kind": "embedded", "id": "bina", "path": "/a/bina/"}},
@@ -1125,7 +1125,7 @@ def selftest() -> list[str]:
         problems.append(f"an invalid alias and a portless row must not be published, got "
                         f"{[a['alias'] for a in cat['apps']]}")
     bina = cat["apps"][0]
-    if bina["title"] != {"he": "בינה ודעת", "en": "Bina"}:
+    if bina["title"] != {"he": "עזריה", "en": "Azaria"}:
         problems.append(f"the title carries both languages, got {bina['title']}")
     if bina["api"] != {"port": 3081, "auth": "bearer:vault:bina-ds"}:
         problems.append(f"an agent app publishes its SECOND door too, got {bina['api']}")

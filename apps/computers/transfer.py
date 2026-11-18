@@ -68,7 +68,7 @@ VOL_ROOT = "/var/lib/docker/volumes"
 #: The archive in flight, ON THE DESTINATION. Outside the volumes on purpose (see the docstring).
 STAGE_DIR = os.environ.get("COMPUTER_TRANSFER_STAGE_DIR", "/var/lib/bina-transfer")
 #: A destination reached as a user who is NOT root but may run docker (DGO-1508: the Dell's sshd says
-#: `PermitRootLogin no` and `AllowUsers shlomy`, who is in the docker group). /var/lib/docker and /var/lib are
+#: `PermitRootLogin no` and `AllowUsers owner`, who is in the docker group). /var/lib/docker and /var/lib are
 #: root's there, so the archive in flight is kept in a volume of its own and every command that touches it or
 #: the destination volume runs in a throwaway container of this image, with both mounted: busybox's sh, tar,
 #: find, du, df, stat and sha256sum. A destination reached as root is served exactly as before. Owners arrive by

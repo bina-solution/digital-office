@@ -71,15 +71,22 @@ projects:
 # Plane's own sign-in page (the safe default for a name nobody declared).
 #
 #   authentik   the office's identity — username, e-mail or uid (any of them matches)
+#   groups      or a group the identity provider answers for that person, matched exactly and only
+#               when the provider is forward-auth. A forward-auth office's owner is named at /setup,
+#               after this file was applied, and /setup puts them in `admins`
+#               (platform-base/forward-auth/setup.go; v1 has one owner), so the owner is declared by
+#               that group (DGO-1982). An invited person (`people`) is never matched, by any key.
 #   plane       the Plane account it IS. `owner` is the account declared above (.env's
 #               PLANE_OWNER_EMAIL), so the address is never written twice.
 #
-# `akadmin` is this deployment's own admin on every office (`AUTHENTIK_BOOTSTRAP_USER` in .env,
-# minted by scripts/ci-env.sh), and its e-mail is listed beside it because that is what a person
-# sees in the identity provider — a renamed admin then still lands in his own workspace.
+# `akadmin` is this deployment's own admin on every office that came from authentik
+# (`AUTHENTIK_BOOTSTRAP_USER` in .env, minted by scripts/ci-env.sh), and its e-mail is listed beside it
+# because that is what a person sees in the identity provider — a renamed admin then still lands in
+# his own workspace. A /setup office has no `akadmin`: its owner is found by `groups`.
 sso:
   users:
     - authentik: [akadmin, ci@example.com]
+      groups: [admins]
       plane: owner
 
 # Accounts for the AGENTS of this office — created the same way the owner is, so a plan file can

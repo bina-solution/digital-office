@@ -1,0 +1,357 @@
+#!/usr/bin/env python3
+"""hop — carry the office browser's answer to «Continue with Google» back into the app (DGO-1336).
+
+Runs INSIDE bina-claude-desktop as the app's user. `open-url` starts it, once per sign-in, and tells it
+on stdin the `hop_nonce` the app put in the URL it asked the system to open, and the EPISODE of the
+hand-off browser42 opened for it.
+
+WHY IT EXISTS. On Linux the app's sign-in is a browser round trip: it opens
+https://claude.com/cai/login/app-google-auth?…&hop_nonce=…, the owner signs in with Google, claude.ai
+redirects to https://claude.ai/login/popup-google-auth?code=…&state=desktop:<uuid>.<nonce>, and that
+page hands the code back by navigating to `claude://login/google-auth?code=…&hop_nonce=…`. The app
+registers claude:// on the machine (com.anthropic.Claude.desktop) and waits. But the browser is the
+OFFICE's, in another container: a browser cannot launch claude:// at all (measured on the HP,
+2026-11-04 — the navigation is swallowed and the tab simply stays), so nothing ever arrives and the
+app never signs in. This watcher is the missing half: it watches the sign-in's own tab in the office
+browser and hands the app exactly the link the OS would have handed it.
+
+  hop -        watch, then deliver (started by open-url; the nonce and the episode on stdin — never by
+               hand: it needs the nonce the app minted for the sign-in that is running)
+
+It reads the answer from the tab's URL, never from the page: `code` is claude.ai's one-time code and
+`state` is `desktop:<uuid>.<nonce>`, which must carry OUR nonce — an answer to somebody else's
+sign-in is not ours to deliver. The code, the state and the nonce are credentials: no line of the log
+holds any part of them (a host and a path, a length at most). One argv does, for seconds, because it is
+the only door a running app takes a link through: `claude-desktop claude://login/google-auth?code=…`.
+
+HOW IT ENDS, and what the person sees (the hand-off `open-url` opened, apps/browser42/handoff.py):
+  · signed in — the code was handed to the app AND the app holds a session made AFTER it
+    (`./bbox bina-claude signed-in` exits 0 and its claude.ai session cookie is a new one — leftover
+    bytes of an old session, or another cookie written during the exchange, are not this sign-in): the
+    hand-off turns `done` and every console takes the person back to the app;
+  · not — no answer in time, the app gone from its display, a delivered code that did not sign the app
+    in, or this watcher failing on the way: the hand-off turns `failed` with the sentence that says
+    which, on the screen he is looking at;
+  · either way the sign-in's tab is closed, by episode (its address holds the spent code or Google's
+    state, and a press made a moment after keeps its own tab), and the app's logs — which hold the link
+    it was handed — are masked in place (`open-url --scrub`), however the sign-in ended;
+  · superseded — a newer «Continue with Google» was pressed (`.bina-claude-hop.current` names another
+    nonce): this watcher leaves at once and says nothing to the person — the new attempt owns the
+    hand-off, and an end this watcher sends names its own episode, which browser42 refuses for a newer one.
+"""
+import hashlib
+import json
+import os
+import sqlite3
+import subprocess
+import sys
+import time
+import urllib.parse
+from contextlib import closing
+
+HOME = os.environ.get("HOME") or "/config"
+LOG = os.path.join(HOME, ".claude-open-url.log")
+CURRENT = os.path.join(HOME, ".bina-claude-hop.current")
+APPDIR = os.path.join(HOME, ".config", "Claude")
+MAIN_LOG = os.path.join(APPDIR, "logs", "main.log")
+COOKIES = os.path.join(APPDIR, "Cookies")     # the store `hooks/signed-in` reads
+OPENER = os.environ.get("BINA_CLAUDE_OPENER") or "/usr/local/bin/bina-claude-open-url"
+GROUP =os.environ.get("BINA_CLAUDE_LOGIN_GROUP") or "claude-signin"
+MARKER = os.environ.get("BINA_CLAUDE_HOP_MARKER") or "/login/popup-google-auth"
+WINDOW = float(os.environ.get("BINA_CLAUDE_HOP_WINDOW") or 120)   # one await; the runner's own cap
+TOTAL = float(os.environ.get("BINA_CLAUDE_HOP_TOTAL") or 1500)    # the whole sign-in, < the nonce's 30 min
+SIGNED_IN_WAIT = float(os.environ.get("BINA_CLAUDE_HOP_SIGNED_IN_SECONDS") or 45)
+RETRY_PAUSE = 10
+POLL = 2
+DROP_WINDOW = 12          # the app waits ≤10 s for its view before it drops a link (as desktop/drive)
+#: The app is launched with EXACTLY the flags its own start uses (desktop/autostart, the `claude-desktop`
+#: line): a link delivered while no instance runs would make THIS launch the main one, and without
+#: --password-store=gnome-libsecret Chromium falls back to basic_text and keeps no sign-in (DGO-1335).
+APP_FLAGS = ["--no-sandbox", "--disable-gpu", "--password-store=gnome-libsecret"]
+#: What the person reads when it did not work, on the screen he is looking at (the hand-off).
+NO_ANSWER = "לא התקבלה תשובה מ-Google בתוך 25 דקות — לחצו שוב «Continue with Google» באפליקציה."
+NO_APP = "אפליקציית Claude לא הייתה פתוחה כש-Google ענה — לחצו שוב «Continue with Google» כשהיא פתוחה."
+NOT_SIGNED_IN = "Google ענה, אבל Claude לא התחבר עם התשובה — לחצו שוב «Continue with Google»."
+BROKE = "הכניסה נעצרה באמצע בגלל תקלה בלשכה — לחצו שוב «Continue with Google»."
+
+
+def log(line):
+    stamp = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+    try:
+        with open(LOG, "a") as f:
+            f.write(f"{stamp} hop {line}\n")
+    except OSError:
+        pass
+
+
+def where(url):
+    """A tab's address as a log may name it: host and path, never its query."""
+    parts = urllib.parse.urlsplit(url or "")
+    return f"{parts.netloc}{parts.path}" or "nothing"
+
+
+def fingerprint(nonce):
+    return hashlib.sha256(nonce.encode()).hexdigest()[:16]
+
+
+def current(ours):
+    """Is this watcher's sign-in still the one the app is waiting for? `open-url` writes the fingerprint
+    of each new sign-in's nonce before it starts its hop; a file that names another one means a newer
+    «Continue with Google» was pressed. No file at all is not a newer attempt."""
+    try:
+        with open(CURRENT) as f:
+            named = f.read().strip()
+    except OSError:
+        return True
+    return not named or named == fingerprint(ours)
+
+
+def repo_root():
+    if os.path.exists("/workspace/office/bbox"):
+        return "/workspace/office"
+    return os.environ.get("BBOX_REPO_HOST") or "/workspace/office"
+
+
+def bbox(*args, timeout=600):
+    """One office command; a timeout or a missing program is an answer (exit 124), never an exception."""
+    root = repo_root()
+    try:
+        return subprocess.run([os.path.join(root, "bbox"), *args], cwd=root,
+                              capture_output=True, text=True, timeout=timeout)
+    except (subprocess.TimeoutExpired, OSError) as error:
+        return subprocess.CompletedProcess(args, 124, stdout="", stderr=type(error).__name__)
+
+
+class Ended(Exception):
+    """This watcher is done; `state` is how the hand-off was ended (or "superseded": not by us)."""
+
+    def __init__(self, state):
+        super().__init__(state)
+        self.state = state
+
+
+def end(ours, episode, state, sentence=""):
+    """End THIS sign-in's hand-off — never a newer one: a newer press means nothing is said, and the end
+    names its episode, which browser42 refuses once a newer attempt has opened the hand-off. Once ended,
+    the sign-in's tab is closed — by episode, so a press made a moment after keeps its own: its address
+    holds the spent code (done) or Google's state (failed), and neither is a page to keep. However it ends —
+    superseded too: the code may already have been handed over — the app's logs are masked (`scrub`)."""
+    try:
+        if not current(ours):
+            log("a newer sign-in started — this watcher leaves; that one owns the hand-off")
+            raise Ended("superseded")
+        args = ["b42", "handoff", GROUP, f"--{state}"] + ([sentence] if state == "failed" else [])
+        args += ["--episode", episode] if episode else []
+        result = bbox(*args, timeout=60)
+        if result.returncode == 3:
+            log("the hand-off belongs to a newer attempt — not ended by this watcher")
+            raise Ended("superseded")                        # …and its tab is that attempt's, not ours to close
+        if result.returncode != 0:
+            log(f"the hand-off could not be marked {state} (exit {result.returncode})")
+        elif episode:
+            bbox("b42", "close", GROUP, "--episode", episode, timeout=90)
+        raise Ended(state)
+    finally:
+        scrub()
+
+
+def scrub():
+    """The app writes the link it was handed — its code and nonce — into its own logs (measured on the HP,
+    2026-11-05): the opener masks them in place (`open-url --scrub`), at every end of a sign-in. Masking
+    never moves a byte, so a newer attempt's watcher reading the app's log by offset is not disturbed."""
+    try:
+        done = subprocess.run([OPENER, "--scrub"], capture_output=True, timeout=120)
+    except (OSError, subprocess.TimeoutExpired) as error:
+        log(f"the app's logs were not masked after the sign-in ({type(error).__name__})")
+        return
+    if done.returncode != 0:
+        log(f"the app's logs were not masked after the sign-in (the opener's scrub exited {done.returncode})")
+
+
+def signed_in():
+    """The app's own answer (hooks/signed-in, DGO-1347): exit 0 = a claude.ai session in its store."""
+    return bbox("bina-claude", "signed-in", timeout=60).returncode == 0
+
+
+def session_mark():
+    """When the app's newest claude.ai session cookie was made (Chromium's `creation_utc`), or None when
+    there is none or the store cannot be read. A NEW mark after the code was handed over is this sign-in;
+    leftover bytes of an old session, or any other cookie written during the exchange, are not."""
+    try:
+        with closing(sqlite3.connect(f"file:{COOKIES}?mode=ro&immutable=1", uri=True, timeout=2)) as db:
+            row = db.execute("SELECT MAX(creation_utc) FROM cookies WHERE name = 'sessionKey' "
+                             "AND host_key LIKE '%claude.ai'").fetchone()
+        return row[0] if row and row[0] is not None else None
+    except Exception:                                        # noqa: BLE001 — unreadable is "not known"
+        return None
+
+
+def answer(url):
+    """(code, nonce) out of the tab's URL, or (None, None) when this is not an answer to a sign-in."""
+    parts = urllib.parse.urlsplit(url)
+    query = urllib.parse.parse_qs(parts.query)
+    code = (query.get("code") or [""])[0]
+    state = (query.get("state") or [""])[0]
+    nonce = ""
+    if state.startswith("desktop:") and "." in state:
+        nonce = state.rsplit(".", 1)[1]
+    if not nonce:                      # older/newer shapes: a hop_nonce of its own, if the page has one
+        nonce = (query.get("hop_nonce") or [""])[0]
+    if not code or not nonce:
+        return None, None
+    return code, nonce
+
+
+def window():
+    try:
+        ids = subprocess.run(["xdotool", "search", "--name", "^Claude$"], capture_output=True,
+                             timeout=20).stdout.decode().split()
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+    return ids[0] if ids else None
+
+
+def dropped_since(pos):
+    """Did the app drop a link it got while its view was loading? (its own log, read from `pos`)"""
+    try:
+        with open(MAIN_LOG, "rb") as f:
+            f.seek(pos)
+            return b"Timed out waiting for mainView" in f.read()
+    except OSError:
+        return False
+
+
+def deliver(link):
+    """Hand the app the link the OS would have handed it, and wait for the app to be SIGNED IN by it.
+
+    The same way desktop/drive hands a link — only a RUNNING app may take it (a second instance under
+    docker exec would become the app, with no bus and no keyring), and a link that lands while its view
+    reloads is dropped, so it is sent again. «Delivered» is not «sent», and «signed in» is not «the store
+    holds a session's bytes»: done is said only when `signed-in` answers 0 AND the app's session cookie
+    is a new one (`session_mark`) — or, where the store cannot be read, when `signed-in` turned 0 from
+    3. Returns "" when signed in, else the sentence for the person."""
+    if window() is None:
+        log("deliver: the Claude window is not on the display; nothing was sent")
+        return NO_APP
+    was_signed_in, mark_before = signed_in(), session_mark()
+
+    def proven():
+        if not signed_in():
+            return False
+        mark = session_mark()
+        if mark is not None:
+            return mark != mark_before                       # a session made after the code was handed over
+        return mark_before is None and not was_signed_in     # the store unreadable: the hook's own transition
+    for attempt in range(1, 4):
+        try:
+            pos = os.path.getsize(MAIN_LOG)
+        except OSError:
+            pos = 0
+        try:
+            subprocess.run(["claude-desktop", *APP_FLAGS, link], capture_output=True, timeout=20)
+        except (subprocess.TimeoutExpired, OSError):
+            log("deliver: the app did not take the link in 20 s")
+            return NOT_SIGNED_IN
+        sent = time.monotonic()
+        resend = False
+        while time.monotonic() - sent < SIGNED_IN_WAIT:
+            time.sleep(POLL)
+            if proven():
+                return ""
+            if time.monotonic() - sent >= DROP_WINDOW and dropped_since(pos):
+                resend = True
+                break
+        if not resend:
+            log(f"deliver: the app took the code but is not signed in after {int(SIGNED_IN_WAIT)} s")
+            return NOT_SIGNED_IN
+        log(f"deliver: the app dropped the link while its view was loading; sending it again ({attempt})")
+    return NOT_SIGNED_IN
+
+
+def read_stdin(argv):
+    """(nonce, episode): two lines on stdin with `-`; a bare argument is an older opener's nonce."""
+    if len(argv) > 1 and argv[1] == "-":
+        return sys.stdin.readline().strip(), sys.stdin.readline().strip()
+    return (argv[1].strip() if len(argv) > 1 else ""), ""
+
+
+def watch(ours, episode):
+    """The sign-in, until it ends (raises Ended)."""
+    started = time.monotonic()
+    noted = set()          # what was already said about a page, so a stuck tab says its line once
+    log(f"watching group '{GROUP}' for {MARKER}")
+    while time.monotonic() - started < TOTAL:
+        if not current(ours):
+            log("a newer sign-in started — this watcher leaves; that one owns the hand-off")
+            raise Ended("superseded")
+        left = TOTAL - (time.monotonic() - started)
+        done = bbox("b42", "await", GROUP, f"url:{MARKER}", str(int(max(1, min(WINDOW, left)))))
+        try:
+            payload = json.loads(done.stdout)
+        except ValueError:
+            payload = None
+            if done.returncode != 0 and "no answer" not in noted:
+                noted.add("no answer")
+                log(f"await: exit {done.returncode}, no JSON answer")
+        if payload and payload.get("state") == "met":
+            url = payload.get("url") or ""
+            code, nonce = answer(url)
+            if code is None:
+                # The tab is ON the callback page but carries no answer: the sign-in has not finished
+                # (or that page is a previous attempt's). Say it once, then keep watching — the tab a
+                # browser wakes up with is not an answer, and leaving now would abandon this sign-in.
+                if where(url) not in noted:
+                    noted.add(where(url))
+                    log(f"the tab is on {where(url)} with no answer in it yet")
+                time.sleep(RETRY_PAUSE)
+                continue
+            if nonce != ours:
+                if "other" not in noted:
+                    noted.add("other")
+                    log("the tab holds an answer to ANOTHER sign-in (not this one's nonce) — not ours to deliver")
+                time.sleep(RETRY_PAUSE)
+                continue
+            if not current(ours):
+                log("a newer sign-in started — this watcher leaves; that one owns the hand-off")
+                raise Ended("superseded")
+            link = ("claude://login/google-auth?" + urllib.parse.urlencode({"code": code, "hop_nonce": nonce}))
+            log(f"the browser answered (a code of {len(code)} characters); handing it to the app")
+            why = deliver(link)
+            if not why:
+                log("signed in — the app holds a claude.ai session it did not hold before (./bbox bina-claude signed-in exit 0)")
+                end(ours, episode, "done")
+            end(ours, episode, "failed", why)
+        if payload:
+            error = payload.get("error")
+            said = (error.get("code") if isinstance(error, dict) else None) or payload.get("state") or "no state"
+            if said not in noted:                            # a code, never the message (it quotes the url)
+                noted.add(said)
+                log(f"await says {str(said)[:60]}")
+        time.sleep(RETRY_PAUSE)
+    log("no answer from the browser inside the window; the sign-in was not completed")
+    end(ours, episode, "failed", NO_ANSWER)
+
+
+def main(argv):
+    ours, episode = read_stdin(argv)
+    if not ours:
+        print("usage: bina-claude-hop -   (started by bina-claude-open-url: the nonce, then the episode, on stdin)",
+              file=sys.stderr)
+        return 2
+    os.environ.setdefault("DISPLAY", ":1")
+    try:
+        watch(ours, episode)
+    except Ended as ended:
+        return 0 if ended.state in ("done", "superseded") else 1
+    except Exception as error:                                # noqa: BLE001 — never leave the person waiting
+        log(f"this watcher stopped on an error ({type(error).__name__}) — the hand-off says so")
+        try:
+            end(ours, episode, "failed", BROKE)
+        except Ended:
+            pass
+        return 1
+    return 1
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv))

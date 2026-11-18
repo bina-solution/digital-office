@@ -528,7 +528,7 @@ def handoffs():
 # browser passes with its own session, and the verdict is "unknown". It also keeps this fetcher on the
 # office's own hosts: an office host that redirects elsewhere is not followed there.
 # What this check can still see is the answer of an app whose own host answers WITHOUT the sign-in
-# (`auth: none` — the #63 case, chimney-services, sets X-Frame-Options itself). An app behind the
+# (`auth: none` — the #63 case, examplech-services, sets X-Frame-Options itself). An app behind the
 # sign-in that refused frames by itself could not be told apart from one that does not; none of the
 # own-host tiles behind it does today (Meet, Plane, Obsidian, measured on Exampleu).
 FRAME_CHECK_TTL = int(os.environ.get("FRAME_CHECK_TTL", "300"))

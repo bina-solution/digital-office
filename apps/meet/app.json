@@ -1,7 +1,7 @@
 {
   "id": "meet",
   "title": {
-    "he": "פגישות וידאו",
+    "he": "פגישות לשכה",
     "en": "Video meetings"
   },
   "layer": 3,
@@ -58,7 +58,9 @@
   "blueprints": {
     "n8n": "blueprint/n8n"
   },
-  "connections": [],
+  "connections": [
+    {"id": "project-pln-api-key", "required": false, "service": "project-pln"}
+  ],
   "compose": "docker-compose.yml",
   "routing": [
     {
@@ -79,7 +81,7 @@
         "embed": true,
         "alias": "meet",
         "id": "meet",
-        "name": "פגישות וידאו",
+        "name": "פגישות לשכה",
         "desc": "פגישה חדשה, קישור לאורחים, Jitsi Meet",
         "order": 36,
         "url": "http://meet-start:8080",

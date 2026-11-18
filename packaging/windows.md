@@ -107,7 +107,7 @@ miss an IPv4-only publish.
 
 > **Derive the list from the compiler, not from `.env`.** The compiled config currently yields 38
 > `*.localhost` names, and several — `chess`, `librechat`, `rocketchat`, `chatbase`, `autopilot`,
-> `ktivayehudit-clone2` — are stale `*_BASE_URL` entries in `.env` for apps that no longer exist.
+> `examplek-clone2` — are stale `*_BASE_URL` entries in `.env` for apps that no longer exist.
 > An installer that writes its hosts block from `.env` would write entries for services that were
 > never installed. `reconcile.py` knows the real routing set; use it.
 

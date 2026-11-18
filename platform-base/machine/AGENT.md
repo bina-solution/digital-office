@@ -9,7 +9,8 @@ socket.
 ## From inside the office network (`http://machine:8080`)
 
 ```bash
-GET /api/overview            # the host and its containers: CPU, memory, disk, per-container use
+GET /api/overview            # the host and its containers: CPU, memory, disk, per-container use; `follow`: why this
+                             # office took, or did not take, a version (at, result, detail, verified, failed_target)
 GET /api/storage             # what holds the disk: images, volumes, build cache
 GET /api/cleanup/options     # what cleanup could free, and which actions this office allows
 GET /api/power               # the power policy, and the host's own power facts

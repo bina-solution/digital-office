@@ -370,14 +370,15 @@ def judge(target, console, domain, asker=None):
 def manifest_of(name, repo=None):
     """(app id, manifest) for an app id or one of its compose services; (None, None) when neither."""
     root = Path(repo or REPO)
-    for base in ("apps", "platform-base"):
+    bases = ("apps", "platform-base", "instances")   # instances/: an app's further copies (DGO-1920)
+    for base in bases:
         p = root / base / name / "app.json"
         if p.is_file():
             try:
                 return name, json.loads(p.read_text(encoding="utf-8"))
             except (OSError, ValueError):
                 return name, None
-    for base in ("apps", "platform-base"):
+    for base in bases:
         for p in sorted((root / base).glob("*/app.json")):
             try:
                 m = json.loads(p.read_text(encoding="utf-8"))

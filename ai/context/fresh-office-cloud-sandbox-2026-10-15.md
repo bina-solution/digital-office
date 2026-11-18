@@ -16,7 +16,7 @@ state file and is not for anyone else).
 | Kernel | `6.18.44-fc` (Firecracker), no `/lib/modules`, no `/proc/modules`; **no WireGuard** (the generic-netlink family `wireguard` is absent) |
 | nftables, tun | `nft list ruleset` works; `/dev/net/tun` present |
 | Size | 4 cores, 15 GB RAM, ~30 GB writable |
-| Network | one interface, `192.0.2.2`; every TLS connection goes through Anthropic's intercepting proxy (CA at `/root/.ccr/ca-bundle.crt`); the address the world sees (`93.184.216.9`) is the shared egress, **nothing inbound reaches the machine**; UDP egress works (a DNS query to 1.1.1.1 is answered) |
+| Network | one interface, `192.0.2.2`; every TLS connection goes through Anthropic's intercepting proxy (CA at `/root/.ccr/ca-bundle.crt`); the address the world sees (`93.184.216.8`) is the shared egress, **nothing inbound reaches the machine**; UDP egress works (a DNS query to 1.1.1.1 is answered) |
 | Docker | none at boot; `bbox run` starts `dockerd` itself (Docker 28.x, `DOCKER_MIN_API_VERSION=1.24`) |
 | `.env` | none; `bbox run` generates the cloud one (`scripts/ci-env.sh`, `localhost`, deployment name `ci`) |
 

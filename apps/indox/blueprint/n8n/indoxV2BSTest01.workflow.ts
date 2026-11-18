@@ -177,7 +177,7 @@ import { workflow, node, links } from '@n8n-as-code/transformer';
     /*__n8n__*/ meta: {"templateCredsSetupCompleted":true},
     /*__n8n__*/ pinData: {},
     /*__n8n__*/ staticData: null,
-    /*__n8n__*/ shared: [{"updatedAt":"2026-07-30T23:42:27.037Z","createdAt":"2026-07-30T23:42:27.037Z","role":"workflow:owner","workflowId":"indoxV2BSTest01","projectId":"2xKn4WH08LyAOk2y","project":{"updatedAt":"2026-07-30T23:40:17.073Z","createdAt":"2026-07-30T23:33:30.049Z","id":"2xKn4WH08LyAOk2y","name":"Admin User <person2@example.com>","type":"personal","icon":null,"description":null,"creatorId":"544b7ec6-5907-4ee2-a94b-c5676e56835c"}}],
+    /*__n8n__*/ shared: [{"updatedAt":"2026-07-30T23:42:27.037Z","createdAt":"2026-07-30T23:42:27.037Z","role":"workflow:owner","workflowId":"indoxV2BSTest01","projectId":"exampleProject02","project":{"updatedAt":"2026-07-30T23:40:17.073Z","createdAt":"2026-07-30T23:33:30.049Z","id":"exampleProject02","name":"Admin User <person2@example.com>","type":"personal","icon":null,"description":null,"creatorId":"544b7ec6-5907-4ee2-a94b-c5676e56835c"}}],
     id: 'indoxV2BSTest01',
     name: 'indox-v2 BS E2E Test',
     active: false,
@@ -253,10 +253,10 @@ return [{ json: {
     "COMPANY_ID": "C1",
     "COMPANY_NAME": "Acme",
     "NAME": "Acme-BSE2E",
-    "LINK": "https://drive.localhost/file/d/1REDACTEDdrivexxxxxxxxxxxxxxx0082/view?usp=drivesdk",
+    "LINK": "https://drive.localhost/file/d/1REDACTEDdrivexxxxxxxxxxxxxxx0006/view?usp=drivesdk",
     // [bs-fixture 2026-08-07] LINK points at a REAL client balance sheet, so without this
     // flag the base stage runs BaseDocEx01 and 'Select Base Values' overwrites the fixture's
-    // COMPANY_ID 'C1' with the company resolved from the actual PDF (500000427). The BS
+    // COMPANY_ID 'C1' with the company resolved from the actual PDF (500000245). The BS
     // line-linker then searches existing invoices by the RESOLVED id, so the seeded
     // ex_upd/ex_skp (still 'C1') can never match: matchCount=0 and the CREATE branch ran for
     // every line. That is why 'SKP03 duplicated (2)' fired -- and why the UPDATE and SKIP
@@ -427,7 +427,7 @@ return [{ json: {
     "NAME": "Acme-FAIL",
     "BASE_EXTRACTION_COMPLETED": true,
     "BASE_SELECTION_COMPLETED": true,
-    "LINK": "https://drive.localhost/file/d/1REDACTEDdrivexxxxxxxxxxxxxxx0083/view"
+    "LINK": "https://drive.localhost/file/d/1REDACTEDdrivexxxxxxxxxxxxxxx0007/view"
   },
   "failCacheFixture": {
     "success": false,
@@ -1496,7 +1496,7 @@ return [{ json: {
         position: [580, 0],
     })
     FxResolve = {
-        jsCode: 'const files=[{"key": "docLink", "upname": "fxbs-main-lvyrvn-3.pdf", "path": "balance_sheet/files/lvyrvn-3.pdf"}, {"key": "failLink", "upname": "fxbs-fail-lvyrvn-5.pdf", "path": "balance_sheet/files/lvyrvn-5.pdf"}];const byName={}; $input.all().map(i=>i.json).filter(f=>f&&f.name).forEach(f=>{byName[f.name]=f.webViewLink;});return files.map(f=>({json:{...f, LINK:byName[f.upname]||null, _missing:!byName[f.upname]}}));',
+        jsCode: 'const files=[{"key": "docLink", "upname": "fxbs-main-supplier17-3.pdf", "path": "balance_sheet/files/supplier17-3.pdf"}, {"key": "failLink", "upname": "fxbs-fail-supplier17-5.pdf", "path": "balance_sheet/files/supplier17-5.pdf"}];const byName={}; $input.all().map(i=>i.json).filter(f=>f&&f.name).forEach(f=>{byName[f.name]=f.webViewLink;});return files.map(f=>({json:{...f, LINK:byName[f.upname]||null, _missing:!byName[f.upname]}}));',
     };
 
     @node({
@@ -1620,7 +1620,7 @@ return [{ json: {
         position: [900, -140],
     })
     Config = {
-        jsCode: 'const base=$(\'Config Base\').first().json;const files=[{"key": "docLink", "upname": "fxbs-main-lvyrvn-3.pdf", "path": "balance_sheet/files/lvyrvn-3.pdf"}, {"key": "failLink", "upname": "fxbs-fail-lvyrvn-5.pdf", "path": "balance_sheet/files/lvyrvn-5.pdf"}];const byName={}; $input.all().map(i=>i.json).filter(x=>x&&x.name).forEach(x=>{byName[x.name]=x.webViewLink;});const links={}; files.forEach(x=>links[x.key]=byName[x.upname]||null);if(!links.docLink||!links.failLink) throw new Error(\'fixture link resolution failed: \'+JSON.stringify(links));const __row=$(\'Drive Connections\').all().map(i=>i.json).find(r=>r&&r.value); let __cx=null; try { __cx=(JSON.parse(__row.value)||{}).drive_connection_id||null; } catch(e) {} if(!__cx) throw new Error(\'no drive connection - settings row test_connections missing or unparseable (indoxApi01 TABLE_GET on indox_test)\'); return [{json:{...base, doc:{...base.doc, LINK:links.docLink, LINK_CONNECTION:__cx}, failDoc:{...base.failDoc, LINK:links.failLink, LINK_CONNECTION:__cx}}}];',
+        jsCode: 'const base=$(\'Config Base\').first().json;const files=[{"key": "docLink", "upname": "fxbs-main-supplier17-3.pdf", "path": "balance_sheet/files/supplier17-3.pdf"}, {"key": "failLink", "upname": "fxbs-fail-supplier17-5.pdf", "path": "balance_sheet/files/supplier17-5.pdf"}];const byName={}; $input.all().map(i=>i.json).filter(x=>x&&x.name).forEach(x=>{byName[x.name]=x.webViewLink;});const links={}; files.forEach(x=>links[x.key]=byName[x.upname]||null);if(!links.docLink||!links.failLink) throw new Error(\'fixture link resolution failed: \'+JSON.stringify(links));const __row=$(\'Drive Connections\').all().map(i=>i.json).find(r=>r&&r.value); let __cx=null; try { __cx=(JSON.parse(__row.value)||{}).drive_connection_id||null; } catch(e) {} if(!__cx) throw new Error(\'no drive connection - settings row test_connections missing or unparseable (indoxApi01 TABLE_GET on indox_test)\'); return [{json:{...base, doc:{...base.doc, LINK:links.docLink, LINK_CONNECTION:__cx}, failDoc:{...base.failDoc, LINK:links.failLink, LINK_CONNECTION:__cx}}}];',
     };
 
     @node({

@@ -12,7 +12,7 @@ other half of every one of those conversations is Python. A function can return 
 
 `_entry_items` is annotated `-> tuple[list[dict], list[str]]` and that second list is where it puts
 everything it could not determine. Dropped here, `_move_items` proceeds as though every item's state
-were known — and the surface that consumed it rendered 2,435 completed documents as `0`. Nothing
+were known — and the surface that consumed it rendered N completed documents as `0`. Nothing
 raised. The information existed, was computed, was returned, and was thrown away in the same
 expression that received it — which is the same defect as G48's, arriving from the opposite
 direction: there the callee refused to say, here the caller refuses to listen.

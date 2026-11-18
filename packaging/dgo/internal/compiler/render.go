@@ -224,6 +224,12 @@ func render(repo string, cat *Catalog, order []string, st *State, stderr io.Writ
 	if err != nil {
 		return nil, err
 	}
+	// …and an .env value an app declares holds its resources for ever (DGO-1848), after them, as reconcile.py
+	forever, err := foreverWarnings(cat, order, env)
+	if err != nil {
+		return nil, err
+	}
+	warnings = append(warnings, forever...)
 	for _, line := range warnings {
 		fmt.Fprintln(stderr, line)
 	}

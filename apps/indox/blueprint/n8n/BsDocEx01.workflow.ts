@@ -56,7 +56,7 @@ import { workflow, node, links } from '@n8n-as-code/transformer';
     /*__n8n__*/ meta: null,
     /*__n8n__*/ pinData: null,
     /*__n8n__*/ staticData: null,
-    /*__n8n__*/ shared: [{"updatedAt":"2026-08-06T12:30:31.436Z","createdAt":"2026-08-06T12:30:31.436Z","role":"workflow:owner","workflowId":"BsDocEx01","projectId":"2xKn4WH08LyAOk2y","project":{"updatedAt":"2026-07-30T23:40:17.073Z","createdAt":"2026-07-30T23:33:30.049Z","id":"2xKn4WH08LyAOk2y","name":"Admin User <person2@example.com>","type":"personal","icon":null,"description":null,"creatorId":"544b7ec6-5907-4ee2-a94b-c5676e56835c"}}],
+    /*__n8n__*/ shared: [{"updatedAt":"2026-08-06T12:30:31.436Z","createdAt":"2026-08-06T12:30:31.436Z","role":"workflow:owner","workflowId":"BsDocEx01","projectId":"exampleProject02","project":{"updatedAt":"2026-07-30T23:40:17.073Z","createdAt":"2026-07-30T23:33:30.049Z","id":"exampleProject02","name":"Admin User <person2@example.com>","type":"personal","icon":null,"description":null,"creatorId":"544b7ec6-5907-4ee2-a94b-c5676e56835c"}}],
     id: 'BsDocEx01',
     name: 'Balance Sheet Document Extraction (AI-led, local supplements)',
     active: true,
@@ -523,7 +523,7 @@ const canonAmount = v => String(v).replace(/[\\s,]/g, '');
 // \`canon\` is optional and touches ONLY the equality test -- pick() still returns the raw
 // winner, so this changes provenance LABELS and can never change a written value.
 // It is passed PER FIELD, never blanket, and every choice is evidence-led (measured live
-// over the 7,332-row non-fixture fleet, tmp/b34/m1-baseline.sql):
+// over the N-row non-fixture fleet, tmp/b34/m1-baseline.sql):
 //   TYPE        169 two-leg pairs, 0 exact, 158 caseless -- the local leg emits \`shipment\`,
 //               Gemini emits \`SHIPMENT\`, so AGREE was structurally unreachable and every
 //               two-legged row was mislabelled DISAGREE_PREFER_LOCAL (final-indox.md B33.6).

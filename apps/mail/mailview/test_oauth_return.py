@@ -63,6 +63,8 @@ def main() -> int:
     check(r.status_code == 200 and d.get("authorize_url") == AUTH and d.get("bind"), "the screen gets Google's address and a secret")
     check(sent.get("bind") == hashlib.sha256(d.get("bind", "").encode()).hexdigest() and sent.get("ret") == RET,
           "connections gets the return page and only the secret's sha256")
+    check(sent.get("protocol") == "mail_gmail_oauth",
+          "…and the protocol this screen connects (Gmail alone where the office reads Drive only, EXU-24)")
     check(d.get("bind", "") not in str(CALLS[-1]) and "no-store" in r.headers.get("Cache-Control", ""),
           "the secret never reaches connections, and its answer is not cached")
     n = len(CALLS)

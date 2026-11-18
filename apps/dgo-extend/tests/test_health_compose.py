@@ -2,7 +2,7 @@
 """test_health_compose — the health step asks compose itself whether the office's project is valid.
 
 rel10 on examplef: every container healthy, the health step green, and every `dc` failing («service
-"chimney-services" has neither an image nor a build context specified») — the step counted containers
+"examplech-services" has neither an image nor a build context specified») — the step counted containers
 and never asked compose. The HEALTH script, run for real in bash against a scratch `scripts/dc` that
 answers as compose and dc do: the line kept is compose's own (or dc's error), never a warning or a bbox
 notice, never a value from a file compose could not parse; and a project with no services is said too.
@@ -46,9 +46,9 @@ def check(cond, what):
 def main() -> int:
     bad = facts_with("echo '[bbox] the docker config names the credential helper desktop.exe' >&2\n"
                      "echo 'time=\"x\" level=warning msg=\"noise\"' >&2\n"
-                     "echo 'service \"chimney-services\" has neither an image nor a build context specified: "
+                     "echo 'service \"examplech-services\" has neither an image nor a build context specified: "
                      "invalid compose project' >&2\nexit 15")
-    check(bad.get("compose") == "invalid" and bad.get("compose_error", "").startswith('service "chimney-services"'),
+    check(bad.get("compose") == "invalid" and bad.get("compose_error", "").startswith('service "examplech-services"'),
           f"an invalid project is said with compose's own line — not its warnings, not a bbox notice: {bad}")
     leak = facts_with("echo 'failed to read /opt/o/.env: line 7: unexpected character \"-\" in variable name "
                       "\"API-KEY=sk-live-SECRETVALUE\"' >&2\nexit 1")

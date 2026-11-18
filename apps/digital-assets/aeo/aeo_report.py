@@ -22,6 +22,8 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 #: the office's one palette — the page takes its colours from here and names none (G82)
 TOKENS = HERE.parents[2] / "platform-base/bina-ui/theme-tokens.css"
+#: …and its one mark, read where it is drawn — beside «הלשכה הדיגיטלית» on the page (the owner, DGO-1846)
+MARK = HERE.parents[2] / "platform-base/bina-ui/brand/mark.html"
 UI_LABELS = re.compile(r"^(Related links|Related results|Show all related results|Show all related links|"
                        r"תוצאות קשורות|הצגת כל התוצאות הקשורות|קישורים קשורים)$", re.I)
 ENGINE_HE = {"google-aio": "Google · תקציר מ-AI", "google-aimode": "Google · מצב AI", "chatgpt": "ChatGPT (ללא התחברות)",
@@ -145,6 +147,9 @@ def page(card, prompts, panel) -> str:
     not_measured = (f" לא נמדדו בריצה הזו: {', '.join(missing)}." if missing else "")
     # the office's ONE palette, read where it is written (G82: only theme-tokens.css names a colour)
     tokens = TOKENS.read_text(encoding="utf-8")
+    drawn = MARK.read_text(encoding="utf-8")
+    start, end = "<!-- @bina-brand:start -->", "<!-- @bina-brand:end -->"     # the region G27 keeps, not a guess at <svg
+    mark = drawn[drawn.index(start) + len(start):drawn.index(end)]
     return f"""<!doctype html><html lang="he" dir="rtl"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1"><meta name="robots" content="noindex">
 <title>על מי ה-AI ממליץ — {card['date']}</title>
@@ -158,8 +163,10 @@ ul.top{{list-style:none;padding:0;margin:0;columns:2;column-gap:28px}} ul.top li
 .big{{font-size:44px;font-weight:800;color:var(--olive);line-height:1}} .k{{color:var(--muted);font-size:14px;margin-inline:6px}} code{{font-size:14px;color:var(--muted)}}
 ol.p{{padding-inline-start:0;list-style:none}} ol.p li{{padding:6px 0;border-bottom:1px solid var(--line)}} .warn{{border-color:var(--lime-d)}}
 @media (max-width:560px){{ul.top{{columns:1}} h1{{font-size:25px}}}}
+.dgo-mark{{display:inline-block;width:1.35em;height:1.35em;vertical-align:-.34em;margin-inline-end:.3em}} .dgo-mark svg{{display:block;width:100%;height:100%}}
+.dgo-mark .t{{fill:var(--olive)}} .dgo-mark .m{{fill:var(--olive-ink)}} .dgo-mark .a{{fill:var(--lime)}}
 </style></head><body><main>
-<p class="sub">הלשכה הדיגיטלית · מחקר AEO · {card['date']} · פאנל {esc(card['panel'])}</p>
+<p class="sub"><span class="dgo-mark">{mark}</span>הלשכה הדיגיטלית · מחקר AEO · {card['date']} · פאנל {esc(card['panel'])}</p>
 <h1>על מי ה-AI ממליץ לעסק ישראלי — הבסיס</h1>
 <p class="sub">40 שאלות קבועות בעברית ובאנגלית, כפי שאדם שואל אותן, נקראו ב-{card['date']} מישראל, בלי התחברות: {esc(measured)}. תמונת מצב מתוארכת, לא דירוג: אותה רשימה חוזרת פעמיים בפחות מאחת ממאה ריצות (SparkToro, ינואר 2026), ולכן מודדים כמה פעמים קוראים לנו בשם לאורך הרבה ריצות, כל שבוע על אותן שאלות.</p>
 <section><h2>כמה פעמים קראו לנו בשם</h2><table><tr><th>מנוע</th><th>תשובות</th><th>בשאלות בלי השם שלנו</th><th>בשאלות על המותג</th></tr>{eng_rows}</table></section>

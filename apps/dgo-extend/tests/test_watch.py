@@ -42,7 +42,7 @@ def run_of(started, status, health=None, machine=None):
 
 def main() -> int:
     app.DECL_DIR.mkdir(parents=True, exist_ok=True)
-    (app.DECL_DIR / "examplef.yaml").write_text("id: examplef\nlabel: The Examplef Guys\nwatch: {health: daily}\n")
+    (app.DECL_DIR / "examplef.yaml").write_text("id: examplef\nlabel: Example shop\nwatch: {health: daily}\n")
     (app.DECL_DIR / "a-broken.yaml").write_text("id: [unclosed\n")                      # sorts first
     (app.DECL_DIR / "b-string.yaml").write_text("id: b\nwatch: daily\n")
     (app.DECL_DIR / "c-paired.yaml").write_text("id: c\nkind: paired\nwatch: {health: daily}\n")
@@ -126,7 +126,7 @@ def main() -> int:
     real_thread = app.threading.Thread
     app.threading.Thread = lambda *a, **k: type("T", (), {"start": lambda self: None})()
     try:
-        office = {"id": "examplef", "label": "The Examplef Guys"}
+        office = {"id": "examplef", "label": "Example shop"}
         run = app.start_run(office, ["health"], by="watch")["run"]
         before = len(hist.read_text().splitlines())
         app._execute(office, run, ["health"])
@@ -174,7 +174,7 @@ def main() -> int:
          "warnings": ["כתובות שאינן עונות: services.exf.digital-office.co.il → 502"],
          "dead_hosts": ["services.exf.digital-office.co.il"], "unhealthy": ["mailapi-examplef"]},
         {"t": t0 - 1 * DAY, "status": "failed", "step": "dns",
-         "reason": "ה־DNS של exf.digital-office.co.il אינו מצביע על המחשב (93.184.216.13)"},
+         "reason": "ה־DNS של exf.digital-office.co.il אינו מצביע על המחשב (93.184.216.9)"},
         {"t": t0, "status": "ok", "summary": "43/43 בריאים", "healthy": "43", "total": "43"}]
     bad = [b'{"t": "abc", "status": "ok"}', b'{"t": 1e20, "status": "ok"}', b'{"t": [], "status": "ok"}',
            b'{"t": 1e400, "status": "ok"}', b'{"t": Infinity, "status": "ok"}',
@@ -188,14 +188,14 @@ def main() -> int:
     check("6 of" not in text and "5 daily checks — 3 healthy, 1 with warnings, 1 failed" in text
           and "not answering: services.exf.digital-office.co.il" in text and "unhealthy: mailapi-examplef" in text
           and "the office's address (DNS) did not point at the server" in text, f"the report's facts: {text!r}")
-    check(not any("֐" <= ch <= "׿" for ch in text) and "93.184.216.13" not in text,
+    check(not any("֐" <= ch <= "׿" for ch in text) and "93.184.216.9" not in text,
           f"never a Hebrew sentence, never an address from a reason: {text!r}")
     check("no daily check" in app.watch_report("nobody", 7, t0)["text"], "an office with no checks says so")
     hist.write_text(json.dumps({"t": t0, "status": "ok", "healthy": "43", "total": "43"}) + "\n")
     check(": 1 daily check — 1 healthy" in app.watch_report("examplef", 7, t0)["text"], "one check is a check, not checks")
     # 4g. the backup watch (EXF-26): a pass starts one run; the next starts the other kind
     (app.DECL_DIR / "examplef.yaml").write_text(
-        "id: examplef\nlabel: The Examplef Guys\nwatch: {health: daily, backup: daily}\n")
+        "id: examplef\nlabel: Example shop\nwatch: {health: daily, backup: daily}\n")
     (app.STATE_DIR / "watch.json").write_text("{}")
     asked = []
     both = lambda office, only, by="": asked.append((office["id"], only)) or {"run": {"started": 1}}  # noqa: E731

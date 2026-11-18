@@ -51,7 +51,7 @@ def _synthetic_entry(alias: str = "bina-mac") -> dict:
             "label": {"he": "המקבוק", "en": "MacBook"}, "link": "macbook",
             "identity": {"to": "owner@local", "from": ["akadmin"]},
             "apps": [{"app": "bina-ds", "alias": alias, "port": 3080, "agent_api_port": 3081,
-                      "name": "בינה ודעת", "icon": "bot", "group": "ראשי", "order": 1,
+                      "name": "עזריה", "icon": "bot", "group": "ראשי", "order": 1,
                       "desc": "הסוכן של הלשכה", "host": "bina.localhost",
                       "identity": {"to": "owner@local", "from": "akadmin"}}]}
 

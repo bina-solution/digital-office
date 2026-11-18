@@ -23,6 +23,9 @@ offices:
   macbook:
     label: MacBook
     wg_public_key: '+0B1Hc+7nYPESAjx/uu3JSDeuYQYadu7dvV0eb/C5B8='
+    # takes dgo-stable by hand, never by a timer: a take builds images, and the desk runs no builds (its engine is the
+    # owner's working screen). `bbox computers herd` says so instead of counting it; every other office follows.
+    follow: by-hand
     role:
       he: 'השולחן — הממשק: קונסול, קישורים ו-Claude; בלי נתונים עסקיים'
       en: 'the desk — the interface: console, links and Claude; no business data'
@@ -100,8 +103,9 @@ admin_apps: [connections, computers, app-management, git, security, console, cla
 # apps/dgo-extend/tests/test_admin_withheld.py holds every measured pair open and the vault closed.
 give:
   hp-laptop:
-    vps1: [bina-ds, bina-claude, browser42, telegram, newsflow, project-pln]
-    macbook: [bina-ds, bina-claude, browser42, computers, project-pln, machine, security]
+    # bs-group: the CEO's one link (DGO-1974) — on the hub console he reaches from anywhere, and on his desk
+    vps1: [bina-ds, bina-claude, browser42, telegram, newsflow, project-pln, bs-group]
+    macbook: [bina-ds, bina-claude, browser42, computers, project-pln, machine, security, bs-group]
     dell: [security, machine, office-routes, bina-ds, bina-claude, browser42]
   macbook:
     vps1: [domain-internic]       # the InterNIC provider of vps1's domains (DGO-1473)
@@ -110,12 +114,24 @@ give:
   vps1:
     macbook: [computers, machine, security, bina-ds, bina-claude]
     hp-laptop: [computers, machine, security, bina-ds, bina-claude]
+  # the owner, 2026-11-13: «I want to see it [the Dell's emulator] from staging». The Dell narrows what it gives the
+  # hub to nothing (its `serve.only.vps1: []`), so vps1 gets exactly this line: the phone's screen — its full API on
+  # :8080 never crosses a link (apps/android-emulator/app.json names an `interface`, so no agent door is derived).
+  # The dell's door MEASURED (DGO-863's way, its own door log 2026-10-31 21:19Z – 11-13 00:42Z, 13 days): the MacBook
+  # opened computers 21,520, machine 658, bina 9 — and the vault (connections), app-management and git twice each;
+  # the HP computers 4,958, git (git-accounts) 78, machine 5; vps1 the catalog only. Named: what was used, and the
+  # agent wherever a home office reached it (its raw port leaves no record). NOT named, so withheld once the dell is
+  # in `admin_by_name` below: the vault, app-management, the console (S32, ai/context/dgo-security.md §3.10).
+  dell:
+    vps1: [android-emulator]
+    macbook: [computers, machine, bina-ds]
+    hp-laptop: [computers, machine, git, bina-ds]
 
 # STAGED (DGO-863, AGENTS rule 8): the offices that give admin apps to the home offices BY NAME only. An office not
-# listed keeps `*` for the home offices, as before, until its own door is measured — the Dell's could not be read
-# from the MacBook (its security app is not given to it), so it is not here yet. (The hub, a public office and a
+# listed keeps `*` for the home offices, as before, until its own door is measured. The dell's was measured on
+# 2026-11-13 from its own door log (the `give: dell:` lines above), so it is listed. (The hub, a public office and a
 # foreign one are withheld from by every office, listed or not: DGO-1360.)
-admin_by_name: [macbook, hp-laptop, vps1]
+admin_by_name: [macbook, hp-laptop, vps1, dell]
 
 # A company's office we set up is linked to ours ONE WAY while we do (DGO-964, DGO-1636): we see and manage it, it
 # sees nothing of ours. At hand-over the link is cut FIRST (unpair, from either screen), THEN its line below goes:
@@ -123,12 +139,31 @@ admin_by_name: [macbook, hp-laptop, vps1]
 # it is a JOIN pair (DGO-1363): each office of ours in `by` (by its key above, never by name) asks the client's link
 # door to join, asking `use`, and the owner approves it once on the client's screen — the fingerprint shown there is
 # `pin`. Our side takes only the client's `serve`, and gives the client nothing (apps/dgo-extend/clients.py).
+# The owner, 2026-11-12 (DGO-1840): each client is a herd of its own — Exampleu, EXF, and Examplex once it has an office of
+# its own — linked one way from ours, with full control from our herd; the work runs on the HP, so the HP joins too.
 clients:
   exampleu:
     herd: Exampleu
     door: https://link.exampleu.digital-office.co.il
     pin: CHANGE_ME
-    by: [macbook]
+    by: [macbook, hp-laptop]
+  # EXF's office (93.184.216.9) is linked to the MacBook today by an INSTALLED tunnel (DGO-1363 calls it «due to
+  # become a join pair»), and it sees nothing of ours (its remote-status is empty, read 2026-11-12). The line makes
+  # that one-way hold on our side by its pin NOW (clients.withheld): no office of ours gives it anything, whatever a
+  # `serve:` says. The join itself waits for its door: link.exf answers with no valid certificate until EXF declares
+  # DGO_LINK_HOST, which comes with its carry of the public release (DGO-1839) — until then nothing is joined.
+  examplef:
+    herd: EXF
+    door: https://link.exf.digital-office.co.il
+    pin: CHANGE_ME
+    by: [macbook, hp-laptop]
+  # Examplex's own office on its own server (93.184.216.10), installed from the public release on 2026-11-17 (DGO-1924);
+  # its pin is `./bbox dgo identity fingerprint` there.
+  examplex:
+    herd: Examplex
+    door: https://link.examplex.digital-office.co.il
+    pin: CHANGE_ME
+    by: [macbook, hp-laptop]
 
 # Every office runs these: its own door and its own guard. Running them everywhere is not duplication.
 base: [traefik, authentik, forward-auth, console, connections, app-management, dgo-extend, security,
@@ -174,6 +209,7 @@ apps:
   glitchtip: hp-laptop           # or retired — decided on DGO-927
   archify: hp-laptop
   my-docs: hp-laptop
+  bs-group: hp-laptop            # the company at a glance, beside the data it reads (DGO-1974)
   google-workspace-agent: hp-laptop
   raphael: hp-laptop
   apitools: dell                 # OCR and ASR, after the measurement of DGO-930

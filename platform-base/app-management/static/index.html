@@ -31,6 +31,10 @@
   color-scheme:light;
   accent-color:var(--accent);   /* the browser's OWN controls - a checkbox, a radio, a range, a progress bar - on both grounds: said once, here (it was said for eight single controls, and every other one was the browser's blue) */
   --bg:#f3f5f7; --surface:#fff; --surface-2:#f9fafb; --ink:#1f2a17; --muted:#6a7068; --line:#dcdfde;
+  /* THE OFFICE'S LOGO HAS THESE THREE COLOURS AND NO OTHER, on every ground and in every theme (the owner, 2026-11-15,
+     group msgs 1103-1104: «From now on this is the only colors you use in logo replace evrywhere and never use diffrent
+     colors» - the logo of digital-office.co.il; DGO-1908). The dark blocks below do not redefine them on purpose. */
+  --mark-tile:#1b5e4a; --mark-glyph:#fbfcfc; --mark-accent:#7ecfad;
   --olive:#56693f; --olive-d:#475734; --olive-soft:#e7eae4; --olive-line:#bfc6b6; --olive-ink:#f3f5f7;
   --sky:#7baae3; --sky-d:#2a6fc4; --sky-soft:#edf3fb; --sky-line:#cddff4; --sky-ink:#13263f;
   --lime:#a9b84c; --lime-d:#69732e; --lime-soft:#f3f5e6; --lime-line:#dee4bb; --lime-ink:#1f2a17;
@@ -156,6 +160,21 @@
     display:flex;flex-direction:column;gap:12px;box-shadow:var(--shadow);
     transition:box-shadow .16s,transform .16s,border-color .16s}
   .card:hover{box-shadow:var(--shadow-lg);transform:translateY(-2px)}
+
+  /* ── business templates (DGO-1689) ────────────────────────────────────────────────────────────
+     A template card IS a card — same surface, same acts row — so only the two parts an app card
+     does not have are styled here: the row that says, per app, what installing the case does to it
+     (the badge's own colours already mean "runs" and "stopped"), and the disclosed list of needs.
+     Every colour is a token (G27); nothing here names one. */
+  .card.tpl .tpl-state{display:flex;flex-wrap:wrap;gap:6px}
+  .card.tpl .tpl-state .badge{white-space:normal;text-align:start;line-height:1.35}
+  .tpl-needs{border:1px solid var(--line);border-radius:9px;background:var(--bg)}
+  .tpl-needs summary{padding:8px 12px;font-size:12.5px;color:var(--muted);cursor:pointer}
+  .tpl-needs summary:hover{color:var(--ink)}
+  .tpl-needs ul{list-style:none;margin:0;padding:0 12px 10px;display:flex;flex-direction:column;gap:9px}
+  .tpl-needs li{display:flex;flex-direction:column;gap:2px;font-size:12.5px;line-height:1.45}
+  .tpl-needs b{color:var(--ink);font-weight:650}
+  .tpl-needs span{color:var(--muted);overflow-wrap:anywhere}
 
   /* ── remote apps: the apps of a LINKED office ────────────────────────────────────────────────
      Same card, same list, ONE mark: a corner bracket in the logo's apps-line colour (the console

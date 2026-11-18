@@ -1,6 +1,10 @@
-# bina-claude — «בינה קלוד»
+# bina-claude — «קלוד דסקטופ» (Claude Desktop)
 
-**Bina Claude is ONLY the official Claude Desktop app with ONE login; there is no terminal; never propose
+Named «בינה קלוד» / Bina Claude until 2026-11-17, when the owner renamed it (DGO-1920); its id, its volume,
+its services and its CLI stay `bina-claude`, so nothing that exists moved. More than one Claude account on
+an office is more than one copy of this app: see [More copies](#more-copies-instances) below.
+
+**Claude Desktop is ONLY the official Claude Desktop app with ONE login; there is no terminal; never propose
 /login or a terminal.** The owner, 2026-11-09 (DGO-1684): «one login in the official claude desktop and we
 should have full cli controll over it and all other 4 channels» … «Delete the terminal and make sure nobody
 gets mixed up again». Gate G105 (`scripts/refactor/one-claude-lint.py`) fails a tile, a host or a doc that
@@ -15,7 +19,7 @@ Two containers on one volume (`bina_claude_home`), four channels on ONE sign-in:
 
 | Channel | What | Where |
 |---|---|---|
-| UI | **the official Claude Desktop app for Linux** (apt `claude-desktop`), streamed by Selkies | the console tile «בינה קלוד», `/a/bina-claude/` (service `bina-claude-desktop`) |
+| UI | **the official Claude Desktop app for Linux** (apt `claude-desktop`), streamed by Selkies | the console tile «קלוד דסקטופ», `/a/bina-claude/` (service `bina-claude-desktop`) |
 | CLI | `./bbox agent --app bina-claude list\|new\|send\|follow\|log\|cancel …`, `./bbox bina-claude status\|signed-in\|ask\|sessions\|show` | any shell of the office, any agent; another office's with `--office` |
 | API | agent.v1 ([agent-contract.md](../../ai/context/agent-contract.md)) over **the desktop app's own sessions** (DGO-1298) | `http://bina-claude:3091` in the office network; `127.0.0.1:3091` on the docker host (service `bina-claude`, the adapter alone) |
 | Flow | the office timeline's lane `bina_claude` (`adapter/spans.mjs`, `SPAN_SOURCE_BINA_CLAUDE`) | «כל מקביל» (any-concurrency) |
@@ -47,6 +51,71 @@ loopback (:3100) at build, and :3000 admits only the edge, the console and the l
 
 Measured on the Mac (2026-10-31): claude-desktop 4.4212.0, Selkies 2.1.0 (websockets, x264 on the CPU),
 the container at ~400 MB, the app at ~11 % of a core when idle.
+
+### Signing in: the office browser does it, the app gets the answer (DGO-1336)
+
+The owner, 2026-11-04: «תעשה שכשאני לוחץ על התחברות עם גוגל זה לוקח אותי לדפדפן לשכה… שיפתח בדפדפן
+ואז יחזור לאפליקציה ויחבר אותה».
+
+On Linux the app's sign-in is a browser round trip, and both halves of it were missing here:
+
+1. «Continue with Google» makes the app call `xdg-open` with
+   `https://claude.com/cai/login/app-google-auth?open_in_browser=1&hop_nonce=<nonce>`. This image has
+   no browser, so the answer was `xdg-open: no method available for opening …` and the click died —
+   the Sign In screen stayed, forever, with nothing to click (`$HOME/.claude-desktop.log`, measured
+   2026-11-04).
+2. claude.ai answers by sending the browser to `claude://login/google-auth?code=…&hop_nonce=…`. A
+   **browser cannot launch a scheme like that at all** — measured on the HP: the navigation is
+   swallowed and the tab simply stays where it was.
+
+So the desktop's browser is the office's, in two files (`desktop/`, in the image and mounted over it
+from the checkout, so a fix lands at the container's next restart without a rebuild):
+
+- **`bina-claude-open-url`** — the http/https handler (`desktop/bina-claude-browser.desktop`, declared
+  into the desktop user's own mimeapps at start, and the same file named by `$BROWSER`, which is what
+  this image's generic `xdg-open` falls back to). A sign-in URL opens in **browser42** as a HAND-OFF
+  (`bbox b42 open bina-claude -`, the address on stdin) in a standing tab of the group `claude-signin`
+  — the browser the owner is already signed in to Google in. The hand-off is a record every console
+  that shows the office browser reads: the person looking at the Claude tile is switched to the
+  browser tile while it is `needed`, and back when it is `done` (DGO-1336; the owner, 2026-11-04: «זה
+  לא עובד לא פותח לי שום דפדפן» — Google's chooser had opened in a display nobody was looking at).
+  Then it starts the watcher below. Any other link opens there in a group of its own (`claude-links`):
+  no hand-off, nothing watching it, and a sign-in in progress keeps its tab. A second press of «Continue
+  with Google» retires the first — every worker and watcher checks that its sign-in is still the newest
+  (`.bina-claude-hop.current`), and browser42 opens one hand-off of a slug at a time.
+- **`bina-claude-hop`** — the missing half: it watches that tab (browser42's own
+  `await url:/login/popup-google-auth`), reads claude.ai's answer out of the tab's URL, requires the
+  `hop_nonce` in `state=desktop:<uuid>.<nonce>` to be the one the app minted, and hands the app exactly
+  the link the OS would have handed it (the way `desktop/drive` hands a `claude://` link: only to a
+  running app, through its single-instance socket). `claude://` itself therefore stays the app's own
+  handler: the answer has to land in the app, and the app is what knows what to do with it.
+
+How it ends: once the app holds a session made AFTER the code was handed to it (`./bbox bina-claude
+signed-in` exits 0 and the app's claude.ai session cookie is a new one — «sent» is not «signed in»,
+and leftover bytes of an old session are not this sign-in), the hand-off turns `done` and the console
+takes the person back to the app. Otherwise it turns `failed` with a sentence that says which — no
+answer in 25 minutes, the app gone from its display, a code the app did not sign in with, or the
+watcher failing on the way — on the screen the person is looking at. Either way the sign-in's tab is
+closed (its address holds the spent code or Google's state). Every end names its episode — minted by
+the opener for each press and given to `bbox b42 open` — so a watcher that outlived its attempt can
+never end a newer one, nor close its tab.
+
+What is never done for him: the Google password, the account choice and the consent are typed and
+pressed on Google's own page, by the owner. The sign-in's query — the nonce, Google's `state`, the
+one-time code — is a credential: no log line holds any part of it (a host, a path, a length at most),
+it travels between the two files and to browser42 on stdin wherever the choice is ours, and browser42
+keeps only bare addresses (its manifests, its extension's storage). Two argvs are not ours and do carry
+it for seconds: xdg-open hands the sign-in URL to `bina-claude-open-url` as its argument, and the hop
+hands the app its answer as `claude-desktop claude://login/google-auth?code=…` — the one door a running
+app takes a link through. The app then writes that link into its own logs (`.claude-desktop.log` and
+Electron's `logs/main.log`, measured on the HP 2026-11-05), so there every secret is overwritten in
+place by dots of its own length — no byte moves, nothing else is touched — once a sign-in's hand-off has
+opened and at every end of it (`bina-claude-open-url --scrub`, which the hop runs). What builds before
+DGO-1336 wrote into the opener's own log is rewritten bare at each press.
+
+If a sign-in does not complete: `./bbox b42 handoff --list` says where it stands, and `docker exec -u abc
+bina-claude-desktop-hp tail -5 /config/.claude-open-url.log` says whether the URL was opened in the
+browser, and whether the browser answered. `./bbox b42 close claude-signin` closes the sign-in tab.
 
 ### The office, in every desktop session (DGO-1275)
 
@@ -195,8 +264,75 @@ curl -s http://bina-claude:3091/v1/health | jq .signout     # the alarm's own st
 `bina-claude` and **no image build**. Settings (`.env`): `BINA_CLAUDE_SIGNIN_LINK` (the address the person
 needs — for the HP `https://console.staging.digital-office.co.il/#/m/bina-claude.hp-laptop`, the console's
 own route for the tile: `/a/<alias>.<office>/` exists only for a tile carrying a `door`, and this one is
-`external`, so it answers «unknown_app» after the sign-in — DGO-1433; empty = the words «האריח «בינה קלוד»
-בקונסול»), `BINA_CLAUDE_SIGNOUT_GRACE_S`, `BINA_CLAUDE_NOTIFY_URL`, `BINA_CLAUDE_TZ` (the clock the hour is
+`external`, so it answers «unknown_app» after the sign-in — DGO-1433; empty = the words «האריח «קלוד דסקטופ»
+בקונסול», the copy's own tile name), `BINA_CLAUDE_SIGNOUT_GRACE_S`, `BINA_CLAUDE_NOTIFY_URL`, `BINA_CLAUDE_TZ` (the clock the hour is
+said in; empty = Asia/Jerusalem, never the container's `TZ`).
+
+## When it is signed out, the office says so (DGO-1430)
+
+A Claude that has lost its account is not idle, it is stuck. On 2026-11-04 07:29 UTC the desktop app lost
+its claude.ai session and stayed signed out for 48 hours: the manager and the group bot that run in it
+stood still, and nothing in the office said a word. The alarm is the adapter's, and it is generic — it
+asks the same `login()` that `bbox bina-claude status` asks (DGO-1347: whether the claude.ai session
+cookie is in the app's own store, never a value).
+
+- Every 60 s the adapter reads `login()`. `logged_in === false` **without a break** for
+  `BINA_CLAUDE_SIGNOUT_GRACE_S` (default 180 — the app's start-up flap is 1–4 s and a sign-in in progress
+  about a minute; a value that is not a positive number of seconds is refused, logged, and 180 is used)
+  is ONE episode, and it posts one notice to «התראות»: source `bina-claude`, source_id
+  `signed-out-<epoch the episode began>`, level `error`, titled «Claude נותק מהחשבון — הסשנים בו עצרו»,
+  with a body that says when in the owner's clock — «מאז HH:MM», or «נמצא מנותק ב-HH:MM» when the alarm did
+  not see the beginning — **with the date when it was not today** («04.11 09:29»; a three-day-old sign-out
+  must not read as this morning), and gives the address to sign in at. The relay writes the title and the
+  body and **not** the notice's `link` field — so the address is in the body.
+  The episode records whether its beginning was **watched** — a «signed in» reading no more than two ticks
+  (120 s) before the first «signed out» one, in this process or in the state it loaded (`last_in`). An
+  adapter that starts on an app that is *already* signed out — or that comes back after hours of unreadable
+  readings — watched no beginning, and says so instead of claiming one (the second reader, 2026-11-06: the
+  first line said «מאז 13:28» — the adapter's own start — while the app had been out since 2026-11-04
+  07:29 UTC; a «signed in» flag that was never cleared made the same claim after any long gap).
+- `logged_in === true` closes an announced episode: the SAME source and source_id at level `info`
+  («Claude מחובר שוב», «ההתראה מ-HH:MM נסגרה»), and the episode ends with that line — the notice is then
+  marked read **best effort** (a read that fails is logged and the episode is closed anyway). The board is
+  asked before the close is written: an episode whose red line never landed is forgotten rather than closed
+  with a green line about nothing, and one whose closing answer was lost already reads `info` there — so
+  there is never a second green line. An episode that ended inside the grace says nothing.
+- Both lines reach the owner's group through a rule of their own, `bina-claude-signout` in
+  `apps/dashboard/group-events.json` — before `errors`, **uncapped**, with no repeat window (both carry the
+  same source_id, so a window would swallow the close). The relay reads that list once at its start: a
+  rule change needs the `dashboard-group` container restarted, not just saved.
+- `logged_in === null` — the store is not readable, the app's container is away — is **not** a sign-out
+  and changes nothing.
+- The episode (`{began, seen, posted, notice, attempted, last_in}`) is kept in
+  `${BINA_CLAUDE_STATE}/signout.json` on the app's volume, so a restart of the adapter neither posts twice
+  nor forgets an open one. Two rules make that hold when the board is slow — it is one gunicorn worker on
+  sqlite, and an answer can arrive after the 10 s abort:
+  - `attempted` is the source_id of a POST that **may** have reached the board, and it is written to the
+    volume *before* the POST leaves. A source_id that may exist is never posted blind: the retry asks the
+    board first (one GET), and a board that cannot answer means the tick is skipped, not a second red line.
+    A board that answers «not there» lets it post; one that answers «already there» adopts it.
+  - an episode whose write was attempted is never forgotten on the sign-in: the board is asked, and a red
+    line that landed late is closed — the group's last word is not left red for ever.
+  A state file that is there but is not JSON is logged, and the episode it still names is salvaged from the
+  text — `began` above all, since the close's source_id comes from it: a number is read only where it ends
+  (a half-written `17939645` is not a 1970 beginning), and nothing before 2026 is believed.
+
+The decision is one pure function, `decideSignout(state, observation, now)` → `(state, action)`, and the
+turn that carries it out (`alarmStep`) is handed the board's three calls **and the pen** (so the write that
+may have left is on disk before it leaves) — both are tested without a clock, a container or a network:
+
+```bash
+node --test apps/bina-claude/adapter/test_signout.mjs
+curl -s http://bina-claude:3091/v1/health | jq .signout     # the alarm's own state, live
+```
+
+`adapter/server.mjs` is mounted over the image's copy (`docker-compose.yml`), the way DGO-1336 mounts
+`desktop/open-url` and `desktop/hop` over the desktop image's — so this lands with a recreate of
+`bina-claude` and **no image build**. Settings (`.env`): `BINA_CLAUDE_SIGNIN_LINK` (the address the person
+needs — for the HP `https://console.staging.digital-office.co.il/#/m/bina-claude.hp-laptop`, the console's
+own route for the tile: `/a/<alias>.<office>/` exists only for a tile carrying a `door`, and this one is
+`external`, so it answers «unknown_app» after the sign-in — DGO-1433; empty = the words «האריח «קלוד דסקטופ»
+בקונסול», the copy's own tile name), `BINA_CLAUDE_SIGNOUT_GRACE_S`, `BINA_CLAUDE_NOTIFY_URL`, `BINA_CLAUDE_TZ` (the clock the hour is
 said in; empty = Asia/Jerusalem, never the container's `TZ`).
 
 ## The API

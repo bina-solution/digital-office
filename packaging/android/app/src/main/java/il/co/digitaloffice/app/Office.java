@@ -147,7 +147,10 @@ final class Office {
             for (String id : new String[]{"forward-auth", "edge", "console", "control"}) n.base.add(new Part(names.get(id), NativeService.running() ? RUN : OFF));
             all = n.base.size();
         }
-        n.baseMeta = n.core ? "רץ ישירות בטלפון" : NativeService.running() ? "עולה עכשיו" : "כבוי";
+        // why the last start's core did not start, in Hebrew (NativeService, CoreFailure — DGO-1817)
+        boolean nativeUp = NativeService.running();   // read once: the top line and the base card agree
+        String failed = nativeUp ? "" : text(NativeService.coreFailed(c));
+        n.baseMeta = n.core ? "רץ ישירות בטלפון" : nativeUp ? "עולה עכשיו" : failed.isEmpty() ? "כבוי" : "לא עלה";
 
         // «מכולות»
         String refused = text(new File(run, "machine-refused"));
@@ -300,7 +303,12 @@ final class Office {
         }
 
         // the line at the top: the one thing that is true now
-        if (!NativeService.running()) {
+        if (!failed.isEmpty()) {
+            n.head = "הבסיס לא עלה";
+            n.say = failed;
+            n.tone = BAD;
+            n.pill = "דורשת פעולה";
+        } else if (!nativeUp) {
             n.head = "הלשכה כבויה";
             n.say = "פתיחת הלשכה מפעילה את הבסיס בתוך שניות.";
             n.tone = OFF;

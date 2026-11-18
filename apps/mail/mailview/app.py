@@ -307,7 +307,7 @@ def label_map():
 
 FAIL_RE = re.compile(r"נכשל|לא מזוהה")           # attention-queue label set
 # synthetic battery mail: injection markers, demo senders, and the unique-corpus
-# alias token every synthetic doc subject is stamped with (bnyas-3, dltvt-tyyr-2…)
+# alias token every synthetic doc subject is stamped with (supplier07-3, supplier02-2…)
 TEST_RE = re.compile(
     r"הזרקת בדיקה|Demo Link|@demo\.indox|demo\+\d+@|@[\w.-]*example\.com"
     r"|\b[a-z]{2,}(?:-[a-z]{2,})*-\d{1,2}\b")
@@ -825,8 +825,10 @@ def oauth_google_start():
         return (jsonify({"error": why}), 400) if check else _oauth_page(False, "ההתחברות ל־Google לא נפתחה", why, status=400)
     secret = secrets.token_urlsafe(24)
     try:
+        # `protocol`: what this screen connects — where the office reads a sibling protocol only (Drive, EXU-24)
+        # connections narrows the consent to Gmail; elsewhere it is ignored and the grant stays Drive + Gmail
         r = _HTTP.get(CONNECTIONS + "/oauth/google-workspace-grant/start",
-                      params={"as_instance": "1", "ret": ret,
+                      params={"as_instance": "1", "ret": ret, "protocol": "mail_gmail_oauth",
                               "bind": hashlib.sha256(secret.encode()).hexdigest()}, timeout=20)
         d = r.json()
     except (requests.RequestException, ValueError):

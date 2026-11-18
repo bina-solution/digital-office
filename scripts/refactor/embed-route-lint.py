@@ -173,16 +173,23 @@ def remote_rows(mods: list[dict], by_alias: dict[str, str]) -> tuple[list[tuple[
 def apps_by_alias() -> dict[str, str]:
     """alias -> the app directory that serves it, read from the manifests (the only declaration)."""
     found: dict[str, str] = {}
-    for base in ("apps", "platform-base"):
+    # instances/: an app's further copies (DGO-1920), generated per office — each declares its own tile
+    for base in ("apps", "platform-base", "instances"):
         for manifest in sorted((ROOT / base).glob("*/app.json")):
             try:
                 app = json.loads(manifest.read_text(encoding="utf-8"))
             except (OSError, ValueError):
                 continue
+            # a copy's screen is its template's: judged (and allowed) by the template's own folder
+            home = manifest.parent
+            of = app.get("instance_of")
+            if base == "instances" and isinstance(of, str):
+                home = next((ROOT / b / of for b in ("apps", "platform-base") if (ROOT / b / of / "app.json").is_file()),
+                            home)
             for route in app.get("routing") or []:
                 module = route.get("module") or {}
                 if module.get("alias"):
-                    found[module["alias"]] = str(manifest.parent.relative_to(ROOT))
+                    found[module["alias"]] = str(home.relative_to(ROOT))
     return found
 
 

@@ -101,6 +101,64 @@ provision:
 - mode: system
   script: |
     #!/bin/bash
+    # Hide the Mac's ~/Library from the guest (DGO-1838, 2026-11-13). The engine mounts the whole home (engine.sh
+    # `--mount "$HOME:w"`, so a checkout with spaces and Hebrew in its path keeps its path), and ~/Library comes with
+    # it. A walk into ~/Library/Group Containers makes macOS ask whether limactl may «access data from other apps»;
+    # the virtiofs request waits for that answer, and every later access to the home mount waits behind it — a
+    # `find /` froze the office's files until the owner clicked (issues/a-walk-of-the-macs-home-from-the-engine-…).
+    # Nothing in the office reads ~/Library from the guest (an Obsidian vault synced under ~/Library would be the one
+    # exception; OBSIDIAN_VAULT_HOST is unset on the Mac), so an empty read-only tmpfs covers it: a walk of ~/Library
+    # finds an empty directory. ~/Desktop, ~/Documents and ~/Downloads keep prompts of their own, so agents still
+    # never walk the home from the guest. Containers running at a live apply see the tmpfs once they are recreated.
+    # A unit on the guest's disk, not only this run: a block applied live to an engine made before it is not in that
+    # engine's lima.yaml, so no boot re-runs it (engine.sh provision_converge) — the unit does, after cloud-init has
+    # mounted the home, and before docker starts the containers (machine binds the whole root, and a bind made before
+    # the tmpfs keeps the real ~/Library); 30 s at most, so a hung lookup cannot hold docker (the second reader,
+    # 2026-11-13). The link is made by hand, not by `systemctl enable`: packaging/android/engine/guest.sh runs these
+    # blocks in a chroot (there it does nothing).
+    # bbox: live-apply
+    set -eu
+    cat > /usr/local/sbin/dgo-hide-library <<'EOF'
+    #!/bin/bash
+    set -eu
+    findmnt -rn -t virtiofs -o TARGET | while IFS= read -r t; do
+      home="$(printf '%b' "${t}")"                    # findmnt -r writes a space as \x20
+      case "${home}" in /Users/*/*) continue ;; /Users/*) ;; *) continue ;; esac   # a home itself, not a folder in one
+      [ -d "${home}/Library" ] || continue
+      mountpoint -q "${home}/Library" && continue
+      mount -t tmpfs -o ro,size=4k,mode=0555,nosuid,nodev,noexec dgo-hide-library "${home}/Library"
+    done
+    EOF
+    chmod 755 /usr/local/sbin/dgo-hide-library
+    # files only, no systemctl: nothing here talks to PID 1, so a systemd that does not answer (2026-11-14: frozen
+    # after an unattended re-exec during the stall) keeps neither the boot unit nor the live cover from going up. No
+    # daemon-reload: the next boot reads the link, and against a frozen PID 1 it only hangs for its D-Bus timeout.
+    printf '%s\n' '[Unit]' "Description=Hide the Mac's ~/Library from the guest (DGO-1838)" \
+      'After=local-fs.target cloud-config.service' 'Before=docker.service' '[Service]' 'Type=oneshot' \
+      'TimeoutStartSec=30' 'ExecStart=/usr/local/sbin/dgo-hide-library' '[Install]' 'WantedBy=multi-user.target' \
+      > /etc/systemd/system/dgo-hide-library.service
+    mkdir -p /etc/systemd/system/multi-user.target.wants
+    ln -sf ../dgo-hide-library.service /etc/systemd/system/multi-user.target.wants/dgo-hide-library.service
+    /usr/local/sbin/dgo-hide-library
+- mode: system
+  script: |
+    #!/bin/bash
+    # No unattended upgrades in the engine (DGO-1838, 2026-11-14). apt-daily-upgrade upgraded systemd at 03:06Z
+    # while the home mount was stalled; PID 1 re-executed, could not fork the sandbox for its generators («Protocol
+    # error») and froze for good: no service is managed until the engine restarts. The engine is the owner's desk.
+    # The price, said: it takes no security updates until it is recreated (engine.sh has no upgrade path, only a
+    # destroy and a new engine). Files only, so it works with a frozen systemd: an apt.conf of our own that sorts
+    # last (a package's 20auto-upgrades can be rewritten by its postinst), and the two timers masked by hand, as
+    # packaging/android/engine/guest.sh masks them for the phone.
+    # bbox: live-apply
+    set -eu
+    printf '%s\n' 'APT::Periodic::Enable "0";' 'APT::Periodic::Update-Package-Lists "0";' \
+      'APT::Periodic::Unattended-Upgrade "0";' > /etc/apt/apt.conf.d/99-dgo-no-periodic
+    ln -sf /dev/null /etc/systemd/system/apt-daily.timer
+    ln -sf /dev/null /etc/systemd/system/apt-daily-upgrade.timer
+- mode: system
+  script: |
+    #!/bin/bash
     # Swap for the guest. The stack fills the guest's memory on an 8 GB Mac (measured 2026-09-18:
     # 4.2/4.9 GB at idle, 140 MB free during an image build), and a cloud image ships with NO swap,
     # so the first spike sends the kernel into reclaim thrash: load average 100+ on 4 cores, health
@@ -148,6 +206,21 @@ provision:
     set -eux -o pipefail
     printf 'vm.compaction_proactiveness = 0\nvm.min_free_kbytes = 131072\n' > /etc/sysctl.d/90-bbox-memory.conf
     sysctl -p /etc/sysctl.d/90-bbox-memory.conf
+- mode: system
+  script: |
+    #!/bin/bash
+    # A crash in a container starts no crash reporter and writes no core file. Measured 2026-11-11: the security
+    # sensor's nft segfaulted every 2.2 s, 7,240 times since 09:20Z, and each crash started Ubuntu's apport (Python,
+    # 87% of a core) and wrote a core dump — load 104-115, the desk unanswered for six minutes (issues/the-macs-desk-
+    # stopped-answering-while-nft-crashed-every-two-seconds-in-its-engine-and-git-status-ran-there.yaml). The engine
+    # only runs the office's containers and nobody reads its crash reports: apport off and masked (it would set the
+    # core pattern back), and the kernel's core pattern a pipe that drops the core.
+    # bbox: live-apply
+    set -eu
+    systemctl disable --now apport.service apport-autoreport.path 2>/dev/null || true
+    systemctl mask apport.service apport-autoreport.path 2>/dev/null || true
+    printf 'kernel.core_pattern = |/bin/false\n' > /etc/sysctl.d/91-bbox-no-crash-reports.conf
+    sysctl -p /etc/sysctl.d/91-bbox-no-crash-reports.conf
 - mode: system
   script: |
     #!/bin/bash

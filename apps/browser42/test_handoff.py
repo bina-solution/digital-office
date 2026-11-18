@@ -443,12 +443,34 @@ class PresentationTests(unittest.TestCase):
                 return "_NET_WM_STATE(ATOM) = _NET_WM_STATE_FULLSCREEN" if argv[2] == "0x01" else "_NET_WM_STATE(ATOM) = _NET_WM_STATE_MAXIMIZED_VERT"
             return ""
 
-        self.assertEqual(MODULE.present_standard(run), 1)
+        with tempfile.TemporaryDirectory() as tmp:          # an image without the window tool
+            self.assertEqual(MODULE.present_standard(run, mark=Path(tmp) / "mark", tool="/nonexistent"), 1)
         keys = [argv for argv in calls if argv[0] == "xdotool"]
         self.assertEqual(keys, [["xdotool", "windowactivate", "--sync", "0x01", "key", "--window", "0x01", "F11"]])
 
     def test_no_x_tools_means_nothing_switched(self):
-        self.assertEqual(MODULE.present_standard(lambda argv: ""), 0)
+        with tempfile.TemporaryDirectory() as tmp:
+            self.assertEqual(MODULE.present_standard(lambda argv: "", mark=Path(tmp) / "mark"), 0)
+
+    def test_standard_is_set_as_a_state_and_marked_so_the_window_loop_leaves_it(self):
+        """DGO-1921: F11 is a toggle — the window loop's next press could undo the hand-off's."""
+        calls = []
+
+        def run(argv):
+            calls.append(argv)
+            if argv[0] == "wmctrl":
+                return "0x01 0 chromium.Chromium      host chromium\n0x03 0 chromium.Chromium      host other\n"
+            if argv[0] == "xprop":
+                return "_NET_WM_STATE(ATOM) = _NET_WM_STATE_FULLSCREEN"
+            return ""
+
+        with tempfile.TemporaryDirectory() as tmp:
+            tool = Path(tmp) / "browser42-window.py"
+            tool.write_text("")
+            self.assertEqual(MODULE.present_standard(run, mark=Path(tmp) / "mark", tool=str(tool), sleep=lambda s: None), 2)
+            self.assertEqual((Path(tmp) / "mark").read_text(), "0x01\n0x03\n")
+        self.assertEqual(calls.count(["python3", str(tool), "standard"]), 2)
+        self.assertFalse([argv for argv in calls if argv[0] == "xdotool"])
 
 
 class PerformTests(unittest.TestCase):
@@ -826,8 +848,10 @@ class WiringTests(unittest.TestCase):
         self.assertIn("- '8767'", compose)
         self.assertIn("BROWSER42_MCP_TOKEN: ${BROWSER42_MCP_TOKEN:-}", compose, "the browser holds the token Caddy sends")
         # Kept alive since DGO-1336: the live view's gate asks it, so a crash would close the whole screen.
-        self.assertRegex((HERE / "start-browser.sh").read_text(encoding="utf-8"),
-                         r"\( while :; do\s+python3 /handoff\.py serve \|\| true\n(?:[^\n]*\n){1,3}?\s*done \) &")
+        # Since DGO-1921 every helper is kept by one `keep` (a restart loop), this one included.
+        script = (HERE / "start-browser.sh").read_text(encoding="utf-8")
+        self.assertRegex(script, r"\nkeep\(\) \{\n(?:[^\n]*\n){1,3}?\s*while :; do\n\s*\"\$@\"\n(?:[^\n]*\n){1,3}?\s*done \) &\n\}")
+        self.assertRegex(script, r"\n\s*keep handoff python3 /handoff\.py serve\n")
 
 
 class ExtensionLogicTests(unittest.TestCase):

@@ -2,9 +2,10 @@
 #
 # The owner's rule for the Dell: the emulator is an app he sees and uses, nothing started on the host by hand. One
 # service: the supervisor (server/, the door on :8080 and the heat governor) runs the emulator with a window on
-# TigerVNC's Xvnc, and websockify serves noVNC on :6080 — the screen the console frames (browser42's stack). It
-# needs the host's KVM (app.json requires_host: refused where /dev/kvm is missing); ANDROID_KVM_DEVICE maps it.
-# Off by default, and the device starts only when asked (POST /api/start) and the heat allows.
+# TigerVNC's Xvnc, and serves the app's screen on :6080 — what the console frames: the state, start/stop and the live
+# display (noVNC, its websocket spliced to websockify inside the container). It needs the host's KVM (app.json
+# requires_host: refused where /dev/kvm is missing); ANDROID_KVM_DEVICE maps it. Off by default; the device starts
+# when asked (the screen's button, POST /api/start) and the heat allows, and stops after 20 minutes nobody used it.
 services:
   android-emulator:
     image: ghcr.io/bina-solution/digital-office/android-emulator:${IMAGE_TAG:-latest}
@@ -28,6 +29,8 @@ services:
       # machine check (the app asks 2 GB + 10 GB before it fetches) needs 20480 here
       EMU_PARTITION_MB: ${ANDROID_EMULATOR_PARTITION_MB:-8192}
       EMU_APKS: /apks
+      # a device nobody watches or uses for this many minutes stops by itself, saving its snapshot (0: never)
+      EMU_IDLE_STOP_MIN: ${ANDROID_EMULATOR_IDLE_STOP_MIN:-20}
       # the office's event stream (flow.v1): this app writes dgo:flow:android-emulator
       REDIS_PASSWORD: ${REDIS_PASSWORD:-}
       TZ: ${TZ:-Asia/Jerusalem}
@@ -35,6 +38,9 @@ services:
       - android_emulator_avd:/root/.android/avd
       - android_emulator_apks:/apks
       - ./server:/app:ro
+      # the entrypoint, from the checkout like the server: the display's stack changes without a build of the
+      # image (the SDK and a system image: built on the Dell's office, one heavy job)
+      - ./start.sh:/start.sh:ro
       - ../../platform-base/redis/flowpub.py:/opt/dgo/flowpub.py:ro
     networks:
       - traefik-network

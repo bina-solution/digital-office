@@ -95,6 +95,9 @@ NOT_A_SCREEN = re.compile(
 ALLOWED = [
     (r"^platform-base/bina-ui/theme-tokens\.css$", None, "the palette: where the colours are written"),
     (r"(^|/)favicon\.svg$", None, "the mark as an image: a file cannot name a token"),
+    (r"^apps/examplex/static/office-mark\.svg$", None,
+     "the office's mark beside its name in Examplex (DGO-1846): a byte copy of brand/favicon.svg, kept so by G27 — a file "
+     "cannot name a token"),
     (r"^platform-base/bina-ui/brand/.*\.svg$", None,
      "the office's mark as image files (the site's logo, the favicon): a file cannot name a token, "
      "and its three values ARE the palette's — olive, lime, the ground"),
@@ -133,7 +136,7 @@ ALLOWED = [
     (r"^apps/apitools/src/doc_gen/", None,
      "a business document: ink on paper, in a palette of its own until the owner decides otherwise (ui2-039)"),
     # ── THE CAP BUILDER IS THE SHOP'S OWN PRODUCT (2026-10-30) ────────────────────────────────────
-    # The Examplef Guys' cap builder carries the shop's own ground and ember brand — `color-scheme:dark`,
+    # Example shop' cap builder carries the shop's own ground and ember brand — `color-scheme:dark`,
     # `#14100d`, `#e8763f` — and its 25 coil finishes are hexes sampled from the SHOP'S PHYSICAL COLOUR
     # CHIPS, read as swatch backgrounds and 3D material colours. Measured 2026-10-30 on examplef: 200
     # literals, 117 distinct values, of which only ~12 exist in the palette at all, and those are its
@@ -141,8 +144,15 @@ ALLOWED = [
     # Repainting it is the owner's design decision, not a lint fix; until he makes it, this is a
     # palette of its own, exactly like apitools' business document above. (Its first copy,
     # `apps/services-2`, stays in the client's herd: the release line carries the builder only as
-    # chimney-services serves it — DGO-1037.)
-    (r"^apps/chimney-services/static/builder/", None,
+    # examplech-services serves it — DGO-1037.)
+    # ── EXAMPLEX IS A PRODUCT OF ITS OWN (2026-11-13, DGO-1864) ──────────────────────────────────────
+    # Examplex runs on its own domain for its own customers, and its meeting exx102 decided its colours: «כחול וטורקיז.
+    # אני חושב שזה הצבעים שאנחנו צריכים לכוון» [37:09], and the owner «הייתי לוקח ממש את הצבעים שנבחרו פה» [37:30] —
+    # the navy and turquoise of Itzik's concept. One file holds them, and only re-points the palette's roles; every
+    # other Examplex file still names tokens only, so this allowance is that one file.
+    (r"^apps/examplex/static/examplex-brand\.css$", None,
+     "Examplex's own brand, decided in its meeting exx102: the navy and turquoise of its owners' concept, in one file of tokens"),
+    (r"^apps/examplech-services/static/builder/", None,
      "the same shop's cap builder, served by the services app: its drawings, material colours and brand"),
     # Meet's web plugin is not a screen of ours: it is included INTO Jitsi's own page (index.html,
     # after config.js), which carries no token block of ours — the alert banner and the live captions

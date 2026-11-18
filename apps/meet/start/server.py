@@ -1,13 +1,15 @@
 #!/usr/bin/env python3
-"""meet-start — the host's door to the office's video meetings (apps/meet). It draws no meeting
-screen: every screen a person meets is Jitsi's own. It only says who is a host.
+"""meet-start — the host's door to the office's video meetings (apps/meet). A meeting itself is Jitsi's own
+screen; around it this door says who is a host, and serves «פגישות», the meetings page (/flow/).
 
 It sits behind the office sign-in: the console's proxy (the tile, /a/meet/) and traefik's authentik
 forward-auth on its own host both hand it the signed-in person in X-authentik-username / -name /
--email, and it believes them only from those two (MEET_TRUSTED_PEERS). Guests never come here: they
-open the room's link on the meeting host, and wait there until a host is in (ENABLE_GUESTS).
+-email, and it believes them only from those two (MEET_TRUSTED_PEERS) — and, for a person on a LINKED office's
+console, the username the link's door writes (MEET_LINK_PEERS, DGO-1895: `Door.person`). Guests never come here:
+they open the room's link on the meeting host, and wait there until a host is in (ENABLE_GUESTS).
 
-    GET /            the tile → Jitsi's own welcome page (its card links here for a new meeting)
+    GET /            the tile → «פגישות» for a signed-in person (MEET_HOME=flow, the default); for nobody signed
+                     in (or MEET_HOME=jitsi), Jitsi's own welcome page (its card links here for a new meeting)
     GET /new         a new room, with this person as its host → Jitsi's own pre-join page
     GET /r/<room>    Jitsi's tokenAuthUrl ("I am the host"): a JWT for this person and this room,
                      back into Jitsi's room page as its moderator
@@ -99,7 +101,8 @@ except ValueError:
 # Who may hand this door a signed-in person. The X-authentik-* headers are the edge's word, and the
 # edge strips any a browser sent; a request that did not come through it (another container on the
 # shared network) could write them itself. So only the edge and the console (whose proxy carries the
-# edge's headers to the tile) are believed; anyone else is not signed in.
+# edge's headers to the tile) are believed — and the link's door for a linked office's person (LINK_PEERS
+# below); anyone else is not signed in.
 TRUSTED = [h.strip() for h in os.environ.get("MEET_TRUSTED_PEERS", "traefik,console").split(",") if h.strip()]
 _trusted_cache = {"at": 0.0, "ips": set()}
 PORT = int(os.environ.get("MEET_START_PORT", "8080"))
@@ -110,7 +113,8 @@ MACHINES = [h.strip() for h in os.environ.get("MEET_MACHINE_PEERS", "").split(",
 _machine_cache = {"at": 0.0, "ips": set()}
 # Of those, the link door (DGO-945): a request from it crossed a link, and the door wrote the office it
 # came from (x-dgo-office, the peer's own claim removed). Only the office Meet's workflows run in is
-# let in that way (hooks/prepare, from `workflows:`); with none named, no linked office is.
+# let in that way (hooks/prepare, from `workflows:`); with none named, no linked office is. On the people's
+# port the same door brings a linked office's PERSON, under the username it writes (Door.person, DGO-1895).
 LINK_PEERS = [h.strip() for h in os.environ.get("MEET_LINK_PEERS", "").split(",") if h.strip()]
 _link_cache = {"at": 0.0, "ips": set()}
 WORKFLOWS_OFFICE = os.environ.get("MEET_WORKFLOWS_OFFICE", "").strip().lower()
@@ -340,16 +344,16 @@ def recording_start(name: str):
 
 
 # \u2500\u2500 the office's own words in the machine's text (examplef, 2026-10-29, AUD-C5-002110) \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
-# Call 5 (exf105): the live captions wrote \u00abDGO fee\u00bb as \u00abDGOP\u00bb, \u00ab\u05d3\u05d9 \u05d2'\u05d5\u05e4\u05d9\u00bb, \u00ab\u05d3\u05d9\u05d2'\u05d9 \u05d0\u05d5\u05e4\u05d9\u00bb, \u00ab\u05d3\u05d9\u05d2'\u05d9 \u05d0\u05d5 \u05e4\u05d9\u00bb, and \u00abOur share\u00bb
-# as \u00ab\u05d0\u05d0\u05d5\u05d5\u05e8 \u05e9\u05d9\u05d9\u05e8\u00bb / \u00ab\u05d4\u05d5\u05d5\u05e8\u05e9\u05d9\u05d9\u05e8\u00bb; William asked why it says DGOP [0:19:32]. The office's speech service takes no word list
+# Call 5 (exf105): the live captions wrote \u00abOffice fee\u00bb as \u00abDGOP\u00bb and in several Hebrew spellings, and \u00abThe share\u00bb
+# in two (every form is in start/vocab.json); A participant asked why it says DGOP [0:19:32]. The office's speech service takes no word list
 # (no prompt), so what it is known to mishear is put right after it: in the captions the recorder posts to the room
 # (/api/recorder/captions answers the fixed text, which jibri/watch.py posts and writes to the .live.txt), in the server
 # captions read back from a .live.txt, and in the first processing (the machine's own words kept beside it, \u00ab\u05de\u05e7\u05d5\u05e8\u00bb).
-# A setting, not code: MEET_VOCAB_FILE (default start/vocab.json), {"terms": [{"say": "DGO fee", "heard": [...]}]};
-# a Hebrew prefix stays and takes a hyphen (\u00ab\u05d1-DGO fee\u00bb), as the reviewed transcripts write it. Re-read when it changes.
+# A setting, not code: MEET_VOCAB_FILE (default start/vocab.json), {"terms": [{"say": "Office fee", "heard": [...]}]};
+# a Hebrew prefix stays and takes a hyphen (\u00ab\u05d1-Office fee\u00bb), as the reviewed transcripts write it. Re-read when it changes.
 # …and BEFORE the recogniser too (EXF-471, 2026-10-29): the same file's "prompt" — the office's English terms, as a
 # list — goes with every live caption to the speech service as Whisper's initial prompt (apitools-asr `prompt`), so
-# the model can spell them the office's way in the first place (measured: an English speaker's «Zelle», «chimney cap»);
+# the model can spell them the office's way in the first place (measured: an English speaker's «Zelle», «examplech cap»);
 # the rules above still put right what it misses (the owners' Hebrew «די ג'י אופי» is not changed by any prompt).
 # A list, not a Hebrew sentence: that once made the model drop the first 8 s of a piece of call 5. Empty = none.
 # A service from before the prompt ignores the field.
@@ -831,7 +835,7 @@ def plane_items(max_age: float = 60.0) -> dict:
         if project:
             module = urlsplit(PLANE_API).hostname or "project-pln"
             cursor = ""
-            for _ in range(20):                                      # 2,000 items at most
+            for _ in range(20):                                      # N items at most
                 page = get(f"/projects/{project['id']}/issues/?per_page=100"
                            + (f"&cursor={quote(cursor)}" if cursor else ""))
                 for i in rows(page):
@@ -1045,6 +1049,11 @@ def trusted_ips() -> set:
     return peer_ips(TRUSTED, _trusted_cache)
 
 
+def link_ips() -> set:
+    """The addresses the link's door has now (MEET_LINK_PEERS): the one hop a linked office's person comes through."""
+    return peer_ips(LINK_PEERS, _link_cache)
+
+
 def to_plane_store(file: str, url: str, fields: dict) -> tuple:
     """Put one recording in Plane's store through the form Plane signed for it (DGO-834: the owner,
     «upload the file to Plain»), the three steps Plane's own screen takes; the workflow asks for the
@@ -1118,16 +1127,38 @@ class Door(BaseHTTPRequestHandler):
     server_version = "meet-start"
 
     def person(self):
-        if self.client_address[0] not in trusted_ips():
+        ip = self.client_address[0]
+        if ip in trusted_ips():
+            user = header(self.headers.get("X-authentik-username"))
+            if not user:
+                return None
+            return {
+                "username": user,
+                "name": header(self.headers.get("X-authentik-name")),
+                "email": header(self.headers.get("X-authentik-email")),
+            }
+        if ip not in link_ips():
             return None
-        user = header(self.headers.get("X-authentik-username"))
+        # A person on a LINKED office's console (DGO-1895: the MacBook's «פגישות וידאו · vps1»). Over the link nobody's
+        # edge is in front of this door: the link's door is (apps/dgo-extend/link-proxy.py). It removes every
+        # X-authentik-* line the other office sent and writes ONE X-Authentik-Username of its own — the user this office's
+        # pairing maps that office's people to (`identity.to` in its catalog) — so from the door's own address that header
+        # is this office's word, as the edge's is; Plane and the console take the same person from it. Two lines would be
+        # someone writing one beside the door's: nothing is believed. The username alone: a name or an e-mail never comes
+        # from a link (the door strips them), and none is read from one here. WHO may call the door on the other office is
+        # the link's own rule, not this file's (issues/any-container-on-an-office-network-can-use-the-link-door-directly-
+        # and-it-signs-the-request-as-the-office.yaml) — and only the door's Host-routed requests are rewritten: a serve
+        # rule that splices raw bytes passes a peer's own headers, and none may ever target this port (meet declares no
+        # agent port). dgo-carry shares the door's address (`network_mode: service:dgo-net`); it hands only join requests
+        # to dgo-extend (carrier/door.go) and asks nothing here. Before this the tile on a linked console was always
+        # anonymous: Jitsi's bare welcome page, whose
+        # host links lead to this office's own sign-in, which a frame on another office's console can never show
+        # («לא ניתן היה להתחבר אל auth.<this office>»).
+        said = self.headers.get_all("X-authentik-username") or []
+        user = header(said[0]) if len(said) == 1 else ""
         if not user:
             return None
-        return {
-            "username": user,
-            "name": header(self.headers.get("X-authentik-name")),
-            "email": header(self.headers.get("X-authentik-email")),
-        }
+        return {"username": user, "name": "", "email": ""}
 
     def send(self, code: int, body: bytes, ctype: str = "text/html; charset=utf-8", extra=None):
         self.send_response(code)

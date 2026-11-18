@@ -40,8 +40,27 @@ cleanup() {
   rm -rf --one-file-system "${work}"
 }
 trap cleanup EXIT
-curl -fsSL -o "${work}/cloud.img" "${url}"
+# The image is pinned by its digest, so a copy kept from an earlier build in the box's own store (/store, kept
+# between builds: guest-box.sh) is the same file, taken when its digest checks out. A download retries: the
+# Dell's line lost cloud-images.ubuntu.com for 270 s at the END of a 94-minute build, and one failed connection
+# threw the build away (engine #113, 2026-11-11, DGO-1818).
+kept=""
+if [ -d /store ] && [ -w /store ]; then kept="/store/cloud/${digest}.img"; fi
+if [ -n "${kept}" ] && [ -f "${kept}" ] && echo "${digest}  ${kept}" | sha256sum -c - >/dev/null 2>&1; then
+  cp "${kept}" "${work}/cloud.img"
+  echo "guest.sh: the cloud image from the kept store (${digest:0:12})"
+else
+  curl -fsSL --connect-timeout 30 --retry 10 --retry-delay 20 --retry-max-time 600 --retry-all-errors \
+    -o "${work}/cloud.img" "${url}"
+  fresh=1
+fi
 echo "${digest}  ${work}/cloud.img" | sha256sum -c -
+# kept for the next build (a kept copy that failed its digest is replaced; each box writes its own part, since a
+# second box shares /store without its lock), and only this digest's: an image pinned before is pruned
+if [ -n "${kept}" ] && [ -n "${fresh:-}" ]; then
+  mkdir -p /store/cloud && cp "${work}/cloud.img" "${kept}.part.$$" && mv "${kept}.part.$$" "${kept}" \
+    && find /store/cloud -type f ! -name "${digest}.img" -mmin +60 -delete || rm -f "${kept}.part.$$"
+fi
 qemu-img convert -O raw "${work}/cloud.img" "${out}"
 qemu-img resize -f raw "${out}" 24G
 loop="$(losetup -fP --show "${out}")"

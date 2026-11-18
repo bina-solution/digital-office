@@ -6,7 +6,28 @@
 # process (it replaces the old Xvfb + x11vnc pair). Unlike Xvfb, Xvnc speaks
 # RandR/SetDesktopSize, so noVNC's resize=remote makes the virtual desktop track
 # the viewer's window 1:1 — crisp, correct density, no stretch-to-fit "zoom"/blur.
+#
+# What runs here, each in one line (DGO-1921; apps/browser42/README.md has the whole app):
+#   Xvnc (display + VNC) · fluxbox (window manager) · websockify (noVNC, the live view) ·
+#   localhost-forward (*.localhost → Traefik) · broker (tab groups ↔ the extension) · handoff.py (the
+#   gate and the hand-off link) · the internal forwarder (all four to browser42's own network) ·
+#   cloakserve (Chromium, CDP) — every helper under `keep`; and five loops: Xvnc watchdog, the window,
+#   the CDP watchdog, the profile snapshot, idle sleep. Every background loop starts with `set +e`:
+#   a subshell inherits `set -e`, and one failing probe used to end a loop for good.
 set -euo pipefail
+
+# keep NAME COMMAND… — a helper that must run for the life of the container: started now, and started
+# again whenever it exits. Every helper is kept the same way; until DGO-1921 three had no supervisor
+# and three had a loop of their own.
+keep() {
+    local name="$1"; shift
+    ( set +e
+      while :; do
+        "$@"
+        echo "[keep] ${name} exited ($?) — starting it again" >&2
+        sleep 1
+      done ) &
+}
 
 SCREEN_W="${SCREEN_WIDTH:-1920}"
 SCREEN_H="${SCREEN_HEIGHT:-1080}"
@@ -62,7 +83,7 @@ start_xvnc() {
         -desktop browser42 \
         -AlwaysShared \
         -SendPrimary=0 \
-        "${sec[@]}" >/tmp/xvnc.log 2>&1 &
+        "${sec[@]}" >&2 &                  # its log is the container's (rotated), not a file in /tmp
 }
 start_xvnc
 # Wait for the X socket before anything tries to draw to it.
@@ -77,7 +98,8 @@ done
 #     browser are bound to the dead display). So exit and let Docker
 #     (restart: unless-stopped) restart the whole stack cleanly — stale X locks are
 #     cleared on the next start (start_xvnc above).
-( sleep 15                       # startup grace: let the stack come up first
+( set +e
+  sleep 15                       # startup grace: let the stack come up first
   while :; do
     if ! ps -eo comm 2>/dev/null | grep -qx "$VNC_COMM"; then
       echo "[watchdog] $VNC_COMM died — killing the browser child for a clean Docker restart" >&2
@@ -89,118 +111,88 @@ done
     sleep 5
   done ) &
 
-# 2. Window manager — without it, popups/dialogs misbehave and look bot-like, AND
-#    new windows aren't maximized (live view shows a small window with black borders
-#    around it). fluxbox can crash; the watchdog above only guards Xvnc, so a dead WM
-#    used to go unnoticed. Supervise it here so the WM — and the maximize loop below,
-#    which depends on it via wmctrl — stay up for the life of the container.
-mkdir -p "${HOME}/.fluxbox"
-cat > "${HOME}/.fluxbox/overlay" <<'EOF'
-background: none
-EOF
-# 2a. Silence fbsetbg, which is what actually painted that desktop with dialog boxes.
-#     `background: none` in the overlay is NOT enough with the Squared_for_Debian style: fluxbox still
-#     runs the style's rootCommand, fbsetbg runs, finds no wallpaper setter in this image (no feh,
-#     hsetroot, xsetroot or Esetroot), and pops a MODAL xmessage that nobody dismisses. One per start,
-#     and one per fluxbox respawn below — 44 of them had piled up by 2026-09-22, each drawn over the
-#     last, which is what the owner saw as a dialog that "keeps popping up all the time".
-#     `session.screen0.rootCommand` in init overrides the style, so give it a command that cannot
-#     fail. The sweeper is the belt to that braces: any dialog a future style change brings back is
-#     reaped within seconds instead of accumulating forever.
-grep -q '^session\.screen0\.rootCommand:' "${HOME}/.fluxbox/init" 2>/dev/null \
-  || echo 'session.screen0.rootCommand: true' >> "${HOME}/.fluxbox/init"
-( while :; do pkill -f 'xmessage.*fbsetbg' 2>/dev/null || true; sleep 5; done ) &
-( while :; do fluxbox >/dev/null 2>&1 || true; sleep 1; done ) &
+# 2. Window manager — without it, popups/dialogs misbehave and look bot-like, AND new windows aren't
+#    maximized (a small window with black borders around it in the live view). Kept like every helper.
+#    (Its wallpaper dialog is gone at the root: the image has no fbsetbg to run — Dockerfile.browser.)
+run_fluxbox() { fluxbox >/dev/null 2>&1; }
+keep fluxbox run_fluxbox
 
-# 2b. Keep the single browser window exactly ON the desktop, by geometry, every cycle.
-#
-#     Two things made this necessary, both found on 2026-09-23 from the owner's screen ("not full
-#     screen, and the top is cut off"):
-#       1. The class filter was `xdotool ... --class Chromium-browser`, which matches NOTHING on this
-#          build — its WM_CLASS is "chromium (/profile/__default__)", "Chromium". The old maximize
-#          loop had therefore been a silent no-op for as long as that class string has been wrong, and
-#          the window sat at a stale size and position (measured: y=-50, 1050x760 on a 1408x793
-#          desktop — the title bar and tab strip literally above the visible area).
-#       2. noVNC runs with resize=remote, so the desktop changes size whenever a viewer connects or
-#          resizes. A window that is merely "maximized" keeps its old geometry through such a change.
-#          Fitting by explicit geometry each cycle tracks it, and cannot go stale the same way:
-#          `wmctrl -lx` prints the real class, and matching it cannot rot with a Chromium rename.
-#     Fullscreen (compact/F11) windows are left alone, so the toolbar toggle still wins.
+# 2b. THE WINDOW — one loop, every 2 s (DGO-1921: it was four loops and a dialog sweeper, and the
+#     compact one ended at boot whenever fluxbox was not up yet — its subshell inherited `set -e`, and
+#     wmctrl fails while there is no window manager — so the browser ran maximized, not compact).
+#       * A NEW Chromium window is made compact (Chrome's own fullscreen, what F11 toggles) when
+#         PRESENTATION_MODE=compact — every launch, a wake from idle sleep included — as a STATE through
+#         browser42-window.py, never by pressing F11: a press Chrome swallowed while starting left it
+#         standard, and late presses toggled it back (2026-11-17). Asked each cycle until Chrome says it
+#         is so, then never again for that window: the viewer's toggle and the hand-off decide after that,
+#         and a window the hand-off made standard (STANDARD_MARK) is never made compact again.
+#       * A window that is not fullscreen is fitted to the WORK AREA by geometry when it is off, and kept
+#         maximized: noVNC's resize=remote changes the desktop whenever a viewer connects, and a merely
+#         "maximized" window keeps its old size through that (2026-09-23: y=-50, the tab strip above
+#         the screen). The work area, not the screen: fluxbox's toolbar takes 20 px, and fitting to the
+#         screen re-applied itself every cycle, which the owner saw as flicker.
+#       * Once, 30 s after the first window appears — and only when that is within 5 minutes of boot —
+#         extra windows are closed: a launch that failed leaves its window behind (2026-09-23: three in
+#         the owner's taskbar), and at boot nothing is in progress. Never again after that: a window the
+#         owner or an agent opens on purpose stays.
+#     `wmctrl -lx` prints the real class ("chromium (/profile/__default__)"), which cannot rot the way a
+#     hard-coded class string did. xdotool moves and sizes: `wmctrl -e` wants five integers.
 chromium_window_ids() {
     wmctrl -lx 2>/dev/null | awk 'tolower($3) ~ /chrom/ {print $1}'
 }
 
 fit_browser_windows() {
-    local target id state geom work
-    # Fit to the WORK AREA, not the screen: fluxbox keeps a 20px toolbar at the bottom and clamps a
-    # window to 1346x710 on a 1346x730 screen. Fitting to the screen therefore never matched what the
-    # window could be, so the loop re-applied itself every 2 seconds — which the owner saw as the
-    # whole view flickering. Target the work area and the loop is silent unless the size really moved.
-    work="$(xprop -root _NET_WORKAREA 2>/dev/null | sed -n 's/.*= *//p' | cut -d, -f1-4 | tr -d ' ')"
-    if [ -z "${work}" ]; then
-        work="0,0,$(xdotool getdisplaygeometry 2>/dev/null | tr ' ' ',')"
-    fi
-    case "${work}" in *,*,*,*) ;; *) return 0 ;; esac
-    target="$(printf '%s' "${work}" | tr ',' ' ')"
-    set -- ${target}
-    target="0 0 ${3} ${4}"
+    local area id geom
+    area="$(xprop -root _NET_WORKAREA 2>/dev/null | sed -n 's/.*= *//p' | cut -d, -f3-4 | tr -d ' ' | tr ',' ' ')"
+    [ -n "${area}" ] || area="$(xdotool getdisplaygeometry 2>/dev/null)"
+    set -- ${area}
+    [ "$#" -eq 2 ] || return 0
     for id in $(chromium_window_ids); do
-        state="$(xprop -id "${id}" _NET_WM_STATE 2>/dev/null || true)"
-        case "${state}" in *FULLSCREEN*) continue ;; esac      # leave F11 / compact alone
+        case "$(xprop -id "${id}" _NET_WM_STATE 2>/dev/null)" in *FULLSCREEN*) continue ;; esac
         geom="$(wmctrl -lG 2>/dev/null | awk -v id="${id}" '$1 == id {print $3, $4, $5, $6}')"
-        [ "${geom}" = "${target}" ] && continue                # already right: touch nothing
-        set -- ${target}
-        wmctrl -i -r "${id}" -b remove,maximized_vert,maximized_horz 2>/dev/null || true
-        # xdotool, not `wmctrl -e`: -e wants FIVE comma-separated integers and fails silently with four.
-        xdotool windowmove "${id}" "$1" "$2" 2>/dev/null || true
-        xdotool windowsize "${id}" "$3" "$4" 2>/dev/null || true
+        if [ "${geom}" != "0 0 $1 $2" ]; then
+            wmctrl -i -r "${id}" -b remove,maximized_vert,maximized_horz 2>/dev/null
+            xdotool windowmove "${id}" 0 0 2>/dev/null
+            xdotool windowsize "${id}" "$1" "$2" 2>/dev/null
+        fi
+        wmctrl -i -r "${id}" -b add,maximized_vert,maximized_horz 2>/dev/null
     done
 }
 
-( while :; do fit_browser_windows; sleep 2; done ) &
 case "${PRESENTATION_MODE:-compact}" in
   compact) START_COMPACT=1 ;;
   standard) START_COMPACT=0 ;;
   *) echo "invalid PRESENTATION_MODE: ${PRESENTATION_MODE}" >&2; exit 1 ;;
 esac
-( while :; do
-    for w in $(chromium_window_ids); do
-      wmctrl -i -r "$w" -b add,maximized_vert,maximized_horz 2>/dev/null || true
-    done
-    sleep 2
-  done ) &
-if [ "$START_COMPACT" = 1 ]; then
-  # Once per NEW window id, for the life of the container — not only at boot: a wake from idle
-  # sleep (§4k) launches a fresh Chromium with a fresh window, and it must come up compact exactly
-  # like the first one did.
-  ( seen=""
-    while :; do
-      w="$(chromium_window_ids | head -1)"
-      if [ -n "$w" ] && [ "$w" != "$seen" ]; then
-        sleep 1                                  # let the window map before the key lands
-        xdotool windowactivate --sync "$w" key --window "$w" F11 2>/dev/null && seen="$w"
+STANDARD_MARK=/tmp/.b42-standard            # handoff.py writes the window ids it made standard here
+( set +e
+  booted="$(date +%s)" compacted="" first_seen=0 converged=0
+  while :; do
+    w="$(chromium_window_ids | head -1)"
+    # No Chrome (asleep, restarting): its next window is new, even if X gives it the same id. Asked of
+    # the process, not of the window list, which is also empty while fluxbox restarts.
+    if [ -z "${w}" ] && ! pgrep -f -- '--user-data-dir=/profile/__default__' >/dev/null; then
+      compacted=""; rm -f "${STANDARD_MARK}"
+    fi
+    if [ "${START_COMPACT}" = 1 ] && [ -n "${w}" ] && [ "${w}" != "${compacted}" ]; then
+      if grep -qx "${w}" "${STANDARD_MARK}" 2>/dev/null \
+          || timeout 15 python3 /usr/local/bin/browser42-window.py compact 2>/dev/null; then
+        compacted="${w}"
       fi
-      sleep 2
-    done ) &
-fi
-
-# 2c. ONE browser window, always. This container is a single shared control surface — one Chromium
-#     and one live view — but extra windows do appear: the CDP retry loop leaves its own window
-#     behind on every failed launch (2026-09-23: three of them in the owner's taskbar), and a link
-#     opened "in a new window" adds another. At BOOT we converge: keep the first Chromium window,
-#     close the rest. Safe by construction — every window shares one profile and one cookie jar, so
-#     closing one loses no session, and at boot nothing is in progress. Deliberately boot-only: a
-#     background janitor would also close a window the owner opened on purpose.
-( for _ in $(seq 1 90); do
-    [ -n "$(chromium_window_ids | head -1)" ] && break
+    fi
+    fit_browser_windows
+    if [ "${converged}" = 0 ] && [ -n "${w}" ]; then
+      [ "${first_seen}" -gt 0 ] || first_seen="$(date +%s)"
+      [ $(( first_seen - booted )) -le 300 ] || converged=1
+      if [ "${converged}" = 0 ] && [ $(( $(date +%s) - first_seen )) -ge 30 ]; then
+        for extra in $(chromium_window_ids | tail -n +2); do
+          echo "[window] closing extra Chromium window ${extra}" >&2
+          wmctrl -i -c "${extra}" 2>/dev/null
+        done
+        converged=1
+      fi
+    fi
     sleep 2
-  done
-  sleep 25                                  # let a retrying launcher settle before looking again
-  first=""
-  for w in $(chromium_window_ids); do
-    if [ -z "$first" ]; then first="$w"; continue; fi
-    echo "[converge] closing extra Chromium window ${w}" >&2
-    wmctrl -i -c "$w" 2>/dev/null || true
   done ) &
 
 # 4a. WHERE THIS CONTAINER LISTENS (DGO-983). It sits on two networks:
@@ -229,8 +221,9 @@ B42_LOOP="${B42_BIND:+127.0.0.1}"    # loopback when the alias is declared; ever
 
 # 4. websockify serves the noVNC static client AND bridges WS->VNC on one port.
 #    Target 127.0.0.1 (not "localhost") to avoid an IPv6/IPv4 mismatch with Xvnc's
-#    loopback bind.
-websockify --web=/usr/share/novnc "${B42_LOOP:+${B42_LOOP}:}6080" 127.0.0.1:5900 >/dev/null 2>&1 &
+#    loopback bind. It is the live view: kept.
+run_websockify() { websockify --web=/usr/share/novnc "${B42_LOOP:+${B42_LOOP}:}6080" 127.0.0.1:5900 >/dev/null 2>&1; }
+keep websockify run_websockify
 
 # 4b. Add Browser42's navigation toggle to noVNC's existing toolbar. The control
 #     sends F11 over the current RFB connection, so it changes only Chromium's
@@ -329,26 +322,20 @@ HTML
 #     which routes by Host header (e.g. auth.localhost -> Authentik). One forward
 #     per port covers every *.localhost app. Pure-stdlib python3 — no extra package.
 if [ -n "${LOCAL_PROXY_TARGET:-}" ]; then
-    python3 /usr/local/bin/localhost-forward.py "${LOCAL_PROXY_TARGET}" 80 443 &
+    keep localhost-forward python3 /usr/local/bin/localhost-forward.py "${LOCAL_PROXY_TARGET}" 80 443
 fi
 
 # 4f. Invisible loopback broker for native Chrome Tab Groups. The extension's
 # service worker connects here; no extension or placeholder page is opened.
-python3 /usr/local/bin/browser42-broker.py &
+keep broker python3 /usr/local/bin/browser42-broker.py
 
 # 4f-bis. The human hand-off route (DGO-571): :8767 behind Caddy's /handoff/* — wake, that group's tab
-#     to the front through the broker above, compact → standard, then the live view. MOUNTED, not
-#     copied (docker-compose.yml), so a fix lands without a rebuild; a container recreated from an
-#     older compose has no file and says so — the browser keeps running, because losing the shared
-#     surface over a hand-off helper would be the wrong trade.
-#     KEPT ALIVE (DGO-1336): it also answers Caddy's gate (`/gate`) before the live view and its
-#     websocket, so a crash here would close the whole screen — not only /handoff/ as before.
+#     to the front through the broker above, compact → standard, then the live view. It also answers
+#     Caddy's gate (`/gate`) before the live view and its websocket (DGO-1336), so it is kept. MOUNTED,
+#     not copied (docker-compose.yml), so a fix lands without a rebuild; a container recreated from an
+#     older compose has no file and says so — the browser keeps running.
 if [ -f /handoff.py ]; then
-    ( while :; do
-        python3 /handoff.py serve || true
-        echo "[4f-bis] the hand-off server exited — starting it again (the live view's gate asks it)" >&2
-        sleep 1
-      done ) &
+    keep handoff python3 /handoff.py serve
 else
     echo "[4f-bis] /handoff.py is not mounted — /handoff/<slug> will answer 502; recreate: ./scripts/dc up -d browser42-browser" >&2
 fi
@@ -356,13 +343,9 @@ fi
 # 4f-ter. browser42's network alone reaches the four loopback services of §4a: CDP, the broker,
 #     noVNC and the hand-off. The same port on browser42's address is piped to loopback, so a
 #     driver's URL and the Host header CDP answers with are what they were. It is every driver's only
-#     way in, and no health check sees it (they all probe loopback), so it is kept alive here.
+#     way in, and no health check sees it (they all probe loopback), so it is kept.
 if [ -n "${B42_BIND}" ]; then
-    ( while :; do
-        FORWARD_LISTEN="${B42_BIND}" python3 /usr/local/bin/localhost-forward.py 127.0.0.1 9222 8765 6080 8767 || true
-        echo "[4f-ter] the forwarder to browser42's network exited — starting it again" >&2
-        sleep 1
-      done ) &
+    keep forwarder env FORWARD_LISTEN="${B42_BIND}" python3 /usr/local/bin/localhost-forward.py 127.0.0.1 9222 8765 6080 8767
 fi
 
 # 4g. CDP self-heal watchdog — the definitive fix for "CDP keeps dying".
@@ -376,7 +359,8 @@ fi
 #     (the profile volume keeps logins/cookies), start-browser.sh clears stale
 #     singleton locks, the reaper reconnects, and the live view self-heals.
 #     Launched before the exec below so it survives as a background supervisor.
-( # WAIT FOR THE FIRST SUCCESS BEFORE COUNTING ANYTHING. The old fixed 45s grace was shorter than a
+( set +e
+  # WAIT FOR THE FIRST SUCCESS BEFORE COUNTING ANYTHING. The old fixed 45s grace was shorter than a
   # cold start on a loaded host (heavy headed Chromium on software compositing), so this watchdog
   # killed a browser that was still coming up: that restart is what turned a slow start into the
   # 2026-09-22 profile wipe. Patience here costs nothing — until CDP has answered once there is
@@ -429,24 +413,23 @@ fi
 #     without renumbering, which made every "see §4f" in this file and in ai/context point at two
 #     different places. New sections take the next FREE number; never reuse one.)
 #
-#     Why this exists: cloakserve deletes the ENTIRE profile when CDP does not answer in time. On
-#     2026-09-22 a cold start hit that path: the Facebook login and every cookie were gone, and there
-#     was no backup to restore from. That note used to end "the binary is third-party and
-#     digest-pinned, so the deletion cannot be patched out" — it can, and since 2026-09-27 it is:
-#     Dockerfile.browser guards that rmtree for the reserved seed, so the delete no longer happens at
-#     all. This guard remains as the second line of defence, because a profile can still be lost by a
-#     path nobody patched (kill -9 mid-write, a torn volume, a future image bump that drifts the sed).
-#     What protects it:
-#       * the snapshot lives OUTSIDE the container volume, on the host (data/browser42/ → /data),
-#         so it survives a container recreate AND an image rebuild;
-#       * the snapshot is only ever replaced by a profile that LOOKS real (a wiped profile has ~0-1
-#         cookies) **and** carries MORE cookies than the snapshot already holds — see
-#         snapshot_profile: "logged out" is not "wiped", and the 2026-09-27 loss was exactly that
-#         blindness (a logged-out profile of 25 cookies overwrote the snapshot every five minutes);
-#       * the copy it replaces is kept as SNAPSHOT_DIR.prev, never deleted, so the last good state
-#         cannot be destroyed by the act of protecting it;
-#       * every boot checks the profile first and restores it when it looks wiped.
-#     Cost of a wipe after this: one boot, no re-login.
+#     What deleted it is gone: cloakserve deleted — and, patched, later moved aside — the WHOLE profile
+#     when Chrome missed its CDP wait (2026-09-22, 09-27, 09-30); patch-cloakserve.py now leaves it where
+#     it is (DGO-1921). What remains here is the disaster copy, for a profile lost by a path nobody
+#     patched (a torn or deleted volume, a future image bump):
+#       * the snapshot lives OUTSIDE the container volume, on the host (data/browser42/ → /data), so it
+#         survives a container recreate, an image rebuild and the volume itself;
+#       * it is the profile WITHOUT the caches Chrome rebuilds by itself: on 2026-11-17 each copy was
+#         2.0 GB on C:, 1.9 GB of it cache;
+#       * it is replaced only by a profile that LOOKS real (a wiped one has ~0-1 cookies) and holds at
+#         least 90% of the snapshot's cookies. A logged-out profile overwrote a logged-in snapshot on
+#         2026-09-27 (25 cookies over 33); "only MORE cookies" stopped that and froze the snapshot
+#         instead — cookies expire, and nothing signed in after 2026-11-13 was in it by 11-17;
+#       * it is taken only when a sign-in file was written since the last one: every 30 minutes, when
+#         Chrome falls asleep (a stopped Chrome is the consistent copy), and on a stop if Docker's 10 s
+#         allow it (a copy cut short is never used, and no copy is in place until it is whole);
+#       * the copy it replaces is kept as SNAPSHOT_DIR.prev, so protecting it cannot be the step that
+#         loses the last good state, and every boot restores it when the profile looks wiped.
 PROFILE_DIR=/profile/__default__
 SNAPSHOT_DIR=/data/profile-snapshot
 MIN_COOKIES=3
@@ -464,11 +447,19 @@ for attempt in range(3):
         # copy of the main file alone can present ZERO rows while the live data sits in the -wal.
         # That false "wiped" reading is what kept the runtime guard asleep during the 2026-09-23
         # acceptance test, so this is not a detail.
-        tmp = tempfile.mkdtemp()
-        for suffix in ("", "-wal", "-shm"):
-            if os.path.exists(src + suffix):
-                shutil.copy(src + suffix, os.path.join(tmp, "Cookies" + suffix))
-        print(sqlite3.connect(os.path.join(tmp, "Cookies")).execute("select count(*) from cookies").fetchone()[0])
+        # The copy is removed on the way out: a bare mkdtemp() here left one 1.3 MB directory per
+        # count, ~5,000 a day, 20,383 of them (25 GB of cookie copies) in the container's /tmp by
+        # 2026-11-17, which filled the HP's C: to 99% (DGO-1917).
+        with tempfile.TemporaryDirectory() as tmp:
+            for suffix in ("", "-wal", "-shm"):
+                if os.path.exists(src + suffix):
+                    shutil.copy(src + suffix, os.path.join(tmp, "Cookies" + suffix))
+            db = sqlite3.connect(os.path.join(tmp, "Cookies"))
+            try:
+                count = db.execute("select count(*) from cookies").fetchone()[0]
+            finally:
+                db.close()
+        print(count)                       # after the cleanup: a retry never prints a second number
         break
     except Exception:
         if attempt == 2:
@@ -498,31 +489,85 @@ profile_is_real() {
     return 0
 }
 
+# The profile without what Chrome rebuilds by itself (caches, service workers) and without its Singleton*
+# locks. A file Chrome removes while the copy runs (a journal) is skipped; any other error — a full disk,
+# a refused write — fails the copy, and a failed copy is never used.
+copy_without_caches() {
+    python3 - "$1" "$2" <<'PY' 2>/dev/null
+import shutil, sys
+SKIP = {"Cache", "Code Cache", "GPUCache", "Service Worker", "GrShaderCache", "ShaderCache", "GraphiteDawnCache",
+        "DawnGraphiteCache", "DawnWebGPUCache", "GPUPersistentCache", "component_crx_cache", "extensions_crx_cache"}
+def copy(src, dst):
+    try:
+        shutil.copy2(src, dst)
+    except FileNotFoundError:
+        pass
+try:
+    shutil.copytree(sys.argv[1], sys.argv[2], symlinks=True, copy_function=copy,
+                    ignore=lambda _, names: [n for n in names if n in SKIP or n.startswith("Singleton")])
+except shutil.Error as error:
+    if any("No such file or directory" not in str(why) for _, _, why in error.args[0]):
+        sys.exit(1)
+PY
+}
+
+# The newest whole second a sign-in file was written at. Whole seconds because the snapshot is on C:
+# (drvfs keeps no more), and a nanosecond compare would make every live file newer than its own copy.
+signins_written() {
+    local f m newest=0
+    for f in Cookies Cookies-journal Cookies-wal "Login Data" "Login Data-journal" "Login Data-wal"; do
+        m="$(stat -c %Y "$1/Default/${f}" 2>/dev/null || echo 0)"
+        [ "${m}" -gt "${newest}" ] && newest="${m}"
+    done
+    echo "${newest}"
+}
+
 snapshot_profile() {
-    profile_is_real || { echo "[profile-guard] live profile looks wiped — snapshot NOT replaced" >&2; return 0; }
-    # NOT every "real" profile is worth keeping. A profile that is merely LOGGED OUT carries a dozen
-    # tracking cookies (facebook: datr/fr/sb/wd — measured 2026-09-27), sails past profile_is_real,
-    # and overwrote a snapshot holding a real login within five minutes of it being taken. Cookie
-    # count is the cheapest monotone proxy for "how much state is in here": logging in only ADDS
-    # cookies and logging out REMOVES them, so a profile with no more of them than the snapshot
-    # already holds may not replace it. Erring this way costs nothing — a stale snapshot of a
-    # logged-in profile is still a logged-in profile.
-    if snapshot_is_real; then
-        live="$(profile_cookie_count)"; have="$(snapshot_cookie_count)"
-        if [ "${live:-0}" -le "${have:-0}" ] 2>/dev/null; then
-            echo "[profile-guard] live profile has no more cookies than the snapshot (${live} <= ${have}) — snapshot NOT replaced" >&2
-            return 0
-        fi
-    fi
-    mkdir -p "${SNAPSHOT_DIR}"
-    rm -rf "${SNAPSHOT_DIR}.new" && mkdir -p "${SNAPSHOT_DIR}.new"
-    cp -a "${PROFILE_DIR}/." "${SNAPSHOT_DIR}.new/" 2>/dev/null || true
-    # Keep the copy being replaced (`.old` used to be deleted outright on the next line): the whole
-    # point of this block is that nothing here may be the step that loses the only good state.
-    rm -rf "${SNAPSHOT_DIR}.prev"
-    mv "${SNAPSHOT_DIR}" "${SNAPSHOT_DIR}.prev" 2>/dev/null || true
-    mv "${SNAPSHOT_DIR}.new" "${SNAPSHOT_DIR}" 2>/dev/null || true
-    echo "[profile-guard] snapshot updated ($(du -sh "${SNAPSHOT_DIR}" 2>/dev/null | cut -f1), cookies=$(profile_cookie_count))" >&2
+    ( set +e
+      flock -n 9 || exit 0                   # the 30-minute loop, a sleep and a stop can meet: one at a time
+      # A rotation cut short (a stop's kill) can leave the last good copy in .prev only: it goes back
+      # first, so the comparison below is made against it and the rotation never drops it.
+      if ! snapshot_is_real && snapshot_dir_is_real "${SNAPSHOT_DIR}.prev"; then
+          rm -rf "${SNAPSHOT_DIR}"
+          mv -T "${SNAPSHOT_DIR}.prev" "${SNAPSHOT_DIR}" || exit 0
+      fi
+      # Nothing new to protect: no sign-in file was written since the snapshot was taken.
+      if snapshot_is_real && [ "$(signins_written "${PROFILE_DIR}")" -le "$(signins_written "${SNAPSHOT_DIR}")" ]; then
+          exit 0
+      fi
+      profile_is_real || { echo "[profile-guard] live profile looks wiped — snapshot NOT replaced" >&2; exit 0; }
+      live="$(profile_cookie_count)"; case "${live}" in ''|*[!0-9]*) exit 0 ;; esac
+      if snapshot_is_real; then
+          have="$(snapshot_cookie_count)"; case "${have}" in ''|*[!0-9]*) have=0 ;; esac
+          if [ $(( live * 10 )) -lt $(( have * 9 )) ]; then
+              echo "[profile-guard] live profile holds under 90% of the snapshot's cookies (${live} of ${have}) — snapshot NOT replaced" >&2
+              exit 0
+          fi
+      fi
+      rm -rf "${SNAPSHOT_DIR}.new"
+      [ ! -e "${SNAPSHOT_DIR}.new" ] || { echo "[profile-guard] ${SNAPSHOT_DIR}.new cannot be removed — snapshot NOT replaced" >&2; exit 0; }
+      if ! copy_without_caches "${PROFILE_DIR}" "${SNAPSHOT_DIR}.new"; then
+          rm -rf "${SNAPSHOT_DIR}.new"; echo "[profile-guard] the copy failed — snapshot NOT replaced" >&2; exit 0
+      fi
+      got="$(cookie_count_in "${SNAPSHOT_DIR}.new")"; case "${got}" in ''|*[!0-9]*) got=0 ;; esac
+      if ! snapshot_dir_is_real "${SNAPSHOT_DIR}.new" || [ $(( got * 10 )) -lt $(( live * 9 )) ]; then
+          rm -rf "${SNAPSHOT_DIR}.new"
+          echo "[profile-guard] the copy holds ${got} of ${live} cookies — snapshot NOT replaced" >&2
+          exit 0
+      fi
+      # Rotate so that one of SNAPSHOT_DIR and .prev is the last good copy at every step (what a boot
+      # restores from); the generation before that goes only once the new one is in place.
+      rm -rf "${SNAPSHOT_DIR}.old"
+      if [ -e "${SNAPSHOT_DIR}.prev" ]; then mv -T "${SNAPSHOT_DIR}.prev" "${SNAPSHOT_DIR}.old" || exit 0; fi
+      if [ -e "${SNAPSHOT_DIR}" ] && ! mv -T "${SNAPSHOT_DIR}" "${SNAPSHOT_DIR}.prev"; then
+          mv -T "${SNAPSHOT_DIR}.old" "${SNAPSHOT_DIR}.prev"; exit 0
+      fi
+      if ! mv -T "${SNAPSHOT_DIR}.new" "${SNAPSHOT_DIR}"; then
+          mv -T "${SNAPSHOT_DIR}.prev" "${SNAPSHOT_DIR}"; mv -T "${SNAPSHOT_DIR}.old" "${SNAPSHOT_DIR}.prev"; exit 0
+      fi
+      rm -rf "${SNAPSHOT_DIR}.old"
+      echo "[profile-guard] snapshot updated ($(du -sh "${SNAPSHOT_DIR}" 2>/dev/null | cut -f1), cookies=${got})" >&2
+    ) 9>/tmp/.b42-snapshot.lock
 }
 
 restore_profile_if_wiped() {
@@ -542,112 +587,55 @@ restore_profile_if_wiped() {
 
 restore_profile_if_wiped
 
-# 4h-bis. UNDO THE VENDOR'S RECOVERY. cloakserve's failed-launch path no longer DELETES the profile
-#     (Dockerfile.browser quarantines it as `<dir>.corrupt-<epoch>`), but the live directory is still
-#     replaced by a fresh one — and a fresh profile has a handful of cookies, so `profile_is_real`
-#     (>= 3 cookies) accepts it and the good state is never restored. Measured 2026-09-29: after a
-#     run of failed launches the live profile was empty while three quarantines held 33 cookies and a
-#     live Facebook session, and the office browser stayed signed out with no saved passwords.
-#     The quarantine IS the state we had a second ago, so it wins: the richest quarantine is promoted
-#     back over a live profile that holds less. Deterministic — no heuristic about which cookie is a
-#     "session" cookie, just compare what is there.
-promote_richest_quarantine() {
-    local best="" best_n=0 n
-    # Only the NEWEST THREE quarantines are candidates. "The state we had a second ago" is by
-    # definition recent, and every failed launch adds one directory: 242 had accumulated by
-    # 2026-09-30 17:05 (each crash-relaunch of the afternoon made one), and counting cookies in all
-    # of them — a DB copy and an sqlite open each — held this boot for ~5 minutes at a core on a
-    # loaded box before cloakserve was even started. Older quarantines are history, not candidates;
-    # pruning them is the owner's call (they are the only copies of whatever they hold).
-    for d in $(ls -td /profile/__default__.corrupt-* 2>/dev/null | head -n 3); do
-        [ -d "${d}/Default" ] || continue
-        n="$(cookie_count_in "${d}")"
-        if [ "${n:-0}" -gt "${best_n}" ] 2>/dev/null; then best="${d}"; best_n="${n}"; fi
-    done
-    [ -n "${best}" ] && [ "${best_n:-0}" -ge 3 ] || return 0
-    local live_n; live_n="$(cookie_count_in "${PROFILE_DIR}")"
-    if [ "${live_n:-0}" -lt "${best_n}" ]; then
-        echo "[profile-guard] live profile holds ${live_n} cookies, quarantine $(basename "${best}") holds ${best_n} — promoting it back" >&2
-        rm -rf "${PROFILE_DIR}.replaced" 2>/dev/null || true
-        [ -d "${PROFILE_DIR}" ] && mv "${PROFILE_DIR}" "${PROFILE_DIR}.replaced"
-        mv "${best}" "${PROFILE_DIR}"
-        snapshot_profile
-    fi
-}
-promote_richest_quarantine
-
-# Periodic refresh, so the snapshot tracks real use rather than the state at boot.
-( sleep 120; while :; do snapshot_profile; sleep 300; done ) &
-
-# 4i. RUNTIME GUARD — the wipe is not a boot-time event, and this is measured, not assumed.
-#     2026-09-23 10:29: /profile/__default__ was recreated with the container's StartedAt unchanged
-#     (09-22 17:03) — i.e. cloakserve tore down and relaunched its Chrome child mid-life and rmtree'd
-#     the profile on the way, exactly as it does on a cold start. A boot-only check would have missed
-#     it. This watcher does both jobs for the life of the container, every 20s:
-#       * the moment a profile that was empty becomes real — a fresh login — is snapshotted straight
-#         away, so the window in which a wipe could cost that login is seconds, not the 5-minute
-#         periodic interval;
-#       * a wipe is repaired immediately: restore the snapshot, then drop the Chrome child so PID 1
-#         exits and Docker restarts the stack on a profile that is whole again.
-#     It cannot fire by accident: it needs a real snapshot to restore FROM, a wipe to be seen TWICE
-#     in a row, and it stays quiet for the first 3 minutes of a boot (Chrome writes its profile
-#     during startup).
-( sleep 180
-  last_state=unknown
-  wiped_seen=0
-  while :; do
-    if profile_is_real; then
-      if [ "${last_state}" != "real" ]; then
-        snapshot_profile                                  # freshly real (a login) or first sight: protect it now
-      fi
-      last_state=real
-      wiped_seen=0
-    else
-      wiped_seen=$((wiped_seen + 1))
-      # TWO consecutive reads, not a transition: the gate must not depend on having seen a healthy
-      # profile first (one false read at boot and it would sleep forever), and a single bad read — a
-      # lock, a partial copy, Chrome mid-start — is not a wipe.
-      if [ "${wiped_seen}" -ge 2 ] && snapshot_is_real; then
-        echo "[profile-guard] WIPE DETECTED at runtime — restoring the snapshot and restarting Chrome" >&2
-        restore_profile_if_wiped
-        pkill -9 -f cloakserve 2>/dev/null || true
-        exit 0
-      fi
-      last_state=wiped
-    fi
-    sleep 20
-  done ) &
+# Every 30 minutes, so the snapshot tracks real use rather than the state at boot. (Until DGO-1921 a
+# second loop also counted cookies every 20 s to catch cloakserve replacing the profile mid-life, and a
+# boot step promoted cloakserve's moved-aside copies back; both undid what patch-cloakserve.py now
+# stops at the root.)
+( set +e; sleep 120; while :; do snapshot_profile; sleep 1800; done ) &
 
 # 4e. Clear stale Chrome singleton locks before launch. ⚠️ This is what makes
 #     logins/cookies actually survive a restart. On an unclean stop (docker
 #     recreate / kill / crash) Chrome leaves SingletonLock/Cookie/Socket behind,
 #     pinned to the OLD container's hostname. On the next start the new Chrome
 #     sees "profile appears to be in use by another process on another computer",
-#     refuses to open the profile, CDP never comes up — and cloakserve's
-#     CDP-timeout handler then `rmtree`s the ENTIRE profile to recover, wiping all
-#     cookies/logins. Deleting the stale locks lets Chrome reuse the profile, so
-#     state persists. Safe: one container ⇒ one Chrome, so any lock here is stale.
-#
-#     ⚠️ Both halves of that sentence are now historical. cloakserve's startup rmtree is guarded in
-#     Dockerfile.browser since 2026-09-27 (the reserved seed is quarantined, not deleted), so a
-#     failed launch can no longer cost a login on its own; this lock clearing is still needed
-#     because it is what lets Chrome OPEN the profile instead of failing in the first place.
+#     refuses to open the profile and CDP never comes up. (cloakserve then deleted
+#     the profile to recover; patch-cloakserve.py stops that, so what is left is
+#     a browser that cannot start.) Safe: one container ⇒ one Chrome, so any lock
+#     here is stale.
 rm -f /profile/*/Singleton* 2>/dev/null || true
 
-# 4e-bis. "Continue where you left off" — the profile-level setting behind --restore-last-session
-#     (docker-compose.yml). Both are needed for a wake after idle sleep (§4k) to reopen the tabs the
-#     session had: the flag alone restored nothing on 2026-09-30 (two empty new-tab pages) while the
-#     profile's `session.restore_on_startup` was unset. Set here, while Chrome is not running (the
-#     file is Chrome's and it rewrites it at exit); idempotent.
-python3 - <<'PY' 2>/dev/null || true
-import json, os
+# 4e-bis. Before a launch — at boot here, and after every idle sleep (§4k) — while Chrome is not running
+#     (the file is Chrome's, and it rewrites it at exit):
+#       * "continue where you left off" (`session.restore_on_startup`), which --restore-last-session
+#         needs: the flag alone reopened nothing on 2026-09-30;
+#       * the last exit marked clean. With the owner's profile Chrome records every exit as "Crashed",
+#         a DevTools Browser.close included (measured 2026-11-17; a fresh profile records "Normal", and no
+#         crash dump is written), and then covers the owner's page with "Restore pages? Chromium didn't
+#         shut down correctly" at the next start. The reaper reopens the tabs itself (last-tabs.json),
+#         so that dialog only stands in the way (DGO-1921).
+#     Written to a temporary file, synced and renamed (a half-written Preferences is a reset profile), and
+#     never while a Chrome holds the profile (its SingletonLock, taken before it reads the profile).
+prepare_profile() {
+    python3 - <<'PY' || echo "[profile] Preferences not prepared (above) — the next start may show the restore dialog" >&2
+import json, os, sys
 p = "/profile/__default__/Default/Preferences"
-if os.path.exists(p):
-    d = json.load(open(p))
-    if d.setdefault("session", {}).get("restore_on_startup") != 1:
-        d["session"]["restore_on_startup"] = 1
-        json.dump(d, open(p, "w"))
+if not os.path.exists(p):
+    sys.exit(0)
+d = json.load(open(p, encoding="utf-8"))
+d.setdefault("session", {})["restore_on_startup"] = 1
+d.setdefault("profile", {}).update({"exit_type": "Normal", "exited_cleanly": True})
+tmp = p + ".b42"
+with open(os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600), "w", encoding="utf-8") as f:
+    json.dump(d, f)
+    f.flush()
+    os.fsync(f.fileno())
+if os.path.lexists("/profile/__default__/SingletonLock"):
+    os.unlink(tmp)                         # a Chrome took the profile meanwhile: its file, not ours
+    sys.exit(0)
+os.replace(tmp, p)
 PY
+}
+prepare_profile
 
 # 4j. Logins — keep Chrome's password manager and the credential plane in step, in BOTH directions.
 #     The store is a SQLite file Chrome holds open, so an outside write is refused while the browser
@@ -729,6 +717,12 @@ last_activity_epoch() {
 }
 # The browser's main process: the oldest one carrying the shared profile's user-data-dir.
 chrome_pid() { pgrep -o -f -- '--user-data-dir=/profile/__default__' 2>/dev/null | head -1; }
+# Running, as opposed to exited: a Chrome that has exited stays a zombie until cloakserve polls it, and
+# `kill -0` answers yes for a zombie — so every sleep used to wait its full 20 s and then TERM and KILL a
+# process that was already gone (DGO-1921).
+pid_running() {
+    case "$(sed -n 's/.*) \(.\).*/\1/p' "/proc/$1/stat" 2>/dev/null)" in ''|Z) return 1 ;; *) return 0 ;; esac
+}
 
 # Ask Chrome ITSELF to quit — CDP Browser.close on Chrome's own port, not through cloakserve (whose
 # guard rightly refuses Browser.close from clients). A normal shutdown writes the session files and
@@ -766,13 +760,15 @@ do_sleep() {
     # exit, the watchdog and the healthcheck stand down before there is anything to relaunch.
     date +%s > "${SLEEPING}"
     chrome_close_gracefully || kill -TERM "${pid}" 2>/dev/null || true
-    for i in $(seq 1 40); do kill -0 "${pid}" 2>/dev/null || break; sleep 0.5; done
-    if kill -0 "${pid}" 2>/dev/null; then
+    for i in $(seq 1 40); do pid_running "${pid}" || break; sleep 0.5; done
+    if pid_running "${pid}"; then
         kill -TERM "${pid}" 2>/dev/null || true
-        for i in $(seq 1 20); do kill -0 "${pid}" 2>/dev/null || break; sleep 0.5; done
-        kill -0 "${pid}" 2>/dev/null && kill -KILL "${pid}" 2>/dev/null
+        for i in $(seq 1 20); do pid_running "${pid}" || break; sleep 0.5; done
+        pid_running "${pid}" && kill -KILL "${pid}" 2>/dev/null
     fi
     rm -f "${SLEEP_REQUEST}"
+    # The next launch is a wake: prepare as a boot does (§4e-bis) — unless a client has launched one already.
+    [ -z "$(chrome_pid)" ] && prepare_profile
     snapshot_profile >/dev/null 2>&1 || true      # a stopped Chrome is the one consistent copy
 }
 wake_up() {
@@ -780,7 +776,8 @@ wake_up() {
     # /json/version IS the launch path (get_or_launch); the marker goes once Chrome answers.
     python3 -c "import urllib.request as u; u.urlopen('http://127.0.0.1:9222/json/version/', timeout=200)" 2>/dev/null || true
 }
-( sleep 60                                       # boot grace: the reaper connects and Chrome launches first
+( set +e
+  sleep 60                                       # boot grace: the reaper connects and Chrome launches first
   was_active=0; zero_since=0
   while :; do
     viewer_connected && touch "${ACTIVITY_DIR}/viewer"
@@ -828,9 +825,11 @@ wake_up() {
     sleep 10
   done ) &
 
-# 5. The stealth browser itself. `cloakserve` launches CloakBrowser's patched
-#    Chromium with all 58 fingerprint patches and exposes CDP on :9222.
-#    0.0.0.0 lets the sibling MCP container reach CDP over the compose network.
+# 5. The stealth browser itself. `cloakserve` launches Chromium and exposes CDP on :9222 — on
+#    loopback when §4a asked for it (BROWSER42_CDP_HOST), the forwarder giving it to browser42's own
+#    network. What this office changes in cloakserve (the profile is never deleted or moved, its
+#    launch lock holds, extensions load, Browser.close is refused, a 180 s launch wait, that address,
+#    no access log) is all in patch-cloakserve.py, applied when the image is built.
 #
 #    Rendering to the X display (so the human sees it over noVNC) is the subtle part:
 #    - Do NOT pass `--headless=false`. cloakserve forwards that flag to Chromium
@@ -849,34 +848,6 @@ wake_up() {
 #    as a CHILD; watchdogs kill the child, the wait returns, PID 1 exits, and Docker
 #    (restart: unless-stopped) brings a clean stack. The trap keeps `docker stop`
 #    graceful: forward TERM to the child instead of letting bash swallow it.
-#    LAUNCH WAIT. cloakserve gives a launching Chrome 10 s to bind CDP (`_wait_for_cdp(port,
-#    timeout=10.0)`) and on a miss kills it, QUARANTINES the profile (Dockerfile.browser's patch —
-#    the live directory is moved aside, so the next launch starts from an empty profile) and answers
-#    502. A cold headed Chromium with a real profile and --restore-last-session takes 15-40 s on this
-#    4-vCPU engine under load — measured 2026-09-30 17:42-17:59: every wake attempt at load 50 missed
-#    the 10 s, so each one cost a quarantine and a relaunch (242 `.corrupt-*` directories by 17:05,
-#    RestartCount 37). 60 s is the budget a slow box needs; a Chrome that cannot bind in 60 s is
-#    genuinely broken. Patched here, at runtime, because the file is plain Python in the writable
-#    layer and a Dockerfile patch would sit before the apt layer and force a full image rebuild; the
-#    anchor is asserted so a vendor bump that moves the line is heard, not silently unpatched.
-if grep -q 'async def _wait_for_cdp(port: int, timeout: float = 10.0)' /usr/local/bin/cloakserve; then
-    # 180 s: at load 46 (2026-09-30 21:08) a cold start needed more than 90 and the first attempt
-    # was quarantined; a Chrome that cannot bind CDP in three minutes is genuinely broken.
-    sed -i 's/async def _wait_for_cdp(port: int, timeout: float = 10.0)/async def _wait_for_cdp(port: int, timeout: float = 180.0)/' /usr/local/bin/cloakserve
-elif ! grep -q 'async def _wait_for_cdp(port: int, timeout: float = 180.0)' /usr/local/bin/cloakserve; then
-    echo "[start-browser] WARNING: cloakserve's _wait_for_cdp anchor not found — launch wait NOT raised; re-derive the patch" >&2
-fi
-# cloakserve picks its own address and ignores --host: every interface inside a container (its
-# main()). §4a needs loopback, so the line reads BROWSER42_CDP_HOST first, anchored like the wait
-# above. A vendor bump that moves the line STOPS the container while §4a asks for loopback — it does
-# not start a CDP on every interface and hope the forwarder still holds <internal>:9222.
-if grep -q 'host = "0.0.0.0" if in_container else "127.0.0.1"' /usr/local/bin/cloakserve; then
-    sed -i 's/host = "0.0.0.0" if in_container else "127.0.0.1"/host = os.environ.get("BROWSER42_CDP_HOST") or ("0.0.0.0" if in_container else "127.0.0.1")/' /usr/local/bin/cloakserve
-fi
-if ! grep -q 'os.environ.get("BROWSER42_CDP_HOST")' /usr/local/bin/cloakserve; then
-    [ -n "${BROWSER42_CDP_HOST:-}" ] && { echo "FATAL: cloakserve's host anchor not found — refusing to start CDP on every interface; re-derive the patch" >&2; exit 1; }
-    echo "[start-browser] WARNING: cloakserve's host anchor not found — CDP's address NOT set; re-derive the patch" >&2
-fi
 cloakserve \
     --host=0.0.0.0 \
     --port=9222 \
@@ -886,7 +857,7 @@ cloakserve \
 B42_CHILD=$!
 # Snapshot the profile AFTER the browser has stopped writing, so the copy is consistent — and the
 # last thing this script does before it dies is protect the logins it was serving.
-trap 'kill -TERM "${B42_CHILD}" 2>/dev/null; wait "${B42_CHILD}"; snapshot_profile >/dev/null 2>&1; exit 0' TERM INT
+trap 'kill -TERM "${B42_CHILD}" 2>/dev/null; wait "${B42_CHILD}"; snapshot_profile >/dev/null 2>&1 || true; exit 0' TERM INT
 wait "${B42_CHILD}"
 B42_EXIT=$?
 echo "[start-browser] cloakserve exited (${B42_EXIT}) — exiting for a clean Docker restart" >&2

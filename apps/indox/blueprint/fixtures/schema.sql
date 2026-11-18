@@ -249,7 +249,7 @@ alter table incoming_documents add column if not exists "updated_at" timestamptz
 -- `basis` (api/__init__.py `_DASH_BASES`) — an offered basis without an index is
 -- a sequential scan wearing a dropdown.
 --
--- Measured on the live 16,237-row table, 2026-08-10, before vs after:
+-- Measured on the live N-row table, 2026-08-10, before vs after:
 --   count(created_at >= now()-30m)  27.4 ms / 2,208 buffers  ->  0.17 ms /  26
 --   count(updated_at >= now()-30m)  27.6 ms / 2,208 buffers  ->  5.97 ms / 263
 --   the endpoint's own paged read    40.4 ms / 2,211 buffers  ->  2.35 ms / 171
@@ -285,7 +285,7 @@ create index if not exists incoming_documents_timestamp_txt on incoming_document
 --
 -- THE PROBLEM THIS SOLVES. `DOC_DATE` is the document's own printed date and is
 -- the question operators actually ask ("what did we receive dated last month"),
--- but it is TEXT in three live shapes, measured on the 16,257-row table:
+-- but it is TEXT in three live shapes, measured on the N-row table:
 --     8,360 filled = 5,114 ISO (`YYYY-MM-DD...`) + 2,806 `DD/MM/YYYY` + 440 `DD/MM/YY`
 -- A lexicographic `>=` across those is not merely imprecise, it is BACKWARDS for
 -- the 39% in slash form: '25/06/2026' > '2026-08-10' (they differ at index 1,
@@ -411,7 +411,7 @@ create index if not exists incoming_documents_doc_date_norm
   on incoming_documents ("doc_date_norm");
 
 
--- trusted suppliers (2nd sheet tab gid 663229729) — TRUSTED_SUPPLIER certainty=100 override
+-- trusted suppliers (2nd sheet tab gid 100000005) — TRUSTED_SUPPLIER certainty=100 override
 create table if not exists trusted_suppliers (
   "id" bigint generated always as identity primary key,
   "COMPANY_ID" TEXT, "SOURCE_TYPE" TEXT, "extra" JSONB default '{}'::jsonb,
@@ -1024,7 +1024,7 @@ alter table incoming_documents add column if not exists "FROM_WAREHOUSE_CHECK" T
 -- FROM_OFFICE <-> FROM_WAREHOUSE mirror, for the duration of the dual-write window.
 -- scripts/ops/indox-column-consolidation.sql §5 states the problem: "Because NO writer has been
 -- repointed yet, these numbers WILL drift apart again after each backfill." A one-time backfill
--- (scripts/ops/migrations/2026-08-06_from_office_to_warehouse_backfill.sql, 5,756 rows) fixes only
+-- (scripts/ops/migrations/2026-08-06_from_office_to_warehouse_backfill.sql, N rows) fixes only
 -- the rows that existed when it ran; every document ingested afterwards is written with
 -- FROM_OFFICE alone and leaves FROM_WAREHOUSE NULL again. These two triggers are what makes the
 -- backfill hold, and what makes it survive a fresh clone rather than needing a re-run.
@@ -1495,7 +1495,7 @@ alter table incoming_documents_archive
 -- TYPE_BY_SOURCE, BASE_SELECTION_COMPLETED, BASE_SELECTION_HASH.
 --
 -- That was DATA LOSS, not cosmetics: the archive move copies BY NAME INTERSECTION, so archiving
--- a document silently dropped whatever the twin lacked. 15,366 rows were already archived that
+-- a document silently dropped whatever the twin lacked. N rows were already archived that
 -- way; this closes the hole going forward and cannot recover what those rows lost.
 --
 -- Mirroring is a loop rather than a list on purpose — a list is the same one-time clone with
@@ -1529,7 +1529,7 @@ $mirror_archive$;
 -- "fresh deploy is not compared to a migrated one" mechanism issues/schema-drift-fixture-vs-live.md
 -- leaves open. Definitions taken from the live indox_example, not reconstructed from memory.
 
--- The dedup audit trail. 10,184 rows on example, and it was undeclared everywhere — found only
+-- The dedup audit trail. N rows on example, and it was undeclared everywhere — found only
 -- because ownership was traced by REFERENCE rather than by name prefix.
 create table if not exists merge_audit (
   id                   bigserial primary key,
@@ -1579,9 +1579,9 @@ create index if not exists idx_settings_history_key on settings_history (instanc
 -- keeping: the owner added FILTER_REQUEST / FILTER_REQUES_REASON through the console, and
 -- migration 2026-08-23_priority_skip.sql later renamed them to PRIORITY_SKIP /
 -- PRIORITY_SKIP_REASON — but only on `incoming_documents`. `indox_priority_local` kept the ORIGINAL
--- names, and neither name ever reached this file. 5,919 rows have a FILTER_REQUEST value only
+-- names, and neither name ever reached this file. N rows have a FILTER_REQUEST value only
 -- because it is NOT NULL DEFAULT false — it is true on ZERO of them, and the reason column is
--- non-null on zero. The live successor is PRIORITY_SKIP (true on 4,996 documents, 4,168 reasons),
+-- non-null on zero. The live successor is PRIORITY_SKIP (true on N documents, 4,168 reasons),
 -- so these two carry no signal; they are declared because they EXIST, not because they are wanted.
 --
 -- The missing T in `FILTER_REQUES_REASON` is preserved deliberately. It is spelled that way in

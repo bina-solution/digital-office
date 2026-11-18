@@ -37,6 +37,9 @@ on:
       - 'issues/**'
       - 'apps/project-pln/plans/**'
       - 'apps/digital-assets/content/**'
+      # the public exporter's rules and its selftest (2026-11-13, DGO-1838: eight pushes of only these in one night,
+      # each a five-module run that held the Dell's take of a green batch behind it); no Go file names them
+      - 'scripts/release/**'
   pull_request:
   workflow_dispatch:
 
@@ -58,13 +61,42 @@ permissions:
 
 jobs:
   test:
+    # An UNCHANGED fork's pull request is skipped here: this job runs on our own machine, and the public copy of this
+    # file is on a public repository, where anyone can open one (DGO-1962). A branch of this repository runs as before.
+    # Defence in depth only: a pull request runs the workflow files of its own merge commit, which its author can
+    # change. The boundary is the repository's setting — the self-hosted runner not available to the public
+    # repository, or every outside contributor's run held for approval.
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     runs-on: [self-hosted, portable]
+    permissions:
+      contents: read
+      actions: write   # scripts/ci/step-aside: whether a version's proof is waiting, and the cancel of this run
     timeout-minutes: 75   # 30 for the job + up to 45 that ops/prejob_waitfree.sh may hold it (memory, heat, a fresh boot)
     strategy:
       fail-fast: false
       matrix:
         module: [packaging/trust, packaging/dgo, packaging/installer, packaging/relsign, platform-base/forward-auth]
     steps:
+      # A VERSION'S PROOF GOES FIRST (DGO-1819): the price above, measured — on 2026-11-11 a version's proof stood
+      # 45 minutes behind office-branch jobs. On any branch but dgo-stable this job asks scripts/ci/step-aside first,
+      # when the runner takes it: while a gates-hosted run of dgo-stable is queued or running, it cancels its own run in
+      # seconds (the run reads «cancelled», never a green). A running run still drains; a superseded head is not a
+      # reason (the group's comment above: DGO-1797); a hand-run, a tag or a pull request never steps aside.
+      - uses: actions/checkout@v4
+        if: startsWith(github.ref, 'refs/heads/') && github.ref != 'refs/heads/dgo-stable'
+        with:
+          fetch-depth: 1
+          filter: blob:none
+          sparse-checkout: scripts/ci/step-aside
+          sparse-checkout-cone-mode: false
+          path: .step-aside
+          persist-credentials: false
+      - name: A version's proof goes first (scripts/ci/step-aside)
+        if: startsWith(github.ref, 'refs/heads/') && github.ref != 'refs/heads/dgo-stable'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: bash .step-aside/scripts/ci/step-aside && rm -rf .step-aside
+
       - uses: actions/checkout@v4
 
       - uses: actions/setup-go@v5

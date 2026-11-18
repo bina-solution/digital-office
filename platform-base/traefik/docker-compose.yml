@@ -46,7 +46,7 @@ services:
     - --serversTransport.forwardingTimeouts.idleConnTimeout=600s
     - --certificatesresolvers.myresolver.acme.httpchallenge=true
     - --certificatesresolvers.myresolver.acme.httpchallenge.entrypoint=web
-    - --certificatesresolvers.myresolver.acme.email=${TRAEFIK_ACME_EMAIL:-person182.x@example.com}
+    - --certificatesresolvers.myresolver.acme.email=${TRAEFIK_ACME_EMAIL:-person92.x@example.com}
     - --certificatesresolvers.myresolver.acme.storage=/etc/traefik/acme.json
     - --providers.docker.exposedbydefault=false
     # WHICH ADDRESS of an app the edge dials: the one on the network the edge itself is on (below, its
@@ -84,8 +84,14 @@ services:
         max-size: 10m
         max-file: '3'
     ports:
-    - 80:80
-    - 443:443
+    # The front door, on every interface unless the office declares otherwise. A LAPTOP office declares loopback —
+    # TRAEFIK_HTTP_PUBLISH=127.0.0.1:80 and TRAEFIK_HTTPS_PUBLISH=127.0.0.1:443 in its .env — because Docker's NAT
+    # runs before the host's firewall: on the dell, UFW allowed 80/443 from the LAN alone and Docker's own chain
+    # accepted them from any interface, so on any Wi-Fi the laptop joined its sign-in could answer, and :80 in
+    # clear text (S31, ai/context/dgo-security.md §3.10). Its own browser keeps the loopback; a phone on the same
+    # Wi-Fi uses the LAN entry below and its host door (apps/lan-console), never these two.
+    - ${TRAEFIK_HTTP_PUBLISH:-80}:80
+    - ${TRAEFIK_HTTPS_PUBLISH:-443}:443
     # the LAN entry, on loopback only: the host's console door is its one way in (DGO-1125)
     - 127.0.0.1:${TRAEFIK_LAN_HOST_PORT:-8081}:8081
     # The HOST side of the two TCP passthroughs is overridable: on a machine where the port is already
@@ -136,7 +142,7 @@ services:
     - traefik.http.routers.traefik-https.tls=true
     - traefik.http.routers.traefik-https.tls.certresolver=${TRAEFIK_CERTRESOLVER-myresolver}
     - traefik.http.routers.traefik-https.service=traefik-deployment
-    - traefik.http.routers.traefik-https.middlewares=authentik-admins@file,hsts@file
+    - traefik.http.routers.traefik-https.middlewares=hsts@file,authentik-admins@file
     - traefik.http.services.traefik-deployment.loadbalancer.server.port=8080
   # ── the door (DGO-136) ────────────────────────────────────────────────────────────────────────
   # The ONE container in this app that holds the engine socket — read-only — and the only one that

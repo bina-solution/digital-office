@@ -194,7 +194,7 @@ import { workflow, node, links } from '@n8n-as-code/transformer';
     /*__n8n__*/ meta: {"templateCredsSetupCompleted":true},
     /*__n8n__*/ pinData: {},
     /*__n8n__*/ staticData: null,
-    /*__n8n__*/ shared: [{"updatedAt":"2026-08-27T19:51:21.199Z","createdAt":"2026-08-27T19:51:21.199Z","role":"workflow:owner","workflowId":"indoxV2ActionsInv01","projectId":"2xKn4WH08LyAOk2y","project":{"updatedAt":"2026-07-30T23:40:17.073Z","createdAt":"2026-07-30T23:33:30.049Z","id":"2xKn4WH08LyAOk2y","name":"Admin User <person2@example.com>","type":"personal","icon":null,"description":null,"creatorId":"544b7ec6-5907-4ee2-a94b-c5676e56835c"}}],
+    /*__n8n__*/ shared: [{"updatedAt":"2026-08-27T19:51:21.199Z","createdAt":"2026-08-27T19:51:21.199Z","role":"workflow:owner","workflowId":"indoxV2ActionsInv01","projectId":"exampleProject02","project":{"updatedAt":"2026-07-30T23:40:17.073Z","createdAt":"2026-07-30T23:33:30.049Z","id":"exampleProject02","name":"Admin User <person2@example.com>","type":"personal","icon":null,"description":null,"creatorId":"544b7ec6-5907-4ee2-a94b-c5676e56835c"}}],
     id: 'indoxV2ActionsInv01',
     name: 'indox-v2 Actions — Invoice',
     active: true,
@@ -1943,7 +1943,7 @@ function gdocTail(doc) {
   //   sent, sig equal       -> silent
   //   sent, sig different   -> re-send, the whole point of the feature
   //   sent, sig UNKNOWN     -> SILENT, not "changed"
-  // That last line is the one that matters. The 4,749 rows v1 already delivered carry
+  // That last line is the one that matters. The N rows v1 already delivered carry
   // PRIORITY_SYNC_COMPLETED=true and no signature, and there is no priority-sent timestamp
   // anywhere to reconstruct one. Treating "unknown" as changed would re-send all 4,749 on the
   // first sweep after the toggle and duplicate every one of them in the client's ERP. Treating
@@ -2607,7 +2607,7 @@ return __gdocDecideFn($input.all());`,
 // includeOtherFields:false and reads $('Action: Update NAME').item, so it never
 // mutates this lane's item.
 // THE REGEX IS DELIBERATELY STRICTER THAN v1's split('.').last(). Company names
-// contain dots: on the live row \`סימנט אי.אס.-12012\` that v1 expression returns
+// contain dots: on the live row \`ספק נון-00001\` that v1 expression returns
 // '-12012', which would be appended as an "extension". Anchoring to a trailing
 // run of alphanumerics refuses that and every case shaped like it.
 // NO EXTENSION FOUND => no suffix, i.e. exactly today's behaviour. This node can

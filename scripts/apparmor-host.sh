@@ -7,8 +7,8 @@
 #   bash scripts/apparmor-host.sh status            # what this host does: the label, the signal, the verdict
 #   bash scripts/apparmor-host.sh status --machine  # the same in key=value lines (baseline reads this)
 #   bash scripts/apparmor-host.sh validate          # parse our profile; loads nothing, needs no root
-#   sudo ./bbox apparmor install                    # write it to the host (the OWNER's act)
-#   sudo ./bbox apparmor uninstall                  # take it off again
+#   ./bbox apparmor install                         # write it to the host (gets root itself: scripts/as-host-root.sh)
+#   ./bbox apparmor uninstall                       # take it off again
 #   bash scripts/apparmor-host.sh verify            # after install: the signal must get through
 #
 # THE CONDITION. Ubuntu's `kernel.apparmor_restrict_unprivileged_unconfined=1` (its default) makes
@@ -139,8 +139,8 @@ say_facts() {
       warn "this host cannot run a database in a container, and no error says why: gosu spins forever"
       warn "at ~80% CPU, autovacuum is cancelled, pg_reload_conf()/pg_cancel_backend() answer"
       warn "Permission denied, and docker stop kills the container (tini cannot forward SIGTERM)."
-      echo "  fix (a host policy change, the owner's act; it does not weaken the host):"
-      echo "      sudo ./bbox apparmor install"
+      echo "  fix (a host policy change that does not weaken the host; it gets root itself):"
+      echo "      ./bbox apparmor install"
       echo "  check it first without touching anything:  ./bbox apparmor validate" ;;
     traded)
       warn "this host runs containers with NO AppArmor profile at all (apparmor=unconfined): it works,"
@@ -194,7 +194,7 @@ case "${1:-status}" in
 
   install)
     export AA_PULL="${AA_PULL:-1}"
-    [ "$(id -u)" = 0 ] || die "installing an AppArmor profile changes this host's policy — run it with sudo: sudo ./bbox apparmor install"
+    [ "$(id -u)" = 0 ] || die "installing an AppArmor profile changes this host's policy and needs root: ./bbox apparmor install gets it itself (sudo, or this host's docker engine)"
     command -v apparmor_parser >/dev/null 2>&1 || die "apparmor_parser is not on this host — nothing to install"
     bash "${BASH_SOURCE[0]}" validate >/dev/null || die "the profile does not validate — not loading it"
     engine="$(docker version --format '{{.Server.Version}}' 2>/dev/null | cut -d. -f1)"
@@ -223,17 +223,17 @@ case "${1:-status}" in
       echo "  it survives a reboot: apparmor.service loads ${INSTALLED} before the engine starts"
       warn "containers that are ALREADY RUNNING keep the rules they started with — recreate them"
       warn "(./bbox run does); otherwise the hung ones stay hung."
-      echo "  undo:  sudo ./bbox apparmor uninstall"
+      echo "  undo:  ./bbox apparmor uninstall"
     else
       bad "the profile loaded but the signal still does not get through — the kernel may be logging a"
       bad "different denial; read: journalctl -k | grep DENIED | tail"
-      echo "  undo:  sudo ./bbox apparmor uninstall"
+      echo "  undo:  ./bbox apparmor uninstall"
       exit 1
     fi
     exit 0 ;;
 
   uninstall)
-    [ "$(id -u)" = 0 ] || die "removing a host profile needs root: sudo ./bbox apparmor uninstall"
+    [ "$(id -u)" = 0 ] || die "removing a host profile needs root: ./bbox apparmor uninstall gets it itself"
     if [ ! -f "${INSTALLED}" ] && [ "${2:-}" != "--force" ]; then
       die "there is no ${INSTALLED} on this host, so the loaded docker-default is not ours — removing it would take the engine's own profile away. Nothing was changed (--force does it anyway)."
     fi

@@ -2275,7 +2275,26 @@ EOF
 # It is the IMAGE's time that is compared, never the container's (DGO-1356): a container re-created today
 # from an image of last week is new, and comparing it hid exactly the case this exists for — measured
 # 2026-11-05 on the Dell, dgo-carry created 11-04 from an image of 10-31, before the relay its checkout had.
+# ONLY THE SERVICES THIS OFFICE DECLARES (its compiled config, as filemount_refresh asks): a container of an app the
+# office has since disabled still runs and its sources still move, and «rebuild it» cannot work for it — handed to
+# `bbox run` by a take, its one name failed the whole rebuild (vps1, 2026-11-12: «no such service: chat», chat disabled
+# and its 10-17 container still up; none of the 13 stale services was rebuilt, DGO-1848). bbox status says such a
+# container already, as «declared off, yet RUNNING». A config that cannot be read keeps every row: the run that follows
+# then fails loudly, as before, never a silent «nothing is stale».
 stale_images() {
+  local rows declared row out=()
+  rows="$(_stale_image_rows)" || return 0
+  [ -n "${rows}" ] || return 0
+  declared=" $(_dcx_run config --services 2>/dev/null | tr -d '\r' | tr '\n' ' ')"
+  if [ -z "${declared// /}" ]; then echo "${rows}"; return 0; fi
+  while IFS= read -r row; do
+    [[ "${declared} " == *" ${row%% *} "* ]] && out+=("${row}")
+  done < <(printf '%s\n' "${rows}" | grep -oE '[^ ]+ \([0-9]+h\)')
+  [ "${#out[@]}" -eq 0 ] || echo "${out[*]}"
+}
+
+# _stale_image_rows — stale_images' measurement: every running compose service with a build context, "svc (Nh) …"
+_stale_image_rows() {
   ( cd "${REPO_ROOT}" && python3 - <<'PY'
 import datetime, os, pathlib, subprocess, glob
 try:

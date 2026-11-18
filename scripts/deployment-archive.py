@@ -396,7 +396,9 @@ def installed_apps():
     must survive a machine move is the INSTALLED set, not the enabled one.
     """
     out = []
-    for root in ("apps", "platform-base"):
+    # instances/ (DGO-1920): an app's further copies keep their data in volumes of their own, which a move
+    # carries like any app's; their folders come back from platform.state.yaml (the render writes them).
+    for root in ("apps", "platform-base", "instances"):
         base = REPO / root
         if not base.is_dir():
             continue
@@ -488,12 +490,14 @@ def undeclared_volumes(listing, declared, project):
             anonymous["count"] += 1
             anonymous["sizes"].append(size)
             continue
-        # The compose label decides whose a volume is, when there is one: a project `p_x` would
-        # otherwise read `p_x_data` as a volume of `p`. With no label, the name's prefix is all
+        # A declared volume is carried by its NAME, `<project>_<short>` (_tar_volume), whatever its
+        # label says — so it is never named as left out (DGO-1510, the second reader).
+        if name.startswith(project + "_") and name[len(project) + 1:] in declared:
+            continue
+        # Otherwise the compose label decides whose a volume is, when there is one: a project `p_x`
+        # would otherwise read `p_x_data` as a volume of `p`. With no label, the name's prefix is all
         # there is to go by.
         ours = (label == project) if label else name.startswith(project + "_")
-        if ours and name.startswith(project + "_") and name[len(project) + 1:] in declared:
-            continue
         rows.append({"name": name, "project": label or (project if ours else None), "ours": ours,
                      "size": size})
     return rows, anonymous
@@ -760,7 +764,7 @@ def stateful_binds(cfg):
 
     G26 asks the same question and answers it at DIRECTORY granularity: tracked_paths() adds every
     parent directory of every tracked file, so a single `.gitkeep` marks a whole tree as "tracked,
-    therefore not state". Measured on this estate, that hides 1,335 files (156 MB) under
+    therefore not state". Measured on this estate, that hides N files (156 MB) under
     apps/apitools/storage and 8 more under apps/chat/data behind two `.gitkeep`s, and G26 still
     reports PASS. This function asks the question per FILE, so a sentinel file cannot hide a tree.
     """
@@ -781,7 +785,7 @@ def stateful_binds(cfg):
                 continue                          # the repo root itself (app-management's mount)
             # ONCE PER DIRECTORY, not once per service that mounts it. The browser's profile is
             # mounted by five services, so it was walked five times: 39 of the 54 seconds an
-            # inventory sweep took on hp-laptop (2026-10-07), for 2,008 files.
+            # inventory sweep took on hp-laptop (2026-10-07), for N files.
             if rel in walked:
                 continue
             walked.add(rel)

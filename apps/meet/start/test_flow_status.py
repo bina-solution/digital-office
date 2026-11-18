@@ -173,7 +173,7 @@ class Transcription(unittest.TestCase):
         self.assertEqual(by_key(st)["ivrit"]["detail"], "כשההקלטה תיסגר")
 
     def test_a_processed_meeting_keeps_its_own_steps(self):
-        flow = {"stages": {"best": {"state": "done", "detail": "934 שורות, 13200 מילים"}, "speakers": {"state": "done", "detail": "שלמה בולוטין"},
+        flow = {"stages": {"best": {"state": "done", "detail": "934 שורות, 13200 מילים"}, "speakers": {"state": "done", "detail": "ישראל ישראלי"},
                            "summary": {"state": "done", "detail": "11 נושאים"}}}
         st = by_key(server.flow_stages("ready", flow, {"live": False}, rec_of(), False, [], time.time()))
         self.assertEqual(st["ivrit"], {"key": "ivrit", "state": "done", "detail": "934 שורות, 13200 מילים"})

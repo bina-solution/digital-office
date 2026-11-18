@@ -59,7 +59,9 @@ STREAM = "dgo:flow:telegram"
 BLOCK_MS = 15000
 #: The bot's own names, as the event stream spells them (`sender` is the display name in the group), so a row
 #: written by anything else — a person, an automation with its own name — is the kind that gets forwarded.
-DEFAULT_BOT_NAMES = ("Bina Agent", "BinaSolutionsAgentBot")
+#: «Azaria» is the bot's display name in the group since it was renamed: without it the office's notices and the
+#: bot's own replies became requests on the desk (62 of 96 open records on 2026-11-13, DGO-1878).
+DEFAULT_BOT_NAMES = ("Bina Agent", "BinaSolutionsAgentBot", "Azaria")
 #: A file is named by the chat and the message number, never by an address: the answerer brings it in with the
 #: app's own verb (`./bbox telegram media <chat_id> <message_id> <path>`), so the line it is handed carries no
 #: internal hostname — these lines end up quoted in the group, and the group never gets an internal address.
@@ -195,9 +197,17 @@ def tell_agent(session: str, text: str, token_path: str) -> None:
                     return
                 last = "HTTP %s" % resp.status
         except urllib.error.HTTPError as e:
-            last = "HTTP %s %s" % (e.code, e.read()[:200].decode("utf-8", "replace"))
+            answer = e.read()[:2000].decode("utf-8", "replace")
+            last = "HTTP %s %s" % (e.code, answer[:200])
             if e.code == 504:
                 log("the door timed out on its own side (504): taken as delivered, never sent twice")
+                return
+            if e.code == 502 and ("not-confirmed" in answer or "Return pressed" in answer):
+                # typed and Return pressed; only the door's look at the transcript came too early (a busy session
+                # shows the text later). Sending again put msg 986 in front of the session for hours, and the
+                # cursor never passed it, so nothing after it arrived (DGO-1878)
+                log("the door typed the text and has not seen it yet (502 not-confirmed): taken as delivered, "
+                    "never sent twice")
                 return
             if e.code in (401, 409, 429, 502, 503):
                 continue                      # a replaced token, a send in flight, a door restarting: try again

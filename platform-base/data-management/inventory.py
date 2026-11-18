@@ -13,7 +13,7 @@ WHY THIS IS A MODULE AND NOT A SCRIPT
 WHAT IT READS
 
     - every app.json under apps/ and platform-base/ (the declared inventory, gate G26 keeps it honest)
-    - docker: volumes for THIS compose project, their sizes and users
+    - docker: every volume on the engine (this project's and the others'), their sizes and users
     - docker: every postgres/redis container in THIS project, their databases and table row estimates
     - scripts/deployment-archive.py: stateful_binds()/SECRET_PATHS, so "what the archive takes" is
       read from the archiver itself rather than guessed at
@@ -104,7 +104,7 @@ def all_apps():
             pass
 
     out = []
-    for root in ("apps", "platform-base"):
+    for root in ("apps", "platform-base", "instances"):   # instances/: an app's further copies (DGO-1920)
         base = REPO / root
         if not base.is_dir():
             continue
@@ -163,23 +163,80 @@ def size_to_bytes(s):
     return int(float(m.group(1)) * mult) if mult else None
 
 
-def live_volumes(project):
-    out, _ = _docker(["volume", "ls", "--format", "{{.Name}}"])
-    vols = [v for v in out.splitlines() if v.startswith(project + "_")]
+def _undeclared(listing, declared, project):
+    """The archiver's own rule for what no app declares (`undeclared_volumes`), so the screen and the
+    archive's manifest name the same volumes. The copy below is used only when the archiver did not load (an
+    inventory still worth serving); it is the same rule, and test_inventory_volumes holds the two together."""
+    if ARCHIVER and hasattr(ARCHIVER, "undeclared_volumes"):
+        return ARCHIVER.undeclared_volumes(listing, declared, project)
+    rows, anonymous = [], {"count": 0, "sizes": []}
+    for name, label, size in listing:
+        size = None if str(size or "").strip().upper() in ("", "N/A") else size
+        if re.fullmatch(r"[0-9a-f]{64}", name or ""):
+            anonymous["count"] += 1
+            anonymous["sizes"].append(size)
+        elif not (name.startswith(project + "_") and name[len(project) + 1:] in declared):
+            ours = (label == project) if label else name.startswith(project + "_")
+            rows.append({"name": name, "project": label or (project if ours else None), "ours": ours, "size": size})
+    return rows, anonymous
+
+
+def live_volumes(project, declared=()):
+    """Every named volume on the engine — this project's AND every other's (DGO-1510) — and the
+    anonymous ones counted. Returns (rows, anonymous).
+
+    Not only this project's prefix: a volume of another project or of none (a `docker volume create`,
+    an earlier office's leftovers, `dgo-offsite-*`) is in no app's declarations either, so no archive
+    carries it, and the screen is where it must be named. Each row says what the archiver says of it:
+    `carried` (a declared volume, by its name `<project>_<short>`), `ours` (this project's, by its compose
+    label or, with none, its prefix) and `project`. `short` is the name without this project's prefix
+    only for this project's prefixed volumes; any other row's `short` is its full name.
+
+    Three docker calls, whatever the count. It was one `docker ps --filter volume=` per volume: on the
+    HP (2026-11-13, 134 volumes, load 8-11) the section never finished inside the sweep's 600 s stall
+    guard. Who uses a volume comes from one `docker ps -a` and its mounts; sizes from one
+    `system df -v`, whose timeout leaves the sizes unknown (None, said), never loses the names."""
+    out, _ = _docker(["volume", "ls", "--format", '{{.Name}}\t{{.Label "com.docker.compose.project"}}'])
+    names = []
+    for line in out.splitlines():
+        n, _, label = line.partition("\t")
+        if n.strip():
+            names.append((n.strip(), label.strip()))
     sizes = {}
-    df, rc = _docker(["system", "df", "-v"], timeout=240)
+    try:
+        df, rc = _docker(["system", "df", "-v", "--format", "{{range .Volumes}}{{.Name}}\t{{.Size}}\n{{end}}"],
+                         timeout=240)
+    except subprocess.TimeoutExpired:
+        df, rc = "", 1
     if rc == 0:
         for line in df.splitlines():
-            parts = line.split()
-            if len(parts) >= 3 and parts[0] in vols:
-                sizes[parts[0]] = parts[2]
+            n, _, s = line.partition("\t")
+            if n.strip():
+                sizes[n.strip()] = None if s.strip().upper() in ("", "N/A") else s.strip()   # N/A is no size
+    users = {}
+    ps, _ = _docker(["ps", "-a", "--no-trunc", "--format", "{{.Names}}\t{{.Mounts}}"])
+    for line in ps.splitlines():
+        c, _, mounts = line.partition("\t")
+        for m in mounts.split(","):
+            if m.strip() and c.strip():
+                users.setdefault(m.strip(), []).append(c.strip())
+    listing = [(n, label, sizes.get(n)) for n, label in names]
+    unclaimed, anonymous = _undeclared(listing, set(declared), project)
+    left = {u["name"]: u for u in unclaimed}
     rows = []
-    for v in sorted(vols):
-        u, _ = _docker(["ps", "-a", "--filter", f"volume={v}", "--format", "{{.Names}}"], timeout=40)
-        rows.append({"name": v, "short": v[len(project) + 1:], "size": sizes.get(v),
-                     "bytes": size_to_bytes(sizes.get(v)),
-                     "used_by": [x for x in u.splitlines() if x]})
-    return rows
+    for n, label in sorted(names):
+        if re.fullmatch(r"[0-9a-f]{64}", n):
+            continue
+        u = left.get(n)
+        ours = u["ours"] if u else True                  # not left out = declared and carried: this project's
+        rows.append({"name": n, "short": n[len(project) + 1:] if ours and n.startswith(project + "_") else n,
+                     "project": u["project"] if u else project,   # carried = carried as this project's
+                     "ours": ours, "carried": u is None, "size": sizes.get(n), "bytes": size_to_bytes(sizes.get(n)),
+                     "used_by": sorted(users.get(n, []))})
+    anonymous = {"count": anonymous["count"],
+                 "bytes": sum(size_to_bytes(s) or 0 for s in anonymous["sizes"]),
+                 "bytes_unknown": sum(1 for s in anonymous["sizes"] if size_to_bytes(s) is None)}
+    return rows, anonymous
 
 
 # ── store discovery: by TECHNOLOGY, never by app ────────────────────────────────────────────────
@@ -421,10 +478,17 @@ def attribute(o):
                             "size": v.get("size"), "coverage": v["coverage"],
                             "provenance": "declared",
                             "shared_with": owners[1:]})
-        else:
+        elif v.get("ours", True):
             unclaimed.append({"kind": "volume", "name": v["short"], "bytes": v.get("bytes"),
                               "size": v.get("size"),
                               "why": "no app.json declares this volume in data.volumes"})
+        else:
+            # another project's, or none's: no app of this office declares it, so no archive carries it
+            unclaimed.append({"kind": "volume", "name": v["short"], "bytes": v.get("bytes"),
+                              "size": v.get("size"), "project": v.get("project"),
+                              "why": (f"a volume of project '{v['project']}', not this office's — no app "
+                                      "declares it, so no backup carries it") if v.get("project") else
+                                     "a volume of no compose project — no app declares it, so no backup carries it"})
 
     # 2. binds — data.paths is authoritative; otherwise attribute by where the path lives.
     for b in o["binds"]:
@@ -544,10 +608,18 @@ def attribute(o):
 def _summary(o):
     """Summary over WHATEVER is present. Called after every section so a partial view still has
     honest totals — the counts only ever grow as sections land."""
-    vols, binds, dbs, apps = o["volumes"], o["binds"], o["databases"], o["apps"]
+    # The footprint and «at risk» are THIS office's volumes: another project's gigabytes are no part of what its
+    # archive contains, and are named in `unclaimed` and counted apart (DGO-1510, the second reader).
+    every = o["volumes"]
+    vols = [v for v in every if v.get("ours", True)]
+    foreign = [v for v in every if not v.get("ours", True)]
+    binds, dbs, apps = o["binds"], o["databases"], o["apps"]
     at_risk = [v for v in vols if v["coverage"].startswith(("UNCLAIMED", "NOT BACKED UP"))]
     return {
         "volumes": len(vols),
+        "foreign_volumes": len(foreign),
+        "foreign_volume_bytes": sum(v.get("bytes") or 0 for v in foreign),
+        "anonymous_volumes": (o.get("anonymous_volumes") or {}).get("count", 0),
         # Volumes + binds is what an archive actually CONTAINS. Databases are deliberately not added
         # to it: every postgres store lives inside one of these volumes, so summing the two would
         # count the same 7.7GB twice and quote a restore size ~15% larger than the real one.
@@ -587,7 +659,7 @@ def inventory_steps(table_limit=40):
     """
     o = {
         "deployment": deployment_name(), "project": None,
-        "apps": [], "volumes": [], "declared_absent": [], "binds": [], "bind_error": None,
+        "apps": [], "volumes": [], "anonymous_volumes": {}, "declared_absent": [], "binds": [], "bind_error": None,
         "databases": [], "redis": [], "secret_paths": [],
         "by_app": [], "unclaimed": [],
         "ready": [], "summary": {},
@@ -610,9 +682,9 @@ def inventory_steps(table_limit=40):
             declared.setdefault(v, []).append(a["id"])
     yield emit("apps")
 
-    vols = live_volumes(project)
+    vols, o["anonymous_volumes"] = live_volumes(project, declared)
     for v in vols:
-        owners = declared.get(v["short"], [])
+        owners = declared.get(v["short"], []) if v["carried"] else []
         v["declared_by"] = owners
         if not owners:
             v["coverage"] = "UNCLAIMED"
@@ -625,7 +697,7 @@ def inventory_steps(table_limit=40):
             owner = next(o_ for o_ in owners if enabled_of.get(o_))
             v["coverage"] = "covered (hook)" if hooks.get(owner) else "covered (generic tar)"
     o["volumes"] = vols
-    live_short = {v["short"] for v in vols}
+    live_short = {v["short"] for v in vols if v["carried"]}
     o["declared_absent"] = [{"volume": d, "declared_by": ow} for d, ow in sorted(declared.items())
                             if d not in live_short]
     yield emit("volumes")

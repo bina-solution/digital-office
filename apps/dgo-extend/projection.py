@@ -1065,7 +1065,7 @@ def selftest() -> list[str]:
     home = {"id": "vps1", "tunnel": {"slot": 4}, "serve": {}}
     mac = {"office": "macbook", "label": {"he": "המקבוק", "en": "MacBook"}, "commit": "abc",
            "generated_at": 111,
-           "apps": [{"alias": "bina", "app": "bina-ds", "title": {"he": "בינה ודעת", "en": "Bina"},
+           "apps": [{"alias": "bina", "app": "bina-ds", "title": {"he": "עזריה", "en": "Azaria"},
                      "port": 3080, "api": {"port": 3081, "auth": "bearer:vault:bina-ds"},
                      "module": {"kind": "embedded", "path": "/a/bina/"}, "host": "bina.localhost",
                      "identity": {"to": "owner@local"}, "order": 1, "icon": "bot", "group": "ראשי",

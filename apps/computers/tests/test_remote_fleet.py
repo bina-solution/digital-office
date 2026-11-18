@@ -148,10 +148,10 @@ def test_the_merge_uses_the_peer_answer_end_to_end() -> None:
     base = _registry({"remote.macbook.computers.json": _record("macbook")})
     app = remote.apps(base)[0]
     answer = {"computers": [{"id": "computer_ssh-abc", "label": "Dell", "host": "10.0.0.5",
-                             "port": 22, "user": "shlomy", "state": "ok", "ok": True}]}
+                             "port": 22, "user": "owner", "state": "ok", "ok": True}]}
     rows = remote.as_rows(app, answer)
     assert [r["id"] for r in rows] == ["computer_ssh-abc.macbook"]
-    assert rows[0]["state"] == "ok" and rows[0]["user"] == "shlomy"
+    assert rows[0]["state"] == "ok" and rows[0]["user"] == "owner"
 
 
 

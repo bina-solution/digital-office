@@ -78,7 +78,7 @@ GATES=(
   # reverse check in --verify-ci). Each was verified to PASS before being adopted, because adding a
   # red gate to the canonical list would turn `gates.sh` red for every lane rather than fixing
   # anything. G58 is the one that matters: the fixture-cleanup gate written after the incident that
-  # deleted 2,432 client documents was absent from every LOCAL "run every gate" path
+  # deleted client documents was absent from every LOCAL "run every gate" path
   # (gates.sh, fresh-machine-check.sh, baseline.sh) while --verify-ci reported "all 40 gates".
   auth-lint                 # G6   no colliding rule mixes protected and unprotected routers
   sso-provider-lint         # G20  every SSO-gated app has an authentik provider
@@ -144,7 +144,7 @@ GATES=(
   # ── The private repo is read by every office's checkout, a client's server included, and nothing
   # asked it what the public export asks of what it publishes: on its first run (2026-11-03) this
   # found an OpenSSH private key in ai/context/, its public half still trusted on the Dell (DGO-1223).
-  # The export's own definition of a secret, over every tracked text file — ~35 s for 4,300 files.
+  # The export's own definition of a secret, over every tracked text file — ~35 s for N files.
   tracked-secret-lint       # G92  no tracked file carries a private key or a provider's token
   # ── Every install that copies the template ran on its secrets: the offices shared their database
   # passwords and vault key with each other and with whoever holds the template (DGO-1220). The template
@@ -162,7 +162,7 @@ GATES=(
   # declare itself `auth: none`. n8n did exactly that with hand-written labels that carried no
   # middleware, so its editor, its own sign-in page and /rest/settings answered the internet on every
   # office — measured from outside 2026-11-09, two scanners loading the editor minutes after an edge
-  # restart (DGO-1594). Static, office-free, ~0.2 s; the three exemptions (authentik, chimney-services,
+  # restart (DGO-1594). Static, office-free, ~0.2 s; the three exemptions (authentik, examplech-services,
   # glitchtip) are decisions with their reasons in the file, and one that stops matching FAILS.
   # G96, not G95: dgo-stable already spent G95 on office-link-lint (DGO-1433), which landed first.
   human-ui-auth-lint        # G96  a host that shows a person a screen is not open to the world
@@ -264,7 +264,7 @@ if [ "${1:-}" = "--verify-ci" ]; then
   # Everything above asks "is every gate in GATES also in ci-verify.yml?". Nothing asked the
   # reverse, so a gate could run in CI and be absent from THE list — and one was:
   # `fixture-delete-scope-lint` (G58, the fixture-cleanup gate written after the incident that
-  # deleted 2,432 client documents) was a named step in ci-verify.yml and missing from GATES here
+  # deleted client documents) was a named step in ci-verify.yml and missing from GATES here
   # the whole time. That meant `scripts/ci/gates.sh`, `fresh-machine-check.sh` and `baseline.sh` —
   # every local "run every gate" path — silently skipped it, while --verify-ci reported
   # "enumerates all 40 gates" and exited 0. Same shape as the drift this file was written to end,

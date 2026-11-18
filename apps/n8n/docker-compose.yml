@@ -46,6 +46,9 @@ services:
     - -c
     - effective_io_concurrency=200
     - -c
+    # 100, and the n8n processes that hold a pool (main, webhook, worker-1, worker-2) are held UNDER it with room
+    # to spare: they were 25 each = 100 = every connection, so a migration, a backup or any reader through
+    # N8N_DB_DSN found none (issues/indox-completion-loop-root-cause-2026-08-10.yaml). test_db_pool.py keeps the sum.
     - max_connections=100
     - -c
     - shared_preload_libraries=pg_stat_statements
@@ -217,7 +220,7 @@ services:
     - DB_POSTGRESDB_USER=${POSTGRES_USER:-root}
     - DB_POSTGRESDB_PASSWORD=${POSTGRES_PASSWORD:?set in .env}
     - DB_POSTGRESDB_DATABASE=${POSTGRES_DB:-n8n}
-    - DB_POSTGRESDB_POOL_SIZE=${DB_POSTGRESDB_POOL_SIZE:-25}
+    - DB_POSTGRESDB_POOL_SIZE=${DB_POSTGRESDB_POOL_SIZE:-15}
     - N8N_ENCRYPTION_KEY=${N8N_ENCRYPTION_KEY:?set in .env}
     - N8N_USER_MANAGEMENT_JWT_SECRET=${N8N_USER_MANAGEMENT_JWT_SECRET:?set in .env}
     - N8N_SECURE_COOKIE=${N8N_SECURE_COOKIE:-false}
@@ -286,11 +289,11 @@ services:
     # incoming_documents table; the webhook/integrated runs carry 1-97 lines each and never sweep.
     # Measured over 24h: EVERY scheduled run failed -- 3 of 3, avg 601s, max 830s -- with
     #   "This execution failed to be processed too many times and will no longer retry."
-    # That is Bull's stalled-job detector, not a workflow error. The sweep serialises ~17,800 rows
+    # That is Bull's stalled-job detector, not a workflow error. The sweep serialises ~N rows
     # through one job and blocks the worker's event loop past the 300s lock, so the lock expires,
     # QUEUE_WORKER_STALLED_INTERVAL (60s) catches it, and the job is failed.
     #
-    # Consequence, measured 2026-08-11: 6,681 documents (37.5% of the fleet) had NEVER been
+    # Consequence, measured 2026-08-11: N documents (37.5% of the fleet) had NEVER been
     # actioned -- no ACTION_LOG at all -- concentrated in a middle ID band. PG Get All is
     # ORDER BY "ID", so the sweep re-processed the head every hour (95% of base extractions were
     # rework) and never reached the tail, while the changelog entry point covered only the newest
@@ -435,7 +438,7 @@ services:
     - DB_POSTGRESDB_USER=${POSTGRES_USER:-root}
     - DB_POSTGRESDB_PASSWORD=${POSTGRES_PASSWORD:?set in .env}
     - DB_POSTGRESDB_DATABASE=${POSTGRES_DB:-n8n}
-    - DB_POSTGRESDB_POOL_SIZE=${DB_POSTGRESDB_POOL_SIZE:-25}
+    - DB_POSTGRESDB_POOL_SIZE=${DB_POSTGRESDB_POOL_SIZE:-15}
     - N8N_ENCRYPTION_KEY=${N8N_ENCRYPTION_KEY:?set in .env}
     - N8N_USER_MANAGEMENT_JWT_SECRET=${N8N_USER_MANAGEMENT_JWT_SECRET:?set in .env}
     - N8N_SECURE_COOKIE=${N8N_SECURE_COOKIE:-false}
@@ -685,7 +688,7 @@ services:
     - DB_POSTGRESDB_USER=${POSTGRES_USER:-root}
     - DB_POSTGRESDB_PASSWORD=${POSTGRES_PASSWORD:?set in .env}
     - DB_POSTGRESDB_DATABASE=${POSTGRES_DB:-n8n}
-    - DB_POSTGRESDB_POOL_SIZE=${DB_POSTGRESDB_POOL_SIZE:-25}
+    - DB_POSTGRESDB_POOL_SIZE=${DB_POSTGRESDB_POOL_SIZE:-15}
     - EXECUTIONS_MODE=queue
     - QUEUE_BULL_REDIS_HOST=redis
     # 300000 -> 1800000 (2026-08-11). THIS IS WHAT KILLED THE HOURLY FULL-TABLE SWEEP.
@@ -694,11 +697,11 @@ services:
     # incoming_documents table; the webhook/integrated runs carry 1-97 lines each and never sweep.
     # Measured over 24h: EVERY scheduled run failed -- 3 of 3, avg 601s, max 830s -- with
     #   "This execution failed to be processed too many times and will no longer retry."
-    # That is Bull's stalled-job detector, not a workflow error. The sweep serialises ~17,800 rows
+    # That is Bull's stalled-job detector, not a workflow error. The sweep serialises ~N rows
     # through one job and blocks the worker's event loop past the 300s lock, so the lock expires,
     # QUEUE_WORKER_STALLED_INTERVAL (60s) catches it, and the job is failed.
     #
-    # Consequence, measured 2026-08-11: 6,681 documents (37.5% of the fleet) had NEVER been
+    # Consequence, measured 2026-08-11: N documents (37.5% of the fleet) had NEVER been
     # actioned -- no ACTION_LOG at all -- concentrated in a middle ID band. PG Get All is
     # ORDER BY "ID", so the sweep re-processed the head every hour (95% of base extractions were
     # rework) and never reached the tail, while the changelog entry point covered only the newest
@@ -1039,7 +1042,7 @@ services:
     - DB_POSTGRESDB_USER=${POSTGRES_USER:-root}
     - DB_POSTGRESDB_PASSWORD=${POSTGRES_PASSWORD:?set in .env}
     - DB_POSTGRESDB_DATABASE=${POSTGRES_DB:-n8n}
-    - DB_POSTGRESDB_POOL_SIZE=${DB_POSTGRESDB_POOL_SIZE:-25}
+    - DB_POSTGRESDB_POOL_SIZE=${DB_POSTGRESDB_POOL_SIZE:-15}
     - EXECUTIONS_MODE=queue
     - QUEUE_BULL_REDIS_HOST=redis
     # 300000 -> 1800000 (2026-08-11). THIS IS WHAT KILLED THE HOURLY FULL-TABLE SWEEP.
@@ -1048,11 +1051,11 @@ services:
     # incoming_documents table; the webhook/integrated runs carry 1-97 lines each and never sweep.
     # Measured over 24h: EVERY scheduled run failed -- 3 of 3, avg 601s, max 830s -- with
     #   "This execution failed to be processed too many times and will no longer retry."
-    # That is Bull's stalled-job detector, not a workflow error. The sweep serialises ~17,800 rows
+    # That is Bull's stalled-job detector, not a workflow error. The sweep serialises ~N rows
     # through one job and blocks the worker's event loop past the 300s lock, so the lock expires,
     # QUEUE_WORKER_STALLED_INTERVAL (60s) catches it, and the job is failed.
     #
-    # Consequence, measured 2026-08-11: 6,681 documents (37.5% of the fleet) had NEVER been
+    # Consequence, measured 2026-08-11: N documents (37.5% of the fleet) had NEVER been
     # actioned -- no ACTION_LOG at all -- concentrated in a middle ID band. PG Get All is
     # ORDER BY "ID", so the sweep re-processed the head every hour (95% of base extractions were
     # rework) and never reached the tail, while the changelog entry point covered only the newest

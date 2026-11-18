@@ -170,8 +170,8 @@ may instead pass JSON with `minimum_extractions`, `minimum_records`, `required_r
 ```
 
 Every command emits one JSON object with `protocol_version: 1`. Verification writes a durable
-`result.json` matching `apps/browser42/task-result.schema.json`; it includes checks, extracted
-records, native-group identity, screenshot hashes, and stage timings. Failures use
+`result.json` beside the task (`task_verify` in `apps/browser42/group-manager.py`); it includes checks,
+extracted records, native-group identity, screenshot hashes, and stage timings. Failures use
 `error.code`, including `invalid_url`, `task_not_found`, `duplicate_slug`, `transient_cdp_failure`,
 `operation_timeout`, `detached_target`, and `result_not_accepted`.
 
@@ -332,17 +332,17 @@ guard would have missed that one, which is why the fix watches for the life of t
 > (`<dir>.corrupt-<epoch>`), not deleted. The guard below stays as the second line of defence, because
 > a profile can still be lost by a path nobody patched.
 
-**What stands in the way now** (all in `apps/browser42/start-browser.sh`, sections **4h** — the profile
-guard — and **4i**, its runtime watcher, plus the Dockerfile patch):
+**What stands in the way now** (DGO-1921, 2026-11-17: `apps/browser42/patch-cloakserve.py`, built into
+the image, and `start-browser.sh` §4h). The quarantine above, the boot step that promoted quarantined
+copies back, and a 20-second runtime watcher were removed: all three undid a move that no longer happens.
 
 | Layer | What it does |
 |---|---|
-| No destructive recovery | `Dockerfile.browser` guards cloakserve's **startup** rmtree for `RESERVED_SEEDS`: the profile is renamed aside, never deleted. This is the one that removes the cause. |
-| Snapshot outside the volume | `/profile` is copied to `data/browser42/profile-snapshot/` on the *host* — it survives a container recreate and an image rebuild. Refreshed 2 min after boot and every 5 min after. |
-| Wipe-proof promotion | A snapshot is only replaced by a live profile that still looks real (`Local State` + `Cookies` + ≥3 cookie rows) **and that holds MORE cookies than the snapshot already does**. A wiped profile (0–1 cookies) and a merely LOGGED-OUT one can therefore never overwrite the last good copy. |
-| Kept generation | The copy a promotion replaces is kept as `profile-snapshot.prev` rather than deleted, and the restore falls back to it when the primary snapshot is unreadable. Nothing here may be the step that loses the only good state. |
+| No destructive recovery | `patch-cloakserve.py`: for `RESERVED_SEEDS` cloakserve neither deletes nor moves the profile, at shutdown or after a failed launch (it logs an error and the next launch reuses it), and its launch lock is never dropped while held — two Chromes on one profile was the other way a launch failed. This is the one that removes the cause. |
+| Snapshot outside the volume | The profile WITHOUT caches (~110 MB, not 2 GB) is copied to `data/browser42/profile-snapshot/` on the *host* — it survives a recreate, a rebuild and the volume itself. Every 30 min and at sleep, and only when a sign-in file was written since the last copy. |
+| Wipe-proof replacement | A snapshot is replaced only by a whole copy (its own cookie database opened and counted) of a live profile that still looks real (`Local State` + `Cookies` + ≥3 cookie rows) and holds **at least 90%** of the snapshot's cookies. "Strictly more" (2026-09-27) froze the snapshot: cookies expire, and from 11-13 to 11-17 nothing newly signed in was in it. 90% still refuses the 09-27 case (25 of 33). |
+| Kept generation | The copy it replaces is kept as `profile-snapshot.prev`, and at every step of the rotation one of the two is the last good copy; the restore falls back to `.prev`. |
 | Restore at boot | Every start checks the profile first and restores the snapshot when it looks wiped. |
-| Runtime watcher (20s) | Detects a mid-life wipe, restores, then drops the Chrome child so Docker restarts the stack on a profile that is whole again. |
 | No premature kill | The CDP watchdog now waits for the **first successful probe** (15 min backstop) instead of a fixed 45s grace — the old grace was shorter than a cold start, so it killed a browser that was still coming up, and that restart is what turned a slow start into the 09-22 wipe. |
 
 **Which copy is the backup (decided 2026-11-10, DGO-327).** Two copies, two jobs, and neither is the only
@@ -416,10 +416,9 @@ snapshot is unreadable).
   at boot — all windows share one profile, so nothing is lost, and nothing is in progress. Closing is
   deliberately boot-only: a background janitor would also close a window the owner opened on purpose.
 - **The wallpaper dialog**: `fbsetbg` (fluxbox's wallpaper helper) finds no setter in this image and
-  pops a modal `xmessage` that nobody dismisses — one per fluxbox start, 44 had accumulated. Two
-  layers: `session.screen0.rootCommand: true` in `~/.fluxbox/init` stops the call at the source (the
-  style's rootCommand cannot run), and a 5-second sweeper reaps any dialog a future style change
-  brings back.
+  pops a modal `xmessage` that nobody dismisses — one per fluxbox start, 44 had accumulated. The
+  `rootCommand: true` override did not stop it in a fresh container (2026-11-17), so since DGO-1921 the
+  image's `fbsetbg` is `/bin/true` and the 5-second sweeper is gone.
 
 ## 2.0.0 — what shipped (2026-09-23)
 

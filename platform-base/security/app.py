@@ -433,7 +433,9 @@ def ingest_spool() -> None:
     except OSError:
         return
     flows, names, signins = [], [], []
-    for f in files[:200]:
+    # only a FINISHED batch: the sensor writes `<name>.json.tmp-<pid>` and renames it into place, and a tmp file
+    # deleted here under it made its rename fail and the sensor die (2026-11-12 12:13:25Z on the Mac, DGO-1838)
+    for f in [f for f in files if f.endswith(".json")][:200]:
         p = os.path.join(d, f)
         doc = read_json(p)
         try:

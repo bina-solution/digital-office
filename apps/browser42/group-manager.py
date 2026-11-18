@@ -39,6 +39,7 @@ import re
 import shutil
 import signal
 import sys
+import tempfile
 import time
 import uuid
 import base64
@@ -1074,12 +1075,39 @@ def task_connection(slug: str):
 # page are never closed. Addresses come back bare, with no query, as the manifests keep them (a sign-in's
 # query carries its codes).
 TAB_ARITY = {"list": (0, 0), "navigate": (2, 2), "click": (2, 2), "type": (2, 3), "eval": (2, 2),
-             "text": (1, 2), "snapshot": (1, 1), "shot": (1, 2), "close": (1, 1)}
+             "text": (1, 2), "snapshot": (1, 1), "shot": (1, 2), "close": (1, 1),
+             "copy": (1, 2)}
+# THE CLIPBOARD (DGO-1251). No verb reads the browser's clipboard: when the owner pastes into this browser, the
+# viewer uploads his own clipboard first (browser-clipboard.js), his passwords included. `copy` gives what a copy
+# would take — the page's selection, or an element's text — without touching the clipboard, and refuses the
+# fields that hold secrets (password, hidden, masked, a password or one-time-code autocomplete). That stops an
+# accident, not an attack: `eval` runs any script on a tab no one holds. No verb WRITES it either: a write needs
+# the tab in front (the owner's view, and the keys he is typing, moved to it) and can replace what he copied a
+# moment before (the viewer passes a remote change for 3 s after his copy chord); `type` puts text into a page.
 # what a tab someone holds (an active task, a person waited for, an owner that cannot be read) still allows:
 # reads that neither scroll nor run anything in the page (`text` walks its scroll container: `task read`)
 TAB_OWNED_READS = {"snapshot", "shot"}
+# the verbs that run a script (or Playwright's injected one) in the page
+TAB_SCRIPT_VERBS = {"click", "type", "eval", "text", "snapshot", "copy"}
 TAB_USAGE = ("tab list | navigate <id> <url> | click <id> <selector> | type <id> <text> [selector] | "
-             "eval <id> <expression> | text <id> [max-chars] | snapshot <id> | shot <id> [full] | close <id>")
+             "eval <id> <expression> | text <id> [max-chars] | snapshot <id> | shot <id> [full] | close <id> | "
+             "copy <id> [selector]")
+COPY_JS = """(sel) => {
+    const secret = e => e && /^(INPUT|TEXTAREA)$/.test(e.tagName) && (
+        /^(password|hidden)$/i.test(e.type || '')
+        || /(current-password|new-password|one-time-code)/i.test(e.getAttribute('autocomplete') || '')
+        || ((getComputedStyle(e).webkitTextSecurity || 'none') !== 'none'));
+    if (!sel) {
+        // a selection inside a secret field is that field's value: refused the same way
+        if (secret(document.activeElement)) return {password: true};
+        return {text: String(window.getSelection() || '')};
+    }
+    const e = document.querySelector(sel);
+    if (!e) return {missing: true};
+    if (secret(e)) return {password: true};
+    return {text: (typeof e.value === 'string' && /^(INPUT|TEXTAREA|SELECT)$/.test(e.tagName))
+        ? e.value : (e.innerText || e.textContent || '')};
+}"""
 
 
 def _target_info(page) -> dict:
@@ -1216,6 +1244,12 @@ def tab_command(argv: list) -> dict:
         raise BrowserTaskError("usage", f"tab text <id> [max-chars], not '{args[1]}'")
     row = _find_tab(browser, args[0])
     page, ident, group = row["page"], row["target"].get("targetId", ""), row["group"]
+    # a verb that runs a script in the page only on a web page: on chrome://newtab the Mac's `tab copy` hung until
+    # the runner's 300 s (2026-11-11) — Chrome's own pages take no page script. Navigate away, shot or close it.
+    where = str(row["target"].get("url") or page.url or "")
+    if verb in TAB_SCRIPT_VERBS and urlparse(where).scheme not in ("http", "https"):
+        raise BrowserTaskError("not_a_web_page", f"tab {ident} shows {where.split('?')[0] or 'nothing'}, not a web page: "
+                               f"{verb} runs a script in the page; navigate it first, or shot / close it")
     owner = _tab_owner(group)
     if owner and verb not in TAB_OWNED_READS:
         why = {"task": (f"is task '{group}'s, which is active: act on it with `task <verb> {group} …`"
@@ -1250,6 +1284,15 @@ def tab_command(argv: list) -> dict:
             path.parent.mkdir(parents=True, exist_ok=True)
             page.screenshot(path=str(path), full_page=len(args) > 1, timeout=30000)
             answer["screenshot"] = {"path": str(path.relative_to(DATA)), "sha256": hashlib.sha256(path.read_bytes()).hexdigest()}
+        elif verb == "copy":
+            got = page.evaluate(COPY_JS, args[1] if len(args) > 1 else "") or {}
+            if got.get("missing"):
+                raise BrowserTaskError("no_such_element", f"tab {ident} has no element {args[1]!r}")
+            if got.get("password"):
+                what = repr(args[1]) if len(args) > 1 else "the focused field"
+                raise BrowserTaskError("password_field", f"{what} holds a secret (password, hidden, masked or one-time "
+                                       "code): its value is never copied")
+            answer["copied"] = str(got.get("text") or "")
         elif verb == "close":
             page.close()
             answer["closed"] = True
@@ -1305,6 +1348,33 @@ LOGIN_FLOWS = {
         "submit": ["button[name=login]", "#loginbutton", "button[type=submit]"],
         # "still signed out" is this element being ON the page; signed in is it being gone.
         "logged_out": "input[name=pass]",
+    },
+    # The office's main Google account (DGO-1825). Google asks the user name and the password on TWO pages:
+    # `user_next` is the «הבא» between them, and the password field is waited for once it is pressed.
+    "google": {
+        # Google's own sign-in, continuing to the account page: a signed-in profile passes straight through to
+        # myaccount, a signed-out one gets the address field. myaccount.google.com itself, signed out, can show a page
+        # of its own or google.com/account/about with no field at all (the fourth and fifth readers).
+        "url": "https://accounts.google.com/ServiceLogin?continue=https%3A%2F%2Fmyaccount.google.com%2F",
+        "user_env": "BROWSER42_LOGIN_GOOGLE_USER",
+        "pass_env": "BROWSER42_LOGIN_GOOGLE_PASSWORD",
+        "user": ["input#identifierId", "input[name=identifier]", "input[type=email]"],
+        "user_next": ["#identifierNext button", "#identifierNext"],
+        "pass": ["input[name=Passwd]", "input[type=password]"],
+        "submit": ["#passwordNext button", "#passwordNext"],
+        "logged_out": "input#identifierId, input[name=Passwd]",
+        # Signed in is LANDING here, nothing less: «Choose an account» (a remembered account, signed out) has
+        # neither field of `logged_out`, and Google's addresses say `signin`/`ServiceLogin`, never `login` (the
+        # second reader). A page under `challenge` after the password is a second step this flow cannot pass.
+        "signed_in_host": "myaccount.google.com",
+        # the password is typed on Google's own sign-in page and nowhere else: a user name that sends the sign-in to
+        # another domain's page (a Workspace account's SSO) gets `login_wrong_page`, never the password
+        "pass_host": "accounts.google.com",
+        "chooser": "[data-identifier], [data-email]",
+        "challenge": "/challenge/",
+        # …except the password's own page, which Google also serves under /challenge/ (/v3/signin/challenge/pwd): the
+        # address can still say it for a moment after a sign-in that worked (the fifth reader)
+        "challenge_not": "/challenge/pwd",
     },
 }
 
@@ -1498,19 +1568,51 @@ def second_factor_outcome(page, field, logged_out: str, site: str, grace_ms: int
                                "connections, or this host's clock is off")
 
 
-def fill_first(page, selectors: list, value: str, what: str, timeout: int = 8000) -> str:
-    """Type into the first selector that resolves, and name the one that worked."""
+def _host(url: str) -> str:
+    return (urlparse(url or "").hostname or "").lower()
+
+
+def click_first(page, selectors: list, what: str, timeout: int = 8000) -> str:
+    """Press the first selector that resolves, and name the one that worked (a login's «next», its submit)."""
+    last = None
+    for selector in selectors:
+        try:
+            button = page.locator(selector).first
+            button.wait_for(state="visible", timeout=timeout)
+            button.click(timeout=timeout)
+            return selector
+        except Exception as error:                      # noqa: BLE001 — the next candidate is the point
+            last = error
+    # the error's KIND only: Playwright's message carries its call log, which can quote what a login page holds
+    raise BrowserTaskError("login_selector_missing",
+                           f"none of the {what} selectors resolved: {selectors} (last error: {type(last).__name__})")
+
+
+def fill_first(page, selectors: list, value: str, what: str, timeout: int = 8000, host: str | None = None) -> str:
+    """Type into the first selector that resolves, and name the one that worked.
+
+    `host`: the value is typed only while the page is on that host, read once the field is there — a redirect
+    between two sign-in pages (a Workspace account's own sign-in, any page off the site) gets a refusal, never
+    the value (the fourth reader of DGO-1825)."""
     last = None
     for selector in selectors:
         try:
             handle = page.locator(selector).first
             handle.wait_for(state="visible", timeout=timeout)
+        except Exception as error:                      # noqa: BLE001 — the next candidate is the point
+            last = error
+            continue
+        if host and _host(page.url) != host:
+            raise BrowserTaskError("login_wrong_page",
+                                   f"the {what} field is on {_host(page.url) or 'no page'}, not {host}: nothing typed")
+        try:
             handle.fill(value, timeout=timeout)
             return selector
         except Exception as error:                      # noqa: BLE001 — the next candidate is the point
             last = error
+    # the error's KIND only: a fill's call log quotes the value it was typing (a password, an account)
     raise BrowserTaskError("login_selector_missing",
-                           f"none of the {what} selectors resolved: {selectors} (last error: {last})")
+                           f"none of the {what} selectors resolved: {selectors} (last error: {type(last).__name__})")
 
 
 def task_start(slug: str, url: str, requirements: dict) -> dict:
@@ -2438,26 +2540,32 @@ def task_login(slug: str, site: str) -> dict:
                                                      wait_until="domcontentloaded", timeout=45000))
     # The profile may already hold the session (that is the point of persisting it) — then there is
     # nothing to type, and the honest answer is "already in", not a second sign-in.
-    if page.locator(flow["logged_out"]).count() == 0 and "login" not in page.url:
+    landed = flow.get("signed_in_host")
+    if landed:
+        try:
+            page.wait_for_load_state("load", timeout=20000)        # a redirect caught mid-way is not an answer
+        except Exception:                                          # noqa: BLE001 — read what there is
+            pass
+        already = _host(page.url) == landed
+    else:
+        already = page.locator(flow["logged_out"]).count() == 0 and "login" not in page.url
+    if already:
         transition(task, "active", "acted", stage="acting", action=f"login:{site}", url=page.url)
         return {"ok": True, "slug": slug, "site": site, "already_logged_in": True, "url": page.url}
+    if flow.get("chooser") and page.locator(flow["logged_out"]).count() == 0 \
+            and page.locator(flow["chooser"]).count() > 0:
+        # «Choose an account»: a person picks there (the office's account is one tile among others) — named, and
+        # no account is guessed or typed into a page that did not ask for it
+        raise BrowserTaskError("login_needs_person",
+                               f"'{site}' shows «Choose an account» — the browser remembers an account that is signed "
+                               "out; sign in once in the office browser, or remove the account it remembers")
     used_user = fill_first(page, flow["user"], user, "username")
-    used_pass = fill_first(page, flow["pass"], password, "password")
+    # a site that asks the password on a page of its own (Google): its «next», then the password field is waited for
+    used_next = click_first(page, flow["user_next"], "next") if flow.get("user_next") else None
+    used_pass = fill_first(page, flow["pass"], password, "password", timeout=20000 if used_next else 8000,
+                           host=flow.get("pass_host"))
     del password, user                                   # nothing below may carry them
-    clicked = None
-    last = None
-    for selector in flow["submit"]:
-        try:
-            button = page.locator(selector).first
-            button.wait_for(state="visible", timeout=8000)
-            button.click(timeout=8000)
-            clicked = selector
-            break
-        except Exception as error:                      # noqa: BLE001 — try the next candidate
-            last = error
-    if not clicked:
-        raise BrowserTaskError("login_selector_missing",
-                               f"none of the submit selectors resolved: {flow['submit']} (last error: {last})")
+    clicked = click_first(page, flow["submit"], "submit")
     # Signed in = the login form is GONE. A site with a second factor shows a one-time-code field
     # INSTEAD: the plane mints the code for this site's `totp` row and it is typed here, never seen
     # by the caller. Only a page that shows neither is a failure — reported without echoing a value.
@@ -2469,6 +2577,20 @@ def task_login(slug: str, site: str) -> dict:
             f"the login form for '{site}' is still on screen after submitting — check the credential "
             f"in connections, or the site asks for something this flow does not recognise ({error})") from error
     second_factor = None
+
+    # a flow that names its `challenge` pages (Google) cannot pass them: a person's step, said with the page it is on
+    # and nothing else — a one-time-code field on one (Google's /challenge/totp) included, which would otherwise ask
+    # the plane for a `totp` row this site does not declare and blame the declaration (the sixth reader)
+    def a_second_step():
+        return bool(flow.get("challenge")) and flow["challenge"] in page.url and not (
+            flow.get("challenge_not") and flow["challenge_not"] in page.url)
+
+    def second_step_needed():
+        return BrowserTaskError("second_step_needed",
+                                f"'{site}' asks for a second step this flow cannot pass "
+                                f"({_host(page.url)}{urlparse(page.url).path}) — approve it once in the office browser")
+    if otp and a_second_step():
+        raise second_step_needed()
     if otp:
         code = totp_code(site, slug)
         field = page.locator(otp).first
@@ -2477,6 +2599,18 @@ def task_login(slug: str, site: str) -> dict:
         field.press("Enter", timeout=8000)
         second_factor = "totp"
         second_factor_outcome(page, field, flow["logged_out"], site)
+    if landed:
+        # in = landed; a `challenge` page (a phone prompt, a security key) has no field to read as a form, so it
+        # would pass as «in» — it is a person's step, said with the page it is on and nothing else
+        for _ in range(30):
+            if _host(page.url) == landed or a_second_step():
+                break
+            time.sleep(0.5)
+        if a_second_step():
+            raise second_step_needed()
+        if _host(page.url) != landed:
+            raise BrowserTaskError("login_failed", f"'{site}' did not land on {landed} after the password "
+                                                   f"(it is on {_host(page.url)})")
     path = task_path(slug).parent / "screenshots" / f"login-{site}.png"
     path.parent.mkdir(parents=True, exist_ok=True)
     retry_safe(task, "capturing", lambda: page.screenshot(path=str(path), timeout=30000))
@@ -2487,7 +2621,7 @@ def task_login(slug: str, site: str) -> dict:
     transition(task, "active", "acted", stage="acting", action=f"login:{site}", url=page.url)
     return {"ok": True, "slug": slug, "site": site, "already_logged_in": False, "url": page.url,
             "second_factor": second_factor,
-            "selectors": {"user": used_user, "pass": used_pass, "submit": clicked, "otp": otp}}
+            "selectors": {"user": used_user, "next": used_next, "pass": used_pass, "submit": clicked, "otp": otp}}
 
 
 def task_verify(slug: str) -> dict:
@@ -2932,7 +3066,42 @@ def cmd_await(slug: str, spec: str, seconds: str = "") -> None:
                      ensure_ascii=False, sort_keys=True))
 
 
+def _pid_alive(pid: int) -> bool:
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+    return True
+
+
+def own_tmpdir() -> None:
+    """Give this run a temporary directory of its own, and remove the ones earlier runs left.
+
+    Playwright makes a `playwright-artifacts-*` directory for every CDP connection and removes it only
+    when the connection is closed gracefully, which this CLI never does: it ends with os._exit so that
+    nothing of the shared browser is torn down, and the runner SIGKILLs a run that outlives its budget.
+    Every command that connected left one behind — 469 in the task runner's /tmp on 2026-11-17, one
+    more per command (DGO-1921). TMPDIR is what the node driver's os.tmpdir() reads, so its directory
+    lands inside this run's own, and the next run removes every one whose process is gone (a SIGKILLed
+    run included, which no exit hook could clean). A run's directory is always new (mkdtemp), so a run
+    that inherits a dead run's pid never adopts the directory another run is about to remove.
+    """
+    base = Path(tempfile.gettempdir())
+    for leftover in base.glob("b42-run-*"):
+        parts = leftover.name.split("-")                    # b42-run-<pid>-<random>
+        pid = parts[2] if len(parts) >= 3 else ""
+        if pid.isdigit() and not _pid_alive(int(pid)):
+            shutil.rmtree(leftover, ignore_errors=True)
+    os.environ["TMPDIR"] = tempfile.mkdtemp(prefix=f"b42-run-{os.getpid()}-", dir=base)
+
+
 def main():
+    try:
+        own_tmpdir()
+    except OSError:
+        pass                          # a full or read-only /tmp must not cost a verb that never connects
     verb = sys.argv[1] if len(sys.argv) > 1 else ""
     # Any verb is "use": the idle sleeper (start-browser.sh §4k, reaper.py) counts idle time from
     # this marker, and a sleeping browser wakes for it.

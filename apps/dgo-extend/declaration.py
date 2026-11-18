@@ -28,7 +28,7 @@ DOMAIN_RE = re.compile(r"^(?=.{4,200}\Z)([a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)
 #: PreUp hook that wg-quick ran as root in dgo-net (DGO-626).
 KEY_RE = re.compile(r"^[A-Za-z0-9+/]{42}[AEIMQUYcgkosw048]=\Z")
 #: A HERD's name (DGO-1003): the company a set of offices belongs to — «Bina Solutions», «EXW», «The
-#: Examplef Guys». A name a person reads, so any script; one line of 1–60 characters, nothing that is
+#: Example shop». A name a person reads, so any script; one line of 1–60 characters, nothing that is
 #: not printable (it is drawn on another office's screen and written into its record): no control
 #: character of either range, no line or paragraph separator (YAML folds them on reload), and no
 #: invisible or direction-changing mark — a peer could otherwise show a heading that looks like
@@ -314,7 +314,7 @@ def selftest_paired() -> list[str]:
         problems.append("a record marked with no herd stores none")
     if validate_paired(dict(good, herd="EXW\nAllowedIPs = 0.0.0.0/0"), "macbook")[1] is None:
         problems.append("a herd name with a line of its own must be refused")
-    if clean_herd("x" * 61)[1] is None or clean_herd("The Examplef Guys") != ("The Examplef Guys", None):
+    if clean_herd("x" * 61)[1] is None or clean_herd("Example shop") != ("Example shop", None):
         problems.append("a herd name is one line of 1–60 characters")
     return problems
 

@@ -139,6 +139,9 @@ production/incoming-documents/storage/extraction-runs/**
 .refactor/candidate*.yml
 .refactor/*.err
 .generated/
+# An app's further copies (DGO-1920): each folder generated from THIS office's platform.state.yaml
+# `app_instances:` by platform/manager/instances.py — per office, never committed.
+/instances/
 platform-base/authentik/blueprints/zz-generated-apps.yaml
 # The reverse plane's traefik routes (`serve:` — the apps of ANOTHER office shown here). Compiled
 # into traefik's own bind-mounted file-provider directory because an external server URL is not

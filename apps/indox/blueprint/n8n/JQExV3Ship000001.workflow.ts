@@ -35,7 +35,7 @@ import { workflow, node, links } from '@n8n-as-code/transformer';
     /*__n8n__*/ meta: null,
     /*__n8n__*/ pinData: null,
     /*__n8n__*/ staticData: null,
-    /*__n8n__*/ shared: [{"updatedAt":"2026-07-30T23:42:27.037Z","createdAt":"2026-07-30T23:42:27.037Z","role":"workflow:owner","workflowId":"JQExV3Ship000001","projectId":"2xKn4WH08LyAOk2y","project":{"updatedAt":"2026-07-30T23:40:17.073Z","createdAt":"2026-07-30T23:33:30.049Z","id":"2xKn4WH08LyAOk2y","name":"Admin User <person2@example.com>","type":"personal","icon":null,"description":null,"creatorId":"544b7ec6-5907-4ee2-a94b-c5676e56835c"}}],
+    /*__n8n__*/ shared: [{"updatedAt":"2026-07-30T23:42:27.037Z","createdAt":"2026-07-30T23:42:27.037Z","role":"workflow:owner","workflowId":"JQExV3Ship000001","projectId":"exampleProject02","project":{"updatedAt":"2026-07-30T23:40:17.073Z","createdAt":"2026-07-30T23:33:30.049Z","id":"exampleProject02","name":"Admin User <person2@example.com>","type":"personal","icon":null,"description":null,"creatorId":"544b7ec6-5907-4ee2-a94b-c5676e56835c"}}],
     id: 'JQExV3Ship000001',
     name: 'Shipment JQ Ex V3',
     active: true,
@@ -242,8 +242,8 @@ function unifyDocDate(s) {
 // The page sometimes prints, or the OCR sometimes reads, the decimal point as a comma:
 // '16,583,00'. Nothing downstream can recover it, because every consumer strips thousands
 // separators before parsing -- so the value becomes 1658300 and the client's ERP is sent 100x
-// the invoice. Measured on doc_msm30ay0w8ea6a (ברסיס IN264026271): the scan reads 16,583.00,
-// the AI leg read 16,583.00, this leg read '16,583,00', and Priority holds 1,658,300 at LINE
+// the invoice. Measured on doc_example0000002 (פלמוני IN260000001): the scan reads 1,000.00,
+// the AI leg read 1,000.00, this leg read '16,583,00', and Priority holds 100,000 at LINE
 // 23002. Across the table the AI leg agrees with the corrected reading on 63 of 70 such rows
 // and the supplier's own ledger on 28 of 30; neither agrees with the 100x reading even once.
 //

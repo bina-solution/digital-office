@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=בינה — דפדפן הלשכה
+Name[en]=Bina — the office browser
+Comment=Open links in the office browser (browser42), and bring a sign-in back to the app
+Exec=/usr/local/bin/bina-claude-open-url %U
+Icon=browser42
+Terminal=false
+NoDisplay=true
+StartupNotify=false
+MimeType=x-scheme-handler/http;x-scheme-handler/https;

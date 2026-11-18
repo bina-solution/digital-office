@@ -1,0 +1,59 @@
+# runtime-error-exclusions.yaml — the ONLY way a runtime error on a screen stops failing the run.
+#
+# WHY THIS FILE EXISTS (rel-2ג). `route-runtime-qa.py` opens every declared screen in a real browser
+# and collects `page.on("pageerror", …)`. That collection used to be printed as a count and written to
+# the JSON and never reach the verdict — so a run carrying 39 JS errors (React #418, a hydration
+# mismatch) printed `FAILED 0` and exited 0. It does not any more: a screen whose own address threw is
+# a FAILURE of THAT screen (never of the whole run, and never of its neighbour), and it is said as
+#
+#     FAIL  <app>  <view> — runtime error on a drawn screen: <the first error, short>
+#
+# An exemption is for the error somebody has UNDERSTOOD and handed to an item. It is matched by NAME
+# (`app` + `view`, exactly as `scripts/ui-coverage/inventory.py` declares them), and it must say:
+#
+#   app    the app id                                     (e.g. sites)
+#   view   the view id of ONE declared screen             (e.g. sites/new)
+#   why    what the error IS, in a sentence a person can check
+#   root   where the fault lives and who owns it           (e.g. "rel-2ד: hydration in …:120")
+#          — a `why`/`root` that itself contains a colon is QUOTED, as YAML requires.
+#
+# An exempted screen is still printed — as `EXCL`, with its error, its `why` and its `root` — and it
+# counts in EXCLUDED, so DECLARED = MEASURED + EXCLUDED + FAILED still holds. What the file may NOT be
+# is quiet: a record missing any of the four keys, a record naming no declared screen (an orphan
+# exemption is a hole, not a pass), and a second record for the same screen are each a FAILURE of the
+# run. An exemption also never rescues a screen that was not drawn: that is a different failure.
+# One file serves every office: a record of an app the inventory says this office does not run
+# (`not_here`) is another office's, and the run says so in a NOTE instead of failing.
+#
+# THE HONEST STATE OF A HEALTHY RUN IS THIS FILE WITH NO RECORDS IN IT. Add a record only for an error
+# that is understood, named, and owned — and delete it once its root is fixed, because an exemption
+# that outlives its fault is a screen nobody measures again.
+#
+# ── WHAT IS DECLARED TODAY, AND WHY IT IS NOT HIDDEN ────────────────────────────────────────────────
+# One screen throws, and it is the only one: 39 uncaught React errors per load (38 × #418 — the
+# hydration mismatch — and 1 × #423, "an error while hydrating, outside a Suspense boundary"). The
+# stack names only react-dom, so the mismatch was found by comparing the served document with the
+# tree the client renders:
+#
+#   /app/web/index.html is a React Router SPA-mode shell — `"ssr":false,"isSpaMode":true` in
+#   window.__reactRouterContext, and its prerendered root is literally `<div></div>` — while
+#   /app/web/assets-…/entry.client-BJhItYEm.js calls `hydrateRoot`. An empty prerender hydrated
+#   against a full client tree is #418 for every node, and React then renders the app client-side
+#   (which is why nobody saw it: the screen works, and only the console knows).
+#
+# It comes from the PREREBUILT FRONTEND, not from this repo's code: the shipped tarball
+# (PLANE_HE_WEB_URL, plane-he he-v1.4.2-c45a21d) carries the same empty `<div></div>` — compared
+# 2026-11-07 byte-for-byte against /app/web/index.html with only `assets-<hash>` renamed by
+# patches/bundle-version.py. Fixing it means changing that build (prerender the root, or ship a shell
+# that does not hydrate), which is another repository's release — so it is declared here, by name,
+# with its root, and it leaves the list the day that build changes.
+- app: project-pln
+  view: main
+  why: >-
+    React #418/#423 on every load — the SPA-mode shell's root is prerendered empty while
+    entry.client hydrates a full client tree; the app then renders client-side and works.
+  root: >-
+    rel-2ד: the plane-he/Plane web build — /app/web/index.html (isSpaMode, `<div></div>`) against
+    /app/web/assets-…/entry.client-BJhItYEm.js (hydrateRoot). Frontend artifact, not this repository:
+    the fix is a prerender/shell change in the plane-he build (or an upstream Plane one).
+

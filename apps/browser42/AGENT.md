@@ -18,6 +18,7 @@ tab you open is in front of him.
 ./bbox b42 task finish <slug>                   # close it; `bbox b42 groups` lists the live ones
 ./bbox b42 tab list                             # ANY tab by its id: text|snapshot|shot|navigate|click|type|eval|close <id>
                                                 # (a task's or hand-off's tab is only read; DGO-1251)
+./bbox b42 tab copy <id> [selector]             # what a copy takes, never the clipboard; secret fields refused
 ./bbox b42 handoff <slug>                       # the one link for a person: that tab in front, awake
 ./bbox b42 open <app> <url|-> --slug <slug>     # an app needs a person here: every console brings him (DGO-1336)
 ./bbox b42 handoff <slug> --done | --failed "<sentence>"   # …and that errand ended; `--list` shows the open ones

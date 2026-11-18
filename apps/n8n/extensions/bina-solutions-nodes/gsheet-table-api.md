@@ -12,9 +12,9 @@ transform this into a TabelSheet node
 // =========================== CONFIGURATION ===================================
 const CONFIG = {
   // Google Sheets
-  spreadsheetId: '1REDACTEDdrivexxxxxxxxxxxxxxxxxxxxxxxxxx0047',
+  spreadsheetId: '1REDACTEDdrivexxxxxxxxxxxxxxxxxxxxxxxxxx0001',
   sheetName: 'מסמכים נכנסים',
-  sheetGid: 542119184,
+  sheetGid: 100000002,
   
   // Column settings
   idColumn: 'ID',

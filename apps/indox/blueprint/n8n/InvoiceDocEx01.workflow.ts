@@ -56,7 +56,7 @@ import { workflow, node, links } from '@n8n-as-code/transformer';
     /*__n8n__*/ meta: null,
     /*__n8n__*/ pinData: null,
     /*__n8n__*/ staticData: null,
-    /*__n8n__*/ shared: [{"updatedAt":"2026-08-06T12:30:31.436Z","createdAt":"2026-08-06T12:30:31.436Z","role":"workflow:owner","workflowId":"InvoiceDocEx01","projectId":"2xKn4WH08LyAOk2y","project":{"updatedAt":"2026-07-30T23:40:17.073Z","createdAt":"2026-07-30T23:33:30.049Z","id":"2xKn4WH08LyAOk2y","name":"Admin User <person2@example.com>","type":"personal","icon":null,"description":null,"creatorId":"544b7ec6-5907-4ee2-a94b-c5676e56835c"}}],
+    /*__n8n__*/ shared: [{"updatedAt":"2026-08-06T12:30:31.436Z","createdAt":"2026-08-06T12:30:31.436Z","role":"workflow:owner","workflowId":"InvoiceDocEx01","projectId":"exampleProject02","project":{"updatedAt":"2026-07-30T23:40:17.073Z","createdAt":"2026-07-30T23:33:30.049Z","id":"exampleProject02","name":"Admin User <person2@example.com>","type":"personal","icon":null,"description":null,"creatorId":"544b7ec6-5907-4ee2-a94b-c5676e56835c"}}],
     id: 'InvoiceDocEx01',
     name: 'Invoice Document Extraction (local + AI, parallel)',
     active: true,
@@ -645,7 +645,7 @@ const has = v => v !== null && v !== undefined && String(v).trim() !== '';
 // Equality only -- the value written is still the raw winner.
 const canonAmount = v => String(v).replace(/[\\s,]/g, '');
 // [B34 2026-08-09] AN EMPTY JSON ARRAY IS A NON-ANSWER, NOT A VALUE. The AI leg returns the
-// literal string \`[]\` when it finds no shipment/order ids -- 2,213 live rows carry it -- and
+// literal string \`[]\` when it finds no shipment/order ids -- N live rows carry it -- and
 // has() counted that as present. On a row where only the AI leg answered, pick() therefore
 // returned \`[]\` and it was WRITTEN INTO the value column. It also silently disabled the
 // [gap-1] fallback below, which exists precisely to fill a shipment's own id in that
@@ -655,7 +655,7 @@ const realList = v => (has(v) && String(v).trim() !== '[]') ? v : null;
 // \`canon\` is optional and touches ONLY the equality test -- pick() still returns the raw
 // winner, so this changes provenance LABELS and can never change a written value.
 // It is passed PER FIELD, never blanket, and every choice is evidence-led (measured live
-// over the 7,332-row non-fixture fleet, tmp/b34/m1-baseline.sql):
+// over the N-row non-fixture fleet, tmp/b34/m1-baseline.sql):
 //   DOC_AMOUNT   92 pairs, 48 exact, 63 ignoring thousands separators -- 15 false
 //               disagreements of the form \`10,069.00\` vs \`10069.00\`.
 //   COMPANY_ID  140 pairs, 131 exact, 131 caseless -- folding changes NOTHING here and

@@ -158,7 +158,7 @@ instance was found by checking output rather than by reading code:
 
 `Try Lock` skip returning `success` · `RELEASE` accepting a bare source name and no-oping · manual
 `SCAN` debounce silently no-oping (the sync board's "run now" lied) · `$?` inside `wsl bash -lc`
-reporting the relay's status, not the command's · discarded `_notes` rendering 2,435 documents as
+reporting the relay's status, not the command's · discarded `_notes` rendering N documents as
 `0` · `reconcile_once` reporting `converged` because it had *called* something (§ above) ·
 `peak-sampler.sh` writing an **empty file and a success message** because `docker ps` returns
 12-char ids while cgroup dirs use 64-char ones — in the very tool being used to size the machine ·

@@ -185,7 +185,7 @@ def aux_delete_sql(entry: dict) -> str:
 
     This is a DELETE against a client CONFIGURATION table, so the containment rule binds at its
     hardest: `"KEY" like 'sv3s%'` would be a pattern standing in for identity, which is the
-    shape that removed 2,432 client documents. An enumerated `in (...)` list cannot over-match,
+    shape that removed client documents. An enumerated `in (...)` list cannot over-match,
     and a suite that adds a label has to declare it in the registry to get it cleaned up.
 
     Keys are single-quote escaped the way the rest of this fleet does it; a key containing a

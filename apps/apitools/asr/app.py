@@ -137,7 +137,7 @@ def _model(name: str | None, *, strict: bool) -> str:
 
 
 # The words the audio is likely to hold, given to the model as the text before the first words (faster-whisper's
-# `initial_prompt`; OpenAI's audio API calls the field `prompt`). Without one the office's Hebrew model wrote «DGO fee»
+# `initial_prompt`; OpenAI's audio API calls the field `prompt`). Without one the office's Hebrew model wrote «Office fee»
 # as «DGOP» and «Zelle» as «Zelt» in a meeting's live captions (EXF-471, measured 2026-10-29); the caller that knows
 # the meeting's words (meet-start, from its vocabulary file) sends them. None: as before, nothing is prepended.
 # A prompt also conditions the style, so it is kept short (the window has 448 tokens) — at most PROMPT_MAX characters.

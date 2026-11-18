@@ -1,0 +1,267 @@
+/* DGO Cloud — the screen (DGO-1893). Bright, Hebrew, right to left, mobile first. Every colour is a token of the
+   office's one palette, stamped below by G27 (scripts/refactor/theme-token-lint.py --fix); this file names none. */
+/* @bina-theme-tokens:start */
+/* OLIVE GROVE — the one palette of the office (the owner, 2026-10-07 · DGO-450). Four hues, sampled
+   from his mock-up, and the ground they stand on. A screen never writes a colour: it names one of
+   these. Each hue is the colour itself (a FILL — a button, a bar, a dot), «-d» for text and thin
+   lines on the ground (4.5:1 or more), «-soft» and «-line» for a tint and its hairline, and «-ink»
+   for what is written ON the fill. The role names every screen already uses point at them:
+   (no backtick in this block: one of its copies lives inside a script's template string)
+     olive  the brand and the main action · what is well, what is done
+     sky    what is in motion, what only informs · a link
+     lime   look here — a warning, something waiting
+     plum   a person must act — a failure, a removal, the one final action
+   Contrast, measured (WCAG): ink on the ground 13.7 · muted 4.65 · light text on olive 5.51 and on
+   plum 9.54 · ink on lime 6.88 · its ink on sky 6.32 · sky-d 4.61 · lime-d 4.70 · violet 5.32 ·
+   on the desk: its ink 6.32 (dark: 13.96), and 11.2 where the sky pales (dark: 5.12). */
+:root,:root[data-theme="light"]{
+  color-scheme:light;
+  accent-color:var(--accent);   /* the browser's OWN controls - a checkbox, a radio, a range, a progress bar - on both grounds: said once, here (it was said for eight single controls, and every other one was the browser's blue) */
+  --bg:#f3f5f7; --surface:#fff; --surface-2:#f9fafb; --ink:#1f2a17; --muted:#6a7068; --line:#dcdfde;
+  /* THE OFFICE'S LOGO HAS THESE THREE COLOURS AND NO OTHER, on every ground and in every theme (the owner, 2026-11-15,
+     group msgs 1103-1104: «From now on this is the only colors you use in logo replace evrywhere and never use diffrent
+     colors» - the logo of digital-office.co.il; DGO-1908). The dark blocks below do not redefine them on purpose. */
+  --mark-tile:#1b5e4a; --mark-glyph:#fbfcfc; --mark-accent:#7ecfad;
+  --olive:#56693f; --olive-d:#475734; --olive-soft:#e7eae4; --olive-line:#bfc6b6; --olive-ink:#f3f5f7;
+  --sky:#7baae3; --sky-d:#2a6fc4; --sky-soft:#edf3fb; --sky-line:#cddff4; --sky-ink:#13263f;
+  --lime:#a9b84c; --lime-d:#69732e; --lime-soft:#f3f5e6; --lime-line:#dee4bb; --lime-ink:#1f2a17;
+  --plum:#5b3349; --plum-d:#4a303b; --plum-soft:#e8e2e6; --plum-line:#c1b1ba; --plum-ink:#f3f5f7;
+  --accent:var(--olive); --accent-d:var(--olive-d); --accent-soft:var(--olive-soft); --accent-ink:var(--olive-ink);
+  --blue:var(--sky-d); --amber:var(--lime-d); --red:var(--plum);
+  --violet:#7c5c6d;   /* plum, lifted a fifth toward white: someone has to look — nothing has failed */
+  --ok:var(--olive); --warn:var(--lime-d); --danger:var(--plum); --info:var(--sky-d);
+  --ok-soft:var(--olive-soft); --warn-soft:var(--lime-soft); --danger-soft:var(--plum-soft); --info-soft:var(--sky-soft);
+  --red-soft:var(--plum-soft); --amber-soft:var(--lime-soft); --blue-soft:var(--sky-soft); --violet-soft:var(--plum-soft);
+  --side:var(--olive); --side-ink:#f3f5f7; --side-mut:#dce1da; --side-line:#788765;
+  --desk:var(--sky); --desk-ink:var(--sky-ink);   /* desktop mode's ground is the sky (the owner, DGO-452), and what is written straight on it */
+  --scrim:rgba(31,42,23,.5);                      /* what dims a screen behind a pop-up */
+  --shadow:0 1px 3px rgba(31,42,23,.08),0 6px 24px rgba(31,42,23,.06);
+  --shadow-lg:0 20px 60px rgba(31,42,23,.28);
+  /* ONE COLOUR AND ONE ANIMAL PER OFFICE (the owner, 2026-10-09 · flt-002). When offices are linked,
+     a person reads WHICH office a thing belongs to without opening it, so each office gets a hue of
+     its own. The hue is an IDENTITY and never a health state: an office that stopped answering keeps
+     its colour, and the quiet mark is the one that says "not answering". Each is an ALIAS of the
+     palette's own hue — no fourth value is invented, and because the ground re-points the hue, the
+     office mark follows the ground by itself. Each office's animal (elephant, deer, eagle) is a
+     glyph of bina-icons.js. */
+  --office-hp:var(--muted);   /* hp · elephant — grey: the heavy laptop at home, in the palette's own grey */
+  --office-mac:var(--lime);   /* macbook · deer — yellow: the palette has one yellow and it is lime. A FILL, so what is written ON it is --lime-ink, never this */
+  --office-vps:var(--sky-d);  /* vps · eagle — deep sky blue, «the eagle in the clouds». THE OWNER'S OWN CHOICE (2026-10-09, in writing: vps = נשר + כחול-שמיים) — this line is the colour he picked, not a default kept for him */
+}
+
+/* ── A LINKED OFFICE'S MARK, BY NAME (flt-004) ───────────────────────────────────────────────
+   The link carries a NAME — mark: {color, animal} in the catalog, from the office's own identity
+   — and never a value: the office that DRAWS a linked tile owns the pixels, so it paints the name
+   with its own palette. These seven rules are that translation, one per family above; a screen sets
+   data-office-hue="lime" and paints var(--office-hue).
+   A name this file does not know paints nothing, which is why the vocabulary in
+   apps/dgo-extend/identity.py may only name families that exist here — and why --red and --ok
+   are not among them: they mean «danger» and «it is well» on every screen in the office. */
+[data-office-hue="grey"]   { --office-hue:var(--muted); }
+[data-office-hue="lime"]   { --office-hue:var(--lime); }
+[data-office-hue="sky"]    { --office-hue:var(--sky-d); }
+[data-office-hue="olive"]  { --office-hue:var(--olive-d); }
+[data-office-hue="plum"]   { --office-hue:var(--plum); }
+[data-office-hue="blue"]   { --office-hue:var(--blue); }
+[data-office-hue="violet"] { --office-hue:var(--violet); }
+/* the dark ground is the same four hues on the palette's own ink, and the SAME legend. Olive on that
+   ink is 2.5:1, so its text step there is olive LIFTED — its own hue and saturation, lighter (7.14
+   on a card, 4.82 on its own tint) — and the brand, the main action and «it is well» take that step.
+   Lime stays «look here» and the sky «in motion», as on the light ground: were lime the accent here
+   (it was, for a day), a warning, a selection and «it is well» were one colour. Each «-d» on its
+   own «-soft» there, measured: olive 4.82 · sky 4.62 · lime 4.63 · plum 4.71. */
+@media (prefers-color-scheme:dark){
+  :root{ color-scheme:dark;
+         --bg:#141b0f; --surface:#1f2a17; --surface-2:#192213; --ink:#f3f5f7; --muted:#a2a8a2; --line:#414a3b;
+         --olive-d:#a5ba8c; --olive-soft:#384629; --olive-line:#56693f;
+         --sky-d:#7baae3; --sky-soft:#2e3f38; --sky-line:#4d6a8c;
+         --lime-d:#a9b84c; --lime-soft:#3b4622; --lime-line:#69732e;
+         --plum-d:#ad99a4; --plum-soft:#402f33; --plum-line:#7c5c6d;
+         --accent:var(--olive-d); --accent-ink:var(--surface);
+         --red:#ad99a4; --violet:#bdadb6; --danger:#ad99a4; --ok:var(--olive-d); --side:var(--surface);
+         --desk:var(--sky-ink); --desk-ink:var(--ink); --scrim:rgba(0,0,0,.6);
+         --shadow:0 1px 3px rgba(0,0,0,.4),0 6px 24px rgba(0,0,0,.3);
+         --shadow-lg:0 20px 60px rgba(0,0,0,.55); }
+}
+:root[data-theme="midnight"]{
+  color-scheme:dark;
+  --bg:#141b0f; --surface:#1f2a17; --surface-2:#192213; --ink:#f3f5f7; --muted:#a2a8a2; --line:#414a3b;
+  --olive-d:#a5ba8c; --olive-soft:#384629; --olive-line:#56693f;
+  --sky-d:#7baae3; --sky-soft:#2e3f38; --sky-line:#4d6a8c;
+  --lime-d:#a9b84c; --lime-soft:#3b4622; --lime-line:#69732e;
+  --plum-d:#ad99a4; --plum-soft:#402f33; --plum-line:#7c5c6d;
+  --accent:var(--olive-d); --accent-ink:var(--surface);
+  --red:#ad99a4; --violet:#bdadb6; --danger:#ad99a4; --ok:var(--olive-d); --side:var(--surface);
+  --desk:var(--sky-ink); --desk-ink:var(--ink); --scrim:rgba(0,0,0,.6);
+  --shadow:0 1px 3px rgba(0,0,0,.4),0 6px 24px rgba(0,0,0,.3);
+  --shadow-lg:0 20px 60px rgba(0,0,0,.55);
+}
+/* THE KEYBOARD'S RING - what the browser draws around the stop the keyboard is on, in the palette, wherever
+   a part draws none of its own. It has no specificity at all (:where), so any rule of a part wins. Two
+   screens said this for themselves; on the others nearly every stop wore the browser's ring (DGO-455).
+   A field keeps the offset it has - fourteen rules draw a field's own outline and say no offset. An area
+   (a scroll box, a table) takes the ring inside, where nothing clips it; a control takes it outside,
+   where a filled button does not hide it. */
+:where(:focus-visible){outline:2px solid var(--accent)}
+:where(:focus-visible:not(a,button,summary,[role=button],input,select,textarea)){outline-offset:-2px}
+:where(a,button,summary,[role=button]):focus-visible{outline-offset:2px}
+/* HEBREW AT A HEAVY WEIGHT - on Windows, where the first family of --font is installed. "Segoe UI" has its
+   Hebrew in Light, Regular, Semibold and Bold. Asked for 800 or 900 the browser takes the family's Black
+   face, which has none, and so has every family after it - so the Hebrew of every title at 800 was drawn in
+   the system's last-resort serif, thin, beside Latin in Black: «חשבונות ומראות» at 20px is 150px wide at 700
+   and 120px at 800 (Chrome 154; the screens ask for 800 in 167 places, the question's title among them).
+   These faces give the family's HEBREW RANGE the faces that have it. A family a sheet names is no longer the
+   system's for those characters, so every weight and both styles are named, each as the system resolves it:
+   measured, only upright 800 and 900 change. Any other character is not theirs and goes on to the next
+   family the screen names - system-ui in --font, on Windows the same faces, Black included - which is why
+   G27 asks that system-ui follows wherever a screen names this family itself. Where the family is not
+   installed nothing here resolves and nothing changes. */
+@font-face{font-family:"Segoe UI";src:local("Segoe UI Light");font-weight:100 300;unicode-range:U+0590-05FF,U+FB1D-FB4F}
+@font-face{font-family:"Segoe UI";src:local("Segoe UI");font-weight:400;unicode-range:U+0590-05FF,U+FB1D-FB4F}
+@font-face{font-family:"Segoe UI";src:local("Segoe UI Semibold");font-weight:500 600;unicode-range:U+0590-05FF,U+FB1D-FB4F}
+@font-face{font-family:"Segoe UI";src:local("Segoe UI Bold");font-weight:700 900;unicode-range:U+0590-05FF,U+FB1D-FB4F}
+@font-face{font-family:"Segoe UI";src:local("Segoe UI Light Italic");font-weight:100 300;font-style:italic;unicode-range:U+0590-05FF,U+FB1D-FB4F}
+@font-face{font-family:"Segoe UI";src:local("Segoe UI Italic");font-weight:400;font-style:italic;unicode-range:U+0590-05FF,U+FB1D-FB4F}
+@font-face{font-family:"Segoe UI";src:local("Segoe UI Semibold Italic");font-weight:500 600;font-style:italic;unicode-range:U+0590-05FF,U+FB1D-FB4F}
+@font-face{font-family:"Segoe UI";src:local("Segoe UI Bold Italic");font-weight:700 900;font-style:italic;unicode-range:U+0590-05FF,U+FB1D-FB4F}
+/* @bina-theme-tokens:end */
+
+/* ── the screen's own tokens: type, radii, rhythm ─────────────────────────────────────────────────────────── */
+:root{
+  --font:"Segoe UI",system-ui,-apple-system,"Noto Sans Hebrew","Assistant",Arial,sans-serif;
+  --mono:ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+  --r-lg:18px;--r-md:12px;--r-sm:8px;--r-pill:999px;
+  --gap:16px;--max:1080px;
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+body{font-family:var(--font);background:var(--bg);color:var(--ink);font-size:16px;line-height:1.55;
+  -webkit-font-smoothing:antialiased;min-height:100vh}
+a{color:var(--sky-d)}
+h1,h2,h3{line-height:1.25;margin:0 0 .5em}
+h1{font-size:clamp(28px,6vw,44px);letter-spacing:-.01em}
+h2{font-size:22px}
+h3{font-size:17px}
+p{margin:0 0 .8em}
+.muted{color:var(--muted)}
+.small{font-size:14px}
+.mono{font-family:var(--mono);direction:ltr;unicode-bidi:embed;overflow-wrap:anywhere}
+.ltr{direction:ltr;unicode-bidi:embed}
+.wrap{max-width:var(--max);margin:0 auto;padding-inline:16px}
+[hidden]{display:none!important}
+
+/* ── the bar ─────────────────────────────────────────────────────────────────────────────────────────────── */
+.top{position:sticky;top:0;z-index:10;background:var(--surface);border-bottom:1px solid var(--line)}
+.top .wrap{display:flex;align-items:center;gap:12px;min-height:60px}
+.brand{display:flex;align-items:center;gap:10px;font-weight:700;font-size:18px;color:var(--ink);text-decoration:none}
+.brand img{width:30px;height:30px}
+.brand small{font-weight:500;color:var(--muted);font-size:13px}
+.top nav{margin-inline-start:auto;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.banner{background:var(--lime-soft);border-bottom:1px solid var(--lime-line);color:var(--ink);padding:8px 0;font-size:14px}
+.banner .wrap{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+
+/* ── buttons and fields ──────────────────────────────────────────────────────────────────────────────────── */
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:44px;padding:0 18px;
+  border-radius:var(--r-pill);border:1px solid var(--line);background:var(--surface);color:var(--ink);font:inherit;
+  font-weight:600;cursor:pointer;text-decoration:none;white-space:nowrap}
+.btn:hover{border-color:var(--olive-line);background:var(--surface-2)}
+.btn.primary{background:var(--olive);border-color:var(--olive);color:var(--olive-ink)}
+.btn.primary:hover{background:var(--olive-d)}
+.btn.danger{color:var(--plum);border-color:var(--plum-line)}
+.btn.small{min-height:34px;padding:0 12px;font-size:14px}
+.btn.big{min-height:54px;padding:0 28px;font-size:18px}
+.btn.block{width:100%}
+.btn[disabled]{opacity:.55;cursor:default}
+.gbtn{background:var(--surface);color:var(--ink)}
+.gbtn svg{width:20px;height:20px}
+label{display:block;font-weight:600;font-size:14px;margin:12px 0 6px}
+input,select,textarea{width:100%;min-height:46px;padding:10px 14px;border:1px solid var(--line);border-radius:var(--r-md);
+  background:var(--surface);color:var(--ink);font:inherit}
+input:focus,select:focus,textarea:focus{outline:2px solid var(--olive-line);border-color:var(--olive)}
+input[type=email],input[dir=ltr]{direction:ltr;text-align:left}
+.err{color:var(--plum);font-size:14px;min-height:1.4em;margin-top:8px}
+.note{background:var(--sky-soft);border:1px solid var(--sky-line);border-radius:var(--r-md);padding:12px 14px;font-size:14px}
+.warn{background:var(--lime-soft);border:1px solid var(--lime-line);border-radius:var(--r-md);padding:12px 14px;font-size:14px}
+.bad{background:var(--plum-soft);border:1px solid var(--plum-line);border-radius:var(--r-md);padding:12px 14px;font-size:14px}
+
+/* ── the offer ───────────────────────────────────────────────────────────────────────────────────────────── */
+.hero{padding:48px 0 24px}
+.hero .lead{font-size:clamp(17px,2.6vw,21px);color:var(--muted);max-width:640px}
+.hero .cta{display:flex;gap:12px;flex-wrap:wrap;margin-top:20px}
+.grid{display:grid;gap:var(--gap)}
+.g2{grid-template-columns:repeat(auto-fit,minmax(280px,1fr))}
+.g3{grid-template-columns:repeat(auto-fit,minmax(240px,1fr))}
+.steps{counter-reset:s;margin:28px 0}
+.step{background:var(--surface);border:1px solid var(--line);border-radius:var(--r-lg);padding:18px}
+.step b{display:inline-flex;width:30px;height:30px;border-radius:50%;background:var(--olive-soft);color:var(--olive-d);
+  align-items:center;justify-content:center;margin-bottom:8px}
+.price{background:var(--surface);border:2px solid var(--olive);border-radius:var(--r-lg);padding:24px;box-shadow:var(--shadow)}
+.price .amount{font-size:48px;font-weight:800;line-height:1}
+.price .amount small{font-size:16px;font-weight:500;color:var(--muted)}
+.price ul{list-style:none;padding:0;margin:16px 0}
+.price li{padding:6px 0;padding-inline-start:28px;position:relative}
+.price li::before{content:"✓";position:absolute;inset-inline-start:4px;color:var(--olive);font-weight:800}
+.faq details{background:var(--surface);border:1px solid var(--line);border-radius:var(--r-md);padding:12px 16px;margin:8px 0}
+.faq summary{cursor:pointer;font-weight:600}
+footer{padding:32px 0 48px;color:var(--muted);font-size:14px}
+footer a{color:var(--muted)}
+
+/* ── sheets, cards, rows ─────────────────────────────────────────────────────────────────────────────────── */
+main{padding:20px 0 64px}
+.sheet{background:var(--surface);border:1px solid var(--line);border-radius:var(--r-lg);padding:20px;box-shadow:var(--shadow)}
+.narrow{max-width:440px;margin:24px auto}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:var(--r-lg);padding:18px}
+.card h3{display:flex;align-items:center;gap:8px}
+.kpi{font-size:30px;font-weight:800;line-height:1.1}
+.kpi small{font-size:14px;font-weight:500;color:var(--muted)}
+.row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.row.between{justify-content:space-between}
+.facts{display:grid;grid-template-columns:auto 1fr;gap:6px 14px;font-size:15px}
+.facts dt{color:var(--muted)}
+.facts dd{margin:0;min-width:0;overflow-wrap:anywhere}
+.chip{display:inline-flex;align-items:center;gap:6px;padding:2px 10px;border-radius:var(--r-pill);font-size:13px;font-weight:600;
+  background:var(--surface-2);border:1px solid var(--line);white-space:nowrap}
+.chip.ok{background:var(--olive-soft);border-color:var(--olive-line);color:var(--olive-d)}
+.chip.go{background:var(--sky-soft);border-color:var(--sky-line);color:var(--sky-d)}
+.chip.wait{background:var(--lime-soft);border-color:var(--lime-line);color:var(--lime-d)}
+.chip.bad{background:var(--plum-soft);border-color:var(--plum-line);color:var(--plum)}
+.dot{width:8px;height:8px;border-radius:50%;background:currentColor;display:inline-block}
+table{width:100%;border-collapse:collapse;font-size:14px}
+th,td{text-align:start;padding:10px 8px;border-bottom:1px solid var(--line);vertical-align:top}
+th{color:var(--muted);font-weight:600;font-size:13px}
+tr.click{cursor:pointer}
+tr.click:hover td{background:var(--surface-2)}
+.scroll{overflow-x:auto;-webkit-overflow-scrolling:touch}
+.pay{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:10px 0;border-top:1px solid var(--line)}
+.secret{background:var(--surface-2);border:1px dashed var(--olive-line);border-radius:var(--r-md);padding:12px;
+  font-family:var(--mono);font-size:18px;direction:ltr;text-align:center;letter-spacing:.04em;word-break:break-all}
+.progress{height:10px;border-radius:var(--r-pill);background:var(--olive-soft);overflow:hidden}
+.progress span{display:block;height:100%;background:var(--olive);transition:width .6s}
+.spin{width:28px;height:28px;border:3px solid var(--olive-soft);border-top-color:var(--olive);border-radius:50%;
+  animation:spin 1s linear infinite;display:inline-block;vertical-align:middle}
+@keyframes spin{to{transform:rotate(360deg)}}
+@media (prefers-reduced-motion:reduce){.spin{animation:none}.progress span{transition:none}}
+
+/* ── the admin ───────────────────────────────────────────────────────────────────────────────────────────── */
+.tabs{display:flex;gap:6px;overflow-x:auto;padding-bottom:6px;margin-bottom:14px;scrollbar-width:none}
+.tabs button{flex:0 0 auto;min-height:40px;padding:0 14px;border-radius:var(--r-pill);border:1px solid var(--line);
+  background:var(--surface);color:var(--ink);font:inherit;font-weight:600;cursor:pointer}
+.tabs button.on{background:var(--olive);border-color:var(--olive);color:var(--olive-ink)}
+.drawer{position:fixed;inset:0;background:var(--scrim);z-index:30;display:flex;justify-content:flex-start}
+.drawer>div{background:var(--bg);width:min(720px,100%);height:100%;overflow:auto;padding:18px;box-shadow:var(--shadow-lg)}
+.toast{position:fixed;bottom:18px;inset-inline:16px;margin:auto;max-width:520px;background:var(--ink);color:var(--bg);
+  padding:12px 16px;border-radius:var(--r-md);z-index:40;box-shadow:var(--shadow-lg);text-align:center}
+body.sim main{max-width:420px;margin:40px auto;text-align:center}
+body.sim .big{font-size:40px;font-weight:800}
+body.sim form{margin:10px 0}
+@media (max-width:560px){
+  .hide-sm{display:none}
+  .sheet,.card{padding:16px}
+  .top .wrap{min-height:56px;gap:8px}
+  .brand{font-size:16px;white-space:nowrap;gap:6px}
+  .brand img{width:26px;height:26px}
+  .top nav{flex-wrap:nowrap;gap:4px}
+  .top nav .btn.small{padding:0 9px;font-size:13px}
+  .facts{grid-template-columns:1fr}
+  .facts dt{margin-top:6px}
+}

@@ -532,6 +532,38 @@ def _host_facts() -> dict[str, Any] | None:
             "short": free < max(1 << 30, total * 0.08)}
 
 
+#: the office's self-update state (scripts/follow.sh writes data/follow/state), read through the host root this app
+#: already mounts read-only — never a bind of its own: docker would create a missing data/follow as root, and a follow
+#: running as the office's user could then write no state at all (second reader)
+FOLLOW_DIR = Path(os.getenv("FOLLOW_DIR") or (DEPLOYMENT_PATH / "data" / "follow"))
+#: what of it an overview says: when, what came of it, why, the last take's merge once proven healthy, the target it
+#: failed on, a take under way, and what that last take was of (its follow target, or the office's own branch)
+FOLLOW_KEYS = {"LAST_AT": "at", "LAST_RESULT": "result", "LAST_DETAIL": "detail", "VERIFIED": "verified",
+               "FAILED_TARGET": "failed_target", "FAILED_AT": "failed_at", "TAKING": "taking",
+               "TAKING_WHAT": "last_take_of",
+               # when it was last up to date (a take or a cycle that found it current): a follow that skips on load
+               # every cycle has a fresh LAST_AT and no other sign — the Dell skipped all night (DGO-1838)
+               "CURRENT_EPOCH": "current_epoch"}
+
+
+def _follow_state() -> dict[str, Any] | None:
+    """This office's follow — its last cycle (when, took / current / skipped / blocked / failed, the reason), the last
+    take's merge once proven healthy, the target it failed on — or None where nothing follows here. Served in the overview, so a LINKED
+    office reads why a machine did or did not take a green version: until now that was in a file only a shell on the
+    machine could read (2026-11-11/12: the HP's and the Dell's takes could be explained only by a terminal on them —
+    issues/an-offices-follow-result-can-be-read-only-by-a-shell-on-it-…, DGO-1848). Read fresh: a few lines."""
+    try:
+        text = (FOLLOW_DIR / "state").read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return None
+    out: dict[str, Any] = {}
+    for line in text.splitlines():
+        key, sep, value = line.partition("=")
+        if sep and key in FOLLOW_KEYS:
+            out[FOLLOW_KEYS[key]] = value.strip()[:400] or None
+    return out or None
+
+
 def _snapshot(cached: tuple[float, dict[str, Any]]) -> dict[str, Any]:
     """Return the cached overview with a freshness marker + the rolling history
     (no deep copy — the background loop replaces the tuple wholesale, never
@@ -542,6 +574,7 @@ def _snapshot(cached: tuple[float, dict[str, Any]]) -> dict[str, Any]:
     # system, kernel, architecture and uptime — and the details card printed "undefined" three
     # times and "windows" for a Linux VM for half a day (2026-10-06).
     snap["vm_host"] = _host_facts()
+    snap["follow"] = _follow_state()
     snap["history"] = list(_history)
     if _history:
         last = _history[-1]

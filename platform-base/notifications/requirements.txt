@@ -4,3 +4,5 @@ requests>=2.31
 sentry-sdk>=2.0
 # Web Push (push.py) — the same sender the services app runs on this office
 pywebpush==2.5.0
+# the office's event stream (flow.v1, flow.py): a notice that is news goes to dgo:flow:notifications
+redis==5.2.1

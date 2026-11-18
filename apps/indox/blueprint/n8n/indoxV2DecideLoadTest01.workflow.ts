@@ -43,7 +43,7 @@ import { workflow, node, links } from '@n8n-as-code/transformer';
     /*__n8n__*/ meta: null,
     /*__n8n__*/ pinData: null,
     /*__n8n__*/ staticData: null,
-    /*__n8n__*/ shared: [{"updatedAt":"2026-08-17T19:37:28.465Z","createdAt":"2026-08-17T19:37:28.465Z","role":"workflow:owner","workflowId":"indoxV2DecideLoadTest01","projectId":"2xKn4WH08LyAOk2y","project":{"updatedAt":"2026-07-30T23:40:17.073Z","createdAt":"2026-07-30T23:33:30.049Z","id":"2xKn4WH08LyAOk2y","name":"Admin User <person2@example.com>","type":"personal","icon":null,"description":null,"creatorId":"544b7ec6-5907-4ee2-a94b-c5676e56835c"}}],
+    /*__n8n__*/ shared: [{"updatedAt":"2026-08-17T19:37:28.465Z","createdAt":"2026-08-17T19:37:28.465Z","role":"workflow:owner","workflowId":"indoxV2DecideLoadTest01","projectId":"exampleProject02","project":{"updatedAt":"2026-07-30T23:40:17.073Z","createdAt":"2026-07-30T23:33:30.049Z","id":"exampleProject02","name":"Admin User <person2@example.com>","type":"personal","icon":null,"description":null,"creatorId":"544b7ec6-5907-4ee2-a94b-c5676e56835c"}}],
     id: 'indoxV2DecideLoadTest01',
     name: 'indox-v2 Decide Load Test',
     active: true,
@@ -85,7 +85,7 @@ export class IndoxV2DecideLoadTestWorkflow {
     @node({
         id: 'dlt-load-01',
         name: 'Load Full Table',
-        /*__n8n__*/ notes: "MEASURED 2026-08-18: 38,955 rows, 74MB on disk, avg 1,983 B/row (ACTION_LOG alone is 576 B/row). As JS objects that inflates roughly 35x, and the CALLER needs two copies — the set it sends plus the set decide returns under the full-row contract. That is why 39k in ONE execution killed the caller four times while decide itself succeeded every time (47/67/88s). LIMIT/OFFSET come from the POST body so each execution carries one 10k batch.",
+        /*__n8n__*/ notes: "MEASURED 2026-08-18: N rows, 74MB on disk, avg 1,983 B/row (ACTION_LOG alone is 576 B/row). As JS objects that inflates roughly 35x, and the CALLER needs two copies — the set it sends plus the set decide returns under the full-row contract. That is why 39k in ONE execution killed the caller four times while decide itself succeeded every time (47/67/88s). LIMIT/OFFSET come from the POST body so each execution carries one 10k batch.",
         type: 'n8n-nodes-base.postgres',
         version: 2.6,
         position: [240, 0],
@@ -100,7 +100,7 @@ export class IndoxV2DecideLoadTestWorkflow {
     @node({
         id: 'dlt-call-decide-01',
         name: 'Call Decide (one batch)',
-        /*__n8n__*/ notes: "The real production decide (indoxV2Decide01). PROVEN at full scale 2026-08-18: 38,955 rows decided in ONE call three times — Mega Decide node 73.6s / 88s / 67s, 38,955 items in and out. Decide is not the capacity limit; the caller's round trip is.",
+        /*__n8n__*/ notes: "The real production decide (indoxV2Decide01). PROVEN at full scale 2026-08-18: N rows decided in ONE call three times — Mega Decide node 73.6s / 88s / 67s, N items in and out. Decide is not the capacity limit; the caller's round trip is.",
         type: 'n8n-nodes-base.executeWorkflow',
         version: 1.3,
         position: [480, 0],

@@ -164,7 +164,7 @@ class PushTest(unittest.TestCase):
         priv = serialization.load_pem_private_key(pem, None)
         d = priv.private_numbers().private_value.to_bytes(32, "big")
         secret_forms = [b64u(d), base64.b64encode(d).decode(), d.hex()] + [ln for ln in pem.decode().splitlines() if "-----" not in ln]
-        r = self.c.get("api/push/key", headers=as_("william"))
+        r = self.c.get("api/push/key", headers=as_("person05"))
         j = r.get_json()
         self.assertEqual(j["key"], k1)
         self.assertTrue(j["enabled"] and j["ready"])
@@ -179,22 +179,22 @@ class PushTest(unittest.TestCase):
         ph = Phone("/a")
         self.assertEqual(self.c.post("api/push/subscribe", json={"subscription": ph.sub()}).status_code, 401)
         bad = dict(ph.sub(), endpoint="http://10.0.0.5:8080/x")
-        self.assertEqual(self.c.post("api/push/subscribe", json={"subscription": bad}, headers=as_("william")).status_code, 400)
+        self.assertEqual(self.c.post("api/push/subscribe", json={"subscription": bad}, headers=as_("person05")).status_code, 400)
         os.environ["PUSH_ALLOW_HTTP"] = "0"
         try:
-            self.assertEqual(self.c.post("api/push/subscribe", json={"subscription": ph.sub()}, headers=as_("william")).status_code, 400)
+            self.assertEqual(self.c.post("api/push/subscribe", json={"subscription": ph.sub()}, headers=as_("person05")).status_code, 400)
         finally:
             os.environ["PUSH_ALLOW_HTTP"] = "1"
         short = dict(ph.sub(), keys={"p256dh": "AAAA", "auth": "AAAA"})
-        self.assertEqual(self.c.post("api/push/subscribe", json={"subscription": short}, headers=as_("william")).status_code, 400)
-        r = self.c.post("api/push/subscribe", data=json.dumps({"subscription": ph.sub()}), headers=as_("william"),
+        self.assertEqual(self.c.post("api/push/subscribe", json={"subscription": short}, headers=as_("person05")).status_code, 400)
+        r = self.c.post("api/push/subscribe", data=json.dumps({"subscription": ph.sub()}), headers=as_("person05"),
                         content_type="text/plain")
         self.assertEqual(r.status_code, 400, "a form-like post must not subscribe")
 
     def test_devices_are_each_persons_own(self):
-        a = self.subscribe("william", "/w1")
+        a = self.subscribe("person05", "/w1")
         self.subscribe("owner", "/s1")
-        j = self.c.get("api/push/devices?endpoint=" + a.endpoint, headers=as_("william")).get_json()
+        j = self.c.get("api/push/devices?endpoint=" + a.endpoint, headers=as_("person05")).get_json()
         self.assertEqual(len(j["devices"]), 1)
         self.assertTrue(j["devices"][0]["this"])
         self.assertIn("Samsung Internet", j["devices"][0]["label"])
@@ -204,7 +204,7 @@ class PushTest(unittest.TestCase):
 
     # 3 ─ the fan-out, decrypted
     def test_error_notice_rings_every_phone_decrypted(self):
-        w = self.subscribe("william", "/w1")
+        w = self.subscribe("person05", "/w1")
         s = self.subscribe("owner", "/s1")
         self.notice(link="/#/m/meet")
         got = self.got()
@@ -241,7 +241,7 @@ class PushTest(unittest.TestCase):
                        (h64 + "." + c64).encode(), ec.ECDSA(hashes.SHA256()))
 
     def test_only_the_levels_set_ring(self):
-        self.subscribe("william", "/w1")
+        self.subscribe("person05", "/w1")
         self.notice(source_id="a", level="info")
         self.notice(source_id="b", level="warning")
         self.assertEqual(self.got(), [])
@@ -250,7 +250,7 @@ class PushTest(unittest.TestCase):
         self.assertEqual(len(self.got()), 1)
 
     def test_back_to_normal_replaces_quietly_and_a_reopen_rings(self):
-        w = self.subscribe("william", "/w1")
+        w = self.subscribe("person05", "/w1")
         self.notice()
         self.notice(level="info", title="Back to normal: the CPU")
         got = self.got()
@@ -270,7 +270,7 @@ class PushTest(unittest.TestCase):
         os.environ["PUSH_ENABLED"] = "0"
         self.notice(meta={"lastSeen": "2026-10-29T06:00:00+00:00"})    # existed before push was on
         os.environ["PUSH_ENABLED"] = "1"
-        self.subscribe("william", "/w1")
+        self.subscribe("person05", "/w1")
         self.notice(meta={"lastSeen": "2026-10-29T06:10:00+00:00"})    # recurs: recorded, not rung
         self.notice(meta={"lastSeen": "2026-10-29T06:20:00+00:00"})    # recurs inside PUSH_REPEAT_MIN
         self.assertEqual(self.got(), [])
@@ -281,22 +281,22 @@ class PushTest(unittest.TestCase):
         self.assertEqual(push.decide(False, "info", "error", False, None, now), "reopened")
 
     def test_a_phone_that_left_is_removed(self):
-        self.subscribe("william", "/gone1")
-        self.subscribe("william", "/missing1")
-        keep = self.subscribe("william", "/w1")
+        self.subscribe("person05", "/gone1")
+        self.subscribe("person05", "/missing1")
+        keep = self.subscribe("person05", "/w1")
         self.notice()
         with push._db() as c:
             left = [r["endpoint"] for r in c.execute("SELECT endpoint FROM push_devices")]
         self.assertEqual(left, [keep.endpoint])
 
     def test_meta_to_addresses_one_person(self):
-        self.subscribe("william", "/w1")
+        self.subscribe("person05", "/w1")
         self.subscribe("owner", "/s1")
         self.notice(meta={"to": "owner"})
         self.assertEqual([g["path"] for g in self.got()], ["/s1"])
 
     def test_the_post_answers_at_once_whatever_the_push_service_does(self):
-        self.subscribe("william", "/slow1")
+        self.subscribe("person05", "/slow1")
         t = time.time()
         r = self.c.post("api/notifications", json={"source": "office-watch", "source_id": "disk", "title": "Disk", "level": "error"})
         took = time.time() - t
@@ -308,7 +308,7 @@ class PushTest(unittest.TestCase):
     def test_a_post_while_the_next_phone_is_slow_does_not_wait_on_the_database(self):
         # R4 08:45Z: deliver() used to hold ONE write transaction across every device, so after the first phone's
         # row was updated, a slow second push service kept the database locked and a notice POSTed meanwhile waited
-        self.subscribe("william", "/a1")        # answers at once -> its row is written
+        self.subscribe("person05", "/a1")        # answers at once -> its row is written
         self.subscribe("owner", "/slow2")      # the push service takes 3 s
         self.c.post("api/notifications", json={"source": "office-watch", "source_id": "cpu", "title": "CPU", "level": "error"})
         time.sleep(1.0)                          # the worker is now inside the slow push of the second phone
@@ -321,9 +321,9 @@ class PushTest(unittest.TestCase):
         self.assertEqual(sorted(g["path"] for g in self.got()), ["/a1", "/slow2"])
 
     def test_send_a_test_to_this_phone(self):
-        w = self.subscribe("william", "/w1")
-        self.subscribe("william", "/w2")
-        j = self.c.post("api/push/test", json={"endpoint": w.endpoint}, headers=as_("william")).get_json()
+        w = self.subscribe("person05", "/w1")
+        self.subscribe("person05", "/w2")
+        j = self.c.post("api/push/test", json={"endpoint": w.endpoint}, headers=as_("person05")).get_json()
         self.assertEqual(j["sent"], 1)
         got = self.got()
         self.assertEqual([g["path"] for g in got], ["/w1"])
@@ -332,7 +332,7 @@ class PushTest(unittest.TestCase):
 
     def test_a_storm_becomes_one_summary(self):
         os.environ["PUSH_MAX_PER_HOUR"] = "2"
-        w = self.subscribe("william", "/w1")
+        w = self.subscribe("person05", "/w1")
         for i in range(5):
             self.notice(source_id="svc-%d" % i, title="down %d" % i)
         got = self.got()
@@ -341,7 +341,7 @@ class PushTest(unittest.TestCase):
 
     def test_push_off_sends_nothing_and_says_so(self):
         os.environ["PUSH_ENABLED"] = "0"
-        self.subscribe("william", "/w1")
+        self.subscribe("person05", "/w1")
         self.notice()
         self.assertEqual(self.got(), [])
         self.assertFalse(self.c.get("api/push/key").get_json()["enabled"])

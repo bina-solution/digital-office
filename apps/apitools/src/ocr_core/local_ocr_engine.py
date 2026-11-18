@@ -154,18 +154,18 @@ OCR_DESKEW_MIN_DEG = float(os.getenv('APITOOLS_OCR_DESKEW_MIN_DEG', '4.0'))
 # a decimal-point or comma is NOT (too small). Toggle with APITOOLS_OCR_REMOVE_MARKS=0.
 OCR_REMOVE_MARKS = os.getenv('APITOOLS_OCR_REMOVE_MARKS', '1') == '1'
 # Erase long table BORDER LINES before OCR. On photographed documents Tesseract's layout
-# analysis can discard an entire bordered cell — a crisp bold "סה\"כ מחיר 2,337.00" inside
+# analysis can discard an entire bordered cell — a crisp bold "סה\"כ מחיר 1,000.00" inside
 # a heavy table frame OCRs to NOTHING with the frame in place, and reads perfectly with it
 # stripped. Kernels are long (>=1/12 of the dimension) so glyph strokes and barcode bars
 # are never touched. Toggle with APITOOLS_OCR_REMOVE_LINES=0.
 OCR_REMOVE_LINES = os.getenv('APITOOLS_OCR_REMOVE_LINES', '1') == '1'
 # Shadow-cell zoom: a photographed table cell often collapses to a lone stray glyph
-# ("PO26002620" read as "0") while its neighbors read fine. A tiny token alone in a
+# ("PO26000004" read as "0") while its neighbors read fine. A tiny token alone in a
 # wide cell-gap marks such a cell; cropping it and re-OCRing at 3x recovers the id.
 OCR_ZOOM_SHADOW = os.getenv('APITOOLS_OCR_ZOOM_SHADOW', '1') == '1'
 # PSM-4 (single-column) recovery for PHOTOS: our primary read uses PSM 11 (sparse
 # text), which reads scattered Hebrew+numbers best but DROPS structured header content
-# on curled/tilted phone photos — a legible "תאריך 15/05/2025" / "חשבונית מס 697512"
+# on curled/tilted phone photos — a legible "תאריך 15/05/2025" / "חשבונית מס 600001"
 # vanishes. PSM 4 reads a document as a single column and catches them. We run it only
 # on smallish images (photos) and ADD tokens the primary missed. Toggle with =0.
 OCR_PSM4_RECOVER = os.getenv('APITOOLS_OCR_PSM4_RECOVER', '1') == '1'
@@ -175,7 +175,7 @@ def _remove_table_lines(gray: 'Image.Image') -> 'Image.Image':
     """Strip long horizontal/vertical rule lines and repair glyph strokes they cut.
     Used ONLY by the bordered-cell RECOVERY pass in ocr_from_image (never on the
     primary pass): Tesseract's layout analysis discards bordered-cell content on
-    photographed documents — a crisp "סה\"כ מחיר 2,337.00" OCRs to nothing with the
+    photographed documents — a crisp "סה\"כ מחיר 1,000.00" OCRs to nothing with the
     frame in place and reads perfectly with it stripped. Returns the input unchanged
     when no lines exist or on any error."""
     try:
@@ -421,7 +421,7 @@ def _recover_large_numbers(gray_image, config: str) -> list:
             # box-plausibility guard: the (45px) horizontal dilation can merge an entire
             # table ROW into one full-width blob (a hero amount never is), and that blob's
             # box then owns every recovered token — its drop-region would wipe the whole
-            # row (dyavr-5: the value row's ids clobbered by a 2300px-wide "17099"). A real
+            # row (supplier06-5: the value row's ids clobbered by a 2300px-wide "17099"). A real
             # number's box is proportional to its digit count; skip blobs far wider.
             def _plausible(tok_):
                 return w <= max(60, len(tok_) * h * 1.2)
@@ -527,10 +527,10 @@ def _photo_recover_fulltext(image: 'Image.Image'):
 
 
 # Photo zoom-verify: on blurry phone shots the full-page pass misreads tiny digit runs
-# ("697512" -> "669764") or shatters one value into two OVERLAPPING partial tokens
+# ("600001" -> "669764") or shatters one value into two OVERLAPPING partial tokens
 # ("15/05/2025" -> "15/05/20" + "5/05/20,"). The same Tesseract reads both perfectly when
 # the region ALONE is re-OCR'd zoomed (crop + 3x upscale + contrast + PSM 6) — proven on
-# yhzkal-ahrvn-1.jpg where Google Vision reads them and the full-page pass doesn't.
+# person02-1.jpg where Google Vision reads them and the full-page pass doesn't.
 # Toggle with OCR_ZOOM_VERIFY=0.
 OCR_ZOOM_VERIFY = os.environ.get('OCR_ZOOM_VERIFY', '1') != '0'
 
@@ -547,8 +547,8 @@ def _zoom_votes(image: 'Image.Image', x0: int, y0: int, x1: int, y1: int, lang: 
     """Re-OCR one suspect region across a small variant grid (3 pads x 4 preprocess/PSM
     recipes) and return {token: [votes, sum_conf]} for digit-rich tokens. A single zoom
     recipe is crop-sensitive on marginal blur (reads flip between pads); the TRUE value
-    is what repeats across variants while misreads scatter — measured on yhzkal:
-    '697512' 2-6 votes vs one-off '697519'/'697542'/'697545'. The 12 Tesseract calls run
+    is what repeats across variants while misreads scatter — measured on person02:
+    '600001' 2-6 votes vs one-off '697519'/'697542'/'697545'. The 12 Tesseract calls run
     in a thread pool (each releases the GIL in its subprocess) — ~2.6x on 4 cores."""
     from PIL import ImageEnhance
     tasks = []
@@ -560,7 +560,7 @@ def _zoom_votes(image: 'Image.Image', x0: int, y0: int, x1: int, y1: int, lang: 
         up3 = c.resize((c.width * 3, c.height * 3), Image.LANCZOS)
         ctr = ImageEnhance.Contrast(up3.convert('L')).enhance(2.0)
         # 3 pads x 4 recipes = 12: the full grid is load-bearing for CONSENSUS accuracy —
-        # trimming it flips the winner (measured: 6-recipe gave 697519 not 697512). The
+        # trimming it flips the winner (measured: 6-recipe gave 697519 not 600001). The
         # calls run in a thread pool below, so the cost is wall-time ~/4 not ~/12.
         tasks += [(c, 6), (up3, 11), (up3, 6), (ctr, 6)]
     # Parallelism is engine-dependent:
@@ -656,7 +656,7 @@ def ocr_from_image(image: Image.Image, lang: str = DEFAULT_LANG) -> dict:
 
     # PSM-3 recovery pass (generic): the primary read uses PSM 11 (sparse text) — best for
     # scattered Hebrew+numbers, but its layout analysis DISCARDS whole framed table cells
-    # (a crisp "PO26002198" reads as nothing on the full page). PSM 3 (full automatic page
+    # (a crisp "PO26000003" reads as nothing on the full page). PSM 3 (full automatic page
     # segmentation) reads those cells — proven across single-page bordered tables AND
     # multi-page scanned stacks where no rule line even survives. So re-OCR at PSM 3 on a
     # line-stripped copy (borders otherwise re-confuse PSM 3; _remove_table_lines is a
@@ -706,18 +706,18 @@ def ocr_from_image(image: Image.Image, lang: str = DEFAULT_LANG) -> dict:
                     frag_len = sum(len(text_annotations[j]["description"]) for j in overlapped)
                     # a cell the primary already filled with SUBSTANTIAL content is left
                     # alone; only EMPTY cells and cells under-read to a tiny fragment (a lone
-                    # "0" where the cell says "2,337.00", a junk "rN" over "PO26000613") are
+                    # "0" where the cell says "1,000.00", a junk "rN" over "PO26000001") are
                     # candidates for recovery.
                     if covering and frag_len > 3:
                         continue
                     # tight-crop RE-READ from the NON-stripped image: line removal nicks
-                    # border-adjacent glyphs (PSM 3 read "PO26002198" as "0026002198") and a
+                    # border-adjacent glyphs (PSM 3 read "PO26000003" as "0026002198") and a
                     # bordered cell prefixes a "|" from the frame. Take the run carrying the
                     # most digits so border pipes and bled neighbour glyphs drop
-                    # ("| PO26000613" -> "PO26000613"); a Hebrew cell (no Latin/digit run)
+                    # ("| PO26000001" -> "PO26000001"); a Hebrew cell (no Latin/digit run)
                     # keeps its full read. PSM 3 gives the WHERE, the crop the accurate WHAT.
                     # clean OCR junk off the raw recovered id first: line removal leaves a
-                    # border "|" or a stray Hebrew letter / dot on a Latin id ("020000005ם.").
+                    # border "|" or a stray Hebrew letter / dot on a Latin id ("020000004ם.").
                     # Take the run carrying the most digits; Hebrew text (no Latin/digit run)
                     # is kept whole, and a short token isn't over-trimmed.
                     def _clean_run(txt):
@@ -728,7 +728,7 @@ def ocr_from_image(image: Image.Image, lang: str = DEFAULT_LANG) -> dict:
                         return b if sum(c.isalnum() for c in b) >= 4 else txt
                     wd_final = _clean_run(wd)
                     # tight re-read from the NON-stripped image fixes prefix glyphs the line
-                    # strip nicked ("0026002198"->"PO26002198"). Use it ONLY when it is at
+                    # strip nicked ("0026002198"->"PO26000003"). Use it ONLY when it is at
                     # least as rich (alnum count) as the cleaned PSM-3 read, so it never
                     # DEGRADES an already-clean high-conf token (SH26M002307 read at conf 88
                     # must not collapse to a stray "7" from a misaligned crop).
@@ -751,8 +751,8 @@ def ocr_from_image(image: Image.Image, lang: str = DEFAULT_LANG) -> dict:
                     # replacing a primary token (a tiny under-read fragment): only when the
                     # recovered value spatially CONTAINS it and clearly dwarfs it. The gate is
                     # the RECROP's quality, not the line-stripped PSM-3 confidence — line
-                    # removal tanks conf on exactly the cells that need recovery (dyavr-4's
-                    # "PO26000613" read at conf 19). An equal-length re-read never swaps, so a
+                    # removal tanks conf on exactly the cells that need recovery (supplier06-4's
+                    # "PO26000001" read at conf 19). An equal-length re-read never swaps, so a
                     # legit short cell (a real "0" quantity) stays intact.
                     if covering:
                         if not (set(covering) <= set(inside)
@@ -828,7 +828,7 @@ def ocr_from_image(image: Image.Image, lang: str = DEFAULT_LANG) -> dict:
 
     # Shadow-cell zoom pass: a 1-2 char token alone in a WIDE same-row gap between
     # normal-length neighbors marks a table cell the layout analysis under-read
-    # ("PO26002620" collapsed to "0"). Crop the cell band, upscale 3x, single-line
+    # ("PO26000004" collapsed to "0"). Crop the cell band, upscale 3x, single-line
     # re-OCR; a confident 4+-char alnum read replaces the stray glyph. Narrow cells
     # (a legit lone "0" quantity) never trigger — the gap guard requires the cell
     # to be several times wider than the stray token.
@@ -891,7 +891,7 @@ def ocr_from_image(image: Image.Image, lang: str = DEFAULT_LANG) -> dict:
                 cand = ''.join(dz['text'][i].strip() for i in range(len(dz['text']))
                                if dz['text'][i].strip())
                 # accept only an id-shaped run and take exactly it — the crop edges
-                # bleed stray glyphs from the neighbor cells ("1PO26002620S"), and
+                # bleed stray glyphs from the neighbor cells ("1PO26000004S"), and
                 # psm-7 whitelist reads report conf 0 even when correct, so the
                 # gate is structural: 0-2 letters + 5-12 digits.
                 m = max(re.finditer(r'[A-Z]{0,2}[0-9]{5,12}', cand), default=None,
@@ -1074,7 +1074,7 @@ def ocr_from_image(image: Image.Image, lang: str = DEFAULT_LANG) -> dict:
             logger.info(f"Local OCR refined {fixed} money token(s)")
 
     # Split-id merge: a low-res cell can break ONE id across adjacent same-row tokens
-    # ("PO26002620" -> "PO26002" + "2620"). The concatenation isn't clean (fragment
+    # ("PO26000004" -> "PO26002" + "2620"). The concatenation isn't clean (fragment
     # boundaries overlap), so re-OCR the UNION region: a letter-prefixed id-start
     # immediately followed by a digit run, aligned on the same line, is re-read and — if it
     # yields a clean LONGER id with the same prefix — replaces the two fragments. Adjacent
@@ -1185,7 +1185,7 @@ def ocr_from_image(image: Image.Image, lang: str = DEFAULT_LANG) -> dict:
             # shattered/truncated ("15/05/20" + "5/05/20,"). Zoom-vote the union crop;
             # accept ONLY a candidate that EXTENDS the longer fragment (startswith) —
             # blind majority picks a confident misread ('18/05/2025' outvotes the true
-            # '15/05/2025' on yhzkal), but the fragment prefix was read in-context and
+            # '15/05/2025' on person02), but the fragment prefix was read in-context and
             # constrains it: the unique extension IS the true value.
             words = [(k, a) for k, a in enumerate(text_annotations) if k > 0]
             drop, add, add_fulltext = set(), [], []
@@ -1224,7 +1224,7 @@ def ocr_from_image(image: Image.Image, lang: str = DEFAULT_LANG) -> dict:
                         break
 
             # (b) suspect PURE-DIGIT runs (>=5 digits, low/unknown confidence — recovery
-            # passes don't carry conf) = plausible-looking misreads ("669764" for 697512).
+            # passes don't carry conf) = plausible-looking misreads ("669764" for 600001).
             # Zoom-vote the box; replace only on CONSENSUS: winner repeats (>=2 votes),
             # clearly beats the runner-up, is digit-only (dates go through (a) only, so a
             # zoomed misread date can never overwrite a fragment), and is at least as

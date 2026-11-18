@@ -1,7 +1,7 @@
 """The panel scripts of the InterNIC write (DGO-1032) run in a REAL browser, on pages shaped as the live
 panel was measured — the fake panel of test_portal_write.py answers by matching a script's text, so the
 scripts' own rules never ran in a test (the third reader). Needs Playwright with its Chromium; skipped
-without it.
+without it — or, where only a Chrome and a Python with Playwright exist (no download), run_js_tests_cdp.py.
 
     python3 apps/domains/test_portal_js.py
 """
@@ -101,6 +101,50 @@ class PanelScriptTests(unittest.TestCase):
         # [office sel, office renew, digital sel, digital renew, bina sel, bina renew]
         self.assertEqual(state, [False, True, True, False, False, True],
                          "only digital-office.co.il's selection box changes; every renew switch is as it was")
+
+    def test_the_panels_instruction_to_select_heads_a_selection_column(self):
+        # InterNIC, 2026-11 (EXX-29, DGO-1837): the header over the selection column is an instruction whose list of
+        # actions names renewal — a selection column all the same; examplex.co.il's zone was refused on it
+        say = "יש לסמן אחד או יותר מהדומיינים כדי להציג את כפתורי הפעולה הרלוונטיים עבורם, כולל חידוש, שינויי DNS ועוד."
+        self.page.set_content(page_with(DASHBOARD.replace("<th></th>", f"<th>{say}</th>", 1).format(sel_a="")))
+        self.assertEqual(self.run_js(portal._JS_OPEN_ZONE, {"domain": "digital-office.co.il"}), {"found": True, "zone": True})
+        self.assertEqual(self.page.evaluate("Array.from(document.querySelectorAll('input')).map(i => i.checked)"),
+                         [False, True, True, False, False, True], "only its own selection box; no renew switch moved")
+        # …its tail pinned: the same opening with another tail (the second reader's) is no instruction
+        tail = ("יש לסמן אחד או יותר מהדומיינים כדי להציג את כפתורי הפעולה הרלוונטיים עבורם, כולל סימון בעמודה זו "
+                "מפעיל חידוש אוטומטי")
+        self.page.set_content(page_with(DASHBOARD.replace("<th></th>", f"<th>{tail}</th>", 1).format(sel_a="")))
+        self.assertTrue(self.run_js(portal._JS_OPEN_ZONE, {"domain": "digital-office.co.il"}).get("no_selection"))
+        self.page.set_content(page_with(DASHBOARD.replace("<th></th>", f"<th><small>{say}</small> חידוש אוטומטי</th>", 1)
+                                        .format(sel_a="")))
+        self.assertTrue(self.run_js(portal._JS_OPEN_ZONE, {"domain": "digital-office.co.il"}).get("no_selection"))
+        # …and as the panel measured it: a select-all box whose checkmark carries the sentence as a Bootstrap tooltip,
+        # line breaks and all, over rows whose box sits in a <th scope=row>
+        tip = "יש לסמן אחד או יותר מהדומיינים\nכדי להציג את כפתורי הפעולה\nהרלוונטיים עבורם,\nכולל חידוש, שינויי DNS ועוד."
+        measured = (
+            '<table><thead><tr><th scope="col"><label class="cs-label-con1"><div class="cs-first-lab1">'
+            '<input id="main-checkbox" type="checkbox" class="select-checkbox"><span class="cs-checkmark1">'
+            f'<div class="cs-inner1" data-bs-toggle="tooltip" data-bs-original-title="{tip}"></div></span></div></label></th>'
+            '<th scope="col"><a href="#">שם הדומיין</a></th><th scope="col"> שרתי DNS</th></tr></thead><tbody>'
+            '<tr><th scope="row"><label class="cs-label-con1"><input type="checkbox" name="domains[1]" '
+            'class="child-checkbox select-checkbox"></label></th><td>bina-solutions.co.il</td><td>ns1</td></tr>'
+            '<tr><th scope="row"><label class="cs-label-con1"><input type="checkbox" name="domains[2]" '
+            'class="child-checkbox select-checkbox"></label></th><td>digital-office.co.il</td><td>ns1</td></tr>'
+            '</tbody></table><button class="zone-edit visually-hidden" onclick="window.opened=1">zone</button>')
+        self.page.set_content(page_with(measured))
+        self.assertEqual(self.run_js(portal._JS_OPEN_ZONE, {"domain": "digital-office.co.il"}), {"found": True, "zone": True})
+        self.assertEqual(self.page.evaluate("Array.from(document.querySelectorAll('input')).map(i => i.checked)"),
+                         [False, False, True], "the select-all box stays as it was; only its own row is ticked")
+        # …a sentence that only begins like it is no instruction
+        self.page.set_content(page_with(DASHBOARD.replace("<th></th>", "<th>יש לסמן כדי לחדש אוטומטית</th>", 1)
+                                        .format(sel_a="")))
+        self.assertTrue(self.run_js(portal._JS_OPEN_ZONE, {"domain": "digital-office.co.il"}).get("no_selection"))
+        # …and the instruction over a renew switch still refuses: the box is judged as under any header
+        self.page.set_content(page_with(
+            f"<table><thead><tr><th>דומיין</th><th>{say}</th></tr></thead><tbody><tr><td>digital-office.co.il</td>"
+            "<td><input type=checkbox class=renew role=switch></td></tr></tbody></table>"))
+        self.assertTrue(self.run_js(portal._JS_OPEN_ZONE, {"domain": "digital-office.co.il"}).get("no_selection"))
+        self.assertFalse(self.page.evaluate("document.querySelector('input').checked"))
 
     def test_the_opener_opens_nothing_when_another_domain_is_selected(self):
         self.page.set_content(page_with(DASHBOARD.format(sel_a="checked")))

@@ -1,0 +1,52 @@
+name: Bug report · דיווח על באג
+description: Something in DGO does not work as it should · משהו ב-DGO לא עובד כמו שצריך
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you for the report. A security problem never goes here — see [SECURITY.md](https://github.com/bina-solution/digital-office/blob/main/.github/SECURITY.md).
+        תודה על הדיווח. בעיית אבטחה לא מדווחים כאן — ראו [SECURITY.md](https://github.com/bina-solution/digital-office/blob/main/.github/SECURITY.md).
+  - type: input
+    id: version
+    attributes:
+      label: Version or commit · גרסה או commit
+      description: "`git log -1 --format=%h` in your clone, or the release you installed · בתיקיית ההתקנה, או הגרסה שהתקנתם"
+    validations:
+      required: true
+  - type: dropdown
+    id: host
+    attributes:
+      label: Where the office runs · איפה הלשכה רצה
+      options:
+        - Linux server (Debian / Ubuntu)
+        - Linux laptop or desktop
+        - macOS (./bbox run engine)
+        - Windows (WSL, bbox.cmd)
+        - Other · אחר
+    validations:
+      required: true
+  - type: input
+    id: app
+    attributes:
+      label: App · אפליקציה
+      description: "The app the problem is in (its folder under apps/ or platform-base/), if you know it · האפליקציה שבה הבעיה, אם ידוע"
+  - type: textarea
+    id: steps
+    attributes:
+      label: What you did · מה עשיתם
+      description: The commands you ran or the screens you used, in order · הפקודות שהרצתם או המסכים שבהם השתמשתם, לפי הסדר
+    validations:
+      required: true
+  - type: textarea
+    id: happened
+    attributes:
+      label: What happened, and what you expected · מה קרה, ומה ציפיתם
+      description: "The real output is best — `./bbox status`, a service's log (`./bbox logs <service>`), or a screenshot · הפלט האמיתי עדיף — status, לוג של שירות, או צילום מסך"
+    validations:
+      required: true
+  - type: markdown
+    attributes:
+      value: |
+        Please never paste a real password, token or customer document; a made-up one shows the problem as well.
+        לעולם אל תדביקו סיסמה, טוקן או מסמך לקוח אמיתיים; ערך מומצא מראה את הבעיה באותה מידה.

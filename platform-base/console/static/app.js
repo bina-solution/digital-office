@@ -1058,7 +1058,7 @@ function renderHome() {
   $("#content").innerHTML = `<div class="home">
     <div class="home-head">
       <div class="home-clock num" id="homeClock"></div>
-      <div class="home-brand"><b>הלשכה הדיגיטלית</b>
+      <div class="home-brand"><b><span class="logo home-logo" aria-hidden="true">${(document.querySelector(".brand .logo svg") || {}).outerHTML || ""}</span>הלשכה הדיגיטלית</b>
         <small>${one(MODULES.length, "אפליקציה אחת מותקנת", "אפליקציות מותקנות")}</small></div>
       <button class="icon-btn home-me" id="homeMe" type="button" title="החשבון שלך: מי מחובר, והתנתקות"
         aria-label="החשבון שלך" aria-haspopup="menu" aria-expanded="false">${esc(((ME && ME.name) || "?").trim().charAt(0) || "?")}</button>
@@ -1097,7 +1097,7 @@ function buildNav() {
       const a = el("a", "bnv-item" + remoteCls(m),
         `<span class="bnv-ic">${mIcon(m.icon)}</span><span class="bnv-label">${esc(m.name)}</span>` +
         // The office's name is the SECOND column, and it is what tells the two tiles of one alias
-        // apart in the rail ("בינה ודעת · MacBook" beside "בינה ודעת"). An office that is not
+        // apart in the rail ("עזריה · MacBook" beside "עזריה"). An office that is not
         // answering says so in FORM — the tag in the failure colour, the row dimmed (bina-nav.css,
         // `.is-offline`) — and in words in the row's tooltip: the column is 5em, the words never fit.
         (r ? `<span class="bnv-meta" data-office="${esc(r.office)}"${r.hue ? ` data-office-hue="${esc(r.hue)}"` : ""}>${esc(r.label)}</span>` : ""));

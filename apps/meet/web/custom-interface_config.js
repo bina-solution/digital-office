@@ -1,7 +1,7 @@
 
 // ── apps/meet: the office's additions, appended by the web image after interface_config.js ──
 
-interfaceConfig.APP_NAME = 'פגישות וידאו';
+interfaceConfig.APP_NAME = 'פגישות לשכה';
 interfaceConfig.PROVIDER_NAME = 'בינה';
 
 // The office's default language wins over the browser's (see config.defaultLanguage).

@@ -516,3 +516,83 @@ func TestCatalogRefusals(t *testing.T) {
 		t.Fatalf("json: code %d err %q", code, errb)
 	}
 }
+
+// TestResolvePullsThePort80AnswerInOnAServerOffice — the Python twin's rule (DGO-1595). Measured
+// 2026-11-09: platform-base/https-redirect shipped, was merged into the stable batch, and NOTHING
+// enabled it, so vps1 (a server office: DEPLOYMENT_DOMAIN with a dot, no resolver override) still
+// answered `http://meet.staging…/` with 200 and its zz-https.yaml carried only the hsts middleware.
+// The answering app is the EDGE's property on a public office, so the compiler seeds it — the same
+// decision, and the same sentence, as resolve() in platform/manager/reconcile.py.
+func TestResolvePullsThePort80AnswerInOnAServerOffice(t *testing.T) {
+	resolve := func(t *testing.T, env, state string, roots []string) ([]string, []Diag) {
+		t.Helper()
+		repo := fixture(t, map[string]string{
+			"apps/a/app.json":                       manifest("a", 3, ""),
+			"platform-base/https-redirect/app.json": manifest("https-redirect", 2, ""),
+			".env":                                  env,
+		}, state)
+		cat, err := LoadCatalog(repo)
+		if err != nil {
+			t.Fatal(err)
+		}
+		st, err := LoadState(repo, io.Discard, io.Discard)
+		if err != nil {
+			t.Fatal(err)
+		}
+		order, diags, err := Resolve(repo, cat, st, roots)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return order, diags
+	}
+	has := func(order []string, id string) bool {
+		for _, o := range order {
+			if o == id {
+				return true
+			}
+		}
+		return false
+	}
+	server := "DEPLOYMENT_DOMAIN=office.example.com\n"
+	state := stateHead + "  a: { enabled: true }\n" // no https-redirect line: the case that shipped
+
+	order, diags := resolve(t, server, state, nil)
+	if !has(order, "https-redirect") {
+		t.Fatalf("a server office must compile the port-80 answer in, got %v", order)
+	}
+	said := false
+	for _, d := range diags {
+		if d.Level == "info" && d.Msg == "https-redirect: pulled in as the port-80 answer of a server office" {
+			said = true
+		}
+	}
+	if !said {
+		t.Fatal("the pull-in must be in the plan, not silent")
+	}
+
+	if order, _ := resolve(t, server+"HTTPS_REDIRECT=off\n", state, nil); has(order, "https-redirect") {
+		t.Fatal("HTTPS_REDIRECT=off is the owner's deliberate closing")
+	}
+	if order, _ := resolve(t, "DEPLOYMENT_DOMAIN=localhost\n", state, nil); has(order, "https-redirect") {
+		t.Fatal("a .localhost office has no certificate, and port 80 IS the office there")
+	}
+	if order, _ := resolve(t, server, state, []string{"a"}); has(order, "https-redirect") {
+		t.Fatal("a roots lane (--for a) asks about the graph, not about the edge")
+	}
+	declared := stateHead + "  a: { enabled: true }\n  https-redirect: { state: enabled, by: cli }\n"
+	order, diags = resolve(t, server, declared, nil)
+	n := 0
+	for _, o := range order {
+		if o == "https-redirect" {
+			n++
+		}
+	}
+	if n != 1 {
+		t.Fatalf("an office that already declares it must not be pulled twice, got %d", n)
+	}
+	for _, d := range diags {
+		if d.Msg == "https-redirect: pulled in as the port-80 answer of a server office" {
+			t.Fatal("a state line the office wrote is not a pull-in")
+		}
+	}
+}

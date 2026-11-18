@@ -13,7 +13,7 @@ under the asked limit, `truncated` computed against the asked limit), with the r
   4. a provider that does not answer degrades ITS half, by name, keeping its last rows;
   5. the index rebuilds from the providers with no loss and no duplicate, and a second sync changes nothing;
   6. resolve() is one choke point: an explicit provider > the binding > a refusal, never a fallback;
-  7. a search over 5,000 rows answers under 300 ms;
+  7. a search over N rows answers under 300 ms;
   8. the ops answer {"ok":true,"op":…,"data":…}, a refusal one Hebrew sentence, a bad body a 400 — never silence;
   9. dates from every provider land as YYYY-MM-DD, so "newest first" is newest first;
  10. INDOX is read in a total order, through a clamp below the page, asking only the mapped columns — nothing lost;
@@ -24,7 +24,7 @@ under the asked limit, `truncated` computed against the asked limit), with the r
      when a row drops out and comes back;
  14. a provider that lists half the list or less is refused and the rows kept, unless the shrink is accepted;
  15. a second sync of the same set writes nothing;
- 16. a sync holds a page, not the book: 20,000 rows through it stay under 12 MB of Python heap.
+ 16. a sync holds a page, not the book: N rows through it stay under 12 MB of Python heap.
 """
 import glob
 import http.client
@@ -444,7 +444,7 @@ class Documents(unittest.TestCase):
             idx.db.close()
         self.assertTrue(report[0]["ok"], report)
         self.assertEqual(report[0]["count"], 20000)
-        self.assertLess(peak, 12 * 2 ** 20, f"a 20,000-row sync peaked at {peak / 2 ** 20:.1f} MB of heap")
+        self.assertLess(peak, 12 * 2 ** 20, f"a N-row sync peaked at {peak / 2 ** 20:.1f} MB of heap")
 
     # 17
     def test_incoming_is_news_only_when_indox_says_so(self):

@@ -59,10 +59,10 @@ class CoreAndCommand(unittest.TestCase):
             self.assertEqual(g.pinned_cpus(root), "0")           # never a word taskset would run
         self.assertEqual(g.pinned_cpus("/nonexistent"), "0")
 
-    def test_the_command_line_has_a_window_and_one_core(self):
+    def test_the_command_line_has_a_window_and_two_vcpus(self):
         argv = g.emulator_argv("dgo", 3072, 4096)
         self.assertNotIn("-no-window", argv)
-        self.assertEqual(argv[argv.index("-cores") + 1], "1")
+        self.assertEqual(argv[argv.index("-cores") + 1], "2")   # the pin holds the heat; one vCPU starves Android
         self.assertEqual(argv[argv.index("-gpu") + 1], "swiftshader_indirect")
         self.assertEqual((argv[argv.index("-memory") + 1], argv[argv.index("-partition-size") + 1]), ("3072", "4096"))
 

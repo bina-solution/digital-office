@@ -125,7 +125,9 @@ env_of() { sed -n "s/^[[:space:]]*$1=//p" "${REPO_ROOT}/.env" 2>/dev/null | tail
 proto="$(env_of AUTH_PROTOCOL)"
 signin="$(env_of FORWARD_AUTH_BASE_URL)"
 console="$(env_of CONSOLE_BASE_URL)"
-domain="$(env_of DEPLOYMENT_DOMAIN)"
+# DEPLOYMENT_DOMAIN is itself ${COMPANY_SLUG}.${COMPANY_BASE_DOMAIN} in .env.ex: resolved down the whole
+# chain, as compose does — a raw read printed a link no browser could open (DGO-1970)
+domain="$(read_env_value DEPLOYMENT_DOMAIN)"
 # .env.ex's values interpolate ${DEPLOYMENT_DOMAIN}; compose does that, this resolves the one it uses
 signin="${signin//\$\{DEPLOYMENT_DOMAIN\}/${domain:-localhost}}"
 console="${console//\$\{DEPLOYMENT_DOMAIN\}/${domain:-localhost}}"

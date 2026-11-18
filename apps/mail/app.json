@@ -87,6 +87,11 @@
         "id": "hello",
         "display_name": "דואר החברה",
         "domain": "digital-office.co.il"
+      },
+      {
+        "id": "examplex",
+        "display_name": "Examplex",
+        "domain": "examplex.co.il"
       }
     ]
   },

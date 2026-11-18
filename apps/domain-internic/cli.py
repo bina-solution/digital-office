@@ -12,7 +12,11 @@ not — into the credential plane's container, with DOMAIN_INTERNIC_API set to t
     add-record <domain> <type> <name> <value> [--ttl N] [--consent "<who>: <why>"]
                                  one record, created through the portal and READ BACK. Without --consent
                                  it runs only if the office has already seen this action succeed once.
-    verified [create]            has the office seen this action succeed (its own from now on)?
+    set-record <domain> <type> <name> <new value> --from <value now> --consent "<who>: <why>"
+                                 one EXISTING record (A, AAAA, CNAME) given a new value, its TTL kept, READ BACK
+                                 with every other record as it was (EXX-29). --from (the value it has now) and a
+                                 consent are required EVERY time: an update rewrites what already serves traffic.
+    verified [create|update]     has the office seen this action succeed (its own from now on)?
     flow                         see hooks/flow (the event stream, live)
 
 Exit status: 0 when the provider answered ok, 1 when it answered a refusal (printed), 2 when it could
@@ -98,9 +102,25 @@ def main(argv):
         if consent:
             body["consented_by"] = consent
         return show(call("POST", "/api/records", body, timeout=600))
+    if verb == "set-record":
+        old = flag(args, "--from")
+        consent = flag(args, "--consent")
+        if len(args) != 4:
+            print('usage: set-record <domain> <type> <name> <new value> [--from <value now>] [--consent "<who>: <why>"]',
+                  file=sys.stderr)
+            return 2
+        domain, rtype, name, value = args
+        if not (old or "").strip():
+            print("set-record: --from <the value now> is required — an update never rewrites a value it did not read",
+                  file=sys.stderr)
+            return 2
+        body = {"action": "update", "domain": domain, "type": rtype, "name": name, "value": value, "from": old}
+        if consent:
+            body["consented_by"] = consent
+        return show(call("POST", "/api/records", body, timeout=600))
     if verb == "verified":
         return show(call("GET", f"/api/verified?action={(args or ['create'])[0]}"))
-    print(f"domain-internic: unknown verb {verb!r} (status, login, domains, zone, add-record, verified, flow)",
+    print(f"domain-internic: unknown verb {verb!r} (status, login, domains, zone, add-record, set-record, verified, flow)",
           file=sys.stderr)
     return 2
 

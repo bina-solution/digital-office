@@ -160,6 +160,59 @@ def own_addresses(repo: Path | None = None) -> set[str]:
     return out
 
 
+def superseded_addresses(block, repo: Path | None = None) -> set[str]:
+    """The addresses the machine's link record (`.dgo/addressing.json`) claims for pairs the block has since MOVED.
+
+    That record is the far end of a link another office once converged onto this machine (its host `wg-quick@wg0`).
+    When such a link is retired and the pair made again by DGO Extend on another slot, nothing on this machine removes
+    the record, and `own_addresses` kept calling its address this office's own. vps1, measured 2026-11-12: its pair
+    with the MacBook of September (slot 2, `self` 10.79.2.2) had been replaced on 11-05 by a join on slot 7; the Dell's
+    new join was given the free slot 2 (dgo-extend's pair allocator reads the LIVE tunnel), its end is 10.79.2.2, and
+    the refusal «the address of this office on this link» kept every tile of the Dell off staging. Two readers, two
+    truths for one fact.
+
+    So an address the record claims for its pair with office X stops being this office's own once the block — the
+    live link plane's picture of every peer — places X on another /24: the record's pair is no longer that pair. It is
+    conservative: an address no pair of the record names (a `self` of its own, a `wg0.conf` alone) still counts, and so
+    does one any claimant of which the block does not place elsewhere. Read only after `own_addresses` has read the same
+    file, so a record that crashes that reader never reaches this one.
+    """
+    root = Path(repo) if repo else REPO
+    try:
+        doc = json.loads((root / ".dgo/addressing.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return set()
+    pairs = doc.get("pairs") if isinstance(doc, dict) else None
+    if not isinstance(pairs, list):
+        return set()
+    def office_id(v) -> str:
+        """An office id as plan() takes one, or "": only an id OFFICE_RE accepts is compared (ASCII, so the Go twin's
+        lowering agrees with str.lower() on every one of them — a Greek final sigma does not)."""
+        oid = v.strip().lower() if isinstance(v, str) else ""
+        return oid if OFFICE_RE.match(oid) else ""
+
+    placed: dict[str, str] = {}
+    for entry in block if isinstance(block, list) else []:
+        office = office_id(entry.get("office")) if isinstance(entry, dict) else ""
+        addr = entry.get("address") if isinstance(entry, dict) else None
+        if not office or not isinstance(addr, str):
+            continue
+        try:
+            ip = ipaddress.ip_address(addr.strip())
+        except ValueError:
+            continue
+        if ip.version == 4 and ip in TUNNEL_NET:
+            placed.setdefault(office, str(ip))
+    claims: dict[str, list[str]] = {}
+    for pair in pairs:
+        own = pair.get("self") if isinstance(pair, dict) else None
+        if isinstance(own, str) and own.strip():
+            claims.setdefault(own.strip(), []).append(office_id(pair.get("office")))
+    net = lambda a: a.rsplit(".", 1)[0]                          # noqa: E731 — the /24 of a dotted address
+    return {a for a, offices in claims.items()
+            if all(o and o in placed and net(placed[o]) != net(a) for o in offices)}
+
+
 def source(state: dict) -> tuple[str, object]:
     """The block this office's reverse plane is declared in: `remote:` if present, else `serve:`.
 
@@ -262,7 +315,7 @@ def plan(state: dict, cat: dict) -> tuple[list[dict], list[str]]:
         if int(str(ip).split(".")[-1]) in (0, 255):
             errs.append(f"{where}.address {addr}: x.0/x.255 הן כתובות רשת/שידור, לא כתובת של לשכה")
             continue
-        mine = own_addresses()
+        mine = own_addresses() - superseded_addresses(raw)
         if str(ip) in mine:
             errs.append(f"{where}.address {addr} היא הכתובת של הלשכה הזו בקישור הזה "
                         f"(מ-.dgo) — הצד השני הוא הקצה האחר של אותו /24")
@@ -764,7 +817,8 @@ def render(entries: list[dict], cat: dict, domain: str = "localhost",
                 # every office; adding it only where an https router exists keeps the other chains
                 # byte-identical.
                 if "websecure" in entry_points and "hsts@file" not in chain:
-                    chain = chain + ["hsts@file"]
+                    chain = ["hsts@file"] + chain    # FIRST: the sign-in's 302 ends the chain before a later pin
+
                 def router(rule, chain):
                     r = dict([("rule", rule), ("entryPoints", list(entry_points)),
                               ("service", svc), ("middlewares", list(chain))])
@@ -941,7 +995,7 @@ def selftest() -> list[str]:
     good = {"remote": [{"office": "macbook", "address": "10.79.3.2",
                         "label": {"he": "המקבוק", "en": "MacBook"}, "link": "macbook",
                         "apps": [{"app": "bina-ds", "port": 3080, "agent_api_port": 3081,
-                                  "alias": "bina", "name": "בינה ודעת",
+                                  "alias": "bina", "name": "עזריה",
                                   "identity": {"to": "owner@local"}}]}]}
     entries, errs = run(good)
     if errs or len(entries) != 1 or entries[0]["apps"][0]["port"] != 3080:
@@ -1040,7 +1094,8 @@ def selftest() -> list[str]:
                         f"{twins} for {nested}")
     kept = wide.get("dgo-remote-macbook-drive-console") or {}
     if kept.get("entryPoints") != ["web", "websecure"] or "tls" not in kept \
-            or kept.get("middlewares", [None])[0] != REMOTE_SIGN_IN:
+            or [m for m in kept.get("middlewares", []) if m != "hsts@file"][:1] != [REMOTE_SIGN_IN]:
+        # (the sign-in opens the chain after the pin, which comes first on an https router: DGO-1595)
         problems.append(f"the twin is an ADDITION: the `-console` router keeps its entry points, its TLS "
                         f"and its sign-in: {kept}")
     if any(r.get("service") == "noop@internal" for r in (local.get("routers") or {}).values()) \
@@ -1202,6 +1257,25 @@ def selftest() -> list[str]:
             problems.append(f"a peer that holds `.1` must be accepted, got {perrs or picked}")
     finally:
         globals()["own_addresses"] = real
+
+    # A host record of a pair the block has MOVED claims its address no more (vps1, 2026-11-12: the September pair
+    # with the MacBook on slot 2, re-made on slot 7, held the Dell's new end 10.79.2.2 as vps1's own) — and one whose
+    # pair the block keeps on that /24, or does not place at all, still does.
+    import tempfile
+    with tempfile.TemporaryDirectory() as tmp:
+        (Path(tmp) / ".dgo").mkdir()
+        (Path(tmp) / ".dgo/addressing.json").write_text(json.dumps({"self": "10.79.2.2", "pairs": [
+            {"office": "macbook", "self": "10.79.2.2"}]}), encoding="utf-8")
+        dell = {"office": "portable-ubuntu", "address": "10.79.2.2"}
+        for block, want in (([{"office": "macbook", "address": "10.79.7.2"}, dell], {"10.79.2.2"}),
+                            ([{"office": "MacBook", "address": " 10.79.7.2 "}, dell], {"10.79.2.2"}),
+                            ([{"office": "macbook", "address": "10.79.2.1"}, dell], set()),
+                            ([dell], set()),
+                            ([{"office": "macbook", "address": "93.184.216.7"}, dell], set()),
+                            ([{"office": "mac book", "address": "10.79.7.2"}, dell], set())):
+            got = superseded_addresses(block, tmp)
+            if got != want:
+                problems.append(f"superseded_addresses({block}) is {got}, not {want}")
 
     # TWO OFFICES, one alias: the owner's own rule ("an app installed in both appears twice").
     two = {"remote": [

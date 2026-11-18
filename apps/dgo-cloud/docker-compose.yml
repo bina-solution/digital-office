@@ -1,0 +1,90 @@
+# DGO Cloud (DGO-1893) — DGO net's first product: a managed DGO in a minute. One service: the site, the API, the client
+# servers' door, the LLM router and the cloud zone's name server. Its routers and the console tile are compiled from
+# app.json (`emit_labels: true`): no label here. Every host answers WITHOUT the office sign-in (`auth: none`): buyers
+# have their own accounts (accounts.py), the router its own keys, the nodes their own secrets.
+services:
+  dgo-cloud:
+    image: dgo-cloud:${IMAGE_TAG:-latest}
+    pull_policy: missing
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: dgo-cloud-${DEPLOYMENT_NAME:-bina-deployment}
+    hostname: dgo-cloud
+    restart: unless-stopped
+    environment:
+      - DGOCLOUD_PORT=8080
+      - DGOCLOUD_DATA=/data
+      # the address every link is built on (Cardcom's return, a reset link, the nodes' front) — never a request's Host
+      - DGOCLOUD_PUBLIC_URL=${DGOCLOUD_PUBLIC_URL:-https://${DGO_CLOUD_BASE_URL:-dgo-cloud.${DEPLOYMENT_DOMAIN:-localhost}}}
+      # the router's public base (what a client office's .env names as DeepSeek/OpenAI/Anthropic)
+      - DGOCLOUD_LLM_URL=${DGOCLOUD_LLM_URL:-https://${DGO_LLM_BASE_URL:-dgo-llm.${DEPLOYMENT_DOMAIN:-localhost}}}
+      - DGOCLOUD_LLM_HOSTS=${DGOCLOUD_LLM_HOSTS:-dgo-llm.,llm.}
+      # who administers DGO Cloud: their DGO net accounts (by e-mail) are admins
+      - DGOCLOUD_ADMINS=${DGOCLOUD_ADMINS:-}
+      # payments: Cardcom v11. Terminal 1000 is Cardcom's test terminal. CARDCOM_SIMULATE=1 is for a laptop ONLY.
+      - CARDCOM_TERMINAL=${CARDCOM_TERMINAL:-}
+      - CARDCOM_API_NAME=${CARDCOM_API_NAME:-}
+      - CARDCOM_API_PASSWORD=${CARDCOM_API_PASSWORD:-}
+      - CARDCOM_SIMULATE=${CARDCOM_SIMULATE:-}
+      # the plan, in agorot, VAT included
+      - DGOCLOUD_PRICE_BASIC=${DGOCLOUD_PRICE_BASIC:-9900}
+      - DGOCLOUD_CREDIT_BASIC=${DGOCLOUD_CREDIT_BASIC:-2400}
+      # compute: hostinger | simulate | off. KVM 2 monthly, Ubuntu 24.04, Germany → France → Lithuania
+      - DGOCLOUD_PROVIDER=${DGOCLOUD_PROVIDER:-hostinger}
+      - HOSTINGER_API_TOKEN=${HOSTINGER_API_TOKEN:-}
+      - HOSTINGER_ITEM=${HOSTINGER_ITEM:-hostingercom-vps-kvm2-usd-1m}
+      - HOSTINGER_TEMPLATE=${HOSTINGER_TEMPLATE:-Ubuntu 24.04}
+      - HOSTINGER_DATACENTERS=${HOSTINGER_DATACENTERS:-de,fr,lt}
+      # servers bought ahead of the sale (what makes it seconds); the admin screen changes it at run time
+      - DGOCLOUD_POOL=${DGOCLOUD_POOL:-1}
+      # SSH to a client server only from these addresses (Bina's own); the ops key the host baseline needs
+      - DGOCLOUD_SSH_FROM=${DGOCLOUD_SSH_FROM:-}
+      - DGOCLOUD_OPS_KEY=${DGOCLOUD_OPS_KEY:-}
+      - DGOCLOUD_ACME_EMAIL=${DGOCLOUD_ACME_EMAIL:-person13@example.com}
+      # the client servers' zone, served by this container's name server; sslip.io until the zone is delegated
+      - DGOCLOUD_ZONE=${DGOCLOUD_ZONE:-cloud.digital-office.co.il}
+      - DGOCLOUD_ZONE_IP=${DGOCLOUD_ZONE_IP:-}
+      - DGOCLOUD_NS=${DGOCLOUD_NS:-}
+      - DGOCLOUD_DNS_PORT=${DGOCLOUD_DNS_PORT:-5353}
+      # the router's upstream keys: the office's own provider accounts (the owner, 2026-11-14)
+      - ROUTER_DEEPSEEK_KEY=${DEEPSEEK_API_KEY:-}
+      - ROUTER_OPENAI_KEY=${OPENAI_API_KEY:-}
+      - ROUTER_ANTHROPIC_KEY=${ANTHROPIC_API_KEY:-}
+      # Google sign-in (the herd's OAuth client; its redirect: <public>/api/auth/google/callback)
+      - GOOGLE_OAUTH_CLIENT_ID=${DGOCLOUD_GOOGLE_CLIENT_ID:-${GOOGLE_OAUTH_CLIENT_ID:-}}
+      - GOOGLE_OAUTH_CLIENT_SECRET=${DGOCLOUD_GOOGLE_CLIENT_SECRET:-${GOOGLE_OAUTH_CLIENT_SECRET:-}}
+      # mail (verify, reset) through the office's own mail server
+      - DGOCLOUD_SMTP_HOST=${DGOCLOUD_SMTP_HOST:-mailserver}
+      - DGOCLOUD_MAIL_FROM=${DGOCLOUD_MAIL_FROM:-person12@example.com}
+      - TZ=${TZ:-Asia/Jerusalem}
+    # The cloud zone's name server. Loopback and an unprivileged port by default (exposure gate G84; nothing to clash
+    # with a host's own resolver): the office that serves the zone (vps1) declares DGOCLOUD_DNS_BIND=<its public
+    # address> — not 0.0.0.0, which collides with systemd-resolved on 127.0.0.53:53 — and DGOCLOUD_DNS_HOST_PORT=53
+    # in its .env, the way a mail office declares MAIL_BIND.
+    ports:
+      - "${DGOCLOUD_DNS_BIND:-127.0.0.1}:${DGOCLOUD_DNS_HOST_PORT:-5353}:5353/udp"
+      - "${DGOCLOUD_DNS_BIND:-127.0.0.1}:${DGOCLOUD_DNS_HOST_PORT:-5353}:5353/tcp"
+    volumes:
+      # the database: accounts, subscriptions, payments, the wallet, the nodes, usage, the audit
+      - dgo_cloud_data:/data
+    networks:
+      - traefik-network
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8080/healthz', timeout=5).status == 200 else 1)"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 256M
+
+volumes:
+  dgo_cloud_data:
+
+networks:
+  traefik-network:
+    external: true

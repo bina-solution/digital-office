@@ -8,7 +8,7 @@ and the app carried its own traefik labels, none of which named `authentik@file`
 the editor, n8n's own sign-in page and `/rest/settings` answered the whole internet: measured
 2026-11-09 07:50-08:05 UTC from outside — `https://n8n.exampleu.digital-office.co.il/` and `/signin`
 answered `200` (not `302` to the sign-in), `/rest/settings` answered `200` to anyone, and within two
-minutes of Exampleu's edge restarting two scanners (93.184.216.53, 93.184.216.54) loaded the editor with
+minutes of Exampleu's edge restarting two scanners (93.184.216.47, 93.184.216.48) loaded the editor with
 every asset. The same on vps1, the herd's public door. n8n's own password was the only lock left
 (DGO-1594).
 
@@ -70,10 +70,18 @@ ALLOWED = {
     ("authentik", "auth"): "the office's sign-in cannot sit behind itself — this host IS the gate "
                            "every other entry in this file is sent to (platform-base/authentik is "
                            "the identity provider).",
-    ("chimney-services", "services"): "the app's callers are the business's CUSTOMERS, not the "
+    ("examplech-services", "services"): "the app's callers are the business's CUSTOMERS, not the "
                                       "office's people: a quote request is the product, and the "
                                       "office's own staff use the same screen. Gating it with the "
                                       "office sign-in would close the shop.",
+    ("examplex", "examplex"): "the app's callers are suppliers and stores, not the office's people (DGO-1837, the owner: a "
+                        "supplier «can just open an account and start uploading»); they sign in to Examplex's OWN accounts "
+                        "(apps/examplex/accounts.py, the Services way), and an office person's headers are believed from the "
+                        "console's proxy only — the office sign-in would shut the market out.",
+    ("dgo-cloud", "dgo-cloud"): "the app's callers are DGO Cloud's CUSTOMERS, who sign up, pay and run their office there "
+                                "(DGO-1893); they sign in to its OWN accounts (apps/dgo-cloud/accounts.py: a session cookie "
+                                "or a Bearer key, no forwarded identity header believed), and its admin is an account "
+                                "proven by a verify link, a reset or Google — the office sign-in would close the service.",
     # (glitchtip, glitchtip) was here on the reason that gating the host breaks error reporting. It never did:
     # every DSN is the internal glitchtip:8000 (hooks/push), so its screen is now behind the sign-in (DGO-1729).
 }

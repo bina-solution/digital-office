@@ -12,7 +12,7 @@ def compare_preprocess(s: str) -> str:
 
 
 # PURE-FUNCTION MEMOIZATION — measured hotspot, zero semantic change. One slow
-# extraction query (zlmn-shr-3 INVOICE_ID: 12 anchors x 977 tokens x repeated
+# extraction query (supplier01-3 INVOICE_ID: 12 anchors x 977 tokens x repeated
 # fallback attempts) profiled at 216,891 WRatio calls = 20.5s of a 55s query,
 # and the SAME (token, anchor) pairs are re-scored across attempts. The scorers
 # below are pure (str, str, int) -> bool, so caching cannot change any result —

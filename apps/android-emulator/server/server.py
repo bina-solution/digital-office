@@ -14,6 +14,20 @@
     GET  /healthz                   → ok
 
 The device's verbs answer 409 unless it is running — paused for the heat included: wait, do not retry at once.
+Each of them (install, shell, a screenshot) is a use of the device: the idle rule's clock starts again.
+
+THE SCREEN is a second, narrower door on :6080 — the one the console's tile frames (app.json routing), and the
+only one a browser reaches (behind the office's sign-in, admins only):
+
+    GET  /                          → the app's screen (screen/index.html): the state, why, the heat, start/stop
+                                      and the live display
+    GET  /vnc/<file>                → noVNC's own files (the image's /usr/share/novnc): the display's client
+    GET  /websockify                → the display's websocket, spliced to websockify (127.0.0.1:6081 → Xvnc :5901);
+                                      while one is open the device counts as watched (Supervisor.watch)
+    GET  /api/status, POST /api/start, POST /api/stop   → as above; nothing else of the door
+
+Before (DGO-1797 pkg 11 to 2026-11-12) the tile was websockify's noVNC alone: with the device off it was a black
+desktop — no state, no reason, no way to start it — and the owner read it as «the emulator does not work».
 
 The governor turns every two seconds in a thread of its own (Supervisor.tick). One emulator at a time — the
 office's, not a per-request one; who asked is on the status and on the flow's bar. Standard library only.
@@ -25,6 +39,7 @@ import json
 import os
 import re
 import shutil
+import socket
 import subprocess
 import sys
 import tempfile
@@ -54,15 +69,47 @@ ROOM_LEFT = 1 << 30                                  # what a stored APK leaves 
 SHELL_ARGS, SHELL_CHARS, SHELL_MAX_S = 64, 8192, 300
 INSTALL_MAX_S = 1800
 OUT_MAX = 1 << 20                                    # an answer's last MiB (a whole logcat is the caller's grep)
+SCREEN_PORT = int(os.environ.get("EMU_SCREEN_PORT") or "6080")    # the tile's port (app.json routing)
+VNC_WS = ("127.0.0.1", int(os.environ.get("EMU_VNC_WS_PORT") or "6081"))   # websockify, inside the container only
+NOVNC_DIR = os.path.realpath(os.environ.get("EMU_NOVNC") or "/usr/share/novnc")
+SCREEN_DIR = os.path.realpath(os.environ.get("EMU_SCREEN")
+                              or os.path.join(os.path.dirname(os.path.abspath(__file__)), "screen"))
+IDLE_STOP_MIN = int(os.environ.get("EMU_IDLE_STOP_MIN") or g.IDLE_STOP_MIN)
+KINDS = {".html": "text/html; charset=utf-8", ".js": "text/javascript; charset=utf-8", ".css": "text/css",
+         ".svg": "image/svg+xml", ".png": "image/png", ".ico": "image/x-icon", ".json": "application/json"}
 
 
 def adb(*args, timeout=30) -> subprocess.CompletedProcess:
     return subprocess.run(["adb", *args], capture_output=True, timeout=timeout)
 
 
+#: Android's three animation scales, off: every screen change draws half the frames, and on a software GPU every frame
+#: is the CPU's (the owner, 2026-11-13: «still pretty slow»). Settings persist on the device; set once per boot.
+ANIMATIONS = ("window_animation_scale", "transition_animation_scale", "animator_duration_scale")
+_tuned = threading.Event()
+
+
+def tune() -> None:
+    """All three, or the next poll tries again (a service not yet up answers «Can't find service: settings»)."""
+    for key in ANIMATIONS:
+        try:
+            ok = adb("shell", "settings", "put", "global", key, "0", timeout=15).returncode == 0
+        except (OSError, subprocess.SubprocessError):
+            ok = False
+        if not ok:
+            _tuned.clear()
+            return
+
+
 def booted() -> bool:
     r = adb("shell", "getprop", "sys.boot_completed", timeout=20)
-    return r.returncode == 0 and r.stdout.strip() == b"1"
+    up = r.returncode == 0 and r.stdout.strip() == b"1"
+    if not up:
+        _tuned.clear()                                 # off or booting: the next boot is tuned again
+    elif not _tuned.is_set():
+        _tuned.set()                                   # once per boot, and never under the supervisor's lock
+        threading.Thread(target=tune, daemon=True).start()
+    return up
 
 
 def apk_path(name: str) -> str | None:
@@ -129,9 +176,32 @@ def avd_free() -> int | None:
         return None
 
 
+def ask_exit() -> bool:
+    """Ask the running emulator to save its quick-boot snapshot and exit (its console's `kill`, through adb)."""
+    try:
+        return adb("emu", "kill", timeout=15).returncode == 0
+    except subprocess.TimeoutExpired:
+        return False
+
+
 def make_supervisor(pub=None) -> Supervisor:
     return Supervisor(g.emulator_argv(AVD, MEMORY_MB, PARTITION_MB), booted=booted, temp=g.package_temp,
-                      pub=pub, cpus=g.pinned_cpus(), disk_free=avd_free, log=EMU_LOG)
+                      pub=pub, cpus=g.pinned_cpus(), disk_free=avd_free, log=EMU_LOG, ask_exit=ask_exit,
+                      idle_s=IDLE_STOP_MIN * 60)
+
+
+def asker(headers, fallback: str) -> str:
+    """Who asked, for the status and the flow's bar — a label, never a decision: the office's sign-in names the person
+    (the edge sets it; a linked office's door says which office), else the caller's own word."""
+    for h in ("X-authentik-name", "X-authentik-username", "X-DGO-Office"):
+        v = (headers.get(h) or "").strip()
+        if v:
+            try:                                 # a header is read as latin-1: a Hebrew name arrives as its UTF-8 bytes
+                v = v.encode("latin-1").decode("utf-8")
+            except (UnicodeEncodeError, UnicodeDecodeError):
+                pass
+            return v[:64]
+    return fallback
 
 
 def handler_for(sup: Supervisor, run_adb=adb):
@@ -165,12 +235,17 @@ def handler_for(sup: Supervisor, run_adb=adb):
             return True
 
         def device(self, *args, timeout):
-            """adb's answer, or None once a 504 has said that it did not come in time."""
+            """adb's answer, or None once a 504 has said that it did not come in time. A use of the device for as long
+            as it runs (an install may take 25 minutes): the idle rule waits for it."""
+            hold = getattr(sup, "hold", None) or (lambda d: None)
+            hold(+1)
             try:
                 return run_adb(*args, timeout=timeout)
             except subprocess.TimeoutExpired:
                 self.answer(504, {"error": f"the device did not answer in {timeout} s", **sup.status()})
                 return None
+            finally:
+                hold(-1)
 
         def do_GET(self):
             path = self.path.split("?", 1)[0]
@@ -231,7 +306,7 @@ def handler_for(sup: Supervisor, run_adb=adb):
         def do_POST(self):
             path = self.path.split("?", 1)[0]
             if path == "/api/start":
-                return self.answer(202, sup.start(self.body().get("by") or self.headers.get("X-DGO-Office") or "?"))
+                return self.answer(202, sup.start(self.body().get("by") or asker(self.headers, "?")))
             if path == "/api/stop":
                 return self.answer(200, sup.stop("asked"))
             if path == "/api/install":
@@ -263,6 +338,136 @@ def handler_for(sup: Supervisor, run_adb=adb):
     return Handler
 
 
+def static_file(root: str, rel: str) -> str | None:
+    """A file under `root` by its relative path — never one outside it (`..`, a link out, an absolute path)."""
+    p = os.path.realpath(os.path.join(root, urllib.parse.unquote(rel).lstrip("/")))
+    return p if p.startswith(root + os.sep) and os.path.isfile(p) else None
+
+
+def keepalive(sock) -> None:
+    """A peer that vanished without closing (a phone that lost its network) is found in about two minutes."""
+    try:
+        sock.setsockopt(socket.SOL_SOCKET, socket.SO_KEEPALIVE, 1)
+        for opt, v in (("TCP_KEEPIDLE", 60), ("TCP_KEEPINTVL", 20), ("TCP_KEEPCNT", 3)):
+            if hasattr(socket, opt):
+                sock.setsockopt(socket.IPPROTO_TCP, getattr(socket, opt), v)
+    except OSError:
+        pass
+
+
+def splice(client, client_read, upstream, head: bytes, used=None, every_s: float = 5.0) -> None:
+    """Carry one websocket between the browser and websockify, byte for byte, both ways, until either side ends. The
+    browser's request (`head`) is handed on as it came; websockify answers the upgrade and speaks the protocol.
+    `used()` is called (at most every `every_s`) while bytes move: the display changed or a person touched it — an
+    open socket alone is no use (a forgotten tab on a dark screen moves nothing)."""
+    up = socket.create_connection(upstream, timeout=10)
+    up.settimeout(None)
+    keepalive(client)
+    last = [None]                                # the first bytes are always a use (monotonic() may start at 0)
+
+    def pump(read, dst):
+        try:
+            while True:
+                chunk = read(1 << 16)
+                if not chunk:
+                    break
+                dst.sendall(chunk)
+                if used and (last[0] is None or time.monotonic() - last[0] >= every_s):
+                    last[0] = time.monotonic()
+                    used()
+        except OSError:
+            pass
+        finally:
+            try:
+                dst.shutdown(socket.SHUT_WR)
+            except OSError:
+                pass
+
+    try:
+        up.sendall(head)
+        back = threading.Thread(target=pump, args=(up.recv, client), daemon=True)
+        back.start()
+        pump(client_read, up)
+        back.join()
+    finally:
+        up.close()
+
+
+def screen_handler_for(sup, upstream=VNC_WS, novnc=NOVNC_DIR, screen=SCREEN_DIR):
+    """The tile's door (:6080): the screen, noVNC's files, the display's websocket, and status/start/stop only."""
+    class Screen(BaseHTTPRequestHandler):
+        protocol_version = "HTTP/1.1"
+
+        def log_message(self, *a):
+            pass
+
+        def answer(self, code, body, kind="application/json", cache="no-store"):
+            data = body if isinstance(body, bytes) else json.dumps(body, ensure_ascii=False).encode()
+            self.send_response(code)
+            self.send_header("Content-Type", kind)
+            self.send_header("Content-Length", str(len(data)))
+            self.send_header("Cache-Control", cache)
+            self.end_headers()
+            self.wfile.write(data)
+
+        def file(self, path, cache):
+            with open(path, "rb") as f:
+                data = f.read()
+            self.answer(200, data, KINDS.get(os.path.splitext(path)[1].lower(), "application/octet-stream"), cache)
+
+        def do_GET(self):
+            path = self.path.split("?", 1)[0]
+            if path in ("/", "/index.html"):
+                page = static_file(screen, "index.html")
+                return self.file(page, "no-store") if page else self.answer(404, {"error": "no screen"})
+            if path == "/healthz":
+                return self.answer(200, {"ok": True})
+            if path == "/api/status":
+                return self.answer(200, sup.status())
+            if path.startswith("/vnc/"):
+                f = static_file(novnc, path[len("/vnc/"):])
+                return self.file(f, "max-age=3600") if f else self.answer(404, {"error": "no such file"})
+            if path == "/websockify" and "websocket" in (self.headers.get("Upgrade") or "").lower():
+                return self.websocket()
+            self.answer(404, {"error": "unknown endpoint"})
+
+        def do_POST(self):
+            path = self.path.split("?", 1)[0]
+            try:
+                length = int(self.headers.get("Content-Length") or 0)
+            except ValueError:
+                length = -1
+            if not 0 <= length <= 4096:          # the screen sends `{}`: anything else is not read, and not kept alive
+                self.close_connection = True
+                return self.answer(413 if length > 4096 else 400, {"error": "a body of 0 to 4096 bytes"})
+            if length:
+                self.rfile.read(length)
+            if path == "/api/start":
+                return self.answer(202, sup.start(asker(self.headers, "המסך")))
+            if path == "/api/stop":
+                return self.answer(200, sup.stop("asked"))
+            self.answer(404, {"error": "unknown endpoint"})
+
+        def websocket(self):
+            query = self.path.split("?", 1)[1] if "?" in self.path else ""
+            head = (f"GET /websockify{'?' + query if query else ''} HTTP/1.1\r\n"
+                    + "".join(f"{k}: {v}\r\n" for k, v in self.headers.items()) + "\r\n").encode("latin-1")
+            self.close_connection = True
+            sup.watch(+1)
+            try:
+                splice(self.connection, self.rfile.read1, upstream, head, used=sup.touch)
+            except OSError:
+                if not self.wfile.closed:
+                    try:
+                        self.answer(502, {"error": "the display is not answering"})
+                    except OSError:
+                        pass
+            finally:
+                sup.watch(-1)
+
+    return Screen
+
+
 def main() -> int:
     try:
         import flowpub
@@ -279,7 +484,19 @@ def main() -> int:
             time.sleep(TICK_S)
 
     threading.Thread(target=turn, daemon=True).start()
-    ThreadingHTTPServer(("0.0.0.0", PORT), handler_for(sup)).serve_forever()
+    door = ThreadingHTTPServer(("0.0.0.0", PORT), handler_for(sup))
+    threading.Thread(target=door.serve_forever, daemon=True, name="door").start()
+    try:
+        screen = ThreadingHTTPServer(("0.0.0.0", SCREEN_PORT), screen_handler_for(sup))
+    except OSError as e:
+        # an image's own start.sh (before it was mounted from the checkout) still runs websockify on this port: a
+        # container RESTARTED, not recreated, after its checkout moved. The door and the governor go on; the tile is
+        # noVNC's page as before until the container is recreated (`./scripts/dc up -d android-emulator`).
+        print(f"android-emulator: the screen cannot listen on :{SCREEN_PORT} ({e.strerror}) — is this container's "
+              f"start.sh the image's? Recreate it; the door on :{PORT} runs on", file=sys.stderr, flush=True)
+        threading.Event().wait()
+        return 1
+    screen.serve_forever()
     return 0
 
 

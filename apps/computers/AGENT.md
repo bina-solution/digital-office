@@ -32,6 +32,7 @@ curl -s http://computers:8977/api/herd                                     # thi
 curl -s http://computers:8977/api/hosts/vps1/machine/api/overview?brief=1   # a computer's resources, via its door
 curl -s http://computers:8977/api/hosts/vps1/security/api/summary?hours=24  # its network, from ITS security app
 ./bbox computers herd [--json]   # every office against herd.yaml: MOVE · LEFT OVER · MISSING · ANOTHER DEPLOYMENT
+./bbox computers map [--json]   # live, no target
 ```
 
 - A read is one GET to a path on `herd.ALLOW`; anything else is a 403 before any network.

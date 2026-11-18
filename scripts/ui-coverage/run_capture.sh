@@ -61,6 +61,27 @@ APPS="${UI_MAP_APPS-console connections incoming-documents mailview drive machin
 SHARDS="${UI_MAP_SHARDS:-4}"
 SHARD_TIMEOUT="${UI_SHARD_TIMEOUT:-900}"
 
+# SIGNED IN THROUGH THE EDGE (DGO-1813): with UI_STORAGE_STATE (the Playwright state `bbox flow-qa-session` mints
+# through the office's own sign-in) and UI_CONSOLE_URL (the office's REAL console host), each shard loads the state and
+# reaches the real address through traefik — which writes the identity itself and routes the root paths itself — so
+# there is no in-shard proxy, no `*.localhost` resolver rule and no forged identity. Without them, the direct path
+# below, which forges an admin's headers: the console believes those only until DGO-1813's stage two.
+VIA_EDGE=""
+if [ -n "${UI_STORAGE_STATE:-}" ] || [ -n "${UI_CONSOLE_URL:-}" ]; then
+  [ -n "${UI_STORAGE_STATE:-}" ] && [ -n "${UI_CONSOLE_URL:-}" ] || {
+    echo "::error::UI_STORAGE_STATE and UI_CONSOLE_URL go together (a session, and the office's real console host)"; exit 1; }
+  [ -r "${UI_STORAGE_STATE}" ] || { echo "::error::UI_STORAGE_STATE (${UI_STORAGE_STATE}) cannot be read"; exit 1; }
+  # an ABSOLUTE path: docker reads `-v rel/path:…` as a volume NAME (flow-qa-session prints a repo-relative path)
+  UI_STORAGE_STATE="$(cd "$(dirname "${UI_STORAGE_STATE}")" && pwd)/$(basename "${UI_STORAGE_STATE}")"
+  UI_CONSOLE_URL="${UI_CONSOLE_URL#https://}"; UI_CONSOLE_URL="${UI_CONSOLE_URL#http://}"; UI_CONSOLE_URL="${UI_CONSOLE_URL%/}"
+  case "${UI_CONSOLE_URL%%:*}" in
+    *localhost) echo "::error::UI_CONSOLE_URL must be the office's REAL console host (a .localhost name resolves to the shard itself)"; exit 1 ;;
+  esac
+  # the password never enters a shard on this path: a sign-in page there is a failure, not a place to type one
+  AK_PASS=""
+  VIA_EDGE=1
+fi
+
 # The browser image — where Playwright + Chromium are declared — is built in ONE place next door, so
 # this capture and the flow suite (`bbox flow-qa`) can never drift on what "the office's browser" is.
 # ensure_capture_image sets IMAGE (${UI_CAPTURE_IMAGE:-ui-capture:latest}).
@@ -115,7 +136,7 @@ AGENT_SVC="$(printf '%s\n' "${AGENT_ADDR}" | head -1)"
 AGENT_HOST="${AGENT_SVC%%:*}"
 AGENT_PORT="${AGENT_SVC##*:}"
 RESERVED="$(printf '%s\n' "${AGENT_ADDR}" | tail -1)"
-if [ -n "${AGENT_HOST}" ]; then
+if [ -z "${VIA_EDGE}" ] && [ -n "${AGENT_HOST}" ]; then     # through the edge, traefik routes the root paths
   AGENT_CID="$(docker ps -q --filter "label=com.docker.compose.service=${AGENT_HOST}" | head -1)"
   AGENT_IP=""
   [ -n "${AGENT_CID}" ] && AGENT_IP="$(docker inspect "${AGENT_CID}" \
@@ -215,6 +236,29 @@ cleanup_shards() {
 }
 trap cleanup_shards EXIT INT TERM
 
+# what each shard is given: the edge's way (the state, the real host) or the direct way (the loopback proxy below)
+if [ -n "${VIA_EDGE}" ]; then
+  SHARD_ARGS=(-e "CONSOLE_BASE_URL=${UI_CONSOLE_URL}" -e "UI_STORAGE_STATE=/state.json"
+              -v "$(npath "${UI_STORAGE_STATE}"):/state.json:ro")
+  SHARD_PROXY=""
+  echo "### ui-map — through the edge: https://${UI_CONSOLE_URL}, signed in by UI_STORAGE_STATE (no proxy, nothing forged)"
+  # the path this run takes, proven before the fan-out: the real host answers from the shard network over 443
+  if ! docker run --rm --network "${NET}" "${IMAGE}" python3 -c "
+import socket, sys
+try:
+    socket.create_connection(('${UI_CONSOLE_URL%%:*}', 443), timeout=10).close()
+except Exception as e:
+    sys.exit('FATAL: https://${UI_CONSOLE_URL} unreachable from a container on ${NET}: %s' % e)
+"; then
+    echo "::error::ui-map capture preflight failed — the office's real console is not reachable from the shard network"; exit 1
+  fi
+else
+  SHARD_ARGS=(-e "UI_HOST_RESOLVER=MAP *.localhost 127.0.0.1"
+              -e "CONSOLE_BASE_URL=console.localhost:${CPORT:-8000}"
+              -e "BINA_DS_BASE_URL=bina.localhost:${AGENT_PORT:-3080}")
+  SHARD_PROXY="python3 -u /edge/capture-edge.py ${CPORT:-8000} --route console.localhost=${CIP}:${CPORT:-8000} ${EDGE_ROOTS[*]} >/data/capture-edge.log 2>&1 & sleep 1; "
+fi
+
 for i in $(seq 0 $((SHARDS - 1))); do
   cname="uicap-${i}-$$"
   names+=("$cname")
@@ -225,15 +269,13 @@ for i in $(seq 0 $((SHARDS - 1))); do
   # the office network was tried first and the shards never spoke to it (measured 2026-10-09: the
   # edge logged its routes and not one request).
   docker run --rm --network "${NET}" -v "$(npath "${DATA}"):/data" -v "$(npath "${SCRIPT_DIR}"):/edge" \
-    -e UI_HOST_RESOLVER="MAP *.localhost 127.0.0.1" \
-    -e CONSOLE_BASE_URL="console.localhost:${CPORT:-8000}" \
-    -e BINA_DS_BASE_URL="bina.localhost:${AGENT_PORT:-3080}" \
+    "${SHARD_ARGS[@]}" \
     -e UI_MAP_PROFILE="${UI_MAP_PROFILE}" \
     -e UI_OWN_BROWSER=1 -e UI_CHROME_BIN=/usr/bin/chromium \
     -e AK_USER="${AK_USER:-akadmin}" -e AK_PASS="${AK_PASS:-}" \
     -e WA_USER="${WA_USER:-}" -e WA_PASS="${WA_PASS:-}" \
     --name "$cname" --entrypoint sh \
-    "${IMAGE}" -c "python3 -u /edge/capture-edge.py ${CPORT:-8000} --route console.localhost=${CIP}:${CPORT:-8000} ${EDGE_ROOTS[*]} >/data/capture-edge.log 2>&1 & sleep 1; exec python3 -u /data/ui-capture.py ${APPS} --shard \"${i}/${SHARDS}\"" &
+    "${IMAGE}" -c "${SHARD_PROXY}exec python3 -u /data/ui-capture.py ${APPS} --shard \"${i}/${SHARDS}\"" &
   pids+=("$!")
   # The watchdog: sleep the deadline, and if the container is still there, remove it. `docker rm -f`
   # also kills the client's connection, so the `wait` below returns.

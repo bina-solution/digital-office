@@ -125,7 +125,7 @@ if calls["find"] or (app._listen_ports().get("carried") or {}).get("port"):
 # The MacBook at a coffee shop (2026-11-01): every PUBLIC pair it dials died at one moment, because its own
 # network moved. Both get a fresh source port on THIS pass, with no first sighting to wait out, and a status
 # still «ok» from a pass that ran before the tunnels died does not hold one back.
-FP = {"office": "examplef", "dial": "home", "slot": 6, "endpoint": "93.184.216.13",
+FP = {"office": "examplef", "dial": "home", "slot": 6, "endpoint": "93.184.216.9",
       "endpoint_port": 51820, "record": {"id": "examplef"}}
 app._link_pairs = lambda home, records: [VPS, FP]
 app.all_declarations = lambda: [VPS["record"], FP["record"]]

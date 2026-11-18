@@ -41,6 +41,17 @@ import time
 from pathlib import Path
 
 PMSET = "/usr/bin/pmset"
+# The engine's own health, beside its power (DGO-1964). The guest's systemd froze on 2026-11-14 (an unattended
+# re-exec during a stall): running containers ran on, none could start, every link of this Mac was down for
+# 2 days 10 hours, and the other offices' agents waited for the owner to come to the Mac. A frozen PID 1 ends only
+# with a boot, and nothing inside the guest can boot it — its timers are PID 1's. So this agent, which lives beside
+# the engine on the host, asks `engine.sh health` every ENGINE_CHECK_S; on «frozen» twice in a row it starts
+# `engine.sh recover` (dockerd stopped gently, the disk synced, the VM booted again) in a session of its own,
+# because the recovery stops the engine and this agent with it. At most once per ENGINE_RECOVER_GAP_S, so a
+# freeze that comes back is said, not looped on; the policy's engine_recover "off" only says it.
+ENGINE_SH = os.environ.get("BBOX_ENGINE_SH") or str(Path(__file__).resolve().parent / "engine.sh")
+ENGINE_CHECK_S = 300
+ENGINE_RECOVER_GAP_S = 6 * 3600
 SUDOERS_FILE = "/private/etc/sudoers.d/digital-office-power"
 # SleepDisabled persists across reboots (powerd re-applies it at boot), so the one-time setup also
 # installs a boot job that clears it; this agent sets it again only if the policy still wants it.
@@ -52,6 +63,7 @@ DEFAULTS = {
     "lid": {"ac": "run", "battery": "run"},
     "battery_floor": 20,
     "thermal_guard": True,
+    "engine_recover": "auto",
 }
 THERMAL_NAMES = {0: "nominal", 1: "fair", 2: "serious", 3: "critical"}
 
@@ -87,7 +99,52 @@ def load_policy(path):
         policy["battery_floor"] = floor
     if isinstance(stored.get("thermal_guard"), bool):
         policy["thermal_guard"] = stored["thermal_guard"]
+    if stored.get("engine_recover") in ("auto", "off"):
+        policy["engine_recover"] = stored["engine_recover"]
     return policy
+
+
+def read_json(path):
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+
+
+def run_group(cmd, timeout):
+    """run() in a process group of its own, the WHOLE group killed at the limit: `engine.sh health` goes through
+    limactl and ssh, and killing only bash left them holding a guest session each time (DGO-1783)."""
+    try:
+        p = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, stdin=subprocess.DEVNULL,
+                             text=True, start_new_session=True)
+    except OSError:
+        return 1, ""
+    try:
+        out, _ = p.communicate(timeout=timeout)
+        return p.returncode, out
+    except subprocess.TimeoutExpired:
+        try:
+            os.killpg(p.pid, signal.SIGKILL)
+        except OSError:
+            pass
+        p.communicate()
+        return 1, ""
+
+
+def pid_alive(pid):
+    try:
+        os.kill(int(pid), 0)
+        return True
+    except (OSError, TypeError, ValueError):
+        return False
+
+
+def is_recovery(pid):
+    """Alive AND an `engine.sh recover`: a pid the system reused after a recovery was killed is not one."""
+    if not pid_alive(pid):
+        return False
+    code, out = run(["ps", "-p", str(int(pid)), "-o", "command="], timeout=5)
+    return code == 0 and "engine.sh" in out
 
 
 # ── sensing ─────────────────────────────────────────────────────────────────────────────────────
@@ -210,8 +267,10 @@ def setup_commands():
 # ── enforcing ──────────────────────────────────────────────────────────────────────────────────
 class Agent:
     def __init__(self, repo, watch_pid, interval):
+        self.repo = repo
         self.dir = repo / "data" / "power"
         self.watch_pid = watch_pid
+        self.engine_checked, self.frozen_checks, self.pid1, self.recovering = 0.0, 0, None, None
         self.interval = interval
         self.caffeinate = None
         self.set_disablesleep = False   # we turned disablesleep on, so we must turn it off
@@ -260,7 +319,16 @@ class Agent:
         if self.set_disablesleep:
             run(["/usr/bin/sudo", "-n", PMSET, "-a", "disablesleep", "0"])
             self.set_disablesleep = False
-            self.sleep_if_lid_closed()
+            # a recovery stops this agent on its way to the boot; putting the Mac to sleep then would freeze the
+            # boot half-way (the recovery holds `caffeinate -i` for the idle case; this is the closed-lid one)
+            if not self.recovery_running():
+                self.sleep_if_lid_closed()
+
+    def recovery_running(self):
+        """An `engine.sh recover` under way: the one this agent started, or the one engine-recover.json names."""
+        if self.recovering is not None and self.recovering.poll() is None:
+            return True
+        return is_recovery(read_json(self.dir / "engine-recover.json").get("pid"))
 
     def engine_running(self):
         if not self.watch_pid:
@@ -270,6 +338,45 @@ class Agent:
             return True
         except OSError:
             return False
+
+    def check_engine(self, policy, now):
+        """Every ENGINE_CHECK_S: is the guest's systemd alive? Frozen twice in a row → recover (see ENGINE_SH)."""
+        if now - self.engine_checked >= ENGINE_CHECK_S:
+            self.engine_checked = now
+            code, out = run_group(["/bin/bash", ENGINE_SH, "health"], timeout=60)
+            lines = out.strip().splitlines()
+            self.pid1 = lines[-1] if lines else "unknown: engine.sh health said nothing (exit %d)" % code
+            self.frozen_checks = self.frozen_checks + 1 if code == 3 else 0
+            if self.frozen_checks >= 2:
+                self.recover(policy, now)
+        last = read_json(self.dir / "engine-recover.json")
+        return {"pid1": self.pid1, "checked_at": int(self.engine_checked) or None,
+                "frozen_checks": self.frozen_checks, "recover": policy["engine_recover"],
+                "last_recover": last or None}
+
+    def recover(self, policy, now):
+        # The stamp is engine.sh's own, written when a recovery stops the engine: a run that found nothing to do
+        # (the guest answered «unknown» to its own look) does not hold the next one off for hours.
+        last = read_json(self.dir / "engine-recover.json")
+        if policy["engine_recover"] != "auto":
+            self.notes.append("the engine's systemd is frozen and engine_recover is off: nothing can start in "
+                              "the engine until `bbox engine recover`")
+            return
+        if self.recovery_running():
+            self.notes.append("the engine's systemd is frozen and a recovery is under way")
+            return
+        if now - (last.get("started_at") or 0) < ENGINE_RECOVER_GAP_S:
+            self.notes.append("the engine's systemd is frozen again within %d h of the last recovery: not "
+                              "recovering in a loop; `bbox engine recover` does it by hand" % (ENGINE_RECOVER_GAP_S // 3600))
+            return
+        self.dir.mkdir(parents=True, exist_ok=True)
+        with open(self.dir / "engine-recover.log", "ab") as log:
+            log.write(("\n== %s %s\n" % (time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(now)), self.pid1)).encode())
+            log.flush()
+            child = self.recovering = subprocess.Popen(
+                ["/bin/bash", ENGINE_SH, "recover"], cwd=str(self.repo), stdin=subprocess.DEVNULL,
+                stdout=log, stderr=subprocess.STDOUT, start_new_session=True)
+        self.notes.append("the engine's systemd is frozen: recovering it (engine.sh recover, pid %d)" % child.pid)
 
     def tick(self):
         self.notes = []
@@ -310,10 +417,12 @@ class Agent:
         # because a closing lid sleeps the Mac before anything here could react.
         sleep_disabled = self.set_lid(want_lid, sense_sleep_disabled())
         caffeinated = self.hold_idle(want_idle or (want_lid and not sleep_disabled))
+        # after the keep-awake is held: the look into the engine can take up to a minute
+        health = self.check_engine(policy, now) if engine else None
         lid_ok = sleep_disabled or lid["causes_sleep"] is False
         status = {
             "version": 1, "platform": "macos", "host": os.uname().nodename,
-            "updated_at": int(now), "agent_pid": os.getpid(), "engine_running": engine,
+            "updated_at": int(now), "agent_pid": os.getpid(), "engine_running": engine, "engine": health,
             "power": power, "lid": lid, "screen_locked": locked,
             "thermal": {"state": thermal, "name": THERMAL_NAMES.get(thermal)},
             "sleep_disabled": sleep_disabled, "caffeinated": caffeinated,

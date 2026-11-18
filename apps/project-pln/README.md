@@ -249,7 +249,7 @@ means the same thing in both places.
 ```
 
 - **A read that is slow says so, and gives up** (the owner: «נכשל מהר במקום להיתקע»). DGO alone
-  is ~1,450 items and this Plane answers a page of `issues/?expand=…` in 3–11 s, so `list` used to be
+  is ~N items and this Plane answers a page of `issues/?expand=…` in 3–11 s, so `list` used to be
   minutes of silence — the same thing on screen as a stuck command. Now:
   - every read past `PLANE_PROGRESS_AFTER` seconds (default 3) prints one line to **stderr** — page n,
     items, seconds — at most every `PLANE_PROGRESS_EVERY` (5). `--json` on stdout is untouched, so a

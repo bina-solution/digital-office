@@ -1,17 +1,18 @@
 {
   "id": "bina-claude",
   "title": {
-    "he": "בינה קלוד",
-    "en": "Bina Claude"
+    "he": "קלוד דסקטופ",
+    "en": "Claude Desktop"
   },
   "layer": 3,
   "people": "admins",
   "kind": "service",
   "page": "ai",
+  "multi_instance": true,
   "version": "0.1.0",
   "summary": {
-    "he": "אפליקציית Claude Desktop הרשמית בתוך הלשכה, בכניסה אחת — מסך בקונסול, ו-CLI, API וזרימה על אותה כניסה",
-    "en": "The official Claude Desktop app inside the office, with ONE sign-in — its screen in the console, and the CLI, the API and the flow on that same sign-in"
+    "he": "אפליקציית Claude Desktop הרשמית בתוך הלשכה, בכניסה אחת לכל מופע — מסך בקונסול, ו-CLI, API וזרימה על אותה כניסה. מופע נוסף = חשבון Claude נוסף",
+    "en": "The official Claude Desktop app inside the office, with ONE sign-in per instance — its screen in the console, and the CLI, the API and the flow on that same sign-in. Another instance is another Claude account"
   },
   "agent_api_service": "bina-claude",
   "wraps": {
@@ -39,6 +40,12 @@
       "capability": "identity",
       "strength": "requires",
       "after": true
+    },
+    {
+      "capability": "browser",
+      "strength": "wants",
+      "after": false,
+      "dependency": "weak"
     }
   ],
   "connections": [],
@@ -69,8 +76,8 @@
         "embed": true,
         "alias": "bina-claude",
         "id": "bina-claude",
-        "name": "בינה קלוד",
-        "desc": "אפליקציית Claude המקורית, בתוך הלשכה",
+        "name": "קלוד דסקטופ",
+        "desc": "אפליקציית Claude Desktop המקורית, בתוך הלשכה",
         "order": 2,
         "url": "http://bina-claude-desktop:3000/",
         "url_env": "BINA_CLAUDE_URL",
@@ -85,7 +92,7 @@
       },
       "sso": {
         "slug": "bina-claude",
-        "display_name": "Bina Claude",
+        "display_name": "Claude Desktop",
         "default_host": "claude.localhost",
         "base_url_env": "BINA_CLAUDE_BASE_URL",
         "local_twin": true

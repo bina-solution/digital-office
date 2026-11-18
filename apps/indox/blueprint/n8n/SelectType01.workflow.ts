@@ -35,7 +35,7 @@ import { workflow, node, links } from '@n8n-as-code/transformer';
     /*__n8n__*/ meta: null,
     /*__n8n__*/ pinData: {},
     /*__n8n__*/ staticData: null,
-    /*__n8n__*/ shared: [{"updatedAt":"2026-08-25T13:36:11.806Z","createdAt":"2026-08-25T13:36:11.806Z","role":"workflow:owner","workflowId":"SelectType01","projectId":"2xKn4WH08LyAOk2y","project":{"updatedAt":"2026-07-30T23:40:17.073Z","createdAt":"2026-07-30T23:33:30.049Z","id":"2xKn4WH08LyAOk2y","name":"Admin User <person2@example.com>","type":"personal","icon":null,"description":null,"creatorId":"544b7ec6-5907-4ee2-a94b-c5676e56835c"}}],
+    /*__n8n__*/ shared: [{"updatedAt":"2026-08-25T13:36:11.806Z","createdAt":"2026-08-25T13:36:11.806Z","role":"workflow:owner","workflowId":"SelectType01","projectId":"exampleProject02","project":{"updatedAt":"2026-07-30T23:40:17.073Z","createdAt":"2026-07-30T23:33:30.049Z","id":"exampleProject02","name":"Admin User <person2@example.com>","type":"personal","icon":null,"description":null,"creatorId":"544b7ec6-5907-4ee2-a94b-c5676e56835c"}}],
     id: 'SelectType01',
     name: 'SelectType01 — per-type selection + scoring',
     active: true,
@@ -63,7 +63,7 @@ export class Selecttype01PerTypeSelectionScoringWorkflow {
     @node({
         id: 'selt-companies-01',
         name: 'Load Companies',
-        /*__n8n__*/ notes: "The trusted-supplier list, read DIRECTLY. This used to call indoxSettings01 with load_companies, which walks all 1,180 companies and builds nine lookup maps to answer one yes/no question — measured over 15 runs before this change: 1,591ms of a 1,905ms selection, 84% of every single one. A selection is otherwise 142ms of arithmetic. The query below returns only companies that actually declare trusted source types, which is the one thing the override needs. NOTE what that measurement also exposed: indoxSettings01 gates the list on `parseInt(SELECTION_CERTAINTY)===100`, and the companies table HAS NO SUCH COLUMN (verified: 1,180 rows, 0 with the key anywhere including `extra`) — so trusted_suppliers has always been an empty array and the override has never once fired. The gate here is a non-empty TRUSTED_SOURCE_TYPES, which is what that column exists to say. It stays inert today (0 companies declare one) and starts working the moment the operator fills it in.",
+        /*__n8n__*/ notes: "The trusted-supplier list, read DIRECTLY. This used to call indoxSettings01 with load_companies, which walks all 1,180 companies and builds nine lookup maps to answer one yes/no question — measured over 15 runs before this change: 1,591ms of a 1,905ms selection, 84% of every single one. A selection is otherwise 142ms of arithmetic. The query below returns only companies that actually declare trusted source types, which is the one thing the override needs. NOTE what that measurement also exposed: indoxSettings01 gates the list on `parseInt(SELECTION_CERTAINTY)===100`, and the companies table HAS NO SUCH COLUMN (verified: N rows, 0 with the key anywhere including `extra`) — so trusted_suppliers has always been an empty array and the override has never once fired. The gate here is a non-empty TRUSTED_SOURCE_TYPES, which is what that column exists to say. It stays inert today (0 companies declare one) and starts working the moment the operator fills it in.",
         type: 'n8n-nodes-base.postgres',
         version: 2.6,
         position: [224, 0],
@@ -125,7 +125,7 @@ const has = v => v !== null && v !== undefined && String(v).trim() !== '';
 const hasReal = v => has(v) && String(v).trim().toLowerCase() !== 'unknown';
 const canonAmount = v => String(v).replace(/[\\s,]/g, '');
 // An empty JSON array is a NON-ANSWER: the AI leg returns the literal string '[]' when it finds
-// no shipment/order ids and 2,213 live rows carry it.
+// no shipment/order ids and N live rows carry it.
 const realList = v => (has(v) && String(v).trim() !== '[]') ? v : null;
 
 // pick() -- ported verbatim from InvoiceDocEx01. 'prefer' exists only because balance sheets are
@@ -183,8 +183,8 @@ function normalizeAmount(val) {
 // [six-digit collision 2026-09-02, owner Decision 5] The company key is the FULL significant digit
 // string, not the last six. Truncating to six let two unrelated companies whose numbers share a
 // tail read as the same company — in the corroboration test (a false "agree") and in the trusted
-// lookup (the wrong company vouched for). Leading zeros are dropped so '0500000021' and
-// '514855800' still meet, which is the only tolerance the truncation was buying.
+// lookup (the wrong company vouched for). Leading zeros are dropped so '0500000019' and
+// '500000020' still meet, which is the only tolerance the truncation was buying.
 function normalizeCompanyID(val) {
   if (!hasReal(val)) return null;
   const digits = String(val).replace(/\\D/g, '').replace(/^0+/, '');

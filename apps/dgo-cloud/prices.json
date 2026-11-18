@@ -1,0 +1,17 @@
+{
+  "$comment": "The LLM router's price table (DGO-1893): USD per million tokens, as each provider bills Bina. A call costs (uncached input × in + cached input × cached + cache writes × write + output × out) / 1e6 USD, × usd_ils, × (1 + margin), in agorot rounded up. A model not listed here is refused, never served unpriced. The admin screen edits usd_ils and margin at run time; a model's prices change here, in a commit. Sources: Claude — the claude-api skill's model table (cached 2026-10-06); DeepSeek and OpenAI — the providers' public price pages as last read (UNCONFIRMED for 2026-11: check before launch, and on every provider price change).",
+  "updated": "2026-11-15",
+  "usd_ils": 3.75,
+  "margin": 0.10,
+  "models": {
+    "deepseek-chat":      {"provider": "deepseek",  "label": "DeepSeek V3 (chat)",       "in": 0.28, "cached": 0.028, "out": 0.42},
+    "deepseek-reasoner":  {"provider": "deepseek",  "label": "DeepSeek (reasoner)",      "in": 0.28, "cached": 0.028, "out": 0.42},
+    "claude-haiku-5-5":   {"provider": "anthropic", "label": "Claude Haiku 5.5",         "in": 0.10, "cached": 0.01,  "write": 0.125, "out": 0.50},
+    "claude-sonnet-5-5":  {"provider": "anthropic", "label": "Claude Sonnet 5.5",        "in": 2.00, "cached": 0.20,  "write": 2.50,  "out": 10.00},
+    "claude-opus-5-5":    {"provider": "anthropic", "label": "Claude Opus 5.5",          "in": 4.00, "cached": 0.20,  "write": 5.00,  "out": 20.00},
+    "claude-fable-5-1":   {"provider": "anthropic", "label": "Claude Fable 5.1",         "in": 10.00, "cached": 0.25, "write": 12.50, "out": 50.00},
+    "gpt-5":              {"provider": "openai",    "label": "GPT-5",                    "in": 1.25, "cached": 0.125, "out": 10.00},
+    "gpt-5-mini":         {"provider": "openai",    "label": "GPT-5 mini",               "in": 0.25, "cached": 0.025, "out": 2.00},
+    "gpt-5-nano":         {"provider": "openai",    "label": "GPT-5 nano",               "in": 0.05, "cached": 0.005, "out": 0.40}
+  }
+}

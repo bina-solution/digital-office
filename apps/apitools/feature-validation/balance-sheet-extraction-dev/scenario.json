@@ -1,6 +1,6 @@
 {
   "feature": "balance-sheet-extraction-dev",
-  "description": "Dev variant of balance-sheet extraction. Uses the 'Balance Sheet Extractor - v2 - shmuel' N8N workflow (indoxV2ExtractBalanceSheet01) instead of the production workflow.",
+  "description": "Dev variant of balance-sheet extraction. Uses the 'Balance Sheet Extractor - v2 - person06' N8N workflow (indoxV2ExtractBalanceSheet01) instead of the production workflow.",
   "cases_source": "fixtures/fixtures.json",
   "workflow_id": "indoxV2ExtractBalanceSheet01",
   "webhook_path": "bs_ex_2_dev",

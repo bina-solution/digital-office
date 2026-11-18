@@ -60,6 +60,15 @@
       # which still uses the API and ships until the routers are collapsed.
       - https://mail.google.com/
       - https://www.googleapis.com/auth/gmail.modify
+    # A consent for ONE platform protocol asks only for what that protocol uses (connections app.py
+    # oauth_scopes). `readonly` applies where the office lists the protocol in OAUTH_READONLY_PROTOCOLS
+    # (.env): Exampleu's office reads its client's Drive and must never write to it (EXU-24).
+    protocol_scopes:
+      drive_google_oauth:
+        full: [openid, email, https://www.googleapis.com/auth/drive]
+        readonly: [openid, email, https://www.googleapis.com/auth/drive.readonly]
+      mail_gmail_oauth:
+        full: [openid, email, https://mail.google.com/, https://www.googleapis.com/auth/gmail.modify]
     extra: {access_type: offline, prompt: consent, include_granted_scopes: "true"}
     # after token exchange, inject the grant into these n8n credentials (via the n8n REST API)
     inject:
@@ -85,8 +94,8 @@
   kind: text-secret
   env: GOOGLE_VISION_API_KEY
   # consumers: DERIVED from each app\'s connections[] (see catalog()) — do not author
-  now: "plain env -> apitools /documentOcr. SECURITY: ocr_processor.py:19 ships a HARD-CODED leaked
-        fallback key used when env is unset — must be removed. OCR_ENGINE=local (Tesseract) bypasses."
+  now: "plain env -> apitools /documentOcr. Ocr_processor.py once carried a hard-coded
+        fallback key; it now reads the environment only. OCR_ENGINE=local (Tesseract) bypasses."
   # probe: contributed by the app (contributes.connection_probes) — gate G9
   wizard: "guided capture; default OCR_ENGINE=local so it's optional"
 

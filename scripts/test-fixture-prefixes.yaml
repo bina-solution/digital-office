@@ -7,7 +7,7 @@
 # `indox_test.`. This file predates that boundary, and its rules still bind inside it: for
 # years the suites seeded their fixtures straight into `public.incoming_documents` — the live
 # client table — and cleaned up afterwards with a prefix-scoped DELETE. On 2026-08-06 one of
-# those cleanups deleted **2,432 real client documents**: `syncV3SourcesTest01`'s "Cleanup SQL"
+# those cleanups deleted **real client documents**: `syncV3SourcesTest01`'s "Cleanup SQL"
 # builds a join-shaped delete
 #
 #     delete from public.incoming_documents d using public.sync_ledger l
@@ -155,7 +155,7 @@ prefixes:
       the same form the other ID-marked prefixes use and is not containment.
       The alternative — registering `SOURCE_LINK` as a marker column so a cleanup could match the
       URL by containment — was rejected: it would dissolve G58 rule F3, which exists because
-      "mentions something of ours" cost 2,432 client documents.
+      "mentions something of ours" cost client documents.
   - prefix: "sv3k_"
     owner: apps/indox/blueprint/n8n/syncItemApiTest01.workflow.ts
     columns: [ID]
@@ -173,8 +173,8 @@ prefixes:
       Added 2026-08-09 with the change that stopped `sv3Inject3x001` reading the LIVE registry.
       It used to loop every row of `sync_registry` with no `enabled` filter, 3 documents each —
       and `gmail-bs`/`gmail-doc`/`gmail-link` are all enabled and all name
-      `mail_imap_app_password-51185288`, the client's real Gmail. So a run appended 9 fixture
-      messages into the client's production mailbox and applied each pipe's REAL `to_sync` label,
+      `mail_imap_app_password-00000001`, the client's real Gmail. So a run appended fixture
+      messages into a production mailbox and applied each pipe's REAL `to_sync` label,
       which injected them into the live pipeline as genuine client documents. It was latent only
       by accident: registry row `mail-private` has `connection: null` AND `labels: null`, so
       `Plan` threw while building the array, before returning any items — one malformed row was
@@ -190,7 +190,7 @@ prefixes:
 # WHY EXACT AND NOT A PREFIX. These are client CONFIGURATION tables, not a document table with a
 # fixture-id convention. `tag_rules` is the deployment's Gmail label registry — 24 rows, every
 # one of them operational. A `"KEY" like 'sv3s%'` DELETE against it is the same shape as the
-# join that removed 2,432 client documents on 2026-08-06: a pattern standing in for identity.
+# join that removed client documents on 2026-08-06: a pattern standing in for identity.
 # An enumerated key list cannot over-match, and if a suite adds a fourth label it has to say so
 # here, which is the point.
 #
@@ -298,7 +298,7 @@ saved_settings:
 # `prefixes` covers `indox_test.incoming_documents`; `aux_tables` covers CONFIGURATION rows by
 # exact key. Neither covers the four tables the sync engine writes as it runs — and every suite
 # has always deleted from them in its own pre-run `Cleanup SQL`, inline, restating its own prefix
-# list. That is the exact fleet-of-fifteen shape that cost 2,432 client documents, and it has the
+# list. That is the exact fleet-of-fifteen shape that cost client documents, and it has the
 # same crash hole as everything else here: the cleanup is at the START of the run, so a suite that
 # dies leaves its ledger, attempts, cursors and drive-file rows behind until someone runs it again.
 #

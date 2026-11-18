@@ -101,10 +101,16 @@ COLD_LAUNCH_S = 3.0
 #: After a wake the extension's offscreen page reconnects to the broker within ~1 s (offscreen.js);
 #: `front` is retried that long while the broker says the extension is not there yet.
 FRONT_RETRY_S = float(os.environ.get("BROWSER42_HANDOFF_FRONT_SECONDS", "20"))
-#: start-browser.sh §2b presses F11 ONCE per new Chromium window, 1 s after it maps, on a 2 s poll:
-#: right after a launch the window is briefly standard and about to turn compact. Looking before that
-#: press would find nothing to undo; so after a launch the look waits for it.
+#: start-browser.sh §2b makes a new Chromium window compact within a 2 s cycle of it mapping: right after
+#: a launch the window is briefly standard and about to turn compact. Looking before that would find
+#: nothing to undo; so after a launch the look waits for it.
 COMPACT_SETTLE_S = float(os.environ.get("BROWSER42_HANDOFF_SETTLE_SECONDS", "4"))
+#: The windows the hand-off made standard, one X id a line: start-browser.sh §2b never makes one of them
+#: compact again (it clears the file when no window is left).
+STANDARD_MARK = Path("/tmp/.b42-standard")
+#: Sets compact/standard as a STATE through Chrome's DevTools (start-browser.sh §2b uses it too); an
+#: image built before it has none, and then a fullscreen window gets F11 once, as it always did.
+WINDOW_TOOL = "/usr/local/bin/browser42-window.py"
 #: Exactly what group-manager.py's slugify() produces: lowercase kebab, no edge or double hyphen.
 SLUG = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
 #: Broker answers that mean "not yet" rather than "no": the extension is still reconnecting.
@@ -500,16 +506,27 @@ def chromium_windows(run=_run) -> list:
     return ids
 
 
-def present_standard(run=_run) -> int:
-    """Leave compact presentation: a FULLSCREEN (F11) Chromium window gets F11 once, so the tab strip —
-    and the group's name on it — is visible. A standard window is left alone, and the viewer's own
-    toggle (browser-navigation.js) still wins afterwards. Returns how many windows were switched."""
-    switched = 0
-    for window in chromium_windows(run):
-        if "FULLSCREEN" in run(["xprop", "-id", window, "_NET_WM_STATE"]):
+def present_standard(run=_run, mark=STANDARD_MARK, tool=WINDOW_TOOL, sleep=time.sleep) -> int:
+    """Leave compact presentation, so the tab strip — and the group's name on it — is visible. Every
+    Chromium window's id goes into `mark` first, so the window loop never makes it compact again; then
+    standard is SET (WINDOW_TOOL), twice a second apart, so a compact request of the loop's that was
+    already in flight cannot be the last word. An image without the tool gets the old behaviour: F11 once
+    on a FULLSCREEN window. The viewer's own toggle (browser-navigation.js) still wins afterwards.
+    Returns how many windows were fullscreen."""
+    windows = chromium_windows(run)
+    try:
+        mark.write_text("".join(window + "\n" for window in windows))
+    except OSError:
+        pass
+    fullscreen = [window for window in windows if "FULLSCREEN" in run(["xprop", "-id", window, "_NET_WM_STATE"])]
+    if windows and os.path.exists(tool):
+        run(["python3", tool, "standard"])
+        sleep(1)
+        run(["python3", tool, "standard"])
+    else:
+        for window in fullscreen:
             run(["xdotool", "windowactivate", "--sync", window, "key", "--window", window, "F11"])
-            switched += 1
-    return switched
+    return len(fullscreen)
 
 
 def perform(slug: str, record: dict, *, waker=None, front=front, present=present_standard,

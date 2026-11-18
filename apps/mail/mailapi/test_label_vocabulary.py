@@ -2,11 +2,11 @@
 """Regression guard for the `label:` search vocabulary (issues/mail-label-registry-split.yaml).
 
 WHAT WENT WRONG, and why a guard has to exist at all: `POST /search` with `label:SYNCED_DOC`
-answered `200 {"total": 0}` on a mailbox where 15,575 messages carried that label. Nothing was
+answered `200 {"total": 0}` on a mailbox where thousands of messages carried that label. Nothing was
 broken in a way anything could see — 0 is also the correct answer for a drained pipe, so the
 endpoint's failure mode was to produce a believable, unfalsifiable lie. A lane very nearly used
 exactly this to conclude the gmail pipes were empty, and this project has already had one outage of
-the same class (59,630 structurally invisible messages).
+the same class (many structurally invisible messages).
 
 THIS FILE DRIVES `GmailBackend.search` ITSELF — not a re-implementation of it, not just the pure
 helper — through a fake IMAP client, and asserts on the CRITERION THAT REACHES THE WIRE. That is
@@ -36,7 +36,7 @@ import app as mailapp  # noqa: E402
 
 # The vocabulary this deployment actually has, abbreviated. The names are the ones the label ENGINE
 # stamps (mailapi /organizer/settings), which is the registry the client's own mailbox proves is
-# authoritative — 15,575 messages on the organizer's SYNCED_DOC name vs 70 on tag_rules'.
+# authoritative — thousands of messages on the organizer's SYNCED_DOC name vs 70 on tag_rules'.
 RULES = [
     {"KEY": "SYNCED_DOC", "LABEL": "אוטומציה-שמירת-מסמכים-טופל"},
     {"KEY": "DOC_TO_SYNC", "LABEL": "לטיפול-אוטומציה-שמירת-מסמכים"},
@@ -51,7 +51,7 @@ MAILBOX_LABELS = [
     "INBOX", "אוטומציה-שמירת-מסמכים-טופל", "לטיפול-אוטומציה-שמירת-מסמכים",
     "באמצע-טיפול-אוטומציה", "אינדוקס - פעולה בוצעה", "מייל-מספק",
     "DOC_LINK_TO_SYNC",           # the stray, literally named after a KEY
-    "היסטורי/ספקים/כתר",           # nested
+    "היסטורי/ספקים/דוגמה",           # nested
 ]
 
 
@@ -245,10 +245,10 @@ def test_negation_and_nesting_survive_the_rewrite(monkeypatch):
     idx, keys = label_index(), key_map()
     q, terms = mailapp.rewrite_label_terms(
         "has:attachment newer_than:6m label:DOC_TO_SYNC -label:IN_PROGRESS "
-        "-label:SYNCED_DOC label:היסטורי/ספקים/כתר", keys, idx)
+        "-label:SYNCED_DOC label:היסטורי/ספקים/דוגמה", keys, idx)
     assert q == ("has:attachment newer_than:6m label:לטיפול-אוטומציה-שמירת-מסמכים "
                  "-label:באמצע-טיפול-אוטומציה -label:אוטומציה-שמירת-מסמכים-טופל "
-                 "label:היסטורי/ספקים/כתר")
+                 "label:היסטורי/ספקים/דוגמה")
     assert [t["status"] for t in terms] == ["matched"] * 4
     assert [t["negated"] for t in terms] == [False, True, True, False]
 

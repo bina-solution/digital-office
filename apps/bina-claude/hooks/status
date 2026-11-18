@@ -7,11 +7,12 @@ REPO_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
 . "${REPO_ROOT}/scripts/lib.sh"
 case "${1:-}" in -h|--help) sed -n 's/^#: //p' "${BASH_SOURCE[0]}"; exit 0 ;; esac
 JSON=0; [ "${1:-}" = "--json" ] && JSON=1
-dcx exec -T -e JSON="${JSON}" bina-claude node -e '
+# This copy's adapter: bina-claude, or an instance's (`./bbox bina-claude-2 status`: bbox sets DGO_INSTANCE_ID, DGO-1920).
+dcx exec -T -e JSON="${JSON}" "${DGO_INSTANCE_ID:-bina-claude}" node -e '
 fetch("http://127.0.0.1:3091/v1/health?deep=1").then(r => r.json()).then(h => {
   if (process.env.JSON === "1") { console.log(JSON.stringify(h)); return; }
   const l = h.login || {};
-  console.log(`bina-claude ${h.version} · ${h.harness} (${h.desktop}) · up ${h.uptime_s}s · ${h.sessions} sessions · ${h.active} running`);
+  console.log(`${h.provider} ${h.version} · ${h.harness} (${h.desktop}) · up ${h.uptime_s}s · ${h.sessions} sessions · ${h.active} running`);
   console.log(l.logged_in ? `signed in: ${l.method}` : l.logged_in === null ? `unknown — ${l.how}` : `NOT signed in — ${l.how}`);
   process.exit(l.logged_in ? 0 : l.logged_in === null ? 1 : 3);
 }).catch(e => { console.error("the adapter does not answer: " + e.message); process.exit(1); });'

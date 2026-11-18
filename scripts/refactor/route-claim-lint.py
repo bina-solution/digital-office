@@ -261,7 +261,12 @@ def missing_hsts(app, doc, rel):
     The middleware is defined in the compiler's generated `zz-https.yaml` on EVERY office (a router
     whose middleware does not resolve is DROPPED whole by traefik), and it is referenced on a
     SERVER office only — so this invariant is about the tree, not about one deployment: a router
-    that names `websecure` must name the pin."""
+    that names `websecure` must name the pin.
+
+    And name it FIRST (2026-11-17): a middleware that answers by itself — the sign-in's 302, a
+    redirect — ends the chain, so a pin after it is never written. Measured on vps1: the console and
+    n8n answered a signed-out visitor's 302 with no Strict-Transport-Security under
+    `authentik@file,hsts@file`; present-anywhere was the check this invariant made, and it passed."""
     out = []
     labels = []
     for spec in (doc.get("services") or {}).values():
@@ -277,8 +282,12 @@ def missing_hsts(app, doc, rel):
     for name, spec in sorted(routers.items()):
         if "websecure" not in (spec.get("entrypoints") or ""):
             continue
-        if "hsts@file" not in (spec.get("middlewares") or ""):
+        chain = [m.strip() for m in (spec.get("middlewares") or "").split(",") if m.strip()]
+        if "hsts@file" not in chain:
             out.append(f"{rel}: router '{name}' is on websecure and carries no hsts@file")
+        elif chain[0] != "hsts@file":
+            out.append(f"{rel}: router '{name}' carries hsts@file after {chain[0]} — it must come first, or "
+                       "a middleware that answers by itself (the sign-in's 302) ends the chain before it")
     return out
 
 
@@ -860,6 +869,17 @@ def self_test() -> int:
         ("…a declaration whose router is still open is not", stale_open_root(app(sso), open_hook), 0),
     ]
     del OPEN_ROOT_KNOWN[("demo", "demo-hook")]
+    tls = {"entrypoints": "websecure", "rule": "Host(`demo.example.com`)"}
+    cases += [  # invariant 7: the pin on every websecure router, and FIRST (DGO-1595)
+        ("a websecure router with hsts first is not a finding",
+         missing_hsts(app(sso), doc(**{"demo-https": dict(tls, middlewares="hsts@file,authentik@file")}), "x"), 0),
+        ("…one with no hsts is one",
+         missing_hsts(app(sso), doc(**{"demo-https": dict(tls, middlewares="authentik@file")}), "x"), 1),
+        ("…one with hsts after the sign-in is one (its 302 ends the chain first)",
+         missing_hsts(app(sso), doc(**{"demo-https": dict(tls, middlewares="authentik@file,hsts@file")}), "x"), 1),
+        ("…a plain-http router owes no pin",
+         missing_hsts(app(sso), doc(**{"demo-http": {"entrypoints": "web", "middlewares": "authentik@file"}}), "x"), 0),
+    ]
     bad = 0
     for name, got, want in cases:
         ok = len(got) == want

@@ -82,7 +82,7 @@ import { workflow, node, links } from '@n8n-as-code/transformer';
     /*__n8n__*/ meta: null,
     /*__n8n__*/ pinData: {},
     /*__n8n__*/ staticData: {"node:Every 5 min":{"recurrenceRules":[]},"global":{"lastFullSweepMs":1786873852538},"node:Lane 1 Schedule (nightly one-shot)":{"recurrenceRules":[]},"node:Lane 5 Tick (2m)":{"recurrenceRules":[]},"node:Tick (2m)":{"recurrenceRules":[]},"node:Nightly (one-shot)":{"recurrenceRules":[]}},
-    /*__n8n__*/ shared: [{"updatedAt":"2026-08-11T15:40:21.326Z","createdAt":"2026-08-11T15:40:21.326Z","role":"workflow:owner","workflowId":"indoxV2BaseDrain01","projectId":"2xKn4WH08LyAOk2y","project":{"updatedAt":"2026-07-30T23:40:17.073Z","createdAt":"2026-07-30T23:33:30.049Z","id":"2xKn4WH08LyAOk2y","name":"Admin User <person2@example.com>","type":"personal","icon":null,"description":null,"creatorId":"544b7ec6-5907-4ee2-a94b-c5676e56835c"}}],
+    /*__n8n__*/ shared: [{"updatedAt":"2026-08-11T15:40:21.326Z","createdAt":"2026-08-11T15:40:21.326Z","role":"workflow:owner","workflowId":"indoxV2BaseDrain01","projectId":"exampleProject02","project":{"updatedAt":"2026-07-30T23:40:17.073Z","createdAt":"2026-07-30T23:33:30.049Z","id":"exampleProject02","name":"Admin User <person2@example.com>","type":"personal","icon":null,"description":null,"creatorId":"544b7ec6-5907-4ee2-a94b-c5676e56835c"}}],
     id: 'indoxV2BaseDrain01',
     name: 'indox-v2 Drain (pool: P lanes x B documents)',
     active: true,
@@ -458,7 +458,7 @@ WHERE e."workflowId" = 'indoxV2BaseDrain01'
     @node({
         id: 'drain-reap-stale-00000c0de',
         name: 'Reap Stale Dispatches',
-        /*__n8n__*/ notes: "[newest-first 2026-08-25, owner order] ORDER BY created_at DESC. This selection had NO ordering at all, so Postgres returned rows in physical order and a document that had just arrived queued behind whatever the heap happened to hold — with ~24,000 rows that is an arbitrary wait. 'Init Pool' slices this list in order (ids.slice(i, i+B)) and the scheduler dispatches batch 0 first, so the SELECT's order IS the dispatch priority. Newest-first starves nothing: the 'all' pass takes the WHOLE selection, so ordering changes WHEN a document is processed, never WHETHER it is.",
+        /*__n8n__*/ notes: "[newest-first 2026-08-25, owner order] ORDER BY created_at DESC. This selection had NO ordering at all, so Postgres returned rows in physical order and a document that had just arrived queued behind whatever the heap happened to hold — with ~N rows that is an arbitrary wait. 'Init Pool' slices this list in order (ids.slice(i, i+B)) and the scheduler dispatches batch 0 first, so the SELECT's order IS the dispatch priority. Newest-first starves nothing: the 'all' pass takes the WHOLE selection, so ordering changes WHEN a document is processed, never WHETHER it is.",
         type: 'n8n-nodes-base.postgres',
         version: 2.6,
         position: [-320, 60],

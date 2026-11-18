@@ -63,7 +63,11 @@ services:
       # 2026-10-01: the nested host answers nothing at all, `bina.localhost` answers 200). It is a
       # DECLARATION in `.env`, per office, because which offices may show this agent is this office's
       # decision — never a container edited by hand, and never a wildcard.
-      - DSH_TRUSTED_HOSTS=${CONSOLE_BASE_URL:-console.${DEPLOYMENT_DOMAIN:-localhost}} console.localhost ${BINA_DS_BASE_URL:-bina.${DEPLOYMENT_DOMAIN:-localhost}} bina.localhost ${BINA_DS_TRUSTED_HOSTS:-}
+      #
+      # `azaria.<domain>` is the app's own address since EXU-64 (the owner, 2026-11-14: «so i can just
+      # go to azaria.exampleu.digital-office.co.il»); `bina.<domain>` keeps answering, so no link a
+      # notice or a message already carries breaks.
+      - DSH_TRUSTED_HOSTS=${CONSOLE_BASE_URL:-console.${DEPLOYMENT_DOMAIN:-localhost}} console.localhost ${AZARIA_BASE_URL:-azaria.${DEPLOYMENT_DOMAIN:-localhost}} azaria.localhost ${BINA_DS_BASE_URL:-bina.${DEPLOYMENT_DOMAIN:-localhost}} bina.localhost ${BINA_DS_TRUSTED_HOSTS:-}
       # Provider keys: the platform's connection cards (deepseek-key, openai-key, anthropic-key) and
       # .env feed these; the entrypoint drops template placeholders so the Models page stays
       # editable for a key the operator types in (stored by the harness on the volume).

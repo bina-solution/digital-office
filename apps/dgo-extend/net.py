@@ -943,7 +943,7 @@ def selftest() -> list[str]:
     # The same pair, from the JOINING end: we are `.2`, the peer is `.1`, and we do not dial.
     joiner = render_multi([{"slot": 3, "side": 2, "dial": "remote", "listen_port": 51999,
                             "peer": {"office": "macbook", "public_key": "HOMEKEY=",
-                                     "endpoint": "93.184.216.8", "endpoint_port": 51830,
+                                     "endpoint": "93.184.216.13", "endpoint_port": 51830,
                                      "direction": "serve"}}])["files"]["pairs/wg3.conf"]
     if "Address = 10.79.3.2/24" not in joiner or "AllowedIPs = 10.79.3.1/32" not in joiner:
         problems.append("an office that joined as side 2 holds .2 and reaches .1")
@@ -1176,7 +1176,7 @@ def selftest() -> list[str]:
     t = 1_800_000_000
     dead = lambda shook: {"alive": False, "handshake_at": shook}           # noqa: E731
     coffee = {"wg2": dead(t), "wg6": dead(t + 40), "wg5": dead(t - 9000)}
-    pairs = [("wg2", "93.184.216.5"), ("wg6", "93.184.216.13"), ("wg5", "127.0.0.1")]
+    pairs = [("wg2", "93.184.216.5"), ("wg6", "93.184.216.9"), ("wg5", "127.0.0.1")]
     if roaming_stall(coffee, pairs) != ["wg2", "wg6"]:
         problems.append(f"two public pairs dead within the window are moved at once (the tcp pair never): "
                         f"{roaming_stall(coffee, pairs)}")

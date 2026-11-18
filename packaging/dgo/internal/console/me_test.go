@@ -22,7 +22,7 @@ func TestMeMatchesFlask(t *testing.T) {
 	reqs := []request{
 		fetch("/api/me"), ask("HEAD", "/api/me"),
 		fetch("/api/me", "X-authentik-username", "owner"),
-		fetch("/api/me", "X-authentik-username", "owner", "X-authentik-email", "person178@example.com",
+		fetch("/api/me", "X-authentik-username", "owner", "X-authentik-email", "person86@example.com",
 			"X-authentik-name", "The Owner", "X-authentik-groups", "admins|staff"),
 		fetch("/api/me", "X-authentik-username", "", "X-authentik-name", "", "X-authentik-groups", ""),
 		fetch("/api/me", "X-authentik-email", "", "X-authentik-groups", "a||b|"),
@@ -50,12 +50,12 @@ func TestMeMatchesFlask(t *testing.T) {
 func TestMeReadsWhatForwardAuthWrites(t *testing.T) {
 	o := newOffice(t)
 	s, proxied := behindTheEdge(t, o)
-	got := serve(s, proxied, fetch("/api/me", "X-authentik-username", "owner", "X-authentik-name", "שלמה בולוטין"))
+	got := serve(s, proxied, fetch("/api/me", "X-authentik-username", "owner", "X-authentik-name", "ישראל ישראלי"))
 	if got == nil {
 		t.Fatal("a Hebrew display name was left to the container")
 	}
 	var me map[string]any
-	if err := json.Unmarshal(got.Body.Bytes(), &me); err != nil || me["name"] != "שלמה בולוטין" || me["user"] != "owner" {
+	if err := json.Unmarshal(got.Body.Bytes(), &me); err != nil || me["name"] != "ישראל ישראלי" || me["user"] != "owner" {
 		t.Fatalf("/api/me = %s (%v), want the name as forward-auth wrote it", got.Body.Bytes(), err)
 	}
 	for _, r := range []request{

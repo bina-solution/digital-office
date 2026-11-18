@@ -126,6 +126,15 @@ duplication.
 > installer (`debian-install.sh`) and dgo's engine check still pin **Docker 28.x** by version, and the
 > offices run 28.x — all but the Dell, which runs 29.
 
+> **Never run `docker buildx history …` (ls, inspect, logs…) on an office's engine.** On a daemon whose BuildKit is
+> older than v0.29.0, Docker 28.5.2 among them, a build-history list with a limit (`ls` sends 50) panics dockerd
+> when a build-cache prune has soft-deleted a record that a running build still holds (moby/buildkit#6614).
+> `bbox run` prunes, then builds. On the HP at 04:29:18 UTC on 2026-11-13, an agent watching a follow take's build
+> ran it, and dockerd died. The restarted daemon killed all 72 containers and restarted none of them, so the office
+> was down for six hours (DGO-1863).
+> To watch a build, read its log: the take's `data/follow/run-*.log`, or `docker top` of the process building.
+> DGO-1871 (the engine) and DGO-1872 (a guard) lift this rule.
+
 On Windows/VPS none of the cloud helpers fire (no proxy CA, ample limits), so behaviour there is
 unchanged. Details: [ai/context/healthy-baseline.md](healthy-baseline.md).
 
@@ -157,6 +166,53 @@ unchanged. Details: [ai/context/healthy-baseline.md](healthy-baseline.md).
 >   Hello and ask `org.gnome.Mutter.IdleMonitor.GetIdletime`, so the office's `machine` can tell
 >   whether somebody is at the desk (DGO-1797; what that exposes is in the profile's header). Two
 >   consequences worth knowing:
+>   the copy in `/etc/apparmor.d` is what makes the fix **survive a reboot** (a load alone evaporates
+>   at the next boot, silently), and **containers that are already running keep the rules they
+>   started with** — recreate them (`bbox run`) or the hung ones stay hung. `./bbox apparmor
+>   validate` parses the profile without loading anything, `./bbox apparmor verify` says whether the
+>   signal now gets through. It is upstream's tested shape, not a mechanism this office has proven on
+>   a live host yet: the proof is `verify` on a host where it ran.
+> - **Loading a profile is a host policy change and the owner's act** — `bbox run` and `bbox baseline`
+>   never do it. What is NOT acceptable, on any host: `sysctl
+>   kernel.apparmor_restrict_unprivileged_unconfined=0` and `apparmor=unconfined` on a container. Both
+>   trade the host's hardening for one app's convenience; either is a decision about a specific host,
+>   never a product default.
+> - **Not fixable from the image side.** "Start postgres as its own user" removes the gosu hang and
+>   leaves a database that cannot vacuum, reload, cancel or shut down cleanly — measured, above. Both
+>   postgres images the office runs (`postgres:17`, `supabase/postgres`) also fail INSIDE their own
+>   entrypoint, on the same denial (`pg_ctl: could not send stop signal … Permission denied`), and
+>   that entrypoint needs root for its own chmod/init work — so no compose-level `user:` change can
+>   even reach the second half of the problem.
+> - **Re-render the profile when the engine changes.** It is rendered from moby/profiles' template,
+>   which moby, containerd and libpod keep in sync; a newer engine may deny a socket family this copy
+>   does not. Never widen a rule to make something work.
+
+
+> **A kernel that STACKS the container's AppArmor label stops every postgres (Ubuntu 26.04, kernel
+> 7.0.0-42 and later).** Ubuntu's default `kernel.apparmor_restrict_unprivileged_unconfined=1` makes
+> the kernel turn runc's profile change into a *stack*, so a container's processes are labelled
+> `docker-default//&unconfined` rather than `docker-default`. Docker's profile allows `signal` and
+> `ptrace` only to the literal peer `docker-default`, so **a container's processes can no longer
+> signal each other** — and the failure looks like anything but that. Measured on the Dell
+> 2026-11-09, with `postgres:17` started directly as `postgres` so that gosu is not involved at all:
+> autovacuum is cancelled every naptime (`autovacuum worker took too long to start`),
+> `pg_reload_conf()` and `pg_cancel_backend()` answer `Permission denied`, `docker stop` kills the
+> container because `tini` cannot forward SIGTERM, and the next start runs crash recovery that stalls
+> on `the database system is starting up`. The production symptom is the one you see first: gosu
+> spins at ~80% CPU forever and the container never logs a line
+> (work item **DGO-1604** carries the whole measurement and the Dell's evidence; upstream
+> [moby/moby#54099](https://github.com/moby/moby/issues/54099),
+> [containerd/containerd#14485](https://github.com/containerd/containerd/issues/14485) and
+> [Launchpad #2172422](https://bugs.launchpad.net/ubuntu/+source/linux/+bug/2172422) are all open,
+> with no fix released.)
+>
+> - **Read it:** `./bbox apparmor status` — two facts from one throwaway container (the label, and
+>   whether `kill -TERM` to a sibling gets through). `./bbox baseline` P0 fails on a host with the
+>   condition and names this fix; `./bbox run` prints it before it brings anything up.
+> - **Fix it:** `sudo ./bbox apparmor install` — copies
+>   `packaging/linux/apparmor/docker-default.dgo` to `/etc/apparmor.d/docker-default` and loads it
+>   from there. The file is Docker's own profile plus the SAME profile's stacked form for `signal`
+>   and `ptrace`, and nothing wider (containerd#14487's proposal). Two consequences worth knowing:
 >   the copy in `/etc/apparmor.d` is what makes the fix **survive a reboot** (a load alone evaporates
 >   at the next boot, silently), and **containers that are already running keep the rules they
 >   started with** — recreate them (`bbox run`) or the hung ones stay hung. `./bbox apparmor

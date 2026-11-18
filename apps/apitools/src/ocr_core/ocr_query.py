@@ -544,7 +544,7 @@ def ocr_find_by_relative_position_example():
 def ocr_find_option_example():
     filename = f"{ocr_test_files_path()}/file10.jpg"
     ocr_query = ocr_query_factory(filename)
-    options_res = ocr_query.find_matching_texts(["משימה משימה", "חוליות זרימה", "nahnv sdkj", "040000006", "google"])
+    options_res = ocr_query.find_matching_texts(["משימה משימה", "חוליות זרימה", "nahnv sdkj", "040000005", "google"])
     if "error" in options_res:
         print(options_res["error"])
     else:
@@ -615,7 +615,7 @@ def simple_match_example():
 def check_simple_texts_matching_annotations_v2():
     filename = f"{ocr_test_files_path()}/file68.jpg"
     ocr_query = ocr_query_factory(filename)
-    matches = ocr_query.find_texts_matching_annotations(["חשבונית מס", "וורקר בע\"מ", "www.worker.co.il"], fuzzy=True)
+    matches = ocr_query.find_texts_matching_annotations(["חשבונית מס", "פלמוני בע\"מ", "www.supplierw.example"], fuzzy=True)
     if matches is None:
         print("No matches found")
     else:

@@ -18,7 +18,12 @@
 # credential of its own (the HP) declares DGO_FOLLOW_VIA=<a linked office> and DGO_FOLLOW_VIA_PATH (its git proxy's
 # path for the repository, /git/gh/<account>/<owner>/<repo>.git): each cycle then fetches and pushes through that
 # office's git app, at the address `bbox remote` gives NOW — a port written into a remote goes stale (the HP's
-# macbook-git pointed at 9004 after the Mac's door moved to 9005).
+# macbook-git pointed at 9004 after the Mac's door moved to 9005). DGO_FOLLOW_VIA may name several offices, in order
+# (`macbook vps1`): the cycle fetches from, and pushes to, the first whose git app ANSWERS this cycle. Published is not
+# enough. On 2026-11-13 from 02:12Z the MacBook was out of memory, its door answered 502 and timeouts, and the HP's
+# and the Dell's follows, both through it, took nothing (DGO-1863). Each office's git app names its account itself, so
+# an entry may carry its own path (`vps1:/git/gh/<account>/<owner>/<repo>.git`); DGO_FOLLOW_VIA_PATH is the path of
+# the entries that carry none.
 #
 # ONE CYCLE (the timer's, every 30 minutes) makes at most ONE change, and every change is a TAKE:
 #   1. One at a time (flock, held by flock(1) itself so nothing the cycle starts inherits it); never beside another
@@ -46,6 +51,8 @@
 # The owner hears what failed: ONE row in the notice centre (source `follow`), written once per distinct text,
 # updated in place, and closed with «back to normal» by the next good take or current cycle. And a good take of
 # dgo-stable, once, in a row of its own (told_took) — with a row open, its «back to normal» says the take instead.
+# And the line itself, where the checkout reads GitHub's API: a gates job of DGO_FOLLOW queued longer than
+# DGO_FOLLOW_LINE_WAIT_MIN (60) for a runner is told, in a row of its own (line_waits), and closed when none waits.
 set -uo pipefail
 
 # The merge below may replace this very file, and bash reads a script as it runs: run from a private copy.
@@ -65,15 +72,29 @@ LOG_TAG=follow
 FOLLOW="$(read_env DGO_FOLLOW)"
 BRANCH="$(read_env DGO_BRANCH)"
 GATES="$(read_env DGO_FOLLOW_GATES)"; GATES="${GATES:-gates-hosted.yml}"
-VIA="$(read_env DGO_FOLLOW_VIA)"
-VIA_PATH="$(read_env DGO_FOLLOW_VIA_PATH)"
+# read_env_value: a quoted list (`"macbook vps1"`) or a trailing ` # comment` is not part of the value
+VIA="$(read_env_value DGO_FOLLOW_VIA)"
+read -r -a _VIA_LIST <<<"${VIA//,/ }"; VIA="${_VIA_LIST[*]-}"   # the ordered list, one space between entries
+VIA_PATH="$(read_env_value DGO_FOLLOW_VIA_PATH)"
+# how long one office's git app may take to answer, in seconds; the environment wins, as for MAX_LOAD below.
+# 1–99999, or 20, said: a typo must never abort the cycle unsaid — a leading 0 is octal to bash's arithmetic (`08`
+# aborts the script), and git refuses a lowSpeedTime above 2^31 (the second reader of DGO-1863)
+VIA_PROBE="${DGO_FOLLOW_VIA_PROBE_S:-$(read_env_value DGO_FOLLOW_VIA_PROBE_S)}"
+VIA_PROBE="${VIA_PROBE#"${VIA_PROBE%%[![:space:]]*}"}"; VIA_PROBE="${VIA_PROBE%"${VIA_PROBE##*[![:space:]]}"}"   # the ends only: «1 5» is no number
+case "${VIA_PROBE}" in ''|*[!0-9]*|0*|??????*) [ -z "${VIA_PROBE}" ] || warn "DGO_FOLLOW_VIA_PROBE_S=${VIA_PROBE} is not 1–99999 seconds — 20 applies"; VIA_PROBE=20 ;; esac
 # "A loaded host" is the 1-minute load above this, default the CPU count. An office that runs its agents' sessions
 # all day (the HP: 8 of them, DGO-1299) sits above its CPU count while it works, and never took a green dgo-stable
 # (skipped at 8–20 on 6 CPUs, 2026-11-03). So the office declares its own ceiling in .env; the environment still wins.
 MAX_LOAD="${DGO_FOLLOW_MAX_LOAD:-$(read_env_value DGO_FOLLOW_MAX_LOAD)}"
 # A number or nothing: awk compares anything else as text, and "16" quoted skipped every cycle while abc never did.
 case "${MAX_LOAD}" in ''|*[!0-9.]*|*.*.*) [ -z "${MAX_LOAD}" ] || warn "DGO_FOLLOW_MAX_LOAD=${MAX_LOAD} is not a number — the CPU count applies"; MAX_LOAD= ;; esac
+# minutes a gates run of DGO_FOLLOW may wait for a runner before the owner is told (line_waits): 1–99999, or 60, said
+LINE_WAIT_MIN="${DGO_FOLLOW_LINE_WAIT_MIN:-$(read_env_value DGO_FOLLOW_LINE_WAIT_MIN)}"
+LINE_WAIT_MIN="${LINE_WAIT_MIN#"${LINE_WAIT_MIN%%[![:space:]]*}"}"; LINE_WAIT_MIN="${LINE_WAIT_MIN%"${LINE_WAIT_MIN##*[![:space:]]}"}"   # as VIA_PROBE: the ends only
+case "${LINE_WAIT_MIN}" in ''|*[!0-9]*|0*|??????*) [ -z "${LINE_WAIT_MIN}" ] || warn "DGO_FOLLOW_LINE_WAIT_MIN=${LINE_WAIT_MIN} is not 1–99999 minutes — 60 applies"; LINE_WAIT_MIN=60 ;; esac
 SRC=origin                              # where a cycle fetches and pushes: origin, or the URL resolve_src() makes
+VIA_USED=""                             # …and the office of DGO_FOLLOW_VIA whose git app answered this cycle
+VIA_WHY=""                              # …or, when none did, what each one said
 OFFICE="$(read_env DGO_OFFICE_ID)"; OFFICE="${OFFICE:-${DN}}"
 STATE_DIR="${REPO_ROOT}/data/follow"
 STATE="${STATE_DIR}/state"
@@ -84,7 +105,15 @@ UNIT=dgo-follow
 DRY=0
 HEAL=0                                  # `bbox follow heal`: office_heal, and nothing after it
 export GIT_TERMINAL_PROMPT=0            # a timer has no terminal: a missing credential fails, never waits
-git() { command git -c core.quotePath=false -C "${REPO_ROOT}" "$@"; }   # paths as they are on disk
+# Every HTTP transfer a cycle makes is bounded like its probe (DGO-1876). A door that answered the probe and then goes
+# silent mid-pack fails the fetch or the push in a minute, and the cycle says so. The MacBook's door did exactly that
+# from 10:09Z on 2026-11-13, its engine's share hung; without the bound the cycle, and every later one, waited for its
+# 6 h. The bound is three probes long, since a pack takes longer than a list of refs, and the server's own work before
+# its first byte counts too. Never under 15 s: a server working silently sends a keepalive every 5 s, and a shorter
+# bound would cut a real pack (the second reader). http.* is read only by an HTTP transfer: no local command changes,
+# and an ssh remote is not bounded by it.
+NET_SLOW=$((VIA_PROBE * 3 > 15 ? VIA_PROBE * 3 : 15))
+git() { command git -c core.quotePath=false -c http.lowSpeedLimit=1 -c "http.lowSpeedTime=${NET_SLOW}" -C "${REPO_ROOT}" "$@"; }   # paths as they are on disk
 short() { git rev-parse --short "$1" 2>/dev/null || printf '%.8s' "$1"; }
 
 # ── state: key=value lines, rewritten whole (only the locked cycle and `clear` write it) ───────────
@@ -150,22 +179,61 @@ told_took() {   # what tgt — a good take of dgo-stable is news too (DGO-1329: 
 }
 
 # ── where a cycle fetches and pushes ──────────────────────────────────────────────────────────────
-resolve_src() {   # SRC = origin, or DGO_FOLLOW_VIA's git proxy at the address its link publishes NOW; fails, said
-  SRC=origin
+via_bare() {   # 0 when an office of DGO_FOLLOW_VIA carries no path of its own (it then needs DGO_FOLLOW_VIA_PATH)
+  local e
+  for e in ${_VIA_LIST[@]+"${_VIA_LIST[@]}"}; do case "${e}" in *:/*) ;; *) return 0 ;; esac; done
+  return 1
+}
+via_names() {   # the offices DGO_FOLLOW_VIA names, in order, without their paths: «macbook, vps1»
+  local e out=""
+  for e in ${_VIA_LIST[@]+"${_VIA_LIST[@]}"}; do out="${out:+${out}, }${e%%:*}"; done
+  printf '%s' "${out}"
+}
+resolve_src() {   # SRC = origin, or the first git app of DGO_FOLLOW_VIA that ANSWERS now, in order; fails, said
+  SRC=origin; VIA_USED=""; VIA_WHY=""
   [ -n "${VIA}" ] || return 0
-  [ -n "${VIA_PATH}" ] \
-    || { say "DGO_FOLLOW_VIA=${VIA} is declared without DGO_FOLLOW_VIA_PATH (/git/gh/<account>/<owner>/<repo>.git)"; return 1; }
-  local port
-  # the DOOR the link publishes for it (registry.link_port), which is what `bbox remote` itself calls — not the app's
-  # own port, which only the serving office's network answers on (that one is only the last resort, for a record the
-  # compiler has not rendered yet: then the fetch fails and the cycle says so)
-  port="$("${DGO_FOLLOW_BBOX:-${REPO_ROOT}/bbox}" remote "${VIA}" git-accounts --json 2>/dev/null \
-          | python3 -c 'import json, sys
+  local entry office path port url err rc probe="${VIA_PROBE}" cap="" why line   # VIA_PROBE: checked where it is read
+  # git's low-speed bound stops a door that accepts and goes silent; timeout(1) also bounds a connect to an address that
+  # never replies and a name that never resolves, which no git setting does (where there is no timeout, git's bound alone)
+  command -v timeout >/dev/null 2>&1 && cap="timeout -k 5 $((probe + 10))"
+  for entry in ${_VIA_LIST[@]+"${_VIA_LIST[@]}"}; do
+    office="${entry%%:*}"
+    case "${entry}" in *:/*) path="/${entry#*:/}" ;; *) path="${VIA_PATH}" ;; esac   # office:/path, or the shared one
+    [ -n "${path}" ] || continue      # never here: the cycle blocks on a missing path before it asks (via_bare)
+    # the DOOR the link publishes for it (registry.link_port), which is what `bbox remote` itself calls — not the app's
+    # own port, which only the serving office's network answers on (that one is only the last resort, for a record the
+    # compiler has not rendered yet: then the probe below fails, and the next office is asked)
+    port="$("${DGO_FOLLOW_BBOX:-${REPO_ROOT}/bbox}" remote "${office}" git-accounts --json 2>/dev/null \
+            | python3 -c 'import json, sys
 d = json.load(sys.stdin)
 print(int((d.get("registry") or {}).get("link_port") or d["app"]["port"]))' 2>/dev/null)" || port=""
-  [ -n "${port}" ] || { say "${VIA}'s git app (DGO_FOLLOW_VIA) is not published to this office — nothing fetched"; return 1; }
-  say "through the git app of ${VIA}, at its door :${port}"
-  SRC="http://git-accounts.${VIA}:${port}${VIA_PATH}"
+    if [ -z "${port}" ]; then
+      say "${office}'s git app (DGO_FOLLOW_VIA) is not published to this office"
+      VIA_WHY="${VIA_WHY:+${VIA_WHY}; }${office}: not published"; continue
+    fi
+    # it must ANSWER, with the branch this office follows (exit 2, the branch absent, is no answer either: the fetch would
+    # fail the same). What git said is kept — on this line and in the cycle's own (LAST_DETAIL, data/follow/log) — so
+    # the root is named: a 502, a timeout (124), a wrong path.
+    url="http://git-accounts.${office}:${port}${path}"
+    # -C explicitly: timeout(1) runs the git BINARY, not the git() function above, and from this cycle's own directory
+    # the checkout's config (its insteadOf, its remotes) would not be read
+    err="$( { ${cap} git -C "${REPO_ROOT}" -c http.lowSpeedLimit=1 -c "http.lowSpeedTime=${probe}" \
+                ls-remote -q --exit-code "${url}" "refs/heads/${FOLLOW}" >/dev/null; } 2>&1 )"; rc=$?
+    if [ "${rc}" != 0 ]; then
+      # git's own verdict (fatal:/error:), not a warning printed before it; else its last line (-a: a line git's proxy
+      # wrote in another encoding is still text). Without the URL git repeats — it is on the line above — so the cause
+      # fits («… returned error: 502»), and cut by characters, not bytes: the git proxy's errors are Hebrew
+      line="$(grep -a -m1 -E '^(fatal|error):' <<<"${err}" || tail -n 1 <<<"${err}")"
+      line="$(sed -E "s/^fatal: unable to access '[^']*': /fatal: /" <<<"${line}")"
+      why="exit ${rc}${line:+: ${line:0:120}}"
+      say "${office}'s git app, at its door :${port}, does not answer (${why})"
+      VIA_WHY="${VIA_WHY:+${VIA_WHY}; }${office}: ${why}"; continue
+    fi
+    say "through the git app of ${office}, at its door :${port}"
+    SRC="${url}"; VIA_USED="${office}"
+    return 0
+  done
+  return 1
 }
 push_branch() {   # sha → DGO_BRANCH where this cycle fetched from (never forced); origin/DGO_BRANCH then says so, as a
   # push to a NAMED remote would have set it — recover() reads it to tell "pushed" from "never verified". Nothing to
@@ -178,22 +246,26 @@ push_branch() {   # sha → DGO_BRANCH where this cycle fetched from (never forc
 }
 
 # ── the gates ─────────────────────────────────────────────────────────────────────────────────────
+gh_api() {   # <path under repos/<owner>/<repo>/> → GitHub's JSON for it, with the checkout's own git credential; fails
+  # when origin is not on GitHub or the call does not answer (5 s to connect: a host whose packets to GitHub are dropped
+  # loses seconds, not a minute, per call). Never print the URL: it may carry a credential.
+  if [ -n "${DGO_FOLLOW_GH_CMD:-}" ]; then "${DGO_FOLLOW_GH_CMD}" "$1"; return; fi
+  local url slug tok
+  url="$(git remote get-url origin 2>/dev/null)" || return 1
+  case "${url}" in *github.com[:/]*) ;; *) return 1 ;; esac
+  slug="$(printf '%s' "${url}" | sed -E 's#\.git$##; s#^.*github\.com[:/]##')"
+  tok="$(printf 'protocol=https\nhost=github.com\n\n' | git credential fill 2>/dev/null | sed -n 's/^password=//p')"
+  { [ -z "${tok}" ] || printf 'header = "Authorization: Bearer %s"\n' "${tok}"; } \
+    | curl -sf --connect-timeout 5 --max-time 30 -K - -H 'Accept: application/vnd.github+json' "https://api.github.com/repos/${slug}/$1"
+}
 green_shas() {   # the commits of DGO_FOLLOW whose ${GATES} run succeeded, one per line; fails when none can be read
   if [ -n "${DGO_FOLLOW_GREEN_CMD:-}" ]; then "${DGO_FOLLOW_GREEN_CMD}"; return; fi
-  local url slug tok ref="" api=""
-  # Every green run, where the checkout can read GitHub's API. Never print the URL: it may carry a credential.
-  url="$(git remote get-url origin 2>/dev/null)" || url=""
-  case "${url}" in
-    *github.com[:/]*)
-      slug="$(printf '%s' "${url}" | sed -E 's#\.git$##; s#^.*github\.com[:/]##')"
-      tok="$(printf 'protocol=https\nhost=github.com\n\n' | git credential fill 2>/dev/null | sed -n 's/^password=//p')"
-      api="$({ [ -z "${tok}" ] || printf 'header = "Authorization: Bearer %s"\n' "${tok}"; } \
-        | curl -sf --max-time 30 -K - -H 'Accept: application/vnd.github+json' \
-            "https://api.github.com/repos/${slug}/actions/workflows/${GATES}/runs?branch=${FOLLOW}&status=success&per_page=100" \
-        | python3 -c 'import json, sys
+  local ref="" api=""
+  # Every green run, where the checkout can read GitHub's API.
+  api="$(gh_api "actions/workflows/${GATES}/runs?branch=${FOLLOW}&status=success&per_page=100" \
+    | python3 -c 'import json, sys
 for r in json.load(sys.stdin).get("workflow_runs", []):
-    print(r["head_sha"])' 2>/dev/null)" || api="" ;;
-  esac
+    print(r["head_sha"])' 2>/dev/null)" || api=""
   [ -z "${api}" ] || { printf '%s\n' "${api}"; return 0; }
   # Where the API cannot be read: gates-hosted's own record as git data (its green job moves refs/green/<branch> to
   # each green commit), from wherever this cycle fetches. Only then — a ref is a weaker word than the API: refs/green
@@ -203,6 +275,73 @@ for r in json.load(sys.stdin).get("workflow_runs", []):
   fi
   [ -n "${ref}" ] || { say "neither GitHub's API nor refs/green/${FOLLOW} could be read — no gates" >&2; return 1; }
   printf '%s\n' "${ref}"
+}
+line_wait() {   # [runners|runners-required] — the ${GATES} runs of DGO_FOLLOW with a job no runner has taken yet, one line
+  # of fields split by | (an empty one stays empty): "<minutes the oldest job waited>|<how many runs>|<the oldest's
+  # commit>|<since, UTC>|<the runners, when NONE is online, comma-separated; «none registered» when the list is empty>".
+  # No line when none waits — unless `runners` is asked, then "0|0|||<runners>": a row that is open closes only once no
+  # runner is listed offline. Fails when GitHub's API cannot be read, and with `runners-required` (the open row named
+  # runners) also when the runners cannot be listed this time: one failed lookup must not read as «a runner is back». A
+  # run is read by its JOBS: one in progress may wait too (decide done, gates queued behind the one runner), and a re-run
+  # keeps its run's first created_at but its jobs are new. Runners are listed only where the credential may (an admin's),
+  # and only when none is online: an old registration left offline beside a working runner is no outage.
+  if [ -n "${DGO_FOLLOW_LINE_CMD:-}" ]; then "${DGO_FOLLOW_LINE_CMD}" "$@"; return; fi
+  local runs id sha j waits="" q="0|0||" off
+  runs="$(gh_api "actions/workflows/${GATES}/runs?branch=${FOLLOW}&per_page=100" | python3 -c 'import json, sys
+for r in json.load(sys.stdin)["workflow_runs"]:
+    if r["status"] != "completed":
+        print(r["id"], r["head_sha"])' 2>/dev/null)" || return 1
+  while read -r id sha; do
+    [ -n "${id}" ] || continue
+    j="$(gh_api "actions/runs/${id}/jobs?filter=latest&per_page=100" | python3 -c 'import json, sys
+q = [j["created_at"] for j in json.load(sys.stdin)["jobs"] if j["status"] == "queued"]
+if q:
+    print(min(q))' 2>/dev/null)" || return 1
+    [ -z "${j}" ] || waits="${waits}${j} ${sha}"$'\n'
+  done <<<"${runs}"
+  [ -n "${waits}" ] || [ -n "${1:-}" ] || return 0
+  if [ -n "${waits}" ]; then
+    q="$(printf '%s' "${waits}" | python3 -c 'import datetime, sys, time
+w = sorted(l.split() for l in sys.stdin if l.strip())
+t = datetime.datetime.strptime(w[0][0], "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=datetime.timezone.utc)
+print("%d|%d|%s|%s" % ((time.time() - t.timestamp()) // 60, len(w), w[0][1], t.strftime("%Y-%m-%d %H:%M")))')" || return 1
+  fi
+  off="$(gh_api "actions/runners" 2>/dev/null | python3 -c 'import json, sys
+r = json.load(sys.stdin)["runners"]
+if not r:
+    print("none registered")
+elif not any(x.get("status") == "online" for x in r):
+    print(",".join(x["name"].replace("|", "/") for x in r))' 2>/dev/null)" \
+    || { [ "${1:-}" != runners-required ] || return 1; off=""; }
+  printf '%s|%s\n' "${q}" "${off}"
+}
+line_waits() {   # the line itself: a gates job of DGO_FOLLOW queued over LINE_WAIT_MIN for a runner is told, in a row of its
+  # own (follow:line:<office>), and closed («back to normal», same row) once none waits that long. On 2026-11-13–15
+  # batches 66–68 waited 37 h and more behind the Dell's one runner, offline, and only a coordinator's notes said so
+  # (DGO-1895). It rings (error) when a runner is listed offline, or after 3 × LINE_WAIT_MIN — longer than a busy
+  # runner's drain (gates-hosted.yml: up to ~2 h behind a mac-dgo proof); before that, a wait behind a runner that may
+  # only be busy is shown, not rung (warning), and told again once if it turns into a ring. It closes only once no job
+  # waits that long AND no runner is listed offline: GitHub ends a job after 24 h in the queue, and a re-ask job then
+  # queues fresh, so «none waits» alone would close it while the runner is still off. Where the API cannot be read (an
+  # office fetching through another's git app), nothing is said or closed: a row told stays until a cycle reads it.
+  local w mins n sha since off told level title mode=""
+  told="$(st_get LINE_TOLD)"   # "<level>[-off] <commit>": -off when the row named runners offline
+  case "${told}" in *-off\ *) mode=runners-required ;; ?*) mode=runners ;; esac
+  w="$(line_wait "${mode}")" || return 0
+  IFS='|' read -r mins n sha since off <<<"${w}"
+  case "${mins}" in ''|*[!0-9]*) mins=0 ;; esac   # none waits — or a field that is no number, never read as a wait
+  if [ "${mins}" -lt "${LINE_WAIT_MIN}" ]; then
+    [ -n "${told}" ] && [ -z "${off}" ] || return 0
+    post_notice info "קו השחרור זז שוב — ${OFFICE}" "No ${GATES} job of ${FOLLOW} has waited for a runner longer than ${LINE_WAIT_MIN} min any more." "line:${OFFICE}" \
+      && st_set LINE_TOLD ""
+    return 0
+  fi
+  level=warning; title="קו השחרור ממתין לשרת בדיקות — ${OFFICE}"
+  [ -z "${off}" ] || title="קו השחרור עומד: שרת הבדיקות כבוי (${off}) — ${OFFICE}"
+  if [ -n "${off}" ] || [ "${mins}" -ge $((LINE_WAIT_MIN * 3)) ]; then level=error; fi
+  case "${told}" in error*) return 0 ;; warning*) [ "${level}" = error ] || return 0 ;; esac
+  post_notice "${level}" "${title}" "${n} ${GATES} run(s) of ${FOLLOW} have a job waiting for a runner, the oldest ($(short "${sha}")) since ${since} UTC${off:+; offline: ${off}}. Until a runner takes them, no office can take anything newer than ${FOLLOW}'s last green commit." "line:${OFFICE}" \
+    && st_set LINE_TOLD "${level}${off:+-off} ${sha}"
 }
 
 # ── health: "<service> <state> <health>" for every service; fails when they cannot be read ─────────
@@ -388,6 +527,24 @@ office_run() {   # bbox run, logged; the exit code is the run's
 
 old_images() {   # the services running an image older than their own build files (lib.sh stale_images), names only
   if [ -n "${DGO_FOLLOW_OLD_IMAGES_CMD:-}" ]; then "${DGO_FOLLOW_OLD_IMAGES_CMD}"; return; fi
+  # Asked of the checkout's lib.sh in a shell of its own: after a take that is the MERGED code, while the lib.sh this
+  # cycle sourced at its start is the one from before the merge. vps1's take of 55 (2026-11-13, DGO-1838) ran 45's
+  # stale_images, which still listed a service the office no longer declares (chat), and «no such service» failed the
+  # whole rebuild — the fix was already in 55 (DGO-1848). The rebuild itself is a fresh `bbox run`, so it already ran
+  # the new code. A follow.sh therefore reads a NEWER lib.sh's stale_image_services: its output (service names, space
+  # separated) is a contract across versions. A merged lib.sh that cannot answer (it fails to source, or lost the
+  # function) is logged, and the cycle's own one answers — never a silent «nothing is stale» (the second reader).
+  if [ -f "${REPO_ROOT}/scripts/lib.sh" ]; then
+    local out rc=0
+    out="$(cd "${REPO_ROOT}" && bash -c '. scripts/lib.sh >/dev/null 2>&1
+      declare -F stale_image_services >/dev/null || exit 3
+      stale_image_services')" || rc=$?
+    if [ "${rc}" = 0 ]; then
+      [ -z "${out}" ] || printf '%s\n' "${out}"
+      return 0
+    fi
+    logline "old_images: the merged scripts/lib.sh could not list stale images (exit ${rc}); the cycle's own lib.sh answered"
+  fi
   stale_image_services
 }
 
@@ -395,6 +552,142 @@ office_rebuild() {   # bbox run of exactly these services, logged: it builds wha
   # its exit is the run's, fatal included (DGO-995): a build that fails here is now told, as the caller always meant
   if [ -n "${DGO_FOLLOW_RUN_CMD:-}" ]; then "${DGO_FOLLOW_RUN_CMD}" rebuild "$@"; return; fi
   "${REPO_ROOT}/bbox" run "$@" > "${STATE_DIR}/run-$(date -u '+%Y%m%dT%H%M%S')-rebuild.log" 2>&1
+}
+
+# ── code mounted as a FOLDER (issues/a-service-that-mounts-its-code-as-a-folder-keeps-running-the-old-code-…) ──────
+# A service that mounts its code as a read-only folder keeps running what it loaded at start: the folder shows the
+# take's files, nothing in its build or definition moved, so the bring-up leaves it be (lib.sh filemount_refresh
+# follows FILE mounts only). Measured 2026-11-13 (DGO-1865): android-emulator mounts ./server:/app:ro, its 0.2.1
+# changed only governor.py, which server.py imports once — and the Dell's phone would have kept the old one. Matched on
+# the MERGE's own diff, never on mtimes: a merge rewrites files whose text did not change. Read-only only: a service
+# writes a read-write folder itself, and its code is not read from there.
+folder_mounts() {   # "<service> <started epoch> <path under the checkout>" per read-only folder bind of a RUNNING container
+  # of this office — listed as filemount_refresh lists them (`dc ps -q`: COMPOSE_PROJECT_NAME is empty on a checkout with a
+  # Latin folder name, the Dell's, and a label filter on it matched nothing — the first version's reader, F1)
+  local json ids
+  if [ -n "${DGO_FOLLOW_INSPECT_CMD:-}" ]; then json="$("${DGO_FOLLOW_INSPECT_CMD}")" || return 1
+  else
+    ids="$(_dcx_run ps -q 2>/dev/null)" || return 1
+    [ -n "${ids}" ] || return 0
+    # shellcheck disable=SC2086 — a list of container ids
+    json="$(docker inspect ${ids} 2>/dev/null)" || return 1
+  fi
+  printf '%s' "${json}" | python3 -c '
+import datetime, json, os, sys
+roots = {os.path.realpath(r) for r in sys.argv[1:] if r}
+rows = json.load(sys.stdin)
+for c in rows:
+    st = c.get("State") or {}
+    if not st.get("Running"):
+        continue
+    svc = ((c.get("Config") or {}).get("Labels") or {}).get("com.docker.compose.service", "")
+    try:
+        started = int(datetime.datetime.fromisoformat(st.get("StartedAt", "")[:19]).replace(
+            tzinfo=datetime.timezone.utc).timestamp())
+    except ValueError:
+        continue
+    for m in c.get("Mounts") or []:
+        src = m.get("Source") or ""
+        if not svc or m.get("Type") != "bind" or m.get("RW") or not os.path.isdir(src):
+            continue
+        real = os.path.realpath(src)
+        for r in roots:
+            if real.startswith(r + os.sep):
+                print(svc, started, real[len(r) + 1:])
+                break' "${REPO_ROOT}" "$(cd "${REPO_ROOT}" 2>/dev/null && pwd -P)"
+}
+folder_app() {   # <path under the checkout> → the app it belongs to (<layer dir>/<app>/…), or nothing
+  case "$1" in apps/?*|platform-base/?*) printf '%s' "$1" | cut -d/ -f2 ;; esac   # the app's own dir too (`.:/app:ro`)
+}
+folders_changed() {   # <before> <merged> <since epoch> → "<service> <app>" per declared service, not this cycle's own
+  # container, running since before <since>, whose read-only folder mount holds a file the merge changed. Fails (logged)
+  # when the merge's diff or the containers cannot be read: never a silent «nothing changed» (F6).
+  local changed mounts declared self s started rel p out=""
+  changed="$(git diff --no-renames --name-only "$1" "$2" 2>/dev/null)" \
+    || { logline "folders: git diff $(short "$1")..$(short "$2") failed — no folder-mounted service checked"; return 1; }
+  [ -n "${changed}" ] || return 0
+  mounts="$(folder_mounts 2>/dev/null)" || { logline "folders: the containers' mounts cannot be read — none checked"; return 1; }
+  [ -n "${mounts}" ] || return 0
+  declared="$(model_services 2>/dev/null)" || { logline "folders: the declared services cannot be read — none checked"; return 1; }
+  self="$(bbox_self_service 2>/dev/null || true)"
+  while read -r s started rel; do
+    [ -n "${rel}" ] || continue
+    grep -qFx -- "${s}" <<<"${declared}" || continue     # a retired service's container: `up <it>` fails them all (F2)
+    [ "${s}" != "${self}" ] || continue
+    [ "${started:-0}" -lt "$3" ] || continue             # started after the bring-up: it already runs the take's code
+    case " ${out} " in *" ${s} "*) continue ;; esac
+    while IFS= read -r p; do
+      case "${p}" in "${rel}"/*) out="${out:+${out} }${s}"; printf '%s %s\n' "${s}" "$(folder_app "${rel}")"; break ;; esac
+    done <<<"${changed}"
+  done <<<"${mounts}"
+}
+office_recreate() {   # recreate exactly these services: no build, no dependency
+  if [ -n "${DGO_FOLLOW_RUN_CMD:-}" ]; then "${DGO_FOLLOW_RUN_CMD}" recreate "$@"; return; fi
+  "${REPO_ROOT}/scripts/dc" up -d --no-deps --force-recreate "$@" > "${STATE_DIR}/run-$(date -u '+%Y%m%dT%H%M%S')-recreate.log" 2>&1
+}
+busy_holds() {   # <service> <folder's app> <busy apps, one per line> → 0 when one of them is this service's
+  local b
+  while IFS= read -r b; do
+    [ -n "${b}" ] || continue
+    [ "${b}" = "$2" ] || [ "${b}" = "$1" ] || [ "${1#"${b}"-}" != "$1" ] && return 0
+  done <<<"$3"
+  return 1
+}
+folders_refresh() {   # <since epoch> "<service> <app>"… → recreates them, a busy app's left for later (F4); what is left
+  # or failed waits in FOLDERS_PENDING for the next cycle (F5), which finds HEAD at the target and would never ask again.
+  # 0: nothing failed (some may wait for a busy app); 1: a recreate failed (said).
+  # An entry is "<service>:<app>" in FOLDERS_PENDING, so a retry asks the same app whether it is busy.
+  local since="$1" busy go="" names="" held="" s a pending rc=0; shift
+  busy="$(busy_apps | cut -d: -f1)"
+  for s in "$@"; do
+    a="${s#* }"; s="${s%% *}"; [ "${a}" != "${s}" ] || a=""
+    # busy when the app the folder belongs to is, or the service's own app: no container carries its app, so it is the
+    # service's name or its prefix (vps1, 2026-11-13: dgo-extend mounts apps/computers; meet-jibri, meet-start are meet's)
+    if busy_holds "${s}" "${a}" "${busy}"; then held="${held}${held:+ }${s}:${a}"
+    else go="${go}${go:+ }${s}:${a}"; names="${names}${names:+ }${s}"; fi
+  done
+  [ -z "${held}" ] || say "code mounted as a folder changed under ${held} — its app is busy, recreated by a later cycle"
+  pending="${held}"
+  if [ -n "${names}" ]; then
+    say "code mounted as a folder changed under ${names} — recreating exactly these"
+    # shellcheck disable=SC2086 — a list of service names
+    if ! office_recreate ${names}; then rc=1; logline "folders: recreating ${names} failed"; pending="${pending}${pending:+ }${go}"; fi
+  fi
+  # …added to what an EARLIER take left, never over it (a newer take's diff rarely touches that folder again): the older
+  # `since` kept, an entry this call handled replaced by its outcome
+  local old old_since e
+  old="$(st_get FOLDERS_PENDING)"
+  if [ -n "${old}" ]; then
+    old_since="${old%% *}"; [ "${old_since}" -lt "${since}" ] 2>/dev/null && since="${old_since}"
+    for e in ${old#* }; do
+      # this call saw it (recreated, failed or held): its outcome is already in pending, or it is done
+      case " ${names} ${held} " in *" ${e%%:*} "*|*" ${e%%:*}:"*) continue ;; esac
+      pending="${pending}${pending:+ }${e}"
+    done
+  fi
+  if [ -n "${pending}" ]; then st_set FOLDERS_PENDING "${since} ${pending}"; else st_set FOLDERS_PENDING ""; fi
+  return "${rc}"
+}
+folders_retry() {   # a cycle after a take: what folders_refresh left (busy, or failed) — the ones still running from before
+  local p since s started mounts names=""
+  local -a live=()
+  p="$(st_get FOLDERS_PENDING)"; [ -n "${p}" ] || return 0
+  since="${p%% *}"
+  mounts="$(folder_mounts 2>/dev/null)" || { logline "folders: the containers' mounts cannot be read — the retry waits"; return 0; }
+  for s in ${p#* }; do
+    started="$(awk -v s="${s%%:*}" '$1 == s {print $2; exit}' <<<"${mounts}")"
+    [ -n "${started}" ] && [ "${started}" -lt "${since}" ] || continue   # gone, or recreated since: it has the new code
+    live+=("${s%%:*} ${s#*:}"); names="${names}${names:+ }${s%%:*}"
+  done
+  if [ "${#live[@]}" = 0 ]; then st_set FOLDERS_PENDING ""; return 0; fi
+  # the first time the merged code runs in them, so judged as the take judged its own (F3): the services before and after
+  local before after bad=""
+  before="$(settle)" || { logline "folders: the services cannot be read — the retry waits"; return 0; }
+  folders_refresh "${since}" "${live[@]}" \
+    || tell "שירות רץ על קוד ישן אחרי עדכון — ${OFFICE}" "${names} mount their code as a folder the last take changed, and recreating them failed again (data/follow/run-*-recreate.log): they run the code from before it until recreated."
+  if after="$(settle)"; then bad="$(lost "${before}" "${after}")"; else bad="the services cannot be read"; fi
+  [ -z "${bad}" ] || tell "שירות נפל אחרי עדכון — ${OFFICE}" "Recreating ${names}, whose code is mounted as a folder the last take changed, left: ${bad//$'\n'/, }. A session must look."
+  return 0
 }
 
 # ── the host timer ────────────────────────────────────────────────────────────────────────────────
@@ -466,7 +759,7 @@ install_timer() {
 
 status() {
   local behind="?" timer="not installed"
-  say "declared: DGO_FOLLOW=${FOLLOW:-<empty: not following>}  DGO_BRANCH=${BRANCH:-<empty>}  gates: ${GATES}${VIA:+  via: the git app of ${VIA}}"
+  say "declared: DGO_FOLLOW=${FOLLOW:-<empty: not following>}  DGO_BRANCH=${BRANCH:-<empty>}  gates: ${GATES}${VIA:+  via: the git app of $(via_names)}"
   if [ -n "${FOLLOW}" ] && git rev-parse -q --verify "refs/remotes/origin/${FOLLOW}" >/dev/null; then
     behind="$(git rev-list --count "HEAD..origin/${FOLLOW}")"
   fi
@@ -478,6 +771,7 @@ status() {
     && timer="${timer}; the follow-runner app runs (follow-runner-${DN})"
   say "timer: ${timer}"
   say "last cycle: $(st_get LAST_AT) $(st_get LAST_RESULT) — $(st_get LAST_DETAIL)"
+  [ -z "$(st_get LAST_VIA)" ] || say "last fetched through the git app of $(st_get LAST_VIA)"
   [ -z "$(st_get TAKING)" ] || say "a take is open: $(st_get TAKING) (merged: $(st_get MERGED))"
   [ -z "$(st_get FAILED_TARGET)" ] || say "not taken again until a newer one is green$([ -z "$(st_get FAILED_HEAD)" ] || printf ' or %s moves past %s (a conflict)' "${BRANCH}" "$(short "$(st_get FAILED_HEAD)")"): $(short "$(st_get FAILED_TARGET)") ($(st_get FAILED_AT))"
 }
@@ -647,10 +941,31 @@ take() {   # ref what — merge ref into BRANCH, run, verify, push or roll back
   fi
   keep="$(sed '/^$/d' <<<"${keep}")"; unstage="$(sed '/^$/d' <<<"${unstage}")"
   added="$(git diff --name-only --no-renames --diff-filter=A "HEAD...${tgt}")"
-  # on disk and NOT tracked here (a file the office already has through a cherry-pick merges cleanly)
-  present="$(printf '%s\n' "${added}" | sed '/^$/d' | while read -r f; do
+  # on disk and NOT tracked here (a file the office already has through a cherry-pick merges cleanly). One that holds
+  # the VERY bytes and mode the take adds is nobody's other work: it is kept as left work in the commit below, and the
+  # merge then adds nothing over it — measured 2026-11-12, the Dell refused 45 for 21 such files (an app copied in by
+  # hand before the line carried it); a file that differs, a link or an ignored one still refuses (DGO-1838).
+  local same="" f mode want filemode
+  filemode="$(git config --type=bool core.fileMode 2>/dev/null || echo true)"
+  present=""
+  while IFS= read -r f; do
+    [ -n "${f}" ] || continue
     git cat-file -e "HEAD:${f}" 2>/dev/null && continue
-    [ -e "${REPO_ROOT}/${f}" ] || [ -L "${REPO_ROOT}/${f}" ] && printf '%s ' "${f}"; done)"
+    [ -e "${REPO_ROOT}/${f}" ] || [ -L "${REPO_ROOT}/${f}" ] || continue
+    # git's own word that it is a plain untracked file by that exact name: not ignored, not under a symlinked
+    # directory, not another case of the name on a case-insensitive disk (second reader)
+    if [ "${mine}" = 1 ] && [ ! -L "${REPO_ROOT}/${f}" ] \
+       && [ "$(git --literal-pathspecs ls-files -o --exclude-standard -- "${f}")" = "${f}" ] \
+       && here_carried "${f}" "${tgt}"; then
+      # the mode git will STAGE: 100755 only where it keeps modes and the owner may execute (WSL/9p: always 100644)
+      want=100644
+      [ "${filemode}" != false ] && [ -n "$(find "${REPO_ROOT}/${f}" -maxdepth 0 -perm -u+x 2>/dev/null)" ] && want=100755
+      mode="$(git ls-tree "${tgt}" -- "${f}" | cut -d' ' -f1)"
+      if [ "${mode}" = "${want}" ]; then same+="${f}"$'\n'; continue; fi
+    fi
+    present+="${f} "
+  done <<<"${added}"
+  keep="$(printf '%s\n%s' "${keep}" "${same}" | sed '/^$/d' | awk '!s[$0]++')"
   if [ -n "${present}" ]; then
     tell "לא ניתן לעדכן: קבצים מקומיים במקום שהעדכון מוסיף — ${OFFICE}" "${what} $(short "${tgt}") adds ${present}which already exist here, untracked or ignored. Move them away; nothing was merged."
     finish blocked "files already where the take adds them: ${present}"; return 1
@@ -751,6 +1066,7 @@ take() {   # ref what — merge ref into BRANCH, run, verify, push or roll back
     finish blocked "the take would change the enabled apps (${plus:+on: ${plus}}${minus:+off: ${minus}})"; return 1
   fi
   say "took ${what} $(short "${tgt}") into ${BRANCH} — bringing the office up on it"
+  local took_at; took_at="$(date +%s)"   # a container started from here on runs the take's code (folders_changed)
   rc=0; office_run take || rc=$?
   if after="$(settle)"; then bad="$(lost "${before}" "${after}")"; else bad="the services cannot be read"; fi
   [ "${rc}" = 0 ] || bad="${bad:+${bad}$'\n'}bbox run exited ${rc}"
@@ -766,17 +1082,34 @@ take() {   # ref what — merge ref into BRANCH, run, verify, push or roll back
     # shellcheck disable=SC2086
     office_rebuild ${old} || { tell "שירותים רצים על קוד ישן אחרי עדכון — ${OFFICE}" "After taking ${what} $(short "${tgt}"), ${old} run images older than their sources and building them again failed (data/follow/run-*-rebuild.log): the code is merged, and those services run the code from before it." && rebuilt=0; }
   fi
+  # …and a service whose read-only FOLDER mount holds a file the merge changed, still running what it loaded before the
+  # take (folders_changed). Its recreate is the first time the merged code runs, so it is judged like the bring-up (F3):
+  # settle + lost against the services before the take — a loss or a failed recreate is said, and the take's own line
+  # waits, as for a failed rebuild. The take stands: its code is merged, and going back would not undo a recreate.
+  local folded fl_svc bad_after
+  local -a fl=()
+  if ! folded="$(folders_changed "${prev}" "${merged}" "${took_at}")"; then
+    # nothing to keep for a retry (the services are unknown), and the next cycle finds HEAD at the target: said, once
+    tell "לא נבדקו שירותים שהקוד שלהם מותקן כתיקייה — ${OFFICE}" "After taking ${what} $(short "${tgt}"), the services whose code is mounted as a folder could not be checked (data/follow/log): one may run the code from before the take. A session must look." && rebuilt=0
+  elif [ -n "${folded}" ]; then
+    while IFS= read -r fl_svc; do [ -n "${fl_svc}" ] && fl+=("${fl_svc}"); done <<<"${folded}"
+    folders_refresh "${took_at}" "${fl[@]}" \
+      || { tell "שירות רץ על קוד ישן אחרי עדכון — ${OFFICE}" "After taking ${what} $(short "${tgt}"), recreating the services whose code is mounted as a folder the take changed failed (data/follow/run-*-recreate.log): they run the code from before it; the next cycle tries again." && rebuilt=0; }
+    if after="$(settle)"; then bad_after="$(lost "${before}" "${after}")"; else bad_after="the services cannot be read"; fi
+    [ -z "${bad_after}" ] \
+      || { tell "שירות נפל אחרי עדכון — ${OFFICE}" "After taking ${what} $(short "${tgt}"), recreating the services whose code is mounted as a folder the take changed left: ${bad_after//$'\n'/, }. The take is merged; a session must look." && rebuilt=0; }
+  fi
   if [ "$(git rev-parse HEAD)" != "${merged}" ]; then moved_on_top "${tgt}"; return 1; fi
   local held=""; [ "$(git rev-parse -q --verify "refs/remotes/origin/${BRANCH}")" = "${merged}" ] && held=1
   # the merge itself, not HEAD: a commit landing between the check above and the push is never pushed unchecked
   if push_branch "${merged}"; then
     st_set TAKING "" MERGED "" BEFORE "" FAILED_TARGET "" FAILED_AT "" FAILED_HEAD "" PUSH_PENDING ""
-    finish took "${what} $(short "${tgt}") into ${BRANCH} at $(short HEAD), healthy, $([ -n "${held}" ] && echo "origin's own commit (nothing to push)" || echo pushed)"
+    finish took "${what} $(short "${tgt}") into ${BRANCH} at $(short HEAD), healthy, $([ -n "${held}" ] && echo "origin's own commit (nothing to push)" || echo pushed)${VIA_USED:+, through ${VIA_USED}}"
     [ "${rebuilt}" = 0 ] || told_took "${what}" "${tgt}"   # a failed rebuild's row names the take, and stays open
   else
     st_set TAKING "" MERGED "" BEFORE "" FAILED_TARGET "" FAILED_AT "" FAILED_HEAD "" PUSH_PENDING "${merged}"
-    finish took "${what} $(short "${tgt}") into ${BRANCH}, healthy — the push was refused, the next cycle pushes again"
-    tell "המשרד עודכן אבל הענף לא נדחף — ${OFFICE}" "${BRANCH} took ${what} $(short "${tgt}") and is healthy, but pushing it${VIA:+ through ${VIA}} was refused; the next cycle pushes again."
+    finish took "${what} $(short "${tgt}") into ${BRANCH}, healthy — the push${VIA_USED:+ through ${VIA_USED}} was refused, the next cycle pushes again"
+    tell "המשרד עודכן אבל הענף לא נדחף — ${OFFICE}" "${BRANCH} took ${what} $(short "${tgt}") and is healthy, but pushing it${VIA_USED:+ through ${VIA_USED}} was refused; the next cycle pushes again."
   fi
   # What the take's builds replaced is given back now, not the day the disk is full (DGO-1393): the dangling images —
   # never a tagged image, a volume or a container; the build cache keeps its weekly prune (scripts/dc). After the push
@@ -863,13 +1196,26 @@ cycle() {
   if [ -e "${gd}/MERGE_HEAD" ] || [ -d "${gd}/rebase-merge" ] || [ -d "${gd}/rebase-apply" ] || [ -e "${gd}/index.lock" ]; then
     finish skipped "a merge, rebase or git command is in flight in the checkout"; return 0
   fi
-  if [ -n "${VIA}" ] && [ -z "${VIA_PATH}" ]; then   # a declaration missing: no cycle will fix it by itself
-    tell "לא ניתן לעקוב: DGO_FOLLOW_VIA_PATH ריק — ${OFFICE}" "DGO_FOLLOW_VIA=${VIA} is declared, but not the path of the repository on its git app (DGO_FOLLOW_VIA_PATH=/git/gh/<account>/<owner>/<repo>.git). Nothing was fetched."
+  # a folder-mounted service an earlier take could not recreate (its app was busy, or the recreate failed): again now —
+  # before the fetch, which it does not need (a fetch that fails would otherwise hold it back too)
+  [ "${DRY}" = 1 ] || folders_retry
+  # a declaration to fix: an office whose own path does not start with / (`vps1:git/gh/…`) — said as that, first, so it
+  # is never read as «no path of its own» below
+  local e bad=""
+  for e in ${_VIA_LIST[@]+"${_VIA_LIST[@]}"}; do case "${e}" in *:/*) ;; *:*) bad="${e}"; break ;; esac; done
+  if [ -n "${bad}" ]; then
+    tell "לא ניתן לעקוב: נתיב לא תקין ב-DGO_FOLLOW_VIA — ${OFFICE}" "DGO_FOLLOW_VIA names «${bad}»: an office's own path is <office>:/git/gh/<account>/<owner>/<repo>.git, starting with /. Nothing was fetched."
+    finish blocked "DGO_FOLLOW_VIA entry ${bad}: its path must start with /"; return 1
+  fi
+  # …and a declaration missing (an office named without a path of its own, and no DGO_FOLLOW_VIA_PATH): no cycle fixes that
+  if [ -z "${VIA_PATH}" ] && via_bare; then
+    tell "לא ניתן לעקוב: DGO_FOLLOW_VIA_PATH ריק — ${OFFICE}" "DGO_FOLLOW_VIA=${VIA} is declared, but not the path of the repository on its git app (DGO_FOLLOW_VIA_PATH=/git/gh/<account>/<owner>/<repo>.git, or <office>:/git/gh/… for one office). Nothing was fetched."
     finish blocked "DGO_FOLLOW_VIA=${VIA} without DGO_FOLLOW_VIA_PATH"; return 1
   fi
-  resolve_src || { finish skipped "${VIA}'s git app cannot be reached (DGO_FOLLOW_VIA)"; return 0; }
+  resolve_src || { finish skipped "the git app of $(via_names) cannot be reached (DGO_FOLLOW_VIA)${VIA_WHY:+ — ${VIA_WHY:0:300}}"; return 0; }
   git fetch -q "${SRC}" "+refs/heads/${FOLLOW}:refs/remotes/origin/${FOLLOW}" 2>/dev/null \
-    || { finish skipped "fetch of ${FOLLOW} failed${VIA:+ (through ${VIA})}"; return 0; }
+    || { finish skipped "fetch of ${FOLLOW} failed${VIA_USED:+ (through ${VIA_USED})}"; return 0; }
+  st_set LAST_VIA "${VIA_USED}"   # which office's git app served it (empty: origin itself) — `status` says, a take's line too
   git fetch -q "${SRC}" "+refs/heads/${BRANCH}:refs/remotes/origin/${BRANCH}" 2>/dev/null || true
   [ "${DRY}" = 1 ] || recover || return 0
   # a take whose line could not be posted is told now — or, while a row is open, once that row is closed
@@ -894,6 +1240,7 @@ cycle() {
   fi
 
   green="$(green_shas)" || green=""
+  [ "${DRY}" = 1 ] || line_waits
   [ -n "${green}" ] || { finish skipped "no green ${GATES} run on ${FOLLOW} could be read"; return 0; }
   target="$(git rev-list --first-parent -n 300 "origin/${FOLLOW}" | grep -Fx -f <(printf '%s\n' "${green}") | head -1)"
   [ -n "${target}" ] || { finish skipped "none of the last 300 commits of ${FOLLOW} has a green ${GATES} run"; return 0; }

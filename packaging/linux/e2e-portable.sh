@@ -61,7 +61,7 @@ step "7. ui-map"
 # stage-control ships the runtime tree only — a customer never screenshots their own platform. The
 # stack under test comes from the executable; the mapper comes from a repo copy:
 #
-#     sudo bash uimap-portable.sh /home/shlomy/binaos-repo
+#     sudo bash uimap-portable.sh /home/owner/binaos-repo
 echo "  run uimap-portable.sh against a repo copy — see that script for why it is separate."
 
 echo

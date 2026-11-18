@@ -197,9 +197,6 @@ def finish_async(uid, profile, store):
                 item = store(f, os.path.getsize(src_p), h.hexdigest(), meta)
             meta.update(state="done", file=item)
             _save(meta)
-            os.unlink(part_p)
-            if src_p != part_p:
-                os.unlink(src_p)
         except Exception as e:      # the session stays; the client may retry the finish
             if src_p != part_p:     # …from the part itself: a prepared copy is made again then
                 try:
@@ -213,6 +210,15 @@ def finish_async(uid, profile, store):
             meta.update(state="failed", error=str(getattr(e, "message", "") or e)[:300],
                         error_status=code if isinstance(code, int) and not isinstance(code, bool) else None)
             _save(meta)
+            return
+        # `done` first, THEN the scratch copies: the order that survives a crash (DGO-1038). Their removal is outside
+        # the try: the file is stored and recorded, so a part that cannot be removed must not turn the session into
+        # `failed` — sweep() takes a leftover part (found beside EXF's 8bb6ebc, DGO-1839)
+        for path in {part_p, src_p}:
+            try:
+                os.unlink(path)
+            except OSError:
+                pass
 
     threading.Thread(target=run, name=f"finish-{uid}", daemon=True).start()
     return meta

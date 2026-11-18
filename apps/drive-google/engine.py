@@ -66,8 +66,11 @@ class Engine:
                 "protocols": {OAUTH: {"private": False}, SA: {"private": False}},
                 # «קבצים»'s consent door for this engine: /oauth/google/{start,return,finish} on its own address
                 # (the herd's relay sends Google's answer only to …/oauth/google/return pages)
-                "oauth": {"google": {"grant": GRANT, "provider": "Google",
-                                     "connected": "Google Drive ו־Gmail של החשבון זמינים עכשיו בלשכה."}},
+                # `protocol`: what this door serves — connections narrows the consent to it where the office
+                # connects it read-only (OAUTH_READONLY_PROTOCOLS, EXU-24); elsewhere the grant stays Drive + Gmail
+                "oauth": {"google": {"grant": GRANT, "protocol": OAUTH, "provider": "Google",
+                                     "connected": "Google Drive ו־Gmail של החשבון זמינים עכשיו בלשכה.",
+                                     "connected_read_only": "Google Drive של החשבון זמין עכשיו בלשכה, לקריאה בלבד."}},
                 "engines": [
                     {"id": OAUTH, "app": "drive", "name": "Google Drive", "icon": "cloud",
                      "private": False, "creates_profiles": False,

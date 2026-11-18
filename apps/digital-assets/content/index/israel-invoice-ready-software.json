@@ -208,7 +208,7 @@
     "grade": "C",
     "source_url": "https://www.ezcount.co.il/",
     "source_date": null,
-    "note": "EZcount homepage counter \"5000 לקוחות מרוצים\" (also 150,000 invoices per month); Hyp homepage separately claims 62,524+ customers for the whole group; undated",
+    "note": "EZcount homepage counter \"5000 לקוחות מרוצים\" (also N invoices per month); Hyp homepage separately claims 62,524+ customers for the whole group; undated",
     "scope": null
    },
    "integrations": [
@@ -654,7 +654,7 @@
    "url": "https://www.linet.org.il/",
    "category": "erp",
    "summary_he": "תוכנה מודולרית לניהול עסק (חשבוניות, הנהלת חשבונות, קופה, מלאי, ממשק לחנות); בדפי הבית והמחירון שקראנו אין אזכור למספר הקצאה.",
-   "why_israeli": "אתר בעברית עם טלפון ישראלי 070-000-0012 ומחירון בשקלים",
+   "why_israeli": "אתר בעברית עם טלפון ישראלי 070-000-0011 ומחירון בשקלים",
    "allocation_numbers": {
     "supported": null,
     "how": null,
@@ -861,7 +861,7 @@
    "url": "https://www.invoice-maven.co.il/",
    "category": "invoicing",
    "summary_he": "תוכנת חשבוניות אונליין של מייבן פתרונות לעסקים בע״מ עם תוסף ל-WooCommerce; אחרי חיבור לרשות המסים מספר ההקצאה מתקבל אוטומטית, והחיבור מתחדש אחת לשלושה חודשים.",
-   "why_israeli": "מייבן פתרונות לעסקים בע״מ, ח.פ. 500000229, כתובת בהרצליה (לפי כותרת האתר); האתר בעברית ומחירים בשקלים; מוצג כמאושר על ידי מס הכנסה",
+   "why_israeli": "מייבן פתרונות לעסקים בע״מ, ח.פ. 500000146, כתובת בהרצליה (לפי כותרת האתר); האתר בעברית ומחירים בשקלים; מוצג כמאושר על ידי מס הכנסה",
    "allocation_numbers": {
     "supported": true,
     "how": "automatic",

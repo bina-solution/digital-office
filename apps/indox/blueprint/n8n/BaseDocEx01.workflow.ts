@@ -62,7 +62,7 @@ import { workflow, node, links } from '@n8n-as-code/transformer';
     /*__n8n__*/ meta: null,
     /*__n8n__*/ pinData: null,
     /*__n8n__*/ staticData: null,
-    /*__n8n__*/ shared: [{"updatedAt":"2026-08-06T12:30:31.436Z","createdAt":"2026-08-06T12:30:31.436Z","role":"workflow:owner","workflowId":"BaseDocEx01","projectId":"2xKn4WH08LyAOk2y","project":{"updatedAt":"2026-07-30T23:40:17.073Z","createdAt":"2026-07-30T23:33:30.049Z","id":"2xKn4WH08LyAOk2y","name":"Admin User <person2@example.com>","type":"personal","icon":null,"description":null,"creatorId":"544b7ec6-5907-4ee2-a94b-c5676e56835c"}}],
+    /*__n8n__*/ shared: [{"updatedAt":"2026-08-06T12:30:31.436Z","createdAt":"2026-08-06T12:30:31.436Z","role":"workflow:owner","workflowId":"BaseDocEx01","projectId":"exampleProject02","project":{"updatedAt":"2026-07-30T23:40:17.073Z","createdAt":"2026-07-30T23:33:30.049Z","id":"exampleProject02","name":"Admin User <person2@example.com>","type":"personal","icon":null,"description":null,"creatorId":"544b7ec6-5907-4ee2-a94b-c5676e56835c"}}],
     id: 'BaseDocEx01',
     name: 'Base Document Extraction (local + AI, parallel)',
     active: true,
@@ -701,7 +701,7 @@ const realType = v => (has(v) && NON_ANSWER_TYPE.indexOf(canonType(v)) < 0) ? v 
 // \`canon\` is optional and touches ONLY the equality test -- pick() still returns the raw
 // winner, so this changes provenance LABELS and can never change a written value.
 // It is passed PER FIELD, never blanket, and every choice is evidence-led (measured live
-// over the 7,332-row non-fixture fleet, tmp/b34/m1-baseline.sql):
+// over the N-row non-fixture fleet, tmp/b34/m1-baseline.sql):
 //   TYPE        169 two-leg pairs, 0 exact, 158 caseless -- the local leg emits \`shipment\`,
 //               Gemini emits \`SHIPMENT\`, so AGREE was structurally unreachable and every
 //               two-legged row was mislabelled DISAGREE_PREFER_LOCAL (final-indox.md B33.6).
@@ -823,7 +823,7 @@ return __in.map((item, __i) => {
     // get_api_tools_id of its own, so a balance sheet can only ever get an id here.
     // Writing an explicit null was harmless (the UPSERT Adapter strips null keys),
     // but writing THIS run's id unconditionally could replace an id the document
-    // already held: 5,694 rows hold one and are still queued for extract_base_doc.
+    // already held: N rows hold one and are still queued for extract_base_doc.
     // Omitting the key on null is the same idiom the FIGURE_*_COMPLETED stamps below
     // use -- the upsert then leaves the column exactly as it was. The router
     // ('Select Base Values') carries the fill-only precedence against the
@@ -875,7 +875,7 @@ return __in.map((item, __i) => {
     @node({
         id: 'a1c7f0de-base-4d21-9f0e-lockmapset01',
         name: 'Lock Map Set (retry scope)',
-        /*__n8n__*/ notes: "[dead-letter scope 2026-08-10] Publishes n8n.exec.<execution>.docmap so a FAILURE in this workflow reaches errorHandler01's 'Get Lock Map' -> 'If Has Lock' gate. Without it, 'Backoff + Dead-letter' never increments RETRY_COUNT (so a document never reaches the >=5 NEEDS_REVIEW dead-letter) and 'EH Unlock Doc' never runs (so the doc_step lock is held for its full 600s TTL and every sweep bounces off it). indoxV2UploadApiTools01 and indoxV2FigureCompanyId01 already carry this node verbatim; BaseDocEx01 was the only action sub-workflow missing it, and it is the largest single error source in the fleet (532 errors/hour, all 'Upload+OCR timed out'). [2026-08-23] `?? ''` is not defensive style, it is the fix for a measured document-destroying bug. The Redis node stringifies this value; when $json.ID was undefined it threw \"Cannot read properties of undefined (reading 'toString')\", and because the node is onError:continueRegularOutput the ERROR OBJECT replaced the item -- so HASH and LINK were gone by the time Upload+OCR ran, the uploader correctly answered wrong_input, JQExV3 correctly answered missing_file_id, and the document still finished COMPLETED with COMPANY_ID/TYPE/DOC_DATE all null. Traced in sync_sources exec 20325/20326/20327: the file itself was uploaded and OCR'd fine (Map Extractions read invoice_id SI9720129 off it), so the ONLY thing that nulled the base pass was this telemetry node erasing the payload. A node that exists to make failures visible must never be able to cause one. ID stays optional here on purpose -- an absent ID now costs the dead-letter path its attribution for that document, which is a known and much smaller loss than blanking the document.",
+        /*__n8n__*/ notes: "[dead-letter scope 2026-08-10] Publishes n8n.exec.<execution>.docmap so a FAILURE in this workflow reaches errorHandler01's 'Get Lock Map' -> 'If Has Lock' gate. Without it, 'Backoff + Dead-letter' never increments RETRY_COUNT (so a document never reaches the >=5 NEEDS_REVIEW dead-letter) and 'EH Unlock Doc' never runs (so the doc_step lock is held for its full 600s TTL and every sweep bounces off it). indoxV2UploadApiTools01 and indoxV2FigureCompanyId01 already carry this node verbatim; BaseDocEx01 was the only action sub-workflow missing it, and it is the largest single error source in the fleet (532 errors/hour, all 'Upload+OCR timed out'). [2026-08-23] `?? ''` is not defensive style, it is the fix for a measured document-destroying bug. The Redis node stringifies this value; when $json.ID was undefined it threw \"Cannot read properties of undefined (reading 'toString')\", and because the node is onError:continueRegularOutput the ERROR OBJECT replaced the item -- so HASH and LINK were gone by the time Upload+OCR ran, the uploader correctly answered wrong_input, JQExV3 correctly answered missing_file_id, and the document still finished COMPLETED with COMPANY_ID/TYPE/DOC_DATE all null. Traced in sync_sources exec 20325/20326/20327: the file itself was uploaded and OCR'd fine (Map Extractions read invoice_id SI9700001 off it), so the ONLY thing that nulled the base pass was this telemetry node erasing the payload. A node that exists to make failures visible must never be able to cause one. ID stays optional here on purpose -- an absent ID now costs the dead-letter path its attribution for that document, which is a known and much smaller loss than blanking the document.",
         /*__n8n__*/ notesInFlow: false,
         type: 'n8n-nodes-base.redis',
         version: 1,

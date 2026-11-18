@@ -21,7 +21,7 @@
 #                                        # {"verb","ref","comment"?,"words"?[]} — the project is paged once
 # …any of the above with `--as <slug>` to act as that office agent (its own vault account + token)
 #
-# A READ THAT IS SLOW SAYS SO, AND GIVES UP. DGO alone is ~1,450 items and the office's Plane answers a
+# A READ THAT IS SLOW SAYS SO, AND GIVES UP. DGO alone is ~N items and the office's Plane answers a
 # page of `issues/?expand=…` in 3–11 s, so `tasks list` could be minutes of silence — indistinguishable
 # from a stuck process. From PLANE_PROGRESS_AFTER seconds (default 3) a read prints one progress line to
 # STDERR every few seconds (page n, items, seconds — never to stdout: `--json` is a contract), and at
@@ -135,7 +135,7 @@ def say(msg: str) -> None:
 
 # A READ ON A BIG, SLOW PLANE MUST NOT LOOK LIKE A HANG (the owner, 2026-11-06: «נכשל מהר במקום להיתקע»).
 # Measured from vps1 against the HP's Plane: a page of `issues/?expand=labels,assignees` takes 3.3–11.3 s,
-# DGO holds ~1,450 items, and `tasks list --project DGO --mine --json` was **112 s of nothing** — no line,
+# DGO holds ~N items, and `tasks list --project DGO --mine --json` was **112 s of nothing** — no line,
 # no error, no clue — while `list` with no `--project` walked all five projects. So a read here has three
 # properties it did not have before: it TALKS (stderr, after PROGRESS_AFTER s), it has a CEILING
 # (READ_DEADLINE over the whole walk, not per request), and it asks Plane for BIG PAGES (PER_PAGE), which
@@ -624,10 +624,20 @@ def main(argv: list[str]) -> int:
             words.append(a)
         i += 1
 
+    # A comment whose whole text is `@<path>` is a file nobody read: the hook reads `@<file>` before the
+    # applier runs, so one that reaches here was typed where no file is (or reached Plane another way). Seven
+    # handoff comments went onto DGO-1849/1861 as bare paths and the work they carried never arrived (issues/
+    # a-comment-given-as-at-file-…). Said loudly, first; refused once every caller is known not to rely on it
+    # (AGENTS.md rule 8).
+    said = comment or (" ".join(words) if verb == "comment" else "")
+    if re.fullmatch(r"@\S+", said.strip()):
+        log(f"WARNING: tasks {verb} {ref}: the comment is only «{said.strip()}» — a file that was not read, "
+            "posted as typed. Write `--comment @<file>` with a file this bbox can read; this will be refused")
+
     if verb == "batch":
         # `tasks batch @actions.jsonl` — the hook puts the file's text where the ref would be. Each line
         # runs through the same verbs as the command line, in THIS process, so the project's items are
-        # paged once for the whole batch (`_ISSUES`) instead of once per action: with 1,227 items at
+        # paged once for the whole batch (`_ISSUES`) instead of once per action: with N items at
         # 60 requests a minute, a triage of 200 items was 200 runs of minutes each (2026-11-03).
         if (ref or "").startswith("@"):
             sys.exit(f"[project-pln] batch {ref}: the file was not read — put `@<file>` right after `batch`")
@@ -716,7 +726,7 @@ def main(argv: list[str]) -> int:
                      f"{', '.join(sorted(x.get('identifier','?') for x in projects))})")
     if all_projects:
         # ONE ceiling for the whole sweep: with no `--project` this walks every project in the workspace
-        # (5 here, ~1,400 items), and a ceiling per project would bound nothing.
+        # (5 here, ~N items), and a ceiling per project would bound nothing.
         READ.begin(f"items of {len(wanted)} projects")
         cols = []
         for x in wanted:

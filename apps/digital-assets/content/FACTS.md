@@ -243,7 +243,7 @@ never as a measured fact.
 - **A collection:** apps chosen and tested by us, some of them translated into Hebrew.
 - **Integration:** «הכול יודע על הכול», everything knows about everything.
 
-The positioning: «מערכת ההפעלה לעידן המודרני». Businesses come first, and Israel first among them. The
+The positioning: «מערכת ההפעלה של העידן המודרני» (with «של», never «לעידן» — the owner, 2026-11-12, DGO-1843). Businesses come first, and Israel first among them. The
 segments: real estate, retail, development, service companies and content creators. The personal use
 belongs to DGO, but not necessarily to the business plan.
 

@@ -5,7 +5,7 @@
 (run as a script; the engine's gdrive.py is imported alone, with `requests` and the vault client
 stood in where this machine lacks them.)
 
-The canonical list op asked Drive for `nextPageToken` and threw it away: a folder of 17,067 files
+The canonical list op asked Drive for `nextPageToken` and threw it away: a folder of N files
 answered 100, at limit=100 and at limit=1000 alike (issues/drive-op-list-single-page.yaml). The fix
 is a loop, and this is what holds it. No network: the adapter's one HTTP door (`_json`) is replaced
 by a Drive that serves a folder in pages of ITS OWN size — smaller than asked, which is how

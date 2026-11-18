@@ -1125,7 +1125,7 @@ export default function DataGrid({
 
   /* THE SELECTION NEVER OUTLIVES ITS QUERY. Internal mode: paging (and the parent bumping
      `clearSelectionSignal` after a bulk write) drops it, so "נבחרו 1,847" always means
-     1,847 rows the operator can still see and count. Controlled mode: paging KEEPS the
+     N rows the operator can still see and count. Controlled mode: paging KEEPS the
      selection — the filter is the selection, and the count stays honest because it is
      derived from `rowCount` and the server resolves the same query — but changing the
      search or a column filter clears it (different query, different set; see setFilter
@@ -1679,7 +1679,7 @@ export default function DataGrid({
           ) : showSkeleton ? (
             /* STRUCTURE, NOT BLANK WHITE. The previous grid hid its body until an
                internal readiness dance finished — a toolbar and a footer claiming
-               39,222 records above and below several seconds of empty page. */
+               N records above and below several seconds of empty page. */
             <div className="dg-body" style={{ height: SKELETON_ROWS * ROW_H }} aria-hidden="true">
               {Array.from({ length: SKELETON_ROWS }).map((_, i) => (
                 <div

@@ -1,0 +1,24 @@
+#!/usr/bin/env bash
+#: admin <email> — make an EXISTING DGO Cloud account an admin, its mailbox counted as proven (the operator vouches)
+# Admin rights normally come only with proof that the person reads the mailbox (the verify link, a reset link,
+# Google) — a sign-up proves nothing (DGO-1893, the second reader's #3). When the office's mail cannot deliver the
+# first admin's link, the office's operator — who already holds the host — vouches here instead. Audited.
+set -uo pipefail
+HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO="$(cd "${HERE}/../../.." && pwd)"
+[ -n "${1:-}" ] || { echo "usage: bbox dgo-cloud admin <email>" >&2; exit 2; }
+exec bash "${REPO}/scripts/dc" exec -T -e DGC_EMAIL="$1" dgo-cloud python3 -c '
+import datetime, json, os, sqlite3, sys
+c = sqlite3.connect("/data/dgo-cloud.db", isolation_level=None)
+e = os.environ["DGC_EMAIL"].strip().lower()
+r = c.execute("SELECT id FROM accounts WHERE email=? COLLATE NOCASE", (e,)).fetchone()
+if not r:
+    sys.exit("no account with that e-mail: sign up on the site first, then run this again")
+now = datetime.datetime.now(datetime.timezone.utc).replace(microsecond=0).isoformat()
+c.execute("BEGIN IMMEDIATE")
+c.execute("UPDATE accounts SET admin=1, proven=1 WHERE id=?", (r[0],))
+c.execute("INSERT INTO audit(at,actor,action,target,detail,ip) VALUES (?,?,?,?,?,?)",
+          (now, "operator", "account.admin.granted", "a:%d" % r[0], json.dumps({"by": "bbox dgo-cloud admin"}), ""))
+c.execute("COMMIT")
+print("admin: %s (account %d)" % (e, r[0]))
+'

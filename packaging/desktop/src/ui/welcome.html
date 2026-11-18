@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8"/>
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'self'; script-src 'self'; img-src 'self' data:"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>הלשכה הדיגיטלית</title>
+<link rel="stylesheet" href="shell.css"/>
+</head>
+<body>
+<!-- THE FIRST RUN (DGO-1972): the two ways the app reaches an office. «Connect» takes an address and opens that
+     office's console in this window; «this computer» opens, starts or installs the office that runs here. It is
+     shown again by «another office» (the tray, the rail's +, Ctrl+Shift+N). -->
+<button class="btn back" id="back" hidden></button>
+<main class="welcome">
+  <header class="hello">
+    <div class="logo"><!-- @bina-brand:start --><svg viewBox="53.57 53.57 892.86 892.86" aria-hidden="true" focusable="false"><rect class="t" x="53.57" y="53.57" width="892.86" height="892.86" rx="196.43"/><rect x="267.32" y="276.79" width="71.25" height="71.25" rx="19.24" class="a"/><rect x="267.32" y="419.29" width="71.25" height="285" rx="19.24" class="m"/><path d="M429.06 276.79H675.59A19.24 19.24 0 0 1 694.82 296.02V685.05A19.24 19.24 0 0 1 675.59 704.29H429.06A19.24 19.24 0 0 1 409.82 685.05V296.02A19.24 19.24 0 0 1 429.06 276.79ZM500.31 348.04A19.24 19.24 0 0 0 481.07 367.27V613.8A19.24 19.24 0 0 0 500.31 633.04H604.34A19.24 19.24 0 0 0 623.57 613.8V367.27A19.24 19.24 0 0 0 604.34 348.04Z" class="m"/><rect x="516.7" y="419.29" width="71.25" height="142.5" rx="19.24" class="a"/></svg><!-- @bina-brand:end --></div>
+    <h1 id="title"></h1>
+    <p id="tagline"></p>
+  </header>
+  <section class="choices">
+    <article class="choice">
+      <h2 id="connectTitle"></h2>
+      <p id="connectText"></p>
+      <form id="connectForm" novalidate>
+        <label for="addr" id="addrLabel"></label>
+        <div class="field">
+          <input id="addr" dir="ltr" placeholder="console.example.co.il" autocomplete="url" spellcheck="false" autofocus/>
+          <button class="btn primary" id="connect" type="submit"></button>
+        </div>
+      </form>
+      <p class="said" id="connectSaid" role="status" aria-live="polite"></p>
+    </article>
+    <article class="choice">
+      <h2 id="localTitle"></h2>
+      <p class="state"><span class="dot wait" id="localDot"></span><span id="localState"></span></p>
+      <div><button class="btn primary" id="localBtn" type="button" hidden></button></div>
+      <pre class="lines" id="localLines" hidden></pre>
+    </article>
+  </section>
+  <p class="foot" id="foot"></p>
+</main>
+<script src="i18n.js"></script>
+<script src="welcome.js"></script>
+</body>
+</html>

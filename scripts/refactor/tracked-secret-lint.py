@@ -75,7 +75,7 @@ ALLOWED = {
                                                      "of .env.ex's history (checked in memory 2026-11-05, DGO-1352)"),
 }
 # A CLIENT'S DATA (DGO-1792). Two WhatsApp exports of a client's group sat in data/chat-dumps from 2026-06-14, and a
-# production sheet's full export (39,582 rows) in INDOX's sample-data, found by the deep scan of 2026-11-10. Neither
+# production sheet's full export (the whole sheet) in INDOX's sample-data, found by the deep scan of 2026-11-10. Neither
 # is a token, so the scan above could not see them, and an archive is opaque to every gate that reads text (this one,
 # G56). So: a chat export is refused by its NAME — a file or a member of a tracked zip/tar — and never declared; and
 # every tracked archive is declared in ARCHIVES with what it holds and why it is in the tree. A declaration whose file

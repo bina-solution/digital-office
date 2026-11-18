@@ -113,7 +113,7 @@ services:
       - traefik.http.routers.connections-https.tls=true
       - traefik.http.routers.connections-https.tls.certresolver=${TRAEFIK_CERTRESOLVER-myresolver}
       - traefik.http.routers.connections-https.service=connections
-      - traefik.http.routers.connections-https.middlewares=authentik-admins@file,hsts@file
+      - traefik.http.routers.connections-https.middlewares=hsts@file,authentik-admins@file
       # Google's ONE return address for the whole herd (DGO-1390): served WITHOUT the office's sign-in,
       # because the person coming back from Google may be a client's, with no account on this office. It
       # does one thing (app.py `oauth_relay`): a state one of our offices signed → 302 to the app that asked.

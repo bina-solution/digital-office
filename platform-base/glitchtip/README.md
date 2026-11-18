@@ -61,7 +61,7 @@ GLITCHTIP_DB_PASSWORD=your-secure-database-password
 # Email configuration (SMTP format)
 # Example: smtp://user:password@smtp.example.com:587
 GLITCHTIP_EMAIL_URL=consolemail://
-GLITCHTIP_FROM_EMAIL=person5@example.com
+GLITCHTIP_FROM_EMAIL=person4@example.com
 
 # Optional settings
 GLITCHTIP_MAX_EVENT_LIFE_DAYS=90
@@ -107,7 +107,7 @@ For fully automated deployments, use the initialization script to create organiz
 ```bash
 # Set required environment variables
 export GLITCHTIP_ADMIN_PASSWORD="your-admin-password"
-export GLITCHTIP_ADMIN_EMAIL="person179@example.com"
+export GLITCHTIP_ADMIN_EMAIL="person88@example.com"
 export GLITCHTIP_ORG_NAME="Example"
 export GLITCHTIP_TEAM_SLUG="developers"
 

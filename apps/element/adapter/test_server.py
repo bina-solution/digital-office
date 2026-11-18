@@ -39,7 +39,7 @@ spec = importlib.util.spec_from_file_location("element_adapter", os.path.join(HE
 srv = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(srv)
 
-PLAIN, SECRET, V12 = "!plain:hs.test", "!secret:hs.test", "!31hneApxJ_1REDACTEDdrivexxxxxxxxxxxxxxx0054"
+PLAIN, SECRET, V12 = "!plain:hs.test", "!secret:hs.test", "!31hneApxJ_1REDACTEDdrivexxxxxxxxxxxxxxx0003"
 CALLS = []
 VALID = {"tok-1"}                 # the tokens the homeserver honours; a test takes one away to "remove the device"
 LOGINS = iter(f"tok-{n}" for n in range(2, 100))   # tok-1 is the token «copied from Element»: never a login's

@@ -20,8 +20,7 @@ different mailbox. It is the SAME ambient-binding defect `apps/drive` closed on 
      `connection_id: "mail_imap_local-local"` — an id that has not existed since the synthetic local
      instance was removed. `adapters.py` silently REMAPS that exact string to
      `cc.active() or cc.default_id()`, so the pipe named *private* has been reading whatever the
-     pointer names. Measured 2026-08-07: 26 REAL client documents (777 אקססוריס, מבנה דרום חדש,
-     קיסנר, פלסאון, סופר מנחם, אם טי אי — real invoices, real COMPANY_IDs) were ingested under
+     pointer names. Measured 2026-08-07: 26 REAL client documents (real suppliers' invoices — real invoices, real COMPANY_IDs) were ingested under
      `SYNC_NAME='mail-private'` from the CLIENT's Gmail, alongside 6 rows genuinely from the private
      mailbox. Both id shapes appear in the same pipe because the pointer moved underneath it.
   2. `SyncSource000001`'s `Resolve` node builds an explicit `identity` for `source==='drive'` and

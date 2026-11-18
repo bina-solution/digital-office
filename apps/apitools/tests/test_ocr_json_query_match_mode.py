@@ -65,16 +65,16 @@ class TestMatchModeId(unittest.TestCase):
         ocr_data = _make_ocr_data([
             ("עוסק", 100, 40, 160, 70),
             ("מורשה", 170, 40, 230, 70),
-            ("500000195", 240, 40, 340, 70),
+            ("500000112", 240, 40, 340, 70),
         ])
         result = _query(ocr_data).json_query({
             "action": "find option",
-            "action_value": ["500000195", "000000000"],
+            "action_value": ["500000112", "000000000"],
             "match_mode": "id",
             "is_rtl": True,
         })
         matches = result["result"]["matches"]
-        self.assertEqual([m["option"] for m in matches], ["500000195"])
+        self.assertEqual([m["option"] for m in matches], ["500000112"])
 
     def test_position_ordering_not_lexicographic(self):
         """Two registered ids both appear on the page. The FIRST one in reading
@@ -142,22 +142,22 @@ class TestMatchModeNameSubstring(unittest.TestCase):
         """A letterhead name spelled with reduced ktiv ('הכל' vs the registry's
         'הכול') still matches, and option_map resolves the matched NAME back to
         the company's id — exactly the acronym-letterhead case the code comment
-        for this branch describes ('א.י.ש. הכל ירוק' vs 'איש הכול ירוק')."""
+        for this branch describes ('ספק טית' vs 'ספק טית')."""
         ocr_data = _make_ocr_data([
-            ("א.י.ש.", 100, 40, 160, 70),
+            ("ס.פ.ק.", 100, 40, 160, 70),
             ("הכל", 170, 40, 220, 70),   # ktiv-reduced spelling
             ("ירוק", 230, 40, 280, 70),
             ("בע\"מ", 290, 40, 340, 70),
         ])
         result = _query(ocr_data).json_query({
             "action": "find option",
-            "action_value": ["איש הכול ירוק"],
-            "option_map": {"איש הכול ירוק": "500000203"},
+            "action_value": ["ספק טית"],
+            "option_map": {"ספק טית": "500000120"},
             "match_mode": "name_substring",
             "is_rtl": True,
         })
         matches = result["result"]["matches"]
-        self.assertEqual([m["option"] for m in matches], ["500000203"])
+        self.assertEqual([m["option"] for m in matches], ["500000120"])
 
     def test_exclude_near_vetoes_name_adjacent_to_recipient_marker(self):
         """A name fragment adjacent to the recipient marker must not be picked —

@@ -514,3 +514,12 @@ fills it. So, every time:
 
 Closing a meeting's decisions/questions in bulk: `tools/flow/close_items.py` (meet-start's own
 change_item; not while the page is in use).
+
+**The word, and what comes after step 6 (DGO-1847).** «קדימה <word>» names a meeting: `./bbox meet kadima <word>`
+(`tools/flow/kadima.py resolve`) finds it among this office's meetings and recordings (room, prefix, title; newest
+first). Step 6 is not the end when the meeting decided to build something:
+- the product gets its own Plane project;
+- it declares `apps/<app>/product.json` and `requirements.json` (every point of the meeting, quoted and traced);
+- it is built in the same «קדימה» until `./bbox meet kadima <word> --live` lists nothing but `בעלים` items.
+
+The path, step by step: ai/context/kadima-meeting-to-product.md.

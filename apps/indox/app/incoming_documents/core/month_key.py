@@ -14,7 +14,7 @@ while the filter was sent as `{op: 'startswith', value: 'YYYY-MM'}`, a raw strin
 prefix that only the ISO shape can ever match. So every chip counted rows the
 grid then refused to show: measured 2026-08-11 on the live corpus, chip
 `אוקטובר 2026` advertised 38 documents and the grid rendered 3, and across the
-table 17,296 of 22,641 rows were countable-but-unopenable.
+table N of N rows were countable-but-unopenable.
 
 The fix is not to teach the filter a second rule — it is to give the rule ONE
 owner and render it into whichever dialect the caller needs:

@@ -4,9 +4,9 @@
 
 1. Creates local (drive_local) folders for the second source path: e2e-loadtest/{gdoc,bs} x
    {to_sync,synced,failed,in_progress} — via apps/drive's own local engine, ALWAYS with an
-   explicit connection_id override (drive_local-19213e58, the "admin" local profile) so this
+   explicit connection_id override (drive_local-00000002, the "admin" local profile) so this
    NEVER touches the bound connection, which on this deployment today is the real Google
-   service account (drive_google_service_account-ea660043 — confirmed live via GET /readyz).
+   service account (drive_google_service_account-00000003 — confirmed live via GET /readyz).
 2. Adds three new public.settings.sync_registry entries (source/config only, not documents —
    this deployment already carries hand-written registry rows like "mail-private" that were
    never created via the validated /sync/registry API, so this script writes the same way):

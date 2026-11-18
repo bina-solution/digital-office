@@ -43,7 +43,7 @@ services:
       - traefik.http.routers.my-docs-https.tls=true
       - traefik.http.routers.my-docs-https.tls.certresolver=${TRAEFIK_CERTRESOLVER-myresolver}
       - traefik.http.routers.my-docs-https.service=my-docs
-      - traefik.http.routers.my-docs-https.middlewares=authentik@file,hsts@file
+      - traefik.http.routers.my-docs-https.middlewares=hsts@file,authentik@file
       - traefik.http.services.my-docs.loadbalancer.server.port=8000
 
 networks:

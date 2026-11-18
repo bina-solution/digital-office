@@ -70,7 +70,7 @@ office: `./bbox remote <office> mailview '/api/messages?limit=5'` (quoted: zsh e
 ## A second domain — a company address whose MX is this machine
 
 `MAIL_DOMAIN` (the deployment's subdomain) stays the default. A COMPANY domain whose MX also points
-here (staging serves `person3@example.com`) is DECLARED, never assumed:
+here (staging serves `hello@digital-office.co.il`) is DECLARED, never assumed:
 
 - `.env` `MAIL_DOMAINS=digital-office.co.il` (comma/space list), read by `mailboxd`, `mailserver-init`
   (an account at a served domain is kept; at an unserved one, deleted as a previous tenant's) and the

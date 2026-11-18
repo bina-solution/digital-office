@@ -124,5 +124,50 @@ class Warnings(unittest.TestCase):
         self.assertEqual(len(rc.ceiling_warnings(cat, ["none"])), 1)          # 7G of 8: the share alone
 
 
+class Forever(unittest.TestCase):
+    """forever_warnings (DGO-1848): an .env value an app DECLARES holds its resources for ever (resources.forever)."""
+    KEEP = {"env": "OLLAMA_KEEP_ALIVE", "starts_with": "-", "why": "held for ever", "unless": "OLLAMA_DEDICATED"}
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.dir = pathlib.Path(self.tmp.name)
+        self.saved = rc.REPO, rc.ENVFILE
+        rc.REPO = self.dir
+
+    def tearDown(self):
+        rc.REPO, rc.ENVFILE = self.saved
+        self.tmp.cleanup()
+
+    def say(self, env, *forever):
+        (self.dir / ".env").write_text(env, encoding="utf-8")
+        return rc.forever_warnings({"ollama": {"resources": {"memory": "6g", "forever": list(forever)}}}, ["ollama"])
+
+    def test_the_dell_s_keep_alive_is_said(self):
+        self.assertEqual(self.say("OLLAMA_KEEP_ALIVE=-1\n", self.KEEP), [
+            "warning: ollama: .env sets OLLAMA_KEEP_ALIVE=-1 — held for ever (a machine that is there for it says so: "
+            "OLLAMA_DEDICATED=1)"])
+        self.assertEqual(len(self.say('OLLAMA_KEEP_ALIVE="-5m"\n', self.KEEP)), 1)
+
+    def test_nothing_on_the_default_an_empty_value_or_no_env(self):
+        self.assertEqual(self.say("OLLAMA_KEEP_ALIVE=10m\n", self.KEEP), [])
+        self.assertEqual(self.say("OLLAMA_KEEP_ALIVE=\n", self.KEEP), [])
+        self.assertEqual(self.say("", self.KEEP), [])
+
+    def test_a_machine_that_is_there_for_it_says_so(self):
+        self.assertEqual(self.say("OLLAMA_KEEP_ALIVE=-1\nOLLAMA_DEDICATED= 1 \n", self.KEEP), [])
+        self.assertEqual(len(self.say("OLLAMA_KEEP_ALIVE=-1\nOLLAMA_DEDICATED=yes\n", self.KEEP)), 1)
+
+    def test_a_declaration_of_another_shape_says_nothing(self):
+        self.assertEqual(self.say("OLLAMA_KEEP_ALIVE=-1\n", "a word", {"env": 5, "starts_with": "-", "why": "x"},
+                                  {"env": "OLLAMA_KEEP_ALIVE", "starts_with": "", "why": "x"},
+                                  {"env": "OLLAMA_KEEP_ALIVE", "matches": "-", "why": "the old key"}), [])
+
+    def test_the_app_declares_it(self):
+        import json
+        app = json.loads((HERE.parents[1] / "apps" / "ollama" / "app.json").read_text(encoding="utf-8"))
+        held = [f for f in app["resources"].get("forever") or [] if f.get("env") == "OLLAMA_KEEP_ALIVE"]
+        self.assertTrue(held and held[0].get("unless") == "OLLAMA_DEDICATED", "apps/ollama declares its keep-alive")
+
+
 if __name__ == "__main__":
     unittest.main()

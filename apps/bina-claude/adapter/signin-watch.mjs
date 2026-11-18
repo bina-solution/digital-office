@@ -10,6 +10,7 @@
 // neither forgets a sign-in nor rings twice. Presence only: no credential's value is ever read out.
 import fs from "node:fs";
 import path from "node:path";
+import { APP_ID, TILE } from "./identity.mjs";
 
 const MISSES = 2;
 
@@ -25,7 +26,7 @@ export function desktopSignIn(home) {
   let raw;
   try { raw = fs.readFileSync(path.join(dir, "Cookies"), { encoding: "latin1" }); }
   catch (e) {
-    return e.code === "ENOENT" ? { state: false, why: "the app has no cookie store yet — open «בינה קלוד» in the console and sign in" }
+    return e.code === "ENOENT" ? { state: false, why: `the app has no cookie store yet — open «${TILE}» in the console and sign in` }
       : { state: null, why: "the app's cookie store could not be read" };
   }
   if (raw.includes("sessionKey")) return { state: true, why: "the app holds its claude.ai session cookie" };
@@ -33,10 +34,10 @@ export function desktopSignIn(home) {
   try { log = fs.readFileSync(path.join(dir, "logs", "main.log"), "utf8"); } catch { /* no log: unknown */ }
   const at = log.lastIndexOf("[startup-sign-in] state: {");
   const m = at < 0 ? null : /sign_in_cookie_present:\s*(true|false)/.exec(log.slice(at, at + 600));
-  if (m && m[1] === "false") return { state: false, why: "the app started without a sign-in — open «בינה קלוד» in the console and sign in" };
+  if (m && m[1] === "false") return { state: false, why: `the app started without a sign-in — open «${TILE}» in the console and sign in` };
   // claude.ai refusing to renew the sign-in after that start is a sign-out, whatever the start said (hooks/signed-in).
   if (m && log.indexOf("session_stale_relogin", at) >= 0) {
-    return { state: false, why: "claude.ai refused to renew the sign-in (session_stale_relogin) — open «בינה קלוד» in the console and sign in" };
+    return { state: false, why: `claude.ai refused to renew the sign-in (session_stale_relogin) — open «${TILE}» in the console and sign in` };
   }
   if (m) return { state: null, why: "the app started signed in; its session cookie has since left the disk — it works now, and a restart would ask for the sign-in again" };
   return { state: null, why: "no session cookie on disk, and the app's own start record is not in its log" };
@@ -66,14 +67,15 @@ export function step(prev, readings) {
 
 // The tile's link is the shell's own route, with no host: the notice is opened on the office's console, and a
 // link a person is given is built by the one builder or not at all (gate G95, scripts/refactor/office-link-lint.py).
-export function texts(face, { office, at }) {
+// `app` and `tile` are THIS copy's (identity.mjs, DGO-1920): a second Claude Desktop's notice opens its own tile.
+export function texts(face, { office, at, app = APP_ID, tile = TILE }) {
   const when = new Date(at).toISOString().slice(11, 16);
   return {
-    title: "בינה קלוד התנתקה מחשבון Claude",
-    body: `האפליקציה «בינה קלוד» בלשכה ${office} אינה מחוברת עוד לחשבון Claude (נמדד ב-${when} UTC, פעמיים ברציפות). `
-      + "הסשנים שלה עוצרים עד שתתחבר שוב. הצעד: פתח את האריח «בינה קלוד» בקונסול ← «Continue with Google» "
+    title: `האפליקציה «${tile}» התנתקה מחשבון Claude`,
+    body: `האפליקציה «${tile}» בלשכה ${office} אינה מחוברת עוד לחשבון Claude (נמדד ב-${when} UTC, פעמיים ברציפות). `
+      + `הסשנים שלה עוצרים עד שתתחבר שוב. הצעד: פתח את האריח «${tile}» בקונסול ← «Continue with Google» `
       + "(או «Continue with email» והקוד שבמייל).",
-    link: "/#/m/bina-claude",
+    link: `/#/m/${app}`,
   };
 }
 
@@ -112,7 +114,7 @@ export function createWatch({ read, stateFile, notifications, office, now = () =
             // One notice per incident: the same source_id would update the last one, and notifications rings an
             // update only 240 minutes after its last ring (PUSH_REPEAT_MIN) — a second sign-out the same morning
             // would be silent.
-            const j = await call("/api/notifications", { source: "bina-claude", source_id: `signed-out-${a.face}-${incident}`, level: "error",
+            const j = await call("/api/notifications", { source: APP_ID, source_id: `signed-out-${a.face}-${incident}`, level: "error",
                                                           ...t, meta: { face: a.face, office } });
             next[a.face].notice = j.id || true;
             log(`[bina-claude] sign-in watch: the ${a.face} is signed out — notice ${j.id ?? "?"} posted`);

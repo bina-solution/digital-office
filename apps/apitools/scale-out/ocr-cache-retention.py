@@ -4,8 +4,8 @@ without limit, and the only one with no eviction path.
 
 WHAT THE NUMBERS SAY (MEASURED 2026-08-11)
 ------------------------------------------
-    ocr_cache            316 MB / 8,440 rows  = 65% of the whole database
-    growth               ~100 MB/day (08-09: 2,140 rows/84MB · 08-10: 2,911/114MB)
+    ocr_cache            316 MB / N rows  = 65% of the whole database
+    growth               ~100 MB/day (08-09: N rows/84MB · 08-10: 2,911/114MB)
     db volume free       869 GB
     ocr_json storage     EXTENDED, already TOASTed and compressed (322 MB toast relation)
     avg row              37 KB compressed, max 548 KB

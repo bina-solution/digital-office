@@ -26,7 +26,7 @@ local is_jibri = util.is_jibri;
 local is_healthcheck_room = util.is_healthcheck_room;
 local get_focus_occupant = util.get_focus_occupant;
 
-local SENDER = "פגישות וידאו";
+local SENDER = "פגישות לשכה";
 -- …and, before it can happen, what took the owner's voice out of a 21-minute recording (DGO-959): on
 -- Android 13+ the Jitsi app keeps its microphone while another app is shown only through a foreground
 -- service, and it starts that service (JitsiMeetOngoingConferenceService.launch, at join) only when

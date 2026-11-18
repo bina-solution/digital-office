@@ -147,8 +147,12 @@ def _mapping() -> list[dict]:
         if isinstance(names, str):
             names = [names]
         names = [str(n).strip() for n in names if str(n).strip()]
-        if plane and names:
-            pairs.append({"plane": plane, "authentik": names})
+        groups = entry.get("groups") or []
+        if isinstance(groups, str):
+            groups = [groups]
+        groups = [str(g).strip() for g in groups if str(g).strip()]
+        if plane and (names or groups):
+            pairs.append({"plane": plane, "authentik": names, "groups": groups})
     _mapping.cache = (stamp, pairs)
     return pairs
 
@@ -174,16 +178,36 @@ def _who_is_this(request, cookies: dict) -> dict | None:
         "username": answer.headers.get("X-Authentik-Username") or "",
         "email": answer.headers.get("X-Authentik-Email") or "",
         "uid": answer.headers.get("X-Authentik-Uid") or "",
+        "groups": answer.headers.get("X-Authentik-Groups") or "",
     }
     return identity if (identity["username"] or identity["email"]) else None
 
 
+#: The group of a person the owner invited (platform-base/forward-auth/invite.go): never a declared account, by name or
+#: by group — on a /setup office the name `akadmin` is free, and an invited «akadmin» is not the owner (DGO-1982).
+INVITED = "people"
+
+
 def _declared_plane_email(pairs: list[dict], identity: dict) -> str:
-    """The Plane account the office declared for this identity — by username, e-mail or uid."""
-    claimed = {v.strip().lower() for v in identity.values() if v}
+    """The Plane account the office declared for this identity — by username, e-mail or uid, or by a group the
+    provider answered for this browser. The group is how a forward-auth office's owner is found: that owner is named
+    at /setup, after onboard wrote this file, so no username here could ever name them (DGO-1982).
+
+    Every entry's names are asked before any entry's groups. Groups are compared exactly, as the office's gates compare
+    them (forward-auth users.go), and only when the provider is forward-auth, whose `admins` is the /setup owner (and,
+    on an office whose users file names no admin, every account its gates already treat as one); an authentik group of
+    that name is whatever its admin made it."""
+    groups = {g.strip() for g in str(identity.get("groups") or "").split("|") if g.strip()}
+    if INVITED in groups:
+        return ""
+    claimed = {str(identity.get(k) or "").strip().lower() for k in ("username", "email", "uid")} - {""}
     for pair in pairs:
         if claimed & {n.lower() for n in pair["authentik"]}:
             return pair["plane"]
+    if OUTPOST == PROVIDERS["forward-auth"]:
+        for pair in pairs:
+            if groups & set(pair.get("groups") or []):
+                return pair["plane"]
     return ""
 
 

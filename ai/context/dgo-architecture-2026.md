@@ -188,7 +188,7 @@ the Python oracle, and `DGO_COMPILER=python` / `BBOX_CONTROL_PLANE=container` ro
 |---|---|---|---|
 | bootstrapper | 5,327,872 B (win/amd64) | ≤ 3.9 MB | drop `net/http` (hand-rolled HTTPS GET over `crypto/tls`), two embedded roots, zenity-style native dialogs |
 | `dgo` core | 2.58 MB shim | 10–15 MB with the console embedded (pre-compressed), SQLite, netstack | one file replaces authentik (1.1 GB), five Python images (~1.5 GB of layers) and the host's Python |
-| a fresh office | git clone (3,600 files) + python3 + PyYAML + docker + 10–15 min build | one download → `dgo` → wizard → images pulled by digest from GHCR (CI builds them, DGO-41) | the clone exists for developers only |
+| a fresh office | git clone (N files) + python3 + PyYAML + docker + 10–15 min build | one download → `dgo` → wizard → images pulled by digest from GHCR (CI builds them, DGO-41) | the clone exists for developers only |
 
 ## 6. The plan — same contract, new body, each step alone with proof and rollback
 

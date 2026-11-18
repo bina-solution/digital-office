@@ -13,7 +13,7 @@ fingerprint and the offices of ours that join it; each of those, by its own key,
     door with `to`), and home.json is never written;
   * the client joiner (join_api.ClientJoiner, through a real Hub and Pairing): a grant other than the host's
     `serve` is refused before anything is written; the mirrored grant joins, `use` on our record;
-  * the real herd file names Exampleu's door and fingerprint, joined by the MacBook.
+  * the real herd file names Exampleu's and EXF's doors and fingerprints, each joined by the MacBook and the HP.
 
 Run: python3 apps/dgo-extend/tests/test_clients.py   (PyYAML, FastAPI; `openssl` 3 for the joiner part)
 """
@@ -259,9 +259,23 @@ def the_real_herd() -> None:
     check(entry.get("door") == "https://link.exampleu.digital-office.co.il" and entry.get("pin") == PIN,
           f"the herd file names Exampleu's door and fingerprint: {entry}")
     by = entry.get("by")
-    check(by == ["macbook"] or by == "macbook", f"…joined by the MacBook: {by}")
-    key = ((doc.get("offices") or {}).get("macbook") or {}).get("wg_public_key")
-    check(sorted(clients.mine(doc, home("macbook", key))) == ["exampleu"], "the MacBook, by its own key, joins Exampleu")
+    # the owner, 2026-11-12 (DGO-1840): the work runs on the HP, so the HP joins the clients beside the MacBook
+    check(by == ["macbook", "hp-laptop"], f"…joined by the MacBook and the HP: {by}")
+    exf = (doc.get("clients") or {}).get("examplef") or {}
+    check(exf.get("door") == "https://link.exf.digital-office.co.il" and exf.get("pin") == "CHANGE_ME"
+          and exf.get("by") == ["macbook", "hp-laptop"], f"the herd file names EXF as a client herd of its own: {exf}")
+    # DGO-1924: Examplex's own office, on its own server
+    exx = (doc.get("clients") or {}).get("examplex") or {}
+    check(exx.get("door") == "https://link.examplex.digital-office.co.il" and exx.get("pin") == "CHANGE_ME"
+          and exx.get("by") == ["macbook", "hp-laptop"], f"the herd file names Examplex as a client herd of its own: {exx}")
+    for office in ("macbook", "hp-laptop"):
+        key = ((doc.get("offices") or {}).get(office) or {}).get("wg_public_key")
+        check(sorted(clients.mine(doc, home(office, key))) == ["examplef", "exampleu", "examplex"],
+              f"{office}, by its own key, joins Exampleu, EXF and Examplex")
+    check(clients.withheld(doc, home("vps1", ((doc.get("offices") or {}).get("vps1") or {}).get("wg_public_key")),
+                           [{"id": "examplef"}, {"id": "exampleu"}, {"id": "examplex"}, {"id": "hp-laptop"}])
+          == {"examplef", "exampleu", "examplex"},
+          "no office of ours gives a client anything — EXF included, joined or not")
 
 
 def main() -> int:

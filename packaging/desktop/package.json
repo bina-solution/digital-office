@@ -1,0 +1,21 @@
+{
+  "name": "dgo-desktop",
+  "productName": "Digital Office",
+  "version": "0.1.0",
+  "description": "The Digital Office as an app of the computer: each office's console in its own window and session, a rail of offices, a tray (DGO-1972)",
+  "author": "BINA Solutions",
+  "homepage": "https://digital-office.co.il/",
+  "license": "UNLICENSED",
+  "private": true,
+  "main": "src/main.js",
+  "desktopName": "dgo-desktop.desktop",
+  "scripts": {
+    "start": "electron .",
+    "test": "node --test test/offices.test.mjs",
+    "dist": "electron-builder --publish never"
+  },
+  "devDependencies": {
+    "electron": "45.3.4",
+    "electron-builder": "26.18.0"
+  }
+}

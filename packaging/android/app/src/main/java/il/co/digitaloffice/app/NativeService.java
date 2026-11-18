@@ -82,6 +82,11 @@ public class NativeService extends Service {
         }
     }
 
+    /** Why the last start's core did not start, in Hebrew for the status screen (CoreFailure); gone at the next start. */
+    static File coreFailed(Context c) {
+        return new File(new File(c.getFilesDir(), "run"), "core-failed");
+    }
+
     static File log(Context c) {
         return new File(c.getFilesDir(), "native.log");
     }
@@ -200,6 +205,7 @@ public class NativeService extends Service {
 
     private void run() {
         Process a = null, c = null;
+        coreFailed(this).delete();   // a new start: the last one's reason is no longer what is true (DGO-1817)
         try {
             File files = getFilesDir();
             File log = log(this);
@@ -221,6 +227,12 @@ public class NativeService extends Service {
                 quick = 0;
                 lastStart = 0;
             }
+            // «מכולות» not chosen: the core no longer asks for the machine at its start for its own plumbing
+            // (DGO-1818), so the app asks itself here, as that ask did — and wantMachine, with nothing chosen, can
+            // only refuse, with the reason that is true on this phone («not installed», or «this app carries no
+            // machine» on one that cannot run it, which the door turns into the business's page): a container
+            // app's page says it from its first second, never «starting» first
+            if (!Office.chosen(this) && !Guest.busy()) wantMachine(run);
             File authDir = own(new File(files, "auth"));
             String lib = getApplicationInfo().nativeLibraryDir;
             File users = new File(authDir, "users");
@@ -280,6 +292,13 @@ public class NativeService extends Service {
                 o.write(("\n[the app] the office's core did not start: " + e + "\n").getBytes(StandardCharsets.UTF_8));
             } catch (IOException ignored) {
                 // nothing more to say than the log already shows
+            }
+            // …and the status screen says why in the owner's words, not the exception (DGO-1817)
+            try {
+                place(coreFailed(this), CoreFailure.say(String.valueOf(e.getMessage()),
+                        Build.SUPPORTED_ABIS.length > 0 ? Build.SUPPORTED_ABIS[0] : "", getApplicationInfo().nativeLibraryDir));
+            } catch (IOException | RuntimeException ignored) {
+                // the log above still holds it; the reason's own failure never ends the service
             }
         } finally {
             end(c);   // one of them ended (or never started): the other serves nothing alone

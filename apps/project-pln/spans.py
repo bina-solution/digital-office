@@ -44,10 +44,19 @@ VAULT = (os.environ.get("CONNECTIONS_URL") or "http://connections:8990").rstrip(
 WS = os.environ.get("PLANE_WORKSPACE") or "bina"
 DEFAULT_PROJECTS = [p.strip() for p in (os.environ.get("PLANE_SPANS_PROJECTS") or "").split(",") if p.strip()]
 CACHE_SECONDS = float(os.environ.get("PLANE_SPANS_CACHE", "30"))
+# A rebuild reads every item of every project through Plane's own API, and that read IS the load. Measured
+# 2026-11-17 on the HP: one build took 231 s, so a fixed 30 s pause after it kept Plane busy with this feed
+# ~88% of the time, and every agent's `tasks show`/`list` queued behind it (DGO-1340). So the pause scales
+# with the build: the next one starts no sooner than this many times the last one's length after it ended
+# (never sooner than CACHE_SECONDS), which holds this feed to about 1/(1+N) of Plane on an office of any size.
+REBUILD_SPACING = float(os.environ.get("PLANE_SPANS_SPACING", "4"))
 
 _lock = threading.Lock()
-_cache: dict = {"at": 0.0, "spans": []}
-_refreshing = threading.Event()          # one background rebuild at a time, however many pollers
+_cache: dict = {"at": 0.0, "spans": [], "tried": 0.0, "took": 0.0}
+# One rebuild at a time, however many pollers — the FIRST one too. The timeline gives up on a call after 25 s
+# (SPAN_SOURCE_TIMEOUT_S) and asks again 5 s later, while the request thread it left keeps building; with the
+# first build unguarded, a restart ran ~8 full builds side by side on the HP (2026-11-17, DGO-1340).
+_refreshing = threading.Event()
 
 
 def log(msg: str) -> None:
@@ -184,14 +193,35 @@ def _refresh() -> list:
 
     A build that could not read Plane (`None`) does NOT become the snapshot: the previous one is
     kept, timestamp and all, so the next caller tries again instead of being told "no work" for a
-    cache period by a read that failed."""
-    spans = build(None)
-    if spans is None:
-        with _lock:
-            return _cache["spans"]
+    cache period by a read that failed. A failed build still counts as a build for the pause
+    (`tried`, `took`): it cost Plane the same reads, and retrying it at once is the same load.
+    A build that RAISES is a failed build too: before, it skipped `_refreshing.clear()` in the
+    background thread, and the feed served one stale snapshot until the process restarted."""
+    t0 = time.time()
+    try:
+        spans = build(None)
+    except Exception as e:                                           # noqa: BLE001
+        log(f"build failed: {type(e).__name__}: {e}")
+        spans = None
     with _lock:
-        _cache.update(at=time.time(), spans=spans)
+        _cache.update(tried=time.time(), took=time.time() - t0)
+        if spans is None:
+            return _cache["spans"]
+        _cache.update(at=_cache["tried"], spans=spans)
     return spans
+
+
+class NotReady(Exception):
+    """No snapshot yet — a first build is running, or the last one failed and the pause holds. Answered 503,
+    never as an empty 200: the timeline takes its FIRST 200 as its seed and asks only for deltas after it, so an
+    empty seed would keep every item that opened before this restart off the timeline for good."""
+
+
+def _rebuild_behind() -> None:
+    try:
+        _refresh()
+    finally:
+        _refreshing.clear()
 
 
 def cached(since_ms: int | None) -> list:
@@ -207,13 +237,29 @@ def cached(since_ms: int | None) -> list:
     """
     with _lock:
         have = _cache["at"] > 0
-        age = time.time() - _cache["at"]
+        due = _cache["tried"] == 0 or (time.time() - _cache["tried"]
+                                       >= max(CACHE_SECONDS, REBUILD_SPACING * _cache["took"]))
+        claim = due and not _refreshing.is_set()   # tested and taken under one lock: one builder
+        if claim:
+            _refreshing.set()
         spans = _cache["spans"]
+    if claim and not have:
+        # No snapshot yet: this caller builds and waits. Another caller meanwhile, or one inside the pause
+        # after a failed first build, is told it is not ready (NotReady) and asks again later.
+        try:
+            _refresh()
+        finally:
+            _refreshing.clear()
+        with _lock:
+            have, spans = _cache["at"] > 0, _cache["spans"]
+    elif claim:
+        try:
+            threading.Thread(target=_rebuild_behind, daemon=True).start()
+        except RuntimeError as e:                                    # no thread to be had: try next time
+            _refreshing.clear()
+            log(f"rebuild not started: {e}")
     if not have:
-        spans = _refresh()
-    elif age >= CACHE_SECONDS and not _refreshing.is_set():
-        _refreshing.set()
-        threading.Thread(target=lambda: (_refresh(), _refreshing.clear()), daemon=True).start()
+        raise NotReady("no snapshot yet: the first build of Plane's items is running or failed — ask again")
     if since_ms:
         spans = [s for s in spans if max(s["s"], s["e"] or 0) >= since_ms]
     return spans
@@ -238,6 +284,9 @@ class Handler(BaseHTTPRequestHandler):
             spans = cached(since)
             body = json.dumps({"spans": spans}, ensure_ascii=False).encode()
             self.send_response(200)
+        except NotReady as e:
+            body = json.dumps({"error": str(e)}).encode()
+            self.send_response(503)
         except Exception as e:                                       # noqa: BLE001
             body = json.dumps({"error": f"{type(e).__name__}: {e}"}).encode()
             self.send_response(500)

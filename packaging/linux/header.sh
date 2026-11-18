@@ -209,9 +209,17 @@ ln -sf "${CONFIG}/binaos.env" "${PREFIX}/.env"
 # The office's own secrets (DGO-1220): binaos.env comes from the template, which carries every secret EMPTY.
 # They are filled here, through the link, only while this machine holds none of the office's data volumes,
 # so a reinstall over an office that has data writes nothing (scripts/env-secrets.py --if-fresh).
-if [ -f "${PREFIX}/scripts/env-secrets.py" ] && command -v python3 >/dev/null 2>&1; then
-  ( cd "${PREFIX}" && python3 scripts/env-secrets.py --env .env --if-fresh ) || say "the office's secrets were not minted (scripts/env-secrets.py) — run it before starting"
-fi
+# NEVER WITHOUT THEM (DGO-1848, issues/sec-every-packaged-office-ships-the-same-secrets.yaml): the template's secrets
+# are empty, so an install that went on without this step started an office with no secrets of its own — and where a
+# compose falls back to a built-in value, with a value every copy shares. A missing script, a missing python3 (this
+# installer needs it below as well) or a run that failed stops the install here, by name; --if-fresh itself answers 0
+# on every path it means (a fresh office minted, an office with data named, an engine it could not ask).
+[ -f "${PREFIX}/scripts/env-secrets.py" ] \
+  || die "this package carries no scripts/env-secrets.py, so the office's own secrets cannot be made — a broken package"
+command -v python3 >/dev/null 2>&1 \
+  || die "python3 is needed to make the office's own secrets (and to adapt the compose below) — install python3 and run this again"
+( cd "${PREFIX}" && python3 scripts/env-secrets.py --env .env --if-fresh ) \
+  || die "the office's own secrets were not made (scripts/env-secrets.py failed above) — nothing was started; fix it and run this again"
 
 # ── adapt the compose to THIS host ────────────────────────────────────────────────────────────
 # ORDER MATTERS, and getting it wrong is why this shipped broken twice. This block rewrites the

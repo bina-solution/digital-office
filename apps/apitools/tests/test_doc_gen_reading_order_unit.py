@@ -14,7 +14,7 @@ that it could not become it. These tests do, for every document type and for bot
 
 What is NOT asserted, because it is the reader's side and not the generator's: on a line that
 mixes Hebrew with a number in parentheses, an extractor returns the runs left to right
-(`get_text()` gives «) בע"מ1988( אגן מפעלי הנדסה»). `ocr_core/pdf_textlayer.py` walks a Hebrew
+(`get_text()` gives «) בע"מ1988( ספק אלף»). `ocr_core/pdf_textlayer.py` walks a Hebrew
 line's spans right to left for that reason.
 """
 import dataclasses

@@ -47,7 +47,7 @@ import { workflow, node, links } from '@n8n-as-code/transformer';
     /*__n8n__*/ meta: null,
     /*__n8n__*/ pinData: null,
     /*__n8n__*/ staticData: null,
-    /*__n8n__*/ shared: [{"updatedAt":"2026-07-30T19:10:23.678Z","createdAt":"2026-07-30T19:10:23.678Z","role":"workflow:owner","workflowId":"indoxApiRouter01","projectId":"IwcBrWygrgE0xpis","project":{"updatedAt":"2026-07-30T19:10:08.961Z","createdAt":"2026-07-30T19:02:55.442Z","id":"IwcBrWygrgE0xpis","name":"Admin User <person2@example.com>","type":"personal","icon":null,"description":null,"creatorId":"c678e57f-b06c-4c25-a005-05e85cb56164"}}],
+    /*__n8n__*/ shared: [{"updatedAt":"2026-07-30T19:10:23.678Z","createdAt":"2026-07-30T19:10:23.678Z","role":"workflow:owner","workflowId":"indoxApiRouter01","projectId":"ExampleProject04","project":{"updatedAt":"2026-07-30T19:10:08.961Z","createdAt":"2026-07-30T19:02:55.442Z","id":"ExampleProject04","name":"Admin User <person2@example.com>","type":"personal","icon":null,"description":null,"creatorId":"c678e57f-b06c-4c25-a005-05e85cb56164"}}],
     id: 'indoxApiRouter01',
     name: 'indox api',
     active: true,

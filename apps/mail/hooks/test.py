@@ -192,7 +192,7 @@ def test_mail_connection():
     mailapi now refuses a canonical op that names no connection. Before that guard, this suite's
     `append`/`search`/`listLabels` calls carried no `connection_id` and resolved to
     `/data/active.json` — the CLIENT's real Gmail — which is how two `mailorg_*` fixture messages
-    (and 146 sync-v3 ones from the INDOX battery) landed in person10@example.com.
+    (and 146 sync-v3 ones from the INDOX battery) landed in person51@example.com.
 
     A non-local id is REFUSED rather than used: seeding unlabelled fixture mail into a real account
     is the incident this closes. Returns "" if the engine is unreachable, so the suite fails loudly

@@ -117,7 +117,7 @@ FEEDBACK_MODES = ("drive_move", "mail_tag", "off")
 #:
 #: A document records where it came from; a registry records where things come from NOW. Those two
 #: drift apart every time a pipe is repointed or pruned, and the drift is not small: measured
-#: 2026-08-21, 23,940 of 25,795 rows carry a SYNC_NAME that no live entry answers to, because
+#: 2026-08-21, most rows carry a SYNC_NAME that no live entry answers to, because
 #: `drive-gdoc-scanned-synced` / `drive-gdoc-scanned-failed` / `mail-private` were real entries once
 #: and are not any more. Those documents still exist, their files still sit in Drive, and they still
 #: need their verdict reported — so the pipe that owns them has to remain nameable.

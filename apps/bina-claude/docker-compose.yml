@@ -1,9 +1,12 @@
-# bina-claude — «בינה קלוד»: ONLY the official Claude Desktop app, with ONE sign-in. There is no terminal.
+# bina-claude — «קלוד דסקטופ» (Claude Desktop): ONLY the official Claude Desktop app, with ONE sign-in. There is
+# no terminal. A further copy, on its own account, is an instance (`bbox apps instance add bina-claude`, DGO-1920):
+# its compose file (instances/<id>/) is a copy of the services below, written again at every render, so whatever is
+# set here is set for every copy at the next compile.
 # The owner, 2026-11-09 (DGO-1684): «one login in the official claude desktop and we should have full cli
 # controll over it and all other 4 channels» … «Delete the terminal and make sure nobody gets mixed up again».
 #
 # Four channels on the desktop app's one sign-in:
-#   UI   — bina-claude-desktop below, streamed into the console's «בינה קלוד» tile.
+#   UI   — bina-claude-desktop below, streamed into the console's «קלוד דסקטופ» tile.
 #   CLI  — `./bbox agent --app bina-claude list|new|send|follow|cancel …` and `./bbox bina-claude …` (hooks/).
 #   API  — agent.v1 on :3091 (adapter/server.mjs), the service `bina-claude` here, published on the docker
 #          HOST's loopback only — the same shape as bina-ds's :3081. It reads the app's own session files and
@@ -81,7 +84,7 @@ services:
       options:
         max-size: 5m
         max-file: '3'
-  # The official Claude Desktop app (Dockerfile.desktop), streamed to the console's «בינה קלוד» tile —
+  # The official Claude Desktop app (Dockerfile.desktop), streamed to the console's «קלוד דסקטופ» tile —
   # the owner, 2026-10-31: «I want the full native software … served like I serve browser 42». Its home
   # is /data/desktop on the SAME volume, so every session it keeps on disk is readable by the CLI
   # (`./bbox bina-claude sessions`). Nothing is published; the stream is reached through the edge only.

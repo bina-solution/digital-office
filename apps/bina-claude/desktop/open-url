@@ -1,0 +1,430 @@
+#!/usr/bin/env python3
+"""open-url — this desktop's ONE browser is the office's (DGO-1336).
+
+Runs INSIDE bina-claude-desktop as the app's user, called by xdg-open: the official Claude app opens
+its sign-in as a SYSTEM url —
+
+    https://claude.com/cai/login/app-google-auth?open_in_browser=1&hop_nonce=<nonce>
+
+(measured on the HP, 2026-11-04, from the app's own log). This image carries no browser at all, so
+xdg-open answered `no method available for opening …` and «Continue with Google» left the app on its
+Sign In screen forever, with nothing to click. The office DOES have a browser — browser42, signed in
+to the owner's Google — so this is the door the owner asked for («שיפתח בדפדפן ואז יחזור לאפליקציה
+ויחבר אותה»): the URL goes there as a HAND-OFF (`bbox b42 open bina-claude`), which every console that
+shows the office browser brings to whoever is looking, and `hop` carries the answer back to the app.
+
+  open-url <url>       what xdg-open calls (this image's http/https handler, and its $BROWSER)
+  open-url --deliver   the worker this file forks; it reads the URL from its stdin, opens the hand-off
+                       and starts the hop
+  open-url --scrub     the logs made bare, the app's masked (the hop calls it at every end of a sign-in)
+
+A URL with no `hop_nonce` is an ordinary link — a doc, a page in the app's UI. It opens in the office
+browser in a group of its own (`claude-links`), with no hand-off: nothing watches it, and a sign-in in
+progress is left alone.
+
+WHAT IS NEVER WRITTEN DOWN (DGO-1336, the second reader of cee06766): the sign-in's query. It carries
+`hop_nonce` and, inside Google's page, `state=desktop:<uuid>.<nonce>` — and the answer coming back
+carries the one-time code. So a log line names a host and a path and how many query fields there were,
+and the URL travels from here on STDIN (to the worker, to browser42, the nonce to the hop). Two argvs
+are not ours to choose and do carry it, each for seconds: xdg-open hands the URL to this file as its
+argument, and the hop hands the app its answer as `claude-desktop claude://…` — the only door a running
+app takes a link through. And the app writes the link it was handed into its own logs (measured on the
+HP, 2026-11-05), so there every secret is overwritten in place by dots of its own length (mask_app_logs)
+— after a sign-in's hand-off has opened, and at every end of it.
+
+ONE SIGN-IN AT A TIME. A second press during a cold wake (up to 69 s) used to race the first: both
+workers opened the same tabs and either could be left in front. Now the newest press owns it — its
+nonce's fingerprint is `.bina-claude-hop.current`, every worker checks it before each step and leaves
+quietly when it is no longer its own, and browser42 opens one hand-off of a slug at a time and tells an
+older attempt it was superseded.
+
+It never types anything: the Google password, the account choice and the consent are the owner's, on
+Google's own page, in the office browser where he is already signed in.
+"""
+import hashlib
+import json
+import os
+import re
+import secrets
+import signal
+import subprocess
+import sys
+import time
+import urllib.parse
+
+HOME = os.environ.get("HOME") or "/config"
+LOG = os.path.join(HOME, ".claude-open-url.log")
+OUT = os.path.join(HOME, ".bina-claude-hop.out")
+PIDFILE = os.path.join(HOME, ".bina-claude-hop.pid")
+CURRENT = os.path.join(HOME, ".bina-claude-hop.current")
+#: The app's own logs: `.claude-desktop.log` (where autostart sends its output) and Electron's. They hold
+#: the sign-in link the app was handed (measured on the HP, 2026-11-05), and they are the app's: masked
+#: in place (mask_app_logs), never rewritten, trimmed or re-encoded.
+APP_LOGS = tuple(os.path.join(HOME, *leaf) for leaf in (
+    (".claude-desktop.log",), (".config", "Claude", "logs", "main.log"), (".config", "Claude", "logs", "main.old.log")))
+GROUP = os.environ.get("BINA_CLAUDE_LOGIN_GROUP") or "claude-signin"
+LINKS = os.environ.get("BINA_CLAUDE_LINKS_GROUP") or "claude-links"
+APP = "bina-claude"
+HOP = os.environ.get("BINA_CLAUDE_HOP") or "/usr/local/bin/bina-claude-hop"
+LOG_MAX = 200_000          # the log lives on the app's volume; it is trimmed, never rotated away
+#: What the person reads on the hand-off while Google's page waits for him, and when it could not open.
+NEEDED = "בחרו את חשבון Google שלכם בדפדפן הלשכה — Claude יתחבר מעצמו ותחזרו אליו."
+NOT_OPENED = "דפדפן הלשכה לא פתח את דף הכניסה של Claude — לחצו שוב «Continue with Google»."
+#: An address inside a line (any scheme — claude:// answers too) and its query or fragment — and the
+#: partial secrets an older build of this file and of `hop` wrote (a nonce's first six characters, a
+#: code's first four). Written so that a run is consumed once: an unbounded scheme made every letter of a
+#: long word the start of a scan to its end (a 200 KB token took minutes), and a run of `http://a/,`
+#: was rescanned at every `://` (40 KB in 4 s — the second reader of round 2).
+URL_RUN = re.compile(r"([A-Za-z][A-Za-z0-9+.-]{0,31}://[^\s?#'\"]+)([?#][^\s'\"]*)?")
+OLD_PARTS = (re.compile(r"(hop_nonce )[A-Za-z0-9_-]+…"), re.compile(r"(sign-in is )[A-Za-z0-9_-]+…"),
+             re.compile(r"(code )[A-Za-z0-9_-]{1,8}…"))
+#: A sign-in's own fields — in a query, and in the shapes they take on a line of their own. Only these: an
+#: app's `exit code=139` or `window state=maximized` stays readable (the second reader of round 2).
+SIGNIN_FIELD = re.compile(r"(?:^|[?&#])(?:code|state|hop_nonce|access_token|id_token|refresh_token)=")
+SECRET_FIELD = re.compile(r"\b(?:state=desktop:|hop_nonce=|(?:access|id|refresh)_token=|code=(?=[A-Za-z0-9/_-]{20,}))"
+                          r"[^\s&'\"]*")
+#: The same three, over bytes: the app's logs are masked as bytes, so nothing in them is ever re-encoded.
+URL_RUN_B, SIGNIN_FIELD_B, SECRET_FIELD_B = (re.compile(p.pattern.encode()) for p in (URL_RUN, SIGNIN_FIELD, SECRET_FIELD))
+#: An attempt a newer press replaced.
+SUPERSEDED = "superseded"
+
+
+def log(line):
+    stamp = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+    try:
+        if os.path.exists(LOG) and os.path.getsize(LOG) > LOG_MAX:   # a first line has no file to measure
+            with open(LOG, "r", errors="replace") as f:
+                keep = f.readlines()[-200:]
+            with open(LOG, "w") as f:
+                f.writelines(keep)
+        with open(LOG, "a") as f:
+            f.write(f"{stamp} open-url {line}\n")
+    except OSError:
+        pass
+
+
+def scrubbed(text):
+    """A line of THIS file's or the hop's log as it may stay on disk: every address bare, no sign-in field,
+    the old partial secrets gone."""
+    text = URL_RUN.sub(lambda m: m[1] + "?…" if m[2] is not None else m[0], text)
+    text = SECRET_FIELD.sub("…", text)
+    for part in OLD_PARTS:
+        text = part.sub(r"\1…", text)
+    return text
+
+
+def scrub_logs():
+    """What builds before DGO-1336 wrote into this file's and the hop's own logs — whole sign-in URLs, a
+    nonce's and a code's first characters — rewritten bare when a sign-in starts; the workers' output file
+    trimmed to its last LOG_MAX bytes as the log is. Only a file that holds such a line, or has grown past
+    that, is written. (The APP's logs are never rewritten: mask_app_logs.)"""
+    for path in (LOG, OUT):
+        try:
+            with open(path, "r+", errors="replace") as f:
+                text = f.read()
+                clean = scrubbed(text)
+                if len(clean) > LOG_MAX:
+                    clean = clean[-LOG_MAX:].split("\n", 1)[-1]
+                if clean != text:
+                    f.seek(0)
+                    f.write(clean)
+                    f.truncate()
+        except OSError:
+            pass
+
+
+def secret_spans(line):
+    """Where a sign-in's secrets sit in one line of bytes, as (start, end): the query of an address that
+    carries a sign-in field (its `?` kept), and a sign-in field on its own."""
+    spans = []
+    for m in URL_RUN_B.finditer(line):
+        if m[2] is not None and SIGNIN_FIELD_B.search(m[2]):
+            spans.append((m.start(2) + 1, m.end(2)))
+    for m in SECRET_FIELD_B.finditer(line):
+        if not any(start <= m.start() < end for start, end in spans):
+            spans.append(m.span())
+    return spans
+
+
+def mask_app_logs():
+    """The app's own logs hold the sign-in link it was handed — its code and nonce — and whatever it logged
+    of the address it opened. Each secret is overwritten IN PLACE by dots of its own length: no byte moves,
+    nothing is truncated or re-encoded, so the app keeps appending where it was, an offset a reader holds
+    (the hop's `dropped_since`) stays true, and a process killed halfway leaves some secrets masked and
+    nothing broken. Read a line at a time, so a log nobody rotates costs time, never memory. Run detached:
+    by a sign-in's worker after its hand-off opened, and by the hop at every end. Returns how many."""
+    masked = 0
+    for path in APP_LOGS:
+        try:
+            found, offset = [], 0
+            with open(path, "rb") as f:
+                for line in f:
+                    found += [(offset + start, end - start) for start, end in secret_spans(line)]
+                    offset += len(line)
+            if found:
+                with open(path, "r+b") as f:
+                    for at, length in found:
+                        f.seek(at)
+                        f.write(b"." * length)
+            masked += len(found)
+        except OSError:
+            continue
+    return masked
+
+
+def describe(url):
+    """What a log may say about an address: its host and path, and how many query fields it carried."""
+    parts = urllib.parse.urlsplit(url)
+    fields = len(urllib.parse.parse_qsl(parts.query, keep_blank_values=True))
+    return f"{parts.netloc}{parts.path}" + (f" (+{fields} query fields)" if fields else "")
+
+
+def fingerprint(nonce):
+    return hashlib.sha256(nonce.encode()).hexdigest()[:16]
+
+
+def current(nonce):
+    """Is this sign-in still the newest press? (`.bina-claude-hop.current`; no file is no newer one.)"""
+    try:
+        with open(CURRENT) as f:
+            named = f.read().strip()
+    except OSError:
+        return True
+    return not named or named == fingerprint(nonce)
+
+
+def repo_root():
+    """Where this office's checkout is, in this container's own namespace."""
+    if os.path.exists("/workspace/office/bbox"):
+        return "/workspace/office"
+    return os.environ.get("BBOX_REPO_HOST") or "/workspace/office"
+
+
+def bbox(*args, timeout=300, stdin=None):
+    """One office command; a timeout or a missing program is an answer (exit 124), never an exception
+    that would leave a hand-off `needed` with nobody to end it."""
+    root = repo_root()
+    try:
+        return subprocess.run([os.path.join(root, "bbox"), *args], cwd=root, input=stdin,
+                              capture_output=True, text=True, timeout=timeout)
+    except (subprocess.TimeoutExpired, OSError) as error:
+        return subprocess.CompletedProcess(args, 124, stdout="", stderr=type(error).__name__)
+
+
+def answer_of(result):
+    """A bbox call's JSON answer, or {} — and its error CODE only: browser42's messages can quote a page's
+    address (`await_timeout … (url: …)`), so a message is never carried into this log."""
+    try:
+        payload = json.loads(result.stdout)
+    except ValueError:
+        return {}, f"exit {result.returncode}, no JSON answer"
+    error = payload.get("error") if isinstance(payload, dict) else None
+    code = error.get("code") if isinstance(error, dict) else error
+    return (payload if isinstance(payload, dict) else {}), (str(code)[:60] if code else "")
+
+
+def nonce_of(url):
+    return (urllib.parse.parse_qs(urllib.parse.urlsplit(url).query).get("hop_nonce") or [""])[0]
+
+
+def alive(pid):
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+    return True
+
+
+def cmdline(pid):
+    """What process `pid` is (b"" when there is none): a pid file can outlive its process, and a pid is
+    reused — only a hop is ours to stop."""
+    try:
+        with open(f"/proc/{pid}/cmdline", "rb") as f:
+            return f.read()
+    except OSError:
+        return b""
+
+
+def stop_previous_hop():
+    """One watcher per sign-in: the newest attempt owns the answer. The previous one is stopped — its
+    whole process group, the `bbox b42 await` it is inside included — and the log says what HAPPENED:
+    it used to say «stopped» the moment the signal was sent, while the old hop went on running. A hop
+    that outlives this leaves by itself at its next look (its nonce is no longer the current one)."""
+    try:
+        with open(PIDFILE) as f:
+            pid = int(f.read().strip() or 0)
+    except (OSError, ValueError):
+        return
+    try:
+        os.unlink(PIDFILE)
+    except OSError:
+        pass
+    if pid <= 1 or pid == os.getpid():
+        return
+    if b"bina-claude-hop" not in cmdline(pid):
+        return                                         # gone already, or a pid reused by something else
+    try:
+        os.killpg(pid, signal.SIGTERM)                 # the hop leads its own session (start_new_session)
+    except OSError:
+        try:
+            os.kill(pid, signal.SIGTERM)
+        except OSError:
+            return
+    deadline = time.monotonic() + 5
+    while time.monotonic() < deadline and alive(pid):
+        time.sleep(0.2)
+    log(f"the previous hop (pid {pid}) " + ("stopped" if not alive(pid) else
+        "did not stop within 5 s — it leaves by itself at its next look, its sign-in is no longer current"))
+
+
+def hop(nonce, episode):
+    """Start the watcher that carries the browser's answer back; it is told its nonce and its hand-off's
+    episode on stdin."""
+    with open(OUT, "ab") as out:
+        proc = subprocess.Popen([HOP, "-"], stdin=subprocess.PIPE, stdout=out, stderr=out,
+                                start_new_session=True, env=dict(os.environ, HOME=HOME))
+    proc.stdin.write(f"{nonce}\n{episode}\n".encode())
+    proc.stdin.close()
+    with open(PIDFILE, "w") as f:
+        f.write(str(proc.pid))
+    log(f"hop watching the sign-in (pid {proc.pid}, group {GROUP})")
+
+
+def tab_url(slug):
+    """What the group's tab is SHOWING, in one short call (`await` reports the page's own url).
+
+    The condition is always true (`notext:` with a string no page carries), so this is a read of the
+    tab that never waits: it is how the worker tells "my URL is in the tab" from "the tab the browser
+    woke up with"."""
+    payload, _ = answer_of(bbox("b42", "await", slug, "notext:⁣bina-claude-probe-never⁣", "5"))
+    return payload.get("url") or ""
+
+
+def is_ours(seen, url):
+    """Is that tab showing THIS sign-in? The app's `hop_nonce` rides in the URL until the sign-in
+    leaves for Google, and inside `state=desktop:<uuid>.<nonce>` after it — so the nonce is the one
+    mark a previous attempt's tab cannot carry."""
+    nonce = nonce_of(url)
+    return bool(seen and nonce and nonce in urllib.parse.unquote(seen))
+
+
+def opened(url, episode):
+    """Open the hand-off for this press's `episode` and verify the tab is really this sign-in — three
+    tries, said in the log. Returns "" when it is open, SUPERSEDED when a newer press took over, and the
+    reason when it could not be opened.
+
+    `bbox b42 open` records the hand-off `needed` first, wakes the browser, closes the group (a sleeping
+    browser's close is a no-op, and the tab a wake restores keeps its old tag) and opens exactly one
+    tab. The nonce is still LOOKED for in the tab: it is the one mark a previous attempt's page cannot
+    carry (measured on the HP, 2026-11-04). browser42's own «superseded» is believed only while this
+    press is no longer the newest: an older press's record written a moment after ours (a slower exec)
+    makes browser42 say it, and this press then simply asks again."""
+    nonce, why = nonce_of(url), "never answered"
+    for attempt in range(1, 4):
+        if not current(nonce):
+            return SUPERSEDED
+        payload, error = answer_of(bbox("b42", "open", APP, "-", "--slug", GROUP, "--sentence", NEEDED,
+                                        "--episode", episode, stdin=url + "\n"))
+        if error == SUPERSEDED:
+            if not current(nonce):
+                return SUPERSEDED
+            log(f"open {GROUP} (attempt {attempt}): an older press wrote after this one — asking again")
+            continue
+        if not payload.get("ok"):
+            why = error or "refused"
+            log(f"open {GROUP} (attempt {attempt}): {why}")
+            time.sleep(5)
+            continue
+        time.sleep(3)
+        if not current(nonce):
+            return SUPERSEDED
+        seen = tab_url(GROUP)
+        if is_ours(seen, url):
+            log(f"opened in the office browser (group {GROUP}, {describe(seen)}) — handed to whoever looks")
+            return ""
+        why = "the tab never showed this sign-in"
+        log(f"attempt {attempt}: the tab is showing {describe(seen) if seen else 'nothing'} — opening again")
+        time.sleep(5)
+    return why
+
+
+def deliver(url):
+    """The worker: a hand-off in the office browser, then the watcher that brings the answer back.
+
+    Detached on purpose — the app's click waits for `open-url`, and a browser that is asleep takes the
+    better part of a minute to wake (measured: 69 s on the HP). A failure is said in the log AND on the
+    hand-off (`failed`, with its sentence, for ITS episode), which is what the person is looking at; a
+    sign-in a newer press replaced leaves without a word to anyone."""
+    nonce = nonce_of(url)
+    if not nonce:
+        # An ordinary link: its own group, no hand-off — nothing waits for a person, and a sign-in in
+        # progress keeps its tab. Its address on stdin too: an app's other sign-ins (a connector's
+        # OAuth) carry a `state` of their own.
+        result = bbox("b42", "group", LINKS, "-", stdin=url + "\n")
+        log(f"link opened in the office browser (group {LINKS}): {describe(url)}" if result.returncode == 0
+            else f"link: the office browser did not open it (exit {result.returncode})")
+        return 0 if result.returncode == 0 else 1
+    # THIS press's episode, minted here: it is ours even if `open` never answers (its caller's timeout),
+    # so the hand-off can always be ended — never left `needed` for half an hour.
+    episode = secrets.token_hex(6)
+    why = opened(url, episode)
+    if why == SUPERSEDED:
+        log("a newer sign-in started — this one leaves the hand-off to it")
+        return 0
+    if why:
+        if current(nonce):
+            bbox("b42", "handoff", GROUP, "--failed", NOT_OPENED, "--episode", episode, timeout=60)
+        log(f"the office browser did not open the sign-in ({why}) — the hand-off says so")
+        return 1
+    if not current(nonce):
+        log("a newer sign-in started — this one leaves the hand-off to it")
+        return 0
+    hop(nonce, episode)
+    return 0
+
+
+def main(argv):
+    if len(argv) > 1 and argv[1] == "--deliver":
+        url = sys.stdin.readline().strip()
+        try:
+            return deliver(url)
+        finally:
+            if nonce_of(url):
+                mask_app_logs()              # what the app logged of this sign-in: detached, after its hand-off
+    if len(argv) > 1 and argv[1] == "--scrub":
+        scrub_logs()                         # the hop, at every end of a sign-in: the app has logged its link
+        mask_app_logs()
+        return 0
+    if len(argv) < 2 or not argv[1].strip():
+        print("usage: bina-claude-open-url <url>   (the xdg http/https handler)", file=sys.stderr)
+        return 2
+    url = argv[1].strip()
+    scheme = urllib.parse.urlsplit(url).scheme.lower()
+    if scheme not in ("http", "https"):
+        # claude:// and friends are the APP's own handlers — they never come here (the image keeps
+        # com.anthropic.Claude.desktop for x-scheme-handler/claude). Anything else is not ours either.
+        log(f"not a web url ({scheme or 'no scheme'}:), nothing opened")
+        return 2
+    scrub_logs()                             # this file's own logs; the app's are masked by the worker
+    nonce = nonce_of(url)
+    log(f"open {'sign-in' if nonce else 'link'}: {describe(url)}")
+    if nonce:
+        try:
+            with open(CURRENT, "w") as f:
+                f.write(fingerprint(nonce))
+        except OSError:
+            pass
+        stop_previous_hop()
+    with open(OUT, "ab") as out:
+        worker = subprocess.Popen([sys.executable, os.path.abspath(__file__), "--deliver"],
+                                  stdin=subprocess.PIPE, stdout=out, stderr=out, start_new_session=True,
+                                  env=dict(os.environ, HOME=HOME))
+    worker.stdin.write((url + "\n").encode())
+    worker.stdin.close()
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv))

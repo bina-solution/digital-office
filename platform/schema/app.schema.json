@@ -368,6 +368,10 @@
             "type": "string",
             "description": "Which compose service receives traffic when the app has several (Runtipi is_main)."
           },
+          "name": {
+            "type": "string",
+            "description": "The base name of this entry's traefik routers and service (`<name>-local|-http|-https`). Defaults to the app id. An app that publishes MORE THAN ONE host names every entry after the first, or two entries emit the same routers (git's forge; bina-ds's azaria host)."
+          },
           "url_env": {
             "type": "string",
             "description": "The env var holding THIS host's public origin (e.g. FORGE_BASE_URL). It feeds the <name>-http router rule and, with an `sso` block, the authentik provider's external host. Defaults to <APP>_BASE_URL, which is what every single-host app wants — and why this is optional. It exists for an app that publishes MORE THAN ONE host (its own UI plus a whole product it runs, e.g. git's forge): without it the second entry renders a router using the FIRST host's rule, so two routers match one Host and traefik resolves that by priority — the app that worked before 404s or serves the wrong container."
@@ -816,6 +820,21 @@
         },
         "memory": {
           "type": "string"
+        },
+        "forever": {
+          "description": "An .env value that holds this app's resources for ever: render warns when the machine's .env sets `env` to a value that starts with `starts_with`, unless the .env sets `unless` to 1 (DGO-1848).",
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["env", "starts_with", "why"],
+            "properties": {
+              "env": {"type": "string", "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"},
+              "starts_with": {"type": "string", "minLength": 1},
+              "why": {"type": "string", "minLength": 1},
+              "unless": {"type": "string", "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"}
+            }
+          }
         }
       }
     },
@@ -1055,6 +1074,20 @@
         "pattern": "^/[A-Za-z0-9._~/-]+$"
       },
       "description": "Origin-root paths this app serves itself (the console: its own /api/* and /healthz). A layer-3 app that root-mounts a passthrough (module.passthrough[].mount=root) is compiled with these excluded, so it can take over /api/<x> without ever shadowing the shell's own routes."
+    },
+    "multi_instance": {
+      "type": "boolean",
+      "description": "Whether the office may run further copies (instances, «מופעים») of this app beside the first (DGO-1920, ai/context/app-instances.md). Unsaid: yes for layer 3, no for layers 1–2 (the office's chassis runs once). false: this app runs once per office."
+    },
+    "instance_of": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9-]{1,30}$",
+      "description": "Set ONLY in a manifest generated under instances/ by platform/manager/instances.py: the template app this instance is a copy of. Never written by hand."
+    },
+    "instance_key": {
+      "type": "string",
+      "pattern": "^[a-z0-9](?:[a-z0-9-]{0,14}[a-z0-9])?$",
+      "description": "Set ONLY in a generated instance manifest: the instance's key; its id is `<instance_of>-<instance_key>`."
     }
   }
 }

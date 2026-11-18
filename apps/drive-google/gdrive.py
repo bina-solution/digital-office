@@ -42,7 +42,7 @@ TOKEN_URL = "https://oauth2.googleapis.com/token"
 # THE REAL CAUSE, established 2026-08-06 and no longer "unexplained": those rows predate this file.
 # They were written by the n8n `Search File` workflow's GoogleDrive node (`resource: fileFolder`,
 # `searchMethod: query`, `options: {}` -- see the pre-refactor export
-# .claude/worktrees/fervent-mestorf-20f464/production/n8n/workflows/cnvttABSBdZTe9Xv.json). With
+# .claude/worktrees/a-worktree/production/n8n/workflows/exampleWorkflow7.json). With
 # `options.fields` unset, the node's own `prepareQueryString(undefined)` returns the literal string
 # 'id, name' (v2/helpers/utils.js in the running n8n image), so it asked Drive for
 # `files(id, name)` -- NO md5Checksum and NO size. `Build: ... LINK FOUND` then evaluated
@@ -123,7 +123,7 @@ class GoogleAuthError(Exception):
     answered a flat 503. A file that genuinely does not exist in Drive therefore came back as
     "Service unavailable - try again later or consider setting this node to retry automatically",
     so n8n classified a PERMANENT miss as a transient outage and re-tried one dead file id
-    (`lf19fd81450ffe7b0eb24db`) 24 times in five minutes — 24 of the window's `drive api` errors,
+    (`lf0000000000000000000001`) 24 times in five minutes — 24 of the window's `drive api` errors,
     all one document. 404/410 now pass through as themselves; auth, quota and transport faults keep
     the 503 that the account bar and /readyz are built on.
     """
@@ -166,6 +166,8 @@ class GoogleDriveAdapter:
             got = cx.get_secret(self.cid)
             if not got:
                 raise GoogleAuthError("שירות החשבונות אינו זמין — לא ניתן לקרוא את ההרשאה")
+            if got.get("refused"):
+                raise GoogleAuthError(got["refused"])
             tok = got.get("secret") or {}
             if not tok.get("access_token") and not tok.get("refresh_token"):
                 raise GoogleAuthError("החיבור אינו מכיל הרשאת Google — יש לחבר מחדש")
@@ -176,6 +178,21 @@ class GoogleDriveAdapter:
         return tok
 
     def _refresh(self, tok):
+        # The vault is the source, read again before a renewal: an account connected again (a new grant — a
+        # read-only one, EXU-24) replaces the token this process still holds, so a renewal never revives the old
+        # grant; a grant the vault now refuses to hand out is dropped here too, and so is one whose renewal it
+        # refuses to keep. When the vault cannot answer, the token held is renewed, as before; when it answers with
+        # no refresh token, the account is connected again — the held grant is not renewed behind its back.
+        got = cx.get_secret(self.cid)
+        if got and got.get("refused"):
+            _CACHE.pop(self.cid, None)
+            raise GoogleAuthError(got["refused"])
+        if got:
+            vault_tok = got.get("secret") or {}
+            if not vault_tok.get("refresh_token"):
+                _CACHE.pop(self.cid, None)
+                raise GoogleAuthError("ההרשאה פגה ואין refresh token — יש לחבר את החשבון מחדש")
+            tok = dict(vault_tok)
         rt = tok.get("refresh_token")
         if not rt:
             raise GoogleAuthError("ההרשאה פגה ואין refresh token — יש לחבר את החשבון מחדש")
@@ -198,8 +215,11 @@ class GoogleDriveAdapter:
         merged["refresh_token"] = new.get("refresh_token") or rt
         if new.get("expires_in"):
             merged["expires_at"] = int(time.time()) + int(new["expires_in"]) - 30
+        kept = cx.update_secret(self.cid, merged)      # best-effort; see connections_client.update_secret
+        if isinstance(kept, dict) and kept.get("refused"):
+            _CACHE.pop(self.cid, None)                 # a grant the vault will not keep is not used (EXU-24)
+            raise GoogleAuthError(kept["refused"])
         _CACHE[self.cid] = merged
-        cx.update_secret(self.cid, merged)      # best-effort; see connections_client.update_secret
         return merged
 
     def _req(self, method, url, **kw):
@@ -722,10 +742,10 @@ class GoogleDriveAdapter:
         reduction, and all ten of its keys were present on every one of the 500 records, so the
         narrowing is provably lossless for every field any caller actually consumes.
 
-        This matters because op_list is the SYNC path: a 4 634-file destination folder was moving
-        ~45 MB of JSON per listing into an n8n execution, which is what OOM-killed reconcile passes
-        442363 / 445301 / 446737 ("possible out-of-memory issue" at `List` / `Call DIFF`). The
-        payload, not the page count, was the constraint.
+        This matters because op_list is the SYNC path: a destination folder of thousands of files was
+        moving tens of MB of JSON per listing into an n8n execution, which is what OOM-killed three
+        reconcile passes ("possible out-of-memory issue" at `List` / `Call DIFF`). The payload, not
+        the page count, was the constraint.
 
         IF YOU NEED A FIELD BACK, add it to FIELDS (line 63) — do not restore `*`. FIELDS is the
         same projection `_list()` uses, so both planes now answer with one shape.
@@ -736,14 +756,14 @@ class GoogleDriveAdapter:
         before this parameter existed.
 
         GAP CLOSED 2026-08-13 — `query` is now accepted and AND-ed into `q`. The evidence that
-        forced it: across all 32,536 rows there were ZERO `LINK FOUND` stamps against 6,861
-        `SEARCH_IN_DRIVE_COMPLETED` attempts spanning 14 days, i.e. the find-link feature had
+        forced it: across every row there were ZERO `LINK FOUND` stamps against thousands of
+        `SEARCH_IN_DRIVE_COMPLETED` attempts spanning two weeks, i.e. the find-link feature had
         never once succeeded. A read-only ground-truth probe run as the SAME service account the
-        pipeline uses found the intended predicate works perfectly — 11/12 on a control of
-        known-good file ids, and 106/200 (53.0%) on a random sample of documents the pipeline had
-        already given up on. So ~3,430 documents were being reported "file not found" while their
-        file sat in Drive. The owner independently reproduced this by hand: searching Drive for
-        `קל קל-05626` returns two matching PDFs, while INDOX shows that document as file-not-found.
+        pipeline uses found the intended predicate works — nearly all of a control of known-good
+        file ids, and about half of a random sample of documents the pipeline had already given up
+        on. So thousands of documents were being reported "file not found" while their file sat in
+        Drive. The owner independently reproduced this by hand: searching Drive for one such
+        document's number returns two matching PDFs, while INDOX shows that document as file-not-found.
 
         The write-path concern in the original note still stands and is deliberately NOT resolved
         here: the LINK FOUND builder overwrites NAME/SOURCE_TYPE on the row, which discards
@@ -806,7 +826,7 @@ class GoogleDriveAdapter:
             qs.update({"corpora": "user", "spaces": SPACES,
                        "includeItemsFromAllDrives": "false", "supportsAllDrives": "false"})
         # FOLLOW nextPageToken, the same loop `_list()` above runs and for the same reason: this op
-        # asked Drive for the token and then threw it away, so a 17,325-file folder answered 100 —
+        # asked Drive for the token and then threw it away, so a N-file folder answered 100 —
         # measured live 2026-08-09, at limit=100 AND limit=1000 alike (Drive caps a `corpora=allDrives`
         # page well below the requested pageSize, so a big `pageSize` is not a workaround). `limit`
         # stays a REAL bound and stays 100 by default — this is the op a sync pass calls, and an

@@ -1383,8 +1383,10 @@ def oauth_google_start(name):
         return (jsonify({"error": why}), 400) if check else _oauth_page(False, failed, why, status=400)
     secret = secrets.token_urlsafe(24)
     try:
+        # `protocol`: the one this door serves — connections narrows the consent to it where the office connects
+        # it read-only (EXU-24), and ignores it elsewhere
         r = requests.get(f"{cx.CONNECTIONS_URL}/oauth/{urllib.parse.quote(door['grant'])}/start",
-                         params={"as_instance": "1", "ret": ret,
+                         params={"as_instance": "1", "ret": ret, "protocol": door.get("protocol") or "",
                                  "bind": hashlib.sha256(secret.encode()).hexdigest()}, timeout=20)
         d = r.json()
     except (requests.RequestException, ValueError):
@@ -1460,7 +1462,8 @@ def oauth_google_finish(name):
         return _oauth_page(False, "החשבון לא חובר", d.get("error") or f"HTTP {r.status_code}", status=400)
     engines.invalidate()
     door = engines.oauth(name) or {}
-    return _oauth_page(True, "החשבון חובר", door.get("connected") or "החשבון זמין עכשיו בלשכה.", made=d.get("made"))
+    said = (d.get("read_only") and door.get("connected_read_only")) or door.get("connected") or "החשבון זמין עכשיו בלשכה."
+    return _oauth_page(True, "החשבון חובר", said, made=d.get("made"))
 
 
 # ── extension slots (§4c) — an app registers UI, this service renders it ───────────

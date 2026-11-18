@@ -11,7 +11,7 @@
 - Access to the chat app: `https://chat.example.bina-solutions.co.il`
   - Credentials: configured in `.env` (`AUTH_USERNAME` / `AUTH_PASSWORD`, fed from the `chat-auth`
     connection as `CHAT_AUTH_USER` / `CHAT_AUTH_PASS`)
-- A WhatsApp account that is **not** the bot number (972500000011)
+- A WhatsApp account that is **not** the bot number (972500000010)
 - The tester's phone number should be listed as an admin in settings (via n8n webhook or `ADMIN_PHONE_*` env vars) to test admin-only features (options 10, 11)
 
 ## Part 1: The chat app

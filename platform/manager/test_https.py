@@ -115,7 +115,8 @@ def test_tls_routers_carry_hsts_and_plain_http_ones_do_not(monkeypatch):
     chain = {re.match(r"traefik\.http\.routers\.([^.]+)\.middlewares=(.*)", l).group(1):
              re.match(r"traefik\.http\.routers\.([^.]+)\.middlewares=(.*)", l).group(2)
              for l in labels if ".middlewares=" in l}
-    assert chain["demo-https"] == "authentik@file,hsts@file"
+    assert chain["demo-https"] == "hsts@file,authentik@file", \
+        "hsts FIRST: the sign-in's 302 ends the chain, and a header after it is never written"
     assert chain["demo-http"] == "authentik@file", "hsts pins a CERTIFICATE; a plain-http router has none"
     assert chain["demo-local"] == "authentik@file"
 
@@ -128,7 +129,9 @@ def test_a_local_office_pins_nothing(monkeypatch):
 
 
 def test_every_websecure_router_in_the_tree_carries_hsts():
-    """The static half of the pin: an app that writes its own labels must not be left out."""
+    """The static half of the pin: an app that writes its own labels must not be left out — and the pin comes
+    FIRST in the chain, or a middleware that answers by itself (the sign-in's 302, a redirect) ends the chain
+    before it and the visitor is never pinned (measured on vps1 2026-11-17, DGO-1595)."""
     missing = []
     for path in sorted((REPO / "apps").glob("*/docker-compose.yml")) + \
             sorted((REPO / "platform-base").glob("*/docker-compose.yml")):
@@ -136,6 +139,11 @@ def test_every_websecure_router_in_the_tree_carries_hsts():
         routers = set(re.findall(r"traefik\.http\.routers\.([A-Za-z0-9_-]+)\.entrypoints=websecure", text))
         for r in routers:
             m = re.search(rf"traefik\.http\.routers\.{re.escape(r)}\.middlewares=(.*)", text)
-            if not m or "hsts@file" not in m.group(1):
+            if not m or m.group(1).strip().split(",")[0] != "hsts@file":
                 missing.append(f"{path.relative_to(REPO)}: {r}")
-    assert not missing, "websecure routers without hsts@file:\n  " + "\n  ".join(missing)
+    for path in sorted((REPO / "platform-base/traefik/config").glob("*.yaml")):
+        for line in path.read_text(encoding="utf-8").splitlines():
+            m = re.match(r"\s*middlewares:\s*\[(.*)\]", line)
+            if m and "hsts@file" in m.group(1) and m.group(1).split(",")[0].strip() != "hsts@file":
+                missing.append(f"{path.relative_to(REPO)}: {line.strip()}")
+    assert not missing, "websecure routers without hsts@file FIRST:\n  " + "\n  ".join(missing)

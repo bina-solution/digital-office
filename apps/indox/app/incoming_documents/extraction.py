@@ -297,7 +297,7 @@ def _corr_field(typ: str, field: str) -> str:
 
 
 # expected-TYPE overrides from corrected_truth (field == "TYPE"): a doc that physically
-# sits in one folder but should classify as another type — e.g. m-trvt-b-1.jpg lives under
+# sits in one folder but should classify as another type — e.g. supplier20-b-1.jpg lives under
 # balance_sheet but is an unclassifiable scrap whose correct TYPE is "unknown".
 _TYPE_TRUTH: dict = {}
 
@@ -326,7 +326,7 @@ def _load_corrections() -> tuple[dict, dict]:
                     fix[key] = str(e.get("new"))
             elif e.get("verdict") == "NOT_ON_DOC":
                 # honor the entry's type — the same basename exists in several type
-                # folders (invoice/hvpyt-*.pdf HAS a total; shipment/hvpyt-*.pdf not)
+                # folders (invoice/supplier21-*.pdf HAS a total; shipment/supplier21-*.pdf not)
                 if e.get("type"):
                     fix_typed[(e["type"],) + key] = ""
                 else:

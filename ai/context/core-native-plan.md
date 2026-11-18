@@ -147,7 +147,7 @@ condition for step 3.
 
 ## 5. The sizes, for the owner's "tiny"
 
-Today a first run needs: a git clone (3,600 files), python3 + PyYAML on the host, docker, and a 10–15
+Today a first run needs: a git clone (N files), python3 + PyYAML on the host, docker, and a 10–15
 minute image build. After step 7: one download (the installer, ~5 MB) that fetches one binary
 (`dgo`, measured target 10–15 MB with the console's files embedded), which provisions the engine and
 pulls the images CI published (DGO-41). The clone exists only for developers.

@@ -50,7 +50,7 @@ import { workflow, node, links } from '@n8n-as-code/transformer';
     /*__n8n__*/ meta: null,
     /*__n8n__*/ pinData: {},
     /*__n8n__*/ staticData: null,
-    /*__n8n__*/ shared: [{"updatedAt":"2026-07-31T00:59:54.840Z","createdAt":"2026-07-31T00:59:54.840Z","role":"workflow:owner","workflowId":"indoxV2SearchWarehouse01","projectId":"2xKn4WH08LyAOk2y","project":{"updatedAt":"2026-07-30T23:40:17.073Z","createdAt":"2026-07-30T23:33:30.049Z","id":"2xKn4WH08LyAOk2y","name":"Admin User <person2@example.com>","type":"personal","icon":null,"description":null,"creatorId":"544b7ec6-5907-4ee2-a94b-c5676e56835c"}}],
+    /*__n8n__*/ shared: [{"updatedAt":"2026-07-31T00:59:54.840Z","createdAt":"2026-07-31T00:59:54.840Z","role":"workflow:owner","workflowId":"indoxV2SearchWarehouse01","projectId":"exampleProject02","project":{"updatedAt":"2026-07-30T23:40:17.073Z","createdAt":"2026-07-30T23:33:30.049Z","id":"exampleProject02","name":"Admin User <person2@example.com>","type":"personal","icon":null,"description":null,"creatorId":"544b7ec6-5907-4ee2-a94b-c5676e56835c"}}],
     id: 'indoxV2SearchWarehouse01',
     name: 'Search File In Warehouse Scans',
     active: true,
@@ -356,7 +356,7 @@ export class SearchFileInWarehouseScansWorkflow {
     WhReqSettings = {
         jsCode: `// Instance-neutral resolution of the warehouse-scans folder.
 // Was a hardcoded folder id inline in 'Search files and folders' — one client's
-// 'סרוקות הצליח'. Shipped in the blueprint, it made every deployment built from
+// 'תיקיית הסריקות'. Shipped in the blueprint, it made every deployment built from
 // this repo search THAT client's Drive whenever a caller omitted WAREHOUSE_FOLDER.
 // Same TABLE_GET shape indoxV2ActionsGDoc01/indoxV2ActionsShip01 already use for
 // this very setting — one mechanism, not a second one.

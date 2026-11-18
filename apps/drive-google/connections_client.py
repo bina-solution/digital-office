@@ -61,9 +61,17 @@ def forget():
 
 
 def get_secret(cid):
-    """{protocol, secret} for a vault instance, or None when the vault cannot answer."""
+    """{protocol, secret} for a vault instance; {"refused": why} when connections answers but will not hand it
+    out (an account wider than the office's read-only declaration, EXU-24: it must be connected again); None
+    when the vault cannot answer."""
     try:
         r = requests.get(f"{CONNECTIONS_URL}/api/instances/{cid}/secret", timeout=_TIMEOUT)
+        if r.status_code == 409:
+            try:
+                why = (r.json() or {}).get("error")
+            except ValueError:
+                why = None
+            return {"refused": why or "שירות החשבונות לא מסר את ההרשאה — יש לחבר את החשבון מחדש"}
         r.raise_for_status()
         return r.json()
     except (requests.RequestException, ValueError):
@@ -71,11 +79,20 @@ def get_secret(cid):
 
 
 def update_secret(cid, secret):
-    """Write a renewed secret back (MERGE, the endpoint's default): best-effort, never raised into an op."""
+    """Write a renewed secret back (MERGE, the endpoint's default): best-effort, never raised into an op. True when
+    kept, False when not; {"refused": why} when connections refuses the grant itself (wider than the office's
+    read-only declaration, EXU-24) — the caller then stops using it."""
     if not cid:
         return False
     try:
         r = requests.put(f"{CONNECTIONS_URL}/api/instances/{cid}/secret", json={"secret": secret}, timeout=_TIMEOUT)
+        if r.status_code == 409:
+            try:
+                why = (r.json() or {}).get("error")
+            except ValueError:
+                why = None
+            log.warning("connections: secret write-back for %s refused (read-only)", cid)
+            return {"refused": why or "שירות החשבונות סירב להרשאה — יש לחבר את החשבון מחדש"}
         if not r.ok:
             log.warning("connections: secret write-back for %s rejected: %s", cid, r.status_code)
         return r.ok

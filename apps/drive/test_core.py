@@ -149,6 +149,34 @@ with tempfile.TemporaryDirectory() as tmp:
     finally:
         uploads.PREPARE.remove(prep)
 
+    # a part that cannot be removed after the file is stored leaves the session `done`, never `failed` — it once
+    # fell into the finish's except and recorded a stored file as failed (found beside EXF's 8bb6ebc, DGO-1839)
+    s = uploads.create("admin", 3, {"name": "c.txt"})
+    uploads.append(s["id"], "admin", 0, io.BytesIO(b"abc"), 3)
+    real_unlink = os.unlink
+
+    def no_unlink(path, *a, **k):
+        if str(path).endswith(".part"):
+            raise PermissionError(13, "held", path)
+        return real_unlink(path, *a, **k)
+
+    os.unlink = no_unlink
+    try:
+        uploads.finish_async(s["id"], "admin", lambda src, size, md5, meta: {"id": "lfZ"})
+        for _ in range(200):
+            if uploads.status(s["id"], "admin")["state"] in ("done", "failed"):
+                break
+            time.sleep(0.05)
+        for _ in range(40):                       # the thread's last act (the unlink it was refused) is over
+            if not any(t.name == f"finish-{s['id']}" for t in __import__("threading").enumerate()):
+                break
+            time.sleep(0.05)
+    finally:
+        os.unlink = real_unlink
+    st = uploads.status(s["id"], "admin")
+    check("a part that cannot be removed after the store leaves the session done, not failed",
+          st["state"] == "done" and (st.get("file") or {}).get("id") == "lfZ")
+
 # ── names and paths: the office storage's own, held by apps/drive-local/test_engine.py (DGO-1500) ──
 
 print("\n" + ("ALL PASSED" if not FAILS else f"{len(FAILS)} FAILED: {FAILS}"))

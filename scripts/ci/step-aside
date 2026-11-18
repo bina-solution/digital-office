@@ -1,0 +1,174 @@
+#!/usr/bin/env bash
+# step-aside — on the office's one runner, a version's proof goes first.
+#
+#   bash scripts/ci/step-aside                  # the first step of a job on [self-hosted, portable]
+#   bash scripts/ci/step-aside --dispatch-too   # …where a hand-run (workflow_dispatch) yields to a version's proof too
+#
+# WHY (DGO-1819, issues/the-versions-proof-stands-behind-office-branch-jobs-on-the-one-runner-which-has-no-queue-
+# priorities.yaml). Every workflow's jobs run on the Dell's one self-hosted runner, and GitHub has no queue
+# priorities: on 2026-11-11 a version's proof (gates-hosted on dgo-stable) stood 45 minutes behind office-branch
+# jobs — among them the gates of a mac-dgo push made 2.5 hours before, which took the runner while the proof waited.
+#
+# WHAT IT ASKS, in seconds, with the job's own token (GH_TOKEN; the job grants `actions: write`, to cancel): is a run
+# of gates-hosted on dgo-stable queued, pending, waiting or in progress — of any age, one question per status? Then a
+# version's proof is ahead, and the job cancels its OWN RUN and waits for the runner to stop it, so the run reads
+# «cancelled» — never a green that tested nothing, never a red that reads as a broken test.
+#
+# NOT «IS MY COMMIT STILL THE HEAD?». A first draft also stepped aside when the job's commit was no longer its
+# branch's head. Measured before it landed: each of the three mac-dgo gates verdicts since 2026-11-10 22:31Z had 6, 2
+# and 26 later pushes before its proof job started, so every one would have cancelled itself — the branch left with
+# no verdict, which DGO-1797 measured and reverted (gates-hosted.yml's and go-test.yml's concurrency comments).
+#
+# NEVER A RUN WITH ANOTHER JOB AT WORK. Before the cancel, the run's own jobs are read: if one other than this job is
+# in progress — android-engine's `qemu`, hours on GitHub's runner beside `guest`, with no `needs:` between them — the
+# cancel would stop it too, so the job runs with a warning. A job that has COMPLETED does not count: `decide` has
+# always completed by the time `gates` takes the runner, and a cancel does not undo what a finished job did.
+#
+# WHAT NEVER STEPS ASIDE. dgo-stable (the workflows do not even call this there). A ref that is not a branch — a tag,
+# a pull request's merge ref: it runs, and says nothing. A hand-run (workflow_dispatch) is an explicit ask: it yields
+# to a version's proof only where the workflow says --dispatch-too — the Android builds, whose runs off dgo-stable are
+# all hand-runs and an hour long on the runner; elsewhere it says the proof is ahead and runs.
+#
+# FAIL OPEN. A question GitHub does not answer, or a cancel it refuses, is a ::warning:: and the job runs: a guard that
+# stopped every job when the API stumbled would be a worse outage than the one it ends. Only a cancel GitHub ACCEPTED
+# and the runner then never carried out ends the step red, after STEP_ASIDE_WAIT seconds (180 by default).
+#
+# The decision is the stdout line that begins `step-aside=` (yes or no, then why); scripts/test_ci_step_aside.py
+# holds each decision, with curl standing in for GitHub.
+set -uo pipefail
+
+dispatch_too=""
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --dispatch-too) dispatch_too=1; shift ;;
+    *) echo "usage: $0 [--dispatch-too]" >&2; exit 2 ;;
+  esac
+done
+
+PROOF_BRANCH=dgo-stable
+PROOF_WORKFLOW=gates-hosted.yml
+api="${GITHUB_API_URL:-https://api.github.com}"
+repo="${GITHUB_REPOSITORY:-}"
+token="${GH_TOKEN:-${GITHUB_TOKEN:-}}"
+wait_s="${STEP_ASIDE_WAIT:-180}"
+
+decided() {   # $1 yes|no, then why
+  local a="$1"; shift
+  [ -z "${GITHUB_OUTPUT:-}" ] || echo "aside=${a}" >> "${GITHUB_OUTPUT}"
+  echo "step-aside=${a} $*"
+}
+
+# GitHub's API with the job's token, which goes on curl's stdin (-H @-), never on its command line
+gh_api() {    # $1 method, $2 path → the body on stdout, non-zero on any failure
+  printf 'Authorization: Bearer %s\nAccept: application/vnd.github+json\nX-GitHub-Api-Version: 2022-11-28\n' "${token}" \
+    | curl -fsS --max-time 10 -X "$1" -H @- "${api}/$2"
+}
+
+case "${GITHUB_REF:-}" in
+  "refs/heads/${PROOF_BRANCH}")
+    decided no "${PROOF_BRANCH}: a version's proof never steps aside"; exit 0 ;;
+  refs/heads/?*)
+    branch="${GITHUB_REF#refs/heads/}" ;;
+  *)
+    decided no "${GITHUB_REF:-no ref}: not a branch, nothing to step aside for"; exit 0 ;;
+esac
+if [ -z "${repo}" ] || [ -z "${token}" ]; then
+  echo "::warning::step-aside has no repository or token to ask GitHub with (GITHUB_REPOSITORY, GH_TOKEN); this job runs"
+  decided no "nothing to ask with"
+  exit 0
+fi
+hand=""; [ "${GITHUB_EVENT_NAME:-}" != workflow_dispatch ] || hand=1
+what="office-branch job"; [ -z "${hand}" ] || what="hand-run"
+run_url() { echo "${GITHUB_SERVER_URL:-https://github.com}/${repo}/actions/runs/$1"; }
+
+# this run's OTHER jobs in progress, their names on one line ("" for none); non-zero when GitHub did not answer.
+# This job is the one on this runner (RUNNER_NAME), or, where no runner is named, the one GITHUB_JOB names (a matrix
+# leg is "<job> (<value>)"); one that matches neither counts as another, and the cancel is not sent.
+others_at_work() {
+  local body
+  body="$(gh_api GET "repos/${repo}/actions/runs/${GITHUB_RUN_ID}/jobs?filter=latest&per_page=100")" || return 1
+  printf '%s' "${body}" | RUNNER="${RUNNER_NAME:-}" JOB="${GITHUB_JOB:-}" python3 -c '
+import json, os, sys
+runner, job = os.environ["RUNNER"], os.environ["JOB"]
+def ours(j):
+    if runner:
+        return j.get("runner_name") == runner
+    name = j.get("name") or ""
+    return bool(job) and (name == job or name.startswith(job + " ("))
+print(", ".join(str(j.get("name") or j.get("id")) for j in json.load(sys.stdin).get("jobs") or []
+                if j.get("status") == "in_progress" and not ours(j)))'
+}
+
+step_aside() {   # $1 why, $2 what asks again
+  local others s
+  if [ -z "${GITHUB_RUN_ID:-}" ]; then
+    echo "::warning::step-aside has no GITHUB_RUN_ID to cancel; this job runs"
+    decided no "no run to cancel: $1"; exit 0
+  fi
+  if ! others="$(others_at_work)"; then
+    echo "::warning::step-aside could not read run ${GITHUB_RUN_ID}'s own jobs (above); this job runs"
+    decided no "its run's jobs could not be read: $1"; exit 0
+  fi
+  if [ -n "${others}" ]; then
+    echo "::warning::$1 — but run ${GITHUB_RUN_ID} has another job at work (${others}), which a cancel would stop too; this job runs"
+    decided no "another job of its run is in progress (${others}): $1"; exit 0
+  fi
+  if ! gh_api POST "repos/${repo}/actions/runs/${GITHUB_RUN_ID}/cancel" >/dev/null; then
+    echo "::warning::step-aside could not cancel run ${GITHUB_RUN_ID} (above) — does this job grant \`actions: write\`? This job runs"
+    decided no "the cancel was refused: $1"; exit 0
+  fi
+  # re-ask (scripts/ci/re-ask.py) knows a run that stepped aside by this notice alone — read as an annotation
+  echo "::notice title=step-aside::$1 — this ${what} steps aside; $2"
+  decided yes "$1"
+  # the runner stops this step when the cancel reaches it, usually within seconds
+  s=$(date +%s)
+  while [ $(( $(date +%s) - s )) -lt "${wait_s}" ]; do sleep 5; done
+  echo "::error::run ${GITHUB_RUN_ID} was cancelled and the runner had not stopped this job ${wait_s} s later: stopped here, red rather than a pass that tested nothing"
+  exit 1
+}
+
+# A PROOF THAT HAS ENDED BUT ITS LAST JOB: every job but `re-ask` has completed. That job asks again the runs that
+# stepped aside (scripts/ci/re-ask.py), and its run reads «in progress» until it ends — a run it asks again must not
+# step aside for it once more. 0 = ended; anything else (another job still going, jobs that could not be read) = not.
+proof_ended() {   # $1 the proof's run id
+  local body
+  body="$(gh_api GET "repos/${repo}/actions/runs/$1/jobs?filter=latest&per_page=100")" || return 1
+  printf '%s' "${body}" | python3 -c '
+import json, sys
+jobs = json.load(sys.stdin).get("jobs") or []
+rest = [j for j in jobs if j.get("name") != "re-ask"]
+sys.exit(0 if len(rest) < len(jobs) and all(j.get("status") == "completed" for j in rest) else 1)'
+}
+
+# A VERSION'S PROOF AHEAD — one question per status, so a run of any age is seen (a newest-N list missed one)
+proof="" proof_status=""
+for s in queued pending waiting requested in_progress; do
+  if ! body="$(gh_api GET "repos/${repo}/actions/workflows/${PROOF_WORKFLOW}/runs?branch=${PROOF_BRANCH}&status=${s}&per_page=10")" \
+     || ! ids="$(printf '%s' "${body}" | python3 -c 'import json, sys; d = json.load(sys.stdin); print(" ".join(str(r["id"]) for r in d.get("workflow_runs") or [] if d.get("total_count")))')"; then
+    echo "::warning::step-aside could not ask GitHub whether a version's proof is ${s} (above); this job runs"
+    decided no "GitHub did not answer whether a version's proof is ${s}"
+    exit 0
+  fi
+  for id in ${ids}; do
+    if [ "${s}" = in_progress ] && proof_ended "${id}"; then
+      echo "step-aside: run ${id} is a version's proof whose last job (re-ask) alone is left — not ahead"
+      continue
+    fi
+    proof="${id}"; proof_status="${s}"; break
+  done
+  [ -z "${proof}" ] || break
+done
+
+if [ -z "${proof}" ]; then
+  decided no "${what} on ${branch}: no version's proof queued or running"
+  exit 0
+fi
+ahead="a version's proof is ahead (run ${proof}, ${proof_status}: $(run_url "${proof}"))"
+if [ -z "${hand}" ]; then
+  step_aside "${ahead}" "the proof's last job (re-ask) asks again once it has ended"
+elif [ -n "${dispatch_too}" ]; then
+  step_aside "${ahead}" "dispatch it again once run ${proof} has ended"
+fi
+echo "::warning::${ahead} — this hand-run takes the runner all the same: a hand-run of this workflow never steps aside"
+decided no "a hand-run on ${branch}: it does not yield to run ${proof}"
+exit 0

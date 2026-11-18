@@ -20,8 +20,8 @@ services:
       # the chat the office listens to from the first connection — the group the owner named (DGO-1300)
       - TELEGRAM_WATCH_DEFAULT=${TELEGRAM_WATCH_DEFAULT:-Bina Solutions Main|בינה פיתרונות ראשי}
       # the same public api pair telegram-tv uses unless the office sets its own
-      - TG_DEFAULT_API_ID=${TV_DEFAULT_API_ID:-414329}
-      - TG_DEFAULT_API_HASH=${TV_DEFAULT_API_HASH:-af17b872310e6467fcd3d0aa82dc0d56}
+      - TG_DEFAULT_API_ID=${TV_DEFAULT_API_ID:-0}
+      - TG_DEFAULT_API_HASH=${TV_DEFAULT_API_HASH:-00000000000000000000000000000000}
       - LOG_LEVEL=${TELEGRAM_LOG_LEVEL:-INFO}
     volumes:
       # which account is active, and which chats are listened to. Losing it loses two choices, not the login.

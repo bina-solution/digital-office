@@ -316,7 +316,7 @@ function Invoke-GracefulShutdown {
     # WHY: Windows kills the WSL VM outright on restart, so Postgres never checkpoints and does
     # CRASH RECOVERY on the way back up. That is not cosmetic - the 2026-08-12 restart left 105
     # orphaned n8n executions, which errorHandler01 then swept into NEEDS_REVIEW, falsely flagging
-    # ~3,250 client documents for human attention. A clean stop removes that whole class of damage.
+    # ~N client documents for human attention. A clean stop removes that whole class of damage.
     #
     # HONEST LIMITATION: this is BEST EFFORT. Windows does not wait for Task Scheduler tasks during
     # shutdown the way it waits for Group Policy shutdown scripts. Triggering on System event 1074

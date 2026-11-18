@@ -31,7 +31,7 @@ SCAN_KINDS = frozenset({"none", "public", "door"})
 #: A 404 on one of these is NOT a scan, and the list is deliberately this short (DGO-1597). A bare `/`
 #: and the favicon are what every browser, every uptime checker and every search engine asks for on a
 #: hostname it has never seen; nobody learned anything from the 404. Measured 2026-11-09 on Exampleu: four
-#: AWS Oregon addresses (93.184.216.26, 93.184.216.27, 93.184.216.28, 93.184.216.29) each collected 20-24
+#: AWS Oregon addresses (93.184.216.20, 93.184.216.21, 93.184.216.22, 93.184.216.23) each collected 20-24
 #: `GET /` 404s on a name nobody routes, and the scan jail (12 failures in 10 minutes) would have banned
 #: all four for asking a question the internet asks by itself. A 404 on any other path still counts: that
 #: is somebody reading the answers.

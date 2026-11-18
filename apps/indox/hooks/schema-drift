@@ -11,13 +11,13 @@
 #
 #   * an object that reached production BY HAND and is in neither file (LINK_CONNECTION and
 #     SYNC_CONNECTION got in that way; nobody noticed for weeks),
-#   * a table the fixture never had at all (merge_audit: 10,184 rows, undeclared everywhere,
+#   * a table the fixture never had at all (merge_audit: N rows, undeclared everywhere,
 #     found only by tracing ownership by REFERENCE instead of by name),
 #   * a column that exists in both but is DEFINED differently — the one that motivated the
 #     column pass below. `indox_sync_stats.payload_light` is
 #     `GENERATED ALWAYS AS (payload - 'items') STORED`; declared as a plain jsonb column it has
 #     the same name, the same type, and passes every name-level diff, while silently shipping
-#     every item of a 1,500-message mailbox to the browser. That reads as a performance mystery
+#     every item of a N-message mailbox to the browser. That reads as a performance mystery
 #     weeks later, not as schema drift.
 #
 # So this gate asks the only question that covers all three: PROVISION A TENANT FROM THE FIXTURE
@@ -54,7 +54,7 @@ SCRATCH="indox_driftcheck"
 # KNOWN AND ACCEPTED DIFFERENCES. Each needs a reason and an exit condition, so this list stays a
 # ledger of decisions rather than a place drift goes to be forgotten.
 #
-#   סימון כרטסת עדכנית — a Sheets-era marker, 0 non-null of 25,982 rows. Removed from the fixture
+#   סימון כרטסת עדכנית — a Sheets-era marker, 0 non-null of N rows. Removed from the fixture
 #   and from indoxApi01's writable-column allowlist, but the LIVE drop is blocked: four functions
 #   take incoming_documents as a composite parameter, so the column drop and a drop/recreate of
 #   both overloads of each must happen in ONE transaction. Expires when that runs.

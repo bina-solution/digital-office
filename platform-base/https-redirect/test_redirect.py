@@ -35,7 +35,7 @@ class Target(unittest.TestCase):
         self.assertIsNone(MODULE.target({}, "/x"))
 
     def test_a_host_that_would_make_another_origin_is_refused(self):
-        for bad in ("evil.com/", "evil.com\\x", "person180@example.com", " ", ".leading"):
+        for bad in ("evil.com/", "evil.com\\x", "person90@example.com", " ", ".leading"):
             self.assertIsNone(MODULE.target({"X-Forwarded-Host": bad}, "/x"), bad)
 
     def test_a_path_that_does_not_start_with_a_slash_is_made_one(self):

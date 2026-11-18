@@ -135,7 +135,7 @@ import { workflow, node, links } from '@n8n-as-code/transformer';
     /*__n8n__*/ meta: {"templateCredsSetupCompleted":true},
     /*__n8n__*/ pinData: {},
     /*__n8n__*/ staticData: null,
-    /*__n8n__*/ shared: [{"updatedAt":"2026-07-30T23:42:27.037Z","createdAt":"2026-07-30T23:42:27.037Z","role":"workflow:owner","workflowId":"indoxV2ActionsBS01","projectId":"2xKn4WH08LyAOk2y","project":{"updatedAt":"2026-07-30T23:40:17.073Z","createdAt":"2026-07-30T23:33:30.049Z","id":"2xKn4WH08LyAOk2y","name":"Admin User <person2@example.com>","type":"personal","icon":null,"description":null,"creatorId":"544b7ec6-5907-4ee2-a94b-c5676e56835c"}}],
+    /*__n8n__*/ shared: [{"updatedAt":"2026-07-30T23:42:27.037Z","createdAt":"2026-07-30T23:42:27.037Z","role":"workflow:owner","workflowId":"indoxV2ActionsBS01","projectId":"exampleProject02","project":{"updatedAt":"2026-07-30T23:40:17.073Z","createdAt":"2026-07-30T23:33:30.049Z","id":"exampleProject02","name":"Admin User <person2@example.com>","type":"personal","icon":null,"description":null,"creatorId":"544b7ec6-5907-4ee2-a94b-c5676e56835c"}}],
     id: 'indoxV2ActionsBS01',
     name: 'indox-v2 Actions — BS',
     active: true,
@@ -1162,7 +1162,7 @@ return out;
     })
     GetReq = {
         jsCode: `// WHY this is a GET and not a GET_ALL: GET_ALL returned every row of incoming_documents and we
-// matched in JS. At 45,839 rows (37MB raw, far more as JS objects, copied again at every
+// matched in JS. At N rows (37MB raw, far more as JS objects, copied again at every
 // executeWorkflow hop) that OOM'd the 1536MB worker on every single document — INDOX processed zero
 // docs and crashed ~357x/hr. We now push the exact same lookup keys down as \`filters\` (OR of
 // AND-groups) so the DB returns only rows that can possibly match. The matcher below is UNCHANGED in
@@ -1250,7 +1250,7 @@ for (const ln of lines) {
   // and read by no node. So before this sort, a line matching both a live document and a merged
   // one linked to whichever the DB happened to return first -- and writing the tombstone means the
   // ledger line lands on a row nobody reads. Measured 2026-08-23: 480 (COMPANY_ID, SHORT_DOC_ID)
-  // keys hold two or more live documents, covering 1,126 documents; the worst holds 35.
+  // keys hold two or more live documents, covering N documents; the worst holds 35.
   //
   // Stable sort, MERGED last. Non-MERGED keep the DB's order among themselves, and a line whose
   // ONLY match is a tombstone still links to it rather than creating a second placeholder.

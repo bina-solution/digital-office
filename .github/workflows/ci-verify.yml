@@ -37,6 +37,12 @@ jobs:
     # Both premises are gone: the lane now runs on the portable runner (4 cores / 15 GB — more
     # capable than the 2-vCPU VPS) where minutes are free, so it runs unconditionally again.
     # Re-add an `if:` here if you ever need to gate it; it is no longer a cost decision.
+    # An UNCHANGED fork's pull request is skipped here: this job runs on our own machine, and the public copy of this
+    # file is on a public repository, where anyone can open one (DGO-1962). A branch of this repository runs as before.
+    # Defence in depth only: a pull request runs the workflow files of its own merge commit, which its author can
+    # change. The boundary is the repository's setting — the self-hosted runner not available to the public
+    # repository, or every outside contributor's run held for approval.
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     runs-on: [self-hosted, portable, ssd]
     timeout-minutes: 95   # 50 for the job + up to 45 that ops/prejob_waitfree.sh may hold it (memory, heat, a fresh boot)
     env:
@@ -190,6 +196,8 @@ jobs:
   # These are cheap, need no stack, and exist so the app-ownership model cannot
   # silently decay back into a second home for services.
   platform-invariants:
+    # not a fork's pull request: it runs on our own machine (see `verify`)
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     runs-on: [self-hosted, portable, ssd]
     steps:
       - uses: actions/checkout@v4
@@ -297,8 +305,8 @@ jobs:
       - name: G65 — declared CPU caps fit the machine the profile describes
         run: python3 scripts/refactor/cpu-budget-lint.py --self-test && python3 scripts/refactor/cpu-budget-lint.py --profile ci-small
       # G36 — a provider list call that fetches ONE page and never follows nextPageToken reports
-      # everything past that page as ABSENT, with no error. On 2026-08-05 that hid 43,326 of the
-      # client's 78,651 Drive documents; folders holding 17,066 files reported exactly 460.
+      # everything past that page as ABSENT, with no error. On 2026-08-05 that hid N of the
+      # client's N Drive documents; folders holding N files reported exactly 460.
       - name: G36 — provider list calls paginate or are explicitly bounded
         run: python3 scripts/refactor/paginated-list-lint.py --self-test && python3 scripts/refactor/paginated-list-lint.py
       # G49 — G36's mirror image, on the CLIENT side. SyncBoard.tsx's infinite scroll derived
@@ -311,7 +319,7 @@ jobs:
       # on ingest (the join key _docs_by_source() reads back). Five live writers (the v1 drive/gmail
       # processors sync-v3 wires up as the default processor_wf) stamped the watched FOLDER's id or
       # the SENDER's email instead, collapsing every document from the same folder/sender onto one
-      # SOURCE_ID. Measured on 2026-08-05: 6,250 rows, 579 distinct SOURCE_ID values.
+      # SOURCE_ID. Measured on 2026-08-05: N rows, 579 distinct SOURCE_ID values.
       - name: G37 — SOURCE_ID is a per-document id, never a folder id or a sender
         run: python3 scripts/refactor/source-id-lint.py --self-test && python3 scripts/refactor/source-id-lint.py
       # G38 — 41 live workflows had settings.errorWorkflow pointing at a workflow id that does not
@@ -325,7 +333,7 @@ jobs:
       # silently drops any field not on the list. indoxDocBatchUpsert01.json's trigger was missing
       # CONNECTION, NEXT_RETRY_AT and RETRY_COUNT — real columns on incoming_documents — so every
       # caller's retry-scheduling value was discarded before the upsert ever ran (NEXT_RETRY_AT: 0 of
-      # 6,207 rows populated, 2026-08-05).
+      # N rows populated, 2026-08-05).
       - name: G39 — executeWorkflowTrigger's declared schema matches the table it upserts
         run: python3 scripts/refactor/trigger-schema-drift-lint.py --self-test && python3 scripts/refactor/trigger-schema-drift-lint.py
       # G40 — scripts/ui-coverage/seed.sh (bbox ui-map / bbox seed, seeding opt-OUT by default)
@@ -339,7 +347,7 @@ jobs:
         run: python3 scripts/refactor/fixture-live-key-lint.py --self-test && python3 scripts/refactor/fixture-live-key-lint.py
       # G58 — G40's sibling from the other direction. G40 stops a fixture OVERWRITING live config;
       # this stops a fixture CLEANUP deleting live rows. On 2026-08-06 syncV3SourcesTest01's
-      # "Cleanup SQL" deleted 2,432 real client documents: its only prefix guard was bound to the
+      # "Cleanup SQL" deleted real client documents: its only prefix guard was bound to the
       # JOIN PARTNER (`sync_ledger`), never to `incoming_documents`, and the join condition was an
       # unanchored substring test on an IMAP uid, so fixture uid `12` matched production
       # `#inbox/120`, `#inbox/128`, `#inbox/1234`. Fourteen sibling cleanups were correct — and
@@ -375,7 +383,7 @@ jobs:
       # G43 — INDOX-UNIFIED-N8N-SPEC.md §2: one sub-workflow (indoxIdentity01) computes document
       # identity; nothing else may. Three divergent SHORT_DOC_ID (last-5-alphanumeric) formulas were
       # confirmed live pre-indoxIdentity01 (INDOX-CODEBASE-MAP-2026-08-05.md §1c), with known collision
-      # sinks '00000' (empty value padded), '61520' (a vendor template repeating one real number),
+      # sinks '00000' (empty value padded), '10001' (a vendor template repeating one real number),
       # '22026' (any February-2026 date). KNOWN FAILING as of 2026-08-05 for the same reason as G42 —
       # the files that compute this locally have not been migrated to call indoxIdentity01 yet
       # (Phase 4). Left wired red on purpose.
@@ -458,7 +466,7 @@ jobs:
       # G50 — G48's rule from the other end. G48 makes an n8n reply name its outcome; this makes the
       # Python reading it listen. `_entry_items` returns `-> tuple[list[dict], list[str]]` and puts
       # everything it could not determine in that second list; `_move_items` dropped it into
-      # `_notes`, and the surface downstream rendered 2,435 completed documents as 0 with nothing
+      # `_notes`, and the surface downstream rendered N completed documents as 0 with nothing
       # raised. KNOWN FAILING (2 findings, both owned by another lane) — wired anyway, same
       # reasoning as G41-G46. `|| true` is deliberately NOT used: see GATES.md.
       - name: G50 — a caller never silently discards what the callee told it
@@ -481,7 +489,7 @@ jobs:
       # G63 — the n8n push re-seeds env-driven credentials from .env, and an unset-or-empty ${VAR}
       # used to resolve to "" and be PATCHed in as if it were a value, re-encrypting an EMPTY
       # secret over a working live credential. `.env` carried `GEMINI_API_KEY=`, so every push
-      # blanked `6mfcsdRaqQ4IdQ8Y` and `Balance Sheet Extractor - v2- shmuel` failed 100% with
+      # blanked `6mfcsdRaqQ4IdQ8Y` and `Balance Sheet Extractor - v2- person06` failed 100% with
       # "Forbidden - perhaps check your credentials?". The step is instance-global, so a scoped
       # `bbox n8n <app> push` destroyed an unrelated app's credential. Replaying the shipped
       # resolver: 20 PATCHes, 5 carrying an empty field.
@@ -770,7 +778,7 @@ jobs:
       # `label:<X>` and the Mail Label Engine APPLIES those labels. mailapi passed the query
       # straight to Gmail's X-GM-RAW, which matches a label NAME, hyphenized — so `label:SYNCED_DOC`
       # (the KEY every sync_registry row stores) and `label:"<name with spaces>"` BOTH returned
-      # 200 total:0 on a mailbox carrying 15,575 such messages. Zero is also what a drained pipe
+      # 200 total:0 on a mailbox carrying thousands of such messages. Zero is also what a drained pipe
       # returns, which made every "this pipe is empty" conclusion unfalsifiable — one lane nearly
       # shipped exactly that. Drives GmailBackend.search through a fake IMAP client and asserts the
       # criterion that reaches the WIRE, not just the helper, because a guard that only exercised

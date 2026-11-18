@@ -80,7 +80,7 @@ function evalAssign(a, row) {
 }
 
 // Canonical form must match the SQL function byte for byte: values joined by the ASCII unit
-// separator. JSON was the first attempt and failed on all 559 rows -- Postgres prints jsonb::text
+// separator. JSON was the first attempt and failed on every row -- Postgres prints jsonb::text
 // with a space after every comma, JSON.stringify does not. Identical values, different bytes.
 const US = String.fromCharCode(31); // == SQL chr(31)
 const canonical = (row) => SIGNED.map((a) => String(evalAssign(a, row))).join(US);

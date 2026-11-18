@@ -114,7 +114,7 @@ OVR='BUSINESS_NAME|DEPLOYMENT_NAME|DEPLOYMENT_DOMAIN|DEV_DOMAIN|AUTH_EXTERNAL_UR
   echo "DGO_IDENTITY=${CI_IDENTITY:-${IDENTITY}}"
   echo "N8N_USER_MANAGEMENT_JWT_SECRET=$(rnd)"
   echo "N8N_ENCRYPTION_KEY=${N8N_ENCRYPTION_KEY_SECRET:-$(rnd)}"
-  echo "N8N_OWNER_EMAIL=${ADMIN:-person6@example.com}"
+  echo "N8N_OWNER_EMAIL=${ADMIN:-person5@example.com}"
   echo "N8N_OWNER_PASSWORD=Ci$(rnd)9X"
   echo "N8N_RUNNERS_AUTH_TOKEN=$(rnd)"
   # CI is http-only (*.localhost over http): n8n's secure cookie would block the UI.
@@ -122,16 +122,16 @@ OVR='BUSINESS_NAME|DEPLOYMENT_NAME|DEPLOYMENT_DOMAIN|DEV_DOMAIN|AUTH_EXTERNAL_UR
   echo "GLITCHTIP_SECRET_KEY=$(rnd)"
   echo "GLITCHTIP_DB_PASSWORD=$(rnd)"
   echo "GLITCHTIP_ENABLE_ORG_CREATION=true"
-  echo "GLITCHTIP_ADMIN_EMAIL=${ADMIN:-person6@example.com}"
+  echo "GLITCHTIP_ADMIN_EMAIL=${ADMIN:-person5@example.com}"
   # Random always, CI included. An office made without an admin address got a FIXED password here,
-  # published with this file; the HP was made that way (DGO-980). Every reader takes it from .env.
+  # published with this file (DGO-980). Every reader takes it from .env.
   echo "GLITCHTIP_ADMIN_PASSWORD=G$(rnd)9x!"
   echo "PORTAINER_ADMIN_PASSWORD=P$(rnd)"
   echo "BROWSER42_MCP_TOKEN=$(rnd)"
   echo "BROWSER42_VNC_PASSWORD="
   # The template's own values for these were REAL and copied as they were, so every office made here
   # shared them with every other and with whoever holds the template (DGO-1220, measured 2026-11-03:
-  # 10 of them in each fresh .env, and vps1 runs on them). Minted per office like the rest. N8N_API_KEY
+  # 10 of them in each fresh .env). Minted per office like the rest. N8N_API_KEY
   # is n8n's to issue (apps/n8n/hooks/push-app ensure_api_key makes one when there is none), the vault's
   # root key is secret-zero (platform-base/connections), and the two SUPABASE_*_PASSWORD keys are written by
   # nothing since DGO-1495: no service read them (every database role takes SUPABASE_DB_PASSWORD).
@@ -178,7 +178,7 @@ if [ -n "${OFFICE_DOMAIN:-}" ]; then echo "LOCALMAIL_PW=$(rnd)"; else echo "LOCA
   # so a fresh instance is unusable until an admin exists: the hook creates one from these values on
   # the first `bbox run`, which is what makes Plane work out of the box like every other app here.
   # The email is the same human as everywhere else, so it defaults to n8n's owner.
-  echo "PLANE_OWNER_EMAIL=${ADMIN:-person6@example.com}"
+  echo "PLANE_OWNER_EMAIL=${ADMIN:-person5@example.com}"
   echo "PLANE_OWNER_PASSWORD=Pl$(rnd)9X"
   echo "PLANE_OWNER_FIRSTNAME=${ADMIN:+Admin}"
   echo "PLANE_OWNER_LASTNAME="

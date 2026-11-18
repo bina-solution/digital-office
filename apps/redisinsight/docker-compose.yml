@@ -35,7 +35,7 @@ services:
     - traefik.http.routers.redisinsight-https.tls=true
     - traefik.http.routers.redisinsight-https.tls.certresolver=${TRAEFIK_CERTRESOLVER-myresolver}
     - traefik.http.routers.redisinsight-https.service=redisinsight
-    - traefik.http.routers.redisinsight-https.middlewares=authentik-admins@file,hsts@file
+    - traefik.http.routers.redisinsight-https.middlewares=hsts@file,authentik-admins@file
     - traefik.http.services.redisinsight.loadbalancer.server.port=5540
 volumes:
   redisinsight_data: null

@@ -174,7 +174,7 @@ FAIL_LINE = re.compile(r"^FAIL(ED)?\b")
 
 def said_failure(out: str, fallback: str) -> str:
     """A failing run's own reason: its first line that says FAIL, with the indented line under it — not
-    its last line when that is a later group's PASS (chimney-services' test_engine failed in the 0.2.0
+    its last line when that is a later group's PASS (examplech-services' test_engine failed in the 0.2.0
     gates and the gate printed only "PASS plane", DGO-1040). With no such line, the fallback."""
     lines = [ln.rstrip() for ln in out.splitlines() if ln.strip()]
     depth = lambda s: len(s) - len(s.lstrip())   # noqa: E731 — the line under it is indented DEEPER

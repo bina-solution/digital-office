@@ -12,7 +12,7 @@ over a real client's live registry twice on 2026-08-05.
 It does not police the OTHER shipped surface: `apps/*/blueprint/n8n/**` and `blueprint/demo/**`.
 Those are bootstrapped into every new deployment just as surely, and on 2026-08-06 a deliberate
 sweep found 243 pieces of one client's data sitting in them — including
-`indoxV2SearchWarehouse01` hardcoding that client's `סרוקות הצליח` Drive folder id as the
+`indoxV2SearchWarehouse01` hardcoding that client's `תיקיית הסריקות` Drive folder id as the
 fallback for its warehouse search, so a brand-new deployment would have searched the OLD
 client's Drive on first run. That one is fixed; the rest are baselined below.
 
@@ -61,18 +61,18 @@ PATTERNS = (
     # The cost is that the list needs a line per production folder — which is exactly the
     # set `data/registry/sync_registry.json` already enumerates, so it is auditable.
     ("known-prod-folder-id", re.compile(
-        r"1REDACTEDlintxxxxxxxxxxxxxxxx0080|1REDACTEDlintxxxxxxxxxxxxxxxx0095|"
-        r"1REDACTEDlintxxxxxxxxxxxxxxxx0012|1REDACTEDlintxxxxxxxxxxxxxxxx0094|"
-        r"1REDACTEDlintxxxxxxxxxxxxxxxx0100|1REDACTEDlintxxxxxxxxxxxxxxxx0013|"
-        r"1REDACTEDlintxxxxxxxxxxxxxxxx0007|1REDACTEDlintxxxxxxxxxxxxxxxx0102|"
-        r"1REDACTEDlintxxxxxxxxxxxxxxxx0103|1REDACTEDlintxxxxxxxxxxxxxxxx0096|"
-        r"1REDACTEDlintxxxxxxxxxxxxxxxx0104|1REDACTEDlintxxxxxxxxxxxxxxxx0098")),
+        r"1REDACTEDlintxxxxxxxxxxxxxxxx0012|1REDACTEDlintxxxxxxxxxxxxxxxx0011|"
+        r"1REDACTEDlintxxxxxxxxxxxxxxxx0013|1REDACTEDlintxxxxxxxxxxxxxxxx0014|"
+        r"1REDACTEDlintxxxxxxxxxxxxxxxx0015|1REDACTEDlintxxxxxxxxxxxxxxxx0016|"
+        r"1REDACTEDlintxxxxxxxxxxxxxxxx0017|1REDACTEDlintxxxxxxxxxxxxxxxx0018|"
+        r"1REDACTEDlintxxxxxxxxxxxxxxxx0019|1REDACTEDlintxxxxxxxxxxxxxxxx0020|"
+        r"1REDACTEDlintxxxxxxxxxxxxxxxx0021|1REDACTEDlintxxxxxxxxxxxxxxxx0022")),
     ("connection-instance-id", re.compile(
         r"(?:drive_google_service_account|mail_imap_app_password|mail_imap_local|drive_local)"
         r"-[0-9a-f]{6,}")),
     ("client-mailbox", re.compile(
-        r"\b(?:hachohen|example\.agent|hachohen\.rikuz|example\.pituah|shimshon300|"
-        r"hachohen\.office|ah0529898)[\w.+-]*@[\w.-]+", re.I)),
+        r"\b(?:example|example\.agent|example\.rikuz|example\.pituah|examplec|"
+        r"example\.office|exampled)[\w.+-]*@[\w.-]+", re.I)),
 )
 
 #: Same judgement as G40's placeholder rule, and for the same reason: a gate that fires on
@@ -128,11 +128,11 @@ def main():
         cases = [
             ("a real Drive file id in a shipped workflow", {
                 "apps/x/blueprint/n8n/w.json":
-                    '{"url":"https://drive.google.com/file/d/1REDACTEDlintxxxxxxxxxxxxxxxx0080"}'}, True),
+                    '{"url":"https://drive.google.com/file/d/1REDACTEDlintxxxxxxxxxxxxxxxx0012"}'}, True),
             ("a connection instance id in a shipped workflow", {
-                "apps/x/blueprint/n8n/w.json": '{"connection_id":"drive_google_service_account-ea660043"}'}, True),
+                "apps/x/blueprint/n8n/w.json": '{"connection_id":"drive_google_service_account-00000003"}'}, True),
             ("a client mailbox in a demo seed", {
-                "apps/x/blueprint/demo/seed.json": '{"email":"person10@example.com"}'}, True),
+                "apps/x/blueprint/demo/seed.json": '{"email":"person51@example.com"}'}, True),
             ("PLACEHOLDER ids are allowed", {
                 "apps/x/blueprint/fixtures/f.json": '{"to_sync":"PLACEHOLDER_TO_SYNC_FOLDER_ID"}'}, False),
             ("a local/dev connection is allowed", {

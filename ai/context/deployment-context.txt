@@ -55,7 +55,7 @@ repo as regular files (no longer git submodules — no `.gitmodules`).
 | supabase (dev) | supabase.dev / supabase-studio.dev | full self-hosted stack (development/supabase, own .env). NOTE: the INDOX PRODUCTION supabase is now a first-class production service (see production table) — this dev entry is the separate full-feature dev stack. |
 | feature-validation | fv.dev | test framework: feature-validation-api + per-suite validators |
 | incoming-documents | incoming-documents.dev | FastAPI rewrite of the n8n doc system; includes Redpanda/Kafka |
-| ktivayehudit-clone2 | ktivayehudit-clone2.dev | scraped WordPress site clone |
+| examplek-clone2 | examplek-clone2.dev | scraped WordPress site clone |
 | filesystem-mcp-sse | (internal) | MCP server |
 | chess / hello-world | chess.dev / hello.dev | demos |
 

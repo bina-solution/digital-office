@@ -19,10 +19,18 @@ trap 'rm -rf "${T}"' EXIT
 mkdir -p "${T}/tmp"; export TMPDIR="${T}/tmp"
 fails=0
 say() { printf '%s  %s\n' "$1" "$2"; }
-ok() { if eval "$2"; then say PASS "$1"; else say FAIL "$1"; sed 's/^/      | /' "${T}/out" | tail -6; fails=$((fails + 1)); fi; }
+# a check is read WITHOUT pipefail: `git log … | grep -q x` stops reading at the first match, git takes a SIGPIPE, and under
+# pipefail the check failed at random — and a negated one (`! … | grep -q`) PASSED wrongly (DGO-1848, measured on vps1)
+ok() {
+  local r=0
+  set +o pipefail; eval "$2" || r=1; set -o pipefail
+  if [ "${r}" = 0 ]; then say PASS "$1"; else say FAIL "$1"; sed 's/^/      | /' "${T}/out" | tail -6; fails=$((fails + 1)); fi
+}
 
 export GIT_AUTHOR_NAME=t GIT_AUTHOR_EMAIL=t@t.invalid GIT_COMMITTER_NAME=t GIT_COMMITTER_EMAIL=t@t.invalid
 export GIT_CONFIG_GLOBAL="${T}/gitconfig" GIT_CONFIG_NOSYSTEM=1
+# the cases grep Hebrew notices: UTF-8 io for any Python they reach, as lib.sh exports it (gate G10, portability-lint)
+export PYTHONIOENCODING=utf-8 PYTHONUTF8=1
 printf '[init]\n\tdefaultBranch = main\n' > "${GIT_CONFIG_GLOBAL}"
 mkdir -p "${T}/bin"
 cat > "${T}/bin/green" <<'EOF'
@@ -36,6 +44,7 @@ echo "$1" >> "${STUB}/runs"
 echo "$1:${BBOX_DISK_ADMITTED:-unset}" >> "${STUB}/admitted"
 echo "$1:${BBOX_ALLOW_ROLLBACK:-unset}" >> "${STUB}/allow"
 [ "$1" = rebuild ] && echo "$*" >> "${STUB}/rebuilt"
+[ "$1" = recreate ] && echo "$*" >> "${STUB}/recreated"
 [ -f "${STUB}/health.$1" ] && cp "${STUB}/health.$1" "${STUB}/health"
 [ -f "${STUB}/do.$1" ] && . "${STUB}/do.$1"
 exit "$(cat "${STUB}/rc.$1" 2>/dev/null || echo 0)"
@@ -57,6 +66,11 @@ EOF
 cat > "${T}/bin/old" <<'EOF'
 #!/bin/sh
 cat "${STUB}/old" 2>/dev/null
+EOF
+cat > "${T}/bin/inspect" <<'EOF'
+#!/bin/sh
+# `docker inspect` of the office's containers, as JSON — the REAL folder_mounts reads it (an empty list unless a case writes it)
+cat "${STUB}/inspect.json" 2>/dev/null || echo '[]'
 EOF
 cat > "${T}/bin/busy" <<'EOF'
 #!/bin/sh
@@ -90,13 +104,34 @@ case "$1" in
   free)    cat "${STUB}/disk.free" 2>/dev/null || echo 99 ;;
 esac
 EOF
+cat > "${T}/bin/line" <<'EOF'
+#!/bin/sh
+# GitHub's queue of dgo-stable's gates runs (line_wait): no file = the API cannot be read; an empty one = none waits
+[ -f "${STUB}/line" ] || exit 1
+cat "${STUB}/line"
+EOF
+cat > "${T}/bin/gh" <<'EOF'
+#!/bin/sh
+# GitHub's API (gh_api) for the REAL line_wait: <path> → the canned reply in $STUB/gh/<name>; none = cannot be read
+case "$1" in
+  actions/workflows/*/runs*) f=runs ;;
+  actions/runs/*/jobs*) f="jobs-$(printf '%s' "$1" | sed 's#^actions/runs/\([0-9]*\)/.*#\1#')" ;;
+  actions/runners) f=runners ;;
+  *) exit 1 ;;
+esac
+[ -f "${STUB}/gh/${f}" ] || exit 1
+cat "${STUB}/gh/${f}"
+EOF
 chmod +x "${T}/bin/"*
 export STUB="${T}/stub"
+export DGO_FOLLOW_LINE_CMD="${T}/bin/line"
+unset DGO_FOLLOW_LINE_WAIT_MIN
 export DGO_FOLLOW_GREEN_CMD="${T}/bin/green" DGO_FOLLOW_RUN_CMD="${T}/bin/run" DGO_FOLLOW_HEALTH_CMD="${T}/bin/health" \
        DGO_FOLLOW_MODEL_CMD="${T}/bin/model" DGO_FOLLOW_NOTIFY_CMD="${T}/bin/notify" DGO_FOLLOW_BUSY_CMD="${T}/bin/busy" \
-       DGO_FOLLOW_OLD_IMAGES_CMD="${T}/bin/old" DGO_FOLLOW_DEPS_CMD="${T}/bin/deps" \
+       DGO_FOLLOW_OLD_IMAGES_CMD="${T}/bin/old" DGO_FOLLOW_DEPS_CMD="${T}/bin/deps" DGO_FOLLOW_INSPECT_CMD="${T}/bin/inspect" \
        DGO_FOLLOW_MAX_LOAD=100000 DGO_FOLLOW_SETTLE=0
-unset DGO_FOLLOW_COPY DGO_FOLLOW_LOCKED
+unset DGO_FOLLOW_COPY DGO_FOLLOW_LOCKED DGO_FOLLOW_VIA_PROBE_S   # a runner's own bound would hide .env's (5d)
+export PYTHONIOENCODING=utf-8   # this file runs python (5d's doors) and holds Hebrew: UTF-8 io on Windows too (G10)
 export DGO_FOLLOW_DISK_CMD="${T}/bin/disk"
 export DGO_FOLLOW_HEAL_CMD="${T}/bin/heal"
 
@@ -195,6 +230,86 @@ ok "a rebuild that fails: said, and the take stands" 'has "${g}" && [ "$(origin_
 ok "a rebuild that fails: its row stays open, no take line closes it" '[ "$(notices)" = 1 ] && grep -q "קוד ישן" <<<"$(tail -1 "${STUB}/notices")"'
 fresh; g="$(stable code.txt two green)"; follow
 ok "nothing old: no rebuild" '[ "$(runs)" = "take " ] && [ ! -e "${STUB}/rebuilt" ]'
+# …and listed by the MERGED lib.sh, not the one the cycle sourced before the merge: vps1's take of 55 (2026-11-13) ran
+# 45's stale_images, which named a service the office no longer declares, and the whole rebuild failed (DGO-1838)
+fresh; git clone -q -b dgo-stable "${T}/origin.git" "${T}/side"; mkdir -p "${T}/side/scripts"
+g="$(stable scripts/lib.sh 'stale_image_services() { echo merged-lib; }' green)"; DGO_FOLLOW_OLD_IMAGES_CMD= follow
+ok "after a take, the old images are listed by the merged lib.sh" 'has "${g}" && [ "$(cat "${STUB}/rebuilt" 2>/dev/null)" = "rebuild merged-lib" ]'
+# …and a merged lib.sh that cannot answer (the function renamed away) is logged, never a silent «nothing is stale»
+fresh; git clone -q -b dgo-stable "${T}/origin.git" "${T}/side"; mkdir -p "${T}/side/scripts"
+g="$(stable scripts/lib.sh 'renamed_away() { echo x; }' green)"; DGO_FOLLOW_OLD_IMAGES_CMD= follow
+ok "a merged lib.sh without stale_image_services: logged, the cycle's own answers" 'has "${g}" && grep -q "could not list stale images (exit 3)" "${O}/data/follow/log"'
+
+# 3d. code mounted as a read-only FOLDER (DGO-1865): android-emulator mounts ./server:/app:ro, its 0.2.1 changed only
+# server/governor.py, which server.py imports once — nothing recreated it. The REAL folder_mounts reads `docker inspect`
+# JSON (the stub only hands it over): <service> <StartedAt> <source> [rw] per mount, all containers running.
+inspect_of() {   # "<service> <StartedAt> <source> [rw|ro]"… → the JSON docker inspect gives for them
+  python3 -c 'import json, sys
+rows = []
+for a in sys.argv[1:]:
+    s, t, src, *mode = a.split()
+    rows.append({"State": {"Running": True, "StartedAt": t}, "Config": {"Labels": {"com.docker.compose.service": s}},
+                 "Mounts": [{"Type": "bind", "Source": src, "RW": (mode or ["ro"])[0] == "rw"}]})
+print(json.dumps(rows))' "$@" > "${STUB}/inspect.json"
+}
+OLD=2020-01-01T00:00:00Z NEW=2099-01-01T00:00:00Z
+folder_case() {   # <changed path> <inspect rows…> — a green commit changing that path; apps/x/server exists in the office
+  fresh; mkdir -p "${O}/apps/x/server" "${O}/apps/x/server2"; local p="$1"; shift
+  git clone -q -b dgo-stable "${T}/origin.git" "${T}/side"; mkdir -p "${T}/side/apps/x/server" "${T}/side/apps/x/server2"
+  inspect_of "$@"; g="$(stable "${p}" v2 green)"
+}
+folder_case apps/x/server/governor.py "web ${OLD} ${O}/apps/x/server"; follow
+ok "a file changed in a service's ro code folder: that service recreated, exactly, the take told" 'has "${g}" && [ "$(cat "${STUB}/recreated" 2>/dev/null)" = "recreate web" ] && took_told "${g}" && [ -z "$(st FOLDERS_PENDING)" ]'
+folder_case apps/x/other.py "web ${OLD} ${O}/apps/x/server"; follow
+ok "a change outside the folder: no recreate" 'has "${g}" && [ ! -e "${STUB}/recreated" ]'
+folder_case apps/x/server2/a.py "web ${OLD} ${O}/apps/x/server"; follow
+ok "a sibling folder with the same prefix (server2): no recreate" 'has "${g}" && [ ! -e "${STUB}/recreated" ]'
+folder_case apps/x/server/governor.py "web ${NEW} ${O}/apps/x/server"; follow
+ok "a container started after the bring-up already runs the take: no recreate" 'has "${g}" && [ ! -e "${STUB}/recreated" ]'
+folder_case apps/x/server/governor.py "ghost ${OLD} ${O}/apps/x/server" "web ${OLD} ${O}/apps/x/server"; follow
+ok "a service the compiled config no longer declares (a retired container): left out, the others recreated" '[ "$(cat "${STUB}/recreated" 2>/dev/null)" = "recreate web" ]'
+folder_case apps/x/server/governor.py "web ${OLD} ${O}/apps/x/server rw"; follow
+ok "a read-write folder mount: the service writes it itself — no recreate" 'has "${g}" && [ ! -e "${STUB}/recreated" ]'
+fresh; mkdir -p "${O}/apps/x"; inspect_of "web ${OLD} ${O}/apps/x/docker-compose.yml"; g="$(stable apps/x/docker-compose.yml "services: {}" green)"; follow
+ok "a FILE mount is lib.sh filemount_refresh's, not this: no recreate here" 'has "${g}" && [ ! -e "${STUB}/recreated" ]'
+# …a recreate that fails is said, the take stands, its line waits — and the next cycle tries again (F5)
+folder_case apps/x/server/governor.py "web ${OLD} ${O}/apps/x/server"; echo 1 > "${STUB}/rc.recreate"; follow
+ok "a recreate that fails: said, the take stands and is pushed, the service kept for the next cycle" 'has "${g}" && [ "$(origin_of o-dgo)" = "$(head_of)" ] && grep -q "קוד ישן" "${STUB}/notices" && ! grep -q "המשרד התעדכן" "${STUB}/notices" && [ "$(st FOLDERS_PENDING | cut -d" " -f2-)" = "web:x" ]'
+rm -f "${STUB}/rc.recreate"; follow
+ok "…and the next cycle recreates it, and forgets it" '[ "$(grep -c "recreate web" "${STUB}/recreated")" = 2 ] && [ -z "$(st FOLDERS_PENDING)" ]'
+# …an app that is busy by the time of the recreate (a meeting started during the take's bring-up) is left alone (F4)
+folder_case apps/x/server/governor.py "web ${OLD} ${O}/apps/x/server"
+echo 'echo "x: a session in progress" > "${STUB}/busy"' > "${STUB}/do.take"; follow
+ok "the service's app turned busy during the take: not recreated, kept for later" 'has "${g}" && [ ! -e "${STUB}/recreated" ] && [ "$(st FOLDERS_PENDING | cut -d" " -f2-)" = "web:x" ]'
+rm -f "${STUB}/do.take"; follow
+ok "…still busy: still not recreated" '[ ! -e "${STUB}/recreated" ] && [ -n "$(st FOLDERS_PENDING)" ]'
+p1="$(st FOLDERS_PENDING)"
+rm -f "${STUB}/busy"; follow
+ok "…no longer busy: recreated, and forgotten" '[ "$(cat "${STUB}/recreated" 2>/dev/null)" = "recreate web" ] && [ -z "$(st FOLDERS_PENDING)" ]'
+# …the service's OWN app counts too, by name or prefix (vps1: dgo-extend mounts apps/computers; meet-jibri is meet's)
+folder_case apps/x/server/governor.py "web ${OLD} ${O}/apps/x/server"
+echo 'echo "web: an agent session in progress" > "${STUB}/busy"' > "${STUB}/do.take"; follow
+ok "the service's own app busy (by its name), the folder's app not: not recreated" '[ ! -e "${STUB}/recreated" ] && [ -n "$(st FOLDERS_PENDING)" ]'
+rm -f "${STUB}/do.take" "${STUB}/busy"; printf 'we: busy\n' > "${STUB}/busy"; follow
+ok "…an app whose name only starts like it (we ≠ web): not its own — recreated" '[ "$(cat "${STUB}/recreated" 2>/dev/null)" = "recreate web" ]'
+# …a recreate that leaves a service unhealthy is judged like the bring-up (F3): said, the take line withheld
+folder_case apps/x/server/governor.py "web ${OLD} ${O}/apps/x/server"; printf 'web running unhealthy\ndb running -\ninit done -\n' > "${STUB}/health.recreate"; follow
+ok "a recreate that leaves a service unhealthy: said, the take stands, no «took» line" 'has "${g}" && grep -q "שירות נפל" "${STUB}/notices" && ! grep -q "המשרד התעדכן" "${STUB}/notices"'
+# …what an earlier take left is never written over by a newer take that recreates OTHER services (web keeps failing;
+# the newer take changes api's folder and recreates api — web must still be pending)
+folder_case apps/x/server/governor.py "web ${OLD} ${O}/apps/x/server" "api ${OLD} ${O}/apps/x/server2"
+printf 'web\napi\ndb\ninit\n' > "${STUB}/model"
+echo 'case " $* " in *" web "*) exit 1 ;; esac' > "${STUB}/do.recreate"; follow
+g2="$(stable apps/x/server2/a.py v3 green)"; follow
+ok "a newer take recreates api, and web (still failing) stays pending" 'has "${g2}" && grep -q "recreate api" "${STUB}/recreated" && [[ " $(st FOLDERS_PENDING) " == *" web:x "* ]] && [[ " $(st FOLDERS_PENDING) " != *" api:"* ]]'
+rm -f "${STUB}/do.recreate"
+# …and a RETRIED recreate is judged the same way (the first time the merged code runs in it)
+folder_case apps/x/server/governor.py "web ${OLD} ${O}/apps/x/server"; echo 1 > "${STUB}/rc.recreate"; follow
+rm -f "${STUB}/rc.recreate"; printf 'web running unhealthy\ndb running -\ninit done -\n' > "${STUB}/health.recreate"; follow
+ok "a retried recreate that leaves a service unhealthy: said" 'grep -q "שירות נפל" "${STUB}/notices" && [ -z "$(st FOLDERS_PENDING)" ]'
+# …a folder that cannot be checked during a take (the containers unreadable) is said, never a silent «nothing changed»
+folder_case apps/x/server/governor.py "web ${OLD} ${O}/apps/x/server"; echo 'not json' > "${STUB}/inspect.json"; follow
+ok "the containers cannot be read after a take: said, no «took» line" 'has "${g}" && grep -q "לא נבדקו" "${STUB}/notices" && ! grep -q "המשרד התעדכן" "${STUB}/notices"'
 
 # 4. a newer commit that is NOT green after a green one: only the green one is taken
 fresh; g="$(stable code.txt two green)"; n="$(stable other.txt y)"; follow
@@ -274,6 +389,129 @@ git -C "${T}/via.git" update-ref refs/green/dgo-stable "${g2}"; DGO_FOLLOW_GREEN
 ok "via: refs/green/dgo-stable comes through the linked office too" 'has "${g2}" && [ "$(git -C "${T}/via.git" rev-parse o-dgo)" = "$(head_of)" ]'
 ok "via: the ref is kept in the follower's own namespace, not as a remote branch" \
    'git -C "${O}" rev-parse -q --verify refs/follow/green/dgo-stable >/dev/null && ! git -C "${O}" rev-parse -q --verify refs/remotes/origin/green/dgo-stable >/dev/null'
+
+# 5d. DGO_FOLLOW_VIA as an ordered list (DGO-1863). Measured 2026-11-13 from 02:12Z: the MacBook out of memory, its
+# door still published and answering 502, and the HP's and the Dell's follows (both through it) took nothing. The
+# first office whose git app ANSWERS is fetched from and pushed to; one only published is passed over; none
+# answering is one skipped cycle that names them, and nobody is told. «dead» is published at its door :9006, but that
+# door's URL maps to a repository that does not exist, so it never answers; «peer» is the live one, as in 5c, and
+# «peer2» (door :9007) a second live one, for the order.
+printf '#!/bin/sh\ncase "$1 $2 $3 $4" in\n  "remote dead git-accounts --json") echo '"'"'{"office": "dead", "app": {"alias": "git-accounts", "port": 8978}, "registry": {"link_port": 9006}}'"'"' ;;\n  "remote peer git-accounts --json") [ -e "%s/via.down" ] && exit 1; echo '"'"'{"office": "peer", "app": {"alias": "git-accounts", "port": 8978}, "registry": {"link_port": 9005}}'"'"' ;;\n  "remote peer2 git-accounts --json") echo '"'"'{"office": "peer2", "app": {"alias": "git-accounts", "port": 8978}, "registry": {"link_port": 9007}}'"'"' ;;\n  *) exit 2 ;;\nesac\n' \
+  "${STUB}" > "${T}/bin/bbox"; chmod +x "${T}/bin/bbox"
+fresh; h="$(head_of)"; g="$(stable code.txt two green)"; git clone -q --mirror "${T}/origin.git" "${T}/via.git"
+git -C "${O}" remote set-url origin "${T}/nowhere.git"
+git -C "${O}" config "url.${T}/via.git.insteadOf" "http://git-accounts.peer:9005/git/gh/acc/o/r.git"
+git -C "${O}" config "url.${T}/nowhere.git.insteadOf" "http://git-accounts.dead:9006/git/gh/acc/o/r.git"
+# …with a trailing comment on the declaration, and a probe bound that is not a number (the default applies)
+printf 'DGO_FOLLOW_VIA=dead peer   # the dead one first\nDGO_FOLLOW_VIA_PATH=/git/gh/acc/o/r.git\n' >> "${O}/.env"
+DGO_FOLLOW_VIA_PROBE_S=20s DGO_FOLLOW_BBOX="${T}/bin/bbox" follow
+ok "via list: the first office is published but does not answer — taken from the second, at its door, pushed there" \
+   'has "${g}" && [ "$(git -C "${T}/via.git" rev-parse o-dgo)" = "$(head_of)" ] && grep -q "dead.s git app, at its door :9006, does not answer" "${T}/out" && grep -q "through the git app of peer, at its door :9005" "${T}/out" && grep -q "DGO_FOLLOW_VIA_PROBE_S=20s is not" "${T}/out"'
+ok "via list: the office that served is recorded — the state, the take's own line, and \`status\`" \
+   '[ "$(st LAST_VIA)" = peer ] && grep -q "took .*, through peer" "${O}/data/follow/log" && follow status && grep -q "last fetched through the git app of peer" "${T}/out"'
+touch "${STUB}/via.down"; n0="$(notices)"; DGO_FOLLOW_BBOX="${T}/bin/bbox" follow
+ok "via list: none answers — one skipped cycle that names them both and what each said, nobody told" \
+   '[ "$(st LAST_RESULT)" = skipped ] && grep -q "the git app of dead, peer cannot be reached" <<<"$(st LAST_DETAIL)" && grep -q "dead: exit" <<<"$(st LAST_DETAIL)" && grep -q "peer: not published" <<<"$(st LAST_DETAIL)" && [ "$(notices)" = "${n0}" ]'
+fresh; h="$(head_of)"; g="$(stable code.txt two green)"; git clone -q --mirror "${T}/origin.git" "${T}/via.git"
+git -C "${O}" remote set-url origin "${T}/nowhere.git"
+git -C "${O}" config "url.${T}/via.git.insteadOf" "http://git-accounts.peer:9005/git/gh/acc/o/r.git"
+git -C "${O}" config "url.${T}/nowhere.git.insteadOf" "http://git-accounts.dead:9006/git/gh/acc/o/none.git"
+printf 'DGO_FOLLOW_VIA=dead,peer:/git/gh/acc/o/r.git\n' >> "${O}/.env"; DGO_FOLLOW_BBOX="${T}/bin/bbox" follow
+ok "via list: an office with no path of its own and no DGO_FOLLOW_VIA_PATH is a declaration missing — blocked, told" \
+   '[ "$(head_of)" = "${h}" ] && [ "$(st LAST_RESULT)" = blocked ] && grep -q "<office>:/git/gh/" "${STUB}/notices"'
+# the first DGO_FOLLOW_VIA line of .env is the one read (lib.sh _env_raw), so the declaration is rewritten, not appended
+{ grep -v '^DGO_FOLLOW_VIA=' "${O}/.env"; printf 'DGO_FOLLOW_VIA="dead:/git/gh/acc/o/none.git peer:/git/gh/acc/o/r.git"\n'; } > "${T}/env.next"
+mv "${T}/env.next" "${O}/.env"; DGO_FOLLOW_BBOX="${T}/bin/bbox" follow
+ok "via list: each office's own path, the list quoted in .env — the one that answers at its own path is taken" \
+   'has "${g}" && [ "$(git -C "${T}/via.git" rev-parse o-dgo)" = "$(head_of)" ]'
+# both answer: the order decides (peer2's door maps to the same live repository as peer's)
+fresh; g="$(stable code.txt two green)"; git clone -q --mirror "${T}/origin.git" "${T}/via.git"
+git -C "${O}" remote set-url origin "${T}/nowhere.git"
+git -C "${O}" config --add "url.${T}/via.git.insteadOf" "http://git-accounts.peer:9005/git/gh/acc/o/r.git"
+git -C "${O}" config --add "url.${T}/via.git.insteadOf" "http://git-accounts.peer2:9007/git/gh/acc/o/r.git"
+printf 'DGO_FOLLOW_VIA=peer2 peer\nDGO_FOLLOW_VIA_PATH=/git/gh/acc/o/r.git\n' >> "${O}/.env"; DGO_FOLLOW_BBOX="${T}/bin/bbox" follow
+ok "via list: when both answer, the first is the one used" \
+   'has "${g}" && [ "$(st LAST_VIA)" = peer2 ] && grep -q "through the git app of peer2, at its door :9007" "${T}/out" && ! grep -q "through the git app of peer," "${T}/out"'
+# an office's own path that does not start with / is a declaration to fix, not «no path of its own»
+fresh; h="$(head_of)"; printf 'DGO_FOLLOW_VIA=peer:git/gh/acc/o/r.git\nDGO_FOLLOW_VIA_PATH=/git/gh/acc/o/r.git\n' >> "${O}/.env"
+DGO_FOLLOW_BBOX="${T}/bin/bbox" follow
+ok "via list: «office:git/…» (no leading /) is blocked and told, never read as the shared path" \
+   '[ "$(head_of)" = "${h}" ] && [ "$(st LAST_RESULT)" = blocked ] && grep -q "must start with /" <<<"$(st LAST_DETAIL)" && grep -q "נתיב לא תקין" "${STUB}/notices"'
+# …and with no DGO_FOLLOW_VIA_PATH beside it, it is still THAT (not «no path of its own»): the bad entry is asked first
+fresh; h="$(head_of)"; printf 'DGO_FOLLOW_VIA=peer:git/gh/acc/o/r.git\n' >> "${O}/.env"; DGO_FOLLOW_BBOX="${T}/bin/bbox" follow
+ok "via list: «office:git/…» with no DGO_FOLLOW_VIA_PATH is still named as a bad path" \
+   '[ "$(head_of)" = "${h}" ] && [ "$(st LAST_RESULT)" = blocked ] && grep -q "must start with /" <<<"$(st LAST_DETAIL)"'
+# a door that accepts and never answers — the MacBook's at 02:12Z, out of memory — is passed over within its bound
+# (DGO_FOLLOW_VIA_PROBE_S), never waited on for the cycle's 6 h: a listener on 127.0.0.1 that accepts and says nothing.
+# The run itself is bounded (120 s), so a probe without its bound fails this check instead of hanging the suite; the
+# listener is bounded too (150 s), so a suite stopped in this case leaves nothing running. «the last 1 seconds» is curl's
+# own sentence for the bound it was given: .env's 1, not the default 20, whatever the load makes of the clock.
+fresh; g="$(stable code.txt two green)"; git clone -q --mirror "${T}/origin.git" "${T}/via.git"
+timeout 150 python3 -c 'import socket
+s = socket.socket(); s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1); s.bind(("127.0.0.1", 0)); s.listen(16)
+print(s.getsockname()[1], flush=True)
+held = []
+while True:
+    held.append(s.accept()[0])' > "${T}/mute.port" 2>/dev/null & mute=$!
+for _ in $(seq 1 300); do [ -s "${T}/mute.port" ] && break; sleep 0.1; done
+mport="$(head -1 "${T}/mute.port" 2>/dev/null)"   # empty: the listener never started, and the case fails below
+printf '#!/bin/sh\ncase "$1 $2 $3 $4" in\n  "remote mute git-accounts --json") echo '"'"'{"office": "mute", "app": {"alias": "git-accounts", "port": 8978}, "registry": {"link_port": 9008}}'"'"' ;;\n  "remote peer git-accounts --json") echo '"'"'{"office": "peer", "app": {"alias": "git-accounts", "port": 8978}, "registry": {"link_port": 9005}}'"'"' ;;\n  *) exit 2 ;;\nesac\n' \
+  > "${T}/bin/bbox-mute"; chmod +x "${T}/bin/bbox-mute"
+git -C "${O}" remote set-url origin "${T}/nowhere.git"
+git -C "${O}" config "url.${T}/via.git.insteadOf" "http://git-accounts.peer:9005/git/gh/acc/o/r.git"
+git -C "${O}" config "url.http://127.0.0.1:${mport:-9}/r.git.insteadOf" "http://git-accounts.mute:9008/git/gh/acc/o/r.git"
+printf 'DGO_FOLLOW_VIA=mute,peer\nDGO_FOLLOW_VIA_PATH=/git/gh/acc/o/r.git\nDGO_FOLLOW_VIA_PROBE_S=1\n' >> "${O}/.env"
+# (no proxy: a runner's http_proxy would answer for the silent door, and curl's sentence would never come)
+t0="$(date +%s)"; env -u http_proxy -u HTTP_PROXY -u all_proxy -u ALL_PROXY DGO_FOLLOW_BBOX="${T}/bin/bbox-mute" \
+  REPO_ROOT="${O}" timeout -k 5 120 bash "${HERE}/follow.sh" > "${T}/out" 2>&1
+t1="$(date +%s)"; kill "${mute}" 2>/dev/null; wait "${mute}" 2>/dev/null
+ok "via list: a door that accepts and never answers is passed over within the bound (.env's probe of 1 s), the next taken" \
+   '[ -n "${mport}" ] && has "${g}" && [ "$(st LAST_VIA)" = peer ] && grep -q "mute.s git app, at its door :9008, does not answer (exit .*the last 1 seconds" "${T}/out" && [ $((t1 - t0)) -lt 110 ]'
+# a probe bound with a leading 0 is octal to bash's arithmetic (`08` aborted the whole script): the default applies
+fresh; g="$(stable code.txt two green)"; git clone -q --mirror "${T}/origin.git" "${T}/via.git"
+git -C "${O}" remote set-url origin "${T}/nowhere.git"
+git -C "${O}" config "url.${T}/via.git.insteadOf" "http://git-accounts.peer:9005/git/gh/acc/o/r.git"
+printf 'DGO_FOLLOW_VIA=peer\nDGO_FOLLOW_VIA_PATH=/git/gh/acc/o/r.git\n' >> "${O}/.env"
+DGO_FOLLOW_VIA_PROBE_S=08 DGO_FOLLOW_BBOX="${T}/bin/bbox" follow
+ok "via list: a probe bound of 08 is not a number to it — the default applies and the cycle takes" \
+   'has "${g}" && [ "$(st LAST_VIA)" = peer ]'
+# a door that ANSWERS the probe (its list of refs) and then goes silent on the pack — the MacBook's from 10:09Z on
+# 2026-11-13 — fails the fetch within the cycle's transfer bound (its floor, 15 s, here) and the cycle is skipped,
+# said; without the bound it waited out its 6 h (DGO-1876). The server answers info/refs from via.git and never the
+# POST, and leaves a mark when the POST comes: the cut is proven the bound's (it waited for it), not any quick failure.
+fresh; h="$(head_of)"; g="$(stable code.txt two green)"; git clone -q --mirror "${T}/origin.git" "${T}/via.git"
+timeout 150 python3 - "${T}/via.git" "${T}/half.post" > "${T}/half.port" 2>/dev/null <<'PY' &
+import http.server, socketserver, subprocess, sys, time
+repo, mark = sys.argv[1], sys.argv[2]
+class H(http.server.BaseHTTPRequestHandler):
+    def log_message(self, *a): pass
+    def do_GET(self):          # the list of refs, as a smart-HTTP server gives it
+        adv = subprocess.run(["git", "upload-pack", "--stateless-rpc", "--advertise-refs", repo], capture_output=True).stdout
+        body = b"001e# service=git-upload-pack\n0000" + adv
+        self.send_response(200)
+        self.send_header("Content-Type", "application/x-git-upload-pack-advertisement")
+        self.send_header("Content-Length", str(len(body))); self.end_headers(); self.wfile.write(body)
+    def do_POST(self):         # …and the pack never comes; the mark says when it was asked for
+        with open(mark, "w") as f: f.write(str(int(time.time())))
+        time.sleep(140)
+srv = socketserver.ThreadingTCPServer(("127.0.0.1", 0), H); srv.daemon_threads = True
+print(srv.server_address[1], flush=True); srv.serve_forever()
+PY
+half=$!
+for _ in $(seq 1 300); do [ -s "${T}/half.port" ] && break; sleep 0.1; done
+hport="$(head -1 "${T}/half.port" 2>/dev/null)"   # empty: the server never started, and the case fails below
+printf '#!/bin/sh\ncase "$1 $2 $3 $4" in\n  "remote half git-accounts --json") echo '"'"'{"office": "half", "app": {"alias": "git-accounts", "port": 8978}, "registry": {"link_port": 9009}}'"'"' ;;\n  *) exit 2 ;;\nesac\n' \
+  > "${T}/bin/bbox-half"; chmod +x "${T}/bin/bbox-half"
+git -C "${O}" remote set-url origin "${T}/nowhere.git"
+git -C "${O}" config "url.http://127.0.0.1:${hport:-9}/r.git.insteadOf" "http://git-accounts.half:9009/git/gh/acc/o/r.git"
+# a probe of 3 s: the info/refs answer (python, then git upload-pack) has room at the HP's load of 20–40, and three
+# probes (9 s) are still under the floor, so the 15 s measured from the POST is the floor's
+printf 'DGO_FOLLOW_VIA=half\nDGO_FOLLOW_VIA_PATH=/git/gh/acc/o/r.git\nDGO_FOLLOW_VIA_PROBE_S=3\n' >> "${O}/.env"
+t0="$(date +%s)"; env -u http_proxy -u HTTP_PROXY -u all_proxy -u ALL_PROXY DGO_FOLLOW_BBOX="${T}/bin/bbox-half" \
+  REPO_ROOT="${O}" timeout -k 5 120 bash "${HERE}/follow.sh" > "${T}/out" 2>&1
+t1="$(date +%s)"; kill "${half}" 2>/dev/null; wait "${half}" 2>/dev/null
+ok "via list: a door that answers the probe and goes silent on the pack — the fetch is cut within its bound, skipped, said" \
+   '[ -n "${hport}" ] && [ "$(head_of)" = "${h}" ] && [ "$(st LAST_RESULT)" = skipped ] && grep -q "fetch of dgo-stable failed (through half)" <<<"$(st LAST_DETAIL)" && grep -q "through the git app of half" "${T}/out" && [ -s "${T}/half.post" ] && [ $((t1 - $(cat "${T}/half.post"))) -ge 14 ] && [ $((t1 - t0)) -lt 90 ]'
 
 # ── health ─────────────────────────────────────────────────────────────────────────────────────────
 # 6. a service turns unhealthy: rolled back, run again, never pushed, told once, not retried; a newer green is
@@ -419,6 +657,34 @@ ok "dry run: says it would keep, keeps nothing" '[ "$(head_of)" = "${h}" ] && gr
 # 13. a file the target adds is already here (an ignored file the office keeps): refused, the file intact
 fresh; h="$(head_of)"; stable keep.local tracked green >/dev/null; printf 'office data\n' > "${O}/keep.local"; follow
 ok "an existing file where the target adds one: kept, not merged" '[ "$(head_of)" = "${h}" ] && [ "$(cat "${O}/keep.local")" = "office data" ] && [ -z "$(st FAILED_TARGET)" ]'
+# …an untracked file holding the VERY bytes the target adds (an app copied in by hand before the line carried it — the
+# Dell, 2026-11-12, DGO-1838): kept as left work, taken, the file as it was
+fresh; g="$(stable new-app.json new green)"; printf 'new\n' > "${O}/new-app.json"
+follow
+ok "an untracked file with the very bytes the target adds: kept, taken" 'has "${g}" && [ "$(cat "${O}/new-app.json")" = new ] && [ "$(git -C "${O}" log --format=%s | grep -c "work left uncommitted on test")" -ge 1 ] && [ -z "$(git -C "${O}" status --porcelain -- new-app.json)" ]'
+# …the same path with OTHER bytes is someone's work: refused, the file intact
+fresh; h="$(head_of)"; stable new-app.json new green >/dev/null; printf 'mine\n' > "${O}/new-app.json"
+follow
+ok "an untracked file with other bytes where the target adds one: refused, intact" '[ "$(head_of)" = "${h}" ] && [ "$(cat "${O}/new-app.json")" = mine ] && [ "$(st LAST_RESULT)" = blocked ]'
+# …the mode counts as git stages it: the target's executable tool.sh here as a plain file is refused, as +x is taken
+exec_target() {   # a green commit on dgo-stable adding an EXECUTABLE tool.sh; prints its sha
+  [ -d "${T}/side" ] || git clone -q -b dgo-stable "${T}/origin.git" "${T}/side"
+  ( cd "${T}/side" && git pull -q origin dgo-stable && printf 'run\n' > tool.sh && chmod +x tool.sh && git add tool.sh \
+    && git commit -qm "stable: tool.sh" && git push -q origin dgo-stable )
+  git -C "${T}/side" rev-parse HEAD | tee -a "${STUB}/green"
+}
+fresh; h="$(head_of)"; exec_target >/dev/null; printf 'run\n' > "${O}/tool.sh"; chmod 644 "${O}/tool.sh"
+follow
+ok "the target's executable as a plain file here: refused (git would stage 100644)" '[ "$(head_of)" = "${h}" ] && [ "$(st LAST_RESULT)" = blocked ]'
+fresh; g="$(exec_target)"; printf 'run\n' > "${O}/tool.sh"; chmod 755 "${O}/tool.sh"
+follow
+ok "…and executable here too: kept, taken" 'has "${g}" && [ -x "${O}/tool.sh" ] && [ -z "$(git -C "${O}" status --porcelain -- tool.sh)" ]'
+# …an IGNORED file with the very bytes is still the office's own (case 13's kind): refused
+fresh; h="$(head_of)"; [ -d "${T}/side" ] || git clone -q -b dgo-stable "${T}/origin.git" "${T}/side"
+( cd "${T}/side" && git pull -q origin dgo-stable && printf 'tracked\n' > same.local && git add -f same.local \
+  && git commit -qm "stable: same.local" && git push -q origin dgo-stable ) && git -C "${T}/side" rev-parse HEAD >> "${STUB}/green"
+printf 'tracked\n' > "${O}/same.local"; follow
+ok "an ignored file with the very bytes the target adds: refused, intact" '[ "$(head_of)" = "${h}" ] && [ "$(cat "${O}/same.local")" = tracked ] && [ "$(st LAST_RESULT)" = blocked ]'
 # …but a file the office already TRACKS (a cherry-pick of the same commit) is no obstacle
 fresh; g="$(stable added.txt same green)"
 ( cd "${O}" && git fetch -q origin dgo-stable && git cherry-pick -x "${g}" >/dev/null && git push -q origin o-dgo ); follow
@@ -619,6 +885,88 @@ printf 'DGO_FOLLOW_MAX_LOAD=0\n' >> "${O}/.env"; DGO_FOLLOW_MAX_LOAD= follow
 ok "load ceiling 0 from .env: skipped" '[ "$(head_of)" = "${h}" ] && grep -q "skipped load" "${O}/data/follow/log"'
 fresh; printf 'DGO_FOLLOW_MAX_LOAD=abc\n' >> "${O}/.env"; DGO_FOLLOW_MAX_LOAD= follow
 ok "load ceiling not a number: said" 'grep -q "is not a number" "${T}/out"'
+
+# 27. the line itself (DGO-1895: batches 66–68 queued 37 h and more behind the Dell's one runner, offline, said only in a
+#     coordinator's notes): a gates run of dgo-stable queued over an hour is told ONCE, in a row of its own, and closed
+#     once none waits that long; an API that cannot be read tells and closes nothing
+fresh; stable code.txt two >/dev/null; q="$(origin_of dgo-stable)"
+printf '30|1|%s|2026-11-15 09:30|portable-ssd\n' "${q}" > "${STUB}/line"; follow
+ok "the line: a run queued 30 min is not told" '[ "$(notices)" = 0 ] && [ -z "$(st LINE_TOLD)" ]'
+printf '2245|3|%s|2026-11-13 19:31|portable-ssd\n' "${q}" > "${STUB}/line"; follow
+ok "the line: queued 37 h behind an offline runner — rung once, in a row of its own, naming it" \
+   '[ "$(notices)" = 1 ] && grep -q "^error | קו השחרור עומד: שרת הבדיקות כבוי (portable-ssd) — test | 3 gates-hosted.yml run(s) of dgo-stable have a job waiting for a runner, the oldest (.*) since 2026-11-13 19:31 UTC; offline: portable-ssd\. .* | line:test$" "${STUB}/notices" && [ "$(st LINE_TOLD)" = "error-off ${q}" ]'
+follow
+ok "…not told again while it waits" '[ "$(notices)" = 1 ]'
+rm -f "${STUB}/line"; follow
+ok "…an API that cannot be read neither tells nor closes" '[ "$(notices)" = 1 ] && [ "$(st LINE_TOLD)" = "error-off ${q}" ]'
+printf '0|0|||portable-ssd\n' > "${STUB}/line"; follow
+ok "…none waits but the runner is still listed offline (GitHub ends a job after 24 h): not closed" '[ "$(notices)" = 1 ] && [ "$(st LINE_TOLD)" = "error-off ${q}" ]'
+: > "${STUB}/line"; follow
+ok "…closed once none waits: info, the same row" '[ "$(notices)" = 2 ] && tail -1 "${STUB}/notices" | grep -q "^info | קו השחרור זז שוב — test | .* | line:test$" && [ -z "$(st LINE_TOLD)" ]'
+follow
+ok "…and closed once" '[ "$(notices)" = 2 ]'
+# 27b. the notice centre down: not marked told, so the next cycle tells it. No runner listed offline (it may only be busy:
+#      gates-hosted.yml drains a mac-dgo proof first) → shown, not rung, until 3 × the ceiling; then rung, once
+fresh; stable code.txt two >/dev/null; q="$(origin_of dgo-stable)"; printf '90|1|%s|2026-11-15 08:30|\n' "${q}" > "${STUB}/line"
+touch "${STUB}/notify.fail"; follow
+ok "the line, the notice centre down: not marked told" '[ "$(notices)" = 0 ] && [ -z "$(st LINE_TOLD)" ]'
+rm -f "${STUB}/notify.fail"; follow
+ok "…told by the next cycle; no runner known offline at 90 min: shown, not rung" \
+   '[ "$(notices)" = 1 ] && grep -q "^warning | קו השחרור ממתין לשרת בדיקות — test | .* since 2026-11-15 08:30 UTC\. Until .* | line:test$" "${STUB}/notices" && [ "$(st LINE_TOLD)" = "warning ${q}" ]'
+printf '150|1|%s|2026-11-15 08:30|\n' "${q}" > "${STUB}/line"; follow
+ok "…still under 3 × 60 min: not told again" '[ "$(notices)" = 1 ]'
+printf '180|1|%s|2026-11-15 08:30|\n' "${q}" > "${STUB}/line"; follow; follow
+ok "…at 3 × 60 min: rung, once" '[ "$(notices)" = 2 ] && tail -1 "${STUB}/notices" | grep -q "^error | קו השחרור ממתין לשרת בדיקות — test | " && [ "$(st LINE_TOLD)" = "error ${q}" ]'
+printf '200|1||2026-11-15 08:30|\n' > "${STUB}/line"; printf 'LINE_TOLD=\n' >> "${O}/data/follow/state"; follow; follow
+ok "…a reply with no commit (an empty field stays empty) is still marked told: rung once, not every cycle" \
+   '[ "$(notices)" = 3 ] && tail -1 "${STUB}/notices" | grep -q "the oldest () since 2026-11-15 08:30 UTC\. " && [ "$(st LINE_TOLD)" = "error " ]'
+# 27c. a dry run tells nothing; a minutes field that is no number is no wait; the ceiling is declared, a typo said
+fresh; stable code.txt two >/dev/null; printf '90|1|%s|2026-11-15 08:30|\n' "$(origin_of dgo-stable)" > "${STUB}/line"; follow --dry-run
+ok "the line, dry run: nothing told or written" '[ "$(notices)" = 0 ] && [ ! -e "${O}/data/follow/state" ]'
+printf 'x|1|%s|2026-11-15 08:30|\n' "$(origin_of dgo-stable)" > "${STUB}/line"; follow
+ok "the line, minutes not a number: not told" '[ "$(notices)" = 0 ]'
+printf '90|1|%s|2026-11-15 08:30|\n' "$(origin_of dgo-stable)" > "${STUB}/line"
+printf 'DGO_FOLLOW_LINE_WAIT_MIN=120\n' >> "${O}/.env"; follow
+ok "the line, a ceiling of 120 min in .env: 90 min not told" '[ "$(notices)" = 0 ]'
+DGO_FOLLOW_LINE_WAIT_MIN=09 follow
+ok "the line, a ceiling that is no 1–99999: said, and 60 applies" '[ "$(notices)" = 1 ] && grep -q "is not 1–99999 minutes — 60 applies" "${T}/out"'
+fresh; stable code.txt two >/dev/null; printf '90|1|%s|2026-11-15 08:30|\n' "$(origin_of dgo-stable)" > "${STUB}/line"
+printf 'DGO_FOLLOW_LINE_WAIT_MIN=120   # two hours\n' >> "${O}/.env"; follow
+ok "the line, a ceiling with a trailing comment in .env: held, not said" '[ "$(notices)" = 0 ] && ! grep -q "is not 1–99999" "${T}/out"'
+
+# 27d. the REAL line_wait, on GitHub's replies (gh_api's DGO_FOLLOW_GH_CMD): a run is read by its JOBS — one in progress
+#      whose decide finished waits too (its gates job queued behind the one runner), and a re-run counts from its new
+#      job, not its run's first created_at; an old registration offline beside a working runner is no outage; a job list
+#      that cannot be read tells and closes nothing; the row closes only once nothing waits AND no runner is off
+ago() { date -u -d "-$1 min" +%Y-%m-%dT%H:%M:%SZ; }
+B=bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb; C=cccccccccccccccccccccccccccccccccccccccc
+runners() { printf '{"runners":[{"name":"portable-ssd","status":"%s"},{"name":"old-mac","status":"offline"}]}' "$1" > "${STUB}/gh/runners"; }
+gh_case() {   # <portable-ssd: online|offline> — run 11 done, run 12 in progress (gates queued 100 min), run 13 a re-run (job 10 min)
+  mkdir -p "${STUB}/gh"
+  printf '{"workflow_runs":[{"id":13,"status":"queued","head_sha":"%s","created_at":"%s"},{"id":12,"status":"in_progress","head_sha":"%s","created_at":"%s"},{"id":11,"status":"completed","head_sha":"aaaa","created_at":"%s"}]}' \
+    "${C}" "$(ago 2880)" "${B}" "$(ago 105)" "$(ago 300)" > "${STUB}/gh/runs"
+  printf '{"jobs":[{"name":"decide","status":"completed","created_at":"%s"},{"name":"gates","status":"queued","created_at":"%s"}]}' "$(ago 105)" "$(ago 100)" > "${STUB}/gh/jobs-12"
+  printf '{"jobs":[{"name":"decide","status":"queued","created_at":"%s"}]}' "$(ago 10)" > "${STUB}/gh/jobs-13"
+  runners "$1"
+}
+gh_follow() { DGO_FOLLOW_LINE_CMD= DGO_FOLLOW_GH_CMD="${T}/bin/gh" follow; }
+fresh; stable code.txt two >/dev/null; gh_case online; gh_follow
+ok "the real line_wait: an in-progress run's queued job counts, a re-run from its new job — the oldest is 100 min; an old registration offline beside a working runner: shown, not rung" \
+   '[ "$(notices)" = 1 ] && grep -q "^warning | קו השחרור ממתין לשרת בדיקות — test | 2 gates-hosted.yml run(s) of dgo-stable have a job waiting for a runner, the oldest (bbbbbbbb*) since " "${STUB}/notices" && ! grep -q "offline:" "${STUB}/notices"'
+gh_case offline; gh_follow
+ok "…no runner online: rung, naming them" '[ "$(notices)" = 2 ] && tail -1 "${STUB}/notices" | grep -q "^error | קו השחרור עומד: שרת הבדיקות כבוי (portable-ssd,old-mac) — test | .*; offline: portable-ssd,old-mac\. "'
+gh_case online; rm -f "${STUB}/gh/jobs-12"; gh_follow
+ok "…a job list that cannot be read: nothing told or closed (not read as «only the 10-min job waits»)" '[ "$(notices)" = 2 ] && [ "$(st LINE_TOLD)" = "error-off ${B}" ]'
+printf '{"workflow_runs":[{"id":11,"status":"completed","head_sha":"aaaa","created_at":"%s"}]}' "$(ago 300)" > "${STUB}/gh/runs"; runners offline; gh_follow
+ok "…every run done but no runner online (GitHub ended the waiting jobs): not closed" '[ "$(notices)" = 2 ] && [ "$(st LINE_TOLD)" = "error-off ${B}" ]'
+rm -f "${STUB}/gh/runners"; gh_follow
+ok "…the row named runners and this time they cannot be listed: not closed (one failed lookup is no runner back)" '[ "$(notices)" = 2 ] && [ "$(st LINE_TOLD)" = "error-off ${B}" ]'
+runners online; gh_follow
+ok "…a runner online again and nothing waits: closed, the same row" '[ "$(notices)" = 3 ] && tail -1 "${STUB}/notices" | grep -q "^info | קו השחרור זז שוב — test | .* | line:test$" && [ -z "$(st LINE_TOLD)" ]'
+gh_follow
+ok "…and nothing listed once closed and none waits" '[ "$(notices)" = 3 ]'
+fresh; stable code.txt two >/dev/null; gh_case online; printf '{"runners":[]}' > "${STUB}/gh/runners"; gh_follow
+ok "…no runner registered at all (GitHub removes one offline 14 days): rung, said as that" '[ "$(notices)" = 1 ] && grep -q "^error | קו השחרור עומד: שרת הבדיקות כבוי (none registered) — test | .*; offline: none registered\. " "${STUB}/notices"'
 
 echo
 [ "${fails}" = 0 ] && echo "test_follow: all passed" || echo "test_follow: ${fails} FAILED"

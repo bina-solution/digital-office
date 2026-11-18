@@ -17,7 +17,7 @@
 
       ## הסשן שאתה שומר
       - שם: `Main session King` — סשן ה-King (Claude Code web).
-      - כתובת: `https://claude.ai/code/session_01QMSW7SVJyjVizAUzELJPTS`
+      - כתובת: `https://claude.ai/code/session_01EXAMPLE0000000000000000`
       - slug קבוע ל-browser42: `king-session` (אותו slug בכל פקודה, לעולם לא slug אחר).
 
       ## המסלול היחיד לדפדפן — `./bbox b42 …`
@@ -25,7 +25,7 @@
       **slug חדש לכל סבב** — `KING="king-$(date +%H%M)"` — כדי שאף פעם לא תיתקל ב-`duplicate_slug`:
       ```bash
       KING="king-$(date +%H%M)"
-      ./bbox b42 task start "$KING" https://claude.ai/code/session_01QMSW7SVJyjVizAUzELJPTS '{"minimum_extractions":0,"minimum_records":0}'
+      ./bbox b42 task start "$KING" https://claude.ai/code/session_01EXAMPLE0000000000000000 '{"minimum_extractions":0,"minimum_records":0}'
       ./bbox b42 task screenshot "$KING" r1                 # תמונה — וממנה אתה מחליט
       #   קרא אותה: data/browser42/tasks/$KING/screenshots/r1.png  בכלי read_image
       ./bbox b42 task inspect "$KING" "<טקסט שמופיע על המסך>"   # מחזיר handles

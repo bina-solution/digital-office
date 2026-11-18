@@ -83,6 +83,55 @@ def test_the_signer_and_the_checker_match_offices_by_one_rule():
     assert body(door) == body(here), "names_office differs between link-proxy.py and office_identity.py"
 
 
+def test_the_owner_of_a_forward_auth_office_is_found_by_the_admins_group():
+    # DGO-1982: a forward-auth office's owner is named at /setup («itzik» on Examplex's office), after onboard wrote the
+    # map, so the map names the owner by the group /setup gives them. A person the owner invited is in `people`.
+    m = load()
+    m.OUTPOST = m.PROVIDERS["forward-auth"]
+    pairs = [{"plane": "owner@example.com", "authentik": ["akadmin", "ci@example.com"], "groups": ["admins"]}]
+    who = m._declared_plane_email
+    assert who(pairs, {"username": "itzik", "email": "", "uid": "u1", "groups": "admins"}) == "owner@example.com"
+    assert who(pairs, {"username": "galit", "email": "g@example.com", "uid": "u2", "groups": "people"}) == ""
+    assert who(pairs, {"username": "itzik", "email": "", "uid": "u1", "groups": ""}) == ""
+    assert who(pairs, {"username": "x", "email": "", "uid": "", "groups": "admins-old|incoming-docs-admin"}) == ""
+    assert who(pairs, {"username": "x", "email": "", "uid": "", "groups": "Admins"}) == ""      # exact, as the gates
+    # an invited person is never the owner: not by group, and not by a name that happens to be free (`akadmin`)
+    assert who(pairs, {"username": "y", "email": "", "uid": "", "groups": "people|admins"}) == ""
+    assert who(pairs, {"username": "akadmin", "email": "", "uid": "", "groups": "people"}) == ""
+    # the link's door names a person and no group; a name still matches as before
+    assert who(pairs, {"username": "akadmin", "email": "", "uid": ""}) == "owner@example.com"
+
+
+def test_names_come_before_groups_and_groups_count_only_on_forward_auth():
+    m = load()
+    pairs = [{"plane": "owner@example.com", "authentik": [], "groups": ["admins"]},
+             {"plane": "itzik@example.com", "authentik": ["itzik"], "groups": []}]
+    m.OUTPOST = m.PROVIDERS["forward-auth"]
+    assert m._declared_plane_email(pairs, {"username": "itzik", "groups": "admins"}) == "itzik@example.com"
+    assert m._declared_plane_email(pairs, {"username": "dana", "groups": "admins"}) == "owner@example.com"
+    # on an authentik office `admins` is just a group its admin made: no one is the owner by it
+    m.OUTPOST = m.PROVIDERS["authentik"]
+    assert m._declared_plane_email(pairs, {"username": "dana", "groups": "admins"}) == ""
+    assert m._declared_plane_email(pairs, {"username": "itzik", "groups": "admins"}) == "itzik@example.com"
+
+
+def test_a_map_entry_may_name_only_a_group_and_an_old_map_still_loads():
+    import json
+    import tempfile
+    m = load()
+    with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False) as f:
+        json.dump({"users": [{"plane": "owner@example.com", "groups": "admins"},
+                             {"plane": "", "groups": ["admins"]},
+                             {"plane": "nobody@example.com"},
+                             {"plane": "old@example.com", "authentik": ["akadmin"]}]}, f)
+    try:
+        m.MAP_FILE = f.name
+        assert m._mapping() == [{"plane": "owner@example.com", "authentik": [], "groups": ["admins"]},
+                                {"plane": "old@example.com", "authentik": ["akadmin"], "groups": []}]
+    finally:
+        os.unlink(f.name)
+
+
 if __name__ == "__main__":
     failed = 0
     for name, fn in sorted(globals().items()):

@@ -7,7 +7,7 @@ DELETE/TRUNCATE against a client table.
 WHY THIS EXISTS. Measured 2026-08-24: POST /webhook/indox-manage takes NO authentication, and its
 Action switch routes RESET into IndoxResetFull01, whose 'Clear Table' node deletes every row of
 public.incoming_documents but the bootstrap sentinel. The production baseline recorded in this repo
-is ~39,000 documents in that table.
+is ~N documents in that table.
 
 AUTHENTIK DOES NOT COVER IT, AND IS NOT MEANT TO. n8n's traefik routers carry no auth middleware
 (only /rest/push has one, and that is an ORIGIN check). That is defensible on its own terms -
@@ -69,7 +69,7 @@ sys.path.insert(0, str(REPO / "scripts" / "refactor"))
 # findings where two matter is a gate people learn to ignore, and an ignored gate is worse than none.
 #
 # incoming_documents is the asset whose loss is unrecoverable: the production baseline in this repo
-# is ~39,000 client documents, and IndoxResetFull01 empties it in one statement. Engine state
+# is ~N client documents, and IndoxResetFull01 empties it in one statement. Engine state
 # (ledger, attempts, cursors) is rebuildable by re-listing the source - that is the entire design of
 # the move-back in syncLedgerApi01. Losing it costs a re-sync; losing the documents costs the client.
 #

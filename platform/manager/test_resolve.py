@@ -359,6 +359,32 @@ def test_a_container_app_with_no_runtime_in_the_catalog_is_an_error():
                              "and not declared in platform/legacy-capabilities.yaml"]
 
 
+def test_a_server_office_pulls_the_port_80_answer_in(tmp_path, monkeypatch):
+    """DGO-1595, the twin of compiler_test.go TestResolvePullsThePort80AnswerInOnAServerOffice. A server
+    office's port 80 is answered by https-redirect whether or not its state names it; the rule was
+    lost from this resolver in a take (cb33a827e, 2026-11-11) while the Go twin kept it, and offices
+    installed by `bbox run` (Examplex, Exampleu) answered port 80 with no redirect (DGO-1984)."""
+    said = "https-redirect: pulled in as the port-80 answer of a server office"
+    cat = catalog(app("a"), app("https-redirect", layer=2))
+
+    def run(env, st, roots=None):
+        (tmp_path / ".env").write_text(env, encoding="utf-8")
+        monkeypatch.setattr(rc, "_SERVER_OFFICE", None)   # read once per process: once per case here
+        return rc.resolve(cat, st, roots)
+
+    server = "DEPLOYMENT_DOMAIN=office.example.com\n"
+    order, diags = run(server, state("a"))
+    assert "https-redirect" in order
+    assert ("info", said) in diags, "the pull-in must be in the plan, not silent"
+    assert "https-redirect" not in run(server + "HTTPS_REDIRECT=off\n", state("a"))[0]
+    assert "https-redirect" not in run("DEPLOYMENT_DOMAIN=localhost\n", state("a"))[0]
+    assert "https-redirect" not in run(server + "TRAEFIK_CERTRESOLVER=\n", state("a"))[0]
+    assert "https-redirect" not in run(server, state("a"), roots=["a"])[0]
+    order, diags = run(server, state("a", "https-redirect"))
+    assert order.count("https-redirect") == 1
+    assert ("info", said) not in diags, "a state line the office wrote is not a pull-in"
+
+
 def test_wants_does_not_pull_anything_in():
     """`wants` is the difference between "I need this" and "I'd use this if it were here". If it
     pulled providers in, nothing could ever express an optional integration."""

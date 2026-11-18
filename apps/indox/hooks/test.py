@@ -187,7 +187,7 @@ def login():
 def deflatten(arr):
     """n8n execution_data.data is 'flatted': index 0 is the root; every string INSIDE a
     container is an index reference. A referenced STRING is the value itself (deref exactly
-    once — re-dereferencing numeric-string VALUES like "06146" corrupts them)."""
+    once — re-dereferencing numeric-string VALUES like "00001" corrupts them)."""
     def deref(v, seen):
         if isinstance(v, str) and v.isdigit() and int(v) < len(arr):
             i = int(v)
@@ -407,7 +407,7 @@ def test_mail_connection():
     (`_explicit_connection_required`). Before that guard, a suite mail op with no `connection_id`
     fell through to mailapi's ambient pointer `/data/active.json`, which on this deployment is the
     CLIENT's real Gmail: that is how 148 fixture messages (`sv3s_`/`sv3f_`/`mailorg`, all addressed
-    to @demo.indox) ended up in person10@example.com between 2026-08-05 and 2026-08-09.
+    to @demo.indox) ended up in person51@example.com between 2026-08-05 and 2026-08-09.
 
     So the id is resolved from the LOCAL mail engine's own profiles — the same source
     scripts/ops/e2e-loadtest/provision.py already uses — and anything that is not a
@@ -717,7 +717,7 @@ def _fixture_sweep(label, keys=None):
     cmd = [sys.executable, os.path.join(ROOT, "apps", "indox", "hooks", "fixture-sweep.py"),
            "--label", label,
            # [sealed 2026-08-31] the sealed suites legitimately seed 505 rows per run (5 lanes
-           # x batch 1+100; FIVE of them in a full battery = 1,414 rows + the rest = 1,525 measured),
+           # x batch 1+100; FIVE of them in a full battery = N rows + the rest = 1,525 measured),
            # over the sweep's default 300-row cap. 2000 keeps the cap's
            # purpose (a prefix matching THOUSANDS still refuses) while letting a sealed battery
            # sweep itself.

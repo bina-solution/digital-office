@@ -100,7 +100,7 @@ for t in incoming_documents settings sync_ledger sync_cursor sync_pipe_state syn
   factq "${t}" "$(q "select count(*) from public.${t};")" "public.${t}"
 done
 factq public_tables "$(q "select count(*) from information_schema.tables where table_schema='public';")"
-# Content, not just cardinality. Two databases can hold 6,341 rows each and disagree about every
+# Content, not just cardinality. Two databases can hold N rows each and disagree about every
 # one of them; this hashes the identity + status of every document so a restore that lost or
 # rewrote content cannot pass by counting.
 # NB: incoming_documents' columns are UPPERCASE identifiers (a Sheets-era legacy), so they must be

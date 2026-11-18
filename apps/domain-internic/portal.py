@@ -452,6 +452,12 @@ def run_write(portal: str, action: str, params: dict, endpoint: str | None = Non
                 "portal_url": (SCRIPTS.get(portal) or {}).get("origin") or ""}
     writer = ZONE_WRITERS.get((portal, action))
     if writer:
+        if action in CONSENT_EVERY_TIME and not allow_draft_write:
+            return {"ok": False, "state": "needs_consent", "portal": portal,
+                    "title": f"{ACTION_HE.get(action, action)} — באישור בכל פעם",
+                    "error": f"{ACTION_HE.get(action, action)} משנה את מה שכבר משרת תנועה, ולכן היא רצה רק באישור של "
+                             "אדם, בכל פעם — מהמסוף של הלשכה שמריצה את האפליקציה (--consent).",
+                    "portal_url": (SCRIPTS.get(portal) or {}).get("origin") or ""}
         refusal = _draft_refusal(portal, action, allow_draft_write)
         return refusal or writer(portal, params or {}, endpoint)
     res = run(portal, operation_for(portal, action) or "", params, endpoint, allow_draft_write)
@@ -758,6 +764,13 @@ _JS_OPEN_ZONE = """(spec) => {
   const SELECT = /^(?:בחר|בחרו|בחר י|בחירה|סמן|סמנו|סימון|(?:בחר|סמן|בחירת) הכו?ל|select|select all|select all rows|select row|choose)$/i;
   // «הכל», "all": "select" only beside a select-all box (a bare «הכל» over a setting column opened: the eleventh)
   const SELECT_ALL = /^(?:הכו?ל|all)$/i;
+  // InterNIC's own header over its selection column since 2026-11 (EXX-29, DGO-1837): an INSTRUCTION to tick
+  // domains — «יש לסמן אחד או יותר מהדומיינים כדי להציג את כפתורי הפעולה הרלוונטיים עבורם, כולל …». The actions it
+  // lists after «כולל» (renewal among them) are buttons a selection shows, not a setting in this column. Only
+  // that sentence, from its first word, read as plain text (punctuation as spaces)
+  // — and its tail pinned to the words measured, «כולל חידוש, שינויי DNS ועוד»: any other tail is no instruction
+  // (the second reader: «… כולל» followed by «סימון בעמודה זו מפעיל חידוש אוטומטי» was exempted)
+  const INSTRUCT = /^יש לסמן אחד או יותר מהדומיינים כדי להציג את כפתורי הפעולה הרלוונטיים עבורם(?: כולל חידוש שינויי DNS ועוד)?$/;
   const words = (s) => String(s || '').replace(/([a-z])([A-Z])/g, '$1 $2').split(/[^A-Za-z0-9]+/).filter(Boolean);
   const plain = (s) => String(s || '').replace(/[^\\p{L}\\p{N}]+/gu, ' ').trim();
   // The names an element carries: a title in any kit's attribute (Bootstrap's after its tooltip starts,
@@ -805,6 +818,19 @@ _JS_OPEN_ZONE = """(spec) => {
     const boxes = box ? Array.from(cell.querySelectorAll('input[type=checkbox]')) : [];
     const boxSaid = boxes.flatMap(b => [...TITLES.map(a => b.getAttribute(a) || ''), b.getAttribute('aria-label') || '',
                                         ...refs(b), ...Array.from(b.labels || []).map(text)]);
+    // the panel's instruction to select (INSTRUCT) — the header's text, or, as InterNIC has it, the Bootstrap tooltip
+    // title on its select-all box's checkmark (measured 2026-11-12 on examplex.co.il's row): that sentence ALONE is not
+    // read for a setting, its «כולל חידוש, שינויי DNS ועוד» listing buttons, not this column. Everything else in the
+    // cell — its text, every other name, the select-all box's own names — is read exactly as for any header, and
+    // the row's box and its own cell are judged below as under any header
+    const isInstr = (s) => INSTRUCT.test(plain(s));
+    if ([raw, ...els.flatMap(e => TITLES.map(a => e.getAttribute(a) || ''))].some(isInstr)) {
+      const rest = [raw, ...els.flatMap(e => [...NAMED, 'aria-label'].map(a => e.getAttribute(a) || '').concat(refs(e))),
+                    ...boxSaid].filter(s => s.trim() && !isInstr(s));
+      if (SETTING.test(rest.join(' ')) || rest.some(s => !plain(s))) return false;
+      if (!box && cell.querySelector('input,select,textarea')) return false;
+      return rest.map(plain).filter(Boolean).every(s => SELECT.test(s) || (!!box && SELECT_ALL.test(s)));
+    }
     if (SETTING.test([...whole, ...boxSaid].join(' '))) return false;
     if (!box && cell.querySelector('input,select,textarea')) return false;
     const said = [...sources, ...boxSaid.map(s => s.split(':')[0])];
@@ -1143,6 +1169,30 @@ _JS_FILL_VALUE = """(spec) => {
                                          type: sel ? sel.value : '', value: v.value}});
 }"""
 
+#: An EXISTING row's value (EXX-29): the ONE visible row whose name, type and value are the record as the zone was
+#: read — exactly one, or nothing is touched — gets the new value; the row is returned as it then stands.
+_JS_FILL_EXISTING = """(spec) => {
+  const norm = (s) => String(s || '').trim().toLowerCase().replace(/\\.$/, '');
+  const typeOf = (sel) => { const o = sel.options[sel.selectedIndex];
+      return ((o && (o.value || o.text)) || sel.value || '').trim().toUpperCase().split(/\\s+/)[0]; };
+  const rows = Array.from(document.querySelectorAll('tr')).filter(tr =>
+      tr.querySelector('select') && tr.offsetParent && tr.getClientRects().length);
+  const hits = rows.filter(tr => {
+    const ins = tr.querySelectorAll('input'), sel = tr.querySelector('select');
+    const v = tr.querySelector('input[name^="specs_"], textarea[name^="specs_"]');
+    return ins[0] && ins[0].name && v && norm(ins[0].value) === norm(spec.name) && typeOf(sel) === spec.type
+        && norm(v.value) === norm(spec.old);
+  });
+  if (hits.length !== 1) return JSON.stringify({ok: false, hits: hits.length});
+  const tr = hits[0];
+  const v = tr.querySelector('input[name^="specs_"], textarea[name^="specs_"]');
+  v.value = spec.value;
+  ['input', 'change'].forEach(t => v.dispatchEvent(new Event(t, {bubbles: true})));
+  const ins = tr.querySelectorAll('input'), sel = tr.querySelector('select');
+  return JSON.stringify({ok: true, row: {name: ins[0] ? ins[0].value : '', ttl: ins[1] ? ins[1].value : '',
+                                         type: typeOf(sel), value: v.value}});
+}"""
+
 _JS_SAVE = """() => {
   const b = Array.from(document.querySelectorAll('button'))
       .find(e => /שמור שינויים/.test(e.innerText || ''));
@@ -1219,9 +1269,13 @@ def _txt(value: str) -> str:
     return "".join(parts) if parts and re.fullmatch(r'\s*("(?:[^"\\]|\\.)*"\s*)+', v) else v
 
 
-#: One TXT string holds 255 characters. A longer value goes in as several strings, which this panel was
-#: never seen writing — so it is refused by name, not sent whole (the second reader of DGO-1032).
-TXT_MAX = 255
+#: One DNS TXT string holds 255 characters; a longer value is served as several. Refused past 255 until the panel
+#: was seen doing that (the second reader of DGO-1032) — measured 2026-11-12 (DGO-1837): the panel's own row
+#: mail._domainkey.digital-office.co.il keeps a 420-character DKIM key as ONE quoted string, the form this writer
+#: types, and the name servers serve it as two strings joining to the same 420; `opendkim-testkey` passes on a key
+#: published so. So a value up to a 4096-bit DKIM key (~800) goes in as one string, and the read-back compares the
+#: joined value.
+TXT_MAX = 1024
 
 
 def txt_value(value: str) -> str:
@@ -1537,10 +1591,191 @@ def _internic_create_in_tab(sess: "bs.Session", s: dict, domain: str, want: dict
             "records_before": len(records), "records_after": len(got), "note": note}
 
 
-#: Writes done by code, per (portal, action). What is not here is not scripted, and says so: update
-#: and delete wait until each is seen working on the panel once, as create was measured.
-ZONE_WRITERS = {("internic", "create"): internic_create}
+def internic_update(portal: str, params: dict, endpoint: str | None = None) -> dict:
+    """Change ONE existing record's value in an InterNIC zone, proved by reading the zone back (EXX-29, DGO-1837:
+    examplex.co.il's apex left the registrar's parking for vps1). The record is named by its name and type — and,
+    where the zone holds more than one of them, by its current value (`from`). Its TTL stays its own, and every
+    other record must read back as it was. A, AAAA and CNAME only: one value field, the field create was seen
+    writing."""
+    s = SCRIPTS.get(portal) or {}
+    domain = (params.get("domain") or "").strip().rstrip(".").lower()
+    rtype = (params.get("type") or "").strip().upper()
+    value = str(params.get("value") or "").strip()
+    old = str(params.get("from") or "").strip()
+    if not domain or not rtype or not value:
+        return {"ok": False, "state": "invalid", "error": "חסרים דומיין, סוג או ערך חדש לרשומה"}
+    # the record is NAMED, and its value now is SAID: an update never falls back to the apex, and never rewrites a
+    # value its caller did not read (the second reader: no name and no `from` re-pointed `@` blind)
+    if not str(params.get("name") or "").strip() or not old:
+        return {"ok": False, "state": "invalid",
+                "error": "עדכון צריך את שם הרשומה (@ לדומיין עצמו) ואת הערך שלה עכשיו (--from) — לא נכתב דבר"}
+    if rtype not in ("A", "AAAA", "CNAME"):
+        return {"ok": False, "state": "not_scripted", "portal": portal,
+                "title": f"עדכון רשומת {rtype} — עוד לא ממופה לפורטל הזה",
+                "error": "הלשכה מעדכנת כאן רק A, AAAA ו-CNAME: שדה ערך אחד, השדה שנצפה נכתב.",
+                "how": "אפשר לעשות אותה ידנית בפורטל (קישור למטה).", "portal_url": s.get("origin") or ""}
+    name = fqdn(params.get("name"), domain)
+    if not in_zone(name, domain):
+        return {"ok": False, "state": "invalid", "error": f"השם {name} אינו בתוך {domain} — לא נכתב דבר"}
+    if rtype == "CNAME" and name == fqdn("@", domain):
+        return {"ok": False, "state": "invalid", "error": f"CNAME לא יכול לשבת על {domain} עצמו — לא נכתב דבר"}
+    bad = _invalid_name(params.get("name"), domain) or _invalid_value(rtype, value)
+    if bad:
+        return {"ok": False, "state": "invalid", "error": bad + " לא נכתב דבר."}
+    want = {"name": name, "type": rtype, "content": target(value, rtype, domain)}
+    stage = {"confirmed": False}
+    try:
+        sess = session_for(portal, endpoint)
+        with own_tab(sess):
+            return _internic_update_in_tab(sess, s, domain, want, old, stage)
+    except bs.SessionError as e:
+        if stage["confirmed"]:
+            return {"ok": False, "state": "unverified", "saved": True,
+                    "error": "השמירה אושרה, ואז הדפדפן של הלשכה נפל — לא ידוע אם הרשומה עודכנה; בדקו בפורטל",
+                    "detail": json.dumps({"written": want, "browser": e.state}, ensure_ascii=False)[:400]}
+        return {"ok": False, "state": e.state, "error": e.message, "detail": e.detail}
+
+
+def _internic_update_in_tab(sess: "bs.Session", s: dict, domain: str, want: dict, old: str, stage: dict) -> dict:
+    before = _read_zone_in_tab(sess, s, domain)
+    if not before.get("ok"):
+        return before
+    records = before.get("records") or []
+    mine = [r for r in records if (r.get("type") or "").upper() == want["type"] and fqdn(r.get("name"), domain) == want["name"]]
+    if old:
+        mine = [r for r in mine if _value(want["type"], r.get("content"), domain) == _value(want["type"], old, domain)]
+    if not mine:
+        return {"ok": False, "state": "invalid",
+                "error": f"אין באזור רשומת {want['type']} של {want['name']}{(' עם ' + old) if old else ''} — לא נכתב דבר"}
+    if len(mine) > 1:
+        return {"ok": False, "state": "conflict",
+                "error": f"באזור {len(mine)} רשומות {want['type']} של {want['name']} — אמרו איזו מהן (`--from <הערך הנוכחי>`). "
+                         "לא נכתב דבר."}
+    cur = mine[0]
+    want = {**want, "ttl": _ttl(cur.get("ttl")) or "3600"}
+    if _same(cur, want, domain):
+        return {"ok": True, "state": bs.OK, "unchanged": True, "record": want, "note": "הרשומה כבר כך באזור — לא נכתב דבר"}
+    # another record of this name and type that already holds the new value would make the read-back prove nothing
+    # (the second reader: it «landed» on the other record while the changed row held something else)
+    if any(r is not cur and _same(r, want, domain) for r in records):
+        return {"ok": False, "state": "conflict",
+                "error": f"כבר יש באזור רשומת {want['type']} של {want['name']} עם {want['content']} — לא נכתב דבר"}
+    # the guard's first read, as create's: the editor's own address served again equals what the editor shows
+    served = _js(sess, _JS_SERVER_ZONE)
+    if not isinstance(served.get("rows"), list) or _zone_key(served["rows"], domain) != _zone_key(records, domain):
+        return {"ok": False, "state": "guard_unavailable",
+                "error": "כתובת העורך אינה מגישה את מה שהעורך מציג, ולכן אין דרך לדעת אם האזור ישתנה עד "
+                         "השמירה — לא נכתב דבר.",
+                "detail": json.dumps({"guard": str(served.get("unavailable") or "served rows differ from the "
+                                                   "editor's")[:120]}, ensure_ascii=False)}
+    filled = _js(sess, _JS_FILL_EXISTING, {"name": want["name"], "type": want["type"],
+                                           "old": cur.get("content") or "", "value": want["content"]})
+    if not filled.get("ok"):
+        return {"ok": False, "state": "selector_missing",
+                "error": "לא נמצאה בעורך שורה אחת בדיוק של הרשומה הזאת — לא נכתב דבר",
+                "detail": json.dumps(filled, ensure_ascii=False)[:300]}
+    row = filled.get("row") or {}
+    if (fqdn(row.get("name"), domain) != want["name"] or (row.get("type") or "").upper() != want["type"]
+            or (row.get("value") or "").strip() != want["content"] or str(row.get("ttl") or "") != want["ttl"]):
+        return {"ok": False, "state": "assert_failed", "error": "השורה אינה מה שנכתב בה — לא נשמר דבר",
+                "detail": json.dumps({"row": row, "wanted": want}, ensure_ascii=False)[:300]}
+    # the save writes the WHOLE zone from this form: the server's zone must still be the one the form loaded
+    server = _js(sess, _JS_SERVER_ZONE)
+    if not isinstance(server.get("rows"), list):
+        return {"ok": False, "state": "guard_unavailable",
+                "error": "לא הצלחתי לקרוא שוב את האזור מהשרת לפני השמירה, ולכן אין הוכחה שהוא לא השתנה "
+                         "בינתיים — לא נשמר דבר.",
+                "detail": json.dumps({"guard": str(server.get("unavailable") or "no answer")[:120]},
+                                     ensure_ascii=False)}
+    if _zone_key(server["rows"], domain) != _zone_key(served["rows"], domain):
+        return {"ok": False, "state": "conflict",
+                "error": "האזור בשרת השתנה מאז שנטען לעריכה — לא נשמר דבר, כדי לא לבטל את השינוי ההוא. נסו שוב.",
+                "detail": json.dumps({"loaded": len(served["rows"]), "on_server": len(server["rows"])})}
+    guard = "checked"
+    expect = f"{len(records)} רשומות"             # a changed row: the zone keeps its count
+    if not _js(sess, _JS_SAVE).get("found"):
+        return {"ok": False, "state": "selector_missing", "error": "לא נמצא הכפתור «שמור שינויים»"}
+    dialog = {}
+    for _ in range(10):
+        sess.call("browser_wait_for", {"time": 0.5})
+        dialog = _js(sess, _JS_DIALOG)
+        if dialog.get("open"):
+            break
+    if not dialog.get("open") or dialog.get("title") != SAVE_QUESTION or dialog.get("text") != expect:
+        _js(sess, _JS_ANSWER, {"confirm": False})
+        sess.call("browser_wait_for", {"time": 1})
+        after = _zone_from_server(sess, s, before.get("zone_id"), domain)
+        landed = any(_same(want, g, domain) for g in after.get("records") or [])
+        return {"ok": False, "state": "assert_failed" if after.get("ok") else "unverified", "saved": landed,
+                "error": (f"חלון השמירה לא אמר «{expect}», והשמירה בוטלה — אבל הרשומה החדשה נמצאת באזור בשרת"
+                          if landed else
+                          f"חלון השמירה לא אמר «{expect}» — השמירה בוטלה, והרשומה לא עודכנה בשרת"
+                          if after.get("ok") else
+                          f"חלון השמירה לא אמר «{expect}» והשמירה בוטלה; האזור לא נקרא חזרה מהשרת — בדקו בפורטל"),
+                "detail": json.dumps({"dialog": dialog, "read_back": bool(after.get("ok"))}, ensure_ascii=False)[:300]}
+    stage["confirmed"] = True
+    if _js(sess, _JS_ANSWER, {"confirm": True}).get("found") is False:
+        stage["confirmed"] = False
+        _js(sess, _JS_ANSWER, {"confirm": False})
+        sess.call("browser_wait_for", {"time": 1})
+        after = _zone_from_server(sess, s, before.get("zone_id"), domain)
+        landed = any(_same(want, g, domain) for g in after.get("records") or [])
+        return {"ok": False, "state": "assert_failed" if after.get("ok") else "unverified", "saved": landed,
+                "error": ("לא נמצא כפתור האישור בחלון השמירה — אבל הרשומה החדשה נמצאת באזור בשרת" if landed else
+                          "לא נמצא כפתור האישור בחלון השמירה, והרשומה לא עודכנה בשרת" if after.get("ok") else
+                          "לא נמצא כפתור האישור בחלון השמירה; האזור לא נקרא חזרה — בדקו בפורטל"),
+                "detail": json.dumps({"dialog": dialog}, ensure_ascii=False)[:300]}
+    said = {}
+    for _ in range(20):
+        shown = _js(sess, _JS_DIALOG)
+        if not shown.get("open"):
+            break
+        said = shown
+        sess.call("browser_wait_for", {"time": 0.5})
+    after, got, landed = {}, [], False
+    for _ in range(3):
+        sess.call("browser_wait_for", {"time": 2})
+        after = _zone_from_server(sess, s, before.get("zone_id"), domain)
+        got = after.get("records") or []
+        landed = any(_same(want, g, domain) for g in got)
+        if landed:
+            break
+    if not after.get("ok"):
+        return {"ok": False, "state": "unverified", "saved": True,
+                "error": "השמירה אושרה, אבל האזור לא נקרא חזרה מהשרת — לא ידוע אם הרשומה עודכנה; בדקו בפורטל",
+                "detail": json.dumps({"written": want, "records_before": len(records)}, ensure_ascii=False)[:400]}
+    # every OTHER record as it was, and the old value gone from this name
+    missing = [r for r in records if r is not cur and not any(_same(r, g, domain) for g in got)]
+    stayed = any(_same(cur, g, domain) for g in got)
+    if not landed or missing or stayed or len(got) != len(records):
+        return {"ok": False, "state": "assert_failed", "saved": True,
+                "error": ("הרשומה לא עודכנה באזור בשרת אחרי לחיצת האישור" if not landed else
+                          f"הרשומה עודכנה, אבל {len(missing)} רשומות שהיו באזור חסרות בו עכשיו — בדקו בפורטל" if missing else
+                          "הערך הישן עדיין באזור לצד החדש — בדקו בפורטל" if stayed else
+                          f"באזור עכשיו {len(got)} רשומות ולא {len(records)} — בדקו בפורטל"),
+                "detail": json.dumps({"written": want, "was": cur, "found": landed, "records_before": len(records),
+                                      "records_after": len(got), "missing": missing[:5],
+                                      "panel_said": {k: said.get(k) for k in ("title", "text")} if said else None},
+                                     ensure_ascii=False)[:800]}
+    stored = next(g for g in got if _same(want, g, domain))
+    record = {**want, "ttl": _ttl(stored.get("ttl")) or want["ttl"]}
+    note = f"הרשומה עודכנה מ-{cur.get('content')} ל-{want['content']}, ונקראה חזרה מהאזור בשרת"
+    if record["ttl"] != want["ttl"]:
+        note += f" — הפורטל שמר TTL {record['ttl']} ולא {want['ttl']} שהיה לה"
+    return {"ok": True, "state": bs.OK, "record": record, "was": cur.get("content"), "guard": guard,
+            "records_before": len(records), "records_after": len(got), "note": note}
+
+
+#: Actions that rewrite what already serves traffic: each runs only with a person's consent, EVERY time — a watched
+#: success does not make them the office's own, as it does create (which only adds). The second reader of EXX-29:
+#: after one approved apex update, any container on the network could have re-pointed any domain's records.
+CONSENT_EVERY_TIME = {"update", "delete"}
+
+#: Writes done by code, per (portal, action). What is not here is not scripted, and says so: delete waits
+#: until it is seen working on the panel once, as create (2026-10) and update (2026-11-12, EXX-29) were.
+ZONE_WRITERS = {("internic", "create"): internic_create, ("internic", "update"): internic_update}
 #: What a watched success vouches for (`verified`): bump it when the writer changes how it writes, and
 #: the next write is watched again. 5: the editor is reached by its kept address (_zones), a route no
 #: watched write took (the tenth reader).
-WRITER_VERSIONS = {("internic", "create"): "internic-create-5 (2026-10-23)"}
+WRITER_VERSIONS = {("internic", "create"): "internic-create-5 (2026-10-23)",
+                   ("internic", "update"): "internic-update-1 (2026-11-12)"}

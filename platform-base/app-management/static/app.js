@@ -386,6 +386,7 @@ function statusBadge(a) {
 const bucket = (a) => (a.core ? "core" : a.installed ? "installed" : "store");
 const TABS = [
   { id: "installed", icon: "grid", label: "האפליקציות שלי", lede: "אפליקציות מותקנות — פתיחה, כיבוי והסרה." },
+  { id: "templates", icon: "layers", label: "תבניות עסק", lede: "תחום עסקי אחד, והאפליקציות שכבר בלשכה עונות לו. התקנת תבנית מפעילה את מה שחסר ומדלגת על מה שפועל." },
   { id: "store", icon: "box", label: "חנות האפליקציות", lede: "זמינות להתקנה. התקנה מפעילה את השירותים של האפליקציה ומייבאת את האוטומציות שלה ל-n8n." },
   { id: "core", icon: "server", label: "שירותי ליבה", lede: "התשתית של הלשכה — מוגנת מפני כיבוי והסרה." },
   { id: "peers", icon: "globe", label: "לשכות מחוברות", lede: "לשכות מקושרות והאפליקציות שהן מריצות. אפליקציה של לשכה אחרת רצה שם — מכאן רק פותחים אותה." },
@@ -420,7 +421,9 @@ function mountNav() {
       title: "מצב האפליקציות",
       items: TABS.map((t) => ({
         id: t.id, icon: t.icon, label: t.label, badge: "", title: t.label,
-        onClick: () => { STATE.tab = t.id; render(); },
+        // Entering the cases re-reads them: "what is already here" is a fact about NOW, and a list
+        // read once at boot would offer to install an app the person installed a minute ago.
+        onClick: () => { STATE.tab = t.id; if (t.id === "templates") loadTemplates(true).then(render).catch(() => {}); render(); },
       })),
     }],
   });
@@ -681,14 +684,133 @@ function openRemote(id) {
   location.href = "/#/m/" + id;
 }
 
+/* ── business templates: the cases the office already answers (DGO-1689) ──────────────────────
+   A template is the BUSINESS DOMAIN a client lives in — field service, bookkeeping, real estate,
+   contractors, agencies — and what this office already does for it: each need, the app that
+   answers it, and the app set an install turns on. The cases are data
+   (`platform-base/app-management/templates/<id>.yaml`), and EVERY number on a card is the
+   server's `plan`, computed from the live catalogue: "already here" is a fact about now, and a
+   screen that guessed it would offer to install what is running. */
+const TPL = { items: [], at: 0, err: "", jobs: new Map() };
+/* How one app of a case reads on the card. `installed` = on and left alone; `enable` = here,
+   containers exist, switched off; `install` = comes up from nothing. Those are the server's three
+   actions, and there is deliberately no fourth word for them here. */
+const TPL_ACT = { installed: ["כבר כאן", "b-run", "dot"], enable: ["כאן, כבויה", "b-stop", "dot"],
+                  install: ["תותקן", "", ""] };
+
+async function loadTemplates(force) {
+  if (!force && Date.now() - TPL.at < 15000) return;
+  TPL.at = Date.now();
+  try {
+    const r = await fetch("api/templates", { cache: "no-store" });
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(d.error || binaSaid(r.status));
+    TPL.items = Array.isArray(d.templates) ? d.templates : [];
+    TPL.err = "";
+  } catch (e) {
+    // A failed read is NEVER "no cases": what was last known stays, and the reason is printed.
+    TPL.err = e.message || "הקריאה לא נענתה";
+  }
+}
+
+function tplCard(t) {
+  const job = TPL.jobs.get(t.id);
+  const chips = (t.plan || []).map((p) => {
+    const [word, cls, dot] = TPL_ACT[p.action] || [p.action, "", ""];
+    return `<span class="badge ${cls}" title="${esc(p.id)} · ${esc(p.state || "")}">${
+      dot ? '<i class="dot"></i>' : ""}${esc(p.name)} · ${esc(word)}</span>`;
+  }).join("");
+  const needs = (t.assets || []).map((n) =>
+    `<li><b>${esc(n.need)}</b><span>${esc(n.how || "")}</span></li>`).join("");
+  const left = (t.plan || []).filter((p) => p.action !== "installed").length;
+  const said = t.ready ? "" : `<div class="warnbox">${(t.problems || []).map(esc).join("<br>")}</div>`;
+  const acts = !t.ready
+    ? `<span class="idl">לא ניתנת להתקנה</span>`
+    : `<button class="btn primary" data-act="tpl" data-id="${esc(t.id)}"${job ? " disabled" : ""}
+         title="${left ? `מתקין את ${one(left, "האפליקציה שאינה כאן", "האפליקציות שאינן כאן")} ומדלג על מה שפועל` : "כל האפליקציות של התבנית כבר פועלות"}">${
+        job ? "מתקין…" : left ? "התקנת התבנית" : "הכל כבר כאן"}</button>`;
+  return `<article class="card tpl" data-tpl="${esc(t.id)}">
+    <div class="top"><div class="ic">${icon("layers")}</div>
+      <div><div class="nm">${esc(t.name)}</div>
+        <div class="idl">${one((t.apps || []).length, "אפליקציה אחת", "אפליקציות")}${
+          left ? ` · ${one(left, "אחת תותקן", "יותקנו")}` : " · כולן כאן"}</div></div></div>
+    <div class="desc">${esc(t.promise || "")}</div>
+    <div class="tpl-state">${chips}</div>
+    ${needs ? `<details class="tpl-needs"><summary>מה התבנית עונה — ${one((t.assets || []).length, "צורך אחד", "צרכים")}</summary>
+      <ul>${needs}</ul></details>` : ""}
+    ${job ? `<div class="prog"><div class="bar"><i></i></div><div class="donerow">${esc(job.step || "מתקין…")}</div></div>` : ""}
+    ${said}
+    <div class="acts">${acts}</div>
+  </article>`;
+}
+
+function tplHTML() {
+  if (TPL.err) {
+    return `<div class="empty">רשימת התבניות לא נטענה — ${esc(TPL.err)}${
+      TPL.items.length ? "<br><span style=\"font-size:12px\">מוצג מה שנקרא לאחרונה.</span>" : ""}</div>`
+      + (TPL.items.length ? TPL.items.map(tplCard).join("") : "");
+  }
+  if (!TPL.items.length) {
+    return `<div class="empty">אין כאן תבניות עסקיות. תבנית היא קובץ אחד ב-<code>platform-base/app-management/templates/</code>.</div>`;
+  }
+  return TPL.items.map(tplCard).join("");
+}
+
+/* The install. It asks first — it turns apps ON, which is the owner's decision — then follows the
+   server's own job (`untilDone` polls /api/templates/<id>/job), so the card shows the step the
+   work is at rather than an animation, and the outcome is the server's answer, not a guess. */
+async function installTemplate(id) {
+  const t = TPL.items.find((x) => x.id === id);
+  if (!t || !t.ready || TPL.jobs.has(id)) return;
+  const will = t.plan.filter((p) => p.action !== "installed");
+  const here = t.plan.filter((p) => p.action === "installed");
+  const ok = await binaAsk({
+    title: `להתקין את «${t.name}»?`, ok: "התקן",
+    body: "האפליקציות שאינן כאן יותקנו ויופעלו לפי הסדר, כל אחת עם מה שהיא צריכה — כמו התקנה מהחנות. מה שכבר פועל לא ייפגע.",
+    facts: [["יותקנו", will.map((p) => p.name).join(", ") || "—"],
+            ["כבר כאן", here.map((p) => p.name).join(", ") || "—"]],
+  });
+  if (!ok) return;
+  TPL.jobs.set(id, { step: "מתחיל…" }); render();
+  try {
+    const r = await untilDone(`api/templates/${encodeURIComponent(id)}`, "install",
+      { method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ confirm: id }) },
+      (step) => {
+        TPL.jobs.set(id, { step: BRINGUP_HE[String(step).split(" · ").pop()] || String(step) });
+        render();
+      });
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok || d.ok === false) {
+      const why = (d.failed || []).map((f) => `${f.id}: ${f.error}`).join(" · ");
+      throw new Error(why || d.error || binaSaid(r.status));
+    }
+    const done = (d.installed || []).length, skip = (d.skipped || []).length;
+    binaTell(`${t.name}: ${one(done, "אחת הותקנה", `${done} הותקנו`)}${skip ? ` · ${skip} כבר היו פועלות` : ""}`, "ok");
+  } catch (e) {
+    binaTell(`התקנת «${t.name}» נכשלה: ${e.message}`, "bad", 12000);
+  } finally {
+    TPL.jobs.delete(id);
+    await loadTemplates(true);              // the plan changed: what was installed is now "here"
+    await load();                           // …and so did the app list behind it
+  }
+}
+
 /* The cards only — the menu's own search redraws THIS and nothing else, so typing never touches
    the menu's rows, its count badges or the focus the reader is in. */
 function renderGrid() {
   const b = bucketize();
   const q = STATE.q.trim().toLowerCase();
+  // the menu draws a count per section, so every section has one even before its cards are drawn
+  b.templates = TPL.items;
   if (STATE.tab === "peers") {
     $("#officebar").innerHTML = "";
     $("#grid").innerHTML = peersHTML();
+    return b;
+  }
+  if (STATE.tab === "templates") {
+    $("#officebar").innerHTML = "";
+    $("#grid").innerHTML = tplHTML();
     return b;
   }
   const list = b[STATE.tab]
@@ -755,6 +877,7 @@ function card(a) {
     move: "העברת האפליקציה והנתונים שלה ללשכה מקושרת",
     archive: "פינוי מקום בדיסק: המכולות והתמונות מוסרות, הנתונים נשמרים",
     unarchive: "הורדה והפעלה מחדש על הנתונים שנשמרו",
+    instance: "עותק נוסף ונפרד של האפליקציה: מכולות, נתונים, כתובת, אריח וכניסה משלו",
   };
   const btn = (cls, act, label) =>
     `<button class="btn ${cls}" data-act="${act}" data-id="${esc(a.id)}" title="${esc(WILL[act] || label)}"${job ? " disabled" : ""}>${label}</button>`;
@@ -763,7 +886,8 @@ function card(a) {
   if (a.core) acts = a.launch ? btn("primary", "open", "פתח") : `<span class="idl">מוגן</span>`;
   else if (a.installed && a.enabled)
     acts = (a.launch ? btn("primary", "open", "פתח") : "") + btn("", "disable", "כבה")
-      + (placeable().length ? btn("", "move", "העבר") : "") + btn("danger", "uninstall", "הסר");
+      + (canCopy(a) ? btn("", "instance", "מופע נוסף") : "")
+      + (placeable().length && !copyOf(a) ? btn("", "move", "העבר") : "") + btn("danger", "uninstall", "הסר");
   else if (a.archived)
     // Its data is still here, so the verb is restore, not install.
     acts = btn("primary", "unarchive", "שחזר") + btn("danger", "uninstall", "הסר");
@@ -771,7 +895,7 @@ function card(a) {
     // Installed but switched off: it stays in My apps and the primary action is to turn it back
     // on. Offering "Install" here would be a lie — it is already installed. Its data is here whether
     // it runs or not, so it can be moved from this state too (the move switches it on for the read).
-    acts = btn("primary", "install", "הפעל") + (placeable().length ? btn("", "move", "העבר") : "")
+    acts = btn("primary", "install", "הפעל") + (placeable().length && !copyOf(a) ? btn("", "move", "העבר") : "")
       + btn("", "archive", "לארכיון") + btn("danger", "uninstall", "הסר");
   else acts = btn("primary", "install", "התקן") + btn("ghost", "detail", "פרטים");
 
@@ -782,7 +906,8 @@ function card(a) {
         <div class="idl">גרסה <bdi>${esc(a.version || "1.0.0")}</bdi></div></div>
     </div>
     <div class="desc">${esc(a.summary || "")}</div>
-    <div class="row">${statusBadge(a)}${a.core ? '<span class="badge">ליבה</span>' : ""}${a.herd_home && !a.enabled
+    <div class="row">${statusBadge(a)}${a.core ? '<span class="badge">ליבה</span>' : ""}${copyOf(a)
+      ? `<span class="badge" title="עותק נפרד של האפליקציה: מכולות, נתונים, כתובת וכניסה משלו">מופע של ${esc(nameOfApp(copyOf(a).of))}</span>` : ""}${a.herd_home && !a.enabled
       ? `<span class="badge" title="apps/computers/herd.yaml: העדר מריץ אותה בלשכה אחת, והשאר מגיעות אליה דרך הקישור">בעדר: רצה ב-${esc(a.herd_home_label || a.herd_home)}</span>` : ""}</div>
     ${job ? progress(job) : ""}
     <div class="acts">${acts}</div>
@@ -853,7 +978,48 @@ const STEPS = {
   unarchive: [{ k: "svc", label: "מוריד ומפעיל מחדש" }, { k: "bp", label: "מייבא אוטומציות" }],
   uninstall: [{ k: "svc", label: "מסיר מכולות" }, { k: "bp", label: "מסיר אוטומציות" }],
   move: [{ k: "svc", label: "מעביר את האפליקציה" }, { k: "bp", label: "מכבה כאן" }],
+  instance: [{ k: "svc", label: "יוצר את המופע" }, { k: "bp", label: "מפעיל את המופע" }],
 };
+const nameOfApp = (id) => (STATE.apps.find((x) => x.id === id) || {}).name || id;
+
+/* ── another copy of an app («מופע נוסף», DGO-1920) ──────────────────────────────────────────────
+   A further copy of the app on THIS office — its own containers, data, address, tile and sign-in: two Claude
+   Desktops, each signed in to its own account. The office names it (the next free number: «קלוד דסקטופ 2») and
+   brings it up as it brings up any app; the copy then has a card of its own, with every verb an app has. */
+async function addInstance(a) {
+  const ok = await binaAsk({
+    title: `להוסיף מופע נוסף של ${a.name}?`, ok: "הוסף מופע",
+    body: "עותק נפרד של האפליקציה בלשכה הזאת: מכולות, נתונים, כתובת, אריח וכניסה משלו.\nהאפליקציה הקיימת לא משתנה.",
+    facts: [["מופע של", a.name], ["נתונים", "חדשים, משלו"]],
+  });
+  if (!ok) return;
+  const job = { action: "instance", steps: STEPS.instance.map((s, i) => ({ ...s, state: i === 0 ? "active" : "" })) };
+  STATE.jobs.set(a.id, job); render();
+  try {
+    const r = await fetch(`api/apps/${encodeURIComponent(a.id)}/instances`, {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: "{}",
+    }).catch(binaNoAnswer);
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(d.error || binaSaid(r.status));
+    job.steps[0].state = "done"; job.steps[0].note = d.id; job.steps[1].state = "active"; render();
+    // the copy's own bring-up, followed to its end on its own job — as untilDone follows any app's
+    let b = d.bringup || {}, code = 202;
+    while (b.state === "running" && code === 202) {
+      await new Promise((res) => setTimeout(res, 2000));
+      const j = await fetch(`api/apps/${encodeURIComponent(d.id)}/job`, { cache: "no-store" }).catch(binaNoAnswer);
+      code = j.status; b = await j.json().catch(() => ({}));
+    }
+    if (b.error) throw new Error(b.error);
+    job.steps[1].state = "done"; job.done = `נוסף: ${nameOfApp(d.id)}`; render();
+    binaTell(`נוסף מופע של ${a.name}`, "ok");
+  } catch (e) {
+    job.steps.forEach((s) => { if (s.state === "active") s.state = "fail"; });
+    render();
+    binaTell(`המופע של ${a.name} לא נוסף: ${e.message}`, "bad", 9000);
+  } finally {
+    setTimeout(() => { STATE.jobs.delete(a.id); notifyModulesChanged(); render(); }, 1500);
+  }
+}
 
 /* A bring-up is a job: an image nobody has built yet, a database's first start, the app's own
    bootstrap. The call answers 202 with the step it is at while that goes on, and `<app>/job` then
@@ -969,6 +1135,7 @@ async function act(id, action) {
   if (!a) return;
   if (action === "open") return openApp(a);
   if (action === "detail") return openDetail(a);
+  if (action === "instance") return addInstance(a);
 
   // WHERE. Installing asks only when there is another office to install on; a move always names one.
   let where = null;
@@ -1035,7 +1202,10 @@ async function act(id, action) {
     // what the manifest declares about its data is a FACT of the question (a token, under a Hebrew key)
     const ok = await binaAsk({
       title: `להסיר את ${a.name}?`, danger: true, ok: "הסר",
-      body: purge ? "המכולות והנתונים של האפליקציה יימחקו." : "המכולות יוסרו. הנתונים יישמרו, ותוכל להתקין מחדש.",
+      // a copy (DGO-1920) leaves the office with its card and tile; a copy added again under its name finds its data
+      body: purge ? "המכולות והנתונים של האפליקציה יימחקו."
+        : copyOf(a) ? `המופע יוסר מהלשכה, עם האריח שלו. הנתונים שלו יישמרו: מופע של ${nameOfApp(copyOf(a).of)} שיתווסף באותו שם ימצא אותם.`
+        : "המכולות יוסרו. הנתונים יישמרו, ותוכל להתקין מחדש.",
       facts: [["בהסרה", `on_uninstall: ${purge ? "purge" : "keep"}`]]
         .concat(a.volumes && a.volumes.length ? [[purge ? "יימחק" : "נשמר", a.volumes.join(", ")]] : []),
     });
@@ -1412,7 +1582,18 @@ async function load() {
   STATE.loadError = null;
   STATE.loaded = true;
   render();
+  // the copies' facts never hold the list back: drawn when they come (the office computes them in the background)
+  loadInstances().then(render).catch(() => {});
 }
+/* An app's copies (DGO-1920): their own answer, beside /api/apps. An office whose apps service has no such route
+   (the native core) answers nothing here, and the screen offers no copy — it cannot make one. */
+async function loadInstances() {
+  const r = await fetch("api/instances", { cache: "no-store" }).catch(binaNoAnswer);
+  const d = (r.ok && (await r.json().catch(() => null))) || {};
+  STATE.instances = { can: new Set(d.can || []), of: d.of || {} };
+}
+const copyOf = (a) => ((STATE.instances || {}).of || {})[a.id];
+const canCopy = (a) => !!STATE.instances && STATE.instances.can.has(a.id);
 function loadFailed(why) {
   STATE.loadError = why;
   if (STATE.apps.length) {
@@ -1434,6 +1615,7 @@ document.addEventListener("click", (e) => {
     if (t.dataset.act === "close") return closeDetail();
     if (t.dataset.act === "connect") return window.open("/a/dgo-extend/connect", "_blank", "noopener");
     if (t.dataset.act === "openRemote") return openRemote(t.dataset.remote);
+    if (t.dataset.act === "tpl") return installTemplate(t.dataset.id);
     return act(t.dataset.id, t.dataset.act);
   }
   const chip = e.target.closest("[data-office]");
@@ -1442,7 +1624,7 @@ document.addEventListener("click", (e) => {
   const c = e.target.closest(".card");
   // A remote card's detail drawer is not this screen's business: there is no manifest here, no
   // lifecycle and no conditions to report — the app is not installed on this machine.
-  if (c && !e.target.closest(".acts") && !c.dataset.remote) {
+  if (c && !e.target.closest(".acts") && !c.dataset.remote && !c.dataset.tpl) {
     const a = STATE.apps.find((x) => x.id === c.dataset.id);
     if (a) openDetail(a);
   }
@@ -1475,6 +1657,8 @@ render();
 // The remote half (linked offices + their apps) is loaded BESIDE the local catalog and never blocks
 // it: an office with no dgo-extend installed, or one that is slow, must not keep "my apps" spinning.
 loadRemote().then(render).catch(() => {});
+// The business cases, beside them: the menu needs their count, and the section is one click away.
+loadTemplates().then(render).catch(() => {});
 load();
 setInterval(oneAtATime(async () => { if (!STATE.jobs.size && !$("#drawer").classList.contains("on")) await load(); }), 5000);
 setInterval(() => { loadRemote().then(render).catch(() => {}); }, 20000);

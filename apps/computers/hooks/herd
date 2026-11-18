@@ -63,20 +63,35 @@ else
   echo '{}' >"${TMP}/remote.json"
 fi
 
+# The links, for the live map (`bbox computers map`, DGO-1960): dgo-extend's own reading of every pair — its state,
+# transport, address and carry — through its public door (`bbox dgo api`, whose first line is the HTTP status);
+# none when it does not run here, which the map then says. A Mac has no `timeout`: lib.sh's timeout_bin.
+case " $* " in *" --map "*)
+  TO="$(timeout_bin)"
+  ${TO:+${TO} 20} "${REPO_ROOT}/bbox" dgo api GET /api/link 2>/dev/null | sed '1{/^HTTP [0-9]/d}' >"${TMP}/links.json" \
+    || echo '{}' >"${TMP}/links.json" ;;
+esac
+
 python3 -c '
 import json, sys, time
-tmp, me = sys.argv[1], sys.argv[2]
+tmp, me, state = sys.argv[1], sys.argv[2], sys.argv[3]
 def load(name, empty):
     try:
         with open(f"{tmp}/{name}", encoding="utf-8") as fh:
             return json.loads(fh.read() or "null") or empty
     except (OSError, ValueError):
         return empty
+try:  # the follow of this office: its last cycle, read where scripts/follow.sh writes it (none: nothing follows here)
+    with open(state, encoding="utf-8", errors="replace") as fh:
+        follow_state = fh.read()
+except OSError:
+    follow_state = None
 offices = dict(load("remote.json", {}))
-offices[me] = {"local": True, "inspect": load("inspect.json", []), "df": load("df.json", {})}
-bundle = {"self": me, "read_at": time.strftime("%Y-%m-%d %H:%M UTC", time.gmtime()), "offices": offices}
+offices[me] = {"local": True, "inspect": load("inspect.json", []), "df": load("df.json", {}), "follow_state": follow_state}
+bundle = {"self": me, "read_at": time.strftime("%Y-%m-%d %H:%M UTC", time.gmtime()), "offices": offices,
+          "links": load("links.json", {})}
 with open(f"{tmp}/bundle.json", "w", encoding="utf-8") as fh:
     json.dump(bundle, fh, ensure_ascii=False)
-' "$(npath "${TMP}")" "${SELF}" || { say "${cr}[computers] could not assemble what was read${c0}"; exit 2; }
+' "$(npath "${TMP}")" "${SELF}" "$(npath "${REPO_ROOT}")/data/follow/state" || { say "${cr}[computers] could not assemble what was read${c0}"; exit 2; }
 
 python3 "$(npath "${REPO_ROOT}")/apps/computers/tools/herd_map.py" "$(npath "${TMP}")/bundle.json" "$@"

@@ -21,7 +21,7 @@ import groupfeed  # noqa: E402
 HERD = os.path.join(TMP, "herd.yaml")
 with open(HERD, "w", encoding="utf-8") as fh:
     fh.write("apps:\n  telegram: hp-laptop\n")
-MAIN, OLD, OTHER = -1004303648995, -5551441246, -1009999999999
+MAIN, OLD, OTHER = -1001234567890, -5551441246, -1009999999999
 
 
 def rows(*ids, chat=MAIN):
@@ -88,13 +88,13 @@ class GroupFeed(unittest.TestCase):
         f = Fake()
         doc = groupfeed.loop(f.get, lambda o, a: "http://telegram.hp-laptop:9003", HERD, once=True, office="macbook")
         self.assertEqual((doc["chat_id"], doc["error"]), (MAIN, ""))
-        self.assertEqual(doc["link"], "https://t.me/c/4303648995")
+        self.assertEqual(doc["link"], "https://t.me/c/1234567890")
         ids = [m["id"] for m in doc["messages"]]
         self.assertEqual(len(ids), groupfeed.GROUP_KEEP)
         self.assertEqual(ids, sorted(ids))
         self.assertEqual(ids[-1], 239)
         last = doc["messages"][-1]
-        self.assertEqual((last["bot"], last["out"], last["link"]), (True, False, "https://t.me/c/4303648995/239"))
+        self.assertEqual((last["bot"], last["out"], last["link"]), (True, False, "https://t.me/c/1234567890/239"))
         self.assertTrue(doc["messages"][-2]["out"])
         with open(os.environ["DASHBOARD_GROUP_LIVE"], encoding="utf-8") as fh:
             self.assertEqual(json.load(fh)["chat_id"], MAIN)
@@ -118,7 +118,7 @@ class GroupFeed(unittest.TestCase):
 
     def test_an_ordinary_group_has_no_t_me_link(self):
         self.assertEqual(groupfeed.tme(OLD, 5), "")
-        self.assertEqual(groupfeed.tme(MAIN, 5), "https://t.me/c/4303648995/5")
+        self.assertEqual(groupfeed.tme(MAIN, 5), "https://t.me/c/1234567890/5")
 
 
 if __name__ == "__main__":

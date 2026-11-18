@@ -86,7 +86,11 @@ services:
       # registration form behind it is an account-creating machine on a company host. Measured
       # before the fix: GET /api/instances/ answered `enable_signup: true`.
       - ENABLE_SIGNUP=0
-      - API_KEY_RATE_LIMIT=${PLANE_API_KEY_RATE_LIMIT:-60/minute}
+      # Every agent of the office reads this Plane with ONE key, and upstream's default is 60/minute per key:
+      # measured on hp-laptop 2026-11-17, 2,314 requests in an hour (peaks 73/min), 52 answered 429, each a
+      # 5–15 s sleep in tasks.py (DGO-1340). The app is internal; its real limit is its gunicorn workers, which
+      # queue a burst instead of refusing it.
+      - API_KEY_RATE_LIMIT=${PLANE_API_KEY_RATE_LIMIT:-300/minute}
       # Plane keeps the FULL response of every request made with an API key, and the office's own
       # task CLI makes those all day (every `tasks list` is the whole project): about 200 MB a day
       # on hp-laptop. Upstream keeps 14 days; three is enough to see what an agent did, and the

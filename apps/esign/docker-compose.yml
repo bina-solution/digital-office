@@ -57,7 +57,7 @@ services:
       - traefik.http.routers.esign-ui-https.tls=true
       - traefik.http.routers.esign-ui-https.tls.certresolver=${TRAEFIK_CERTRESOLVER-myresolver}
       - traefik.http.routers.esign-ui-https.priority=1
-      - traefik.http.routers.esign-ui-https.middlewares=authentik@file,hsts@file
+      - traefik.http.routers.esign-ui-https.middlewares=hsts@file,authentik@file
       - traefik.http.routers.esign-ui-https.service=esign-svc
       # THE PUBLIC HALF — the signer's page. No authentik here, and no other path may use this router.
       # `hsts` on the https twin: a share link is public, the origin is the office's (DGO-1595).

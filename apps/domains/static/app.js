@@ -332,8 +332,13 @@ async function boot() {
   $('btn-add').onclick = () => showAddAccount();
   Store.events((job) => renderJobs([job]));
   Store.onJob(() => renderJobs(Store.activeJobs()));
-  const p = await api('providers');
-  if (p.ok) S.providers = p.body.providers || [];
+  // The provider catalogue is the SLOWEST read this app makes (measured on EXF's office: 19.7 s cold, 13.7 ms warm)
+  // and the add-account screen is its ONLY consumer. Awaited here, it held the whole screen behind a bare «טוען…» for
+  // 16–20 s on a first visit. So the screen paints first, and `showAddAccount` waits for the catalogue before it draws
+  // (EXF's 1449704, brought home; DGO-1839).
+  S.providersReady = api('providers')
+    .then((p) => { if (p.ok) S.providers = p.body.providers || []; return S.providers; })
+    .catch(() => S.providers);
   render();
 }
 
@@ -1165,7 +1170,8 @@ function tabOps(d) {
 }
 
 // ── adding an account ───────────────────────────────────────────────────────────────────────────
-function showAddAccount() {
+async function showAddAccount() {
+  if (S.providersReady) await S.providersReady;
   const browser = S.providers.find((p) => p.flow === 'browser') || {};
   const apiProviders = S.providers.filter((p) => p.flow !== 'browser');
   $('view').innerHTML = `

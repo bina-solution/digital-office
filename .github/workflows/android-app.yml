@@ -40,6 +40,13 @@ permissions:
   contents: write   # this repository's release, and nothing else
   actions: read     # whether the engine built by the same push failed (the wait below ends on it)
 
+# A VERSION'S PROOF GOES FIRST (DGO-1819). A dispatch from an office branch takes the Dell's one runner for up to an
+# hour, and GitHub has no queue priorities: on 2026-11-11 one took it ahead of a version's proof queued before it. So
+# each job here asks scripts/ci/step-aside first on any branch but dgo-stable — with --dispatch-too, because every
+# run of this workflow off dgo-stable is a dispatch: while a gates-hosted run of dgo-stable is queued or running, the
+# run cancels itself in seconds and says to dispatch it again once that run has ended. The cancel is each job's own
+# `actions: write`, on the two jobs that call the guard.
+
 env:
   # gh's repository by name: once the workspace is the public copy (below) it has no remote to read it from
   GH_REPO: ${{ github.repository }}
@@ -52,10 +59,27 @@ jobs:
   # asks for it by hand.
   phone:
     runs-on: [self-hosted, portable, ssd]
+    permissions:
+      contents: write   # the workflow's
+      actions: write    # scripts/ci/step-aside: whether a version's proof is waiting, and the cancel of this run
     timeout-minutes: 55   # a minute's work, and up to 45 that ops/prejob_waitfree.sh may hold it (run 86 died at 10)
     outputs:
       build: ${{ steps.what.outputs.build }}
     steps:
+      - uses: actions/checkout@v4
+        if: startsWith(github.ref, 'refs/heads/') && github.ref != 'refs/heads/dgo-stable'
+        with:
+          fetch-depth: 1
+          filter: blob:none
+          sparse-checkout: scripts/ci/step-aside
+          sparse-checkout-cone-mode: false
+          path: .step-aside
+          persist-credentials: false
+      - name: A version's proof goes first (scripts/ci/step-aside)
+        if: startsWith(github.ref, 'refs/heads/') && github.ref != 'refs/heads/dgo-stable'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: bash .step-aside/scripts/ci/step-aside --dispatch-too && rm -rf .step-aside
       - uses: actions/checkout@v4
         with:
           fetch-depth: 2
@@ -99,10 +123,29 @@ jobs:
     # billing is stopped (DGO-1116), and the owner, 2026-11-01: «run everything yourself». This job builds no
     # image and holds no core for long: it assembles the APK from an engine draft that exists.
     runs-on: [self-hosted, portable, ssd]
+    permissions:
+      contents: write   # this repository's release (the workflow's)
+      actions: write    # the engine's runs, read (the workflow's), and scripts/ci/step-aside's cancel of this run
     timeout-minutes: 265   # up to 180 of them waiting for the engine built by the same push (below), up to 45 that ops/prejob_waitfree.sh may hold it
     env:
       DGO_ABIS: ${{ inputs.abis || 'arm64-v8a' }}   # build.gradle's abiFilters; x86_64's libraries are built below
     steps:
+      # asked again HERE, when the runner takes this job (the header): `phone` may have answered long before
+      - uses: actions/checkout@v4
+        if: startsWith(github.ref, 'refs/heads/') && github.ref != 'refs/heads/dgo-stable'
+        with:
+          fetch-depth: 1
+          filter: blob:none
+          sparse-checkout: scripts/ci/step-aside
+          sparse-checkout-cone-mode: false
+          path: .step-aside
+          persist-credentials: false
+      - name: A version's proof goes first (scripts/ci/step-aside)
+        if: startsWith(github.ref, 'refs/heads/') && github.ref != 'refs/heads/dgo-stable'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: bash .step-aside/scripts/ci/step-aside --dispatch-too && rm -rf .step-aside
+
       # no token left in .git/config: the workspace becomes the public copy below
       - uses: actions/checkout@v4
         with:
@@ -426,6 +469,15 @@ jobs:
         with:
           distribution: temurin
           java-version: '17'
+
+      # what the status screen says when the core did not start (DGO-1817), in plain Java: seconds, no Android
+      - name: CoreFailure, the status screen's reason, tested
+        run: |
+          set -euo pipefail
+          a=packaging/android/app/src; o="${RUNNER_TEMP}/corefailure"; rm -rf "${o}"
+          javac -encoding UTF-8 -d "${o}" "${a}/main/java/il/co/digitaloffice/app/CoreFailure.java" \
+            "${a}/test/java/il/co/digitaloffice/app/CoreFailureTest.java"
+          java -Dfile.encoding=UTF-8 -cp "${o}" il.co.digitaloffice.app.CoreFailureTest
 
       - uses: gradle/actions/setup-gradle@v4
         with:

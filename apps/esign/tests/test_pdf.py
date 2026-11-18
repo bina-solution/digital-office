@@ -46,11 +46,11 @@ def test_the_hebrew_font_is_in_the_image_and_has_the_letters():
 def test_the_stamp_and_the_certificate_page_are_appended(tmp_path):
     src = tmp_path / "in.pdf"
     src.write_bytes(source_pdf())
-    stamped = pdfsign.stamp(str(src), 1, (300, 80, 520, 160), signer_name="ברוך",
+    stamped = pdfsign.stamp(str(src), 1, (300, 80, 520, 160), signer_name="דנה",
                             when=__import__("datetime").datetime(2026, 11, 9, 12, 0),
                             doc_sha256="a" * 64)
     cert = pdfsign.certificate_page("תעודת חתימה אלקטרונית",
-                                    ["שם המסמך: הסכם", "החותם: ברוך"], footer="נחתם בלשכת בינה")
+                                    ["שם המסמך: הסכם", "החותם: דנה"], footer="נחתם בלשכת בינה")
     out = pdfsign.append_pages(stamped, cert)
     import pikepdf
     with pikepdf.open(io.BytesIO(out)) as pdf:
@@ -64,7 +64,7 @@ def test_the_certificate_page_really_renders_text(tmp_path):
     """Rasterised, not assumed: a page of Hebrew text has ink on it."""
     import pypdfium2 as pdfium
     cert = pdfsign.certificate_page("תעודת חתימה אלקטרונית",
-                                    ["שם המסמך: הסכם עבודה", "החותם: ברוך", "מועד: 2026-11-09"],
+                                    ["שם המסמך: הסכם עבודה", "החותם: דנה", "מועד: 2026-11-09"],
                                     footer="נחתם בלשכת בינה")
     path = tmp_path / "cert.pdf"
     path.write_bytes(cert)
@@ -80,10 +80,10 @@ def signed(tmp_path_factory):
     d = tmp_path_factory.mktemp("sign")
     src = d / "in.pdf"
     src.write_bytes(source_pdf())
-    stamped = pdfsign.stamp(str(src), 1, (300, 80, 520, 160), signer_name="ברוך",
+    stamped = pdfsign.stamp(str(src), 1, (300, 80, 520, 160), signer_name="דנה",
                             when=__import__("datetime").datetime(2026, 11, 9, 12, 0),
                             doc_sha256="a" * 64)
-    cert = pdfsign.certificate_page("תעודת חתימה", ["החותם: ברוך"], footer="בינה סלושנס")
+    cert = pdfsign.certificate_page("תעודת חתימה", ["החותם: דנה"], footer="בינה סלושנס")
     body = pdfsign.append_pages(stamped, cert)
     staged = d / "staged.pdf"
     staged.write_bytes(body)

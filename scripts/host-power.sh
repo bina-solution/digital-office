@@ -2,8 +2,8 @@
 # host-power.sh — a laptop that runs an office stays on, stays cool, and comes back by itself (DGO-1750).
 #
 #   bash scripts/host-power.sh status [--machine]   # what this host does now: sleep, lid, heat, panic, watchdog, wake
-#   sudo ./bbox host-power install                  # declare it on the host (the OWNER's act: it is host policy)
-#   sudo ./bbox host-power uninstall                # take it off again
+#   ./bbox host-power install                       # declare it on the host (host policy; gets root itself: as-host-root.sh)
+#   ./bbox host-power uninstall                     # take it off again
 #   host-power.sh guard [--once]                    # the heat guard itself — run by its unit, as root
 #
 # WHY. The Dell (portable-ubuntu, i7-5500U, Ubuntu 26.04) powered off again and again with nothing in its journal:
@@ -193,7 +193,7 @@ install_files() {   # writes every declared file under ROOT; records and prints 
 changed() { local c; for c in "${CHANGED[@]+"${CHANGED[@]}"}"; do [ "$c" = "$1" ] && return 0; done; return 1; }
 
 install() {
-  [ -n "${ROOT}" ] || [ "$(id -u)" = 0 ] || die "this writes host policy — run it with sudo: sudo ./bbox host-power install"
+  [ -n "${ROOT}" ] || [ "$(id -u)" = 0 ] || die "this writes host policy and needs root: ./bbox host-power install gets it itself (sudo, or this host's docker engine)"
   laptop || [ "${HOST_POWER_FORCE:-}" = 1 ] || die "no battery here: not a laptop (HOST_POWER_FORCE=1 to declare it anyway)"
   [ -d "${ROOT}${PSTATE}" ] || say "no intel_pstate on this host: the heat ceiling cannot be set here (the rest is declared)"
   install_files || die "a file could not be written"
@@ -215,12 +215,12 @@ install() {
   else
     systemctl start "${UNIT}.service" || die "${UNIT}.service did not start: journalctl -u ${UNIT}"
   fi
-  say "installed. Undo: sudo ./bbox host-power uninstall"
+  say "installed. Undo: ./bbox host-power uninstall"
   status
 }
 
 uninstall() {
-  [ -n "${ROOT}" ] || [ "$(id -u)" = 0 ] || die "this removes host policy — run it with sudo: sudo ./bbox host-power uninstall"
+  [ -n "${ROOT}" ] || [ "$(id -u)" = 0 ] || die "this removes host policy and needs root: ./bbox host-power uninstall gets it itself"
   [ -n "${ROOT}" ] || systemctl disable --now "${UNIT}.service" >/dev/null 2>&1 || true
   clear_alarm
   local f
@@ -262,7 +262,7 @@ status() {
   [ -f "${ROOT}/etc/sysctl.d/90-dgo-recover.conf" ] || bad=1
   [ "${wd}" != absent ] || bad=1
   if [ "${bad}" = 0 ]; then say "this laptop stays on, cool, and comes back by itself"
-  else say "not all of it is in place — the owner's act: sudo ./bbox host-power install"; fi
+  else say "not all of it is in place — fix: ./bbox host-power install (it gets root itself)"; fi
   return "${bad}"
 }
 

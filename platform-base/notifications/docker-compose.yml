@@ -64,7 +64,7 @@ services:
       - traefik.http.routers.notifications-https.entrypoints=websecure
       - traefik.http.routers.notifications-https.tls=true
       - traefik.http.routers.notifications-https.tls.certresolver=${TRAEFIK_CERTRESOLVER-myresolver}
-      - traefik.http.routers.notifications-https.middlewares=authentik@file,hsts@file
+      - traefik.http.routers.notifications-https.middlewares=hsts@file,authentik@file
       - traefik.http.routers.notifications-https.service=notifications
       - traefik.http.services.notifications.loadbalancer.server.port=8977
     healthcheck:

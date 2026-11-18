@@ -6,7 +6,8 @@ rules come from the workflow that ran it until now, android-install-check.yml, w
   * HEAT: it starts only under 80°C, is PAUSED (SIGSTOP, never killed) at 85°C, resumed under 80°C, and STOPPED
     at 90°C. On 2026-11-09 a boot on two threads took the Dell from 83 to 92°C in 81 s and it switched itself off,
     the herd's only runner with it; on one core it climbs 81→91°C in 5 s and cools in 5 s.
-  * ONE physical core: cpu0 and its hyperthread sibling (`thread_siblings_list`), one virtual core.
+  * ONE physical core: cpu0 and its hyperthread sibling (`thread_siblings_list`), two virtual cores inside it (0.2.1:
+    one vCPU starved Android — see emulator_argv; qemu already filled both threads with the software GPU).
   * x86_64 Android with its own arm64 translation, on KVM, software GPU (swiftshader_indirect).
 
 Pure: no process is started here. The supervisor (server.py) reads the temperature, asks decide() what to do,
@@ -23,8 +24,12 @@ RESUME_BELOW = 80     # °C: SIGCONT under this, after a pause
 STOP_AT = 90          # °C: stopped at or above this, and it says why
 DISK_FLOOR_GB = 20    # GB free on the office's disk: under it the device is stopped (the office keeps its room)
 
-#: the states the screen shows (the design, §2(iii)): off, waiting at the door, booting, running, paused for heat
-OFF, WAITING, BOOTING, RUNNING, PAUSED = "off", "waiting", "booting", "running", "paused"
+#: the states the screen shows (the design, §2(iii)): off, waiting at the door, booting, running, paused for heat —
+#: and stopping: a running device asked to stop saves its quick-boot snapshot first (a minute at most), so its next
+#: start takes seconds instead of the four minutes a cold boot took on the Dell (246 s, measured 2026-11-11)
+OFF, WAITING, BOOTING, RUNNING, PAUSED, STOPPING = "off", "waiting", "booting", "running", "paused", "stopping"
+SAVE_S = 120          # s: what a stop waits for the snapshot to be saved before it kills the emulator
+IDLE_STOP_MIN = 20    # min: a device nobody watches or uses for this long stops by itself (0: never)
 
 
 def package_temp(root: str = "/sys/class/thermal") -> int | None:
@@ -48,7 +53,7 @@ def decide(temp: int | None, state: str) -> str | None:
     `state` is the emulator's: WAITING (asked for, not started), BOOTING or RUNNING (going), PAUSED (stopped by
     heat), OFF. An unreadable temperature holds a start and pauses nothing that runs: the hardware's own limit
     still stands, and a reading that comes back resumes the rule."""
-    if state == OFF:
+    if state in (OFF, STOPPING):            # a stopping device is the supervisor's to finish (Supervisor.tick)
         return None
     if state == WAITING:
         return "wait" if temp is None or temp >= START_BELOW else "start"
@@ -76,6 +81,13 @@ def pinned_cpus(root: str = "/sys/devices/system/cpu") -> str:
 
 def emulator_argv(avd: str, memory_mb: int, partition_mb: int) -> list[str]:
     """The emulator's command line: the workflow's flags, with a window — the screen shows it through VNC, so no
-    -no-window here (DISPLAY is the app's Xvnc)."""
-    return ["emulator", "-avd", avd, "-no-audio", "-no-boot-anim", "-no-snapshot", "-gpu", "swiftshader_indirect",
-            "-cores", "1", "-memory", str(int(memory_mb)), "-partition-size", str(int(partition_mb))]
+    -no-window here (DISPLAY is the app's Xvnc). QUICK BOOT, not -no-snapshot: a stop asked of a running device saves
+    the snapshot (`adb emu kill`, Supervisor.stop) and the next start loads it in seconds; a device that was killed
+    (the heat's 90 °C, an exit) saved nothing, and the emulator, which loads only a snapshot a clean exit wrote, boots
+    it cold. TWO vCPUs: the pin (taskset on cpu0 and its hyperthread sibling — one physical core) caps qemu at two
+    hardware threads whatever the guest's core count, and the software GPU already filled both on one vCPU (qemu 183 %,
+    70–72 °C; on two vCPUs 100–190 %, 72–73 °C, the dell 2026-11-13) — the heat rule stays the guard. On ONE vCPU Android 35's composer (priority -3, the
+    software GPU) starves system_server until Android's own watchdog kills it, and the phone sits on «Pixel is
+    starting…» (measured on the dell 2026-11-13: watchdog 05:41Z, ANRs, no home screen after 17 min)."""
+    return ["emulator", "-avd", avd, "-no-audio", "-no-boot-anim", "-gpu", "swiftshader_indirect",
+            "-cores", "2", "-memory", str(int(memory_mb)), "-partition-size", str(int(partition_mb))]

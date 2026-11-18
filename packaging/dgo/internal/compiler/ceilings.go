@@ -171,3 +171,56 @@ func ceilingWarnings(repo string, cat *Catalog, order []string, env *dotenv) ([]
 	}
 	return out, nil
 }
+
+// foreverWarnings is forever_warnings(cat, order): the warnings of an .env value an app DECLARES holds its resources
+// for ever (app.json resources.forever, DGO-1848) — `{env, starts_with, why, unless}`: said when this machine's .env
+// sets env to a value that starts with that text, unless the .env sets `unless` to 1. A literal prefix, read alike on
+// both sides; a declaration of another shape says nothing, as reconcile.py skips it; the lines are Python's.
+func foreverWarnings(cat *Catalog, order []string, env *dotenv) ([]string, error) {
+	var out []string
+	value := func(name string) string { // no .env: _envfile_value answers None for every name
+		if env == nil {
+			return ""
+		}
+		return env.value(name)
+	}
+	for _, aid := range order {
+		res, err := dict(get(cat.Apps[aid].doc, "resources"), aid+": resources")
+		if err != nil {
+			return nil, err
+		}
+		items, err := list(get(res, "forever"), aid+": resources.forever")
+		if err != nil {
+			return nil, err
+		}
+		for _, it := range items {
+			f, ok := it.(*yamlish.Map)
+			if !ok {
+				continue
+			}
+			name, okName := get(f, "env").(string)
+			prefix, okPrefix := get(f, "starts_with").(string)
+			if !okName || !okPrefix {
+				continue
+			}
+			val := value(name)
+			if val == "" || prefix == "" || !strings.HasPrefix(val, prefix) {
+				continue
+			}
+			unless, _ := get(f, "unless").(string)
+			if unless != "" && pyval.Strip(value(unless)) == "1" {
+				continue
+			}
+			why, _ := get(f, "why").(string)
+			if why == "" {
+				why = "it is held for ever"
+			}
+			line := fmt.Sprintf("warning: %s: .env sets %s=%s — %s", aid, name, val, why)
+			if unless != "" {
+				line += fmt.Sprintf(" (a machine that is there for it says so: %s=1)", unless)
+			}
+			out = append(out, line)
+		}
+	}
+	return out, nil
+}

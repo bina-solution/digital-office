@@ -1125,7 +1125,7 @@ export default function DocumentDetailPage() {
      `/extraction/draw` and `/extraction/tokens` all 404 with `{"error":"not found"}` for every real
      incoming_documents row. Root cause, confirmed by reading extraction.py: those routes resolve
      files inside the extraction-TESTING dataset by `type/filename` (`_doc_path`, ids shaped like
-     "invoice/arkhh-3.pdf" — see `_load_dataset`), a namespace that never overlaps with this table's
+     "invoice/supplier18-3.pdf" — see `_load_dataset`), a namespace that never overlaps with this table's
      `ID` column (`doc_<hash>`). `/extraction/rerun/<id>` ("הרץ חילוץ") hits the same wall — it looks
      the id up in that same dataset and 404s "unknown document" for every production document, so the
      button was removed rather than shipped permanently broken.

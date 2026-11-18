@@ -1,11 +1,13 @@
 #!/usr/bin/env bash
 # bina-claude's entrypoint: the agent.v1 adapter over the official Claude Desktop app — and nothing else.
-# Bina Claude is ONLY the desktop app, with ONE sign-in; there is no terminal (the owner, 2026-11-09, DGO-1684:
-# «Delete the terminal and make sure nobody gets mixed up again»).
+# Claude Desktop («קלוד דסקטופ», DGO-1920) is ONLY the desktop app, with ONE sign-in; there is no terminal (the
+# owner, 2026-11-09, DGO-1684: «Delete the terminal and make sure nobody gets mixed up again»).
 set -euo pipefail
 
 STATE="${BINA_CLAUDE_STATE:-/data/bina-claude}"
 OFFICE="${BBOX_REPO_HOST:-/workspace/office}"
+# Which copy of the app this is: bina-claude, or an instance (instances/<id>/, DGO-1920) told by DGO_INSTANCE_ID.
+APP="${DGO_INSTANCE_ID:-bina-claude}"
 mkdir -p "${HOME}" "${STATE}"
 # The desktop app's home (bina-claude-desktop mounts this folder of the volume as its /config; a volume
 # subpath must exist before it is mounted), owned by the desktop's user — the checkout's owner, declared per
@@ -27,12 +29,12 @@ chmod 600 "${TOKEN_FILE}"
 # phone: "not sure what dgo means").
 brief() {
   cat <<EOF
-# Bina Claude — the office's Claude
+# Claude Desktop — the office's Claude
 
-Bina Claude is ONLY the official Claude Desktop app, with ONE sign-in. There is no terminal: never propose
-/login, /remote-control or a terminal to anyone.
+Claude Desktop («קלוד דסקטופ») is ONLY the official Claude Desktop app, with ONE sign-in. There is no
+terminal: never propose /login, /remote-control or a terminal to anyone.
 
-You run inside the digital office (DGO) of this machine, in the desktop app of \`bina-claude\`. The office
+You run inside the digital office (DGO) of this machine, in the desktop app of \`${APP}\`. The office
 is its checkout, \`/workspace/office\` — work there, whatever folder this session opened in; its entry
 file is \`/workspace/office/AGENTS.md\`. Read it before you change anything, and keep its
 non-negotiables (production, \`./scripts/dc\` never bare \`docker compose\`, explain a dangerous command
@@ -41,8 +43,9 @@ the office's docker.
 
 The other agents of the office are a CLI away:
 - Azaria (bina-ds): \`./bbox agent list\`, \`./bbox agent new -F "<text>"\`, \`./bbox agent send <id> "<text>"\`
-- yourself, as other callers see you: \`./bbox agent --app bina-claude list\`
+- yourself, as other callers see you: \`./bbox agent --app ${APP} list\`
 - work items: \`./bbox project-pln tasks show <REF>\`
+- every copy of Claude Desktop on this office, each its own account: \`./bbox apps instance list\`
 EOF
 }
 # The desktop's home belongs to the desktop's user, and so does every write into it: as root, a link that

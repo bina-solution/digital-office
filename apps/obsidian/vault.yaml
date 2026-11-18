@@ -64,6 +64,11 @@ notes:
     scope: office
     title: "איך בונים אפליקציה של הלשכה"
 
+  - to: "Architecture/מופעים של אפליקציה.md"
+    from: ai/context/app-instances.md
+    scope: office
+    title: "מופעים — יותר מעותק אחד של אפליקציה בלשכה (כמה «קלוד דסקטופ», כל אחד בחשבון משלו)"
+
   - to: "Architecture/חוזה השירות.md"
     from: ai/context/platform-service-contract.md
     scope: office
@@ -128,6 +133,9 @@ herd_docs:
   - to: "Herd/קדימה — הנוהל.md"
     from: ai/context/kadima.md
     title: "«קדימה»: שישה שלבים, לכל אחד בעלים ושעון"
+  - to: "Herd/קדימה — מפגישה למוצר.md"
+    from: ai/context/kadima-meeting-to-product.md
+    title: "«קדימה»: מפגישה למוצר, כל הדרך"
   - to: "Herd/אבטחה — מצב העדר.md"
     from: ai/context/dgo-security.md
     title: "האבטחה של העדר: הממצאים והפתרונות"

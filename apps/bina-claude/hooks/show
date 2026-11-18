@@ -5,4 +5,5 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
 . "${REPO_ROOT}/scripts/lib.sh"
 case "${1:-}" in ""|-h|--help) sed -n 's/^#: //p' "${BASH_SOURCE[0]}"; [ -n "${1:-}" ]; exit $? ;; esac
-dcx exec -T bina-claude python3 - show "$@" < "$(npath "${REPO_ROOT}")/apps/bina-claude/sessions.py"
+# This copy's volume, through its own adapter (bbox sets DGO_INSTANCE_ID for an instance, DGO-1920).
+dcx exec -T "${DGO_INSTANCE_ID:-bina-claude}" python3 - show "$@" < "$(npath "${REPO_ROOT}")/apps/bina-claude/sessions.py"

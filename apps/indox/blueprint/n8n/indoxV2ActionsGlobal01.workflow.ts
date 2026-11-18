@@ -176,7 +176,7 @@ import { workflow, node, links } from '@n8n-as-code/transformer';
     /*__n8n__*/ meta: {"templateCredsSetupCompleted":true},
     /*__n8n__*/ pinData: {},
     /*__n8n__*/ staticData: null,
-    /*__n8n__*/ shared: [{"updatedAt":"2026-07-30T23:42:27.037Z","createdAt":"2026-07-30T23:42:27.037Z","role":"workflow:owner","workflowId":"indoxV2ActionsGlobal01","projectId":"2xKn4WH08LyAOk2y","project":{"updatedAt":"2026-07-30T23:40:17.073Z","createdAt":"2026-07-30T23:33:30.049Z","id":"2xKn4WH08LyAOk2y","name":"Admin User <person2@example.com>","type":"personal","icon":null,"description":null,"creatorId":"544b7ec6-5907-4ee2-a94b-c5676e56835c"}}],
+    /*__n8n__*/ shared: [{"updatedAt":"2026-07-30T23:42:27.037Z","createdAt":"2026-07-30T23:42:27.037Z","role":"workflow:owner","workflowId":"indoxV2ActionsGlobal01","projectId":"exampleProject02","project":{"updatedAt":"2026-07-30T23:40:17.073Z","createdAt":"2026-07-30T23:33:30.049Z","id":"exampleProject02","name":"Admin User <person2@example.com>","type":"personal","icon":null,"description":null,"creatorId":"544b7ec6-5907-4ee2-a94b-c5676e56835c"}}],
     id: 'indoxV2ActionsGlobal01',
     name: 'indox-v2 Actions — DOC BASE',
     active: true,
@@ -1512,7 +1512,7 @@ function docBaseDecide(doc, dup) {
     // 51% of all work those documents ever received.
     // Bound is RETRY_COUNT, which 'Join COMPANY_NAME' already increments on every miss -- no new column.
     // 10 chosen against the resolvers' real behaviour: documents that DO resolve need p50=0, p90=0,
-    // p99=8 retries. A cap of 10 blocks 41 of 5,000 real completions (0.8%) and gives 412 of the 482
+    // p99=8 retries. A cap of 10 blocks 41 of N real completions (0.8%) and gives 412 of the 482
     // stuck documents an honest UNKNOWN_COMPANY terminal instead of a false MAX_ITERATIONS (85%).
     // [always-complete 2026-08-17, owner order] one name attempt per epoch: the action
     // always stamps COMPANY_NAME_COMPLETED; the restart action resets it. No RETRY bound,
@@ -2262,7 +2262,7 @@ const out = [];
 // [winner status 2026-08-22, owner order] The winner is the line decide ACTS ON, so the action
 // must leave it somewhere the state machine can continue from. Emitting only
 // DOUBLE_LINE_CONTEXT left it in the status it arrived in, so the gate handed it the same
-// action next sweep -- 3,352 documents pinned in ACTION_RESTART, some since 2026-08-18.
+// action next sweep -- N documents pinned in ACTION_RESTART, some since 2026-08-18.
 // Only PARKED statuses resume: a winner that is COMPLETED or OLD has finished its lifecycle
 // and must not be dragged back into the pipeline by a duplicate verdict.
 const RESUME = s => ['DOUBLE','ACTION_RESTART'].indexOf(String(s || '').toUpperCase()) >= 0;
@@ -2563,7 +2563,7 @@ return rows.length ? rows : [{ json: { KEY: null, LABEL: null } }];`,
     @node({
         id: 'sfb-linesreq-0006',
         name: 'Lines Req (Feedback)',
-        /*__n8n__*/ notes: "SOURCE_LIST is re-read HERE rather than carried from decide. Two reasons. (1) SIZE: it is the fattest column on the table -- 26 MB total, avg 692 B/row, 1.37 MB per 2,000-row decide slice -- and the driver deliberately strips it from the decide payload, because the worker aborts at Node's 2,600 MB V8 ceiling long before the container's 4 GB and a fat column on a hot path shows up as OOM rather than as slowness. (2) FRESHNESS: this group is at most 150 documents, and a copy carried since decide could have been overtaken by another action. The action must act on what the row says NOW.",
+        /*__n8n__*/ notes: "SOURCE_LIST is re-read HERE rather than carried from decide. Two reasons. (1) SIZE: it is the fattest column on the table -- 26 MB total, avg 692 B/row, 1.37 MB per N-row decide slice -- and the driver deliberately strips it from the decide payload, because the worker aborts at Node's 2,600 MB V8 ceiling long before the container's 4 GB and a fat column on a hot path shows up as OOM rather than as slowness. (2) FRESHNESS: this group is at most 150 documents, and a copy carried since decide could have been overtaken by another action. The action must act on what the row says NOW.",
         type: 'n8n-nodes-base.code',
         version: 2,
         position: [880, 2528],
@@ -3008,7 +3008,7 @@ const realType = v => (has(v) && NON_ANSWER_TYPE.indexOf(canonType(v)) < 0) ? v 
 // \`canon\` is optional and touches ONLY the equality test -- pick() still returns the raw
 // winner, so this changes provenance LABELS and can never change a written value.
 // It is passed PER FIELD, never blanket, and every choice is evidence-led (measured live
-// over the 7,332-row non-fixture fleet, tmp/b34/m1-baseline.sql):
+// over the N-row non-fixture fleet, tmp/b34/m1-baseline.sql):
 //   TYPE        169 two-leg pairs, 0 exact, 158 caseless -- the local leg emits \`shipment\`,
 //               Gemini emits \`SHIPMENT\`, so AGREE was structurally unreachable and every
 //               two-legged row was mislabelled DISAGREE_PREFER_LOCAL (final-indox.md B33.6).
@@ -3156,7 +3156,7 @@ return __rows.map((item, __i) => {
   // hash short-circuit returns file_id too, so both upload paths yield one). It is
   // the ONLY source for a balance sheet -- indoxV2ActionsBS01 has no
   // get_api_tools_id. What it must never do is REPLACE an id the row already has:
-  // 5,694 rows carry one and are still queued for extract_base_doc. Precedence is
+  // N rows carry one and are still queued for extract_base_doc. Precedence is
   // existing-value-wins, read from the pre-extraction row exactly the way the
   // sibling 'Build Base Doc Upsert' node reads it. On neither side present the key
   // is DELETED, not nulled, so the upsert leaves the column untouched.

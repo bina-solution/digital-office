@@ -390,17 +390,50 @@ def chrome_delete_written(origin: str, username: str) -> int:
 
 # ── the credential plane ────────────────────────────────────────────────────────────────────────
 
+#: Credentials the plane refused to reveal to THIS caller (a `reveal_to` row asked from a container it does not name,
+#: DGO-1825), and their origins: a sync leaves those origins alone — Chrome's copy is never harvested into a new,
+#: ungated row, and nothing is written over it.
+WITHHELD: set = set()
+WITHHELD_ORIGINS: set = set()
+
+
+def _self_container_id() -> str:
+    """This container's own id — what makes the plane's identification of us VERIFIED (id + address), not an address
+    alone; read out of mountinfo exactly as group-manager.py's lease does."""
+    for path, marker in (("/proc/self/mountinfo", "/containers/"), ("/proc/self/cgroup", "/docker/")):
+        try:
+            with open(path, encoding="utf-8", errors="replace") as handle:
+                for line in handle:
+                    index = line.find(marker)
+                    while index != -1:
+                        candidate = line[index + len(marker):index + len(marker) + 64]
+                        if len(candidate) == 64 and all(c in "0123456789abcdef" for c in candidate):
+                            return candidate
+                        index = line.find(marker, index + 1)
+        except OSError:
+            continue
+    return ""
+
+
 def _call(path: str, data: dict | None = None):
     body = json.dumps(data).encode() if data is not None else None
-    request = Request(CONNECTIONS_URL + path, data=body,
-                      headers={"Content-Type": "application/json"},
+    headers = {"Content-Type": "application/json"}
+    if _self_container_id():
+        headers["X-Conn-Container"] = _self_container_id()
+    request = Request(CONNECTIONS_URL + path, data=body, headers=headers,
                       method="POST" if body is not None else "GET")
     try:
         with urlopen(request, timeout=20) as response:
             return json.loads(response.read().decode())
     except HTTPError as error:
-        fail("credentials_refused",
-             f"{path} -> {error.code} {error.read().decode(errors='replace')[:300]}")
+        said = error.read().decode(errors='replace')[:300]
+        if error.code == 403 and path.startswith("/api/reveal/") and "revealed only to" in said:
+            # a row the plane reveals only to named services (DGO-1825: the office's Google password goes only to
+            # the browser's own containers) — from any other caller that row is skipped, its origin left alone
+            WITHHELD.add(path.rsplit("/", 1)[1])
+            note(f"{path.rsplit('/', 1)[1]}: revealed only to the office browser's own container — not synced from here")
+            return None
+        fail("credentials_refused", f"{path} -> {error.code} {said}")
     except URLError as error:
         fail("credentials_unreachable", f"cannot reach {CONNECTIONS_URL}: {error.reason}")
 
@@ -458,6 +491,9 @@ def plane_entries() -> dict:
                 held.setdefault("shadowed_cid", {})[username] = cid   # where its newest password is kept first
             continue
         password = (_call(f"/api/reveal/{cid}", {"field": password_field}) or {}).get("value")
+        if cid in WITHHELD:
+            WITHHELD_ORIGINS.add(origin)           # not ours to read here: and not Chrome's to harvest into an open row
+            continue
         if not password:
             continue
         shadowed = list((held or {}).get("shadowed") or [])
@@ -472,6 +508,10 @@ def plane_entries() -> dict:
         entries[origin] = {"cid": cid, "username": username, "password": password, "url": url,
                            "password_field": write_field,
                            **({"shadowed": shadowed, "shadowed_cid": shadowed_cid} if shadowed else {})}
+    # a withheld origin has no entry at all: a copy harvested from Chrome before it was withheld (a `browser-login-*`
+    # row) would otherwise be put back into Chrome and revealed to the browser (the fourth reader of DGO-1825)
+    for origin in WITHHELD_ORIGINS:
+        entries.pop(origin, None)
     return entries
 
 
@@ -1080,9 +1120,11 @@ def cmd_sync(materialize: bool = True, harvest: bool = True) -> None:
     if held:
         report["skipped"].append({"origin": "*", "reason": "the plane listed no credential while the state holds "
                                   f"{len(state['entries'])}: nothing is deleted or harvested back on that answer"})
-    pending = set()                                           # origins harvest leaves alone on this run
+    pending = set(WITHHELD_ORIGINS)                           # origins harvest leaves alone on this run (a withheld
+                                                              # login's too: DGO-1825)
     for origin, known in list(state["entries"].items()):
-        if origin in entries:
+        if origin in entries or origin in WITHHELD_ORIGINS:
+            # listed again — or listed and not ours to read (DGO-1825): neither is an absence, nothing is decided
             known.pop("missing", None)                        # listed again: a later absence starts over
             continue
         if held:

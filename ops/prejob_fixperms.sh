@@ -27,7 +27,7 @@ set -uo pipefail
 # The WHOLE work folder, not $RUNNER_WORKSPACE. sudoers does not allow wildcards in command
 # arguments, so the rule that permits this has to name one exact path - and the work folder is the
 # only path that is the same for every job:
-#   shlomy ALL=(root) NOPASSWD: /usr/bin/chown -R shlomy\:shlomy /opt/actions-runner/_work
+#   owner ALL=(root) NOPASSWD: /usr/bin/chown -R owner\:owner /opt/actions-runner/_work
 WORK=/opt/actions-runner/_work
 ME="$(id -un)"
 

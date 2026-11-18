@@ -42,7 +42,7 @@ import { workflow, node, links } from '@n8n-as-code/transformer';
     /*__n8n__*/ meta: {"templateCredsSetupCompleted":true},
     /*__n8n__*/ pinData: {},
     /*__n8n__*/ staticData: null,
-    /*__n8n__*/ shared: [{"updatedAt":"2026-07-30T23:42:27.037Z","createdAt":"2026-07-30T23:42:27.037Z","role":"workflow:owner","workflowId":"indoxV2DecideTest01","projectId":"2xKn4WH08LyAOk2y","project":{"updatedAt":"2026-07-30T23:40:17.073Z","createdAt":"2026-07-30T23:33:30.049Z","id":"2xKn4WH08LyAOk2y","name":"Admin User <person2@example.com>","type":"personal","icon":null,"description":null,"creatorId":"544b7ec6-5907-4ee2-a94b-c5676e56835c"}}],
+    /*__n8n__*/ shared: [{"updatedAt":"2026-07-30T23:42:27.037Z","createdAt":"2026-07-30T23:42:27.037Z","role":"workflow:owner","workflowId":"indoxV2DecideTest01","projectId":"exampleProject02","project":{"updatedAt":"2026-07-30T23:40:17.073Z","createdAt":"2026-07-30T23:33:30.049Z","id":"exampleProject02","name":"Admin User <person2@example.com>","type":"personal","icon":null,"description":null,"creatorId":"544b7ec6-5907-4ee2-a94b-c5676e56835c"}}],
     id: 'indoxV2DecideTest01',
     name: 'indox-v2 Decide Tests',
     active: false,
@@ -338,7 +338,7 @@ const cases = [
     'no_action_api_tools_failed',
     { ID: '2010', API_TOOLS_ID: null, API_TOOLS_ID_COMPLETED: false, STATUS: 'API_TOOLS_FAILED' }),
 
-  // [typed at birth 2026-09-03, owner Decision N8] The live shape of שריזלי-01010: born from a
+  // [typed at birth 2026-09-03, owner Decision N8] The live shape of פלמוני-00001: born from a
   // balance-sheet line typed INVOICE, its file found in Drive, no OCR upload id yet, base never
   // run. Base's gate is now "no API_TOOLS_ID yet" (not "no TYPE"), so the document goes to base
   // extraction — upload + OCR + both legs — instead of parking as API_TOOLS_FAILED with no reason.

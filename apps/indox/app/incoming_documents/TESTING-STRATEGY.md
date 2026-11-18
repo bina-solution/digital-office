@@ -168,7 +168,7 @@ Each step asserts HTTP status + JSON shape via `jq`.
 - Pass criteria: p50 < 500 ms, p99 < 3 s, 0 5xx, no GSheet 429s leaking out (retry layer must absorb).
 
 ### 8.2 `migration_burst`
-- Simulates the daily catch-up: single client posts 39,582 rows in batches of 500 (= the production CSV size).
+- Simulates the daily catch-up: single client posts the sheet's rows in batches of 500 (= the production CSV size).
 - Pass criteria: completes < 10 min, all rows present in the backend, no duplicates.
 
 Both scenarios must pass for **both** backends.

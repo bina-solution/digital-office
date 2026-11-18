@@ -199,7 +199,7 @@ def declared_values() -> dict:
     `format=env` and NOT the route's default JSON body, which is MASKED on purpose
     (`env={k: mask(v)}`, `mask()` being `v[:3] + "…" + v[-2:]`). This function used to read the
     mask as if it were the declaration, and on 2026-10-01 that is exactly what happened: the owner
-    arrived here as `sol…om` (`person9@example.com` under `mask()`), so the bootstrap CREATED a
+    arrived here as `sol…om` (`person83@example.com` under `mask()`), so the bootstrap CREATED a
     user with that address, made him the instance administrator and the owner of the declared
     workspace, and released the real owner — all while reporting success. A masked value is a
     rendering of a secret, never the secret.
@@ -222,7 +222,7 @@ password = need("PLANE_OWNER_PASSWORD")
 # RESOLVED HERE, BEFORE THE GUARD BELOW ASKS WHOSE INSTANCE THIS IS. It used to be resolved after it,
 # so the guard judged the address the hook passed and everything below then acted for another one.
 # hp-laptop, 2026-10-06: `.env` had just been set to the instance's real administrator, the credential
-# plane's container still carried the line it was created with (`person6@example.com`, the CI placeholder
+# plane's container still carried the line it was created with (`person5@example.com`, the CI placeholder
 # the hook itself refuses) — the guard saw the real owner and passed, and the applier revived the
 # placeholder's administrator row and handed it the declared workspace, reporting success. The
 # guard exists for exactly that ("a second owner is not something a bring-up hook gets to decide"):
@@ -366,10 +366,14 @@ for entry in ((cfg.get("sso") or {}).get("users") or []):
     if isinstance(names, str):
         names = [names]
     names = [str(n).strip() for n in names if str(n).strip()]
+    groups = entry.get("groups") or []                   # the provider's group (DGO-1982: the /setup owner)
+    if isinstance(groups, str):
+        groups = [groups]
+    groups = [str(g).strip() for g in groups if str(g).strip()]
     who = str(entry.get("plane") or "").strip()
     if who in ("", "owner"):
         who = user.email                                 # the owner this run established
-    if not names or not who:
+    if not (names or groups) or not who:
         problems.append(f"bootstrap.yaml: sso.users entry {entry!r} names no office identity or no "
                         f"Plane account — skipped")
         continue
@@ -377,7 +381,7 @@ for entry in ((cfg.get("sso") or {}).get("users") or []):
         problems.append(f"bootstrap.yaml: sso maps an office identity to '{who}', which is not a "
                         f"Plane account on this instance — not written")
         continue
-    sso_users.append({"plane": who, "authentik": names})
+    sso_users.append({"plane": who, "authentik": names, "groups": groups})
 try:
     with open(SSO_MAP, "w", encoding="utf-8") as handle:
         json.dump({"users": sso_users, "source": "apps/project-pln/bootstrap.yaml"},

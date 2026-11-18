@@ -15,14 +15,16 @@ and the app counts what it handled. Only the first; one response; the connection
 and the bytes after it reach the app before it answers. With a websocket library installed (`websockets`, in
 requirements.txt) uvicorn hands that connection to its websocket handler, so the bytes are never read as HTTP — a
 refused upgrade is closed. Without one (`--ws none`, the control) h11 serves the pipelined request with the peer's mark.
-So the protection rests on that library: the test asserts it is importable, and a uvicorn that ever answered the
-second request on any path here fails it.
+So the protection rests on that library: the test asserts requirements.txt declares it (off the image, where it
+cannot be imported, the test says NOT RUN and the cases are run in the image), and a uvicorn that ever answered
+the second request on any path here fails it.
 
 Run in the app's image: python3 tests/test_door_pipelining.py   (from apps/computers; needs no network)
 """
 from __future__ import annotations
 
 import json
+import re
 import socket
 import subprocess
 import sys
@@ -107,10 +109,13 @@ def main() -> int:
     # as a DECLARATION wherever the file is (a bare runner, a desk), and as a fact where the library can be imported
     req = Path(__file__).resolve().parent.parent / "requirements.txt"
     if req.is_file():
-        declared = any(ln.split("#")[0].strip().lower().startswith("websockets")
+        # the package itself, not one whose name begins with it (websockets-proxy), and never a comment
+        declared = any(re.match(r"websockets(?![a-z0-9._-])", ln.split("#")[0].strip().lower())
                        for ln in req.read_text(encoding="utf-8").splitlines())
         check(declared, "the image's requirements.txt names a websocket library, which is what keeps a refused "
                         "upgrade from serving HTTP")
+    else:
+        check(False, "apps/computers/requirements.txt is there to be read")
     try:
         import websockets  # noqa: F401
     except ImportError:

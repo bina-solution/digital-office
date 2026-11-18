@@ -18,7 +18,7 @@
 set -uo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-VMDIR="${VMDIR:-/home/shlomy/vm}"
+VMDIR="${VMDIR:-/home/owner/vm}"
 DISK="${VMDIR}/binaos-win10.qcow2"
 ISO="${VMDIR}/win10.iso"
 UNATTEND="${VMDIR}/unattend.iso"

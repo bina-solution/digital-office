@@ -147,6 +147,23 @@ class Batch(unittest.TestCase):
             self.assertEqual(t.main(["comment", "DGO-12", "--comment", "from a flag", "--as", "local"]), 0)
         self.assertEqual(comments(), ["<p>from a flag</p>"])
 
+    def test_a_comment_that_is_only_an_unread_file_is_said(self):
+        # seven handoff comments went in as bare `@ci-artifacts/…` paths (DGO-1849/1861): stage 1 says it
+        for argv in (["comment", "DGO-12", "@ci-artifacts/x/handoff.md"],
+                     ["batch", '{"verb":"comment","ref":"DGO-12","comment":"@ci-artifacts/x/handoff.md"}']):
+            reset()
+            out = io.StringIO()
+            with contextlib.redirect_stdout(out), contextlib.redirect_stderr(io.StringIO()):
+                t.main(argv)
+            self.assertIn("WARNING", out.getvalue(), argv)
+            self.assertIn("«@ci-artifacts/x/handoff.md»", out.getvalue(), argv)
+        reset()
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out), contextlib.redirect_stderr(io.StringIO()):
+            t.main(["comment", "DGO-12", "@azaria", "look", "at", "this"])
+        self.assertNotIn("WARNING", out.getvalue())
+        self.assertEqual(comments(), ["<p>@azaria look at this</p>"])
+
     def test_a_later_run_in_the_same_process_finds_an_item_made_since(self):
         reset()
         with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):

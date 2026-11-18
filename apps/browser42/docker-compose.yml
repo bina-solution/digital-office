@@ -423,7 +423,7 @@ services:
     - traefik.http.routers.browser42-https.tls=true
     - traefik.http.routers.browser42-https.tls.certresolver=${TRAEFIK_CERTRESOLVER-myresolver}
     - traefik.http.routers.browser42-https.service=browser42
-    - traefik.http.routers.browser42-https.middlewares=authentik-admins@file,hsts@file
+    - traefik.http.routers.browser42-https.middlewares=hsts@file,authentik-admins@file
     # There was a second https router here for /mcp with no sign-in, a bearer token only: a
     # remotely drivable browser on the public internet. Nothing in the office used it - the agent
     # and the task runner reach http://browser42-mcp:8931 on the office network - so it is gone;

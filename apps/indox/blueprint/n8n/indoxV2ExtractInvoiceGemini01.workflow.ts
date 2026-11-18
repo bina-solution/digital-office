@@ -162,7 +162,7 @@ import { workflow, node, links } from '@n8n-as-code/transformer';
     /*__n8n__*/ meta: null,
     /*__n8n__*/ pinData: {},
     /*__n8n__*/ staticData: null,
-    /*__n8n__*/ shared: [{"updatedAt":"2026-07-31T00:59:54.840Z","createdAt":"2026-07-31T00:59:54.840Z","role":"workflow:owner","workflowId":"indoxV2ExtractInvoiceGemini01","projectId":"2xKn4WH08LyAOk2y","project":{"updatedAt":"2026-07-30T23:40:17.073Z","createdAt":"2026-07-30T23:33:30.049Z","id":"2xKn4WH08LyAOk2y","name":"Admin User <person2@example.com>","type":"personal","icon":null,"description":null,"creatorId":"544b7ec6-5907-4ee2-a94b-c5676e56835c"}}],
+    /*__n8n__*/ shared: [{"updatedAt":"2026-07-31T00:59:54.840Z","createdAt":"2026-07-31T00:59:54.840Z","role":"workflow:owner","workflowId":"indoxV2ExtractInvoiceGemini01","projectId":"exampleProject02","project":{"updatedAt":"2026-07-30T23:40:17.073Z","createdAt":"2026-07-30T23:33:30.049Z","id":"exampleProject02","name":"Admin User <person2@example.com>","type":"personal","icon":null,"description":null,"creatorId":"544b7ec6-5907-4ee2-a94b-c5676e56835c"}}],
     id: 'indoxV2ExtractInvoiceGemini01',
     name: 'invoice Extractor - Gemini 3.1 pro',
     active: true,
@@ -515,7 +515,7 @@ return [{
     // while leaving PER_TYPE_EXTRACTION_COMPLETED unset, so Decide GDoc/Shipment re-dispatches this
     // document on every sweep with no error ever surfacing. Measured before this landed: 761 runs
     // (39.3% of 1,934) dead-ended on these two branches across only 37 documents, ~20 futile
-    // retries each, and 1,934 executions covered just 179 distinct documents (90.7% redundant).
+    // retries each, and N executions covered just 179 distinct documents (90.7% redundant).
     // The gate closes because the work IS finished -- there is nothing further to extract from this
     // file -- and ERROR carries the reason so the row reads as failed, not as silently complete.
     PER_TYPE_EXTRACTION_COMPLETED: true,
@@ -1438,7 +1438,7 @@ return [{
     // while leaving PER_TYPE_EXTRACTION_COMPLETED unset, so Decide GDoc/Shipment re-dispatches this
     // document on every sweep with no error ever surfacing. Measured before this landed: 761 runs
     // (39.3% of 1,934) dead-ended on these two branches across only 37 documents, ~20 futile
-    // retries each, and 1,934 executions covered just 179 distinct documents (90.7% redundant).
+    // retries each, and N executions covered just 179 distinct documents (90.7% redundant).
     // The gate closes because the work IS finished -- there is nothing further to extract from this
     // file -- and ERROR carries the reason so the row reads as failed, not as silently complete.
     PER_TYPE_EXTRACTION_COMPLETED: true,
@@ -1523,7 +1523,7 @@ return [{
     })
     HttpRequest = {
         method: 'POST',
-        url: 'https://us-documentai.googleapis.com/v1/projects/928205450024/locations/us/processors/55409bca20033969/processorVersions/fb6558662229489c:process',
+        url: 'https://us-documentai.googleapis.com/v1/projects/100000000001/locations/us/processors/0000000000000001/processorVersions/0000000000000002:process',
         authentication: 'predefinedCredentialType',
         nodeCredentialType: 'googleApi',
         sendBody: true,
@@ -2024,7 +2024,7 @@ return $input.all().map(it => {
         jsCode: `// CP1255 -> Unicode for the CSV branch.
 //
 // WHY THIS NODE EXISTS
-// The Sonol/Hebrew CSV exports this pipeline receives are windows-1255 (CP1255), not UTF-8:
+// The A supplier's Hebrew CSV exports this pipeline receives are windows-1255 (CP1255), not UTF-8:
 // the bytes f7 e5 e3 are "קוד", which is not valid UTF-8 at all. n8n's Extract from File can
 // only decode Node buffer encodings (ascii/latin1/ucs2/utf8) -- windows-1255 is not offered --
 // so decoding as UTF-8 turned every Hebrew character into U+FFFD. That silently destroyed the

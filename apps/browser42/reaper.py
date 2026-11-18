@@ -33,7 +33,7 @@ gives a fresh driver in seconds, and the first thing the new one does is reconne
 tabs `save_tabs` wrote down. The tab list is written whenever the tab set CHANGES, not only when the
 reaper itself decides to sleep, because it is the one thing a restart cannot rebuild.
 """
-import json, os, re, sys, threading, time
+import json, os, re, shutil, sys, tempfile, threading, time
 from pathlib import Path
 from urllib.error import HTTPError
 from urllib.parse import urlsplit
@@ -62,6 +62,11 @@ SWEEP_TIMEOUT = int(os.environ.get("BROWSER42_REAPER_SWEEP_TIMEOUT", "120"))
 RECONNECT_GIVE_UP = int(os.environ.get("BROWSER42_REAPER_RECONNECT_GIVE_UP", "10"))
 TASKS_DIR = Path(os.environ.get("TASKS_DIR", "/data/tasks"))
 TERMINAL_STATES = {"finished", "rejected", "stalled", "closed", "failed"}
+# A task holds the browser awake only while it is being driven: the states group-manager.py calls
+# ACTIVE_STATES and task-watchdog.py watches. «Not terminal» is not the same thing — `accepted` is
+# neither, so one task verified and never finished (nf36-marketingweek, 2026-11-05) kept the browser
+# from ever sleeping again (DGO-1921).
+LIVE_STATES = {"allocated", "active", "verifying"}
 # Lane reconciliation (R-lane): a tab lane on any-concurrency is closed by finish /
 # watchdog, but a task that DIES before finish (crashed start, legacy run from before
 # span_close_tab existed) leaves its lane span open forever — the UI shows a dead task
@@ -108,11 +113,11 @@ def markers_epoch() -> float:
 
 
 def live_task_exists() -> bool:
-    """A task that is not terminal owns the browser, however quiet its tab looks right now."""
+    """A task being driven owns the browser, however quiet its tab looks right now."""
     try:
         for d in TASKS_DIR.iterdir():
             rec = task_record(d.name)
-            if rec and rec.get("state") not in TERMINAL_STATES:
+            if rec and rec.get("state") in LIVE_STATES:
                 return True
     except OSError:
         pass
@@ -489,8 +494,22 @@ def _under_deadline(fn, *args):
         _SWEEPING["since"] = 0.0
 
 
+def remove_dead_artifacts() -> int:
+    """Remove the Playwright directories an earlier reaper process left in /tmp. Playwright makes one per
+    connection and removes it when the connection is closed; a process that died (the sweep watchdog's
+    exit, a crash) never did. This container runs nothing else that uses Playwright, and the new
+    process has not connected yet, so every one of them is dead (DGO-1921)."""
+    removed = 0
+    for leftover in Path(tempfile.gettempdir()).glob("playwright-artifacts-*"):
+        shutil.rmtree(leftover, ignore_errors=True)
+        removed += 1
+    return removed
+
+
 def main():
     from playwright.sync_api import sync_playwright  # lazy: keeps the module importable for unit tests
+    if not ONCE:                                     # a manual --once may run beside the live reaper
+        print(f"reaper: removed {remove_dead_artifacts()} playwright-artifacts dir(s) a dead reaper left", flush=True)
     p = sync_playwright().start()
     # The watchdog starts FIRST: everything below it — the first connect and the restore that follows
     # it — is driver work that can hang.

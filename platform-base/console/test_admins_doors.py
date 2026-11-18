@@ -16,7 +16,7 @@ exec(compile(MODULE_PATH.read_text(encoding="utf-8"), str(MODULE_PATH), "exec"),
 
 OWNER = {"X-authentik-username": "owner", "X-authentik-groups": "admins"}
 DEV = {"X-authentik-username": "akadmin", "X-authentik-groups": "authentik Admins"}   # the SSO off
-INVITED = {"X-authentik-username": "tamar", "X-authentik-groups": "people"}
+INVITED = {"X-authentik-username": "galit", "X-authentik-groups": "people"}
 NOBODY = {"X-authentik-username": "clerk", "X-authentik-groups": ""}
 
 

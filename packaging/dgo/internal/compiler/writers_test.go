@@ -624,6 +624,26 @@ func TestRemoteSetMatchesPython(t *testing.T) {
 			setup: func(dir string) { put(t, dir, ".dgo/wg0.conf", "[Interface]\n  Address = 10.79.5.2/24\n") }},
 		{name: "this office's own address, from a pair's conf", verb: "remote-set", stdin: `[` + entry("") + `]`, state: small,
 			setup: func(dir string) { put(t, dir, ".dgo/pairs/wg1.conf", "Address=10.79.5.2\n") }},
+		// vps1, 2026-11-12: a retired host link's record (its pair with `old` on slot 5) claims the end the live plane
+		// has since given to another pair; the block places `old` on another /24, so the claim is superseded…
+		{name: "a host record whose pair the block moved claims its address no more", verb: "remote-set", state: small,
+			stdin: `[` + entry("") + `, {"office": "Old", "address": " 10.79.9.2 ", "apps": [{"app": "a", "port": 1}]}]`,
+			setup: func(dir string) {
+				put(t, dir, ".dgo/addressing.json", `{"self": "10.79.5.2", "pairs": [{"office": "old", "self": " 10.79.5.2"}, null, {"self": 7}]}`)
+				put(t, dir, ".dgo/wg0.conf", "[Interface]\nAddress = 10.79.5.2/24\n")
+			}},
+		// …while one whose pair the block keeps on that /24, or a claimant it does not place, still holds it.
+		{name: "a host record whose pair stays on its /24 still holds its address", verb: "remote-set", state: small,
+			stdin: `[` + entry("") + `, {"office": "old", "address": "10.79.5.1", "apps": [{"app": "a", "port": 1}]}]`,
+			setup: func(dir string) {
+				put(t, dir, ".dgo/addressing.json", `{"pairs": [{"office": "old", "self": "10.79.5.2"}, {"office": "gone", "self": "10.79.5.2"}]}`)
+			}},
+		// …and only an office id plan() accepts is compared: Go's lowering and str.lower() part on a Greek final sigma
+		{name: "a host record's office that is no office id moves nothing", verb: "remote-set", state: small,
+			stdin: `[` + entry("") + `, {"office": "ΑΣ", "address": "10.79.9.2", "apps": [{"app": "a", "port": 1}]}]`,
+			setup: func(dir string) {
+				put(t, dir, ".dgo/addressing.json", `{"pairs": [{"office": "ας", "self": "10.79.5.2"}]}`)
+			}},
 		{name: "an unreadable link record says nothing", verb: "remote-set", stdin: `[` + entry("") + `]`, state: small,
 			setup: func(dir string) { put(t, dir, ".dgo/addressing.json", `{"self": `) }},
 		{name: "a link record that is a list", verb: "remote-set", stdin: `[` + entry("") + `]`, state: small, crash: true,

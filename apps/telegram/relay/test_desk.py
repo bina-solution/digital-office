@@ -2,16 +2,19 @@
 """The group desk's rules (desk.py) and the relay's line (relay_group.py), without redis or Telegram:
     python3 apps/telegram/relay/test_desk.py
 Each case is a failure read in the group's thread of 2026-11-03/04 (DGO-1352)."""
+import io
 import json
 import os
 import sys
 import unittest
+import urllib.error
+from unittest import mock
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import desk          # noqa: E402
 import relay_group   # noqa: E402
 
-GROUP = -1004303648995
+GROUP = -1001234567890
 
 
 class FakeRedis:
@@ -142,6 +145,16 @@ class Ledger(unittest.TestCase):
         self.assertIn("at most two workers", text)          # the HP serves everyone: capacity before speed
         self.assertIn("NOT ANSWERED", text.splitlines()[1])
 
+    def test_a_new_promise_supersedes_the_open_one(self):
+        rec = desk.take(desk.new_record(owner_msg(748, "…"), T0), ["DGO-1765"], at=T0)
+        desk.promise(rec, "measure Google and DuckDuckGo again with a screenshot, here", hours=3, at=T0)
+        desk.promise(rec, "DDG measured; Google next", hours=24, at="2026-11-04T13:00:00Z")
+        t = desk.parse_at(T0) + 5 * 3600
+        self.assertEqual(desk.overdue(rec, t), [])                       # the 3-hour one no longer sweeps
+        self.assertEqual(desk.open_requests([rec], t), [])               # the 24-hour one carries it
+        self.assertFalse(rec["promises"][0]["kept"])                     # superseded, not claimed kept
+        self.assertTrue(rec["promises"][0]["superseded"])
+
     def test_a_kept_promise_is_not_swept(self):
         rec = desk.take(desk.new_record(owner_msg(15, "…"), T0), ["DGO-1321"])
         desk.promise(rec, "proof shot", hours=1, at=T0)
@@ -261,6 +274,18 @@ class Relay(unittest.TestCase):
                "text": "…", "reply_to": 202}
         self.assertEqual(relay_group.note_group_message(r, self.ev(bot), bots), (False, ""))
         self.assertEqual(desk.load(r, GROUP, 202)["answers"], [206])
+
+    def test_the_bot_named_azaria_is_the_bot(self):
+        r, bots = FakeRedis(), set(relay_group.DEFAULT_BOT_NAMES)
+        relay_group.note_group_message(r, self.ev(owner_msg(968, "…")), bots)
+        reply = {"chat_id": GROUP, "chat": "Bina Solutions Main", "message_id": 979, "sender": "Azaria",
+                 "text": "…", "reply_to": 968}
+        notice = {"chat_id": GROUP, "chat": "Bina Solutions Main", "message_id": 977, "sender": "Azaria",
+                  "text": "🟢 🦅 vps1: …"}
+        self.assertEqual(relay_group.note_group_message(r, self.ev(reply), bots), (False, ""))
+        self.assertEqual(relay_group.note_group_message(r, self.ev(notice), bots), (False, ""))
+        self.assertEqual(desk.load(r, GROUP, 968)["answers"], [979])
+        self.assertEqual([x["message_id"] for x in desk.all_records(r)], [968])
 
     def test_a_replayed_message_keeps_its_records_mark(self):
         r, bots = FakeRedis(), set(relay_group.DEFAULT_BOT_NAMES)
@@ -400,6 +425,44 @@ class Line(unittest.TestCase):
         ev = self.ev({"chat_id": GROUP, "chat": "Bina Solutions Main", "message_id": 206, "sender": "Bina Agent"})
         self.assertFalse(relay_group.wanted(ev, "Bina Solutions Main", "", bots))
         self.assertTrue(relay_group.wanted(self.ev(owner_msg(202, "…")), "Bina Solutions Main", "", bots))
+
+
+class TellAgent(unittest.TestCase):
+    """The door's answers to one send (DGO-1878): msg 986 was typed into the session again and again, because a 502
+    «not-confirmed» — the text typed, only not yet seen in the transcript — was read as «not delivered»."""
+
+    def door(self, code, answer):
+        sends = []
+
+        def urlopen(req, timeout=None):
+            sends.append(req)
+            raise urllib.error.HTTPError(req.full_url, code, "door", {}, io.BytesIO(answer.encode("utf-8")))
+        return sends, urlopen
+
+    def tell(self, urlopen):
+        with mock.patch.object(relay_group.urllib.request, "urlopen", urlopen), \
+                mock.patch.object(relay_group.time, "sleep", lambda s: None), \
+                mock.patch.object(relay_group, "agent_token", lambda p: "t"), \
+                mock.patch.object(relay_group, "log", lambda *a: None):
+            relay_group.tell_agent("local_x", "TG: …", "/bc/api-token")
+
+    def test_typed_but_not_yet_seen_is_delivered_once(self):
+        sends, urlopen = self.door(502, json.dumps({"error": "Return pressed, but the transcript does not show the "
+                                                    "text yet — look at the app's screen", "code": "not-confirmed"}))
+        self.tell(urlopen)
+        self.assertEqual(len(sends), 1)
+
+    def test_busy_is_retried_and_then_raised(self):
+        sends, urlopen = self.door(409, json.dumps({"error": "the session is mid-turn (busy); nothing was sent"}))
+        with self.assertRaises(ConnectionError):
+            self.tell(urlopen)
+        self.assertEqual(len(sends), 3)
+
+    def test_another_502_is_still_retried(self):
+        sends, urlopen = self.door(502, "Bad Gateway")
+        with self.assertRaises(ConnectionError):
+            self.tell(urlopen)
+        self.assertEqual(len(sends), 3)
 
 
 if __name__ == "__main__":

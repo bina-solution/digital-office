@@ -5,7 +5,7 @@
 
 WHY THIS GATE EXISTS
 
-On 2026-08-06 a test suite deleted **2,432 real client documents** from
+On 2026-08-06 a test suite deleted **real client documents** from
 `public.incoming_documents`. Not a dropped table, not a TRUNCATE — a cleanup query that looked
 scoped. `syncV3SourcesTest01`'s "Cleanup SQL" node builds this:
 
@@ -53,7 +53,7 @@ except (file, node) pairs named in the registry's `delete_allowlist`:
   F3  CONTAINMENT IS NOT SCOPE. A delete may not be scoped by an unanchored containment test —
       `position(x in y)`, `strpos`, `like '%…'` — against the deleted relation. Containment
       says "this row mentions something of ours somewhere", which is not the same claim as
-      "this row is ours", and the difference is 2,432 documents.
+      "this row is ours", and the difference is documents.
 
   F4  NO SCOPE AT ALL. A delete whose statement never names a marker column is unscoped.
 
@@ -464,7 +464,7 @@ def scan_node(rel: str, node: str, text: str, reg: dict) -> list[dict]:
                     f"JOIN-SHAPED {VERB} WITH NO GUARD ON THE MUTATED RELATION"
                     f"{f' ({alias})' if alias else ''} — every prefix predicate here binds to "
                     f"the join partner, so the blast radius is whatever the join reaches. "
-                    f"This is the shape that deleted 2,432 client documents on 2026-08-06"
+                    f"This is the shape that deleted client documents on 2026-08-06"
                     + ("; on an UPDATE it rewrites them instead, leaving no missing rows to "
                        "notice." if kind == "update" else "."),
                     stmt[:400])
@@ -819,7 +819,7 @@ SELF_TEST = [
     # ── UPDATE (added 2026-08-07) ──────────────────────────────────────────────────────
     # THE READ-SIDE TWIN, PROMOTED TO A WRITE. `syncV3SourcesTest01`'s `PB Row` carried exactly
     # this join and matched 2,385 of 2,390 `#inbox/` documents. It was a SELECT, so nothing was
-    # destroyed. As an UPDATE it rewrites the same 2,385 client rows and — unlike a DELETE —
+    # destroyed. As an UPDATE it rewrites the same N client rows and — unlike a DELETE —
     # leaves no row-count drop behind. This is the case that motivated extending the gate.
     ("unanchored-uid UPDATE joined to the ledger, guard on the partner only",
      'update public.incoming_documents d set "STATUS" = \'X\' from public.sync_ledger l'

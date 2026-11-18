@@ -81,12 +81,12 @@ blocked AS (
   --
   -- The first version tested only the doc's LAST logged action. The guard does not: it scans the
   -- newest 10 ACTION_HISTORY rows and blocks when action_merge_doubles appears with no restart
-  -- AFTER it -- whatever ran since. doc_msq6hmoidspohq slipped through on exactly that
+  -- AFTER it -- whatever ran since. doc_example0000001 slipped through on exactly that
   -- difference: merge at 00:23, update_status_old_doc at 00:27, so its last action was not a
   -- merge and it was fed anyway.
   --
   -- One such document is not one lost document. 'Raise Double Blocked' is a stop-and-error, so it
-  -- aborts the WHOLE driver execution: a 702-id drain produced 4 driver errors and ZERO
+  -- aborts the WHOLE driver execution: a drain produced 4 driver errors and ZERO
   -- dispatches. Two stale documents were holding the entire backlog still.
   --
   -- The 10-row window is copied too. Reading the whole history instead would over-exclude

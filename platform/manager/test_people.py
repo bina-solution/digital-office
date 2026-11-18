@@ -26,7 +26,10 @@ rc = _load()
 
 
 def _mw(labels):
-    return {l.split(".")[3]: l.split("=", 1)[1] for l in labels if ".middlewares=" in l and ".routers." in l}
+    """router → its chain, the HSTS pin left out: on a server office the pin opens every https chain
+    (DGO-1595), and what these tests ask is which sign-in comes first after it."""
+    return {l.split(".")[3]: ",".join(m for m in l.split("=", 1)[1].split(",") if m != "hsts@file")
+            for l in labels if ".middlewares=" in l and ".routers." in l}
 
 
 def test_an_admins_app_is_signed_in_by_the_admins_middleware_on_every_router():

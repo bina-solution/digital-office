@@ -22,6 +22,7 @@ this folder holds the deeper material. Each fact has **one home** (no duplicatio
 | File | What |
 |---|---|
 | `../../bbox` (CLI) | **The** deployment entry point — `run/stop/reset/status/verify`, `n8n pull/push/status/verify`, `b42`, `install`, `onboarding`. Thin dispatcher over `scripts/*` (shared helpers in `scripts/lib.sh`). |
+| `app-instances.md` | **App instances («מופעים»)** (DGO-1920): more than one copy of an app on one office (three Claude Desktops, each its own account) — the model, `bbox apps instance` and the apps screen's «מופע נוסף», the generated `instances/` root both compilers read, which apps can be copied and why, the research behind it, the limits. |
 | `wrapped-official-app.md` | **A wrapped official app** (DGO-1259): the vendor's own Linux client as the screen (Selkies), its headless side behind a contract, one volume for the sign-in; the four channels, the `wraps` declaration and gate G108, the check before a wrap enters the catalogue. Starting files: `apps/_template-wrapped/`. |
 | `app-cli-api-standard.md` | **The app CLI and API standard** (DGO-1243): what the screen does, the API and the CLI do. The grammar `dgo <app> <noun> <verb>`, `--json` on every verb, exit codes 0/1/2/3, help, secrets, writes, canonical ops. What holds today and what comes with cli-202…206. |
 | `automation-iac.md` | The blueprint dev loop (pull→edit→push→verify), the 3 credential classes, push hardening (non-destructive + native tag import), and gotchas. |
@@ -139,7 +140,8 @@ still-live n8n sync content moved into [n8n-cli.md](n8n-cli.md).
 ## The herd: links, remote apps and security
 | File | What |
 |---|---|
-| `kadima.md` | **«קדימה» — the procedure** (DGO-1820): when the owner says it, six stages with an owner and a clock each (gather, sweep, cut, prove, distribute, show), four lanes at full pace, «waiting for X» is not an end state, the idle sweep, the board with six office rows. |
+| `kadima.md` | **«קדימה» — the procedure** (DGO-1820): when the owner says it, six stages with an owner and a clock each (gather, sweep, cut, prove, distribute, show), four lanes at full pace, «waiting for X» is not an end state, the idle sweep, the board with six office rows. «קדימה <word>» is a meeting first (DGO-1847). |
+| `kadima-meeting-to-product.md` | **«קדימה» from a meeting to a live product** (DGO-1847): the word resolved to a meeting; a product the meeting decided gets its own Plane project, `product.json` and `requirements.json`; sources, research, a reference app mapped live, reuse, own accounts and the way in, domain and mail through the registrar app, the site in the sites app, the beauty gate. `./bbox meet kadima <word> --live` lists what is missing. Born from the eleven directions «קדימה exx» needed. |
 | `dgo-herd.md` | The herd as one business (DGO-911): the MacBook the interface, the HP the centre, the Dell heavy work, vps1 the public door; where each app runs. |
 | `dgo-herd-os.md` | DGO as the herd's OS (the owner, 2026-11-02): access levels, doors, identity, secrets and links from one control point. |
 | `dgo-extend-plan.md` | DGO Extend, the 2026-09-30 decision: remote offices, links and placement; §13 records what changed since. |
@@ -223,7 +225,7 @@ still-live n8n sync content moved into [n8n-cli.md](n8n-cli.md).
 | `owner-decisions-2026-10-14.md` | Azaria's 2026-10-14 page for the owner: what was decided alone, and the questions only he can answer. |
 | `the-plan-2026-10-14.md` | Azaria's work plan of 2026-10-14 for the owner's approval: the order, what needs his signature, three questions. |
 | `session-8a989787-post-mortem-2026-10-11.md` | What session-8a989787 really did over 2026-10-09…11, from its own record, git and the board. |
-| `new-company-office-playbook.md` | Setting up a new company's office, phase by phase, from what The Examplef Guys' setup taught us (2026-10-22…30, DGO-1037): what to do, what went wrong, what the product does now, the owner's decisions and the gaps still open. No client data. |
+| `new-company-office-playbook.md` | Setting up a new company's office, phase by phase, from what Example shop' setup taught us (2026-10-22…30, DGO-1037): what to do, what went wrong, what the product does now, the owner's decisions and the gaps still open. No client data. |
 
 ## Client systems (Exampleu since 2026-11-09, DGO-1494)
 | File | What |

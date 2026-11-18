@@ -83,7 +83,7 @@ MAIL_DOMAIN = (os.environ.get("MAIL_DOMAIN") or "local.test").strip().lower() or
 def served_domains():
     """Every domain this deployment SERVES: MAIL_DOMAIN, plus whatever `MAIL_DOMAINS` adds.
 
-    A company address on the company's OWN domain (person3@example.com, whose MX is this same
+    A company address on the company's OWN domain (hello@digital-office.co.il, whose MX is this same
     machine) is a profile at a domain that is not MAIL_DOMAIN. The old rule — "the address is
     DERIVED, never declared, because a profile at another domain would be a black hole" — was right
     about the danger and wrong about the fact: it is a hole only when nothing points its MX here.

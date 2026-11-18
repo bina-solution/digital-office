@@ -105,7 +105,7 @@ func missingHostDevices(repo, aid string) ([]string, error) {
 	if !appDirID.MatchString(aid) {
 		return nil, nil
 	}
-	for _, root := range []string{"platform-base", "apps"} {
+	for _, root := range []string{"platform-base", "apps", "instances"} {
 		p := filepath.Join(repo, root, aid, "app.json")
 		if !isRegular(p) {
 			continue

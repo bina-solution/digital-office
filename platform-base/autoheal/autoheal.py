@@ -429,7 +429,7 @@ def revive_cycle(project, st):
 # ── the overdue one-off (DGO-1231) ───────────────────────────────────────────────────────────────
 # A container somebody ran BY HAND (`docker run`, not compose) that declares no restart is a one-off
 # job. One that is still running long after any job should have ended is a leak, and nothing else in
-# the office ever looks at it. Measured on The Examplef Guys' server, 2026-11-02: a WebGL probe run
+# the office ever looks at it. Measured on Example shop' server, 2026-11-02: a WebGL probe run
 # under `timeout 150 docker run …` ran 8 hours at a full core (its PID 1, python3, ignores the
 # SIGTERM `timeout` sends; there was no --init), and a `meet verify --call` box (`sleep infinity`)
 # had outlived its run by 93 hours. On a 2-vCPU server the provider then throttled the whole office
@@ -528,7 +528,7 @@ def overdue_cycle(project, st):
 # (IDLE_LABEL), and gives its address to the waker (app-management) while it is stopped, so opening it
 # starts it again. This stops it once its network has been quiet for that window: every IDLE_EVERY the
 # container's own counters (rx + tx, every interface) are read, and a look in which it moved less than
-# IDLE_BYTES is a quiet one. Measured on The Examplef Guys' CAD desktop, 2026-11-03: ~336 bytes a minute
+# IDLE_BYTES is a quiet one. Measured on Example shop' CAD desktop, 2026-11-03: ~336 bytes a minute
 # with nobody connected, megabytes a minute while a person has it open — its health probe runs on its own
 # loopback and is not counted. The clock starts at the first look (a restarted autoheal gives a full
 # window again), and a container whose counters went back (it was restarted) is in use. Only this
@@ -635,8 +635,8 @@ def idle_cycle(project, st):
 # ── files left in a RAM-backed /tmp (DGO-1271) ────────────────────────────────────────────────────
 # Where the machine's /tmp is a tmpfs (Debian 13 makes it one), every file hand-run work leaves there is
 # RAM — and swap, once memory runs short — until systemd-tmpfiles ages it out after 10 days. On The
-# Examplef Guys' server, 2026-11-02, 1,103 MB of it: four `meet verify` runs (689 MB of wav) and 164
-# copies of chimney-services from a deploy's preflight (276 MB, a dozen more each day), on a server whose
+# Example shop' server, 2026-11-02, 1,103 MB of it: four `meet verify` runs (689 MB of wav) and 164
+# copies of examplech-services from a deploy's preflight (276 MB, a dozen more each day), on a server whose
 # swap was full. Nothing saw it. This looks every TMP_EVERY at the machine's /tmp (mounted read-only at
 # HOST_TMP): when it is a tmpfs holding more than TMP_LIMIT, the owner is told ONCE per episode, with the
 # largest entries — names, sizes and ages, never contents — and the episode ends when it falls under 80%.
@@ -688,7 +688,7 @@ def _clean(name):
 
 def tmp_group(name):
     """The name a leftover is reported under: its words up to the first with a digit in it, the random or
-    dated tail of mktemp and of a run's stamp ("chimney-r2-4J0yHQ" → "chimney", "meet-verify-47ilv6ic" →
+    dated tail of mktemp and of a run's stamp ("examplech-r2-4J0yHQ" → "examplech", "meet-verify-47ilv6ic" →
     "meet-verify"). Many copies are one line, and a file's own name is said only when it has no tail."""
     words = re.split(r"[-_.]", _clean(name))
     kept = [w for w in itertools.takewhile(lambda w: not any(c.isdigit() for c in w), words[1:])]
@@ -1245,7 +1245,7 @@ def selftest():
           "breaker")
     check("a Docker timestamp is read as UTC", int(_ago("2026-11-02T16:16:50.123456789Z", 1793636210.0)), 0)
 
-    # The overdue one-off (DGO-1231), from The Examplef Guys' server on 2026-11-02.
+    # The overdue one-off (DGO-1231), from Example shop' server on 2026-11-02.
     od = lambda **k: decide_overdue(**{**dict(compose_made=False, policy="no", running_for=8 * 3600,  # noqa: E731
                                               labels={}, project="examplef", own_project="examplef",
                                               max_age=6 * 3600), **k})[0]
@@ -1270,7 +1270,7 @@ def selftest():
               od(labels={ONEOFF_AGE_LABEL: bad}, running_for=3600), "skip")
 
     print("\n=== on demand: an app that runs only while it is used (DGO-1270) ===")
-    # The CAD desktop on The Examplef Guys' server, 2026-11-03: ~336 bytes a minute with nobody
+    # The CAD desktop on Example shop' server, 2026-11-03: ~336 bytes a minute with nobody
     # connected (≈1.7 KB a 5-minute look), megabytes while a person has it open; a 2 h window.
     idl = lambda **k: decide_idle(**{**dict(window=7200, quiet_for=7300, moved=1700,  # noqa: E731
                                             threshold=64 * 1024), **k})[0]
@@ -1352,16 +1352,16 @@ def selftest():
           (mount_type("/host-tmp", info), mount_type("/var-tmp", info), mount_type("/nope", info)),
           ("tmpfs", "ext4", None))
     check("a leftover's group: mktemp and run-stamp tails dropped, a plain name kept",
-          [tmp_group(n) for n in ("chimney-r2-4J0yHQ", "meet-verify-47ilv6ic", "meet-verify-261030-0118",
+          [tmp_group(n) for n in ("examplech-r2-4J0yHQ", "meet-verify-47ilv6ic", "meet-verify-261030-0118",
                                   "chat81-r2f7oP", "exf-verify-shots", "r6meet", "bad\nname\udcff")],
-          ["chimney", "meet-verify", "meet-verify", "chat81", "exf-verify-shots", "r6meet", "badname�"])
+          ["examplech", "meet-verify", "meet-verify", "chat81", "exf-verify-shots", "r6meet", "badname�"])
     import tempfile
     import types
     told, g = [], globals()
     saved = (g["HOST_TMP"], g["mount_type"], g["notify"], g["TMP_LIMIT"], os.statvfs)
     with tempfile.TemporaryDirectory() as d:
         try:
-            for name in ("chimney-r2-4J0yHQ", "chimney-r2-cNAQ1S", "chimney-r2-ZcHTT1"):
+            for name in ("examplech-r2-4J0yHQ", "examplech-r2-cNAQ1S", "examplech-r2-ZcHTT1"):
                 os.makedirs(os.path.join(d, name))
                 with open(os.path.join(d, name, "app.py"), "wb") as f:
                     f.write(os.urandom(100_000))
@@ -1375,11 +1375,11 @@ def selftest():
             os.symlink("/etc", os.path.join(d, "a-link"))
             big, whole = largest_in(d, time.time())
             mb = {k: round(b / 2 ** 20, 1) for b, k, _c, _a in big}
-            check("groups: three chimney copies are one line, a hard link counted once, a sparse file by "
+            check("groups: three examplech copies are one line, a hard link counted once, a sparse file by "
                   "the space it holds, a link never followed",
-                  (whole, [k for _b, k, _c, _a in big][:2], {k: c for _b, k, c, _a in big}["chimney"],
+                  (whole, [k for _b, k, _c, _a in big][:2], {k: c for _b, k, c, _a in big}["examplech"],
                    mb["meet-verify"] < 0.6, mb["sparse"] < 1, mb.get("a-link", 0) < 0.01),
-                  (True, ["meet-verify", "chimney"], 3, True, True, True))
+                  (True, ["meet-verify", "examplech"], 3, True, True, True))
             g["HOST_TMP"], g["mount_type"], g["TMP_LIMIT"] = d, (lambda path, mountinfo=None: "tmpfs"), 512 * mib
             g["notify"] = lambda level, title, body, name, event_id: told.append((level, title, body))
             os.statvfs = lambda p: types.SimpleNamespace(f_blocks=1_000_000, f_bfree=1_000_000 - 1103 * 256,
@@ -1389,7 +1389,7 @@ def selftest():
             st["next"] = 0
             tmp_cycle(st)
             check("a 1,103 MB tmpfs /tmp -> one warning, its groups named, not two",
-                  (len(told), told[0][0] if told else None, "chimney* — 3 פריטים" in (told[0][2] if told else ""),
+                  (len(told), told[0][0] if told else None, "examplech* — 3 פריטים" in (told[0][2] if told else ""),
                    "1103 MB" in (told[0][1] if told else "")), (1, "warning", True, True))
         finally:
             g["HOST_TMP"], g["mount_type"], g["notify"], g["TMP_LIMIT"], os.statvfs = saved

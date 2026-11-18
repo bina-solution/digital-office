@@ -53,12 +53,52 @@ for i in "${!PASSTHRU[@]}"; do
     fi
   fi
 done
+# `comment <REF> @<file>`: the words after the ref ARE the comment (tasks.py `comment`), so a lone `@<file>`
+# there is read the same way. It was posted as its path instead, and a handoff never reached its item
+# (issues/tasks-comment-posts-a-positional-at-file-as-its-path.yaml). Only a LONE word after the ref, read
+# from the arguments as typed (a flag's value is never one): `@azaria please look` is words, as it always was.
+# A kept write replayed from the outbox is never refused here — one refusal would hold the whole queue.
+COMMENT_FILE=""                          # the one positional `@<file>` read here, which the hub path carries too
+if [ "${ARGS[0]:-}" = comment ]; then
+  POS=(); skip=""
+  for i in "${!ARGS[@]}"; do
+    [ "${i}" -ge 1 ] || continue
+    if [ -n "${skip}" ]; then skip=""; continue; fi
+    case "${ARGS[$i]}" in
+      --project|--assignee|--state|--comment|--as|--name|--priority) skip=1 ;;
+      --*) ;;
+      *) POS+=("${i}") ;;
+    esac
+  done
+  if [ "${#POS[@]}" = 2 ]; then          # the ref, and one word
+    i="${POS[1]}"; v="${ARGS[$i]}"
+    if [ "${v:0:1}" = "@" ] && [ "${#v}" -gt 1 ] && [ "${v#* }" = "${v}" ]; then
+      if [ -f "${v:1}" ]; then
+        [ "$(wc -c <"${v:1}")" -le 120000 ] || { say "${cr}[project-pln] comment ${v}: over 120 KB — split it${c0}"; exit 2; }
+        PASSTHRU[$i]="$(cat "${v:1}")"
+        COMMENT_FILE="${v:1}"
+      elif [ -z "${PLN_OUTBOX_REPLAY:-}" ]; then
+        say "${cr}[project-pln] comment ${v}: no such file${c0}"; exit 2
+      fi
+    fi
+  fi
+fi
 # `batch @<file.jsonl>`: the actions file, the same way — its text goes to the applier as the one argument
 # after the verb (one JSON object per line; tasks.py `batch`).
 if [ "${PASSTHRU[0]:-}" = batch ] && [ "${#PASSTHRU[@]}" -gt 1 ] && [ "${PASSTHRU[1]:0:1}" = "@" ]; then
   [ -f "${PASSTHRU[1]:1}" ] || { say "${cr}[project-pln] batch ${PASSTHRU[1]}: no such file${c0}"; exit 2; }
   # one argv entry is capped at 128 KiB by the kernel (MAX_ARG_STRLEN); Hebrew escaped in JSON is ~6 B a letter
   [ "$(wc -c <"${PASSTHRU[1]:1}")" -le 120000 ] || { say "${cr}[project-pln] batch ${PASSTHRU[1]}: over 120 KB — split it${c0}"; exit 2; }
+  # A line's `"comment": "@<file>"` is that file's text, read HERE: the applier runs in a container (or on
+  # the hub) where this machine's files are not. Resolved into a copy, so the hub is sent text, not a path.
+  BATCH_READ="$(python3 "$(npath "${APP_DIR}/batch_files.py")" "${PASSTHRU[1]:1}")" \
+    || { say "${cr}[project-pln] batch ${PASSTHRU[1]}: ${BATCH_READ:-the file of a comment could not be read}${c0}"; exit 2; }
+  if [ -n "${BATCH_READ}" ]; then
+    trap 'rm -f "${BATCH_READ}"' EXIT
+    [ "$(wc -c <"${BATCH_READ}")" -le 120000 ] || { say "${cr}[project-pln] batch ${PASSTHRU[1]}: over 120 KB with its comments' files — split it${c0}"; exit 2; }
+    ARGS[1]="@${BATCH_READ}"
+    PASSTHRU[1]="@${BATCH_READ}"
+  fi
   PASSTHRU[1]="$(cat "${PASSTHRU[1]:1}")"
 fi
 # `attach`: every file named must be one THIS bbox can read. On a Mac, bbox runs inside its engine, which
@@ -139,8 +179,14 @@ if [ -n "${PLN_HUB:-}" ]; then   # away from home: the same verb, run on the her
   if [ "${ARGS[0]:-}" = attach ]; then
     for f in "${ARGS[@]:2}"; do [ -f "${f}" ] && PUT+=(--put "${f}"); done
   fi
+  # `comment <REF> @<file>`: the one file read above travels as `--comment @` does — never another `@`-word,
+  # which is words here and must stay words there
+  [ -z "${COMMENT_FILE}" ] || PUT+=(--put "${COMMENT_FILE}")
   VIA_T=(); [ "${ARGS[0]:-}" = batch ] && VIA_T=(--timeout 600)   # a batch runs past via's default 300 s
-  exec "${REPO_ROOT}/bbox" via "${PLN_HUB}" ${VIA_T[@]+"${VIA_T[@]}"} ${PUT[@]+"${PUT[@]}"} project-pln tasks "${ARGS[@]}"
+  # not `exec` while a resolved batch copy is ours to remove (its EXIT trap)
+  [ -n "${BATCH_READ:-}" ] || exec "${REPO_ROOT}/bbox" via "${PLN_HUB}" ${VIA_T[@]+"${VIA_T[@]}"} ${PUT[@]+"${PUT[@]}"} project-pln tasks "${ARGS[@]}"
+  "${REPO_ROOT}/bbox" via "${PLN_HUB}" ${VIA_T[@]+"${VIA_T[@]}"} ${PUT[@]+"${PUT[@]}"} project-pln tasks "${ARGS[@]}"
+  exit $?
 fi
 # `attach`: its files are THIS machine's and the applier runs in the container. Each is streamed in
 # under a directory of this run and named to the applier by where it landed; removed afterwards.

@@ -41,7 +41,7 @@ import { workflow, node, links } from '@n8n-as-code/transformer';
     /*__n8n__*/ meta: null,
     /*__n8n__*/ pinData: {},
     /*__n8n__*/ staticData: null,
-    /*__n8n__*/ shared: [{"updatedAt":"2026-08-26T08:57:58.592Z","createdAt":"2026-08-26T08:57:58.592Z","role":"workflow:owner","workflowId":"DecideProbeTest01","projectId":"2xKn4WH08LyAOk2y","project":{"updatedAt":"2026-07-30T23:40:17.073Z","createdAt":"2026-07-30T23:33:30.049Z","id":"2xKn4WH08LyAOk2y","name":"Admin User <person2@example.com>","type":"personal","icon":null,"description":null,"creatorId":"544b7ec6-5907-4ee2-a94b-c5676e56835c"}}],
+    /*__n8n__*/ shared: [{"updatedAt":"2026-08-26T08:57:58.592Z","createdAt":"2026-08-26T08:57:58.592Z","role":"workflow:owner","workflowId":"DecideProbeTest01","projectId":"exampleProject02","project":{"updatedAt":"2026-07-30T23:40:17.073Z","createdAt":"2026-07-30T23:33:30.049Z","id":"exampleProject02","name":"Admin User <person2@example.com>","type":"personal","icon":null,"description":null,"creatorId":"544b7ec6-5907-4ee2-a94b-c5676e56835c"}}],
     id: 'DecideProbeTest01',
     name: 'DecideProbeTest01 — what would decide say (TEST ONLY, read-only)',
     active: true,
@@ -123,7 +123,7 @@ LIMIT $1::int;`,
   -- but __CFG() reads $('Companies') or an injected _cfg, and NEITHER router has a Companies
   -- node and nothing injects _cfg -- so __CFG() is {} on the decide path and _priorityActive was
   -- ALWAYS false. Measured 2026-08-21: action_priority_sync has 0 dispatches all-time, and the
-  -- 4,749 rows carrying PRIORITY_SYNC_COMPLETED were written by the v1 processors, not by this
+  -- N rows carrying PRIORITY_SYNC_COMPLETED were written by the v1 processors, not by this
   -- action. Flipping activePrioritySync would have sent the client nothing, silently.
   -- Carried on the row like __merge_enabled and __source_feedback_enabled, for the same reason.
          COALESCE((SELECT lower(value) = 'true' FROM indox_test.settings
@@ -143,12 +143,12 @@ LIMIT $1::int;`,
      doc-id is shared across 3+ companies rather than merge documents that only look alike. The
      DETECTOR did not know about it, and that asymmetry is a group with no terminal state: the
      driver raises it, the adjudicator refuses it, nothing is written, and it is raised again on
-     the next sweep. Five mains reached 146 action_merge_doubles dispatches this way.
+     the next sweep. Five mains reached many action_merge_doubles dispatches this way.
      Every one of the last 10 duplicate groups on the table was this and only this. The worst
      offender, DOC_ID 500000088, is a company registration number appearing under FIFTEEN
-     companies across 68 rows; another, 02-0000020, is a phone number under 5. They are not
+     companies across 68 rows; another, 02-0000018, is a phone number under 5. They are not
      duplicates -- they are different documents whose id was mis-extracted.
-     Table-wide: 49 such doc-ids, 258 rows.
+     Table-wide: a few such doc-ids.
      Quarantining at the KEY, not after grouping, is what gives them a terminal state: they simply
      stop being duplicates. A row still gets its hash or comp key, so a genuine duplicate hiding
      behind a bad doc-id is still caught by the tiers below -- this narrows the biz tier only.
@@ -254,7 +254,7 @@ LIMIT $1::int;`,
   --
   -- Computed HERE, in the one SQL pass that already runs per batch, and never in decide. Two
   -- reasons, both measured: SOURCE_LIST is now the FATTEST COLUMN ON THE TABLE (26 MB total,
-  -- avg 692 B, 1.37 MB per 2,000-row decide slice), and the last time a fat column was parsed
+  -- avg 692 B, 1.37 MB per N-row decide slice), and the last time a fat column was parsed
   -- per row in the decide path it was ACTION_LOG, which is exactly what the 2026-08-17 slimming
   -- removed. Decide gets two scalars instead: an index and an identity.
   --
@@ -264,7 +264,7 @@ LIMIT $1::int;`,
   -- two at once would let two executions upsert the same row concurrently, and the loser's
   -- SOURCE_LIST write would be clobbered; that source then re-decides, finds its own name
   -- already in ACTION_HISTORY with no restart between, and is parked as DOUBLE ACTION BLOCKED
-  -- forever. A document with three sources simply takes three sweeps. Only 1,025 of 39,160 rows
+  -- forever. A document with three sources simply takes three sweeps. Only N of N rows
   -- have more than one source, and the drain runs continuously.
   SELECT DISTINCT ON (b."ID") b."ID",
          (e.ord - 1)::int AS idx,
@@ -326,7 +326,7 @@ ORDER BY b."ID"`,
     @node({
         id: 'dp-hist',
         name: 'Get Action History',
-        /*__n8n__*/ notes: "[action history 2026-08-20, owner order] The newest 16 dispatches per document, from indox_test.indox_action_execution_log, as ACTION_HISTORY, each carrying the LINE_HASH the router stamped at dispatch time. This is what replaces reading the ACTION_LOG string: 'Dup Guard: Double Action' and decide's _log both key on it. DELIBERATELY ITS OWN NODE, not folded into 'Enrich Double Lines' -- that node answers 'is this row a duplicate DOCUMENT' (data quality, answered by a merge); this one answers 'what has this document already been DISPATCHED' (state-machine health). Same reason the two were renamed apart. Cost measured 2026-08-20: 33 ms for 2,000 documents (PK index, avg 8.4 rows/doc, p95 17, max 344). IDs are pipe-joined because n8n splits Query Parameters on commas. executeOnce: once for the batch, not once per row.",
+        /*__n8n__*/ notes: "[action history 2026-08-20, owner order] The newest 16 dispatches per document, from indox_test.indox_action_execution_log, as ACTION_HISTORY, each carrying the LINE_HASH the router stamped at dispatch time. This is what replaces reading the ACTION_LOG string: 'Dup Guard: Double Action' and decide's _log both key on it. DELIBERATELY ITS OWN NODE, not folded into 'Enrich Double Lines' -- that node answers 'is this row a duplicate DOCUMENT' (data quality, answered by a merge); this one answers 'what has this document already been DISPATCHED' (state-machine health). Same reason the two were renamed apart. Cost measured 2026-08-20: 33 ms for N documents (PK index, avg 8.4 rows/doc, p95 17, max 344). IDs are pipe-joined because n8n splits Query Parameters on commas. executeOnce: once for the batch, not once per row.",
         type: 'n8n-nodes-base.postgres',
         version: 2.6,
         position: [672, 0],
@@ -378,7 +378,7 @@ return rows.map(it => {
   const j = { ...it.json, ACTION_HISTORY: hist.get(String(it.json.ID)) || [], __instance: 'test' };
   // [source feedback 2026-08-21] SOURCE_LIST NEVER ENTERS THE DECIDE PAYLOAD.
   // Measured today it is the FATTEST COLUMN ON THE TABLE -- 26 MB total, avg 692 B/row,
-  // 1.37 MB per 2,000-row slice -- and it is pure ballast here: 'Enrich Double Lines' has
+  // 1.37 MB per N-row slice -- and it is pure ballast here: 'Enrich Double Lines' has
   // already reduced it to the two scalars decide actually needs (__feedback_idx and
   // __feedback_key). This is the same trade the 2026-08-17 slimming made for ACTION_LOG, and
   // it matters for the same reason: the worker aborts at Node's 2,600 MB V8 ceiling long

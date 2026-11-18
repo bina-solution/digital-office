@@ -49,7 +49,49 @@ def test_answered_no():
     assert not LATIN_WORD.search(clients._said(500, {}))
 
 
+def test_optional_absent_costs_nothing():
+    """An absent optional service costs the screen at most the deadline once, then nothing; an answer is never
+    remembered (DGO-1839: the overview waited 7.5 s on a social-list that was not there)."""
+    import time
+    clients._optional_failed.clear()
+    calls = []
+
+    def silent():
+        calls.append(1)
+        time.sleep(3)
+        return ["late"]
+
+    t = time.monotonic()
+    try:
+        clients.optional("t-silent", silent, deadline=0.3)
+        raise AssertionError("a silent service answered")
+    except clients.Unavailable as e:
+        assert str(e) == "לא ענה בזמן", str(e)
+    assert time.monotonic() - t < 1.0, "the screen paid more than the deadline"
+    t = time.monotonic()
+    try:
+        clients.optional("t-silent", silent, deadline=0.3)
+        raise AssertionError("a remembered failure answered")
+    except clients.Unavailable:
+        pass
+    assert time.monotonic() - t < 0.1 and len(calls) == 1, "a remembered failure is asked again"
+
+    def broken():
+        raise RuntimeError("socket.gaierror: Temporary failure in name resolution")
+    try:
+        clients.optional("t-broken", broken)
+        raise AssertionError("a broken read answered")
+    except clients.Unavailable as e:
+        assert not LATIN_WORD.search(str(e)), str(e)       # the reader's words, never the exception's
+
+    answers = iter([["a"], ["a", "b"]])
+    assert clients.optional("t-fresh", lambda: next(answers)) == ["a"]
+    assert clients.optional("t-fresh", lambda: next(answers)) == ["a", "b"], "an answer was remembered"
+    clients._optional_failed.clear()
+
+
 if __name__ == "__main__":
     test_no_answer()
     test_answered_no()
-    print("clients: 2/2 ok")
+    test_optional_absent_costs_nothing()
+    print("clients: 3/3 ok")

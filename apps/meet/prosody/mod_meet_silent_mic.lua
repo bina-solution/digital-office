@@ -71,7 +71,7 @@ local TICK = 5;
 local RING = (os.getenv("MEET_SILENT_MIC_RING") or "0") == "1";
 local REPEAT = tonumber(os.getenv("MEET_SILENT_MIC_REPEAT_SECONDS") or "") or 600;
 
-local SENDER = "פגישות וידאו";
+local SENDER = "פגישות לשכה";
 -- 3. heard, then silent
 local GONE = "⚠️ הקול שלך לא מגיע לפגישה — המיקרופון לא מושתק, אבל כבר %d שניות לא מגיע ממנו שום קול.";
 local GONE_RECORDED = "⚠️ הקול שלך לא מגיע לפגישה ולא להקלטה — המיקרופון לא מושתק, אבל כבר %d שניות לא מגיע ממנו שום קול.";

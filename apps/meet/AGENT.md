@@ -5,9 +5,11 @@ and right-to-left. A **room** is a name in a URL (`meet.<domain>/<room>`); the s
 meeting. A **host** is someone from the office, signed in; a **guest** is anyone with the link and
 waits until a host is in. The detail behind every line here: README.md.
 
-## How a meeting opens — every screen is Jitsi's own
-The tile (`meet-start` at `/a/meet/`) lands on Jitsi's welcome page; its card offers a new meeting as
-host (`/a/meet/new`) and the recordings (`/a/meet/recordings`). "I am the host" goes to
+## How a meeting opens
+The tile (`meet-start` at `/a/meet/`) is «פגישות» (`/flow/`) for a signed-in person: the edge's, the
+console's, or a LINKED office's console through the link's door, under the one username the door writes
+(`MEET_LINK_PEERS`, DGO-1895). Nobody signed in (or `MEET_HOME=jitsi`): Jitsi's welcome page, whose card
+offers `/a/meet/new` and `/a/meet/recordings`. «פגישה חדשה» opens `r/<room>` in a tab. "I am the host" goes to
 `TOKEN_AUTH_URL` = `console.<domain>/a/meet/r/{room}`. `new` and `r/<room>` mint a JWT (HS256,
 `MEET_JWT_SECRET`, iss `dgo`, aud `jitsi`, one room, 4 h) and redirect to `meet.<domain>/<room>?jwt=…`,
 Jitsi's pre-join page as moderator. The console frames apps with `allow="camera; microphone; …"`.
@@ -42,6 +44,9 @@ is off: all media goes through this bridge. Names and chat but no video = the me
 ## «קדימה» after a meeting
 The meeting's page stays «עיבוד ראשון» until `tools/flow/` writes its flow folder; tasks live only in
 Plane, questions only what blocks work. The six steps: README «קדימה after a meeting».
+`./bbox meet kadima <word> [--live]` first: the word is a meeting (room, prefix, title). A product the
+meeting decided is built in the same run to its `apps/<app>/product.json`; this door lists what is missing
+(ai/context/kadima-meeting-to-product.md).
 
 ## Doors
 - `./bbox meet new` — a room, the host's link (a signed-in person opening it is the host) and the

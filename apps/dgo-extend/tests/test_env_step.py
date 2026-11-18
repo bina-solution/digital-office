@@ -175,7 +175,7 @@ def main() -> int:
           f"a key listed twice gets one value on every line: {len(values)} line(s)")
 
     # EXF-33: an installed office moves to another domain, from exactly the one its .env names
-    old, new = "theexamplefguys.digital-office.co.il", "exf.digital-office.co.il"
+    old, new = "exampleshop.digital-office.co.il", "exf.digital-office.co.il"
     office_env = (f"DEPLOYMENT_DOMAIN={old}\nCONSOLE_BASE_URL=console.{old}\nAUTH_EXTERNAL_URL=auth.{old}\n"
                   f"PLANE_OWNER_EMAIL=owner@{old}\nN8N_BASE_URL=https://n8n.{old}/\n"
                   f"OTHER_SITE=x{old}\nSITE_URL=https://{old}.example.net/\nDB_PASSWORD=s3cr3t-{new}-like\n"
@@ -209,7 +209,7 @@ def main() -> int:
     facts, env5, _ = run(converge.ENV_MERGE, nested, mint="0", rename=("x.co.il", "staging.x.co.il"))
     check(not facts.get("RENAMED") and "console.staging.x.co.il\n" in env5,
           "a rename into a subdomain of the old name (or out of one) is not attempted")
-    composed = "COMPANY_SLUG=theexamplefguys\nDEPLOYMENT_DOMAIN=${COMPANY_SLUG}.digital-office.co.il\n" \
+    composed = "COMPANY_SLUG=exampleshop\nDEPLOYMENT_DOMAIN=${COMPANY_SLUG}.digital-office.co.il\n" \
                "MAIL_BASE_URL=mail.${DEPLOYMENT_DOMAIN}\n"
     facts, env4, _ = run(converge.ENV_MERGE, composed, mint="0", rename=(old, new))
     check(facts.get("DOMAIN") == new and f"DEPLOYMENT_DOMAIN={new}\n" in env4 and f"MAIL_BASE_URL=mail.{new}" in env4,

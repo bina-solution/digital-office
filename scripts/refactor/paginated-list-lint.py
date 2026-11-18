@@ -10,8 +10,8 @@ WHY THIS GATE EXISTS (a real outage, 2026-08-05):
 regardless of the `pageSize` asked for, so every folder larger than one page silently reported only
 its first page. No error, no warning, no log line — the rest of the folder simply looked absent.
 
-On the client's real archive that hid **43,326 of 78,651 documents** (the count went 35,325 ->
-78,651 the moment pagination was added). Folders that actually held 17,066 / 2,001 / 1,967 files all
+On the client's real archive that hid **N of N documents** (the count went N ->
+N the moment pagination was added). Folders that actually held N / N / N files all
 reported exactly 460. A sync built on that lister would have declared itself complete having moved
 the first 460 files of each folder.
 
@@ -194,7 +194,7 @@ def main():
         print("\n  A list call must either follow the provider's continuation token")
         print("  (nextPageToken / pageToken / cursor) or take an explicit limit the caller chose.")
         print("  An unbounded call that returns one page reports the rest of the data as ABSENT —")
-        print("  on 2026-08-05 that hid 43,326 of 78,651 documents with no error.")
+        print("  on 2026-08-05 that hid N of N documents with no error.")
         return 1
     print("G36 PASS — every provider list call paginates or is explicitly bounded.")
     return 0

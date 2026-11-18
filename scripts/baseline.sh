@@ -115,7 +115,7 @@ esac
 # SIGTERM, and the next start runs crash recovery that stalls on `the database system is starting up`.
 # Same reasoning as the API-floor check above: this is a FAILURE, not a warning — a baseline run on
 # such a host is a hundred red checks whose cause no message names. It is never fixed here: loading a
-# host profile is the owner's act, and neither `apparmor_restrict_unprivileged_unconfined=0` nor
+# host profile is an explicit verb (`./bbox apparmor install`, it gets root itself), and neither `apparmor_restrict_unprivileged_unconfined=0` nor
 # `apparmor=unconfined` is acceptable. `./bbox apparmor …` is where both halves live.
 # AA_PULL=1: a baseline run may fetch the tiny probe image, so a fresh host MEASURES rather than
 # saying "could not measure" (`bbox run` asks for it too, but with a 20 s cap).
@@ -125,7 +125,7 @@ aa_signal="$(printf '%s\n' "${aa_m}" | tr ' ' '\n' | sed -n 's/^signal=//p' | he
 aa_reason="$(printf '%s\n' "${aa_m}" | sed -n 's/.*reason=\([^ ]*\).*/\1/p' | head -1)"
 case "${aa_label:-unknown}:${aa_signal:-unknown}" in
   unconfined:ok)  crit "P0 apparmor-container-signals" warn "containers on this host run with NO AppArmor profile (apparmor=unconfined): everything works, and the host's hardening was traded away for it. That is a decision for this host, never a product default — ./bbox apparmor install is the way back to a real profile" ;;
-  stacked:denied) crit "P0 apparmor-container-signals" fail "this kernel STACKS the container's AppArmor label (docker-default//&unconfined) and DENIES signals between a container's own processes: every postgres-backed app will hang (gosu spins, autovacuum cancelled, docker stop is a kill) and the cause appears in no error. Install the profile that lifts it — the owner's act, it does not weaken the host: sudo ./bbox apparmor install (read it first: ./bbox apparmor status)" ;;
+  stacked:denied) crit "P0 apparmor-container-signals" fail "this kernel STACKS the container's AppArmor label (docker-default//&unconfined) and DENIES signals between a container's own processes: every postgres-backed app will hang (gosu spins, autovacuum cancelled, docker stop is a kill) and the cause appears in no error. Install the profile that lifts it (it does not weaken the host, and the verb gets root itself — sudo, or this host's own docker engine): ./bbox apparmor install (read it first: ./bbox apparmor status)" ;;
   *:ok)           crit "P0 apparmor-container-signals" pass "a container's processes can signal each other${aa_label:+ (label: ${aa_label})}" ;;
   *)              crit "P0 apparmor-container-signals" warn "could not measure the host's AppArmor${aa_reason:+ (${aa_reason})} — a stacked label would stop every database container; ./bbox apparmor status says it by hand, with the reason it gives." ;;
 esac

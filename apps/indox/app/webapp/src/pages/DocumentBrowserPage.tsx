@@ -755,7 +755,7 @@ function FieldEditModal({ n, cfg, onCancel, onConfirm }: {
    `D/M/YY` — which the month INDEX buckets correctly (it parses both shapes) and
    an ISO prefix cannot match at all. Measured 2026-08-11: the chip for
    אוקטובר 2026 advertised 38 documents and clicking it rendered 3, and 17,296 of
-   the table's 22,641 rows were countable but unopenable. A month you cannot open
+   the table's N rows were countable but unopenable. A month you cannot open
    is not month navigation. */
 
 const DATE_COL_CANDIDATES: { col: string; label: string }[] = [
@@ -1037,7 +1037,7 @@ export default function DocumentBrowserPage() {
     for (const [k, v] of Object.entries(drillFilters)) f[k] = v.value;
     // Column filters from the grid. In server mode the grid deliberately does NOT narrow `rows`
     // itself — the server owns filtering — so without this translation the popover would apply,
-    // show its chip, and change nothing: the operator would be looking at an unfiltered 6,203 rows
+    // show its chip, and change nothing: the operator would be looking at an unfiltered N rows
     // believing they had filtered. Every operator below is one the backend already implements
     // (core/models.py QueryOp; supabase_transport._encode_op), so no backend change is needed.
     for (const [k, v] of Object.entries(gridFilters)) {

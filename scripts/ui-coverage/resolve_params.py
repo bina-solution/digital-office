@@ -66,25 +66,25 @@ def _container(service: str) -> str:
     return f"{service}-{DN}"
 
 INDOX_DOCS = [
-    {"ID": "demo-inv-1001", "TYPE": "INVOICE", "SHORT_DOC_ID": "06146",
-     "COMPANY_DOC_ID": "SI256006146", "COMPANY_ID": "500000138",
-     "COMPANY_NAME": "סבח סוכנויות בע\"מ", "NAME": "חשבונית מס 06146",
+    {"ID": "demo-inv-1001", "TYPE": "INVOICE", "SHORT_DOC_ID": "00001",
+     "COMPANY_DOC_ID": "SI250000001", "COMPANY_ID": "500000047",
+     "COMPANY_NAME": "פלוני סוכנויות בע\"מ", "NAME": "חשבונית מס 00001",
      "DOC_DATE": "12/06/2026", "DOC_TOTAL_AMOUNT": "5400"},
-    {"ID": "demo-shp-5001", "TYPE": "SHIPMENT", "SHORT_DOC_ID": "05179",
-     "COMPANY_DOC_ID": "S0125005179", "COMPANY_ID": "500000161",
-     "COMPANY_NAME": "פוליראן תעשיות", "NAME": "תעודת משלוח 05179",
-     "DOC_DATE": "03/06/2026", "SHIPMENT_DOC_ID": "S0125005179"},
+    {"ID": "demo-shp-5001", "TYPE": "SHIPMENT", "SHORT_DOC_ID": "00009",
+     "COMPANY_DOC_ID": "S0125000009", "COMPANY_ID": "500000070",
+     "COMPANY_NAME": "ספק כף תעשיות", "NAME": "תעודת משלוח 00009",
+     "DOC_DATE": "03/06/2026", "SHIPMENT_DOC_ID": "S0125000009"},
     {"ID": "demo-ord-7001", "TYPE": "ORDER", "SHORT_DOC_ID": "10004",
-     "COMPANY_DOC_ID": "PO25010004", "COMPANY_ID": "500000062",
-     "COMPANY_NAME": "אגן שיווק", "NAME": "הזמנת רכש 10004",
+     "COMPANY_DOC_ID": "PO25010004", "COMPANY_ID": "500000013",
+     "COMPANY_NAME": "אלמוני שיווק", "NAME": "הזמנת רכש 10004",
      "DOC_DATE": "28/05/2026", "PURCHASE_ID": "PO25010004"},
-    {"ID": "demo-inv-1002", "TYPE": "INVOICE", "SHORT_DOC_ID": "00818",
-     "COMPANY_DOC_ID": "SI266000818", "COMPANY_ID": "500000393",
-     "COMPANY_NAME": "ישראל קרטון", "NAME": "חשבונית מס 00818",
+    {"ID": "demo-inv-1002", "TYPE": "INVOICE", "SHORT_DOC_ID": "00005",
+     "COMPANY_DOC_ID": "SI260000005", "COMPANY_ID": "500000302",
+     "COMPANY_NAME": "ספק יוד", "NAME": "חשבונית מס 00005",
      "DOC_DATE": "14/05/2026", "DOC_TOTAL_AMOUNT": "12800"},
-    {"ID": "demo-inv-1003", "TYPE": "INVOICE", "SHORT_DOC_ID": "01661",
-     "COMPANY_DOC_ID": "SI256001661", "COMPANY_ID": "500000401",
-     "COMPANY_NAME": "מ.ש. הדוגמה בע\"מ", "NAME": "חשבונית מס 01661",
+    {"ID": "demo-inv-1003", "TYPE": "INVOICE", "SHORT_DOC_ID": "00003",
+     "COMPANY_DOC_ID": "SI250000003", "COMPANY_ID": "500000278",
+     "COMPANY_NAME": "א.ב. הדוגמה בע\"מ", "NAME": "חשבונית מס 00003",
      "DOC_DATE": "22/04/2026", "DOC_TOTAL_AMOUNT": "3120"},
 ]
 
@@ -302,6 +302,33 @@ def domains(subs: dict) -> None:
         subs.setdefault("domains", {})["{domain}"] = str(row["domain"])
 
 
+def digital_assets_section(subs: dict) -> None:
+    """digital-assets: `/#/s/{section}` — the id that follows `/s/` in the app's own sections.
+
+    The value is the app's own data: `/api/overview` answers with the live `sections` map, and the app's own MENU
+    declares which sections have a `/s/<id>` address (its `media`/`gallery` are routes of their own, so `#/s/media`
+    would measure a screen the app does not have). The intersection is the value; with no app answering, nothing is
+    written and the route stays SKIPPED and honest. A top-level LITERAL, the same shape as `{hours}` (EXF's c5c1943).
+    """
+    code = ('import urllib.request,json;'
+            'd=json.loads(urllib.request.urlopen("http://127.0.0.1:8985/api/overview",timeout=20).read());'
+            'print(json.dumps(sorted((d.get("sections") or {}).keys())))')
+    out = pyrun("digital-assets", code, timeout=40)
+    try:
+        live = json.loads(out.splitlines()[-1]) if out else []
+    except Exception:
+        live = []
+    try:
+        src = (Path(__file__).resolve().parents[2] / "apps/digital-assets/static/app.js").read_text(
+            encoding="utf-8", errors="replace")
+        served = re.findall(r"path: '/s/([\w-]+)'", src)
+    except Exception:
+        served = []
+    pick = next((s for s in served if s in live), None)
+    if pick:
+        subs["{section}"] = pick
+
+
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--data", default="data/browser42")
@@ -336,8 +363,10 @@ def main() -> int:
     # [2026-10-13] any-concurrency's window is not a lookup — it is one of the app's own values
     # (`WINS`: 0.25 · 1 · 2 · 6 · 24 hours), so the placeholder is filled with a literal. Two hours is
     # a real window on any office; if WINS ever loses it, the view's own step (the app's window
-    # control) is what the capture runs.
-    subs["hours"] = "2"
+    # control) is what the capture runs. The key carries the BRACES (`{hours}`): the map writes placeholders as
+    # `{hours}` and both readers replace the key literally, so a bare `hours` key never matched anything and the window
+    # screen stayed SKIPPED (EXF's c5c1943, brought home; DGO-1839).
+    subs["{hours}"] = "2"
 
     # [2026-09-27] sites and domains joined the map. Their detail views are parameterised
     # (`#/s/{site}/<tab>`, `#/a/{account}/d/{domain}/<tab>`), so with no id every one of them is
@@ -346,6 +375,9 @@ def main() -> int:
     simple(subs, "sites", "sites", 8979, "/api/overview", "sites", "{site}",
            ("id", "sid", "label"))
     domains(subs)
+    # digital-assets' `#/s/{section}` had a placeholder nobody filled, so that screen was always SKIPPED — filled
+    # from the app's own sections (see the function)
+    digital_assets_section(subs)
 
     out = Path(a.data) / "ui-params.json"
     out.parent.mkdir(parents=True, exist_ok=True)

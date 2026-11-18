@@ -39,10 +39,10 @@ key, opened as a real interactive shell (`ssh -tt`, a pty on both ends).
 ```bash
 curl -s http://terminal:8080/api/machines | jq '.machines[] | {id,label,state}'
 curl -s -X POST http://terminal:8080/api/shell -H 'content-type: application/json' \
-     -d '{"machine":"computer_ssh-bacedbb6","cols":120,"rows":32}'
+     -d '{"machine":"computer_ssh-00000004","cols":120,"rows":32}'
 # → {session, output, cursor, alive}
 curl -s -X POST http://terminal:8080/api/shell/input -H 'content-type: application/json' \
-     -d '{"machine":"computer_ssh-bacedbb6","session":"<sid>","data":"uname -a\n","cursor":0}'
+     -d '{"machine":"computer_ssh-00000004","session":"<sid>","data":"uname -a\n","cursor":0}'
 curl -s "http://terminal:8080/api/shell/poll?machine=<cid>&session=<sid>&cursor=<n>"
 curl -s -X DELETE http://terminal:8080/api/shell/<cid>/<sid>
 ```

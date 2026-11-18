@@ -67,7 +67,7 @@ FLOOR = ROOT / "scripts" / "ci" / "node-coverage-floor.json"
 APP = os.environ.get("COVERAGE_APP", "indox")
 
 #: THE WINDOW IS EXECUTION-ID FENCES, and an execution id means nothing outside the instance it came
-#: from: vps1 held 1661500..1684897 on 2026-11-03 (17,683 executions) and the HP's range is its own.
+#: from: vps1 held 1661500..1684897 on 2026-11-03 (N executions) and the HP's range is its own.
 #: A literal id written here would therefore be right for exactly one office and silently wrong — or
 #: silently empty — on the next one, so there is no literal here.
 #:

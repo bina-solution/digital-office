@@ -3,7 +3,7 @@
 
 Adding a mailbox is one line in `postfix-accounts.cf`:
 
-    person94@example.com|{SHA512-CRYPT}$6$…
+    person79@example.com|{SHA512-CRYPT}$6$…
 
 and that is the whole of "a new person in this company gets an address" — no DNS, no certificate,
 no restart, because the company's domain records already exist (ai/context/mail-multi-tenant.md).
@@ -113,7 +113,7 @@ MAIL_DOMAIN = (os.environ.get("MAIL_DOMAIN") or "local.test").strip().lower()
 #
 # The guard used to be `dom != MAIL_DOMAIN` on the premise, written out in create_mailbox(), that
 # "MX points at this machine for exactly one domain". That premise is a property of the DEPLOYMENT,
-# not of the code: a company whose own address (person3@example.com) lists this machine as
+# not of the code: a company whose own address (hello@digital-office.co.il) lists this machine as
 # its MX has a second domain here, and refusing it produced exactly the failure the guard was
 # written to prevent — an address that exists at the provider and is a black hole in the world.
 # So the guard stays, and what it compares against is now declared: MAIL_DOMAIN is always served,

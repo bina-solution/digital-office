@@ -55,7 +55,7 @@ import { workflow, node, links } from '@n8n-as-code/transformer';
     /*__n8n__*/ meta: {"templateCredsSetupCompleted":true},
     /*__n8n__*/ pinData: {},
     /*__n8n__*/ staticData: null,
-    /*__n8n__*/ shared: [{"updatedAt":"2026-07-30T23:42:27.037Z","createdAt":"2026-07-30T23:42:27.037Z","role":"workflow:owner","workflowId":"indoxV2Decide01","projectId":"2xKn4WH08LyAOk2y","project":{"updatedAt":"2026-07-30T23:40:17.073Z","createdAt":"2026-07-30T23:33:30.049Z","id":"2xKn4WH08LyAOk2y","name":"Admin User <person2@example.com>","type":"personal","icon":null,"description":null,"creatorId":"544b7ec6-5907-4ee2-a94b-c5676e56835c"}}],
+    /*__n8n__*/ shared: [{"updatedAt":"2026-07-30T23:42:27.037Z","createdAt":"2026-07-30T23:42:27.037Z","role":"workflow:owner","workflowId":"indoxV2Decide01","projectId":"exampleProject02","project":{"updatedAt":"2026-07-30T23:40:17.073Z","createdAt":"2026-07-30T23:33:30.049Z","id":"exampleProject02","name":"Admin User <person2@example.com>","type":"personal","icon":null,"description":null,"creatorId":"544b7ec6-5907-4ee2-a94b-c5676e56835c"}}],
     id: 'indoxV2Decide01',
     name: 'indox-v2 Decide',
     active: true,
@@ -676,18 +676,18 @@ $execution.customData.set('timings', ('n=' + __batch.length
 // these keys onto them by ID (indoxV2Driver01 -> "Merge Verdicts").
 //
 // Why: under the old full-row contract the caller had to hold TWO copies of the set — the one
-// it sent and the one it got back. Measured on this table: 38,955 rows = 74MB on disk, ~1,983
+// it sent and the one it got back. Measured on this table: N rows = 74MB on disk, ~1,983
 // B/row, which inflates ~25-35x as JS objects, so each copy is 1.5-2GB. The caller died at the
 // Call Decide step at 2.5G, 3.25G, 4G AND 6G ceilings (six runs) while decide itself succeeded
 // every time in 47-88s. Returning ~5 short keys instead of ~110 columns removes the second copy.
 //
 // The list is DECISIONS only, and it is MEASURED, not guessed. A field-level diff of decide's
-// own input vs output over all 38,958 rows (execution 3398360) found 38 fields differing. 30 of
+// own input vs output over all its rows found 38 fields differing. 30 of
 // them differ by TYPE COERCION ONLY — Postgres returns the flags as the strings 'true'/'false'
 // and decide casts them to booleans. Verified transition census, e.g.:
-//     BASE_EXTRACTION_COMPLETED   'true' -> true (27,951)   'false' -> false (3,981)
+//     BASE_EXTRACTION_COMPLETED   'true' -> true (most)   'false' -> false (some)
 //     COMPANY_NAME_COMPLETED      'true' -> true (28,702)   'false' -> false (6,276)
-// ZERO false->true transitions in 38,958 rows: decide never DECIDES a *_COMPLETED flag, it only
+// ZERO false->true transitions in all its rows: decide never DECIDES a *_COMPLETED flag, it only
 // reads them as gates (see docBaseRouterDecide, the not-BASE_EXTRACTION_COMPLETED test). The caller
 // holds the same values already and the routers re-coerce when they act, so returning them is
 // ~30 columns/row of zero information.

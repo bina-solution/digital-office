@@ -108,7 +108,7 @@ export const sourceLabel = (v: unknown): string => label('SOURCE_TYPE', v);
  *  Returns EVERY status this module knows, not just the ones passed in. The caller supplies the
  *  *editable* list, which is necessarily narrower than what the pipeline can produce — and a
  *  value missing from it still has to RENDER, in Hebrew. Keying the labels off the editable list
- *  alone is exactly how `NEEDS_REVIEW` reached the screen as raw English on 3,131 documents. */
+ *  alone is exactly how `NEEDS_REVIEW` reached the screen as raw English on N documents. */
 export const statusLabels = (values: readonly string[]): Record<string, string> => ({
   ...(ENUM_WORDS.STATUS ?? {}),
   ...(ABSENT['STATUS:(ריק)'] ? { '(ריק)': ABSENT['STATUS:(ריק)'] } : {}),

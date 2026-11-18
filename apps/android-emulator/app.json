@@ -7,7 +7,7 @@
   "layer": 3,
   "kind": "service",
   "page": "base",
-  "version": "0.1.0",
+  "version": "0.2.2",
   "summary": {
     "he": "טלפון אנדרואיד מדומה בלשכה: רואים אותו ומפעילים אותו מהמסך, מתקינים עליו APK, והחום של המחשב שומר עליו",
     "en": "An Android phone emulated in the office: seen and used from its screen, APKs installed on it, kept cool by the machine's heat"
@@ -16,7 +16,7 @@
     {
       "name": "android-device",
       "type": "service",
-      "endpoint": "http://android-emulator:8080",
+      "interface": "android-device.v1",
       "required_ops": [
         "status",
         "start",
@@ -26,7 +26,9 @@
       ]
     }
   ],
-  "use": [],
+  "use": [
+    { "capability": "identity", "strength": "wants", "after": false, "dependency": "weak" }
+  ],
   "connections": [],
   "compose": "docker-compose.yml",
   "agent": {

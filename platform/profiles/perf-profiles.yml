@@ -459,8 +459,8 @@ wsl-10g:         # THIS laptop: 6 cores, but a 9.7 GiB WSL2 VM — added 2026-08
   # ── the contamination note, retained ────────────────────────────────────────────────────────
   # The 3.0 raise was argued from a declared sum of 29.1 GiB and an observed peak sum of 10363 MiB
   # (104% of physical). BOTH numbers were measured while two pathologies were running: a GlitchTip
-  # error loop at ~2,900 executions/hour, and apitools' documentJsonQuery taking 178-206 s with a
-  # 100% 504 rate (a 2,383-item company list causing 135,000+ fuzzy comparisons per document).
+  # error loop at ~N executions/hour, and apitools' documentJsonQuery taking 178-206 s with a
+  # 100% 504 rate (a N-item company list causing 135,000+ fuzzy comparisons per document).
   # With both fixed and this profile applied, the same measurements are:
   #     declared sum   29.1 -> 25.1 GiB   (apitools 8G -> 4G)
   #     observed peak  10363 -> 6624 MiB  = 66% of physical, G30b PASS

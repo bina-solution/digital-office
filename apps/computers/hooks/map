@@ -1,0 +1,13 @@
+#!/usr/bin/env bash
+#: map — the whole network as it is now: every office, the machine it runs on, the link to it, what runs there and whether it takes dgo-stable — read live, never from a file of the repository (DGO-1960)
+#
+#   ./bbox computers map           # the page
+#   ./bbox computers map --json    # the same, as data
+#
+# It only reads, and reads exactly what `herd` reads — this office through its own engine, each linked office through
+# its door (its machine app), and the links as dgo-extend measures them — but answers with what IS, not with how it
+# differs from apps/computers/herd.yaml. Exit 0 when it read, 2 when it cannot.
+set -uo pipefail
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+case "${1:-}" in -h|--help) sed -n 's/^#: //p; s/^#   //p' "${BASH_SOURCE[0]}"; exit 0 ;; esac
+exec bash "${SCRIPT_DIR}/herd" --map "$@"

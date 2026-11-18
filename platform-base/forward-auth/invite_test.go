@@ -47,7 +47,7 @@ func mint(t *testing.T, iv *invites, line string, now time.Time) (string, int) {
 func TestAnInvitationKeepsOnlyItsHashAndThePersonChoosesTheirPassword(t *testing.T) {
 	s, iv, usersFile := inviteOffice(t)
 	before, _ := os.ReadFile(usersFile)
-	code, rc := mint(t, iv, "tamar tamar@example.com תמר", time.Now())
+	code, rc := mint(t, iv, "galit galit@example.com רות", time.Now())
 	if rc != 0 || len(code) < 32 {
 		t.Fatalf("-invite = %d, code %q; want 0 and a code of 32+ characters", rc, code)
 	}
@@ -79,7 +79,7 @@ func TestAnInvitationKeepsOnlyItsHashAndThePersonChoosesTheirPassword(t *testing
 		}
 	}
 	w := get("/invite?code=" + url.QueryEscape(code))
-	if !strings.Contains(w.Body.String(), `name="password"`) || !strings.Contains(w.Body.String(), "תמר") {
+	if !strings.Contains(w.Body.String(), `name="password"`) || !strings.Contains(w.Body.String(), "רות") {
 		t.Fatal("the right code does not show the form with the person's name")
 	}
 	if w.Header().Get("Referrer-Policy") != "no-referrer" || w.Header().Get("X-Frame-Options") != "DENY" {
@@ -112,7 +112,7 @@ func TestAnInvitationKeepsOnlyItsHashAndThePersonChoosesTheirPassword(t *testing
 	who.AddCookie(cookie)
 	ww := httptest.NewRecorder()
 	s.routes().ServeHTTP(ww, who)
-	if !strings.Contains(ww.Body.String(), `"username":"tamar"`) {
+	if !strings.Contains(ww.Body.String(), `"username":"galit"`) {
 		t.Fatalf("the cookie an invitation sets must name the invited person: /whoami = %d %s", ww.Code, ww.Body.String())
 	}
 	after, _ := os.ReadFile(usersFile)
@@ -123,11 +123,11 @@ func TestAnInvitationKeepsOnlyItsHashAndThePersonChoosesTheirPassword(t *testing
 	if err != nil {
 		t.Fatalf("the users file does not load after an invitation: %v", err)
 	}
-	u, ok := st.byName["tamar"]
-	if !ok || u.Email != "tamar@example.com" || u.Display != "תמר" || strings.Join(u.Groups, ",") != peopleGroup {
-		t.Fatalf("the invited person's line: %+v, want tamar, her email and display, and the group people (DGO-1755)", u)
+	u, ok := st.byName["galit"]
+	if !ok || u.Email != "galit@example.com" || u.Display != "רות" || strings.Join(u.Groups, ",") != peopleGroup {
+		t.Fatalf("the invited person's line: %+v, want galit, her email and display, and the group people (DGO-1755)", u)
 	}
-	if _, ok := st.verify("tamar", pw); !ok {
+	if _, ok := st.verify("galit", pw); !ok {
 		t.Fatal("the invited person cannot sign in with the password they chose")
 	}
 	if _, ok := st.verify("owner", testPassword); !ok {
@@ -153,14 +153,14 @@ func TestMintingRefusesWhatWouldBreakTheUsersFile(t *testing.T) {
 	now := time.Now()
 	for _, line := range []string{
 		"owner owner2@example.com",        // already a user
-		"Tamar Cohen tamar@example.com",   // a two-word name reads as a name and an «email» with no @
-		"tamar not-an-email",              // no @
-		"tamar ta\x1bmar@example.com",     // a control character would reach the header and --list
-		"tamar tamar@example.com\x00",     // …and so would a NUL
-		"tamar tamar@example.com תמר כהן", // a display of two words splits the users-file line
-		"tamar tamar@example.com תמר כהן", // a no-break space is a space to strings.Fields
+		"Galit Cohen galit@example.com",   // a two-word name reads as a name and an «email» with no @
+		"galit not-an-email",              // no @
+		"galit ga\x1blit@example.com",     // a control character would reach the header and --list
+		"galit galit@example.com\x00",     // …and so would a NUL
+		"galit galit@example.com רות כהן", // a display of two words splits the users-file line
+		"galit galit@example.com רות כהן", // a no-break space is a space to strings.Fields
 		"",                                // nothing
-		"t/amar tamar@example.com",        // not a user name
+		"g/alit galit@example.com",        // not a user name
 	} {
 		if code, rc := mint(t, iv, line, now); rc == 0 {
 			t.Fatalf("-invite %q = 0 (code %q); want a refusal", line, code)
@@ -171,7 +171,7 @@ func TestMintingRefusesWhatWouldBreakTheUsersFile(t *testing.T) {
 	}
 	// no owner yet: the first-run link comes first
 	noOwner := &invites{path: filepath.Join(t.TempDir(), "invites"), usersFile: filepath.Join(t.TempDir(), "users")}
-	if _, rc := mint(t, noOwner, "tamar tamar@example.com", now); rc == 0 {
+	if _, rc := mint(t, noOwner, "galit galit@example.com", now); rc == 0 {
 		t.Fatal("an office with no owner minted an invitation")
 	}
 }
@@ -179,15 +179,15 @@ func TestMintingRefusesWhatWouldBreakTheUsersFile(t *testing.T) {
 func TestAnInvitationExpiresAndANewOneReplacesTheOld(t *testing.T) {
 	s, iv, _ := inviteOffice(t)
 	past := time.Now().Add(-inviteTTL - time.Minute)
-	old, rc := mint(t, iv, "yossi yossi@example.com יוסי", past)
+	old, rc := mint(t, iv, "moshe moshe@example.com משה", past)
 	if rc != 0 {
 		t.Fatal("minting failed")
 	}
 	if _, ok := iv.find(old, time.Now()); ok {
 		t.Fatal("an invitation older than its TTL still opens")
 	}
-	first, _ := mint(t, iv, "yossi yossi@example.com יוסי", time.Now())
-	second, _ := mint(t, iv, "yossi yossi@example.com יוסי", time.Now())
+	first, _ := mint(t, iv, "moshe moshe@example.com משה", time.Now())
+	second, _ := mint(t, iv, "moshe moshe@example.com משה", time.Now())
 	if _, ok := iv.find(first, time.Now()); ok {
 		t.Fatal("a second invitation for the same person must replace the first")
 	}
@@ -195,15 +195,15 @@ func TestAnInvitationExpiresAndANewOneReplacesTheOld(t *testing.T) {
 		t.Fatal("the newest invitation does not open")
 	}
 	if list, _ := iv.read(); len(list) != 1 {
-		t.Fatalf("want one live invitation for yossi, have %d", len(list))
+		t.Fatalf("want one live invitation for moshe, have %d", len(list))
 	}
 	var out bytes.Buffer
-	if rc := listInvites(iv, &out, time.Now()); rc != 0 || !strings.HasPrefix(out.String(), "yossi yossi@example.com יוסי ") ||
+	if rc := listInvites(iv, &out, time.Now()); rc != 0 || !strings.HasPrefix(out.String(), "moshe moshe@example.com משה ") ||
 		strings.Contains(out.String(), second) {
-		t.Fatalf("-invites = %d %q; want yossi's line and never a code", rc, out.String())
+		t.Fatalf("-invites = %d %q; want moshe's line and never a code", rc, out.String())
 	}
 	out.Reset()
-	if rc := revokeInvite(iv, strings.NewReader("yossi\n"), &out, time.Now()); rc != 0 || strings.TrimSpace(out.String()) != "revoked" {
+	if rc := revokeInvite(iv, strings.NewReader("moshe\n"), &out, time.Now()); rc != 0 || strings.TrimSpace(out.String()) != "revoked" {
 		t.Fatalf("-revoke-invite = %d %q", rc, out.String())
 	}
 	w := httptest.NewRecorder()
@@ -240,11 +240,11 @@ func TestWrongInvitationCodesAreLimitedPerAddress(t *testing.T) {
 
 func TestAnInvitationNeverOverwritesAUserAddedSinceItWasMade(t *testing.T) {
 	s, iv, usersFile := inviteOffice(t)
-	code, _ := mint(t, iv, "tamar tamar@example.com תמר", time.Now())
+	code, _ := mint(t, iv, "galit galit@example.com רות", time.Now())
 	// someone with the same name became a user after the invitation was made (a restore, a second link)
 	hash, _ := hashPassword(testPassword)
 	f, _ := os.OpenFile(usersFile, os.O_APPEND|os.O_WRONLY, 0o600)
-	_, _ = f.WriteString("tamar other@example.com אחרת 9 - " + hash + "\n")
+	_, _ = f.WriteString("galit other@example.com אחרת 9 - " + hash + "\n")
 	f.Close()
 	before, _ := os.ReadFile(usersFile)
 	const pw = "a passphrase long enough"
@@ -272,12 +272,12 @@ func TestAcceptRechecksUnderTheLock(t *testing.T) {
 	if _, err := iv.accept("no-such-code", line("ghost"), now); err != errInviteGone {
 		t.Fatalf("accept of a code that is not there = %v, want errInviteGone", err)
 	}
-	code, _ := mint(t, iv, "tamar tamar@example.com תמר", now)
-	if _, err := iv.accept(code, line("tamar"), now); err != nil {
+	code, _ := mint(t, iv, "galit galit@example.com רות", now)
+	if _, err := iv.accept(code, line("galit"), now); err != nil {
 		t.Fatalf("the first accept: %v", err)
 	}
 	before, _ := os.ReadFile(usersFile)
-	if _, err := iv.accept(code, line("tamar"), now); err != errInviteGone {
+	if _, err := iv.accept(code, line("galit"), now); err != errInviteGone {
 		t.Fatalf("a second accept of the same code = %v, want errInviteGone (no second line)", err)
 	}
 	if after, _ := os.ReadFile(usersFile); !bytes.Equal(before, after) {
@@ -285,18 +285,18 @@ func TestAcceptRechecksUnderTheLock(t *testing.T) {
 	}
 
 	// the half state: the person is a user and the invitation is still listed (its spend was cut)
-	code2, _ := mint(t, iv, "yossi yossi@example.com יוסי", now)
+	code2, _ := mint(t, iv, "moshe moshe@example.com משה", now)
 	f, _ := os.OpenFile(usersFile, os.O_APPEND|os.O_WRONLY, 0o600)
-	_, _ = f.WriteString(line("yossi") + "\n")
+	_, _ = f.WriteString(line("moshe") + "\n")
 	f.Close()
-	if _, err := iv.accept(code2, line("yossi"), now); err != errInviteGone {
+	if _, err := iv.accept(code2, line("moshe"), now); err != errInviteGone {
 		t.Fatalf("accept for a person who is already a user = %v, want errInviteGone", err)
 	}
 	if _, ok := iv.find(code2, now); ok {
 		t.Fatal("the half-spent invitation is still live after its next use")
 	}
 	if st, err := loadUsers(usersFile); err != nil || len(st.byName) != 3 {
-		t.Fatalf("the users file after the half state: %v, %d users (want owner, tamar, yossi)", err, len(st.byName))
+		t.Fatalf("the users file after the half state: %v, %d users (want owner, galit, moshe)", err, len(st.byName))
 	}
 }
 

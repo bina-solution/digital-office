@@ -368,6 +368,20 @@ def cmd_rename(c: Client, a) -> int:
     out(f"{sid}: {r['title']}"); return 0
 
 
+def cmd_archive(c: Client, a) -> int:
+    """`archive` / `unarchive` (DGO-1250): the harness's own archive, and what it holds afterwards. An adapter
+    from before this verb answers «no route» (404) by name."""
+    sid = sid_of(c, a.id)
+    verb = "unarchive" if a.unarchive else "archive"
+    r = c.call("POST", f"/v1/sessions/{sid}/{verb}", {})
+    ok = bool(r.get("archived")) != bool(a.unarchive)   # the end state the verb asked for
+    if getattr(a, "json", False):
+        out(json.dumps(r, ensure_ascii=False))
+    else:
+        out(f"{sid}: {'archived' if r.get('archived') else 'not archived'} ({len(r.get('archived_ids') or [])} in the archive)")
+    return 0 if ok else 1
+
+
 def cmd_fork(c: Client, a) -> int:
     sid = sid_of(c, a.id)
     r = c.call("POST", f"/v1/sessions/{sid}/fork", {"at_seq": a.at_seq} if a.at_seq is not None else {})
@@ -744,6 +758,10 @@ def build_parser() -> argparse.ArgumentParser:
     p = sub.add_parser("wait", help="block until the running turn ends, print the answer"); sid(p); p.add_argument("--for", dest="wait_for", type=float, default=3600, help="give up after S seconds (default 3600)"); p.set_defaults(fn=cmd_wait)
     p = sub.add_parser("cancel", aliases=["stop"], help="interrupt the running turn"); sid(p); p.set_defaults(fn=cmd_cancel)
     p = sub.add_parser("rename", help="set the title"); sid(p); p.add_argument("title", nargs="+"); p.set_defaults(fn=cmd_rename)
+    p = sub.add_parser("archive", help="move it to the harness's archive (idempotent; `unarchive` brings it back)")
+    sid(p); p.set_defaults(fn=cmd_archive, unarchive=False)
+    p = sub.add_parser("unarchive", help="bring it back from the archive")
+    sid(p); p.set_defaults(fn=cmd_archive, unarchive=True)
     p = sub.add_parser("fork", help="fork a session"); sid(p); p.add_argument("--at-seq", type=int, default=None); p.set_defaults(fn=cmd_fork)
     p = sub.add_parser("cmd", aliases=["slash"], help="run a slash command in a session"); sid(p); p.add_argument("-f", "--file", action="append", default=[]); p.add_argument("line", nargs="+"); p.set_defaults(fn=cmd_cmd)
     p = sub.add_parser("commands", help="the slash commands a session offers"); sid(p); p.set_defaults(fn=cmd_commands)

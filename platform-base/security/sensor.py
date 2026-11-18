@@ -9,7 +9,7 @@ What it watches
                 which port — the outbound map, and inbound that never touches the edge (SSH, mail,
                 the link's UDP).
   names         the DNS answers the machine receives and the server name of every TLS connection it
-                opens — so an address on the map reads `api.github.com`, not `93.184.216.30`. A kernel
+                opens — so an address on the map reads `api.github.com`, not `93.184.216.24`. A kernel
                 filter (netparse.BPF_DNS_SNI) hands it those packets and nothing else.
   sign-ins      the machine's sshd, from its journal (accepted keys by fingerprint, failures).
   facts         interfaces, routes, the gateway, every listening socket, the router behind the
@@ -219,6 +219,30 @@ def vol_elements(doc: dict) -> dict:
     return out
 
 
+#: nft KILLED by a signal — a crash, not a refusal — stops every nft call until its back-off ends: the image's nft
+#: cannot read what this machine's nft wrote (DGO-1358), and each crash costs the host a crash report and a core
+#: dump. On the MacBook's engine (nft 1.0.9, this image's 1.0.6) it was one every 2.2 s, 7,240 by 15:48Z
+#: 2026-11-11, and the desk stood unanswered for six minutes. 5 min, doubling to an hour; a success resets it.
+NFT_CRASH = {"until": 0.0, "wait": 0.0, "said": ""}
+
+
+def nft_run(args: list, **kw):
+    """`nft <args>` → its CompletedProcess, or None while a crash's back-off lasts (NFT_CRASH["said"] says why)."""
+    now = time.time()
+    if now < NFT_CRASH["until"]:
+        return None
+    r = subprocess.run(["nft", *args], **kw)
+    if r.returncode < 0:
+        NFT_CRASH["wait"] = min(3600.0, max(300.0, NFT_CRASH["wait"] * 2))
+        NFT_CRASH["until"] = now + NFT_CRASH["wait"]
+        NFT_CRASH["said"] = (f"nft crashed (signal {-r.returncode}): this image's nft cannot read this machine's "
+                             f"ruleset (DGO-1358) — not asked again for {int(NFT_CRASH['wait'] // 60)} min")
+        log(NFT_CRASH["said"])
+    elif r.returncode == 0:
+        NFT_CRASH["wait"] = 0.0
+    return r
+
+
 class Volume:
     """Reads the counters and hands on what grew since the last reading. The last reading is kept on
     disk: the sets outlive this process, so after a restart a delta counted from zero would report every
@@ -237,9 +261,12 @@ class Volume:
         if self.ok and now - self.applied < 600:
             return
         try:
-            r = subprocess.run(["nft", "-f", "-"], input=vol_script().encode(), capture_output=True, timeout=20)
+            r = nft_run(["-f", "-"], input=vol_script().encode(), capture_output=True, timeout=20)
         except (OSError, subprocess.TimeoutExpired) as e:
             self.ok, self.error = False, f"{type(e).__name__}: {e}"[:300]
+            return
+        if r is None or r.returncode < 0:
+            self.ok, self.error = False, NFT_CRASH["said"]
             return
         if r.returncode != 0:
             self.ok, self.error = False, r.stderr.decode(errors="replace").strip()[:300]
@@ -250,7 +277,10 @@ class Volume:
         readings = {}
         for name in VOL_SETS:
             try:
-                r = subprocess.run(["nft", "-j", "list", "set", "inet", "dgo_security", name], capture_output=True, timeout=10)
+                r = nft_run(["-j", "list", "set", "inet", "dgo_security", name], capture_output=True, timeout=10)
+                if r is None or r.returncode < 0:
+                    return []                         # no reading at all: the last one stays, or every counter
+                                                      # would come back as new growth after the back-off
                 readings[name] = vol_elements(json.loads(r.stdout or b"{}"))
             except (OSError, ValueError, subprocess.TimeoutExpired):
                 continue
@@ -293,9 +323,12 @@ class Nft:
         if h == self.applied_hash and now - self.last_apply < 60:
             return
         try:
-            r = subprocess.run(["nft", "-f", "-"], input=script.encode(), capture_output=True, timeout=20)
+            r = nft_run(["-f", "-"], input=script.encode(), capture_output=True, timeout=20)
         except (OSError, subprocess.TimeoutExpired) as e:
             self.ok, self.error = False, f"{type(e).__name__}: {e}"
+            return
+        if r is None or r.returncode < 0:
+            self.ok, self.error = False, NFT_CRASH["said"]
             return
         if r.returncode != 0:
             self.ok, self.error = False, r.stderr.decode(errors="replace").strip()[:400]
@@ -312,7 +345,9 @@ class Nft:
     def counters(self) -> dict:
         out = {}
         try:
-            r = subprocess.run(["nft", "-j", "list", "table", "inet", "dgo_security"], capture_output=True, timeout=10)
+            r = nft_run(["-j", "list", "table", "inet", "dgo_security"], capture_output=True, timeout=10)
+            if r is None or r.returncode < 0:
+                return out
             doc = json.loads(r.stdout or b"{}")
         except (OSError, ValueError, subprocess.TimeoutExpired):
             return out
@@ -753,16 +788,15 @@ def closed_door_drops() -> "tuple[str, int | None]":
     be asked), so the screen never mistakes a failed read for a missing fence (DGO-1646). Measured on
     Exampleu: 3,127 packets between the boot at 02:45 and 16:20 UTC."""
     try:
-        out = subprocess.run(["nft", "list", "tables"], capture_output=True, text=True, timeout=5)
-        if out.returncode != 0:
+        out = nft_run(["list", "tables"], capture_output=True, text=True, timeout=5)
+        if out is None or out.returncode != 0:
             return "error", None
         if not re.search(r"^table inet dgo_host$", out.stdout, re.M):
             return "absent", None
-        out = subprocess.run(["nft", "list", "chain", "inet", "dgo_host", "input"],
-                             capture_output=True, text=True, timeout=5)
+        out = nft_run(["list", "chain", "inet", "dgo_host", "input"], capture_output=True, text=True, timeout=5)
     except (OSError, subprocess.SubprocessError):
         return "error", None
-    if out.returncode != 0:
+    if out is None or out.returncode != 0:
         return "error", None
     found = re.findall(r"counter packets (\d+) bytes \d+ drop", out.stdout)
     return "present", (sum(int(x) for x in found) if found else 0)
@@ -816,7 +850,7 @@ def _local(tag: str) -> str:
 
 
 def upnp(ip: str) -> dict | None:
-    msg = ("M-SEARCH * HTTP/1.1\r\nHOST: 93.184.216.31:1900\r\nMAN: \"ssdp:discover\"\r\nMX: 1\r\n"
+    msg = ("M-SEARCH * HTTP/1.1\r\nHOST: 93.184.216.25:1900\r\nMAN: \"ssdp:discover\"\r\nMX: 1\r\n"
            "ST: urn:schemas-upnp-org:device:InternetGatewayDevice:1\r\n\r\n").encode()
     s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     s.settimeout(2.5)

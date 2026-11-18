@@ -42,7 +42,11 @@ import serve  # noqa: E402  (must come after REPO/sys.path, and it imports nothi
 # rather than by reading 25 manifests.
 BASE = REPO / "platform-base"
 APPS = REPO / "apps"
-CATALOG_ROOTS = {BASE: (1, 2), APPS: (3,)}
+# instances/ holds an app's further copies (DGO-1920): each folder GENERATED from platform.state.yaml
+# `app_instances:` and its template app by platform/manager/instances.py, never edited, never committed.
+# An instance has its template's layer, so this root takes every layer.
+INSTANCES = REPO / "instances"
+CATALOG_ROOTS = {BASE: (1, 2), APPS: (3,), INSTANCES: (1, 2, 3)}
 STATE = REPO / "platform.state.yaml"
 # What a fresh install starts from. The office's own file is written at runtime and belongs to the
 # deployment (like `.env` beside `.env.ex`); this one is tracked and never written by anything but a
@@ -91,7 +95,7 @@ MAX_BRIEF_BYTES = 6000
 #     -> COMPANY_SLUG          example
 #        -> DEPLOYMENT_NAME    example                        -> n8n-example, mailserver-example, …
 #        -> DEPLOYMENT_DOMAIN  example.digital-office.co.il   -> console.example…, n8n.example…, …
-#        -> MAIL_DOMAIN        = DEPLOYMENT_DOMAIN            -> person183@example.com
+#        -> MAIL_DOMAIN        = DEPLOYMENT_DOMAIN            -> person93@example.com
 #        -> MAIL_DKIM_SELECTOR example
 #        -> GLITCHTIP_ORG_SLUG example
 #
@@ -592,7 +596,7 @@ def missing_host_devices(aid):
     refusal. A manifest that cannot be read declares nothing here; validate() says why elsewhere."""
     if not isinstance(aid, str) or not APP_DIR_ID.fullmatch(aid):
         return []
-    for root in ("platform-base", "apps"):
+    for root in ("platform-base", "apps", "instances"):
         path = REPO / root / aid / "app.json"
         if not path.is_file():
             continue
@@ -924,6 +928,28 @@ def set_remote(block):
 
 
 # ── load ──────────────────────────────────────────────────────────────────────
+def sync_instances():
+    """instances/ := platform.state.yaml `app_instances:` — an app's further copies (DGO-1920), each folder
+    generated from its row and its template app by instances.py. Run by `render` before it reads the catalog,
+    so a compile always reads the instances the state declares (a template's rename of a service reaches
+    them). Says nothing unless an instance is refused, which leaves that one out and the office compiling.
+    An office with neither the block nor the folder never imports it."""
+    try:
+        declared = re.search(r"(?m)^app_instances:", STATE.read_text(encoding="utf-8"))
+    except OSError:
+        declared = None
+    if not declared and not INSTANCES.is_dir():
+        return
+    sys.modules.setdefault("reconcile", sys.modules[__name__])   # one module, one state lock, as __main__ too
+    try:
+        import instances
+        _, errs = instances.sync(quiet=True)
+    except Exception as e:                      # noqa: BLE001 — never the reason an office does not compile
+        errs = [f"(all): instances/ was not synced ({type(e).__name__}: {e}) — the render reads it as it is"]
+    for e in errs:
+        print(f"  REFUSED  instance {e}", file=sys.stderr)
+
+
 def load_catalog():
     cat = {}
     for root, layers in CATALOG_ROOTS.items():
@@ -1398,6 +1424,24 @@ def resolve(cat, state, roots=None):
                 want.add(chosen); frontier.append(chosen)
                 diags.append(("info", f"{chosen}: pulled in as provider of '{cap}' for {aid}"))
 
+    # A SERVER OFFICE'S PORT-80 ANSWER IS NOT AN OPTION (DGO-1595). platform-base/https-redirect's own
+    # brief says it IS the answer on port 80 of a public office, and that is a property of the EDGE,
+    # not a choice an office has to remember to declare: measured 2026-11-09, after the app shipped and
+    # nothing enabled it, vps1 (a server office, DEPLOYMENT_DOMAIN with a dot and no resolver override)
+    # still served its apps in cleartext — `http://meet.staging…/` answered 200 — and its zz-https.yaml
+    # carried only the hsts middleware. So the compiler pulls it in for a server office, exactly the
+    # way it pulls a capability's provider in, and `HTTPS_REDIRECT=off` in `.env` stays the owner's
+    # deliberate closing (an office whose ACME cannot issue, or a name in front of something else).
+    # NOT for a `roots` lane: `--for indox` is a question about the graph, and a lane brings up what
+    # the graph says, not the edge's own answer. The Go twin is packaging/dgo resolve.go, in the same
+    # words. This block was lost once, in a take of 2026-11-11 (cb33a827e), and Examplex's and Exampleu's
+    # offices, installed by `bbox run`, answered port 80 with no redirect; test_resolve.py now holds
+    # it (DGO-1984).
+    if not roots and server_office() and "https-redirect" in cat and "https-redirect" not in want \
+            and (_envfile_value("HTTPS_REDIRECT") or "").strip().lower() != "off":
+        want.add("https-redirect")
+        diags.append(("info", "https-redirect: pulled in as the port-80 answer of a server office"))
+
     # CONFLICTS. `conflicts` was in STRENGTHS but nothing ever read it, so declaring one did
     # nothing. Debian splits this in two and the distinction is the useful part:
     #   Breaks    -> the other must be DECONFIGURED (here: disabled; data kept)
@@ -1784,6 +1828,30 @@ def ceiling_warnings(cat, order):
                 out.append(f"warning: {aid}/{svc}: a memory limit of {effective} ({setby} in .env) is "
                            f"{size * 100 // total}% of this machine's {tenths // 10}.{tenths % 10} GiB — more "
                            f"than {HOST_SHARE_PCT}% for one service")
+    return out
+
+
+def forever_warnings(cat, order):
+    """The warnings of an .env value that an app DECLARES holds its resources for ever (app.json resources.forever,
+    DGO-1848), every enabled app in order: `{"env": NAME, "starts_with": text, "why": words, "unless": NAME}` — said
+    when this machine's .env sets NAME to a value that starts with that text, unless the .env sets `unless` to 1 (a
+    machine that is there for that app). The Dell's .env kept a model loaded for ever and froze the machine for two
+    hours; the app's own README advised it. Declared by the app, so no app is named here. A literal prefix, not a
+    pattern: the Go twin reads it exactly alike. A declaration of another shape says nothing (validate refuses it)."""
+    out = []
+    for aid in order:
+        for f in (cat[aid].get("resources") or {}).get("forever") or []:
+            if not isinstance(f, dict) or not isinstance(f.get("env"), str) or not isinstance(f.get("starts_with"), str):
+                continue
+            val = _envfile_value(f["env"])
+            if not val or not f["starts_with"] or not val.startswith(f["starts_with"]):
+                continue
+            unless = f.get("unless") if isinstance(f.get("unless"), str) else ""
+            if unless and (_envfile_value(unless) or "").strip() == "1":
+                continue
+            why = f.get("why") if isinstance(f.get("why"), str) and f.get("why") else "it is held for ever"
+            out.append(f"warning: {aid}: .env sets {f['env']}={val} — {why}"
+                       + (f" (a machine that is there for it says so: {unless}=1)" if unless else ""))
     return out
 
 
@@ -2410,7 +2478,10 @@ def routing_labels(app_id, r, framed="", admins=False):
             # `--configFile` plus `--entrypoints.websecure.address` in the command started the edge
             # with a random listener port). `hsts` is defined in the generated file, so the name always
             # resolves — a router whose middleware does not exist is dropped whole.
-            mids = mids + ["hsts@file"]
+            # FIRST in the chain: a middleware that answers by itself (the sign-in's 302, a redirect)
+            # ends the chain there, so an hsts after it never ran and a signed-out visitor was never
+            # pinned (measured on vps1 2026-11-17: console and n8n 302 without the header).
+            mids = ["hsts@file"] + mids
         if mids:
             # authentik@file, NOT a bare `authentik`. The middleware is defined in traefik's FILE
             # provider (platform-base/traefik/config/authentik-forwardauth.yaml), and a bare name on
@@ -2475,7 +2546,7 @@ def routing_labels(app_id, r, framed="", admins=False):
             L.append(f"{p}.service={svc}")
             mids = chain(list(sub.get("middlewares") or []))
             if tls and server_office():
-                mids = mids + ["hsts@file"]
+                mids = ["hsts@file"] + mids             # first, as in router() above
             if mids:
                 L.append(f"{p}.middlewares={','.join(mids)}")
 
@@ -3060,7 +3131,7 @@ def render(cat, order, state):
     render_vault(cat, order)
     render_host_devices(cat)
     render_authentik(cat, order, served)
-    for line in ceiling_warnings(cat, order):
+    for line in ceiling_warnings(cat, order) + forever_warnings(cat, order):
         print(line, file=sys.stderr)
 
     write(GEN / "resolved.json", json.dumps({
@@ -3840,6 +3911,8 @@ def main():
             print(p)
         return 0
 
+    if a.verb == "render":
+        sync_instances()                          # instances/ before the catalog that reads it (DGO-1920)
     cat, state = load_catalog(), load_state()
     errs, provided = validate(cat)
     errs = language_errors(state) + errs          # the state's one value validate() does not read

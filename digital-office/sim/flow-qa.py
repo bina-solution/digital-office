@@ -706,13 +706,20 @@ def mail_flows(pg, errs):
         gap = w.evaluate('e => { const r = e.getBoundingClientRect(); return [Math.round(r.left), Math.round(innerWidth - r.right), innerWidth]; }')
         check("mail/the compose sheet is the screen's width on a phone, and inset from the reading side on a wider screen",
               gap[:2] == [0, 0] if gap[2] <= 640 else gap[1] == 24, gap)
-        w.locator('[data-to]').fill('person119@example.com')
+        w.locator('[data-to]').fill('person85@example.com')
         w.locator('[data-subj]').fill('בדיקת QA — הודעה חדשה')
         w.locator('[data-body]').fill('גוף ההודעה לבדיקה.')
-        w.locator('.mlc-send').click(); pg.wait_for_timeout(1200)
-        view('sent', 1400)
-        check('mail/sent message appears in נשלח',
-              'בדיקת QA' in fl.locator('#msgTable').inner_text())
+        if target_url().startswith('http'):
+            # a live office's own mailbox: «שליחה» would send a real message from it (a client's, on a client's
+            # office) — the window is checked and closed, never sent (DGO-1839)
+            check('mail/compose takes an address, a subject and a body (not sent: a live office)',
+                  w.locator('[data-subj]').input_value().startswith('בדיקת QA'))
+            pg.keyboard.press('Escape'); pg.wait_for_timeout(500)
+        else:
+            w.locator('.mlc-send').click(); pg.wait_for_timeout(1200)
+            view('sent', 1400)
+            check('mail/sent message appears in נשלח',
+                  'בדיקת QA' in fl.locator('#msgTable').inner_text())
     else:
         check('mail/compose window opens', False, 'compose button not found')
 
@@ -723,6 +730,14 @@ def mail_flows(pg, errs):
     box.fill('חשמל'); box.press('Enter'); pg.wait_for_timeout(1600)
     check('mail/search', fl.locator('.gm-row').count() > 10, fl.locator('.gm-row').count())
 
+    # A LIVE OFFICE IS NOT A SCRATCH ONE (as the console's «disable» below): the settings flows rename the office's
+    # PROCESSED rule, save it, delete it and save again, and the account switch moves the office's active account.
+    # Pressed in the simulation only; on a live office they are said, not done (EXF's 712f562 found it on its own
+    # live lane; DGO-1839).
+    if target_url().startswith('http'):
+        check('mail/settings and the account switch · saves are pressed in the simulation only (a live office here)',
+              True, 'not pressed: ' + target_url())
+        return
     mail_settings_flows(pg, fl, view)
 
     # account switch swaps the mailbox
@@ -764,7 +779,7 @@ def mail_settings_flows(pg, fl, view):
     # last messages and counts the ones it could not read. No line pressed it, and the mock refuses nothing: when
     # that count was worded (round 27) the page's `one()` stood under a local of the same name — the worker that
     # tries one message — and ONE unreadable message asked the trial of a number, which failed and asked again:
-    # 7,568 rows and as many requests in twelve seconds, «[object Promise]» for a summary, no «עצירה» left to press.
+    # N rows and as many requests in twelve seconds, «[object Promise]» for a summary, no «עצירה» left to press.
     # The first message the trial asks for is refused here (in the page only), and the trial is left to end.
     fl.locator('body').evaluate("""() => { const f0 = window.fetch.bind(window); let asked = 0;
       window.fetch = (u, o) => String(u).includes('api/message/') && !asked++
@@ -1652,7 +1667,7 @@ FIND_BY_TYPING = """() => {
 # frame are stood in for, so nothing is fetched from a host that does not exist here.
 OWN_HOST = """async () => {
   const from = {office: 'macbook', label: {he: 'MacBook'}};
-  const own = {id: 'bina.macbook', name: 'בינה ודעת', icon: 'bot', group: 'ראשי', external: true,
+  const own = {id: 'bina.macbook', name: 'עזריה', icon: 'bot', group: 'ראשי', external: true,
                host: 'bina.macbook', embed: '/a/bina/', signed_in: '/.dgo/signed-in', enter: '/.dgo/enter', remote: from};
   const door = {id: 'drive.macbook', name: 'דרייב', icon: 'folder', group: 'עסק', external: true,
                 host: 'drive.macbook', embed: '/a/drive/', proxy: '/a/drive.macbook/', remote: from};
@@ -2209,7 +2224,7 @@ def layout_flows(pg, errs):
             continue
         # 17 — the instance chip in the console's top bar is THIS screen's, or there is none. The simulation's
         #      switcher mounts a chip there from each of the four apps that have instances, and left it standing
-        #      on the next tile: «מכונה» was read under INDOX's «סבח סוכנויות». (Its own overlay: not asked of a
+        #      on the next tile: «מכונה» was read under INDOX's «פלוני סוכנויות». (Its own overlay: not asked of a
         #      running office, whose screens keep their accounts inside themselves.)
         if not target_url().startswith('http') and m not in WITH_INSTANCES:
             chip = pg.evaluate("() => { const c = document.querySelector('.dosw-top'); return c ? c.innerText.replace(/\\s+/g, ' ').trim().slice(0, 40) : null; }")

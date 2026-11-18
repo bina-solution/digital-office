@@ -34,8 +34,17 @@ def _vol_short(rel):
 def build_plan(man, live):
     """Pure. Two dicts in, one plan out - no docker, no network, so it is directly testable."""
     arts = man.get("artifacts") or {}
-    live_vols = live.get("volumes") or []
-    live_short = {v.get("short"): v for v in live_vols if v.get("short")}
+    # this office's volumes only: another project's on the same engine is neither overwritten nor «not in this
+    # archive» (the inventory lists every volume on the engine since DGO-1510, each with `ours`)
+    live_vols = [v for v in live.get("volumes") or [] if v.get("ours", True)]
+    proj = live.get("project") or ""
+
+    def restores_into(v):
+        """A restore writes `<project>_<short>` (_untar_volume): only that volume is overwritten by `short`. A volume
+        of this project by its label and not by that name (a compose `name:`) never is (the second reader)."""
+        return not proj or not v.get("name") or v["name"] == f"{proj}_{v.get('short')}"
+
+    live_short = {v.get("short"): v for v in live_vols if v.get("short") and restores_into(v)}
 
     overwrite, create, handled, binds, secrets, app_backups = [], [], [], [], [], []
     declarations = []
@@ -71,7 +80,7 @@ def build_plan(man, live):
     in_archive = {_vol_short(r) for r in arts if r.startswith(VOL_PREFIX)}
     target_only = [{"volume": v.get("short"), "size": v.get("size"), "bytes": v.get("bytes") or 0,
                     "coverage": v.get("coverage"), "used_by": v.get("used_by")}
-                   for v in live_vols if v.get("short") not in in_archive]
+                   for v in live_vols if not restores_into(v) or v.get("short") not in in_archive]
     target_only.sort(key=lambda r: -(r["bytes"] or 0))
 
     same_deployment = bool(man.get("deployment_name")

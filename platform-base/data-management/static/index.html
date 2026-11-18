@@ -29,6 +29,10 @@
   color-scheme:light;
   accent-color:var(--accent);   /* the browser's OWN controls - a checkbox, a radio, a range, a progress bar - on both grounds: said once, here (it was said for eight single controls, and every other one was the browser's blue) */
   --bg:#f3f5f7; --surface:#fff; --surface-2:#f9fafb; --ink:#1f2a17; --muted:#6a7068; --line:#dcdfde;
+  /* THE OFFICE'S LOGO HAS THESE THREE COLOURS AND NO OTHER, on every ground and in every theme (the owner, 2026-11-15,
+     group msgs 1103-1104: «From now on this is the only colors you use in logo replace evrywhere and never use diffrent
+     colors» - the logo of digital-office.co.il; DGO-1908). The dark blocks below do not redefine them on purpose. */
+  --mark-tile:#1b5e4a; --mark-glyph:#fbfcfc; --mark-accent:#7ecfad;
   --olive:#56693f; --olive-d:#475734; --olive-soft:#e7eae4; --olive-line:#bfc6b6; --olive-ink:#f3f5f7;
   --sky:#7baae3; --sky-d:#2a6fc4; --sky-soft:#edf3fb; --sky-line:#cddff4; --sky-ink:#13263f;
   --lime:#a9b84c; --lime-d:#69732e; --lime-soft:#f3f5e6; --lime-line:#dee4bb; --lime-ink:#1f2a17;
@@ -2239,6 +2243,7 @@ function showRoute(place, replace) {
 function goTo(place) {
   var n = nodeOf(place);
   if (!n) return;
+  asked = place;                       // the address named it — see heldNow()
   if (place === 'raw' && 'open' in n) n.open = true;
   if (n.scrollIntoView) n.scrollIntoView({ block: 'start' });
   var nav = typeof BinaNav !== 'undefined' && BinaNav.forId('data-management');
@@ -2257,10 +2262,25 @@ function sectionNow() {
   return at;
 }
 var queued = false;
+/* A place the ADDRESS asked for holds the address while its own section is still on screen. The two
+   last sections cannot pass the reading line — the page runs out of scroll before they do — so
+   `sectionNow()` would hand their address back to the section above them during the scroll the load
+   itself starts, and a deep link to `/unclaimed` or `/archives` would open at `/byapp`. Released as
+   soon as that section is off screen, so reading on still moves the address (EXF's c5c1943, brought
+   home; DGO-1839). */
+var asked = '';
+function heldNow() {
+  if (!asked) return '';
+  var n = nodeOf(asked);
+  if (!n || (asked === 'raw' && 'open' in n && !n.open)) { asked = ''; return ''; }
+  var r = n.getBoundingClientRect(), h = window.innerHeight || 0;
+  if (r.bottom <= 0 || r.top >= h) { asked = ''; return ''; }
+  return asked;
+}
 function writeFromScreen() {
   if (queued) return;
   queued = true;
-  var done = function () { queued = false; showRoute(sectionNow(), true); };
+  var done = function () { queued = false; showRoute(heldNow() || sectionNow(), true); };
   if (typeof requestAnimationFrame === 'function') requestAnimationFrame(done); else done();
 }
 window.addEventListener('scroll', writeFromScreen, { passive: true });
@@ -2272,7 +2292,7 @@ document.addEventListener('click', function (ev) {
   var row = ev.target && ev.target.closest && ev.target.closest('#sideNav .bnv-item[data-bnv-id]');
   if (!row) return;
   var place = placeOf(String(row.getAttribute('data-bnv-id') || '').replace(/^sec-/, ''));
-  if (place) showRoute(place, false);
+  if (place) { asked = place; showRoute(place, false); }
 });
 var rawView = nodeOf('raw');
 if (rawView) rawView.addEventListener('toggle', function () { showRoute(rawView.open ? 'raw' : sectionNow(), true); });

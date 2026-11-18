@@ -152,6 +152,11 @@ def promise(rec: dict, what: str, hours: float = 24.0, at: str = "") -> dict:
         raise ValueError("promise: what was promised, in the words it was said")
     stamp = at or now()
     due = datetime.datetime.fromtimestamp(parse_at(stamp) + hours * 3600, datetime.timezone.utc)
+    # The newest promise is what the answerer owes now: an earlier open one is superseded, not kept — still in the
+    # ledger as said, but no longer swept as overdue (a measured step and its next step, DGO-1878 msg 748)
+    for p in rec.get("promises") or []:
+        if not p.get("kept"):
+            p["superseded"] = stamp
     rec.setdefault("promises", []).append({"what": what[:300], "at": stamp,
                                            "due": due.strftime("%Y-%m-%dT%H:%M:%SZ"), "kept": False})
     return rec
@@ -185,14 +190,16 @@ def overdue(rec: dict, t: float) -> list:
     """The promises of an OPEN record that are past due — a finished record owes nothing more."""
     if rec.get("state") not in OPEN:
         return []
-    return [p for p in rec.get("promises") or [] if not p.get("kept") and parse_at(p.get("due")) <= t]
+    return [p for p in rec.get("promises") or []
+            if not p.get("kept") and not p.get("superseded") and parse_at(p.get("due")) <= t]
 
 
 def carried(rec: dict, t: float) -> list:
     """The promises of an open record still in force — someone is on it until their due time."""
     if rec.get("state") not in OPEN:
         return []
-    return [p for p in rec.get("promises") or [] if not p.get("kept") and parse_at(p.get("due")) > t]
+    return [p for p in rec.get("promises") or []
+            if not p.get("kept") and not p.get("superseded") and parse_at(p.get("due")) > t]
 
 
 def open_requests(records: list, t: float, stale_s: float = 1800.0) -> list:

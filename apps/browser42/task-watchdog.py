@@ -9,6 +9,7 @@ tab would hold a lane up to MAX_TABS) and the owner is told so; the browser itse
 
 import json
 import os
+import shutil
 import time
 from contextlib import contextmanager
 from pathlib import Path
@@ -26,6 +27,17 @@ TOTAL_SECONDS = int(os.environ.get("BROWSER42_TASK_TOTAL_SECONDS", "1800"))
 # silently for 19 minutes because allocated was only governed by TOTAL_SECONDS).
 ALLOCATED_STALL_SECONDS = int(os.environ.get("BROWSER42_TASK_ALLOCATED_STALL_SECONDS", "240"))
 ACTIVE = {"allocated", "active", "verifying"}
+# RETENTION (DGO-1921). Task records and the MCP's output were written and never removed: on 2026-11-17
+# the HP held 889 task directories (151 MB, back to 2026-10-06) and every console log the MCP ever
+# wrote, and this sweep read all 889 every 5 s. A task nobody drives keeps its evidence for
+# TASK_KEEP_DAYS after its last write, an MCP output file for OUTPUT_KEEP_DAYS; 0 keeps them forever.
+# This is the one process that already reads every task, so it prunes them, once an hour.
+OUTPUT = DATA / "output"
+PRUNED = DATA / ".pruned"            # tombstones, beside tasks/ and not in it: no glob of tasks/ sees them
+TASK_KEEP_DAYS = int(os.environ.get("BROWSER42_TASK_KEEP_DAYS", "14"))
+OUTPUT_KEEP_DAYS = int(os.environ.get("BROWSER42_OUTPUT_KEEP_DAYS", "7"))
+PRUNE_EVERY_SECONDS = 3600
+PRUNE_LIMIT = 200
 # any-concurrency span ingest + broker, so a stalled task's tab lane is closed and its
 # group is released (R1/R3). Best-effort only — monitoring must never break the sweep.
 BROKER = os.environ.get("BROKER", "ws://browser42-browser:8765")
@@ -195,8 +207,63 @@ def sweep(current=None) -> list[str]:
     return stalled
 
 
+def prune(current=None, limit: int = PRUNE_LIMIT) -> dict:
+    """Remove task directories nobody drives and MCP output files past their keep (RETENTION above).
+
+    A task directory is first moved to a tombstone under PRUNED and then deleted, so a delete cut short
+    never leaves a half directory in tasks/ (where the reaper and the next pass would read it), and its
+    slug is free at once; the next pass finishes what is left there. Dot-entries are never pruned
+    (`output/.gitkeep` is the checkout's), and one pass removes at most `limit` entries so a backlog
+    cannot hold up the stall sweep."""
+    current = time.time() if current is None else current
+    removed = {"tasks": 0, "output": 0}
+    if PRUNED.is_dir():
+        for tombstone in PRUNED.iterdir():
+            shutil.rmtree(tombstone, ignore_errors=True)
+    if TASK_KEEP_DAYS > 0:
+        cutoff = current - TASK_KEEP_DAYS * 86400
+        for path in TASKS.glob("*/task.json"):
+            if removed["tasks"] >= limit:
+                break
+            try:
+                if path.stat().st_mtime > cutoff:
+                    continue
+                if json.loads(path.read_text(encoding="utf-8")).get("state") in ACTIVE:
+                    continue
+                PRUNED.mkdir(exist_ok=True)
+                tombstone = PRUNED / f"{path.parent.name}-{int(current)}"
+                path.parent.rename(tombstone)
+                shutil.rmtree(tombstone, ignore_errors=True)
+                removed["tasks"] += 1
+            except (OSError, ValueError):
+                continue
+    if OUTPUT_KEEP_DAYS > 0 and OUTPUT.is_dir():
+        cutoff = current - OUTPUT_KEEP_DAYS * 86400
+        for entry in OUTPUT.iterdir():
+            if removed["output"] >= limit:
+                break
+            try:
+                if entry.name.startswith(".") or entry.lstat().st_mtime > cutoff:
+                    continue
+                if entry.is_dir() and not entry.is_symlink():
+                    shutil.rmtree(entry)
+                else:
+                    entry.unlink()
+                removed["output"] += 1
+            except OSError:
+                continue
+    return removed
+
+
 if __name__ == "__main__":
+    pruned_at = 0.0
     while True:
         for slug in sweep():
             print(f"task stalled: {slug}", flush=True)
+        if time.time() - pruned_at >= PRUNE_EVERY_SECONDS:
+            pruned_at = time.time()
+            removed = prune()
+            if removed["tasks"] or removed["output"]:
+                print(f"pruned {removed['tasks']} task(s) older than {TASK_KEEP_DAYS} d and "
+                      f"{removed['output']} MCP output(s) older than {OUTPUT_KEEP_DAYS} d", flush=True)
         time.sleep(INTERVAL)

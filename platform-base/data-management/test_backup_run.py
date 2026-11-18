@@ -284,6 +284,65 @@ class Decisions(unittest.TestCase):
         self.assertEqual(opened, [], "a token was opened for an export that failed")
         self.assertEqual(list((SHARED / ".restic-staging").iterdir()), [], "staging left behind")
 
+    def test_the_runs_result_names_what_the_export_left_out(self):
+        # DGO-1510: «every run's report and manifest name the unclaimed volumes with their size». The archiver's
+        # manifest names them; the run's result (what is kept and shown) carries the same list, or says the
+        # listing failed. The helper is faked here: what is tested is what the run makes of the export.
+        def export_naming(man_extra):
+            def export(staging, log):
+                (staging / "a").write_bytes(b"x")
+                (staging / "manifest.json").write_text(json.dumps({"artifacts": ["a"], **man_extra}))
+            return export
+
+        summary = json.dumps({"message_type": "summary", "snapshot_id": "cd" * 32, "total_files_processed": 1,
+                              "total_bytes_processed": 1, "data_added": 1})
+        real_run = BR.subprocess.run
+
+        def helper(argv, *a, **kw):
+            if argv[:2] == ["docker", "run"]:
+                return subprocess.CompletedProcess(argv, 0, stdout=summary + "\n", stderr="")
+            return real_run(argv, *a, **kw)
+
+        named = {"undeclared_volumes": [{"name": "exf-release", "project": None, "ours": False, "size": "33MB"},
+                                        {"name": "exampleu_old", "project": "exampleu", "ours": True, "size": None}],
+                 "anonymous_volumes": 2}
+        failed = {"undeclared_volumes_error": "TimeoutExpired: docker volume ls"}
+        BR.subprocess.run = helper
+        try:
+            lines: list[str] = []
+            r = BR.run("herd-run", OFFICE, SHARED, SHARED / "state-left-out", export_naming(named), lines.append)
+            self.assertEqual(r["not_carried"], {"volumes": [{"name": "exf-release", "project": None, "size": "33MB"},
+                                                            {"name": "exampleu_old", "project": "exampleu", "size": None}],
+                                                "anonymous": 2})
+            self.assertEqual(BR.last(SHARED / "state-left-out", "herd-run")["not_carried"], r["not_carried"])
+            self.assertTrue(any("exf-release (33MB)" in s and "exampleu_old (size unknown)" in s and "2 anonymous" in s
+                                for s in lines), lines)
+            BR.MIN_INTERVAL, saved = 0, BR.MIN_INTERVAL
+            try:
+                r = BR.run("herd-run", OFFICE, SHARED, SHARED / "state-left-out", export_naming(failed), lines.append)
+            finally:
+                BR.MIN_INTERVAL = saved
+            self.assertEqual(r["not_carried"], {"volumes": None, "anonymous": None,
+                                                "error": "TimeoutExpired: docker volume ls"})
+            self.assertTrue(any("UNKNOWN" in s for s in lines), lines)
+        finally:
+            BR.subprocess.run = real_run
+
+    def test_a_manifest_that_says_nothing_of_the_listing_is_unknown_never_nothing_left_out(self):
+        # an older archiver, an app-scoped export, a manifest that is not what it should be: UNKNOWN, and never the
+        # run's end — the list is a report (the second reader)
+        d = pathlib.Path(tempfile.mkdtemp(prefix="left-out-"))
+        for body in (json.dumps({"artifacts": []}), json.dumps(["not", "a", "dict"]),
+                     json.dumps({"undeclared_volumes": [1, 2]}), json.dumps({"undeclared_volumes": None}), "{torn"):
+            (d / "manifest.json").write_text(body)
+            out = BR.left_out(d)
+            self.assertEqual((out["volumes"], out["anonymous"]), (None, None), body)
+            self.assertTrue(out["error"], body)
+        (d / "manifest.json").unlink()
+        self.assertIsNone(BR.left_out(d)["volumes"])
+        (d / "manifest.json").write_text(json.dumps({"undeclared_volumes": [], "anonymous_volumes": 0}))
+        self.assertEqual(BR.left_out(d), {"volumes": [], "anonymous": 0})
+
     def test_runs_keep_their_interval_across_a_restart(self):
         state = SHARED / "state-interval"
         BR._mark_started(state, "herd-run")               # kept in the volume: a restarted service reads it

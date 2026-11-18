@@ -33,7 +33,7 @@ import { workflow, node, links } from '@n8n-as-code/transformer';
     /*__n8n__*/ meta: null,
     /*__n8n__*/ pinData: {},
     /*__n8n__*/ staticData: null,
-    /*__n8n__*/ shared: [{"updatedAt":"2026-08-28T01:16:53.218Z","createdAt":"2026-08-28T01:16:53.218Z","role":"workflow:owner","workflowId":"mail01","projectId":"2xKn4WH08LyAOk2y","project":{"updatedAt":"2026-07-30T23:40:17.073Z","createdAt":"2026-07-30T23:33:30.049Z","id":"2xKn4WH08LyAOk2y","name":"Admin User <person2@example.com>","type":"personal","icon":null,"description":null,"creatorId":"544b7ec6-5907-4ee2-a94b-c5676e56835c"}}],
+    /*__n8n__*/ shared: [{"updatedAt":"2026-08-28T01:16:53.218Z","createdAt":"2026-08-28T01:16:53.218Z","role":"workflow:owner","workflowId":"mail01","projectId":"exampleProject02","project":{"updatedAt":"2026-07-30T23:40:17.073Z","createdAt":"2026-07-30T23:33:30.049Z","id":"exampleProject02","name":"Admin User <person2@example.com>","type":"personal","icon":null,"description":null,"creatorId":"544b7ec6-5907-4ee2-a94b-c5676e56835c"}}],
     id: 'mail01',
     name: 'MAIL app scheduler (all automation, all connections)',
     active: true,
@@ -123,7 +123,7 @@ if (!processed_label) throw new Error('mail01: the organizer settings carry no P
 const query = '-in:scheduled -label:' + processed_label.replace(/ /g, '-');
 
 // [reachable mailboxes only, one run per mailbox — measured 2026-09-02 11:15 on example-prod]
-// The registry held 10 connections: the client's Gmail, TWO entries for person4@example.com
+// The registry held 10 connections: the client's Gmail, TWO entries for person3@example.com
 // (an env-configured one and an app-password one) and SEVEN local-mailserver test mailboxes whose
 // IMAP login fails on that host. Every tick dispatched all ten: the seven dead ones each ended in
 // the engine's bootstrap lane creating the PROCESSED label through a mailbox it cannot log into

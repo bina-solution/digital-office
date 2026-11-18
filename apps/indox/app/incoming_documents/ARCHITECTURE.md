@@ -17,7 +17,7 @@ flowchart LR
     end
 
     subgraph Orch["n8n Orchestrator"]
-        ID016["Incoming Documents 0.1.6<br/>xWM5NQjGxl0qAhHg<br/>213 nodes · ~32 batch-upsert sites"]
+        ID016["Incoming Documents 0.1.6<br/>exampleWorkflow1<br/>213 nodes · ~32 batch-upsert sites"]
     end
 
     subgraph Helpers["Helper subworkflows (n8n)"]
@@ -42,7 +42,7 @@ flowchart LR
     end
 
     subgraph External["External services"]
-        GSHEET[("Google Sheet<br/>AutomationValues<br/>מסמכים נכנסים<br/>52 cols × 39,582 rows")]
+        GSHEET[("Google Sheet<br/>AutomationValues<br/>מסמכים נכנסים<br/>52 cols")]
         APITOOLS[("apitools<br/>/documentOcr<br/>/documentJsonQuery")]
         GEMINI[("Gemini / Vision")]
     end

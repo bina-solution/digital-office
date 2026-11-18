@@ -256,6 +256,7 @@ DRIVE_BASE_URL=drive.${DEPLOYMENT_DOMAIN}
 # ("<app>.localhost"), so on any office with a real domain — every office the dgo-extend app
 # provisions — these apps compiled an authentik provider and a router no browser can reach.
 BINA_DS_BASE_URL=bina.${DEPLOYMENT_DOMAIN}
+AZARIA_BASE_URL=azaria.${DEPLOYMENT_DOMAIN}
 COMPUTERS_BASE_URL=computers.${DEPLOYMENT_DOMAIN}
 DIGITAL_ASSETS_BASE_URL=digital-assets.${DEPLOYMENT_DOMAIN}
 DOMAINS_BASE_URL=domains.${DEPLOYMENT_DOMAIN}
@@ -277,6 +278,11 @@ DGO_BRANCH=
 # refuse to start from another named branch. A detached checkout, as a converge makes, is only said. Left empty,
 # they say it and start. Set it once every office has declared its DGO_BRANCH.
 DGO_BRANCH_ENFORCE=
+# Root on this host through its own docker engine (scripts/as-host-root.sh, DGO-1848), for the verbs that SAY they
+# change the host (`bbox apparmor install`, `bbox host-power install`) when there is no passwordless sudo. 1 on the
+# company's own machines (the owner's standing word, DGO-1822); EMPTY on a client's server, where the verb then asks
+# for sudo and a person answers. The docker group is root on its host either way: this only removes the human gate.
+DGO_HOST_ROOT_VIA_DOCKER=
 # The branch this office FOLLOWS by itself (r030-201, scripts/follow.sh): a host timer that `bbox run`
 # installs merges its newest commit whose gates are green into DGO_BRANCH every 30 minutes, keeps it only
 # if every service stays healthy (else rolls back), and tells the owner only what failed. dgo-stable on
@@ -307,9 +313,18 @@ DGO_FOLLOW_MAX_LOAD=
 # that office (the HP: macbook), DGO_FOLLOW_VIA_PATH its proxy path for the repository
 # (/git/gh/<account>/<owner>/<repo>.git). Each cycle resolves the address with `bbox remote`, fetches and pushes
 # there, and — where GitHub's API cannot be read — takes the gates from refs/green/<DGO_FOLLOW>, which gates-hosted
-# moves forward on every green run.
+# moves forward on every green run. Several offices, in order (`macbook,vps1`, or quoted with spaces: a shell that
+# sources this file would run an unquoted second word): the first whose git app ANSWERS this cycle is used. Each git app
+# names its account itself, so one office may carry its own path (`vps1:/git/gh/<account>/<owner>/<repo>.git`);
+# DGO_FOLLOW_VIA_PATH is the path of the offices that carry none. «Answers» is a fetch: an office whose account may read
+# but not push still wins, and then its push is refused every cycle (PUSH_PENDING) — name only offices that may push.
 DGO_FOLLOW_VIA=
 DGO_FOLLOW_VIA_PATH=
+# Seconds one office's git app may take to answer before the next is asked (1–99999; empty or anything else = 20).
+DGO_FOLLOW_VIA_PROBE_S=
+# Minutes a gates job of DGO_FOLLOW may wait for a runner before the owner is shown it (1–99999; empty or anything
+# else = 60); rung at 3 × this, or at once when no runner is online. Only an office that reads GitHub's API says it.
+DGO_FOLLOW_LINE_WAIT_MIN=
 # ── The herd's hub relay (DGO-1097, apps/dgo-extend/carrier/relay.go) ─────────────────────────────
 # Off the LAN its peer is on (a laptop at a café), a pair on the TCP path meets its peer at the herd's
 # hub instead: both sides connect out to the hub's link door, which joins them and copies ciphertext —
@@ -341,7 +356,7 @@ DGO_OFFSITE_TO=
 DGO_OFFSITE_DIR=
 DGO_OFFSITE_KEEP=
 # ── The office's HERD (DGO-1003) ───────────────────────────────────────────────────────────────
-# The company this office belongs to — «Bina Solutions», «EXW», «The Examplef Guys». Every office
+# The company this office belongs to — «Bina Solutions», «EXW», «Example shop». Every office
 # says it about itself; it travels with the office's catalog, and DGO Extend on a linked office
 # groups the offices it sees by it (its own herd first, then each external herd). One line, 1–60
 # characters. Empty = none said: a linked office then counts this one as part of its own herd.
@@ -395,6 +410,11 @@ NOTIFICATIONS_BASE_URL=alerts-svc.${DEPLOYMENT_DOMAIN}
 # CONNECTIONS_PUBLIC_URL=http://127.0.0.1:8990 (connections publishes that loopback callback so
 # Google can reach it directly, bypassing Traefik/Authentik).
 CONNECTIONS_PUBLIC_URL=https://${CONNECTIONS_BASE_URL}
+# Platform protocols this office connects READ-ONLY (comma-separated, read by connections): every consent that
+# would mint one asks Google for its read-only scopes alone (drive_google_oauth → drive.readonly), and a
+# provider-wide consent covering it is refused. Empty = full access, as always. (EXU-24: an office that reads a
+# client's Drive must never be able to write to it.)
+OAUTH_READONLY_PROTOCOLS=
 # Secret-zero of the vault: the ONE key that unlocks the encrypted connection store
 # (platform-base/connections/app.py, docker-compose.yml). Generate with: openssl rand -hex 32
 # An empty or CHANGE_ME value means the vault is unlocked with a placeholder — fine for a throwaway
@@ -422,7 +442,7 @@ CONNECTIONS_ROOT_KEY=
 MAIL_DOMAIN=${DEPLOYMENT_DOMAIN}
 # The OTHER domains this machine receives for, on top of MAIL_DOMAIN — comma- or space-separated,
 # empty by default. Set it when the company's own address lives on a domain of its own AND that
-# domain's MX also points at this machine: the staging office serves `person3@example.com`
+# domain's MX also points at this machine: the staging office serves `hello@digital-office.co.il`
 # this way. Two things follow from it, and nothing else does:
 #   · a mailbox may be created at one of these domains (mailboxd's guard compares against this list
 #     instead of against MAIL_DOMAIN alone), and mailserver-init keeps such an account instead of
@@ -531,7 +551,7 @@ GMAIL_BACKEND=
 # app-password IMAP (no OAuth/Gmail-API quota) — only used when GMAIL_IMAP_MODE=gmail.
 # Capture the app password per ai/context/gmail-onboardin-imap-stmp.md; HOST/PORT default to
 # imap.gmail.com:993.
-GMAIL_IMAP_USER=person4@example.com
+GMAIL_IMAP_USER=person3@example.com
 GMAIL_IMAP_APP_PW=
 # GMAIL_IMAP_HOST=imap.gmail.com
 # GMAIL_IMAP_PORT=993
@@ -561,6 +581,9 @@ OLLAMA_MAX_LOADED_MODELS=1
 OLLAMA_PULL=
 OLLAMA_CONTEXT_LENGTH=32768
 OLLAMA_KEEP_ALIVE=10m
+# 1 only on a machine that runs nothing but its models: a negative OLLAMA_KEEP_ALIVE (a model held for ever) is
+# then meant, and render does not warn about it (apps/ollama app.json resources.forever, DGO-1848).
+OLLAMA_DEDICATED=
 # The Ollama release this office BUILDS (apps/ollama/Dockerfile): empty = the Dockerfile's one default. An office
 # whose model needs a newer release says it here, and keeps it across every take — never a hand edit of the file.
 # It takes effect when the image is built: `bbox run` builds (`up --build`); with BBOX_PREBUILT it starts the image
@@ -604,7 +627,7 @@ BS_WEBHOOK_USER=admin
 # minted per office by scripts/env-secrets.py: 48 random hex characters
 BS_WEBHOOK_PASS=
 # 93.184.216.1: Production svm IP
-# 93.184.216.2 : willi home
+# 93.184.216.2 : a home
 # 93.184.216.3 : random coffee shop
 # http://93.184.216.1/
 DBS_ALLOWED_IPS=93.184.216.4,93.184.216.5,93.184.216.6,93.184.216.1,93.184.216.2,93.184.216.3
@@ -636,7 +659,7 @@ GLITCHTIP_DB_PASSWORD=
 # SMTP format: smtp://user:password@smtp.example.com:587
 GLITCHTIP_EMAIL_URL=consolemail://
 # Derived like every other address on this deployment. It used to be a literal
-# person5@example.com, which is how the LIVE .env ended up sending alert mail
+# person4@example.com, which is how the LIVE .env ended up sending alert mail
 # from a domain the deployment no longer serves while DEPLOYMENT_DOMAIN said something else.
 GLITCHTIP_FROM_EMAIL=noreply@${DEPLOYMENT_DOMAIN}
 GLITCHTIP_MAX_EVENT_LIFE_DAYS=90
@@ -645,7 +668,7 @@ GLITCHTIP_ENABLE_ORG_CREATION=false
 # Declarative bootstrap (scripts/glitchtip-push): admin user + org + projects with
 # DETERMINISTIC DSNs are auto-created on bring-up. Set the *_SENTRY_DSN above from the
 # DSNs it prints (they're stable across `down -v` — derived from GLITCHTIP_SECRET_KEY).
-GLITCHTIP_ADMIN_EMAIL=person6@example.com
+GLITCHTIP_ADMIN_EMAIL=person5@example.com
 # empty on purpose: `bbox glitchtip push` mints one into .env on first provisioning (DGO-980 —
 # the literal that stood here was published with this file)
 GLITCHTIP_ADMIN_PASSWORD=
@@ -797,6 +820,45 @@ BROWSER42_DEBUG=
 # For cross-host restore, share it out-of-band and set it in the target host's .env.
 BROWSER42_STATE_PASSPHRASE=
 
+# ── קלוד דסקטופ (apps/bina-claude, «בינה קלוד» until DGO-1920): the sign-out alarm (DGO-1430) ───────
+# The Claude desktop app lost its claude.ai account on 2026-11-04 07:29 UTC and stayed signed out for
+# 48 hours while the manager and the group bot that run in it stood still — and nothing in the office
+# said a word. The adapter (apps/bina-claude/adapter/server.mjs) now reads `login()` every 60 s and
+# posts ONE notice per episode to «התראות» (source `bina-claude`, source_id
+# `signed-out-<epoch the episode began>`, level error), then closes it — the same id, level info, and
+# marked read — when the sign-in comes back. BOTH lines reach the owner's group through the relay's own
+# rule for this source (apps/dashboard/group-events.json, `bina-claude-signout`, uncapped: a burst of
+# other errors must not keep the one line that says the office's agent is stopped out of the group),
+# and the relay writes the title and the body but NOT the notice's link field, which is why the address
+# is in the body.
+# The body says «מאז HH:MM» only when the alarm WATCHED the sign-in the episode follows — a «signed in»
+# reading no more than two ticks (120 s) before it; an adapter that starts on an app already signed out,
+# or comes back after hours of unreadable readings, says «נמצא מנותק ב-HH:MM» instead, which is what it
+# can honestly claim. Either way the DATE joins the hour when it was not today («04.11 09:29»), and the
+# closing line is «ההתראה מ-HH:MM נסגרה».
+# The address the owner opens «קלוד דסקטופ» at from his phone, as the body gives it: the CONSOLE's own route
+# for the tile, `#/m/<alias>.<office>`. Measured today on the HP:
+# https://console.staging.digital-office.co.il/#/m/bina-claude.hp-laptop
+# (vps1's console lists the tile, its nested host has a valid certificate and answers 302 to vps1's
+# sign-in, and behind that gate the app's screen answers 200 from vps1 through the link).
+# NOT `/a/bina-claude.hp-laptop/`: that route exists only for a tile that carries a `door`, and this tile
+# is `external` (framed on its nested host) — the owner's phone got «unknown_app» from it after the
+# sign-in (DGO-1433). Empty (the default) = the words «האריח «קלוד דסקטופ» בקונסול», which is right for an
+# office nobody reaches from outside.
+BINA_CLAUDE_SIGNIN_LINK=
+# How long «signed out» must hold WITHOUT A BREAK before it is announced. The app's start-up flap is
+# 1–4 s and a sign-in in progress about a minute; 180 s clears both and still alarms within minutes.
+# Seconds, whole — a value that is not a positive number (3m, 0, empty) is refused and logged, and 180
+# is used: an unreadable grace used to become NaN, which is no grace at all, and the alarm fired on the
+# app's start-up flap after every reboot.
+BINA_CLAUDE_SIGNOUT_GRACE_S=180
+# Where the notice goes: the office's own notice board (the in-network name of apps/notifications).
+BINA_CLAUDE_NOTIFY_URL=http://notifications:8977/api/notifications
+# The clock the notice's «מאז HH:MM» is said in. Empty = Asia/Jerusalem, the owner's own — an office
+# whose .env sets TZ=Etc/UTC (the HP does) would otherwise name an hour he does not read (DGO-1357).
+# A zone the runtime does not know is logged, once, and the hours are said in UTC: never silently.
+BINA_CLAUDE_TZ=
+
 # Feature Validation API
 FV_BASE_URL=fv.${DEV_DOMAIN}
 FV_SCHEDULE_MINUTES=0
@@ -938,8 +1000,8 @@ ERROR_REPORT_GLITCHTIP=false
 # its end-to-end "a trigger really registers and answers" proof.
 CI_HELLO_ENABLED=false
 
-# ktivayehudit-clone2 static site
-KTIVAYEHUDIT_CLONE2_BASE_URL=ktivayehudit-clone2.${DEV_DOMAIN}
+# examplek-clone2 static site
+EXAMPLEK_CLONE2_BASE_URL=examplek-clone2.${DEV_DOMAIN}
 GEMINI_API_KEY=
 
 # --- n8n adjacent-automation creds (env-managed via blueprint credential_overrides) ---

@@ -501,7 +501,7 @@ VAULT_CAPABILITY = "secrets"   # connections' vault: read by NAME through the va
 
 def local_manifest(alias: str) -> dict:
     """This office's app named `alias` (its id or its cli.alias), as its app.json says, with `_root`."""
-    for root in ("apps", "platform-base"):
+    for root in ("apps", "platform-base", "instances"):   # instances/: an app's further copies (DGO-1920)
         for p in sorted((REPO / root).glob("*/app.json")):
             try:
                 m = json.loads(p.read_text(encoding="utf-8"))

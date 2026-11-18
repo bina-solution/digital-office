@@ -122,6 +122,9 @@ func planRemote(repo, name string, block []any) ([]remoteEntry, []string, error)
 			if mine, err = ownAddresses(repo); err != nil {
 				return nil, nil, err
 			}
+			for a := range supersededAddresses(repo, block) {
+				delete(mine, a)
+			}
 		}
 		if mine[addr] {
 			refuse("%s.address %s היא הכתובת של הלשכה הזו בקישור הזה (מ-.dgo) — הצד השני הוא הקצה האחר של אותו /24", where, addr)
@@ -409,6 +412,95 @@ func ownAddresses(repo string) (map[string]bool, error) {
 		}
 	}
 	return out, nil
+}
+
+// supersededAddresses is superseded_addresses(): the addresses the machine's link record (.dgo/addressing.json)
+// claims for pairs the block has since moved to another /24 — a retired host link's end that the live plane has
+// given to another pair (vps1, 2026-11-12: the September pair with the MacBook on slot 2 held the Dell's new end
+// 10.79.2.2 as vps1's own). An address no pair of the record names, or one any claimant of which the block does not
+// place elsewhere, still counts. Called after ownAddresses has read the same file, so a record that crashes that
+// reader never reaches this one; anything else it cannot read says nothing.
+func supersededAddresses(repo string, block []any) map[string]bool {
+	out := map[string]bool{}
+	text, err := readText(filepath.Join(repo, ".dgo", "addressing.json"))
+	if err != nil {
+		return out
+	}
+	doc, err := yamlish.LoadJSON(text)
+	if err != nil {
+		return out
+	}
+	m, ok := doc.(*yamlish.Map)
+	if !ok {
+		return out
+	}
+	rawPairs, _ := m.Get("pairs")
+	pairs, ok := rawPairs.([]any)
+	if !ok {
+		return out
+	}
+	// an office id as plan() takes one, or "": only one officeRE accepts is compared — ASCII, where pyLower and
+	// str.lower() agree (a Greek final sigma lowers differently, the second reader's case)
+	officeID := func(v any) string {
+		s, ok := v.(string)
+		if !ok {
+			return ""
+		}
+		if oid := pyLower(pyval.Strip(s)); officeRE.MatchString(oid) {
+			return oid
+		}
+		return ""
+	}
+	placed := map[string]string{}
+	for _, item := range block {
+		entry, ok := item.(*yamlish.Map)
+		if !ok {
+			continue
+		}
+		office := officeID(get(entry, "office"))
+		addr, addrIsStr := get(entry, "address").(string)
+		if office == "" || !addrIsStr {
+			continue
+		}
+		ip, version := parseIP(pyval.Strip(addr))
+		if version != 4 || ip[0] != 10 || ip[1] != 79 {
+			continue
+		}
+		if _, seen := placed[office]; !seen {
+			placed[office] = fmt.Sprintf("%d.%d.%d.%d", ip[0], ip[1], ip[2], ip[3])
+		}
+	}
+	claims := map[string][]string{}
+	for _, item := range pairs {
+		pair, ok := item.(*yamlish.Map)
+		if !ok {
+			continue
+		}
+		own, isStr := get(pair, "self").(string)
+		if !isStr || pyval.Strip(own) == "" {
+			continue
+		}
+		claims[pyval.Strip(own)] = append(claims[pyval.Strip(own)], officeID(get(pair, "office")))
+	}
+	net := func(a string) string { // the /24 of a dotted address: Python's a.rsplit(".", 1)[0]
+		if i := strings.LastIndex(a, "."); i >= 0 {
+			return a[:i]
+		}
+		return a
+	}
+	for a, offices := range claims {
+		moved := true
+		for _, o := range offices {
+			if p, ok := placed[o]; o == "" || !ok || net(p) == net(a) {
+				moved = false
+				break
+			}
+		}
+		if moved {
+			out[a] = true
+		}
+	}
+	return out
 }
 
 // addSelves adds `self` of the record and of each of its `pairs` — raising where Python's `.get`

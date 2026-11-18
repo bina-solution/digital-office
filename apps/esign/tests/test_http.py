@@ -27,7 +27,7 @@ def tiny_pdf() -> bytes:
     c = canvas.Canvas(buf, pagesize=A4)
     c.setFont("Helvetica", 14)
     c.drawString(72, 700, "BINA Solutions - services agreement (test)")
-    c.drawString(72, 680, "40 hours x 250 NIS = 10,000 NIS")
+    c.drawString(72, 680, "30 hours x 200 NIS = 6,000 NIS")
     c.showPage()
     c.save()
     return buf.getvalue()
@@ -157,6 +157,17 @@ def test_the_link_answers_a_stranger(cl):
     tok = token_of(create(cl)["link"])
     r = cl.get("/s/%s" % tok)
     assert r.status_code == 200 and "הסכם דוגמה" in r.get_data(as_text=True)
+
+
+def test_the_signer_pages_take_their_stylesheet_from_the_public_path(cl):
+    """/static/ sits behind the office's sign-in; a stranger's pages must load their look from /s/ (DGO-1846: without
+    it the pages were unstyled, and the office's mark beside its name as wide as the page)."""
+    tok = token_of(create(cl)["link"])
+    for page in (cl.get("/s/%s" % tok), cl.get("/s/%s" % ("A" * 43))):          # the signer page, and a sentence
+        html = page.get_data(as_text=True)
+        assert 'href="/s/esign.css"' in html and "/static/" not in html and "dgo-mark" in html
+    css = cl.get("/s/esign.css")
+    assert css.status_code == 200 and css.mimetype == "text/css" and b".dgo-mark" in css.get_data()
 
 
 def test_an_unknown_or_disabled_link_answers_one_sentence_and_no_document(cl):

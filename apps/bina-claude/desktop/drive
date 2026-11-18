@@ -488,9 +488,32 @@ def cancel(sid):
     return out(False, code="not-confirmed", id=sid, error="Esc pressed, but the session still runs — look at the app's screen")
 
 
+def home(folder):
+    """The New session page, on the office's folder (DGO-1920, the owner: «i want that myDgo to be the default folder
+    when i come in after login and start a new session»). The app opens the New page on the place the last session
+    was started from (its own `startedFrom`, read in its UI code) — after a first sign-in there is none, so it shows
+    «No folder». This hands it the office through its own door, once: the app asks «Trust this workspace?» for a
+    folder a link names (measured, DGO-1684), which is the person's to answer, so no key is pressed here; the first
+    session started there makes the office the app's own default from then on."""
+    if not os.path.isdir(folder):
+        return out(False, code="no-folder", error=f"{folder} is not a folder here; nothing was sent")
+    if not delivered_link("claude://code/new?folder=" + urllib.parse.quote(folder, safe="")):
+        return out(False, code="dropped", error=f"the app kept dropping the link (its view was loading; {MAIN_LOG})")
+    return out(True, folder=folder)
+
+
 def main(argv):
+    if argv and argv[0] == "home":
+        os.environ.setdefault("DISPLAY", ":1")
+        with open(LOCK, "w") as lk:
+            try:
+                fcntl.flock(lk, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            except BlockingIOError:
+                return out(False, code="locked", error="another call is driving the app; nothing was sent")
+            return home(argv[1] if len(argv) > 1 else os.environ.get("BBOX_REPO_HOST") or "/workspace/office")
     if not argv or argv[0] not in ("new", "send", "cancel") or (argv[0] in ("send", "cancel") and len(argv) < 2):
-        print("usage: drive new | drive send local_<id>   (the text on stdin) | drive cancel local_<id>", file=sys.stderr)
+        print("usage: drive new | drive send local_<id>   (the text on stdin) | drive cancel local_<id> | drive home [<folder>]",
+              file=sys.stderr)
         return 2
     text = "" if argv[0] == "cancel" else sys.stdin.read().strip()
     if argv[0] != "cancel" and not text:

@@ -480,6 +480,25 @@ def archiver_export(repo: pathlib.Path):
     return export
 
 
+def left_out(staging: pathlib.Path) -> dict:
+    """What the export named and did not carry, from its manifest (DGO-1510): every volume on the engine that no
+    installed app declares — this project's and the others' — with its size, and the anonymous ones counted. The
+    run's result carries it, so the run's report names them as its manifest does. A listing that failed, or a manifest
+    that says nothing of it, is UNKNOWN, never «nothing left out»; and a report never stops the backup."""
+    def unknown(why: str) -> dict:
+        return {"volumes": None, "anonymous": None, "error": why}
+    try:
+        man = json.loads((staging / "manifest.json").read_text(encoding="utf-8"))
+        if man.get("undeclared_volumes_error"):
+            return unknown(str(man["undeclared_volumes_error"])[:300])
+        if not isinstance(man.get("undeclared_volumes"), list):
+            return unknown("the export's manifest does not say which volumes no app declares")
+        return {"volumes": [{k: v.get(k) for k in ("name", "project", "size")} for v in man["undeclared_volumes"]],
+                "anonymous": int(man.get("anonymous_volumes") or 0)}
+    except Exception as e:                                          # noqa: BLE001 — a report, never the run's end
+        return unknown(f"the export's manifest did not read: {type(e).__name__}")
+
+
 def run(target: str, office: str, archive_root: pathlib.Path, state_dir: pathlib.Path, export, log,
         weekday: int | None = None) -> dict:
     """One backup of `office` to `target`. Returns the result (also kept in state_dir); raises Refused
@@ -551,6 +570,7 @@ def run(target: str, office: str, archive_root: pathlib.Path, state_dir: pathlib
         _mark_started(state_dir, target)
         staging.mkdir(parents=True)
         export(staging, log)
+        not_carried = left_out(staging)
 
         if remote:
             try:
@@ -616,12 +636,19 @@ def run(target: str, office: str, archive_root: pathlib.Path, state_dir: pathlib
                   # (None for a store that keeps everything; a carried value that does not read is a new baseline)
                   "pruned": (None if retention(spec, PRUNE_DAY) != "prune"
                              else finished.isoformat() if keep == "prune" or pruned is None
-                             else prev.get("pruned"))}
+                             else prev.get("pruned")),
+                  "not_carried": not_carried}
         if remote:
             result["store"] = {"office": remote.link, "target": remote.target}
         _keep(state_dir, target, result)
         log(f"run {run_id}: snapshot {res['snapshot'][:8]} · {res.get('files')} files · "
             f"{(res.get('added') or 0) / 1e6:.1f} MB added · check {n}/7 ok")
+        if not_carried.get("error"):
+            log(f"run {run_id}: which volumes no app declares is UNKNOWN: {not_carried['error']}")
+        elif not_carried["volumes"] or not_carried["anonymous"]:
+            log(f"run {run_id}: NOT carried — {len(not_carried['volumes'])} volume(s) no app declares, "
+                f"{not_carried['anonymous']} anonymous: "
+                + ", ".join(f"{v['name']} ({v['size'] or 'size unknown'})" for v in not_carried["volumes"]))
         return result
     finally:
         try:

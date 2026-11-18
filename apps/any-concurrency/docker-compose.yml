@@ -111,7 +111,7 @@ services:
     - traefik.http.routers.any-concurrency-https.service=any-concurrency
     # hsts@file: every certificate this edge serves pins https for its host (DGO-1595). The router is
     # a server office's only — a `.localhost` office has no certificate and port 80 is the office.
-    - traefik.http.routers.any-concurrency-https.middlewares=authentik-admins@file,hsts@file
+    - traefik.http.routers.any-concurrency-https.middlewares=hsts@file,authentik-admins@file
     - traefik.http.services.any-concurrency.loadbalancer.server.port=8080
 volumes:
   # Declared by apps/n8n too; compose `include` merges the identical definition, and both

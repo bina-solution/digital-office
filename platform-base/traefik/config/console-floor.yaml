@@ -34,7 +34,7 @@ http:
       rule: Host(`{{ env "CONSOLE_BASE_URL" | default "console.localhost" }}`)
       entryPoints: [websecure]
       priority: 1
-      middlewares: [authentik@file, hsts@file]
+      middlewares: [hsts@file, authentik@file]
       service: console-floor
       tls: {}
   services:

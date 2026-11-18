@@ -232,7 +232,7 @@ def main() -> int:
     pv = ev / "version"
     pv.write_text("Linux version 6.6.87.2-microsoft-standard-WSL2 (root@…)\n")
     check(desk.engine_vm(ev, pv) == "wsl", "WSL's kernel names it: the HP")
-    pv.write_text("Linux version 6.1.0-25-amd64 (person181-x@example.com)\n")
+    pv.write_text("Linux version 6.1.0-25-amd64 (person91-x@example.com)\n")
     (ev / "etc").mkdir()
     check(desk.engine_vm(ev, pv) is None, "no /etc/hosts to read: not known")
     (ev / "etc" / "hosts").write_text("127.0.0.1 localhost\n")

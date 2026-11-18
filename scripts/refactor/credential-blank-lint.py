@@ -19,7 +19,7 @@ WHAT BROKE (measured 2026-08-09). The resolver read
 so an UNSET-or-EMPTY variable resolved to the empty string and was PATCHed in as if it were a value.
 `.env` carried `GEMINI_API_KEY=` (empty; `.env.ex` carries a real one), so **every push** re-encrypted
 an empty `apiKey` over credential `6mfcsdRaqQ4IdQ8Y` (ai-studio-bs-extraction). The workflow
-`Balance Sheet Extractor - v2- shmuel` then failed 100% of runs with
+`Balance Sheet Extractor - v2- person06` then failed 100% of runs with
 "Forbidden - perhaps check your credentials?" out of its Google Gemini node — a live credential
 destroyed by a routine push, with no error, no warning and no diff to point at. `BmKlKWiEeZAxNWyi`
 (Chat Auth) went the same way via CHAT_AUTH_USER/CHAT_AUTH_PASS, which are not in `.env` at all;

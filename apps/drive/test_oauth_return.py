@@ -93,8 +93,10 @@ def main() -> int:
     requests.get, requests.post = fake_get, fake_post
     # since the split (DGO-1500) the door is the one an engine names in its /ops: drive-google's
     app.engines.invalidate = lambda *a, **kw: None
-    app.engines.oauth = lambda name: ({"grant": "google-workspace-grant", "provider": "Google", "engine": "google",
-                                       "connected": "Google Drive ו־Gmail של החשבון זמינים עכשיו בלשכה."}
+    app.engines.oauth = lambda name: ({"grant": "google-workspace-grant", "protocol": "drive_google_oauth",
+                                       "provider": "Google", "engine": "google",
+                                       "connected": "Google Drive ו־Gmail של החשבון זמינים עכשיו בלשכה.",
+                                       "connected_read_only": "Google Drive של החשבון זמין עכשיו בלשכה, לקריאה בלבד."}
                                       if name == "google" else None)
 
     # ── start, from the screen ──
@@ -104,6 +106,8 @@ def main() -> int:
     check(r.status_code == 200 and d.get("authorize_url") == AUTH and d.get("bind"), "the screen gets Google's address and a secret")
     check(sent.get("bind") == hashlib.sha256(d.get("bind", "").encode()).hexdigest(), "connections gets only the secret's sha256")
     check(sent.get("ret") == RET and sent.get("as_instance") == "1", "…with the return page, for an account")
+    check(sent.get("protocol") == "drive_google_oauth",
+          "…and the protocol the door serves (connections narrows the consent to it where the office reads it only, EXU-24)")
     check(d.get("bind", "") not in str(CALLS[-1]), "the secret itself never reaches connections")
     check("no-store" in r.headers.get("Cache-Control", ""), "the answer that carries the secret is not cached")
     check((start().get_json() or {}).get("bind") not in (None, d.get("bind")), "every consent has a secret of its own")
@@ -172,6 +176,13 @@ def main() -> int:
           and CALLS[-1][2] == {"code": "C1", "state": "S1", "bind": "the-secret"}, "finish hands code, state and the secret to connections")
     check(r.status_code == 200 and "החשבון חובר" in page and "owner@example.com" in page
           and r.headers.get("X-Dgo-Oauth") == "1", "…and says which account was connected, on a page marked as the app's answer")
+    check("Gmail" in page and "לקריאה בלבד" not in page, "…a full consent says Drive and Gmail")
+    ANSWER["relayed"] = (200, {"ok": True, "read_only": True, "made": [{"id": "drive_google_oauth-1",
+                                                                         "protocol": "drive_google_oauth",
+                                                                         "account_hint": "reader@example.com"}]})
+    page = c.post("/oauth/google/finish", json={"code": "C9", "state": "S9", "bind": "the-secret"}).get_data(as_text=True)
+    check("לקריאה בלבד" in page and "Gmail" not in page, "a read-only consent (EXU-24) says Drive alone, read-only")
+    ANSWER.pop("relayed", None)
     n = len(CALLS)
     r = c.post("/oauth/google/finish", json={"error": "access_denied", "state": "S1", "bind": "the-secret"})
     check(len(CALLS) == n and "ההתחברות בוטלה" in r.get_data(as_text=True), "a cancelled consent asks nothing")

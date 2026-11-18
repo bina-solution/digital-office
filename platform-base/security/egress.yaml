@@ -113,6 +113,6 @@ apps:
   git:
     - api.github.com
     - github.com
-  chimney-services:
+  examplech-services:
     - fcm.googleapis.com                      # push notifications
     - web.push.apple.com

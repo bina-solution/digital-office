@@ -42,7 +42,7 @@ import { workflow, node, links } from '@n8n-as-code/transformer';
     /*__n8n__*/ meta: {"templateCredsSetupCompleted":true},
     /*__n8n__*/ pinData: {},
     /*__n8n__*/ staticData: {"node:Schedule Trigger":{"recurrenceRules":[6]}},
-    /*__n8n__*/ shared: [{"updatedAt":"2026-06-29T10:06:58.177Z","createdAt":"2026-06-29T10:06:58.177Z","role":"workflow:owner","workflowId":"gwaHealthCheck01","projectId":"Wx6WPGz1tIrghF2r","project":{"updatedAt":"2026-06-29T10:06:28.586Z","createdAt":"2026-06-29T10:02:30.215Z","id":"Wx6WPGz1tIrghF2r","name":"Owner Laptop <person2@example.com>","type":"personal","icon":null,"description":null,"creatorId":"147f2398-75f7-4139-8132-7c477ee5cdfd"}}],
+    /*__n8n__*/ shared: [{"updatedAt":"2026-06-29T10:06:58.177Z","createdAt":"2026-06-29T10:06:58.177Z","role":"workflow:owner","workflowId":"gwaHealthCheck01","projectId":"ExampleProject03","project":{"updatedAt":"2026-06-29T10:06:28.586Z","createdAt":"2026-06-29T10:02:30.215Z","id":"ExampleProject03","name":"Owner Laptop <person2@example.com>","type":"personal","icon":null,"description":null,"creatorId":"147f2398-75f7-4139-8132-7c477ee5cdfd"}}],
     id: 'gwaHealthCheck01',
     name: 'Google Integration Health',
     active: true,
@@ -115,18 +115,18 @@ export class GoogleIntegrationHealthWorkflow {
     GetRowSInSheet = {
         documentId: {
             __rl: true,
-            value: '1REDACTEDdrivexxxxxxxxxxxxxxxxxxxxxxxxxx0046',
+            value: '1REDACTEDdrivexxxxxxxxxxxxxxxxxxxxxxxxxx0004',
             mode: 'list',
-            cachedResultName: 'Incoming Documents — solutionsbina',
-            cachedResultUrl: 'https://docs.google.com/spreadsheets/d/1REDACTEDdrivexxxxxxxxxxxxxxxxxxxxxxxxxx0046/edit',
+            cachedResultName: 'Incoming Documents — examplebina',
+            cachedResultUrl: 'https://docs.google.com/spreadsheets/d/1REDACTEDdrivexxxxxxxxxxxxxxxxxxxxxxxxxx0004/edit',
         },
         sheetName: {
             __rl: true,
-            value: 1183063235,
+            value: 100000004,
             mode: 'list',
             cachedResultName: 'חברות',
             cachedResultUrl:
-                'https://docs.google.com/spreadsheets/d/1REDACTEDdrivexxxxxxxxxxxxxxxxxxxxxxxxxx0046/edit#gid=1183063235',
+                'https://docs.google.com/spreadsheets/d/1REDACTEDdrivexxxxxxxxxxxxxxxxxxxxxxxxxx0004/edit#gid=100000004',
         },
         options: {},
     };
@@ -236,7 +236,7 @@ export class GoogleIntegrationHealthWorkflow {
             mappingMode: 'defineBelow',
             value: {
                 op: 'createFromText',
-                params: '={{ ({ name: "Hello", content: $now.toString(), folderId: "1REDACTEDdrivexxxxxxxxxxxxxxx0055", profile_id: "admin" }) }}',
+                params: '={{ ({ name: "Hello", content: $now.toString(), folderId: "1REDACTEDdrivexxxxxxxxxxxxxxx0005", profile_id: "admin" }) }}',
             },
             matchingColumns: [],
             schema: [

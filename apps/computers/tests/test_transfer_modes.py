@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """test_transfer_modes — a volume copy into a destination reached as root (as always) and as a user who is not
-root but may run docker (DGO-1508: the Dell, `PermitRootLogin no`, `AllowUsers shlomy` in the docker group).
+root but may run docker (DGO-1508: the Dell, `PermitRootLogin no`, `AllowUsers owner` in the docker group).
 
 Both ends are this machine, through the real bash; the source is a directory standing in for a volume.
 - root (forced): the stage and the volume are host paths, the commands exactly as before — staged, verified,

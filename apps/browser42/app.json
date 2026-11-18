@@ -63,6 +63,13 @@
       "service": [
         "browser42-task-runner"
       ]
+    },
+    {
+      "id": "browser42-login-google",
+      "required": false,
+      "service": [
+        "browser42-task-runner"
+      ]
     }
   ],
   "contributes": {
@@ -94,6 +101,35 @@
         },
         "now": "The second step of the Facebook sign-in, passed by the office itself. Paste the TOTP secret ONCE — the otpauth:// URI an authenticator exports, or the base32 key Facebook shows under «אימות דו-שלבי → אפליקציית אימות»; connections validates it on write (RFC 6238, totp.py) and keeps it in the vault only — export and lease skip the kind, so no container ever holds it. When the login page asks for a code, `bbox b42 task login <slug> facebook` asks the plane for the CURRENT code (GET /api/totp/browser42-totp-facebook, gated to the `browser42-task-runner` service this entry names) and types it: no agent, log, journal or response carries the secret or the code. Without this row the login stops with a NAMED refusal (`needs_totp_secret`) that carries the handoff link to the live view, where a human finishes the step.",
         "wizard": "סוד ה-TOTP מתוך «אימות דו-שלבי → אפליקציית אימות» — paste the otpauth:// URI or the base32 key once; from then on the browser passes the second step by itself"
+      },
+      {
+        "id": "browser42-login-google",
+        "title": "Google — the office's main account; the office browser signs in with it",
+        "title_he": "חשבון Google הראשי של הלשכה",
+        "kind": "password",
+        "pillar": "app-password",
+        "env": "BROWSER42_LOGIN_GOOGLE_PASSWORD",
+        "envs_extra": [
+          "BROWSER42_LOGIN_GOOGLE_USER",
+          "BROWSER42_LOGIN_GOOGLE_URL"
+        ],
+        "fixed": {
+          "BROWSER42_LOGIN_GOOGLE_URL": "https://accounts.google.com/"
+        },
+        "labels": {
+          "BROWSER42_LOGIN_GOOGLE_USER": "כתובת Gmail"
+        },
+        "reveal_to": [
+          "browser42-task-runner"
+        ],
+        "pin": true,
+        "purpose_he": "הדפדפן של הלשכה נכנס איתו ל-Google בעצמו, והסוכן עובד ב-Google בחיבור הזה בלי שהסיסמה נמסרת לו.",
+        "about_he": "הסיסמה נשמרת בכספת של הלשכה ונמסרת רק לרכיב שמקליד אותה בדף הכניסה של Google. היא לא נשמרת במנהל הסיסמאות של הדפדפן. אם Google יבקש אישור נוסף, צריך לאשר אותו פעם אחת בדפדפן של הלשכה.",
+        "probe": {
+          "type": "present"
+        },
+        "now": "The owner types the office's Google account ONCE, here (DGO-1825). The address is fixed (accounts.google.com). `bbox b42 task login <slug> google` signs the office browser in: the task runner — the ONLY service this value is revealed to (`reveal_to`, verified by container id) — leases it at the moment of typing and types it into Google's own page, and the profile keeps the session. It is never written into the browser's password store (a page the agent drives could read that store); the value is never printed, answered or logged.",
+        "wizard": "כתובת Gmail + סיסמה, פעם אחת; הדפדפן של הלשכה ממלא אותן בעצמו"
       }
     ]
   },

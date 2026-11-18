@@ -51,8 +51,8 @@ WATCH_PATH = os.path.join(DATA, "watch.json")
 CONNECTIONS_URL = os.environ.get("CONNECTIONS_URL", "http://connections:8990").rstrip("/")
 PROTOCOL = "telegram_user"
 BOT_PROTOCOL = "telegram_bot"
-API_ID = int(os.environ.get("TG_DEFAULT_API_ID", "414329"))
-API_HASH = os.environ.get("TG_DEFAULT_API_HASH", "af17b872310e6467fcd3d0aa82dc0d56")
+API_ID = int(os.environ.get("TG_DEFAULT_API_ID", "0"))
+API_HASH = os.environ.get("TG_DEFAULT_API_HASH", "00000000000000000000000000000000")
 WATCH_DEFAULT = [t.strip() for t in os.environ.get("TELEGRAM_WATCH_DEFAULT", "").split("|") if t.strip()]
 
 # The event stream (flow.v1, ai/context/build-your-first-app.md): capped, and its TTL renewed with every event.

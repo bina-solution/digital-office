@@ -20,7 +20,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import app  # noqa: E402
 
 ACCOUNT = ({"id": "1", "protocol": "domain_portal_session"}, {}, None)
-CREATE = {"action": "create", "type": "A", "name": "exf", "content": "93.184.216.13", "ttl": 3600}
+CREATE = {"action": "create", "type": "A", "name": "exf", "content": "93.184.216.9", "ttl": 3600}
 
 
 class FakeProvider:
@@ -55,7 +55,7 @@ class DoorTests(unittest.TestCase):
             self.addCleanup(setattr, owner, name, original)
         self.answer = {"ok": True, "state": "ok", "guard": "checked",
                        "record": {"name": "exf.digital-office.co.il.", "type": "A",
-                                  "content": "93.184.216.13", "ttl": "3600"}}
+                                  "content": "93.184.216.9", "ttl": "3600"}}
 
     def write(self, portal_name, action, params, consented_by=None):
         self.written.append(bool(consented_by))

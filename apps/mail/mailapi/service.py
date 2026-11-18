@@ -150,7 +150,7 @@ def _backend(connection_id=None, *, require_explicit):
     one. The parameter was written, documented, and referenced by this module's own docstring as
     "set by every canonical-op route" while not one caller passed it, so the guard read as live in
     review and was inert in production for two days (2026-08-07 → 2026-08-09), during which the
-    suites deposited 148 test messages into the client's real Gmail. Keyword-only and mandatory
+    suites deposited test messages into a client's real mailbox. Keyword-only and mandatory
     means a route that forgets to decide raises TypeError on its first request instead of quietly
     inheriting the permissive answer: a new route cannot re-open this hole by omission, which is
     exactly how it was opened."""

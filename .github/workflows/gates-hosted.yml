@@ -33,6 +33,13 @@ on:
 permissions:
   contents: read
 
+# A VERSION'S PROOF GOES FIRST (DGO-1819, since 2026-11-11). The price above, a dgo-stable proof waiting behind
+# office-branch jobs, measured 45 minutes that day — one of them the gates of a mac-dgo push made 2.5 hours before.
+# So every job here that takes the runner for a branch other than dgo-stable asks scripts/ci/step-aside first: while
+# a gates-hosted run of dgo-stable is queued or running, it cancels its own run in seconds (the run reads
+# «cancelled», never a green) — the cancel is that job's own `actions: write`. A RUNNING proof still drains; a
+# superseded head is NOT a reason (above: that is DGO-1797's); a hand-run never steps aside; the groups are unchanged.
+
 jobs:
   # THE QUESTION, asked once, in git's own words. It used to be `contains(head_commit.message,
   # '[gates]')` — a substring — so a commit that merely QUOTED the marker started a full gates run
@@ -67,6 +74,9 @@ jobs:
       group: ${{ (github.ref == 'refs/heads/dgo-stable' || github.event_name == 'workflow_dispatch') && format('gates-hosted-decide-run-{0}', github.run_id) || format('gates-hosted-decide-{0}', github.ref) }}
       cancel-in-progress: false
     runs-on: [self-hosted, portable]
+    permissions:
+      contents: read
+      actions: write   # scripts/ci/step-aside: whether a version's proof is waiting, and the cancel of this run
     # 5 for the checkout + up to 45 that ops/prejob_waitfree.sh may hold the runner (memory, heat, a
     # fresh boot) — the same allowance the carrier and green jobs carry.
     timeout-minutes: 50
@@ -80,10 +90,18 @@ jobs:
         with:
           fetch-depth: 1
           filter: blob:none
-          sparse-checkout: scripts/ci/gates-asked
+          sparse-checkout: |
+            scripts/ci/gates-asked
+            scripts/ci/step-aside
           sparse-checkout-cone-mode: false
           path: .decide
           persist-credentials: false
+
+      - name: A version's proof goes first (scripts/ci/step-aside)
+        if: startsWith(github.ref, 'refs/heads/') && github.ref != 'refs/heads/dgo-stable'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: bash .decide/scripts/ci/step-aside
 
       - id: marker
         name: Does this commit ask for the gates?
@@ -114,8 +132,27 @@ jobs:
       group: gates-hosted-gates-${{ github.ref }}
       cancel-in-progress: false
     runs-on: [self-hosted, portable]
+    permissions:
+      contents: read
+      actions: write   # scripts/ci/step-aside (decide's)
     timeout-minutes: 90
     steps:
+      # asked again HERE, when the runner takes this job: `decide` answered minutes or hours before (the header)
+      - uses: actions/checkout@v4
+        if: startsWith(github.ref, 'refs/heads/') && github.ref != 'refs/heads/dgo-stable'
+        with:
+          fetch-depth: 1
+          filter: blob:none
+          sparse-checkout: scripts/ci/step-aside
+          sparse-checkout-cone-mode: false
+          path: .step-aside
+          persist-credentials: false
+      - name: A version's proof goes first (scripts/ci/step-aside)
+        if: startsWith(github.ref, 'refs/heads/') && github.ref != 'refs/heads/dgo-stable'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: bash .step-aside/scripts/ci/step-aside && rm -rf .step-aside
+
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
@@ -151,11 +188,30 @@ jobs:
       group: gates-hosted-carrier-${{ github.ref }}
       cancel-in-progress: false
     runs-on: [self-hosted, portable]
+    permissions:
+      contents: read
+      actions: write   # scripts/ci/step-aside (decide's)
     timeout-minutes: 60   # 15 for the job + up to 45 that ops/prejob_waitfree.sh may hold it (memory, heat, a fresh boot)
     defaults:
       run:
         working-directory: apps/dgo-extend/carrier
     steps:
+      - uses: actions/checkout@v4
+        if: startsWith(github.ref, 'refs/heads/') && github.ref != 'refs/heads/dgo-stable'
+        with:
+          fetch-depth: 1
+          filter: blob:none
+          sparse-checkout: scripts/ci/step-aside
+          sparse-checkout-cone-mode: false
+          path: .step-aside
+          persist-credentials: false
+      - name: A version's proof goes first (scripts/ci/step-aside)
+        if: startsWith(github.ref, 'refs/heads/') && github.ref != 'refs/heads/dgo-stable'
+        working-directory: .
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: bash .step-aside/scripts/ci/step-aside && rm -rf .step-aside
+
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
@@ -213,3 +269,32 @@ jobs:
             echo "::error::refs/green/dgo-stable could not be moved to ${GITHUB_SHA}: an office that reads it would stay behind"
             exit 1
           fi
+
+  # The proof is over: the office-branch runs that stepped aside for it (scripts/ci/step-aside) are asked again —
+  # per workflow and branch the newest run that tested something, when step-aside cancelled it — unless another proof
+  # still waits (scripts/ci/re-ask.py, DGO-1848). Here and not as a `workflow_run` workflow: that trigger fires only
+  # from the default branch's file. Whatever the proof's verdict (`always()`); never its verdict (continue-on-error).
+  re-ask:
+    needs: [decide, gates, carrier, green]
+    if: always() && github.event_name == 'push' && github.ref == 'refs/heads/dgo-stable'
+    runs-on: [self-hosted, portable]
+    continue-on-error: true
+    timeout-minutes: 5
+    permissions:
+      actions: write    # read the runs, and run again the jobs that stepped aside
+      checks: read      # read step-aside's notice on a job (its check run's annotations)
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          filter: blob:none
+          sparse-checkout: |
+            scripts/ci/re-ask.py
+          sparse-checkout-cone-mode: false
+          path: .re-ask
+          persist-credentials: false
+      - name: The runs that stepped aside for this proof, asked again
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 .re-ask/scripts/ci/re-ask.py

@@ -44,12 +44,16 @@ fi
 # tunnel — PLN_HUB names the hub, and the hook re-runs the same verb THERE (`bbox via`, scripts/via.py).
 # A command that came in through `via` never goes on to a second hop (BBOX_VIA), so the hub, whose own
 # pair may be the dead one too, answers for itself instead of bouncing the request back.
+# THE API IS ASKED, NOT THE FRONT (issues/plane-calls-hang-half-an-hour-when-the-office-that-runs-plane-stalls.yaml,
+# DGO-1848): `/` is the web front, which answered while the backend behind it hung, so every call then waited out
+# its own timeouts instead of taking the hub. `/api/v1/users/me/` is served by the backend itself: any HTTP answer
+# (401 without a key included) is a live Plane; no answer in 8 s, or the proxy's 502/503/504, is not.
 PLN_HUB=""
 if [ -n "${PLN_API}" ] && [ -z "${BBOX_VIA:-}" ]; then
   if ! dcx exec -T "${PLN_IN}" python3 -c '
 import sys, urllib.error, urllib.request
 try:
-    urllib.request.urlopen(sys.argv[1] + "/", timeout=8)
+    urllib.request.urlopen(sys.argv[1] + "/api/v1/users/me/", timeout=8)
 except urllib.error.HTTPError as e:
     sys.exit(1 if e.code in (502, 503, 504) else 0)
 except Exception:

@@ -459,7 +459,7 @@ class BoundingBox:
 
         WHY IT IS SAFE DESPITE USING PLAIN FLOATS. numpy's 2-element `dot` is not
         bit-identical to `a*b + c*d` in Python — measured on this container's numpy 1.26.4
-        over 239,024 real annotation pairs, 6.3 % differ, by ~1 ULP (it is FMA/SIMD-backed,
+        over N real annotation pairs, 6.3 % differ, by ~1 ULP (it is FMA/SIMD-backed,
         scalar Python is not). Every comparison below therefore carries `_PREFILTER_SLACK`
         of head-room, which is ~10 orders of magnitude larger than that discrepancy, so a
         pair anywhere near a decision boundary is passed through to the exact code rather

@@ -96,6 +96,14 @@
   },
   "resources": {
     "cpus": "1.5",
-    "memory": "6g"
+    "memory": "6g",
+    "forever": [
+      {
+        "env": "OLLAMA_KEEP_ALIVE",
+        "starts_with": "-",
+        "why": "a negative keep-alive keeps every model in memory for ever, and the machine's other work then has none — the Dell froze for two hours (DGO-1797)",
+        "unless": "OLLAMA_DEDICATED"
+      }
+    ]
   }
 }

@@ -1,0 +1,402 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>אמולטור אנדרואיד</title>
+<!-- The office's Android phone (apps/android-emulator): what the console's tile frames — at /a/android-emulator/ on
+     the office's own console, at the root of its own host when a linked office (staging) frames it. Every URL here is
+     relative, so both read the same file. The device's state, why it is so, the heat, start and stop, and the live
+     display: noVNC's RFB from the image's /usr/share/novnc (served at vnc/), its websocket at websockify, spliced by
+     server.py to websockify inside the container. Until 2026-11-13 the tile was noVNC alone — a black desktop when
+     the device was off, with no word and no way to start it. -->
+<style>
+/* @bina-theme-tokens:start */
+/* OLIVE GROVE — the one palette of the office (the owner, 2026-10-07 · DGO-450). Four hues, sampled
+   from his mock-up, and the ground they stand on. A screen never writes a colour: it names one of
+   these. Each hue is the colour itself (a FILL — a button, a bar, a dot), «-d» for text and thin
+   lines on the ground (4.5:1 or more), «-soft» and «-line» for a tint and its hairline, and «-ink»
+   for what is written ON the fill. The role names every screen already uses point at them:
+   (no backtick in this block: one of its copies lives inside a script's template string)
+     olive  the brand and the main action · what is well, what is done
+     sky    what is in motion, what only informs · a link
+     lime   look here — a warning, something waiting
+     plum   a person must act — a failure, a removal, the one final action
+   Contrast, measured (WCAG): ink on the ground 13.7 · muted 4.65 · light text on olive 5.51 and on
+   plum 9.54 · ink on lime 6.88 · its ink on sky 6.32 · sky-d 4.61 · lime-d 4.70 · violet 5.32 ·
+   on the desk: its ink 6.32 (dark: 13.96), and 11.2 where the sky pales (dark: 5.12). */
+:root,:root[data-theme="light"]{
+  color-scheme:light;
+  accent-color:var(--accent);   /* the browser's OWN controls - a checkbox, a radio, a range, a progress bar - on both grounds: said once, here (it was said for eight single controls, and every other one was the browser's blue) */
+  --bg:#f3f5f7; --surface:#fff; --surface-2:#f9fafb; --ink:#1f2a17; --muted:#6a7068; --line:#dcdfde;
+  /* THE OFFICE'S LOGO HAS THESE THREE COLOURS AND NO OTHER, on every ground and in every theme (the owner, 2026-11-15,
+     group msgs 1103-1104: «From now on this is the only colors you use in logo replace evrywhere and never use diffrent
+     colors» - the logo of digital-office.co.il; DGO-1908). The dark blocks below do not redefine them on purpose. */
+  --mark-tile:#1b5e4a; --mark-glyph:#fbfcfc; --mark-accent:#7ecfad;
+  --olive:#56693f; --olive-d:#475734; --olive-soft:#e7eae4; --olive-line:#bfc6b6; --olive-ink:#f3f5f7;
+  --sky:#7baae3; --sky-d:#2a6fc4; --sky-soft:#edf3fb; --sky-line:#cddff4; --sky-ink:#13263f;
+  --lime:#a9b84c; --lime-d:#69732e; --lime-soft:#f3f5e6; --lime-line:#dee4bb; --lime-ink:#1f2a17;
+  --plum:#5b3349; --plum-d:#4a303b; --plum-soft:#e8e2e6; --plum-line:#c1b1ba; --plum-ink:#f3f5f7;
+  --accent:var(--olive); --accent-d:var(--olive-d); --accent-soft:var(--olive-soft); --accent-ink:var(--olive-ink);
+  --blue:var(--sky-d); --amber:var(--lime-d); --red:var(--plum);
+  --violet:#7c5c6d;   /* plum, lifted a fifth toward white: someone has to look — nothing has failed */
+  --ok:var(--olive); --warn:var(--lime-d); --danger:var(--plum); --info:var(--sky-d);
+  --ok-soft:var(--olive-soft); --warn-soft:var(--lime-soft); --danger-soft:var(--plum-soft); --info-soft:var(--sky-soft);
+  --red-soft:var(--plum-soft); --amber-soft:var(--lime-soft); --blue-soft:var(--sky-soft); --violet-soft:var(--plum-soft);
+  --side:var(--olive); --side-ink:#f3f5f7; --side-mut:#dce1da; --side-line:#788765;
+  --desk:var(--sky); --desk-ink:var(--sky-ink);   /* desktop mode's ground is the sky (the owner, DGO-452), and what is written straight on it */
+  --scrim:rgba(31,42,23,.5);                      /* what dims a screen behind a pop-up */
+  --shadow:0 1px 3px rgba(31,42,23,.08),0 6px 24px rgba(31,42,23,.06);
+  --shadow-lg:0 20px 60px rgba(31,42,23,.28);
+  /* ONE COLOUR AND ONE ANIMAL PER OFFICE (the owner, 2026-10-09 · flt-002). When offices are linked,
+     a person reads WHICH office a thing belongs to without opening it, so each office gets a hue of
+     its own. The hue is an IDENTITY and never a health state: an office that stopped answering keeps
+     its colour, and the quiet mark is the one that says "not answering". Each is an ALIAS of the
+     palette's own hue — no fourth value is invented, and because the ground re-points the hue, the
+     office mark follows the ground by itself. Each office's animal (elephant, deer, eagle) is a
+     glyph of bina-icons.js. */
+  --office-hp:var(--muted);   /* hp · elephant — grey: the heavy laptop at home, in the palette's own grey */
+  --office-mac:var(--lime);   /* macbook · deer — yellow: the palette has one yellow and it is lime. A FILL, so what is written ON it is --lime-ink, never this */
+  --office-vps:var(--sky-d);  /* vps · eagle — deep sky blue, «the eagle in the clouds». THE OWNER'S OWN CHOICE (2026-10-09, in writing: vps = נשר + כחול-שמיים) — this line is the colour he picked, not a default kept for him */
+}
+
+/* ── A LINKED OFFICE'S MARK, BY NAME (flt-004) ───────────────────────────────────────────────
+   The link carries a NAME — mark: {color, animal} in the catalog, from the office's own identity
+   — and never a value: the office that DRAWS a linked tile owns the pixels, so it paints the name
+   with its own palette. These seven rules are that translation, one per family above; a screen sets
+   data-office-hue="lime" and paints var(--office-hue).
+   A name this file does not know paints nothing, which is why the vocabulary in
+   apps/dgo-extend/identity.py may only name families that exist here — and why --red and --ok
+   are not among them: they mean «danger» and «it is well» on every screen in the office. */
+[data-office-hue="grey"]   { --office-hue:var(--muted); }
+[data-office-hue="lime"]   { --office-hue:var(--lime); }
+[data-office-hue="sky"]    { --office-hue:var(--sky-d); }
+[data-office-hue="olive"]  { --office-hue:var(--olive-d); }
+[data-office-hue="plum"]   { --office-hue:var(--plum); }
+[data-office-hue="blue"]   { --office-hue:var(--blue); }
+[data-office-hue="violet"] { --office-hue:var(--violet); }
+/* the dark ground is the same four hues on the palette's own ink, and the SAME legend. Olive on that
+   ink is 2.5:1, so its text step there is olive LIFTED — its own hue and saturation, lighter (7.14
+   on a card, 4.82 on its own tint) — and the brand, the main action and «it is well» take that step.
+   Lime stays «look here» and the sky «in motion», as on the light ground: were lime the accent here
+   (it was, for a day), a warning, a selection and «it is well» were one colour. Each «-d» on its
+   own «-soft» there, measured: olive 4.82 · sky 4.62 · lime 4.63 · plum 4.71. */
+@media (prefers-color-scheme:dark){
+  :root{ color-scheme:dark;
+         --bg:#141b0f; --surface:#1f2a17; --surface-2:#192213; --ink:#f3f5f7; --muted:#a2a8a2; --line:#414a3b;
+         --olive-d:#a5ba8c; --olive-soft:#384629; --olive-line:#56693f;
+         --sky-d:#7baae3; --sky-soft:#2e3f38; --sky-line:#4d6a8c;
+         --lime-d:#a9b84c; --lime-soft:#3b4622; --lime-line:#69732e;
+         --plum-d:#ad99a4; --plum-soft:#402f33; --plum-line:#7c5c6d;
+         --accent:var(--olive-d); --accent-ink:var(--surface);
+         --red:#ad99a4; --violet:#bdadb6; --danger:#ad99a4; --ok:var(--olive-d); --side:var(--surface);
+         --desk:var(--sky-ink); --desk-ink:var(--ink); --scrim:rgba(0,0,0,.6);
+         --shadow:0 1px 3px rgba(0,0,0,.4),0 6px 24px rgba(0,0,0,.3);
+         --shadow-lg:0 20px 60px rgba(0,0,0,.55); }
+}
+:root[data-theme="midnight"]{
+  color-scheme:dark;
+  --bg:#141b0f; --surface:#1f2a17; --surface-2:#192213; --ink:#f3f5f7; --muted:#a2a8a2; --line:#414a3b;
+  --olive-d:#a5ba8c; --olive-soft:#384629; --olive-line:#56693f;
+  --sky-d:#7baae3; --sky-soft:#2e3f38; --sky-line:#4d6a8c;
+  --lime-d:#a9b84c; --lime-soft:#3b4622; --lime-line:#69732e;
+  --plum-d:#ad99a4; --plum-soft:#402f33; --plum-line:#7c5c6d;
+  --accent:var(--olive-d); --accent-ink:var(--surface);
+  --red:#ad99a4; --violet:#bdadb6; --danger:#ad99a4; --ok:var(--olive-d); --side:var(--surface);
+  --desk:var(--sky-ink); --desk-ink:var(--ink); --scrim:rgba(0,0,0,.6);
+  --shadow:0 1px 3px rgba(0,0,0,.4),0 6px 24px rgba(0,0,0,.3);
+  --shadow-lg:0 20px 60px rgba(0,0,0,.55);
+}
+/* THE KEYBOARD'S RING - what the browser draws around the stop the keyboard is on, in the palette, wherever
+   a part draws none of its own. It has no specificity at all (:where), so any rule of a part wins. Two
+   screens said this for themselves; on the others nearly every stop wore the browser's ring (DGO-455).
+   A field keeps the offset it has - fourteen rules draw a field's own outline and say no offset. An area
+   (a scroll box, a table) takes the ring inside, where nothing clips it; a control takes it outside,
+   where a filled button does not hide it. */
+:where(:focus-visible){outline:2px solid var(--accent)}
+:where(:focus-visible:not(a,button,summary,[role=button],input,select,textarea)){outline-offset:-2px}
+:where(a,button,summary,[role=button]):focus-visible{outline-offset:2px}
+/* HEBREW AT A HEAVY WEIGHT - on Windows, where the first family of --font is installed. "Segoe UI" has its
+   Hebrew in Light, Regular, Semibold and Bold. Asked for 800 or 900 the browser takes the family's Black
+   face, which has none, and so has every family after it - so the Hebrew of every title at 800 was drawn in
+   the system's last-resort serif, thin, beside Latin in Black: «חשבונות ומראות» at 20px is 150px wide at 700
+   and 120px at 800 (Chrome 154; the screens ask for 800 in 167 places, the question's title among them).
+   These faces give the family's HEBREW RANGE the faces that have it. A family a sheet names is no longer the
+   system's for those characters, so every weight and both styles are named, each as the system resolves it:
+   measured, only upright 800 and 900 change. Any other character is not theirs and goes on to the next
+   family the screen names - system-ui in --font, on Windows the same faces, Black included - which is why
+   G27 asks that system-ui follows wherever a screen names this family itself. Where the family is not
+   installed nothing here resolves and nothing changes. */
+@font-face{font-family:"Segoe UI";src:local("Segoe UI Light");font-weight:100 300;unicode-range:U+0590-05FF,U+FB1D-FB4F}
+@font-face{font-family:"Segoe UI";src:local("Segoe UI");font-weight:400;unicode-range:U+0590-05FF,U+FB1D-FB4F}
+@font-face{font-family:"Segoe UI";src:local("Segoe UI Semibold");font-weight:500 600;unicode-range:U+0590-05FF,U+FB1D-FB4F}
+@font-face{font-family:"Segoe UI";src:local("Segoe UI Bold");font-weight:700 900;unicode-range:U+0590-05FF,U+FB1D-FB4F}
+@font-face{font-family:"Segoe UI";src:local("Segoe UI Light Italic");font-weight:100 300;font-style:italic;unicode-range:U+0590-05FF,U+FB1D-FB4F}
+@font-face{font-family:"Segoe UI";src:local("Segoe UI Italic");font-weight:400;font-style:italic;unicode-range:U+0590-05FF,U+FB1D-FB4F}
+@font-face{font-family:"Segoe UI";src:local("Segoe UI Semibold Italic");font-weight:500 600;font-style:italic;unicode-range:U+0590-05FF,U+FB1D-FB4F}
+@font-face{font-family:"Segoe UI";src:local("Segoe UI Bold Italic");font-weight:700 900;font-style:italic;unicode-range:U+0590-05FF,U+FB1D-FB4F}
+/* @bina-theme-tokens:end */
+:root{--font:"Segoe UI",system-ui,-apple-system,"Noto Sans Hebrew","Assistant",Arial,sans-serif;
+  --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;--r:16px;--r-sm:9px;--bar:56px}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0}
+body{font:13px/1.5 var(--font);background:var(--bg);color:var(--ink);display:flex;flex-direction:column;
+  min-height:100dvh}
+.num{font-variant-numeric:tabular-nums;direction:ltr;unicode-bidi:isolate}
+.mono{font-family:var(--mono);direction:ltr;unicode-bidi:isolate;text-align:start}
+.ic-svg{width:18px;height:18px;flex:none}
+
+/* the bar: name and state, four facts as key over value, one button family */
+.bar{display:flex;align-items:center;gap:14px;flex-wrap:wrap;padding:10px 16px;min-height:var(--bar);
+  background:var(--surface);border-block-end:1px solid var(--line)}
+.who{display:flex;align-items:center;gap:10px;min-width:0}
+.who h1{font-size:16px;font-weight:800;margin:0;white-space:nowrap}
+.pill{display:inline-flex;align-items:center;gap:6px;height:24px;padding:0 10px;border-radius:999px;font-size:12px;
+  font-weight:700;white-space:nowrap;border:1px solid transparent}
+.pill::before{content:"";width:7px;height:7px;border-radius:50%;background:currentColor}
+.pill.ok{background:var(--olive-soft);color:var(--olive-d);border-color:var(--olive-line)}
+.pill.info{background:var(--sky-soft);color:var(--sky-d);border-color:var(--sky-line)}
+.pill.warn{background:var(--lime-soft);color:var(--lime-d);border-color:var(--lime-line)}
+.pill.bad{background:var(--plum-soft);color:var(--plum-d);border-color:var(--plum-line)}
+.pill.muted{background:var(--surface-2);color:var(--muted);border-color:var(--line)}
+.pill.moving::before{animation:beat 1.2s ease-in-out infinite}
+@keyframes beat{50%{opacity:.25}}
+.facts{display:flex;gap:1px;margin:0;background:var(--line);border:1px solid var(--line);border-radius:var(--r-sm);
+  overflow:hidden;flex-wrap:wrap}
+.facts>div{background:var(--surface);padding:4px 12px;min-width:84px}
+.facts dt{font-size:11px;color:var(--muted)}
+.facts dd{margin:0;font-size:12.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:180px}
+.facts dd.hot{color:var(--lime-d);font-weight:700}
+.acts{display:flex;gap:8px;margin-inline-start:auto}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;height:36px;padding:0 16px;
+  border-radius:var(--r-sm);border:1px solid var(--accent);background:var(--accent);color:var(--accent-ink);
+  font:700 13px var(--font);cursor:pointer}
+.btn.sm{height:30px;padding:0 12px;font-size:12.5px}
+.btn.ghost{background:transparent;color:var(--ink);border-color:var(--line)}
+.btn:disabled{opacity:.5;cursor:default}
+.btn[hidden]{display:none}
+.spin{width:13px;height:13px;border:2px solid currentColor;border-inline-end-color:transparent;border-radius:50%;
+  animation:turn .8s linear infinite}
+@keyframes turn{to{transform:rotate(360deg)}}
+
+/* the stage: the phone's display, or a card that says why there is none */
+.stage{position:relative;flex:1;min-height:0;display:flex;align-items:center;justify-content:center;padding:14px}
+.screen{position:absolute;inset:14px;display:none}
+.screen.on{display:block}
+.screen canvas{border-radius:var(--r-sm);box-shadow:var(--shadow)}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);box-shadow:var(--shadow);
+  padding:22px 24px;max-width:440px;width:100%;text-align:center}
+.card[hidden]{display:none}
+.card .big{display:inline-flex;align-items:center;justify-content:center;width:52px;height:52px;border-radius:50%;
+  background:var(--surface-2);color:var(--muted);margin-block-end:8px}
+.card .big .ic-svg{width:26px;height:26px}
+.card.bad .big{background:var(--plum-soft);color:var(--plum-d)}
+.card.wait .big{background:var(--lime-soft);color:var(--lime-d)}
+.card h2{font-size:16px;font-weight:800;margin:4px 0 6px}
+.card p{margin:0 0 14px;color:var(--muted);font-size:13px}
+.card .acts{justify-content:center;margin:0}
+.card details{margin-block-start:14px;text-align:start;font-size:12px;color:var(--muted)}
+.card pre{white-space:pre-wrap;word-break:break-word;margin:6px 0 0;font-size:11.5px}
+.chip{position:absolute;inset-block-start:22px;inset-inline-start:50%;transform:translateX(50%);display:none;
+  align-items:center;gap:8px;height:30px;padding:0 14px;border-radius:999px;background:var(--surface);
+  border:1px solid var(--line);box-shadow:var(--shadow);font-size:12.5px;font-weight:700;z-index:2}
+.chip.on{display:inline-flex}
+.chip.info{color:var(--sky-d)}
+.chip.warn{color:var(--lime-d)}
+@media (max-width:640px){
+  .bar{padding:8px 12px;gap:8px}
+  .facts>div{min-width:0;padding:3px 9px}
+  .facts dd{max-width:120px}
+  .acts{margin-inline-start:0}
+  .stage,.screen{padding:0;inset:8px}
+}
+</style>
+</head>
+<body>
+<header class="bar">
+  <div class="who">
+    <svg class="ic-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="2" width="14" height="20" rx="2"/><path d="M12 18h.01"/></svg>
+    <h1>אמולטור אנדרואיד</h1>
+    <span class="pill muted" id="pill" title="מצב הטלפון">בודק…</span>
+  </div>
+  <dl class="facts">
+    <div title="טמפרטורת המעבד של המחשב: עולה מתחת ל-80°C, מושהה ב-85°C, נכבה ב-90°C"><dt>חום</dt><dd class="num" id="f-temp">—</dd></div>
+    <div title="מי ביקש להפעיל את הטלפון"><dt>הפעיל</dt><dd id="f-by">—</dd></div>
+    <div title="ממתי הטלפון במצב הזה"><dt>מאז</dt><dd id="f-since">—</dd></div>
+    <div id="f-idle-box" title="טלפון שאיש לא משתמש בו נכבה מעצמו, ונשמר כדי לעלות מהר בפעם הבאה"><dt>נכבה מעצמו</dt><dd id="f-idle">—</dd></div>
+  </dl>
+  <div class="acts">
+    <button class="btn sm ghost" id="stop" type="button" title="שומר את מצב הטלפון וכובה אותו — ההפעלה הבאה תעלה מהר" hidden>כבה</button>
+  </div>
+</header>
+<main class="stage">
+  <div class="screen" id="screen" aria-label="מסך הטלפון"></div>
+  <div class="chip" id="chip"></div>
+  <section class="card" id="card">
+    <span class="big"><svg class="ic-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="2" width="14" height="20" rx="2"/><path d="M12 18h.01"/></svg></span>
+    <h2 id="c-title">בודק את הטלפון…</h2>
+    <p id="c-text">רגע אחד</p>
+    <div class="acts"><button class="btn" id="start2" type="button" title="מפעיל את הטלפון: עלייה מהירה מהשמירה האחרונה, או עלייה מלאה בפעם הראשונה" hidden>הפעל את הטלפון</button></div>
+    <details id="c-more" hidden><summary>מה אמר האמולטור</summary><pre class="mono" id="c-why"></pre></details>
+  </section>
+</main>
+<script type="module">
+// noVNC is loaded when there is a display to show, and its failure is said on the stage: the state, the reason and
+// the buttons never depend on it (a static import that failed would have taken the whole page with it)
+let RFB = null;
+const $ = (id) => document.getElementById(id);
+const STATE = {
+  off: ["כבוי", "muted"], waiting: ["ממתין לקירור", "warn"], booting: ["עולה", "info moving"],
+  running: ["פועל", "ok"], paused: ["מושהה לקירור", "warn"], stopping: ["שומר ונכבה", "info moving"],
+};
+// why it is off, in the owner's words (server/supervisor.py's codes); the emulator's own sentence stays one click away
+const REASON = {
+  idle: (s) => [`נכבה מעצמו אחרי ${Math.round((s.idle_stop_s || 1200) / 60)} דקות שאיש לא השתמש בו`,
+                "כך המחשב חוזר לעבודה של הלשכה. " + (s.saved ? "מצבו נשמר, וההפעלה הבאה עולה תוך שניות."
+                                                              : "הפעם מצבו לא נשמר, וההפעלה הבאה תיקח כמה דקות.")],
+  asked: (s) => ["הטלפון כבוי", s.saved ? "מצבו נשמר בכיבוי: ההפעלה עולה תוך שניות."
+                                         : "ההפעלה לוקחת כמה דקות; כיבוי מהמסך שומר את מצבו לפעם הבאה."],
+  heat: () => ["נכבה כי המחשב התחמם", "ב-90°C הטלפון נכבה כדי לשמור על המחשב. אפשר להפעיל שוב כשהוא מתקרר."],
+  exited: () => ["האמולטור נסגר באמצע", "אפשר להפעיל שוב. אם זה חוזר — מה שהאמולטור אמר כתוב למטה."],
+  disk: () => ["נכבה כי נשאר מעט מקום בדיסק", "הלשכה שומרת לעצמה 20GB פנויים. יש לפנות מקום ואז להפעיל."],
+  refused: () => ["הטלפון לא הצליח לעלות", "המחשב לא מאפשר לו לרוץ כרגע. הסיבה המלאה כתובה למטה."],
+  stuck: () => ["האמולטור לא נכבה", "הוא עדיין רץ, ולכן לא תעלה עוד גרסה שלו. הסיבה המלאה כתובה למטה."],
+  "": () => ["הטלפון כבוי", "ההפעלה הראשונה לוקחת כמה דקות; אחריה כל הפעלה עולה מהשמירה תוך שניות."],
+};
+let st = null, rfb = null, busy = false, failures = 0, retry = null;
+
+function ago(sec) {
+  const s = Math.max(0, Math.round(Date.now() / 1000 - sec));
+  if (s < 60) return "עכשיו";
+  if (s < 3600) return `לפני ${Math.round(s / 60)} דק׳`;
+  const h = Math.round(s / 3600), d = Math.round(s / 86400);
+  if (s < 86400) return h === 1 ? "לפני שעה" : h === 2 ? "לפני שעתיים" : `לפני ${h} שעות`;
+  return d === 1 ? "אתמול" : d === 2 ? "לפני יומיים" : `לפני ${d} ימים`;
+}
+const clock = (sec) => { const s = Math.max(0, Math.round(Date.now() / 1000 - sec));
+  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`; };
+
+let loading = false;
+async function connect() {
+  if (rfb || loading) return;
+  if (!RFB) {
+    loading = true;
+    try { RFB = (await import("./vnc/core/rfb.js")).default; }
+    catch (e) { $("chip").className = "chip on warn"; $("chip").textContent = "התצוגה לא נטענה — מנסה שוב"; }
+    loading = false;
+    if (!RFB) { clearTimeout(retry); retry = setTimeout(connect, 5000); return; }
+    if (rfb || !st || !["booting", "running", "paused", "stopping"].includes(st.state)) return;
+  }
+  const ws = new URL("websockify", document.baseURI);
+  ws.protocol = ws.protocol === "https:" ? "wss:" : "ws:";
+  const me = rfb = new RFB($("screen"), ws.href, { shared: true });
+  me.scaleViewport = true;
+  me.resizeSession = false;
+  me.qualityLevel = 6;
+  me.compressionLevel = 2;
+  me.focusOnClick = true;
+  me.background = getComputedStyle(document.body).getPropertyValue("--bg").trim();
+  me.addEventListener("disconnect", () => {
+    // noVNC says so up to three seconds after it was asked: by then a newer display may stand in its place
+    if (rfb !== me) return;
+    rfb = null;
+    if (st && ["booting", "running", "paused"].includes(st.state)) {
+      clearTimeout(retry);
+      retry = setTimeout(connect, 2000);
+    }
+  });
+}
+function disconnect() {
+  clearTimeout(retry);
+  if (rfb) { const r = rfb; rfb = null; r.disconnect(); }
+}
+
+function card(kind, title, text, why, canStart) {
+  $("card").hidden = false;
+  $("card").className = "card" + (kind ? " " + kind : "");
+  $("c-title").textContent = title;
+  $("c-text").textContent = text;
+  $("start2").hidden = !canStart;
+  $("c-more").hidden = !why;
+  $("c-why").textContent = why || "";
+}
+
+function render() {
+  const s = st, on = ["booting", "running", "paused", "stopping"].includes(s.state);
+  const failed = s.state === "off" && ["heat", "exited", "disk", "refused", "stuck"].includes(s.code);
+  const [word, cls] = STATE[s.state] || [s.state, "muted"];
+  $("pill").className = "pill " + (failed ? "bad" : cls);
+  $("pill").textContent = word;
+  $("f-temp").textContent = s.temp == null ? "—" : `${s.temp}°C`;
+  $("f-temp").className = "num" + (s.temp >= 80 ? " hot" : "");
+  $("f-by").textContent = s.asked_by || "—";
+  $("f-by").title = s.asked_by || "";
+  $("f-since").textContent = s.since ? ago(s.since) : "—";
+  $("f-idle-box").hidden = s.idle_in == null;
+  $("f-idle").textContent = s.idle_in == null ? "—" : `בעוד ${Math.max(1, Math.ceil(s.idle_in / 60))} דק׳`;
+  $("stop").hidden = !(on || s.state === "waiting");
+  $("stop").disabled = busy || s.state === "stopping";
+  $("start2").disabled = busy;
+
+  $("screen").classList.toggle("on", on);
+  if (on) { $("card").hidden = true; connect(); } else disconnect();
+  const chip = $("chip");
+  const say = { booting: [`עולה · ${clock(s.since)}`, "info"], paused: [`מושהה לקירור · ${s.temp}°C`, "warn"],
+                stopping: ["שומר את מצב הטלפון ונכבה…", "info"] }[s.state];
+  chip.className = "chip" + (say ? ` on ${say[1]}` : "");
+  chip.innerHTML = say ? '<span class="spin" aria-hidden="true"></span>' : "";
+  if (say) chip.append(say[0]);
+
+  if (s.state === "waiting") {
+    card("wait", "ממתין שהמחשב יתקרר", `עכשיו ${s.temp ?? "?"}°C. הטלפון עולה מעצמו מתחת ל-80°C.`, "", false);
+  } else if (s.state === "off") {
+    const [title, text] = (REASON[s.code] || REASON[""])(s);
+    card(failed ? "bad" : "", title, text, s.why && s.why !== "asked" ? s.why : "", true);
+  }
+}
+
+async function poll() {
+  try {
+    const r = await fetch("api/status", { cache: "no-store", credentials: "same-origin" });
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    st = await r.json();
+    failures = 0;
+    render();
+  } catch (e) {
+    failures += 1;
+    if (failures >= 2) {
+      disconnect();
+      $("screen").classList.remove("on");
+      $("pill").className = "pill bad";
+      $("pill").textContent = "לא עונה";
+      card("bad", "המסך של הטלפון לא עונה", "האפליקציה עולה מחדש או שהמחשב לא זמין. מנסה שוב מעצמו.",
+           String(e && e.message || e), false);
+    }
+  }
+}
+
+async function ask(verb, button) {
+  if (busy) return;
+  busy = true;
+  const label = button.textContent;
+  button.disabled = true;
+  button.innerHTML = '<span class="spin" aria-hidden="true"></span>';
+  button.append(verb === "start" ? "מפעיל…" : "מכבה…");
+  try {
+    const r = await fetch(`api/${verb}`, { method: "POST", credentials: "same-origin",
+                                           headers: { "Content-Type": "application/json" }, body: "{}" });
+    if (r.ok) { st = await r.json(); }
+  } catch (e) { /* the next poll says what is so */ }
+  busy = false;
+  button.textContent = label;
+  if (st) render();
+  poll();
+}
+
+$("start2").addEventListener("click", (e) => ask("start", e.currentTarget));
+$("stop").addEventListener("click", (e) => ask("stop", e.currentTarget));
+poll();
+setInterval(poll, 2000);
+</script>
+</body>
+</html>

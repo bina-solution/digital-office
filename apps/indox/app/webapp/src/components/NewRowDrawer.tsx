@@ -5,7 +5,7 @@
 //
 // `onAddRow` used to POST `{}` and prepend whatever came back. On a five-row
 // lookup table that reads as "a row appeared, type into it". On `companies` —
-// 1,180 rows, sorted by name, paged 50 at a time, with two quick-filters that
+// N rows, sorted by name, paged 50 at a time, with two quick-filters that
 // both mean "this record is incomplete" — it is the opposite of an affordance:
 // the new row carries no name, so under the active sort it is not where the eye
 // went; it trips both quick-filters the instant it exists; and every column it

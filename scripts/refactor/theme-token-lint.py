@@ -41,7 +41,7 @@ SOURCE = ROOT / "platform-base/bina-ui/theme-tokens.css"
 def app_not_in_tree(rel: str) -> bool:
     """A target of an app whose whole directory is absent: the app is not in this tree at all, and there is
     no surface to check. The public export holds back a client's app (scripts/release/public/exclude.txt,
-    apps/chimney-services/, r030-301), and its CI runs this gate. A missing file in an app that IS here
+    apps/examplech-services/, r030-301), and its CI runs this gate. A missing file in an app that IS here
     still fails, below."""
     parts = rel.split("/")
     return len(parts) > 2 and parts[0] == "apps" and not (ROOT / "apps" / parts[1]).is_dir()
@@ -55,6 +55,10 @@ TARGETS = [
     "platform-base/bina-ui/bina-ui.css",
     # [2026-11-10] esign's screen (DGO-1631, hp-dgo), taken by the release (DGO-969): it carried the block, unlisted
     "apps/esign/static/esign.css",
+    # [2026-11-11] Examplex's screen (DGO-1836): suppliers, stores, orders — mobile first
+    "apps/examplex/static/examplex.css",
+    # [2026-11-15] DGO Cloud's screen (DGO-1893): the offer, sign-up, «my DGO», billing, the admin
+    "apps/dgo-cloud/static/app.css",
     # [2026-11-10] hp-dgo's calculator and news screens (DGO-969): they named a palette of their own (G82)
     "apps/calculator/static/index.html",
     "apps/newsflow/static/index.html",
@@ -73,6 +77,7 @@ TARGETS = [
     "apps/my-docs/static/style.css",
     "apps/computers/static/index.html",
     "apps/dashboard/static/index.html",   # the control centre (DGO-1124)
+    "apps/bs-group/static/app.css",       # [2026-11-18] «קבוצת בינה סולושנס», the company at a glance (DGO-1974)
     "apps/git/static/index.html",
     "apps/sites/static/index.html",
     "apps/domains/static/index.html",
@@ -83,8 +88,8 @@ TARGETS = [
     # [2026-10-12] the routes screen (DGO-543): what the office answers on, and where.
     "apps/office-routes/static/index.html",
     "apps/dgo-extend/static/index.html",
-    # [2026-10-22] the field-sales services app of The Examplef Guys (EXF-15): its one stylesheet
-    "apps/chimney-services/static/app.css",
+    # [2026-10-22] the field-sales services app of Example shop (EXF-15): its one stylesheet
+    "apps/examplech-services/static/app.css",
     # [2026-11-01] the caps as digital replicas (DGO-1091): cad-api's gallery and cap pages share one stylesheet
     "apps/cad-api/static/cad.css",
     "apps/telegram-tv/static/style.css",
@@ -108,6 +113,8 @@ TARGETS = [
     "apps/ollama/front/index.html",
     # [2026-11-10] the office's GitHub runner as an app, «מריץ CI» (DGO-1797)
     "apps/ci-runner/static/index.html",
+    # [2026-11-13] the office's Android phone: its state, start/stop and the live display, in place of noVNC alone
+    "apps/android-emulator/server/screen/index.html",
     # [2026-11-10] the card over the office browser's screen when it does not connect (DGO-437): drawn inside
     # noVNC's page, and answered by Caddy when the browser does not answer at all
     "apps/browser42/viewer/card.css",
@@ -155,6 +162,8 @@ TARGETS = [
     # [2026-11-05] two remain: the v1 pages (app.css, list.html, live.html) went to legacy/ (DGO-1325).
     "apps/meet/start/flow/bina-ui.css",
     "apps/meet/start/flow/mf.css",
+    # [2026-11-18] the desktop app's own screens (DGO-1972): its first run and its office rail, around the console
+    "packaging/desktop/src/ui/shell.css",
 ]
 
 
@@ -190,6 +199,7 @@ FONT_TARGETS = [
     "platform-base/forward-auth/ui/page.css",
     "apps/browser42/viewer/card.css",
     "apps/ci-runner/static/index.html",
+    "apps/android-emulator/server/screen/index.html",
     # [2026-11-11] the three client screens of Exampleu's group, which used var(--font) and never defined it (DGO-1782)
     "apps/examplem-io/static/index.html",
     "apps/assets/static/index.html",
@@ -231,6 +241,9 @@ NAV_JS_TARGETS: list[str] = [
     "platform-base/connections/ui.html",
     "platform-base/security/static/index.html",
     "apps/computers/static/index.html",
+    # [2026-11-12] `apps/examplex` LEFT this row (DGO-1837): the owner asked for the structure of the Services app —
+    # «מבחינת העיצוב של האפליקציה, זה פחות או יותר מה שאנחנו רוצים… לקחת את המבנה הזה» — a client product on its own host
+    # (app.examplex.co.il) with a bottom bar and one raised action on a phone, as apps/examplech-services has; not this rail.
 ]
 
 # Apps that are one scrolling page: no router, no sections — their uniformity is the CHROME.
@@ -251,6 +264,7 @@ PAGE_TARGETS: list[str] = [
     "apps/meet/start/flow/bina-page.css",
     "apps/meet/start/flow/mf.css",
     "apps/telegram/static/index.html",   # [2026-11-03] one page, three places (DGO-1300)
+    "apps/bs-group/static/app.css",      # [2026-11-18] one page: the company at a glance (DGO-1974)
 ]
 
 NAV_TARGETS: list[str] = [
@@ -272,6 +286,7 @@ NAV_TARGETS: list[str] = [
     "platform-base/notifications/static/index.html",
     "platform-base/security/static/index.html",
     "apps/computers/static/index.html",
+    # [2026-11-12] `apps/examplex` LEFT this row with the one in NAV_JS_TARGETS (DGO-1837, the Services shell).
 ]
 
 BLOCKS = [
@@ -300,7 +315,9 @@ BLOCKS = [
      "targets": ["platform-base/console/static/app.js", "platform-base/app-management/static/app.js",
                  "platform-base/console/static/install.js", "apps/dgo-extend/static/app.js",
                  # [2026-10-29] the meeting-start flow pages carry their own copy of this set.
-                 "apps/meet/start/flow/bina-icons.js", "apps/meet/start/flow/mf.js"]},
+                 "apps/meet/start/flow/bina-icons.js", "apps/meet/start/flow/mf.js",
+                 # [2026-11-12] Examplex's menu draws the office's glyphs (DGO-1836; G77 refuses an emoji for an icon)
+                 "apps/examplex/static/examplex.js"]},
     # What a failed request is CALLED when the service sent no sentence of its own. Eight request
     # helpers ended in `body.error || "HTTP " + r.status`, so a service that was down -- the one that
     # cannot send a sentence -- was reported as "HTTP 502"; five said the answer "is not JSON".
@@ -321,7 +338,14 @@ BLOCKS = [
                  "platform-base/security/static/app.js",
                  # [2026-10-29] the meeting-start flow pages ask and report in the page too.
                  "apps/meet/start/flow/bina-ask.js", "apps/meet/start/flow/mf.js",
-                 "apps/telegram/static/app.js"]},
+                 "apps/telegram/static/app.js",
+                 # [2026-11-11] Examplex (DGO-1836) asks a reason, confirms a removal and reports in the page.
+                 "apps/examplex/static/examplex.js",
+                 # [2026-11-17] DGO Cloud's admin (DGO-1893) asks before a refund, a purchase or a release
+                 # in the page — it shipped with confirm()/prompt(), and G77 held batch 71 on them.
+                 "apps/dgo-cloud/static/app.js",
+                 # [2026-11-18] «קבוצת בינה סולושנס» (DGO-1974) says what its «רענון» did in the page.
+                 "apps/bs-group/static/app.js"]},
     # The office's ONE mark, drawn inline so its three parts wear the palette's tokens (the image
     # files beside the source carry the values, for a favicon and the site). Two screens drew their
     # own copies of it before (the shell, the first-run wizard); the simulator embeds the shell, and
@@ -330,7 +354,13 @@ BLOCKS = [
      "start": "<!-- @bina-brand:start -->", "end": "<!-- @bina-brand:end -->",
      "targets": ["platform-base/console/static/index.html", "platform-base/console/static/install.html",
                  # [2026-11-09] the sign-in app's pages wear the mark where the card's icon goes (DGO-1501)
-                 "platform-base/forward-auth/ui/pages.html"]},
+                 "platform-base/forward-auth/ui/pages.html",
+                 # [2026-11-12] the signing pages a signer outside the office sees: the mark beside «הלשכה הדיגיטלית»
+                 # (the owner, DGO-1846) — one copy per page, so this gate checks every one
+                 "apps/esign/templates/done.html", "apps/esign/templates/sentence.html",
+                 "apps/esign/templates/signer.html",
+                 # [2026-11-18] the desktop app's first run and its rail («this computer») wear the mark (DGO-1972)
+                 "packaging/desktop/src/ui/welcome.html", "packaging/desktop/src/ui/rail.html"]},
     # THE CARD, AND THE LOGO WALL IT STANDS ON (DGO-1501, 2026-11-09). The card a screen shows when it
     # has nothing else to show (`.xn`) lived in the console's stylesheet alone; the sign-in app's pages
     # were unstyled and the link's door drew a card of its own. One card now, stamped from bina-ui. The
@@ -385,7 +415,11 @@ VENDORED = ["platform-base/bina-ui/bina-table.js", "platform-base/bina-ui/bina-t
 # served from the shell's own static root (`/favicon.svg`), where a `vendor/` path would not be a
 # favicon. Source -> the copies that must stay byte-identical to it.
 VENDORED_COPIES = {
-    "platform-base/bina-ui/brand/favicon.svg": ["platform-base/console/static/favicon.svg"],
+    # [2026-11-12] …and Examplex's office-mark.svg: wherever Examplex writes «הלשכה הדיגיטלית», the office's mark stands
+    # beside it (the owner, DGO-1846) — the site's pages, the sign-in page
+    # [2026-11-15] …and DGO Cloud's favicon, the mark beside «DGO Cloud» in its bar (DGO-1893)
+    "platform-base/bina-ui/brand/favicon.svg": ["platform-base/console/static/favicon.svg", "apps/examplex/static/office-mark.svg",
+                                                "apps/dgo-cloud/static/favicon.svg"],
     # the logo wall behind the card (DGO-1501): each surface that draws the card serves it at /bina-wall.svg
     "platform-base/bina-ui/brand/bina-wall.svg": ["platform-base/console/static/bina-wall.svg",
                                                    "platform-base/forward-auth/ui/bina-wall.svg",
@@ -412,6 +446,17 @@ def check_vendored(fix: bool) -> int:
             ["git", "-C", str(ROOT), "ls-files", "--", "*/vendor/" + Path(rel).name],
             capture_output=True, text=True).stdout.splitlines()
         for copy in copies:
+            parts = Path(copy).parts
+            if not (ROOT / copy).exists() and len(parts) > 2 and parts[0] == "apps" \
+                    and not (ROOT / parts[0] / parts[1]).exists():
+                # its whole app is not in this tree (the public copy holds a client's app back: apps/examplex/ — G27
+                # crashed on it there, 0.3.2's second reader); a copy missing BESIDE its app is still a failure
+                print(f"skip  {copy}  (its app is not in this tree)")
+                continue
+            if not (ROOT / copy).exists():
+                print(f"FAIL  {copy}: missing (a copy of {rel})")
+                bad += 1
+                continue
             if (ROOT / copy).read_bytes().replace(b"\r\n", b"\n") == want:
                 print(f"ok    {copy}  (a copy of {rel})")
             elif fix:

@@ -34,14 +34,26 @@ log() { echo "[n8n-push] $*"; }
 # Everything else the hook does is instance-global (owner, credentials, activation, restart) and
 # still runs — scoping narrows WHICH workflows are staged, not whether the instance is made sane.
 APP_SCOPE=""
+RESEED_ONLY=""   # set here, never inherited: an exported RESEED_ONLY must not turn a full push into a reseed
 _rest=""
 while [ "$#" -gt 0 ]; do
   case "$1" in
     --app)   APP_SCOPE="${2:-}"; shift 2 || shift ;;
     --app=*) APP_SCOPE="${1#--app=}"; shift ;;
+    # the credentials alone (DGO-1015): re-seed the env-managed credentials from .env (step 1.5) and stop — no
+    # schema, no workflow, no activation, NO RESTART; a credential that does not take fails the run (exit 3), so
+    # a key rotation that changed .env knows whether n8n holds the new value. The door: `bbox n8n push all
+    # --reseed-only` (a scoped `bbox n8n push <app>` goes to push-app, which has no such mode)
+    --reseed-only) RESEED_ONLY=1; shift ;;
+    # a near-miss of it is refused, never run as the FULL push (which restarts the whole stack) the caller avoided
+    *[Rr][Ee][Ss][Ee][Ee][Dd]*|*[Rr][Ee]-[Ss][Ee][Ee][Dd]*)    # any spelling, any case, an em-dash: never a full push
+      echo "Error: unknown argument '$1' — did you mean --reseed-only? Nothing was run." >&2; exit 2 ;;
     *)       _rest="${_rest} $1"; shift ;;
   esac
 done
+# Any other argument is not understood, and was always dropped without a word. Said now (rule 8, stage one: said,
+# then refused once no caller is seen passing one), since a dropped flag means a FULL push and its restart.
+[ -z "${_rest}" ] || echo "[n8n-push] WARNING: argument(s) not understood, ignored:${_rest} — this run is a FULL push" >&2
 
 # A SCOPED push of an app this office has switched OFF is refused, not honoured — and asked HERE, before
 # the lock and the instance-wide steps below (owner, credentials, reseed), which ran for a push that was
@@ -100,8 +112,9 @@ case "${_gc}" in
 esac
 
 # performance profile: refresh the .env block + perf_* settings rows (no-op if unset) — after the guard, so
-# a refused push changes nothing (the second reader of DGO-998)
-( cd "${REPO_ROOT}" && python3 scripts/perf-profile-apply ) || true
+# a refused push changes nothing (the second reader of DGO-998). Not in --reseed-only: a key rotation calls it
+# between its own writes of .env, and this rewrites .env in place (DGO-1015's third reader)
+[ -n "${RESEED_ONLY:-}" ] || ( cd "${REPO_ROOT}" && python3 scripts/perf-profile-apply ) || true
 
 # ── Mutual exclusion — `flock`, not the `processLock01` Redis mechanism ──────────────────────────
 # processLock01 (Redis INCR + TTL, ~1,700 calls/day) is the right tool for locking BETWEEN n8n
@@ -142,7 +155,7 @@ fi
 # release the metadata (not the flock itself — that's the kernel's job) on any exit path.
 _PUSH_STARTED="$(date -u +%FT%TZ)"
 printf 'pid=%s host=%s started=%s(UTC) scope=%s\n' "$$" "$(hostname 2>/dev/null || echo '?')" \
-  "${_PUSH_STARTED}" "${APP_SCOPE:-all}" > "${LOCK_META}"
+  "${_PUSH_STARTED}" "${APP_SCOPE:-all}${RESEED_ONLY:+ mode=reseed-only}" > "${LOCK_META}"
 
 # ── APPEND BEFORE DELETING — a forensic record that self-deletes is not a record. ───────────────
 # The meta file only describes the CURRENT holder, so it must go on exit or the next reader sees a
@@ -170,12 +183,16 @@ trap _push_record EXIT
 #    which takes authentik's forward-auth down with it for the duration. Anyone hitting a protected
 #    console/UI during that window sees a raw, unexplained `HTTP ERROR 500` — this exists so nobody
 #    is surprised by that. ──
+if [ -n "${RESEED_ONLY:-}" ]; then
+  log "reseed-only: the env-managed credentials from .env — nothing else moves, nothing restarts"
+else
 echo "${c1:-}[n8n-push] ================================================================${c0:-}" >&2
 echo "${c1:-}[n8n-push]  FULL-STACK RESTART — this push restarts n8n + workers + task-runners${c0:-}" >&2
 echo "${c1:-}[n8n-push]  at the end. Expect a few minutes of downtime: the console, any-concurrency${c0:-}" >&2
 echo "${c1:-}[n8n-push]  and every authentik-protected route will 500/hang until n8n (and authentik's${c0:-}" >&2
 echo "${c1:-}[n8n-push]  forward-auth check against it) come back up.${c0:-}" >&2
 echo "${c1:-}[n8n-push] ================================================================${c0:-}" >&2
+fi
 
 log "Container: ${N8N_CONTAINER}"
 docker ps --format '{{.Names}}' | grep -Fxq "${N8N_CONTAINER}" || { echo "Error: '${N8N_CONTAINER}' not running." >&2; exit 1; }
@@ -198,7 +215,7 @@ docker ps --format '{{.Names}}' | grep -Fxq "${N8N_CONTAINER}" || { echo "Error:
 # Re-applying is safe: every statement in 01_platform.sql is `if not exists` / `or replace`.
 SQL="${N8N_DIR}/schema/01_platform.sql"
 [ -f "${SQL}" ] || { echo "Error: platform schema missing: ${SQL}" >&2; exit 1; }
-if PG_DB="$(cn supabase-db)" && [ -n "${PG_DB}" ]; then
+if [ -z "${RESEED_ONLY:-}" ] && PG_DB="$(cn supabase-db)" && [ -n "${PG_DB}" ]; then
   t=0; until docker exec "${PG_DB}" pg_isready -U postgres -q 2>/dev/null || [ "${t}" -ge 60 ]; do
     sleep 3; t=$((t + 3))
   done
@@ -250,6 +267,8 @@ if PG_DB="$(cn supabase-db)" && [ -n "${PG_DB}" ]; then
     echo "       ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO anon, authenticated, service_role;" >&2
     exit 1
   fi
+elif [ -n "${RESEED_ONLY:-}" ]; then
+  log "reseed-only: platform schema not touched"
 else
   # Not an error in every deployment: an estate with no supabase provider has nowhere to put this.
   log "no supabase-db container — platform schema not applied"
@@ -415,7 +434,7 @@ fi
 # NEVER BLANK A LIVE SECRET. An unset-or-empty `${VAR}` used to resolve to "" and get PATCHed in,
 # so a push silently re-encrypted an EMPTY secret over a working credential. Measured 2026-08-09:
 # `.env` had `GEMINI_API_KEY=` (empty; `.env.ex` carries a value), so every push blanked
-# `6mfcsdRaqQ4IdQ8Y` (ai-studio-bs-extraction) and `Balance Sheet Extractor - v2- shmuel` failed
+# `6mfcsdRaqQ4IdQ8Y` (ai-studio-bs-extraction) and `Balance Sheet Extractor - v2- person06` failed
 # 100% with "Forbidden - perhaps check your credentials?" from its Gemini node. `BmKlKWiEeZAxNWyi`
 # (Chat Auth) was blanked the same way by CHAT_AUTH_USER/PASS being absent from `.env` entirely.
 # This step is INSTANCE-GLOBAL — `bbox n8n <app> push` narrows only which WORKFLOWS are staged —
@@ -432,8 +451,13 @@ if printf '%s\n' "${OVR_BLOCK}" | grep -qE '^[[:space:]]{2}[A-Za-z0-9_-]+:[[:spa
   REF_VARS="$(printf '%s\n' "${OVR_BLOCK}" | grep -E '^[[:space:]]{2}[A-Za-z0-9_-]+:[[:space:]]*\{' | grep -oE '\$\{[A-Za-z0-9_]+\}' | tr -d '${}' | sort -u)"
   RESEED_ENV=(-e "OWNER_EMAIL=${OE}" -e "OWNER_PASSWORD=${OP}")
   for v in ${REF_VARS}; do RESEED_ENV+=(-e "${v}=$(read_env "${v}" || true)"); done
+  # reseed-only is STRICT: a credential whose PATCH does not take, or no owner session, fails the run (exit 3) — a
+  # full push keeps today's lenient report (a skipped unset credential is never a failure, in either mode)
+  [ -z "${RESEED_ONLY:-}" ] || RESEED_ENV+=(-e "RESEED_STRICT=1")
   log "Reseeding env-driven credentials from .env (credential_overrides)..."
-  printf '%s' "${OVR_BLOCK}" | docker exec -i "${RESEED_ENV[@]}" "${N8N_CONTAINER}" node -e '
+  # the marker FIRST: a re-seed cut off from outside keeps running inside n8n (docker exec outlives its client), and
+  # scripts/env-secrets.py waits it out by `pgrep -f dgo-reseed` — busybox's pgrep reads 1023 bytes of a command line
+  printf '%s' "${OVR_BLOCK}" | docker exec -i "${RESEED_ENV[@]}" "${N8N_CONTAINER}" node -e '/*dgo-reseed*/
     const http=require("http"); let block="";
     process.stdin.on("data",d=>block+=d).on("end",async()=>{
       const items=[];
@@ -454,7 +478,7 @@ if printf '%s\n' "${OVR_BLOCK}" | grep -qE '^[[:space:]]{2}[A-Za-z0-9_-]+:[[:spa
         }
         items.push({id:m[1],name:spec.name,type:spec.type,data,unset});
       }
-      if(!items.length){console.log("[n8n-push]   credential_overrides: none parsed");return;}
+      if(!items.length){console.log("[n8n-push]   credential_overrides: none parsed");if(process.env.RESEED_STRICT)process.exitCode=3;return;}
       function req(path,method,body,cookie){return new Promise((res,rej)=>{
         const data=body?JSON.stringify(body):null;
         const r=http.request({host:"127.0.0.1",port:5678,path,method,headers:Object.assign({"Content-Type":"application/json","browser-id":"reseed"},data?{"Content-Length":Buffer.byteLength(data)}:{},cookie?{Cookie:cookie}:{})},resp=>{let d="";resp.on("data",c=>d+=c).on("end",()=>res({status:resp.statusCode,body:d,sc:resp.headers["set-cookie"]}));});
@@ -462,7 +486,7 @@ if printf '%s\n' "${OVR_BLOCK}" | grep -qE '^[[:space:]]{2}[A-Za-z0-9_-]+:[[:spa
       });}
       let cookie="";
       for(let i=0;i<20;i++){ try{ const lg=await req("/rest/login","POST",{emailOrLdapLoginId:process.env.OWNER_EMAIL,password:process.env.OWNER_PASSWORD}); if(lg.sc){cookie=lg.sc.map(c=>c.split(";")[0]).join("; ");break;} }catch(e){} await new Promise(r=>setTimeout(r,1000)); }
-      if(!cookie){console.log("[n8n-push]   reseed: could not log in as owner — skipping");return;}
+      if(!cookie){console.log("[n8n-push]   reseed: could not log in as owner — skipping");if(process.env.RESEED_STRICT)process.exitCode=3;return;}
       let ok=0, skipped=0;
       for(const it of items){
         if(it.unset && it.unset.length){
@@ -476,7 +500,17 @@ if printf '%s\n' "${OVR_BLOCK}" | grep -qE '^[[:space:]]{2}[A-Za-z0-9_-]+:[[:spa
       }
       console.log("[n8n-push]   reseeded "+ok+"/"+(items.length-skipped)+" env-driven credential(s) from .env"+
                   (skipped?("; "+skipped+" SKIPPED to avoid blanking a live secret"):""));
-    });'
+      if(process.env.RESEED_STRICT&&ok<items.length-skipped){console.log("[n8n-push]   reseed-only: "+(items.length-skipped-ok)+" credential(s) did not take — FAILED");process.exitCode=3;}
+    });' || { _rc=$?; [ -z "${RESEED_ONLY:-}" ] || exit 3; exit "${_rc}"; }   # a full push aborts with the code as before
+elif [ -n "${RESEED_ONLY:-}" ]; then
+  log "reseed-only: the blueprint declares no credential_overrides — nothing to re-seed"; exit 3
+fi
+
+# `--reseed-only` stops here (DGO-1015): the credentials are re-seeded and nothing else moves — no workflow staged,
+# nothing activated, nothing restarted
+if [ -n "${RESEED_ONLY:-}" ]; then
+  log "reseed-only: done — no workflow staged, nothing restarted"
+  exit 0
 fi
 
 # ── 2) Workflows (upsert) + 3) re-activate the active ones (publish:workflow) — single in-container pass ──

@@ -25,9 +25,9 @@ if [ -f "${REPO_ROOT}/.env" ]; then ok ".env present"
   if [ -f "${REPO_ROOT}/.env.ex" ]; then
     _keys(){ grep -oE '^[A-Z_][A-Z0-9_]*=' "$1" 2>/dev/null | sed 's/=$//' | sort -u; }
     miss=$(comm -23 <(_keys "${REPO_ROOT}/.env.ex") <(_keys "${REPO_ROOT}/.env") | tr '\n' ' ')
-    xtra=$(comm -13 <(_keys "${REPO_ROOT}/.env.ex") <(_keys "${REPO_ROOT}/.env") | tr '\n' ' ')
+    extra=$(comm -13 <(_keys "${REPO_ROOT}/.env.ex") <(_keys "${REPO_ROOT}/.env") | tr '\n' ' ')
     [ -n "${miss// }" ] && warn ".env missing template keys: ${miss}" || ok ".env has all .env.ex keys"
-    [ -n "${xtra// }" ] && warn ".env keys absent from .env.ex (document in template): ${xtra}"
+    [ -n "${extra// }" ] && warn ".env keys absent from .env.ex (document in template): ${extra}"
   fi
 else bad ".env missing — bbox install or copy .env.ex"; fi
 

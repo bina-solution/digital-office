@@ -98,7 +98,7 @@ import { workflow, node, links } from '@n8n-as-code/transformer';
     /*__n8n__*/ meta: null,
     /*__n8n__*/ pinData: null,
     /*__n8n__*/ staticData: null,
-    /*__n8n__*/ shared: [{"updatedAt":"2026-07-30T23:42:27.037Z","createdAt":"2026-07-30T23:42:27.037Z","role":"workflow:owner","workflowId":"IndoxInjectDemo01","projectId":"2xKn4WH08LyAOk2y","project":{"updatedAt":"2026-07-30T23:40:17.073Z","createdAt":"2026-07-30T23:33:30.049Z","id":"2xKn4WH08LyAOk2y","name":"Admin User <person2@example.com>","type":"personal","icon":null,"description":null,"creatorId":"544b7ec6-5907-4ee2-a94b-c5676e56835c"}}],
+    /*__n8n__*/ shared: [{"updatedAt":"2026-07-30T23:42:27.037Z","createdAt":"2026-07-30T23:42:27.037Z","role":"workflow:owner","workflowId":"IndoxInjectDemo01","projectId":"exampleProject02","project":{"updatedAt":"2026-07-30T23:40:17.073Z","createdAt":"2026-07-30T23:33:30.049Z","id":"exampleProject02","name":"Admin User <person2@example.com>","type":"personal","icon":null,"description":null,"creatorId":"544b7ec6-5907-4ee2-a94b-c5676e56835c"}}],
     id: 'IndoxInjectDemo01',
     name: 'INDOX Inject Demo Blueprint',
     active: false,
@@ -305,7 +305,7 @@ for(const r of wi){
   const buf=await this.helpers.getBinaryDataBuffer(r.i,'data');
   const _co=_coById[String(_idByName[r.fn])]||{}; const _from=(_co.name||'Demo Supplier')+' <'+(_co.email||('demo+'+r.i+'@example.com'))+'>';
   const cn=r.fn.replace(/\\.[^.]+$/,'');
-  const mime=buildMime({from:_from,to:'person4@example.com',subject:'חשבונית '+cn,body:'חשבונית (demo inject).',filename:r.fn,contentB64:buf.toString('base64')});
+  const mime=buildMime({from:_from,to:'person3@example.com',subject:'חשבונית '+cn,body:'חשבונית (demo inject).',filename:r.fn,contentB64:buf.toString('base64')});
   out.push({json:{op:'append',params:{raw_base64:mime,labels:[labelName],folder:'INBOX',connection_id:connId}}});
 }
 return out;`,
@@ -379,7 +379,7 @@ for(const r of wi){
   const buf=await this.helpers.getBinaryDataBuffer(r.i,'data');
   const _co=_coById[String(_idByName[r.fn])]||{}; const _from=(_co.name||'Demo Supplier')+' <'+(_co.email||('demo+'+r.i+'@example.com'))+'>';
   const cn=r.fn.replace(/\\.[^.]+$/,'');
-  const mime=buildMime({from:_from,to:'person4@example.com',subject:'דוח גיול '+cn,body:'דוח גיול (demo inject).',filename:r.fn,contentB64:buf.toString('base64')});
+  const mime=buildMime({from:_from,to:'person3@example.com',subject:'דוח גיול '+cn,body:'דוח גיול (demo inject).',filename:r.fn,contentB64:buf.toString('base64')});
   out.push({json:{op:'append',params:{raw_base64:mime,labels:[labelName],folder:'INBOX',connection_id:connId}}});
 }
 return out;`,
@@ -597,7 +597,7 @@ for (const r of wi) {
   const body = ['שלום,', 'מצורף קישור למסמך לטיפול אוטומציה:', url, 'תודה.'].join(NL);
   const L = [
     'From: Demo Link <demolink+' + r.i + '@example.com>',
-    'To: person4@example.com',
+    'To: person3@example.com',
     'Date: ' + new Date().toUTCString(),
     'Subject: ' + enchdr('קישור למסמך - ' + stem),
     'MIME-Version: 1.0',

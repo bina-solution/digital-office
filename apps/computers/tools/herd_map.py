@@ -4,7 +4,8 @@
 `./bbox computers herd` gathers one bundle and runs this on it (the path is argv[1]):
 
     {"self": "macbook", "read_at": "2026-10-21T15:00:00Z",
-     "offices": {"macbook":   {"local": true, "inspect": [<docker inspect>…], "df": <docker system df -v>},
+     "offices": {"macbook":   {"local": true, "inspect": [<docker inspect>…], "df": <docker system df -v>,
+                               "follow_state": <the text of data/follow/state, or null>},
                  "hp-laptop": {"label": "HP", "overview": <machine /api/overview>, "storage": <machine /api/storage>},
                  "vps1":      {"label": "…", "error": "…"}}}
 
@@ -13,6 +14,8 @@ container and volume is given to the app that declares it, read from every app.j
 file of this checkout, so the answer names apps rather than containers.
 
 For each office it prints:
+- whether it takes dgo-stable by itself: its follow's last cycle, or that it does not follow, stopped, is blocked or
+  has not been up to date for a day (each of those is a difference);
 - the apps in their place;
 - the apps running where they do not belong, and where they go;
 - what is left of apps that do not run there (stopped containers, data);
@@ -22,12 +25,18 @@ For each office it prints:
 
 Then it prints the apps that run on more than one office. Exit 0 when nothing differs, 1 when
 something does, 2 when the bundle or the target cannot be read. `--json` prints the same as data.
+
+`--map` (`./bbox computers map`, DGO-1960) answers instead with the network as it IS — every office the reads or the
+links name, its link (as dgo-extend measures it, `bundle["links"]`), its engine, what runs and what is stopped, its
+follow — with no target: from the declaration it takes only how to name a container, and does without it. Exit 0.
 """
 from __future__ import annotations
 
+import calendar
 import json
 import re
 import sys
+import time
 from collections import Counter, defaultdict
 from pathlib import Path
 
@@ -247,14 +256,100 @@ def read_office(oid: str, o: dict, namer: Namer) -> dict:
             "volumes": len(vols), "data": sum(v["size"] for v in vols)}
 
 
+# ── does the office take dgo-stable by itself ─────────────────────────────────────────────────────
+# The Dell never followed and nobody saw it: it kept link code from before the herd's withholding and served the public
+# hub every app it had (DGO-1838; issues/an-office-that-does-not-follow-…yaml). A linked office's machine serves its
+# follow's last cycle in the overview (`follow`, platform-base/machine/app.py); this office's own is its state file,
+# which the hook passes as text and is read here with the same keys.
+FOLLOW_KEYS = {"LAST_AT": "at", "LAST_RESULT": "result", "LAST_DETAIL": "detail", "CURRENT_EPOCH": "current_epoch",
+               "FAILED_TARGET": "failed_target", "FAILED_AT": "failed_at", "TAKING": "taking"}
+# A cycle comes 30 minutes after the last one ended (both the host timer and the follow-runner add up to 5), and one
+# that is put off still writes its line: two hours with none is a follow that stopped. The Dell's follow-runner was
+# declared but never created — no cycle for 2 h while two batches went green, and the herd called it healthy for 6
+# (DGO-1838, 2026-11-13). Two hours, not less: a laptop back from sleep or a boot runs its first cycle 15–35 min in, a
+# `--dry-run` at the timer's minute drops one line, and `now` is this office's clock while `at` is the other's.
+FOLLOW_SILENT_S = 2 * 3600
+# …but a take writes its cycle's line only when it ends: its unit's own bound (6 h, scripts/follow.sh) counted from
+# the cycle's start, which comes up to a cycle after the last line
+TAKE_SILENT_S = 6 * 3600 + FOLLOW_SILENT_S
+BEHIND_S = 24 * 3600         # a day since it was last up to date: green has reached the others and not this one
+
+
+def follow_state_of(text) -> dict | None:
+    """A follow state file's text → the overview's `follow` shape (only the keys read here); None for no file."""
+    if not isinstance(text, str):
+        return None
+    out = {}
+    for line in text.splitlines():
+        key, sep, value = line.partition("=")
+        if sep and key in FOLLOW_KEYS and value.strip():
+            out[FOLLOW_KEYS[key]] = value.strip()
+    return out or None
+
+
+def _epoch(value) -> float | None:
+    """`2026-11-13 01:03:31 UTC`, `2026-11-13 01:03 UTC`, `2026-10-21T15:00:00Z` or an epoch → seconds; None if neither."""
+    s = str(value or "").strip()
+    if s.isdigit():
+        return float(s)
+    for fmt in ("%Y-%m-%d %H:%M:%S UTC", "%Y-%m-%d %H:%M UTC", "%Y-%m-%dT%H:%M:%SZ"):
+        try:
+            return float(calendar.timegm(time.strptime(s, fmt)))
+        except ValueError:
+            continue
+    return None
+
+
+def _ago(seconds: float) -> str:
+    # minutes under three hours: «2 h» for 2 h 59 min hid how far past the two-hour line a follow is
+    if seconds < 3 * 3600:
+        return f"{seconds / 60:.0f} min"
+    return f"{seconds / 86400:.1f} days" if seconds >= 2 * 86400 else f"{seconds / 3600:.0f} h"
+
+
+def follow_of(o: dict, now: float, declared: str = "") -> dict:
+    """{ok, line}: whether this office takes dgo-stable by itself, and the one line that says how it stands.
+    `declared` is the office's `follow` in herd.yaml: `by-hand` for one that is updated by hand on purpose."""
+    if o.get("local"):
+        f, known = follow_state_of(o.get("follow_state")), True
+    else:
+        ov = o.get("overview") or {}
+        f, known = ov.get("follow"), "follow" in ov
+    if not f and declared == "by-hand":
+        return {"ok": True, "line": f"follow           by hand, as {TARGET.name} declares: no follow runs here"}
+    if not known:
+        return {"ok": False, "line": "FOLLOW UNREAD    its machine does not say (older than 2026-11-12, or not running): "
+                                     "nothing tells whether it takes dgo-stable"}
+    if not f:
+        return {"ok": False, "line": "DOES NOT FOLLOW  no follow cycle has run here: dgo-stable reaches it only by hand"}
+    res, at, cur = f.get("result") or "?", _epoch(f.get("at")), _epoch(f.get("current_epoch"))
+    when_why = f"at {f.get('at') or '?'}" + (f" — {f['detail']}" if f.get("detail") else "")
+    last = f"{res} {when_why}"
+    if at is None or now - at > (TAKE_SILENT_S if f.get("taking") else FOLLOW_SILENT_S):
+        return {"ok": False, "line": f"FOLLOW SILENT    no cycle for {_ago(now - at) if at else 'ever'}"
+                                     f"{' (a take open)' if f.get('taking') else ''}; the last: {last}"}
+    # a failed take is said ONCE as `failed`; every cycle after it says `waiting` (or `skipped`) while the target it
+    # failed on stays set — until a newer green is tried or a take succeeds (scripts/follow.sh). The second reader.
+    if f.get("failed_target"):
+        return {"ok": False, "line": f"FOLLOW FAILED    {f['failed_target'][:9]} failed at {f.get('failed_at') or '?'}; "
+                                     f"not taken again until a newer one is green — the last cycle: {last}"}
+    if res in ("blocked", "failed"):
+        return {"ok": False, "line": f"FOLLOW {res.upper():<10}{when_why}"}
+    if res not in ("took", "current") and cur is not None and now - cur > BEHIND_S:
+        return {"ok": False, "line": f"BEHIND           last up to date {_ago(now - cur)} ago; the last cycle: {last}"}
+    return {"ok": True, "line": f"follow           {last}"}
+
+
 def compare(bundle: dict, target: Target, namer: Namer) -> dict:
     offices = {}
+    now = _epoch(bundle.get("read_at")) or time.time()
     for oid, o in (bundle.get("offices") or {}).items():
         key = target.office(oid)
         if o.get("error"):
             offices[key] = {"office": oid, "error": o["error"]}
             continue
         offices[key] = read_office(oid, o, namer)
+        offices[key]["follow"] = follow_of(o, now, str((target.offices.get(key) or {}).get("follow") or ""))
     runs_on: dict = defaultdict(list)                  # app → offices where it runs
     present_on: dict = defaultdict(list)               # app → offices where anything of it is
     for key, r in offices.items():
@@ -289,6 +384,7 @@ def compare(bundle: dict, target: Target, namer: Namer) -> dict:
         r["report"] = rep
         drift += sum(len(rep[k]) for k in ("move", "left_over", "stopped_here", "missing", "unplaced"))
         drift += len(r["foreign"]) + len(r["unknown_containers"]) + len(r["unknown_volumes"])
+        drift += 0 if r["follow"]["ok"] else 1
     dupes = {app: on for app, on in runs_on.items()
              if len(on) > 1 and app not in target.base and app not in target.per_office}
     drift += len(dupes)
@@ -320,6 +416,7 @@ def render(res: dict, target: Target, bundle: dict) -> str:
         rep = r["report"]
         lines.append(f"   {r['running']} running / {r['containers']} containers · {r['volumes']} volumes {gb(r['data'])}"
                      + (f" · the office is compose project '{r['own']}'" if r["own"] else ""))
+        lines.append("   " + r["follow"]["line"])
         if rep["in_place"]:
             lines.append("   in place       " + ", ".join(rep["in_place"]))
         if rep["base_stopped"]:
@@ -354,19 +451,98 @@ def render(res: dict, target: Target, bundle: dict) -> str:
     return "\n".join(lines)
 
 
+# ── the live map (`./bbox computers map`, DGO-1960): what IS, with no target ──────────────────────────────────────
+# The same reads as the comparison, plus the links as dgo-extend measures them (`bundle["links"]`, its GET /api/link),
+# answered as they are: an office the link names but no machine answered for is still on the map, as «not read».
+def live_map(bundle: dict, namer: Namer) -> dict:
+    now = _epoch(bundle.get("read_at")) or time.time()
+    read = bundle.get("offices") or {}
+    links = {i["office"]: i for i in ((bundle.get("links") or {}).get("items") or []) if isinstance(i, dict) and i.get("office")}
+    offices = {}
+    for oid in list(read) + [k for k in links if k not in read]:
+        o, ln = read.get(oid) or {}, links.get(oid) or {}
+        row = {"office": oid, "label": ln.get("label") or o.get("label") or oid, "this_office": bool(o.get("local"))}
+        if ln:
+            carry = ln.get("carry") or {}
+            row["link"] = {"state": ln.get("state"), "transport": ln.get("transport"), "address": ln.get("endpoint"),
+                           "direction": ln.get("direction"), "commit": ln.get("commit"),
+                           "publishes": len(ln.get("apps") or []), "ok": (ln.get("verdict") or {}).get("ok"),
+                           "why": (ln.get("verdict") or {}).get("why") or "",
+                           "carry": ({"state": carry.get("state"), "via": carry.get("via"), "rtt_ms": carry.get("rtt_ms"),
+                                      "heard_s": carry.get("heard_s")} if carry else None)}
+        if not o or o.get("error"):
+            row["error"] = o.get("error") or "no machine answered for it through the link"
+        else:
+            r = read_office(oid, o, namer)
+            row.update({k: r[k] for k in ("running", "containers", "volumes", "data")})
+            row["project"] = r["own"]
+            row["runs"] = sorted(a for a, v in r["apps"].items() if v["running"])
+            row["stopped"] = sorted(a for a, v in r["apps"].items() if not v["running"] and (v["total"] or v["data"]))
+            row["other_deployments"] = sorted(r["foreign"])
+            row["follow"] = follow_of(o, now)["line"].strip()
+        offices[oid] = row
+    # no `items` at all is a link read that failed (dgo-extend off, or it did not answer): said, never shown as «no links»
+    links_read = isinstance((bundle.get("links") or {}).get("items"), list)
+    return {"read_from": bundle.get("self"), "read_at": bundle.get("read_at"), "links_read": links_read, "offices": offices}
+
+
+def render_map(m: dict) -> str:
+    lines = [f"network map — read live from {m.get('read_from') or 'this office'} at {m.get('read_at', '')}: this office's "
+             "engine, each linked office's machine, and the links as dgo-extend measures them"]
+    if not m.get("links_read"):
+        lines.append("   links: NOT READ — dgo-extend did not answer here, so no link state is shown (`./bbox dgo link status`)")
+    for oid, r in sorted(m["offices"].items(), key=lambda kv: (not kv[1]["this_office"], kv[0])):
+        lines.append("")
+        lines.append(f"== {r['label']} ({oid})" + (" — this office" if r["this_office"] else ""))
+        ln = r.get("link")
+        if ln:
+            c = ln.get("carry") or {}
+            via = (f" · carry {c.get('state')} via {c.get('via')}" + (f", rtt {c['rtt_ms']:.1f} ms" if isinstance(c.get("rtt_ms"), (int, float)) else "")
+                   if c else "")
+            lines.append(f"   link     {ln.get('state') or '?'} · {ln.get('transport') or '?'} · {ln.get('address') or '?'} · "
+                         f"{ln.get('direction') or '?'}{via}")
+            lines.append(f"            commit {str(ln.get('commit') or '?')[:9]} · publishes {ln['publishes']} app(s) here"
+                         + (f" · {ln['why']}" if ln.get("why") and not ln.get("ok") else ""))
+        if r.get("error"):
+            lines.append(f"   not read: {r['error']}")
+            continue
+        lines.append(f"   engine   {r['running']} running / {r['containers']} containers · {r['volumes']} volumes {gb(r['data'])}"
+                     + (f" · compose project '{r['project']}'" if r["project"] else ""))
+        lines.append(f"   {r['follow']}")
+        if r["runs"]:
+            lines.append(f"   runs     {', '.join(r['runs'])}")
+        if r["stopped"]:
+            lines.append(f"   stopped  {', '.join(r['stopped'])}")
+        if r["other_deployments"]:
+            lines.append(f"   also     other deployments on this machine: {', '.join(r['other_deployments'])}")
+    return "\n".join(lines)
+
+
 def main(argv: list) -> int:
     args = [a for a in argv[1:] if not a.startswith("--")]
     if not args:
-        print("usage: herd_map.py <bundle.json> [--json]", file=sys.stderr)
+        print("usage: herd_map.py <bundle.json> [--map] [--json]", file=sys.stderr)
         return 2
     try:
         bundle = json.loads(Path(args[0]).read_text(encoding="utf-8"))
-        target = Target(yaml.safe_load(TARGET.read_text(encoding="utf-8")) or {})
+        # the map answers with what is: it takes from the declaration only how to NAME a container (`names`), and does
+        # without it when there is none
+        try:
+            doc = yaml.safe_load(TARGET.read_text(encoding="utf-8"))
+        except (OSError, yaml.YAMLError):
+            if "--map" not in argv:
+                raise
+            doc = {}
+        target = Target(doc if isinstance(doc, dict) else {})
     except (OSError, ValueError, yaml.YAMLError) as e:
         print(f"herd: cannot read the bundle or the target: {e}", file=sys.stderr)
         return 2
     apps, svc2app, vol2app = manifests(ROOT)
     namer = Namer(apps, svc2app, vol2app, target.names, target.volume_names)
+    if "--map" in argv:
+        m = live_map(bundle, namer)
+        print(json.dumps(m, ensure_ascii=False, indent=1) if "--json" in argv else render_map(m))
+        return 0
     res = compare(bundle, target, namer)
     if "--json" in argv:
         print(json.dumps(res, ensure_ascii=False, indent=1, default=list))

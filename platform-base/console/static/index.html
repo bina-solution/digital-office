@@ -5,6 +5,13 @@
 <meta name="viewport" content="width=device-width, initial-scale=1"/>
 <title>הלשכה הדיגיטלית · ניהול תהליכים עסקיים</title>
 <link rel="icon" type="image/svg+xml" href="/favicon.svg"/>
+<!-- THE OFFICE AS AN APP OF THE COMPUTER (DGO-1972): with this, Chrome and Edge install the console into the Start
+     menu / Applications / a Linux launcher, and it opens in its own window with no browser around it. The console
+     is behind the sign-in, and a manifest is fetched WITHOUT cookies unless it says otherwise: without
+     `use-credentials` the sign-in's redirect answered instead and nothing could be installed. No theme or
+     background colour in it: one fixed colour cannot follow the office's two themes (the window's bar follows the
+     system's), and the palette lives in the screens' tokens (G82). The icons: app_icons.py, from the mark. -->
+<link rel="manifest" href="/manifest.webmanifest" crossorigin="use-credentials"/>
 <link rel="stylesheet" href="/style.css"/>
 <link rel="stylesheet" href="/desktop.css"/>
 <!-- FIRST, and before any other script: the mount point and the fetch seam (see mount.js). -->

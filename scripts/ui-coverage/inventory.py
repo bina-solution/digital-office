@@ -637,6 +637,8 @@ def x_single_view(man) -> list[dict]:
         "dgo-extend": "apps/dgo-extend/static/index.html",
         # [2026-11-11] one page, no router (the smell probe over it was empty when it was declared)
         "domain-internic": "apps/domain-internic/static/index.html",
+        # [2026-11-13] the phone's own screen (state, start/stop, the live display) replaced noVNC's page: one view
+        "android-emulator": "apps/android-emulator/server/screen/index.html",
     }
     for app, spec in man["single_view"].items():
         rel = probes.get(app)
@@ -802,11 +804,13 @@ def x_reveal_states(_m) -> list[dict]:
                    "document.querySelectorAll('.exp').forEach(function(e){e.classList.remove('hidden');"
                    "if(!e.innerHTML.trim())e.innerHTML='<div class=about>עורך שדות ההרשאה</div>';});"}]),
           ("connections", "state-audit-drawer", "חיבורים · יומן פעילות",
-           [{"js": "try{openAudit&&openAudit()}catch(e){} var d=document.querySelector('.drawer');"
-                   "if(d){d.classList.add('show','open');d.classList.remove('hidden')}"}]),
+           # in a scope of its own: the page's script declares `d` itself, and a global `var d` was refused
+           # («Identifier 'd' has already been declared»), so the drawer was never opened in the shot
+           [{"js": "(function(){try{openAudit&&openAudit()}catch(e){} var d=document.querySelector('.drawer');"
+                   "if(d){d.classList.add('show','open');d.classList.remove('hidden')}})()"}]),
           ("connections", "state-add-secret", "חיבורים · הוספת סוד",
-           [{"js": "try{addSecret&&addSecret()}catch(e){} var o=document.querySelector('.ov,.modal-ov');"
-                   "if(o){o.classList.add('show');o.classList.remove('hidden')}"}])]
+           [{"js": "(function(){try{addSecret&&addSecret()}catch(e){} var o=document.querySelector('.ov,.modal-ov');"
+                   "if(o){o.classList.add('show');o.classList.remove('hidden')}})()"}])]
 
     # my-docs: open the document detail drawer (seeded docs make it real), + customer/item rows
     S += [("my-docs", "state-doc-drawer", "מסמכים שלי · פרטי מסמך",

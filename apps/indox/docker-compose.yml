@@ -101,8 +101,8 @@ services:
       # --- How many messages a mail pipe lists PER STATE for the board and the inventory.
       # The default 300 is not just a display cap: the board's move-gate resolves an item's
       # CURRENT state from this listing, so anything past the cap is refused with "current state
-      # None" and an operator simply cannot act on it. Measured 2026-08-25 on a 1,041-message
-      # mailbox: of 1,190 documents needing a re-sync, the gate could see 307. Raised to cover
+      # None" and an operator simply cannot act on it. Measured 2026-08-25 on a N-message
+      # mailbox: of N documents needing a re-sync, the gate could see 307. Raised to cover
       # the whole mailbox. Cost is a larger stats payload; the UI reads are unaffected because
       # they go through the `payload_light` generated column, which strips `items`.
       - INDOX_SYNC_MAIL_LIMIT=${INDOX_SYNC_MAIL_LIMIT:-1500}
@@ -216,7 +216,7 @@ services:
       - traefik.http.routers.incoming-documents-https.tls=true
       - traefik.http.routers.incoming-documents-https.tls.certresolver=${TRAEFIK_CERTRESOLVER-myresolver}
       - traefik.http.routers.incoming-documents-https.service=incoming-documents
-      - traefik.http.routers.incoming-documents-https.middlewares=authentik@file,hsts@file
+      - traefik.http.routers.incoming-documents-https.middlewares=hsts@file,authentik@file
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
       interval: ${HEALTHCHECK_INTERVAL:-30s}

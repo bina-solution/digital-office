@@ -933,9 +933,16 @@ class TabPage:
         self.done.append(("goto", url))
         self.url = url
 
-    def evaluate(self, expression):
+    def evaluate(self, expression, arg=None):
+        if expression == MODULE.COPY_JS:          # `copy`: the page's selection, or an element's
+            if not arg:
+                return {"text": self.selection}
+            return self.elements.get(arg, {"missing": True})
         self.done.append(("eval", expression))
         return 42
+
+    selection = "the selected words"
+    elements = {"#total": {"text": "1,250 ₪"}, "input[name=pw]": {"password": True}}
 
     def screenshot(self, path, full_page=False, timeout=None):
         Path(path).write_bytes(b"png")
@@ -1091,13 +1098,275 @@ class TabCommandTests(unittest.TestCase):
         MODULE.tab_command(["click", self.TWIN[:12], "a"])
         self.assertEqual(self.pages[3].done, [("click", "a")])
 
+    def test_copy_gives_what_a_copy_would_take_never_the_clipboard(self):
+        self.assertEqual(MODULE.tab_command(["copy", self.OWNER])["copied"], "the selected words")
+        self.assertEqual(MODULE.tab_command(["copy", self.OWNER, "#total"])["copied"], "1,250 ₪")
+        self.refused(["copy", self.OWNER, "#nothing"], "no_such_element")
+        self.refused(["copy", self.OWNER, "input[name=pw]"], "password_field")
+        self.refused(["copy", self.TASK], "tab_owned_by_task")
+        self.assertEqual(self.pages[2].done, [])     # nothing pressed
+        # a selection inside the focused secret field is refused like the field itself
+        self.pages[2].evaluate = lambda expression, arg=None: {"password": True}
+        self.assertIn("the focused field", self.refused(["copy", self.OWNER], "password_field"))
+
+    def test_the_secret_fields_and_no_clipboard_read_in_the_source(self):
+        # COPY_JS names every kind of field that holds a secret, and no verb reads (or writes) the clipboard
+        for kind in ("password|hidden", "current-password", "new-password", "one-time-code", "webkitTextSecurity"):
+            self.assertIn(kind, MODULE.COPY_JS)
+        source = PATH.read_text(encoding="utf-8")
+        for call in ("readText", "clipboard.read(", "writeText", "clipboard.write("):
+            self.assertNotIn(call, source)
+
+    def test_a_page_that_is_not_the_web_takes_no_script(self):
+        # chrome://newtab hung `tab copy` on the Mac until the runner's 300 s: refused by name, at once
+        newtab = TabPage("E5E5E5E5E5E5E5E5E5E5E5E5E5E5E5E5", "chrome://newtab/")
+        self.pages.append(newtab)
+        for argv in (["copy", newtab.tid], ["eval", newtab.tid, "1"], ["click", newtab.tid, "a"],
+                     ["type", newtab.tid, "x"], ["text", newtab.tid], ["snapshot", newtab.tid]):
+            self.assertIn("not a web page", self.refused(argv, "not_a_web_page"))
+        self.refused(["eval", self.ANCHOR, "1"], "not_a_web_page")      # about:blank too
+        self.assertEqual(newtab.done, [])
+        MODULE.tab_command(["shot", newtab.tid])                         # a picture, and leaving, still work
+        MODULE.tab_command(["navigate", newtab.tid, "https://site.example/"])
+        self.assertEqual([d[0] for d in newtab.done], ["shot", "goto"])
+
     def test_usage(self):
+        self.refused(["copy", self.OWNER, "#a", "#b"], "usage")
+        self.refused(["clipboard-set", self.OWNER, "x"], "usage")
         self.refused(["open", "https://x.example"], "usage")
         self.refused(["list", "extra"], "usage")
         self.refused(["navigate", self.OWNER], "usage")
         self.refused(["shot", self.OWNER, "half"], "usage")
         self.refused(["text", self.OWNER, "abc"], "usage")
         self.refused(["navigate", self.OWNER, "file:///etc/passwd"], "invalid_url")
+
+
+class GoogleLoginFlowTests(unittest.TestCase):
+    """DGO-1825: the office's main Google account. Google asks the user name and the password on TWO pages, so
+    the flow fills the address, presses «הבא», waits for the password page, fills it and submits — and the answer
+    names selectors, never the account or the password."""
+
+    PASSWORD = "Zq9-THEREALPASSWORD-of-this-test"
+    ACCOUNT = "person7.x@example.com"
+
+    class Page:
+        # where each stage of the sign-in is: the address page, the password page, «Choose an account», landed,
+        # and a second step (a phone prompt) this flow cannot pass
+        AT = {"email": "https://accounts.google.com/signin", "password": "https://accounts.google.com/signin/pwd",
+              "chooser": "https://accounts.google.com/signin/chooser", "in": "https://myaccount.google.com/",
+              "challenge": "https://accounts.google.com/signin/challenge/dp"}
+
+        def __init__(self, stage="email", after_password="in"):
+            self.stage, self.after_password, self.steps = stage, after_password, []
+
+        @property
+        def url(self):
+            return self.AT[self.stage]
+
+        def goto(self, url, **_):
+            self.steps.append(("goto", url))
+
+        def wait_for_load_state(self, *_, **__):
+            pass
+
+        def locator(self, css):
+            return GoogleLoginFlowTests.Field(self, css)
+
+        def screenshot(self, path, **_):
+            Path(path).write_bytes(b"png")
+
+    class Field:
+        # what each page of the sign-in shows: the address page, then the password page, then neither
+        SHOWN = {"email": ("input#identifierId", "#identifierNext button"),
+                 "password": ("input[name=Passwd]", "#passwordNext button"),
+                 "chooser": ("[data-identifier]",)}
+
+        def __init__(self, page, css):
+            self.page, self.css = page, css
+
+        @property
+        def first(self):
+            return self
+
+        def count(self):
+            return sum(1 for part in self.css.split(", ") if part in self.SHOWN.get(self.page.stage, ()))
+
+        def wait_for(self, state="visible", timeout=0):
+            if self.css not in self.SHOWN.get(self.page.stage, ()):
+                raise TimeoutError(f"{self.css} is not on the {self.page.stage} page")
+
+        def fill(self, value, timeout=0):
+            self.page.steps.append(("fill", self.css, len(value)))
+
+        def click(self, timeout=0):
+            self.page.steps.append(("click", self.css))
+            self.page.stage = {"#identifierNext button": "password",
+                               "#passwordNext button": self.page.after_password}[self.css]
+
+    def login(self, page, otp=None):
+        """task_login(google) against `page`, with the task store, the lease and the clock out of the way (`otp`: the
+        one-time-code field the page shows after the password, as await_login_or_otp would name it)."""
+        names = ("read_task", "login_credential", "task_connection", "retry_safe", "transition", "await_login_or_otp",
+                 "task_path", "DATA")
+        saved = {k: getattr(MODULE, k) for k in names}
+        with tempfile.TemporaryDirectory() as tmp, patch.object(MODULE.time, "sleep", lambda s: None):
+            try:
+                MODULE.read_task = lambda slug: {"state": "active", "created_at": 0, "evidence": {"screenshots": []}}
+                MODULE.login_credential = lambda site: (MODULE.LOGIN_FLOWS[site], self.ACCOUNT, self.PASSWORD)
+                MODULE.task_connection = lambda slug: (None, None, page)
+                MODULE.retry_safe = lambda task, stage, operation: operation()
+                MODULE.transition = lambda *a, **k: None
+                MODULE.await_login_or_otp = lambda page_, logged_out: otp
+                MODULE.task_path = lambda slug: Path(tmp) / "task.json"
+                MODULE.DATA = Path(tmp)
+                return MODULE.task_login("dgo-1825", "google")
+            finally:
+                for k, v in saved.items():
+                    setattr(MODULE, k, v)
+
+    def assertSaysNothingSecret(self, said):
+        self.assertNotIn(self.PASSWORD, said)
+        self.assertNotIn("office.account", said)
+
+    def test_the_two_pages_in_order_landing_signed_in_and_nothing_secret_in_the_answer(self):
+        page = self.Page()
+        out = self.login(page)
+        self.assertEqual([s[:2] for s in page.steps if s[0] != "goto"],
+                         [("fill", "input#identifierId"), ("click", "#identifierNext button"),
+                          ("fill", "input[name=Passwd]"), ("click", "#passwordNext button")])
+        self.assertEqual(out["selectors"]["next"], "#identifierNext button")
+        self.assertFalse(out["already_logged_in"])
+        self.assertSaysNothingSecret(json.dumps(out))
+
+    def test_a_signed_in_profile_is_not_signed_in_again(self):
+        page = self.Page(stage="in")
+        out = self.login(page)
+        self.assertTrue(out["already_logged_in"])
+        self.assertEqual([s for s in page.steps if s[0] != "goto"], [])
+
+    def test_choose_an_account_is_a_persons_step_never_read_as_signed_in(self):
+        # neither field of the sign-in is on it, which the old «form gone» check read as «already in»
+        with self.assertRaises(MODULE.BrowserTaskError) as caught:
+            self.login(self.Page(stage="chooser"))
+        self.assertEqual(caught.exception.code, "login_needs_person")
+        self.assertSaysNothingSecret(str(caught.exception))
+
+    def test_a_phone_prompt_after_the_password_is_a_second_step_not_a_sign_in(self):
+        with self.assertRaises(MODULE.BrowserTaskError) as caught:
+            self.login(self.Page(after_password="challenge"))
+        self.assertEqual(caught.exception.code, "second_step_needed")
+        self.assertIn("/challenge/", str(caught.exception))
+        self.assertSaysNothingSecret(str(caught.exception))
+
+    def test_a_failed_fill_does_not_quote_what_it_was_typing(self):
+        class Quoting(self.Field):
+            def fill(self, value, timeout=0):
+                raise TimeoutError(f'locator.fill: Timeout 8000ms exceeded.\n  - fill("{value}")')
+
+        class Page(self.Page):
+            def locator(self, css):
+                return Quoting(self, css)
+
+        with self.assertRaises(MODULE.BrowserTaskError) as caught:
+            self.login(Page())
+        self.assertEqual(caught.exception.code, "login_selector_missing")
+        self.assertSaysNothingSecret(str(caught.exception))
+
+    def test_a_password_page_off_google_gets_nothing_typed(self):
+        # a user name whose domain signs in elsewhere (a Workspace SSO): after «next» the password field is on
+        # another host — the password is never typed there (the fourth reader)
+        class Page(self.Page):
+            AT = {**GoogleLoginFlowTests.Page.AT, "password": "https://sso.attacker.example/login"}
+
+        page = Page()
+        with self.assertRaises(MODULE.BrowserTaskError) as caught:
+            self.login(page)
+        self.assertEqual(caught.exception.code, "login_wrong_page")
+        self.assertIn("sso.attacker.example", str(caught.exception))
+        self.assertNotIn(("fill", "input[name=Passwd]"), [s[:2] for s in page.steps])
+        self.assertSaysNothingSecret(str(caught.exception))
+
+    def test_the_password_pages_own_challenge_address_is_not_a_second_step(self):
+        # Google serves the password page at /v3/signin/challenge/pwd, and the address can still say so for a moment
+        # after a sign-in that worked: that is waited out, not read as a second step (the fifth reader)
+        class Page(self.Page):
+            AT = {**GoogleLoginFlowTests.Page.AT, "password": "https://accounts.google.com/v3/signin/challenge/pwd"}
+            reads = 0
+
+            @property
+            def url(self):
+                if self.stage == "pwd-then-in":
+                    self.reads += 1
+                    return self.AT["password"] if self.reads <= 3 else self.AT["in"]
+                return self.AT[self.stage]
+
+        page = Page(after_password="pwd-then-in")
+        out = self.login(page)
+        self.assertFalse(out["already_logged_in"])
+        self.assertSaysNothingSecret(json.dumps(out))
+
+    def test_a_code_page_under_challenge_is_a_second_step_not_a_missing_totp_row(self):
+        # Google's authenticator page (/v2/challenge/totp) shows `totpPin`, an OTP field: it is a person's step, said
+        # by name, and the plane is never asked for a `browser42-totp-google` row nobody declared (the sixth reader)
+        class Page(self.Page):
+            AT = {**GoogleLoginFlowTests.Page.AT, "totp": "https://accounts.google.com/v2/challenge/totp"}
+
+        asked = []
+        page = Page(after_password="totp")
+        saved = MODULE.totp_code
+        try:
+            MODULE.totp_code = lambda site, slug: asked.append(site) or "123456"
+            with self.assertRaises(MODULE.BrowserTaskError) as caught:
+                self.login(page, otp="input[name=totpPin]")
+        finally:
+            MODULE.totp_code = saved
+        self.assertEqual(caught.exception.code, "second_step_needed")
+        self.assertIn("/v2/challenge/totp", str(caught.exception))
+        self.assertEqual(asked, [])
+        self.assertSaysNothingSecret(str(caught.exception))
+
+    def test_it_starts_at_googles_sign_in_continuing_to_the_account_page(self):
+        page = self.Page(stage="in")
+        self.login(page)
+        start = [s[1] for s in page.steps if s[0] == "goto"][0]
+        self.assertTrue(start.startswith("https://accounts.google.com/ServiceLogin?continue="), start)
+
+
+class OwnTmpdirTests(unittest.TestCase):
+    """Each run's temporary files live in its own directory; the next run removes the dead ones (DGO-1921)."""
+
+    def test_a_run_removes_what_ended_runs_left_and_keeps_live_ones(self):
+        with tempfile.TemporaryDirectory() as base, \
+                patch.object(MODULE.tempfile, "gettempdir", return_value=base), \
+                patch.dict(os.environ, {}, clear=False):
+            dead = Path(base) / "b42-run-999999999-ab12cd"
+            (dead / "playwright-artifacts-abc").mkdir(parents=True)
+            dead_first_form = Path(base) / "b42-run-999999998"
+            dead_first_form.mkdir()
+            alive = Path(base) / f"b42-run-{os.getppid()}-ef34gh"
+            alive.mkdir()
+            other = Path(base) / "someone-else"
+            other.mkdir()
+            MODULE.own_tmpdir()
+            mine = Path(os.environ["TMPDIR"])
+            self.assertFalse(dead.exists())
+            self.assertFalse(dead_first_form.exists())
+            self.assertTrue(alive.exists())
+            self.assertTrue(other.exists())
+            self.assertEqual(mine.parent, Path(base))
+            self.assertTrue(mine.name.startswith(f"b42-run-{os.getpid()}-"), mine.name)
+            self.assertTrue(mine.is_dir())
+            MODULE.own_tmpdir()                          # never adopts an existing directory
+            self.assertNotEqual(Path(os.environ["TMPDIR"]), mine)
+
+    def test_a_tmp_that_cannot_be_written_costs_no_verb(self):
+        with patch.object(MODULE, "own_tmpdir", side_effect=OSError("read-only")), \
+                patch.object(MODULE, "Path"), \
+                patch.object(MODULE, "cmd_list", side_effect=SystemExit(0)) as listed, \
+                patch.object(sys, "argv", ["group-manager.py", "list"]):
+            with self.assertRaises(SystemExit):
+                MODULE.main()
+            listed.assert_called_once()
 
 
 if __name__ == "__main__":

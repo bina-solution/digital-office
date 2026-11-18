@@ -237,7 +237,7 @@ def test_key():
         store[body["id"]] = body["secret"]
         return {"id": body["id"]}
     converge._http = http
-    office = {"id": "examplef", "label": "The Examplef Guys"}
+    office = {"id": "examplef", "label": "Example shop"}
     k1, fp1 = converge._offsite_key(office)
     k2, fp2 = converge._offsite_key(office)
     check(len(k1) >= 40 and k1 == k2 and fp1 == fp2 and len(fp1) == 12 and sum(m == "POST" for m, _ in calls) == 1,

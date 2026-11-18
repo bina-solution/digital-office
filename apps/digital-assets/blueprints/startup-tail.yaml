@@ -493,7 +493,7 @@ phases:
     copy: promise -> 'why do you want it / what is your current problem?' -> honest expectation (small weekly batches)
       -> share link
     examples:
-    - 'Linear private beta: ~10,000 emails, ~10 hand-picked invites per week - https://review.firstround.com/linears-path-to-product-market-fit/'
+    - 'Linear private beta: ~N emails, ~10 hand-picked invites per week - https://review.firstround.com/linears-path-to-product-market-fit/'
     - Karri Saarinen on hand-picking waitlist invites - https://x.com/karrisaarinen/status/1785391264730669351
     - Arc drops its waitlist at 1.0, 2023-07-25 - https://9to5mac.com/2023/07/25/arc-browser-no-waitlist/
   - id: cohort-invite-email

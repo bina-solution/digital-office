@@ -154,7 +154,7 @@ describe('default wiring', () => {
 describe('E2E: an admin drops an invoice into the chat (auto-intake)', () => {
   test('the document is downloaded, saved, processed and acknowledged — with no transport in sight', async () => {
     docs.processGeneralDocument.mockResolvedValue({
-      companyGuess: { companyName: 'ישראל קרטון בע״מ' },
+      companyGuess: { companyName: 'ספק יוד בע״מ' },
       ids: { document_id: 'INV-20458', document_type: 'invoice' },
       driveLink: 'https://drive.example/d/20458',
     });
@@ -186,7 +186,7 @@ describe('E2E: an admin drops an invoice into the chat (auto-intake)', () => {
     const texts = backend.texts();
     expect(texts[0]).toBe(TEXTS.AUTO_INTAKE_DOC);
     expect(texts[1]).toContain(TEXTS.GENERIC_DOC_RECEIVED_PREFIX);
-    expect(texts[1]).toContain('ישראל קרטון בע״מ');
+    expect(texts[1]).toContain('ספק יוד בע״מ');
     expect(texts[1]).toContain('INV-20458');
     expect(texts[1]).toContain('https://drive.example/d/20458');
     expect(texts[2]).toContain(TEXTS.MENU_TEXT.slice(0, 20));
@@ -237,13 +237,13 @@ describe('E2E: the balance-sheet flow across three turns', () => {
       phoneNumber: SENDER.id, fullName: SENDER.name,
       state: 'await_balance_sheet_company', pending_balance_file: stashed.pending_balance_file,
     });
-    companies.findCompanyByInput.mockReturnValue({ companyName: 'ישראל קרטון בע״מ', companyId: '514' });
-    docs.processBalanceSheet.mockResolvedValueOnce({ companyGuess: { companyName: 'ישראל קרטון בע״מ' }, driveLink: 'https://drive.example/bs' });
+    companies.findCompanyByInput.mockReturnValue({ companyName: 'ספק יוד בע״מ', companyId: '514' });
+    docs.processBalanceSheet.mockResolvedValueOnce({ companyGuess: { companyName: 'ספק יוד בע״מ' }, driveLink: 'https://drive.example/bs' });
     const b3 = fakeBackend();
-    await send(inbound({ text: 'ישראל קרטון' }), { backend: b3 });
+    await send(inbound({ text: 'ספק יוד' }), { backend: b3 });
     expect(docs.processBalanceSheet).toHaveBeenLastCalledWith(expect.objectContaining({
       filePath: stashed.pending_balance_file,
-      explicitCompany: { companyName: 'ישראל קרטון בע״מ', companyId: '514' },
+      explicitCompany: { companyName: 'ספק יוד בע״מ', companyId: '514' },
     }));
     expect(b3.texts()[0]).toContain(TEXTS.BALANCE_SHEET_RECEIVED_PREFIX);
     expect(b3.texts()[0]).toContain('https://drive.example/bs');

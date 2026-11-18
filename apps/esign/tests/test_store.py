@@ -37,7 +37,7 @@ def st(tmp_path):
 
 def make(st, **kw):
     args = dict(doc_name="הסכם דוגמה.pdf", doc_path="/tmp/a.pdf", doc_sha256="a" * 64,
-                doc_size=1234, signer_name="ברוך", sender="שלמה", days=14)
+                doc_size=1234, signer_name="דנה", sender="נועם", days=14)
     args.update(kw)
     return st.create(**args)
 
@@ -101,7 +101,7 @@ def test_the_audit_trail_is_a_chain_and_a_tamper_breaks_it(st):
     env = make(st)
     st.append(env["id"], "envelope.created", {"doc": env["doc_name"]})
     st.append(env["id"], "envelope.opened", {"ip": "203.0.113.7"})
-    st.append(env["id"], "envelope.signed", {"signer": "ברוך"})
+    st.append(env["id"], "envelope.signed", {"signer": "דנה"})
     ok, bad, last = st.chain_ok(env["id"])
     assert ok and bad is None and len(last) == 64
     events = st.events(env["id"])

@@ -195,6 +195,20 @@ for it in (d.get("items") or []):
         print("  %-10s source port: %s%s — הוזז פורט מקור (%sx)%s" % (
             "", sp.get("port"), (" (was %s)" % sp["was"]) if sp.get("was") else "",
             sp.get("count") or 1, ("  " + str(sp["why"])) if sp.get("why") else ""))
+    se = it.get("search") or {}
+    if se:
+        # THE LAST SEARCH for the pair (DGO-1848): the office moved (found at a new address) and the office is
+        # off or on another network (no answer from N addresses) are two different facts, and say so.
+        if se.get("running"):
+            print("  %-10s search: looking around %s (search %sx)" % ("", se.get("around") or "?", se.get("count") or 1))
+        elif se.get("found"):
+            print("  %-10s search: found at %s%s — נמצאה בכתובת חדשה" % (
+                "", se["found"], (" (was %s)" % se["was"]) if se.get("was") else ""))
+        elif se.get("timed_out"):
+            print("  %-10s search: did not finish in time around %s — לא ידוע אם כבויה" % ("", se.get("around") or "?"))
+        else:
+            print("  %-10s search: no answer from %s address(es) around %s — כבויה, או ברשת אחרת" % (
+                "", se.get("tried") or 0, se.get("around") or "?"))
     # THE PATH, ONE WORD, AND SINCE WHEN (DGO-1098): direct (ישיר), the home network (LAN), the hub
     # relay (ממסר) or down (למטה) — or not measured (לא נמדד), which is never called down. A TCP pair says
     # it from its carrier: `relayed` is the hub joining the

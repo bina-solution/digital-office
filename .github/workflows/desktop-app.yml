@@ -1,0 +1,74 @@
+name: desktop-app
+
+# The Digital Office desktop app (DGO-1972): packaging/desktop, built for Windows, macOS and Linux, UNSIGNED, for the
+# team. The packages are the run's artifacts (30 days). Signed builds, the store and updates wait on the owner's
+# accounts (DGO-1980, «בעלים»): until then Windows shows SmartScreen's «unknown publisher», and macOS (an ad-hoc
+# signature) needs right-click → Open the first time.
+#
+# GitHub's own machines, one per system, named and never "-latest" (fresh-install.yml's rule). Not the Dell's one
+# runner, so scripts/ci/step-aside has nothing to yield here: a version's proof never waits behind this.
+#
+# When: a push to dgo-stable that touches the app (or the console's icons, which are its icons), and a dispatch from
+# any ref (`gh workflow run desktop-app.yml --ref hp-dgo`).
+
+on:
+  push:
+    branches: [dgo-stable]
+    paths:
+      - packaging/desktop/**
+      - platform-base/console/static/icons/**
+      - .github/workflows/desktop-app.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: desktop-app-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-24.04
+            target: --linux deb rpm
+          - os: macos-15
+            target: --mac dmg --universal
+          - os: windows-2025
+            target: --win nsis
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+    defaults:
+      run:
+        working-directory: packaging/desktop
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: packaging/desktop/package-lock.json
+      - name: rpmbuild, for the .rpm
+        if: runner.os == 'Linux'
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq rpm
+      - run: npm ci
+      - run: npm test
+      - name: Build, unsigned
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: "false"   # no signing identity is looked for (DGO-1980)
+        run: npx electron-builder ${{ matrix.target }} --publish never
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dgo-desktop-${{ runner.os }}
+          path: |
+            packaging/desktop/dist/*.deb
+            packaging/desktop/dist/*.rpm
+            packaging/desktop/dist/*.dmg
+            packaging/desktop/dist/*.exe
+          if-no-files-found: error
+          retention-days: 30

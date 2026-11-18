@@ -441,6 +441,19 @@ def start_run(office: dict, only: list[str] | None, by: str = "") -> dict:
 
 #: How long this office's own git facts are trusted before the machine is asked again (seconds).
 HOME_SOURCE_TTL = float(os.environ.get("DGO_HOME_SOURCE_TTL", "600"))
+#: How long the machine may spend on those facts before the command itself is ended (seconds).
+HOME_SOURCE_LIMIT_S = 30
+#: The facts, in ONE shell on the machine. `dirty` is measured only where `git status` stays on the machine's own disk:
+#: a checkout on virtiofs, 9p or a FUSE mount answers it across a VM boundary, file by file (home_source's rules).
+#: GNU `stat -f` names them `fuseblk` (virtiofs, sshfs) and `v9fs` (WSL's C:). The subject is printed with printf: it is
+#: the one fact a person wrote, and `sh`'s echo (dash) turns a `\n` in it into a line that parse_facts reads as a fact.
+_HOME_FACTS = (
+    'echo repo=$(git remote get-url origin); echo branch=$(git rev-parse --abbrev-ref HEAD); '
+    'echo commit=$(git rev-parse HEAD); fs=$(stat -f -c %T . 2>/dev/null); echo fs=$fs; '
+    'case "$fs" in virtiofs|9p|v9fs|fuse*) echo dirty=;; '
+    '*) echo dirty=$(git status --porcelain --untracked-files=no | wc -l);; esac; '
+    'echo pushed=$(git branch -r --contains HEAD 2>/dev/null | head -1 | tr -d " "); '
+    'printf "subject=%s\\n" "$(git log -1 --format=%s | head -c 140 | tr -d "\\r\\n")"')
 _home_source_cache: dict = {}
 _home_source_lock = threading.Lock()
 
@@ -458,21 +471,30 @@ def home_source(max_age: float = HOME_SOURCE_TTL) -> dict:
     # The background catalog refresh takes the full TTL. The screen (`api_context`) asks for a short
     # one: its «upgrade to this office's version» button writes `home.commit` into a peer's
     # declaration, and a commit made a minute ago must not lose to a ten-minute-old cache.
+    #
+    # Three rules (the coordinator, 2026-11-11 15:48Z: a `git status` on the MacBook's engine was read 124 s old at 34%
+    # of a core, its parent gone, during a six-minute stand of the Mac's desk):
+    # - a FAILED read is cached as long as a good one: it returned before the cache, so the next /api/context or
+    #   catalog pass asked again, and the git it had abandoned was still running;
+    # - the limit is the COMMAND's (`timeout -k`, under the wait), so a read that runs over is ended, not left behind;
+    # - `git status` walks every file, and on a checkout behind a VM boundary (the Mac's engine reads the host's over
+    #   virtiofs, the HP's WSL over 9p) that walk is the whole cost. There the dirty count is not measured (`None`);
+    #   repo, branch, commit and subject are a few file reads and stay.
     now = time.time()
     with _home_source_lock:
         have = _home_source_cache.get("value")
         if have and now - _home_source_cache.get("at", 0) < max_age:
             return dict(have)
-    r = cv.exec_on(LOCAL_MACHINE,
-                   f"cd {cv.q(HOME_REPO)} && echo repo=$(git remote get-url origin) && "
-                   f"echo branch=$(git rev-parse --abbrev-ref HEAD) && echo commit=$(git rev-parse HEAD) && "
-                   f"echo dirty=$(git status --porcelain --untracked-files=no | wc -l) && "
-                   f"echo pushed=$(git branch -r --contains HEAD 2>/dev/null | head -1 | tr -d ' ') && "
-                   f"echo subject=$(git log -1 --format=%s | head -c 140)", 40)
+    # the `cd` is under the limit too: a mount that hangs, hangs there first
+    script = f"cd {cv.q(HOME_REPO)} || exit 3; {_HOME_FACTS}"
+    r = cv.exec_on(LOCAL_MACHINE, f"timeout -k 5 {HOME_SOURCE_LIMIT_S} sh -c {cv.q(script)}", HOME_SOURCE_LIMIT_S + 10)
     if r.get("code") != 0:
-        return {"error": r.get("reason") or (r.get("stderr") or "")[-300:]}
+        err = {"error": r.get("reason") or (r.get("stderr") or "")[-300:] or f"exit {r.get('code')}"}
+        with _home_source_lock:
+            _home_source_cache.update(value=dict(err), at=time.time())
+        return err
     f = cv.parse_facts(r.get("stdout") or "")
-    f["dirty"] = int(f.get("dirty") or 0)
+    f["dirty"] = int(f["dirty"]) if str(f.get("dirty") or "").strip().isdigit() else None
     # Where the checkout IS, on the machine that runs this office. Reported, not guessed: the office's
     # path is a Hebrew name with a TRAILING SPACE, and a caller that hardcodes it reads a directory
     # that does not exist — which looks exactly like a missing app.
@@ -708,13 +730,36 @@ FIND_CANDIDATES = int(os.environ.get("DGO_LINK_FIND_CANDIDATES", "64"))
 
 
 def _find_state() -> dict:
-    """`{office: {count, at, want, endpoint, tried}}` — the searches this office has run. An entry
-    without `want` is a finished one: its count and clock decide when the next may start."""
+    """`{office: {count, at, want, endpoint, tried, adopted, was, timed_out}}` — the searches this office has run.
+    An entry without `want` is a finished one: its count and clock decide when the next may start. `tried`,
+    `adopted`, `was` and `timed_out` are the LAST search's result alone (SEARCH_RESULT): a new search, and each
+    answer, clears them first, so one search's result is never read as another's."""
     try:
         doc = json.loads((STATE_DIR / FIND_FILE).read_text(encoding="utf-8"))
     except (OSError, ValueError):
         return {}
     return doc if isinstance(doc, dict) else {}
+
+
+#: the fields one search's answer writes — cleared when a search starts and when its answer comes
+SEARCH_RESULT = ("adopted", "was", "tried", "timed_out")
+
+
+def _search_said(entry) -> dict | None:
+    """One pair's last search as a screen reads it, or None when none ran: running (still looking), when, the
+    address it looked around, how many it tried, whether it ran out of time, and — when it found the office —
+    where, and where it was."""
+    if not isinstance(entry, dict):
+        return None
+    try:
+        count = int(entry.get("count") or 0)
+    except (TypeError, ValueError):
+        count = 0
+    if count < 1:
+        return None
+    return {"running": bool(entry.get("want")), "at": entry.get("at"), "around": entry.get("endpoint"),
+            "tried": entry.get("tried"), "timed_out": bool(entry.get("timed_out")),
+            "found": entry.get("adopted") or None, "was": entry.get("was") or None, "count": count}
 
 
 def _write_find_state(doc: dict) -> None:
@@ -793,7 +838,7 @@ def find_peer(oid: str, why: str = "") -> dict:
     tmp.write_text("\n".join(lines) + "\n", encoding="utf-8")
     tmp.replace(path)
     state = _find_state()
-    entry = dict(state.get(oid) or {})
+    entry = {k: v for k, v in (state.get(oid) or {}).items() if k not in SEARCH_RESULT}
     state[oid] = {**entry, "want": want, "at": time.time(), "endpoint": endpoint, "port": port,
                   "candidates": len(candidates), "count": int(entry.get("count") or 0) + 1,
                   "why": why}
@@ -822,7 +867,9 @@ def collect_found_peer(oid: str, req: dict) -> dict | None:
         if time.time() - float(req.get("at") or 0) < float(os.environ.get("DGO_LINK_FIND_GIVE_UP", "900")):
             return None                                   # still looking
         state = _find_state()
-        state[oid] = {k: v for k, v in (state.get(oid) or {}).items() if k != "want"}
+        # ran out of time: said as that — not as «no answer from N», which would read as «the office is off»
+        state[oid] = {**{k: v for k, v in (state.get(oid) or {}).items() if k != "want" and k not in SEARCH_RESULT},
+                      "timed_out": True}
         _write_find_state(state)
         return {"office": oid, "ok": False,
                 "reason": "החיפוש לא הסתיים בזמן — לא נגענו בכתובת של הזוג"}
@@ -832,7 +879,9 @@ def collect_found_peer(oid: str, req: dict) -> dict | None:
         tried = 0
     found = str(answer.get("found") or "").strip()
     state = _find_state()
-    state[oid] = {**{k: v for k, v in (state.get(oid) or {}).items() if k != "want"},
+    # each answer replaces what the LAST search found: a search that finds nothing must not read as found
+    # because an earlier one did (`adopted`/`was` are this answer's alone — _search_said publishes them)
+    state[oid] = {**{k: v for k, v in (state.get(oid) or {}).items() if k != "want" and k not in SEARCH_RESULT},
                   "tried": tried, "at": time.time()}
     if not found:
         _write_find_state(state)
@@ -2613,8 +2662,8 @@ def _check_en(r: dict) -> str:
 
 
 def watch_report(oid: str, days: int = 7, now: int | None = None) -> dict:
-    """The office's daily checks over `days`, counted, and the text of the weekly report (EXF-26: William and
-    Alan read English). Read from the history the checks keep; nothing is measured here. The text is written
+    """The office's daily checks over `days`, counted, and the text of the weekly report (EXF-26: the office's people and
+    They read English). Read from the history the checks keep; nothing is measured here. The text is written
     from the checks' facts, in fixed English sentences — never from their Hebrew summaries or reasons."""
     now = int(time.time()) if now is None else int(now)
     since = now - days * 86400
@@ -3283,6 +3332,8 @@ def api_link():
     # THIS office's own source port per pair, as the heal last left it (DGO-1096): one dict for the
     # whole answer, read once — the same repair is invisible from both ends of the tunnel.
     ports = _listen_ports()
+    # …and the last SEARCH for each pair's moved address (find_peer / collect_found_peer), read once the same way
+    searches = _find_state()
     items = []
     for oid, d in sorted(decls.items()):
         link = cv._link_of(d, home["id"])
@@ -3363,6 +3414,11 @@ def api_link():
                       # (DGO-1096): the one repair neither end can see, so every surface that lists a
                       # pair says it — with the port it came FROM and why. Absent (`None`) when it was
                       # never moved, so a screen never shows a repair that did not happen.
+                      # The last search for this pair's address (issues/hp-link-dead-for-25-hours-…, DGO-1848):
+                      # «the office moved» and «the office is off» read the same until a screen can say a
+                      # search ran, how many addresses it tried, and whether it found the office (and where).
+                      # `None` when none ran, as above.
+                      "search": _search_said(searches.get(oid)),
                       "source_port": ({k: (ports.get(oid) or {}).get(k)
                                        for k in ("port", "was", "at", "count", "why")}
                                       if (ports.get(oid) or {}).get("port") else None),

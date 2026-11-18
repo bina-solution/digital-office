@@ -29,9 +29,15 @@ function shotPlaceholders() {
 	const one = /!\[([^\]]*)\]\(TODO-shot:\s*([^)]*)\)/;
 	const all = new RegExp(one.source, 'g');
 	const esc = (s) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
-	const box = (alt, what) =>
-		`<span class="shot-todo" role="img" aria-label="${esc(alt)}"><b>${/תרשים/.test(what) ? 'תרשים' : 'צילום מסך'} שעוד ` +
-		`יבוא:</b> ${esc(alt)}<small>${esc(what)}</small></span>`;
+	// the box speaks the page's language: a page under content/docs/en/ is English, every other page Hebrew
+	const label = (what, en) =>
+		en
+			? `${/diagram|תרשים/i.test(what) ? 'Diagram' : 'Screenshot'} to come:`
+			: `${/תרשים/.test(what) ? 'תרשים' : 'צילום מסך'} שעוד יבוא:`;
+	const box = (alt, what, en) =>
+		`<span class="shot-todo" role="img" aria-label="${esc(alt)}"><b>${label(what, en)}</b> ${esc(alt)}` +
+		`<small>${esc(what)}</small></span>`;
+	let en = false;
 	const visit = (node) => {
 		if (!Array.isArray(node.children)) return;
 		const out = [];
@@ -44,14 +50,17 @@ function shotPlaceholders() {
 			let last = 0;
 			for (const m of child.value.matchAll(all)) {
 				if (m.index > last) out.push({ type: 'text', value: child.value.slice(last, m.index) });
-				out.push({ type: 'html', value: box(m[1], m[2]) });
+				out.push({ type: 'html', value: box(m[1], m[2], en) });
 				last = m.index + m[0].length;
 			}
 			if (last < child.value.length) out.push({ type: 'text', value: child.value.slice(last) });
 		}
 		node.children = out;
 	};
-	return (tree) => visit(tree);
+	return (tree, file) => {
+		en = /[\\/]content[\\/]docs[\\/]en[\\/]/.test(file?.path || '');
+		visit(tree);
+	};
 }
 
 export default defineConfig({
@@ -60,8 +69,9 @@ export default defineConfig({
 	markdown: { remarkPlugins: [shotPlaceholders], rehypePlugins: [withBase] },
 	integrations: [
 		starlight({
-			// DGO-1802 (the owner, 2026-11-10): the Hebrew name always with its mark — a government service has the same name
-			title: 'הלשכה הדיגיטלית DGO',
+			// DGO-1802 (the owner, 2026-11-10): the Hebrew name always with its mark — a government service has the same name.
+			// The English pages carry the English name, as the public README does.
+			title: { he: 'הלשכה הדיגיטלית DGO', en: 'DGO — the digital office' },
 			defaultLocale: 'he',
 			locales: {
 				he: { label: 'עברית', lang: 'he', dir: 'rtl' },
@@ -113,7 +123,9 @@ export default defineConfig({
 						{ slug: 'apps/app-management' },
 						{ slug: 'apps/connections' },
 						{ slug: 'apps/traefik' },
+						{ slug: 'apps/https-redirect' },
 						{ slug: 'apps/forward-auth' },
+						{ slug: 'apps/authentik' },
 						{ slug: 'apps/notifications' },
 						{ slug: 'apps/machine' },
 						{ slug: 'apps/data-management' },
@@ -121,17 +133,29 @@ export default defineConfig({
 						{ slug: 'apps/containers' },
 						{ slug: 'apps/postgres' },
 						{ slug: 'apps/redis' },
+						{ slug: 'apps/supabase' },
+						{ slug: 'apps/bina-ui' },
 						{ slug: 'apps/security' },
+						{ slug: 'apps/glitchtip' },
 						{ slug: 'apps/drive' },
 						{ slug: 'apps/mail' },
 						{ slug: 'apps/indox' },
 						{ slug: 'apps/apitools' },
+						{ slug: 'apps/my-docs' },
+						{ slug: 'apps/esign' },
 						{ slug: 'apps/bina-ds' },
 						{ slug: 'apps/n8n' },
+						{ slug: 'apps/raphael' },
+						{ slug: 'apps/any-concurrency' },
 						{ slug: 'apps/project-pln' },
 						{ slug: 'apps/chat' },
+						{ slug: 'apps/telegram' },
 						{ slug: 'apps/meet' },
 						{ slug: 'apps/sites' },
+						{ slug: 'apps/domains' },
+						{ slug: 'apps/digital-assets' },
+						{ slug: 'apps/social-list' },
+						{ slug: 'apps/browser42' },
 						{ slug: 'apps/computers' },
 						{ slug: 'apps/dgo-extend' },
 					],
@@ -144,7 +168,7 @@ export default defineConfig({
 				{
 					label: 'ניהול',
 					translations: { en: 'Administration' },
-					items: [{ slug: 'admin/health' }, { slug: 'admin/never-do' }],
+					items: [{ slug: 'admin/health' }, { slug: 'admin/updates' }, { slug: 'admin/never-do' }],
 				},
 				{
 					label: 'עיון',

@@ -41,7 +41,7 @@ q() { docker exec -e PGPASSWORD="${PGP}" "${PG_CONTAINER}" psql -U "${PGU}" -d "
 # exactly the "moved to another laptop" case this whole capability exists for.
 EXCL=()
 if [ "${MODE}" = "config" ]; then
-  # Execution history is 2,936 MB of a 2,991 MB database on this estate (55,346 rows, almost all of
+  # Execution history is 2,936 MB of a 2,991 MB database on this estate (N rows, almost all of
   # it TOAST), and n8n prunes it at 168h anyway — so it is the single biggest thing worth NOT
   # carrying. The SCHEMA is still dumped for each of these; only the rows are dropped, so the
   # restored instance has the tables and starts clean.
@@ -61,7 +61,7 @@ echo "SKIPVOL postgres_storage"
 # ── 2. the .n8n volume ──────────────────────────────────────────────────────────────────────────
 # What is actually in it, measured: `nodes/` 204 MB (the five community node packages this estate's
 # workflows import — carried in BOTH modes, because a restore that has to reach npm is a restore
-# that fails on an offline machine), `storage/` 1.6 GB in 35,062 files (execution BINARY data, since
+# that fails on an offline machine), `storage/` 1.6 GB in N files (execution BINARY data, since
 # N8N_DEFAULT_BINARY_DATA_MODE=filesystem — the filesystem half of the execution history the config
 # mode already drops from the database), `config` 88 bytes holding a SECOND copy of the encryption
 # key that n8n wrote itself on first boot, and the event logs.

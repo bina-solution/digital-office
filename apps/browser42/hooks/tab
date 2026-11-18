@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-#: [--office <office>] list | navigate <id> <url> | click <id> <selector> | type <id> <text> [selector] | eval <id> <expression> | text <id> [max-chars] | snapshot <id> | shot <id> [full] | close <id>
+#: [--office <office>] list | navigate <id> <url> | click <id> <selector> | type <id> <text> [selector] | eval <id> <expression> | text <id> [max-chars] | snapshot <id> | shot <id> [full] | close <id> | copy <id> [selector]
 # tab — one verb on ANY tab of the office browser, named by the CDP id `tab list` prints, never «the
 # current tab» (DGO-1251): what only the MCP or noVNC could do. It is `task tab …`: the same runner, one
 # command at a time, 300 s, and a linked office's browser with --office. A tab someone holds (an active

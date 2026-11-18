@@ -1,0 +1,49 @@
+#!/usr/bin/env bash
+#: kadima [WORD…] [--live] [--rows FILE|-] — «קדימה <word>»: the meeting the word names (room, then prefix, then title; newest first), its page, and — for a product that meeting decided — what of its end state is still missing, then how to get in:  ./bbox meet kadima exx --live
+# With no word: every declared product (apps/*/product.json) is checked. The meetings are read from this office's
+# meet-start (`cli.py meetings` + `recordings`, 60 s each where `timeout` exists); where meet runs on another office,
+# pipe those lines in:   … meet meetings 50; … meet recordings 50  |  ./bbox meet kadima exx --rows -
+# The procedure it measures: ai/context/kadima-meeting-to-product.md (DGO-1847).
+set -uo pipefail
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
+. "${REPO_ROOT}/scripts/lib.sh"
+case "${1:-}" in -h|--help) sed -n 's/^#: //p' "${BASH_SOURCE[0]}"; exit 0 ;; esac
+TOOL="${REPO_ROOT}/apps/meet/tools/flow/kadima.py"
+
+live="" rows="" words=()
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --live) live="--live" ;;
+    --rows)
+      case "${2:-}" in ""|--*) rows="-" ;; *) rows="$2"; shift ;; esac ;;
+    *) words+=("$1") ;;
+  esac
+  shift
+done
+
+# bash 3.2 (macOS) calls an empty array unbound under `set -u`: every expansion below is guarded.
+if [ "${#words[@]}" -eq 0 ]; then
+  python3 "$TOOL" check ${live:+"$live"}
+  exit $?
+fi
+
+if [ -n "$rows" ]; then
+  out="$(python3 "$TOOL" resolve "${words[@]}" --rows "$rows")"
+else
+  limit=""
+  command -v timeout >/dev/null 2>&1 && limit="timeout 60"
+  list="$( { $limit dcx exec -T meet-start python /app/cli.py meetings 50; $limit dcx exec -T meet-start python /app/cli.py recordings 50; } 2>/dev/null )"
+  if [ -z "$list" ]; then
+    echo "meet does not answer on this office — run this on the office that records, or pipe its «meet meetings» and «meet recordings» lines in with --rows -" >&2
+    exit 2
+  fi
+  out="$(printf '%s\n' "$list" | python3 "$TOOL" resolve "${words[@]}")"
+fi
+rc=$?
+printf '%s\n' "$out"
+[ $rc -eq 0 ] || exit $rc
+product="$(printf '%s\n' "$out" | sed -n 's/^product: \(apps\/[^ ]*product\.json\)$/\1/p')"
+[ -n "$product" ] || exit 0
+echo
+python3 "$TOOL" check "$product" ${live:+"$live"}

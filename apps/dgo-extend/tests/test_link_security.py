@@ -111,7 +111,7 @@ serve_mod = _load(ROOT / "platform/manager/serve.py", "dgo_serve")
 REGISTRY = {"apps": [
     {"app": "drive", "alias": "drive", "name": "דרייב", "name_en": "Drive", "icon": "drive",
      "group": "ראשי", "desc": "קבצים", "order": 2, "port": 8975, "host": "drive.localhost"},
-    {"app": "bina-ds", "alias": "bina", "name": "בינה ודעת", "icon": "bot", "order": 1, "port": 3080,
+    {"app": "bina-ds", "alias": "bina", "name": "עזריה", "icon": "bot", "order": 1, "port": 3080,
      "agent_api_port": 3081, "host": "bina.localhost",
      "identity": {"to": "owner@local"}},
     {"app": "app-management", "alias": "apps", "name": "ניהול אפליקציות", "port": 8010,
@@ -465,9 +465,21 @@ def c_identity_crosses_boundedly():
         return problems
     doc = yaml.safe_load(serve_mod.render(entries, console, domain="office.example"))
     chain = doc["http"]["routers"]["dgo-remote-macbook-bina-console"]["middlewares"]
-    if chain[0] != sign_in:
-        problems.append(f"this office's own SSO ({sign_in}) must run FIRST, so a forged header is already "
-                        f"gone before the mapping is written, got {chain}")
+    # Nothing that reads or writes a REQUEST header may run before the sign-in. The one middleware allowed ahead of
+    # it is the HSTS pin (b0bdd0d14: first in every TLS chain, because a sign-in that redirects ends the chain and a
+    # pin after it never ran) — and only while its definition sets nothing but the response's STS header.
+    ahead = chain[:chain.index(sign_in)] if sign_in in chain else chain
+    if sign_in not in chain or any(m != "hsts@file" for m in ahead):
+        problems.append(f"this office's own SSO ({sign_in}) must run before any middleware that touches the "
+                        f"request (only the HSTS pin may precede it), so a forged header is already gone before "
+                        f"the mapping is written, got {chain}")
+    if "hsts@file" in ahead:
+        pin = (yaml.safe_load((ROOT / "platform-base/traefik/config/zz-https.yaml").read_text(encoding="utf-8"))
+               or {}).get("http", {}).get("middlewares", {}).get("hsts", {})
+        if set(pin) != {"headers"} or not set(pin["headers"]) <= {"stsSeconds", "stsIncludeSubdomains",
+                                                                   "stsPreload", "forceSTSHeader"}:
+            problems.append(f"the HSTS pin runs before the sign-in, so it may set the STS response header and "
+                            f"nothing else, got {pin}")
     mapping = f"dgo-remote-{entry['office']}-identity"
     if mapping not in chain:
         problems.append(f"the mapped identity middleware is missing from the chain: {chain}")

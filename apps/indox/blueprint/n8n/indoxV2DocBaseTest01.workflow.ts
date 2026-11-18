@@ -125,7 +125,7 @@ import { workflow, node, links } from '@n8n-as-code/transformer';
     /*__n8n__*/ meta: null,
     /*__n8n__*/ pinData: {},
     /*__n8n__*/ staticData: null,
-    /*__n8n__*/ shared: [{"updatedAt":"2026-07-30T23:42:27.037Z","createdAt":"2026-07-30T23:42:27.037Z","role":"workflow:owner","workflowId":"indoxV2DocBaseTest01","projectId":"2xKn4WH08LyAOk2y","project":{"updatedAt":"2026-07-30T23:40:17.073Z","createdAt":"2026-07-30T23:33:30.049Z","id":"2xKn4WH08LyAOk2y","name":"Admin User <person2@example.com>","type":"personal","icon":null,"description":null,"creatorId":"544b7ec6-5907-4ee2-a94b-c5676e56835c"}}],
+    /*__n8n__*/ shared: [{"updatedAt":"2026-07-30T23:42:27.037Z","createdAt":"2026-07-30T23:42:27.037Z","role":"workflow:owner","workflowId":"indoxV2DocBaseTest01","projectId":"exampleProject02","project":{"updatedAt":"2026-07-30T23:40:17.073Z","createdAt":"2026-07-30T23:33:30.049Z","id":"exampleProject02","name":"Admin User <person2@example.com>","type":"personal","icon":null,"description":null,"creatorId":"544b7ec6-5907-4ee2-a94b-c5676e56835c"}}],
     id: 'indoxV2DocBaseTest01',
     name: 'indox-v2 DOC BASE E2E Test',
     active: false,
@@ -244,10 +244,10 @@ return [{json:{
   // company resolver on them and asserts. Company expected from the GDoc/BS fixtures where known.
   demoBase:'http://indox-demo-docs:8088',
   figureFiles:[
-    {ID:'dbf_inv', upname:'dbf_inv-agn-3.162b24.pdf',      path:'invoice/files/agn-3.dbf.pdf',            expectType:'INVOICE',       expectCompany:'500000062'},
+    {ID:'dbf_inv', upname:'dbf_inv-almn-3.162b24.pdf',      path:'invoice/files/almn-3.dbf.pdf',            expectType:'INVOICE',       expectCompany:'500000013'},
     {ID:'dbf_ord', upname:'dbf_ord-PO25010001.fd669c.png', path:'order/files/PO25010001.dbf.png',         expectType:'ORDER',         expectCompany:'511234567'},
-    {ID:'dbf_shp', upname:'dbf_shp-by-gy-4.995211.pdf',     path:'shipment/files/by-gy-4.dbf.pdf',         expectType:'SHIPMENT',      expectCompany:'500000070'},
-    {ID:'dbf_bs',  upname:'dbf_bs-asyp-shr-ts-1.pdf',path:'balance_sheet/files/asyp-shr-ts-1.dbf.pdf',expectType:'BALANCE_SHEET', expectCompany:'500000435', seedCompany:'500000435'},
+    {ID:'dbf_shp', upname:'dbf_shp-supplier19-4.995211.pdf',     path:'shipment/files/supplier19-4.dbf.pdf',         expectType:'SHIPMENT',      expectCompany:'500000252'},
+    {ID:'dbf_bs',  upname:'dbf_bs-supplier15-1.pdf',path:'balance_sheet/files/supplier15-1.dbf.pdf',expectType:'BALANCE_SHEET', expectCompany:'500000260', seedCompany:'500000260'},
   ],
 }}];
 `,
@@ -277,7 +277,7 @@ return [{json:{
     })
     SeedCompanies = {
         operation: 'executeQuery',
-        query: "INSERT INTO indox_test.companies (\"instance\", \"מזהה 1\", \"שם חברה\") VALUES ('incoming-documents-main','999000111','DocBase Test Co'),('incoming-documents-main','500000062','Fig Inv Co'),('incoming-documents-main','511234567','Fig Ord Co'),('incoming-documents-main','500000070','Fig Shp Co'),('incoming-documents-main','500000435','Asif Schar Etz') ON CONFLICT (\"instance\", \"מזהה 1\") DO UPDATE SET \"שם חברה\"=EXCLUDED.\"שם חברה\";",
+        query: "INSERT INTO indox_test.companies (\"instance\", \"מזהה 1\", \"שם חברה\") VALUES ('incoming-documents-main','999000111','DocBase Test Co'),('incoming-documents-main','500000013','Fig Inv Co'),('incoming-documents-main','511234567','Fig Ord Co'),('incoming-documents-main','500000252','Fig Shp Co'),('incoming-documents-main','500000260','Asif Schar Etz') ON CONFLICT (\"instance\", \"מזהה 1\") DO UPDATE SET \"שם חברה\"=EXCLUDED.\"שם חברה\";",
         options: {},
     };
 

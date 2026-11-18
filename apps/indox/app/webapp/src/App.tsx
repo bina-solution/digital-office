@@ -112,7 +112,7 @@ function ActiveDocsRedirect({ active, resolved }: { active: string | null; resol
      Every drill-down on the dashboard targets `/documents?status=…` / `?type=…` / `?source=…`
      and lands here to be resolved to the active instance. This redirect used to rebuild the
      path and drop `search`, so clicking a bar that said 134 documents opened the unfiltered
-     table — all 25,576 rows, no chip, nothing on screen contradicting the number you had just
+     table — all N rows, no chip, nothing on screen contradicting the number you had just
      clicked. That is the worst failure this app can have: an observation you cannot act on,
      silently answered with something else. */
   const { search } = useLocation();

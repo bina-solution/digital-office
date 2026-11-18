@@ -26,6 +26,8 @@ import { fileURLToPath } from "node:url";
 import { StringDecoder } from "node:string_decoder";
 import { createSpanStore, liveSessions } from "./spans.mjs";
 import { createWatch, desktopSignIn } from "./signin-watch.mjs";
+import { APP_ID, TILE, desktopContainer } from "./identity.mjs";
+import { createHomeFolder } from "./home-folder.mjs";
 
 const PORT = Number(process.env.BINA_CLAUDE_ADAPTER_PORT || 3091);
 const STATE = process.env.BINA_CLAUDE_STATE || "/data/bina-claude";
@@ -33,7 +35,8 @@ const TOKEN_FILE = process.env.AGENT_TOKEN_FILE || `${STATE}/api-token`;
 const OFFICE = process.env.BBOX_REPO_HOST || "/workspace/office";
 // The app's HOME as this container sees it (docker-compose.yml: the volume's `desktop` folder).
 const DESK = process.env.BINA_CLAUDE_DESKTOP_HOME || "/data/desktop";
-const DESKTOP = process.env.BINA_CLAUDE_DESKTOP_CONTAINER || `bina-claude-desktop-${process.env.DEPLOYMENT_NAME || "bina-deployment"}`;
+// This copy's own desktop (identity.mjs): bina-claude-desktop-<office>, or an instance's bina-claude-2-desktop-<office>.
+const DESKTOP = desktopContainer();
 // The checkout is mounted at the same path in both containers, so the driver runs from it.
 const DRIVE = path.join(OFFICE, "apps", "bina-claude", "desktop", "drive");
 const VERSION = "0.5.0";
@@ -101,6 +104,17 @@ if (process.env.BINA_CLAUDE_SIGNIN_WATCH !== "off") {
     stateFile: path.join(STATE, "signin-watch.json"),
     notifications: (process.env.NOTIFICATIONS_URL || "http://notifications:8977").replace(/\/+$/, ""),
     office: process.env.DEPLOYMENT_NAME || "",
+  }).start();
+}
+
+// The office's folder is where a new session opens, from the first sign-in on (home-folder.mjs; DGO-1920).
+if (process.env.BINA_CLAUDE_HOME_FOLDER !== "off") {
+  createHomeFolder({
+    desk: DESK,
+    folders: [...new Set([OFFICE, "/workspace/office"])],
+    stateFile: path.join(STATE, "home-folder.json"),
+    signedIn: () => login().logged_in,
+    drive: (args) => drive(args, ""),
   }).start();
 }
 
@@ -409,11 +423,11 @@ const ALARM_GRACE = (() => {
 const NOTIFY_URL = process.env.BINA_CLAUDE_NOTIFY_URL || "http://notifications:8977/api/notifications";
 const SIGNIN_LINK = process.env.BINA_CLAUDE_SIGNIN_LINK || "";
 const SIGNOUT_FILE = path.join(STATE, "signout.json");
-const ALARM_SOURCE = "bina-claude";
+const ALARM_SOURCE = APP_ID;
 const SIGNOUT_TITLE = "Claude נותק מהחשבון — הסשנים בו עצרו";
 const SIGNIN_TITLE = "Claude מחובר שוב";
 // What the body names when no address is configured: the tile the person already has.
-const SIGNIN_TILE = "האריח «בינה קלוד» בקונסול";
+const SIGNIN_TILE = `האריח «${TILE}» בקונסול`;
 
 // The hour the OWNER reads, not the container's. An office that sets TZ=Etc/UTC in its .env (the HP
 // does) would say an hour he does not read, and DGO-1357 measured what that costs — «מאז 12:16» was
@@ -705,7 +719,7 @@ const notHere = (what) => new Fail(501, "not-implemented", `${what} is not offer
 async function route(req, res, url) {
   const p = url.pathname;
   if (p === "/v1/health") {
-    const out = { ok: true, provider: "bina-claude", version: VERSION, harness: "claude-desktop", harness_ms: 0,
+    const out = { ok: true, provider: APP_ID, version: VERSION, harness: "claude-desktop", harness_ms: 0,
                   uptime_s: Math.round((Date.now() - startedAt) / 1000), stream: true, desktop: DESKTOP, login: login(),
                   signout: { since_ms: signout.began, seen: signout.seen, posted: signout.posted,
                              notice: signout.notice, attempted: signout.attempted,

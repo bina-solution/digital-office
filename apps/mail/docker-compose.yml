@@ -102,7 +102,7 @@ services:
       # read its own copy, it could report a setup as correct while the MTA used something else.
       - MAIL_DOMAIN=${MAIL_DOMAIN:-local.test}
       # The OTHER domains this machine serves, on top of MAIL_DOMAIN — a company address on the
-      # company's own domain (person3@example.com), whose MX also points here. Read by the
+      # company's own domain (hello@digital-office.co.il), whose MX also points here. Read by the
       # engine reconciler (profiles.served_domains) to decide whether a declared profile at another
       # domain may be brought up, and by mailboxd as the list it will create at.
       - MAIL_DOMAINS=${MAIL_DOMAINS:-}
@@ -249,7 +249,7 @@ services:
       - traefik.http.routers.mailview-https.entrypoints=websecure
       - traefik.http.routers.mailview-https.tls=true
       - traefik.http.routers.mailview-https.tls.certresolver=${TRAEFIK_CERTRESOLVER-myresolver}
-      - traefik.http.routers.mailview-https.middlewares=authentik@file,hsts@file
+      - traefik.http.routers.mailview-https.middlewares=hsts@file,authentik@file
       - traefik.http.routers.mailview-https.service=mailview
       - traefik.http.services.mailview.loadbalancer.server.port=8976
     healthcheck:
@@ -273,7 +273,7 @@ services:
   #
   # This replaced GreenMail, and the reason is not features — it is honesty. GreenMail is a TEST
   # double: it accepts every recipient, and for an address it has never seen it CREATES a local
-  # mailbox and files the message there. So `POST /send {"to":"person88@example.com"}` answered
+  # mailbox and files the message there. So `POST /send {"to":"person8@example.com"}` answered
   # {"ok":true,"via":"smtp"} while the mail sat in a fake inbox inside the container. Every layer
   # above it — the app, n8n, the operator — was told mail had been sent that had not been sent.
   #
@@ -590,8 +590,8 @@ services:
         # mail_config VOLUME outlives .env. Re-point a machine at another company (new COMPANY_SLUG,
         # so new MAIL_DOMAIN) without wiping volumes and postfix-accounts.cf still lists the old
         # company's addresses. Measured on staging 2026-07-29: five accounts, ONE of them belonged
-        # to this deployment — person89@example.com, person90@example.com
-        # and person91.x-x@example.com were the previous tenant's, and they were on the
+        # to this deployment — person74@example.com, person75@example.com
+        # and person76.x-x@example.com were the previous tenant's, and they were on the
         # new company's mailbox screen. No MX points here for those domains, so they could not
         # receive a single message; they were pure leakage of one customer's names to the next.
         #

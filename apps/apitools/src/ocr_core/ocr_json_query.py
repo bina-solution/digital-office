@@ -102,7 +102,7 @@ def _nows(s):
 
 def _nopunct(s):
     """Normalize a name for matching: keep only letters/digits (Hebrew + Latin), dropping
-    whitespace and punctuation so 'א.י.ש. הכל' and 'איש הכל' normalize the same."""
+    whitespace and punctuation so 'ס.פ.ק. הכל' and 'איש הכל' normalize the same."""
     return re.sub(r'[^0-9A-Za-z֐-׿]', '', s or '')
 
 
@@ -412,7 +412,7 @@ class OcrJsonQuery:
                         break
                     head.append(wd)
                 # name matching is punctuation-insensitive: drop dots/quotes so an acronym
-                # letterhead ('א.י.ש. הכל ירוק') matches its registry name ('איש הכול ירוק').
+                # letterhead ('ספק טית') matches its registry name ('ספק טית').
                 norm = _nopunct(' '.join(wd['t'] for wd in head))
                 fulltxt = _nows(' '.join(wd['t'] for wd in words))
                 excl_pos = [m.start() for mk in (query.get("exclude_near") or [])
@@ -449,7 +449,7 @@ class OcrJsonQuery:
                         if not any(abs(idx - ep) < 40 for ep in excl_pos):
                             hits.append((len(on), o))
                         continue
-                    # ktiv-insensitive: drop ו/י from both sides (הכול vs הכל, מטבעון vs
+                    # ktiv-insensitive: drop ו/י from both sides (הכול vs הכל, עירהדוגמה vs
                     # מטבען). exclude_near must apply here too, in the ktiv-reduced space:
                     # else a name adjacent to the recipient/home marker (e.g. 'מ.ש הדוגמה
                     # חומרי בנין') leaks through this path.
@@ -544,7 +544,7 @@ class OcrJsonQuery:
                     tc = t; is_clean = False
                     if not _value_passes(t, value_validations):
                         # garbage-wrapped id: heb+eng OCR mangles a Latin id's prefix and
-                        # wraps it in punctuation / a stray Hebrew letter ("PO26001466" ->
+                        # wraps it in punctuation / a stray Hebrew letter ("PO26000002" ->
                         # "0(26001466)ם"), which fails a fullmatch value_regex. When the
                         # query DOES expect an id shape (has a matches_regex), retry with
                         # non-alphanumerics stripped. Recorded as a SEPARATE candidate used
@@ -554,7 +554,7 @@ class OcrJsonQuery:
                                       for v in (value_validations or []))
                         # Only rescue a token with the clear WRAPPED-id signature: a long
                         # digit run enclosed in brackets/parens ("0(26001466)ם" for
-                        # PO26001466). This is the heb+eng-OCR wrapping artefact; requiring
+                        # PO26000002). This is the heb+eng-OCR wrapping artefact; requiring
                         # the bracket avoids cleaning arbitrary junk into a plausible id
                         # that would block a later fallback.
                         _wrapped = bool(re.search(r'[\[\](){}<>].*\d', t) and re.search(r'\d.*[\[\](){}<>]', t))
@@ -571,8 +571,8 @@ class OcrJsonQuery:
                     if scope == "row" and query.get("row_side"):
                         # 'after' = the reading-direction side of the anchor (RTL: to its
                         # LEFT). A "label: value" row reads label→value; a number on the
-                        # other side belongs to the PREVIOUS label ("לתעודה 220329591 |
-                        # הזמנת לקוח: <empty>" must not yield 220329591 for הזמנת).
+                        # other side belongs to the PREVIOUS label ("לתעודה 220000001 |
+                        # הזמנת לקוח: <empty>" must not yield 220000001 for הזמנת).
                         is_after = (dx < 0) if query.get("is_rtl") else (dx > 0)
                         if query["row_side"] == "after" and not is_after:
                             continue

@@ -222,8 +222,8 @@ _ZONE_NS = {}
 def _zone_nameservers(name):
     """Addresses of the nameservers authoritative for the closest zone at or above `name`.
 
-    Walks up the labels because the zone cut is not knowable in advance — `93.184.216.18.in-addr.arpa`
-    has no NS of its own, the delegation lives at `196.97.31.in-addr.arpa` (the VPS provider), and
+    Walks up the labels because the zone cut is not knowable in advance — `93.184.216.17.in-addr.arpa`
+    has no NS of its own, the delegation lives at `2.0.192.in-addr.arpa` (the VPS provider), and
     the same is true of `_dmarc.<domain>` versus `<domain>`."""
     parts = name.rstrip(".").split(".")
     for i in range(len(parts) - 1):
@@ -463,7 +463,7 @@ def _v6(addr):
 
 def _in6(addr_bytes, cidr):
     """Is `addr_bytes` inside `cidr` (an ip6 mechanism's argument, with or without a /prefix)?
-    Operators write ip6:2a02:4780:28:cb4c::/64 at least as often as a single address, and treating
+    Operators write ip6:2001:db8:28:cb4c::/64 at least as often as a single address, and treating
     that as "does not cover us" would send someone to fix a record that is already correct."""
     net, _, bits = cidr.partition("/")
     n = _v6(net)

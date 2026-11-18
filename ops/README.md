@@ -37,7 +37,7 @@ is not owned by the runner user, and stays silent otherwise. It needs one narrow
 wildcards are not allowed in sudoers command arguments, so it names the work folder exactly:
 
 ```
-shlomy ALL=(root) NOPASSWD: /usr/bin/chown -R shlomy\:shlomy /opt/actions-runner/_work
+owner ALL=(root) NOPASSWD: /usr/bin/chown -R owner\:owner /opt/actions-runner/_work
 ```
 
 Validate with `visudo -c -f` BEFORE installing. An unparseable file in `/etc/sudoers.d` makes sudo

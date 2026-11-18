@@ -1,0 +1,81 @@
+# The desktop app's packages (DGO-1972): what a person downloads and installs, after which the office is in the
+# computer's list of apps — the Start menu, Applications and Launchpad, a Linux launcher.
+#
+# UNSIGNED for now, for the team (.github/workflows/desktop-app.yml). Signing waits on the owner's accounts
+# (DGO-1980, «בעלים»): Apple's Developer ID and notarization, a Windows code-signing certificate, the Microsoft Store.
+# Until then Windows shows SmartScreen's «unknown publisher», and macOS needs a right-click → Open the first time.
+#
+# The names a person reads are Hebrew (the shortcut, the launcher, the Dock); the files' and folders' names stay
+# ASCII («Digital Office», dgo-desktop-*), so no installer, path or updater ever meets a name it cannot spell.
+appId: il.co.digital-office.desktop
+productName: Digital Office
+copyright: © BINA Solutions
+artifactName: dgo-desktop-${version}-${os}-${arch}.${ext}
+directories:
+  output: dist
+files:
+  - src/**
+  - package.json
+# the console's own icons (platform-base/console/app_icons.py renders them from the mark): one picture, not a copy
+icon: ../../platform-base/console/static/icons/icon-512.png
+extraResources:
+  - from: ../../platform-base/console/static/icons
+    to: icons
+protocols:
+  - name: Digital Office
+    schemes: [dgo]
+# Electron's switches, burnt into the binary: it never runs as plain Node, takes no NODE_OPTIONS or --inspect from
+# whoever starts it, loads its code only from its own archive and checks that archive's integrity
+electronFuses:
+  runAsNode: false
+  enableCookieEncryption: true
+  enableNodeOptionsEnvironmentVariable: false
+  enableNodeCliInspectArguments: false
+  enableEmbeddedAsarIntegrityValidation: true
+  onlyLoadAppFromAsar: true
+
+linux:
+  target: [deb, rpm]
+  category: Office
+  executableName: dgo-desktop
+  maintainer: BINA Solutions
+  synopsis: הלשכה הדיגיטלית
+  desktop:
+    entry:
+      Name: הלשכה הדיגיטלית
+      Name[en]: Digital Office
+      # the window's class is package.json's desktopName, so the launcher and the running window are one icon
+      StartupWMClass: dgo-desktop
+
+deb:
+  # electron-builder's own list, and the sound library it leaves out: installed on a clean Debian 13 the app
+  # stopped at «libasound.so.2: cannot open shared object file» (2026-11-18). On Debian 13 and Ubuntu 24.04
+  # libasound2t64 provides it.
+  depends: [libgtk-3-0, libnotify4, libnss3, libxss1, libxtst6, xdg-utils, libatspi2.0-0, libuuid1, libsecret-1-0, libasound2]
+
+rpm:
+  # the same gap in electron-builder's rpm list (its FpmTarget defaults, read 2026-11-18), and fpm turns rpm's own
+  # library detection off: the sound library is named here
+  depends: [gtk3, libnotify, nss, libXScrnSaver, (libXtst or libXtst6), xdg-utils, at-spi2-core, (libuuid or libuuid1), alsa-lib]
+
+mac:
+  target:
+    - target: dmg
+      arch: [universal]
+  category: public.app-category.business
+  # an ad-hoc signature, so the arm64 half runs at all; Developer ID, the hardened runtime and notarization arrive
+  # together with the owner's Apple account (DGO-1980)
+  identity: '-'
+  hardenedRuntime: false
+  extendInfo:
+    CFBundleDisplayName: הלשכה הדיגיטלית
+
+win:
+  target: [nsis]
+
+nsis:
+  oneClick: true
+  perMachine: false
+  shortcutName: הלשכה הדיגיטלית
+  createStartMenuShortcut: true
+  createDesktopShortcut: true

@@ -72,7 +72,15 @@ CONSOLE="$(cn console)"; [ -n "$CONSOLE" ] || die "console container not running
 # in every environment. Discover the console's published container port (8000 for this image).
 CPORT="${UI_CONSOLE_PORT:-$(docker inspect "$CONSOLE" --format '{{range $p,$_ := .Config.ExposedPorts}}{{$p}} {{end}}' 2>/dev/null | tr '/' ' ' | awk '{print $1; exit}')}"
 CPORT="${CPORT:-8000}"
-printf '{"CONSOLE_BASE_URL":"console.localhost:%s"}\n' "$CPORT" > "${DATA}/ui-env.json"
+if [ -n "${UI_STORAGE_STATE:-}" ] || [ -n "${UI_CONSOLE_URL:-}" ]; then
+  [ -n "${UI_STORAGE_STATE:-}" ] && [ -n "${UI_CONSOLE_URL:-}" ] \
+    || die "UI_STORAGE_STATE and UI_CONSOLE_URL go together (a session from \`bbox flow-qa-session\`, and the office's real console host)"
+  # through the edge, signed in (DGO-1813, run_capture.sh): the office's REAL console, as a person reaches it
+  UI_CONSOLE_HOST="${UI_CONSOLE_URL#https://}"; UI_CONSOLE_HOST="${UI_CONSOLE_HOST#http://}"
+  printf '{"CONSOLE_BASE_URL":"%s"}\n' "${UI_CONSOLE_HOST%/}" > "${DATA}/ui-env.json"
+else
+  printf '{"CONSOLE_BASE_URL":"console.localhost:%s"}\n' "$CPORT" > "${DATA}/ui-env.json"
+fi
 
 log "ui-map — inventory"
 python3 "$(npath "${UM_DIR}")/inventory.py" --out "$(npath "${DATA}")/ui-inventory.json" || die "UI inventory has drift — denominator not trustworthy"
@@ -84,7 +92,8 @@ log "ui-map — resolve parameterised-route ids"
 python3 "$(npath "${UM_DIR}")/resolve_params.py" --data "$(npath "${DATA}")" || warn "param resolve reported issues — continuing"
 
 # THE capture: N Chromium containers, sharded, direct-to-console (no browser42). Shared mechanism.
-UI_DATA="${DATA}" UI_CONSOLE_CONTAINER="${CONSOLE}" bash "${UM_DIR}/run_capture.sh"
+UI_DATA="${DATA}" UI_CONSOLE_CONTAINER="${CONSOLE}" bash "${UM_DIR}/run_capture.sh" \
+  || die "the capture did not run (see above) — no map is made from an earlier run's results"
 
 cp "${DATA}/ui-capture-results.json" "${ART}/" 2>/dev/null || true
 cp "${DATA}/ui-raw-coverage.json"    "${ART}/" 2>/dev/null || true

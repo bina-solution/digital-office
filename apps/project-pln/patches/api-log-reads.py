@@ -8,11 +8,11 @@ changed. For a read it is a second copy of data Plane already holds — and a li
 items is 80 KB of it. Measured on hp-laptop, 2026-10-07, after the scheduler came back and the
 daily prune had run:
 
-    GET    17,471 rows · 81,450 characters stored per answer on average
+    GET    N rows · 81,450 characters stored per answer on average
     POST      676 rows ·  4,473
     PATCH     369 rows ·  1,646
 
-15,219 rows were written on one working day — the office's own task CLI and the hook that asks the
+N rows were written on one working day — the office's own task CLI and the hook that asks the
 hub what is left — so the table grew by about 300 MB a day and would settle near 1 GB even with
 three days of retention. Nothing in Plane reads the column back: `APIActivityLogSerializer` is
 defined and no view uses it.

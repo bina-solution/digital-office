@@ -1,8 +1,8 @@
 {
   "id": "bina-ds",
   "title": {
-    "he": "בינה",
-    "en": "Bina"
+    "he": "עזריה",
+    "en": "Azaria"
   },
   "layer": 3,
   "people": "admins",
@@ -103,8 +103,8 @@
         "embed": true,
         "alias": "bina",
         "id": "bina",
-        "name": "בינה ודעת",
-        "desc": "הסוכן של הלשכה",
+        "name": "עזריה",
+        "desc": "הסוכן של הלשכה — כל השיחות במקום אחד",
         "order": 1,
         "url": "http://bina-ds:3080",
         "url_env": "BINA_DS_URL",
@@ -140,6 +140,21 @@
         "display_name": "Bina",
         "default_host": "bina.localhost",
         "base_url_env": "BINA_DS_BASE_URL",
+        "local_twin": true
+      }
+    },
+    {
+      "host": "azaria",
+      "port": 3080,
+      "auth": "sso",
+      "emit_labels": true,
+      "name": "azaria",
+      "url_env": "AZARIA_BASE_URL",
+      "sso": {
+        "slug": "azaria",
+        "display_name": "Azaria",
+        "default_host": "azaria.localhost",
+        "base_url_env": "AZARIA_BASE_URL",
         "local_twin": true
       }
     }
