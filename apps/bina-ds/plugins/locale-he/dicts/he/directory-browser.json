@@ -1,15 +1,15 @@
 {
- "browser.title": "בחירת תיקייה",
- "browser.home": "בית",
- "browser.newFolder": "תיקייה חדשה",
- "browser.folderName": "שם התיקייה",
- "browser.createIn": "תיקייה חדשה בתוך \"{name}\"",
- "browser.untitledFolder": "תיקייה ללא שם",
- "browser.create": "יצירה",
  "browser.cancel": "ביטול",
- "browser.open": "פתיחה",
+ "browser.create": "יצירה",
+ "browser.createIn": "תיקייה חדשה בתוך \"{name}\"",
  "browser.editPath": "עריכת הנתיב",
+ "browser.folderName": "שם התיקייה",
+ "browser.home": "בית",
  "browser.loading": "טוען…",
+ "browser.newFolder": "תיקייה חדשה",
+ "browser.open": "פתיחה",
+ "browser.showHidden": "הצגת קבצים מוסתרים",
+ "browser.title": "בחירת תיקייה",
  "browser.truncated": "יותר מדי תיקיות להצגה; מוצגת רק ההתחלה.",
- "browser.showHidden": "הצגת קבצים מוסתרים"
+ "browser.untitledFolder": "תיקייה ללא שם"
 }

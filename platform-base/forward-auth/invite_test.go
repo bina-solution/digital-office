@@ -215,7 +215,7 @@ func TestAnInvitationExpiresAndANewOneReplacesTheOld(t *testing.T) {
 
 func TestWrongInvitationCodesAreLimitedPerAddress(t *testing.T) {
 	s, iv, _ := inviteOffice(t)
-	code, _ := mint(t, iv, "dana dana@example.com ברוך", time.Now())
+	code, _ := mint(t, iv, "dana dana@example.com דנה", time.Now())
 	limited := false
 	for i := 0; i < 40 && !limited; i++ {
 		r := httptest.NewRequest("POST", "/invite", strings.NewReader(url.Values{"code": {"guess"}}.Encode()))

@@ -1,15 +1,15 @@
 {
- "browser.title": "Select Workspace Directory",
- "browser.home": "Home",
- "browser.newFolder": "New folder",
- "browser.folderName": "Folder name",
- "browser.createIn": "New folder in \"{name}\"",
- "browser.untitledFolder": "Untitled folder",
- "browser.create": "Create",
  "browser.cancel": "Cancel",
- "browser.open": "Open",
+ "browser.create": "Create",
+ "browser.createIn": "New folder in \"{name}\"",
  "browser.editPath": "Edit path",
+ "browser.folderName": "Folder name",
+ "browser.home": "Home",
  "browser.loading": "Loading…",
+ "browser.newFolder": "New folder",
+ "browser.open": "Open",
+ "browser.showHidden": "Show hidden files",
+ "browser.title": "Select Workspace Directory",
  "browser.truncated": "Too many folders to list; only the beginning is shown.",
- "browser.showHidden": "Show hidden files"
+ "browser.untitledFolder": "Untitled folder"
 }

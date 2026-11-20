@@ -407,7 +407,7 @@ def test_mail_connection():
     (`_explicit_connection_required`). Before that guard, a suite mail op with no `connection_id`
     fell through to mailapi's ambient pointer `/data/active.json`, which on this deployment is the
     CLIENT's real Gmail: that is how 148 fixture messages (`sv3s_`/`sv3f_`/`mailorg`, all addressed
-    to @demo.indox) ended up in person51@example.com between 2026-08-05 and 2026-08-09.
+    to @demo.indox) ended up in person52@example.com between 2026-08-05 and 2026-08-09.
 
     So the id is resolved from the LOCAL mail engine's own profiles — the same source
     scripts/ops/e2e-loadtest/provision.py already uses — and anything that is not a

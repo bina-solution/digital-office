@@ -91,6 +91,20 @@ def download_doc(doc_id, request):
     return resp
 
 
+def preview_doc(doc_id, request=None):
+    """The house HTML of a ledger document — the screen's instant preview; uses up no «מקור» (DGO-2029).
+    `?fonts=<relative path>` is where the screen serves the two faces (house_api.font)."""
+    try:
+        html = store.preview_html(doc_id, font_base=(request.args.get('fonts') if request is not None else None))
+    except KeyError:
+        return jsonify({'error': 'not_found'}), 404
+    resp = make_response(html)
+    resp.headers['Content-Type'] = 'text/html; charset=utf-8'
+    from .house_api import CSP
+    resp.headers['Content-Security-Policy'] = CSP
+    return resp
+
+
 def _act(fn, doc_id, request, **extra):
     body = request.get_json(force=True, silent=True) or {}
     try:
@@ -115,12 +129,27 @@ def cancel_doc(doc_id, request):
         return jsonify(store.cancel(doc_id, body.get('reason', '')))
     except KeyError:
         return jsonify({'error': 'not_found'}), 404
-    except PermissionError as e:
+    except (PermissionError, ValueError) as e:     # already cancelled, a credit note, a credit that would not match
         return _err(e, 409)
 
 
 def events_doc(doc_id):
     return jsonify(store.events(doc_id))
+
+
+def import_docs(request, settle=False):
+    """POST /documents/import {source, documents: [...]} — documents another system issued, kept as they were
+    (store.import_issued, DGO-2042); POST /documents/import/settle with the same rows (no PDFs needed) once all are
+    in — their links and the series (store.settle_imported). Both may run again."""
+    body = request.get_json(force=True, silent=True) or {}
+    rows = body.get('documents')
+    if not isinstance(rows, list) or not rows:
+        return jsonify({'error': 'bad_request', 'message': 'documents: a list of documents'}), 400
+    try:
+        fn = store.settle_imported if settle else store.import_issued
+        return jsonify(fn(rows, source=str(body.get('source') or '')[:40]))
+    except ValueError as e:
+        return _err(e, 400)
 
 
 def convert_doc(doc_id, request):
@@ -186,7 +215,12 @@ def business_get(request):
 
 def business_save(request):
     body = request.get_json(force=True, silent=True) or {}
-    return jsonify(entities.save_business(body))
+    try:
+        return jsonify(entities.save_business(body))
+    except entities.IdentityHeld as e:
+        # what the business IS is defined in «זהות» (DGO-2048): the screen says which fields and where
+        return jsonify({'error': 'identity_held', 'message': str(e), 'fields': e.fields,
+                        'url': entities.IDENTITY_EDIT_URL}), 409
 
 
 def _crud(request, kind, rid=None):
@@ -208,7 +242,16 @@ def _crud(request, kind, rid=None):
 
 
 def customers(request, rid=None):
-    return _crud(request, 'customers', rid)
+    """The documents' customers — «ישויות»' once it runs in the office (DGO-2101): its refusal is the caller's
+    (400, in its words), and its silence is said as it is (502), never answered from the ledger's old table."""
+    try:
+        return _crud(request, 'customers', rid)
+    except entities.CustomerNotFound:
+        return jsonify({'error': 'not_found'}), 404
+    except entities.EntitiesRefused as e:
+        return jsonify({'error': 'refused', 'message': str(e)}), 400
+    except entities.EntitiesUnreachable as e:
+        return jsonify({'error': 'entities_unreachable', 'message': str(e)}), 502
 
 
 def items(request, rid=None):

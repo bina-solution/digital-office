@@ -34,6 +34,20 @@
       "strength": "wants",
       "after": false,
       "dependency": "weak"
+    },
+    {
+      "capability": "esign",
+      "strength": "wants",
+      "after": false,
+      "dependency": "weak",
+      "note": "«שליחה לחתימה»: an issued deal document goes out as esign's personal link (BFF /api/sign, DGO-2029)."
+    },
+    {
+      "capability": "documents",
+      "strength": "wants",
+      "after": false,
+      "dependency": "weak",
+      "note": "«ארכיון»: the issued, the incoming and the office's files in one Hebrew search (BFF /api/archive, DGO-2029)."
     }
   ],
   "connections": [

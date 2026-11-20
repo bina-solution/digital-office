@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ישויות</title>
+<script>
+/* The app's root, from its own address: under the console it is /a/<alias>/, alone it is /. A route is the rest —
+   r/<role> (a list) or e/<id> (one entity's card) — so a link to either opens that screen (G83). */
+(function () {
+  var p = location.pathname, m = /^(.*?\/)(?:r|e)\/[^/]*\/?$/.exec(p);
+  window.ENT_ROOT = m ? m[1] : (p.endsWith('/') ? p : p + '/');
+  document.write('<link rel="stylesheet" href="' + window.ENT_ROOT + 'app.css">');
+})();
+</script>
+</head>
+<body>
+<main class="pg">
+  <header class="pg-head">
+    <div style="min-width:0">
+      <h1 id="title">ישויות</h1>
+      <div class="pg-sub">כל מי שהעסק עובד איתו — אנשים וארגונים — במקום אחד. לכל ישות כמה תפקידים: לקוח, ספק, חברה,
+        איש מכירות, איש קשר; והמסמכים, המייל וכל הלשכה משתמשים בהם.</div>
+    </div>
+    <div class="pg-actions">
+      <input class="search" id="q" type="search" placeholder="חיפוש: שם, ח״פ, טלפון, אימייל" aria-label="חיפוש">
+      <button class="btn primary" type="button" id="new">+ ישות חדשה</button>
+    </div>
+  </header>
+  <div class="chips" id="chips" role="toolbar" aria-label="תפקיד"></div>
+  <div class="list" id="list" role="list" aria-live="polite"></div>
+</main>
+<div id="layer"></div>
+<div class="toast" id="toast" role="status" hidden></div>
+<script>document.write('<script src="' + window.ENT_ROOT + 'app.js"><\/script>');</script>
+</body>
+</html>

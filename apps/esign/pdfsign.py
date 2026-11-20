@@ -60,17 +60,21 @@ def stamp(src: str, page_index: int, box: tuple[float, float, float, float], *,
         c.setStrokeColor(Color(0.16, 0.22, 0.18))
         c.setLineWidth(0.8)
         c.rect(x0, y0, x1 - x0, y1 - y0)
+        # A PDF line has no direction: Hebrew goes in visual order (he()) and is set from the RIGHT edge of
+        # the frame, as it reads. The text is cut in LOGICAL order first, so a long name loses its end, not
+        # its beginning (DGO-2029: these lines were drawn unreordered — reversed — and left-aligned).
+        right = x1 - 6
         c.setFont(_font(True), 8.5)
         c.setFillColor(black)
-        c.drawString(x0 + 6, y1 - 13, "נחתם אלקטרונית")
+        c.drawRightString(right, y1 - 13, he("נחתם אלקטרונית"))
         c.setFont(_font(), 7.5)
-        c.drawString(x0 + 6, y1 - 24, signer_name[:48])
-        c.drawString(x0 + 6, y1 - 34, when.strftime("%Y-%m-%d %H:%M %Z").strip())
+        c.drawRightString(right, y1 - 24, he(signer_name[:48]))
+        c.drawRightString(right, y1 - 34, when.strftime("%d/%m/%Y %H:%M %Z").strip())
         c.setFont(_font(), 6)
-        c.drawString(x0 + 6, y0 + 8, "SHA-256 " + doc_sha256[:16])
+        c.drawRightString(right, y0 + 8, "SHA-256 " + doc_sha256[:16])
         if note:
             c.setFont(_font(), 6)
-            c.drawString(x0 + 6, y0 + 16, note[:70])
+            c.drawRightString(right, y0 + 16, he(note[:70]))
         c.showPage()
         c.save()
         buf.seek(0)
@@ -96,7 +100,7 @@ def certificate_page(title: str, lines: Iterable[str], footer: str) -> bytes:
     c.setFillColor(black)
     for line in lines:
         c.setFont(_font(), 10)
-        c.drawRightString(width - 56, y, he(line)[:120])
+        c.drawRightString(width - 56, y, he(line[:120]))      # cut in reading order, then reorder
         y -= 17
         if y < 120:
             c.showPage()
@@ -104,7 +108,7 @@ def certificate_page(title: str, lines: Iterable[str], footer: str) -> bytes:
             y = height - 80
     c.setFont(_font(), 8.5)
     for line in footer.split("\n"):
-        c.drawRightString(width - 56, y, he(line)[:140])
+        c.drawRightString(width - 56, y, he(line[:140]))
         y -= 12
     c.showPage()
     c.save()
@@ -122,8 +126,46 @@ def append_pages(pdf_bytes: bytes, extra: bytes) -> bytes:
 
 
 # ── the key ────────────────────────────────────────────────────────────────────────────────────────
-def load_or_create_cert(data_dir: str, p12_path: str = "", p12_pass: str = "") -> tuple[str, str]:
-    """(key_pem, cert_pem) — the office's PKCS#12 when one is connected, else a self-signed pair.
+#: the name every office's key was made with before it was made in the office's own name (DGO-2029)
+LEGACY_NAME = "BINA Solutions office signing (self-signed)"
+
+
+def _cert_name(value: str) -> str:
+    """`value` when a certificate may carry it as a name, else ''. A name is at most 64 bytes (the cryptography
+    library refuses more, and then no key is ever made — the fourth reader). asn1crypto refuses a name that mixes a
+    right-to-left script with Latin letters, or that does not begin and end with a letter of that script (RFC 3454
+    §6), and then pyHanko cannot sign at all (DGO-2029: «משרד בדיקה — office signing» was a 500). A name too long is
+    cut on a word, then the library's own check decides."""
+    value = (value or "").strip()
+    while len(value.encode("utf-8")) > 64:
+        cut = value.rsplit(" ", 1)[0].strip() if " " in value else value[:-1]
+        value = cut
+    if not value:
+        return ""
+    from asn1crypto import x509 as asn1_x509
+    try:
+        asn1_x509.Name.build({"common_name": value}).hashable
+        return value
+    except ValueError:
+        return ""
+
+
+def subject(cert_pem: str) -> str:
+    """Whose key it is, as the certificate says: its common name (the signature's name in every PDF reader)."""
+    from cryptography import x509
+    from cryptography.x509.oid import NameOID
+    try:
+        cert = x509.load_pem_x509_certificate(cert_pem.encode("utf-8"))
+        names = cert.subject.get_attributes_for_oid(NameOID.COMMON_NAME)
+        return str(names[0].value) if names else cert.subject.rfc4514_string()
+    except ValueError:
+        return ""
+
+
+def load_or_create_cert(data_dir: str, p12_path: str = "", p12_pass: str = "",
+                        office: str = "") -> tuple[str, str]:
+    """(key_pem, cert_pem) — the office's PKCS#12 when one is connected, else a self-signed pair, made once, in
+    the office's own name (`office`, the deployment's BUSINESS_NAME; it said «BINA Solutions» on every office).
 
     The self-signed pair proves the bytes did not change; it does not prove WHO the signer is, which is
     the audit trail's job and, for a document that needs it, a registered CA's (research §3.3).
@@ -138,10 +180,27 @@ def load_or_create_cert(data_dir: str, p12_path: str = "", p12_pass: str = "") -
         cert_pem = signer.signing_cert.public_bytes(serialization.Encoding.PEM).decode()
         return key_pem, cert_pem
 
+    # one signing at a time looks at the office's key and makes it: two first signings at once would each make one,
+    # or move a fresh key over the old pair (the fifth reader)
+    import fcntl
+    os.makedirs(data_dir, exist_ok=True)
+    with open(os.path.join(data_dir, ".signing-key.lock"), "w") as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        return _office_key(data_dir, office)
+
+
+def _office_key(data_dir: str, office: str) -> tuple[str, str]:
     key_path = os.path.join(data_dir, "signing-key.pem")
     cert_path = os.path.join(data_dir, "signing-cert.pem")
     if os.path.exists(key_path) and os.path.exists(cert_path):
-        return open(key_path, encoding="utf-8").read(), open(cert_path, encoding="utf-8").read()
+        key_pem, cert_pem = open(key_path, encoding="utf-8").read(), open(cert_path, encoding="utf-8").read()
+        if not (office and subject(cert_pem) == LEGACY_NAME):
+            return key_pem, cert_pem
+        # a key made in «BINA Solutions»' name on an office that has its own: made again, once, in the office's
+        # name (the fourth reader); the old pair is kept beside it, and what it signed still verifies (its
+        # certificate travels inside each signed file)
+        os.replace(key_path, key_path + ".legacy")
+        os.replace(cert_path, cert_path + ".legacy")
 
     from cryptography import x509
     from cryptography.hazmat.primitives import hashes, serialization
@@ -149,8 +208,13 @@ def load_or_create_cert(data_dir: str, p12_path: str = "", p12_pass: str = "") -
     from cryptography.x509.oid import NameOID
 
     key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
-    name = x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, "BINA Solutions office signing (self-signed)"),
-                      x509.NameAttribute(NameOID.ORGANIZATION_NAME, "BINA Solutions")])
+    org = _cert_name(office) or "Digital Office"
+    # a Hebrew name stands alone (it may not share the name with Latin words), and so does a long one; a short Latin
+    # one is said to be self-signed
+    full = "%s — office signing (self-signed)" % org
+    common = full if _cert_name(full) == full else org
+    name = x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, common),
+                      x509.NameAttribute(NameOID.ORGANIZATION_NAME, org)])
     now = datetime.now(timezone.utc)
     cert = (x509.CertificateBuilder()
             .subject_name(name).issuer_name(name)
@@ -172,36 +236,41 @@ def load_or_create_cert(data_dir: str, p12_path: str = "", p12_pass: str = "") -
     return key_pem, cert_pem
 
 
+def timestamper(tsa_url: str = ""):
+    """An RFC 3161 time-stamping authority, when the office names one (`ESIGN_TSA_URL`): the signature then carries a
+    trusted time (PAdES B-T) — what an audit trail written by the office itself cannot prove. Only the signature's
+    hash travels to the authority. No URL, no timestamp: nothing here calls an outside service by default."""
+    if not tsa_url:
+        return None
+    from pyhanko.sign.timestamps import HTTPTimeStamper
+    return HTTPTimeStamper(tsa_url, timeout=20)
+
+
 def sign(pdf_path: str, out_path: str, key_pem: str, cert_pem: str, *,
-         reason: str = "", location: str = "") -> None:
-    """PAdES over the whole file, into a new signature field. `out_path` must not exist yet."""
+         reason: str = "", location: str = "", stamper=None) -> None:
+    """PAdES over the whole file, into a new signature field. `out_path` must not exist yet. `stamper` (see
+    timestamper()) adds a trusted time. The key is loaded in memory — it is never written to a file (DGO-2029: it
+    was, beside the signed copy, for the length of a signing)."""
+    from asn1crypto import pem, x509
+    from pyhanko.keys import load_private_key_from_pemder_data
     from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter
     from pyhanko.sign import fields, signers
     from pyhanko.sign.fields import SigFieldSpec, SigSeedSubFilter
+    from pyhanko_certvalidator.registry import SimpleCertificateStore
 
-    key_tmp = out_path + ".key.pem"
-    cert_tmp = out_path + ".cert.pem"
-    with open(key_tmp, "w", encoding="utf-8") as fh:
-        fh.write(key_pem)
-    with open(cert_tmp, "w", encoding="utf-8") as fh:
-        fh.write(cert_pem)
-    os.chmod(key_tmp, 0o600)
-    try:
-        signer = signers.SimpleSigner.load(key_file=key_tmp, cert_file=cert_tmp)
-        meta = signers.PdfSignatureMetadata(
-            field_name="Signature1", md_algorithm="sha256",
-            subfilter=SigSeedSubFilter.PADES, reason=reason, location=location)
-        with open(pdf_path, "rb") as infile, open(out_path, "wb") as outfile:
-            writer = IncrementalPdfFileWriter(infile)
-            fields.append_signature_field(writer, SigFieldSpec(sig_field_name="Signature1",
-                                                               on_page=0, box=(0, 0, 0, 0)))
-            signers.sign_pdf(writer, meta, signer=signer, output=outfile)
-    finally:
-        for tmp in (key_tmp, cert_tmp):
-            try:
-                os.remove(tmp)
-            except OSError:
-                pass
+    key = load_private_key_from_pemder_data(key_pem.encode("utf-8"), passphrase=None)
+    raw = cert_pem.encode("utf-8")
+    cert = x509.Certificate.load(pem.unarmor(raw)[2] if pem.detect(raw) else raw)
+    signer = signers.SimpleSigner(signing_cert=cert, signing_key=key,
+                                  cert_registry=SimpleCertificateStore.from_certs([cert]))
+    meta = signers.PdfSignatureMetadata(
+        field_name="Signature1", md_algorithm="sha256",
+        subfilter=SigSeedSubFilter.PADES, reason=reason, location=location)
+    with open(pdf_path, "rb") as infile, open(out_path, "wb") as outfile:
+        writer = IncrementalPdfFileWriter(infile)
+        fields.append_signature_field(writer, SigFieldSpec(sig_field_name="Signature1",
+                                                           on_page=0, box=(0, 0, 0, 0)))
+        signers.sign_pdf(writer, meta, signer=signer, timestamper=stamper, output=outfile)
 
 
 def verify(path: str) -> dict:
@@ -224,4 +293,6 @@ def verify(path: str) -> dict:
                 "valid": bool(status.valid), "trusted": bool(status.trusted),
                 "signer": str(getattr(status, "signer_reported_subject_name", "") or ""),
                 "algorithm": str(getattr(status, "md_algorithm", "") or ""),
-                "coverage": status.coverage.name if status.coverage else ""}
+                "coverage": status.coverage.name if status.coverage else "",
+                # an RFC 3161 time inside the signature (ESIGN_TSA_URL), not the office's own clock
+                "timestamped": getattr(status, "timestamp_validity", None) is not None}

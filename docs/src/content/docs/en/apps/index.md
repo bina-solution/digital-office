@@ -59,7 +59,8 @@ description: Every app of the office, by layer, with its id and what is on in a 
 | Element | `element` | no | yes |
 | Signal | `signal` | no | yes |
 | Social networks | `social-list` | no | yes |
-| Digital assets | `digital-assets` | no | yes |
+| Identity | `digital-assets` | yes | yes |
+| Entities | `entities` | yes | yes |
 | Sites | `sites` | no | yes |
 | Domains | `domains` | no | yes |
 | InterNIC | `domain-internic` | no | yes |

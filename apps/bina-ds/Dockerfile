@@ -45,6 +45,16 @@ RUN sh harness/customize.sh harness/profile
 
 # The agent.v1 adapter (ai/context/agent-contract.md): a sibling process started by the entrypoint.
 COPY adapter /opt/bina/adapter
+# The screen's Markdown parser, pinned and taken from npm at build (integrity-checked by npm; never a CDN at
+# run time): markdown-it 14.1.0, MIT, its licence beside it. Before `COPY web`, so a screen change keeps
+# this layer — COPY adds files and never removes the vendor folder.
+RUN mkdir -p /opt/bina/web/vendor && cd /tmp && npm pack markdown-it@14.1.0 --silent \
+ && tar xzf markdown-it-14.1.0.tgz package/dist/markdown-it.min.js package/LICENSE \
+ && mv package/dist/markdown-it.min.js /opt/bina/web/vendor/markdown-it.min.js \
+ && mv package/LICENSE /opt/bina/web/vendor/markdown-it.LICENSE \
+ && rm -rf /tmp/package /tmp/markdown-it-14.1.0.tgz
+# עזריה's own screen (EXU-64): one list of Azaria's and Claude's conversations, served by the adapter.
+COPY web /opt/bina/web
 COPY harness/entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
 # `bbox` from ANY directory (DGO-977): the agent's shell is wherever its last task left it, and a bare `bbox …`

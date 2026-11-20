@@ -136,6 +136,16 @@ class Routers:
         if name.startswith("sites-public-"):
             site = re.sub(r"-\d+(-https?)?$", "", name[len("sites-public-"):])
             return {"kind": "public", "app": f"site:{site}", "office": ""}
+        if name.startswith("dgo-public-"):
+            # A linked office's door opened to the internet here (`publish:`, DGO-2050): PUBLIC, so the scan
+            # jail counts a guesser of its tokens; named by the door and the office that serves it.
+            rest = re.sub(r"-http$", "", name[len("dgo-public-"):])
+            with self.lock:
+                offices = sorted(self.offices, key=len, reverse=True)
+            for office in offices:
+                if rest.startswith(office + "-"):
+                    return {"kind": "public", "app": rest[len(office) + 1:], "office": office}
+            return {"kind": "public", "app": rest, "office": ""}
         with self.lock:
             m = self.meta.get(name)
         base = _SUFFIX.sub("", name)

@@ -1,7 +1,12 @@
 {
+ "navigation.label": "Navigation",
+ "panels.label": "Global panels",
+ "panels.more": "More",
+ "panels.unpin": "Unpin {name} from sidebar",
+ "panels.unpinTooltip": "Unpin from left sidebar",
  "session.new": "New Session",
  "session.new.label": "New session",
- "toggle.open": "Open sidebar",
  "toggle.collapse": "Collapse sidebar",
- "panels.label": "Global panels"
+ "toggle.open": "Open sidebar",
+ "version.copied": "Version copied"
 }

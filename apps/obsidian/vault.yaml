@@ -155,6 +155,11 @@ herd_docs:
     from: ai/context/moving-an-office.md
     scope: herd
     title: "העברת אפליקציה ולשכה שלמה בין מחשבים"
+  # herd, not office: its examples are the business's own customers and machines (Example, Examplex, «on the HP»)
+  - to: "Herd/זהות, ישויות ומסמכים.md"
+    from: ai/context/business-domains.md
+    scope: herd
+    title: "זהות, ישויות ומסמכים — מי מחזיק מה בעסק"
 
 # ── what the compiler writes itself ───────────────────────────────────────────────────────────────
 # `index`     — "00 - START HERE": the office's identity, what is installed, the reading order, and

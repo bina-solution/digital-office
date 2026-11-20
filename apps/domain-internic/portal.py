@@ -570,7 +570,7 @@ _ZONE_ROWS = """(doc) => {
   // `class_<n>` and `specs_<n>` (the value), where <n> is the record's own id. Every OTHER row with a
   // type <select> is a TEMPLATE: the "add a record" form, and the SRV priority/weight/port/target
   // sub-rows, have no per-record field names at all. Reading those positionally is how this reader
-  // used to invent records that do not exist in the zone — an apex A at 93.184.216.15 that no resolver
+  // used to invent records that do not exist in the zone — an apex A at 93.184.216.14 that no resolver
   // ever answered, and two CNAMEs whose value was the domain itself. So a row counts as a record ONLY
   // if it carries the per-record field names, and its fields are matched by the SAME numeric suffix.
   const rows = [];

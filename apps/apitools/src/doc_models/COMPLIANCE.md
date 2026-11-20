@@ -1,7 +1,7 @@
 # Israeli business-document compliance — verified checklist → implemented features
 
 Source: deep research 2026-07-08, every claim 3-vote verified against primary sources —
-הוראות מס הכנסה (ניהול פנקסי חשבונות) תשל"ג-1973 (consolidated text, Wikisource/Nevo),
+הוראות מס הכנסה (ניהול ספרי חשבונות) תשל"ג-1973 (consolidated text, Wikisource/Nevo),
 ITA circular 4/01, Instruction 36 / Annex E, and the ITA "Israel Invoice Model API
 Description" v2.0 (7/2024, gov.il). Confidence high on all items below.
 

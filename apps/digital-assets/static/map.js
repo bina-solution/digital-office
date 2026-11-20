@@ -1,15 +1,19 @@
-/* The map (#/) — the business's digital assets as a MAP: the basics first (identity), then the
+/* The map (#/) — «זהות», the business as a MAP: the basics first (identity), then the
  * blueprint per business type, then the gallery's folders. Pictures, not paragraphs. Uses app.js's
  * helpers at call time; declares only window.pageMap. */
 (function () {
   'use strict';
+  // the business as every document, page and product prints it (brand_fields.py, DGO-2048) — a missing one says so
   const FACTS = [
-    ['identity.name.brand-he', 'שם העסק'], ['identity.description.short', 'תיאור קצר', 'wide'],
+    ['identity.name.brand-he', 'שם העסק'], ['identity.name.brand-en', 'שם באנגלית'],
+    ['identity.name.legal', 'שם משפטי'], ['identity.legal.entity-type', 'סוג העוסק'],
+    ['identity.legal.business-number', 'מספר עוסק / ח״פ'], ['identity.legal.signatory', 'החותם בשם העסק'],
+    ['identity.description.short', 'תיאור קצר', 'wide'],
     ['identity.description.long', 'תיאור מלא', 'wide'], ['identity.contact.phone', 'טלפון'],
     ['identity.contact.email', 'אימייל'], ['identity.contact.address', 'כתובת'], ['identity.contact.website-url', 'אתר'],
   ];
   async function pageMap() {
-    header('נכסים דיגיטליים', 'המפה של העסק: הבסיס, התבנית לפי סוג העסק, והגלריה.',
+    header('זהות', 'המקום היחיד שבו מגדירים את העסק: הבסיס, התבנית לפי סוג העסק, והגלריה.',
       `<a class="btn sm primary" href="#/gallery">${ic('image')}לגלריה</a>`);
     const [ids, bps, gal] = await Promise.all([api('api/slots?section=identity'), api('api/blueprints'), api('api/gallery')]);
     const slots = (ids.ok && ids.body.slots) || [];

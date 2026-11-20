@@ -186,6 +186,8 @@ PERFORMANCE_PROFILE=
 #   BINA_DS_CPUS=2          the agents' container's cap. Changing it re-creates bina-ds at the next converge.
 #   BINA_DS_CPU_FLOOR=2     what the budget may not take below for the agents' container. Re-creates nothing:
 #                           `docker update` gives it.
+#   BROWSER42_CPU_FLOOR=2   the same for the office browser (default 2, never above BROWSER42_CPUS; DGO-2028).
+#   BROWSER42_MEMORY=3g     the office browser's memory ceiling (default 3g). Changing it re-creates the browser.
 # Container health-check timing, shared by every service of apps/meet as
 # `${HEALTHCHECK_INTERVAL:-30s}` / `${HEALTHCHECK_TIMEOUT:-10s}`. Empty = those defaults; raise them
 # on a slow machine whose Jitsi services need longer than a 10s probe before they answer.
@@ -766,7 +768,8 @@ BROWSER42_BASE_URL=browser42.${DEPLOYMENT_DOMAIN}
 # key and not a literal).
 BROWSER42_CPUS=6
 # How many tabs the shared office browser holds (the anchor page + task tabs). One sign-in tab per
-# service needs more than the default; each tab costs memory inside the 1.8 GB the browser is given.
+# service needs more than the default; each tab costs memory inside the 3 GB the browser is given
+# (BROWSER42_MEMORY).
 BROWSER42_MAX_TABS=6
 # The same rule for n8n's database, which was the LAST literal CPU ceiling on the platform: as a
 # literal it could not be sized by a profile nor lowered by a host, so `bbox run` aborted the whole
@@ -810,6 +813,11 @@ ASSETS_API_TOKEN=
 # needs none (loopback inside its container). Empty = only the CLI answers.
 # minted per office by scripts/env-secrets.py: 64 random hex characters
 LOANS_API_TOKEN=
+# entities («ישויות», everyone the business works with): the bearer token a service — the documents' ledger, a flow —
+# calls its API with; its own CLI needs none (loopback inside its container). Empty = only the CLI and an admin's
+# screen answer.
+# minted per office by scripts/env-secrets.py: 64 random hex characters
+ENTITIES_API_TOKEN=
 # Debug mode for the Playwright MCP. Set non-empty (e.g. 1) to enable: a full
 # per-action session log + Playwright trace are written to data/browser42/output/,
 # and verbose MCP logs go to the container's stderr (docker logs). Empty = off.

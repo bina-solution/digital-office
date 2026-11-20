@@ -12,7 +12,7 @@ folder an app writes into is marked (`system`) and cannot be renamed, moved or d
 ```bash
 ./bbox drive profile list                        # every drive: what it is, and the default (*)
 ./bbox drive -p admin ls /הקלטות                  # -p names a drive: profile id, address, name or connection id
-./bbox drive -p person21@example.com files list /עבודה        # …a Google account by its address
+./bbox drive -p person22@example.com files list /עבודה        # …a Google account by its address
 ./bbox drive -p admin folders list / · tree / --depth 2 · file "/מסמכים/x.pdf" · storage
 ./bbox drive find הקלטה                           # names that hold a text, with their paths
 ./bbox drive get "/הקלטות/הקלטה חדשה 3.m4a" ci-artifacts/   # to this machine (streams; any size)

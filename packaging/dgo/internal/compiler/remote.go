@@ -31,6 +31,8 @@ var (
 	labelRE     = regexp.MustCompile(`^[a-z][a-z0-9-]{0,30}\z`)
 	headerRE    = regexp.MustCompile(`^[A-Za-z0-9@._+\-]{1,128}\z`)
 	authorityRE = regexp.MustCompile(`^[a-z0-9]([a-z0-9.\-]{0,251})?(:\p{Nd}{1,5})?\z`)
+	// DOOR_PATH_RE (DGO-2050): a door's path — absolute, plain URL characters (catalog.py's PATH_RE)
+	doorPathRE = regexp.MustCompile(`^/(?:[A-Za-z0-9._~-]+/)*[A-Za-z0-9._~-]*\z`)
 	wgAddress   = regexp.MustCompile(`^` + pyval.SpaceClass + `*Address` + pyval.SpaceClass + `*=` + pyval.SpaceClass + `*([0-9]{1,3}(?:\.[0-9]{1,3}){3})`)
 )
 
@@ -46,11 +48,19 @@ type remoteApp struct {
 	identity                         *yamlish.Map // `to` and `from`, each only where set
 }
 
+// doorPath is serve.door_path(): absolute, no `.` or `..` segment, nothing escaped (DGO-2050).
+func doorPath(p any) bool {
+	s, ok := p.(string)
+	return ok && doorPathRE.MatchString(s) && !strings.Contains(s+"/", "/../") && !strings.Contains(s+"/", "/./")
+}
+
 // remoteDoor is one door with no tile a linked office gives this one (plan()'s `services`, DGO-945):
 // only an address on this office's network (renderAliases), never a tile, a route or a sign-in.
 type remoteDoor struct {
 	app, alias string
 	port       int64
+	paths      []string // the prefixes its office narrowed it to, sorted; nil for an open door (DGO-2050)
+	public     bool     // its office opened it to the internet (`public: true`): its consent to publish:
 }
 
 // tileOrder is a linked office's `order` as the sorts can use it: a number (a bool is one) as it is,
@@ -296,8 +306,31 @@ func planRemote(repo, name string, block []any) ([]remoteEntry, []string, error)
 				refuse("%s.port %s אינו פורט בטווח", at, pyval.Repr(field("port")))
 				continue
 			}
+			// The prefixes the serving office lets through this door (DGO-945's `paths`, DGO-2050): kept,
+			// because a door this office may PUBLISH must be one the serving office narrowed itself.
+			var paths []string
+			if rawPaths := field("paths"); rawPaths != nil {
+				list, isList := rawPaths.([]any)
+				good := isList && len(list) > 0
+				for _, p := range list {
+					if !doorPath(p) {
+						good = false
+						break
+					}
+					if s := p.(string); !contains(paths, s) {
+						paths = append(paths, s)
+					}
+				}
+				if !good {
+					refuse("%s.paths %s: רשימה של נתיבים מוחלטים, בלי . ו-.. (למשל /s/)", at, pyval.Repr(rawPaths))
+					continue
+				}
+				sort.Strings(paths)
+			}
 			seenLabel[oid+"."+label] = oid + ":" + sid
-			doors = append(doors, remoteDoor{app: sid, alias: label, port: port.N})
+			// …and whether it OPENED the door to the internet (`public: true`, DGO-2050): `is True`, a bool alone
+			public, _ := field("public").(bool)
+			doors = append(doors, remoteDoor{app: sid, alias: label, port: port.N, paths: paths, public: public})
 		}
 		if len(clean) == 0 && len(doors) == 0 {
 			continue

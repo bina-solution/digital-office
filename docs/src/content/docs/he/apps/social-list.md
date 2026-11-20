@@ -49,6 +49,6 @@ description: "כל רשת חברתית שהעסק נמצא בה, ממקום אח
 
 ## להעמיק
 
-- [נכסים דיגיטליים](/he/apps/digital-assets)
+- [זהות](/he/apps/digital-assets)
 - [חיבורים ומפתחות](/he/apps/connections)
 - [צ׳אט](/he/apps/chat)

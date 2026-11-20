@@ -113,7 +113,7 @@ const C = [
   { _case: 'junk id — date shaped, rejected',
     TYPE: 'INVOICE', LOCAL_DOC_ID: '12/03/2026', _expect: { DOC_ID: null } },
   { _case: 'junk id — company number shaped, rejected',
-    TYPE: 'INVOICE', LOCAL_DOC_ID: '500000237', _expect: { DOC_ID: null } },
+    TYPE: 'INVOICE', LOCAL_DOC_ID: '500000245', _expect: { DOC_ID: null } },
   { _case: 'junk id — purely alphabetic, rejected',
     TYPE: 'INVOICE', LOCAL_DOC_ID: 'INVOICE', _expect: { DOC_ID: null } },
   { _case: 'junk id — under 3 alphanumerics, rejected',

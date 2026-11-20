@@ -32,6 +32,7 @@ var handBackFiles = []string{
 	filepath.Join(authentikDir, "blueprints", generatedBlueprint),
 	filepath.Join("platform-base", "traefik", "config", "zz-https.yaml"),
 	filepath.Join("platform-base", "traefik", "config", "zz-serve.yaml"),
+	filepath.Join("platform-base", "traefik", "config", "zz-public.yaml"),
 }
 
 // HandBack gives the checkout's owner what a compile run as root left root's in it — every entry under

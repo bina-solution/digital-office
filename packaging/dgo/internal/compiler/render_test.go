@@ -493,6 +493,11 @@ const (
 	envLocalPort = "# a laptop office: the edge on :8080\nBUSINESS_NAME=Example\nexport X=1\nDEPLOYMENT_DOMAIN=localhost\n" +
 		"CONSOLE_BASE_URL=http://console.localhost:8080\nAPP_MANAGEMENT_BASE_URL=apps.localhost:8080\n" +
 		"GIT_BASE_URL='git.localhost:8080'\nPROJECT_PLN_BASE_URL=plane.console.localhost\nGIT_PROTOCOL=ftp\nSELF=${SELF}x\n"
+	// DGO-2050: a linked office that gives this one ONE door, narrowed to /s/, and the publish: block that
+	// opens it to the internet on this office's edge
+	publishShapes = "remote:\n- office: hp-laptop\n  address: 10.79.9.2\n  link_port: 9004\n  label: HP\n  apps: []\n" +
+		"  services:\n  - {app: esign, alias: esign-public, port: 8080, paths: [/s/], public: true}\npublish:\n" +
+		"- {host: sign.staging.digital-office.co.il, door: esign-public.hp-laptop, paths: [/s/]}\n"
 	// a remote block of every shape plan() accepts: two offices, one behind a door (link_port) with an
 	// identity mapped both ways, one without; apps embedded and of their own host, with and without
 	// the authority they answer under, an agent's second door, labels as text and as an object, a mark
@@ -608,6 +613,38 @@ func TestRenderMatchesPython(t *testing.T) {
 	render := []string{"render"}
 	cases := []renderCase{
 		{name: "this checkout as committed: a remote: block with a linked office", argv: render},
+		// DGO-2050: a linked office's door narrowed to /s/, opened to the internet on this office's edge
+		{name: "a published door: zz-public.yaml beside zz-serve.yaml", argv: render,
+			state: withoutRemote(state) + publishShapes,
+			files: map[string]string{".env": "BUSINESS_NAME=Bina\nDEPLOYMENT_DOMAIN=staging.digital-office.co.il\n"}},
+		{name: "a published door off this office's domain: PUBLISH PLAN REFUSED, as reconcile.py stops", argv: render,
+			state: withoutRemote(state) + strings.Replace(publishShapes, "sign.staging.digital-office.co.il", "sign.example.com", 1),
+			files: map[string]string{".env": "BUSINESS_NAME=Bina\nDEPLOYMENT_DOMAIN=staging.digital-office.co.il\n"}},
+		{name: "a published door on a name the office already routes (console): PUBLISH PLAN REFUSED", argv: render,
+			state: withoutRemote(state) + strings.Replace(publishShapes, "host: sign.staging", "host: console.staging", 1),
+			files: map[string]string{".env": "BUSINESS_NAME=Bina\nDEPLOYMENT_DOMAIN=staging.digital-office.co.il\n"}},
+		{name: "an exact door path beside a prefix: Path() || PathPrefix(), the asked paths sorted", argv: render,
+			state: withoutRemote(state) + strings.Replace(strings.Replace(publishShapes,
+				"paths: [/s/], public: true}", "paths: [/s/, /sign], public: true}", 1),
+				"door: esign-public.hp-laptop, paths: [/s/]}", "door: esign-public.hp-laptop, paths: [/sign, /s/]}", 1),
+			files: map[string]string{".env": "BUSINESS_NAME=Bina\nDEPLOYMENT_DOMAIN=staging.digital-office.co.il\n"}},
+		{name: "a path outside the door's own: left out with a line, the render goes on", argv: render,
+			state: withoutRemote(state) + strings.Replace(publishShapes,
+				"door: esign-public.hp-laptop, paths: [/s/]}", "door: esign-public.hp-laptop, paths: [/api/]}", 1),
+			files: map[string]string{".env": "BUSINESS_NAME=Bina\nDEPLOYMENT_DOMAIN=staging.digital-office.co.il\n"}},
+		{name: "a door no linked office gives: left out with a line, the render goes on", argv: render,
+			state: withoutRemote(state) + strings.Replace(publishShapes, "door: esign-public.hp-laptop", "door: nothere.hp-laptop", 1),
+			files: map[string]string{".env": "BUSINESS_NAME=Bina\nDEPLOYMENT_DOMAIN=staging.digital-office.co.il\n"}},
+		{name: "publish paths that are no list: PUBLISH PLAN REFUSED, spelled as repr() spells them", argv: render,
+			state: withoutRemote(state) + strings.Replace(publishShapes,
+				"door: esign-public.hp-laptop, paths: [/s/]}", "door: esign-public.hp-laptop, paths: s}", 1),
+			files: map[string]string{".env": "BUSINESS_NAME=Bina\nDEPLOYMENT_DOMAIN=staging.digital-office.co.il\n"}},
+		{name: "a door its office did not narrow: left out with a line, the render goes on", argv: render,
+			state: withoutRemote(state) + strings.Replace(publishShapes, ", paths: [/s/], public: true}", "}", 1),
+			files: map[string]string{".env": "BUSINESS_NAME=Bina\nDEPLOYMENT_DOMAIN=staging.digital-office.co.il\n"}},
+		{name: "a door its office did not open to the internet: left out with a line, the render goes on", argv: render,
+			state: withoutRemote(state) + strings.Replace(publishShapes, ", public: true}", "}", 1),
+			files: map[string]string{".env": "BUSINESS_NAME=Bina\nDEPLOYMENT_DOMAIN=staging.digital-office.co.il\n"}},
 		{name: "the office's vault on a herd office, every declared document present (render_vault)", argv: render,
 			files: map[string]string{".env": "BUSINESS_NAME=Bina\nDEPLOYMENT_NAME=bina\nDGO_OFFICE_ID=hp-laptop\n"},
 			setup: func(t *testing.T, _ []string, dir string) { copyVaultSources(t, dir) }},
@@ -1127,6 +1164,9 @@ func TestServePlanMatchesPython(t *testing.T) {
 		{name: "refused, a sentence per reason", argv: sp,
 			state: withoutRemote(state) + "remote:\n- office: macbook\n  address: 10.79.3.0\n  apps: [{app: x, port: 1}]\n- 5\n- office: vps\n  address: 10.79.4.2\n  label: 7\n  apps: [{app: y, port: 70000}, {app: z, port: 2, identity: {to: 'a b'}}, {app: w, port: 3, agent_api_port: 3}]\n"},
 		{name: "remote: is a mapping", argv: sp, state: withoutRemote(state) + "remote: {office: x}\n"},
+		{name: "a door's paths that are no /prefix/: refused, the list spelled as repr() spells it", argv: sp,
+			state: withoutRemote(state) + "remote:\n- office: hp-laptop\n  address: 10.79.9.2\n  apps: []\n" +
+				"  services:\n  - {app: esign, alias: esign-public, port: 8080, paths: [s, /s/../]}\n"},
 		{name: "an office named by a mapping with typed keys: refused, spelled as repr() spells it", argv: sp,
 			state: withoutRemote(state) + "remote:\n- office: {true: x, 1.5: y}\n  address: 10.79.3.2\n  apps: []\n"},
 		{name: "a manifest that fails validation comes first", argv: sp,

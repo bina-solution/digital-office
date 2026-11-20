@@ -1,9 +1,13 @@
-"""digital-assets (נכסים דיגיטליים) — the business's whole digital front, organised as slots.
+"""digital-assets — «זהות» (Identity): the ONE place an office defines its business, organised as slots.
 
 What it is FOR, in the owner's words: add a logo, make it the active one, and it changes on every
 account, on the website and in the office's own products. Change the name, the slug, the
 description — same. Media the office agent makes lands in the right gallery, and is posted by one
 click or by the agent. Every text and picture on the website is a slot, editable here.
+And (DGO-2048, «המקום היחיד שבו מגדירים את המשתנים העיקריים של העסק»): the names, the legal details,
+the contact details, the marks, the colours, who signs and the bank are defined here and nowhere else —
+every other app reads them from `GET /api/brand` (brand_fields.py is that contract). The id stays
+`digital-assets`: it is the host, the volume, the SSO slug and the link address on every office.
 
 The model (store.py): slots → assets (versions) → the active one → publications (per channel).
 Blueprints (blueprints/*.yaml) create the slots; propagate.py plans and publishes a change; the
@@ -739,3 +743,4 @@ def _startup() -> None:
     webengine.start_workers(int(os.environ.get("DIGITAL_ASSETS_WORKERS", "2")))
     blueprints.ensure_channels()
     _ensure_inbox()
+    propagate.ensure_identity()

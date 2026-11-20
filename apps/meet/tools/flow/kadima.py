@@ -611,7 +611,7 @@ def self_test():
         eq("odd shapes are findings, not crashes", any("view_as" in x for x in check_static(odd, {})), True)
 
     good = {"domains": {"office_ip": "93.184.216.7", "app": "app.x.co", "site": "www.x.co", "apex": "x.co"},
-            "mail": {"mailbox": "person82@example.com", "dkim_selector": "mail"},
+            "mail": {"mailbox": "person83@example.com", "dkim_selector": "mail"},
             "site": {"house_line": "מבית הלשכה הדיגיטלית", "backlinks": ["https://bina.example", "digital-office.co.il"],
                      "logo": "office-mark"}}
     page = ('<a href="https://app.x.co/">app</a> מבית הלשכה הדיגיטלית <img src="office-mark.svg" alt="">'
@@ -640,7 +640,7 @@ def self_test():
             ("x.co", "MX"): ["10 mail.x.co."], ("mail.x.co", "A"): ["93.184.216.7"], ("x.co", "TXT"): ['"v=spf1 a mx -all"'],
             ("_dmarc.x.co", "TXT"): ['"v=DMARC1; p=quarantine"'], ("mail._domainkey.x.co", "TXT"): [key]}
     eq("live: all standing", check_live(good, fake(full)), [])
-    parked = {**full, ("x.co", "A"): ["93.184.216.15"]}
+    parked = {**full, ("x.co", "A"): ["93.184.216.14"]}
     eq("live: a parked apex", len(check_live(good, fake(parked))), 1)
     eq("live: no 301", any("301s" in x for x in check_live(good, fake(full, apex_loc=""))), True)
     eq("live: a sign-in elsewhere is not the app", any("door" in x for x in check_live(

@@ -1,17 +1,55 @@
 #!/bin/sh
 # entrypoint.sh — boot the Bina harness profile against the persistent home.
 #
-# The profile's code (node_modules, package.json, cordis.patch.yml) lives in the image under
-# /opt/bina/harness/profile; everything a user accumulates — settings.yaml, .credentials.yaml, sessions,
-# workspaces — lives in $DSH_HOME on the bina_ds_home volume. The profile directory dsh expects at
-# $DSH_HOME/profiles/bina is therefore a symlink into the image, refreshed on every start so an
-# image upgrade replaces the code and never touches the data.
+# The profile's code (node_modules, package.json, cordis.patch.yml, agent-presets) lives in the image
+# under /opt/bina/harness/profile; everything a user accumulates — .credentials.yaml, sessions,
+# workspaces, and the profile's OWN settings layer — lives in $DSH_HOME on the bina_ds_home volume.
+#
+# Since DeepSeek Harness 0.2.x the user's settings (the default model, the Models page, the local model
+# routes) are not `$DSH_HOME/settings.yaml` any more but the profile directory's own `cordis.yml` (and
+# its `cordis.snapshot.yml`), written by the harness — and the first 0.2.x start MOVES an old
+# settings.yaml into it (renaming the file `settings.yaml.imported`). With the profile directory a
+# symlink into the image, that import landed in the container's own filesystem and was lost at the next
+# recreate (EXU-64, measured 2026-11-14: the office's local default model was gone after a redeploy).
+# So $DSH_HOME/profiles/bina is a REAL directory on the volume: every file of the image's profile is
+# linked into it, refreshed at every start so an image upgrade replaces the code, and the settings layer
+# beside them is the volume's own. That layer is the profile's `cordis.patch.yml` — the one file 0.2.x
+# writes the user's settings into, as rows — so the OFFICE'S declared composition (the image's
+# cordis.patch.yml) is not that file: it is passed to dsh as the first `--patch` overlay (below), and
+# the volume's own cordis.patch.yml starts empty and belongs to the harness and the routes writer.
 set -eu
 : "${DSH_HOME:=/data/dsh}"
 : "${DSH_PROFILE:=bina}"
 : "${DSH_PORT:=3080}"
+PROFILE_SRC=/opt/bina/harness/profile
+PROFILE_DIR="${DSH_HOME}/profiles/${DSH_PROFILE}"
 mkdir -p "${DSH_HOME}/profiles"
-ln -sfn /opt/bina/harness/profile "${DSH_HOME}/profiles/${DSH_PROFILE}"
+[ -L "${PROFILE_DIR}" ] && rm -f "${PROFILE_DIR}"            # the 0.1.6 layout: one symlink into the image
+mkdir -p "${PROFILE_DIR}"
+for f in "${PROFILE_DIR}"/* "${PROFILE_DIR}"/.[!.]*; do         # links whose target the new image no longer has
+  [ -L "$f" ] && [ ! -e "$f" ] && rm -f "$f"
+done
+for f in "${PROFILE_SRC}"/* "${PROFILE_SRC}"/.[!.]*; do
+  [ -e "$f" ] || continue
+  case "$(basename "$f")" in cordis.yml|cordis.snapshot.yml|cordis.patch.yml) continue ;; esac   # the volume's own
+  ln -sfn "$f" "${PROFILE_DIR}/$(basename "$f")"
+done
+[ -L "${PROFILE_DIR}/cordis.patch.yml" ] && rm -f "${PROFILE_DIR}/cordis.patch.yml"
+if [ ! -e "${PROFILE_DIR}/cordis.patch.yml" ]; then
+  printf '%s\n' "# The user's settings layer of this office's agent harness (written by the harness and by" \
+    "# bina-ds-llm-routes). The office's own composition is apps/bina-ds/harness/profile/cordis.patch.yml," \
+    "# applied as an overlay after this file. EXU-64." "[]" > "${PROFILE_DIR}/cordis.patch.yml"
+fi
+# The settings an earlier 0.2.x start imported into a profile directory that was not on the volume: the
+# volume's settings layer does not exist yet, so the old document is put back once and imported again —
+# this time where it stays.
+# ONCE: a marker on the volume says it was done, so a later restart never re-imports stale settings over
+# what the owner changed since.
+if [ ! -e "${DSH_HOME}/.settings-reimported" ] && [ -e "${DSH_HOME}/settings.yaml.imported" ] && [ ! -e "${DSH_HOME}/settings.yaml" ]; then
+  mv "${DSH_HOME}/settings.yaml.imported" "${DSH_HOME}/settings.yaml"
+  date -u '+%FT%TZ' > "${DSH_HOME}/.settings-reimported"
+  echo "entrypoint: settings.yaml put back once, to be imported into the profile on the volume" >&2
+fi
 export DSH_HOME
 
 # A cordis.patch.yml in the HOME is a second plugin layer — dsh stacks it over the profile's — that
@@ -41,13 +79,17 @@ unset stray aside
 #   3. nothing — the provider is listed, the field is editable, requests fail MISSING_CREDENTIAL.
 # A template PLACEHOLDER (.env.ex ships `sk-your-…`/`your-…` stubs so every key has a line) must
 # count as case 3, not case 1: left in place it LOCKS the field with a value that can never work.
+# `CHANGE_ME` is one too: .env.ex ships DEEPSEEK_API_KEY='CHANGE_ME', and taken as a key it made
+# DeepSeek look configured — עזריה offered its models and every turn on them failed 401 (EXU-64).
+# Compared without quotes, carriage returns or case, so `"CHANGE_ME"`, 'changeme' and a CRLF .env match too.
 for var in DEEPSEEK_API_KEY OPENAI_API_KEY ANTHROPIC_API_KEY GEMINI_API_KEY; do
   eval "val=\${${var}:-}"
-  case "${val}" in
-    ""|sk-your-*|your-*|*your-*-key*|\'sk-your-*|\'your-*) unset "${var}" ;;
+  bare=$(printf '%s' "${val}" | tr -d "\"'\r" | tr '[:upper:]' '[:lower:]')
+  case "${bare}" in
+    ""|sk-your-*|your-*|*your-*-key*|change_me*|changeme*) unset "${var}" ;;
   esac
 done
-unset var val
+unset var val bare
 
 # The checkout is mounted at its host path (docker-compose.yml); /workspace/office is the short,
 # ASCII alias of the same directory. Never loop the link onto itself when the two coincide.
@@ -102,6 +144,30 @@ fi
 chmod 600 "${TOKEN_FILE}"
 BINA_DS_API_TOKEN="$(cat "${TOKEN_FILE}")"
 export BINA_DS_API_TOKEN
+# The ONE address the harness listens on. Since 0.2.x its web server refuses a wildcard (`0.0.0.0`:
+# "binding every interface would expose remote code execution to the network") and takes one concrete
+# address. The edge reaches this container on the network it shares with it, so that is the address:
+# the local interface whose subnet holds the edge (`traefik-<office>`, its alias on traefik-network) —
+# not merely the first interface, which on a container joined to a second network may be the wrong leg.
+# When the edge cannot be resolved yet, the first non-internal IPv4 is used and the log says so.
+# Everything inside the container that calls the harness (the adapter, the healthcheck) calls it on
+# the same address; the healthcheck reads it from /tmp/dsh-bind-host.
+DSH_BIND_HOST="$(node -e '
+const os = require("os"), dns = require("dns");
+const ifs = Object.values(os.networkInterfaces()).flat().filter((i) => i && i.family === "IPv4" && !i.internal);
+const v = (s) => s.split(".").reduce((a, x) => ((a << 8) + Number(x)) >>> 0, 0);
+const same = (ip, cidr) => { if (!cidr) return false; const [a, b] = cidr.split("/"); const m = Number(b) === 0 ? 0 : (~0 << (32 - Number(b))) >>> 0; return ((v(ip) & m) >>> 0) === ((v(a) & m) >>> 0); };
+const edges = [process.env.DSH_EDGE_HOST, "traefik-" + (process.env.DEPLOYMENT_NAME || ""), "traefik-deployment"].filter((h) => h && !h.endsWith("-"));
+(async () => {
+  for (const h of edges) {
+    try { const { address } = await dns.promises.lookup(h, { family: 4 }); const i = ifs.find((x) => same(address, x.cidr)); if (i) return process.stdout.write(i.address); } catch {}
+  }
+  process.stderr.write("entrypoint: the edge is not resolvable from here — listening on the first network address\n");
+  process.stdout.write(ifs[0] ? ifs[0].address : "127.0.0.1");
+})().catch(() => process.stdout.write(ifs[0] ? ifs[0].address : "127.0.0.1"));')" || DSH_BIND_HOST=""
+[ -n "${DSH_BIND_HOST}" ] || DSH_BIND_HOST=127.0.0.1
+export DSH_BIND_HOST
+printf '%s' "${DSH_BIND_HOST}" > /tmp/dsh-bind-host
 # The adapter is a sibling process; if it dies the harness keeps serving the UI, and /v1/health
 # going dark is what reports it. It is restarted with the container, like the harness.
 node /opt/bina/adapter/server.mjs &
@@ -154,7 +220,13 @@ fi
 : >"${EXIT_LOG}"          # this boot's own record; whatever was there has just been read
 
 cd /opt/bina/harness/profile
-set -- node_modules/.bin/dsh --profile "${DSH_PROFILE}" --no-open --port "${DSH_PORT}"
+set -- node_modules/.bin/dsh --profile "${DSH_PROFILE}" --patch /opt/bina/harness/profile/cordis.patch.yml
+# The office's agent presets (עזריה, רפאל, עזריה · מקומי), one patch file each beside the profile:
+# since 0.2.x a preset is a row of the preset registry (`@deepseek-ai/dsh-agent-preset`), not a
+# directory the harness discovers, so each is composed in as its own overlay, in name order.
+# `--patch` is the launcher's option, so it goes before the app's own flags.
+for p in agent-presets/*/preset.patch.yml; do [ -f "$p" ] && set -- "$@" --patch "/opt/bina/harness/profile/$p"; done
+set -- "$@" --no-open --port "${DSH_PORT}"
 for h in ${DSH_TRUSTED_HOSTS:-}; do set -- "$@" --trusted-host "$h"; done
 "$@" &
 harness_pid=$!

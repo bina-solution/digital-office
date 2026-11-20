@@ -49,6 +49,6 @@ Neither command calls any network.
 
 ## Going further
 
-- [Digital assets](/en/apps/digital-assets)
+- [Identity](/en/apps/digital-assets)
 - [Connections](/en/apps/connections)
 - [Chat](/en/apps/chat)

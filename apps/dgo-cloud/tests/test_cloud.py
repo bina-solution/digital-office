@@ -40,7 +40,7 @@ class World:
         self.b = Billing(self.s, "https://front.test", on_paid=self.p.on_paid, on_stopped=self.p.on_stopped,
                          log=lambda *a: None)
 
-    def buyer(self, email="person14@example.com"):
+    def buyer(self, email="person15@example.com"):
         return self.acc.signup(email, "דנה", "olive-grove-77", "93.184.216.7")
 
     def pay_first(self, a, ok=True):

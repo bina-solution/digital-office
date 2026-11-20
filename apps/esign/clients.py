@@ -30,6 +30,19 @@ def _request(method: str, url: str, body: bytes | None = None,
         return 0, str(exc).encode("utf-8")
 
 
+# ── the office's documents renderer ─────────────────────────────────────────────────────────────────
+def render_house(render_url: str, doc: dict, timeout: int = 15) -> bytes | None:
+    """A page in the office's house style, drawn by the documents renderer (the ledger's
+    `POST /docGen/house`, DGO-2029) — the same look as every document the business issues. None when
+    the renderer is not there or answers anything but a PDF: the caller draws its own page instead."""
+    if not render_url:
+        return None
+    code, body = _request("POST", "%s/docGen/house?format=pdf" % render_url.rstrip("/"),
+                          body=json.dumps(doc, ensure_ascii=False).encode("utf-8"),
+                          headers={"Content-Type": "application/json"}, timeout=timeout)
+    return body if code == 200 and body.startswith(b"%PDF") else None
+
+
 # ── the drive ───────────────────────────────────────────────────────────────────────────────────────
 def drive_put(drive_url: str, path: str, data: bytes, content_type: str = "application/pdf",
               timeout: int = 120) -> dict:
@@ -117,4 +130,6 @@ def config() -> dict:
         "redis_url": os.environ.get("REDIS_URL", ""),
         "redis_password": os.environ.get("REDIS_PASSWORD", ""),
         "public_base": os.environ.get("ESIGN_BASE_URL", "http://esign.localhost:8080").rstrip("/"),
+        # the office's documents renderer (the ledger, apitools): the certificate in the house style
+        "render_url": os.environ.get("ESIGN_RENDER_URL", "http://apitools:8080").rstrip("/"),
     }

@@ -259,6 +259,11 @@ acceptance. Stop immediately on `rejected` or `stalled`; do not claim a result w
   throttling the browser in 23.5% of periods and starving CDP, and 4 nearly doubling the office's
   latency), desktop 1280x800, container memory ceiling 1792M (the measured peak under three heavy
   pages in parallel was 1456MiB = 95% of the old 1536M).
+- **Since 2026-11-19 (DGO-2028)**: memory ceiling 3g (`BROWSER42_MEMORY`). On the HP, five or six heavy app
+  tabs from two or three sessions held 1.67 GB in RAM plus 970 MiB in swap at the old 1792M, with about 980
+  major faults a second during a command. There is also a CPU floor: `x-cpu-floor`, `BROWSER42_CPU_FLOOR` (2) for
+  the browser and 1 for the task runner. Without it the HP's CPU budget held them at 1.12 and 0.56, and the
+  browser was throttled in 88% of its periods while a command ran.
 - **Idle cost, measured**: 6 containers, ~0.7–0.9 GiB RAM and 6–12% of one core while nothing runs
   (every other container in the estate is under 1.5%). It is the office's largest idle consumer, so
   stop it when it is not in use — see the `office-browser` skill for the enable/stop commands, the

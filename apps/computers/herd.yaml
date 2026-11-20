@@ -133,37 +133,9 @@ give:
 # foreign one are withheld from by every office, listed or not: DGO-1360.)
 admin_by_name: [macbook, hp-laptop, vps1, dell]
 
-# A company's office we set up is linked to ours ONE WAY while we do (DGO-964, DGO-1636): we see and manage it, it
-# sees nothing of ours. At hand-over the link is cut FIRST (unpair, from either screen), THEN its line below goes:
-# removing the line only stops asking and lifts the narrowing, it never unpairs. It runs DGO Extend of its own, so
-# it is a JOIN pair (DGO-1363): each office of ours in `by` (by its key above, never by name) asks the client's link
-# door to join, asking `use`, and the owner approves it once on the client's screen — the fingerprint shown there is
-# `pin`. Our side takes only the client's `serve`, and gives the client nothing (apps/dgo-extend/clients.py).
-# The owner, 2026-11-12 (DGO-1840): each client is a herd of its own — Exampleu, EXF, and Examplex once it has an office of
-# its own — linked one way from ours, with full control from our herd; the work runs on the HP, so the HP joins too.
-clients:
-  exampleu:
-    herd: Exampleu
-    door: https://link.exampleu.digital-office.co.il
-    pin: CHANGE_ME
-    by: [macbook, hp-laptop]
-  # EXF's office (93.184.216.9) is linked to the MacBook today by an INSTALLED tunnel (DGO-1363 calls it «due to
-  # become a join pair»), and it sees nothing of ours (its remote-status is empty, read 2026-11-12). The line makes
-  # that one-way hold on our side by its pin NOW (clients.withheld): no office of ours gives it anything, whatever a
-  # `serve:` says. The join itself waits for its door: link.exf answers with no valid certificate until EXF declares
-  # DGO_LINK_HOST, which comes with its carry of the public release (DGO-1839) — until then nothing is joined.
-  examplef:
-    herd: EXF
-    door: https://link.exf.digital-office.co.il
-    pin: CHANGE_ME
-    by: [macbook, hp-laptop]
-  # Examplex's own office on its own server (93.184.216.10), installed from the public release on 2026-11-17 (DGO-1924);
-  # its pin is `./bbox dgo identity fingerprint` there.
-  examplex:
-    herd: Examplex
-    door: https://link.examplex.digital-office.co.il
-    pin: CHANGE_ME
-    by: [macbook, hp-laptop]
+# A company's office this office set up is linked to it one way, and listed here: its herd, its link door and the
+# fingerprint its owner approved (DGO Extend's clients, apps/dgo-extend/clients.py). An office lists none until then.
+clients: {}
 
 # Every office runs these: its own door and its own guard. Running them everywhere is not duplication.
 base: [traefik, authentik, forward-auth, console, connections, app-management, dgo-extend, security,
@@ -200,7 +172,8 @@ apps:
   bina-ds: hp-laptop             # one Azaria; it operates the other offices through the links (DGO-926)
   browser42: hp-laptop
   data-management: hp-laptop     # the nightly backup to the Dell (DGO-920)
-  digital-assets: hp-laptop
+  digital-assets: hp-laptop      # «זהות», the business itself: one per herd, every office reads it (DGO-2048)
+  entities: hp-laptop            # «ישויות», everyone the business works with, beside the documents (DGO-2101)
   social-list: hp-laptop
   telegram-tv: hp-laptop         # or retired — decided on DGO-936
   telegram: hp-laptop            # the owner's Telegram and its event stream — the owner, DGO-1300

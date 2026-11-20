@@ -94,7 +94,7 @@ def reset() -> None:
 # 1. every account contributes, and a LOCAL repository sorts first
 reset()
 ACCOUNT_ROWS[:] = [
-    {"id": "gh1", "label": "GitHub — solomon", "protocol": "git_github_pat", "account_hint": "person23@example.com"},
+    {"id": "gh1", "label": "GitHub — solomon", "protocol": "git_github_pat", "account_hint": "person24@example.com"},
     {"id": "lc1", "label": "פורג' מקומי", "protocol": "git_forge_local", "account_hint": "office@forge"},
 ]
 REPOS["gh1"] = [{"full_name": "bina-solution/b", "description": "", "default_branch": "main"},

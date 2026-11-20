@@ -67,23 +67,23 @@ def _container(service: str) -> str:
 
 INDOX_DOCS = [
     {"ID": "demo-inv-1001", "TYPE": "INVOICE", "SHORT_DOC_ID": "00001",
-     "COMPANY_DOC_ID": "SI250000001", "COMPANY_ID": "500000047",
+     "COMPANY_DOC_ID": "SI250000001", "COMPANY_ID": "500000054",
      "COMPANY_NAME": "פלוני סוכנויות בע\"מ", "NAME": "חשבונית מס 00001",
      "DOC_DATE": "12/06/2026", "DOC_TOTAL_AMOUNT": "5400"},
     {"ID": "demo-shp-5001", "TYPE": "SHIPMENT", "SHORT_DOC_ID": "00009",
-     "COMPANY_DOC_ID": "S0125000009", "COMPANY_ID": "500000070",
+     "COMPANY_DOC_ID": "S0125000009", "COMPANY_ID": "500000088",
      "COMPANY_NAME": "ספק כף תעשיות", "NAME": "תעודת משלוח 00009",
      "DOC_DATE": "03/06/2026", "SHIPMENT_DOC_ID": "S0125000009"},
     {"ID": "demo-ord-7001", "TYPE": "ORDER", "SHORT_DOC_ID": "10004",
-     "COMPANY_DOC_ID": "PO25010004", "COMPANY_ID": "500000013",
+     "COMPANY_DOC_ID": "PO25010004", "COMPANY_ID": "500000021",
      "COMPANY_NAME": "אלמוני שיווק", "NAME": "הזמנת רכש 10004",
      "DOC_DATE": "28/05/2026", "PURCHASE_ID": "PO25010004"},
     {"ID": "demo-inv-1002", "TYPE": "INVOICE", "SHORT_DOC_ID": "00005",
-     "COMPANY_DOC_ID": "SI260000005", "COMPANY_ID": "500000302",
+     "COMPANY_DOC_ID": "SI260000005", "COMPANY_ID": "500000310",
      "COMPANY_NAME": "ספק יוד", "NAME": "חשבונית מס 00005",
      "DOC_DATE": "14/05/2026", "DOC_TOTAL_AMOUNT": "12800"},
     {"ID": "demo-inv-1003", "TYPE": "INVOICE", "SHORT_DOC_ID": "00003",
-     "COMPANY_DOC_ID": "SI250000003", "COMPANY_ID": "500000278",
+     "COMPANY_DOC_ID": "SI250000003", "COMPANY_ID": "500000286",
      "COMPANY_NAME": "א.ב. הדוגמה בע\"מ", "NAME": "חשבונית מס 00003",
      "DOC_DATE": "22/04/2026", "DOC_TOTAL_AMOUNT": "3120"},
 ]
@@ -378,6 +378,9 @@ def main() -> int:
     # digital-assets' `#/s/{section}` had a placeholder nobody filled, so that screen was always SKIPPED — filled
     # from the app's own sections (see the function)
     digital_assets_section(subs)
+    # «ישויות»' card (`/e/{entity}`, DGO-2101): the first entity its own list answers with — an office with none
+    # leaves the card SKIPPED, honestly
+    simple(subs, "entities", "entities", 8999, "/api/entities", "entities", "{entity}", ("id",))
 
     out = Path(a.data) / "ui-params.json"
     out.parent.mkdir(parents=True, exist_ok=True)

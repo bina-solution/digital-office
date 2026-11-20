@@ -1,0 +1,37 @@
+{# כרטסת לקוח — what was charged, what was paid, what is open, and how old it is. #}
+{% extends "base.html.j2" %}
+{% import "_parts.html.j2" as p with context %}
+{% block body %}
+{{ p.masthead(chip_rows) }}
+{{ p.band(facts) }}
+<div class="kpis">
+  <div class="kpi"><div class="k">יתרת פתיחה</div><div class="v">{{ p.money(st.opening) }}</div></div>
+  <div class="kpi"><div class="k">חיובים בתקופה</div><div class="v">{{ p.money(st.debits) }}</div></div>
+  <div class="kpi"><div class="k">תשלומים וזיכויים</div><div class="v">{{ p.money(st.credits) }}</div></div>
+  <div class="kpi hi"><div class="k">יתרה לתשלום</div><div class="v">{{ p.money(st.closing) }}</div></div>
+</div>
+<div class="sec"><span class="eyebrow">תנועות בתקופה{% if st.period %} · <span class="num">{{ st.period }}</span>{% endif %}</span>
+<table class="lines compact">
+  <thead><tr><th class="n">תאריך</th><th>מסמך</th><th>פרטים</th><th class="n">חובה</th><th class="n">זכות</th><th class="n">יתרה</th></tr></thead>
+  <tbody>
+  <tr><td class="n per"></td><td class="per">יתרת פתיחה</td><td></td><td class="n"></td><td class="n"></td><td class="n amt"><span class="num">{{ st.opening }}</span></td></tr>
+  {% for r in st.rows %}
+  <tr><td class="n"><span class="num">{{ r.date }}</span></td>
+      <td class="doc"><span class="d">{{ r.kind }}</span> <span class="num muted">{{ r.ref }}</span></td>
+      <td class="per">{{ r.details }}{% if r.due %}<span class="sepdot"> · </span>לתשלום עד <span class="num">{{ r.due }}</span>{% endif %}</td>
+      <td class="n"><span class="num">{{ r.debit }}</span></td>
+      <td class="n"><span class="num">{{ r.credit }}</span></td>
+      <td class="n amt"><span class="num">{{ r.balance }}</span></td></tr>
+  {% endfor %}
+  </tbody>
+</table></div>
+{% if st.aging %}
+<div class="sec"><span class="eyebrow">גיול היתרה הפתוחה</span>
+  <div class="aging">{% for kk, vv in st.aging %}<div class="b"><div class="k">{{ kk }}</div><div class="v">{{ p.money(vv) }}</div></div>{% endfor %}</div>
+</div>
+{% endif %}
+{% if notes or bank %}<div class="close"><div class="side">
+  {% if notes %}<div class="blk"><span class="eyebrow">הערות</span>{{ notes }}</div>{% endif %}
+</div>{% if bank %}<div class="totals">{{ p.bank_block() }}</div>{% endif %}</div>{% endif %}
+{{ p.endmark() }}
+{% endblock %}

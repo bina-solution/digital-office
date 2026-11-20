@@ -132,8 +132,10 @@ services:
     networks:
       - traefik-network
     healthcheck:
-      # A public static asset: index itself is authenticated, so it cannot be the probe.
-      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3080/favicon.svg').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      # A public static asset: index itself is authenticated, so it cannot be the probe. Since DeepSeek
+      # Harness 0.2.x the harness listens on ONE address, the one it shares with the edge, which
+      # entrypoint.sh chooses at boot and records in /tmp/dsh-bind-host — so the probe asks there.
+      test: ["CMD", "node", "-e", "fetch('http://'+require('fs').readFileSync('/tmp/dsh-bind-host','utf8').trim()+':3080/favicon.svg').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
       interval: ${HEALTHCHECK_INTERVAL:-30s}
       timeout: ${HEALTHCHECK_TIMEOUT:-8s}
       retries: 5

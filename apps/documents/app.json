@@ -23,6 +23,8 @@
     { "capability": "identity", "strength": "requires", "after": true },
     { "capability": "ledger", "strength": "wants", "after": false, "dependency": "weak" },
     { "capability": "indox-api", "strength": "wants", "after": false, "dependency": "weak" },
+    { "capability": "drive", "strength": "wants", "after": false, "dependency": "weak", "ops": ["list"],
+      "note": "«קבצים»: the office's files under /מסמכים, /לקוחות, /מחקרים, listed beside its documents (DGO-2029)." },
     { "capability": "kv", "strength": "wants", "after": false, "dependency": "weak" }
   ],
   "compose": "docker-compose.yml",

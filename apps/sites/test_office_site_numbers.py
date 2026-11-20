@@ -71,7 +71,7 @@ def main():
     assert (agg["hits"], agg["bots"], agg["uniques"]) == (2, 1, 1), agg
     before = store.visits_total("live", 7)
     public.serve(live, "", host="live.co.il", ua=H.UA, ip="10.0.0.5")              # the uptime probe
-    public.serve(live, "", host="live.co.il", ua="Mozilla/5.0 (compatible; Googlebot/2.1)", ip="93.184.216.18")
+    public.serve(live, "", host="live.co.il", ua="Mozilla/5.0 (compatible; Googlebot/2.1)", ip="93.184.216.17")
     public.serve(live, "index.html", host="live.co.il", ua="Mozilla/5.0", ip="203.0.113.7")  # same visitor
     public.serve(live, "", host="live.co.il", ua="Mozilla/5.0", ip="198.51.100.9")        # a new one
     after = store.visits_total("live", 7)

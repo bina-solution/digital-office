@@ -147,6 +147,8 @@ platform-base/authentik/blueprints/zz-generated-apps.yaml
 # into traefik's own bind-mounted file-provider directory because an external server URL is not
 # expressible in a docker label; see platform/manager/serve.py.
 platform-base/traefik/config/zz-serve.yaml
+# …and a linked office's door opened to the internet on this office's edge (`publish:`, DGO-2050).
+platform-base/traefik/config/zz-public.yaml
 # …and the edge's port-80 answer + the HSTS every certificate pins (DGO-1595): rendered by
 # reconcile.render_https_redirect on EVERY render — only where a certificate exists does it carry
 # the `dgo-port80` router, so a `.localhost` office compiles the middleware and no redirect.

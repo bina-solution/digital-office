@@ -73,6 +73,7 @@ CREATE TABLE IF NOT EXISTS business_documents (
   model         JSONB NOT NULL,
   truth         JSONB,
   pdf           BYTEA,
+  copy_pdf      BYTEA,                     -- «העתק», drawn when the original was (DGO-2029)
   file_ext      TEXT DEFAULT 'pdf',
   original_served_at TIMESTAMPTZ,
   cancels       TEXT,
@@ -111,6 +112,8 @@ CREATE TABLE IF NOT EXISTS business_settings (
   logo_b64 TEXT, vat_pct NUMERIC DEFAULT 18, vat_registered BOOLEAN DEFAULT true,
   default_series TEXT DEFAULT 'A', doc_start INTEGER DEFAULT 0,
   bank_name TEXT, bank_branch TEXT, bank_account TEXT,
+  name_en TEXT, website TEXT, mark TEXT, signatory TEXT, signatory_title TEXT, brand TEXT, series_start TEXT,
+  identity_held TEXT, parties_from TEXT,
   created_at TIMESTAMPTZ DEFAULT now(), updated_at TIMESTAMPTZ DEFAULT now()
 );
 CREATE TABLE IF NOT EXISTS customers (
@@ -166,6 +169,17 @@ MIGRATIONS = [
     "ALTER TABLE business_documents ADD COLUMN IF NOT EXISTS signed_at TIMESTAMPTZ",
     "ALTER TABLE business_documents ADD COLUMN IF NOT EXISTS sig_certified BOOLEAN DEFAULT false",
     "ALTER TABLE business_settings ADD COLUMN IF NOT EXISTS doc_start INTEGER DEFAULT 0",
+    # how the documents present the business (DGO-2029)
+    *("ALTER TABLE business_settings ADD COLUMN IF NOT EXISTS %s TEXT" % c
+      for c in ('name_en', 'website', 'mark', 'signatory', 'signatory_title', 'brand')),
+    # a document of the books keeps its «העתק» beside its «מקור», both drawn when it was issued (DGO-2029)
+    "ALTER TABLE business_documents ADD COLUMN IF NOT EXISTS copy_pdf BYTEA",
+    # the types whose numbers continue a series the business brought with it (DGO-2042), {type: first number}
+    "ALTER TABLE business_settings ADD COLUMN IF NOT EXISTS series_start TEXT",
+    # which identity fields «זהות» held at its last answer (DGO-2048): cleared there → cleared here
+    "ALTER TABLE business_settings ADD COLUMN IF NOT EXISTS identity_held TEXT",
+    # 'entities' once the customers moved to «ישויות» (DGO-2101): it is the list from then on
+    "ALTER TABLE business_settings ADD COLUMN IF NOT EXISTS parties_from TEXT",
 ]
 
 
@@ -195,6 +209,11 @@ def _connect():
     path = os.path.join(storage_path(), 'business_documents.db')
     conn = sqlite3.connect(path, check_same_thread=False)
     conn.executescript(SCHEMA_SQLITE)
+    for mig in MIGRATIONS:      # an older dev database gains the columns the schema has grown since (DGO-2029)
+        try:
+            conn.execute(mig.replace(' IF NOT EXISTS', '').replace('BYTEA', 'BLOB').replace('TIMESTAMPTZ', 'TEXT'))
+        except sqlite3.OperationalError:
+            pass                # a column it has already
     conn.commit()
     return conn, False
 

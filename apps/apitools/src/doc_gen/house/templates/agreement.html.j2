@@ -1,0 +1,47 @@
+{# הסכם שירות / הסכם סודיות — the parties, the recitals, the clauses, and the signatures. A cover when the data
+   asks for one (a service agreement usually does; an NDA usually does not). #}
+{% extends "base.html.j2" %}
+{% import "_parts.html.j2" as p with context %}
+{% block body %}
+{% if has_cover %}{{ p.cover(cover_kick, cover_title, cover_sub, cover_facts) }}{% endif %}
+<div class="narr">
+{{ p.runhead() }}
+<div class="agr-title">
+  <div class="k">{{ k.en | upper }}</div>
+  <h1>{{ title }}</h1>
+  <div class="m">{{ made }}</div>
+</div>
+<div class="parties">
+  {% for pt in parties %}
+  <div class="pty"><span class="l">{{ pt.label }}</span><div class="t">{{ pt.text }}</div></div>
+  {% endfor %}
+</div>
+{% if recitals %}
+<div class="recitals">
+  {% for r in recitals %}<div class="r"><span class="w">{{ 'הואיל' if loop.first else 'והואיל' }}</span><div>{{ r }}</div></div>{% endfor %}
+  <div class="agreed">לפיכך הוסכם, הוצהר והותנה בין הצדדים כדלקמן:</div>
+</div>
+{% endif %}
+<ol class="clauses">
+  {% for c in clauses %}
+  <li><div class="ct">{{ c.title }}</div>
+    {% if c.text %}<div class="cb">{{ c.text }}</div>{% endif %}
+    {% if c.points %}<ol class="sub">{% for it in c.points %}<li><div>{{ it }}</div></li>{% endfor %}</ol>{% endif %}
+  </li>
+  {% endfor %}
+</ol>
+<div class="witness">ולראיה באו הצדדים על החתום:</div>
+<div class="sigs">
+  {% for s in signatures %}
+  <div class="sigbox">
+    <div class="p">{{ s.party }}</div>
+    <div class="n">{{ s.name }}{% if s.title %} · {{ s.title }}{% endif %}</div>
+    <div class="area">{% if s.signed %}<div>{% if s.signed.image %}<img class="sigimg" src="{{ s.signed.image }}" alt="">{% endif %}{{ p.signed_mark({'name': s.name, 'when': s.signed.when}) }}</div>{% endif %}</div>
+    <div class="meta"><span>חתימה{% if s.stamp %} וחותמת{% endif %}</span><span>תאריך{% if s.signed %} · <span class="num">{{ s.signed.date }}</span>{% endif %}</span></div>
+  </div>
+  {% endfor %}
+</div>
+{% if appendix %}<div class="fine" style="margin-top:6mm">{{ appendix }}</div>{% endif %}
+{{ p.endmark() }}
+</div>
+{% endblock %}

@@ -1,12 +1,17 @@
 {
- "section.files": "קבצים ותיקיות",
- "section.sessions": "שיחות",
  "candidate.noCwd": "(ללא תיקייה נוכחית)",
  "crumb.root": "סביבת העבודה",
- "time.now": "עכשיו",
- "time.minutes": "{n} דק׳",
- "time.hours": "{n} שע׳",
+ "fileOpen.close": "סגירה",
+ "fileOpen.failed": "לא ניתן היה לפתוח את “{path}”. נסו שוב או סגרו הודעה זו.",
+ "fileOpen.retry": "ניסיון חוזר",
+ "fileOpen.title": "לא ניתן היה לפתוח את הקובץ",
+ "section.files": "קבצים ותיקיות",
+ "section.sessions": "שיחות",
+ "section.subagents": "סוכני משנה",
  "time.days": "{n} ימים",
+ "time.hours": "{n} שע׳",
+ "time.minutes": "{n} דק׳",
  "time.months": "{n} חוד׳",
+ "time.now": "עכשיו",
  "time.years": "{n} שנים"
 }

@@ -1,0 +1,26 @@
+{# קבלה — the money that came in: how much (the hero), by what means (one row per payment), and for what. #}
+{% extends "base.html.j2" %}
+{% import "_parts.html.j2" as p with context %}
+{% block body %}
+{{ p.masthead(chip_rows) }}
+{{ p.band(facts) }}
+<div class="hero">
+  <div><div class="lbl"><span class="tick">{{ p.check() }}</span>התקבל מכם בתודה</div>
+    {% if nature %}<div class="for">עבור {{ nature }}</div>{% endif %}</div>
+  <div class="amt"><span class="num">{{ received }}</span>&nbsp;<span class="cur">₪</span></div>
+</div>
+<div class="sec"><span class="eyebrow">פרטי התשלום</span>{{ p.payments_table(pays) }}
+  <div class="close">
+    <div class="side">
+      {% if notes %}<div class="blk"><span class="eyebrow">הערות</span>{{ notes }}</div>{% endif %}
+    </div>
+    <div class="totals">
+      {% if withholding %}<div class="tl"><span class="k">ניכוי מס במקור</span>{{ p.money(withholding) }}</div>{% endif %}
+      <div class="grand"><span class="k">סה״כ התקבל</span>{{ p.money(received) }}</div>
+      {% if patur %}<div class="cap">עוסק פטור — קבלה זו אינה חשבונית מס</div>{% endif %}
+    </div>
+  </div>
+</div>
+{{ p.signoff() }}
+{{ p.endmark() }}
+{% endblock %}

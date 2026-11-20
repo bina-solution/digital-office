@@ -78,8 +78,11 @@ TARGETS = [
     "apps/computers/static/index.html",
     "apps/dashboard/static/index.html",   # the control centre (DGO-1124)
     "apps/bs-group/static/app.css",       # [2026-11-18] «קבוצת בינה סולושנס», the company at a glance (DGO-1974)
+    "apps/entities/static/app.css",       # [2026-11-19] «ישויות», everyone the business works with (DGO-2101)
     "apps/git/static/index.html",
     "apps/sites/static/index.html",
+    # [2026-11-14] Azaria's own screen (EXU-64): one list of Azaria's and Claude's conversations.
+    "apps/bina-ds/web/app.css",
     "apps/domains/static/index.html",
     # [2026-11-08] the InterNIC provider app's screen (DGO-1473): the session, the domains, a zone
     "apps/domain-internic/static/index.html",
@@ -265,6 +268,7 @@ PAGE_TARGETS: list[str] = [
     "apps/meet/start/flow/mf.css",
     "apps/telegram/static/index.html",   # [2026-11-03] one page, three places (DGO-1300)
     "apps/bs-group/static/app.css",      # [2026-11-18] one page: the company at a glance (DGO-1974)
+    "apps/entities/static/app.css",      # [2026-11-19] one page: the list, and each entity's card over it (DGO-2101)
 ]
 
 NAV_TARGETS: list[str] = [
@@ -397,7 +401,9 @@ BLOCKS = [
                  "platform-base/security/static/app.js", "apps/telegram/static/app.js",
                  "apps/examplem-io/static/index.html", "apps/assets/static/index.html",
                  "apps/loans/static/index.html", "apps/ollama/front/index.html",
-                 "apps/terminal/static/vendor/bina-said.js", "apps/office-routes/static/app.js"]},
+                 "apps/terminal/static/vendor/bina-said.js", "apps/office-routes/static/app.js",
+                 # [2026-11-19] «ישויות» (DGO-2101) names a failed request in the office's words
+                 "apps/entities/static/app.js"]},
     # There WAS a "the screen in the address bar" block here (`platform-base/bina-ui/bina-route.js`),
     # stamped into each app so it could speak to the console about its route. It is gone: the shell
     # reads the frame's own URL instead (platform-base/console/static/app.js `watchFrameRoute`), so

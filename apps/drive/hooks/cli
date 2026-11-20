@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #: «קבצים» from the shell — every drive of the office (a profile of its storage, a Google account), by path:
 #:   ./bbox drive profile list                      every drive, and the default (*)
-#:   ./bbox drive -p person21@example.com files list /עבודה
+#:   ./bbox drive -p person22@example.com files list /עבודה
 #:   ./bbox drive -p admin folders list · tree · file <path> · find <text> · link <path> · storage
 #:   ./bbox drive -p admin get "/הקלטות/x.m4a" [dest]   ·   put ./doc.pdf /מסמכים/ [--replace]
 #:   ./bbox drive -p admin mkdir · mv <path> <folder> · rename <path> <name> · rm <path> · restore <name>

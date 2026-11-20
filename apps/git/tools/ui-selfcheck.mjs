@@ -288,7 +288,7 @@ X.renderAccounts(ANSWERS.providers.providers);
 truthy('accounts: the list carries no title of its own — the page names it, the menu counts it',
        !has(mainHtml(), '<h2>חשבונות</h2>') && has(mainHtml(), '<h2>חיבור חשבון חדש</h2>'));
 X.S.accounts = [
-  { id: 't1', account_hint: 'person24@example.com', label: 'GitHub — solomon', provider: 'github', state: 'unknown' },
+  { id: 't1', account_hint: 'person25@example.com', label: 'GitHub — solomon', provider: 'github', state: 'unknown' },
   { id: 't2', login: 'solomon', label: 'my github', provider: 'github', state: 'ok' },
   { id: 't3', login: 'solomon', label: 'GitLab — solomon', provider: 'gitlab', state: 'ok' }];
 X.renderAccounts(ANSWERS.providers.providers);

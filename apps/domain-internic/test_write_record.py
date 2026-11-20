@@ -30,7 +30,7 @@ import login  # noqa: E402
 import portal  # noqa: E402
 
 CREATE = {"action": "create", "domain": "digital-office.co.il", "type": "A", "name": "*.exampleu",
-          "value": "93.184.216.11", "ttl": 3600}
+          "value": "93.184.216.10", "ttl": 3600}
 
 
 class Quiet(unittest.TestCase):
@@ -49,7 +49,7 @@ class WriteTests(Quiet):
         self.addCleanup(setattr, portal, "VERIFIED_FILE", original)
         self.calls = []
         self.answer = {"ok": True, "state": "ok", "guard": "checked",
-                       "record": {"name": "*.exampleu.digital-office.co.il.", "type": "A", "content": "93.184.216.11"}}
+                       "record": {"name": "*.exampleu.digital-office.co.il.", "type": "A", "content": "93.184.216.10"}}
         real = portal.ZONE_WRITERS[("internic", "create")]
         portal.ZONE_WRITERS[("internic", "create")] = self.writer
         self.addCleanup(portal.ZONE_WRITERS.__setitem__, ("internic", "create"), real)

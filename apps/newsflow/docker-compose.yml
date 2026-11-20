@@ -34,8 +34,11 @@ services:
     networks:
       - traefik-network
     healthcheck:
-      # python, never curl: the image is python:3.12-slim and carries no curl (gate G18)
-      test: ["CMD", "python", "-c", "import urllib.request,sys;sys.exit(0 if urllib.request.urlopen('http://localhost:8991/healthz',timeout=8).status==200 else 1)"]
+      # bash's own /dev/tcp — the image is python:3.12-slim, with bash and no curl (gate G18). It was a fresh Python
+      # importing urllib on every probe: 187 ms of CPU and 1.3 s on the HP's capped container, ~93% of all this app's
+      # CPU (measured 2026-11-19, DGO-2030). This is 4 ms, and it fails on a closed port or any answer but 200. It
+      # reads the answer to its end, so the server never writes into a socket the probe already closed.
+      test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/8991 && printf 'GET /healthz HTTP/1.0\\r\\n\\r\\n' >&3 && IFS= read -r -d '' -t 8 r <&3; [[ $$r == HTTP/1.?' 200 '* ]]"]
       interval: ${HEALTHCHECK_INTERVAL:-30s}
       timeout: ${HEALTHCHECK_TIMEOUT:-10s}
       retries: 3

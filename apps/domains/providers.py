@@ -463,7 +463,7 @@ class PleskAdapter(BaseAdapter):
     exactly two things from the provider (an API key, and our egress IP on their allowlist).
 
     The refusal message names the IP to allowlist, and this adapter SURFACES it rather than
-    paraphrasing: "access disabled for 93.184.216.13" is the difference between a support ticket
+    paraphrasing: "access disabled for 93.184.216.12" is the difference between a support ticket
     that gets answered and one that says "the API does not work".
     """
     provider = "plesk"

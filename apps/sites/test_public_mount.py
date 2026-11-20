@@ -54,9 +54,9 @@ PAGES = {
                   'srcset="wp-content/s1.jpg 1x, wp-content/s2.jpg 2x"><a href="#top">↑</a>'
                   '<a href="https://example.org/x">out</a></body></html>',
     "עלינו/index.html": '<html><head><link rel="stylesheet" href="../wp-content/a.css"></head><body>'
-                        '<a href="../">בית</a><a href="../projects/karkur/">כרכור</a>'
+                        '<a href="../">בית</a><a href="../projects/village/">כפר</a>'
                         '<img src="../.assets/ab.png"></body></html>',
-    "projects/karkur/index.html": '<html><head itemscope><link href="../../wp-content/a.css" rel="stylesheet">'
+    "projects/village/index.html": '<html><head itemscope><link href="../../wp-content/a.css" rel="stylesheet">'
                                   '</head><body><video src="../../wp-content/v.mp4"></video>'
                                   '<a href="../../">בית</a></body></html>',
     # asked for WITHOUT its slash (`features` → features.html): its links inside the page must stay on it
@@ -69,7 +69,7 @@ PAGES = {
 # receives, decoded — what `public.resolve` turns into the file
 ASKED = {"index.html": ("", ""),
          "עלינו/index.html": ("%d7%a2%d7%9c%d7%99%d7%a0%d7%95/", "עלינו/"),
-         "projects/karkur/index.html": ("projects/karkur/", "projects/karkur/"),
+         "projects/village/index.html": ("projects/village/", "projects/village/"),
          "features.html": ("features", "features"),
          "projects/a(b),c/index.html": ("projects/a(b),c/", "projects/a(b),c/")}
 URL_ATTR = re.compile(r'\b(href|src|srcset)="([^"]*)"')

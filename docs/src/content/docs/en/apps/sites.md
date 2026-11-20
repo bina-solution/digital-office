@@ -59,7 +59,7 @@ Deleting a site leaves its files on the computer. Only an explicit request, with
 ## What does not work yet today
 
 - **A site the office serves does not pass on its headers.** In `office` mode, a header the site sets for itself, like Permissions-Policy, does not reach visitors. Only the edge router's headers arrive.
-- **Edited texts and pictures do not always reach the live site.** They come from the digital assets app. When it is in another office and cannot be reached, the site is served as it is, and the asset addresses answer 503. This was found on a live server office on 2 November 2026, and the fault is still open.
+- **Edited texts and pictures do not always reach the live site.** They come from the «Identity» app. When it is in another office and cannot be reached, the site is served as it is, and the asset addresses answer 503. This was found on a live server office on 2 November 2026, and the fault is still open.
 - **The appearance scan needs the rendering service.** When it is not healthy, the scan writes «The rendering service is not available». That is not a finding about the site.
 
 ## What it reaches outside

@@ -1,4 +1,28 @@
-# digital-assets (נכסים דיגיטליים) + social-list (רשתות חברתיות)
+# digital-assets («זהות») + social-list (רשתות חברתיות)
+
+**«זהות» is the one place an office defines its business** (DGO-2048, the owner: «המקום היחיד שבו
+מגדירים את המשתנים העיקריים של העסק»): the names, the legal details, the contact details, the marks,
+the colours, who signs, the bank, the texts, content and media. The id stays `digital-assets` (the
+host, the volume, the SSO slug and the link address on every office); only its name changed.
+
+## The identity contract — `GET /api/brand` (brand.v1)
+
+`brand_fields.py` lists every field and the slot it comes from: `name`, `name_en`, `legal_name`,
+`short_name`, `slug`, `domain`, `entity_type`, `business_number`, `signatory`, `signatory_title`,
+`address`, `phone`, `whatsapp`, `email`, `website`, `tagline`, `description`, `description_long`,
+`logo`, `logo_square`, `logo_mono`, `logo_reversed`, `favicon`, `color`, `color_secondary`, `color_neutral`,
+`bank_name`, `bank_branch`, `bank_account`. The answer is `{brand: {field: text | {url, png, mime}},
+missing: [fields with no active value], updated_at}`. Every office has these slots: the ones its
+blueprint did not create are created at start (definitions only). The blueprint generator takes its
+`brand` targets from the same table.
+
+Who reads it: the ledger's documents (apitools `entities.get_business`, through `BRAND_URL`: every field
+«זהות» holds wins, the row keeps a mirror, the colour becomes the house's tone family), the websites (`sites`,
+the bundle) and the networks (the plan). Still to follow (DGO-2029, its lane's files): «המסמכים שלי»'s form
+showing the details read-only, and esign's key name and signer pages.
+`python3 apps/digital-assets/tests/test_brand.py` (in the app's image).
+
+## The digital front
 
 The business's whole digital front — everything it shows the world — organised once and pushed
 everywhere. Two apps, one job each:

@@ -50,6 +50,9 @@ KEEP = [
     # the clock and the reporter's name glued to the END of the sentence are the card's furniture too
     ("הכוכבת חושפת \"הייתי בת 11, הציעו לי קוקאין במסיבות סיום הצילומים\" 09:26 מיכל דאב",
      "https://www.mako.co.il/x", "הכוכבת חושפת"),
+    # cyber news that names an external link is news, not an interstitial (DGO-2030, the second reader)
+    ("הונאה חדשה: לחיצה על קישור חיצוני בוואטסאפ מרוקנת את חשבון הבנק",
+     "https://www.ynet.co.il/digital/technews/article/x", "הונאה חדשה: לחיצה על קישור חיצוני"),
 ]
 
 

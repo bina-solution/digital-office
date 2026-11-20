@@ -1,9 +1,10 @@
 {
- "row.title": "Skill",
- "row.running": "Loading skill",
+ "menu.userOnly": "user-only",
  "row.failed": "Skill load failed",
- "row.stopped": "Skill load stopped",
- "row.instructions": "Instructions",
  "row.inspect": "Inspect",
- "menu.userOnly": "user-only"
+ "row.instructions": "Instructions",
+ "row.preparing": "Preparing to load a skill",
+ "row.running": "Loading skill",
+ "row.stopped": "Skill load stopped",
+ "row.title": "Skill"
 }

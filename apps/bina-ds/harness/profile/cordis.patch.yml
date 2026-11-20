@@ -4,10 +4,12 @@
 
 # The browser HTTP carrier. Stock `dsh web` binds loopback and derives host/port from its own flags;
 # as a platform service the process must answer on the container's network interface, where only
-# Traefik (behind authentik forward-auth) can reach it. Port 3080 is the harness default.
+# Traefik (behind the office's sign-in) can reach it. Port 3080 is the harness default. Since 0.2.x the
+# host must be ONE concrete address (a wildcard is refused), so it is the container's own office-network
+# address, which entrypoint.sh resolves at boot into DSH_BIND_HOST.
 - id: webserver
   config:
-    host: '0.0.0.0'
+    host: !!js process.env.DSH_BIND_HOST || '127.0.0.1'
     port: 3080
     compression: gzip
     compressionLevel: 1
@@ -25,6 +27,14 @@
 - id: connection
   config:
     trustedHosts: !!js (process.env.DSH_TRUSTED_HOSTS ?? '').split(/\s+/).filter(Boolean)
+
+# The interface opens in the office's language, whatever the browser asks for (DGO-550: a phone whose
+# own language is not Hebrew got the stock English screen inside the owner's office). Since 0.2.x the
+# active language is the `locale` row's own config — this is the composition's value, and a choice in
+# Settings → שפה still wins over it. (Under 0.1.6 this was a patch in customize.sh.)
+- id: locale
+  config:
+    preference: he
 
 # The Bina additions to the browser roster.
 - insert:
@@ -71,20 +81,11 @@
       name: '@bina/dsh-client-office-links'
 
 # ── the office agent ───────────────────────────────────────────────────────────────────────────
-# "תצורות סוכן" are preset DIRECTORIES discovered from roots. The office ships its own root beside
-# this file (agent-presets/<id>/{agent.cordis.yml,preset.yml,skills/}) and makes עזריה the default
-# for every new conversation. The harness's shipped set (标准模式/ptc/minimal/cordis) is dropped:
-# their display text is not localizable and none of them knows the office. `trust: system` keeps
-# the shipped preset non-deletable from the UI; a copy the owner makes lands under
-# $DSH_HOME/.agent-presets (user root, kept on by default) and can be edited or removed there.
-- id: agent-presets
-  config:
-    default: azaria
-    includeShippedRoot: false
-    includeUserRoot: true
-    roots:
-      - path: !!js "process.getBuiltinModule('node:url').fileURLToPath(new URL('agent-presets/', baseUrl))"
-        trust: system
+# "תצורות סוכן": since 0.2.x a preset is a row of the preset registry, not a directory. The office's
+# three — עזריה (the default for every new conversation), רפאל and עזריה · מקומי — are one patch file
+# each, agent-presets/<id>/preset.patch.yml beside this file (with their skills/), composed in by
+# entrypoint.sh with `--patch`; the azaria file also makes it the registry's default and turns the
+# harness's shipped presets off (their display text is not localizable and none knows the office).
 
 # The office checkout as a workspace, registered at boot (plugins/office-workspace); the path comes
 # from DSH_OFFICE_ROOT (entrypoint.sh), the title is what the hero's workspace chip shows.
@@ -179,6 +180,21 @@
       config:
         maxGoalRounds: 12
         noProgress: true
+# ── one way in for a plugin, one clock ────────────────────────────────────────────────────────
+# 0.2.x mounts two things the office has already ruled on. The plugin manager installs plugins from the
+# screen into the data volume — and the office's plugins are DECLARED in this profile and nowhere else
+# (entrypoint.sh moves a stray patch file aside for the same reason). The scheduler is a timer inside
+# this container — and the office's clock is n8n, declared with this app (blueprint/n8n; the owner,
+# 2026-10-14: «use n8n automation blueprinted inside bina-ds app … keep clean and official»). Both are
+# off, the agent's tools for them too. EXU-64.
+- id: ui-plugin-manager
+  disabled: true
+- id: ui-schedule
+  disabled: true
+- id: schedule
+  disabled: true
+- id: tool-schedule
+  disabled: true
 
 # ── production quiet ──────────────────────────────────────────────────────────────────────────
 # dsh-client-hmr is the harness's dev hot-reload driver ("Dev-only", its own header). dsh-web-app

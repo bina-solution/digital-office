@@ -80,7 +80,7 @@ fi
 say "running the browser acceptance against the live office (short recording + the audio send)"
 playwright_image="${PLAYWRIGHT_IMAGE:-mcr.microsoft.com/playwright:v1.49.1-noble}"
 ip="$(docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}} {{end}}' "${CONTAINER}" 2>/dev/null | awk '{print $1}')"
-launch_token="$(docker logs "${CONTAINER}" 2>&1 | grep -o 'dsh web: http://127.0.0.1:3080/?token=[A-Za-z0-9_-]*' | tail -1 | sed 's/.*token=//')"
+launch_token="$(docker logs "${CONTAINER}" 2>&1 | grep -o 'dsh web: http://[^/ ]*:3080/?token=[A-Za-z0-9_-]*' | tail -1 | sed 's/.*token=//')"
 if ! docker image inspect "${playwright_image}" >/dev/null 2>&1; then
   say "SKIPPED: ${playwright_image} is not on this engine — the acceptance test did not run"
   notify warning "העדכון הוחל אבל לא נבדק בדפדפן" "התמונה ${playwright_image} אינה במנוע. הרץ ידנית: apps/bina-ds/plugins/voice/tools/verify-voice.cjs"

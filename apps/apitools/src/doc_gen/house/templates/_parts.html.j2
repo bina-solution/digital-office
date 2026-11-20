@@ -1,0 +1,188 @@
+{# The pieces every document is made of. Each macro draws one block from the view (view.py); none computes. #}
+
+{# Heebo and Rubik carry no ✓, so the mark is drawn #}
+{% macro check() -%}<svg class="ck" viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg"><path d="M3.2 8.4l3 3 6.6-6.8" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>{%- endmacro %}
+
+{# an amount and its ₪ are one box, so a flex row never pulls them apart #}
+{% macro money(v, cls='') -%}
+<span class="amt-w"><span class="num {{ cls }}">{{ v }}</span>&nbsp;<span class="cur">₪</span></span>
+{%- endmacro %}
+
+{% macro label_pill() -%}
+{% if label %}<span class="pill{% if label == 'העתק' or label == 'נאמן למקור' %} copy{% elif label == 'טיוטה' %} draft{% endif %}">{{ label }}</span>{% endif %}
+{%- endmacro %}
+
+{% macro contact_lines(who) -%}
+{% if who.where %}{% for c in who.where %}{% if not loop.first %}<span class="sep">·</span>{% endif %}<span class="iso">{{ c }}</span>{% endfor %}{% endif %}
+{% if who.online %}<br>{% for c in who.online %}{% if not loop.first %}<span class="sep">·</span>{% endif %}<span class="ltr">{{ c }}</span>{% endfor %}{% endif %}
+{%- endmacro %}
+
+{% macro masthead(rows) -%}
+<div class="mast">
+  <div class="who">
+    {{ mark_html }}
+    <div>
+      <div class="biz">{{ sup.name }}</div>
+      {% if sup.name_en %}<div class="biz-en">{{ sup.name_en }}</div>{% endif %}
+      <div class="bizmeta">{% if sup.tax %}<span class="tax">{{ sup.tax }}</span>{% endif %}{% if sup.vat_file and sup.vat_file != sup.company_id %}<span class="sep">|</span>תיק מע״מ <span class="num">{{ sup.vat_file }}</span>{% endif %}{% if sup.deduction_file %}<span class="sep">|</span>תיק ניכויים <span class="num">{{ sup.deduction_file }}</span>{% endif %}<br>{{ contact_lines(sup) }}</div>
+    </div>
+  </div>
+  <div class="chip">
+    <div class="kind"><span>{{ k.he }}</span>{{ label_pill() }}</div>
+    <div class="no num">{{ doc_id or '—' }}</div>
+    {% for kk, vv in rows %}<div class="row"><span>{{ kk }}</span><b class="num">{{ vv }}</b></div>{% endfor %}
+  </div>
+</div>
+<div class="rule"></div>
+{%- endmacro %}
+
+{% macro band(facts) -%}
+<div class="band">
+  <div class="to">
+    <span class="eyebrow">{{ to_word }}</span>
+    <div class="name">{{ cust.name or '—' }}</div>
+    {% set det = [] %}{% if cust.company_id %}{% set _ = det.append('ח.פ./ע.מ. ' ~ cust.company_id) %}{% endif %}{% if cust.address %}{% set _ = det.append(cust.address) %}{% endif %}{% if cust.phone %}{% set _ = det.append('טל׳ ' ~ cust.phone) %}{% endif %}
+    {% if det %}<div class="det">{% for d in det %}{% if not loop.first %}<span class="sep">·</span>{% endif %}<span class="iso">{{ d }}</span>{% endfor %}</div>{% endif %}
+    {% if cust.person %}<div class="att">לידי {{ cust.person }}{% if cust.person_title %}, {{ cust.person_title }}{% endif %}{% if cust.email %}<span class="sep">·</span><span class="ltr">{{ cust.email }}</span>{% endif %}</div>{% elif cust.email %}<div class="att"><span class="ltr">{{ cust.email }}</span></div>{% endif %}
+  </div>
+  {% if facts %}<div class="facts">{% for kk, vv in facts %}<div class="fact"><div class="k">{{ kk }}</div><div class="v">{{ vv }}</div></div>{% endfor %}</div>{% endif %}
+</div>
+{%- endmacro %}
+
+{% macro lines_table(rows, prices=True, hours=False, suffix='') -%}
+<table class="lines">
+  <thead><tr>
+    <th class="i">#</th><th>תיאור</th>
+    {% if hours %}<th>אחראי</th><th class="n">מועד</th>{% endif %}
+    <th class="n">כמות</th>{% if prices %}<th class="n">מחיר יחידה</th><th class="n">סכום{% if suffix %} {{ suffix }}{% endif %}</th>{% else %}<th>יחידה</th>{% endif %}
+  </tr></thead>
+  <tbody>
+  {% for ln in rows %}
+    <tr>
+      <td class="i num">{{ ln.n }}</td>
+      <td><div class="d">{{ ln.description }}</div>{% if ln.detail %}<div class="x">{{ ln.detail }}</div>{% endif %}</td>
+      {% if hours %}<td class="per">{{ ln.owner }}</td><td class="n per"><span class="num">{{ ln.when }}</span></td>{% endif %}
+      <td class="n"><span class="num">{{ ln.qty }}</span>{% if ln.unit and prices %} <span class="muted">{{ ln.unit }}</span>{% endif %}</td>
+      {% if prices %}
+      <td class="n"><span class="num">{{ ln.unit_price }}</span></td>
+      <td class="n amt"><span class="num">{{ ln.amount }}</span></td>
+      {% else %}<td>{{ ln.unit }}</td>{% endif %}
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{%- endmacro %}
+
+{% macro totals_box(t, total_label, credit=False, suffix='') -%}
+<div class="totals">
+  {% for kk, vv in t.ladder %}<div class="tl"><span class="k">{{ kk }}</span>{{ money(vv) }}</div>{% endfor %}
+  <div class="grand{% if credit %} credit{% endif %}"><span class="k">{{ total_label }}{% if suffix %} {{ suffix }}{% endif %}</span>{{ money(t.total) }}</div>
+  {% if t.patur %}<div class="cap">עוסק פטור — לא נגבה מע״מ</div>{% elif t.vat_on %}<div class="cap">הסכומים בש״ח</div>{% endif %}
+</div>
+{%- endmacro %}
+
+{% macro bank_block() -%}
+{% if bank %}
+<div class="blk"><span class="eyebrow">לתשלום בהעברה בנקאית</span>
+  <div class="card">
+    {% if bank.beneficiary %}<div class="r"><span class="k">המוטב</span><b>{{ bank.beneficiary }}</b></div>{% endif %}
+    {% if bank.bank %}<div class="r"><span class="k">בנק</span><b>{{ bank.bank }}</b></div>{% endif %}
+    {% if bank.branch %}<div class="r"><span class="k">סניף</span><b class="num">{{ bank.branch }}</b></div>{% endif %}
+    {% if bank.account %}<div class="r"><span class="k">חשבון</span><b class="num">{{ bank.account }}</b></div>{% endif %}
+    {% if bank.iban %}<div class="r"><span class="k">IBAN</span><b class="num">{{ bank.iban }}</b></div>{% endif %}
+  </div>
+</div>
+{% endif %}
+{%- endmacro %}
+
+{% macro allocation_box() -%}
+{% if alloc %}
+<div class="alloc"><span class="k">מספר הקצאה</span><span class="v num">{{ alloc.head }}<b>{{ alloc.tail }}</b></span><span class="h">רשות המסים · חשבוניות ישראל</span></div>
+{% endif %}
+{%- endmacro %}
+
+{% macro payments_table(rows) -%}
+<table class="lines">
+  <thead><tr><th>אמצעי תשלום</th><th>פירוט</th><th class="n">תאריך</th><th class="n">סכום</th></tr></thead>
+  <tbody>
+  {% for p in rows %}
+    <tr><td><div class="d">{{ p.method }}</div></td><td class="per">{{ p.detail }}</td>
+        <td class="n"><span class="num">{{ p.date }}</span></td><td class="n amt">{{ money(p.amount) }}</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+{%- endmacro %}
+
+{% macro seal() -%}
+<div class="seal"><div class="in"><div class="nm">{{ sup.name }}</div><div class="hr"></div><div class="sm">{{ sup.tax }}</div></div></div>
+{%- endmacro %}
+
+{% macro signoff(caption='חתימה וחותמת') -%}
+<div class="signrow">
+  {{ seal() }}
+  <div class="sig">
+    <div class="line"></div>
+    {% if sup.signatory %}<span class="who">{{ sup.signatory }}</span>{% if sup.signatory_title %}<span class="role">{{ sup.signatory_title }}</span>{% endif %}{% endif %}
+    <div class="eyebrow">{{ caption }}</div>
+    {% if digital and computerised %}<div class="digital"><span class="dot">{{ check() }}</span>מסמך ממוחשב</div>{% endif %}
+  </div>
+</div>
+{%- endmacro %}
+
+{% macro signed_mark(s) -%}
+<span class="signame">{{ s.name }}</span>
+<span class="signed-stamp">{{ check() }} נחתם אלקטרונית · <span class="num">{{ s.when }}</span></span>
+{%- endmacro %}
+
+{% macro accept_block(title='אישור הלקוח', text='') -%}
+<div class="accept">
+  <div class="h">{{ title }}</div>
+  <div class="p">{{ text or 'הרינו מאשרים את ' ~ (k.short or k.he) ~ ' על תנאיה ומזמינים את העבודה המתוארת בה.' }}</div>
+  {% if signed %}
+  <div class="signed-area">{% if signed.image %}<img class="sigimg" src="{{ signed.image }}" alt="">{% endif %}{{ signed_mark(signed) }}</div>
+  {% else %}
+  <div class="fields">
+    <div class="f"><div class="l"></div><div class="c">שם מלא</div></div>
+    <div class="f"><div class="l"></div><div class="c">תפקיד</div></div>
+    <div class="f"><div class="l"></div><div class="c">תאריך</div></div>
+    <div class="f"><div class="l"></div><div class="c">חתימה וחותמת</div></div>
+  </div>
+  {% endif %}
+</div>
+{%- endmacro %}
+
+{% macro endmark() -%}
+<div class="endmark">סוף המסמך</div>
+{%- endmacro %}
+
+{% macro deco() -%}
+<svg class="deco" viewBox="0 0 400 400" xmlns="http://www.w3.org/2000/svg"><g fill="none" stroke="#FFFFFF" stroke-width="10"><rect x="20" y="20" width="360" height="360" rx="80"/><rect x="190" y="110" width="110" height="180" rx="24"/></g><rect x="110" y="110" width="34" height="34" rx="9" fill="#FFFFFF"/><rect x="110" y="170" width="34" height="120" rx="9" fill="#FFFFFF"/></svg>
+<svg class="deco2" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg"><rect x="6" y="6" width="88" height="88" rx="22" fill="none" stroke="#FFFFFF" stroke-width="3"/></svg>
+{%- endmacro %}
+
+{# A cover is in normal flow: WeasyPrint lays out an absolutely placed flex box in RTL off the page (measured
+   2026-11-19), so only the foot is placed, by its left edge and its own width. #}
+{% macro cover(kick, title_html, sub='', facts=[]) -%}
+<section class="cover">
+  {{ deco() }}
+  <div class="frame"></div>
+  <div class="top">
+    <div class="brand">{{ mark_html }}<div><div class="n">{{ sup.name }}</div>{% if sup.name_en %}<div class="e">{{ sup.name_en }}</div>{% endif %}</div></div>
+    {% if confidential %}<span class="conf">חסוי · לנמען בלבד</span>{% endif %}
+  </div>
+  <div class="mid">
+    <div class="kick">{{ kick }}</div>
+    <h1>{{ title_html }}</h1>
+    {% if sub %}<div class="sub">{{ sub }}</div>{% endif %}
+    <div class="bar"></div>
+  </div>
+  <div class="foot"><table><tr>
+    {% for kk, vv in facts %}<td><div class="k">{{ kk }}</div><div class="v">{{ vv }}</div></td>{% endfor %}
+  </tr></table></div>
+</section>
+{%- endmacro %}
+
+{% macro runhead() -%}
+<div class="runhead">{{ mark_html }}<span class="rn">{{ sup.name }}</span></div>
+<div class="runtitle">{{ run_title }}</div>
+{%- endmacro %}

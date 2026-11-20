@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+#: import-history — the documents another system issued, into the ledger as they were issued (DGO-2042):
+#:   ./bbox my-docs import-history "/מסמכים/חשבונאות/<register>.csv" --pdfs "/מסמכים/חשבונאות/<folder>" [--apply]
+#: Without --apply it only says what it would keep. A number the ledger holds is skipped, so it can run again.
+# Pipes the app's own CLI (apps/my-docs/cli.py) into its container: no address, no key, no rebuild.
+set -uo pipefail
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
+. "${REPO_ROOT}/scripts/lib.sh"
+case "${1:-}" in -h|--help) sed -n 's/^#: //p' "${BASH_SOURCE[0]}"; exit 0 ;; esac
+dcx exec -T my-docs python - import-history "$@" < "$(npath "${REPO_ROOT}")/apps/my-docs/cli.py"

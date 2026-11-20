@@ -21,6 +21,8 @@ import yaml
 
 HERE = Path(__file__).resolve().parent
 OUT = HERE.parent / "blueprints"
+sys.path.insert(0, str(HERE.parent))
+import brand_fields  # noqa: E402 — the identity contract (DGO-2048): which slot feeds which brand field
 TODAY = "2026-09-29"
 
 SOCIAL = ["facebook", "instagram", "x", "youtube", "github", "discord", "whatsapp", "linkedin",
@@ -55,12 +57,9 @@ FIELD_MAP: dict[str, dict[str, list[str]]] = {
     "identity.profile.discord.banner":  {"banner": ["discord"]},
     "identity.profile.linkedin.cover":  {"banner": ["linkedin"]},
 }
-# slots the office's own products read live (the `brand` capability)
-BRAND = {"identity.name.brand-he": "name", "identity.name.brand-en": "name_en",
-         "identity.logo.primary": "logo", "identity.logo.square": "logo_square",
-         "identity.logo.favicon": "favicon", "identity.logo.monochrome": "logo_mono",
-         "identity.description.short": "description", "identity.tagline": "tagline",
-         "identity.color.primary": "color", "identity.slug": "slug"}
+# slots the office's own products read live (the `brand` capability) — the identity contract's own table,
+# so a blueprint and /api/brand can never disagree on which slot is which field
+BRAND = dict(brand_fields.BY_SLOT)
 LANG = {"identity.name.brand-he": "he", "identity.name.brand-en": "en"}
 
 

@@ -58,7 +58,7 @@ class Who(unittest.TestCase):
         relay.items([])
         t[0] += 30
         relay.items([{"ts": t[0] - 5, "kind": "done", "text": "נסגר: הקישור בכרטיס", "ref": "DGO-1400", "by": "עזריה"}])
-        self.assertIn("✅ DGO-1400 · נסגר: הקישור בכרטיס — עזריה", out[0])
+        self.assertIn("• הקישור בכרטיס DGO-1400 — עזריה", out[0])     # the name first, then who did it (DGO-2102)
 
 
 if __name__ == "__main__":

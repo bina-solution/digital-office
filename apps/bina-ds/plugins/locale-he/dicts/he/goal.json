@@ -1,14 +1,14 @@
 {
- "phase.active": "יעד פעיל",
- "phase.active.disarmed": "יעד לא פעיל",
- "phase.paused": "יעד מושהה",
- "phase.blocked": "יעד חסום",
- "objective.aria": "מטרת היעד",
- "commandInput.aria": "שדה פקודה",
- "action.save": "שמירת היעד",
  "action.cancel": "ביטול העריכה",
+ "action.clear": "ניקוי היעד",
+ "action.edit": "עריכת היעד",
  "action.pause": "השהיית היעד",
  "action.resume": "המשך היעד",
- "action.edit": "עריכת היעד",
- "action.clear": "ניקוי היעד"
+ "action.save": "שמירת היעד",
+ "commandInput.aria": "שדה פקודה",
+ "objective.aria": "מטרת היעד",
+ "phase.active": "יעד פעיל",
+ "phase.active.disarmed": "יעד לא פעיל",
+ "phase.blocked": "יעד חסום",
+ "phase.paused": "יעד מושהה"
 }

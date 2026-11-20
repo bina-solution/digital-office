@@ -53,6 +53,7 @@ LOCK = os.path.join(HOME, ".bina-claude-drive.lock")
 Q_MAX = 14336     # the app's own cap on ?q=, compared with the ENCODED query (Hebrew grows ~6×)
 DROP_WINDOW = 12  # the app waits ≤10 s for its view before it drops a link; a drop is logged by then
 DEADLINE = 150    # the whole call, lock included; the adapter gives it 200 s
+COPY_PATIENCE = 4 # how long a composer that should hold the text is asked for it again (a stalled app, DGO-2037)
 SENTINEL = "⁣drive-nothing-selected⁣"
 started = time.monotonic()
 pressed = False   # Return went into the app: from here on, an end that is not a confirmation is unknown
@@ -144,7 +145,12 @@ def dropped_since(pos):
 
 
 def delivered_link(url):
-    """Send the link; True once the window in which the app could still drop it has passed quietly."""
+    """Send the link; True once the window in which the app could still drop it has passed quietly.
+
+    The whole window is waited out on purpose (DGO-2037, the HP, 2026-11-19): returning as soon as the app logged
+    the page (`setFocusedSession`, ~1 s after the hand-off) put the click on a page still being drawn, and the
+    text did not stay in its composer — a send that waited the window out went through. A faster return needs a
+    sign that the composer is ready, not that the page was chosen."""
     while left() > DROP_WINDOW + 30:
         pos = log_end()
         link(url)
@@ -197,13 +203,24 @@ def clip_get() -> bytes:
         return b""
 
 
-def selection():
-    """What select-all + copy gives in the focused element ('' when nothing is selected)."""
-    clip_set(SENTINEL.encode())
-    press("ctrl+a")
-    press("ctrl+c")
-    got = clip_get().decode("utf-8", "replace")
-    return "" if got == SENTINEL else got
+def selection(want=None, patience=None):
+    """What select-all + copy gives in the focused element ('' when nothing is selected).
+
+    With `want`, the copy is asked again until it gives that text or COPY_PATIENCE seconds pass. MEASURED on the
+    HP 2026-11-19 (DGO-2037): the app's main process was blocked 0.5–1.1 s at a time (git status timing out on the
+    office's slow /mnt/c checkout), the copy was answered after the clipboard had been read, and a composer that
+    held the whole text — selected, on screen — was reported as not holding it: nothing was sent from Azaria.
+    Asking again presses nothing but select-all and copy."""
+    end = time.monotonic() + ((COPY_PATIENCE if patience is None else patience) if want is not None else 0)
+    while True:
+        clip_set(SENTINEL.encode())
+        press("ctrl+a")
+        press("ctrl+c")
+        got = clip_get().decode("utf-8", "replace")
+        got = "" if got == SENTINEL else got
+        if want is None or words(got) == words(want) or time.monotonic() >= end or left() <= 0:
+            return got
+        time.sleep(0.4)
 
 
 def words(s):
@@ -213,9 +230,24 @@ def words(s):
     return " ".join(unicodedata.normalize("NFKC", str(s or "")).split())
 
 
+_restore = None   # the owner's clipboard, put back again once the call's keys are done (clipboard_again)
+
+
+def clipboard_again():
+    """A stalled app may answer the last copy only after the clipboard was put back, and take it with the composer's
+    text: put the owner's back again — AFTER Return, never between the read-back and Return (second reader, DGO-2037)."""
+    if _restore is None:
+        return
+    time.sleep(0.6)
+    if clip_get() != _restore:
+        clip_set(_restore)
+
+
 def fill(text, prefilled):
     """Leave the composer holding exactly `text`, focused; or say why not. The clipboard is put back."""
+    global _restore
     old = clip_get()
+    _restore = old
     try:
         if not prefilled:
             click_composer()
@@ -224,9 +256,16 @@ def fill(text, prefilled):
                 press("End")                      # leave his draft as it was: not selected, not replaced
                 return "the composer is not empty (a draft of the owner's, or the click did not land in it)"
             clip_set(text.encode())
+            # collapse what select-all selected first: if a stalled app answered the copy late, a draft of the
+            # owner's read as «empty», and a paste over its selection would have replaced it (second reader)
+            press("End")
             press("ctrl+v")
-        if words(selection()) != words(text):
-            return "the text is not in the composer (the click did not land in it)"
+            # the paste is served before the read-back puts its marker on the clipboard: a stalled app that pasted
+            # LATE would paste the marker (second reader) — the margin a stall measured on the HP needed
+            time.sleep(0.6)
+        if words(selection(want=text)) != words(text):
+            return ("the composer the link filled did not give the text back (the app did not answer the copy, or the "
+                    "text is not in it)" if prefilled else "the text is not in the composer (the click did not land in it)")
         press("End")                              # collapse the selection: Return then sends
         return None
     finally:
@@ -536,6 +575,8 @@ def main(argv):
             if pressed:
                 return out(False, code="not-confirmed", error=f"a key was pressed, then the driver failed ({e!r}) — look at the app's screen")
             return out(False, code="not-sent", error=f"nothing was sent: the driver failed ({e!r})")
+        finally:
+            clipboard_again()                     # after every key of the call, Return included (the answer is out)
 
 
 if __name__ == "__main__":

@@ -244,10 +244,10 @@ return [{json:{
   // company resolver on them and asserts. Company expected from the GDoc/BS fixtures where known.
   demoBase:'http://indox-demo-docs:8088',
   figureFiles:[
-    {ID:'dbf_inv', upname:'dbf_inv-almn-3.162b24.pdf',      path:'invoice/files/almn-3.dbf.pdf',            expectType:'INVOICE',       expectCompany:'500000013'},
+    {ID:'dbf_inv', upname:'dbf_inv-almn-3.162b24.pdf',      path:'invoice/files/almn-3.dbf.pdf',            expectType:'INVOICE',       expectCompany:'500000021'},
     {ID:'dbf_ord', upname:'dbf_ord-PO25010001.fd669c.png', path:'order/files/PO25010001.dbf.png',         expectType:'ORDER',         expectCompany:'511234567'},
-    {ID:'dbf_shp', upname:'dbf_shp-supplier19-4.995211.pdf',     path:'shipment/files/supplier19-4.dbf.pdf',         expectType:'SHIPMENT',      expectCompany:'500000252'},
-    {ID:'dbf_bs',  upname:'dbf_bs-supplier15-1.pdf',path:'balance_sheet/files/supplier15-1.dbf.pdf',expectType:'BALANCE_SHEET', expectCompany:'500000260', seedCompany:'500000260'},
+    {ID:'dbf_shp', upname:'dbf_shp-supplier19-4.995211.pdf',     path:'shipment/files/supplier19-4.dbf.pdf',         expectType:'SHIPMENT',      expectCompany:'500000260'},
+    {ID:'dbf_bs',  upname:'dbf_bs-supplier15-1.pdf',path:'balance_sheet/files/supplier15-1.dbf.pdf',expectType:'BALANCE_SHEET', expectCompany:'500000278', seedCompany:'500000278'},
   ],
 }}];
 `,
@@ -277,7 +277,7 @@ return [{json:{
     })
     SeedCompanies = {
         operation: 'executeQuery',
-        query: "INSERT INTO indox_test.companies (\"instance\", \"מזהה 1\", \"שם חברה\") VALUES ('incoming-documents-main','999000111','DocBase Test Co'),('incoming-documents-main','500000013','Fig Inv Co'),('incoming-documents-main','511234567','Fig Ord Co'),('incoming-documents-main','500000252','Fig Shp Co'),('incoming-documents-main','500000260','Asif Schar Etz') ON CONFLICT (\"instance\", \"מזהה 1\") DO UPDATE SET \"שם חברה\"=EXCLUDED.\"שם חברה\";",
+        query: "INSERT INTO indox_test.companies (\"instance\", \"מזהה 1\", \"שם חברה\") VALUES ('incoming-documents-main','999000111','DocBase Test Co'),('incoming-documents-main','500000021','Fig Inv Co'),('incoming-documents-main','511234567','Fig Ord Co'),('incoming-documents-main','500000260','Fig Shp Co'),('incoming-documents-main','500000278','Supplier15') ON CONFLICT (\"instance\", \"מזהה 1\") DO UPDATE SET \"שם חברה\"=EXCLUDED.\"שם חברה\";",
         options: {},
     };
 

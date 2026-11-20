@@ -199,7 +199,7 @@ def declared_values() -> dict:
     `format=env` and NOT the route's default JSON body, which is MASKED on purpose
     (`env={k: mask(v)}`, `mask()` being `v[:3] + "…" + v[-2:]`). This function used to read the
     mask as if it were the declaration, and on 2026-10-01 that is exactly what happened: the owner
-    arrived here as `sol…om` (`person83@example.com` under `mask()`), so the bootstrap CREATED a
+    arrived here as `sol…om` (`person86@example.com` under `mask()`), so the bootstrap CREATED a
     user with that address, made him the instance administrator and the owner of the declared
     workspace, and released the real owner — all while reporting success. A masked value is a
     rendering of a secret, never the secret.

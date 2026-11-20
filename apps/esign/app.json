@@ -28,6 +28,15 @@
         "download",
         "retry"
       ]
+    },
+    {
+      "name": "esign-public",
+      "type": "protocol",
+      "endpoint": "http://esign:8080",
+      "link": true,
+      "required_ops": [
+        "sign"
+      ]
     }
   ],
   "use": [
@@ -54,6 +63,13 @@
       "strength": "wants",
       "after": false,
       "dependency": "weak"
+    },
+    {
+      "capability": "ledger",
+      "strength": "wants",
+      "after": false,
+      "dependency": "weak",
+      "note": "The signing certificate is drawn in the office's house style by the documents renderer (POST /docGen/house, DGO-2029); without it, esign draws a plain page."
     }
   ],
   "connections": [],

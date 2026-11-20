@@ -105,6 +105,34 @@ OWN_HOST = (("signed_in", SIGNED_IN_PATH), ("enter", ENTER_PATH))
 #: The sign-in in front of every form that reaches a linked office's app: its admins' (DGO-1755). A person the owner
 #: invited opens this office's work apps, never another office's through the link, which arrives as its owner.
 REMOTE_SIGN_IN = "authentik-admins@file"
+#: The block that opens a linked office's DOOR to the internet on THIS office's edge (DGO-2050): a client
+#: of the business opens `https://sign.<domain>/s/<token>` on the herd's public office, and the request
+#: crosses the link to the office that holds the key and the documents. Read by `publish_plan`.
+PUBLISH_BLOCK = "publish"
+#: A door's path (`/s/`, `/webhook/meet-recordings`): absolute, plain URL characters — the serving office's
+#: own rule for the paths it narrows a door to (apps/dgo-extend/catalog.py PATH_RE + plain_path), so a door
+#: it publishes is never refused here; its link door checks the raw request line against them (link-proxy.py).
+DOOR_PATH_RE = re.compile(r"^/(?:[A-Za-z0-9._~-]+/)*[A-Za-z0-9._~-]*\Z")
+
+
+def door_path(p) -> bool:
+    """Is `p` a path a door may be narrowed to — absolute, no `.` or `..` segment, nothing escaped?"""
+    return isinstance(p, str) and bool(DOOR_PATH_RE.match(p)) and "/../" not in f"{p}/" and "/./" not in f"{p}/"
+
+
+#: What every published door wears on this edge, defined in the same file (traefik drops a router whose
+#: middleware is missing):
+#:   - HSTS (G21's invariant 7);
+#:   - headers: framed only by its own pages (the signer page frames its PDF), no sniffing, and no Referer,
+#:     because the token is in the URL;
+#:   - a rate per client address;
+#:   - an in-flight cap per client and one per host;
+#:   - the https redirect of its `web` twin.
+PUBLIC_HEADERS_MW = "dgo-public-headers"
+PUBLIC_RATE_MW = "dgo-public-rate"
+PUBLIC_INFLIGHT_IP_MW = "dgo-public-inflight-ip"
+PUBLIC_INFLIGHT_MW = "dgo-public-inflight"
+PUBLIC_HTTPS_MW = "dgo-public-https"
 
 
 class ServeError(RuntimeError):
@@ -460,8 +488,23 @@ def plan(state: dict, cat: dict) -> tuple[list[dict], list[str]]:
             if not 1 <= port <= 65535:
                 errs.append(f"{where}.services[{j}].port {svc.get('port')!r} אינו פורט בטווח")
                 continue
+            # The prefixes the serving office lets through this door (DGO-945's `paths`, DGO-2050): kept,
+            # because a door this office may PUBLISH must be one the serving office narrowed itself.
+            paths = svc.get("paths")
+            if paths is not None and (not isinstance(paths, list) or not paths
+                                      or not all(door_path(p) for p in paths)):
+                errs.append(f"{where}.services[{j}].paths {paths!r}: רשימה של נתיבים מוחלטים, בלי . ו-.. "
+                            f"(למשל /s/)")
+                continue
             seen_label[f"{oid}.{label}"] = f"{oid}:{sid}"
-            services.append({"app": sid, "alias": label, "port": port})
+            row = {"app": sid, "alias": label, "port": port}
+            if paths is not None:
+                row["paths"] = sorted(set(paths))
+            # …and whether it OPENED the door to the internet (`public: true`, DGO-2050): its consent, without
+            # which no office may publish it
+            if svc.get("public") is True:
+                row["public"] = True
+            services.append(row)
         if clean or services:
             # ONE identity per link, not per app: two apps of the same office reachable under two
             # different identities is a second trust plane that nobody declared.
@@ -928,6 +971,178 @@ def render_aliases(entries: list[dict]) -> str | None:
                                    default_flow_style=False, width=1000)
 
 
+def publish_plan(state: dict, served: list[dict], domain: str = "",
+                 cat: dict | None = None) -> tuple[list[dict], list[str], list[str]]:
+    """Check `publish:` against the doors linked offices give this one: (published, errors, dropped).
+
+    `publish:` opens ONE door of a linked office to the internet on THIS office's edge (DGO-2050). The example is
+    the signer's page of the office that holds the documents and the signing key, reached through the herd's
+    public office, which holds neither:
+
+        publish:
+          - host: sign.staging.digital-office.co.il
+            door: esign-public.hp-laptop          # <the door's alias>.<the office that serves it>
+            paths: [/s/]
+
+    TWO KINDS OF NO, and only one stops the render:
+    - `errors`: this office's own declaration is malformed. Not a list, not an object, a host that is no host,
+      lies off this office's public domain or is a name one of its own apps is routed under, a host or a door
+      twice, two doors whose routers would share a name, a path that is no path or is `/` (the whole app). The
+      render stops, as for any malformed state, before the edge's files are written.
+    - `dropped`: the SERVING office decides, and it decided otherwise. It no longer gives this door, did not
+      narrow it to paths, did not open it to the internet (`public: true` in its serve.services, its consent to
+      this), or narrowed it to paths that do not hold the ones asked for. The door is LEFT OUT with a line, and
+      the render goes on: a change on the other office must never stop every render here, and leaving it out
+      is closing it.
+
+    Only an office with a real domain publishes; `localhost` has no internet to publish to.
+    """
+    raw = state.get(PUBLISH_BLOCK)
+    if raw in (None, [], {}):
+        return [], [], []
+    if not isinstance(raw, list):
+        return [], [f"{PUBLISH_BLOCK}: חייב להיות רשימה של דלתות מפורסמות (host, door, paths), "
+                    f"לא {type(raw).__name__}"], []
+    domain = (domain or "").strip().lower()
+    doors = {f"{s['alias']}.{e['office']}": (e, s) for e in (served or []) for s in (e.get("services") or [])}
+    # the names this office's own apps are routed under (`console`, `auth`, `esign`, …): a door published on one
+    # would take its paths from that app, since traefik prefers the longer rule
+    routed = {str(r.get("host")).strip().lower() for m in (cat or {}).values() if isinstance(m, dict)
+              for r in (m.get("routing") or []) if isinstance(r, dict) and r.get("host")}
+    out: list[dict] = []
+    errs: list[str] = []
+    dropped: list[str] = []
+    hosts: set[str] = set()
+    taken: set[str] = set()
+    names: set[str] = set()
+    for i, item in enumerate(raw):
+        where = f"{PUBLISH_BLOCK}[{i}]"
+        if not isinstance(item, dict):
+            errs.append(f"{where}: חייב להיות אובייקט עם host, door ו-paths")
+            continue
+        host = str(item.get("host") or "").strip().lower()
+        if not AUTHORITY_RE.match(host) or ":" in host or "." not in host:
+            errs.append(f"{where}.host {item.get('host')!r} אינו שם מארח (בלי פורט ובלי נתיב)")
+            continue
+        if domain in ("", "localhost") or not host.endswith("." + domain):
+            errs.append(f"{where}.host {host}: אינו תחת הדומיין של הלשכה הזו ({domain or 'אין לה דומיין'}) — "
+                        f"רק לשכה עם דומיין ציבורי מפרסמת, ורק תחתיו")
+            continue
+        first = host[:-(len(domain) + 1)].split(".")[-1]
+        if first in routed:
+            errs.append(f"{where}.host {host}: {first}.{domain} כבר מנותב לאפליקציה של הלשכה הזו — "
+                        f"שם אחר, למשל sign")
+            continue
+        if host in hosts:
+            errs.append(f"{where}.host {host}: מפורסם פעמיים")
+            continue
+        door = str(item.get("door") or "").strip().lower()
+        if "." not in door:
+            errs.append(f"{where}.door {item.get('door')!r}: <כינוי הדלת>.<הלשכה שנותנת אותה>, למשל "
+                        f"esign-public.hp-laptop")
+            continue
+        if door in taken:
+            errs.append(f"{where}.door {door}: מפורסמת פעמיים — דלת אחת, שם מארח אחד")
+            continue
+        # the routers' names are built from the office and the alias, and a dash joins both: office `a-b` with
+        # alias `c` and office `a` with alias `b-c` would be ONE router, and the later would replace the earlier
+        alias, _, office = door.partition(".")
+        name = f"dgo-public-{office}-{alias}"
+        if name in names or f"{name}-http" in names:
+            errs.append(f"{where}.door {door}: שם הנתב {name} מתנגש בנתב של דלת אחרת שמתפרסמת כאן — כינוי "
+                        f"או לשכה אחרים")
+            continue
+        paths = item.get("paths")
+        if not isinstance(paths, list) or not paths or not all(door_path(p) for p in paths) or "/" in paths:
+            errs.append(f"{where}.paths {paths!r}: רשימה של נתיבים מוחלטים, בלי . ו-.., ולא / (האפליקציה כולה) "
+                        f"— למשל /s/")
+            continue
+        hosts.add(host)
+        taken.add(door)
+        names.update((name, f"{name}-http"))
+        # …and what the SERVING office decides: a door it gives, narrows and opens to the internet, or none
+        if door not in doors:
+            dropped.append(f"{where}: {door} — אין דלת כזו בין הדלתות שלשכות מקושרות נותנות ללשכה הזו כרגע; "
+                           f"לא מתפרסם")
+            continue
+        entry, svc = doors[door]
+        given = svc.get("paths") or []
+        if not given:
+            dropped.append(f"{where}: {door} — הלשכה {entry['office']} לא צמצמה את הדלת לנתיבים; לא מתפרסם")
+            continue
+        if svc.get("public") is not True:
+            dropped.append(f"{where}: {door} — הלשכה {entry['office']} לא פתחה את הדלת לאינטרנט "
+                           f"(public: true ב-serve.services שלה); לא מתפרסם")
+            continue
+        outside = sorted(p for p in set(paths)
+                         if not any(p == g or (g.endswith("/") and p.startswith(g)) for g in given))
+        if outside:
+            dropped.append(f"{where}: {', '.join(outside)} — מחוץ לנתיבים שהלשכה {entry['office']} פתחה בדלת "
+                           f"({', '.join(given)}); לא מתפרסם")
+            continue
+        port = int(entry.get("link_port") or 0) or int(svc["port"])
+        out.append({"name": name, "host": host,
+                    "office": entry["office"], "alias": svc["alias"], "app": svc["app"],
+                    "url": f"http://{door}:{port}", "paths": sorted(set(paths))})
+    return out, errs, dropped
+
+
+def render_published(published: list[dict]) -> str | None:
+    """Traefik FILE-provider dynamic config for every published door (DGO-2050), or None when there is none.
+
+    Per door, two routers and one service, nothing else:
+      · `<name>`: on `websecure`, `Host(<host>) && (…)`, where each path is a `PathPrefix` when it ends in
+        `/` and an exact `Path` when it does not, as the serving door itself matches it. The router carries:
+          - its own Let's Encrypt certificate and HSTS;
+          - headers: framed only by its own pages (SAMEORIGIN: the signer page frames its own PDF at
+            /s/<token>/doc, which DENY would blank), no sniffing, and no Referer, because the token is in the URL;
+          - a rate per client address (this edge is the only hop that sees it);
+          - an in-flight cap per client and one per host.
+        Every other path of the host matches nothing: traefik's 404.
+      · `<name>-http`: the host on `web`, a permanent redirect to https, forwarding nothing.
+      · the service: the door's network alias on the link proxy, with `passHostHeader: false`. The serving
+        office's link door picks the door by the Host it is sent, and the client's Host never travels.
+    No sign-in: the token in the path is the credential, and the serving app answers only it. The serving
+    office's link door does mark the request as this office's (X-Dgo-Office, and X-Dgo-Herd on a herd pair). That
+    grants nothing beyond the door's paths, which are all it answers. Nothing here adds an identity.
+    Known limit: IPv6 clients reach vps1's edge as one docker address (DGO-1633), so they share one rate bucket.
+    """
+    if not published:
+        return None
+    middlewares = dict([
+        (PUBLIC_HEADERS_MW, dict([("headers", dict([
+            ("customFrameOptionsValue", "SAMEORIGIN"), ("contentTypeNosniff", True),
+            ("referrerPolicy", "no-referrer")]))])),
+        (PUBLIC_RATE_MW, dict([("rateLimit", dict([("average", 30), ("period", "1m"), ("burst", 20)]))])),
+        (PUBLIC_INFLIGHT_IP_MW, dict([("inFlightReq", dict([
+            ("amount", 5), ("sourceCriterion", dict([("ipStrategy", dict([("depth", 0)]))]))]))])),
+        (PUBLIC_INFLIGHT_MW, dict([("inFlightReq", dict([
+            ("amount", 20), ("sourceCriterion", dict([("requestHost", True)]))]))])),
+        (PUBLIC_HTTPS_MW, dict([("redirectScheme", dict([("scheme", "https"), ("permanent", True)]))])),
+    ])
+    routers, services = dict(), dict()
+    for p in published:
+        rule = f"Host(`{p['host']}`) && (" + " || ".join(
+            f"PathPrefix(`{x}`)" if x.endswith("/") else f"Path(`{x}`)" for x in p["paths"]) + ")"
+        routers[p["name"]] = dict([
+            ("rule", rule), ("entryPoints", ["websecure"]), ("service", p["name"]),
+            ("middlewares", ["hsts@file", PUBLIC_HEADERS_MW, PUBLIC_RATE_MW, PUBLIC_INFLIGHT_IP_MW,
+                             PUBLIC_INFLIGHT_MW]),
+            ("tls", dict([("certResolver", "myresolver")]))])
+        routers[f"{p['name']}-http"] = dict([
+            ("rule", f"Host(`{p['host']}`)"), ("entryPoints", ["web"]),
+            ("service", "noop@internal"), ("middlewares", [PUBLIC_HTTPS_MW])])
+        services[p["name"]] = dict([("loadBalancer", dict([
+            ("servers", [dict([("url", p["url"])])]), ("passHostHeader", False)]))])
+    doc = dict([("http", dict([("middlewares", middlewares), ("routers", routers), ("services", services)]))])
+    header = (
+        "# GENERATED by platform/manager/serve.py from platform.state.yaml `publish:` — DO NOT EDIT.\n"
+        "# A linked office's DOOR, opened to the internet on this office's edge (DGO-2050): only the paths\n"
+        "# that office narrowed it to, no sign-in (the token in the path is the credential), a rate per client.\n")
+    return header + yaml.safe_dump(doc, sort_keys=False, allow_unicode=True,
+                                   default_flow_style=False, width=1000)
+
+
 def sso_hosts(entries: list[dict], cat: dict, domain: str = "localhost",
               console_port: str = "") -> list[dict]:
     """The identity-layer host(s) each remote app needs — `<alias>.<office>.<console host>.<domain>`.
@@ -1328,6 +1543,89 @@ def selftest() -> list[str]:
         problems.append(f"a door with no app beside it must still be an alias, and nothing else: {oerrs}")
     if not run({"remote": [dict(svc["remote"][0], apps=[], services=[])]})[1]:
         problems.append("an office that gives neither an app nor a door must still be refused")
+
+    # A DOOR OPENED TO THE INTERNET (DGO-2050): the HP's signer page, published on the public office.
+    hp = {"office": "hp-laptop", "address": "10.79.6.2", "link_port": 9004, "label": "HP", "apps": [],
+          "services": [{"app": "esign", "alias": "esign-public", "port": 8080, "paths": ["/s/"], "public": True}]}
+    pentries, perrs = run({"remote": [hp]})
+    if perrs or (pentries[0].get("services") or [{}])[0].get("paths") != ["/s/"] \
+            or (pentries[0].get("services") or [{}])[0].get("public") is not True:
+        problems.append(f"a door's paths and its office's consent must be kept: {perrs} {pentries}")
+    if not run({"remote": [dict(hp, services=[dict(hp["services"][0], paths=["s"])])]})[1]:
+        problems.append("a door path that is not a /prefix/ must be refused")
+    if not run({"remote": [dict(hp, services=[dict(hp["services"][0], paths=["/s/../api/"])])]})[1]:
+        problems.append("a door path with .. must be refused")
+    hooks = {"remote": [dict(hp, services=[{"app": "n8n", "alias": "workflow-hooks", "port": 5678,
+                                            "paths": ["/webhook/meet-recordings"]}])]}
+    if run(hooks)[1]:
+        problems.append("a door narrowed to a path with no trailing / (the serving office's own rule) must be "
+                        "accepted, never stop the render")
+    pub = {"host": "sign.staging.digital-office.co.il", "door": "esign-public.hp-laptop", "paths": ["/s/"]}
+    dom = "staging.digital-office.co.il"
+    published, puberrs, pubdrop = publish_plan({"publish": [pub]}, pentries, dom)
+    if puberrs or pubdrop or len(published) != 1 or published[0]["url"] != "http://esign-public.hp-laptop:9004":
+        problems.append(f"a narrowed, opened door under this office's domain must publish, at the door's alias "
+                        f"and the link's port: {puberrs} {pubdrop} {published}")
+    else:
+        routed = render_published(published) or ""
+        for must in ("Host(`sign.staging.digital-office.co.il`) && (PathPrefix(`/s/`))",
+                     "certResolver: myresolver", "hsts@file", PUBLIC_HEADERS_MW,
+                     "customFrameOptionsValue: SAMEORIGIN",
+                     "referrerPolicy: no-referrer", PUBLIC_RATE_MW, PUBLIC_INFLIGHT_IP_MW, PUBLIC_INFLIGHT_MW,
+                     "passHostHeader: false", "noop@internal", PUBLIC_HTTPS_MW):
+            if must not in routed:
+                problems.append(f"the published door's routes must carry {must!r}")
+        for never in ("authentik", "X-authentik-username", "X-DGO-From"):
+            if never in routed:
+                problems.append(f"a published door must carry no sign-in and no identity, got {never!r}")
+    # an exact path at the door is an exact path at the edge, and a narrower prefix inside the door's is allowed
+    exact = run({"remote": [dict(hp, services=[dict(hp["services"][0], paths=["/s/", "/sign"])])]})[0]
+    xs = publish_plan({"publish": [dict(pub, paths=["/sign", "/s/v/"])]}, exact, dom)[0]
+    if len(xs) != 1 or "Path(`/sign`)" not in (render_published(xs) or "") \
+            or "PathPrefix(`/s/v/`)" not in (render_published(xs) or ""):
+        problems.append(f"an exact door path must be Path(), a narrower prefix PathPrefix(): {xs}")
+    # THIS office's malformed declaration stops the render…
+    for bad, why in (
+            (dict(pub, host="sign.example.com"), "a host off this office's domain"),
+            (dict(pub, host="sign.staging.digital-office.co.il:8443"), "a host with a port"),
+            (dict(pub, door="esign-public"), "a door that names no office"),
+            (dict(pub, paths=[]), "no paths at all"),
+            (dict(pub, paths=["/"]), "the whole app"),
+            (dict(pub, paths=["/s/../api/"]), "a path with ..")):
+        if not publish_plan({"publish": [bad]}, pentries, dom)[1]:
+            problems.append(f"publishing must refuse {why}")
+    if not publish_plan({"publish": [pub, pub]}, pentries, dom)[1]:
+        problems.append("publishing one host twice must be refused")
+    if not publish_plan({"publish": [pub, dict(pub, host="sign2.staging.digital-office.co.il")]}, pentries, dom)[1]:
+        problems.append("publishing one door on two hosts must be refused (one router name)")
+    for one, two in (("c.a-b", "b-c.a"), ("x.o", "x-http.o"), ("x-http.o", "x.o")):
+        pair = [dict(pub, door=one), dict(pub, door=two, host="sign2.staging.digital-office.co.il")]
+        if not publish_plan({"publish": pair}, pentries, dom)[1]:
+            problems.append(f"two doors whose routers share a name ({one}, {two}) must be refused")
+    if not publish_plan({"publish": [pub]}, pentries, "localhost")[1]:
+        problems.append("an office without a public domain must not publish")
+    owned = {"console": {"routing": [{"host": "console"}]}, "esign": {"routing": [{"host": "esign", "port": 8080}]}}
+    for taken_host in ("console.staging.digital-office.co.il", "esign.staging.digital-office.co.il",
+                       "bina.macbook.console.staging.digital-office.co.il"):
+        if not publish_plan({"publish": [dict(pub, host=taken_host)]}, pentries, dom, owned)[1]:
+            problems.append(f"publishing on {taken_host}, a name this office already routes, must be refused")
+    if publish_plan({"publish": [pub]}, pentries, dom, owned)[1]:
+        problems.append("a free name (sign) must publish beside the office's own routed names")
+    # …and what the SERVING office decided only leaves the door out, with a line, and never stops the render
+    open_door = run({"remote": [dict(hp, services=[{"app": "esign", "alias": "esign-public", "port": 8080,
+                                                    "public": True}])]})[0]
+    unopened = run({"remote": [dict(hp, services=[dict(hp["services"][0], public=False)])]})[0]
+    for served_now, why in ((open_door, "a door its office did not narrow"),
+                            (unopened, "a door its office did not open to the internet"),
+                            ([], "a door no office gives this one any more")):
+        got = publish_plan({"publish": [pub]}, served_now, dom)
+        if got[0] or got[1] or len(got[2]) != 1:
+            problems.append(f"{why} must be left out with a line, never published and never a stop: {got}")
+    got = publish_plan({"publish": [dict(pub, paths=["/api/"])]}, pentries, dom)
+    if got[0] or got[1] or len(got[2]) != 1:
+        problems.append(f"a path outside the door's own must be left out with a line: {got}")
+    if publish_plan({}, pentries, dom) != ([], [], []) or render_published([]) is not None:
+        problems.append("no publish: block must mean no file, no error and no line")
     return problems
 
 

@@ -1,11 +1,16 @@
 {
- "header.more": "פעולות נוספות",
- "menu.download": "הורדת יומן השיחה",
- "dialog.preparingTitle": "מייצא שיחה",
- "dialog.preparingDescription": "מכין ZIP עם השיחה הזו, שיחות המשנה שלה והקבצים המצורפים.",
- "dialog.successTitle": "הורדת השיחה התחילה",
- "dialog.successDescription": "הדפדפן מוריד את ה-ZIP של השיחה.",
- "dialog.errorTitle": "ייצוא השיחה נכשל",
  "dialog.close": "סגירה",
- "dialog.commandFailed": "לא ניתן להתחיל את ייצוא השיחה."
+ "dialog.commandFailed": "לא ניתן להתחיל את ייצוא השיחה.",
+ "dialog.errorTitle": "ייצוא השיחה נכשל",
+ "dialog.preparingDescription": "מכין קובץ ZIP עם השיחה שנבחרה, תתי-השיחות שלה והקבצים המצורפים.",
+ "dialog.preparingTitle": "מייצא שיחה",
+ "dialog.session": "שיחה: {sessionId}",
+ "dialog.successDescription": "הדפדפן מוריד את ה-ZIP של השיחה.",
+ "dialog.successTitle": "הורדת השיחה התחילה",
+ "menu.copyMarkdown": "העתקת השיחה כ-Markdown",
+ "menu.download": "הורדת יומן השיחה",
+ "menu.feedback": "משוב",
+ "toast.clipboardFailed": "לא ניתן היה לכתוב ללוח. בדקו את הרשאת הלוח ונסו שוב.",
+ "toast.copied": "השיחה הועתקה כ-Markdown.",
+ "toast.preparationFailed": "לא ניתן היה לקרוא את השיחה להעתקה. נסו שוב."
 }

@@ -168,11 +168,23 @@ func render(repo string, cat *Catalog, order []string, st *State, stderr io.Writ
 	if len(refusals) > 0 {
 		return nil, &exit{"SERVE PLAN REFUSED:\n  - " + strings.Join(refusals, "\n  - ")}
 	}
+	// a linked office's door opened to the internet on this office's edge (DGO-2050), planned before anything is
+	// written: this office's own malformed publish: stops the render, a door the serving office closed is a line
+	pub, prefusals, pdropped := publishPlan(st, served, env.domain(), cat)
+	if len(prefusals) > 0 {
+		return nil, &exit{"PUBLISH PLAN REFUSED:\n  - " + strings.Join(prefusals, "\n  - ")}
+	}
+	for _, line := range pdropped {
+		fmt.Fprintln(stderr, "  PUBLISH  "+line)
+	}
 	framed, err := framedHosts(cat, order, env)
 	if err != nil {
 		return nil, err
 	}
 	if err := renderServe(repo, gen, cat, served, framed, env, order); err != nil {
+		return nil, err
+	}
+	if err := renderPublishedFile(repo, pub); err != nil { // its own file, so the remote routes keep their bytes
 		return nil, err
 	}
 	httpsRedirect := false

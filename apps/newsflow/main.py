@@ -31,6 +31,7 @@ never reach the site.
 """
 from __future__ import annotations
 
+import functools
 import json
 import os
 import re
@@ -68,6 +69,13 @@ SHOT_TIMEOUT = float(os.environ.get("NEWSFLOW_SHOT_TIMEOUT", "90"))
 #: quietly waited for. Measured 2026-11-04: one pass over twenty sources, three of them hanging on a
 #: paywall or a bot wall, held the lock for half an hour and the screen said nothing.
 PASS_BUDGET_S = float(os.environ.get("NEWSFLOW_PASS_BUDGET_S", "1800"))
+#: When this many sources IN A ROW read nothing — sources that gave an article in the DRY_DAYS before the store's
+#: newest article, so they read fine through this browser lately — it is the office browser that is not reading
+#: pages, not the sites, and the pass stops (0 = never). Measured on the HP (DGO-2030): 19 of 30 passes between 11-11 and 11-19 added nothing
+#: and still walked 67–221 sources for 1–33 minutes each (276 minutes of the shared browser in eight days for 7
+#: articles), while a healthy pass never had more than 4 empty sources in a row.
+DRY_STOP = int(os.environ.get("NEWSFLOW_DRY_STOP", "8"))
+DRY_DAYS = 7
 
 #: The taxonomy is the owner's own list (his words, 2026-11-04), each with the sources that feed it.
 #: A source that changes shape is a row «failed: why» in the run, never a silent empty category.
@@ -476,6 +484,50 @@ def init() -> None:
         c.commit()
 
 
+#: The store's version, asked of one reader that never writes: SQLite's `data_version` moves whenever ANOTHER
+#: connection commits, and every write here (a pass's articles, a picture healed, a review) goes through db().
+#: The file's inode is part of it: a store replaced under the service (a restore) gets a new reader and a new version.
+_VERSION = {"conn": None, "ino": None, "lock": threading.Lock()}
+#: Answers that depend on the store alone, kept until it changes: (version, answer) per question.
+_ANSWERS: dict = {}
+_ANSWERS_LOCK = threading.Lock()
+
+
+def store_version() -> tuple:
+    with _VERSION["lock"]:
+        ino = os.stat(DB).st_ino
+        if _VERSION["conn"] is None or _VERSION["ino"] != ino:
+            if _VERSION["conn"] is not None:
+                _VERSION["conn"].close()
+                with _ANSWERS_LOCK:          # nothing filed under the store that was replaced may come back
+                    _ANSWERS.clear()
+            _VERSION["conn"] = sqlite3.connect(DB, timeout=20, check_same_thread=False)
+            _VERSION["ino"] = ino
+        return ino, _VERSION["conn"].execute("pragma data_version").fetchone()[0]
+
+
+def remembered(key: tuple, compute):
+    """The answer to a read, computed once per version of the store. The screen asks the same two questions on every
+    open, and their answers change only when a pass writes: on the HP's capped container they cost 0.4–0.8 s each
+    (measured 2026-11-19, DGO-2030), so asking again is now one `pragma data_version`. The version is read BEFORE the
+    answer is computed, so a write that lands in between makes the next ask recompute — an answer is never older
+    than the version it is filed under."""
+    try:
+        version = store_version()
+    except (sqlite3.Error, OSError):
+        return compute()
+    with _ANSWERS_LOCK:
+        hit = _ANSWERS.get(key)
+    if hit is not None and hit[0] == version:
+        return hit[1]
+    value = compute()
+    with _ANSWERS_LOCK:
+        if key not in _ANSWERS and len(_ANSWERS) >= 64:
+            _ANSWERS.pop(next(iter(_ANSWERS)))
+        _ANSWERS[key] = (version, value)
+    return value
+
+
 #: Every browser task this app opens, on the volume. A task is a TAB in the shared browser, a browser42 slug
 #: is immutable and lives forever, and a task that stalls stays stalled — so a pass that dies mid-way leaves
 #: tabs behind and the next pass meets `browser_tab_pressure` on its first source (measured 2026-11-04: the
@@ -556,7 +608,10 @@ NAV_CUES = ("view our", "read more", "learn more", "sign in", "log in", "subscri
             # A page's own link interstitial is a sentence with no story in it, and it led the front page
             # on 2026-11-05 («whatsapp מעבר לאתר חיצוני»): the same words every browser overlay uses.
             "מעבר לאתר חיצוני", "אתר חיצוני", "external site", "opens in a new", "נפתח בחלון",
-            "whatsapp מעבר", "קישור חיצוני"
+            "whatsapp מעבר",
+            # Not «קישור חיצוני» on its own: «הונאה חדשה: לחיצה על קישור חיצוני בוואטסאפ…» is cyber news, and a cue
+            # here drops it at COLLECTION, for good. It never filtered anything anyway: a missing comma glued it to
+            # «(onsite)» (DGO-2030, the second reader). The interstitial is caught by «מעבר לאתר חיצוני» above.
             # a job board is not news (measured 2026-11-05: eleven «Developer Wanted» cards led the Israel feed)
             "(onsite)", "(remote)", "onsite)", "we are hiring", " משרה ", "דרוש/ה")
 
@@ -615,6 +670,15 @@ def is_headline(title: str, url: str = "") -> bool:
     if re.search(r"\bIDR\s*\d|\bRp\s*\d|\bsalary\b", t, re.I):
         return False
     return True
+
+
+@functools.lru_cache(maxsize=4096)
+def served_title(title: str, url: str) -> str:
+    """The headline a reader sees for a stored row, or "" when the row is a page's furniture — decided once per
+    (title, url). The feed is served from the newest rows again and again, and every request re-ran the same dozen
+    patterns on the same 480 rows: 65% of /api/news (measured on a copy of the HP's store, 2026-11-19, DGO-2030).
+    The rules live in this file, so only a restart changes an answer — and a restart starts this cache empty."""
+    return clean_title(title) if is_headline(title, url) else ""
 
 
 def now() -> str:
@@ -860,8 +924,24 @@ def collect(categories: list[str] | None) -> dict:
                   + (f"; {len(left)} would not close: {', '.join(left)}" if left else ""), flush=True)
         open_tasks = tasks_read()
         deadline = time.time() + PASS_BUDGET_S
+        # The sources that gave an article lately. When DRY_STOP of them in a row read nothing, it is the office
+        # browser that is not reading pages: the pass stops instead of walking the whole list through it. «Lately»
+        # counts back from the start of the last HEALTHY pass (one that read at least DRY_STOP sources; before any,
+        # from the newest article) — never from now, so an outage freezes the window instead of emptying it and
+        # turning the stop off, and a source still trickling articles through a half-dead browser does not move it
+        # either (the second reader, DGO-2030). While passes read, a site that died ages out within DRY_DAYS.
+        with db() as c:
+            lately = {r[0] for r in c.execute(
+                "select distinct source from articles where found_at >= strftime('%Y-%m-%dT%H:%M:%SZ', coalesce("
+                "(select started_at from runs where ended_at is not null and sources_ok >= ? order by id desc limit 1),"
+                " (select max(found_at) from articles)), ?)", (max(DRY_STOP, 1), f"-{DRY_DAYS} days"))}
+        dry: list = []                               # the sources that read nothing since the last that read
+        stopped = ""
         for slug, url, cat in want:
             t0 = time.time()
+            if stopped:
+                report[slug] = "skipped: the pass stopped (the office browser read nothing)"
+                continue
             if t0 > deadline:
                 report[slug] = "skipped: the pass ran out of its %ds budget" % PASS_BUDGET_S
                 continue
@@ -870,6 +950,7 @@ def collect(categories: list[str] | None) -> dict:
             # behind (measured 2026-11-04). So each pass gets its own task, and the task is always closed.
             task = f"nf{run}-{slug}"
             handles: list = []                       # per source: a stale one from the last page is not evidence
+            read = False
             source_seen(slug, time.time())
             open_tasks = tasks_read() + [task]
             tasks_write(open_tasks)                  # written BEFORE the tab exists: a crash leaves a record
@@ -901,6 +982,7 @@ def collect(categories: list[str] | None) -> dict:
                     report[slug] = "no links read (the page may need the owner's eyes) · %.0fs" % (time.time() - t0)
                     continue
                 ok += 1
+                read = True
                 ts = now()
                 imgs = image_map(task)               # the cards' own pictures, one evaluate on the open page
                 with db() as c:
@@ -971,14 +1053,35 @@ def collect(categories: list[str] | None) -> dict:
                                 time.sleep(3)
                     if closed:
                         tasks_write([t for t in tasks_read() if t != task])
+                # A source that read links ends a dry streak; one that gave an article lately and read nothing now
+                # lengthens it (a source that has not given anything lately is no evidence about the browser either
+                # way). At DRY_STOP the pass stops. The streak's sources keep the stamp this pass gave them, as every
+                # tried source does, so the next pass starts AFTER them: a run of sites that died together can cut
+                # one pass short, never hold the rotation on themselves (the second reader, DGO-2030).
+                if read:
+                    dry = []
+                elif slug in lately:
+                    dry.append(slug)
+                    if DRY_STOP > 0 and len(dry) >= DRY_STOP:
+                        stopped = "the office browser read nothing from %d sources in a row (%s)" % (
+                            len(dry), ", ".join(dry))
+                        print(f"[newsflow] pass {run} stopped: {stopped}", flush=True)
         flow_err = publish(events)
         ended = now()
         with db() as c:
             c.execute("update runs set ended_at=?, added=?, sources_ok=?, report=? where id=?",
                       (ended, added, ok, json.dumps(report, ensure_ascii=False), run))
             c.commit()
+        # The pass changed the store, so the screen's next open would pay for its two reads (~0.4 s on the HP's capped
+        # container): they are answered here, once, and the open after a pass is as quick as any other.
+        for warm in (answer_news, answer_categories):
+            try:
+                warm()
+            except Exception as e:
+                print(f"[newsflow] the screen's answers were not prepared ({e})", flush=True)
         return {"run": run, "started_at": started, "ended_at": ended, "added": added,
-                "sources_ok": ok, "sources_tried": len(want), "report": report, "flow": flow_err or "ok"}
+                "sources_ok": ok, "sources_tried": len(want), "report": report, "flow": flow_err or "ok",
+                "stopped": stopped}
 
 
 # ── the API ──────────────────────────────────────────────────────────────────────────────────────────
@@ -1023,10 +1126,11 @@ def news(category: str = "", limit: int = 60, source: str = "") -> dict:
     with db() as c:
         rows = []
         for r in c.execute(q, args):
-            if not is_headline(r["title"], r["url"]):
+            title = served_title(r["title"], r["url"])
+            if not title:
                 continue
             r = dict(r)
-            r["title"] = clean_title(r["title"])
+            r["title"] = title
             rows.append(r)
         if not category and not source:
             rows = order_front(rows)
@@ -1034,6 +1138,31 @@ def news(category: str = "", limit: int = 60, source: str = "") -> dict:
     for r in rows:
         r["category_he"] = CAT_NAME.get(r["category"], r["category"])
     return {"items": rows, "count": len(rows), "category": category, "source": source}
+
+
+def categories() -> dict:
+    """The taxonomy with a count per category; `total` is every article (each has one category), so the screen's
+    title needs no second call."""
+    with db() as c:
+        counts = dict(c.execute("select category, count(*) from articles group by category").fetchall())
+        opp = c.execute("select count(*) from articles where " + " or ".join(
+            "title like ?" for _ in OPPORTUNITY_CUES), ["%" + cue + "%" for cue in OPPORTUNITY_CUES]).fetchone()[0]
+    return {"categories": [{"id": i, "he": h, "articles": opp if i == "opportunities" else counts.get(i, 0)}
+                           for i, h in CATEGORIES],
+            "total": sum(counts.values())}
+
+
+def _json(payload) -> bytes:
+    return json.dumps(payload, ensure_ascii=False).encode()
+
+
+# The screen's two reads, answered once per version of the store and kept already serialised (remembered()).
+def answer_news(category: str = "", limit: int = 60, source: str = "") -> bytes:
+    return remembered(("news", category, limit, source), lambda: _json(news(category, limit, source)))
+
+
+def answer_categories() -> bytes:
+    return remembered(("categories",), lambda: _json(categories()))
 
 
 def review_queue(limit: int = 30, category: str = "") -> dict:
@@ -1134,6 +1263,13 @@ def status() -> dict:
     return out
 
 
+#: The client hung up before the answer was written (a probe's own timeout, a closed tab). Nothing is left to answer
+#: and nothing failed here: answering it with a 500 only raised a second exception into the same dead socket, and the
+#: log showed a double traceback for each — 14 hang-ups on the HP between 11-13 and 11-19, eight of them the
+#: healthcheck's own 8 s clock and six the screen's requests (DGO-2030).
+HANG_UP = (BrokenPipeError, ConnectionResetError)
+
+
 class Handler(BaseHTTPRequestHandler):
     server_version = "newsflow/" + VERSION
 
@@ -1141,7 +1277,7 @@ class Handler(BaseHTTPRequestHandler):
         print("[newsflow] " + (fmt % a), flush=True)
 
     def _send(self, code: int, payload, ctype="application/json; charset=utf-8"):
-        body = payload if isinstance(payload, bytes) else json.dumps(payload, ensure_ascii=False).encode()
+        body = payload if isinstance(payload, bytes) else _json(payload)
         self.send_response(code)
         self.send_header("content-type", ctype)
         self.send_header("content-length", str(len(body)))
@@ -1164,18 +1300,11 @@ class Handler(BaseHTTPRequestHandler):
                     "capabilities": [{"name": "news-feed", "type": "service", "interface": "newsflow.v1"}],
                     "state": {"articles": status()["articles"]}})
             if u.path == "/api/categories":
-                with db() as c:
-                    counts = dict(c.execute("select category, count(*) from articles group by category").fetchall())
-                    opp = c.execute("select count(*) from articles where " + " or ".join(
-                        "title like ?" for _ in OPPORTUNITY_CUES),
-                        ["%" + cue + "%" for cue in OPPORTUNITY_CUES]).fetchone()[0]
-                return self._send(200, {"categories": [{"id": i, "he": h,
-                                                        "articles": opp if i == "opportunities" else counts.get(i, 0)}
-                                                       for i, h in CATEGORIES]})
+                return self._send(200, answer_categories())
             if u.path == "/api/news":
-                return self._send(200, news((q.get("category") or [""])[0],
-                                            int((q.get("limit") or ["60"])[0] or 60),
-                                            (q.get("source") or [""])[0]))
+                return self._send(200, answer_news((q.get("category") or [""])[0],
+                                                   int((q.get("limit") or ["60"])[0] or 60),
+                                                   (q.get("source") or [""])[0]))
             if u.path == "/api/status":
                 return self._send(200, status())
             if u.path == "/api/review/queue":
@@ -1188,6 +1317,8 @@ class Handler(BaseHTTPRequestHandler):
                 with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "static", "index.html"), "rb") as f:
                     return self._send(200, f.read(), "text/html; charset=utf-8")
             return self._send(404, {"error": "no such path", "path": u.path})
+        except HANG_UP:
+            return
         except Exception as e:
             return self._send(500, {"error": str(e)[:300]})
 
@@ -1206,6 +1337,8 @@ class Handler(BaseHTTPRequestHandler):
                 code, out = review(body)
                 return self._send(code, out)
             return self._send(404, {"error": "no such path", "path": u.path})
+        except HANG_UP:
+            return
         except Exception as e:
             return self._send(500, {"error": str(e)[:300]})
 
@@ -1238,7 +1371,8 @@ def schedule() -> None:
         try:
             out = collect(None)
             print(f"[newsflow] scheduled pass {out['run']}: +{out['added']} · "
-                  f"{out['sources_ok']}/{out['sources_tried']} sources · flow {out['flow']}", flush=True)
+                  f"{out['sources_ok']}/{out['sources_tried']} sources · flow {out['flow']}"
+                  + (" · stopped early" if out.get("stopped") else ""), flush=True)
         except Exception as e:           # a failed pass must not end the clock
             print(f"[newsflow] scheduled pass failed: {e}", flush=True)
         time.sleep(max(600, every * 60))

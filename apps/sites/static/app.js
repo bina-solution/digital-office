@@ -810,7 +810,7 @@ async function tabSettings(s) {
       <p class="note">הנתיב הציבורי הוא הכתובת שהעולם רואה: דומיין (מתוך „דומיינים”) ונתיב בתוכו.
         במצב <b>הלשכה</b> האתר מוגש מהלשכה עצמה — בלי SSO, ישירות מהקצה — והקונטיינר של האתר
         במכונה נעצר. במצב <b>המכונה</b> החבילה שעל המכונה ממשיכה להגיש אותו כמו היום.
-        הטקסטים, התמונות והלוגו נאספים תמיד מ„נכסים דיגיטליים”.</p>
+        הטקסטים, התמונות והלוגו נאספים תמיד מ„זהות”.</p>
       <div class="grid">
         <div><label>מי מגיש את האתר</label><select id="f-pmode">
           <option value="container" ${(s.public || {}).mode === 'office' ? '' : 'selected'}>המכונה (הקונטיינר של האתר)</option>
@@ -929,7 +929,7 @@ async function tabSettings(s) {
     const b = r.body || {};
     const mapped = (b.pages || []).reduce((n, p) => n + (p.mapped || []).length, 0);
     const free = (b.unmapped || []).length;
-    $('pub-slots-out').innerHTML = `<p class="note">${mapped === 1 ? 'ערך אחד כבר נכס דיגיטלי' : `${mapped} ערכים כבר נכסים דיגיטליים`} ·
+    $('pub-slots-out').innerHTML = `<p class="note">${mapped === 1 ? 'ערך אחד כבר בא מ„זהות”' : `${mapped} ערכים כבר באים מ„זהות”`} ·
       ${free === 1 ? 'טקסט/תמונה אחד שעוד כתוב ביד' : `${free} טקסטים/תמונות שעוד כתובים ביד`} · עודכן ${esc(ago(b.synced_at))}</p>`;
   };
   $('del').onclick = () => del(s, false);

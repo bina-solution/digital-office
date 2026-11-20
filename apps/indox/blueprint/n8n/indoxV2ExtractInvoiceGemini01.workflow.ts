@@ -1228,7 +1228,7 @@ return $input.all();`,
     "properties": {
       "AI_COMPANY_ID": {
         "type": "string",
-        "description": "The company identification number or VAT number. Ignore 500000088 / הדוגמה חומרי בניין בע\\"מ."
+        "description": "The company identification number or VAT number. Ignore 500000096 / הדוגמה חומרי בניין בע\\"מ."
       },
       "AI_DOC_AMOUNT": {
         "type": "string",

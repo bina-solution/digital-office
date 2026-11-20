@@ -1495,6 +1495,12 @@ def _home_herd() -> str:
     if err and not _HERD_WARNED:
         _HERD_WARNED.append(err)
         log.warning("DGO_HERD is not a herd name (%s) — this office publishes no herd", err)
+    if not herd and not err:
+        # An office of OURS (by its key) that declares none is the herd file's: its peers of ours are drawn in
+        # the herd the file names (`_peer_herd`), and a home herd of "" would draw them as a stranger's (DGO-2026).
+        doc, me, _ = _herd_ctx()
+        if me:
+            herd, _ = declaration.clean_herd(doc.get("herd"))
     return herd
 
 
@@ -2933,6 +2939,23 @@ def _herd() -> tuple[dict, str]:
     return doc, entry
 
 
+def _herd_ctx() -> tuple[dict, str, dict]:
+    """(the herd file, THIS office's name in it by its key, this office's home record) for the screens' per-office
+    rules (DGO-2026): `_herd()`'s answer read through give.load_herd's cache, and the home record with it — a caller
+    reads this ONCE per request and hands it to `_peer_herd`/`_peer_label` for every linked office (the second
+    reader: one home read per office per poll was the costly part, not the file)."""
+    import give
+    doc = give.load_herd()
+    home = cv.home_office()
+    if not doc:
+        return {}, "", home
+    entry = give.entry_of(doc, str(home.get("id") or ""))
+    want = give._herd_key(doc, entry) if entry else ""
+    if not want or give._key(home.get("identity")) != want:
+        return doc, "", home
+    return doc, entry, home
+
+
 def _herd_relay() -> str:
     """`wss://<the hub's link host>/relay` for an office of the herd that is not its hub; "" otherwise.
 
@@ -3278,16 +3301,62 @@ def api_link_access(since: float = 0, limit: int = 2000):
             "source": str(DOOR_ACCESS_LOG), "present": DOOR_ACCESS_LOG.exists()}
 
 
-def _peer_herd(decl: dict, cat: dict) -> str:
-    """The herd of a linked office: the owner's mark on its record first, then its own word.
+def _peer_herd(decl: dict, cat: dict, ctx: tuple | None = None) -> str:
+    """The herd of a linked office: the owner's mark on its record first, then the herd file, then its own word.
 
-    What the peer published is read as a stranger's text — cleaned by the one rule, and dropped when
-    it is not a herd name — because it is drawn on this office's screen."""
+    THE HERD FILE (DGO-2026). On an office of ours (by its key, `_herd_ctx`), a client it names (`clients:`, by its
+    pinned identity — clients.entry_for) is that client's herd, and an office of ours (by ITS key) is our herd — the
+    owner, 2026-11-19: «Exampleu is a separate herd … like Example shop, it is a client». Exampleu's office says no
+    herd of its own, and an office that says none was drawn inside ours. What the peer published is read as a
+    stranger's text — cleaned by the one rule, and dropped when it is not a herd name — because it is drawn on this
+    office's screen. `ctx` is `_herd_ctx()`, read once by a caller that asks for many offices."""
+    import clients
+    import give
     mark, _ = declaration.clean_herd(decl.get("herd"))
     if mark:
         return mark
+    doc, me, home = ctx or _herd_ctx()
+    if me:
+        cid = clients.entry_for(doc, decl)
+        if cid:
+            return clients.declared(doc)[cid]["herd"]
+        if give.herd_peer(doc, home, decl):
+            ours, _ = declaration.clean_herd(doc.get("herd"))
+            if ours:
+                return ours
     own, _ = declaration.clean_herd((cat or {}).get("herd"))
     return own
+
+
+def _peer_label(decl: dict, cat: dict, oid: str, ctx: tuple | None = None) -> str:
+    """The name a PERSON reads for a linked office (the map, the tooltip, the phone tile).
+
+    The herd file's word first, on an office of ours: its `label` for an office of ours (by key) — the owner,
+    2026-11-19: «it is simply the Dell», and the MacBook's record of it said «Portable» — and a client line's own
+    `label` when it has one. Then, for a PAIRED record, what the office calls itself NOW (its catalog): the record's
+    label is a copy taken on the day of the pairing (pair_api), which no later rename reaches — the Dell renamed
+    itself «Dell» on 11-13 and stayed «Portable» here. Then the declaration's label — for an office declared here it
+    is the owner's word — and the id last. A placeholder is no name (pair_api.UNNAMED: an office nobody named calls
+    itself «הלשכה הזאת», as Examplex's did)."""
+    import clients
+    import give
+    doc, me, home = ctx or _herd_ctx()
+    if me:
+        if give.herd_peer(doc, home, decl):
+            entry = (doc.get("offices") or {}).get(give.entry_of(doc, oid))
+            label = clients._text((entry if isinstance(entry, dict) else {}).get("label"))
+            if label:
+                return label
+        cid = clients.entry_for(doc, decl)
+        if cid and clients.declared(doc)[cid]["label"]:
+            return clients.declared(doc)[cid]["label"]
+    raw = (cat or {}).get("label")
+    own = clients._text(raw.get("he") or raw.get("en")) if isinstance(raw, dict) else clients._text(raw)
+    own = "" if own in pair_api.UNNAMED else own
+    if own and str(decl.get("kind") or "") == declaration.PAIRED:
+        return own
+    rec = str(decl.get("label") or "").strip()
+    return (rec if rec not in pair_api.UNNAMED else "") or own or oid
 
 
 @app.post("/api/link/herd")
@@ -3334,6 +3403,8 @@ def api_link():
     ports = _listen_ports()
     # …and the last SEARCH for each pair's moved address (find_peer / collect_found_peer), read once the same way
     searches = _find_state()
+    # …and the herd file with this office's place in it, for every office's herd and name (DGO-2026)
+    herd_ctx = _herd_ctx()
     items = []
     for oid, d in sorted(decls.items()):
         link = cv._link_of(d, home["id"])
@@ -3393,14 +3464,14 @@ def api_link():
                       "endpoint": (d.get("tunnel") or {}).get("endpoint"),
                       "peer_fingerprint": ((d.get("identity") or {}).get("fingerprint")),
                       "machine": d.get("machine"),
-                      # The name a PERSON reads (the tooltip and the phone tile print it): the
-                      # declaration's own label first — it is the owner's word for that office — then
-                      # what the office published about itself in its catalog, then the id.
-                      "label": str(d.get("label") or (cat.get("label") or {}).get("he") or oid),
+                      # The name a PERSON reads (the tooltip and the phone tile print it): the herd
+                      # file's word for an office of ours or a client, then what a paired office calls
+                      # itself now, then the declaration's label, then the id (`_peer_label`).
+                      "label": _peer_label(d, cat, oid, herd_ctx),
                       # The HERD it belongs to (DGO-1003), by the same order: the owner's mark on this
                       # record (an office whose code publishes none — EXW's), then what the office says
                       # about itself, else none — the screen groups an office with no herd with its own.
-                      "herd": _peer_herd(d, cat),
+                      "herd": _peer_herd(d, cat, herd_ctx),
                       "state": "up" if up else ("down" if state else "unknown"),
                       "state_at": state.get("at"),
                       "state_error": state.get("error") or "",
@@ -3478,6 +3549,69 @@ def _map_apps(rows, hidden=()) -> list[dict]:
     return out
 
 
+#: the computers app's list as the map reads it, kept MAP_SERVERS_S: a machine's name and its last probe change
+#: rarely, and the dashboard reads the map every 20 s (the second reader of DGO-2026)
+MAP_SERVERS_S = 30.0
+_MAP_SERVERS: dict = {"at": 0.0, "rows": {}}
+
+
+def _map_servers() -> dict:
+    """{address: the computer of THIS office's «מחשבים» that has it} — its id, its name, and what its last probe
+    said (`?probe=0`: no SSH round trip; a machine never probed says nothing). {} when the app does not answer."""
+    if time.time() - _MAP_SERVERS["at"] < MAP_SERVERS_S:
+        return _MAP_SERVERS["rows"]
+    d = _get(f"{cv.COMPUTERS_URL}/api/computers?probe=0&shared=0", 10)
+    out = {}
+    for c in (d.get("computers") if isinstance(d, dict) else None) or []:
+        if isinstance(c, dict) and c.get("host") and not c.get("builtin"):
+            out.setdefault(str(c["host"]).strip().lower(), {
+                k: c.get(k) for k in ("id", "label", "host", "state", "reason") if c.get(k) not in (None, "")})
+    _MAP_SERVERS.update(at=time.time(), rows=out)
+    return out
+
+
+def _map_clients(items: list, ctx: tuple | None = None) -> list:
+    """The herd file's client offices on the map (DGO-2026) — the owner, 2026-11-19: «I want to see all of our
+    clients, every herd of theirs organised». Each linked one in `items` gets its server; each one no link reaches
+    HERE is returned apart, as an office of its herd: «not linked yet», or linked through the offices of ours its
+    line names (`by`) when this office is not one of them — vps1's map (the owner's phone) says Exampleu is linked
+    through the MacBook, not that it is unlinked. Apart, and not among the links: the dashboard reads the links of
+    /api/map every 20 s, and an office that is not a link is not «down». Only on an office of ours (by key): a
+    client's office runs this same checkout, and our client list is not its map."""
+    import clients
+    import give
+    import identity as _identity
+    doc, me, _home = ctx or _herd_ctx()
+    table = clients.declared(doc) if me else {}
+    if not table:
+        return []
+    servers = _map_servers()
+    linked = {}
+    for d in cv.declarations():
+        cid = clients.entry_for(doc, d)
+        if cid:
+            linked[str(d.get("id") or "")] = cid
+    for item in items:
+        cid = linked.get(str(item.get("office") or ""))
+        host = table[cid]["host"].lower() if cid else ""
+        if host:
+            item["server"] = servers.get(host) or {"host": host}
+    out = []
+    for cid, c in table.items():
+        if cid in linked.values():
+            continue
+        host = c["host"].lower()
+        names = [give.entry_of(doc, b) for b in c["by"]]
+        via = [clients._text(((doc.get("offices") or {}).get(n) or {}).get("label")) or n
+               for n in names if n and n != me]
+        out.append({"office": cid, "label": c["label"] or c["herd"], "herd": c["herd"], "kind": "client",
+                    "direction": None, "state": "unlinked", "via": via if me not in names else [],
+                    "state_error": "", "transport": None, "endpoint": None, "commit": "",
+                    "mark": _identity.mark_for(cid), "handshake_age_s": None, "apps": [], "shared": [],
+                    "machine": {}, "server": (servers.get(host) or {"host": host}) if host else {}})
+    return out
+
+
 @app.get("/api/map")
 def api_map():
     """The DGO MAP (DGO-1006): every herd this office sees, the offices of each, how each is linked
@@ -3514,11 +3648,26 @@ def api_map():
                                   "commit": s.get("commit") or "",
                                   "apps": _map_apps(s.get("apps"))} for s in shared],
                       "machine": machines.get(oid) or {}})
+    ctx = _herd_ctx()
+    doc, me, _home = ctx
+    unlinked = _map_clients(items, ctx)
+    # On an office of ours the herd is the herd file's (DGO-2026): its peers of ours are drawn in that name, so
+    # a DGO_HERD written another way must not draw its own siblings as a stranger's herd (the second reader). An
+    # office that is neither ours by its key, nor a client, nor says a herd is drawn apart, never inside ours.
+    ours = declaration.clean_herd(doc.get("herd"))[0] if me else ""
+    if me:
+        for item in items:
+            item["herd"] = item.get("herd") or UNHERDED
     own = build_catalog()
-    return {"home": {"id": home.get("id"), "label": _home_label(home).get("he"), "herd": _home_herd(),
+    return {"home": {"id": home.get("id"), "label": _home_label(home).get("he"), "herd": ours or _home_herd(),
                      "commit": _home_commit(), "domain": home.get("domain"),
                      "apps": _map_apps(own.get("apps")), "machine": machines.get("local") or {}},
-            "items": items, "at": int(time.time())}
+            "items": items, "clients": unlinked, "at": int(time.time())}
+
+
+#: the map's group for a linked office that is neither ours by its key, nor a client the herd file names, nor one that
+#: says a herd of its own (DGO-2026): before, it was drawn inside OUR herd — an impostor called `hp-laptop` included
+UNHERDED = "ללא עדר"
 
 
 @app.get("/api/link/history")

@@ -39,6 +39,7 @@ import time
 import tracemalloc
 import unittest
 import urllib.error
+import urllib.parse
 import urllib.request
 from unittest import mock
 
@@ -63,6 +64,19 @@ INDOX = [{"ID": f"d{i}", "TYPE": "INVOICE", "SHORT_DOC_ID": f"S{i}", "COMPANY_NA
           "DOC_TOTAL_AMOUNT": 50.0 * i, "STATUS": "COMPLETED", "REQUIRED_ACTION": "" if i % 3 else "CHECK",
           "EXTRA_WIDE_COLUMN": "x" * 200} for i in range(1, 8)]
 INDOX[6]["DOC_DATE"] = ""                                  # no DOC_DATE: TIMESTAMP decides
+# «קבצים» as the drive answers GET /api/fs?path= (DGO-2029): the office's own folders, as DGO-2027 laid them out
+_F = lambda path, folders=(), files=(): {"kind": "folder", "path": path, "folder": {"id": path},
+                                         "folders": [{"name": n} for n in folders], "files": list(files)}
+DRIVE = {
+    "/": _F("/", ("מסמכים", "לקוחות")),
+    "/מסמכים": _F("/מסמכים", ("הצעות מחיר והסכמים",),
+                  [{"id": "f1", "name": "בינה סלושנס - מי אנחנו.pdf", "created": "2026-11-19T10:00"}]),
+    "/מסמכים/הצעות מחיר והסכמים": _F("/מסמכים/הצעות מחיר והסכמים", (),
+                                     [{"id": "f2", "name": "מסמך עקרונות והצעת מחיר לשירותי אוטומציה.docx",
+                                       "created": "2025-08-03T09:00"}]),
+    "/לקוחות": _F("/לקוחות", ("לקוח לדוגמה",)),
+    "/לקוחות/לקוח לדוגמה": _F("/לקוחות/לקוח לדוגמה", (), [{"id": "f3", "name": "הצעת מחיר.pdf", "created": "2026-11-19T13:15"}]),
+}
 INSTANCES = {"success": True, "instances": [{"id": "levi", "schema_name": "indox_levi", "enabled": True},
                                             {"id": "test", "schema_name": "indox_test", "enabled": True},
                                             {"id": "old", "schema_name": "indox_old", "enabled": False}]}
@@ -72,6 +86,7 @@ class Stub(http.server.BaseHTTPRequestHandler):
     protocol_version = "HTTP/1.1"
     log, bodies = [], []
     ledger, indox, instances = LEDGER, INDOX, INSTANCES
+    drive_big = 0           # >0: that many more files in /מסמכים, saved 23:30 UTC (the drive pages them by 1000)
     big = 0                 # >0: a ledger of that many rows, generated a page at a time
     clamp = None            # INDOX rows per page under the asked limit (PostgREST's db-max-rows)
     cut = False             # INDOX's query answer is cut short (an IncompleteRead)
@@ -84,7 +99,7 @@ class Stub(http.server.BaseHTTPRequestHandler):
     def reset(cls):
         cls.log, cls.bodies = [], []
         cls.ledger, cls.indox, cls.instances = LEDGER, INDOX, INSTANCES
-        cls.big, cls.clamp, cls.cut, cls.unordered = 0, None, False, 0
+        cls.big, cls.clamp, cls.cut, cls.unordered, cls.drive_big = 0, None, False, 0, 0
         cls.per_instance, cls.lacks, cls.stuck = None, "", False
 
     def log_message(self, *a):
@@ -118,6 +133,21 @@ class Stub(http.server.BaseHTTPRequestHandler):
         if p.startswith("/documents/"):
             row = next((r for r in Stub.ledger if str(r["id"]) == p.split("/")[2]), None)
             return self._json(200, row) if row else self._json(404, {"error": "not_found"})
+        if p == "/api/fs":
+            path = urllib.parse.unquote_plus(q.get("path", "/"))
+            return self._json(200, DRIVE[path]) if path in DRIVE else self._json(404, {"error": "אין כלום בנתיב"})
+        if p == "/api/folders":            # the drive's folder rows: an id, a name, the parent's id (drive-local's shape)
+            rows = [{"id": path, "name": path.rsplit("/", 1)[1], "parent": path.rsplit("/", 1)[0] or None}
+                    for path in DRIVE if path.startswith("/") and path != "/"]
+            return self._json(200, {"folders": rows + list(getattr(Stub, "extra_folders", []))})
+        if p == "/api/files":              # a folder's files, a page at a time
+            fid = urllib.parse.unquote_plus(q.get("folder", ""))
+            files = list(DRIVE.get(fid, {}).get("files", []))
+            if fid == "/מסמכים":
+                files += [{"id": f"b{i}", "name": f"סריקה {i}.pdf", "created": "2026-11-18 23:30"}
+                          for i in range(Stub.drive_big)]
+            off, lim = int(q.get("offset", 0)), int(q.get("limit", 1000))
+            return self._json(200, {"files": files[off:off + lim], "folders": []})
         if p == "/incomingDocuments/instances":
             return self._json(200, Stub.instances)
         if p.startswith("/incomingDocuments/repos/"):
@@ -206,6 +236,91 @@ class Documents(unittest.TestCase):
         self.assertEqual(inc["ref"], {"instance": "levi", "repo": "incoming-documents-main", "doc_id": "d3"})
         self.assertEqual(inc["needs"], "CHECK")
         self.assertEqual(idx.search("__"), [], "an underscore is a letter in a search, not a wildcard")
+
+    # 2b (DGO-2029)
+    def test_hebrew_search_reads_past_prefixes_final_letters_and_marks(self):
+        idx = self.fresh()
+        mk = lambda i, party, typ="INVOICE": {
+            "id": f"local:{i}", "provider": "local", "direction": "out", "type": typ, "number": f"PQ-2026-{i:05d}",
+            "date": "2026-11-19", "party": party, "total": 1.0, "currency": "ILS", "allocation_number": "",
+            "state": "issued", "needs": "", "ref": {"id": i}}
+        idx.replace_provider("local", [mk(1, "בינה סולושנס"), mk(2, "חברת החשמל לישראל"), mk(3, "חשבונות ספקים"),
+                                       mk(4, "דוח מע״מ"), mk(5, "מסמכי שיווק"), mk(6, "ועדת בחירה"),
+                                       mk(7, "המחירון של 2026"), mk(8, "מדינת ישראל")])
+        hit = lambda q: sorted(r["id"] for r in idx.search(q))
+        # a word is found at the start of a word, never inside one (DGO-2029, the second reader)
+        self.assertEqual(hit("מחיר"), ["local:7"], "«מחיר» finds «המחירון», not «בחירה»")
+        self.assertEqual(hit("בינה"), ["local:1"], "«בינה» does not find «מדינת»")
+        self.assertNotIn("folded", idx.search("בינה")[0], "the search's reading is not a field of the row")
+        self.assertEqual(hit("ובינה"), ["local:1"], "a word behind ו is found")
+        self.assertEqual(hit("לחברת החשמל"), ["local:2"], "every word, each behind its prefix")
+        self.assertEqual(hit("חשבון"), ["local:3"], "a final letter matches its plain form")
+        self.assertEqual(hit("מעמ"), ["local:4"], "gershayim are not letters")
+        self.assertEqual(hit("בִּינָה"), ["local:1"], "niqqud is not a letter")
+        self.assertEqual(hit("מסמכי"), ["local:5"], "a word that starts with a prefix letter still finds itself")
+        self.assertEqual(hit("חברת ספקים"), [], "two words must both be there")
+        self.assertEqual(hit("pq-2026-00003"), ["local:3"], "a document number, in any case")
+
+    # 2c (DGO-2029)
+    def test_the_offices_files_are_listed_and_found_beside_its_documents(self):
+        base = f"http://127.0.0.1:{self.srv.server_address[1]}"
+        drive = core.make("drive", {"DOCUMENTS_DRIVE_URL": base})
+        self.assertEqual(drive.roots, ["/מסמכים", "/לקוחות", "/מחקרים"])
+        rows = [r for page in drive.pages() for r in page]
+        by_id = {r["id"]: r for r in rows}
+        self.assertEqual(sorted(by_id), ["drive:f1", "drive:f2", "drive:f3"], "every file under the roots; /מחקרים absent is no fault")
+        self.assertEqual((by_id["drive:f2"]["type"], by_id["drive:f2"]["party"], by_id["drive:f2"]["state"]),
+                         ("FILE_WORD", "מסמכים", "/מסמכים/הצעות מחיר והסכמים"))
+        self.assertEqual((by_id["drive:f3"]["type"], by_id["drive:f3"]["party"]), ("FILE_PDF", "לקוח לדוגמה"),
+                         "a client's folder names the client")
+        self.assertEqual(by_id["drive:f3"]["ref"], {"path": "/לקוחות/לקוח לדוגמה/הצעת מחיר.pdf", "id": "f3"})
+        self.assertEqual(by_id["drive:f2"]["date"], "2025-08-03")
+        idx = self.fresh()
+        report = core.sync(idx, [drive])
+        self.assertEqual([r["ok"] for r in report], [True], report)
+        self.assertEqual(sorted(r["id"] for r in idx.search("הצעת מחיר")), ["drive:f2", "drive:f3"])
+        self.assertEqual([r["id"] for r in idx.search("לקוח לדוגמה")], ["drive:f3"])
+        self.assertEqual([r["id"] for r in idx.search("בהצעות")], ["drive:f2"], "a folder's words, past a prefix")
+        self.assertIsNone(drive.event_kind(rows[0]), "a filed file is not news on the flow")
+        self.assertIn("drive", core.PROVIDERS)
+
+    # 2d (DGO-2029, the second reader)
+    def test_a_long_folder_is_read_whole_in_one_tree_call_and_a_utc_time_is_the_offices_day(self):
+        base = f"http://127.0.0.1:{self.srv.server_address[1]}"
+        Stub.drive_big = 5001                                   # N files in /מסמכים: two pages of the drive's 5,000
+        drive = core.make("drive", {"DOCUMENTS_DRIVE_URL": base, "DOCUMENTS_DRIVE_PROFILE": "office"})
+        old_tz = os.environ.get("TZ")
+        os.environ["TZ"] = "IST-2"                              # the office's clock in November (UTC+2), no tz database
+        time.tzset()
+        try:
+            rows = [r for page in drive.pages() for r in page]
+        finally:
+            if old_tz is None:
+                os.environ.pop("TZ", None)
+            else:
+                os.environ["TZ"] = old_tz
+            time.tzset()
+        self.assertEqual(len(rows), 5001 + 3, "no folder cut off at the drive's page")
+        scan = next(r for r in rows if r["id"] == "drive:b0")
+        self.assertEqual(scan["date"], "2026-11-19", "23:30 UTC is the next morning in the office")
+        gets = [p for m, p in Stub.log if m == "GET"]
+        self.assertEqual(gets.count("/api/folders"), 1, "the tree is read once, not once per folder")
+        self.assertNotIn("/api/fs", gets, "no whole-tree listing per folder")
+        self.assertEqual(gets.count("/api/files"), 2 + 3, "/מסמכים in two pages, three folders in one each")
+
+    # 2e (DGO-2029, the third reader)
+    def test_two_folders_of_one_name_are_both_read_and_an_underscore_parts_words(self):
+        base = f"http://127.0.0.1:{self.srv.server_address[1]}"
+        twin = {"id": "twin", "name": "מסמכים", "parent": None}       # another «/מסמכים» (Google allows the twin)
+        with mock.patch.object(Stub, "extra_folders", [twin], create=True), \
+                mock.patch.dict(DRIVE, {"twin": {"files": [{"id": "t1", "name": "חשבונית_כהן_2025.pdf",
+                                                            "created": "2026-11-19 10:00"}]}}):
+            drive = core.make("drive", {"DOCUMENTS_DRIVE_URL": base})
+            rows = [r for page in drive.pages() for r in page]
+        self.assertIn("drive:t1", [r["id"] for r in rows], "the twin folder's files are read too")
+        idx = self.fresh()
+        idx.replace_provider("drive", rows)
+        self.assertEqual([r["id"] for r in idx.search("כהן")], ["drive:t1"], "«_» parts a file name's words")
 
     # 3
     def test_the_providers_are_read_only(self):

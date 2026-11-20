@@ -61,7 +61,7 @@ def _locs(paths) -> str:
 def _site() -> dict[str, str]:
     """Paths → bodies: a sitemap INDEX over two files (and one that points into the office), 40
     pages and the home page, with the external links the tests care about spread over them."""
-    links = {1: [GONE, FINE, MOVED, NOHEAD, "mailto:person84@example.com", "#top", "javascript:void(0)", "/p2.html"],
+    links = {1: [GONE, FINE, MOVED, NOHEAD, "mailto:person87@example.com", "#top", "javascript:void(0)", "/p2.html"],
              2: [GONE], 3: [GONE, HICCUP], 4: [GUARDED, DOWN], 5: [DEAD, *FLAKY, *RATE],
              6: [*BUSY, *PRIVATE, REBIND]}
     site = {f"/p{n}.html": _html(n, links.get(n, [])) for n in range(1, 41)}

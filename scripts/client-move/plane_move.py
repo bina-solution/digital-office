@@ -3,7 +3,7 @@
 
 Runs INSIDE an office's project-pln container, like plan.py: the API at PLANE_API_URL (default http://127.0.0.1,
 the app's caddy → api), the key from PLANE_LOCAL_API_TOKEN or the credential plane (plane_local_api_token-local).
-README.md has the commands that put it there.
+It is put there with docker cp.
 
     snapshot-sql SPEC…                            the read-only query of the SOURCE Plane's database (psql -At)
     export SPEC… [--redact REGEX] < snapshot > bundle.json

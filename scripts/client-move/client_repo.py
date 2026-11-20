@@ -23,8 +23,8 @@ import subprocess
 import sys
 
 OTHER = "[לקוח אחר]"
-WHO = {"GIT_AUTHOR_NAME": "DGO client-move", "GIT_AUTHOR_EMAIL": "person94@example.com",
-       "GIT_COMMITTER_NAME": "DGO client-move", "GIT_COMMITTER_EMAIL": "person94@example.com"}
+WHO = {"GIT_AUTHOR_NAME": "DGO client-move", "GIT_AUTHOR_EMAIL": "person97@example.com",
+       "GIT_COMMITTER_NAME": "DGO client-move", "GIT_COMMITTER_EMAIL": "person97@example.com"}
 
 
 def git(d, *args, data=None, env=None):

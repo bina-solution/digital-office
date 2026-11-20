@@ -1,10 +1,13 @@
 {
   "name": "@bina/dsh-office-context",
-  "description": "Registers the compiler's app registry (.generated/registry/agent-context.md) as one system-prompt section, re-read on every prompt assembly",
-  "version": "0.1.0",
+  "description": "Registers an index of the installed apps (from the compiler's .generated/registry/agent-context.json; their briefs are read on demand) as one system-prompt section, re-read on every prompt assembly",
+  "version": "0.2.0",
   "private": true,
   "type": "module",
   "main": "lib/index.js",
+  "scripts": {
+    "test": "node --test"
+  },
   "exports": {
     ".": "./lib/index.js",
     "./package.json": "./package.json"

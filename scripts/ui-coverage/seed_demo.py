@@ -35,21 +35,21 @@ BUSINESS = {
     "name": "בינה פתרונות בע\"מ",
     "company_id": "514789234",
     "address": "הרחוב הראשי 1, מודיעין",
-    "email": "person95@example.com",
-    "phone": "08-0000020",
+    "email": "person98@example.com",
+    "phone": "08-0000025",
 }
 
 CUSTOMERS = [
-    {"name": "א.ב. הדוגמה בע\"מ", "company_id": "500000278", "city": "מודיעין",
-     "email": "person96@example.com", "phone": "08-0000021"},
-    {"name": "פלוני סוכנויות בע\"מ", "company_id": "500000047", "city": "מושב הדוגמה",
-     "email": "person97@example.com", "phone": "03-0000022"},
-    {"name": "ספק כף תעשיות", "company_id": "500000070", "city": "אשדוד",
-     "email": "person98@example.com", "phone": "08-0000023"},
-    {"name": "אלמוני שיווק", "company_id": "500000013", "city": "פתח תקווה",
-     "email": "person99@example.com", "phone": "03-0000024"},
-    {"name": "ספק יוד", "company_id": "500000302", "city": "חיפה",
-     "email": "person100@example.com", "phone": "04-0000025"},
+    {"name": "א.ב. הדוגמה בע\"מ", "company_id": "500000286", "city": "מודיעין",
+     "email": "person99@example.com", "phone": "08-0000026"},
+    {"name": "פלוני סוכנויות בע\"מ", "company_id": "500000054", "city": "מושב הדוגמה",
+     "email": "person100@example.com", "phone": "03-0000027"},
+    {"name": "ספק כף תעשיות", "company_id": "500000088", "city": "אשדוד",
+     "email": "person101@example.com", "phone": "08-0000028"},
+    {"name": "אלמוני שיווק", "company_id": "500000021", "city": "פתח תקווה",
+     "email": "person102@example.com", "phone": "03-0000029"},
+    {"name": "ספק יוד", "company_id": "500000310", "city": "חיפה",
+     "email": "person103@example.com", "phone": "04-0000030"},
 ]
 
 ITEMS = [

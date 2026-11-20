@@ -147,14 +147,14 @@ const CONFIG = {
     DEFAULT_COUNTRY_CODE: process.env.DEFAULT_COUNTRY_CODE || '972',
     ADMINS: [
         // note: admins sorces: hardcoded, env, adds to admins from settings api
-        '16825550109', '972500000001', '972 50-000-0008',
+        '16825550113', '972500000001', '972 50-000-0012',
         process.env.ADMIN_PHONE_1  || 'env_admin_1',
         process.env.ADMIN_PHONE_2  || 'env_admin_2'
     ],
     CONTENT_MEDIA: join(__dirname, '../media/campaign-media.mp4'),
     SHOPCONTACT_DISPLAY_NAME: process.env.SHOPCONTACT_DISPLAY_NAME || 'ישראלה ישראלי',
-    SHOPCONTACT_PHONE: process.env.SHOPCONTACT_PHONE || '972500000007',
-    SHOPCONTACT_WID: process.env.SHOPCONTACT_WID || '972500000007',
+    SHOPCONTACT_PHONE: process.env.SHOPCONTACT_PHONE || '972500000011',
+    SHOPCONTACT_WID: process.env.SHOPCONTACT_WID || '972500000011',
     SHOPCONTACT_ORG: process.env.SHOPCONTACT_ORG || 'לנשום',
     PORT: parseInt(process.env.APP_PORT || '3000'),
     SUBSCRIBERS_DB_PATH: join(__dirname, '../data/subscribers.db'),

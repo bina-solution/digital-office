@@ -127,7 +127,7 @@ class AWithheldLoginIsLeftAlone(unittest.TestCase):
     def test_a_refused_reveal_skips_the_row_and_withholds_its_origin(self):
         rows = {"browser42-login-google": {"app": {}, "fields": [
                     {"key": "BROWSER42_LOGIN_GOOGLE_PASSWORD", "secret": True, "primary": True},
-                    {"key": "BROWSER42_LOGIN_GOOGLE_USER", "secret": False, "clear": "person7.x@example.com"},
+                    {"key": "BROWSER42_LOGIN_GOOGLE_USER", "secret": False, "clear": "person8.x@example.com"},
                     {"key": "BROWSER42_LOGIN_GOOGLE_URL", "secret": False, "clear": "https://accounts.google.com/",
                      "fixed": True}]}}
 
@@ -154,7 +154,7 @@ class AWithheldLoginIsLeftAlone(unittest.TestCase):
         # it must not stay an entry (it would be materialized into Chrome and revealed to the browser)
         rows = {"browser-login-accounts-google-com": {"app": {}, "fields": [
                     {"key": "PASSWORD", "secret": True, "primary": True},
-                    {"key": "USERNAME", "secret": False, "clear": "person8@example.com"},
+                    {"key": "USERNAME", "secret": False, "clear": "person9@example.com"},
                     {"key": "URL", "secret": False, "clear": "https://accounts.google.com/"}]},
                 "browser42-login-google": {"app": {}, "fields": [
                     {"key": "BROWSER42_LOGIN_GOOGLE_PASSWORD", "secret": True, "primary": True},

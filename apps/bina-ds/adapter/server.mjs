@@ -24,9 +24,11 @@ import { randomUUID, timingSafeEqual } from "node:crypto";
 import { appendFileSync, closeSync, mkdirSync, openSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import path from "node:path";
+import { createUi } from "./ui.mjs";
 
 const PORT = Number(process.env.BINA_DS_ADAPTER_PORT || 3081);
-const HARNESS = `http://127.0.0.1:${process.env.DSH_PORT || 3080}`;
+// The harness listens on ONE address since 0.2.x — the container's own (entrypoint.sh, DSH_BIND_HOST).
+const HARNESS = `http://${process.env.DSH_BIND_HOST || "127.0.0.1"}:${process.env.DSH_PORT || 3080}`;
 const HARNESS_WS = HARNESS.replace(/^http/, "ws") + "/api/remote.mux";
 const OFFICE = process.env.DSH_OFFICE_ROOT || "/workspace/office";
 const PROFILE_DIR = process.env.DSH_PROFILE_DIR || "/opt/bina/harness/profile";
@@ -153,6 +155,10 @@ const summary = (s) => {
     model: v.modelSelection?.next || v.modelSelection?.lastUsed || null,
     goal: goal ? { objective: goal.objective, phase: goal.phase, rounds: v.goal.roundsStarted, max_rounds: goal.maxGoalRounds } : null,
     todos: v.todos || null,
+    // what the agent asked the person and still waits on (ask_user_question), and whether a failed turn can
+    // be continued — the screen answers and retries from here (EXU-64)
+    questions: (v.userQuestions?.active || []).map((q) => ({ call_id: q.callId, state: q.state, questions: q.questions })),
+    can_retry: !!v.conversationContinuation,
     turns: (v.turnOutline || []).length,
     tokens: v.tokenUsage || null,
     queue: s.queueItems ? s.queueItems.length : (v.inbox?.["next-turn"]?.length || 0) + (v.inbox?.["next-step"]?.length || 0),
@@ -239,6 +245,49 @@ class Live {
 const live = new Live();
 const rawSessions = (fresh = false) => live.sessions(fresh);
 async function listSessions(fresh) { return (await live.sessions(fresh)).map(summary); }
+
+// Which conversations the person archived: the harness's Workspace registry holds it, and its follow stream
+// sends a baseline and then `archived` frames — kept here like the session model, so the screen's list is a
+// memory read. Archiving is the harness's way to put a conversation away (it has no delete). EXU-64.
+class Shelf {
+  constructor() { this.archived = new Set(); this.stream = null; this.opening = null; }
+  ensure() {
+    if (this.stream) return Promise.resolve();
+    if (!this.opening) {
+      this.opening = mux.open("workspace/follow", {}, {
+        onItem: (f) => {
+          if (f.type === "baseline") this.archived = new Set(f.value?.archivedSessionIds || []);
+          else if (f.type === "archived") this.archived = new Set(f.archivedSessionIds || []);
+        },
+        onEnd: () => { this.stream = null; },
+        onError: () => { this.stream = null; },
+      }).then((s) => { this.stream = s; }, () => {}).finally(() => { this.opening = null; });
+    }
+    return this.opening;
+  }
+}
+const shelf = new Shelf();
+
+// עזריה's own screen: one list of Azaria's and Claude's conversations (ui.mjs, ../web/). EXU-64.
+const ui = createUi({ listSessions, snapshotEvents: (id, limit) => snapshotEvents(id, limit), prompt, rpc,
+                      refreshList: (force) => live.refreshList(force), office: OFFICE,
+                      archived: () => { shelf.ensure(); return shelf.archived; },
+                      setArchived: (ids) => { shelf.archived = new Set(ids || []); },
+                      follow: (res, id, q) => follow(res, id, q), upload: uploadTo });
+
+// a file or an image the person attached, handed to the harness for a session → its receipt (rc.3 takes a
+// prompt's file parts by receipt; an image's receipt enters the message as that image)
+async function uploadTo(id, name, mediaType, body) {
+  let r;
+  try {
+    r = await fetch(`${HARNESS}/api/session/uploadFileBinary?${new URLSearchParams({ sessionId: id, name, ...(mediaType ? { mediaType } : {}) })}`, {
+      method: "POST", headers: { "content-type": "application/octet-stream", authorization: `Bearer ${TOKEN}` }, body,
+    });
+  } catch (e) { throw new Fail(502, "harness/unreachable", `upload failed (${e.code || e.name})`); }
+  const j = JSON.parse(await r.text());
+  if (j.ok === false) throw new Fail(400, j.error?.code || "upload", j.error?.message || "upload rejected");
+  return { receipt: j.value?.receiptId, image: !!j.value?.image, name };
+}
 
 const FULL_ID = /^session-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$|^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 
@@ -882,6 +931,8 @@ async function route(req, res) {
   const p = url.pathname.replace(/\/+$/, "") || "/";
   const q = url.searchParams;
   if (req.method === "GET" && p === "/v1/health") { const h = await health(q.get("deep") === "1"); return [h.ok ? 200 : 502, h]; }
+  // the screen of עזריה and its door (ui.mjs): behind the office's sign-in, not this token
+  if (await ui(req, res, p, q)) return null;
   // ── the office timeline's lane (SPAN_SOURCE_BINA, apps/bina-ds/app.json) ─────────────────────
   // Deliberately outside the token gate, and read-only on purpose: an any-concurrency span source
   // is a bare GET — it holds no credential for any app, which is exactly how INDOX's lane is
@@ -1046,7 +1097,12 @@ async function route(req, res) {
     await rpc("agentPresets/select", { agentId: id, agentPreset: String(b.preset) }); live.refreshList(true);
     return [200, { id, preset: b.preset }];
   }
-  if (sub === "subagents" && req.method === "GET") return [200, { id, subagents: await rpc("subagents/list", { parentSessionId: id }) }];
+  // DeepSeek Harness 0.2.x has named subagents and no `subagents/list`: the session projects its own
+  // catalog (`subagentCatalog`), read here without activating the session.
+  if (sub === "subagents" && req.method === "GET") {
+    const p = await rpc("session/projections", { request: { sessionId: id } });
+    return [200, { id, subagents: p?.values?.subagentCatalog ?? [] }];
+  }
   if (sub === "goal") {
     if (req.method === "GET") return [200, { id, goal: (await rpc("goals/get", { agentId: id })) ?? null }];
     if (req.method === "POST" && !act) {
@@ -1121,7 +1177,9 @@ function snapshotEvents(id, history) {
     let stream = null, settled = false;
     const finish = (fn, v) => { if (settled) return; settled = true; clearTimeout(timer); try { stream?.cancel(); } catch {} fn(v); };
     const timer = setTimeout(() => finish(reject, new Fail(504, "snapshot/timeout", "the harness sent no history within 60s")), 60000);
-    mux.open("session/follow", followRequest(address(id), history, false), {
+    // 0.2.x accepts `assistantStream` only as `true` ("const": true) and refuses a request that says
+    // `false` ("wire field request failed boundary validation"); a snapshot wants no stream, so it is left out.
+    mux.open("session/follow", { request: { address: address(id), maxMessages: history } }, {
       onItem: (item) => {
         if (item.type !== "snapshot") return;
         finish(resolve, (item.records || []).flatMap((r) => (r.type === "event" && r.event ? normalize(r.event) : [])));
@@ -1174,3 +1232,29 @@ createServer(async (req, res) => {
   res.writeHead(status, { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" });
   res.end(JSON.stringify(payload));
 }).listen(PORT, "0.0.0.0", () => console.log(`bina-ds adapter: ${VERSION} + the timeline lane on :${PORT} (stream: ${WS ? "ws" : "unavailable"})`));
+
+// ── the conversations written by an older harness, brought to its format once ───────────────────
+// DeepSeek Harness 0.2.x keeps a session in a newer log format and migrates an older one only when
+// the session is OPENED; until then it lists it by its cached title alone (no preset, model,
+// permissions or turns — `bbox agent list|show` and the screen's own row both say less than they
+// should). So once the harness answers, every session it reports `migration-required` is opened the
+// cheapest way the API offers — a rename to the title it already has, which resumes it, writes the new
+// log beside the old one (the old file stays on the volume) and starts no turn. Sequential, once per
+// adapter start; a failure is logged and left for the screen to open. EXU-64.
+(async function migrateOldSessions() {
+  for (let i = 0; i < 60; i++) {
+    try { await fetch(`${HARNESS}/`, { redirect: "manual", signal: AbortSignal.timeout(4000) }); break; } catch { await new Promise((r) => setTimeout(r, 5000)); }
+  }
+  let items;
+  try { items = (await rpc("session/list", { _request: {} }, 600000))?.items || []; } catch (e) { console.log(`adapter: migration skipped — ${e.message}`); return; }
+  const old = items.filter((s) => s.formatStatus === "migration-required");
+  if (!old.length) return;
+  let done = 0;
+  for (const s of old) {
+    const title = s.projections?.values?.title;
+    if (typeof title !== "string" || !title) continue;   // a blank session has nothing to show and migrates when opened
+    try { await rpc("session/rename", { request: { sessionId: s.sessionId, title } }); done++; } catch (e) { console.log(`adapter: ${s.sessionId} not migrated — ${e.message}`); }
+  }
+  console.log(`adapter: ${done} of ${old.length} sessions from the older harness brought to its current format`);
+  live.refreshList(true);
+})();

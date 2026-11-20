@@ -20,7 +20,7 @@ logger = get_logger('apitools.pdf_to_jpg')
 # are comparable only when every one rasterizes alike.
 # 300 since 51d88df3 (2026-07-07, «300-DPI PDF rasterization»), and the value every office has actually run —
 # the compose file never passed APITOOLS_PDF_DPI into the container, so the old env read was a dead knob.
-# Why not lower: 96 DPI turned small Hebrew glyphs and digits to mush (tax-id 500000104 read as 510564699,
+# Why not lower: 96 DPI turned small Hebrew glyphs and digits to mush (tax-id 500000112 read as 510564699,
 # «חשבונית זיכוי» fragmented → UNKNOWN types, missing company-id, failed amounts). A sweep over
 # 96/120/150/200/250/300 found tax-id digits correct from 120 and type/amount accuracy flat from 150.
 # Oversized pages are clamped per page below (_effective_dpi_for_page) — that, not this number, bounds memory.

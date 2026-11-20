@@ -1,0 +1,9 @@
+{
+ "create": "יצירת התוסף שלכם",
+ "createPrompt.conversation": "צור תוסף תצוגת שיחה ל-DSH.",
+ "createPrompt.rightbar": "צור תוסף ל-DSH עם כניסה בסרגל הצד הימני.",
+ "createPrompt.sidebar": "צור תוסף ל-DSH עם כניסה בסרגל הצד השמאלי.",
+ "install": "עיון בתוספים נוספים",
+ "pin": "הצמדת {name} לסרגל הצד",
+ "pinTooltip": "הצמדה לסרגל הצד השמאלי"
+}

@@ -914,8 +914,8 @@ return out;`,
      driver raises it, the adjudicator refuses it, nothing is written, and it is raised again on
      the next sweep. Five mains reached many action_merge_doubles dispatches this way.
      Every one of the last 10 duplicate groups on the table was this and only this. The worst
-     offender, DOC_ID 500000088, is a company registration number appearing under FIFTEEN
-     companies across 68 rows; another, 02-0000018, is a phone number under 5. They are not
+     offender, DOC_ID 500000096, is a company registration number appearing under FIFTEEN
+     companies across 68 rows; another, 02-0000023, is a phone number under 5. They are not
      duplicates -- they are different documents whose id was mis-extracted.
      Table-wide: a few such doc-ids.
      Quarantining at the KEY, not after grouping, is what gives them a terminal state: they simply

@@ -188,7 +188,7 @@ MAX_ROWS = 500_000                                         # a provider that nev
 # ── the providers ─────────────────────────────────────────────────────────────────────────────────────────────────
 class LedgerProvider:
     """`local`: the business's own documents — apitools' ledger (`ledger` capability), what «המסמכים שלי» shows."""
-    id, direction, title = "local", "out", "המסמכים שהעסק הנפיק (הפנקס)"
+    id, direction, title = "local", "out", "המסמכים שהעסק הנפיק («מסמכים שלי»)"
     PAGE = 200
     ANNOUNCED_STATES = ("issued", "sent", "paid")         # a draft is not a document yet (store.py: DRAFT … CANCELLED)
 
@@ -326,6 +326,124 @@ class IndoxProvider:
                                   {"instance": ref.get("instance") or None}), dict, "INDOX")
 
 
+class DriveProvider:
+    """`drive`: the office's files — «קבצים» (`drive`), the folders where its documents are kept (DGO-2029: the owner,
+    «כל המסמכים במסמכים»): /מסמכים, /לקוחות/<client>/, /מחקרים by default (`DOCUMENTS_DRIVE_ROOTS`). Read, never
+    written, in two kinds of call: the folder tree once (`GET /api/folders`), then every folder under a root in pages of
+    files (`GET /api/files?folder=&limit=&offset=`) — not one listing of the whole tree per folder, and not a folder
+    cut off at the drive's page (DGO-2029, the second reader). A folder is known by its id: two folders of one name
+    under one parent are both read (the third reader). A page is drive-local's largest, N files, because its order
+    has no tiebreaker past it (issues/drive-local-files-paging-has-no-tiebreaker.yaml). Root «/» reads every folder,
+    not the files lying at the top itself. A root this office does not have is skipped, not a fault.
+    `DOCUMENTS_DRIVE_PROFILE` names the drive's account, the office's own «קבצים»; empty, the drive's active
+    connection answers, which is whatever account its connection bar was last set to. A file's row: its name is the
+    `number` a search finds, its folder the `state`, the client the `party`."""
+    id, direction, title = "drive", "file", "הקבצים של הלשכה («קבצים»)"
+    PAGE = 500                                             # rows handed to the index at a time
+    FILES_PAGE = 5000                                      # files asked of the drive per call (drive-local's largest)
+    KINDS = (("FILE_PDF", (".pdf",)), ("FILE_WORD", (".doc", ".docx", ".odt", ".rtf")),
+             ("FILE_SHEET", (".xls", ".xlsx", ".ods", ".csv")), ("FILE_SLIDES", (".ppt", ".pptx", ".odp", ".key")),
+             ("FILE_IMAGE", (".png", ".jpg", ".jpeg", ".gif", ".webp", ".heic", ".svg")),
+             ("FILE_TEXT", (".md", ".txt", ".html", ".json")))
+
+    def __init__(self, base: str, roots: str = "", profile: str = ""):
+        self.c = ReadOnlyClient(base)
+        self.roots = [r.strip().rstrip("/") or "/" for r in (roots or "/מסמכים,/לקוחות,/מחקרים").split(",") if r.strip()]
+        self.profile = (profile or "").strip()
+
+    def _get(self, path: str, params: dict):
+        return self.c.get(path, dict(params, profile_id=self.profile) if self.profile else params)
+
+    def ping(self):
+        _shaped(self._get("/api/folders", {}), dict, "the drive")
+
+    def tree(self) -> dict:
+        """{folder id: path} of every live folder, each path built from its parents' names (a loop is cut)."""
+        got = _shaped(self._get("/api/folders", {}), dict, "the drive")
+        rows = {str(f["id"]): f for f in got.get("folders") or [] if f.get("id") not in (None, "")}
+        paths: dict = {}
+
+        def path_of(fid, seen=()):
+            if fid in paths:
+                return paths[fid]
+            f = rows.get(fid)
+            if f is None or fid in seen:
+                return None
+            parent = str(f.get("parent") or "")
+            above = path_of(parent, seen + (fid,)) if parent else ""
+            if above is None:
+                return None
+            paths[fid] = f"{above}/{f.get('name') or fid}"
+            return paths[fid]
+
+        return {fid: p for fid in rows if (p := path_of(fid))}
+
+    @staticmethod
+    def utc(value) -> str:
+        """drive-local writes a moment as `YYYY-MM-DD HH:MM` in UTC with no zone (its `_utc16`): read as UTC, a file
+        saved at 01:30 in Israel is dated that day, not the one before."""
+        s = str(value or "").strip()
+        if re.match(r"^\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}(:\d{2})?$", s):
+            return s.replace(" ", "T", 1) + "Z"
+        return s
+
+    @classmethod
+    def kind(cls, name: str) -> str:
+        low = (name or "").lower()
+        for code, exts in cls.KINDS:
+            if low.endswith(exts):
+                return code
+        return "FILE"
+
+    def _row(self, folder: str, root: str, f: dict) -> dict:
+        name = f.get("name") or ""
+        rest = folder[len(root):].strip("/").split("/") if folder.startswith(root) else []
+        party = rest[0] if root.endswith("/לקוחות") and rest and rest[0] else root.strip("/").split("/")[-1]
+        return {"id": f"drive:{f.get('id') or folder + '/' + name}", "provider": "drive", "direction": "file",
+                "type": self.kind(name), "number": name,
+                "date": first_date(self.utc(f.get("created")), self.utc(f.get("modified")), self.utc(f.get("updated"))),
+                "party": party, "total": None, "currency": "", "allocation_number": "", "state": folder,
+                "needs": "", "ref": {"path": folder.rstrip("/") + "/" + name, "id": str(f.get("id") or "")}}
+
+    def pages(self):
+        """Every file under the roots, folder by folder, page by page; more than MAX_ROWS stops with its reason (a
+        listing that never ends is a fault, not a big office)."""
+        tree, page, total, done = self.tree(), [], 0, set()
+        for root in self.roots:
+            under = sorted((p, fid) for fid, p in tree.items() if root == "/" or p == root or p.startswith(root + "/"))
+            for folder, fid in under:
+                if fid in done:
+                    continue                               # two roots that overlap list a folder once
+                done.add(fid)
+                offset, seen = 0, set()
+                while True:
+                    got = _shaped(self._get("/api/files", {"folder": fid, "limit": self.FILES_PAGE,
+                                                           "offset": offset}), dict, "the drive")
+                    files = [f for f in got.get("files") or [] if str(f.get("id")) not in seen]
+                    for f in files:
+                        seen.add(str(f.get("id")))
+                        page.append(self._row(folder, root, f))
+                        total += 1
+                        if total > MAX_ROWS:
+                            raise ConnectionError(f"the drive listed over {MAX_ROWS} files under "
+                                                  f"{', '.join(self.roots)} — stopped")
+                        if len(page) >= self.PAGE:
+                            yield page
+                            page = []
+                    # a short page is the last; a page with nothing new is a drive that does not page (no loop)
+                    if len(got.get("files") or []) < self.FILES_PAGE or not files:
+                        break
+                    offset += self.FILES_PAGE
+        if page:
+            yield page
+
+    def event_kind(self, row: dict) -> str | None:
+        return None                                        # a file filed is not news on the flow
+
+    def document(self, ref: dict) -> dict:
+        return _shaped(self._get("/api/fs", {"path": ref["path"]}), dict, "the drive")
+
+
 def _num(v):
     try:
         return round(float(v), 2) if v not in (None, "") else None
@@ -333,7 +451,7 @@ def _num(v):
         return None
 
 
-PROVIDERS = ("local", "indox")
+PROVIDERS = ("local", "indox", "drive")
 
 
 def make(provider_id: str, env=os.environ):
@@ -342,6 +460,9 @@ def make(provider_id: str, env=os.environ):
     if provider_id == "indox":
         return IndoxProvider(env.get("DOCUMENTS_INDOX_URL", "http://incoming-documents:8080/incomingDocuments"),
                              env.get("DOCUMENTS_INDOX_REPO", "incoming-documents-main"))
+    if provider_id == "drive":
+        return DriveProvider(env.get("DOCUMENTS_DRIVE_URL", "http://drive:8975"), env.get("DOCUMENTS_DRIVE_ROOTS", ""),
+                             env.get("DOCUMENTS_DRIVE_PROFILE", ""))
     raise Refused(f"אין ספק מסמכים בשם «{provider_id}» (יש: {', '.join(PROVIDERS)})", 404)
 
 
@@ -369,7 +490,7 @@ SCHEMA = f"""
 CREATE TABLE IF NOT EXISTS documents (
   id TEXT PRIMARY KEY, provider TEXT NOT NULL, direction TEXT NOT NULL, type TEXT, number TEXT, date TEXT,
   party TEXT, total REAL, currency TEXT, allocation_number TEXT, state TEXT, needs TEXT, ref TEXT NOT NULL,
-  synced_at REAL NOT NULL);
+  synced_at REAL NOT NULL, folded TEXT);
 CREATE INDEX IF NOT EXISTS documents_by_date ON documents (direction, date);
 CREATE INDEX IF NOT EXISTS documents_by_provider ON documents (provider);
 CREATE TABLE IF NOT EXISTS syncs (
@@ -387,6 +508,58 @@ CREATE TABLE IF NOT EXISTS announced (id TEXT NOT NULL, kind TEXT NOT NULL, at R
 SHRINK_FLOOR = 50                                          # below this many rows a half may empty freely
 SHRINK_SHARE = 0.5                                         # a sync that would remove half or more is refused
 
+# ── Hebrew search (DGO-2029, research_notes/DGO-2029 …/05) ───────────────────────────────────────────────────
+# No search engine handles Hebrew's attached prefixes, its final letters or its marks, so the matching is ours.
+# Text and query are both folded: niqqud and cantillation dropped, ך→כ ם→מ ן→נ ף→פ ץ→צ, ׳ ״ ' " dropped, Latin
+# lowered. A row's words are kept as written AND without up to two of ו/ה/ב/כ/ל/מ/ש in front (three letters stay),
+# written once when the row is synced (`folded`). A query word matches at the START of a row's word: as written, or
+# without its own prefix letters when four letters or more stay. So «בחשבונית» finds «חשבונית», «חשבון» finds
+# «חשבונות», «מעמ» finds «מע״מ», «לחברת» finds «חברת» — and «מחיר» does not find «בחירה» (DGO-2029, the second
+# reader: matching anywhere in the text did). A word of digits is found anywhere: a number's tail («00031»). Words are
+# letters and digits only — «חשבונית_כהן_2025.pdf» is four words, so «כהן» finds it (the third reader).
+_NIQQUD = re.compile("[֑-ׇ]")
+_FINALS = str.maketrans("ךםןףץ", "כמנפצ")
+_MARKS = re.compile("[׳״'\"`]")
+_PREFIXES = "והבכלמש"
+_WORD = re.compile(r"[^\W_]+")
+#: the folding's version: an index folded by an older rule is folded again, whole, when it opens (PRAGMA user_version)
+FOLD_VERSION = 2
+
+
+def heb_norm(s) -> str:
+    """Text as the search compares it (see above). None is the empty text."""
+    return _MARKS.sub("", _NIQQUD.sub("", str(s or "")).translate(_FINALS)).lower()
+
+
+def heb_fold(party, number, type_, state) -> str:
+    """What the search reads of a row (see above): its words and their prefix-less forms, each with a space in front."""
+    words = []
+    for word in _WORD.findall(heb_norm(" ".join(str(x or "") for x in (party, number, type_, state)))):
+        words.append(word)
+        for _ in range(2):
+            if len(word) > 3 and word[0] in _PREFIXES:
+                word = word[1:]
+                words.append(word)
+            else:
+                break
+    return " " + " ".join(dict.fromkeys(words)) + " "
+
+
+def query_words(q: str) -> list:
+    """Each word of a query as the forms it is found by: itself, and itself without one or two prefix letters while
+    four letters or more stay («לחברת» → «חברת»; «מחיר» stays «מחיר»)."""
+    out = []
+    for word in _WORD.findall(heb_norm(q)):
+        forms = [word]
+        for _ in range(2):
+            if len(word) > 4 and word[0] in _PREFIXES:
+                word = word[1:]
+                forms.append(word)
+            else:
+                break
+        out.append(forms)
+    return out
+
 
 class Index:
     def __init__(self, path: str):
@@ -394,12 +567,23 @@ class Index:
             os.makedirs(os.path.dirname(os.path.abspath(path)), exist_ok=True)
         self.db = sqlite3.connect(path, check_same_thread=False)
         self.db.row_factory = sqlite3.Row
+        self.db.create_function("heb_fold", 4, heb_fold, deterministic=True)
         # the container's root is read-only and /app is a read-only mount: SQLite has no directory for a temp file,
         # so anything it would spill (a big sort, a big subquery) stays in memory — or fails as "disk I/O error"
         self.db.execute("PRAGMA temp_store=MEMORY")
         self.lock = threading.Lock()
-        with self.lock:
+        with self.lock, self.db:
             self.db.executescript(SCHEMA)
+            try:                                           # an index from before the folded words (DGO-2029)
+                self.db.execute("ALTER TABLE documents ADD COLUMN folded TEXT")
+            except sqlite3.OperationalError:
+                pass                                       # it has them
+            if self.db.execute("PRAGMA user_version").fetchone()[0] < FOLD_VERSION:
+                self.db.execute("UPDATE documents SET folded=heb_fold(party, number, type, state)")
+                self.db.execute(f"PRAGMA user_version={FOLD_VERSION}")
+            else:
+                self.db.execute("UPDATE documents SET folded=heb_fold(party, number, type, state) "
+                                "WHERE folded IS NULL")
 
     # a sync, streamed: begin → add a page at a time (the network read happens outside the lock) → commit
     def stage_begin(self, provider_id: str):
@@ -448,7 +632,8 @@ class Index:
                             f"(SELECT 1 FROM documents d WHERE d.id=stage.id AND ({differs}))", (provider_id,))
             added = self.db.execute("SELECT count(*) FROM stage WHERE provider=? AND mark='new'", (provider_id,)).fetchone()[0]
             changed = self.db.execute("SELECT count(*) FROM stage WHERE provider=? AND mark='chg'", (provider_id,)).fetchone()[0]
-            self.db.execute(f"INSERT OR REPLACE INTO documents ({','.join(COLS)}) SELECT {','.join(ROW)}, ? FROM stage "
+            self.db.execute(f"INSERT OR REPLACE INTO documents ({','.join(COLS)}, folded) SELECT {','.join(ROW)}, ?, "
+                            f"heb_fold(party, number, type, state) FROM stage "
                             f"WHERE provider=? AND mark IS NOT NULL", (now, provider_id))
             self.db.execute("DELETE FROM documents WHERE provider=? AND NOT EXISTS "
                             "(SELECT 1 FROM stage s WHERE s.id=documents.id)", (provider_id,))
@@ -516,6 +701,7 @@ class Index:
             out = [dict(r) for r in self.db.execute(sql, args)]
         for r in out:
             r["ref"] = json.loads(r["ref"])
+            r.pop("folded", None)                          # the search's own reading of the row, not a field of it
         return out
 
     def list(self, direction=None, provider=None, type=None, q=None, limit=100, offset=0) -> list:
@@ -524,11 +710,18 @@ class Index:
             if val:
                 sql += f" AND {col}=?"
                 args.append(val)
-        if q:
-            # the words are the person's: % and _ are letters here, not wildcards
-            like = "%" + q.strip().lower().replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%"
-            sql += " AND (" + " OR ".join(f"lower({c}) LIKE ? ESCAPE '\\'" for c in ("party", "number", "type", "state")) + ")"
-            args += [like] * 4
+        words = query_words(q) if q else []
+        if q and not words:
+            return []                                      # a query of no letter or digit («__», «—») finds nothing
+        for forms in words:
+            # every word of the query, at the start of a word of the row (a number's digits anywhere); the words are
+            # the person's: % and _ are letters, not wildcards
+            ors = []
+            for form in forms:
+                esc = form.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+                ors.append("folded LIKE ? ESCAPE '\\'")
+                args.append(("%" if form.isdigit() else "% ") + esc + "%")
+            sql += " AND (" + " OR ".join(ors) + ")"
         sql += " ORDER BY date DESC, id LIMIT ? OFFSET ?"
         args += [max(1, min(int(limit), 1000)), max(0, int(offset))]
         return self._rows(sql, tuple(args))

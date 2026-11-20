@@ -21,6 +21,17 @@ services:
     - SIGN_CERT_P12=${SIGN_CERT_P12:-}
     - SIGN_CERT_PASSWORD=${SIGN_CERT_PASSWORD:-}
     - SIGN_CERT_CERTIFIED=${SIGN_CERT_CERTIFIED:-}
+    # who the business is — its name, number, address, logo, colour, signatory, bank — is read from «זהות»
+    # (digital-assets, brand.v1) and never typed here (DGO-2048). On an office whose «זהות» runs on a linked
+    # office: BRAND_URL=http://digital-assets.<office>:8985. Empty = the ledger's own row alone.
+    - BRAND_URL=${BRAND_URL-http://digital-assets:8985}
+    - IDENTITY_EDIT_URL=${IDENTITY_EDIT_URL:-/#/m/digital-assets}
+    # who the business works with — its customers — is kept in «ישויות» (entities, entities.v1), never in a table
+    # here (DGO-2101): the first time it answers, the ledger's own customers move there, and `/customers` is its
+    # list from then on. On an office whose «ישויות» runs on a linked office: ENTITIES_URL=http://entities.<office>:…
+    # Empty = the ledger's own table alone.
+    - ENTITIES_URL=${ENTITIES_URL-http://entities:8999}
+    - ENTITIES_API_TOKEN=${ENTITIES_API_TOKEN:-}
     - FLASK_DEBUG=False
     - LOG_LEVEL=INFO
     - PORT=8080

@@ -1,5 +1,5 @@
-/* digital-assets — נכסים דיגיטליים. Vanilla JS, relative URLs only (the console serves the app at
- * /a/digital-assets/ and injects the base).
+/* digital-assets — «זהות», the one place the business is defined (DGO-2048). Vanilla JS, relative URLs
+ * only (the console serves the app at /a/digital-assets/ and injects the base).
  *
  * Routes (every screen is a URL; a drawer is `?slot=` / `?post=` / `?bp=` / `?ch=` on top of it):
  *   #/                 overview — the identity at a glance, the channels, what waits for the owner
@@ -325,9 +325,18 @@ const GROUP_HE = { logo: 'לוגו', name: 'שמות', names: 'שמות', legal:
   catering: 'קייטרינג', restaurant: 'המסעדה', links: 'קישורים', photo: 'צילומים', image: 'תמונות',
   video: 'וידאו', food: 'צילומי אוכל', inbox: 'לא משובץ', calendar: 'לוח שנה',
   library: 'ספריית התוכן', article: 'מאמרי עומק', project: 'כרטיסי פרויקטים', tutorial: 'מדריכים',
-  comparison: 'השוואות וחלופות', directory: 'מפתחות', report: 'דוחות', post: 'פוסטים', glossary: 'מילון' };
+  comparison: 'השוואות וחלופות', directory: 'מפתחות', report: 'דוחות', post: 'פוסטים', glossary: 'מילון',
+  bank: 'בנק',
+  // the pages of the website blueprints (business-website, startup-website: each slot's `group:`), which stood as
+  // «home», «footer», «pricing» … over «תוכן» (DGO-2101); tests/test_group_names.py fails on a group with no title
+  home: 'דף הבית', footer: 'תחתית האתר', services: 'שירותים', pricing: 'מחירים', features: 'יכולות',
+  projects: 'פרויקטים', apps: 'האפליקציות', demo: 'הדגמה', 'business-model': 'המודל העסקי',
+  'how-we-work': 'איך אנחנו עובדים', careers: 'קריירה', privacy: 'פרטיות', terms: 'תנאי שימוש',
+  accessibility: 'נגישות', 'not-found': 'עמוד לא נמצא', seo: 'חיפוש וקידום' };
 const grpHe = (g) => GROUP_HE[g] || g || 'כללי';
 const lbl = (o) => (o && (o.he || o.en)) || '';
+// a slot's group in words: a media unit is in its plan's phase, which names itself (startup-tail: «טיזר», «יום ההשקה»)
+const grpOf = (s) => lbl((s.plan || {}).phase_name) || grpHe(s.grp);
 const fmtDate = (iso) => { if (!iso) return ''; const [y, m, d] = String(iso).split('-'); return `${d}.${m}.${String(y).slice(2)}`; };
 const fmtAgo = (ts) => {
   if (!ts) return '';
@@ -392,7 +401,7 @@ function mountNav() {
   if (NAV || typeof BinaNav === 'undefined') return NAV;
   NAV = BinaNav.mount($('sideNav'), {
     id: 'digital-assets',
-    brand: { name: 'נכסים דיגיטליים', avatar: 'נ' },
+    brand: { name: 'זהות', avatar: 'ז' },
     sections: [{ id: 'pages', items: MENU.map((m) => ({ id: m.path, label: m.label, icon: m.icon, href: '#' + m.path, title: m.label })) }],
   });
   const t = $('navToggle');
@@ -461,7 +470,7 @@ function header(title, sub, actions) {
 /* ── overview ─────────────────────────────────────────────────────────────────────────────── */
 async function pageOverview() {
   const r = await loadOverview();
-  header('נכסים דיגיטליים', 'כל מה שהעסק מציג לעולם — זהות, תוכן ומדיה — במקום אחד, ומשם לכל ערוץ.',
+  header('זהות', 'המקום היחיד שבו מגדירים את העסק — שם, פרטים, סמלים, צבעים, תוכן ומדיה — וכל הלשכה קוראת משם.',
     `<button class="btn sm ghost" id="b-refresh" title="טען מחדש את כל הנתונים">${ic('refresh')}רענון</button>`);
   $('b-refresh').onclick = () => route();
   if (!r.ok) { $('view').innerHTML = `<div class="issue">${esc(errText(r.body))}</div>`; return; }
@@ -740,7 +749,7 @@ async function slotDrawer(key, planFor) {
        ${isMedia ? `<button class="btn sm" id="f-post" title="פוסט עם המדיה של המשבצת">${ic('share')}פוסט</button>` : ''}
        <span class="spacer"></span><span class="note" title="${esc(key)}">${esc(fmtAgo(s.active_since))}</span>`
     : `${isMedia ? `<button class="btn sm" id="f-post" title="פוסט עם המדיה של המשבצת">${ic('share')}פוסט</button>` : ''}<span class="note">בחרו או הוסיפו גרסה כדי לפרסם</span>`;
-  drawer(esc(lbl(s.label)), `${esc(SECTION_HE[s.section])} · ${esc(grpHe(s.grp))} · <span class="mono">${esc(key)}</span>`, body, foot);
+  drawer(esc(lbl(s.label)), `${esc(SECTION_HE[s.section])} · ${esc(grpOf(s))} · <span class="mono">${esc(key)}</span>`, body, foot);
   wireSlotDrawer(s);
   if (planFor) showPlan(key, planFor === '1' ? null : planFor);
 }
@@ -826,6 +835,9 @@ function addForm(s) {
   let input = '';
   if (k === 'color') input = `<div class="row"><input type="color" id="f-color" value="#56693f"><input id="f-text" class="mono" placeholder="#56693f" style="flex:1"></div>`;
   else if (['richtext', 'list', 'price-list', 'hours', 'address'].includes(k) || k === 'set') input = `<textarea id="f-text" ${max} placeholder="${k === 'list' || k === 'price-list' ? 'פריט בכל שורה' : k === 'set' ? 'טקסט לפוסט / כיתוב (אופציונלי)' : 'הטקסט'}"></textarea>`;
+  // a slot with a closed list of values (the kind of business: עוסק פטור / מורשה / חברה…) is chosen, not typed —
+  // a typed «עוסק פטור» with another space was read as nothing, and the documents charged VAT (DGO-2048)
+  else if (textish && Array.isArray(cons.enum) && cons.enum.length) input = `<select id="f-text">${cons.enum.map((v) => `<option>${esc(v)}</option>`).join('')}</select>`;
   else if (textish) input = `<input id="f-text" ${max} placeholder="${esc(KIND_HE[k] || 'ערך')}">`;
   return `${textish ? input : ''}
     ${fileish ? `<div class="drop" id="f-drop" tabindex="0" title="בחירת קובץ">${ic('upload')} גררו לכאן קובץ, או לחצו לבחירה

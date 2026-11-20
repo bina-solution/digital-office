@@ -28,7 +28,10 @@ office with no forward-auth answers nothing there: no person, the CLI and the to
 
 Who passes `door()`, in order: /healthz; a service with the app's token (`Authorization: Bearer`); the app's own CLI
 on loopback (unless `<APP>_TRUST_LOOPBACK=0`); then a PERSON an admin of the office, for a GET or HEAD of one of the
-app's `person_reads` only. Anyone else is refused in words: the page for the screen, a JSON detail for the API.
+app's `person_reads` only — or, for an app that names `person_writes`, any method on those paths, sent from the app's
+own page (a browser's `Sec-Fetch-Site` that is present says `same-origin`). Anyone else is refused in words: the page
+for the screen, a JSON detail for the API. A person who passes is named to the app in `request.scope["dgo.person"]`,
+so a change it records says WHO made it.
 
 Standard library only, but `door()` builds FastAPI responses, so it imports FastAPI when it is called.
 """
@@ -132,10 +135,18 @@ def bearer_ok(authorization: str | None, token: str) -> bool:
     return bool(token) and auth.startswith("Bearer ") and hmac.compare_digest(auth[7:].strip().encode(), token.encode())
 
 
-def door(sign_in: SignIn, *, token, loopback_env: str, person_reads, words: Words, screen: str = "/"):
+def door(sign_in: SignIn, *, token, loopback_env: str, person_reads, words: Words, screen: str = "/",
+         person_writes=()):
     """The app's HTTP middleware: `app.middleware("http")(door(...))`. `token` is the app's token, or a function
     returning it now (a test may change it); `person_reads` the paths a person's GET may read — the screen and its
-    reads; `screen` the path whose refusal is a page, not JSON."""
+    reads; `screen` the path whose refusal is a page, not JSON. `person_writes` (empty by default, so an app that
+    does not name it is exactly as before): the paths an ADMIN may also change from the screen — any method — for
+    an app whose screen is where its records are kept («ישויות», DGO-2101). Either may be a set of paths or any
+    object answering `path in it` (a prefix rule). Such a change is taken only from the app's own page: a browser
+    names where a request comes from (`Sec-Fetch-Site`), and one that names anything but `same-origin` — a sibling
+    host of the office's domain shares the session cookie (SameSite=Lax) — is refused; the app takes a change only
+    as JSON, exactly (its `_body`), which no page of another site can send unasked. The person let in is named to
+    the app in `request.scope["dgo.person"]`."""
     token_now = token if callable(token) else (lambda: token)
     from fastapi.concurrency import run_in_threadpool
     from fastapi.responses import HTMLResponse, JSONResponse
@@ -155,6 +166,13 @@ def door(sign_in: SignIn, *, token, loopback_env: str, person_reads, words: Word
         lines = request.headers.getlist("cookie")
         person = await run_in_threadpool(sign_in.person, lines) if sign_in.session_cookie(lines) else None
         if person and person[1] and request.method in ("GET", "HEAD") and path in person_reads:
+            request.scope["dgo.person"] = person[0]
+            return await call_next(request)
+        if person and person[1] and path in person_writes:
+            site = (request.headers.get("sec-fetch-site") or "").strip().lower()
+            if site and site != "same-origin":            # another page — of a sibling host too — not the app's own
+                return JSONResponse({"detail": "a change is made from the app's own page"}, status_code=403)
+            request.scope["dgo.person"] = person[0]
             return await call_next(request)
         if person:                                        # signed in, but not one who reads this (or not a read)
             if path == screen:

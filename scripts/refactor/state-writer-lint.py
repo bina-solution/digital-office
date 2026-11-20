@@ -110,8 +110,9 @@ NAMED = re.compile(r"^(STATE|STATE_FILE|state_path)\s*=\s*(.+)$", re.M)
 
 def scan_text(rel, text):
     # prose, and markup that never runs: an SVG diagram's `<text>platform.state.yaml</text>` read as a shell redirect
-    # (`>platform.state.yaml`) — the docs' two diagrams, 2026-11-11 (the release lane's pre-cut sweep)
-    if rel.endswith((".md", ".txt", ".svg")) or "/ai/context/" in f"/{rel}":
+    # (`>platform.state.yaml`) — the docs' two diagrams, 2026-11-11 (the release lane's pre-cut sweep); a paper's HTML,
+    # `<code>platform.state.yaml</code>` in a figure's caption — DGO-2045's, which kept batch 81 red on 2026-11-19
+    if rel.endswith((".md", ".txt", ".svg", ".html", ".htm")) or "/ai/context/" in f"/{rel}":
         return []
     elsewhere = {m.group(1) for m in NAMED.finditer(text) if STATE not in m.group(2)}
     out = []
@@ -172,6 +173,8 @@ SELF_TEST = [
      '<text x="1" y="2" class="mono">platform.state.yaml</text>\n', False),
     ("…and the same line in a shell file still is a redirect", "scripts/_p.sh",
      '<text x="1" y="2" class="mono">platform.state.yaml</text>\n', True),
+    ("a paper names it (HTML markup, never run)", "research_notes/_paper/_p.html",
+     '<figcaption>its desired state (<code>platform.state.yaml</code>, block <code>remote:</code>)</figcaption>\n', False),
     ("shell greps it", "scripts/_p.sh", 'grep -n browser42 platform.state.yaml\n', False),
     ("delegating to the writer", "scripts/_p.sh",
      'python3 platform/manager/reconcile.py set-state --app x --state enabled\n', False),

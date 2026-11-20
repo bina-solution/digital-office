@@ -18,9 +18,11 @@
 # office agent, and nothing else" — written out: **the platform's chassis apps marked `true` below,
 # apitools, indox, drive, mail and bina-ds on**, and the rest off. The lines below are the list and the
 # count; a number here went stale as the catalog grew («19 of 41» when it was written, 17 of 70 on
-# 2026-11-10). The ten apps
+# 2026-11-10). The apps
 # that joined after that decision (computers, git, sites, domains, telegram-tv, project-pln,
-# dgo-extend, social-list, digital-assets, archify) are therefore off.
+# dgo-extend, social-list, archify) are therefore off. Two joined the list on 2026-11-19 by the
+# owner's word (DGO-2048, DGO-2101): «זהות» (digital-assets) and «ישויות» (entities) — the business's
+# own records, which the documents and the other apps draw on (ai/context/business-domains.md).
 #
 # EVERY APP LINE IS A DISPOSITION AND NOTHING ELSE: `{ enabled: true|false }`. No `state:`, no `by:`,
 # no `remote:` — those describe a deployment's history, and a fresh install has none. Gate G23
@@ -75,6 +77,10 @@ apps:
   # 2026-09-17 (owner): "בינה" — the office agent, the platform's primary app going forward. A
   # customized DeepSeek Harness embedded in the console; see apps/bina-ds/README.md.
   bina-ds:          { enabled: true }
+  # 2026-11-19 (owner, DGO-2048/DGO-2101): the business's own records, the core the other apps use —
+  # «זהות», the business itself (brand.v1), and «ישויות», everyone it works with (entities.v1).
+  digital-assets:   { enabled: true }
+  entities:         { enabled: true }
 
   # ── gallery — installable apps that ship DISABLED (the app-store surface).
   #    Declared and present in the catalog; `bbox apps enable ollama` turns one on.
@@ -111,7 +117,6 @@ apps:
   meet:             { enabled: false }   # video meetings (Jitsi Meet)
   dgo-extend:       { enabled: false }
   social-list:      { enabled: false }
-  digital-assets:   { enabled: false }
   archify:          { enabled: false }
   # DGO-553: the browser terminal. Off in the PRODUCT DEFAULT for the file's own reason — it joined
   # after the owner's 2026-09-17 decision, like the ten above it — and listed here rather than left

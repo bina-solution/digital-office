@@ -501,6 +501,237 @@ func renderAliases(served []remoteEntry) (string, error) {
 		"# and for every agent. Applied by `dc up -d`, i.e. when the remote app set changes.\n" + string(body), nil
 }
 
+// publishedDoor is one door serve.publish_plan() opens to the internet on this office's edge (DGO-2050).
+type publishedDoor struct {
+	name, host, office, alias, app, url string
+	paths                               []string
+}
+
+// publishPlan is serve.publish_plan(state, served, domain): the `publish:` block checked against the doors
+// linked offices give this one. It returns the doors this office opens, the refusals of its OWN malformed
+// declaration (they stop the render) and the doors left out because the serving office decided otherwise
+// (lines, never a stop), each in Python's words and order. Only a door its serving office narrowed to paths
+// and opened to the internet (`public: true`) is ever published.
+func publishPlan(st *State, served []remoteEntry, domain string, cat *Catalog) ([]publishedDoor, []string, []string) {
+	raw, _ := st.Doc.Get("publish")
+	if noBlock(raw) {
+		return nil, nil, nil
+	}
+	block, ok := raw.([]any)
+	if !ok {
+		return nil, []string{fmt.Sprintf("publish: חייב להיות רשימה של דלתות מפורסמות (host, door, paths), לא %s", pyTypeName(raw))}, nil
+	}
+	domain = pyLower(pyval.Strip(domain))
+	type doorOf struct {
+		e remoteEntry
+		d remoteDoor
+	}
+	doors := map[string]doorOf{}
+	for _, e := range served {
+		for _, d := range e.doors {
+			doors[d.alias+"."+e.office] = doorOf{e, d}
+		}
+	}
+	// the names this office's own apps are routed under: a door published on one would take its paths from that app
+	routed := map[string]bool{}
+	if cat != nil {
+		for _, a := range cat.Apps {
+			if a == nil || a.doc == nil {
+				continue
+			}
+			list, _ := get(a.doc, "routing").([]any)
+			for _, r := range list {
+				if rm, ok := r.(*yamlish.Map); ok {
+					if h := get(rm, "host"); truthy(h) {
+						routed[pyLower(pyval.Strip(pyval.Str(h)))] = true
+					}
+				}
+			}
+		}
+	}
+	var out []publishedDoor
+	var errs, dropped []string
+	hosts, taken, names := map[string]bool{}, map[string]bool{}, map[string]bool{}
+	for i, rawItem := range block {
+		where := fmt.Sprintf("publish[%d]", i)
+		item, ok := rawItem.(*yamlish.Map)
+		if !ok {
+			errs = append(errs, where+": חייב להיות אובייקט עם host, door ו-paths")
+			continue
+		}
+		hostRaw := get(item, "host")
+		host := pyLower(pyval.Strip(pyval.Str(orEmpty(hostRaw))))
+		if !authorityRE.MatchString(host) || strings.Contains(host, ":") || !strings.Contains(host, ".") {
+			errs = append(errs, fmt.Sprintf("%s.host %s אינו שם מארח (בלי פורט ובלי נתיב)", where, pyval.Repr(hostRaw)))
+			continue
+		}
+		if domain == "" || domain == "localhost" || !strings.HasSuffix(host, "."+domain) {
+			named := domain
+			if named == "" {
+				named = "אין לה דומיין"
+			}
+			errs = append(errs, fmt.Sprintf("%s.host %s: אינו תחת הדומיין של הלשכה הזו (%s) — רק לשכה עם דומיין ציבורי מפרסמת, ורק תחתיו", where, host, named))
+			continue
+		}
+		first := host[:len(host)-len(domain)-1]
+		if i := strings.LastIndex(first, "."); i >= 0 {
+			first = first[i+1:]
+		}
+		if routed[first] {
+			errs = append(errs, fmt.Sprintf("%s.host %s: %s.%s כבר מנותב לאפליקציה של הלשכה הזו — שם אחר, למשל sign", where, host, first, domain))
+			continue
+		}
+		if hosts[host] {
+			errs = append(errs, fmt.Sprintf("%s.host %s: מפורסם פעמיים", where, host))
+			continue
+		}
+		doorRaw := get(item, "door")
+		door := pyLower(pyval.Strip(pyval.Str(orEmpty(doorRaw))))
+		if !strings.Contains(door, ".") {
+			errs = append(errs, fmt.Sprintf("%s.door %s: <כינוי הדלת>.<הלשכה שנותנת אותה>, למשל esign-public.hp-laptop", where, pyval.Repr(doorRaw)))
+			continue
+		}
+		if taken[door] {
+			errs = append(errs, fmt.Sprintf("%s.door %s: מפורסמת פעמיים — דלת אחת, שם מארח אחד", where, door))
+			continue
+		}
+		// office `a-b` + alias `c` and office `a` + alias `b-c` would be ONE router: refused, never replaced
+		alias, office, _ := strings.Cut(door, ".")
+		name := "dgo-public-" + office + "-" + alias
+		if names[name] || names[name+"-http"] {
+			errs = append(errs, fmt.Sprintf("%s.door %s: שם הנתב %s מתנגש בנתב של דלת אחרת שמתפרסמת כאן — כינוי או לשכה אחרים", where, door, name))
+			continue
+		}
+		pathsRaw := get(item, "paths")
+		list, isList := pathsRaw.([]any)
+		good := isList && len(list) > 0
+		var paths []string
+		for _, p := range list {
+			if !doorPath(p) || p.(string) == "/" {
+				good = false
+				break
+			}
+			if s := p.(string); !contains(paths, s) {
+				paths = append(paths, s)
+			}
+		}
+		if !good {
+			errs = append(errs, fmt.Sprintf("%s.paths %s: רשימה של נתיבים מוחלטים, בלי . ו-.., ולא / (האפליקציה כולה) — למשל /s/", where, pyval.Repr(pathsRaw)))
+			continue
+		}
+		sort.Strings(paths)
+		hosts[host] = true
+		taken[door] = true
+		names[name], names[name+"-http"] = true, true
+		// …and what the SERVING office decides: a door it gives, narrows and opens to the internet, or none
+		hit, found := doors[door]
+		if !found {
+			dropped = append(dropped, fmt.Sprintf("%s: %s — אין דלת כזו בין הדלתות שלשכות מקושרות נותנות ללשכה הזו כרגע; לא מתפרסם", where, door))
+			continue
+		}
+		given := hit.d.paths
+		if len(given) == 0 {
+			dropped = append(dropped, fmt.Sprintf("%s: %s — הלשכה %s לא צמצמה את הדלת לנתיבים; לא מתפרסם", where, door, hit.e.office))
+			continue
+		}
+		if !hit.d.public {
+			dropped = append(dropped, fmt.Sprintf("%s: %s — הלשכה %s לא פתחה את הדלת לאינטרנט (public: true ב-serve.services שלה); לא מתפרסם", where, door, hit.e.office))
+			continue
+		}
+		var outside []string
+		for _, p := range paths {
+			inside := false
+			for _, g := range given {
+				if p == g || (strings.HasSuffix(g, "/") && strings.HasPrefix(p, g)) {
+					inside = true
+					break
+				}
+			}
+			if !inside {
+				outside = append(outside, p)
+			}
+		}
+		if len(outside) > 0 {
+			dropped = append(dropped, fmt.Sprintf("%s: %s — מחוץ לנתיבים שהלשכה %s פתחה בדלת (%s); לא מתפרסם", where, strings.Join(outside, ", "), hit.e.office, strings.Join(given, ", ")))
+			continue
+		}
+		port := hit.e.linkPort
+		if port == 0 {
+			port = hit.d.port
+		}
+		out = append(out, publishedDoor{name: name, host: host,
+			office: hit.e.office, alias: hit.d.alias, app: hit.d.app,
+			url: fmt.Sprintf("http://%s:%d", door, port), paths: paths})
+	}
+	return out, errs, dropped
+}
+
+// renderPublished is serve.render_published(): "" when nothing is published, else per published door:
+//   - a `websecure` router on its host and paths, with its own certificate, HSTS, the headers (framed only by
+//     its own pages, no Referer), a rate per client, and in-flight caps per client and per host;
+//   - a `web` twin that redirects to https;
+//   - a service at the door's network alias that never forwards the client's Host.
+func renderPublished(pub []publishedDoor) (string, error) {
+	if len(pub) == 0 {
+		return "", nil
+	}
+	middlewares := ordered(
+		"dgo-public-headers", ordered("headers", ordered("customFrameOptionsValue", "SAMEORIGIN", "contentTypeNosniff", true,
+			"referrerPolicy", "no-referrer")),
+		"dgo-public-rate", ordered("rateLimit", ordered("average", int64(30), "period", "1m", "burst", int64(20))),
+		"dgo-public-inflight-ip", ordered("inFlightReq", ordered("amount", int64(5),
+			"sourceCriterion", ordered("ipStrategy", ordered("depth", int64(0))))),
+		"dgo-public-inflight", ordered("inFlightReq", ordered("amount", int64(20),
+			"sourceCriterion", ordered("requestHost", true))),
+		"dgo-public-https", ordered("redirectScheme", ordered("scheme", "https", "permanent", true)))
+	routers, services := yamlish.NewMap(), yamlish.NewMap()
+	for _, p := range pub {
+		// a path that ends in `/` is a prefix at the serving door, any other an exact path: the edge says the same
+		matchers := make([]string, 0, len(p.paths))
+		for _, x := range p.paths {
+			if strings.HasSuffix(x, "/") {
+				matchers = append(matchers, "PathPrefix(`"+x+"`)")
+			} else {
+				matchers = append(matchers, "Path(`"+x+"`)")
+			}
+		}
+		routers.Set(p.name, ordered(
+			"rule", "Host(`"+p.host+"`) && ("+strings.Join(matchers, " || ")+")",
+			"entryPoints", strs("websecure"), "service", p.name,
+			"middlewares", strs("hsts@file", "dgo-public-headers", "dgo-public-rate", "dgo-public-inflight-ip",
+				"dgo-public-inflight"),
+			"tls", ordered("certResolver", "myresolver")))
+		routers.Set(p.name+"-http", ordered(
+			"rule", "Host(`"+p.host+"`)", "entryPoints", strs("web"),
+			"service", "noop@internal", "middlewares", strs("dgo-public-https")))
+		services.Set(p.name, ordered("loadBalancer", ordered(
+			"servers", []any{ordered("url", p.url)}, "passHostHeader", false)))
+	}
+	body, err := yamlish.Marshal(ordered("http", ordered("middlewares", middlewares, "routers", routers,
+		"services", services)), yamlish.Options{Width: 1000})
+	if err != nil {
+		return "", err
+	}
+	return "# GENERATED by platform/manager/serve.py from platform.state.yaml `publish:` — DO NOT EDIT.\n" +
+		"# A linked office's DOOR, opened to the internet on this office's edge (DGO-2050): only the paths\n" +
+		"# that office narrowed it to, no sign-in (the token in the path is the credential), a rate per client.\n" +
+		string(body), nil
+}
+
+// renderPublishedFile is reconcile.render_published(): platform-base/traefik/config/zz-public.yaml, beside
+// zz-serve.yaml, written — or removed — on every render.
+func renderPublishedFile(repo string, pub []publishedDoor) error {
+	dest := filepath.Join(repo, "platform-base", "traefik", "config", "zz-public.yaml")
+	doc, err := renderPublished(pub)
+	if err != nil {
+		return err
+	}
+	if doc == "" {
+		return unlink(dest)
+	}
+	return write(dest, doc) // left alone when it says the same: the file provider reloads on any write
+}
+
 // ssoHost is one record of serve.sso_hosts(): the sign-in provider a remote app's nested host needs.
 type ssoHost struct{ slug, name, host, portHost string }
 

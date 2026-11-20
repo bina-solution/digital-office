@@ -53,7 +53,7 @@ test('camera, microphone and the screen go to the office\'s meetings only', () =
 });
 
 test('a link that leaves the office goes to the system browser or mail, never to a file or a program', () => {
-  for (const u of ['https://example.com', 'http://example.com', 'mailto:person84@example.com', 'tel:+972500000000']) assert.ok(o.mayOpenOutside(u), u);
+  for (const u of ['https://example.com', 'http://example.com', 'mailto:person87@example.com', 'tel:+972500000000']) assert.ok(o.mayOpenOutside(u), u);
   for (const u of ['file:///C:/Windows/System32/calc.exe', 'smb://host/share', 'ms-msdt:/id', 'javascript:alert(1)', 'x']) {
     assert.ok(!o.mayOpenOutside(u), u);
   }

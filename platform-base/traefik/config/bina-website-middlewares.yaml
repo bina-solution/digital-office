@@ -13,7 +13,7 @@ http:
         browserXssFilter: true
         referrerPolicy: "strict-origin-when-cross-origin"
         # HSTS for the site's own host only: a subdomain may be another office on another server (exf.digital-
-        # office.co.il is a client's, 93.184.216.9), and one still waiting for its certificate would be unreachable
+        # office.co.il is a client's, 93.184.216.11), and one still waiting for its certificate would be unreachable
         # for a year in any browser that had seen the apex (DGO-687, 2026-11-10). No stsIncludeSubdomains.
         stsSeconds: 31536000
     compress:

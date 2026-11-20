@@ -157,7 +157,7 @@ class Accounts:
         if not a or not ok:
             raise Refused("המייל או הסיסמה לא נכונים.")
         if a["status"] != "active":
-            raise Refused("החשבון הזה מושבת. פנו אלינו: person11@example.com")
+            raise Refused("החשבון הזה מושבת. פנו אלינו: person12@example.com")
         return a
 
     def google_account(self, info, ip=""):
@@ -171,7 +171,7 @@ class Accounts:
         with self.s.tx() as c:
             if a:
                 if a["status"] != "active":
-                    raise Refused("החשבון הזה מושבת. פנו אלינו: person11@example.com")
+                    raise Refused("החשבון הזה מושבת. פנו אלינו: person12@example.com")
                 if not a["proven"]:
                     # Google proves THIS person owns the mailbox; whoever signed the address up with a password before
                     # never did — their password and every session they opened end here (pre-account takeover)
@@ -341,7 +341,7 @@ def send_mail(to, subject, lead, link="", cta="", foot=""):
     host = os.environ.get("DGOCLOUD_SMTP_HOST", "mailserver")
     if not host or host == "off":
         return False
-    sender = os.environ.get("DGOCLOUD_MAIL_FROM", "person12@example.com")
+    sender = os.environ.get("DGOCLOUD_MAIL_FROM", "person13@example.com")
     plain = f"{lead}\n\n" + (f"{cta}: {link}\n\n" if link else "") + (f"{foot}\n\n" if foot else "") + \
         "DGO Cloud — הלשכה הדיגיטלית"
     html = (f'<div dir="rtl" style="font-family:Arial,sans-serif;font-size:15px;line-height:1.6">'

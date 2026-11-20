@@ -3,12 +3,12 @@
 The hooks pipe THIS file into the documents container (`dcx exec -T documents python - <verb> … < apps/documents/cli.py`),
 so it runs from the checkout with no image rebuild and talks to the service on 127.0.0.1, with no address and no key.
 
-    list [out|in] [N]        the newest N documents (default 20), both directions or one
+    list [out|in|file] [N]   the newest N documents (default 20): issued, incoming, the office's files — or all
     show <id>                one document: the index row and the provider's own record
     search <words>           one search over both directions
     types                    the document types (data, not code)
     providers                which providers this office reads, and each one's last sync
-    sync [local|indox] [--accept-shrink]
+    sync [local|indox|drive] [--accept-shrink]
                              read the providers now (reads only — it writes into no other app); a provider whose set
                              is half the list or less is refused and its rows kept, unless --accept-shrink
 """
@@ -40,7 +40,7 @@ def call(method, path, params=None, body=None):
 def rows_out(rows):
     for r in rows:
         total = f"₪{r['total']:,.2f}" if isinstance(r.get("total"), (int, float)) else "—"
-        arrow = "←" if r["direction"] == "in" else "→"
+        arrow = {"in": "←", "out": "→"}.get(r["direction"], "·")      # «·» a file of the office's own («קבצים»)
         print(f"{arrow} {r['date'] or '—':10}  {r['type_name']:<16} {r['number'] or '—':<10} {total:>14}  "
               f"{(r['party'] or '—')[:30]:<30}  {r['state']}  [{r['id']}]")
 
@@ -58,7 +58,7 @@ def main(argv):
     if verb == "list":
         params = {"limit": 20}
         for a in rest:
-            if a in ("out", "in"):
+            if a in ("out", "in", "file"):
                 params["direction"] = a
             elif a.isdigit():
                 params["limit"] = int(a)

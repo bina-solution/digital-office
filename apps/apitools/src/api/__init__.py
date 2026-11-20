@@ -12,6 +12,7 @@ from src.ocr_core import ocr_cache
 from src.api.pdf_to_jpeg import optimized_pdf_to_jpeg
 from src.api.doc_gen_api import generate_document, generate_sample
 from src.api import documents_api as docs
+from src.api import house_api
 from src.utils.storage import storage_path
 from src.utils.logging_config import (
     get_logger, log_request_start, log_request_end,
@@ -336,6 +337,30 @@ def create_app():
         except (ValueError, TypeError, KeyError) as e:
             return jsonify({"error": "bad_request", "message": str(e)}), 400
 
+    # ── /docGen/house — the documents in the house style, without the books (DGO-2029) ──
+    @app.route('/docGen/house/types', methods=['GET'])
+    def doc_gen_house_types():
+        return house_api.types(request)
+
+    @app.route('/docGen/house/sample', methods=['GET'])
+    def doc_gen_house_sample():
+        return house_api.sample(request)
+
+    @app.route('/docGen/house/template', methods=['GET'])
+    def doc_gen_house_template():
+        return house_api.template(request)
+
+    @app.route('/docGen/house/fonts/<name>', methods=['GET'])
+    def doc_gen_house_font(name):
+        return house_api.font(name)
+
+    @app.route('/docGen/house', methods=['POST'])
+    def doc_gen_house():
+        try:
+            return house_api.render(request)
+        except (ValueError, TypeError) as e:
+            return jsonify({"error": "bad_document", "message": str(e)}), 400
+
     # ── /documents — business-document management (CRUD + lifecycle, DB-backed) ──
     @app.route('/documents', methods=['GET', 'POST'])
     def documents_root():
@@ -344,6 +369,14 @@ def create_app():
     @app.route('/documents/verify', methods=['GET'])
     def documents_verify():
         return docs.verify(request)
+
+    @app.route('/documents/import', methods=['POST'])
+    def documents_import():
+        return docs.import_docs(request)
+
+    @app.route('/documents/import/settle', methods=['POST'])
+    def documents_import_settle():
+        return docs.import_docs(request, settle=True)
 
     @app.route('/documents/<doc_id>/signature', methods=['GET'])
     def documents_signature(doc_id):
@@ -385,6 +418,10 @@ def create_app():
     @app.route('/documents/<doc_id>/issue', methods=['POST'])
     def documents_issue(doc_id):
         return docs.issue_doc(doc_id, request)
+
+    @app.route('/documents/<doc_id>/preview', methods=['GET'])
+    def documents_preview(doc_id):
+        return docs.preview_doc(doc_id, request)
 
     @app.route('/documents/<doc_id>/download', methods=['GET'])
     def documents_download(doc_id):

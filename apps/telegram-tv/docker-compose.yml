@@ -53,7 +53,7 @@ services:
       - TV_CACHE_DIR=/data/cache
       - TV_ARTWORK_DIR=/data/artwork
       - TV_CACHE_BYTES=${TV_CACHE_BYTES:-3221225472}
-      - TV_CACHE_MAX_FILE=${TV_CACHE_MAX_FILE:-400000295}
+      - TV_CACHE_MAX_FILE=${TV_CACHE_MAX_FILE:-400000303}
       - TV_MAX_SESSIONS=${TV_MAX_SESSIONS:-3}
       - TV_SESSION_IDLE_SECONDS=${TV_SESSION_IDLE_SECONDS:-45}
       # how the app reaches itself for the ffmpeg path (it reads its own range endpoint)

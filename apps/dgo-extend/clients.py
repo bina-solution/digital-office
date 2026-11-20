@@ -11,7 +11,7 @@ THE DECLARATION. The herd file (apps/computers/herd.yaml, mounted read-only at /
       exampleu:
         herd: Exampleu                                   # the company's herd (a label)
         door: https://link.exampleu.digital-office.co.il # the client's link door
-        pin: CHANGE_ME                       # its fingerprint (or Ed25519 key): no other office is taken
+        pin: 0A0A-0000-0000-0001                       # its fingerprint (or Ed25519 key): no other office is taken
         by: [macbook]                                  # the offices of OURS that join it
 
 An office of ours named in `by` — and holding the key the herd file gives that name, never by name alone (a client
@@ -166,3 +166,48 @@ def narrow(serve_map, cut: set) -> dict:
             services[alias] = spec
         out["services"] = services
     return out
+
+
+def _text(value) -> str:
+    """One line of at most 60 characters a person reads (a herd's name, an office's, a server's address), or ""."""
+    text = " ".join(str(value or "").split()) if isinstance(value, (str, int, float)) else ""
+    return text if len(text) <= 60 else ""
+
+
+def declared(doc: dict) -> dict:
+    """{client id: {herd, label, host, pin, by}} — EVERY client office the herd file names, linked or not (DGO-2026).
+
+    The owner, 2026-11-19: «I want to see all of our clients, every herd of theirs organised». The map draws a
+    client's herd from the moment its line is written here: an office of it that no link reaches yet is drawn as one
+    («not linked yet»), with the server it runs on (`host`). Several lines may share one `herd` — a company with two
+    offices (a server and a tablet). Nothing here joins anything: that is `mine`, with its door and pin.
+    One of OUR offices' names is never a client's."""
+    table = (doc or {}).get(KEY)
+    if not isinstance(table, dict):
+        return {}
+    out = {}
+    for cid, spec in table.items():
+        cid = str(cid)
+        if not CLIENT_RE.match(cid) or not isinstance(spec, dict) or give.entry_of(doc, cid):
+            continue
+        out[cid] = {"herd": _text(spec.get("herd")) or cid, "label": _text(spec.get("label")),
+                    "host": _text(spec.get("host")), "pin": _text(spec.get("pin")), "by": _by(spec)}
+    return out
+
+
+def entry_for(doc: dict, rec: dict) -> str:
+    """The client id the herd file gives the office this record describes, or "". A line with a pin is that client
+    only by the pinned identity — under its own id or under a name of its own (Examplex's office joined by its hostname
+    first) — so a stranger that pairs under the id `exampleu` is not drawn as Exampleu; a line with no pin, by its id. One
+    of OUR offices is never a client, whatever an entry names or pins. (Display only: `withheld` matches by id OR pin,
+    since withholding more is never wrong.)"""
+    if not isinstance(rec, dict) or not rec.get("id"):
+        return ""
+    rid = str(rec["id"]).strip().lower()
+    if give.entry_of(doc, rid):
+        return ""
+    table = declared(doc)
+    own = table.get(rid)
+    if own is not None and (not own["pin"] or _pinned(rec.get("identity"), own["pin"])):
+        return rid
+    return next((cid for cid, c in table.items() if c["pin"] and _pinned(rec.get("identity"), c["pin"])), "")

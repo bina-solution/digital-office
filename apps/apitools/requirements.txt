@@ -24,5 +24,5 @@ pymupdf>=1.26
 # doc_data business-document store — Postgres/Supabase source of truth
 psycopg2-binary>=2.9
 cryptography>=42
-weasyprint>=62
+weasyprint>=70
 zxing-cpp>=2.2

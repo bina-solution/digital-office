@@ -170,6 +170,11 @@ services:
         target: ${BBOX_REPO_HOST:-/workspace/office}
       # The office's vault, beside the checkout (DGO-1642) — the CLI sees what the desktop sees.
       - ${OBSIDIAN_VAULT_HOST:-obsidian_vault}:/workspace/vault
+      # The two halves the desktop runs from the checkout, so a fix to either needs no image (test_signin). They were
+      # lost when hp-laptop took dgo-stable's version of its 32 conflicting files (cb33a827e, 2026-11-11), and G72 has
+      # been red since (issues/bina-claude-test-asserts-hop-and-open-url-mounts-…; DGO-2039).
+      - ./desktop/open-url:/usr/local/bin/bina-claude-open-url:ro
+      - ./desktop/hop:/usr/local/bin/bina-claude-hop:ro
     depends_on:
       bina-claude:
         condition: service_started
@@ -190,11 +195,14 @@ services:
     # sessions in 2 GB / 2 CPU (planned down to 1.32): 99.7% of its memory, the cap hit 8,010 times,
     # 71 min throttled, the screen too slow to use (DGO-1299). Per office in .env; the reservation is
     # the floor the CPU plan (G65) never scales below. The office that runs the sessions sets ~4 / 3 / 5g.
+    # The default is 4g, not 2g: Exampleu set nothing, and its app was killed by the 2 GB cap twice (2026-11-17 for
+    # two days, 2026-11-19 30 s after a restart) and stayed a blank window while its health said signed in. Idle
+    # with one Code session it holds 1.85 GB before Chromium draws a page (DGO-2044).
     deploy:
       resources:
         limits:
           cpus: '${BINA_CLAUDE_DESKTOP_CPUS:-2}'
-          memory: ${BINA_CLAUDE_DESKTOP_MEMORY:-2g}
+          memory: ${BINA_CLAUDE_DESKTOP_MEMORY:-4g}
         reservations:
           cpus: '${BINA_CLAUDE_DESKTOP_CPUS_FLOOR:-0.5}'
     logging:

@@ -19,7 +19,12 @@ ENV PIP_NO_CACHE_DIR=1 \
 WORKDIR /app
 
 COPY requirements.render.txt ./requirements.txt
-RUN pip install -r requirements.txt \
+# libatomic1 FIRST (DGO-2026): playwright's install runs its own bundled node, which links libatomic.so.1, and
+# python:3.12-slim on Debian trixie no longer carries it — `--with-deps` installs Chromium's libraries, not the
+# driver's, so a fresh office's first `bbox run` failed here ("libatomic.so.1: cannot open shared object file",
+# measured 2026-11-19 on Examplek's server, public 0.3.2).
+RUN apt-get update && apt-get install -y --no-install-recommends libatomic1 && rm -rf /var/lib/apt/lists/* \
+ && pip install -r requirements.txt \
  && python -m playwright install --with-deps chromium \
  && apt-get update \
  && apt-get install -y --no-install-recommends fonts-dejavu-core fonts-noto-core \

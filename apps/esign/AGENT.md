@@ -7,7 +7,9 @@ signed copy lands in «קבצים». The design, the three engines weighed and t
 Vocabulary: an **envelope** is one document + one signer + one link (its own record and audit trail).
 The **token** is the random part of the link (`/s/<token>`). The **signer's page** is the one public
 path. The **audit trail** is a hash-chained list of what happened, and the paper that carries it is the
-last page of the signed PDF.
+last page of the signed PDF: the signing certificate, drawn in the office's house style by the documents
+renderer (`ESIGN_RENDER_URL`, apitools' `POST /docGen/house`, DGO-2029), or as a plain page when it does not
+answer. A deal document reaches here from «מסמכים שלי» («שליחה לחתימה», its BFF `/api/sign/<doc>`).
 
 ## From the server's shell
 
@@ -50,10 +52,14 @@ is given; five wrong attempts lock the link for 15 minutes and every attempt is 
   `POST /api/envelopes/<id>/retry` finishes the delivery, never a second signing.
 - **Never rewrite a signed envelope.** Signing twice is two envelopes; drive keeps an existing file and
   names the new one «name (2)».
-- The office's signing certificate is generated once on the volume (self-signed) or connected as a
-  PKCS#12 (`ESIGN_CERT_P12`/`ESIGN_CERT_PASS`). A self-signed signature proves the bytes did not change;
+- The office's signing certificate is generated once on the volume (self-signed, in the office's name:
+  `ESIGN_OFFICE_NAME` ← BUSINESS_NAME) or connected as a PKCS#12 (`ESIGN_CERT_P12`/`ESIGN_CERT_PASS`); the
+  certificate page names that key's subject. A self-signed signature proves the bytes did not change;
   it does not prove WHO signed — that is the audit trail's job, and for a document that needs it, a
   registered CA's (research §3.3).
+- A trusted time (PAdES B-T) only when the office names an RFC 3161 authority (`ESIGN_TSA_URL`; empty
+  calls nothing outside); only the signature's hash travels. An authority that does not answer never
+  costs the signer the act: the file is signed without the time and the event says `timestamped: false`.
 
 ## Traps
 

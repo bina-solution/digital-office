@@ -48,5 +48,5 @@ Turn it on from the apps screen, which goes all the way, or from the command lin
 ## Going further
 
 - [Social networks](/en/apps/social-list)
-- [Digital assets](/en/apps/digital-assets)
+- [Identity](/en/apps/digital-assets)
 - [Connections](/en/apps/connections)

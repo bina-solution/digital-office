@@ -1,0 +1,18 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8">
+<title>{{ k.he }} {{ doc_id }}</title>
+<meta name="author" content="{{ sup.name }}">
+<meta name="description" content="{{ k.he }} {{ doc_id }} · {{ cust.name }}">
+<meta name="generator" content="DGO documents · {{ style_name }}">
+<style>{{ fonts_css }}
+:root { {{ root_vars }} }
+{{ css }}</style>
+</head>
+<body>
+<div class="runfoot"><b>{{ sup.name }}</b> · {{ k.short or k.he }}{% if doc_id %} <span class="num">{{ doc_id }}</span>{% endif %}{% if label %} · <span class="lab">{{ label }}</span>{% endif %}<br>{{ footer_line }}</div>
+{% if watermark %}<div class="wm{% if k.credit or status == 'cancelled' %} credit{% endif %}">{{ watermark }}</div>{% endif %}
+{% block body %}{% endblock %}
+</body>
+</html>

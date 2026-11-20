@@ -268,6 +268,11 @@ CHECKER_DIRS: dict[str, str] = {
         "a QA driver — it opens the running office from OUTSIDE in a real browser and injects a "
         "synthetic identity so it can reach every declared route without a human login; it serves "
         "nothing, is routed nowhere, and no manifest can declare it",
+    # one FILE, not its directory: research_notes/ holds other tools, and a paper's folder is no place for a service
+    "research_notes/DGO paper 2026-11-19/short/cap.py":
+        "a film and screenshot client for DGO-2045's short — it opens the running office from OUTSIDE through "
+        "Chrome's DevTools and injects the office's synthetic proof identity, as scripts/ui-coverage/ does; it "
+        "serves nothing, is routed nowhere, and no manifest can declare it",
     # one FILE, not its directory: scripts/ops/ also holds host tools that are code paths
     "scripts/ops/edge-bypass-probe.sh":
         "a security probe (DGO-1656, `bbox security probe`) — sent from a PEER office, it forges the family "

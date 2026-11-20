@@ -107,7 +107,7 @@ For fully automated deployments, use the initialization script to create organiz
 ```bash
 # Set required environment variables
 export GLITCHTIP_ADMIN_PASSWORD="your-admin-password"
-export GLITCHTIP_ADMIN_EMAIL="person88@example.com"
+export GLITCHTIP_ADMIN_EMAIL="person91@example.com"
 export GLITCHTIP_ORG_NAME="Example"
 export GLITCHTIP_TEAM_SLUG="developers"
 

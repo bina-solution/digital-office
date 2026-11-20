@@ -1,6 +1,6 @@
 {
- "viewer.label": "Markdown",
- "code.copy": "העתקה",
  "code.copied": "הועתק",
- "footnotes": "הערות שוליים"
+ "code.copy": "העתקה",
+ "footnotes": "הערות שוליים",
+ "viewer.label": "Markdown"
 }

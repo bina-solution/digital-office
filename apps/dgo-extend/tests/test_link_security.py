@@ -85,6 +85,7 @@ import linkproxy     # noqa: E402
 import move          # noqa: E402
 import net           # noqa: E402
 import pairing       # noqa: E402
+import projection    # noqa: E402
 import peers         # noqa: E402
 import projection    # noqa: E402
 
@@ -594,7 +595,31 @@ def c_door_with_no_tile_is_narrow():
         if not catalog.clean_services({"workflow-hooks": {"paths": bad}})[1]:
             problems.append(f"the writers must refuse paths {bad!r}")
     if not catalog.clean_services({"speech": {"port": 1}})[1]:
-        problems.append("a door's spec is `to` and `paths` only: a port there is refused")
+        problems.append("a door's spec is `to`, `paths` and `public` only: a port there is refused")
+    # DGO-2050: `public: true` is the serving office's consent to the internet, only beside paths of its own
+    opened = {"esign-public": {"to": ["vps1"], "paths": ["/s/"], "public": True}}
+    if catalog.clean_services(opened)[1]:
+        problems.append(f"a door narrowed to /s/ and opened to the internet must be accepted: {catalog.clean_services(opened)}")
+    for bad in ({"esign-public": {"public": True}}, {"esign-public": {"paths": ["/"], "public": True}},
+                {"esign-public": {"paths": ["/s/"], "public": "yes"}}):
+        if not catalog.clean_services(bad)[1]:
+            problems.append(f"the writers must refuse {bad!r}: the internet only for a narrowed door, as a bool")
+    esign_doors = DOORS + [{"app": "esign", "alias": "esign-public", "port": 8080, "service": "esign"}]
+    given = catalog.publishable_services(dict(REGISTRY, services=esign_doors),
+                                         {"services": dict(opened, **{"workflow-hooks": HOOKS})}, "vps1")
+    flags = {d["alias"]: d.get("public") for d in given}
+    if flags.get("esign-public") is not True or flags.get("workflow-hooks") is not None:
+        problems.append(f"only a door its office opened travels with `public: true`, got {given}")
+    # …and the consuming office's projection keeps a door's paths, and its office's consent only beside them
+    entry = projection._entry("hp-laptop", {"apps": [], "services": [
+        {"app": "esign", "alias": "esign-public", "port": 8080, "paths": ["/s/"], "public": True},
+        {"app": "n8n", "alias": "workflow-hooks", "port": 5678, "paths": ["/webhook/x"]},
+        {"app": "apitools", "alias": "speech", "port": 8987, "public": True}]}, set(), "10.79.6.2")
+    rows = {d["alias"]: d for d in ((entry or {}).get("services") or [])}
+    if rows.get("esign-public", {}).get("paths") != ["/s/"] or rows.get("esign-public", {}).get("public") is not True \
+            or "public" in rows.get("workflow-hooks", {}) or "public" in rows.get("speech", {}) \
+            or "paths" in rows.get("speech", {}):
+        problems.append(f"the projection must keep a door's paths, and `public` only beside them, got {entry}")
     # The catalog carries the doors under their own key, never as tiles, and refuses a clash with an app
     published = catalog.build(catalog.publishable(registry, named, "vps1"), "hp-laptop",
                               link_port=linkproxy.door_port(3), services=got)

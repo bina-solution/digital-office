@@ -639,6 +639,8 @@ def x_single_view(man) -> list[dict]:
         "domain-internic": "apps/domain-internic/static/index.html",
         # [2026-11-13] the phone's own screen (state, start/stop, the live display) replaced noVNC's page: one view
         "android-emulator": "apps/android-emulator/server/screen/index.html",
+        # [2026-11-14] Azaria's own screen (EXU-64): one list, one conversation (`?s=` is data).
+        "bina": "apps/bina-ds/web/app.js",
     }
     for app, spec in man["single_view"].items():
         rel = probes.get(app)
@@ -1053,17 +1055,41 @@ def x_digital_assets(_m) -> list[dict]:
     """digital-assets: its own `route()` table."""
     rel = "apps/digital-assets/static/app.js"
     src = _read(rel)
-    titles = {"/": "נכסים דיגיטליים — סקירה", "/media": "נכסים דיגיטליים — מדיה",
-              "/channels": "נכסים דיגיטליים — ערוצים", "/blueprints": "נכסים דיגיטליים — תבניות"}
+    titles = {"/": "זהות — סקירה", "/media": "זהות — מדיה",
+              "/channels": "זהות — ערוצים", "/blueprints": "זהות — תבניות"}
     out = []
     for path in _routes(src, rel, r"path === '(/[\w-]*)'"):
         out.append(_view("digital-assets", "page" + (path.strip("/") or "overview"),
-                         titles.get(path, f"נכסים דיגיטליים — {path}"), kind="hash",
+                         titles.get(path, f"זהות — {path}"), kind="hash",
                          url=f"/#{path}", source=f"{rel}:route"))
     if "path.startsWith('/s/')" not in src:
         raise DriftError(f"{rel}: the per-section route is gone — grammar changed")
-    out.append(_view("digital-assets", "section", "נכסים דיגיטליים — מקטע", kind="hash",
+    out.append(_view("digital-assets", "section", "זהות — מקטע", kind="hash",
                      url="/#/s/{section}", source=f"{rel}:route"))
+    return out
+
+
+def x_entities(_m) -> list[dict]:
+    """entities («ישויות», DGO-2101): the list of everyone, one role's list and one entity's card — `/`,
+    `/r/<role>` and `/e/<id>` under the app's mount, read off its own router (`readRoute`); one view per role
+    the patterns table holds, so a role added there is a view here."""
+    rel = "apps/entities/static/app.js"
+    src = _read(rel)
+    if r"/^(r|e)\/([^/]+)/.exec(rest)" not in src:
+        raise DriftError(f"{rel}: the /r/<role> and /e/<id> routes are gone — the router shape changed")
+    prel = "apps/entities/patterns.py"
+    table = _read(prel).split("ROLES = {", 1)[-1].split("\n}\n", 1)[0]
+    roles = re.findall(r'^    "([^"]+)": \{\n        "he": "([^"]+)", "en": "[^"]+", "plural_he": "([^"]+)"', table, re.M)
+    keys = re.findall(r'^    "([^"]+)": \{', table, re.M)
+    if len(keys) < 4 or [r[0] for r in roles] != keys:
+        # every role the table holds is read, or none is: a sixth role in another shape is drift, not a view fewer
+        raise DriftError(f"{prel}: the ROLES table did not read ({len(roles)} of {len(keys)} roles) — its shape changed")
+    out = [_view("entities", "all", "ישויות — כל הישויות", kind="route", url="/", source=f"{rel}:readRoute")]
+    for role, _he, plural in roles:
+        out.append(_view("entities", f"role-{role}", f"ישויות — {plural}", kind="route", url=f"/r/{role}",
+                         source=f"{prel}:ROLES"))
+    out.append(_view("entities", "entity", "ישויות — כרטיס של ישות", kind="route", url="/e/{entity}",
+                     source=f"{rel}:readRoute"))
     return out
 
 
@@ -1132,6 +1158,7 @@ EXTRACTORS = [
     # [2026-09-27] five apps that shipped enabled + embedded and were never in the denominator.
     ("social-list", x_social_list),
     ("digital-assets", x_digital_assets),
+    ("entities", x_entities),
     ("sites", x_sites),
     ("domains", x_domains),
     ("telegram-tv", x_telegram_tv),

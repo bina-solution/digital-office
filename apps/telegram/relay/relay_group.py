@@ -159,6 +159,82 @@ def bot_token(label: str) -> str:
     return ((secret or {}).get("secret") or {}).get("token", "").strip()
 
 
+class Stuck:
+    """One message the agent's door keeps refusing (DGO-2049). This is the third time the group went deaf that way:
+    - 11-13: msg 986;
+    - 11-14/15: 23 hours;
+    - 11-18/19: 31 hours, 1,541 tries, each one driving the HP's Claude app to another page.
+
+    Each round of retries waits longer than the one before: 5 s, doubling up to 10 min. While the session is only
+    busy, a round waits at most 1 min, because a turn ends by itself. A refusal that says nothing was sent is said
+    to the group ONCE — so its people know their messages wait — when such refusals (not «busy» ones) have lasted
+    `tell_after` seconds. «Once» means once it was SENT: a notice that failed is due again on the next round. It is
+    said again only for another message."""
+
+    BUSY = ("mid-turn", "(busy)")
+
+    def __init__(self, tell_after: float = 600, clock=time.time):
+        self.tell_after, self.clock = tell_after, clock
+        self._reset(None, 0.0)
+
+    def _reset(self, eid, now):
+        self.eid, self.since, self.rounds, self.told = eid, now, 0, False
+        self.refused_since = None                    # the first refusal that was not «busy» (the notice's «since»)
+        self.refused_for = 0.0                       # time that ended in a refusal that was not «busy»
+        self.last = None                             # when the previous round ended
+
+    def failed(self, eid: str, why: str) -> tuple:
+        """One more refused round for `eid` → (seconds to wait before the next, whether the group should be told now).
+        The caller says `told_now()` once the notice really went out. Only time that ends in a refusal that is not
+        «busy» counts toward the notice: a long turn between two «locked» answers is the session working, not stuck."""
+        now = self.clock()
+        if eid != self.eid:
+            self._reset(eid, now)
+        self.rounds += 1
+        busy = any(b in why for b in self.BUSY)
+        if not busy:
+            if self.refused_since is None:
+                self.refused_since = now
+            self.refused_for += now - (self.last if self.last is not None else now)
+        self.last = now
+        wait = min(60 if busy else 600, 5 * 2 ** min(self.rounds - 1, 10))
+        due = not busy and not self.told and self.refused_for >= self.tell_after
+        return wait, due
+
+    def told_now(self) -> None:
+        self.told = True
+
+    def delivered(self, eid: str) -> None:
+        if eid == self.eid:
+            self._reset(None, 0.0)
+
+
+def stuck_text(since: float) -> str:
+    """What the group reads (Stuck): Hebrew, the time as the group lives it, no internal address, no error text, and
+    no promise the relay cannot keep — the stream is capped, so a long stall may lose its oldest lines."""
+    try:
+        from zoneinfo import ZoneInfo
+        import datetime
+        when = datetime.datetime.fromtimestamp(since, ZoneInfo("Asia/Jerusalem")).strftime("%H:%M")
+    except Exception:                         # noqa: BLE001 — no tz data in the image: the hour is still said
+        when = time.strftime("%H:%M UTC", time.gmtime(since))
+    return "⚠️ סוכן הקבוצה לא מצליח לקבל הודעות מאז %s. אנחנו מטפלים בזה." % when
+
+
+def tell_stuck(token: str, chat_id, since: float) -> bool:
+    """The one line the group gets when its agent cannot take messages: a message of its own, NOT a reply — a reply
+    of the bot is recorded as that request's answer (desk.add_answer), and the waiting request would leave the
+    sweep's «not answered». True only when Telegram took it."""
+    if not token or not chat_id:
+        return False
+    msg = {"chat_id": chat_id, "text": stuck_text(since)}
+    req = urllib.request.Request("https://api.telegram.org/bot%s/sendMessage" % token,
+                                 data=json.dumps(msg, ensure_ascii=False).encode("utf-8"), method="POST",
+                                 headers={"content-type": "application/json; charset=utf-8"})
+    with urllib.request.urlopen(req, timeout=30) as resp:
+        return resp.status == 200
+
+
 def mark_received(token: str, chat_id, message_id, emoji: str = "👀") -> None:
     """Say «seen» on the message itself. The owner's message 144: «נראה שאתה לא מחובר בכלל» — a listener that
     delivers without a mark looks dead, even when the answer comes a minute later. The bot IS an admin
@@ -521,6 +597,7 @@ def main(argv) -> int:
     ctx = None if args.once else command_context(args, token_path)    # a replay by hand runs no command
     bot_tok = ""                       # read from the vault on the first delivery, kept in memory only
     last_sweep = time.time()           # the first hand-over waits one window: a restart is not a reason to nudge
+    stuck = Stuck()                    # a message the door keeps refusing: waits that grow, the group told once
     while True:
         try:
             if not r.sock:
@@ -593,9 +670,28 @@ def main(argv) -> int:
                         if not cmd or cmd.get("deliver", True):
                             tell_agent(args.session, line, token_path)
                     except ConnectionError as e:
-                        # the cursor stays BEFORE this message: the retry after the reconnect reads it again
-                        log("%s NOT delivered (%s); it is read again after the reconnect" % (eid, e))
+                        # the cursor stays BEFORE this message: the retry after the reconnect reads it again —
+                        # after a wait that grows, and the group is told once when it lasts (Stuck, DGO-2049)
+                        wait, due = stuck.failed(eid, str(e))
+                        log("%s NOT delivered (%s); it is read again in %ds" % (eid, e, wait))
+                        if due and not args.once and not args.no_mark:
+                            try:
+                                if not bot_tok:
+                                    bot_tok = bot_token(args.bot)
+                                if tell_stuck(bot_tok, data.get("chat_id"), stuck.refused_since):
+                                    stuck.told_now()
+                                    log("%s: the group was told once that its agent cannot take messages" % eid)
+                                else:
+                                    log("%s: the group could not be told (no bot token, or Telegram refused); "
+                                        "the next round tries again" % eid)
+                            except Exception as e2:     # noqa: BLE001 — the line is a courtesy; the retry goes on
+                                why = str(e2)
+                                if bot_tok:
+                                    why = why.replace(bot_tok, "***")
+                                log("%s: the group could not be told (%s); the next round tries again" % (eid, why[:160]))
+                        e.wait = wait
                         raise
+                    stuck.delivered(eid)
                     cursor = eid
                     forwarded += 1
                     write_state(state_file, eid)
@@ -609,15 +705,18 @@ def main(argv) -> int:
                                 bot_tok = bot_token(args.bot)
                             mark_received(bot_tok, data.get("chat_id"), data.get("message_id"), mark)
                         except Exception as e:          # a mark is a courtesy; the delivery already happened
-                            log("msg %s not marked (%s)" % (data.get("message_id"), str(e).replace(
-                                bot_tok or "", "***")[:160]))
+                            why = str(e)
+                            if bot_tok:                 # an empty token would put *** between every character
+                                why = why.replace(bot_tok, "***")
+                            log("msg %s not marked (%s)" % (data.get("message_id"), why[:160]))
                     if args.once:
                         log("once: %d forwarded" % forwarded)
                         return 0
         except (ConnectionError, OSError) as e:
-            log("redis or the door went away (%s); retrying in 5s" % e)
+            wait = getattr(e, "wait", 5)
+            log("redis or the door went away (%s); retrying in %ds" % (e, wait))
             r.close()
-            time.sleep(5)
+            time.sleep(wait)
             if args.once:
                 return 3
 

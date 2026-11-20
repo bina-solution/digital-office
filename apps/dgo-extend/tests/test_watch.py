@@ -174,7 +174,7 @@ def main() -> int:
          "warnings": ["כתובות שאינן עונות: services.exf.digital-office.co.il → 502"],
          "dead_hosts": ["services.exf.digital-office.co.il"], "unhealthy": ["mailapi-examplef"]},
         {"t": t0 - 1 * DAY, "status": "failed", "step": "dns",
-         "reason": "ה־DNS של exf.digital-office.co.il אינו מצביע על המחשב (93.184.216.9)"},
+         "reason": "ה־DNS של exf.digital-office.co.il אינו מצביע על המחשב (93.184.216.11)"},
         {"t": t0, "status": "ok", "summary": "43/43 בריאים", "healthy": "43", "total": "43"}]
     bad = [b'{"t": "abc", "status": "ok"}', b'{"t": 1e20, "status": "ok"}', b'{"t": [], "status": "ok"}',
            b'{"t": 1e400, "status": "ok"}', b'{"t": Infinity, "status": "ok"}',
@@ -188,7 +188,7 @@ def main() -> int:
     check("6 of" not in text and "5 daily checks — 3 healthy, 1 with warnings, 1 failed" in text
           and "not answering: services.exf.digital-office.co.il" in text and "unhealthy: mailapi-examplef" in text
           and "the office's address (DNS) did not point at the server" in text, f"the report's facts: {text!r}")
-    check(not any("֐" <= ch <= "׿" for ch in text) and "93.184.216.9" not in text,
+    check(not any("֐" <= ch <= "׿" for ch in text) and "93.184.216.11" not in text,
           f"never a Hebrew sentence, never an address from a reason: {text!r}")
     check("no daily check" in app.watch_report("nobody", 7, t0)["text"], "an office with no checks says so")
     hist.write_text(json.dumps({"t": t0, "status": "ok", "healthy": "43", "total": "43"}) + "\n")

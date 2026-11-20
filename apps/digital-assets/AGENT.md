@@ -1,6 +1,12 @@
-# Operating `digital-assets`
+# Operating «זהות» (`digital-assets`)
 
-The business's digital front — everything it shows the world — as **slots**. A slot is one named,
+**The one place the business is defined** (DGO-2048): its names, legal details (entity type, business
+number, who signs), contact details, logos, colours, bank, texts, content and media. No other app
+defines them; the documents read them from `GET /api/brand` (`brand_fields.py` is the contract;
+`missing` = fields not set) within half a minute. A question about the business's details is answered
+from here; a change to them is made here — never in the documents' settings, `.env` or a template.
+
+Everything the business shows the world is a **slot**. A slot is one named,
 typed place (`identity.logo.square`, `identity.description.short`, `content.app-store.listing`,
 `media.launch-day.launch-film`); it holds **versions** (assets), and one version is **active**: that
 one IS the business now. Making a version active produces a **plan** (per channel: push / manual /

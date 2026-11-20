@@ -28,7 +28,7 @@ from bbox_agent.client import AgentError  # noqa: E402
 LIST = (
     f"{'computer_local-local':28} {'המחשב הזה':24} root@172.18.0.1\n"
     f"{'computer_ssh-b154fa0c':28} {'שרת פיתוח בינה סלושנס':24} root@93.184.216.5\n"
-    f"{'computer_ssh-0259c905':28} {'שרת דוגמה':24} root@93.184.216.11\n"
+    f"{'computer_ssh-0259c905':28} {'שרת דוגמה':24} root@93.184.216.10\n"
 )
 
 
@@ -64,9 +64,9 @@ class Flags(unittest.TestCase):
                 oc.strip_local_flags(typed)
 
     def test_a_long_label_does_not_shift_the_host(self):
-        line = f"{'computer_ssh-0259c905':28} {'שרת דוגמה, הראשי של הלקוח הגדול':24} root@93.184.216.11  (shared)"
+        line = f"{'computer_ssh-0259c905':28} {'שרת דוגמה, הראשי של הלקוח הגדול':24} root@93.184.216.10  (shared)"
         self.assertEqual(oc.parse_list(line), [{"id": "computer_ssh-0259c905", "label": "שרת דוגמה, הראשי של הלקוח הגדול",
-                                                "host": "93.184.216.11"}])
+                                                "host": "93.184.216.10"}])
 
 
 class FindTheComputer(unittest.TestCase):
@@ -85,7 +85,7 @@ class FindTheComputer(unittest.TestCase):
 
     def test_by_id_label_or_host_without_asking_any_computer(self):
         fake = FakeBbox({})
-        for name in ("computer_ssh-0259c905", "שרת דוגמה", "93.184.216.11"):
+        for name in ("computer_ssh-0259c905", "שרת דוגמה", "93.184.216.10"):
             self.assertEqual(oc.Finder(run=fake).find(name), "computer_ssh-0259c905")
         self.assertTrue(all(c[:3] == ["computers", "ssh", "list"] for c in fake.calls))
 

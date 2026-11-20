@@ -204,7 +204,7 @@ def _offering(iid: str, protocol: str, secret: dict) -> dict:
 
 def test_a_holder_alone_never_decides_what_lands_here():
     # F1 (the second reader): a compromised holder offers a link row — or anything this office did not name
-    evil = {"label": "vps1", "app": "bina-ds", "address": "93.184.216.14", "port": 1}
+    evil = {"label": "vps1", "app": "bina-ds", "address": "93.184.216.13", "port": 1}
     for iid, protocol, take in (("dgo_link-x", "dgo_link", "hp-laptop=dgo_link-x"),          # named, link-shaped
                                 ("dgo_link-serve-vps1-bina-ds-agent", "telegram_bot",
                                  "hp-laptop=dgo_link-serve-vps1-bina-ds-agent"),            # link-shaped id

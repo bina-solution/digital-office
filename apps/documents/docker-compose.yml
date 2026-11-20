@@ -14,10 +14,15 @@ services:
     working_dir: /app
     command: ["python", "-u", "server.py"]
     environment:
-      # the office's binding: which providers it reads (local = the ledger, indox = INDOX). A provider that is not
-      # installed here answers «לא ענה» for ITS half of the list; the other half keeps working.
-      DOCUMENTS_PROVIDERS: ${DOCUMENTS_PROVIDERS:-local,indox}
+      # the office's binding: which providers it reads (local = the ledger, indox = INDOX, drive = «קבצים»). A provider
+      # that is not installed here answers «לא ענה» for ITS part of the list; the others keep working.
+      DOCUMENTS_PROVIDERS: ${DOCUMENTS_PROVIDERS:-local,indox,drive}
       DOCUMENTS_LEDGER_URL: ${DOCUMENTS_LEDGER_URL:-http://apitools:8080}
+      # «קבצים» (DGO-2029, «כל המסמכים במסמכים»): the folders read for the office's documents, comma-separated
+      DOCUMENTS_DRIVE_URL: ${DOCUMENTS_DRIVE_URL:-http://drive:8975}
+      DOCUMENTS_DRIVE_ROOTS: ${DOCUMENTS_DRIVE_ROOTS:-/מסמכים,/לקוחות,/מחקרים}
+      # the drive's account to read (its profile id); empty = the drive's active connection, whichever it is set to
+      DOCUMENTS_DRIVE_PROFILE: ${DOCUMENTS_DRIVE_PROFILE:-}
       DOCUMENTS_INDOX_URL: ${DOCUMENTS_INDOX_URL:-http://incoming-documents:8080/incomingDocuments}
       DOCUMENTS_INDOX_REPO: ${DOCUMENTS_INDOX_REPO:-incoming-documents-main}
       DOCUMENTS_SYNC_SECONDS: ${DOCUMENTS_SYNC_SECONDS:-300}

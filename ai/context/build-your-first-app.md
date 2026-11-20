@@ -93,6 +93,13 @@ Two more, both about ordering rather than presence:
 fails and names both candidates. Resolve it with `default_provider` on your `use[]` entry (your
 preference) or `bindings.<capability>` in `platform.state.yaml` (the operator's, which wins).
 
+**The business and its parties are used, never kept** (`ai/context/business-domains.md`). Who the business is
+— its name, number, address, logo, colour, who signs — is `use: brand` (`GET /api/brand` of «זהות»). Who it
+works with — a customer, a supplier, a contact person — is `use: entities` (`GET /api/parties`,
+`/api/entities/{id}/party` of «ישויות»). Never a `.env` value, a string in your code, or a table of your own: a
+second copy is the bug those two apps end. A document you issue keeps a snapshot of its parties; that is the
+one copy allowed.
+
 ### Routing — how you are reached
 
 ```jsonc

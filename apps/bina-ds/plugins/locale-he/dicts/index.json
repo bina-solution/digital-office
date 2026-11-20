@@ -1,230 +1,305 @@
 {
- "dsh": "0.1.6-alpha.1",
+ "dsh": "0.2.2-rc.3",
  "namespaces": {
+  "account.notifications": {
+   "file": "account.notifications.json",
+   "source": "dsh-client-ui-account-notifications/lib/client.js",
+   "keys": 1
+  },
   "agent-team": {
    "file": "agent-team.json",
-   "source": "client-ui-agent-team/src/client/mount.ts",
-   "keys": 35
+   "source": "dsh-client-ui-agent-team/lib/client.js",
+   "keys": 30
   },
   "approval": {
    "file": "approval.json",
-   "source": "client/ui-approval/src/client/index.ts",
-   "keys": 5
+   "source": "dsh-client-ui-approval/lib/client.js",
+   "keys": 7
   },
   "chat": {
    "file": "chat.json",
-   "source": "client/ui-chat/src/client/apply.ts",
-   "keys": 104
+   "source": "dsh-client-ui-chat/lib/client.js",
+   "keys": 207
   },
   "command": {
    "file": "command.json",
-   "source": "client/ui-commands/src/client/index.ts",
+   "source": "dsh-client-ui-commands/lib/client.js",
    "keys": 28
   },
   "common": {
    "file": "common.json",
-   "source": "client/locale/src/client/index.ts",
-   "keys": 37
+   "source": "dsh-client-locale/lib/client.js (static)",
+   "keys": 41
+  },
+  "contextMenu": {
+   "file": "contextMenu.json",
+   "source": "dsh-client-ui-context-menu/lib/client.js",
+   "keys": 2
   },
   "conversation": {
    "file": "conversation.json",
-   "source": "client/ui-conversation/src/client/apply.ts",
-   "keys": 153
+   "source": "dsh-client-ui-conversation/lib/client.js (static)",
+   "keys": 392
   },
   "cordis": {
    "file": "cordis.json",
-   "source": "ui-cordis/src/client/index.ts",
-   "keys": 50
+   "source": "dsh-client-ui-cordis/lib/client.js",
+   "keys": 51
   },
   "deliverables": {
    "file": "deliverables.json",
-   "source": "client/ui-deliverables/src/client/index.ts",
-   "keys": 37
+   "source": "dsh-client-ui-deliverables/lib/client.js (static)",
+   "keys": 57
+  },
+  "directory-browser": {
+   "file": "directory-browser.json",
+   "source": "(kept: registers per language)",
+   "keys": 13
   },
   "documentHtml": {
    "file": "documentHtml.json",
-   "source": "client/ui-sidebar-documentpreview/src/client/html/index.ts",
+   "source": "dsh-client-ui-sidebar-documentpreview/lib/client.js",
    "keys": 4
   },
   "documentMarkdown": {
    "file": "documentMarkdown.json",
-   "source": "client/ui-sidebar-documentpreview/src/client/markdown/index.ts",
+   "source": "dsh-client-ui-sidebar-documentpreview/lib/client.js",
    "keys": 4
+  },
+  "entryCustomization": {
+   "file": "entryCustomization.json",
+   "source": "dsh-client-ui-entry-customization/lib/client.js",
+   "keys": 7
   },
   "feedback": {
    "file": "feedback.json",
-   "source": "client/ui-message-feedback/src/client/index.ts",
+   "source": "dsh-client-ui-message-feedback/lib/client.js",
    "keys": 20
+  },
+  "fileActions": {
+   "file": "fileActions.json",
+   "source": "dsh-client-ui-file-actions/lib/client.js (static)",
+   "keys": 12
+  },
+  "fileDrag": {
+   "file": "fileDrag.json",
+   "source": "dsh-client-ui-file-drag/lib/client.js",
+   "keys": 1
   },
   "goal": {
    "file": "goal.json",
-   "source": "client/ui-goal/src/client/index.ts",
+   "source": "dsh-client-ui-goal/lib/client.js",
    "keys": 12
   },
   "job": {
    "file": "job.json",
-   "source": "client/ui-jobs/src/client/index.ts",
-   "keys": 15
+   "source": "dsh-client-ui-jobs/lib/client.js",
+   "keys": 38
+  },
+  "messageQuotes": {
+   "file": "messageQuotes.json",
+   "source": "dsh-message-quotes/lib/client.js",
+   "keys": 1
   },
   "model": {
    "file": "model.json",
-   "source": "client/ui-model-selection/src/client/index.ts",
-   "keys": 21
+   "source": "dsh-client-ui-model-selection/lib/client.js",
+   "keys": 23
   },
   "open-in-app": {
    "file": "open-in-app.json",
-   "source": "client/ui-open-in-app/src/client/index.ts",
-   "keys": 39
+   "source": "dsh-client-ui-open-in-app/lib/client.js (static)",
+   "keys": 59
   },
   "permission.access": {
    "file": "permission.access.json",
-   "source": "client/ui-permission-presets/src/client/index.ts",
+   "source": "dsh-client-ui-permission-presets/lib/client.js",
    "keys": 17
   },
   "plan": {
    "file": "plan.json",
-   "source": "client/ui-plan/src/client/index.ts",
-   "keys": 6
+   "source": "dsh-client-ui-plan/lib/client.js",
+   "keys": 16
   },
   "question": {
    "file": "question.json",
-   "source": "client/ui-user-questions/src/client/index.ts",
-   "keys": 15
+   "source": "dsh-client-ui-user-questions/lib/client.js (static)",
+   "keys": 31
   },
   "reference": {
    "file": "reference.json",
-   "source": "client/ui-reference/src/client/index.ts",
-   "keys": 10
+   "source": "dsh-client-ui-reference/lib/client.js",
+   "keys": 15
   },
-  "schedule.catalog": {
-   "file": "schedule.catalog.json",
-   "source": "client/ui-schedule/src/client/index.ts",
-   "keys": 18
+  "secretMask": {
+   "file": "secretMask.json",
+   "source": "dsh-client-ui-secret-mask/lib/client.js",
+   "keys": 2
   },
   "session-log-download": {
    "file": "session-log-download.json",
-   "source": "session-log-export/src/client/index.ts",
-   "keys": 9
+   "source": "dsh-session-log-export/lib/client.js",
+   "keys": 14
   },
   "settings": {
    "file": "settings.json",
-   "source": "client/ui-settings-general/src/client/index.ts",
-   "keys": 11
+   "source": "dsh-client-ui-settings-general/lib/client.js",
+   "keys": 65
+  },
+  "settings.account": {
+   "file": "settings.account.json",
+   "source": "dsh-client-ui-settings-account/lib/client.js",
+   "keys": 93
+  },
+  "settings.agentLoop": {
+   "file": "settings.agentLoop.json",
+   "source": "dsh-client-ui-settings-agent-loop/lib/client.js",
+   "keys": 12
   },
   "settings.agentPreset": {
    "file": "settings.agentPreset.json",
-   "source": "client/ui-agent-preset/src/client/index.ts",
-   "keys": 57
-  },
-  "settings.archivedSessions": {
-   "file": "settings.archivedSessions.json",
-   "source": "client/ui-settings-unarchive-sessions/src/client/index.ts",
-   "keys": 15
+   "source": "dsh-client-ui-agent-preset/lib/client.js",
+   "keys": 47
   },
   "settings.locale": {
    "file": "settings.locale.json",
-   "source": "client/locale/src/client/index.ts",
+   "source": "dsh-client-locale/lib/client.js (static)",
    "keys": 1
   },
   "settings.models": {
    "file": "settings.models.json",
-   "source": "client/ui-settings-models/src/client/index.ts",
-   "keys": 103
+   "source": "dsh-client-ui-settings-models/lib/client.js",
+   "keys": 173
   },
   "settings.permission": {
    "file": "settings.permission.json",
-   "source": "client/ui-permission-presets/src/client/index.ts",
+   "source": "dsh-client-ui-permission-presets/lib/client.js (static)",
    "keys": 12
   },
   "settings.pluginInventory": {
    "file": "settings.pluginInventory.json",
-   "source": "client/ui-settings-plugin-inventory/src/client/index.ts",
-   "keys": 36
+   "source": "dsh-client-ui-settings-plugin-inventory/lib/client.js",
+   "keys": 37
   },
   "settings.plugins": {
    "file": "settings.plugins.json",
-   "source": "client/ui-settings-plugins/src/client/index.ts",
-   "keys": 52
+   "source": "dsh-client-ui-settings-plugins/lib/client.js",
+   "keys": 5
+  },
+  "settings.sessionLog": {
+   "file": "settings.sessionLog.json",
+   "source": "dsh-client-ui-settings-session-log/lib/client.js",
+   "keys": 4
+  },
+  "settings.shell": {
+   "file": "settings.shell.json",
+   "source": "dsh-client-ui-settings-shell/lib/client.js",
+   "keys": 14
+  },
+  "settings.subagent": {
+   "file": "settings.subagent.json",
+   "source": "dsh-client-ui-settings-subagent/lib/client.js",
+   "keys": 35
   },
   "settings.theme": {
    "file": "settings.theme.json",
-   "source": "client/ui-theme/src/client/index.ts",
-   "keys": 9
+   "source": "dsh-client-ui-theme/lib/client.js",
+   "keys": 25
+  },
+  "settings.webSearch": {
+   "file": "settings.webSearch.json",
+   "source": "dsh-client-ui-settings-web-search/lib/client.js",
+   "keys": 43
+  },
+  "shortcuts": {
+   "file": "shortcuts.json",
+   "source": "dsh-client-ui-shortcuts/lib/client.js",
+   "keys": 56
+  },
+  "shortcuts.layout": {
+   "file": "shortcuts.layout.json",
+   "source": "dsh-client-ui-layout/lib/client.js",
+   "keys": 1
   },
   "sidebar": {
    "file": "sidebar.json",
-   "source": "client/ui-sidebar/src/client/index.ts",
-   "keys": 5
+   "source": "dsh-client-ui-sidebar/lib/client.js",
+   "keys": 10
   },
   "sidebarCodePreview": {
    "file": "sidebarCodePreview.json",
-   "source": "client/ui-sidebar-documentpreview/src/client/code/index.ts",
+   "source": "dsh-client-ui-sidebar-documentpreview/lib/client.js",
    "keys": 3
   },
   "sidebarDocumentPreview": {
    "file": "sidebarDocumentPreview.json",
-   "source": "client/ui-sidebar-documentpreview/src/client/index.ts",
-   "keys": 19
+   "source": "dsh-client-ui-sidebar-documentpreview/lib/client.js",
+   "keys": 22
+  },
+  "sidebarExcel": {
+   "file": "sidebarExcel.json",
+   "source": "dsh-client-ui-sidebar-documentpreview/lib/client.js",
+   "keys": 15
   },
   "sidebarFiles": {
    "file": "sidebarFiles.json",
-   "source": "client/ui-sidebar-files/src/client/index.ts",
-   "keys": 13
+   "source": "dsh-client-ui-sidebar-files/lib/client.js",
+   "keys": 53
   },
   "sidebarImage": {
    "file": "sidebarImage.json",
-   "source": "client/ui-sidebar-documentpreview/src/client/image/index.ts",
-   "keys": 5
+   "source": "dsh-client-ui-sidebar-documentpreview/lib/client.js",
+   "keys": 11
+  },
+  "sidebarOffice": {
+   "file": "sidebarOffice.json",
+   "source": "dsh-client-ui-sidebar-documentpreview/lib/client.js",
+   "keys": 15
   },
   "sidebarPdf": {
    "file": "sidebarPdf.json",
-   "source": "client/ui-sidebar-documentpreview/src/client/pdf/index.ts",
-   "keys": 9
+   "source": "dsh-client-ui-sidebar-documentpreview/lib/client.js",
+   "keys": 15
   },
   "sidebarRight": {
    "file": "sidebarRight.json",
-   "source": "client/ui-sidebar-right/src/client/index.ts",
-   "keys": 21
+   "source": "dsh-client-ui-sidebar-right/lib/client.js",
+   "keys": 38
   },
   "sidebarTerminal": {
    "file": "sidebarTerminal.json",
-   "source": "client/ui-sidebar-terminal/src/client/index.ts",
-   "keys": 27
+   "source": "dsh-client-ui-sidebar-terminal/lib/client.js",
+   "keys": 33
   },
   "skill": {
    "file": "skill.json",
-   "source": "client/ui-skill/src/client/index.ts",
-   "keys": 7
+   "source": "dsh-client-ui-skill/lib/client.js",
+   "keys": 8
   },
   "slash.menu": {
    "file": "slash.menu.json",
-   "source": "client/ui-input-trigger/src/client/index.ts",
+   "source": "dsh-client-ui-input-trigger/lib/client.js",
    "keys": 9
   },
   "subagent": {
    "file": "subagent.json",
-   "source": "client/ui-subagent/src/client/index.ts",
-   "keys": 37
+   "source": "dsh-client-ui-subagent/lib/client.js",
+   "keys": 47
   },
   "trajectory": {
    "file": "trajectory.json",
-   "source": "client/ui-trajectory/src/client/index.ts",
-   "keys": 182
+   "source": "dsh-client-ui-trajectory/lib/client.js",
+   "keys": 199
   },
   "workflowRun": {
    "file": "workflowRun.json",
-   "source": "client/ui-workflow-run/src/client/index.ts",
+   "source": "dsh-client-ui-workflow-run/lib/client.js",
    "keys": 18
   },
   "workspace": {
    "file": "workspace.json",
-   "source": "client/ui-workspace/src/client/index.ts",
-   "keys": 63
-  },
-  "directory-browser": {
-   "file": "directory-browser.json",
-   "source": "client/ui-directory-picker-browse/src/client/index.ts",
-   "keys": 13
+   "source": "dsh-client-ui-workspace/lib/client.js (static)",
+   "keys": 119
   }
  }
 }

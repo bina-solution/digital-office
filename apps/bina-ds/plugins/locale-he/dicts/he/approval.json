@@ -1,7 +1,9 @@
 {
- "waiting": "ממתין לאישור",
+ "allow": "אישור",
+ "allowAlways": "אישור תמיד",
+ "allowOnce": "אישור חד־פעמי",
  "detail.aria": "פרטי האישור",
  "escalation": "הכלי {toolName} מבקש הרצה עם הרשאות מורחבות",
  "reject": "דחייה",
- "allowOnce": "אישור חד־פעמי"
+ "waiting": "ממתין לאישור"
 }

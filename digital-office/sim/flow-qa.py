@@ -706,7 +706,7 @@ def mail_flows(pg, errs):
         gap = w.evaluate('e => { const r = e.getBoundingClientRect(); return [Math.round(r.left), Math.round(innerWidth - r.right), innerWidth]; }')
         check("mail/the compose sheet is the screen's width on a phone, and inset from the reading side on a wider screen",
               gap[:2] == [0, 0] if gap[2] <= 640 else gap[1] == 24, gap)
-        w.locator('[data-to]').fill('person85@example.com')
+        w.locator('[data-to]').fill('person88@example.com')
         w.locator('[data-subj]').fill('בדיקת QA — הודעה חדשה')
         w.locator('[data-body]').fill('גוף ההודעה לבדיקה.')
         if target_url().startswith('http'):

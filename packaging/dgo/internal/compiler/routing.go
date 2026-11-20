@@ -283,6 +283,10 @@ func renderRouting(repo string, cat *Catalog, order []string, env *dotenv) (stri
 func routingLabels(appID string, r *yamlish.Map, framed string, env *dotenv, admins bool) ([]any, error) {
 	svc := pyval.Str(either(get(r, "service"), appID))
 	name := pyval.Str(either(get(r, "name"), appID))
+	// The traefik SERVICE this entry's routers go to: its own name when the entry declares one, so one
+	// container may publish two ports (bina-ds: the harness and עזריה's screen — EXU-64). An entry with
+	// no name, or whose name is its compose service, renders exactly as before (reconcile.py's `lb`).
+	lb := pyval.Str(either(get(r, "name"), svc))
 	hostv, err := index(r, "host", appID+": routing")
 	if err != nil {
 		return nil, err
@@ -385,7 +389,7 @@ func routingLabels(appID string, r *yamlish.Map, framed string, env *dotenv, adm
 			// never asks Let's Encrypt for a .localhost certificate — reconcile.py writes the same text
 			labels = append(labels, p+".tls=true", p+".tls.certresolver=${TRAEFIK_CERTRESOLVER-myresolver}")
 		}
-		labels = append(labels, p+".service="+svc)
+		labels = append(labels, p+".service="+lb)
 		if len(wantMW) > 0 {
 			labels = append(labels, p+".middlewares="+strings.Join(wantMW, ","))
 		}
@@ -460,7 +464,7 @@ func routingLabels(appID string, r *yamlish.Map, framed string, env *dotenv, adm
 			if priority != nil {
 				labels = append(labels, p+".priority="+pyval.Str(priority))
 			}
-			labels = append(labels, p+".service="+svc)
+			labels = append(labels, p+".service="+lb) // the entry's own service: its port (EXU-64)
 			mids := subChain
 			if tls && srv { // hsts pins a CERTIFICATE's host: the https twin of this path only
 				mids = append([]string{"hsts@file"}, subChain...) // first, as mwFor above
@@ -480,7 +484,7 @@ func routingLabels(appID string, r *yamlish.Map, framed string, env *dotenv, adm
 			subRouter("", "Host(`"+framed+"`)", "web", false)
 		}
 	}
-	return append(labels, "traefik.http.services."+svc+".loadbalancer.server.port="+pyval.Str(port)), nil
+	return append(labels, "traefik.http.services."+lb+".loadbalancer.server.port="+pyval.Str(port)), nil
 }
 
 // ── on demand (DGO-1270): reconcile.py's ON_DEMAND_LABEL, on_demand_waker, on_demand_idle, on_demand_labels ──
@@ -626,6 +630,7 @@ func passthroughLabels(appID string, r, consoleR, console *yamlish.Map, env *dot
 		return nil, &exit{appID + ": module.passthrough requires module.alias"}
 	}
 	svc := pyval.Str(either(get(r, "service"), appID))
+	lb := pyval.Str(either(get(r, "name"), svc)) // the traefik service, as routingLabels names it (EXU-64)
 	port, err := index(r, "port", appID+": routing")
 	if err != nil {
 		return nil, err
@@ -697,10 +702,10 @@ func passthroughLabels(appID string, r, consoleR, console *yamlish.Map, env *dot
 			if rt.tls {
 				labels = append(labels, key+".tls=true", key+".tls.certresolver=${TRAEFIK_CERTRESOLVER-myresolver}")
 			}
-			labels = append(labels, key+".service="+svc, key+".middlewares="+strings.Join(middlewares, ","))
+			labels = append(labels, key+".service="+lb, key+".middlewares="+strings.Join(middlewares, ","))
 		}
 	}
-	return append(labels, "traefik.http.services."+svc+".loadbalancer.server.port="+pyval.Str(port)), nil
+	return append(labels, "traefik.http.services."+lb+".loadbalancer.server.port="+pyval.Str(port)), nil
 }
 
 // pyReEscape is re.escape(): a backslash before each character a pattern gives a meaning to —

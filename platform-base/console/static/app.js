@@ -3,12 +3,6 @@
 // connections credential plane.
 const $ = s => document.querySelector(s);
 const el = (t, c, h) => { const e = document.createElement(t); if (c) e.className = c; if (h != null) e.innerHTML = h; return e; };
-/* ONE IS SAID AS ONE (DGO-530, and the plural items behind it): a count of one is its own sentence —
-   «1 אפליקציות מותקנות» is not Hebrew — and any other count is the number as the office writes
-   numbers, with the plural. The rule is written out in apps/mail/mailview/static/app.js; this is the
-   console's copy of it, because each of these scripts carries what it needs. */
-const num = n => Number(n).toLocaleString("he-IL");
-const one = (n, single, many) => (Number(n) === 1 ? single : `${num(n)} ${many}`);
 
 // ── the tile icons: ONE set for every surface that lists apps — a copy of
 // platform-base/bina-ui/bina-icons.js, kept byte-identical by gate G27. mIcon() wraps a glyph.
@@ -844,6 +838,7 @@ async function boot() {
   const addressesApp = () => /^(#\/?)?$|^#\/m\/(?!settings(?:[/?#]|$))/.test(location.hash);   // settings is the console's own
   applyRail(addressesApp());
   ME = await fetch("/api/me").then(r => r.json()).catch(() => ({ name: "אורח" }));
+  tbMeInit();
   $("#userBox").innerHTML = `מחובר/ת<br><b>${esc(ME.name)}</b>`;
   signoutUrl();   // read once, early: desktop mode's office menu draws its «התנתקות» from it (DGO-1621)
   // the office's mark and the «מחובר/ת» line open the account menu (DGO-1621)
@@ -1012,6 +1007,13 @@ function meClose(focusBack) {
 function meOutside(e) { if (meOpen && !meOpen.menu.contains(e.target) && !meOpen.from.contains(e.target)) meClose(false); }
 function meKey(e) { if (meOpen && e.key === "Escape") { e.stopPropagation(); e.preventDefault(); meClose(true); } }
 let meAsking = null;   // the anchor whose menu waits for /api/signout: a second press meanwhile opens nothing more
+// The account button in the top bar, on every screen (DGO-1892): the person's initial in a circle, where every phone
+// app keeps it, opening the same account menu as the office's mark (DGO-1621).
+function tbMeInit() {
+  const b = $("#tbMe"); if (!b) return;
+  b.textContent = (((ME && ME.name) || "?").trim().charAt(0) || "?");
+  b.onclick = () => meMenu(b);
+}
 async function meMenu(anchor) {
   const was = meOpen && meOpen.from;
   meClose(false);
@@ -1056,25 +1058,12 @@ function renderHome() {
       ${officeLine(m)}
     </a>`;
   $("#content").innerHTML = `<div class="home">
-    <div class="home-head">
-      <div class="home-clock num" id="homeClock"></div>
-      <div class="home-brand"><b><span class="logo home-logo" aria-hidden="true">${(document.querySelector(".brand .logo svg") || {}).outerHTML || ""}</span>הלשכה הדיגיטלית</b>
-        <small>${one(MODULES.length, "אפליקציה אחת מותקנת", "אפליקציות מותקנות")}</small></div>
-      <button class="icon-btn home-me" id="homeMe" type="button" title="החשבון שלך: מי מחובר, והתנתקות"
-        aria-label="החשבון שלך" aria-haspopup="menu" aria-expanded="false">${esc(((ME && ME.name) || "?").trim().charAt(0) || "?")}</button>
-    </div>
     ${groups.map((g) => `${g.name ? `<div class="home-group">${esc(g.name)}</div>` : ""}
       <div class="home-grid">${g.mods.map(tile).join("")}</div>`).join("")}
   </div>`;
-  const tick = () => {
-    const el = $("#homeClock");
-    if (!el) return;
-    el.textContent = new Date().toLocaleTimeString("he-IL", { hour: "2-digit", minute: "2-digit" });
-  };
-  tick();
-  const me = $("#homeMe"); if (me) me.onclick = () => meMenu(me);
-  clearInterval(renderHome._t);
-  renderHome._t = setInterval(tick, 20000);
+  // The home screen is its tiles (the owner, 2026-11-18, msg 1270, DGO-1892): no clock and no account button inside
+  // the view — the office's name is the top bar's title here, and the account is the bar's last control (#tbMe).
+  $("#viewTitle").innerHTML = `<span class="logo vt-home-logo" aria-hidden="true">${(document.querySelector(".brand .logo svg") || {}).outerHTML || ""}</span>הלשכה הדיגיטלית`;
 }
 
 function buildNav() {

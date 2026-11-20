@@ -256,7 +256,7 @@ return [{ json: {
     "LINK": "https://drive.localhost/file/d/1REDACTEDdrivexxxxxxxxxxxxxxx0006/view?usp=drivesdk",
     // [bs-fixture 2026-08-07] LINK points at a REAL client balance sheet, so without this
     // flag the base stage runs BaseDocEx01 and 'Select Base Values' overwrites the fixture's
-    // COMPANY_ID 'C1' with the company resolved from the actual PDF (500000245). The BS
+    // COMPANY_ID 'C1' with the company resolved from the actual PDF (500000252). The BS
     // line-linker then searches existing invoices by the RESOLVED id, so the seeded
     // ex_upd/ex_skp (still 'C1') can never match: matchCount=0 and the CREATE branch ran for
     // every line. That is why 'SKP03 duplicated (2)' fired -- and why the UPDATE and SKIP

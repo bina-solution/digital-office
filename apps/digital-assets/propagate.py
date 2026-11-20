@@ -22,6 +22,7 @@ import logging
 import os
 import time
 
+import brand_fields
 import clients
 import files
 import store
@@ -87,12 +88,15 @@ def plan(slot_key: str, asset_id: str | None = None) -> dict:
     caps_cache: dict[str, dict] = {}
     social_down = None
     items = []
+    live = {"channel": "brand", "channel_label": "המוצרים של הלשכה", "kind": "brand", "action": "live",
+            "why": "המוצרים של הלשכה, ובהם המסמכים, קוראים את הזהות מכאן — השינוי מגיע אליהם תוך חצי דקה"}
+    # a slot of the identity contract feeds the products whether or not its blueprint declared it (DGO-2048)
+    if slot_key in brand_fields.BY_SLOT and not any(t.get("channel") == "brand" for t in slot.get("targets") or []):
+        items.append({**live, "field": brand_fields.BY_SLOT[slot_key]})
     for t in slot.get("targets") or []:
         cid, field = t.get("channel"), t.get("field")
         if cid == "brand":
-            items.append({"channel": "brand", "channel_label": "המוצרים של הלשכה", "kind": "brand",
-                          "field": t.get("brand") or "", "action": "live",
-                          "why": "המוצרים קוראים את המותג ישירות מכאן — השינוי חל מיד"})
+            items.append({**live, "field": t.get("brand") or ""})
             continue
         ch = channels.get(cid)
         if not ch:
@@ -332,22 +336,54 @@ def bundle(only: list[str] | None = None, public_base: str | None = None) -> dic
 
 
 def brand(public_base: str | None = None) -> dict:
-    """The business identity as the office's own products read it (capability `brand`)."""
+    """The business identity as the office's own products read it (capability `brand`, DGO-2048).
+
+    `brand` holds every field of the contract (brand_fields.CORE) whose slot holds an active value, and any
+    other field a blueprint declared with a `channel: brand` target (the product's own name and mark);
+    `missing` names the contract's fields that hold nothing yet. A file is {url, png, mime}; the rest is text."""
     base = (public_base or SELF_URL).rstrip("/")
-    out = {}
     actives = store.active_map()
+
+    def value(key: str):
+        a = actives.get(key)
+        asset = store.get_asset(a["asset_id"]) if a else None
+        if not asset:
+            return None
+        if asset.get("file_sha"):
+            return {"url": f"{base}/files/{asset['file_sha']}.{asset['file_ext']}",
+                    "png": f"{base}/files/{asset['file_sha']}.{asset['file_ext']}?px=512",
+                    "mime": asset.get("mime")}
+        text = asset.get("text")
+        return text if isinstance(text, str) and text.strip() else None
+
+    out, missing = {}, []
+    for f in brand_fields.CORE:
+        v = next((x for x in (value(k) for k in f["slots"]) if x is not None), None)
+        if v is None:
+            missing.append(f["field"])
+        else:
+            out[f["field"]] = v
     for s in store.list_slots("identity"):
         for t in s.get("targets") or []:
-            if t.get("channel") != "brand" or not t.get("brand"):
+            name = t.get("brand") if t.get("channel") == "brand" else None
+            if not name or name in brand_fields.FIELDS or name in out:
                 continue
-            a = actives.get(s["key"])
-            asset = store.get_asset(a["asset_id"]) if a else None
-            if not asset:
-                continue
-            if asset.get("file_sha"):
-                out[t["brand"]] = {"url": f"{base}/files/{asset['file_sha']}.{asset['file_ext']}",
-                                   "png": f"{base}/files/{asset['file_sha']}.{asset['file_ext']}?px=512",
-                                   "mime": asset.get("mime")}
-            else:
-                out[t["brand"]] = asset.get("text")
-    return {"brand": out, "updated_at": max([a["set_at"] for a in actives.values()] or [0])}
+            v = value(s["key"])
+            if v is not None:
+                out[name] = v
+    return {"brand": out, "missing": missing,
+            "updated_at": max([a["set_at"] for a in actives.values()] or [0])}
+
+
+def ensure_identity() -> list[str]:
+    """Create the contract's slots this office lacks — the definition only, never a value — so «זהות» holds
+    every field of the business on every office, whatever blueprint it applied. Returns the keys created."""
+    made = []
+    for f in brand_fields.CORE:
+        key = f["slots"][0]
+        if not store.get_slot(key):
+            store.upsert_slot(brand_fields.slot_definition(f))
+            made.append(key)
+    if made:
+        store.event("identity", f"נוספו {len(made)} משבצות של זהות העסק", actor="system")
+    return made

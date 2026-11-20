@@ -119,6 +119,52 @@ def flow(type_: str, title: str, *, link: str = "", data: dict | None = None) ->
                     redis_url=cfg["redis_url"], password=cfg["redis_password"])
 
 
+# ── the certificate, as the house style draws it ───────────────────────────────────────────────────
+#: what each audit event says on the certificate
+EVENT_WORDS = {
+    "envelope.created": "המסמך הוכן לחתימה", "envelope.sent": "קישור החתימה נשלח",
+    "envelope.relinked": "הקישור הונפק מחדש", "envelope.opened": "המסמך נפתח",
+    "envelope.unlock": "הוזנה סיסמה", "envelope.consent": "החותם הסכים לחתום אלקטרונית",
+    "envelope.sign_failed": "ניסיון חתימה נכשל", "envelope.cancelled": "המעטפה בוטלה",
+}
+
+
+def _local(at: str) -> str:
+    """An audit timestamp (ISO, UTC) on the office's clock (TZ), as the certificate prints it."""
+    try:
+        return datetime.fromisoformat(str(at).replace("Z", "+00:00")).astimezone().strftime("%d/%m/%Y %H:%M:%S")
+    except ValueError:
+        return str(at)
+
+
+def house_certificate(env: dict, *, typed_name: str, when: datetime, ip: str, chain_ok: bool) -> dict:
+    """The SIGN_CERTIFICATE document (src/doc_gen/house in apitools) for this envelope: the document, its
+    fingerprint, the signer and how the link was guarded, and every audit event in order."""
+    events = []
+    for ev in store().events(env["id"]):
+        try:
+            data = json.loads(ev.get("data") or "{}")
+        except (TypeError, ValueError):
+            data = {}
+        what = EVENT_WORDS.get(ev["type"], ev["type"])
+        if ev["type"] == "envelope.unlock":
+            what += " — " + ("נכונה" if data.get("result") == "ok" else "שגויה")
+        events.append({"when": _local(ev["at"]), "what": what, "ip": data.get("ip") or ""})
+    events.append({"when": _local(iso(when)), "what": "נחתם", "who": typed_name, "ip": ip or ""})
+    method = "קישור אישי" + (" + סיסמה שנמסרה בנפרד" if env.get("pw_hash") else "")
+    n = len(events) - 1
+    return {
+        "doc_type": "SIGN_CERTIFICATE", "doc_id": env["id"], "doc_date": when.astimezone().strftime("%d/%m/%Y"),
+        "certificate": {
+            "envelope": env["id"], "title": env["doc_name"], "sender": env["sender"], "sha_before": env["doc_sha256"],
+            "signers": [{"name": typed_name, "method": method, "when": _local(iso(when)), "ip": ip or ""}],
+            "events": events,
+            "verdict": ("שרשרת יומן החתימה שלמה (%d אירועים), והמסמך נחתם כפי שנשלח." % n) if chain_ok
+            else "אימות שרשרת יומן החתימה נכשל — ראו את יומן החתימה המצורף.",
+        },
+    }
+
+
 # ── signing: the whole chain, in one function, so a retry can run it again ────────────────────────
 def sign_envelope(env: dict, *, typed_name: str, ip: str = "", ua: str = "") -> dict:
     """Stamp, add the certificate page, PAdES-sign, verify, store, and copy into drive."""
@@ -155,19 +201,39 @@ def sign_envelope(env: dict, *, typed_name: str, ip: str = "", ua: str = "") -> 
                                              "אימות תקין" if chain_ok else "אימות נכשל"),
         "חתימת השרשרת: %s" % (last or ""),
     ]
-    cert = pdfsign.certificate_page("תעודת חתימה אלקטרונית", lines,
-                                    footer="מסמך זה נחתם אלקטרונית בלשכה הדיגיטלית של בינה סלושנס.\n"
-                                           "החתימה מוצמדת למסמך כולו, ומזהה שינוי בכל בייט אחרי החתימה.")
+    # the key first: the certificate names whose key signs (DGO-2029, the third reader)
+    office = os.environ.get("ESIGN_OFFICE_NAME", "")
+    key_pem, cert_pem = pdfsign.load_or_create_cert(
+        data_dir, os.environ.get("ESIGN_CERT_P12", ""), os.environ.get("ESIGN_CERT_PASS", ""), office=office)
+    # the certificate in the office's house style (the documents renderer, DGO-2029); the plain page when
+    # the renderer does not answer — a signature never waits on a look
+    certificate = house_certificate(env, typed_name=typed_name, when=when, ip=ip, chain_ok=chain_ok)
+    certificate["certificate"]["key_subject"] = pdfsign.subject(cert_pem)
+    cert = clients.render_house(cfg["render_url"], certificate)
+    if not cert:
+        cert = pdfsign.certificate_page("תעודת חתימה אלקטרונית", lines,
+                                        footer="מסמך זה נחתם אלקטרונית בלשכה הדיגיטלית.\n"
+                                               "החתימה מוצמדת למסמך כולו, ומזהה שינוי בכל בייט אחרי החתימה.")
     body = pdfsign.append_pages(stamped, cert)
     tmp_dir = tempfile.mkdtemp(prefix="esign-")
     try:
         staged = os.path.join(tmp_dir, "staged.pdf")
         with open(staged, "wb") as fh:
             fh.write(body)
-        key_pem, cert_pem = pdfsign.load_or_create_cert(
-            data_dir, os.environ.get("ESIGN_CERT_P12", ""), os.environ.get("ESIGN_CERT_PASS", ""))
-        pdfsign.sign(staged, signed_path, key_pem, cert_pem,
-                     reason="חתימה על %s" % env["doc_name"], location="BINA Solutions office")
+        reason = "חתימה על %s" % env["doc_name"]
+        location = office or "Digital Office"
+        tsa_url = os.environ.get("ESIGN_TSA_URL", "")
+        try:
+            stamper = pdfsign.timestamper(tsa_url)
+            pdfsign.sign(staged, signed_path, key_pem, cert_pem, reason=reason, location=location, stamper=stamper)
+        except Exception:
+            if not tsa_url:
+                raise
+            # the time-stamping authority did not answer: the signer's act is never lost to it — the file is
+            # signed without the trusted time, and the event says so (pades.timestamped false)
+            if os.path.exists(signed_path):
+                os.remove(signed_path)
+            pdfsign.sign(staged, signed_path, key_pem, cert_pem, reason=reason, location=location)
     finally:
         shutil.rmtree(tmp_dir, ignore_errors=True)
 

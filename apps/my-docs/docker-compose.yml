@@ -17,6 +17,10 @@ services:
       - SENTRY_DSN=${MY_DOCS_SENTRY_DSN:-}
       - DEPLOYMENT_NAME=${DEPLOYMENT_NAME:-bina-deployment}
       - APITOOLS_URL=${MY_DOCS_APITOOLS_URL:-http://apitools:8080}
+      # the signing app: a deal document goes out for signature from the documents screen (DGO-2029)
+      - ESIGN_URL=${MY_DOCS_ESIGN_URL:-http://esign:8080}
+      # the documents index: «ארכיון» — issued, incoming and the office's files, one search (DGO-2029)
+      - DOCUMENTS_URL=${MY_DOCS_DOCUMENTS_URL:-http://documents:8080}
     networks:
       - traefik-network
     deploy:

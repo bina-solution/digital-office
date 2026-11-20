@@ -222,7 +222,7 @@ _ZONE_NS = {}
 def _zone_nameservers(name):
     """Addresses of the nameservers authoritative for the closest zone at or above `name`.
 
-    Walks up the labels because the zone cut is not knowable in advance — `93.184.216.17.in-addr.arpa`
+    Walks up the labels because the zone cut is not knowable in advance — `93.184.216.16.in-addr.arpa`
     has no NS of its own, the delegation lives at `2.0.192.in-addr.arpa` (the VPS provider), and
     the same is true of `_dmarc.<domain>` versus `<domain>`."""
     parts = name.rstrip(".").split(".")

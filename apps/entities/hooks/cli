@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+#: ישויות from the shell — people and organizations, with their roles: ./bbox entities help
+#:   ./bbox entities list [customer|supplier|company|salesperson|contact] · show <id> · add <kind> "<name>" · party <id>
+#
+# The app's one door to the shell (app.json `cli.fallback`): `bbox entities <anything>` lands here and runs
+# apps/entities/cli.py inside the app's own container, against its API on loopback (the only caller it admits
+# without its token).
+set -uo pipefail
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
+. "${REPO_ROOT}/scripts/lib.sh"
+
+running "entities-${DN}" || die "[entities] «ישויות» does not run on this office — \`bbox app enable entities\`"
+dcx exec -T entities python3 /app/cli.py "$@"

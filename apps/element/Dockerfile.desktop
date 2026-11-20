@@ -14,7 +14,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 # Element's OWN repository, exactly as element.io/download says (packages.element.io, suite `default`,
 # amd64 and arm64). Element publishes no fingerprint for its key: the one checked here is the key as
-# packages.element.io served it over HTTPS on 2026-11-10 (uid «riot.im packages <person22@example.com>»,
+# packages.element.io served it over HTTPS on 2026-11-10 (uid «riot.im packages <person23@example.com>»,
 # computed from the key file, sha256 c2cb0c6b…c1955). A changed key fails the build; a person checks it
 # with Element before this line changes. The Release file apt reads is signed with it.
 RUN curl -fsSLo /usr/share/keyrings/element-io-archive-keyring.gpg https://packages.element.io/debian/element-io-archive-keyring.gpg \

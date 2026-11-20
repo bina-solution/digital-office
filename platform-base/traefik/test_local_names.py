@@ -29,7 +29,7 @@ PRIVATE = {"127.0.0.0/8", "10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16", "100.
            "::1/128", "fc00::/7", "fe80::/10"}
 # measured outsiders of 2026-11-09 (the Mac's public address, vps1, Exampleu, a public resolver, a public v6)
 # and the office's own sources (a container on traefik-network, the bridge, Lima's forward, loopback)
-OUTSIDE = ["93.184.216.13", "93.184.216.5", "93.184.216.11", "8.8.8.8", "2001:4860:4860::8888"]
+OUTSIDE = ["93.184.216.12", "93.184.216.5", "93.184.216.10", "8.8.8.8", "2001:4860:4860::8888"]
 INSIDE = ["172.18.0.25", "172.18.0.1", "192.168.5.2", "127.0.0.1", "::1", "10.0.2.15"]
 NAMES = ["supabase.localhost", "SUPABASE.LocalHost", "supabase.localhost.", "glitchtip.localhost",
          "plane.hp-laptop.localhost", "localhost"]

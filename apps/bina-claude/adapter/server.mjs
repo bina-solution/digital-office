@@ -190,6 +190,11 @@ function event(p, type, data = {}, at = now()) {
 function parse(p, r) {
   const ev = (type, data) => event(p, type, data, r.timestamp || now());
   const out = [];
+  // The office's Stop hook sending Claude back after its answer is a meta line of the person's role. It is no
+  // message of the person's, but what Claude writes next is the same turn going on — said as its own `hook`
+  // event, so a reader does not take the second answer for a reply to something new (DGO-2037).
+  if (r.isMeta && !r.isSidechain && r.type === "user" && r.message && /^Stop hook feedback/.test(userText(r.message.content) || ""))
+    return [ev("hook", { text: userText(r.message.content).slice(0, 400) })];
   if (r.isMeta || r.isSidechain) return out;
   if (r.type === "user" && r.message) {
     const c = r.message.content;
@@ -774,10 +779,16 @@ async function route(req, res, url) {
       // A start that pressed nothing may be tried again; one that may have started a session keeps its
       // answer, so a retry never starts a second one.
       const pd = pending.get(given);
-      if (!pd.start) pd.start = startSession(text).then((id) => { pd.id = id; return id; }, (e) => { if (UNSENT.has(e.code)) pd.start = null; throw e; });
+      if (!pd.start) pd.start = startSession(text).then((id) => { pd.id = id; return id; }, (e) => { if (UNSENT.has(e.code)) pd.start = null; else pd.failed = e.code || "unknown"; throw e; });
       return [202, { accepted: true, queue: 0, id: await pd.start }];
     }
-    if (!verb && req.method === "GET") return { id: given, title: "", running: false, blank: true, preset: "claude-desktop", turns: 0 };
+    // read before it started: whether its start is under way, or why a start that may have sent ended (a caller that
+    // lost its own record of it — Azaria's door after a restart — learns here what became of its message, DGO-2044)
+    if (!verb && req.method === "GET") {
+      const pd = pending.get(given);
+      return { id: given, title: "", running: false, blank: true, preset: "claude-desktop", turns: 0,
+               starting: !!(pd && pd.start && !pd.failed), ...(pd && pd.failed ? { failed: pd.failed } : {}) };
+    }
     throw new Fail(409, "not-started", `${given} starts with its first message`);
   }
   const rec = hit.rec;

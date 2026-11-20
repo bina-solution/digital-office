@@ -1,10 +1,11 @@
 ---
 id: assets.show
 title: What the business shows the world — its website's texts and its identity, slot by slot
-title_he: הנכסים הדיגיטליים — מה כתוב באתר ובזהות העסק
+title_he: «זהות» — מה כתוב באתר ובזהות העסק
 when:
   - מה כתוב באתר
   - מה הטקסטים של האתר
+  - הזהות של העסק
   - הנכסים הדיגיטליים
   - מה התיאור של העסק
   - website texts

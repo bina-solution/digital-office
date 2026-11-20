@@ -1,17 +1,17 @@
 {
   "id": "digital-assets",
   "title": {
-    "he": "נכסים דיגיטליים",
-    "en": "Digital assets"
+    "he": "זהות",
+    "en": "Identity"
   },
   "layer": 3,
   "people": "admins",
   "kind": "service",
   "page": "services",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "summary": {
-    "he": "כל מה שהעסק מציג לעולם — לוגו, שם, תיאורים, תוכן ומדיה — במשבצות מסודרות לפי תבניות, ומשם לכל ערוץ: רשתות, אתר ומוצרים",
-    "en": "Everything the business shows the world — logo, name, descriptions, content and media — as slots organised by blueprints, pushed to every channel: networks, website and products"
+    "he": "המקום היחיד שבו מגדירים את העסק — שם, פרטים משפטיים, פרטי קשר, סמלים, צבעים, טקסטים, תוכן ומדיה — וכל הלשכה קוראת משם: מסמכים, אתרים, רשתות ומוצרים",
+    "en": "The one place the business is defined — name, legal details, contact details, marks, colours, texts, content and media — and the whole office reads it from here: documents, websites, networks and products"
   },
   "capabilities": [
     {
@@ -97,8 +97,8 @@
         "embed": true,
         "alias": "digital-assets",
         "id": "digital-assets",
-        "name": "נכסים דיגיטליים",
-        "desc": "הזהות, התוכן והמדיה של העסק — ומשם לכל ערוץ",
+        "name": "זהות",
+        "desc": "הזהות של העסק, במקום אחד — ומשם לכל הלשכה ולכל ערוץ",
         "order": 4,
         "service": "digital-assets",
         "url_env": "DIGITAL_ASSETS_URL",
@@ -135,6 +135,6 @@
   },
   "agent": {
     "context": "AGENT.md",
-    "order": 24
+    "order": 4
   }
 }

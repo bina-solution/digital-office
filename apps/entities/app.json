@@ -1,0 +1,63 @@
+{
+  "id": "entities",
+  "title": { "he": "ישויות", "en": "Entities" },
+  "summary": {
+    "he": "כל מי שהעסק עובד איתו — אנשים וארגונים — במקום אחד, ולכל אחד התפקידים שלו: לקוח, ספק, חברה, איש מכירות, איש קשר. המסמכים וכל הלשכה לוקחים אותם מכאן",
+    "en": "Everyone the business works with — people and organizations — in one place, each with its roles: customer, supplier, company, salesperson, contact. Documents and the whole office take them from here"
+  },
+  "layer": 3,
+  "people": "admins",
+  "kind": "service",
+  "page": "services",
+  "version": "0.1.0",
+  "compose": "docker-compose.yml",
+  "capabilities": [
+    {
+      "name": "entities",
+      "type": "protocol",
+      "interface": "entities.v1",
+      "endpoint": "http://entities:8999",
+      "required_ops": ["entities", "entity", "party"],
+      "optional_ops": ["parties", "patterns", "create", "update", "role", "archive", "relations", "import", "events"]
+    }
+  ],
+  "use": [
+    { "capability": "identity", "strength": "wants", "after": false, "dependency": "weak" }
+  ],
+  "routing": [
+    {
+      "host": "entities",
+      "port": 8999,
+      "auth": "sso",
+      "module": {
+        "group": "עסק",
+        "icon": "book",
+        "embed": true,
+        "alias": "entities",
+        "id": "entities",
+        "name": "ישויות",
+        "desc": "אנשים וארגונים — לקוחות, ספקים, חברות, אנשי מכירות ואנשי קשר",
+        "order": 5,
+        "service": "entities",
+        "url_env": "ENTITIES_URL",
+        "url": "http://entities:8999"
+      },
+      "sso": {
+        "slug": "entities",
+        "display_name": "Entities",
+        "default_host": "entities.localhost",
+        "base_url_env": "ENTITIES_BASE_URL",
+        "local_twin": true
+      }
+    }
+  ],
+  "health": { "structural": "auto", "probe": { "http": "http://entities:8999/healthz", "interval": "30s" } },
+  "resources": { "cpus": "0.2", "memory": "128M" },
+  "data": {
+    "volumes": ["entities_data"],
+    "on_uninstall": "keep",
+    "note": "The people and organizations the business works with, their roles, relations, where each import came from, and the audit of every change — one SQLite file, entities.db. An entity is archived, never deleted: an issued document may name it."
+  },
+  "cli": { "alias": "entities", "fallback": "cli" },
+  "agent": { "context": "AGENT.md", "order": 5 }
+}

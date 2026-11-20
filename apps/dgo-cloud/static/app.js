@@ -311,7 +311,7 @@ function landing() {
       <details><summary>אפשר לבטל?</summary><p>בכל רגע, מהמסך שלך. השרת ממשיך לעבוד עד סוף החודש ששולם, והמידע נשמר עוד 14 יום.</p></details>
     </div>
   </section>
-  <footer>DGO Cloud — שירות של בינה סולושנס · <a href="#/terms">תנאי שימוש</a> · <a href="#/privacy">פרטיות</a> · <a href="mailto:person11@example.com">person11@example.com</a></footer>
+  <footer>DGO Cloud — שירות של בינה סולושנס · <a href="#/terms">תנאי שימוש</a> · <a href="#/privacy">פרטיות</a> · <a href="mailto:person12@example.com">person12@example.com</a></footer>
   </main>`);
 }
 
@@ -324,7 +324,7 @@ function legal(which) {
     `<h1>מדיניות פרטיות</h1>
     <p>אנחנו שומרים את מה שצריך כדי לתת את השירות: שם, מייל, פרטי חשבונית, היסטוריית תשלומים (מספר עסקה ו-4 ספרות אחרונות — את פרטי הכרטיס שומרת Cardcom), ורישום שימוש במודלים (איזה מודל, כמה טוקנים, כמה עלה).</p>
     <p>את תוכן השיחות עם המודלים אנחנו לא שומרים; הן עוברות דרך הנתב לספק המודל שבחרת (DeepSeek, Anthropic או OpenAI), לפי תנאי הפרטיות שלו.</p>
-    <p>המידע שבלשכה שלך נשאר על השרת שלך. לבקשות בנושא פרטיות: person11@example.com.</p>`;
+    <p>המידע שבלשכה שלך נשאר על השרת שלך. לבקשות בנושא פרטיות: person12@example.com.</p>`;
   view(`<main class="wrap"><div class="sheet" style="max-width:760px;margin:auto">${t}<p class="small muted">עודכן: 15.11.2026</p></div></main>`);
 }
 

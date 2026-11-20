@@ -1,6 +1,6 @@
 {
- "title": "HTML",
+ "failed": "This HTML document could not be previewed.",
  "frame": "HTML document preview",
- "loading": "Reading…",
- "failed": "This HTML document could not be previewed."
+ "loading": "Rendering document...",
+ "title": "HTML"
 }

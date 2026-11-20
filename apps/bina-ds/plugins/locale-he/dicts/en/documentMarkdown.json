@@ -1,6 +1,6 @@
 {
- "viewer.label": "Markdown",
- "code.copy": "Copy",
  "code.copied": "Copied",
- "footnotes": "Footnotes"
+ "code.copy": "Copy",
+ "footnotes": "Footnotes",
+ "viewer.label": "Markdown"
 }

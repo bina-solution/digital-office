@@ -30,6 +30,8 @@ names:
     he: בינה סולושנס
     en: Bina Solutions
     role: develops and provides DGO
+    # its legal details, contact details, logo and colours are defined in ONE place, the office's «זהות»
+    # (digital-assets on the MacBook, GET /api/brand — DGO-2048); this table names it and never restates them
   agent:
     he: עזריה                               # masculine
     en: Azaria
@@ -45,7 +47,7 @@ names:
     - { he: «ניהול גרסאות», en: git }
     - { he: «הרחבת הלשכה», en: dgo-extend, what: links offices together }
     - { he: «מחשבים», en: computers }
-    - { he: «נכסים דיגיטליים», en: digital-assets }
+    - { he: «זהות», en: digital-assets, what: the one place the business is defined (until 2026-11 «נכסים דיגיטליים») }
     - { he: «דומיינים», en: domains }
     - { he: «ניהול אפליקציות», en: app-management }
     - { he: «חיבורים ומפתחות», en: connections, what: the vault of keys, passwords and OAuth logins }

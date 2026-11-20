@@ -1,63 +1,66 @@
 # Operating «מסמכים שלי» (the `my-docs` app)
 
-The business's own documents: quotes, invoices, receipts, credit notes, numbered the way the tax
-authority expects, with their customers and items. This app is the screen and a thin pass-through.
-The documents themselves live in apitools' ledger (Postgres), which numbers, renders and audits
-them. Anything under `/api/…` here is forwarded as-is to `http://apitools:8080/…`.
+The business's own documents, every type, in one house style (DGO-2029): a proposal with its cover, a quote,
+a service agreement, an NDA, a work order, an order, a delivery note, a payment request («חשבון עסקה»), a tax
+invoice, an invoice-receipt, a receipt, a credit note, a customer statement, a report, a letter. This app is
+the screen and a thin pass-through. The documents live in apitools' ledger (Postgres), which numbers, renders
+(`src/doc_gen/house/`, README there) and audits them. Anything under `/api/…` is forwarded to `http://apitools:8080/…`.
 
 ## From inside the office network (`http://my-docs:8000/api/…`, or apitools directly)
 
 ```bash
 GET   /api/documents?type=&status=&customer_id=&limit=   # list / search
 GET   /api/documents/<id>                                # one document
-GET   /api/documents/<id>/download?format=pdf|png        # the rendered file — a write, see Rules
+GET   /api/documents/<id>/preview                        # its page as HTML — a read: uses up no «מקור»
+GET   /api/documents/<id>/download?format=pdf|png        # the file — a write for a document of the books, see Rules
 GET   /api/documents/<id>/events                         # its audit trail
-GET   /api/documents/verify                              # numbering continuity + tamper chain
 POST  /api/documents                                     # a DRAFT (`?issue=1` issues at once)
 PATCH /api/documents/<id>                                # edit a draft
-POST  /api/documents/<id>/issue | send {to} | pay | cancel {reason} | allocation {allocation_number,status}
+POST  /api/documents/<id>/issue | send {to} | pay | cancel {reason} | convert {to_type} | allocation {…}
+GET   /api/docGen/house/types?tax_status=patur           # the catalogue: which types this business issues
+GET   /api/docGen/house/template?type=PROPOSAL           # what a new document of a type starts with
+POST  /api/docGen/house?format=html|pdf                  # draw a document from data — nothing numbered or kept
+POST  /api/sign/<id> {signer,email?,password?}           # an issued deal document → esign's one link
+GET   /api/sign/<id> · /api/sign/envelope/<eid>/download # its envelopes (by the ids its trail recorded); the signed copy
 GET|POST /api/customers · /api/items · /api/business     # PATCH|DELETE /api/customers/<id>, /api/items/<id>
-GET   /api/me                                            # who the edge signed in
 ```
 
-A POST that creates something takes an `Idempotency-Key` header. The same key within 15 minutes
-returns the first answer and does not create twice: use one per intent, and retry with the same one.
-The screen is `/a/my-docs/` (`#/m/my-docs/<view>` or `doc/<id>`). From the shell, reads only:
-`./bbox my-docs documents|show <id>|events <id>|customers|items|integrity`.
+A POST that creates something takes an `Idempotency-Key` header: the same key within 15 minutes returns the
+first answer. The screen is `/a/my-docs/` (`new`, `new/<TYPE>`, `doc/<id>`). Shell, reads only:
+`./bbox my-docs documents|show <id>|events <id>|customers|items|integrity`. One write, a migration:
+`./bbox my-docs import-history <register.csv> --pdfs <folder> [--apply]` (both in «קבצים»; DGO-2042). It keeps
+another system's documents as they were issued: each PDF is the original, its copy is stamped «העתק», and the
+type's series continues past them (each type's next number follows its last imported one). Without --apply it changes nothing;
+a number already in the ledger is skipped.
 
 ## Rules
 
-- **Read freely, except the download.** The first download of an issued document uses up its
-  «מקור» (original): every later copy, the owner's own included, is «העתק». Download an issued
-  document only on the owner's words. A draft is yours to prepare when asked.
-- **Issue is final.** It takes the next number in the series, and a number is never reused. To undo
-  an issued document you **cancel** it, which creates a credit document beside it. Issue, cancel and
-  allocation only on the owner's words for that document.
-- **`send {to}` e-mails nothing.** It only marks the document sent and records the address in its
-  audit trail. Never tell the owner a customer was e-mailed because of it: delivering the file is a
-  separate act (a mail, with his go-ahead).
-- `pay` marks money as received: only from evidence the owner pointed at.
-- Deleting a customer or an item is his to ask for.
+- **Read freely, except the download of a document of the books.** The first download of an issued invoice,
+  invoice-receipt, credit note, receipt or delivery note is its «מקור», printed on the page; every later
+  copy prints «העתק». Download one only on the owner's words. The preview is free.
+- **Issue is final.** It takes the next number in the type's series, never reused. Cancelling a tax invoice
+  issues a credit note naming it, its date and the reason; cancelling anything else only marks it cancelled.
+  Issue, cancel and allocation only on the owner's words for that document.
+- **An עוסק פטור issues no tax invoice, invoice-receipt or credit note** — the ledger refuses them; its bill
+  is «חשבון עסקה» and its proof of payment «קבלה».
+- **`send {to}` e-mails nothing**, and **`/api/sign` sends nothing**: the first records the address, the second
+  makes the link. Delivering either to the customer is the owner's act, with his go-ahead.
+- `pay` marks money as received: only from evidence the owner pointed at. Deleting a customer or an item is
+  his to ask for.
 
-## Client documents in one house style, from data (`line`, DGO-1454)
+## The deal, end to end
 
-`./bbox my-docs line <data.json> [<out.pdf>] [--html] [--drive "/folder/"]` makes a quote, a service agreement, or
-both, in the business's one style: the bs101 agreement's look, written in Olive Grove's own values. The input is a
-JSON document. `line/example.json` is a whole one, with a made-up customer, and `line/line.py`'s header is the
-contract. A real customer's data is the business's file: it lives in the drive beside the PDF it made (for example
-`/פגישות/2026-11-08 · exu102/מקור/`), never in this repository.
+Proposal (or quote) → issued → «שליחה לחתימה» (esign: the PDF, a personal link, the audit trail; the signed
+copy and its certificate in «קבצים») → «המשך: …» converts it into the next draft: an agreement, a payment
+request (only one-time lines: a monthly retainer is billed each month), an invoice → «המשך: קבלה» on payment.
 
-It renders with WeasyPrint, else a local Chromium, else the Chromium of the office's browser42 image in a throwaway
-container. The last is what the MacBook gets, because `bbox` runs hooks in its engine's guest. Without a renderer
-that works, it writes the HTML and exits 1; the exit codes are in line.py's header. It is not the ledger: it
-numbers nothing and issues nothing. A quote that must be a tax
-document is a ledger QUOTE (`POST /api/documents`). Tests: `python3 apps/my-docs/line/test_line.py`.
+`./bbox my-docs line <data.json>` (DGO-1454, the olive bs101 look) still renders its data files; new client
+documents are the ledger's PROPOSAL and SERVICE_AGREEMENT, in the house style.
 
 ## Traps
 
-- The pass-through forwards every path and method, and apitools has no sign-in of its own. The
-  edge's SSO is the only gate, so never expose apitools' port.
-- The idempotency memory is per process (one worker by design). A restart forgets keys still inside
-  their 15 minutes.
+- The pass-through forwards every path and method, and apitools has no sign-in of its own. The edge's SSO
+  is the only gate, so never expose apitools' port.
+- The idempotency memory is per process (one worker by design). A restart forgets keys inside their 15 minutes.
 
-Gates: G27 (the shared screen blocks).
+Gates: G27 (the shared screen blocks), G82 (the screen names no colour; the documents' palette is apitools').

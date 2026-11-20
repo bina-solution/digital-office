@@ -1,0 +1,37 @@
+{# תעודת חתימה אלקטרונית — the last page of a signed document: what was signed, by whom, how they were verified,
+   when each step happened, and how anyone can check that not one byte changed since. #}
+{% extends "base.html.j2" %}
+{% import "_parts.html.j2" as p with context %}
+{% block body %}
+<div class="cert-h">
+  <div class="cert-badge"><span class="b">{{ p.check() }}</span>
+    <div><div class="t">תעודת חתימה אלקטרונית</div><div class="s">{{ sup.name }} · <span class="num">{{ cert.envelope }}</span></div></div></div>
+  {{ mark_html }}
+</div>
+<div class="rule"></div>
+<div class="sec"><span class="eyebrow">המסמך</span>
+<table class="kv">
+  <tr><td class="k">שם המסמך</td><td><b>{{ cert.title }}</b></td></tr>
+  {% if cert.number %}<tr><td class="k">מספר</td><td><span class="num">{{ cert.number }}</span></td></tr>{% endif %}
+  {% if cert.pages %}<tr><td class="k">עמודים</td><td><span class="num">{{ cert.pages }}</span> (ועוד תעודה זו)</td></tr>{% endif %}
+  <tr><td class="k">נשלח על ידי</td><td>{{ cert.sender }}</td></tr>
+  <tr><td class="k">טביעת אצבע לפני החתימה</td><td><span class="hash">SHA-256 {{ cert.sha_before }}</span></td></tr>
+  {% if cert.sha_after %}<tr><td class="k">טביעת אצבע של העותק החתום</td><td><span class="hash">SHA-256 {{ cert.sha_after }}</span></td></tr>{% endif %}
+</table></div>
+<div class="sec"><span class="eyebrow">החותמים</span>
+<table class="lines">
+  <thead><tr><th>שם</th><th>זיהוי</th><th>אימות</th><th class="n">נחתם</th></tr></thead>
+  <tbody>{% for s in cert.signers %}
+  <tr><td><div class="d">{{ s.name }}</div>{% if s.role %}<div class="x">{{ s.role }}</div>{% endif %}</td>
+      <td class="per">{% if s.email %}<span class="ltr">{{ s.email }}</span>{% endif %}{% if s.phone %}<br><span class="num">{{ s.phone }}</span>{% endif %}</td>
+      <td class="per">{{ s.method }}</td>
+      <td class="n"><span class="num">{{ s.when }}</span>{% if s.ip %}<div class="x num">IP {{ s.ip }}</div>{% endif %}</td></tr>
+  {% endfor %}</tbody>
+</table></div>
+<div class="sec"><span class="eyebrow">מה קרה, לפי הסדר</span>
+<div class="timeline">{% for e in cert.events %}
+  <div class="ev"><span class="t num">{{ e.when }}</span><span class="d">{{ e.what }}{% if e.who %} · {{ e.who }}{% endif %}</span>{% if e.ip %}<span class="ip num">{{ e.ip }}</span>{% endif %}</div>
+{% endfor %}</div></div>
+<div class="verdict"><span class="b">{{ p.check() }} {{ cert.verdict }}</span></div>
+<div class="fine">{{ cert.fine }}</div>
+{% endblock %}

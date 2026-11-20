@@ -117,7 +117,7 @@
    "category": "acquirer + payment gateway",
    "type": "acquirer",
    "summary_he": "סולק עצמאי ושער תשלומים לעסקים; קיבל רישיון סולק קבוע מבנק ישראל ביולי 2024 ועבר לפיקוח רשות ניירות ערך בדצמבר 2025.",
-   "why_israeli": "חברה ישראלית (ח.פ. 500000153), כתובת רשומה יד חרוצים 19 נתניה לפי מרשם רשות ניירות ערך",
+   "why_israeli": "חברה ישראלית (ח.פ. 500000161), כתובת רשומה יד חרוצים 19 נתניה לפי מרשם רשות ניירות ערך",
    "licence": {
     "what": "ISA payment-company licence (חברת תשלומים), status in force — services: סליקה של פעולות תשלום",
     "regulator": "Israel Securities Authority (רשות ניירות ערך)",
@@ -183,7 +183,7 @@
    "category": "acquirer + payment gateway + invoices",
    "type": "acquirer",
    "summary_he": "סולק ושער תשלומים ישראלי עם דפי תשלום, הוראות קבע וחשבוניות דיגיטליות; קיבל רישיון סולק קבוע מבנק ישראל ב-2023.",
-   "why_israeli": "חברה ישראלית (Cardcom Acquiring Ltd., ח.פ. 500000161), כתובת רשומה הרוקמים 26 חולון לפי מרשם רשות ניירות ערך",
+   "why_israeli": "חברה ישראלית (Cardcom Acquiring Ltd., ח.פ. 500000179), כתובת רשומה הרוקמים 26 חולון לפי מרשם רשות ניירות ערך",
    "licence": {
     "what": "ISA payment-company licence (חברת תשלומים), status in force — services: ניהול חשבון תשלום, הנפקת אמצעי תשלום, סליקה",
     "regulator": "Israel Securities Authority (רשות ניירות ערך)",
@@ -257,7 +257,7 @@
    "category": "acquirer / payment facilitator",
    "type": "acquirer",
    "summary_he": "חברת סליקה ישראלית לעסקים קטנים (קישור תשלום, כפתור, אפליקציה, תשלום בנגיעה בטלפון); מחזיקה שני רישיונות חברת תשלומים מרשות ניירות ערך.",
-   "why_israeli": "חברות ישראליות (Upay Acquiring ח.פ. 500000179, בני ברק; Upay Finance) לפי מרשם רשות ניירות ערך",
+   "why_israeli": "חברות ישראליות (Upay Acquiring ח.פ. 500000187, בני ברק; Upay Finance) לפי מרשם רשות ניירות ערך",
    "licence": {
     "what": "ISA payment-company licence (חברת תשלומים), status in force — services: סליקה של פעולות תשלום (Upay Acquiring Ltd.); Upay Finance Ltd. נוסף ב-2026-06-04 עם סליקה ואשראי אגב פעולת תשלום",
     "regulator": "Israel Securities Authority (רשות ניירות ערך)",
@@ -719,7 +719,7 @@
    "category": "psp (payments-as-a-service)",
    "type": "psp",
    "summary_he": "פלטפורמת תשלומים כשירות עם ישות ישראלית שקיבלה רישיון חברת תשלומים מרשות ניירות ערך ביולי 2025.",
-   "why_israeli": "ישות ישראלית (ח.פ. 500000187), כתובת דרך מנחם בגין 132 תל אביב לפי מרשם רשות ניירות ערך",
+   "why_israeli": "ישות ישראלית (ח.פ. 500000195), כתובת דרך מנחם בגין 132 תל אביב לפי מרשם רשות ניירות ערך",
    "licence": {
     "what": "ISA payment-company licence (חברת תשלומים), status in force — services: ניהול חשבון תשלום, הנפקה, סליקה",
     "regulator": "Israel Securities Authority (רשות ניירות ערך)",
@@ -751,7 +751,7 @@
    "category": "psp (global business accounts)",
    "type": "psp",
    "summary_he": "ישות מקומית של חברת התשלומים הגלובלית; רישיון חברת תשלומים של רשות ניירות ערך מיולי 2025.",
-   "why_israeli": "ישות ישראלית (ח.פ. 500000195), כתובת דרך מנחם בגין 132 תל אביב",
+   "why_israeli": "ישות ישראלית (ח.פ. 500000203), כתובת דרך מנחם בגין 132 תל אביב",
    "licence": {
     "what": "ISA payment-company licence (חברת תשלומים), status in force — services: ניהול חשבון תשלום, הנפקה, סליקה",
     "regulator": "Israel Securities Authority (רשות ניירות ערך)",
@@ -783,7 +783,7 @@
    "category": "psp / wallet",
    "type": "wallet",
    "summary_he": "ישות ישראלית של רבולוט עם רישיון חברת תשלומים של רשות ניירות ערך מיולי 2025 (חשבון תשלום, כרטיסים, סליקה).",
-   "why_israeli": "ישות ישראלית (ח.פ. 500000203) במרשם רשות ניירות ערך",
+   "why_israeli": "ישות ישראלית (ח.פ. 500000211) במרשם רשות ניירות ערך",
    "licence": {
     "what": "ISA payment-company licence (חברת תשלומים), status in force — services: ניהול חשבון תשלום, הנפקה, סליקה",
     "regulator": "Israel Securities Authority (רשות ניירות ערך)",
@@ -878,7 +878,7 @@
    "category": "psp / gateway",
    "type": "psp",
    "summary_he": "ישות ישראלית של BlueSnap עם רישיון חברת תשלומים לסליקה מיולי 2026; מופיעה גם במרשם המשך העיסוק.",
-   "why_israeli": "ישות ישראלית (ח.פ. 500000211) במרשם רשות ניירות ערך",
+   "why_israeli": "ישות ישראלית (ח.פ. 500000229) במרשם רשות ניירות ערך",
    "licence": {
     "what": "ISA payment-company licence (חברת תשלומים), status in force — services: סליקת פעולת תשלום",
     "regulator": "Israel Securities Authority (רשות ניירות ערך)",
@@ -1054,7 +1054,7 @@
    "category": "open banking / payment initiation",
    "type": "open-banking",
    "summary_he": "חברה עם רישיון חברת תשלומים כולל ייזום בסיסי ושירות מידע פיננסי (מאי 2026); מופיעה כאפשרות אינטגרציה באתר EasyCard.",
-   "why_israeli": "ישות ישראלית (ח.פ. 500000229), כתובת ז'בוטינסקי 9 בני ברק לפי המרשם",
+   "why_israeli": "ישות ישראלית (ח.פ. 500000237), כתובת ז'בוטינסקי 9 בני ברק לפי המרשם",
    "licence": {
     "what": "ISA payment-company licence (חברת תשלומים), status in force — services: ניהול חשבון, סליקה, הנפקה, שירות מידע פיננסי; ייזום בסיסי: כן",
     "regulator": "Israel Securities Authority (רשות ניירות ערך)",

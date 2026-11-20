@@ -41,7 +41,7 @@ services:
       # SSH to a client server only from these addresses (Bina's own); the ops key the host baseline needs
       - DGOCLOUD_SSH_FROM=${DGOCLOUD_SSH_FROM:-}
       - DGOCLOUD_OPS_KEY=${DGOCLOUD_OPS_KEY:-}
-      - DGOCLOUD_ACME_EMAIL=${DGOCLOUD_ACME_EMAIL:-person13@example.com}
+      - DGOCLOUD_ACME_EMAIL=${DGOCLOUD_ACME_EMAIL:-person14@example.com}
       # the client servers' zone, served by this container's name server; sslip.io until the zone is delegated
       - DGOCLOUD_ZONE=${DGOCLOUD_ZONE:-cloud.digital-office.co.il}
       - DGOCLOUD_ZONE_IP=${DGOCLOUD_ZONE_IP:-}
@@ -56,7 +56,7 @@ services:
       - GOOGLE_OAUTH_CLIENT_SECRET=${DGOCLOUD_GOOGLE_CLIENT_SECRET:-${GOOGLE_OAUTH_CLIENT_SECRET:-}}
       # mail (verify, reset) through the office's own mail server
       - DGOCLOUD_SMTP_HOST=${DGOCLOUD_SMTP_HOST:-mailserver}
-      - DGOCLOUD_MAIL_FROM=${DGOCLOUD_MAIL_FROM:-person12@example.com}
+      - DGOCLOUD_MAIL_FROM=${DGOCLOUD_MAIL_FROM:-person13@example.com}
       - TZ=${TZ:-Asia/Jerusalem}
     # The cloud zone's name server. Loopback and an unprivileged port by default (exposure gate G84; nothing to clash
     # with a host's own resolver): the office that serves the zone (vps1) declares DGOCLOUD_DNS_BIND=<its public

@@ -95,7 +95,7 @@ MAX_BRIEF_BYTES = 6000
 #     -> COMPANY_SLUG          example
 #        -> DEPLOYMENT_NAME    example                        -> n8n-example, mailserver-example, …
 #        -> DEPLOYMENT_DOMAIN  example.digital-office.co.il   -> console.example…, n8n.example…, …
-#        -> MAIL_DOMAIN        = DEPLOYMENT_DOMAIN            -> person93@example.com
+#        -> MAIL_DOMAIN        = DEPLOYMENT_DOMAIN            -> person96@example.com
 #        -> MAIL_DKIM_SELECTOR example
 #        -> GLITCHTIP_ORG_SLUG example
 #
@@ -1546,7 +1546,8 @@ def write(path, text):
 #: files (render_authentik, render_https_redirect, render_serve). The Go twin's handBackFiles is the same list.
 HAND_BACK_FILES = ("platform-base/authentik/blueprints/zz-generated-apps.yaml",
                    "platform-base/traefik/config/zz-https.yaml",
-                   "platform-base/traefik/config/zz-serve.yaml")
+                   "platform-base/traefik/config/zz-serve.yaml",
+                   "platform-base/traefik/config/zz-public.yaml")
 
 
 def hand_back(repo=None, euid=None):
@@ -2396,6 +2397,11 @@ def routing_labels(app_id, r, framed="", admins=False):
     """
     svc = r.get("service") or app_id
     name = r.get("name") or app_id            # traefik router/service base name
+    # The traefik SERVICE this entry's routers go to: its own name when the entry declares one, so one
+    # container may publish two ports (bina-ds: the harness on 3080, עזריה's screen on 3081 — EXU-64).
+    # An entry with no name, or whose name is its compose service (git's forge, meet-start), renders
+    # exactly as before.
+    lb = r.get("name") or svc
     host, port = r["host"], r["port"]
     # Fall back to <host>.<DEPLOYMENT_DOMAIN> when <APP>_BASE_URL is unset, so a NEW app routes
     # without also needing a matching line in .env.ex. An explicit var still wins, so every app
@@ -2468,7 +2474,7 @@ def routing_labels(app_id, r, framed="", admins=False):
             # `.localhost` office (scripts/lib.sh derives TRAEFIK_CERTRESOLVER="" there — no authority
             # issues for `<app>.localhost`, and the edge asked again on every reload: DGO-901)
             L.append(f"{p}.tls.certresolver=${{TRAEFIK_CERTRESOLVER-myresolver}}")
-        L.append(f"{p}.service={svc}")
+        L.append(f"{p}.service={lb}")
         mids = chain(own_mw if extra is None else extra) if mw else []
         if tls and server_office():
             # Every certificate served by this edge also PINS https for its host (DGO-1595), declared
@@ -2543,7 +2549,7 @@ def routing_labels(app_id, r, framed="", admins=False):
                 L.append(f"{p}.tls.certresolver=${{TRAEFIK_CERTRESOLVER-myresolver}}")
             if sub.get("priority") is not None:
                 L.append(f"{p}.priority={sub['priority']}")
-            L.append(f"{p}.service={svc}")
+            L.append(f"{p}.service={lb}")              # the entry's own service: its port (EXU-64)
             mids = chain(list(sub.get("middlewares") or []))
             if tls and server_office():
                 mids = ["hsts@file"] + mids             # first, as in router() above
@@ -2560,7 +2566,7 @@ def routing_labels(app_id, r, framed="", admins=False):
             # `-https` twin here would be a router no request can ever reach — the "router nobody can
             # explain" shape this file exists to prevent.
             sub_router("", f"Host(`{framed}`)", "web")
-    L.append(f"traefik.http.services.{svc}.loadbalancer.server.port={port}")
+    L.append(f"traefik.http.services.{lb}.loadbalancer.server.port={port}")
 
     return L
 
@@ -2590,6 +2596,7 @@ def console_passthrough_labels(app_id, r, console_r, console_app=None, first=0, 
     if not alias:
         raise SystemExit(f"{app_id}: module.passthrough requires module.alias")
     svc = r.get("service") or app_id
+    lb = r.get("name") or svc       # the traefik service, as routing_labels names it (EXU-64)
     port = r["port"]
     console_host = console_r["host"]
     console_env = traefik_host(base_url_env("console"), console_host + ".${DEPLOYMENT_DOMAIN:-localhost}")
@@ -2627,14 +2634,14 @@ def console_passthrough_labels(app_id, r, console_r, console_app=None, first=0, 
             if tls:
                 labels.append(f"{key}.tls=true")
                 labels.append(f"{key}.tls.certresolver=${{TRAEFIK_CERTRESOLVER-myresolver}}")
-            labels.append(f"{key}.service={svc}")
+            labels.append(f"{key}.service={lb}")
             labels.append(f"{key}.middlewares={','.join(middlewares)}")
 
         router("local", f"{console_host}.localhost", "web")
         router("http", console_env, "web")
         router("https", console_env, "websecure", tls=True)
 
-    labels.append(f"traefik.http.services.{svc}.loadbalancer.server.port={port}")
+    labels.append(f"traefik.http.services.{lb}.loadbalancer.server.port={port}")
     return labels
 
 
@@ -3117,7 +3124,18 @@ def render(cat, order, state):
     served, serrs = serve.plan(state, cat)
     if serrs:
         sys.exit("SERVE PLAN REFUSED:\n" + "\n".join(f"  - {e}" for e in serrs))
+    # A linked office's door opened to the internet on THIS office's edge (DGO-2050), planned BEFORE anything is
+    # written. Only this office's own malformed `publish:` stops the render. A door the serving office no longer
+    # gives, narrows or opens to the internet is only LEFT OUT, with a line, because a change on the other office
+    # must never stop every render here (it closes the door: fail closed).
+    published, perrs, pdropped = serve.publish_plan(state, served,
+                                                    _envfile_value("DEPLOYMENT_DOMAIN") or "localhost", cat)
+    if perrs:
+        sys.exit("PUBLISH PLAN REFUSED:\n" + "\n".join(f"  - {e}" for e in perrs))
+    for line in pdropped:
+        print(f"  PUBLISH  {line}", file=sys.stderr)
     render_serve(cat, served, framed_hosts(cat, order), lan=lan_name(order))
+    render_published(published)        # its own file, so the remote routes above keep their bytes
     render_https_redirect(cat, order)
     render_registries(cat, order, served, state)
     # who may read an agent's action token from the vault (DGO-1152): connections mounts registry/ read-only
@@ -3243,6 +3261,22 @@ def render_https_redirect(cat, order):
         ]
     write(dest, "\n".join(head) + "\n")        # left alone when it says the same: traefik watches it (DGO-628)
     return 1 if redirect else 0
+
+
+def render_published(published):
+    """Write, or remove, the routes of the doors this office opens to the internet (`publish:`, DGO-2050).
+
+    `platform-base/traefik/config/zz-public.yaml`, beside zz-serve.yaml and for the same reason: the file
+    provider is the only place traefik accepts a server outside the engine. Its own file, so the remote
+    routes keep their bytes; written or removed on EVERY render, so un-declaring a door closes it in the
+    same breath."""
+    dest = REPO / "platform-base/traefik/config/zz-public.yaml"
+    doc = serve.render_published(published)
+    if not doc:
+        dest.unlink(missing_ok=True)
+        return 0
+    write(dest, doc)          # left alone when it says the same: the file provider reloads on any write
+    return len(published)
 
 
 def render_serve(cat, served, framed=(), lan=("", "")):

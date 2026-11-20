@@ -49,6 +49,13 @@ EXEMPT = {
         "when nothing is declared. Without this entry the gate was red on exactly the offices "
         "that are linked (measured on the HP office 2026-10-05: a checkout that both had a link "
         "and ran the gates).",
+    "platform-base/traefik/config/zz-public.yaml":
+        "compiled by reconcile.py (render_published) from the `publish:` block of platform.state.yaml "
+        "-- a linked office's door this office opens to the internet (DGO-2050) -- and REMOVED by the same "
+        "render when nothing is published. A fresh clone publishes nothing, so it has no such file and "
+        "needs none. Its references treat it as an output: reconcile.py writes and removes it and lists it "
+        "in HAND_BACK_FILES; the Go twin does the same (render.go, lock_unix.go). Without this entry the "
+        "gate would be red on the one office that publishes a door (vps1), as zz-serve.yaml's was.",
     "platform-base/traefik/config/sites-public.yaml":
         "written and removed by the sites app at publish time: apps/sites/public.py:652 (publish) "
         "writes it into the edge's config dir when a site is served by the OFFICE, and the same "

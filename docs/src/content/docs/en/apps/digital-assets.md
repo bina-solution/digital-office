@@ -1,11 +1,23 @@
 ---
-title: Digital assets
-description: "Everything the business shows the world — logo, name, descriptions, content and media — in slots, and from there to every channel: networks, website and products. What changes the business everywhere, and what waits for the owner."
+title: Identity
+description: "The one place the business is defined — name, legal details, contact details, marks, colours, texts, content and media — and the whole office reads it from there: documents, websites, networks and products."
 ---
 
 ## What it is
 
-«Digital assets» (`digital-assets`) holds everything the business shows the world: logo, name, descriptions, content and media. It is for administrators only, off in a new install, and is in the «Digital assets» tile in the «Business» group.
+«Identity» («זהות», `digital-assets`) is the one place the business is defined: its name in Hebrew and English, its legal name, the kind of business and its number, who signs for it, the address, phone, email and website, the logo, the colours, the bank account, the texts, content and media. It is for administrators only, off in a new install, and is in the «Identity» tile in the «Business» group. Until November 2026 it was called «Digital assets»; the id `digital-assets` did not change.
+
+## The whole office reads it from there
+
+No other app defines the business's details. They take them from «Identity»:
+
+| Who | What it takes | How |
+|---|---|---|
+| The business documents (receipts, invoices, proposals, agreements) | The issuer: name, kind and number, address, contact details, logo, colours, signatory and bank | they read `GET /api/brand` |
+| Websites | The texts, pictures and logo | they read the active values |
+| Social networks | The name, description, logo and link | publishing sends them |
+
+A change in «Identity» reaches the documents within half a minute. A document already issued keeps the business's details as they were on the day it was issued. The documents keep a copy of the last details only so they can still be drawn while «Identity» is out of reach. A detail cleared in «Identity» is cleared on the documents too, and the documents' settings screen does not let a detail «Identity» holds be changed there. A field not filled yet shows as «missing».
 
 Turn it on from the apps screen, which goes all the way, or from the command line. There `apps enable` only writes the decision, and `./bbox run` brings the app up:
 

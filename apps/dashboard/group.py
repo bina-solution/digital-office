@@ -375,6 +375,67 @@ def said_of(n, rules, office, age):
     return text[:4000]
 
 
+#: HOW A WORK ITEM IS SAID IN THE GROUP (DGO-2102; the owner, 2026-11-19, of «📁 🐘 HP: ✅ DGO-2043 · בעלים · שלושה
+#: קבצים… — bina-solution»: «זה ממש מכוער איך שזה עכשו»). Its name first, in Hebrew, so the line stays right to left;
+#: its number after the name; one heading per kind instead of «נסגר:» on every line; the label a name opens with said
+#: as what it means to him (בעלים → «מחכה לך» / «היה אצלך»), a lane's tag («azds ·») dropped; never a login.
+ITEM_VERB = re.compile(r"^(נסגר|נפתח מחדש|נפתח|בוטל|התחיל)\s*:\s*")
+#: «בעלים ·» / «בעלים:» is the owner's; a lowercase tag with «·» («azds ·», «exx102 ·», «exu101 ·») is a lane's or a
+#: client's — said after the number, never dropped (it names whose item it is). A lowercase word with a COLON names the
+#: subject («vps1: הדיסק מלא», «drive: rm|trash…») and stays in the name (the second reader, 1,880 plan names).
+ITEM_LABEL = re.compile(r"^(?:(?P<owner>בעלים)\s*[·:]|(?P<tag>[a-z][a-z0-9-]{1,7})\s*·)\s+")
+LOGIN = re.compile(r"^[A-Za-z0-9._@-]+$")    # Plane's own name for an account — the owner's, which agents also write as
+ITEM_HEADS = {"open": ("נפתחה משימה", "נפתחו {n} משימות"), "done": ("נסגרה משימה", "נסגרו {n} משימות"),
+              "cancel": ("בוטלה משימה", "בוטלו {n} משימות")}
+ITEM_HEAD_ANY = ("משימה אחת", "{n} משימות")    # a kind group-events.json adds later: still a sentence, one said as one
+ITEMS_SHOWN = 5          # lines of one kind in a message; the rest of that kind is a count under its own heading
+NAME_MAX = 80            # feed.py cuts a name at 90 mid-word: cut earlier, at a word, and say so with «…»
+RLM = "‏"           # Telegram sets a line's direction by its first letter: every line starts right to left
+
+
+def cut_name(name):
+    """A name that was or must be cut, at a whole word, never leaving a bracket or a quote open, said cut with «…»."""
+    base = name[:NAME_MAX + 1] if len(name) > NAME_MAX else name
+    if " " in base:
+        base = base.rsplit(" ", 1)[0]       # the word after the last space was cut — or base's 81st letter is a space
+    for opens, closes in (("(", ")"), ("«", "»"), ("[", "]")):
+        if base.count(opens) > base.count(closes):
+            base = base[:base.rfind(opens)]
+    base = base.rstrip(" ,;:·—-\"'")
+    return (base or name[:NAME_MAX]) + "…"
+
+
+def item_line(kind, ref, text, by=""):
+    """«• <name> <ref>», then the marks: «· נפתחה מחדש» on a reopen; on the owner's item «· מחכה לך» when it opens,
+    «· היה אצלך» when it closes or is cancelled, «· שלך» otherwise; a lane's or client's tag; «— <name>» only when
+    Plane names a person, not a login. A name with nothing in it is the number alone."""
+    words = " ".join(str(text or "").split())
+    verb = ITEM_VERB.match(words)
+    name = words[verb.end():] if verb else words
+    feed_cut = len(name) >= 89                   # feed.py cut it at 90, mid-word: measured before a tag comes off
+    label = ITEM_LABEL.match(name)
+    if label:
+        name = name[label.end():]
+    head, sep, _ = name.partition(" — ")
+    clause = bool(sep) and len(head.strip()) >= 20   # «pairing.py — …» alone would say nothing: a short head stays whole
+    if clause:
+        name = head
+    name = name.strip()
+    if len(name) > NAME_MAX or (feed_cut and not clause):
+        name = cut_name(name)
+    marks = []
+    if verb and verb.group(1) == "נפתח מחדש":
+        marks.append("נפתחה מחדש")
+    if label and label.group("owner"):
+        marks.append("מחכה לך" if kind == "open" else "היה אצלך" if kind in ("done", "cancel") else "שלך")
+    if label and label.group("tag"):
+        marks.append(label.group("tag"))
+    by = " ".join(str(by or "").split())
+    who = f" — {by[:40]}" if by and not LOGIN.match(by) else ""
+    body = f"{name} {ref}" if name else ref
+    return f"{RLM}• {body}" + "".join(f" · {m}" for m in marks) + who
+
+
 class Relay:
     """The decisions over time: holds, repeats, retries, the hourly cap. Pure — send() and save() are handed
     in, so the tests drive it with a clock and a list."""
@@ -474,29 +535,36 @@ class Relay:
         if self.items_from is None:
             self.items_from = t
             return
-        news = []
+        news, fresh = {}, {}                            # kind → its lines, oldest first; ref → what it is now
         for line in sorted([f for f in feed or [] if isinstance(f, dict)], key=lambda f: float(f.get("ts") or 0)):
             ref, kind, ts = str(line.get("ref") or ""), line.get("kind"), float(line.get("ts") or 0)
             if not ref or kind not in kinds or ts < self.items_from or t - ts > STALE:
                 continue
-            was = self.items_seen.get(ref)
+            was = fresh.get(ref) or self.items_seen.get(ref)
             if was and (was["kind"] == kind or ts <= was["ts"]):
                 continue
-            self.items_seen[ref] = {"kind": kind, "ts": ts, "at": t}
-            by = " ".join(str(line.get("by") or "").split())     # who did it, when Plane says (feed.py by_of)
-            news.append((f"{kinds[kind]} {ref} · {' '.join(str(line.get('text') or '').split())}"[:280]
-                         + (f" — {by[:40]}" if by else "")))
+            fresh[ref] = {"kind": kind, "ts": ts, "at": t}
+            # who did it, when Plane names a person (feed.py by_of) — item_line keeps a name and drops a login
+            news.setdefault(kind, []).append(item_line(kind, ref, line.get("text"), line.get("by")))
         if not news:
             return
         self.items_sent = [s for s in self.items_sent if t - s < 3600]
         if len(self.items_sent) >= int(spec.get("per_hour", ITEMS_PER_HOUR)):
-            self.counts["capped"] += 1
+            # not marked seen: the next pass with room says them; a counter of its own — the alarms' «capped» counts
+            # alarms, and a feed rewritten every 30 s would count one held pass ninety times there
+            self.counts["items_capped"] = self.counts.get("items_capped", 0) + 1
             return
-        head = self.rules.get("offices", {}).get(OFFICE, OFFICE)
-        shown = news[:15]
-        text = f"🗂 {head}: " + ("\n" if len(shown) > 1 else "") + "\n".join(shown)
-        if len(news) > len(shown):
-            text += f"\n(ועוד {len(news) - len(shown)} בלוח הבקרה)"
+        self.items_seen.update(fresh)
+        out = []
+        for kind in [k for k in ITEM_HEADS if k in news] + [k for k in news if k not in ITEM_HEADS]:
+            # the owner's first: a line that waits on him is never the one a long pass leaves unnamed
+            lines = sorted(news[kind], key=lambda s: not any(m in s for m in (" · מחכה לך", " · היה אצלך", " · שלך")))
+            one, many = ITEM_HEADS.get(kind, ITEM_HEAD_ANY)
+            out.append(f"{RLM}{kinds[kind]} " + (one if len(lines) == 1 else many.format(n=len(lines))))
+            out += lines[:ITEMS_SHOWN]
+            if len(lines) > ITEMS_SHOWN:
+                out.append(f"{RLM}(ועוד {len(lines) - ITEMS_SHOWN} בלוח הבקרה)")
+        text = "\n".join(out)
         self.items_sent.append(t)
         n = {"source": "plane", "source_id": f"items:{int(t)}", "level": "info", "title": text, "raw": True}
         self.post(n, OWN_RULES["items"], at=t)
@@ -782,9 +850,59 @@ def bot_token():
     return tok
 
 
+#: A WORK ITEM'S NUMBER OPENS IT (DGO-2102): the ONE form a person is given, `https://<the hub's console>/go/<ref>`
+#: (G95, DGO-1433) — herd.yaml's hub_console; the console resolves it when it is opened, after a sign-in too. Only the
+#: project codes that exist are numbers (the office's own and each client's `plane:`): «UTF-8», «HTTP-500», «INV-40013»
+#: are words, and the console would answer them «not found» (the second reader's count: UTF 86, INV 21, PDF 12 …).
+OWN_KEYS = ("DGO", "MEET")
+
+
+def herd_links(herd=HERD):
+    """(hub_console, the project codes) from herd.yaml; ("", OWN_KEYS) when it cannot be read."""
+    hub, keys = "", set(OWN_KEYS)
+    try:
+        with open(herd, encoding="utf-8") as fh:
+            for line in fh:
+                line = line.rstrip("\n")
+                m = re.match(r"""^hub_console:\s*["']?([A-Za-z0-9.-]+)["']?\s*(#.*)?$""", line)
+                if m:
+                    hub = m.group(1)
+                k = re.match(r"""^\s+plane:\s*["']?([A-Z]{2,6})["']?\s*(#.*)?$""", line)
+                if k:
+                    keys.add(k.group(1))
+    except OSError:
+        pass
+    return hub, keys
+
+
+def hub_console(herd=HERD):
+    """herd.yaml's `hub_console:` — the host every link a person is given opens on; "" when it cannot be read."""
+    return herd_links(herd)[0]
+
+
+def ref_links(text, hub, keys=OWN_KEYS):
+    """Telegram's text_link entities, one per work item number in `text` — offsets and lengths in UTF-16 code units,
+    as Telegram counts them (an emoji such as 📌 is two). A number after a Hebrew prefix («ו-DGO-1898») is one too."""
+    if not hub or not keys:
+        return []
+    ref = re.compile(r"(?<![A-Za-z0-9])(?<![A-Za-z0-9]-)((?:" + "|".join(sorted(map(re.escape, keys), key=len, reverse=True))
+                     + r")-\d{1,6})(?![A-Za-z0-9-])")
+    out = []
+    for m in ref.finditer(text):
+        out.append({"type": "text_link", "offset": len(text[:m.start()].encode("utf-16-le")) // 2,
+                    "length": len(m.group(1).encode("utf-16-le")) // 2, "url": f"https://{hub}/go/{m.group(1)}"})
+    return out[:100]                        # Telegram's own limit on a message's entities
+
+
 class Bot:
     def __init__(self):
         self.tok, self.tok_at, self.chat, self.chat_at, self.error = None, 0, None, 0, None
+        self.hub, self.keys = herd_links()
+
+    def post_message(self, form):
+        body = urllib.parse.urlencode(form).encode()
+        with urllib.request.urlopen(f"{BOT_API}/bot{self.tok}/sendMessage", data=body, timeout=30) as r:
+            return json.load(r)
 
     def send(self, text):
         try:
@@ -792,10 +910,16 @@ class Bot:
                 self.tok, self.tok_at = bot_token(), time.time()
             if not self.chat or time.time() - self.chat_at > 3600:
                 self.chat, self.chat_at = group_chat(), time.time()
-            body = urllib.parse.urlencode({"chat_id": self.chat, "text": text,
-                                           "disable_web_page_preview": "true"}).encode()
-            with urllib.request.urlopen(f"{BOT_API}/bot{self.tok}/sendMessage", data=body, timeout=30) as r:
-                res = json.load(r)
+            form = {"chat_id": self.chat, "text": text, "disable_web_page_preview": "true"}
+            links = ref_links(text, self.hub, self.keys)
+            try:
+                res = self.post_message({**form, "entities": json.dumps(links)} if links else form)
+            except urllib.error.HTTPError as e:
+                # a link is never why a line is not said: Telegram refusing the entities (400) is said again without
+                # them, before the 400 below would read as «the group moved»
+                if not (links and e.code == 400):
+                    raise
+                res = self.post_message(form)
             self.error = None
             return res["result"]["message_id"]
         except Exception as e:                              # noqa: BLE001 — said in the state, never raised

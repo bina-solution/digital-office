@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """drive_move — a folder of one office's «קבצים» into another office's, whole and idempotent (DGO-1924).
 
-Runs INSIDE an office's drive container (copied there; README.md has the commands), talking to
+Runs INSIDE an office's drive container (copied there with docker cp), talking to
 that office's own «קבצים» at http://127.0.0.1:8975 — the same API every agent uses (apps/drive/AGENT.md).
 
     export <path> [--connection ID]            > bundle.tar   the folder, recursively, and a manifest (sha256 per file)

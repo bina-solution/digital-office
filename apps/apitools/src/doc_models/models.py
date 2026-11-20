@@ -11,7 +11,18 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass, field, asdict
+from decimal import Decimal, ROUND_HALF_UP
 from typing import List, Optional
+
+
+def _d(v) -> Decimal:
+    return Decimal(str(v if v not in (None, '') else 0))
+
+
+def _agorot(v: Decimal) -> float:
+    """Half up to the agora, in decimal — the arithmetic the printed page uses (src/doc_gen/house/view.py), so the
+    books and the page agree (DGO-2029: float round() gave 222.25 VAT where the page printed 222.26)."""
+    return float(v.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP))
 
 
 def _last5(doc_id: str) -> str:
@@ -33,6 +44,15 @@ class Party:
     deduction_file_no: str = ''     # מס. תיק ניכויים
     customer_no: str = ''           # מס' לקוח (on the customer side)
     tax_status: str = 'murshe'      # murshe (עוסק מורשה) | patur (עוסק פטור) | company (ח.פ)
+    # how the document presents the party (DGO-2029, the house style): none of these is a field of the law
+    name_en: str = ''               # the name in Latin letters, under the Hebrew one
+    website: str = ''
+    mark: str = ''                  # 'i0' — the office's own mark — when the business has no logo of its own
+    logo: str = ''                  # an SVG text or a data: URI
+    signatory: str = ''             # who signs for the business, and as what
+    signatory_title: str = ''
+    contact_person: str = ''        # on the customer side: «לידי …»
+    contact_title: str = ''
 
 
 @dataclass
@@ -46,10 +66,11 @@ class LineItem:
     customer_order_ref: str = ''    # הזמנתכם
     shipment_ref: str = ''          # תעודת משלוח the line was delivered on
     packages: int = 0               # מס. אריזות (shipment certs)
+    detail: str = ''                # a second, smaller line under the description (DGO-2029)
 
     @property
     def total(self) -> float:
-        return round(self.qty * self.unit_price, 2)
+        return _agorot(_d(self.qty) * _d(self.unit_price))
 
 
 @dataclass
@@ -65,6 +86,10 @@ class _BaseDoc:
     customer: Party = None
     doc_id: str = ''
     doc_date: str = ''              # DD/MM/YYYY
+    # what the house style prints around the lines (DGO-2029); empty = not printed
+    subject: str = ''
+    notes: str = ''
+    terms: List[str] = field(default_factory=list)
 
     @property
     def short_doc_id(self) -> str:
@@ -108,23 +133,23 @@ class Invoice(_BaseDoc):
 
     @property
     def subtotal(self) -> float:
-        return round(sum(l.total for l in self.lines), 2)
+        return _agorot(sum((_d(l.total) for l in self.lines), Decimal(0)))
 
     @property
     def discount(self) -> float:
-        return round(self.subtotal * self.discount_pct / 100.0, 2)
+        return _agorot(_d(self.subtotal) * _d(self.discount_pct) / 100)
 
     @property
     def after_discount(self) -> float:
-        return round(self.subtotal - self.discount, 2)
+        return _agorot(_d(self.subtotal) - _d(self.discount))
 
     @property
     def vat(self) -> float:
-        return round(self.after_discount * self.vat_pct / 100.0, 2)
+        return _agorot(_d(self.after_discount) * _d(self.vat_pct) / 100)
 
     @property
     def total_due(self) -> float:
-        return round(self.after_discount + self.vat, 2)
+        return _agorot(_d(self.after_discount) + _d(self.vat))
 
     def extraction_truth(self) -> dict:
         return {
@@ -152,7 +177,7 @@ class InvoiceReceipt(Invoice):
 
     @property
     def amount_paid(self) -> float:
-        return round(self.paid_amount or self.total_due, 2)
+        return _agorot(_d(self.paid_amount or self.total_due))
 
     def extraction_truth(self) -> dict:
         t = super().extraction_truth()
@@ -161,13 +186,96 @@ class InvoiceReceipt(Invoice):
 
 
 @dataclass
+class CreditNote(Invoice):
+    """חשבונית מס זיכוי — reverses a tax invoice, whole or in part. Its own type and series (CN), never a
+    «חשבונית מס» with negative prices (DGO-2029: that printed as a tax invoice): §9(ה) asks the numbers and
+    dates of the invoices it credits, and the reason. The lines keep the ledger's sign — negative prices —
+    so its totals, and the VAT report built from them, are negative as a credit is."""
+    DOC_TYPE = 'CREDIT_NOTE'
+    original_invoice: str = ''          # the number of the tax invoice it credits
+    original_date: str = ''             # that invoice's date
+    reason: str = ''                    # why
+
+    def extraction_truth(self) -> dict:
+        t = super().extraction_truth()
+        t['AI_TYPE'] = 'CREDIT_NOTE'
+        return t
+
+
+class HouseDoc:
+    """A document of the house catalogue that has no dataclass of its own (DGO-2029): a proposal, an
+    agreement, an NDA, a work order, a payment request, a letter, a statement. It IS its dict — the shape
+    src/doc_gen/house reads — with the few attributes the ledger asks of every model (the parties, the
+    number, the totals) computed from it by the house's own arithmetic, so the page and the books agree."""
+
+    def __init__(self, doc_type, **kw):
+        self.DOC_TYPE = doc_type
+        self.data = dict(kw)
+        self.data['doc_type'] = doc_type
+        for pk in ('supplier', 'customer'):
+            v = kw.get(pk)
+            setattr(self, pk, v if isinstance(v, Party) or v is None else Party(**{
+                k: val for k, val in v.items() if k in Party.__dataclass_fields__}))
+        self.doc_id = kw.get('doc_id') or ''
+        self.doc_date = kw.get('doc_date') or ''
+        self._t = None
+
+    def _totals(self):
+        if self._t is None:
+            from src.doc_gen.house import context
+            groups = context(self.to_dict()).get('groups') or []
+            one = next((g for g in groups if not g['period']), None)
+            self._t = one['totals'] if one else None
+        return self._t
+
+    @property
+    def subtotal(self):
+        t = self._totals()
+        return float(t['raw_after']) if t else None
+
+    @property
+    def vat(self):
+        t = self._totals()
+        return float(t['raw_vat']) if t else None
+
+    @property
+    def total_due(self):
+        t = self._totals()
+        return float(t['raw_total']) if t else None
+
+    @property
+    def short_doc_id(self) -> str:
+        return _last5(self.doc_id)
+
+    def to_dict(self) -> dict:
+        d = dict(self.data)
+        d['doc_id'] = self.doc_id
+        return d
+
+    def extraction_truth(self) -> dict:
+        return {'AI_COMPANY_ID': self.supplier.company_id if self.supplier else '', 'AI_DOC_ID': self.doc_id,
+                'AI_DOC_DATE': self.doc_date,
+                'AI_DOC_AMOUNT': f'{self.total_due:.2f}' if self.total_due is not None else '',
+                'AI_SHIPMENT_IDS': [], 'AI_ORDER_IDS': '', 'AI_TYPE': self.DOC_TYPE}
+
+
+#: the house types the ledger keeps as HouseDoc (their shape is the house's, see src/doc_gen/house/samples.py)
+HOUSE_TYPES = ('PROPOSAL', 'SERVICE_AGREEMENT', 'NDA', 'WORK_ORDER', 'PAYMENT_REQUEST', 'LETTER', 'STATEMENT', 'REPORT')
+
+
+@dataclass
 class Order(_BaseDoc):
     DOC_TYPE = 'ORDER'
     lines: List[LineItem] = field(default_factory=list)
+    # what the house page prints above the lines and in its chips (DGO-2029: the screen sent them and the save
+    # failed — the dataclass had neither)
+    intro: str = ''
+    delivery_date: str = ''         # מועד אספקה
+    vat_pct: float = 18.0           # the business's rate, which the house page prints its VAT at
 
     @property
     def total(self) -> float:
-        return round(sum(l.total for l in self.lines), 2)
+        return _agorot(sum((_d(l.total) for l in self.lines), Decimal(0)))
 
     def extraction_truth(self) -> dict:
         return {
@@ -187,7 +295,6 @@ class Quote(Order):
     requirement); converts into a sales document."""
     DOC_TYPE = 'QUOTE'
     valid_until: str = ''
-    intro: str = ''
 
     def extraction_truth(self) -> dict:
         t = super().extraction_truth()
@@ -214,6 +321,7 @@ class ShipmentCert(_BaseDoc):
     print_date: str = ''                # תאריך הדפסה (distinct from ship date)
     customer_line: str = ''             # לקוח:: A  (route/customer code line)
     has_barcode: bool = True            # delivery notes carry a barcode
+    delivery_date: str = ''             # מועד אספקה, as the house page prints it (DGO-2029)
 
     def extraction_truth(self) -> dict:
         return {
@@ -239,7 +347,7 @@ class BSLine:
 
     @property
     def amount(self) -> float:
-        return round(self.debit - self.credit, 2)
+        return _agorot(_d(self.debit) - _d(self.credit))
 
 
 @dataclass
@@ -255,7 +363,7 @@ class BalanceSheet(_BaseDoc):
 
     @property
     def document_total(self) -> float:
-        return round(sum(l.amount for l in self.lines), 2)
+        return _agorot(sum((_d(l.amount) for l in self.lines), Decimal(0)))
 
     def extraction_truth(self) -> dict:
         def iso(d):
@@ -316,7 +424,11 @@ def validate_compliance(m) -> list:
     need(sup and sup.name, 'issuer name missing')
     need(sup and sup.company_id, 'issuer registration number (ח.פ/עוסק מורשה) missing')
     need(m.doc_date, 'document date missing')
-    if m.DOC_TYPE in ('INVOICE', 'INVOICE_RECEIPT'):
+    if m.DOC_TYPE == 'CREDIT_NOTE':
+        need(m.original_invoice, 'the credited invoice\'s number missing (§9(ה))')
+        need(m.original_date, 'the credited invoice\'s date missing (§9(ה))')
+        need(m.reason, 'the reason for the credit missing (§9(ה))')
+    if m.DOC_TYPE in ('INVOICE', 'INVOICE_RECEIPT', 'CREDIT_NOTE'):
         need(sup and (sup.street or sup.city), 'issuer address missing (§9(a)(1))')
         need(m.doc_id, 'invoice number missing')
         if not m.issued_at_shipping:
@@ -351,3 +463,5 @@ def validate_compliance(m) -> list:
 
 
 DOC_TYPES = {c.DOC_TYPE: c for c in (Invoice, InvoiceReceipt, Order, Quote, ShipmentCert, BalanceSheet, Receipt)}
+#: what the ledger can hold: the corpus types above, a credit note, and the house's own types
+LEDGER_TYPES = dict(DOC_TYPES, CREDIT_NOTE=CreditNote)

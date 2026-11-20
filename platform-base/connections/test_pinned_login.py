@@ -31,7 +31,7 @@ PROV = {"id": CID, "group": "Apps", "kind": "password", "pillar": "app-password"
         "reveal_to": ["browser42-task-runner"],
         "pin": True, "purpose_he": "הדפדפן של הלשכה נכנס איתו ל-Google לבד.", "about_he": "הסיסמה נשמרת בכספת.",
         "probe": {"type": "present"}}
-STORE = {CID: PW, f"{CID}:BROWSER42_LOGIN_GOOGLE_USER": "person7.x@example.com"}
+STORE = {CID: PW, f"{CID}:BROWSER42_LOGIN_GOOGLE_USER": "person8.x@example.com"}
 
 
 def _row(prov, store):
@@ -46,7 +46,7 @@ def _row(prov, store):
 def test_the_pinned_row_says_what_it_is_and_whose_it_is():
     row = _row(PROV, STORE)
     assert row["pin"] is True and row["purpose_he"] == PROV["purpose_he"] and row["about_he"] == PROV["about_he"], row
-    assert (row["app"] or {}).get("user") == "person7.x@example.com", row["app"]
+    assert (row["app"] or {}).get("user") == "person8.x@example.com", row["app"]
     assert PW not in repr(row), "the password is in the row"
 
 
@@ -66,7 +66,7 @@ def test_the_fixed_field_is_its_value_and_the_labels_are_the_providers():
     url = fields["BROWSER42_LOGIN_GOOGLE_URL"]
     assert url == {**url, "fixed": True, "secret": False, "clear": "https://accounts.google.com/", "source": "env"}, url
     assert fields["BROWSER42_LOGIN_GOOGLE_USER"]["label"] == "כתובת Gmail"
-    assert fields["BROWSER42_LOGIN_GOOGLE_USER"]["clear"] == "person7.x@example.com"
+    assert fields["BROWSER42_LOGIN_GOOGLE_USER"]["clear"] == "person8.x@example.com"
     pw = fields["BROWSER42_LOGIN_GOOGLE_PASSWORD"]
     assert pw["secret"] is True and pw["clear"] is None and "fixed" not in pw, pw
     assert PW not in repr(fields), "the password is in the fields' answer"
@@ -82,13 +82,13 @@ def test_writing_a_fixed_field_is_refused_and_stores_nothing():
         r = app.app.test_client().post(f"/api/set/{CID}",
                                        json={"field": "BROWSER42_LOGIN_GOOGLE_URL", "value": "https://evil.example/"})
         ok = app.app.test_client().post(f"/api/set/{CID}",
-                                        json={"field": "BROWSER42_LOGIN_GOOGLE_USER", "value": "person87@example.com"})
+                                        json={"field": "BROWSER42_LOGIN_GOOGLE_USER", "value": "person90@example.com"})
     finally:
         app.catalog, app.vault_read, app.vault_write = real
     assert r.status_code == 400 and "fixed" in (r.get_json() or {}).get("error", ""), (r.status_code, r.get_data())
     assert ok.status_code == 200, ok.get_data()
     # (the audit line is a write of its own: what matters is what any write holds)
-    assert any(w.get(f"{CID}:BROWSER42_LOGIN_GOOGLE_USER") == "person87@example.com" for w in written), written
+    assert any(w.get(f"{CID}:BROWSER42_LOGIN_GOOGLE_USER") == "person90@example.com" for w in written), written
     assert not any(f"{CID}:BROWSER42_LOGIN_GOOGLE_URL" in w for w in written), "a fixed field was stored"
 
 

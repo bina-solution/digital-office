@@ -48,5 +48,5 @@ description: "Chromium אחד ומשותף של הלשכה: מחובר לאתר�
 ## להעמיק
 
 - [רשתות חברתיות](/he/apps/social-list)
-- [נכסים דיגיטליים](/he/apps/digital-assets)
+- [זהות](/he/apps/digital-assets)
 - [חיבורים ומפתחות](/he/apps/connections)

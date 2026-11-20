@@ -36,9 +36,9 @@ def main() -> int:
     d = Path(tempfile.mkdtemp(prefix="herd-cache-"))
     f = d / "herd.yaml"
     try:
-        f.write_text(HERD.format(pin="CHANGE_ME"), encoding="utf-8")
+        f.write_text(HERD.format(pin="0A0A-0000-0000-0001"), encoding="utf-8")
         old = os.stat(f).st_mtime_ns
-        check(give.load_herd(f)["offices"]["exampleu"]["pin"] == "CHANGE_ME", "the first read")
+        check(give.load_herd(f)["offices"]["exampleu"]["pin"] == "0A0A-0000-0000-0001", "the first read")
 
         # THE TICK: rewritten in place at the same size, and within one tick of the kernel's file clock — so its stat is
         # the SAME as before in every field the key holds (inode, mtime, ctime, size). The clock is the kernel's, so the

@@ -32,8 +32,14 @@ services:
       # an office PKCS#12, when the owner connects one (a registered CA's, or the office's own)
       - ESIGN_CERT_P12=${ESIGN_CERT_P12:-}
       - ESIGN_CERT_PASS=${ESIGN_CERT_PASS:-}
+      # the office's name: in its self-signed key (made once) and in each signature's location
+      - ESIGN_OFFICE_NAME=${BUSINESS_NAME:-}
+      # an RFC 3161 time-stamping authority (PAdES B-T); empty = no trusted time and nothing called outside
+      - ESIGN_TSA_URL=${ESIGN_TSA_URL:-}
       - DRIVE_URL=${DRIVE_URL:-http://drive:8975}
       - NOTIFICATIONS_URL=${NOTIFICATIONS_URL:-http://notifications:8977}
+      # the documents renderer (the ledger's /docGen/house): the signing certificate in the house style (DGO-2029)
+      - ESIGN_RENDER_URL=${ESIGN_RENDER_URL:-http://apitools:8080}
       # the office's event stream (flow.v1) — dgo:flow:esign
       - REDIS_URL=redis://:${REDIS_PASSWORD:-}@redis:6379/0
       - REDIS_PASSWORD=${REDIS_PASSWORD:-}

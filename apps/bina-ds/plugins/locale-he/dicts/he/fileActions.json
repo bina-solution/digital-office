@@ -1,0 +1,14 @@
+{
+ "menu.copied": "הועתק",
+ "menu.copyFailed": "לא ניתן להעתיק. בדקו שהתוכן זמין ונסו שוב.",
+ "menu.copyImage": "העתקת תמונה",
+ "menu.download": "הורדה",
+ "menu.downloadStarted": "ההורדה החלה",
+ "menu.downloaded": "ההורדה הושלמה",
+ "menu.finder": "הצגה ב-Finder",
+ "menu.reveal": "הצגה בתיקייה",
+ "menu.saveAs": "שמירה בשם…",
+ "menu.saveFailed": "לא ניתן לשמור. בדקו את המקור והיעד ונסו שוב.",
+ "menu.saved": "נשמר",
+ "path.revealError": "לא ניתן להציג את מיקום הקובץ. נסו שוב."
+}

@@ -15,7 +15,7 @@
     "test": "node --test test/"
   },
   "dependencies": {
-    "@deepseek-ai/schemastery": "3.18.2",
+    "@deepseek-ai/schemastery": "3.19.0",
     "zod": "^4"
   },
   "dsh": {

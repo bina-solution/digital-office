@@ -1,0 +1,429 @@
+/* עזריה — the screen (EXU-64). One list of every conversation, one conversation, one composer, the
+   shape of the Claude apps in the office's own palette. Colours are the palette's tokens only (G82):
+   the block between the markers is stamped from platform-base/bina-ui/theme-tokens.css (G27). */
+:root{
+  --font:"Segoe UI",system-ui,-apple-system,"Noto Sans Hebrew","Assistant",Arial,sans-serif;
+  --mono:ui-monospace,"SFMono-Regular",Menlo,Consolas,monospace;
+  --r-card:16px; --r-ctl:10px; --side-w:296px; --col:760px;
+}
+/* @bina-theme-tokens:start */
+/* OLIVE GROVE — the one palette of the office (the owner, 2026-10-07 · DGO-450). Four hues, sampled
+   from his mock-up, and the ground they stand on. A screen never writes a colour: it names one of
+   these. Each hue is the colour itself (a FILL — a button, a bar, a dot), «-d» for text and thin
+   lines on the ground (4.5:1 or more), «-soft» and «-line» for a tint and its hairline, and «-ink»
+   for what is written ON the fill. The role names every screen already uses point at them:
+   (no backtick in this block: one of its copies lives inside a script's template string)
+     olive  the brand and the main action · what is well, what is done
+     sky    what is in motion, what only informs · a link
+     lime   look here — a warning, something waiting
+     plum   a person must act — a failure, a removal, the one final action
+   Contrast, measured (WCAG): ink on the ground 13.7 · muted 4.65 · light text on olive 5.51 and on
+   plum 9.54 · ink on lime 6.88 · its ink on sky 6.32 · sky-d 4.61 · lime-d 4.70 · violet 5.32 ·
+   on the desk: its ink 6.32 (dark: 13.96), and 11.2 where the sky pales (dark: 5.12). */
+:root,:root[data-theme="light"]{
+  color-scheme:light;
+  accent-color:var(--accent);   /* the browser's OWN controls - a checkbox, a radio, a range, a progress bar - on both grounds: said once, here (it was said for eight single controls, and every other one was the browser's blue) */
+  --bg:#f3f5f7; --surface:#fff; --surface-2:#f9fafb; --ink:#1f2a17; --muted:#6a7068; --line:#dcdfde;
+  /* THE OFFICE'S LOGO HAS THESE THREE COLOURS AND NO OTHER, on every ground and in every theme (the owner, 2026-11-15,
+     group msgs 1103-1104: «From now on this is the only colors you use in logo replace evrywhere and never use diffrent
+     colors» - the logo of digital-office.co.il; DGO-1908). The dark blocks below do not redefine them on purpose. */
+  --mark-tile:#1b5e4a; --mark-glyph:#fbfcfc; --mark-accent:#7ecfad;
+  --olive:#56693f; --olive-d:#475734; --olive-soft:#e7eae4; --olive-line:#bfc6b6; --olive-ink:#f3f5f7;
+  --sky:#7baae3; --sky-d:#2a6fc4; --sky-soft:#edf3fb; --sky-line:#cddff4; --sky-ink:#13263f;
+  --lime:#a9b84c; --lime-d:#69732e; --lime-soft:#f3f5e6; --lime-line:#dee4bb; --lime-ink:#1f2a17;
+  --plum:#5b3349; --plum-d:#4a303b; --plum-soft:#e8e2e6; --plum-line:#c1b1ba; --plum-ink:#f3f5f7;
+  --accent:var(--olive); --accent-d:var(--olive-d); --accent-soft:var(--olive-soft); --accent-ink:var(--olive-ink);
+  --blue:var(--sky-d); --amber:var(--lime-d); --red:var(--plum);
+  --violet:#7c5c6d;   /* plum, lifted a fifth toward white: someone has to look — nothing has failed */
+  --ok:var(--olive); --warn:var(--lime-d); --danger:var(--plum); --info:var(--sky-d);
+  --ok-soft:var(--olive-soft); --warn-soft:var(--lime-soft); --danger-soft:var(--plum-soft); --info-soft:var(--sky-soft);
+  --red-soft:var(--plum-soft); --amber-soft:var(--lime-soft); --blue-soft:var(--sky-soft); --violet-soft:var(--plum-soft);
+  --side:var(--olive); --side-ink:#f3f5f7; --side-mut:#dce1da; --side-line:#788765;
+  --desk:var(--sky); --desk-ink:var(--sky-ink);   /* desktop mode's ground is the sky (the owner, DGO-452), and what is written straight on it */
+  --scrim:rgba(31,42,23,.5);                      /* what dims a screen behind a pop-up */
+  --shadow:0 1px 3px rgba(31,42,23,.08),0 6px 24px rgba(31,42,23,.06);
+  --shadow-lg:0 20px 60px rgba(31,42,23,.28);
+  /* ONE COLOUR AND ONE ANIMAL PER OFFICE (the owner, 2026-10-09 · flt-002). When offices are linked,
+     a person reads WHICH office a thing belongs to without opening it, so each office gets a hue of
+     its own. The hue is an IDENTITY and never a health state: an office that stopped answering keeps
+     its colour, and the quiet mark is the one that says "not answering". Each is an ALIAS of the
+     palette's own hue — no fourth value is invented, and because the ground re-points the hue, the
+     office mark follows the ground by itself. Each office's animal (elephant, deer, eagle) is a
+     glyph of bina-icons.js. */
+  --office-hp:var(--muted);   /* hp · elephant — grey: the heavy laptop at home, in the palette's own grey */
+  --office-mac:var(--lime);   /* macbook · deer — yellow: the palette has one yellow and it is lime. A FILL, so what is written ON it is --lime-ink, never this */
+  --office-vps:var(--sky-d);  /* vps · eagle — deep sky blue, «the eagle in the clouds». THE OWNER'S OWN CHOICE (2026-10-09, in writing: vps = נשר + כחול-שמיים) — this line is the colour he picked, not a default kept for him */
+}
+
+/* ── A LINKED OFFICE'S MARK, BY NAME (flt-004) ───────────────────────────────────────────────
+   The link carries a NAME — mark: {color, animal} in the catalog, from the office's own identity
+   — and never a value: the office that DRAWS a linked tile owns the pixels, so it paints the name
+   with its own palette. These seven rules are that translation, one per family above; a screen sets
+   data-office-hue="lime" and paints var(--office-hue).
+   A name this file does not know paints nothing, which is why the vocabulary in
+   apps/dgo-extend/identity.py may only name families that exist here — and why --red and --ok
+   are not among them: they mean «danger» and «it is well» on every screen in the office. */
+[data-office-hue="grey"]   { --office-hue:var(--muted); }
+[data-office-hue="lime"]   { --office-hue:var(--lime); }
+[data-office-hue="sky"]    { --office-hue:var(--sky-d); }
+[data-office-hue="olive"]  { --office-hue:var(--olive-d); }
+[data-office-hue="plum"]   { --office-hue:var(--plum); }
+[data-office-hue="blue"]   { --office-hue:var(--blue); }
+[data-office-hue="violet"] { --office-hue:var(--violet); }
+/* the dark ground is the same four hues on the palette's own ink, and the SAME legend. Olive on that
+   ink is 2.5:1, so its text step there is olive LIFTED — its own hue and saturation, lighter (7.14
+   on a card, 4.82 on its own tint) — and the brand, the main action and «it is well» take that step.
+   Lime stays «look here» and the sky «in motion», as on the light ground: were lime the accent here
+   (it was, for a day), a warning, a selection and «it is well» were one colour. Each «-d» on its
+   own «-soft» there, measured: olive 4.82 · sky 4.62 · lime 4.63 · plum 4.71. */
+@media (prefers-color-scheme:dark){
+  :root{ color-scheme:dark;
+         --bg:#141b0f; --surface:#1f2a17; --surface-2:#192213; --ink:#f3f5f7; --muted:#a2a8a2; --line:#414a3b;
+         --olive-d:#a5ba8c; --olive-soft:#384629; --olive-line:#56693f;
+         --sky-d:#7baae3; --sky-soft:#2e3f38; --sky-line:#4d6a8c;
+         --lime-d:#a9b84c; --lime-soft:#3b4622; --lime-line:#69732e;
+         --plum-d:#ad99a4; --plum-soft:#402f33; --plum-line:#7c5c6d;
+         --accent:var(--olive-d); --accent-ink:var(--surface);
+         --red:#ad99a4; --violet:#bdadb6; --danger:#ad99a4; --ok:var(--olive-d); --side:var(--surface);
+         --desk:var(--sky-ink); --desk-ink:var(--ink); --scrim:rgba(0,0,0,.6);
+         --shadow:0 1px 3px rgba(0,0,0,.4),0 6px 24px rgba(0,0,0,.3);
+         --shadow-lg:0 20px 60px rgba(0,0,0,.55); }
+}
+:root[data-theme="midnight"]{
+  color-scheme:dark;
+  --bg:#141b0f; --surface:#1f2a17; --surface-2:#192213; --ink:#f3f5f7; --muted:#a2a8a2; --line:#414a3b;
+  --olive-d:#a5ba8c; --olive-soft:#384629; --olive-line:#56693f;
+  --sky-d:#7baae3; --sky-soft:#2e3f38; --sky-line:#4d6a8c;
+  --lime-d:#a9b84c; --lime-soft:#3b4622; --lime-line:#69732e;
+  --plum-d:#ad99a4; --plum-soft:#402f33; --plum-line:#7c5c6d;
+  --accent:var(--olive-d); --accent-ink:var(--surface);
+  --red:#ad99a4; --violet:#bdadb6; --danger:#ad99a4; --ok:var(--olive-d); --side:var(--surface);
+  --desk:var(--sky-ink); --desk-ink:var(--ink); --scrim:rgba(0,0,0,.6);
+  --shadow:0 1px 3px rgba(0,0,0,.4),0 6px 24px rgba(0,0,0,.3);
+  --shadow-lg:0 20px 60px rgba(0,0,0,.55);
+}
+/* THE KEYBOARD'S RING - what the browser draws around the stop the keyboard is on, in the palette, wherever
+   a part draws none of its own. It has no specificity at all (:where), so any rule of a part wins. Two
+   screens said this for themselves; on the others nearly every stop wore the browser's ring (DGO-455).
+   A field keeps the offset it has - fourteen rules draw a field's own outline and say no offset. An area
+   (a scroll box, a table) takes the ring inside, where nothing clips it; a control takes it outside,
+   where a filled button does not hide it. */
+:where(:focus-visible){outline:2px solid var(--accent)}
+:where(:focus-visible:not(a,button,summary,[role=button],input,select,textarea)){outline-offset:-2px}
+:where(a,button,summary,[role=button]):focus-visible{outline-offset:2px}
+/* HEBREW AT A HEAVY WEIGHT - on Windows, where the first family of --font is installed. "Segoe UI" has its
+   Hebrew in Light, Regular, Semibold and Bold. Asked for 800 or 900 the browser takes the family's Black
+   face, which has none, and so has every family after it - so the Hebrew of every title at 800 was drawn in
+   the system's last-resort serif, thin, beside Latin in Black: «חשבונות ומראות» at 20px is 150px wide at 700
+   and 120px at 800 (Chrome 154; the screens ask for 800 in 167 places, the question's title among them).
+   These faces give the family's HEBREW RANGE the faces that have it. A family a sheet names is no longer the
+   system's for those characters, so every weight and both styles are named, each as the system resolves it:
+   measured, only upright 800 and 900 change. Any other character is not theirs and goes on to the next
+   family the screen names - system-ui in --font, on Windows the same faces, Black included - which is why
+   G27 asks that system-ui follows wherever a screen names this family itself. Where the family is not
+   installed nothing here resolves and nothing changes. */
+@font-face{font-family:"Segoe UI";src:local("Segoe UI Light");font-weight:100 300;unicode-range:U+0590-05FF,U+FB1D-FB4F}
+@font-face{font-family:"Segoe UI";src:local("Segoe UI");font-weight:400;unicode-range:U+0590-05FF,U+FB1D-FB4F}
+@font-face{font-family:"Segoe UI";src:local("Segoe UI Semibold");font-weight:500 600;unicode-range:U+0590-05FF,U+FB1D-FB4F}
+@font-face{font-family:"Segoe UI";src:local("Segoe UI Bold");font-weight:700 900;unicode-range:U+0590-05FF,U+FB1D-FB4F}
+@font-face{font-family:"Segoe UI";src:local("Segoe UI Light Italic");font-weight:100 300;font-style:italic;unicode-range:U+0590-05FF,U+FB1D-FB4F}
+@font-face{font-family:"Segoe UI";src:local("Segoe UI Italic");font-weight:400;font-style:italic;unicode-range:U+0590-05FF,U+FB1D-FB4F}
+@font-face{font-family:"Segoe UI";src:local("Segoe UI Semibold Italic");font-weight:500 600;font-style:italic;unicode-range:U+0590-05FF,U+FB1D-FB4F}
+@font-face{font-family:"Segoe UI";src:local("Segoe UI Bold Italic");font-weight:700 900;font-style:italic;unicode-range:U+0590-05FF,U+FB1D-FB4F}
+/* @bina-theme-tokens:end */
+
+*{box-sizing:border-box}
+html,body{height:100%;margin:0}
+body{background:var(--surface);color:var(--ink);font:15px/1.6 var(--font);-webkit-font-smoothing:antialiased;overflow:hidden}
+button{font:inherit;color:inherit;background:none;border:0;cursor:pointer;padding:0}
+a{color:var(--blue)}
+button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:var(--r-ctl)}
+svg.i{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;flex:none}
+svg.i.sm{width:16px;height:16px}
+.mono{font-family:var(--mono);direction:ltr;unicode-bidi:isolate;font-size:12.5px}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
+
+/* ── frame ───────────────────────────────────────────────────────────────────────────────────── */
+.app{height:100%;display:flex;container-type:inline-size;position:relative;background:var(--surface)}
+.side{width:var(--side-w);flex:none;background:var(--surface-2);border-inline-end:1px solid var(--line);display:flex;flex-direction:column;min-height:0;transition:transform .22s ease}
+.main{flex:1;min-width:0;display:flex;flex-direction:column;min-height:0}
+.scrim-side{display:none}
+
+/* ── side: brand, new, search, filter, list, account ─────────────────────────────────────────── */
+.brand{display:flex;align-items:center;gap:10px;padding:14px 14px 10px;min-height:58px}
+.mark{width:30px;height:30px;border-radius:8px;background:var(--olive);color:var(--olive-ink);display:inline-flex;align-items:center;justify-content:center;font-weight:800;font-size:17px;flex:none;line-height:1}
+.brand b{font-size:17px;font-weight:800;flex:1;letter-spacing:-.01em}
+.icbtn{width:38px;height:38px;border-radius:var(--r-ctl);display:inline-flex;align-items:center;justify-content:center;color:var(--ink);flex:none}
+.icbtn:hover{background:var(--olive-soft)}
+.newbtn{margin:0 12px 10px;display:flex;align-items:center;gap:10px;padding:0 14px;height:42px;border-radius:var(--r-ctl);background:var(--surface);border:1px solid var(--line);font-weight:600;box-shadow:var(--shadow)}
+.newbtn:hover{border-color:var(--olive-line)}
+.search{margin:0 12px 8px;display:flex;align-items:center;gap:8px;padding:0 12px;height:38px;border-radius:var(--r-ctl);background:var(--surface);border:1px solid var(--line);color:var(--muted)}
+.search input{border:0;background:none;outline:0;flex:1;min-width:0;font:inherit;font-size:14px;color:var(--ink)}
+.chips{display:flex;gap:6px;padding:2px 12px 6px;flex-wrap:wrap}
+.chip{font-size:12.5px;padding:0 11px;height:30px;border-radius:999px;border:1px solid var(--line);background:var(--surface);color:var(--muted);display:inline-flex;gap:6px;align-items:center}
+.chip[aria-pressed="true"]{border-color:var(--olive-line);background:var(--olive-soft);color:var(--olive-d);font-weight:600}
+.chip .n{font-variant-numeric:tabular-nums}
+.list{flex:1;overflow:auto;padding:2px 8px 10px;min-height:0;overscroll-behavior:contain}
+.grp{font-size:12px;font-weight:600;color:var(--muted);padding:14px 10px 4px}
+.row{width:100%;text-align:start;display:grid;grid-template-columns:minmax(0,1fr) auto;gap:3px 8px;padding:9px 10px;border-radius:var(--r-ctl);min-height:48px}
+.row:hover{background:var(--olive-soft)}
+.row[aria-current="true"]{background:var(--surface);box-shadow:inset 0 0 0 1px var(--line),var(--shadow)}
+.row .t{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:14px;font-weight:500;text-align:match-parent}
+/* an English title reads left to right but sits where every title starts: the page's start (its own end) */
+.row .t:dir(ltr){text-align:end}
+.top .ttl b:dir(ltr){text-align:end}
+.row .w{font-size:12px;color:var(--muted);font-variant-numeric:tabular-nums;white-space:nowrap}
+.row .m{grid-column:1/-1;display:flex;gap:6px;align-items:center;font-size:12px;color:var(--muted);min-width:0}
+.row .m span:last-child{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.eng{display:inline-flex;align-items:center;font-size:11px;font-weight:600;padding:0 7px;height:19px;border-radius:999px;border:1px solid var(--line);color:var(--muted);background:var(--surface);flex:none}
+.eng.az{border-color:var(--olive-line);color:var(--olive-d);background:var(--olive-soft)}
+.dot{width:8px;height:8px;border-radius:50%;background:var(--muted);display:inline-block;flex:none}
+.dot.run{background:var(--sky-d);animation:pulse 1.4s ease-in-out infinite}
+.dot.ok{background:var(--ok)}
+.dot.wait{background:var(--violet)}
+/* a Claude message its app did not take (DGO-2044): the row says so until it is sent again */
+.dot.bad{background:var(--danger)}
+.unsent{color:var(--danger);font-weight:600}
+.note .quote{color:var(--muted);white-space:pre-wrap;overflow-wrap:anywhere}
+/* finished since the person last looked: an olive dot and a bold title (the Claude apps' unread mark) */
+.dot.new{background:var(--olive)}
+.row.unread .t{font-weight:700}
+.row .t .pinmark{color:var(--olive-d);margin-inline-end:4px;vertical-align:-2px}
+/* a conversation's «⋯» menu sits at the end of its second line: on hover or on the open one at a desk, always on a phone */
+.rowwrap{position:relative}
+.rmenu{position:absolute;inset-inline-end:4px;bottom:5px;width:30px;height:30px;color:var(--muted);opacity:0}
+.rowwrap:hover .rmenu,.rmenu:focus-visible,.rowwrap:has(.row[aria-current="true"]) .rmenu{opacity:1}
+@media (hover:none){.rmenu{opacity:1}}
+.sheet.small{width:min(380px,100%)}
+.sheet h3 .ttl1{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
+/* back to the end of the conversation, floating over its bottom edge (no layout shift: its margins net to zero) */
+.tobottom{align-self:center;position:relative;z-index:6;width:36px;height:36px;margin-block:-50px 14px;border-radius:50%;background:var(--surface);border:1px solid var(--line);box-shadow:var(--shadow);display:inline-flex;align-items:center;justify-content:center;color:var(--ink)}
+.tobottom[hidden]{display:none}
+.wait{color:var(--violet);font-weight:600}
+@keyframes pulse{50%{opacity:.3}}
+.empty{padding:28px 14px;text-align:center;color:var(--muted);font-size:13px}
+.foot{border-top:1px solid var(--line);padding:8px;display:grid;gap:2px}
+.acct{width:100%;display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:var(--r-ctl);text-align:start;min-height:46px;text-decoration:none;color:inherit}
+.acct:hover{background:var(--olive-soft)}
+.acct .who{flex:1;min-width:0;display:grid;line-height:1.3}
+.acct .who b{font-size:13.5px}
+.acct .who small{color:var(--muted);font-size:12px;display:flex;align-items:center;gap:6px}
+.avatar{width:30px;height:30px;border-radius:50%;background:var(--olive-soft);color:var(--olive-d);display:inline-flex;align-items:center;justify-content:center;flex:none}
+
+/* ── main: top bar ───────────────────────────────────────────────────────────────────────────── */
+.top{display:flex;align-items:center;gap:6px;padding:8px 12px;min-height:58px;flex:none;border-bottom:1px solid var(--line);background:var(--surface)}
+.top .ttl{flex:1;min-width:0;display:grid;line-height:1.3;padding-inline:4px}
+/* a title in either language: its own direction (so an English one is cut at its END), aligned to the page's start */
+.top .ttl b{display:block;max-width:100%;font-size:16px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;text-align:match-parent}
+.top .ttl small{font-size:12px;color:var(--muted);display:flex;gap:6px;align-items:center;white-space:nowrap;overflow:hidden}
+.only-phone{display:none}
+.runpill{display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--sky-d);background:var(--sky-soft);border:1px solid var(--sky-line);border-radius:999px;padding:0 10px;height:26px;flex:none}
+
+/* ── the conversation ────────────────────────────────────────────────────────────────────────── */
+.thread{flex:1;overflow:auto;min-height:0;overscroll-behavior:contain}
+.col{max-width:var(--col);margin:0 auto;padding:22px 18px 10px;display:flex;flex-direction:column;gap:18px}
+/* the person's own message sits where a Hebrew reader starts — on the right (the owner, EXU-64 07:48) */
+.msg-u{align-self:flex-start;max-width:85%;background:var(--surface-2);border:1px solid var(--line);border-radius:20px;padding:10px 15px;white-space:pre-wrap;overflow-wrap:anywhere}
+.msg-a{display:grid;gap:8px;line-height:1.7}
+/* an answer, as markdown-it writes it: every block in its own direction, rhythm by margins (not line breaks) */
+.md{white-space:normal;overflow-wrap:anywhere}
+.md .plain{white-space:pre-wrap}
+.md>:first-child{margin-top:0}.md>:last-child{margin-bottom:0}
+.md p{margin:0 0 .65em}
+.md ul,.md ol{margin:.15em 0 .65em;padding-inline-start:1.35em}
+.md li{margin:.2em 0}
+.md li>p{margin:0}
+.md blockquote{margin:.4em 0 .7em;padding-inline-start:12px;border-inline-start:3px solid var(--line);color:var(--muted)}
+.md h1,.md h2,.md h3,.md h4,.md h5,.md h6{margin:.9em 0 .35em;line-height:1.35;font-weight:700}
+.md h1{font-size:18px}.md h2{font-size:16.5px}.md h3,.md h4,.md h5,.md h6{font-size:15px}
+.md hr{border:0;border-top:1px solid var(--line);margin:1em 0}
+.md a{color:var(--info);text-decoration:underline;text-underline-offset:2px}
+/* the person's message, and on hover (or a tap on a phone) the way to edit it into a new version */
+.uwrap{align-self:flex-start;max-width:85%;display:grid;justify-items:start;gap:2px}
+.uwrap .msg-u{max-width:100%}
+.uacts{display:flex;gap:2px;opacity:0;transition:opacity .15s}
+.uwrap:hover .uacts,.uwrap:focus-within .uacts{opacity:1}
+@media (hover:none){.uacts{opacity:1}}
+.uacts .icbtn{width:30px;height:30px;color:var(--muted)}
+.ufiles{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}
+.ufiles span{display:inline-flex;gap:4px;align-items:center;font-size:12.5px;color:var(--muted)}
+.md code{font-family:var(--mono);font-size:.88em;background:var(--surface-2);border:1px solid var(--line);border-radius:6px;padding:0 5px;direction:ltr;unicode-bidi:isolate}
+.md pre{white-space:pre;overflow-x:auto;background:var(--surface-2);border:1px solid var(--line);border-radius:var(--r-ctl);padding:10px 12px;margin:2px 0;direction:ltr;text-align:left;font-size:12.5px;line-height:1.5}
+.md pre code{border:0;background:none;padding:0}
+/* a code block: its language and a copy button above it, as in the Claude apps */
+.md .code{border:1px solid var(--line);border-radius:var(--r-ctl);overflow:hidden;margin:2px 0;direction:ltr;white-space:normal}
+.md .code-bar{display:flex;align-items:center;justify-content:space-between;padding-block:2px;padding-inline:12px 4px;background:var(--surface-2);border-bottom:1px solid var(--line);font:12px var(--mono);color:var(--muted)}
+.md .code pre{margin:0;border:0;border-radius:0}
+/* a table in an answer: a hairline grid that scrolls sideways on a phone instead of breaking the page */
+.md .tbl{overflow-x:auto;white-space:normal;margin:2px 0}
+.md .tbl table{border-collapse:collapse;font-size:13.5px;line-height:1.5}
+.md .tbl th,.md .tbl td{border:1px solid var(--line);padding:5px 9px;text-align:start;vertical-align:top}
+.md .tbl th{background:var(--surface-2);font-weight:700}
+.md .h{font-weight:700;font-size:15.5px}
+.acts{display:flex;gap:2px;color:var(--muted);margin-top:-2px}
+.acts .icbtn{width:32px;height:32px;color:var(--muted)}
+/* an answer's actions: always under the newest one, on hover (or keyboard focus) under the rest */
+.msg-a .acts{opacity:0;transition:opacity .15s}
+.msg-a.last .acts,.msg-a:hover .acts,.msg-a:focus-within .acts{opacity:1}
+@media (hover:none){.msg-a .acts{opacity:1}}
+.tools{font-size:13.5px}
+.tools>button{display:inline-flex;align-items:center;gap:6px;color:var(--muted);padding:2px 0;min-height:30px}
+.tools>button .plus{color:var(--olive-d);font-weight:700;direction:ltr;unicode-bidi:isolate}
+.tools>button .chev{transition:transform .15s}
+.tools.open>button .chev{transform:rotate(-90deg)}
+.tools ol{list-style:none;margin:6px 0 2px;padding:8px 12px;border-inline-start:2px solid var(--line);display:none;gap:7px}
+.tools.open ol{display:grid}
+.tools li{display:flex;gap:8px;align-items:center;color:var(--muted);min-width:0}
+.tools li .mono{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--ink)}
+/* the summary a carried-over conversation opens with: folded, like a tool run */
+.tools .sumbody{display:none;margin:6px 0 2px;padding:10px 14px;border-inline-start:2px solid var(--line);font-size:13.5px;line-height:1.65;color:var(--muted);max-height:420px;overflow:auto}
+.tools.open .sumbody{display:block}
+.tools li .bad{color:var(--danger)}
+/* the work between two texts: one folded row (Claude Code's), its thinking and calls inside */
+.tools.work>button .wl{color:var(--muted)}
+.tools.work.live>button .wl{color:var(--ink)}
+.tools li.think{align-items:flex-start}
+.tools li.think .md{font-size:13px;line-height:1.6;color:var(--muted);max-height:260px;overflow:auto}
+.tools .badge{font-size:11px;font-weight:600;color:var(--danger);border:1px solid var(--plum-line);border-radius:999px;padding:0 6px;flex:none}
+.msg-a.streaming .md{min-height:1.7em}
+/* what Azaria asks, answered here; and his plan for the turn */
+.qcard,.todo{border:1px solid var(--line);border-radius:var(--r-card);background:var(--surface);padding:12px 14px;display:grid;gap:10px;box-shadow:var(--shadow)}
+.qcard{border-color:var(--violet)}
+.qhead{display:flex;align-items:center;gap:8px;font-size:14px}
+.qcard .qhead b{color:var(--violet)}
+.qstate{margin-inline-start:auto;font-size:12px;color:var(--muted);font-variant-numeric:tabular-nums}
+.qitem{display:grid;gap:8px}
+.qitem p{margin:0;font-weight:600}
+.qh{font-size:11.5px;color:var(--muted);font-weight:600}
+.qdetail{font-size:13px;color:var(--muted)}
+.qopts{display:flex;flex-wrap:wrap;gap:6px}
+.qopt{display:grid;gap:1px;text-align:start;border:1px solid var(--line);border-radius:var(--r-ctl);padding:7px 12px;background:var(--surface);min-height:36px;font-size:13.5px}
+.qopt small{font-size:11.5px;color:var(--muted)}
+.qopt[aria-pressed="true"]{border-color:var(--accent);background:var(--olive-soft);box-shadow:inset 0 0 0 1px var(--accent)}
+.qcustom{height:38px;font-size:14px}
+.todo ol{list-style:none;margin:0;padding:0;display:grid;gap:6px}
+.todo li{display:flex;gap:8px;align-items:center;font-size:13.5px}
+.todo li.completed{color:var(--muted);text-decoration:line-through}
+.todo li.in_progress{font-weight:600}
+.todo li .i{color:var(--ok)}
+.note{border-radius:var(--r-card);padding:10px 14px;font-size:13.5px;display:grid;gap:4px}
+.note.err{background:var(--danger-soft);color:var(--ink);border:1px solid var(--plum-line)}
+.note.err b{color:var(--danger)}
+.note.warn{background:var(--lime-soft);border:1px solid var(--lime-line)}
+.note.ask{border:1.5px solid var(--violet)}
+.note.ask b{color:var(--violet)}
+.typing{display:inline-flex;gap:8px;align-items:center;color:var(--muted);font-size:13.5px}
+/* the answer went on without a message of the person's (a Stop hook sent it back): one quiet line where it did */
+.cont{align-self:center;font-size:12px;color:var(--muted);border:1px dashed var(--line);border-radius:999px;padding:2px 12px}
+/* the way to the conversation's beginning: a quiet chip above its first loaded message */
+.more-old{align-self:center;display:inline-flex;align-items:center;gap:6px;font-size:12.5px;color:var(--muted);border:1px solid var(--line);border-radius:999px;padding:5px 14px;background:var(--surface);min-height:30px}
+button.more-old:hover{color:var(--ink);border-color:var(--olive-line)}
+
+/* ── a new conversation ──────────────────────────────────────────────────────────────────────── */
+.hero{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;padding:24px 18px;text-align:center}
+.hero .mark{width:46px;height:46px;border-radius:12px;font-size:25px}
+.hero h2{font-size:27px;font-weight:700;margin:0;text-wrap:balance;letter-spacing:-.01em}
+.sugg{display:flex;gap:8px;flex-wrap:wrap;justify-content:center;max-width:640px}
+.sugg button{border:1px solid var(--line);background:var(--surface);border-radius:999px;padding:0 15px;height:36px;font-size:13.5px}
+.sugg button:hover{border-color:var(--olive-line);background:var(--olive-soft)}
+/* where it runs (DGO-2032): one card per place — Azaria in the cloud, Azaria on a computer of the office, the
+   Claude app — the chosen one marked as an option of a question is; a place that cannot run says what it needs */
+.where{display:grid;gap:8px;justify-items:center;width:100%;max-width:720px}
+.where .wl{font-size:12.5px;font-weight:600;color:var(--muted)}
+.places{display:flex;flex-wrap:wrap;gap:8px;justify-content:center;width:100%}
+.place{display:grid;grid-template-columns:auto minmax(0,1fr);column-gap:9px;row-gap:0;align-items:center;text-align:start;width:168px;padding:9px 12px;border:1px solid var(--line);border-radius:var(--r-card);background:var(--surface);box-shadow:var(--shadow);min-height:56px}
+.place svg.i{grid-row:1/4;color:var(--olive-d)}
+.place .pn{font-weight:700;font-size:14px;line-height:1.3}
+.place small{font-size:12px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:1.35}
+.place em{font-style:normal;font-size:11.5px;color:var(--violet);font-weight:600;line-height:1.35}
+.place:hover{border-color:var(--olive-line)}
+.place[aria-checked="true"]{border-color:var(--accent);background:var(--olive-soft);box-shadow:inset 0 0 0 1px var(--accent)}
+.place.add{border-style:dashed;box-shadow:none;background:none}
+.place.add small{white-space:normal}
+.place.add svg.i{color:var(--muted)}
+/* the sheet of places: one row each, its state, and the one thing it needs */
+.prow{display:flex;align-items:center;gap:10px;padding:8px 4px;border-bottom:1px solid var(--line);min-width:0}
+.pic{width:34px;height:34px;border-radius:10px;background:var(--olive-soft);color:var(--olive-d);display:inline-flex;align-items:center;justify-content:center;flex:none}
+.pt{flex:1;min-width:0;display:grid;line-height:1.35}
+.pt b{font-size:14px}
+.pt small{font-size:12px;color:var(--muted);display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+
+/* ── the composer ────────────────────────────────────────────────────────────────────────────── */
+.cwrap{flex:none;padding:8px 16px calc(8px + env(safe-area-inset-bottom,0px));background:var(--surface)}
+.cwrap .col{padding:0;gap:6px}
+.composer{border:1px solid var(--line);border-radius:24px;background:var(--surface);box-shadow:var(--shadow);padding:10px 10px 8px;display:grid;gap:6px}
+.composer:focus-within{border-color:var(--olive-line)}
+.composer textarea{border:0;outline:0;resize:none;background:none;font:inherit;color:var(--ink);min-height:46px;max-height:200px;padding:4px 8px;width:100%}
+.composer textarea::placeholder{color:var(--muted)}
+.cbar{display:flex;align-items:center;gap:6px}
+/* files going with the message, a drop that lands on the composer, and an edit in progress */
+.fchips{display:flex;flex-wrap:wrap;gap:6px}
+.fchip{display:inline-flex;align-items:center;gap:5px;max-width:240px;height:30px;padding-inline:10px 2px;border:1px solid var(--line);border-radius:999px;background:var(--surface-2);font-size:12.5px}
+.fchip bdi{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
+.fchip .icbtn{width:26px;height:26px}
+.composer.drop{border-color:var(--accent);box-shadow:0 0 0 3px var(--olive-soft)}
+.cbar .clip{width:36px;height:36px;color:var(--muted)}
+.editing{display:flex;align-items:center;gap:8px;font-size:12.5px;color:var(--ink);background:var(--olive-soft);border:1px solid var(--olive-line);border-radius:var(--r-ctl);padding:6px 10px}
+.editing span{flex:1}
+.linkish{color:var(--info);text-decoration:underline;text-underline-offset:2px;font-size:inherit;padding:0}
+.cbar .sp{flex:1}
+.send{width:38px;height:38px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;background:var(--accent);color:var(--accent-ink);flex:none}
+.send[disabled]{background:var(--olive-soft);color:var(--olive-line);cursor:default}
+.send.stop{background:var(--ink);color:var(--surface)}
+.pill{display:inline-flex;align-items:center;gap:6px;height:36px;padding:0 12px;border-radius:999px;border:1px solid var(--line);background:var(--surface-2);font-size:13px;font-weight:600;max-width:70%;min-width:0}
+.pill span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pill.static{cursor:default}
+.hint{font-size:12px;color:var(--muted);text-align:center}
+.limit{font-size:12px;color:var(--lime-d);background:var(--lime-soft);border-radius:999px;padding:2px 10px;align-self:flex-start}
+/* what the composer runs on, said once and quietly under it */
+.cnote{margin:0;font-size:11.5px;color:var(--muted);text-align:center;line-height:1.4}
+
+/* ── sheets ──────────────────────────────────────────────────────────────────────────────────── */
+.scrim{position:absolute;inset:0;background:var(--scrim);z-index:20;display:flex;align-items:center;justify-content:center;padding:16px}
+.sheet{background:var(--surface);border-radius:var(--r-card);box-shadow:var(--shadow-lg);width:min(480px,100%);max-height:86%;overflow:auto;padding:16px;display:grid;gap:12px}
+.sheet h3{margin:0;font-size:16px;font-weight:700;display:flex;align-items:center;gap:8px}
+.sheet h3 .sp{flex:1}
+.opt{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:2px 10px;align-items:center;text-align:start;padding:10px;border-radius:var(--r-ctl);border:1px solid transparent;width:100%}
+.opt:hover{background:var(--surface-2)}
+.opt[aria-checked="true"]{border-color:var(--olive-line);background:var(--olive-soft)}
+.opt[disabled]{opacity:.5;cursor:default}
+.opt .nm{font-weight:600}
+.opt .ds{grid-column:2/-1;font-size:12px;color:var(--muted)}
+.opt .ck{color:var(--olive-d);visibility:hidden}
+.opt[aria-checked="true"] .ck{visibility:visible}
+.ogrp{font-size:12px;font-weight:600;color:var(--muted);padding:6px 4px 0}
+.facts{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:1px;background:var(--line);border:1px solid var(--line);border-radius:var(--r-ctl);overflow:hidden}
+.facts div{background:var(--surface);padding:8px 10px;display:grid;line-height:1.35;min-width:0}
+.facts small{font-size:11px;color:var(--muted)}
+.facts span{font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:flex;align-items:center;gap:6px}
+.why{font-size:13px;color:var(--muted);margin:0}
+.btns{display:flex;gap:8px;flex-wrap:wrap}
+.field{height:42px;padding-inline:12px;border:1px solid var(--line);border-radius:var(--r-ctl);background:var(--surface);color:var(--ink);font:inherit;font-size:15px;width:100%}
+.btn{display:inline-flex;align-items:center;gap:6px;height:36px;padding:0 14px;border-radius:var(--r-ctl);background:var(--accent);color:var(--accent-ink);font-weight:600;font-size:13.5px;text-decoration:none}
+.btn.ghost{background:var(--surface);color:var(--ink);border:1px solid var(--line)}
+.btn.sm{height:30px;padding:0 12px;font-size:13px;justify-self:start}
+.btn[disabled]{opacity:.6}
+.toast{position:absolute;bottom:110px;inset-inline:0;margin:auto;width:max-content;max-width:90%;background:var(--ink);color:var(--surface);padding:9px 15px;border-radius:var(--r-ctl);font-size:13.5px;z-index:30;box-shadow:var(--shadow-lg)}
+.skel{background:var(--surface-2);border-radius:8px;height:14px;margin:12px 10px}
+
+/* ── the phone: the list is a drawer, the bar owns the top, the composer the bottom ──────────── */
+@container (max-width:760px){
+  .only-phone{display:inline-flex}
+  .only-desk{display:none!important}
+  /* closed, the drawer is out of the page entirely: no shadow at the edge, no stop for the keyboard */
+  .side{position:absolute;inset-block:0;inset-inline-start:0;width:min(340px,86%);z-index:15;transform:translateX(105%);visibility:hidden;transition:transform .22s ease,visibility 0s linear .22s}
+  .app.drawer .side{transform:none;visibility:visible;box-shadow:var(--shadow-lg);transition:transform .22s ease}
+  .app.drawer .scrim-side{display:block;position:absolute;inset:0;background:var(--scrim);z-index:14}
+  .top{border-bottom:0;padding-top:calc(8px + env(safe-area-inset-top,0px))}
+  .top .ttl{text-align:center}
+  .top .ttl b:dir(ltr){text-align:center}
+  .top .ttl small{justify-content:center}
+  .scrim{align-items:flex-end;padding:0}
+  .sheet{width:100%;border-radius:22px 22px 0 0;max-height:84%;padding-bottom:calc(16px + env(safe-area-inset-bottom,0px))}
+  .col{padding-inline:14px}
+  .cwrap{padding-inline:10px}
+  .hero h2{font-size:23px}
+  .place{width:calc(50% - 4px)}
+  .msg-u{max-width:90%}
+}
+@media (prefers-reduced-motion:reduce){.dot.run{animation:none}.side,.tools>button .chev{transition:none}}

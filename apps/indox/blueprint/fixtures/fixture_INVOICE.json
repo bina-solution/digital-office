@@ -457,7 +457,7 @@
      "shipping_id_query": {
       "action": "find after",
       "action_value": [
-       "מספר תעודה בפנקס:",
+       "מספר תעודה ב\u05e4\u05e0\u05e7\u05e1:",
        "תעודת החזרה מלקוח מספר",
        "משלוח אריזות מספר",
        "תעודת משלוח מספר",
@@ -571,7 +571,7 @@
    "_bust_note": "LIVE cache key does NOT include version or model -> does NOT invalidate on prompt/model change. (Draft proposed sha256 + version/model bust; PROPOSED change, not live.)"
   },
   "constants": {
-   "own_company_vat": "500000088",
+   "own_company_vat": "500000096",
    "own_company_name": "הדוגמה חומרי בניין בע\"מ"
   },
   "response_schema": {

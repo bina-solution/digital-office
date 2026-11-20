@@ -423,7 +423,7 @@ All five extend `business-basic`. Only the slots that differ from it are listed.
 | S32 | primary | תקנות שוויון זכויות לאנשים עם מוגבלות (התאמות נגישות לשירות), תשע״ג-2013 - reg. 35, 35ה (statement), 35ו (exemptions) | <https://www.nevo.co.il/law_html/law01/500_865.htm> |
 | S33 | secondary | ISOC-IL - legal aspects: IS 5568 = WCAG 2.0 level AA; statement contents; penalties | <https://www.isoc.org.il/freedom-of-internet/accessibility/legal-aspects-accessibility> |
 | S34 | secondary | Tax invoice (חשבונית מס) mandatory details; עוסק פטור cannot issue one | <https://www.greeninvoice.co.il/magazine/tax-invoice/> |
-| S35 | primary | הוראות מס הכנסה (ניהול פנקסי חשבונות), תשל״ג-1973 - primary text | <https://www.nevo.co.il/law_html/law01/255_179.htm> |
+| S35 | primary | הוראות מס הכנסה (ניהול ספרי חשבונות), תשל״ג-1973 - primary text | <https://www.nevo.co.il/law_html/law01/255_179.htm> |
 | S36 | primary | Israel Tax Authority - allocation number required above 5,000 ₪ (before VAT) from 1 June 2026 | <https://www.gov.il/he/pages/pa240525-1> |
 | S37 | secondary | Allocation number (מספר הקצאה) - 9 digits, >5,000 ₪ from 1.6.2026 | <https://www.grantthornton.co.il/insights1/tax-insignths/2026/From_June_the_allocation_number/> |
 | S38 | secondary | עוסק פטור ceiling 2026: 122,833 ₪ | <https://www.mako.co.il/news-money/2026_q3/Article-39baaaa750e10a1027.htm> |

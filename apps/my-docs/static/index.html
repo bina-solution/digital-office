@@ -14,6 +14,7 @@
     <nav>
       <a data-view="dash" class="active"><span class="nav-dot"></span>לוח בקרה</a>
       <a data-view="docs"><span class="nav-dot"></span>מסמכים</a>
+      <a data-view="archive" title="כל המסמכים — שהעסק הנפיק, שנכנסו, והקבצים ב«קבצים» — בחיפוש אחד"><span class="nav-dot"></span>ארכיון</a>
       <a data-view="customers"><span class="nav-dot"></span>לקוחות</a>
       <a data-view="items"><span class="nav-dot"></span>פריטים</a>
       <a data-view="settings"><span class="nav-dot"></span>הגדרות עסק</a>
@@ -37,6 +38,15 @@
     <section id="view-docs" class="view hidden">
       <div class="filters" id="filters"></div>
       <div id="docsTable" class="tablewrap"></div>
+    </section>
+
+    <section id="view-archive" class="view hidden">
+      <div class="arch-bar">
+        <input id="archQ" type="search" placeholder="חיפוש בכל המסמכים והקבצים — שם, לקוח, מספר, תיקייה…"/>
+        <div class="filters" id="archDir"></div>
+      </div>
+      <div class="arch-status" id="archStatus"></div>
+      <div id="archTable" class="tablewrap"></div>
     </section>
 
     <section id="view-customers" class="view hidden">
@@ -71,30 +81,22 @@
 <div id="editor" class="editor hidden" dir="rtl">
   <div class="editor-h">
     <h2 id="editorTitle">מסמך חדש</h2>
-    <button class="ghost" id="closeEditor"><svg class="ic-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></button>
+    <div class="editor-h-acts">
+      <button class="ghost sm hidden" id="backToTypes" title="חזרה לבחירת סוג המסמך">כל סוגי המסמכים</button>
+      <button class="ghost" id="closeEditor" title="סגירה בלי לשמור"><svg class="ic-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></button>
+    </div>
   </div>
-  <div class="editor-b">
-    <label>סוג מסמך
-      <select id="fType">
-        <option value="INVOICE">חשבונית מס</option>
-        <option value="INVOICE_RECEIPT">חשבונית מס קבלה</option>
-        <option value="RECEIPT">קבלה</option>
-        <option value="QUOTE">הצעת מחיר</option>
-        <option value="ORDER">הזמנת רכש</option>
-        <option value="SHIPMENT">תעודת משלוח</option>
-      </select>
-    </label>
+  <!-- step 1: which document — every type this business issues, from the catalogue (DGO-2029) -->
+  <div class="editor-b gallery" id="typeGallery"></div>
+  <!-- step 2: the form beside the document itself, drawn as it is typed -->
+  <div class="stage hidden" id="stage">
+  <div class="editor-b" id="docForm">
+    <input type="hidden" id="fType"/>
     <div class="row">
       <label>תאריך<input type="date" id="fDate"/></label>
-      <label>אמצעי תשלום
-        <select id="fPay">
-          <option>מזומן</option>
-          <option>העברה בנקאית</option>
-          <option>כרטיס אשראי</option>
-          <option>המחאה</option>
-          <option>ביט</option>
-        </select>
-      </label>
+      <label data-for="valid" class="hidden">בתוקף עד<input type="date" id="fValid"/></label>
+      <label data-for="due" class="hidden">לתשלום עד<input type="date" id="fDue"/></label>
+      <label data-for="delivery" class="hidden">מועד אספקה<input type="date" id="fDelivery"/></label>
     </div>
     <fieldset><legend>לקוח</legend>
       <div class="row">
@@ -105,30 +107,84 @@
         <label>כתובת<input id="cStreet" placeholder="רחוב ומספר"/></label>
         <label>עיר<input id="cCity"/></label>
       </div>
+      <div class="row">
+        <label>איש קשר<input id="cPerson" placeholder="לידי…"/></label>
+        <label>דוא״ל<input id="cEmail" dir="ltr" placeholder="person85@example.com"/></label>
+      </div>
     </fieldset>
-    <fieldset class="lines-fs"><legend>שורות</legend>
+    <fieldset data-for="cover" class="hidden"><legend>השער</legend>
+      <label>כותרת השער<textarea id="fCoverTitle" rows="2" placeholder="שורה בכל שורה · **מודגש**"></textarea></label>
+      <label>תת־כותרת<textarea id="fCoverSub" rows="2"></textarea></label>
+    </fieldset>
+    <fieldset data-for="subject" class="hidden"><legend>פתיחה</legend>
+      <label>הנדון<input id="fSubject"/></label>
+      <label>פסקת פתיחה<textarea id="fIntro" rows="3"></textarea></label>
+    </fieldset>
+    <fieldset data-for="sections" class="hidden"><legend>פרקי ההצעה</legend>
+      <div id="sections"></div>
+      <button class="ghost sm" id="addSection">הוסף פרק</button>
+    </fieldset>
+    <fieldset data-for="agreement" class="hidden"><legend>ההסכם</legend>
+      <label>שם ההסכם<input id="fAgrTitle"/></label>
+      <label>הואיל — שורה לכל הואיל<textarea id="fRecitals" rows="3"></textarea></label>
+      <div id="clauses"></div>
+      <button class="ghost sm" id="addClause">הוסף סעיף</button>
+    </fieldset>
+    <fieldset data-for="letter" class="hidden"><legend>המכתב</legend>
+      <label>הנדון<input id="fLtSubject"/></label>
+      <label>גוף המכתב<textarea id="fLtBody" rows="10" placeholder="פסקאות מופרדות בשורה ריקה · - לנקודה · **מודגש**"></textarea></label>
+    </fieldset>
+    <fieldset data-for="lines" class="lines-fs hidden"><legend id="linesLegend">שורות</legend>
       <table class="lines"><thead><tr>
-        <th>תיאור</th><th>כמות</th><th>מחיר יח׳</th><th>סה״כ</th><th></th>
+        <th>תיאור</th><th>כמות</th><th data-for="price">מחיר יח׳</th><th data-for="price">סה״כ</th><th data-for="period" class="hidden" title="שורה שחוזרת כל חודש — ריטיינר">חודשי</th><th></th>
       </tr></thead><tbody id="lines"></tbody></table>
       <button class="ghost" id="addLine"><svg class="ic-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14"/><path d="M12 5v14"/></svg>הוסף שורה</button>
     </fieldset>
+    <fieldset data-for="payments" class="hidden"><legend>התשלום</legend>
+      <div class="row">
+        <label>אמצעי תשלום
+          <select id="fPay">
+            <option>העברה בנקאית</option>
+            <option>כרטיס אשראי</option>
+            <option>המחאה</option>
+            <option>ביט</option>
+            <option>מזומן</option>
+          </select>
+        </label>
+        <label data-for="amount" class="hidden">סכום שהתקבל<input id="fAmount" type="number" step="0.01" dir="ltr"/></label>
+      </div>
+      <div class="row">
+        <label>אסמכתא / מס׳ המחאה<input id="fPayRef" dir="ltr"/></label>
+        <label id="fPayBankBox" class="hidden" title="קבלה על המחאה נושאת את מספרה ואת הבנק שלה">בנק וסניף ההמחאה<input id="fPayBank" placeholder="לאומי 10, סניף 800"/></label>
+        <label data-for="amount" class="hidden">עבור<input id="fNature" placeholder="חשבון עסקה …"/></label>
+      </div>
+    </fieldset>
+    <fieldset data-for="terms" class="hidden"><legend>תנאים והערות</legend>
+      <label>תנאים — שורה לכל תנאי<textarea id="fTerms" rows="3"></textarea></label>
+      <label>הערות<textarea id="fNotes" rows="2"></textarea></label>
+    </fieldset>
     <div class="totals" id="editorTotals"></div>
   </div>
-  <div class="editor-f">
-    <button class="ghost" id="saveDraft">שמור טיוטה</button>
+  <div class="preview" id="stagePreview" aria-label="המסמך כפי שיופק">
+    <div class="preview-h"><span>המסמך כפי שיופק</span><span class="muted" id="pvState"></span></div>
+    <div class="preview-b" id="pvBox"><iframe id="pvFrame" title="תצוגת המסמך" sandbox="allow-same-origin"></iframe></div>
+  </div>
+  </div>
+  <div class="editor-f hidden" id="editorFoot">
     <button class="primary" id="issueNow">הפק מסמך<svg class="ic-svg ic-end" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 18-6-6 6-6"/></svg></button>
+    <button class="ghost" id="saveDraft">שמור טיוטה</button>
   </div>
 </div>
 
 <!-- Document detail drawer -->
 <div id="drawer" class="drawer hidden" dir="rtl">
   <div class="drawer-h">
-    <div><span id="dNum" class="dnum"></span><span id="dStatus" class="chip"></span><span id="dConv" class="conv-from"></span></div>
+    <div><span id="dNum" class="dnum"></span><span id="dStatus" class="chip"></span><span id="dSign" class="chip"></span><span id="dConv" class="conv-from"></span></div>
     <button class="ghost" id="closeDrawer"><svg class="ic-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></button>
   </div>
   <div class="drawer-actions" id="dActions"></div>
   <div class="drawer-b">
-    <iframe id="dPdf" title="מסמך"></iframe>
+    <div class="preview-b" id="dPdfBox"><iframe id="dPdf" title="המסמך" sandbox="allow-same-origin"></iframe></div>
     <div class="events"><h3>יומן פעולות</h3><ul id="dEvents"></ul></div>
   </div>
 </div>

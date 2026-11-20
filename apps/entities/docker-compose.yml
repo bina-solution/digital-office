@@ -1,0 +1,52 @@
+# entities — «ישויות», everyone the business works with: people and organizations and the roles each holds
+# (DGO-2101, ai/context/business-domains.md); see app.py's docstring.
+#
+# Its tile «ישויות» (app.json routing, behind the office's sign-in) opens the list and each entity's card. The API
+# answers its own CLI (inside this container), a service holding its token (the documents' ledger), and a signed-in
+# admin for the screen. The office network reaches it at http://entities:8999.
+services:
+  entities:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      # the office's ONE door for a Python app (who the person is, asked of the sign-in), built into the image from
+      # the platform — never a copy of it here (platform-base/forward-auth/signin.py says why)
+      additional_contexts:
+        dgo: ../../platform-base/forward-auth
+    container_name: entities-${DEPLOYMENT_NAME:-bina-deployment}
+    hostname: entities
+    restart: unless-stopped
+    environment:
+      - ENTITIES_DATA=/data
+      # a service (the documents' ledger, an n8n flow) calls with it; minted per office (scripts/env-secrets.py)
+      - ENTITIES_API_TOKEN=${ENTITIES_API_TOKEN:-}
+      - TZ=${ENTITIES_TZ:-Asia/Jerusalem}
+    volumes:
+      # the people and organizations the business works with (data.on_uninstall: keep)
+      - entities_data:/data
+    networks:
+      - traefik-network
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request,sys;sys.exit(0 if urllib.request.urlopen('http://localhost:8999/healthz',timeout=8).status==200 else 1)"]
+      interval: ${HEALTHCHECK_INTERVAL:-30s}
+      timeout: ${HEALTHCHECK_TIMEOUT:-10s}
+      retries: 3
+      start_period: 15s
+    deploy:
+      resources:
+        limits:
+          # one SQLite file and a screen a few people use
+          cpus: '0.2'
+          memory: 128M
+    logging:
+      driver: ${LOGGING_DRIVER:-json-file}
+      options:
+        max-size: 5m
+        max-file: '3'
+
+volumes:
+  entities_data:
+
+networks:
+  traefik-network:
+    external: true

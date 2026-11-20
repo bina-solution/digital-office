@@ -73,9 +73,16 @@ async function mount(options) {
   const store = listStore(options)
   const opened = []
   const disposers = []
-  const sessions = {
-    list: store,
-    open(id) {
+  // DeepSeek Harness 0.2.x (EXU-64): the list is `sessions.list` (phase, ids), and the open conversation
+  // is the workspace view's `selection` ({sessionId}), opened with `uiWorkspace.openSession(id)`. The
+  // fake keeps ONE snapshot (`current` is the selection) so every case below reads as it did on 0.1.6.
+  const sessions = { list: store }
+  const uiWorkspace = {
+    selection: {
+      getSnapshot: () => ({ sessionId: store.getSnapshot().current }),
+      subscribe: (listener) => store.subscribe(listener),
+    },
+    openSession(id) {
       if (store.getSnapshot().ids.indexOf(id) < 0) throw new Error(`unknown session ${id}`)
       opened.push(id)
       store.publish({ current: id })
@@ -83,12 +90,13 @@ async function mount(options) {
   }
   const ctx = {
     sessions,
+    uiWorkspace,
     effect: (fn) => {
       disposers.push(fn())
     },
   }
   const loaded = await plugin()
-  assert.deepEqual(loaded.inject, ['sessions'])
+  assert.deepEqual(loaded.inject, ['sessions', 'uiWorkspace'])
   loaded.apply(ctx)
   return { store, opened, harness, dispose: () => disposers.forEach((fn) => fn()) }
 }
@@ -184,9 +192,9 @@ test('teardown unsubscribes: a disposed plugin is silent', async () => {
   assert.equal(m.harness.messages.length, seen)
 })
 
-test('the plugin declares the session controller as its load-order dependency', async () => {
+test('the plugin declares the session controller and the workspace view as its load-order dependencies', async () => {
   const manifest = JSON.parse(await readFile(MANIFEST, 'utf8'))
   assert.equal(manifest.dsh.client.platform, 'web')
-  assert.deepEqual(manifest.dsh.client.inject, ['@deepseek-ai/dsh-api-session-controller'])
+  assert.deepEqual(manifest.dsh.client.inject, ['@deepseek-ai/dsh-api-session-controller', '@deepseek-ai/dsh-client-ui-workspace'])
   assert.equal(manifest.exports['./client'], './lib/client.js')
 })

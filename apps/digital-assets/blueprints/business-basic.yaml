@@ -329,6 +329,8 @@ slots:
   - channel: invoice
   - channel: print
   - channel: website
+  - channel: brand
+    brand: legal_name
 - key: identity.name.short
   section: identity
   group: name
@@ -348,6 +350,8 @@ slots:
   - channel: x
   - channel: tiktok
   - channel: whatsapp
+  - channel: brand
+    brand: short_name
 - key: identity.slug
   section: identity
   group: ''
@@ -386,6 +390,8 @@ slots:
   targets:
   - channel: website
   - channel: email
+  - channel: brand
+    brand: domain
 - key: identity.legal.entity-type
   section: identity
   group: legal
@@ -409,6 +415,8 @@ slots:
   targets:
   - channel: invoice
   - channel: website
+  - channel: brand
+    brand: entity_type
 - key: identity.legal.business-number
   section: identity
   group: legal
@@ -427,6 +435,8 @@ slots:
   - channel: invoice
   - channel: print
   - channel: website
+  - channel: brand
+    brand: business_number
 - key: identity.contact.address
   section: identity
   group: contact
@@ -456,6 +466,8 @@ slots:
   - channel: website
   - channel: invoice
   - channel: print
+  - channel: brand
+    brand: address
 - key: identity.contact.map-pin
   section: identity
   group: contact
@@ -498,6 +510,8 @@ slots:
   - channel: dapei-zahav
   - channel: easy
   - channel: facebook
+  - channel: brand
+    brand: phone
 - key: identity.contact.whatsapp
   section: identity
   group: contact
@@ -517,6 +531,8 @@ slots:
   - channel: instagram
   - channel: facebook
   - channel: print
+  - channel: brand
+    brand: whatsapp
 - key: identity.contact.email
   section: identity
   group: contact
@@ -536,6 +552,8 @@ slots:
   - channel: invoice
   - channel: print
   - channel: email
+  - channel: brand
+    brand: email
 - key: identity.contact.website-url
   section: identity
   group: contact
@@ -566,6 +584,8 @@ slots:
   - channel: gbp
   - channel: print
   - channel: email
+  - channel: brand
+    brand: website
 - key: identity.hours.regular
   section: identity
   group: hours
@@ -777,6 +797,8 @@ slots:
   - channel: dapei-zahav
   - channel: easy
   - channel: website
+  - channel: brand
+    brand: description_long
 - key: identity.terminology
   section: identity
   group: ''
@@ -835,6 +857,8 @@ slots:
   - channel: website
   - channel: print
   - channel: signage
+  - channel: brand
+    brand: color_secondary
 - key: identity.color.neutral
   section: identity
   group: color
@@ -850,6 +874,8 @@ slots:
   targets:
   - channel: website
   - channel: print
+  - channel: brand
+    brand: color_neutral
 - key: identity.theme.typography
   section: identity
   group: theme

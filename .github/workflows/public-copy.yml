@@ -1,0 +1,83 @@
+name: public-copy
+# THE PUBLIC COPY OF THE GREEN LINE, MADE BY CI (DGO-2102, DGO-2106). The client offices (Examplex, Exampleu, EXF, Examplek…)
+# follow the public repository, so a version reaches them only as a public copy. On 2026-11-19 none could be made:
+# scripts/release/public-export.py had always run on an office machine — the Mac is the owner's station (nothing
+# heavy there), vps1 had 1.3 GB to spare (it hung the same afternoon), the HP sat at load 30–90 with its swap full.
+# This job makes the copy on the Dell's runner instead and keeps it as the run's artifact (the tree, its report), so
+# the readers read it and push-public.sh pushes it from wherever a person works.
+#
+#   a push to mac-dgo whose head commit says "[public-copy]"   → the copy of refs/green/dgo-stable
+#   the same on dgo-stable                                     → the copy of that commit
+#
+# NOTHING HERE PUSHES: publishing the copy stays a person's step, after the readers (push-public.sh checks green, the
+# counted tree file by file, and a fast-forward of the public main).
+on:
+  push:
+    branches: [mac-dgo, dgo-stable]
+
+permissions:
+  contents: read
+  actions: write   # scripts/ci/step-aside: whether a version's proof is waiting, and the cancel of this run
+
+jobs:
+  copy:
+    if: contains(github.event.head_commit.message, '[public-copy]')
+    concurrency:
+      group: public-copy
+      cancel-in-progress: false
+    runs-on: [self-hosted, portable, ssd]
+    timeout-minutes: 60
+    steps:
+      # a version's proof goes first (DGO-1819): on any branch but dgo-stable this job yields to a queued or running
+      # gates-hosted run of dgo-stable, cancelling its own run in seconds — push the trigger again once that run ended
+      - uses: actions/checkout@v4
+        if: startsWith(github.ref, 'refs/heads/') && github.ref != 'refs/heads/dgo-stable'
+        with:
+          fetch-depth: 1
+          filter: blob:none
+          sparse-checkout: scripts/ci/step-aside
+          sparse-checkout-cone-mode: false
+          path: .step-aside
+          persist-credentials: false
+      - name: A version's proof goes first (scripts/ci/step-aside)
+        if: startsWith(github.ref, 'refs/heads/') && github.ref != 'refs/heads/dgo-stable'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: bash .step-aside/scripts/ci/step-aside && rm -rf .step-aside
+
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0          # the export reads the commit through git (git archive)
+          persist-credentials: false
+
+      # the export parses every JavaScript file it changed, and a file it could not check fails it — the Dell's
+      # runner has no node of its own (export-verify.yml, run 41541423988)
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: The public copy, and its own checks
+        run: |
+          set -euo pipefail
+          bash scripts/ci/pip-ensure.sh yaml:pyyaml
+          if [ "${GITHUB_REF}" = "refs/heads/dgo-stable" ]; then rev="${GITHUB_SHA}"
+          else
+            git fetch -q origin '+refs/green/dgo-stable:refs/remotes/origin/green/dgo-stable'
+            rev="$(git rev-parse origin/green/dgo-stable)"
+          fi
+          echo "the copy of ${rev}, made by the exporter of ${GITHUB_SHA}"
+          out="${RUNNER_TEMP}/public"; rm -rf "${out}"; mkdir -p "${out}"
+          python3 scripts/release/public-export.py --rev "${rev}" --out "${out}" --report "${RUNNER_TEMP}/export-report.json"
+          python3 -c "import json,sys; r=json.load(open(sys.argv[1])); print('export ok:', r.get('ok')); sys.exit(0 if r.get('ok') else 1)" "${RUNNER_TEMP}/export-report.json"
+          printf '%s\n' "${rev}" > "${RUNNER_TEMP}/public-copy.rev"
+          tar -C "${out}" -czf "${RUNNER_TEMP}/public-copy.tgz" .
+          ls -la "${RUNNER_TEMP}/public-copy.tgz"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: public-copy
+          path: |
+            ${{ runner.temp }}/public-copy.tgz
+            ${{ runner.temp }}/public-copy.rev
+            ${{ runner.temp }}/export-report.json
+          retention-days: 7

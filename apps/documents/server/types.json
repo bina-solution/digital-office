@@ -8,6 +8,22 @@
   {"code": "ORDER", "name_he": "הזמנה", "direction": "both"},
   {"code": "SHIPMENT", "name_he": "תעודת משלוח", "direction": "both"},
   {"code": "BALANCE_SHEET", "name_he": "דף חשבון", "direction": "both"},
-  {"code": "UNKNOWN", "name_he": "לא מזוהה", "direction": "in"}
+  {"code": "UNKNOWN", "name_he": "לא מזוהה", "direction": "in"},
+  {"code": "PROPOSAL", "name_he": "הצעה עסקית", "direction": "out"},
+  {"code": "SERVICE_AGREEMENT", "name_he": "הסכם שירות", "direction": "out"},
+  {"code": "NDA", "name_he": "הסכם סודיות", "direction": "out"},
+  {"code": "WORK_ORDER", "name_he": "הזמנת עבודה", "direction": "out"},
+  {"code": "PAYMENT_REQUEST", "name_he": "חשבון עסקה", "direction": "out"},
+  {"code": "CREDIT_NOTE", "name_he": "חשבונית מס זיכוי", "direction": "both"},
+  {"code": "STATEMENT", "name_he": "כרטסת לקוח", "direction": "out"},
+  {"code": "REPORT", "name_he": "דוח ללקוח", "direction": "out"},
+  {"code": "LETTER", "name_he": "מכתב", "direction": "out"},
+  {"code": "FILE_PDF", "name_he": "קובץ PDF", "direction": "file"},
+  {"code": "FILE_WORD", "name_he": "מסמך Word", "direction": "file"},
+  {"code": "FILE_SHEET", "name_he": "גיליון", "direction": "file"},
+  {"code": "FILE_SLIDES", "name_he": "מצגת", "direction": "file"},
+  {"code": "FILE_IMAGE", "name_he": "תמונה", "direction": "file"},
+  {"code": "FILE_TEXT", "name_he": "טקסט", "direction": "file"},
+  {"code": "FILE", "name_he": "קובץ", "direction": "file"}
  ]
 }

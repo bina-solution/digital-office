@@ -1,0 +1,56 @@
+{# The business documents with lines: quote, order, work order, payment request, tax invoice, invoice-receipt,
+   credit note, delivery note. What each one carries is the catalogue's flags (k.*), never its name. #}
+{% extends "base.html.j2" %}
+{% import "_parts.html.j2" as p with context %}
+{% block body %}
+{{ p.masthead(chip_rows) }}
+{{ p.band(facts) }}
+{% if subject %}<div class="subject">{{ subject }}</div>{% endif %}
+{% if intro %}<div class="intro">{{ intro }}</div>{% endif %}
+{% if refbox %}<div class="refbox{% if not k.credit %} ok{% endif %}">{{ refbox }}</div>{% endif %}
+
+{% for g in groups %}
+<div class="sec">
+  {% if groups|length > 1 %}<div class="group-title"><span class="t">{{ g.title }}</span></div>{% else %}<span class="eyebrow">{{ lines_title }}</span>{% endif %}
+  {{ p.lines_table(g.lines, prices=k.prices, hours=k.hours, suffix=g.suffix) }}
+  {% if k.prices %}
+  <div class="close">
+    <div class="side">
+      {% if loop.last %}
+        {% if terms %}<div class="blk"><span class="eyebrow">תנאים</span><ul class="bul terms">{% for t in terms %}<li>{{ t }}</li>{% endfor %}</ul></div>{% endif %}
+        {% if k.bank or k.due %}{{ p.bank_block() }}{% endif %}
+        {% if notes %}<div class="blk"><span class="eyebrow">הערות</span>{{ notes }}</div>{% endif %}
+      {% endif %}
+    </div>
+    {{ p.totals_box(g.totals, k.total_label, credit=k.credit, suffix=g.suffix) }}
+  </div>
+  {% endif %}
+</div>
+{% endfor %}
+
+{% if not k.prices %}
+<div class="close"><div class="side">
+  {% if terms %}<div class="blk"><span class="eyebrow">תנאים</span><ul class="bul terms">{% for t in terms %}<li>{{ t }}</li>{% endfor %}</ul></div>{% endif %}
+  {% if notes %}<div class="blk"><span class="eyebrow">הערות</span>{{ notes }}</div>{% endif %}
+</div></div>
+{% endif %}
+
+{% if k.payments and pays %}
+<div class="sec"><span class="eyebrow">פרטי התשלום · קבלה</span>{{ p.payments_table(pays) }}</div>
+{% endif %}
+
+{% if k.allocation %}{{ p.allocation_box() }}{% endif %}
+{% if k.note %}<div class="intro muted" style="margin-top:4mm;font-size:8pt">{{ k.note }}</div>{% endif %}
+
+{% if k.receiver %}
+<div class="sigs" style="margin-top:10mm">
+  <div class="sigbox"><div class="p">השולח</div><div class="n">{{ sup.name }}</div><div class="area"></div><div class="meta"><span>שם וחתימה</span><span>תאריך</span></div></div>
+  <div class="sigbox"><div class="p">המקבל</div><div class="n">קיבלתי את המפורט לעיל במלואו ובמצב תקין</div><div class="area"></div><div class="meta"><span>שם וחתימה</span><span>תאריך</span></div></div>
+</div>
+{% elif k.acceptance %}
+{{ p.accept_block() }}
+{% else %}
+{{ p.signoff() }}
+{% endif %}
+{{ p.endmark() }}
+{% endblock %}

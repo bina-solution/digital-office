@@ -462,7 +462,8 @@ function shook(t) {
       : ["bad", `${ago(t.handshake_age_s)} — המנהרה לא חיה`];
   return `<div><div class="k">לחיצת יד אחרונה</div><div class="v ${cls}" title="${esc(t.endpoint ? "נשמעה לאחרונה מ-" + t.endpoint : "עוד לא נשמעה")}">${text}</div></div>`;
 }
-const STATE_HE = { up: ["ok", "מחוברת"], down: ["warn", "לא עונה"], unknown: ["unset", "ממתינה לחיבור"] };
+const STATE_HE = { up: ["ok", "מחוברת"], down: ["warn", "לא עונה"], unknown: ["unset", "ממתינה לחיבור"],
+                   unlinked: ["unset", "עוד לא מקושרת"] };
 
 // An office that is given LESS than the rest (`serve.only`) says so on its own card: the office's card
 // above states what is given to linked offices, and this is the one fact that is per office. An
@@ -605,6 +606,11 @@ function officeCard(o, mname) {
 // `#map` would not survive a reload or a sent link there (the second reader of DGO-1006).
 let MAP = null, MAP_LOADING = null;
 const MAP_DIR = { use: "חד-כיווני: משתמשים כאן באפליקציות שלה", serve: "חד-כיווני: היא משתמשת באפליקציות מכאן", both: "דו־כיווני" };
+// The words are THIS office's view (as the pairing list's: pair_api.listing mirrors it), but /api/link carries a
+// link's `direction` as the FAR office's own record holds it — its role (declaration.py: `serve` = it serves this
+// office, so its apps are used HERE). Read through the mirror (DGO-2026): the map said Exampleu and EXF «use the apps
+// from here», when the MacBook uses their apps and they see nothing of ours.
+const mapDir = (d) => MAP_DIR[d === "serve" ? "use" : d === "use" ? "serve" : d] || "";
 const mapRoute = () => {
   let id = "";
   try { id = routeOf(); } catch (_) { return null; }            // a malformed `%` in the address is no route
@@ -641,14 +647,16 @@ function renderMap(r) {
   const own = home.herd || "";
   const nodes = [{ office: home.id, label: home.label || home.id, herd: own, home: true, state: "up",
                    apps: home.apps || [], machine: home.machine || {}, commit: home.commit || "", shared: [] },
-                 ...(MAP.items || []).map((i) => ({ ...i, herd: i.herd || own }))];
+                 ...(MAP.items || []).map((i) => ({ ...i, herd: i.herd || own })),
+                 // the herd file's client offices no link reaches HERE (DGO-2026), each in its own herd
+                 ...(MAP.clients || []).map((i) => ({ ...i, herd: i.herd || own }))];
   const sel = nodes.find((n) => n.office === r.office) || nodes[0];
   const names = [...new Set(nodes.map((n) => n.herd))]
     .sort((a, b) => (a === own ? -1 : b === own ? 1 : a.localeCompare(b, "he")));
   const herds = names.map((h) => {
     const group = nodes.filter((n) => n.herd === h);
     const ext = h !== own;
-    const dirs = [...new Set(group.filter((n) => !n.home).map((n) => MAP_DIR[n.direction] || ""))].filter(Boolean);
+    const dirs = [...new Set(group.filter((n) => !n.home).map((n) => mapDir(n.direction)))].filter(Boolean);
     const line = ext ? `הקישור אליו: ${dirs.join(" · ") || "עוד אין"}` : "העדר של הלשכה הזאת, והקישורים שלה אל כל לשכה בו";
     const count = group.length === 1 ? "לשכה אחת" : `<span class="num">${group.length}</span> לשכות`;
     return `<section class="hpanel${ext ? " ext" : ""}">
@@ -660,16 +668,29 @@ function renderMap(r) {
   $("map").innerHTML = `<div class="map"><div class="map-herds">${herds}</div>${mapSide(sel, r.app, own)}</div>`;
 }
 
+// A client's server, as THIS office's «מחשבים» knows it (DGO-2026): the herd file names its address, and the
+// computers app says whether this office has it and what its last check said.
+const SERVER_HE = { ok: "עונה", needs_action: "צריך פעולה", error: "לא עונה", no_ssh: "אין בו SSH" };
+const mapServer = (s) => !s || !s.host ? "" : s.id
+  ? `השרת ${s.host} · במחשבים: ${SERVER_HE[s.state] || "עוד לא נבדק"}`
+  : `השרת ${s.host} · עוד לא במחשבים של הלשכה הזאת`;
+
 function mapNode(n, on) {
-  const [cls, text] = n.home ? ["ok", "הלשכה הזאת"] : (STATE_HE[n.state] || STATE_HE.unknown);
+  // a client linked through another office of ours (its herd-file line's `by`) is not «not linked» — on vps1's map
+  // Exampleu is linked, through the MacBook
+  const [cls, text] = n.home ? ["ok", "הלשכה הזאת"]
+    : n.state === "unlinked" && (n.via || []).length ? ["unset", `מקושרת דרך ${n.via.join(" · ")}`]
+    : (STATE_HE[n.state] || STATE_HE.unknown);
   const mark = officeMark(n);
-  const link = n.home ? "מכאן מסתכלים" : [MAP_DIR[n.direction], n.transport ? n.transport.toUpperCase() : ""].filter(Boolean).join(" · ");
+  const link = n.home ? "מכאן מסתכלים" : n.state === "unlinked" ? (mapServer(n.server) || "אין עדיין קישור")
+    : [mapDir(n.direction), n.transport ? n.transport.toUpperCase() : ""].filter(Boolean).join(" · ");
   const apps = (n.apps || []).filter((a) => !a.hidden).length;
   return `<button type="button" class="onode${n.home ? " home" : ""}" data-mnode="${esc(n.office)}" aria-pressed="${on}"${mark.hue}
       title="פתיחת הפרטים של ${esc(n.label || n.office)}">
     <span class="top"><span class="nm">${mark.animal}${esc(n.label || n.office)}</span><span class="pill ${cls}">${text}</span></span>
     <span class="ln${n.state === "up" ? " ok" : ""}">${esc(link)}</span>
-    <span class="ft"><span>${mapMachine(n.machine) || "המחשב לא נמסר לכאן"}</span><span>${apps === 1 ? "אפליקציה אחת" : `<span class="num">${apps}</span> אפליקציות`}</span></span>
+    ${n.state === "unlinked" ? "" /* no link yet: nothing given, no machine — its server line above says it all */
+      : `<span class="ft"><span>${mapMachine(n.machine) || "המחשב לא נמסר לכאן"}</span><span>${apps === 1 ? "אפליקציה אחת" : `<span class="num">${apps}</span> אפליקציות`}</span></span>`}
   </button>`;
 }
 
@@ -694,8 +715,11 @@ function mapSide(n, appId, own) {
       ${cell("המחשב", esc([m.hostname, m.arch].filter(Boolean).join(" · ") || "לא נמסר לכאן"))}
       ${cell("מערכת ומשאבים", mapMachine(m) || "לא נמסר לכאן")}
       ${cell("גרסה", n.home ? (commit ? `<span title="${esc(commit)}">הגרסה של כאן</span>` : "לא נמסרה") : versionCell(commit))}
-      ${cell("הקישור", n.home ? "הלשכה הזאת" : esc([MAP_DIR[n.direction], n.transport ? n.transport.toUpperCase() : ""].filter(Boolean).join(" · ") || "—"))}
-      ${n.home ? "" : cell("הכתובת", n.endpoint ? `<span class="tok">${esc(n.endpoint)}</span>` : "דרך לשכה אחרת")}
+      ${cell("הקישור", n.home ? "הלשכה הזאת" : esc([mapDir(n.direction), n.transport ? n.transport.toUpperCase() : ""].filter(Boolean).join(" · ") || "—"))}
+      ${n.home ? "" : cell("הכתובת", n.endpoint ? `<span class="tok">${esc(n.endpoint)}</span>` : n.state === "unlinked" ? ((n.via || []).length ? `דרך ${esc(n.via.join(" · "))}` : "אין עדיין קישור") : "דרך לשכה אחרת")}
+      ${n.server && n.server.host ? cell("השרת", `<span class="tok">${esc(n.server.host)}</span> · ${n.server.id
+        ? `${esc(n.server.label || n.server.id)}: ${esc(SERVER_HE[n.server.state] || "עוד לא נבדק")}${n.server.reason ? ` — ${esc(n.server.reason)}` : ""}`
+        : "עוד לא במחשבים של הלשכה הזאת"}`) : ""}
     </div>
     <div class="hpanel-h"><h5>האפליקציות שהיא נותנת · <span class="num">${apps.length}</span></h5></div>
     <div class="achips">${chips || `<span class="small muted">לא נותנת כלום לכאן</span>`}</div>

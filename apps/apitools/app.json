@@ -9,7 +9,7 @@
   "page": "documents",
   "version": "0.5.4",
   "summary": {
-    "he": "OCR, חילוץ ערכים, תמלול עברית ופנקס המסמכים",
+    "he": "OCR, חילוץ ערכים, תמלול עברית ומאגר המסמכים העסקיים",
     "en": "OCR, value extraction, Hebrew speech-to-text and the document ledger"
   },
   "capabilities": [
@@ -70,6 +70,31 @@
       "capability": "secrets",
       "strength": "requires",
       "after": true
+    },
+    {
+      "capability": "brand",
+      "strength": "wants",
+      "after": false,
+      "dependency": "weak",
+      "ops": [
+        "getBrand"
+      ]
+    },
+    {
+      "capability": "entities",
+      "strength": "wants",
+      "after": false,
+      "dependency": "weak",
+      "ops": [
+        "parties",
+        "entity",
+        "party",
+        "create",
+        "update",
+        "role",
+        "archive",
+        "import"
+      ]
     }
   ],
   "connections": [

@@ -171,7 +171,7 @@ class InternicWriteTests(unittest.TestCase):
         self.addCleanup(setattr, portal, "VERIFIED_FILE", original_file)
 
     def write(self, allow=True, **record):
-        params = {"domain": DOMAIN, "type": "A", "name": "exf", "value": "93.184.216.9", **record}
+        params = {"domain": DOMAIN, "type": "A", "name": "exf", "value": "93.184.216.11", **record}
         return portal.run_write("internic", "create", params, None, allow)
 
     def test_a_record_lands_in_a_new_row_and_every_other_record_is_untouched(self):
@@ -215,10 +215,10 @@ class InternicWriteTests(unittest.TestCase):
         # delete is still not scripted; update is (EXX-29, 2026-11-12) — and a record the zone does not hold is
         # refused by name, nothing clicked
         res = portal.run_write("internic", "delete", {"domain": DOMAIN, "type": "A", "name": "exf",
-                                                     "value": "93.184.216.9"}, None, True)
+                                                     "value": "93.184.216.11"}, None, True)
         self.assertEqual(res["state"], "not_scripted", res)
         res = portal.run_write("internic", "update", {"domain": DOMAIN, "type": "A", "name": "exf",
-                                                     "value": "93.184.216.9"}, None, True)
+                                                     "value": "93.184.216.11"}, None, True)
         self.assertFalse(res["ok"], res)
         self.assertIn("לא נכתב דבר", res["error"])
         self.assertEqual(self.panel.clicks, [])
@@ -229,14 +229,14 @@ class InternicWriteTests(unittest.TestCase):
         # the second reader of EXX-29: after one approved update, «update» was the office's own, and any container
         # could re-point any domain's apex with no name and no `from`
         upd = lambda allow=True, **r: portal.run_write("internic", "update", {"domain": DOMAIN, "type": "A",
-                                                                             "value": "93.184.216.16", **r}, None, allow)
+                                                                             "value": "93.184.216.15", **r}, None, allow)
         portal.mark_verified("internic", "update", "owner@office", {"name": "@"})
         res = upd(allow=False, name="@", **{"from": "93.184.216.5"})
         self.assertEqual(res["state"], "needs_consent", res)
         self.assertEqual(upd(name="", **{"from": "93.184.216.5"})["state"], "invalid")
         self.assertEqual(upd(name="@")["state"], "invalid")                     # no `from`
         # a new value another record of that name and type already holds would make the read-back prove nothing
-        self.panel.saved.append({"name": "digital-office.co.il.", "type": "A", "content": "93.184.216.16", "ttl": "86400"})
+        self.panel.saved.append({"name": "digital-office.co.il.", "type": "A", "content": "93.184.216.15", "ttl": "86400"})
         res = upd(name="@", **{"from": "93.184.216.5"})
         self.assertEqual(res["state"], "conflict", res)
         self.assertEqual(self.panel.clicks, [])
@@ -269,8 +269,8 @@ class InternicWriteTests(unittest.TestCase):
                              r["name"].startswith("app.")), 1, "a retry wrote the record again")
 
     def test_a_name_the_panel_shows_short_is_the_same_record(self):
-        self.panel.saved.append({"name": "exg", "type": "A", "content": "93.184.216.9", "ttl": "3600"})
-        res = self.write(name="exg.digital-office.co.il.", value="93.184.216.9")
+        self.panel.saved.append({"name": "exg", "type": "A", "content": "93.184.216.11", "ttl": "3600"})
+        res = self.write(name="exg.digital-office.co.il.", value="93.184.216.11")
         self.assertTrue(res.get("unchanged"), res)
         self.assertNotIn("add", self.panel.clicks)
 
@@ -725,7 +725,7 @@ class WatchedOnceTests(unittest.TestCase):
         self.assertTrue(state["enabled"], state)
         self.assertIn("מחיקת רשומה", state["missing"])
         res = portal.run_write("internic", "create", {"domain": DOMAIN, "type": "A", "name": "a2",
-                                                      "value": "93.184.216.16"})
+                                                      "value": "93.184.216.15"})
         self.assertTrue(res["ok"], res)
         kept = json.loads(portal.VERIFIED_FILE.read_text(encoding="utf-8"))["internic"]["create"]
         self.assertEqual(kept["by"], "owner@office")

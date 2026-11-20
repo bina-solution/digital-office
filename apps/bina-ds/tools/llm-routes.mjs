@@ -45,7 +45,13 @@ import { createRequire } from "node:module";
 import { spawnSync } from "node:child_process";
 
 const HOME = process.env.DSH_HOME || "/data/dsh";
-const SETTINGS = path.join(HOME, "settings.yaml");
+// Where the harness keeps the user's settings. Since DeepSeek Harness 0.2.x that is the profile's own
+// patch layer — a YAML LIST of rows, `$DSH_HOME/profiles/<profile>/cordis.patch.yml`, on the volume
+// (harness/entrypoint.sh) and reloaded live — and no longer `settings.yaml`, which the first 0.2.x start
+// imports into it. The routes are the `llm-pi-ai` row's `config.providers`; the default is the
+// `agent-default-model` row's config. EXU-64.
+const SETTINGS = path.join(HOME, "profiles", process.env.DSH_PROFILE || "bina", "cordis.patch.yml");
+const ROUTES_ROW = { id: "llm-pi-ai", name: "@deepseek-ai/dsh-llm-pi-ai" };
 const CREDENTIALS = path.join(HOME, ".credentials.yaml");
 const STATE = path.join(HOME, "llm-routes.json");
 const OFFICE = process.env.OFFICE_ROOT || "/workspace/office";
@@ -72,9 +78,15 @@ const args = process.argv.slice(2);
 const DRY = args.includes("--dry-run");
 const RELAYED = args.includes("--loop");      // only the service relays; --once writes direct URLs
 
-// The YAML library the harness's own settings provider uses, from where pnpm put it.
+// The YAML library the harness itself writes its documents with, from where pnpm put it: 0.2.x keeps it
+// at the store's top (`yaml@<version>`); 0.1.6 reached it through its settings-file package.
 function loadYaml() {
-  for (const d of fs.existsSync(PROFILE) ? fs.readdirSync(PROFILE) : []) {
+  const dirs = fs.existsSync(PROFILE) ? fs.readdirSync(PROFILE) : [];
+  for (const d of dirs) {
+    if (!/^yaml@\d/.test(d)) continue;
+    try { return createRequire(path.join(PROFILE, d, "node_modules", "yaml", "package.json"))("yaml"); } catch { /* next */ }
+  }
+  for (const d of dirs) {
     if (!d.startsWith("@deepseek-ai+dsh-settings-file@")) continue;
     const pkg = path.join(PROFILE, d, "node_modules", "@deepseek-ai", "dsh-settings-file", "package.json");
     try { return createRequire(pkg)("yaml"); } catch { /* next */ }
@@ -1004,7 +1016,7 @@ async function models(src, signal, lastContext) {
 
 // ── one pass ────────────────────────────────────────────────────────────────────────────────────
 async function pass() {
-  if (!DRY && !fs.existsSync(SETTINGS)) { log("settings.yaml is not there yet — the harness writes it first"); return; }
+  if (!DRY && !fs.existsSync(SETTINGS)) { log("the profile's settings layer is not there yet — the harness's entrypoint writes it first"); return; }
   const state = readJson(STATE, {});
   const now = Math.floor(Date.now() / 1000);
   const srcs = sources();
@@ -1053,7 +1065,8 @@ async function pass() {
         return true;
       });
     } catch (e) { log(`.credentials.yaml: ${e.message}`); }
-    try { installPresets(); } catch (e) { log(`presets: ${e.code || e.message}`); }
+    // (The local preset, עזריה · מקומי, is no longer copied into a user preset root here: DeepSeek
+    // Harness 0.2.x has none, and the preset is declared in the image's profile — EXU-64.)
   }
   try { pairPreset(); } catch (e) { log(`preset pairing: ${e.code || e.message}`); }
   const changed = write(routes);
@@ -1061,9 +1074,14 @@ async function pass() {
   if (changed) log(`routes: ${Object.keys(routes).join(", ") || "none"}`);
 }
 
+// The settings layer is a list of rows; one row by its id.
+function rowOf(list, id) {
+  return Array.isArray(list) ? list.find((r) => r && typeof r === "object" && r.id === id) : undefined;
+}
+
 function defaultRoute() {
   try {
-    const d = (YAML.parse(fs.readFileSync(SETTINGS, "utf8")) || {})["agent-default-model"] || {};
+    const d = (rowOf(YAML.parse(fs.readFileSync(SETTINGS, "utf8")), "agent-default-model") || {}).config || {};
     return { provider: String(d.provider || ""), model: String(d.model || "") };
   } catch { return { provider: "", model: "" }; }
 }
@@ -1189,23 +1207,29 @@ function edit(file, mutate) {
   }
 }
 
-// settings.yaml: OUR routes only.
+// The profile's settings layer: OUR routes only, inside the `llm-pi-ai` row (made when absent); every
+// other row, and every provider that is not ours, is left exactly as it is.
 function write(routes) {
   return edit(SETTINGS, (doc) => {
-    if (!mapAt(doc, ["llm-pi-ai"], true) || !mapAt(doc, ["llm-pi-ai", "providers"], true)) {
-      log("settings.yaml: `llm-pi-ai` or its `providers` is not a map — left as it is");
+    if (doc.contents === null || doc.contents === undefined) doc.contents = doc.createNode([]);
+    if (!YAML.isSeq(doc.contents)) { log("the settings layer is not a list of rows — left as it is"); return false; }
+    let idx = doc.contents.items.findIndex((n) => YAML.isMap(n) && n.get("id") === ROUTES_ROW.id);
+    if (idx < 0) {
+      if (!Object.keys(routes).length) return false;
+      doc.contents.items.push(doc.createNode({ ...ROUTES_ROW, config: { providers: {} } }));
+      idx = doc.contents.items.length - 1;
+    }
+    const at = (...k) => [idx, ...k];
+    if (!mapAt(doc, at("config"), true) || !mapAt(doc, at("config", "providers"), true)) {
+      log("the `llm-pi-ai` row's `config.providers` is not a map — left as it is");
       return false;
     }
-    const before = JSON.stringify((doc.toJS() || {})["llm-pi-ai"] || {});
-    const current = doc.getIn(["llm-pi-ai", "providers"]);
+    const before = JSON.stringify(doc.getIn(at("config")) ? doc.getIn(at("config")).toJSON() : {});
+    const current = doc.getIn(at("config", "providers"));
     const names = current && current.items ? current.items.map((p) => String(p.key && p.key.value !== undefined ? p.key.value : p.key)) : [];
-    for (const n of names) if (n.startsWith(PREFIX) && !(n in routes)) doc.deleteIn(["llm-pi-ai", "providers", n]);
-    for (const [n, r] of Object.entries(routes)) doc.setIn(["llm-pi-ai", "providers", n], doc.createNode(r));
-    const prov = doc.getIn(["llm-pi-ai", "providers"]);
-    if (prov && prov.items && !prov.items.length) doc.deleteIn(["llm-pi-ai", "providers"]);
-    const sec = doc.get("llm-pi-ai");
-    if (sec && sec.items && !sec.items.length) doc.delete("llm-pi-ai");
-    return JSON.stringify((doc.toJS() || {})["llm-pi-ai"] || {}) !== before;
+    for (const n of names) if (n.startsWith(PREFIX) && !(n in routes)) doc.deleteIn(at("config", "providers", n));
+    for (const [n, r] of Object.entries(routes)) doc.setIn(at("config", "providers", n), doc.createNode(r));
+    return JSON.stringify(doc.getIn(at("config")) ? doc.getIn(at("config")).toJSON() : {}) !== before;
   });
 }
 

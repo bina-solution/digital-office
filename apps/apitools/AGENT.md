@@ -69,7 +69,7 @@ the cache. The engine is local unless `OCR_ENGINE=google` names Google Vision; t
 `APITOOLS_QUERY_SOFT_TIMEOUT` and a "find option" over a huge candidate list is what made that a
 real limit; the bulkhead's slots are file locks, so two containers have two pools.
 
-## `ledger` — פנקס המסמכים
+## `ledger` — מאגר המסמכים
 
 `business`, `customers`, `items`, `documents` over the office's Postgres (`supabase-db`, tables
 declared in `app.json` under `data.sql`); the screen in front of it is `my-docs`. The ledger is

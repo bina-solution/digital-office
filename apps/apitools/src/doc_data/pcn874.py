@@ -58,7 +58,9 @@ def build(documents, business_id, period_yyyymm=None):
     total_vat = 0
     n = 0
     for d in documents:
-        if d.get('doc_type') not in ('INVOICE',) or d.get('status') == 'cancelled':
+        # a credit note is reported as the reversing invoice it used to be stored as (DGO-2029 gave it its
+        # own type; its totals are still negative, so the report's sums are what they were)
+        if d.get('doc_type') not in ('INVOICE', 'CREDIT_NOTE') or d.get('status') == 'cancelled':
             continue
         vat = _shekels(d.get('vat'))
         total_vat += vat

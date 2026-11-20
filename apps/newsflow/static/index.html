@@ -223,15 +223,20 @@
 
 <script>
 const $ = (s) => document.querySelector(s);
-let cat = "", cats = [];
+// `items`: the tab's list as the server gave it — the search filters THIS, it never asks again (DGO-2030: a letter
+// typed cost three requests through the link, and a tab the same three). `seq`: only the newest answer paints.
+let cat = "", cats = [], items = [], seq = 0, fullSeq = 0;
 
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+// ONE IS SAID AS ONE (gate G89, the rule apps/mail/mailview/static/app.js writes out): «1 כתבות» is never a sentence.
+const num = (n) => Number(n).toLocaleString("he-IL");
+const one = (n, single, many) => (Number(n) === 1 ? single : `${num(n)} ${many}`);
 const hhmm = (iso) => { try { return new Date(iso).toLocaleTimeString("he-IL", { hour: "2-digit", minute: "2-digit" }); } catch { return ""; } };
 const ago = (iso) => {
   const m = Math.round((Date.now() - new Date(iso).getTime()) / 60000);
   if (!isFinite(m)) return "";
   if (m < 60) return `לפני ${m} דק׳`;
-  if (m < 1440) return `לפני ${Math.round(m / 60)} שעות`;
+  if (m < 1440) return `לפני ${one(Math.round(m / 60), "שעה", "שעות")}`;
   return new Date(iso).toLocaleDateString("he-IL");
 };
 async function j(url, opt) {
@@ -318,28 +323,37 @@ function paintNews(items) {
   list.querySelectorAll(".thumb").forEach((el) => paintShot(el, { image: el.dataset.src, source: el.dataset.source }));
 }
 
-async function load() {
+function paint() {
+  const q = ($("#q").value || "").trim().toLowerCase();
+  paintNews(q ? items.filter((i) => (i.title + " " + i.source + " " + i.category_he).toLowerCase().includes(q)) : items);
+}
+
+// A tab asks for its list only; the tabs and the article count (`full`) once per open and after a pass.
+async function load(full) {
+  const mine = ++seq;
+  const mineFull = full || !cats.length ? ++fullSeq : 0;
   try {
-    const q = ($("#q").value || "").trim().toLowerCase();
-    const [d, c, st] = await Promise.all([
+    const [d, c] = await Promise.all([
       j("api/news?limit=60" + (cat ? "&category=" + encodeURIComponent(cat) : "")),
-      j("api/categories"),
-      j("api/status"),
+      mineFull ? j("api/categories") : null,
     ]);
-    cats = c.categories || [];
-    const items = q ? d.items.filter((i) => (i.title + " " + i.source + " " + i.category_he).toLowerCase().includes(q)) : d.items;
-    paintTabs();
-    paintNews(items);
-    document.title = `זרימת חדשות · ${st.articles} כתבות`;
+    if (c && mineFull === fullSeq) {   // the tabs and the count hold for every tab: the newest full answer wins
+      cats = c.categories || [];
+      paintTabs();
+      document.title = `זרימת חדשות · ${one(c.total, "כתבה אחת", "כתבות")}`;
+    }
+    if (mine !== seq) return;
+    items = d.items || [];
+    paint();
   } catch (e) {
-    $("#list").innerHTML = `<li class="err">לא הצלחתי לטעון: ${esc(e.message || e)}</li>`;
+    if (mine === seq) $("#list").innerHTML = `<li class="err">לא הצלחתי לטעון: ${esc(e.message || e)}</li>`;
   }
 }
 
-$("#q").oninput = () => load();
+$("#q").oninput = () => paint();
 $("#go").onclick = () => collect();
 document.querySelectorAll("nav.bottom button").forEach((b) => {
-  b.onclick = () => (b.dataset.act === "collect" ? collect() : load());
+  b.onclick = () => (b.dataset.act === "collect" ? collect() : load(true));
 });
 async function collect() {
   const b = $("#go");
@@ -349,9 +363,9 @@ async function collect() {
     console.info(`[newsflow] pass ${r.run}: +${r.added}, ${r.sources_ok}/${r.sources_tried} sources, flow ${r.flow}`);
   } catch (e) { console.error("collect failed", e); }
   b.disabled = false; b.textContent = "↻";
-  load();
+  load(true);
 }
-load();
+load(true);
 </script>
 </body>
 </html>

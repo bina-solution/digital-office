@@ -154,6 +154,7 @@ export default defineConfig({
 						{ slug: 'apps/sites' },
 						{ slug: 'apps/domains' },
 						{ slug: 'apps/digital-assets' },
+						{ slug: 'apps/entities' },
 						{ slug: 'apps/social-list' },
 						{ slug: 'apps/browser42' },
 						{ slug: 'apps/computers' },

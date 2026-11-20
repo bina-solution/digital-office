@@ -8,7 +8,7 @@ WHY THIS GATE EXISTS
 
 `data/registry/sync_registry.json` is the client's live pipe configuration. Four of its rows
 (`gmail-doc`, `gmail-bs`, `gmail-link`, `mail-private`) name `mail_imap_app_password-00000001` —
-person51@example.com, the client's real mailbox. Two fixture workflows read that registry and fanned
+person52@example.com, the client's real mailbox. Two fixture workflows read that registry and fanned
 out over whatever they found:
 
   * `sv3Inject3x001`'s `Plan` looped EVERY row with no `enabled` filter, 3 documents each. Three of
@@ -38,7 +38,7 @@ THE RULES
       : {})` and `if (x) params.connection_id = x` both OMIT the key when the id is falsy, and an
       omitted `connection_id` used to resolve through mailapi's ambient `/data/active.json` — the
       client's Gmail. That is how 148 fixture messages addressed to @demo.indox ended up in
-      person51@example.com between 2026-08-05 and 2026-08-09. Stamping the key unconditionally turns
+      person52@example.com between 2026-08-05 and 2026-08-09. Stamping the key unconditionally turns
       the same mistake into a loud 400.
 
   R3  A test blueprint that builds a mail op must carry the local-only guard — a

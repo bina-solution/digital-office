@@ -84,6 +84,11 @@ def judge(cat, order, state):
             read += 1
             if r.get("auth") == "none":
                 open_routes.append((aid, route_name(aid, r)))
+    # A linked office's door this office opens to the internet (`publish:`, DGO-2050) is served open HERE: one
+    # more open route, named by its host, so the office says it in `public:` like any other open route.
+    for p in (state.get("publish") or []) if isinstance(state.get("publish"), list) else []:
+        if isinstance(p, dict) and isinstance(p.get("host"), str) and p["host"].strip():
+            open_routes.append(("publish", p["host"].strip().lower()))
     names = {n for _, n in open_routes}
     undeclared = [(aid, n) for aid, n in open_routes if f"{aid}/{n}" not in INHERENT and n not in declared]
     stale = sorted(n for n in set(declared) if n not in names)
@@ -181,6 +186,12 @@ def self_test():
     check("another app's route named like the sign-in is not excused", [n for _, n in r[2]] == ["auth"])
     r = judge(cat, order, {"schema_version": 2, "public": ["meet", "drive:8975"]})
     check("a state the compiler refuses (schema_version) is broken", any("schema_version" in b for b in r[4]))
+    pub = {"publish": [{"host": "sign.staging.example", "door": "esign-public.hp-laptop", "paths": ["/s/"]}]}
+    r = judge(cat, order, {**v1, **pub, "public": ["meet", "drive:8975"]})
+    check("a published door is an open route of this office, named by its host (DGO-2050)",
+          [n for _, n in r[2]] == ["sign.staging.example"])
+    r = judge(cat, order, {**v1, **pub, "public": ["meet", "drive:8975", "sign.staging.example"]})
+    check("…and declared in `public:` it is neither undeclared nor stale", r[2] == [] and r[3] == [] and r[4] == [])
 
     # ── the live edge (public_route_live) ──
     L = live_edge

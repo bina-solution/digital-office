@@ -39,9 +39,11 @@ The stream is `dgo:flow:newsflow` (flow.v1): one `article.new` per article that 
 
 ## Traps
 
-- browser42 is REQUIRED. With it down every source answers `failed: …` and the pass adds nothing — that is
-  reported, not hidden. `curl -s http://newsflow:8991/healthz` stays green: it reports the store, not the
-  browser.
+- browser42 is REQUIRED. With it down (or reading no page), the pass stops after 8 sources in a row read nothing —
+  counting only sources with an article since 7 days before the last pass that read 8 or more (`NEWSFLOW_DRY_STOP`,
+  0 = never).
+  The sources it did not reach are «skipped: the pass stopped» and keep their turn for the next pass — reported, not
+  hidden (DGO-2030). `curl -s http://newsflow:8991/healthz` stays green: it reports the store, not the browser.
 - A site that blocks even the office browser (a paywall, a bot wall) will read no links: the report says
   «no links read (the page may need the owner's eyes)».
 - The source list and the category ids live in `main.py` (`SOURCES`, `CATEGORIES`) — add a source there, in

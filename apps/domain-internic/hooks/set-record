@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-#: set-record <domain> <type> <name> <new value> --from <value now> --consent "<who>: <why>" — give ONE existing record (A, AAAA, CNAME) a new value through the InterNIC portal and read the zone back:  ./bbox domain-internic set-record examplex.co.il A @ 93.184.216.5 --from 93.184.216.15 --consent "…"
+#: set-record <domain> <type> <name> <new value> --from <value now> --consent "<who>: <why>" — give ONE existing record (A, AAAA, CNAME) a new value through the InterNIC portal and read the zone back:  ./bbox domain-internic set-record examplex.co.il A @ 93.184.216.5 --from 93.184.216.14 --consent "…"
 # Pipes the app's own CLI (apps/domain-internic/cli.py) into its container, or — on an office that does not
 # run it — into the credential plane's container, at the linked office's door (../where.sh).
 # An update rewrites what already serves traffic, so it needs --from (the value it has now) and --consent — the

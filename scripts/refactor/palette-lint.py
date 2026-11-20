@@ -146,9 +146,9 @@ ALLOWED = [
     # `apps/services-2`, stays in the client's herd: the release line carries the builder only as
     # examplech-services serves it — DGO-1037.)
     # ── EXAMPLEX IS A PRODUCT OF ITS OWN (2026-11-13, DGO-1864) ──────────────────────────────────────
-    # Examplex runs on its own domain for its own customers, and its meeting exx102 decided its colours: «כחול וטורקיז.
-    # אני חושב שזה הצבעים שאנחנו צריכים לכוון» [37:09], and the owner «הייתי לוקח ממש את הצבעים שנבחרו פה» [37:30] —
-    # the navy and turquoise of Itzik's concept. One file holds them, and only re-points the palette's roles; every
+    # Examplex runs on its own domain for its own customers, and one of its meetings decided its colours:
+    # navy and turquoise —
+    # from its own concept. One file holds them, and only re-points the palette's roles; every
     # other Examplex file still names tokens only, so this allowance is that one file.
     (r"^apps/examplex/static/examplex-brand\.css$", None,
      "Examplex's own brand, decided in its meeting exx102: the navy and turquoise of its owners' concept, in one file of tokens"),

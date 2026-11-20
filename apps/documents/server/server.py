@@ -4,7 +4,7 @@
     GET  /readyz                  every bound provider answers — through resolve(), the same door as the ops
     GET  /api/providers           op providers: who is bound, and each one's last sync in one Hebrew sentence
     GET  /api/types               op types: the document types (types.json — data, not code)
-    GET  /api/documents           op list   ?direction=out|in &provider= &type= &q= &limit= &offset=
+    GET  /api/documents           op list   ?direction=out|in|file &provider= &type= &q= &limit= &offset=
     GET  /api/documents/<id>      op get    the index row + the provider's own record (live)
     GET  /api/search?q=           op search one query over both directions
     POST /api/sync                op sync   {"provider": "local"|"indox", "accept_shrink": false}, or every bound one —

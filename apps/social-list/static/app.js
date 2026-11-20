@@ -480,14 +480,14 @@ function actList(rows) {
   return `<div class="plan">${rows.map((x) => `<div class="pi" style="grid-template-columns:auto minmax(0,1fr) auto">
     ${chip(STATE_HE[x.state] || x.state, STATE_CHIP[x.state] || 'bad', x.state)}
     <div style="min-width:0"><div class="c">${esc((ops[x.op] || {}).he || x.op)} ${x.summary ? `· <span class="note">${esc(x.summary)}</span>` : ''}</div>
-      <div class="w">${esc(KIND_HE[x.kind] || x.kind)} · ${esc(x.actor && x.actor.startsWith('digital-assets') ? 'נכסים דיגיטליים' : x.actor === 'owner' ? 'הבעלים' : x.actor || '')}
+      <div class="w">${esc(KIND_HE[x.kind] || x.kind)} · ${esc(x.actor && x.actor.startsWith('digital-assets') ? 'זהות' : x.actor === 'owner' ? 'הבעלים' : x.actor || '')}
       ${x.result && x.result.error ? ` · ${esc(x.result.error)}` : ''}</div></div>
     <span class="note">${esc(fmtAgo(x.at))}</span></div>`).join('')}</div>`;
 }
 async function confirmDisconnect(a) {
   // the office's own question: the action is not offered until the account's id is typed
   if (await binaAsk({ title: 'לנתק את החשבון מהלשכה?', ok: 'ניתוק', danger: true, facts: [['חשבון', a.label]],
-    body: 'החשבון יוסר מהלשכה (מהכספת). בפלטפורמה עצמה לא ישתנה דבר.\nכל ערוץ ב„נכסים דיגיטליים” שקשור אליו יישאר בלי חשבון.',
+    body: 'החשבון יוסר מהלשכה (מהכספת). בפלטפורמה עצמה לא ישתנה דבר.\nכל ערוץ ב„זהות” שקשור אליו יישאר בלי חשבון.',
     input: { label: 'להמשך, הקלד את מזהה החשבון: ' + a.id, must: a.id, dir: 'ltr' } }) == null) return;
   busy($('b-del'), async () => {
     const r = await api(`api/accounts/${encodeURIComponent(a.id)}?confirm=${encodeURIComponent(a.id)}`, { method: 'DELETE' });
@@ -642,7 +642,7 @@ async function editDrawer(id) {
   S.drawerKey = 'edit:' + id;
   const pr = await api(`api/accounts/${id}/profile`);
   const v = (pr.body || {}).value || {};
-  drawer('עריכת פרופיל', 'רק שדות שתשנו יישלחו. לשינוי זהות שמגיע לכל הרשתות — עדיף מתוך „נכסים דיגיטליים”.', `
+  drawer('עריכת פרופיל', 'רק שדות שתשנו יישלחו. לשינוי זהות שמגיע לכל הרשתות — עדיף מתוך „זהות”.', `
     <label for="e-name">שם תצוגה</label><input id="e-name" value="${esc(v.name || '')}">
     <label for="e-bio">תיאור קצר</label><textarea id="e-bio">${esc(v.bio || '')}</textarea>
     <label for="e-av">תמונת פרופיל חדשה</label><input type="file" id="e-av" accept="image/*">

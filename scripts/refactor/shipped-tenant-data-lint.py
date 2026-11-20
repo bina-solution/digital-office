@@ -132,7 +132,7 @@ def main():
             ("a connection instance id in a shipped workflow", {
                 "apps/x/blueprint/n8n/w.json": '{"connection_id":"drive_google_service_account-00000003"}'}, True),
             ("a client mailbox in a demo seed", {
-                "apps/x/blueprint/demo/seed.json": '{"email":"person51@example.com"}'}, True),
+                "apps/x/blueprint/demo/seed.json": '{"email":"person52@example.com"}'}, True),
             ("PLACEHOLDER ids are allowed", {
                 "apps/x/blueprint/fixtures/f.json": '{"to_sync":"PLACEHOLDER_TO_SYNC_FOLDER_ID"}'}, False),
             ("a local/dev connection is allowed", {

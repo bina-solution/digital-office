@@ -153,9 +153,19 @@ def _entry(office: str, doc: dict, hidden: set, address: str) -> dict | None:
     # The DOORS WITH NO TILE the office gives this one (DGO-945): an address here and nothing else —
     # the three facts the compiler reads (`serve.plan`), never a tile's presentation. Hidden like an
     # app: the owner's "not this one" holds for a door too.
-    doors = [{"app": d.get("app"), "alias": d.get("alias"), "port": d.get("port")}
-             for d in (doc.get("services") or [])
-             if isinstance(d, dict) and str(d.get("alias") or "").lower() not in hidden]
+    doors = []
+    for d in (doc.get("services") or []):
+        if not isinstance(d, dict) or str(d.get("alias") or "").lower() in hidden:
+            continue
+        door = {"app": d.get("app"), "alias": d.get("alias"), "port": d.get("port")}
+        # …and the paths the serving office narrowed it to (DGO-2050): the only door this office may
+        # PUBLISH is one narrowed by its own office, so the compiler must see them (serve.publish_plan).
+        if isinstance(d.get("paths"), list) and d["paths"]:
+            door["paths"] = [str(p) for p in d["paths"]]
+            # …and its office's consent to the internet, which publishing requires (serve.publish_plan)
+            if d.get("public") is True:
+                door["public"] = True
+        doors.append(door)
     if not apps and not doors:
         return None
     entry = {"office": office,

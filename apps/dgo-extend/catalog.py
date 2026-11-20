@@ -866,8 +866,8 @@ def clean_services(value) -> tuple[dict, str]:
         if not ALIAS_RE.match(a):
             return {}, f"serve.services: {alias!r} אינו כינוי תקין"
         spec = {} if spec in (None, "") else spec
-        if not isinstance(spec, dict) or set(spec) - {"to", "paths"}:
-            return {}, f"serve.services.{a} הוא אובייקט עם to ו/או paths בלבד"
+        if not isinstance(spec, dict) or set(spec) - {"to", "paths", "public"}:
+            return {}, f"serve.services.{a} הוא אובייקט עם to, paths ו/או public בלבד"
         entry = {}
         if "to" in spec:
             names = [spec["to"]] if isinstance(spec["to"], str) else spec["to"]
@@ -880,6 +880,15 @@ def clean_services(value) -> tuple[dict, str]:
             if not isinstance(paths, list) or not paths or not all(plain_path(p) for p in paths):
                 return {}, f"serve.services.{a}.paths: רשימה של נתיבים מוחלטים, בלי . ו-.. ובלי %"
             entry["paths"] = list(paths)
+        # `public: true`: this office's CONSENT that an office it gives the door to may open it to the internet
+        # (`publish:`, DGO-2050). Only for a door narrowed to paths, never `/`: an open door is the whole app.
+        if "public" in spec:
+            if not isinstance(spec["public"], bool):
+                return {}, f"serve.services.{a}.public: true או false"
+            if spec["public"] and (not entry.get("paths") or "/" in entry["paths"]):
+                return {}, (f"serve.services.{a}.public: רק דלת שצומצמה לנתיבים (paths, לא /) נפתחת לאינטרנט — "
+                            f"דלת פתוחה היא האפליקציה כולה")
+            entry["public"] = spec["public"]
         out[a] = entry
     return out, ""
 
@@ -924,6 +933,9 @@ def publishable_services(registry: dict, serve_map, office: str = "") -> list[di
             if not given or not all(plain_path(p) for p in given):
                 continue
             door["paths"] = given
+        # this office's consent to the internet (DGO-2050), only beside paths of its own and never `/`
+        if spec.get("public") is True and door.get("paths") and "/" not in door["paths"]:
+            door["public"] = True
         out.append(door)
     return sorted(out, key=lambda d: d["alias"])
 

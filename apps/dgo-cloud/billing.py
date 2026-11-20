@@ -91,7 +91,7 @@ class Billing:
     def checkout(self, acc, plan_id):
         """A pending subscription and its first payment, and the Cardcom page to pay it on → the page's URL."""
         if not cardcom.configured():
-            raise Refused("התשלום עוד לא פתוח — נסו שוב בעוד מעט, או כתבו לנו: person11@example.com")
+            raise Refused("התשלום עוד לא פתוח — נסו שוב בעוד מעט, או כתבו לנו: person12@example.com")
         p = plan(plan_id)
         live = [s for s in self.subs(acc["id"]) if s["status"] in ("active", "past_due")]
         if live:

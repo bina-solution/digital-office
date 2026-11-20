@@ -1,0 +1,24 @@
+{# מכתב — the business's letterhead: the masthead, the date, to whom, the subject, the body, and who signs. #}
+{% extends "base.html.j2" %}
+{% import "_parts.html.j2" as p with context %}
+{% block body %}
+<div class="mast">
+  <div class="who">{{ mark_html }}
+    <div><div class="biz">{{ sup.name }}</div>{% if sup.name_en %}<div class="biz-en">{{ sup.name_en }}</div>{% endif %}
+      <div class="bizmeta">{% if sup.tax %}<span class="tax">{{ sup.tax }}</span><br>{% endif %}{% for c in sup.contact %}{% if not loop.first %}<span class="sep">·</span>{% endif %}{% if '@' in c or c.startswith('www') or c.startswith('http') %}<span class="ltr">{{ c }}</span>{% else %}{{ c }}{% endif %}{% endfor %}</div></div>
+  </div>
+  {% if doc_id %}<div class="fact" style="text-align:left"><div class="k">סימוכין</div><div class="v num">{{ doc_id }}</div></div>{% endif %}
+</div>
+<div class="rule"></div>
+<div class="lt-date">{{ long_date }}</div>
+<div class="lt-to"><span class="muted">לכבוד</span><br><b>{{ cust.name }}</b>{% if cust.person %}<br>{{ cust.person }}{% if cust.person_title %}, {{ cust.person_title }}{% endif %}{% endif %}{% if cust.address %}<br>{{ cust.address }}{% endif %}</div>
+{% if subject %}<div class="lt-subj"><span>הנדון: {{ subject }}</span></div>{% endif %}
+<div class="lt-body">{{ body }}</div>
+<div class="lt-close">
+  <div>{{ closing or 'בברכה,' }}</div>
+  {% if signed %}<div class="s"><span class="signed-stamp">{{ p.check() }} נחתם אלקטרונית · <span class="num">{{ signed.when }}</span></span></div>{% endif %}
+  <div class="nm">{{ sup.signatory or sup.name }}</div>
+  <div class="tt">{{ sup.signatory_title }}{% if sup.signatory and sup.signatory_title %} · {% endif %}{% if sup.signatory %}{{ sup.name }}{% endif %}</div>
+</div>
+{% if cc %}<div class="lt-cc">העתק: {{ cc }}</div>{% endif %}
+{% endblock %}

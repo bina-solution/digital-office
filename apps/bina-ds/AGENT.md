@@ -1,9 +1,11 @@
-# Operating «בינה» (the `bina-ds` app)
+# Operating «עזריה» (the `bina-ds` app)
 
-The office's AI: a Hebrew agent harness where the office agents live. Azaria is the default agent
-and acts; Raphael is the guardian and only proposes. People talk to them in the tile. Every other
-caller (a script, another agent, a linked office) speaks agent.v1 to the agent door, for which the
-CLI is `bbox agent`.
+The office's AI: a Hebrew agent harness (DeepSeek Harness 0.2.2-rc.3) where the office agents live, at
+`azaria.<domain>` and in the console tile. Azaria is the default agent and acts; Raphael is the guardian
+and only proposes. People talk to them in the tile. Every other caller (a script, another agent, a linked
+office) speaks agent.v1 to the agent door, for which the CLI is `bbox agent`. The tile's «Claude» panel
+shows and drives the official Claude app's sessions (`bina-claude`, its one sign-in): a message sent there
+runs in that app and counts against the owner's Claude plan.
 
 ## From the server's shell (`bbox agent`, layer 0)
 

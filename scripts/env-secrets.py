@@ -67,6 +67,7 @@ TABLE = {
     "EXAMPLEM_API_TOKEN": ("hex", 32),
     "ASSETS_API_TOKEN": ("hex", 32),
     "LOANS_API_TOKEN": ("hex", 32),
+    "ENTITIES_API_TOKEN": ("hex", 32),   # entities: the documents' ledger and a flow read parties with it (DGO-2101)
     "AUTHENTIK_SECRET_KEY": ("hex", 48),
     "AUTHENTIK_POSTGRES_PASSWORD": ("hex", 24),
     "AUTHENTIK_BOOTSTRAP_PASSWORD": ("pw", 24),

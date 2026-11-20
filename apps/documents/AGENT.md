@@ -18,6 +18,17 @@ document is issued (`out`, «יוצא») or incoming (`in`, «נכנס»); a pro
 On the office network: `GET http://documents:8080/api/documents?direction=in&q=…` →
 `{"ok":true,"op":"list","data":{"rows":[…],"status":[…]}}`.
 
+A third provider, `drive` (DGO-2029), lists the office's files in «קבצים» — `/מסמכים`, `/לקוחות/<client>/`,
+`/מחקרים` (`DOCUMENTS_DRIVE_ROOTS`) — as rows of direction `file`: the name, the folder, the client, the date.
+It reads the folder tree once, then each folder a thousand files a page, and writes nothing; a root the office
+lacks is skipped. `DOCUMENTS_DRIVE_PROFILE` pins the drive's account; empty, the drive's active connection
+answers — whichever account its connection bar was last set to.
+
+The search reads Hebrew (DGO-2029). Every word must be there, at the start of a word, past up to two prefix
+letters (ו/ה/ב/כ/ל/מ/ש). Final letters match plain ones, and niqqud and ׳ ״ are ignored. «לחברת החשמל», «חשבון»
+and «מעמ» find «חברת החשמל», «חשבונות» and «מע״מ»; «מחיר» does not find «בחירה». A row's searchable words
+are written once, when it is synced (`folded`).
+
 ## Traps
 
 - It READS. Issuing, cancelling and sending stay the ledger's (`./bbox my-docs …`, the owner's words only), and

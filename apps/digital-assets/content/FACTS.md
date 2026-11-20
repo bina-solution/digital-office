@@ -126,8 +126,9 @@ Say «מופע» for an instance, never "tenancy".
 - **«מחשבים»:** the office's own machine and SSH servers.
 - **«אתרים»:** hosts and monitors the business's websites — uptime, visits, security, SEO and a
   beauty score.
-- **«נכסים דיגיטליים»:** the business's logo, names, texts and media, organised once and pushed to
-  every channel.
+- **«זהות» (digital-assets):** the one place the business is defined — its names, legal details,
+  contact details, logo, colours, texts and media — read from there by the whole office (documents,
+  websites, networks) and pushed to every channel. Until November 2026 it was called «נכסים דיגיטליים».
 - **«רשתות חברתיות»:** every social network behind one interface, through the office browser.
 - **«דומיינים»:** domain expiry, DNS and registrars.
 - **«כל מקביל»:** a live timeline of everything running in parallel.

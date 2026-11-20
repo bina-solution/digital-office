@@ -16,7 +16,7 @@ and the HP gives it to vps1 and the MacBook (`give:`), so `./bbox domain-interni
 ./bbox domain-internic login                     # sign in by itself (credential + the mailed code), once
 ./bbox domain-internic domains                   # the account's domains, off the portal
 ./bbox domain-internic zone digital-office.co.il # one zone, off the portal's own editor
-./bbox domain-internic add-record digital-office.co.il A '*.exampleu' 93.184.216.11 [--ttl 3600] [--consent "<who>: <why>"]
+./bbox domain-internic add-record digital-office.co.il A '*.exampleu' 93.184.216.10 [--ttl 3600] [--consent "<who>: <why>"]
 ./bbox domain-internic verified create           # has the office seen a create succeed (its own since)?
 ./bbox domain-internic flow                      # sign-ins, records, a lost session — the last 10, then live
 ```

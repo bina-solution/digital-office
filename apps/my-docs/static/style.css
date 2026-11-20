@@ -213,12 +213,21 @@ td.num{font-variant-numeric:tabular-nums;font-family:ui-monospace,Menlo,Consolas
 .muted{color:var(--muted)}
 .empty{padding:40px;text-align:center;color:var(--muted)}
 
-.chip{display:inline-block;font-size:11.5px;font-weight:700;padding:3px 10px;border-radius:999px}
+/* a chip's height is its own (the page's 1.5): inside the grid's cell it took the row's line height and was drawn
+   as a 50px circle around «הונפק» (DGO-2029, seen in the simulation with our records) */
+.chip{display:inline-block;font-size:11.5px;font-weight:700;line-height:1.5;padding:3px 10px;border-radius:999px}
 .chip.draft{background:var(--bg);color:var(--muted)}
 .chip.issued{background:var(--info-soft);color:var(--blue)}
 .chip.sent{background:var(--violet-soft);color:var(--violet)}
 .chip.paid{background:var(--accent-soft);color:var(--accent-d)}
 .chip.cancelled{background:var(--danger-soft);color:var(--red)}
+/* the documents list on a narrow screen: a two-line row (app.js NARROW_DOCS) — a cell lays its content out in a row,
+   so the two lines are one column of their own */
+.bina-table .dlw{display:flex;flex-direction:column;justify-content:center;flex:1;min-width:0;width:100%;line-height:1.35}
+.bina-table .dl{line-height:1.35;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.bina-table .dl2{font-size:12px;color:var(--muted);margin-top:2px}
+.bina-table .dl .chip{padding-block:1px}
+#docsTable.docs-narrow .bt-btn[title="צפיפות שורות"]{display:none}   /* «צפוף» (34px) would cut the second line */
 
 .filters{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px}
 .filters button{background:var(--surface);border:1px solid var(--line);color:var(--muted);padding:7px 14px;font-weight:600;font-size:13px}
@@ -259,13 +268,77 @@ body:has(.editor:not(.hidden)) #bina-tell{inset-block-end:84px}
 .ghost{background:var(--bg);color:var(--ink);font-weight:600;padding:10px 16px}
 .ghost:hover{background:var(--line)}
 
+/* ── the new document: a gallery of types, then the form beside the document itself (DGO-2029) ────────
+   Replaces the one <select> of six types: fifteen documents are a choice to SEE, and a quote, a proposal or
+   an agreement is judged by how it looks — so the page it will be is drawn beside its form, live. */
+#editor .hidden{display:none}
+.editor.wide{width:min(1380px,98vw)}
+.editor-h-acts{display:flex;gap:8px;align-items:center}
+.sm{padding:6px 12px;font-size:13px;height:30px;display:inline-flex;align-items:center;gap:6px}
+textarea{font-family:inherit;font-size:14px;border:1px solid var(--line);border-radius:8px;padding:8px 10px;width:100%;
+  background:var(--surface);color:var(--ink);resize:vertical;line-height:1.55}
+textarea:focus{outline:2px solid var(--accent-soft);border-color:var(--accent)}
+.editor-b label textarea{margin-top:5px}
+.gallery{gap:22px}
+.tgroup .tg-h{display:flex;align-items:baseline;gap:10px;margin-bottom:8px}
+.tgroup h3{font-size:14px;font-weight:800}
+.tgroup .tg-h .muted{font-size:12px}
+/* a strip, not floating cards: whole rows of three, hairlines between (a group is padded to a full row) */
+.tcards{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:1px;background:var(--line);
+  border:1px solid var(--line);border-radius:12px;overflow:hidden}
+.tcard{background:var(--surface);border-radius:0;padding:13px 15px;text-align:start;display:flex;flex-direction:column;gap:3px;min-height:76px}
+.tcard:hover,.tcard:focus-visible{background:var(--accent-soft)}
+.tcard .tc-n{font-size:14px;font-weight:700;color:var(--ink)}
+.tcard .tc-s{font-size:12px;color:var(--muted);line-height:1.45}
+.tcard.blank{pointer-events:none}
+.tg-note{font-size:12px;margin:0}
+.stage{flex:1;min-height:0;display:grid;grid-template-columns:minmax(400px,500px) minmax(0,1fr)}
+.stage .editor-b{border-inline-end:1px solid var(--line)}
+.preview{display:flex;flex-direction:column;min-height:0;background:var(--surface-2)}
+.preview-h{display:flex;justify-content:space-between;gap:10px;padding:10px 18px;font-size:12px;font-weight:700;
+  color:var(--muted);border-bottom:1px solid var(--line)}
+/* the sheet is 860px of HTML scaled to the pane (fitPreview): a transform does not change layout, so the frame
+   stands out of the flow and the box's height is the SCALED sheet's (--pv-h) — a scroll down, never sideways */
+.preview-b{flex:1;overflow:auto;position:relative}
+.preview-b::before{content:"";display:block;height:calc(var(--pv-h,600px) + 8px)}
+.preview-b iframe{position:absolute;top:4px;inset-inline-start:4px;border:0;transform-origin:top right;background:transparent}
+/* below a wide desk the form and the sheet stack: the form first, the document under it, one scroll */
+@media (max-width:1100px){
+  .stage{grid-template-columns:minmax(0,1fr);overflow:auto}
+  .stage .editor-b{border-inline-end:0;border-bottom:1px solid var(--line);overflow:visible}
+  .preview{min-height:72vh}
+}
+.part-ed{border:1px solid var(--line);border-radius:10px;padding:10px;display:flex;flex-direction:column;gap:8px;margin-bottom:10px;background:var(--surface)}
+.pe-h{display:flex;gap:8px;align-items:center}
+.pe-n{font-weight:800;color:var(--muted);min-width:22px}
+.pe-note{font-size:12px}
+table.lines td.per-c{text-align:center;width:52px}
+.danger-t{color:var(--red)}
+/* «ארכיון» (DGO-2029): the office's every document and file, one search */
+.arch-bar{display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin-bottom:10px}
+.arch-bar input{flex:1;min-width:220px}
+.arch-bar .filters{margin:0}
+.arch-status{display:flex;gap:14px;flex-wrap:wrap;font-size:12px;color:var(--muted);margin-bottom:12px}
+.arch-path{font-size:11.5px;direction:rtl}
+.arch-more{font-size:12px;margin-top:8px}
+#archTable tr[data-i]{cursor:pointer}
+/* a name or a folder with no space in it («TaxReceiptInvoiceSales_3344938_…_84222ada-….pdf», 90 letters) held its
+   column at its whole width: at 600px the files were a 997px table in a 562px box, and .tablewrap clipped the date
+   and «מקור» (measured on our 559 files). The name breaks anywhere; the client or folder breaks only a word that
+   would not fit (`anywhere` there let the table squeeze it to a letter: «/מסמכים/חשבונאות/מ|סמכים» at 600); the kind,
+   the date and the source never break */
+#archTable td:nth-child(2){overflow-wrap:anywhere}#archTable td:nth-child(3){overflow-wrap:break-word}
+#archTable td:nth-child(1),#archTable td:nth-child(4),#archTable td:nth-child(5){white-space:nowrap}
+#dSign:empty{display:none}
+#dSign{margin-inline-start:6px}
+
 .drawer{position:fixed;inset:0 0 0 auto;width:min(860px,96vw);background:var(--surface);
   z-index:50;display:flex;flex-direction:column;box-shadow:var(--shadow-lg)}
 .dnum{font-size:19px;font-weight:800;font-family:ui-monospace,Menlo,Consolas,monospace;margin-inline-end:12px}
 .conv-from{display:inline-block;font-size:11.5px;color:var(--muted);margin-inline-start:10px}
 .drawer-actions{display:flex;gap:8px;flex-wrap:wrap;padding:14px 22px;border-bottom:1px solid var(--line)}
 .drawer-b{flex:1;display:grid;grid-template-columns:1fr 260px;overflow:hidden}
-#dPdf{border:none;width:100%;height:100%;background:var(--muted)}
+#dPdfBox{background:var(--surface-2);min-height:0}
 .events{border-inline-start:1px solid var(--line);padding:16px;overflow:auto}
 .events h3{font-size:13px;color:var(--muted);margin-bottom:10px}
 .events ul{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:11px}
@@ -277,7 +350,8 @@ body:has(.editor:not(.hidden)) #bina-tell{inset-block-end:84px}
 
 /* narrow: the name and «מסמך חדש» share the first line, the tabs are the second */
 @media (max-width:720px){.side{padding-inline:12px}.side nav{order:3;flex-basis:100%}
-  .drawer-b{grid-template-columns:1fr}#dPdf{height:52vh}.main{padding:18px}
+  .drawer-b{grid-template-columns:1fr}#dPdfBox{height:58vh}.main{padding:18px}
+  .tcards{grid-template-columns:1fr}.tcard.blank{display:none}
   /* THE DASHBOARD'S OWN TWO COLUMNS. The hero card and the strip of four numbers stood side by side at
      every width, and a `1fr` track never shrinks below its content — so the pair held a 643px floor and
      the screen was 63px wider than a 580px window and 263px wider than a 380px one (measured
@@ -329,6 +403,20 @@ body:has(.editor:not(.hidden)) #bina-tell{inset-block-end:84px}
 button .ic-svg{margin-inline-end:5px}
 button.x .ic-svg,.ghost#closeEditor .ic-svg,.ghost#closeDrawer .ic-svg{margin:0}
 button .ic-svg.ic-end{margin-inline:5px 0}   /* a mark AFTER the label («הפק מסמך» and its way forward) */
+/* «ארכיון» at phone width: its five columns were wider than a 390 phone, and .tablewrap clips — the date lost its
+   day and «מקור» was cut away (DGO-2029, seen in the simulation with our records). A row is two lines: the kind,
+   the name and the source; under them the client or folder, and the date. Up to 720px, not 560: below about 700 the
+   three fixed columns (≈281px) left the name and the folder too little, and names broke every few letters */
+@media (max-width:720px){#archTable table.data,#archTable tbody{display:block}#archTable thead{display:none}
+  #archTable tr{display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:center;gap:3px 10px;
+    padding:9px 12px;border-bottom:1px solid var(--line)}
+  #archTable tr:last-child{border-bottom:none}
+  #archTable td{padding:0;border:0;min-width:0}
+  #archTable td:nth-child(1){font-size:12px;color:var(--muted)}
+  #archTable td:nth-child(2){justify-self:start;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  #archTable td:nth-child(3){grid-column:1/3;grid-row:2;font-size:12.5px;overflow-wrap:anywhere}
+  #archTable td:nth-child(4){grid-column:3;grid-row:2;justify-self:end;font-size:12px;color:var(--muted)}
+  #archTable td:nth-child(5){grid-column:3;grid-row:1;justify-self:end}}
 /* the nav bullet was a ▪ character; a real dot sizes and colours with its label */
 .nav-dot{
   width:6px;height:6px;border-radius:50%;background:currentColor;

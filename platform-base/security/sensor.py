@@ -9,7 +9,7 @@ What it watches
                 which port — the outbound map, and inbound that never touches the edge (SSH, mail,
                 the link's UDP).
   names         the DNS answers the machine receives and the server name of every TLS connection it
-                opens — so an address on the map reads `api.github.com`, not `93.184.216.24`. A kernel
+                opens — so an address on the map reads `api.github.com`, not `93.184.216.23`. A kernel
                 filter (netparse.BPF_DNS_SNI) hands it those packets and nothing else.
   sign-ins      the machine's sshd, from its journal (accepted keys by fingerprint, failures).
   facts         interfaces, routes, the gateway, every listening socket, the router behind the
@@ -850,7 +850,7 @@ def _local(tag: str) -> str:
 
 
 def upnp(ip: str) -> dict | None:
-    msg = ("M-SEARCH * HTTP/1.1\r\nHOST: 93.184.216.25:1900\r\nMAN: \"ssdp:discover\"\r\nMX: 1\r\n"
+    msg = ("M-SEARCH * HTTP/1.1\r\nHOST: 93.184.216.24:1900\r\nMAN: \"ssdp:discover\"\r\nMX: 1\r\n"
            "ST: urn:schemas-upnp-org:device:InternetGatewayDevice:1\r\n\r\n").encode()
     s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     s.settimeout(2.5)

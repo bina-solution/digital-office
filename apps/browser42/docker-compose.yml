@@ -131,10 +131,29 @@ services:
           # mid-task. 1792M keeps ~23% headroom over that measured peak. This is a CEILING, not a
           # reservation: idle usage is ~0.7-1.0GiB, and the host only pays if the browser really
           # grows.
-          memory: 1792M
+          # 1792M -> 3g, 2026-11-19 (DGO-2028). The office browser is the herd's (herd.yaml: on the
+          # HP, given to every office), and a real day is five or six heavy app tabs from two or three
+          # sessions at once (Drive, Hostinger's panel, Canva, morning), not three test pages. Measured
+          # on the HP: 1.67 GB in RAM plus 970 MiB in swap — the host's largest swap user — with
+          # memory.events `max` at 61 102, and ~980 major faults a second while one command ran, all
+          # while the host had 2.3 GB available. The kernel was paging the browser against its own
+          # ceiling. 3g holds that working set (2.6 GB) with room for the sixth tab (BROWSER42_MAX_TABS),
+          # and is still a ceiling: a browser that is asleep holds none of it, and an idle one only what
+          # it uses. An office whose machine is smaller says less with BROWSER42_MEMORY in .env.
+          memory: ${BROWSER42_MEMORY:-3g}
         reservations:
           cpus: '1'
           memory: 512M
+    # THE CPU FLOOR (gate G65, DGO-1730's `x-cpu-floor`; DGO-2028). The CPU budget scales every cap down
+    # to its machine, and on the HP it scaled the `2` above to 1.12: measured 2026-11-19, the browser
+    # was throttled in 88% of its CFS periods while a command ran (397 of 452 in 45 s) with the host's
+    # CPU two-thirds idle, and one command's attach to the tabs took 8-55 s. The browser is the
+    # interactive tool the owner watches and every office's agents queue on, one command at a time, so
+    # the budget may not take it below BROWSER42_CPU_FLOOR cores (2 by default; never above its cap or
+    # the machine's cores). An `x-` field is outside the container's configuration hash, so the floor
+    # alone re-creates nothing: the next `bbox run` renders it into the plan, and `docker update` gives
+    # it to the running browser.
+    x-cpu-floor: ${BROWSER42_CPU_FLOOR:-2}
     logging:
       driver: json-file
       options:
@@ -349,6 +368,11 @@ services:
           # 256M and stalled mid-protocol. Real headroom keeps the protocol fast.
           cpus: '1'
           memory: 512M
+    # Every command is a new python + Playwright driver started HERE, before it touches the browser, and
+    # the CPU budget held this `1` at 0.56 on the HP: 44% of its periods throttled while one command ran,
+    # its driver start 1.3-3.4 s of each command (2026-11-19, DGO-2028). Its cap is its floor; like the
+    # browser's, it reaches the running runner through the plan (`bbox run`, then `docker update`).
+    x-cpu-floor: 1
     logging:
       driver: json-file
       options:

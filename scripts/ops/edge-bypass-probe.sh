@@ -3,7 +3,7 @@
 #
 #   scripts/ops/edge-bypass-probe.sh <office-ipv4> <host>[:<public-prefix>] …
 #   e.g. (from vps1, at Exampleu)
-#     scripts/ops/edge-bypass-probe.sh 93.184.216.11 console.exampleu.digital-office.co.il \
+#     scripts/ops/edge-bypass-probe.sh 93.184.216.10 console.exampleu.digital-office.co.il \
 #       computers.exampleu.digital-office.co.il:/share/ drive.exampleu.digital-office.co.il:/file/d/ \
 #       n8n.exampleu.digital-office.co.il:/webhook/ meet.exampleu.digital-office.co.il
 #

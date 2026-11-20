@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """test_audit_ssh — the machine audit reads SSH the way sshd does (DGO-415).
 
-Measured 2026-11-10 from the MacBook's «מחשבים» against Exampleu's server (93.184.216.11):
+Measured 2026-11-10 from the MacBook's «מחשבים» against Exampleu's server (93.184.216.10):
 - the audit said «SSH מקבל סיסמאות» (error) and «התחברות root ב-SSH מותרת» (warn);
 - `sshd -T` there says `passwordauthentication no` and `permitrootlogin without-password`;
 - the collector had concatenated sshd_config with its drop-ins and taken the LAST matching line.

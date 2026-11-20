@@ -1,30 +1,74 @@
-# bina-ds — בינה
+# bina-ds — עזריה
 
 The office agent: a customized [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness)
-(MIT, pinned to `0.1.6-alpha.1`) that speaks Hebrew natively and runs inside the console.
+(MIT, pinned to `0.2.2-rc.3`, the newest release on 2026-11-13) that speaks Hebrew natively and runs
+inside the console, and on its own address, `azaria.<domain>` (EXU-64; `bina.<domain>` still answers).
+The app's id stays `bina-ds`: the CLI, the n8n clock, the linked offices' catalogs and the volume name it.
+
+**Claude, inside עזריה.** A «Claude» row in the sidebar opens the office's OFFICIAL Claude app
+(`apps/bina-claude`, signed in once): its sign-in state and its sessions, read and written over its agent.v1
+contract — what is typed there runs in that app, on that sign-in. עזריה holds no Claude credential and offers
+no claude.ai sign-in of its own: Anthropic's terms keep that sign-in in Anthropic's own flow
+(code.claude.com/docs/en/legal-and-compliance). `plugins/claude-sessions/`.
+
+**The screen: one place for every conversation (EXU-64, DGO-2036).** `azaria.<domain>` and the console's tile open
+עזריה's own screen: `web/` (static), with its data from the adapter's `/ui/…` door (`adapter/ui.mjs`). The door
+answers only the office's edge and console, only with the identity header the edge adds, only same-origin, and
+every write as JSON.
+- `GET /ui/sessions`: ONE list. It holds Azaria's conversations and those of every Claude app of the office: the
+  first, `bina-claude`, and each instance of it (DGO-1920), found from `instances/<id>/app.json` with
+  `instance_of: bina-claude`. Each Claude row names its `app`, and its reads and writes go to that app.
+- `GET /ui/models`: the harness's model catalog, each Claude app's state (`claudes`), and the name of each computer
+  that serves a local model (`computers`). An office of our own herd is named by its label; any other is
+  `<id> · מחוץ לעדר`, never the name it gave itself.
+- `GET /ui/providers` («איפה זה רץ»): every place a conversation can run.
+  - Each cloud provider: is its key there, and does it come from the office's secrets.
+  - Each computer with a local model.
+  - Each Claude app.
+  - No key value ever crosses.
+- `POST /ui/providers/<deepseek|openai|anthropic>/vault`: points the provider's key reference at its connection
+  (`vault:<connection>`, the vault-key plugin's pointer). It is refused over a key that already works from
+  elsewhere, and when the harness cannot say where the key comes from.
+- `POST /ui/sessions` `{engine: "azaria"|"claude", app?, text, model?}`. Per conversation: `messages`, `stream`,
+  `cancel`, `answer`, `rename`, `archive`, `edit`, `retry`, `upload`, `model`.
+
+Tests: `adapter/test_providers.mjs`, `adapter/test_claude_apps.mjs`.
 
 What is ours, and where:
 
 | Piece | Path | What it does |
 |---|---|---|
-| Hebrew language pack | `plugins/locale-he/` | Adds the `he` language to the harness web client — one Hebrew dictionary per UI namespace (`dicts/he/*.json`, checked against the pinned English source in `dicts/en/`) and right-to-left document direction while Hebrew is active. `build-client.mjs` generates the browser bundle. The node half also DECLARES the office's language, once (`declareOfficeLocale`: the harness's own `locale` setting, written only while it holds no preference) — adding a language is not selecting one, and until DGO-550 nothing selected one, so the interface opened in whatever the browser asked for with stock `en` as the fallback. `node test/locale-default.test.mjs` pins that write and its three refusals. |
+| Hebrew language pack | `plugins/locale-he/` | Adds the `he` language to the harness web client — one Hebrew dictionary per UI namespace (`dicts/he/*.json`, checked against the pinned English source in `dicts/en/`) and right-to-left document direction while Hebrew is active. `build-client.mjs` generates the browser bundle. The office's language is DECLARED in the profile (the `locale` row's config, `preference: he`) — adding a language is not selecting one, and until DGO-550 nothing selected one, so the interface opened in whatever the browser asked for with stock `en` as the fallback. `node test/locale-default.test.mjs` pins that declaration. |
 | Random Hebrew wording | `plugins/locale-he/phrases.json` | The keys whose Hebrew value is drawn at random instead of being one fixed sentence: the blank-session hero title (`conversation/hero.headline`) and the turn-status verb shown while the agent works (`chat/chat.deepDiving`). One pick per page load, validated against both dictionaries at build time. Owner decision 2026-09-25. |
-| Bina brand | `plugins/brand-bina/` | The sidebar name and mark and the blank-session hero mark, in place of the harness vendor's wordmark and whale — and hides the harness's own "preview" pill beside the hero title (matched by the CSS-module suffix `_previewBadge`). |
-| The conversation in the address bar | `plugins/session-link/` | The harness was the one embedded app that took no part in the shell's route contract: its URL was `#/m/bina` whatever conversation was open, because the browser half has no URL routing and keeps its selection in the browser's storage. This plugin opens `?s=<sessionId>` off its own URL when the shell hands one over (the console's `#/m/bina?s=<id>`, or `bina.<domain>/?s=<id>` standalone) and reports every change of the open conversation back with `bina:route`, which the shell mirrors into the address bar. Owner request 2026-10-12. |
-| Profile | `harness/profile/` | Which plugins run and how the web surface is composed (`cordis.patch.yml`); installs stock dsh + the Bina plugins with pnpm at image build. |
-| Edge auth | `harness/customize.sh` | The one change to the harness's own code: when `DSH_TRUST_PROXY_AUTH_HEADER` is set, a request carrying the identity header Traefik adds after SSO (`X-authentik-username`) is authenticated, the same trust every other embedded app places in the edge. Stock dsh's launch-token + cookie flow stays for any other deployment. Owner-approved 2026-09-17. |
+| Brand | `plugins/brand-bina/` | The sidebar name «עזריה» and mark «ע», the blank-session hero mark and the tab title, in place of the harness vendor's wordmark, whale and "DeepSeek Harness" — and hides the harness's own "preview" pill beside the hero title (matched by the CSS-module suffix `_previewBadge`). |
+| Claude | `plugins/claude-sessions/` | The «Claude» panel: the official Claude app's sign-in state and sessions (list, conversation, composer) through a narrow door on the harness's web server, `/office-claude/…`, behind the office's sign-in. The door takes bina-claude's action token the way `bbox agent --app bina-claude` does (from its container, through the engine) and never hands it to the browser. EXU-64. |
+| The conversation in the address bar | `plugins/session-link/` | The harness was the one embedded app that took no part in the shell's route contract: its URL was `#/m/bina` whatever conversation was open. This plugin opens `?s=<sessionId>` off its own URL when the shell hands one over (the console's `#/m/bina?s=<id>`, or `azaria.<domain>/?s=<id>` standalone) and writes every change of the open conversation into its own URL, which the shell mirrors. On 0.2.x the open conversation is `uiWorkspace.selection`. Owner request 2026-10-12. |
+| Profile | `harness/profile/` | Which plugins run and how the web surface is composed (`cordis.patch.yml`); installs stock dsh + the office plugins with pnpm at image build. The plugin manager and the harness's own scheduler are OFF: plugins are declared here only, and the office's clock is n8n. |
+| Agent presets | `harness/profile/agent-presets/<id>/preset.patch.yml` | עזריה (the default), רפאל and עזריה · מקומי — since 0.2.x each is a row of the preset registry, composed in by `entrypoint.sh` with `--patch`, beside its `skills/`. (`presets/azaria-local/` is the 0.1.6 copy, superseded.) |
+| Edge auth | `harness/customize.sh` | The changes to the harness's own code, each asserted exactly once and skipped when already applied: a request carrying the identity header Traefik adds after the office's sign-in (`X-authentik-username`), or the adapter's token, is a signed-in browser; the page "owns the host" behind the edge; bundles load under the console's `/a/bina/`; the copy button falls back inside a frame. Owner-approved 2026-09-17. |
 | Office timeline | `plugins/timeline-lanes/` | The lane `כל מקביל` (any-concurrency) draws this app on: the harness's own session events projected into spans — a span per turn, step, tool call, command, approval, workflow run, and an instant for everything else. The store lives on the volume (`$DSH_HOME/timeline`), the adapter serves it (`GET /timeline/spans`), and `app.json` declares it as `SPAN_SOURCE_BINA`. |
 | Container | `Dockerfile`, `harness/entrypoint.sh` | `node:24-slim`, the profile under `/opt/bina/harness/profile`, user state on the `bina_ds_home` volume. |
 
 How it reaches the console: the index is embedded at `/a/bina/` like every app, but the harness's
 browser code addresses `/api` and `/plugins` at the origin root, so `app.json` root-mounts those two
 prefixes on the console host (`module.passthrough[].mount: root`, a platform extension added for this
-app) with the console's own `reserved_paths` carved out. Standalone, the app also answers on
-`bina.<domain>`.
+app) with the console's own `reserved_paths` carved out. Standalone, the app answers on
+`azaria.<domain>` (and `bina.<domain>`). Since 0.2.x the harness listens on ONE concrete address (a
+wildcard is refused), so `entrypoint.sh` resolves the container's own office-network address into
+`DSH_BIND_HOST`, and the adapter and the healthcheck call the harness there.
 
-Updating the harness version: bump `harness/profile/package.json`, re-extract the English
-dictionaries (the extraction script lives in the bina-lab notes), and let `build-client.mjs`
-report which Hebrew keys changed.
+Updating the harness version (what EXU-64 did for 0.2.2-rc.3):
+1. bump `@deepseek-ai/dsh` in `harness/profile/package.json` and re-pin the `~`-ranged packages its tree
+   asks for (`pnpm.overrides`);
+2. install it in a probe, run `harness/customize.sh` (it fails loudly on an anchor that moved), boot it
+   beside the live app on a copy of the volume;
+3. list the bundles the page loads (the served index's boot manifest), then in `plugins/locale-he`:
+   `node extract-en.mjs <profile> --packages <list> --keep directory-browser --write`, translate the keys
+   it reports, `node apply-he.mjs <translations.json>`, `node build-client.mjs --check`;
+4. the plugins' own tests (`node --test plugins/*/test/*.test.mjs`).
+
+Sessions written by an older harness are migrated when opened; the adapter opens every one of them once
+at start (a rename to its own title), so the list and `bbox agent show` say everything about them.
 
 ## On the office timeline (כל מקביל)
 
@@ -96,8 +140,10 @@ section once a minute.
   `reasoning_effort: "none"`. qwen3.5:2b on the Dell answered a sum in 1.5 s that way, and in
   273.5 s by default.
 
-**`עזריה · מקומי` (`presets/azaria-local`)** is installed into `$DSH_HOME/.agent-presets` once the
-office has a local route. It keeps a short persona, bash, the file tools and compaction.
+**`עזריה · מקומי` (`harness/profile/agent-presets/azaria-local/preset.patch.yml`)** is declared in the
+profile like the other presets (0.2.x has no user preset root to install it into; a preset pins no
+model, so it is harmless where no local route exists). It keeps a short persona, bash, the file tools
+and compaction.
 - Measured against a stub model on the Dell: a session on it sends 4.5k characters of messages and
   5 tools (6.7k characters). The full preset sends 67.7k characters and 26 tools (28.5k).
 - That is the difference between a few minutes and the better part of an hour, cold, on a laptop

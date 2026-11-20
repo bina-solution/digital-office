@@ -85,6 +85,7 @@ def stub(monkeypatch):
     monkeypatch.setenv("DRIVE_URL", s.url)
     monkeypatch.setenv("NOTIFICATIONS_URL", s.url)
     monkeypatch.setenv("ESIGN_BASE_URL", "http://esign.test")
+    monkeypatch.setenv("ESIGN_RENDER_URL", "")          # no documents renderer: the plain certificate page
     yield s
     s.stop()
 
@@ -236,6 +237,65 @@ def test_signing_produces_a_pades_pdf_copies_it_to_drive_and_notifies(cl, stub):
     pdf = cl.get("/api/envelopes/%s/download" % eid)
     assert pdf.status_code == 200 and pdf.data.startswith(b"%PDF")
     assert len(pdf.data) > len(tiny_pdf())
+
+
+class RendererStub:
+    """The office's documents renderer (apitools' POST /docGen/house): answers a one-page PDF, keeps what it got."""
+
+    def __init__(self):
+        self.docs = []
+        outer = self
+
+        class Handler(BaseHTTPRequestHandler):
+            def do_POST(self):
+                n = int(self.headers.get("Content-Length") or 0)
+                outer.docs.append((self.path, json.loads(self.rfile.read(n).decode("utf-8"))))
+                from reportlab.pdfgen import canvas
+                buf = io.BytesIO()
+                c = canvas.Canvas(buf)
+                c.drawString(72, 700, "HOUSE CERTIFICATE PAGE")
+                c.showPage()
+                c.save()
+                self.send_response(200)
+                self.send_header("content-type", "application/pdf")
+                self.end_headers()
+                self.wfile.write(buf.getvalue())
+
+            def log_message(self, *a):
+                pass
+
+        self.httpd = HTTPServer(("127.0.0.1", 0), Handler)
+        self.url = "http://127.0.0.1:%d" % self.httpd.server_port
+        threading.Thread(target=self.httpd.serve_forever, daemon=True).start()
+
+
+def test_the_certificate_is_drawn_in_the_house_style_when_the_renderer_answers(cl, monkeypatch):
+    """DGO-2029: the certificate is the office's own page — the documents renderer draws it from the envelope's
+    facts (the document, its fingerprint, the signer, every audit event); the plain page is only the fallback."""
+    r = RendererStub()
+    monkeypatch.setenv("ESIGN_RENDER_URL", r.url)
+    monkeypatch.setenv("ESIGN_OFFICE_NAME", "משרד בדיקה")    # the office's own key, made at its first signing
+    got = create(cl, password="סודה")
+    tok, eid = token_of(got["link"]), got["envelope"]["id"]
+    assert cl.post("/s/%s/unlock" % tok, data={"password": "סודה"}).status_code in (302, 303)
+    assert cl.post("/s/%s/sign" % tok, data={"name": "ישראל", "consent": "1"}).status_code == 200
+    path, doc = r.docs[0]
+    assert path.startswith("/docGen/house") and "format=pdf" in path
+    assert doc["doc_type"] == "SIGN_CERTIFICATE" and doc["doc_id"] == eid
+    cert = doc["certificate"]
+    assert cert["envelope"] == eid and cert["title"] == "הסכם דוגמה.pdf"
+    assert len(cert["sha_before"]) == 64
+    assert cert["signers"][0]["name"] == "ישראל" and "סיסמה" in cert["signers"][0]["method"]
+    # the certificate names the key that signs — this office's, in its name, never «BINA Solutions» (the third reader);
+    # a Hebrew name stands alone in it (a certificate's name may not mix Hebrew with Latin words)
+    assert cert["key_subject"] == "משרד בדיקה"
+    whats = [e["what"] for e in cert["events"]]
+    assert whats[0] == "המסמך הוכן לחתימה" and "הוזנה סיסמה — נכונה" in whats and whats[-1] == "נחתם"
+    import pypdfium2 as pdfium
+    pdf = cl.get("/api/envelopes/%s/download" % eid).data
+    doc_pdf = pdfium.PdfDocument(pdf)
+    assert len(doc_pdf) == 2                                    # the document, then the house certificate
+    assert "HOUSE CERTIFICATE PAGE" in doc_pdf[1].get_textpage().get_text_range()
 
 
 def test_signing_twice_is_refused(cl):

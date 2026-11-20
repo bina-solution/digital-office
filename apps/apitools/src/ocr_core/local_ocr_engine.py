@@ -717,7 +717,7 @@ def ocr_from_image(image: Image.Image, lang: str = DEFAULT_LANG) -> dict:
                     # ("| PO26000001" -> "PO26000001"); a Hebrew cell (no Latin/digit run)
                     # keeps its full read. PSM 3 gives the WHERE, the crop the accurate WHAT.
                     # clean OCR junk off the raw recovered id first: line removal leaves a
-                    # border "|" or a stray Hebrew letter / dot on a Latin id ("020000004ם.").
+                    # border "|" or a stray Hebrew letter / dot on a Latin id ("020000006ם.").
                     # Take the run carrying the most digits; Hebrew text (no Latin/digit run)
                     # is kept whole, and a short token isn't over-trimmed.
                     def _clean_run(txt):

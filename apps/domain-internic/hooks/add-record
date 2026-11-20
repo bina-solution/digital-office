@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-#: add-record <domain> <type> <name> <value> [--ttl N] [--consent "<who>: <why>"] — create one record through the InterNIC portal and read it back:  ./bbox domain-internic add-record digital-office.co.il A '*.exampleu' 93.184.216.11
+#: add-record <domain> <type> <name> <value> [--ttl N] [--consent "<who>: <why>"] — create one record through the InterNIC portal and read it back:  ./bbox domain-internic add-record digital-office.co.il A '*.exampleu' 93.184.216.10
 # Pipes the app's own CLI (apps/domain-internic/cli.py) into its container, or — on an office that does not
 # run it — into the credential plane's container, at the linked office's door (../where.sh).
 # Without --consent it runs only when the office has already seen this action succeed once (portal.verified);

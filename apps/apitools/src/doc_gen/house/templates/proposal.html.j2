@@ -1,0 +1,44 @@
+{# הצעה עסקית — the document that closes a deal: a cover, then the sections the data holds (the need, what we build,
+   the plan, the investment, the terms, the next steps), then the client's acceptance. #}
+{% extends "base.html.j2" %}
+{% import "_parts.html.j2" as p with context %}
+{% block body %}
+{{ p.cover(cover_kick, cover_title, cover_sub, cover_facts) }}
+<div class="narr">
+{{ p.runhead() }}
+{% for s in sections %}
+<div class="part">
+  {% if s.kicker %}<div class="kick-s">{{ s.kicker }}</div>{% endif %}
+  <div class="ph"><span class="no num">{{ '%02d' % loop.index }}</span><h2>{{ s.title }}</h2></div>
+  {% if s.lead %}<div class="lead">{{ s.lead }}</div>{% endif %}
+  {% if s.body %}<div class="body">{{ s.body }}</div>{% endif %}
+  {% if s.modules %}
+  <table class="mods">{% for row in s.modules | batch(2) %}<tr>{% for m in row %}<td><div class="mod"><div class="mt"><span class="i num">{{ m.n }}</span><span class="t">{{ m.title }}</span></div><div class="md">{{ m.body }}</div></div></td>{% endfor %}{% if row|length < 2 %}<td></td>{% endif %}</tr>{% endfor %}</table>
+  {% endif %}
+  {% if s.plan %}
+  <table class="plan">{% for r in s.plan %}<tr><td class="w">{{ r.when }}</td><td>{{ r.what }}</td><td class="o">{{ r.who }}</td></tr>{% endfor %}</table>
+  {% endif %}
+  {% if s.pricing %}
+    {% for g in groups %}<div class="pgroup">
+      {% if groups|length > 1 %}<div class="group-title"><span class="t">{{ g.title }}</span></div>{% endif %}
+      {{ p.lines_table(g.lines, prices=True, suffix=g.suffix) }}
+      <div class="close"><div class="side">{% if loop.last and s.price_note %}<div class="blk">{{ s.price_note }}</div>{% endif %}</div>
+        {{ p.totals_box(g.totals, k.total_label, suffix=g.suffix) }}</div>
+    </div>{% endfor %}
+  {% endif %}
+  {% if s.terms %}<ul class="bul terms body">{% for t in s.terms %}<li>{{ t }}</li>{% endfor %}</ul>{% endif %}
+  {% if s.callout %}<div class="callout">{{ s.callout }}</div>{% endif %}
+</div>
+{% endfor %}
+{% if sign_off %}
+<div class="lt-close" style="margin-top:8mm"><div>{{ sign_off.greeting or 'בברכה,' }}</div>
+  <div class="nm">{{ sign_off.name }}</div><div class="tt">{{ sign_off.title }}{% if sign_off.org %} · {{ sign_off.org }}{% endif %}</div></div>
+{% endif %}
+{% if k.acceptance %}
+{% if recap %}<div class="recap">{% for kk, vv, cap in recap %}<div class="rc"><div class="k">{{ kk }}</div><div class="v">{{ p.money(vv) }}</div>{% if cap %}<div class="c">{{ cap }}</div>{% endif %}</div>{% endfor %}</div>{% endif %}
+{{ p.accept_block('אישור ההצעה', 'הרינו מאשרים את ההצעה על תנאיה, ומבקשים להתחיל בעבודה. החתימה כאן היא גם אישור ההזמנה.') }}
+{% endif %}
+{% if k.note %}<div class="fine">{{ k.note }}{% if valid_until %} ההצעה בתוקף עד <span class="num">{{ valid_until }}</span>.{% endif %}</div>{% endif %}
+{{ p.endmark() }}
+</div>
+{% endblock %}

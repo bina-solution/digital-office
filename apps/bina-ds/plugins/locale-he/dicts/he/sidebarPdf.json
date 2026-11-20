@@ -1,11 +1,17 @@
 {
- "title": "PDF",
- "pageImage": "עמוד PDF {page}",
- "loading": "קורא…",
- "rendering": "מעבד עמוד…",
  "failed": "לא ניתן להציג את ה-PDF: {message}",
+ "loading": "מעבד את המסמך...",
+ "pageImage": "עמוד PDF {page}",
  "password": "ה-PDF הזה דורש סיסמה; תצוגה מקדימה של קבצים מוגני סיסמה לא נתמכת.",
- "workerFailed": "תהליך העיבוד של ה-PDF לא הצליח להמשיך. נסו שוב.",
+ "rendering": "מעבד עמוד…",
+ "retry": "ניסיון חוזר",
+ "title": "PDF",
  "unsupported": "תצוגה מקדימה של PDF דורשת את תוכן הקובץ המלא.",
- "retry": "ניסיון חוזר"
+ "workerFailed": "תהליך העיבוד של ה-PDF לא הצליח להמשיך. נסו שוב.",
+ "zoomControls": "פקדי זום",
+ "zoomFitWidth": "התאמה לרוחב",
+ "zoomIn": "הגדלה",
+ "zoomMenu": "בחירת זום",
+ "zoomOut": "הקטנה",
+ "zoomValue": "{percent}%"
 }

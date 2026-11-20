@@ -1,0 +1,14 @@
+{
+ "menu.copied": "Copied",
+ "menu.copyFailed": "Could not copy. Check that the content is available, then retry.",
+ "menu.copyImage": "Copy image",
+ "menu.download": "Download",
+ "menu.downloadStarted": "Download started",
+ "menu.downloaded": "Download complete",
+ "menu.finder": "Show in Finder",
+ "menu.reveal": "Show in folder",
+ "menu.saveAs": "Save as…",
+ "menu.saveFailed": "Could not save. Check the source and destination, then retry.",
+ "menu.saved": "Saved",
+ "path.revealError": "Could not show the file location. Try again."
+}

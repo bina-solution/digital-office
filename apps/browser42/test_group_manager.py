@@ -1147,7 +1147,7 @@ class GoogleLoginFlowTests(unittest.TestCase):
     names selectors, never the account or the password."""
 
     PASSWORD = "Zq9-THEREALPASSWORD-of-this-test"
-    ACCOUNT = "person7.x@example.com"
+    ACCOUNT = "person8.x@example.com"
 
     class Page:
         # where each stage of the sign-in is: the address page, the password page, «Choose an account», landed,

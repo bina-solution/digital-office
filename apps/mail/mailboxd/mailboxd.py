@@ -3,7 +3,7 @@
 
 Adding a mailbox is one line in `postfix-accounts.cf`:
 
-    person79@example.com|{SHA512-CRYPT}$6$…
+    person80@example.com|{SHA512-CRYPT}$6$…
 
 and that is the whole of "a new person in this company gets an address" — no DNS, no certificate,
 no restart, because the company's domain records already exist (ai/context/mail-multi-tenant.md).

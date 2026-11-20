@@ -216,7 +216,7 @@
       const lg = ['identity.logo.square', 'identity.logo.primary'].map((k) => by[k] && by[k].active).find((a) => a && a.thumb);
       const nm = ['identity.name.brand-he', 'identity.name.brand-en'].map((k) => by[k] && by[k].active).find(Boolean);
       host.innerHTML = `<div class="st">${lg ? `<img alt="לוגו" src="${esc(lg.thumb)}">` : stateBox('', 'award', 'אין עדיין לוגו', '')}</div>
-        <div class="bar"><span class="nm">${esc(nm ? nm.text : 'נכסים דיגיטליים')}</span></div>`;
+        <div class="bar"><span class="nm">${esc(nm ? nm.text : 'זהות')}</span></div>`;
       return;
     }
     const it = T.items[T.at % T.items.length];
