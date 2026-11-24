@@ -8,7 +8,7 @@
 #  * `security-sensor` — the eyes and hands on the MACHINE: the host's network namespace, exactly two
 #    capabilities (NET_ADMIN for its nftables table and the connection table, NET_RAW for the filtered
 #    sniffer), a read-only root, no published port and no listener at all. It talks to the app through
-#    one volume (`security_sensor`): the app writes what it wants enforced, the sensor writes what it
+#    one store (data/security/sensor, the volume `security_sensor` until DGO-2019): the app writes what it wants enforced, the sensor writes what it
 #    saw. Nothing on any network can reach it.
 #
 # What is mounted, and why only that:
@@ -19,7 +19,7 @@
 #    .generated/registry     which apps exist and which offices are linked (the compiled registry)
 # Not mounted: the host's root filesystem (what the machine app did — issues/sec-the-machine-app-
 # mounts-the-whole-host-filesystem.yaml). The disk the resource view shows is the partition this
-# app's own volume lives on.
+# app's own store lives on: the DGO folder's, or its volume's while the store's move waits.
 services:
   security:
     image: ghcr.io/bina-solution/digital-office/security:${IMAGE_TAG:-latest}
@@ -49,8 +49,10 @@ services:
       - SECURITY_DATA=/data
       - SECURITY_REGISTRY=/registry
     volumes:
-      - security_data:/data
-      - security_sensor:/sensor
+      # in the DGO folder's data/security/{data,sensor} (DGO-2019); they were the volumes security_data and
+      # security_sensor, moved once by `bbox run`
+      - ../../data/security/data:/data
+      - ../../data/security/sensor:/sensor
       - ${BBOX_DOCKER_SOCK:-/var/run/docker.sock}:/var/run/docker.sock:ro
       - ../../.generated/registry:/registry:ro
       - /etc/os-release:/host/os-release:ro
@@ -114,7 +116,7 @@ services:
       # one STUN question an hour: the office's public address, to place it on its own map ('' = never)
       - SECURITY_STUN=${SECURITY_STUN-stun.cloudflare.com:3478}
     volumes:
-      - security_sensor:/sensor
+      - ../../data/security/sensor:/sensor
       - /var/log:/host/log:ro
       - /root/.ssh:/host/ssh:ro
     healthcheck:
@@ -136,10 +138,6 @@ services:
       options:
         max-size: 5m
         max-file: '3'
-
-volumes:
-  security_data:
-  security_sensor:
 
 networks:
   traefik-network:

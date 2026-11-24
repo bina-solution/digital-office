@@ -159,9 +159,10 @@
     ],
     "on_uninstall": "prompt",
     "paths": [
-      "apps/apitools/storage",
-      "apps/apitools/logs"
+      "data/apitools/storage",
+      "data/apitools/logs"
     ],
+    "moved_from": {"data/apitools/storage": "path:apps/apitools/storage", "data/apitools/logs": "path:apps/apitools/logs"},
     "sql": [
       {
         "instance": "supabase-db",

@@ -92,7 +92,7 @@
       "port": 8985,
       "auth": "sso",
       "module": {
-        "group": "עסק",
+        "group": "ניהול העסק",
         "icon": "palette",
         "embed": true,
         "alias": "digital-assets",
@@ -121,9 +121,9 @@
     }
   },
   "data": {
-    "volumes": [
-      "digital_assets_state"
-    ],
+    "volumes": [],
+    "paths": ["data/digital-assets/state"],
+    "moved_from": {"data/digital-assets/state": "digital_assets_state"},
     "on_uninstall": "keep"
   },
   "resources": {

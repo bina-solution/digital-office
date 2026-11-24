@@ -31,6 +31,30 @@ const one = (n, single, many) => (Number(n) === 1 ? single : `${num(n)} ${many}`
 const STATE = { apps: [], counts: {}, project: "", tab: "installed", q: "", office: "", jobs: new Map(),
                 remote: null, loaded: false };
 
+/* A link may name ONE app: `<console>/go/apps?app=<id>` — the console hands `?app=<id>` to this frame — opens the
+   screen on that app: the search holds its id from the first paint, and the first list moves to its section (the
+   store when it is not installed), so its card and its own action («התקן», «פתח», «הפעל») are what the person sees.
+   Azaria offers Claude Desktop this way (DGO-2126). Once only, and a person's own click or search before the list
+   arrives wins (askedDone). An id this office does not know stays in the search, which shows there is no such app.
+   `app` then leaves this frame's address, so a reload of it does not filter it again (a route the console stored
+   before that, as the phone's open-apps sheet does, may still carry it once). */
+const ASKED_APP = (() => {
+  try {
+    const v = new URLSearchParams(location.search).get("app") || "";
+    return /^[a-z0-9][a-z0-9._-]{0,62}$/.test(v) ? v : "";
+  } catch { return ""; }
+})();
+if (ASKED_APP) STATE.q = ASKED_APP;
+let askedShown = !ASKED_APP;
+const askedOn = () => !!ASKED_APP && STATE.q === ASKED_APP;     // the link's filter is still what the screen shows
+function askedDone() {                                           // the person moved on: the link no longer decides
+  askedShown = true;
+  try {
+    const u = new URL(location.href);
+    if (u.searchParams.has("app")) { u.searchParams.delete("app"); history.replaceState(history.state, "", u.pathname + u.search + u.hash); }
+  } catch { /* not ours */ }
+}
+
 // The tile icons — a copy of platform-base/bina-ui/bina-icons.js (gate G27), the set the console's
 // rail draws from, so an app wears ONE icon on both screens. This screen had 18 glyphs of its own,
 // drawn differently, and showed a box for the 13 apps whose name it lacked.
@@ -414,7 +438,10 @@ function mountNav() {
       placeholder: "חיפוש אפליקציה…",
       filter: false,
       value: STATE.q,
-      onInput: (q) => { STATE.q = q; renderGrid(); },
+      onInput: (q) => {
+        askedDone(); STATE.q = q; renderGrid();
+        $("#installer").hidden = STATE.tab !== "store" || askedOn();   // the box comes back as the search leaves the link's app
+      },
     },
     sections: [{
       id: "tabs",
@@ -423,7 +450,12 @@ function mountNav() {
         id: t.id, icon: t.icon, label: t.label, badge: "", title: t.label,
         // Entering the cases re-reads them: "what is already here" is a fact about NOW, and a list
         // read once at boot would offer to install an app the person installed a minute ago.
-        onClick: () => { STATE.tab = t.id; if (t.id === "templates") loadTemplates(true).then(render).catch(() => {}); render(); },
+        onClick: () => {
+          // another section: a link's one-app filter would hide everything else there, so it goes (DGO-2126)
+          if (askedOn()) { STATE.q = ""; if (NAV) NAV.setSearch(""); }
+          askedDone();
+          STATE.tab = t.id; if (t.id === "templates") loadTemplates(true).then(render).catch(() => {}); render();
+        },
       })),
     }],
   });
@@ -854,7 +886,8 @@ function render() {
 
   // Install-by-reference belongs to the store, and only to the store: it is how the catalog grows
   // beyond what shipped in this repo. It is meaningless on "my apps" and forbidden on core.
-  $("#installer").hidden = STATE.tab !== "store";
+  // …and not above the one card a link asked for: on a phone it pushed that card's «התקן» below the fold (DGO-2126)
+  $("#installer").hidden = STATE.tab !== "store" || askedOn();
 
   const c = STATE.counts;
   const rem = REMOTE.apps.length;
@@ -1581,6 +1614,11 @@ async function load() {
   STATE.apps = d.apps; STATE.counts = d.counts || {}; STATE.project = d.project || "";
   STATE.loadError = null;
   STATE.loaded = true;
+  if (!askedShown) {                      // the app a link named: its section, once (ASKED_APP above)
+    const a = STATE.apps.find((x) => x.id === ASKED_APP);
+    if (a) STATE.tab = bucket(a);
+    askedDone();
+  }
   render();
   // the copies' facts never hold the list back: drawn when they come (the office computes them in the background)
   loadInstances().then(render).catch(() => {});

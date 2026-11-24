@@ -71,7 +71,7 @@
       "port": 8983,
       "auth": "sso",
       "module": {
-        "group": "תשתית",
+        "group": "ניהול הלשכה",
         "icon": "building",
         "embed": true,
         "alias": "dgo-extend",

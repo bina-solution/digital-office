@@ -1,0 +1,134 @@
+/* my-docs — «מילוי וחתימה» (DGO-2139): the office's editor of one signing link. Loaded after style.css, whose palette
+ * block it names (G27/G82: no colour of its own). The buttons are the screen's own family (.primary, .ghost, .sm); a
+ * side of the document has an identity hue only on its own boxes and dot, never as a state.
+ * A page's places are physical (a PDF has a left edge): fill-editor.js sets left/top from the data; layout is logical. */
+.fe-scrim{position:fixed;inset:0;z-index:80;background:var(--scrim);display:flex;align-items:center;justify-content:center;
+  --p1:var(--sky-d);--p2:var(--olive);--p3:var(--violet);--p4:var(--lime-d);
+  --p1-soft:var(--sky-soft);--p2-soft:var(--olive-soft);--p3-soft:var(--plum-soft);--p4-soft:var(--lime-soft)}
+.fe{width:min(1320px,100vw);height:min(94vh,100dvh);background:var(--surface);border-radius:14px;box-shadow:var(--shadow-lg);
+  display:flex;flex-direction:column;overflow:hidden;color:var(--ink)}
+.fe-ic{width:16px;height:16px;flex:none;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.fe-spin{width:16px;height:16px;border:2.5px solid currentColor;border-inline-end-color:transparent;border-radius:50%;
+  display:inline-block;animation:fe-spin .8s linear infinite;vertical-align:-3px;margin-inline-end:8px}
+@keyframes fe-spin{to{transform:rotate(360deg)}}
+.fe-load{margin:auto;display:flex;align-items:center;gap:10px;color:var(--muted);font-size:14px;padding:30px}
+.fe-load.bad{color:var(--plum-d)}
+.fe button .fe-ic,.fe a .fe-ic{margin-inline-end:6px;vertical-align:-3px}
+
+.fe-h{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 18px;border-bottom:1px solid var(--line)}
+.fe-h b{font-size:16px;font-weight:800;margin-inline-end:10px}
+.fe-h span{color:var(--muted);font-size:13px}
+.fe-b{flex:1;min-height:0;display:grid;grid-template-columns:400px 1fr}
+.fe-side{overflow:auto;padding:14px 16px 20px;border-inline-end:1px solid var(--line);background:var(--surface)}
+.fe-sec{font-size:12px;font-weight:700;color:var(--muted);margin:16px 0 8px;letter-spacing:.2px}
+.fe-found{display:flex;gap:9px;align-items:flex-start;background:var(--olive-soft);border:1px solid var(--olive-line);
+  border-radius:10px;padding:10px 12px;font-size:13px;line-height:1.5}
+.fe-found .fe-ic{color:var(--olive-d);margin-top:2px}
+
+.fe-party{border:1px solid var(--line);border-radius:12px;padding:10px 12px 12px;margin:0 0 10px;background:var(--surface)}
+.fe-party[data-p="1"]{--pc:var(--p1);--pcs:var(--p1-soft)}.fe-party[data-p="2"]{--pc:var(--p2);--pcs:var(--p2-soft)}
+.fe-party[data-p="3"]{--pc:var(--p3);--pcs:var(--p3-soft)}.fe-party[data-p="4"]{--pc:var(--p4);--pcs:var(--p4-soft)}
+.fe-ph{display:flex;align-items:center;gap:8px}
+.fe-party .dot,.fe-left .dot{width:10px;height:28px;border-radius:5px;background:var(--pc);flex:none}
+.fe-pname{flex:1;min-width:0;font:inherit;font-size:15px;font-weight:800;border:1px solid transparent;border-radius:7px;
+  padding:4px 6px;background:none;color:var(--ink)}
+.fe-pnote{width:100%;font:inherit;font-size:12.5px;color:var(--muted);border:1px solid transparent;border-radius:7px;padding:3px 6px;
+  margin:0 0 6px;background:none}
+.fe-pname:hover,.fe-pnote:hover,.fe-pname:focus,.fe-pnote:focus{border-color:var(--line);background:var(--surface-2);outline:none}
+.fe-iconbtn{background:none;border:0;color:var(--muted);padding:4px;border-radius:6px;cursor:pointer}
+.fe-iconbtn:hover{background:var(--surface-2);color:var(--plum-d)}
+.fe-iconbtn .fe-ic{margin:0}
+.fe-fields{list-style:none;margin:0;padding:0;display:grid;gap:4px}
+.fe-rowb{width:100%;display:grid;grid-template-columns:auto 1fr;grid-template-areas:"t q" "t w";gap:0 10px;text-align:start;
+  background:var(--surface-2);border:1px solid var(--line);border-radius:9px;padding:7px 10px;font:inherit;cursor:pointer;color:var(--ink)}
+.fe-rowb:hover{border-color:var(--pc)}
+.fe-row.on .fe-rowb{border-color:var(--pc);background:var(--pcs)}
+.fe-rowb .t{grid-area:t;align-self:center;font-size:11px;font-weight:700;color:var(--pc);background:var(--surface);
+  border:1px solid var(--pc);border-radius:999px;padding:1px 8px;white-space:nowrap}
+.fe-rowb .q{grid-area:q;font-size:13.5px;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.fe-rowb .w{grid-area:w;font-size:11.5px;color:var(--muted)}
+.fe-ed{border:1px solid var(--pc);border-top:0;border-radius:0 0 9px 9px;margin:-5px 0 4px;padding:12px 10px 10px;background:var(--surface)}
+.fe-ed label{display:block;font-size:12px;color:var(--muted);margin:0 0 9px}
+.fe-ed label .opt{color:var(--muted);font-weight:400}
+.fe-ed input,.fe-ed select,.fe-ed textarea,.fe-set input,.fe-set select{display:block;width:100%;margin-top:3px;font:inherit;font-size:13.5px;
+  color:var(--ink);background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:7px 9px}
+.fe-ed textarea{min-height:70px}
+.fe-two{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.fe-edfoot{display:flex;flex-wrap:wrap;align-items:center;gap:6px}
+.fe-req{display:flex !important;align-items:center;gap:6px;margin:0 !important;color:var(--ink) !important;font-size:13px !important;
+  margin-inline-end:auto !important}
+.fe-req input{width:auto;display:inline;margin:0}
+.fe-adds{display:flex;gap:6px;margin:8px 0 0;flex-wrap:wrap}
+.fe-code{display:flex;align-items:center;gap:7px;font-size:12.5px;color:var(--muted);margin:10px 0 0;cursor:pointer}
+.fe-code input,.fe-req input{width:auto;height:auto;margin:0;flex:none}
+.fe-mono{font-family:ui-monospace,Menlo,Consolas,monospace;direction:ltr;unicode-bidi:isolate;color:var(--ink);font-weight:700}
+.fe-addparty{width:100%}
+.fe-set{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.fe-set label{font-size:12px;color:var(--muted)}
+
+.fe-pages{overflow:auto;background:var(--surface-2);padding:18px;display:grid;gap:18px;align-content:start;position:relative}
+.fe-pages.placing .fe-page{cursor:crosshair}
+.fe-placing{position:sticky;top:0;z-index:3;display:flex;align-items:center;gap:8px;justify-content:center;font-size:13.5px;
+  font-weight:700;background:var(--sky-soft);color:var(--ink);border:1px solid var(--sky-line);border-radius:10px;padding:8px 12px}
+.fe-page{position:relative;width:min(100%,820px);margin:0 auto;background:var(--surface);box-shadow:var(--shadow);user-select:none}
+.fe-page img{display:block;width:100%;height:auto;pointer-events:none}
+.fe-pno{position:absolute;inset-block-end:8px;inset-inline-start:10px;font-size:11px;color:var(--muted);background:var(--surface);
+  border:1px solid var(--line);border-radius:999px;padding:0 8px}
+/* a place ON the page: the page is white paper in every theme — its marks are the hues' fills (no dark ground re-points
+   them) as a light wash and a line, its words paper's ink (a dark tint over the white page hid them) */
+.fe-box{position:absolute;border:2px solid var(--pf);background:color-mix(in srgb,var(--pf) 18%,transparent);border-radius:4px;
+  cursor:pointer;display:flex;align-items:center;justify-content:center;overflow:hidden;touch-action:none}
+.fe-box span{font-size:11px;font-weight:700;color:var(--lime-ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;padding:0 3px}
+.fe-box[data-p="1"]{--pf:var(--sky)}.fe-box[data-p="2"]{--pf:var(--olive)}
+.fe-box[data-p="3"]{--pf:var(--plum)}.fe-box[data-p="4"]{--pf:var(--lime)}
+.fe-box.on{border-width:2.5px;box-shadow:0 0 0 4px color-mix(in srgb,var(--pf) 30%,transparent);cursor:move;overflow:visible;z-index:2}
+.fe-grip{position:absolute;inset-block-end:-7px;inset-inline-start:-7px;width:14px;height:14px;border-radius:50%;background:var(--olive-ink);
+  border:2.5px solid var(--pf);cursor:nwse-resize}
+
+.fe-f{display:flex;align-items:center;justify-content:flex-end;gap:10px;padding:12px 18px;border-top:1px solid var(--line);background:var(--surface)}
+.fe-why{margin-inline-end:auto;font-size:13px;color:var(--lime-d);font-weight:600}
+.fe-f .primary{display:inline-flex;align-items:center}
+.fe-f .primary:disabled{opacity:.5;cursor:default}
+
+.fe-sent{max-width:620px;margin:0 auto;padding:30px 20px;overflow:auto;text-align:center}
+.fe-sent .ok{width:64px;height:64px;margin:0 auto 10px;border-radius:50%;background:var(--olive);color:var(--olive-ink);display:flex;
+  align-items:center;justify-content:center}
+.fe-sent .ok .fe-ic{width:32px;height:32px;stroke-width:3;margin:0}
+.fe-sent h2{font-size:20px;font-weight:800;margin:0 0 4px}
+.fe-sent p{color:var(--muted);margin:0 0 14px}
+.fe-linkbox{background:var(--surface-2);border:1px solid var(--line);border-radius:10px;padding:12px;font-family:ui-monospace,Menlo,Consolas,monospace;
+  font-size:13px;color:var(--sky-d);word-break:break-all;margin:0 0 12px;text-align:center}
+.fe-acts{display:flex;gap:8px;justify-content:center;flex-wrap:wrap;margin:0 0 16px}
+.fe-a{display:inline-flex;align-items:center;text-decoration:none;border-radius:8px}
+.fe-left{list-style:none;margin:0 0 14px;padding:0;display:grid;gap:8px;text-align:start}
+.fe-left li{display:flex;align-items:center;gap:10px;border:1px solid var(--line);border-radius:10px;padding:8px 12px}
+.fe-left li[data-p="1"]{--pc:var(--p1)}.fe-left li[data-p="2"]{--pc:var(--p2)}.fe-left li[data-p="3"]{--pc:var(--p3)}.fe-left li[data-p="4"]{--pc:var(--p4)}
+.fe-left b{margin-inline-end:auto}
+.fe-note{display:flex;gap:8px;align-items:flex-start;text-align:start;font-size:13px;background:var(--sky-soft);border:1px solid var(--sky-line);
+  border-radius:10px;padding:10px 12px;color:var(--ink) !important}
+
+/* the drawer: each event of the document and each side's state, above its trail */
+.fe-st:empty{display:none}
+.fe-st{margin-bottom:18px;padding-bottom:14px;border-bottom:1px solid var(--line);
+  --p1:var(--sky-d);--p2:var(--olive);--p3:var(--violet);--p4:var(--lime-d)}
+.fe-st h3{font-size:13px;color:var(--muted);margin:0 0 10px}
+.fe-st .fe-mut{font-size:12.5px;color:var(--muted);margin:0}
+.fe-ev+.fe-ev{margin-top:12px;padding-top:12px;border-top:1px dashed var(--line)}
+.fe-ev ul{list-style:none;margin:0;padding:0;display:grid;gap:7px}
+.fe-ev li{display:flex;align-items:center;gap:8px;font-size:12.5px}
+.fe-ev li[data-p="1"]{--pc:var(--p1)}.fe-ev li[data-p="2"]{--pc:var(--p2)}.fe-ev li[data-p="3"]{--pc:var(--p3)}.fe-ev li[data-p="4"]{--pc:var(--p4)}
+.fe-ev .dot{width:8px;height:18px;border-radius:4px;background:var(--pc);flex:none}
+.fe-ev b{margin-inline-end:auto}
+.fe-ev .chip{font-size:10.5px;padding:2px 8px}
+.fe-evacts{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin-top:8px}
+.fe-evacts .fe-mut{flex-basis:100%}                                   /* what happened, on its own line */
+.fe-evacts .sm{height:26px;padding:4px 9px;font-size:12px;text-decoration:none;white-space:nowrap}
+
+@media (max-width:900px){
+  .fe{width:100vw;height:100dvh;border-radius:0}
+  .fe-b{display:block;overflow:auto}
+  .fe-side{border-inline-end:0;border-bottom:1px solid var(--line)}
+  .fe-pages{overflow:visible;padding:12px}
+  .fe-f{position:sticky;bottom:0}
+  .fe-f .ghost{display:none}
+}

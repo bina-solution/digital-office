@@ -21,6 +21,8 @@ import re
 import secrets
 import shutil
 import tempfile
+import threading
+import urllib.parse
 from datetime import datetime
 from functools import wraps
 
@@ -29,9 +31,12 @@ from flask import (Flask, Response, abort, current_app, make_response, redirect,
 
 import clients
 import pdfsign
-from store import Store, iso, sha256_bytes, utcnow
+from store import KINDS, Store, iso, sha256_bytes, utcnow
 
 APP_ID = "esign"
+#: one replacement of a view link's file at a time reads the file it replaces and writes the new one (esign is one
+#: process): each then removes exactly the file it replaced, and none is left behind (the second reader of DGO-2047)
+_FILE_SWAP = threading.Lock()
 MAX_UPLOAD = int(os.environ.get("ESIGN_MAX_UPLOAD", str(40 * 1024 * 1024)))
 PUBLIC_PREFIX = "/s/"
 
@@ -48,6 +53,9 @@ def create_app(*, data_dir: str | None = None, store: Store | None = None, clock
     app.config["STORE"] = store or Store(os.environ.get("ESIGN_DB", os.path.join(data, "esign.db")),
                                          clock=clock or utcnow)
     app.config["CLOCK"] = clock or utcnow
+    # the office's own name on the signer's pages, as on its signing key (ESIGN_OFFICE_NAME, DGO-2125): the pages
+    # said «בינה סלושנס», misspelled, on every office
+    app.context_processor(lambda: {"office_name": os.environ.get("ESIGN_OFFICE_NAME", "").strip()})
     key_file = os.path.join(data, "secret-key")
     if os.environ.get("ESIGN_SECRET_KEY"):
         app.secret_key = os.environ["ESIGN_SECRET_KEY"]
@@ -72,14 +80,22 @@ def now() -> datetime:
     return current_app.config["CLOCK"]()
 
 
-# The console's own screen for this app: a link RELATIVE to the console that shows it, the house form
+# The console's screen for a signature: a link RELATIVE to the console that shows it, the house form
 # (dgo-extend, machine) — never a host guessed here (G95: a loopback console in a link opens nothing on
-# any office but this one, and nothing at all from a phone).
-CONSOLE_LINK = "/#/m/esign/"
+# any office but this one, and nothing at all from a phone). Since this app's tile left the home it is
+# «חתימות» inside «מסמכים», or the document itself when the signature is of one (DGO-2169, the owner: «זה
+# לא אמור להיות אפלקציה נפרדת זה הכל פיצר מובנה של מסמכים»); its own /#/m/esign/ opens nothing now.
+CONSOLE_LINK = "/#/m/my-docs/signatures"
+
+
+def console_link(ref: str | None = None) -> str:
+    """Where a notice about one signature opens: its document in «מסמכים», or «חתימות» there."""
+    return "/#/m/my-docs/doc/" + urllib.parse.quote(str(ref), safe="") if ref else CONSOLE_LINK
 
 
 def public_base() -> str:
-    return os.environ.get("ESIGN_BASE_URL", "http://esign.localhost:8080").rstrip("/")
+    """The address a signer's link is minted on: the published one when there is one (DGO-2125), clients.public_base."""
+    return clients.public_base()
 
 
 def link_for(token: str) -> str:
@@ -126,6 +142,7 @@ EVENT_WORDS = {
     "envelope.relinked": "הקישור הונפק מחדש", "envelope.opened": "המסמך נפתח",
     "envelope.unlock": "הוזנה סיסמה", "envelope.consent": "החותם הסכים לחתום אלקטרונית",
     "envelope.sign_failed": "ניסיון חתימה נכשל", "envelope.cancelled": "המעטפה בוטלה",
+    "envelope.updated": "המסמך עודכן",
 }
 
 
@@ -202,7 +219,7 @@ def sign_envelope(env: dict, *, typed_name: str, ip: str = "", ua: str = "") -> 
         "חתימת השרשרת: %s" % (last or ""),
     ]
     # the key first: the certificate names whose key signs (DGO-2029, the third reader)
-    office = os.environ.get("ESIGN_OFFICE_NAME", "")
+    office = os.environ.get("ESIGN_OFFICE_NAME", "").strip()
     key_pem, cert_pem = pdfsign.load_or_create_cert(
         data_dir, os.environ.get("ESIGN_CERT_P12", ""), os.environ.get("ESIGN_CERT_PASS", ""), office=office)
     # the certificate in the office's house style (the documents renderer, DGO-2029); the plain page when
@@ -269,7 +286,7 @@ def sign_envelope(env: dict, *, typed_name: str, ip: str = "", ua: str = "") -> 
     st.set(env["id"], notice_state="ok" if notice["ok"] else "pending:%s" % (notice["detail"] or
                                                                              notice["status"]))
     flow("envelope.signed", "%s נחתם בידי %s" % (env["doc_name"], typed_name),
-         link=CONSOLE_LINK,
+         link=console_link(env.get("ref")),
          data={"envelope": env["id"], "drive_path": st.get(env["id"])["drive_path"]})
     return {"envelope": st.get(env["id"]), "pades": checks, "drive": put, "notice": notice}
 
@@ -280,7 +297,7 @@ def notify_signed(env: dict) -> dict:
     return clients.notify(cfg["notifications_url"], source_id="esign-%s" % env["id"],
                           title=title,
                           body="העותק החתום נשמר ב«קבצים»: %s" % (env.get("drive_path") or "—"),
-                          link=CONSOLE_LINK, level="info",
+                          link=console_link(env.get("ref")), level="info",
                           actions=[{"id": "open", "label": "פתח את המסמך",
                                     "op": "esign.open", "args": {"envelope": env["id"]}}])
 
@@ -309,7 +326,8 @@ def routes(app: Flask) -> Flask:
     @_gated
     def api_list():
         limit = int(request.args.get("limit", 100))
-        rows = [public_row(r) for r in store().list(limit)]
+        # `ref`: the envelopes one source document went out in (my-docs asks by its ledger id, DGO-2047)
+        rows = [public_row(r) for r in store().list(limit, ref=(request.args.get("ref") or None))]
         return ok("list", items=rows, count=len(rows))
 
     @app.post("/api/envelopes")
@@ -322,8 +340,11 @@ def routes(app: Flask) -> Flask:
         if not raw.startswith(b"%PDF"):
             return err("create", "the file is not a PDF", 415)
         form = request.form
+        kind = (form.get("kind") or "sign").strip()
+        if kind not in KINDS:
+            return err("create", "kind must be sign or view", 400)
         signer = (form.get("signer") or "").strip()
-        if not signer:
+        if not signer and kind == "sign":
             return err("create", "no signer name", 400)
         eid_dir = tempfile.mkdtemp(prefix="esign-upload-")
         doc_path = os.path.join(current_app.config["DATA_DIR"], "docs", "%s.pdf" % secrets.token_hex(8))
@@ -341,14 +362,49 @@ def routes(app: Flask) -> Flask:
                              signer_name=signer, sender=form.get("sender") or "הלשכה",
                              days=int(form.get("days") or 14), page=int(form.get("page") or 1),
                              box=box, password=(form.get("password") or None),
-                             signer_email=(form.get("email") or ""))
+                             signer_email=(form.get("email") or ""), kind=kind,
+                             ref=(form.get("ref") or "").strip()[:200] or None)
         store().set(env["id"], status="sent")
         event(env["id"], "envelope.created",
               {"doc_name": env["doc_name"], "signer": signer, "sha256": env["doc_sha256"],
-               "password": bool(form.get("password")), "days": int(form.get("days") or 14)})
-        flow("envelope.created", "מסמך מוכן לחתימה: %s" % env["doc_name"],
-             data={"envelope": env["id"]})
+               "password": bool(form.get("password")), "days": int(form.get("days") or 14), "kind": kind})
+        flow("envelope.created", ("מסמך שותף לצפייה: %s" if kind == "view" else "מסמך מוכן לחתימה: %s")
+             % env["doc_name"], data={"envelope": env["id"]})
         return ok("create", envelope=public_row(store().get(env["id"])), link=link_for(env["token"]))
+
+    @app.put("/api/envelopes/<eid>/file")
+    @_gated
+    def api_replace_file(eid: str):
+        """A view link follows its document: while the link is open, the file behind it is replaced, and the
+        audit trail says when and with what fingerprint. A document sent to be SIGNED never changes under its
+        signer — that is a new envelope (DGO-2047)."""
+        env = store().get(eid)
+        if not env:
+            return err("file", "no such envelope", 404)
+        if (env.get("kind") or "sign") != "view":
+            return err("file", "a document out for signature is not replaced — send a new envelope", 409)
+        if env["status"] == "cancelled":
+            return err("file", "the link is closed", 409)
+        up = request.files.get("file")
+        raw = up.read() if up is not None else b""
+        if not raw.startswith(b"%PDF"):
+            return err("file", "the file is not a PDF", 415)
+        doc_path = os.path.join(current_app.config["DATA_DIR"], "docs", "%s.pdf" % secrets.token_hex(8))
+        with open(doc_path, "wb") as fh:
+            fh.write(raw)
+        fields = {"doc_path": doc_path, "doc_sha256": sha256_bytes(raw), "doc_size": len(raw)}
+        if request.form.get("name"):
+            fields["doc_name"] = request.form["name"]
+        with _FILE_SWAP:
+            old = (store().get(eid) or env).get("doc_path")          # the file THIS write replaces, read under the lock
+            store().set(eid, **fields)
+        event(eid, "envelope.updated", {"sha256": fields["doc_sha256"], "size": len(raw)})
+        if old and old != doc_path:
+            try:
+                os.remove(old)
+            except FileNotFoundError:
+                pass                                                # (a request reading it may hold it: done all the same)
+        return ok("file", envelope=public_row(store().get(eid)))
 
     @app.post("/api/envelopes/<eid>/send")
     @_gated
@@ -448,10 +504,14 @@ def routes(app: Flask) -> Flask:
             # a signed envelope has nothing left to sign: opening the link again shows the receipt and
             # MUST NOT move the row back to a state a signature can be claimed from
             return redirect(url_for("signer_done", token=token))
+        view = _is_view(env)
         if _needs_unlock(env) and not _unlocked(env):
-            return render_template("signer.html", env=env, mode="password", error="")
+            return render_template("viewer.html" if view else "signer.html", env=env, mode="password", error="")
         event(env["id"], "envelope.opened", {"ip": _ip(), "ua": _ua()})
         store().set(env["id"], status="opened", opened_at=iso(now()), opened_ip=_ip(), opened_ua=_ua())
+        if view:
+            flow("envelope.opened", "%s נפתח לצפייה" % env["doc_name"], data={"envelope": env["id"]})
+            return render_template("viewer.html", env=env, mode="view", error="")
         flow("envelope.opened", "%s נפתח על ידי %s" % (env["doc_name"], env["signer_name"]),
              data={"envelope": env["id"]})
         return render_template("signer.html", env=env, mode="sign", error="")
@@ -466,10 +526,11 @@ def routes(app: Flask) -> Flask:
         if verdict == "ok":
             session["unlocked"] = token
             return redirect(url_for("signer_page", token=token))
+        page = "viewer.html" if _is_view(env) else "signer.html"
         if verdict == "locked":
-            return render_template("signer.html", env=env, mode="password",
+            return render_template(page, env=env, mode="password",
                                    error="יותר מדי ניסיונות. נסו שוב בעוד %d דקות." % 15), 429
-        return render_template("signer.html", env=env, mode="password",
+        return render_template(page, env=env, mode="password",
                                error="הסיסמה אינה נכונה."), 403
 
     @app.get(PUBLIC_PREFIX + "<token>/doc")
@@ -479,11 +540,28 @@ def routes(app: Flask) -> Flask:
             return _public_sentence(state), (410 if state == "expired" else 404)
         if _needs_unlock(env) and not _unlocked(env):
             return _public_sentence("locked"), 403
-        resp = send_file(env["doc_path"], mimetype="application/pdf",
-                         download_name=env["doc_name"], as_attachment=False)
+        # a view link's file is replaced while it is open: the one this request looked up may be gone a moment
+        # later. The link is read again, once — its state checked again with it — and its new file is the answer
+        # (the second reader of DGO-2047). The open itself is what is guarded: a check before it leaves a window
+        resp = None
+        for again in (False, True):
+            if again:
+                env, state = _public_env(token)
+                if state != "ok":
+                    return _public_sentence(state), (410 if state == "expired" else 404)
+            try:
+                resp = send_file(env["doc_path"], mimetype="application/pdf",
+                                 download_name=env["doc_name"], as_attachment=False)
+                break
+            except FileNotFoundError:
+                continue
+        if resp is None:
+            return _public_sentence("missing"), 404
         resp.headers["Cache-Control"] = "no-store"
-        resp.headers["Content-Disposition"] = "inline; filename*=UTF-8''%s" % \
-            __import__("urllib.parse", fromlist=["quote"]).quote(env["doc_name"])
+        # `?dl=1`: the same bytes as a file to keep — the view page's «הורדה» (DGO-2047)
+        resp.headers["Content-Disposition"] = "%s; filename*=UTF-8''%s" % (
+            "attachment" if request.args.get("dl") else "inline",
+            __import__("urllib.parse", fromlist=["quote"]).quote(env["doc_name"]))
         return resp
 
     @app.post(PUBLIC_PREFIX + "<token>/sign")
@@ -491,6 +569,9 @@ def routes(app: Flask) -> Flask:
         env, state = _public_env(token)
         if state != "ok":
             return _public_sentence(state), (410 if state == "expired" else 404)
+        if _is_view(env):
+            # a link to look at a document signs nothing: no form posts here, and none is believed (DGO-2047)
+            return _public_sentence("missing"), 404
         if env["status"] == "signed":
             # signing twice is a second envelope, never a second signature on this one
             return render_template("done.html", env=env, pades={}), 409
@@ -519,7 +600,7 @@ def routes(app: Flask) -> Flask:
         env, state = _public_env(token)
         if not env:
             return _public_sentence("expired"), 404
-        if env["status"] != "signed":
+        if env["status"] != "signed" or _is_view(env):
             return redirect(url_for("signer_page", token=token))
         return render_template("done.html", env=env, pades={})
 
@@ -530,10 +611,16 @@ def routes(app: Flask) -> Flask:
 def public_row(env: dict) -> dict:
     keep = ("id", "status", "doc_name", "signer_name", "sender", "created_at", "expires_at",
             "opened_at", "signed_at", "doc_sha256", "signed_sha256", "drive_path", "drive_state",
-            "notice_state", "page", "box", "doc_size")
+            "notice_state", "page", "box", "doc_size", "kind", "ref")
     row = {k: env.get(k) for k in keep}
+    row["kind"] = row["kind"] or "sign"
+    row["password"] = bool(env.get("pw_hash"))   # whether the link asks one — never the hash
     row["link"] = None            # a link is minted where it is needed, never served from a listing
     return row
+
+
+def _is_view(env: dict) -> bool:
+    return (env.get("kind") or "sign") == "view"
 
 
 def _public_env(token: str) -> tuple[dict | None, str]:
@@ -579,7 +666,8 @@ def _public_sentence(kind: str) -> Response:
 
 
 def build() -> Flask:
-    return routes(create_app())
+    import fill                       # «מילוי וחתימה» (DGO-2139): one link for every party, beside the envelopes
+    return fill.routes(routes(create_app()))
 
 
 app = None

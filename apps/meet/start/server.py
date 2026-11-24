@@ -50,8 +50,9 @@ it answers only the containers MEET_MACHINE_PEERS names (n8n's):
 2026-10-26), answered only to that container (MEET_RECORDER_PEERS) with the secret both hold
 (MEET_RECORDER_WATCH_SECRET): the two things it cannot reach from meet-net itself.
 
-    POST /api/recorder/health            {state: degraded|ok, title, body, session, room} → one
-                                         notification per recording in the office's notice centre
+    POST /api/recorder/health            {state: degraded|ok|ended, title, body, session, room} → one
+                                         notification per recording in the office's notice centre («ok» is
+                                         written resolved: the row closes; «ended» is a real loss, a warning)
                                          (MEET_NOTIFY_URL, source meet-recorder), updated as it goes
     POST /api/recorder/captions?language=auto|he|en   a 30-s WAV → the office's transcriber
                                          (MEET_SPEECH_URL /transcribe, synchronous for short audio;
@@ -1771,7 +1772,9 @@ class MachineDoor(Door):
             "body": str(doc.get("body") or "")[:2000],
             "level": "info" if state == "ok" else "warning",
             "link": f"{CONSOLE_URL}/a/meet/recordings" if CONSOLE_URL else "",
-            "meta": {"state": state, "room": doc.get("room"), "session": doc.get("session")},
+            # the recorder's «ok» (back at full speed, or ended whole) ENDS the row's episode: the board reads it
+            # (`resolved`, DGO-2111); «degraded» and «ended» (a real loss) stay news
+            "meta": {"state": "resolved" if state == "ok" else state, "room": doc.get("room"), "session": doc.get("session")},
         }, ensure_ascii=False).encode("utf-8")
         req = urllib.request.Request(NOTIFY_URL + "/api/notifications", data=payload, method="POST",
                                      headers={"Content-Type": "application/json"})
@@ -2217,10 +2220,11 @@ def watch_meetings() -> None:
 # ── the recordings into «קבצים» (the office's Files): /פגישות/<date> · <room>/ ─────────────────────────────
 # The owner (2026-10-28): Meet's recordings belong in Drive, under «פגישות» — the office's one place for
 # files, where every agent reads them. A finished recording (its video, and the sound finalize.sh writes)
-# is copied there once. Drive is asked first whether a file is there already, so nothing is kept here and
-# a restart copies nothing twice. Only what recordings() lists — never flow/ or flows/ — and only meetings
-# that STARTED from MEET_DRIVE_SINCE on (the file's stamp): the older ones are tests and repair copies,
-# and which of them belong in Drive is decided by whoever repaired them. Streamed from the volume in 4 MB
+# is copied there once. Drive is asked whether a file is there already — once a day per file, the answer
+# kept in memory (to_drive) — so a restart copies nothing twice. Only what recordings() lists — never flow/
+# or flows/ — and only meetings that STARTED from MEET_DRIVE_SINCE on (the file's stamp): the older ones
+# are tests and repair copies, and which of them belong in Drive is decided by whoever repaired them.
+# Streamed from the volume in 4 MB
 # pieces (this container has 48 MB and a tenth of a core), one file at a time. A Drive that is not
 # installed or not answering is asked again ten minutes later; the meetings never wait for it.
 DRIVE_URL = os.environ.get("MEET_DRIVE_URL", "http://drive:8975").strip().rstrip("/")
@@ -2315,7 +2319,12 @@ def to_drive() -> None:
     # (drive's ceiling there is 50 MB) failed every ten minutes since 5.11, and with it exu101's own 27 MB sound and
     # every meeting listed after it. The mark is kept in memory for a day, then asked again (a raised ceiling is
     # found without a restart); after a restart it is asked once more, and said once more.
-    marked, quiet_until, too_big = False, 0.0, {}
+    # A file the drive HAS (it answered for it, or took it) is asked about again only a day later (the owner
+    # 2026-11-22: «אין סוף קריאות מיותרות בקבצים»): every pass asked «קבצים» twice for each recording since
+    # DRIVE_SINCE, every minute for good — 198 `/api/fs` in 15 minutes on Exampleu. Once a day still puts back what the
+    # drive lost while this ran (a drive recreated on a fresh volume, restored from an older backup, its engine
+    # switched, a copy deleted on purpose): within a day, as the day mark of too_big. The disk is asked before the drive.
+    marked, quiet_until, too_big, held = False, 0.0, {}, {}
     while True:
         try:
             if time.time() >= quiet_until:
@@ -2332,13 +2341,16 @@ def to_drive() -> None:
                     folder = f"/{DRIVE_FOLDER}/{r['started'][:10]} · {r['room']}"
                     for name, mime in ((r["file"], "video/mp4"), (r["audio"], "audio/ogg")):
                         key = (r["session"], name)
-                        if not name or time.monotonic() - too_big.get(key, -1e12) < 86400 or _in_drive(f"{folder}/{name}"):
+                        if not name or any(time.monotonic() - m.get(key, -1e12) < 86400 for m in (held, too_big)):
                             continue
                         try:                              # an empty file has nothing to copy, and its upload would
                             if os.path.getsize(os.path.join(RECORDINGS, r["session"], name)) == 0:   # never finish:
                                 continue                  # 20 minutes of every pass, behind it, for good
                         except OSError:
                             continue                      # gone between the listing and now: the next pass sees
+                        if _in_drive(f"{folder}/{name}"):
+                            held[key] = time.monotonic()
+                            continue
                         try:                              # any other failure: the whole pass waits, as before
                             _to_drive_one(os.path.join(RECORDINGS, r["session"], name), folder, name, mime)
                         except TooBig as e:
@@ -2346,6 +2358,7 @@ def to_drive() -> None:
                             print(f"meet-start: {r['session']}/{name} ({e.size // 2 ** 20} MB) is more than «קבצים» "
                                   "takes — not copied; the other recordings go on (asked again in a day)", flush=True)
                             continue
+                        held[key] = time.monotonic()
                         print(f"meet-start: copied {r['session']}/{name} into «קבצים» {folder}", flush=True)
         except Exception as e:                                       # noqa: BLE001 — the copier never dies
             print(f"meet-start: copying the recordings into «קבצים»: {e}", flush=True)
@@ -2673,8 +2686,9 @@ def meta_put(room: str, name: str, text: str) -> None:
     elif kind == "drive":
         path = f"{drive_folder(room, create=True)}/.meet-flow/{name}"
         ctype = "application/json" if name.endswith(".json") else "text/plain; charset=utf-8"
-        _drive_json("PUT", f"/api/fs/content?path={quote(path)}&mode=replace", data=text.encode("utf-8"),
-                    headers={"Content-Type": ctype}, timeout=60)
+        # an empty text is a file emptied on purpose: the drive refuses an empty body unless asked (DGO-2042)
+        _drive_json("PUT", f"/api/fs/content?path={quote(path)}&mode=replace" + ("" if text else "&empty=1"),
+                    data=text.encode("utf-8"), headers={"Content-Type": ctype}, timeout=60)
     else:
         raise store_down("this door has no store")
     _meta_cache[(room, name)] = (time.time(), text)
@@ -4094,8 +4108,9 @@ def folder_put(room: str, name: str, text: str, ctype: str) -> None:
                 raise store_down(e) from e
     elif kind == "drive":
         path = f"{drive_folder(room, create=True)}/{name}"
-        _drive_json("PUT", f"/api/fs/content?path={quote(path)}&mode=replace", data=text.encode("utf-8"),
-                    headers={"Content-Type": ctype}, timeout=60)
+        # an empty text is a file emptied on purpose: the drive refuses an empty body unless asked (DGO-2042)
+        _drive_json("PUT", f"/api/fs/content?path={quote(path)}&mode=replace" + ("" if text else "&empty=1"),
+                    data=text.encode("utf-8"), headers={"Content-Type": ctype}, timeout=60)
     else:
         raise store_down("this door has no store")
 

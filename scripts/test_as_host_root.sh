@@ -79,9 +79,12 @@ dell; SUDO=ok; AS_ROOT_ENV=AA_PULL; setup; rc="$(run touch marker-sudo)"
 [ "${rc}" = 0 ] && ran "^sudo -n env AA_PULL=1 touch marker-sudo" && [ -e "${TMP}/marker-sudo" ] && ! ran "^docker run" \
   && ok "passwordless sudo: through sudo, AS_ROOT_ENV carried" || no "passwordless sudo (rc ${rc}; $(cat "${LOG}"))"
 
-# 3. the Dell: through the engine, nsenter into PID 1, in THIS directory, every argument exactly
-dell; AS_ROOT_ENV=AA_PULL; setup; rc="$(run touch "a b" "c'd" '$(x)' "-n")"
-names="$(cd "${TMP}" && ls -A | tr '\n' '|')"
+# 3. the Dell: through the engine, nsenter into PID 1, in THIS directory, every argument exactly. `touch --`: GNU's
+# touch reads an option anywhere on its line, so on Linux «-n» was its option (and refused) before it was a file —
+# found when the CI runner first ran this suite (batch 112, DGO-2123); BSD's touch stops at the first file name. And the
+# names in C order: GNU's ls sorts by the locale, which sets «-n» after «c'd»
+dell; AS_ROOT_ENV=AA_PULL; setup; rc="$(run touch -- "a b" "c'd" '$(x)' "-n")"
+names="$(cd "${TMP}" && LC_ALL=C ls -A | tr '\n' '|')"
 [ "${rc}" = 0 ] && [ "${names}" = '$(x)|-n|a b|c'"'"'d|' ] && ok "the engine's way: in this directory (its name ends in a space), each argument exactly" \
   || no "the engine's way (rc ${rc}; files «${names}»; $(cat "${BASE}/out"))"
 line="$(grep '^docker run' "${LOG}")"

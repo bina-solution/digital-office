@@ -29,8 +29,9 @@ services:
       - REDIS_PASSWORD=${REDIS_PASSWORD:-}
       - TZ=${TZ:-Asia/Jerusalem}
     volumes:
-      # the articles and the runs. Losing it loses the feed, not the sources — they are declared in main.py.
-      - newsflow_data:/data
+      # the articles and the runs (newsflow.db). Losing it loses the feed, not the sources — they are declared in main.py.
+      # In the DGO folder's data/newsflow/state (DGO-2019); it was the volume newsflow_data, moved once by `bbox run`.
+      - ../../data/newsflow/state:/data
     networks:
       - traefik-network
     healthcheck:
@@ -56,9 +57,6 @@ services:
       options:
         max-size: 5m
         max-file: '3'
-
-volumes:
-  newsflow_data:
 
 networks:
   traefik-network:

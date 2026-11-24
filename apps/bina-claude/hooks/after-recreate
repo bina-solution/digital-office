@@ -1,0 +1,52 @@
+#!/usr/bin/env bash
+#: after-recreate — the sessions a recreate cut, resumed with one message each (DGO-2129):  run by the office, not by hand
+# Run by the office after a command that recreated or restarted this copy (lib.sh compose_when_idle_up, which names in
+# DGO_RECREATE_SERVICES the services whose container changed). Only a new DESKTOP cuts anything: the adapter's restart
+# leaves the sessions running. It waits for the app to be up and signed in (its adapter's /v1/health), then sends each
+# session before-recreate found at work one message through the office's own door (`bbox agent`), once, and says whom
+# it reached. A copy that comes back signed out cannot be resumed: that is said, with the backup of the moment before
+# (DGO-2016). The list is in the copy's own home (/config/.dgo-recreate/at-work), so the new container reads it.
+set -uo pipefail
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
+. "${REPO_ROOT}/scripts/lib.sh" || { echo "scripts/lib.sh cannot be read: nobody was resumed"; exit 1; }
+case "${1:-}" in -h|--help) sed -n 's/^#: //p' "${BASH_SOURCE[0]}"; exit 0 ;; esac
+DN="$(read_env_value DEPLOYMENT_NAME)"; DN="${DN:-bina-deployment}"
+APP="${DGO_INSTANCE_ID:-bina-claude}"; DESK="${APP}-desktop-${DN}"
+case " ${DGO_RECREATE_SERVICES:-${APP}-desktop} " in *" ${APP}-desktop "*) ;; *) exit 0 ;; esac
+ids=""; signed=""
+for _ in $(seq 1 60); do                            # up to five minutes for the app to start and sign itself in
+  # the new desktop as compose labels it in this office's project, whatever its name (as hooks/busy finds it)
+  d="$(docker ps --filter "label=com.docker.compose.project=$(office_project)" \
+    --filter "label=com.docker.compose.service=${APP}-desktop" --format '{{.Names}}' 2>/dev/null | head -1)"
+  [ -z "${d}" ] || DESK="${d}"
+  [ -n "${ids}" ] || ids="$(docker exec -u 0 "${DESK}" cat /config/.dgo-recreate/at-work 2>/dev/null)" || ids=""
+  [ -n "${ids}" ] || { docker exec "${DESK}" true >/dev/null 2>&1 && break; sleep 5; continue; }   # read, and empty
+  signed="$(docker exec "${APP}-${DN}" node -e '
+    fetch("http://127.0.0.1:3091/v1/health").then((r) => r.json())
+      .then((j) => console.log(j.login && j.login.logged_in ? "in" : "out")).catch(() => console.log(""));' 2>/dev/null)"
+  [ "${signed}" = in ] && break
+  sleep 5
+done
+n="$(grep -c . <<<"${ids}")"
+[ "${n}" -gt 0 ] || { echo "${APP}: no session was at work, nothing to resume"; exit 0; }
+if [ "${signed}" != in ]; then
+  echo "${APP} was recreated and is ${signed:+signed out}${signed:-not answering} after five minutes: the ${n} session(s) at work were not resumed. The keyring and config of the moment before are in ${DESK}:/config/.dgo-recreate"
+  exit 1
+fi
+at="$(date -u '+%F %T UTC')"
+msg="The office's Claude Desktop was recreated by an update at ${at} (DGO-2129). What you had running was cut: your turn, or a background job or watcher you were waiting on. Continue where you stopped: re-read your notes and your work item first, and start again what you were waiting for."
+ok=0; bad=""
+while IFS= read -r id; do
+  [ -n "${id}" ] || continue
+  # once, never again: a send that timed out has still delivered (the office's own memory: agent-send-timeout). A
+  # minute each, so a dozen sessions fit in the office's cap on this hook (lib.sh: 30 minutes).
+  if printf '%s' "${msg}" | timeout -k 5 60 bash "${REPO_ROOT}/bbox" agent --app "${APP}" send "${id}" - >/dev/null 2>&1; then
+    ok=$((ok + 1))
+  else
+    bad="${bad}${bad:+ }${id}"
+  fi
+done <<<"${ids}"
+docker exec -u 0 "${DESK}" sh -c ': > /config/.dgo-recreate/at-work' 2>/dev/null || true   # resumed once
+echo "${APP}: resumed ${ok} of ${n} session(s)${bad:+; not answered (it may still have reached them): ${bad}}"
+[ -z "${bad}" ]

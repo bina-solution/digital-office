@@ -186,15 +186,34 @@ def finish_async(uid, profile, store):
     def run():
         _, part_p = _paths(uid)
         src_p = part_p
+        # A finish slower than STALE_FINISH is not a lost thread, so while this one works it says it is alive. Without
+        # it a 2 GiB file (about seven minutes to store on the HP, DGO-1785) read as abandoned after 180 s, and the
+        # client's next poll stored it a second time.
+        alive = threading.Event()
+
+        def beat():
+            while not alive.wait(STALE_FINISH / 3):
+                try:
+                    if os.path.exists(_paths(uid)[0]):    # a session the client deleted is not brought back by a beat
+                        _save(dict(meta))
+                except Exception:   # noqa: BLE001 — a missed beat is a late one, not a failed store
+                    pass
+
+        beating = threading.Thread(target=beat, name=f"beat-{uid}", daemon=True)
+        beating.start()
         try:
-            for prep in PREPARE:
-                src_p = prep(src_p, meta) or src_p
-            h = hashlib.md5()
-            with open(src_p, "rb") as f:
-                for buf in iter(lambda: f.read(BLOCK), b""):
-                    h.update(buf)
-                f.seek(0)
-                item = store(f, os.path.getsize(src_p), h.hexdigest(), meta)
+            try:
+                for prep in PREPARE:
+                    src_p = prep(src_p, meta) or src_p
+                h = hashlib.md5()
+                with open(src_p, "rb") as f:
+                    for buf in iter(lambda: f.read(BLOCK), b""):
+                        h.update(buf)
+                    f.seek(0)
+                    item = store(f, os.path.getsize(src_p), h.hexdigest(), meta)
+            finally:                # the beat stops before the outcome is written, so it never writes over it
+                alive.set()
+                beating.join()
             meta.update(state="done", file=item)
             _save(meta)
         except Exception as e:      # the session stays; the client may retry the finish

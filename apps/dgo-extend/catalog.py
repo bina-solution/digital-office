@@ -785,7 +785,10 @@ def given_by_name(row_names: set, only: set | None, withheld) -> bool:
     one or not the herd's own — or a home office, when this office is in the herd file's `admin_by_name`
     (DGO-863) — minus what the herd file's `give:` names for it. Such an app passes otherwise only when
     `serve.only.<office>` names it (a sibling tile too: its app's own id is withheld with it)."""
-    return bool(withheld and (set(withheld) & row_names)) and not (only is not None and only & row_names)
+    # "*" withholds every app (app.py _admin_withheld, when the herd file is there and no rules were ever read from it:
+    # DGO-2111 root 23) — a row of another office's handed on, or a serve: key by alias, included
+    w = set(withheld or ())
+    return bool("*" in w or w & row_names) and not (only is not None and only & row_names)
 
 
 def publishable(registry: dict, serve_map, office: str = "", withheld=frozenset()) -> dict:

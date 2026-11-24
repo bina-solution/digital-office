@@ -292,6 +292,64 @@ def disk_watch() -> None:
     _disk_alarm_state["over"] = over
 
 
+# ── memory, watched the same way (DGO-2111 root 25) ───────────────────────────────────────────────
+# vps1 on 2026-11-19 (memory: «ping yes, TCP no»), the Dell's freezes and the Mac's engine of 11-19 night
+# all ran out of memory with nothing said: the overview held the number every 10 s and nobody was told.
+# The notice is the disk's: one id, posted on a TRANSITION, closed by a recovery. Memory moves in spikes
+# where a disk only fills, so a notice needs the low reading to HOLD for MEM_SUSTAIN_TICKS ticks in a row
+# (a minute at 10 s), and it closes only at MEM_CLEAR_AVAIL_PCT, above the warning, so a machine hovering
+# at the line does not open and close it all day. A post that fails (the notices service is the first to
+# starve) is not counted as said: the watch tries again after another minute that stays low.
+MEM_WARN_AVAIL_PCT = float(os.environ.get("MACHINE_MEM_WARN_AVAIL_PCT", "5"))
+MEM_ERROR_AVAIL_PCT = float(os.environ.get("MACHINE_MEM_ERROR_AVAIL_PCT", "2"))
+MEM_CLEAR_AVAIL_PCT = float(os.environ.get("MACHINE_MEM_CLEAR_AVAIL_PCT", "10"))
+MEM_SUSTAIN_TICKS = int(os.environ.get("MACHINE_MEM_SUSTAIN_TICKS", "6"))
+_mem_alarm_state: dict[str, Any] = {"over": False, "low_ticks": 0}
+
+
+def mem_alarm(available_pct: float, available: int, swap_used: int, swap_total: int) -> dict[str, Any] | None:
+    """The sentence a given memory reading deserves — None while the machine is fine. Pure, like disk_alarm."""
+    mb = available / (1 << 20)
+    swap = (f" ה-swap בשימוש {swap_used / (1 << 30):.1f} מתוך {swap_total / (1 << 30):.1f} GB."
+            if swap_total else " אין למכונה swap.")
+    if available_pct < MEM_ERROR_AVAIL_PCT:
+        return {"id": "machine-memory", "level": "error",
+                "title": f"הזיכרון של המכונה כמעט נגמר — נשארו {mb:.0f} MB",
+                "body": f"{available_pct:.1f}% מהזיכרון פנוי, כבר דקה.{swap} "
+                        f"מכאן שירותים נתקעים, ומה שגדל עוד נהרג (OOM)."}
+    if available_pct < MEM_WARN_AVAIL_PCT:
+        return {"id": "machine-memory", "level": "warn",
+                "title": f"הזיכרון של המכונה אוזל — {available_pct:.0f}% פנוי",
+                "body": f"נשארו {mb:.0f} MB פנויים (הסף {MEM_WARN_AVAIL_PCT:.0f}%), כבר דקה.{swap} "
+                        f"מי צורך הכי הרבה: עמודת הזיכרון במסך המכונה."}
+    return None
+
+
+def mem_watch(mem: dict[str, Any] | None = None) -> None:
+    """One tick: count a low reading, say it once it held, close it once the machine is well above the line."""
+    m = mem if mem is not None else _mem_info()
+    total = int(m.get("total") or 0)
+    if not total:
+        return                              # an unreadable /proc/meminfo is not an alarm
+    pct = m["available"] / total * 100
+    alarm = mem_alarm(pct, m["available"], m["swap_used"], m["swap_total"])
+    st = _mem_alarm_state
+    st["low_ticks"] = st["low_ticks"] + 1 if alarm else 0
+    if alarm and not st["over"] and st["low_ticks"] >= MEM_SUSTAIN_TICKS:
+        if _notify("POST", NOTIFY_URL, {"source": "machine", "source_id": alarm["id"],
+                                        "title": alarm["title"], "body": alarm["body"],
+                                        "level": alarm["level"], "link": "/#/m/machine"}):
+            st["over"] = True
+        else:
+            st["low_ticks"] = 0
+    elif st["over"] and pct >= MEM_CLEAR_AVAIL_PCT:
+        listing = _get_json(NOTIFY_URL + "?limit=60") or {}
+        for row in (listing.get("notifications") or []):
+            if row.get("source_id") == "machine-memory" and not row.get("is_read"):
+                _notify("POST", f"{NOTIFY_URL}/{row.get('id')}/read")
+        st["over"] = False
+
+
 def _disk_usage(path: Path) -> dict[str, Any]:
     st = os.statvfs(path)
     total = st.f_frsize * st.f_blocks
@@ -654,6 +712,7 @@ async def _refresh_loop() -> None:
                 "tx": _net_rate[1],
             })
             disk_watch()                    # DGO-70: a filling disk is SAID, not discovered
+            mem_watch()                     # DGO-2111 root 25: and so is a machine out of memory
             # 2) full container build (cache + net) — only while watched (or cold),
             #    fired CONCURRENTLY so the expensive stats collection never stalls
             #    the sampling cadence above.

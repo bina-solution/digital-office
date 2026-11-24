@@ -1,4 +1,4 @@
-/* desktop.js — the console's optional desktop mode ("שולחן עבודה").
+/* desktop.js — the console on a computer ("שולחן עבודה"): the ONE shell of a screen 1024px wide or wider (DGO-2132).
  *
  * A spatial window manager for the shell, after Scott Jenson's Akademy 2026 prototype (the idea
  * inventory is ai/context/console-desktop-working-memory.md §3.S):
@@ -21,22 +21,19 @@
   const BARE = new URLSearchParams(location.search).has("bare");
   if (BARE) document.documentElement.classList.add("bare");
 
-  // A URL may ASK for the desktop — `?desktop` — and the person's own press still wins: the ask is a
-  // STARTING state, dropped the first time somebody turns the desktop on or off (enable/disable
-  // below). It exists because a surface can draw the office at a fixed desktop size and hand it to
-  // somebody who has never been here: the public site's simulator embeds this very shell in a
-  // 1440x900 frame, and a first-time visitor has no localStorage for the choice to live in, so the
-  // site was showing the classic shell while the product's own face is the window desktop (the
-  // owner, 2026-10-09: "הסימולציה באתר תדמית צריכה להציג את המערכת במצב דסקטופ"). Default off, so
-  // every other surface — and every URL without the flag — behaves exactly as before.
-  let asked = new URLSearchParams(location.search).has("desktop");
-
-  const K = { on: "do-desktop", prefs: "do-desktop-prefs", layout: "do-desktop-layout" };
+  // THE COMPUTER'S ONE SHELL (DGO-2132 — the owner, 2026-11-20: «חייב לנקות את המצב קונסולה אחת ולתמיד שתפסיק
+  // להתבלבל כי זה ישן ולא רלוונטי היום במחשב משתמשים במצב דסקטופ»). The desk was opt-in — a switch in the settings
+  // view (`do-desktop`), and `?desktop` for the public site's simulator — so every computer that never pressed it
+  // opened the old shell with its side rail, and the two shells were built, measured and shown side by side. A
+  // screen 1024px wide or wider IS the desk now; below that the console is the phone's shell (its home and its bar).
+  // There is nothing to turn on or off, and the old switch's key is taken out of the browser at boot.
+  const K = { prefs: "do-desktop-prefs", layout: "do-desktop-layout" };
+  const DESK_FRAME = "dgo-desk-window";   // the name of every frame a desk window holds (createWin, inDesk)
   const load = (k, d) => { try { const v = localStorage.getItem(k); return v == null ? d : JSON.parse(v); } catch (e) { return d; } };
   const save = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) { /* private mode: layout is simply not kept */ } };
 
   const CFG = {
-    MIN_WIDTH: 1024,        // below this the classic shell is the right tool
+    MIN_WIDTH: 1024,        // below this the phone's shell (app.js: the home and its bar) is the right tool
     BAR_TOP: 6, BAR_H: 30, DOCK_H: 64, DOCK_GAP: 10,
     S_MIN: 0.16,            // flank scale runs from 1 at the zone edge to this at the screen edge
     WIDGET_S: 0.42,         // a window that publishes a widget becomes it below this scale
@@ -45,6 +42,7 @@
     GRID: 44,
     SHAKE_REV: 4, SHAKE_TRAVEL: 24, SHAKE_MS: 650, SHAKE_SPREAD: 320, SHAKE_COOL: 900,
     MIN_W: 380, MIN_H: 260, MAX_WINS: 40,
+    APP_W: 1200,            // a maximised window's floor (the screen less 32px where narrower): the width the apps' desktop layouts hold at (DGO-2156)
   };
   const DEF_PREFS = { bg: "grid", pill: true, rails: true, morph: false, live: 10, history: true };
   let prefs = Object.assign({}, DEF_PREFS, load(K.prefs, {}));
@@ -144,7 +142,9 @@
     const body = w.native ? '<div class="dk-body"><div class="dk-native"></div></div>'
       // allow: as the shell's own frame (index.html says why `*`) — an app may ask for the camera,
       // microphone and screen, and the browser still asks the person
-      : '<div class="dk-body"><iframe title="' + escH(m.name) + '" allow="camera *; microphone *; display-capture *; fullscreen *; autoplay *; clipboard-write *"></iframe>' +
+      // `name`: the page inside reads it as `window.name` on any origin — how a console framed here (a linked office's
+      // «המרכז», on its own host too) knows it is a desk's window and grows no desk of its own (inDesk)
+      : '<div class="dk-body"><iframe name="' + DESK_FRAME + '" title="' + escH(m.name) + '" allow="camera *; microphone *; display-capture *; fullscreen *; autoplay *; clipboard-write *"></iframe>' +
         '<div class="dk-sleep">' + icon(m.icon) + '<div>' + escH(m.name) + ' במנוחה · לחצו כדי להעיר</div></div></div>';
     e.innerHTML =
       '<div class="dk-tb"><div class="dk-lights">' +
@@ -479,6 +479,7 @@
     // page, and is this page's own sign-in still alive. Without it a desktop left open for days kept
     // running the build it was loaded with, and kept opening windows onto a sign-in that had run out.
     if (typeof freshen === "function") freshen(true);
+    closeHome();                               // an app opened by its address (a link, ⌘K) is not opened under «בית»
     if (m && m.id) noteUse(m);                 // the dock's order is this number, nothing else
     // An app of its own host: a window on that host, not a frame of the shell's proxy. `externalUrl`
     // is the shell's one derivation of that origin (app.js, loaded after this file, so it is resolved
@@ -646,11 +647,19 @@
     setTitle(w, w.title, true);
     focusWin(w);
   }
-  // "maximise" fills the focus zone, never the flanks: the periphery stays in view (S3)
+  // "maximise" fills the focus zone — the periphery stays in view (S3) — but gives an app at least the width its own
+  // desktop layout needs: APP_W, or the screen less 32px where the screen is narrower (1172 on the owner's 1204-wide
+  // MacBook), taking from the flanks only that much, centred. A laptop's zone alone is ~63% of its screen (754px there,
+  // 906px at 1440), and there INDOX's wide toolbar wrapped, a my-docs amount spilled its tile, and a press on a mail
+  // row's subject landed on its hover actions (DGO-2156). The price, chosen on a laptop: while such a window is
+  // maximized it covers the flanks' inner part (at 1204 nearly all of them) — their windows stay live beneath it and
+  // come back into view when it is restored or they are raised. A wide screen's zone (≥ 1216px, from about 2250px up)
+  // already holds APP_W, so there it is the zone, as before. The snap preview (snapCheck) uses the same frame.
+  const maxW = () => Math.round(Math.max(G.zr - G.zl - 16, Math.min(G.W - 32, CFG.APP_W)));
   function maxGeom(w) {
     w.cx = G.W / 2;
     w.cy = (G.top + G.bottom) / 2;
-    w.w = Math.round(G.zr - G.zl - 16);
+    w.w = maxW();
     w.h = Math.round(G.bottom - G.top);
   }
 
@@ -830,11 +839,14 @@
   function snapCheck(d) {
     const w = d.w;
     if (!d.shift || !inZone(w)) { d.snap = null; snapEl.style.display = "none"; return; }
-    const zw = G.zr - G.zl, hh = G.bottom - G.top;
+    const zw = G.zr - G.zl, hh = G.bottom - G.top, mw = maxW(), ml = (G.W - mw) / 2;
     let r = null;
-    if (d.py < G.top + 24) r = { l: G.zl + 8, t: G.top, w: zw - 16, h: hh, max: true };
-    else if (d.px < G.zl + zw * 0.2) r = { l: G.zl + 8, t: G.top, w: zw / 2 - 12, h: hh };
-    else if (d.px > G.zr - zw * 0.2) r = { l: G.zl + zw / 2 + 4, t: G.top, w: zw / 2 - 12, h: hh };
+    // the halves split the frame a maximized window fills: at the owner's 1204 a half is 582px, where a half of the zone
+    // was 373 (under MIN_W); each half's centre stays inside the zone, so it is drawn at full size. On a wide screen the
+    // frame IS the zone less 16px, and the halves are what they were.
+    if (d.py < G.top + 24) r = { l: ml, t: G.top, w: mw, h: hh, max: true };
+    else if (d.px < G.zl + zw * 0.2) r = { l: ml, t: G.top, w: mw / 2 - 4, h: hh };
+    else if (d.px > G.zr - zw * 0.2) r = { l: ml + mw / 2 + 4, t: G.top, w: mw / 2 - 4, h: hh };
     d.snap = r;
     if (!r) { snapEl.style.display = "none"; return; }
     snapEl.style.display = "block";
@@ -1040,18 +1052,16 @@
     if (todo.length) toast("נפתחו " + one(todo.length, "יישום אחד", "יישומים"));
   }
   function closeAll() { wins.slice().forEach(closeWin); }
-  function openDefaults() {
-    const hm = typeof parseModuleHash === "function" ? parseModuleHash() : null;
-    modules().filter(m => m.embed && (!hm || m.id !== hm[1])).slice(0, 3).forEach(m => openWin(m, "", { noFocus: true }));
-  }
+  // A FRESH DESK OPENS NOTHING BY ITSELF (DGO-2132). It used to open the registry's first three apps in windows —
+  // whichever came first, on our offices another machine's admins-only agent — the same arbitrary first app the
+  // phone's home replaced (DGO-2122). The address decides now: an app's address opens its window, and an address
+  // that names none opens the home (route() → openHome).
   function resetDesk() {
     closeAll();
     try { localStorage.removeItem(K.layout); } catch (e) { /* ignore */ }
-    openDefaults();
     const hm = typeof parseModuleHash === "function" ? parseModuleHash() : null;
     const m = hm && modById(hm[1]);
-    if (m) openModule(m, hm[2] || "");
-    else if (order.length) focusWin(order[order.length - 1]);
+    if (m) openModule(m, hm[2] || ""); else openHome();
     toast("שולחן העבודה אופס");
   }
   function cycle(dir) {
@@ -1180,10 +1190,12 @@
 
   // ── menu bar ────────────────────────────────────────────────────────────────────────────
   function buildBar() {
+    // The mark has one owner, index.html's #brandMark (a template, stamped by G27 — the side rail that carried it went
+    // with DGO-2132); the bar reuses its SVG. A template's content is not in the document: read it there.
+    const markT = document.getElementById("brandMark");
+    const mark = markT && markT.content ? markT.content.querySelector("svg") : null;
     bar.innerHTML =
-      // the mark has one owner, the sidebar brand in index.html; the bar reuses its SVG
-      '<button class="dk-logo" data-menu="sys" aria-label="תפריט הלשכה">' +
-        ((document.querySelector('.brand .logo svg') || {}).outerHTML || 'ל') + '</button>' +
+      '<button class="dk-logo" data-menu="sys" aria-label="תפריט הלשכה">' + (mark ? mark.outerHTML : "ל") + '</button>' +
       '<button class="dk-appname" data-menu="app"></button>' +
       '<button data-menu="win">חלון</button><button data-menu="view">תצוגה</button><button data-menu="help">עזרה</button>' +
       '<span class="dk-grow"></span>' +
@@ -1293,11 +1305,15 @@
       { label: "הגדרות מסוף…", act: openSettings },
       { label: "קיצורי מקלדת", kbd: "?", act: () => toggleHelp(true) },
       "-",
-      { label: "חזרה לתצוגה הרגילה", act: () => api.disable() },
-      // the way out (DGO-1621): the office's own sign-out, as the classic view's account menu offers it — read once
+      // (no «חזרה לתצוגה הרגילה»: the desk IS the computer's console since DGO-2132 — there is no other view to go to)
+      // the way out (DGO-1621): the office's own sign-out, as the phone's account menu offers it — read once
       // by the shell at boot (app.js signoutUrl); an office with none here shows the item disabled, not a dead link
       { label: "התנתקות", disabled: !(typeof SIGNOUT === "string" && SIGNOUT),
         act: () => { location.href = SIGNOUT + (SIGNOUT.includes("?") ? "&" : "?") + "rd=" + encodeURIComponent(location.origin + "/"); } },
+      // C1 — the build, visible: "is this the version with the fix?" is answered here on a computer (app.js reads it
+      // once at boot, STAMP), as the phone's account menu answers it. Words, not a control.
+      ...(typeof STAMP === "object" && STAMP && STAMP.version
+        ? ["-", { label: "digital-office " + STAMP.version, disabled: true }] : []),
     ]);
     if (name === "app") return [
       { label: fm ? "חלון נוסף של " + fm.name : "חלון נוסף", disabled: !fm, act: () => openWin(fm, f.route) },
@@ -1386,7 +1402,7 @@
     const keys = Object.keys(natives);
     const groups = dockGroups(modules());     // one entry per KIND, the copies live in its stack
     const apps = groups;
-    const fixed = keys.length + 1;            // the desk's own tools + «כל החלונות»
+    const fixed = keys.length + 2;            // «בית» + the desk's own tools + «כל החלונות»
     const budget = (B.resolveDock || (() => ({ slots: apps.length + fixed + 1, showMore: false })))({
       available: Math.max(0, window.innerWidth - 40), count: apps.length + fixed,
       tile: L.tile, gap: L.gap, pad: L.pad, sep: L.sep, min: L.min,
@@ -1549,85 +1565,109 @@
     b.querySelector(".tip").textContent = "עוד " + one(behind.length, "אפליקציה אחת", "אפליקציות");
     b.querySelector(".dk-more-n").textContent = String(behind.length);
     b.setAttribute("aria-label", "עוד " + one(behind.length, "אפליקציה אחת", "אפליקציות") + " — כל האפליקציות");
-    b.addEventListener("click", () => openDockMore());
+    b.setAttribute("aria-haspopup", "dialog");
+    b.addEventListener("click", () => openHome(null, b));
     return b;
   }
 
-  // The door's panel: the EXISTING grouped launcher (same registry, same `group` order, same .htile
-  // grid as renderHome(), same filter-in-place idiom as BinaNav) — nothing about it is invented, which
-  // is why it cannot drift from the launcher. Every app is here, not only the ones the dock had to
-  // hide: a door that shows a different set than the launcher is a second answer to "what is
-  // installed". The `is-remote` mark and the office label ride along (dgo-remote-apps.md §4).
-  function openDockMore() {
-    closeDockMore();
+  // ── THE HOME (DGO-2122 · DGO-2132) ─────────────────────────────────────────────────────────────────────────────
+  // «בית» on a computer: every app of the office in the home's seven groups, one tile per KIND, and the machines and
+  // offices this office links — the SAME model and the same tiles as the phone's home (app.js homeBody, officePage),
+  // drawn over the desk, so the two cannot drift. A linked office's card opens that office's own page in place (every
+  // app it gives this office, the copies the home folds into one tile), and «כל האפליקציות» comes back from it. It
+  // opens from the dock's first tile, from the door at the dock's end when apps are behind it, from an address that
+  // names no app (route()) and from an office's address (`#/o/<office>`); Escape or a press beside it closes it.
+  // Search filters in place: a kind stays when any of its copies answers the shell's one matcher (app.js
+  // moduleMatches), an office when its name does — and the apps this console does not frame join the result (EXF-107:
+  // an app whose screen lives only on its own host has no module; app.js otherApps reads app-management's list, and
+  // they open the way ⌘K opens them, app.js openOutside).
+  let homeRedraw = null;                  // the open home's own drawing: a new registry redraws it (refresh)
+  let homeFrom = null;                    // the dock's tile that opened it: dismissed, the focus goes back there
+  function openHome(office, opener) {
     if (!root) return;
-    const apps = modules();
-    // …AND THE APPS THIS CONSOLE DOES NOT FRAME (EXF-107). An app whose UI lives only on its own host
-    // (`embed: false`, e.g. the services app) has no module, so this panel — the desktop's only search —
-    // never listed it while the apps screen did: «החיפוש לא מוצא את אפליקציית השירותים» (exf2 2:24:48).
-    // They come from the answer ⌘K already reads (app.js otherApps(): app-management's /api/apps) and
-    // open the way ⌘K and that screen open them (app.js openOutside: a window on this desktop).
+    closeHome();
+    homeFrom = opener || null;
+    let at = office || null;              // null: every app; an office's id: that office's page
     let others = [];
-    const ov = h("div", "dk-more");
+    const ov = h("div", "dk-more dk-home");
     ov.setAttribute("role", "dialog");
-    ov.setAttribute("aria-label", "כל האפליקציות");
+    ov.setAttribute("aria-modal", "true");
+    ov.setAttribute("aria-label", "בית — כל האפליקציות");
     const box = h("div", "dk-more-box");
     const head = h("div", "dk-more-head");
-    head.innerHTML = `<b>כל האפליקציות</b><small class="num">${apps.length}</small>`;
     const q = h("input", "dk-more-q");
     q.type = "search";
-    q.placeholder = "חיפוש אפליקציה…";
-    q.setAttribute("aria-label", "חיפוש אפליקציה");
+    q.placeholder = "חיפוש אפליקציה או לשכה…";
+    q.setAttribute("aria-label", "חיפוש אפליקציה או לשכה");
     const list = h("div", "dk-more-list");
     const draw = () => {
-      // the shell's one matcher (app.js moduleMatches): name, description, id, office — any case
-      const hits = apps.concat(others).filter(m => moduleMatches(m, q.value));
-      const groups = [];
-      hits.forEach(m => {
-        let g = groups.find(x => x.name === (m.group || ""));
-        if (!g) { g = { name: m.group || "", mods: [] }; groups.push(g); }
-        g.mods.push(m);
-      });
-      list.innerHTML = groups.length ? groups.map(g =>
-        (g.name ? `<div class="dk-more-grp">${esc(g.name)}</div>` : "") +
-        `<div class="home-grid">${g.mods.map(m =>
-          `<button class="htile${remoteCls(m)}"${officeHue(m)} data-mid="${esc(m.id)}">` +
-            `<span class="htile-ic">${mIcon(m.icon)}</span>` +
-            `<span class="htile-nm">${esc(m.name)}</span>` + officeLine(m) +
-            `</button>`).join("")}</div>`).join("") : `<div class="dk-more-none">אין תוצאות</div>`;
-      list.querySelectorAll("[data-mid]").forEach(el => el.addEventListener("click", ev => {
-        const mm = modById(el.dataset.mid);
-        const out = mm ? null : others.find(o => o.id === el.dataset.mid);
-        closeDockMore();
-        if (out) { openOutside(out); return; }
-        if (!mm) return;
-        if (ev.ctrlKey || ev.metaKey || ev.shiftKey) openWin(mm, ""); else openModule(mm, "");
-      }));
+      const { kinds, offices } = homeModel();
+      const typed = q.value;
+      const o = at ? offices.find(x => x.id === at) : null;
+      if (at && !o) at = null;            // an office that is not linked (any more): every app
+      if (o) {
+        head.innerHTML = `<button type="button" class="btn ghost sm dk-home-back" title="חזרה לכל האפליקציות">` +
+          `${icon("back")}<span>כל האפליקציות</span></button>`;
+        list.innerHTML = officePage(o, o.mods.filter(m => moduleMatches(m, typed)));
+      } else {
+        const outs = others.filter(m => moduleMatches(m, typed));
+        head.innerHTML = `<b>כל האפליקציות</b><small class="num">${kinds.length + others.length}</small>`;
+        // nothing found is «אין תוצאות»; nothing at all — a registry that came back empty — is said as the phone says it
+        list.innerHTML = homeBody(kinds.filter(e => e.copies.some(m => moduleMatches(m, typed))),
+          offices.filter(x => moduleMatches({ name: x.label, id: x.id }, typed)), outs) ||
+          `<div class="dk-more-none">${String(typed).trim() || kinds.length || others.length ? "אין תוצאות"
+            : "רשימת האפליקציות חזרה ריקה. ודאו שהשירותים פועלים, ורעננו את הדף."}</div>`;
+      }
     };
+    // One listener for every tile and card the panel draws (they are redrawn on every keystroke).
+    list.addEventListener("click", ev => {
+      const card = ev.target.closest("[data-office]");
+      if (card) {                         // a machine or an office: its page, here
+        ev.preventDefault();
+        at = card.dataset.office; q.value = ""; draw(); list.scrollTop = 0;
+        const back = head.querySelector(".dk-home-back");
+        if (back) back.focus();
+        return;
+      }
+      const t = ev.target.closest("[data-hid]");
+      if (!t) return;
+      ev.preventDefault();
+      const mm = modById(t.dataset.hid);
+      const out = mm ? null : others.find(x => x.id === t.dataset.hid);
+      closeHome();
+      if (out) { openOutside(out); return; }
+      if (!mm) return;
+      if (ev.ctrlKey || ev.metaKey || ev.shiftKey) openWin(mm, ""); else openModule(mm, "");
+    });
+    head.addEventListener("click", ev => {
+      if (!ev.target.closest(".dk-home-back")) return;
+      at = null; draw(); q.focus();
+    });
     q.addEventListener("input", draw);
-    ov.addEventListener("pointerdown", ev => { if (ev.target === ov) closeDockMore(true); });
+    ov.addEventListener("pointerdown", ev => { if (ev.target === ov) closeHome(true); });
     box.append(head, q, list);
     ov.appendChild(box);
     root.appendChild(ov);
     draw();
+    homeRedraw = draw;
     q.focus();
     if (typeof otherApps === "function") otherApps().then(l => {
       others = Array.isArray(l) ? l : [];
-      if (!others.length || !ov.isConnected) return;
-      const n = head.querySelector(".num");
-      if (n) n.textContent = String(apps.length + others.length);
-      draw();
+      if (others.length && ov.isConnected) draw();
     });
   }
-  // `back` = the panel was DISMISSED (Escape, a click beside it), not used to open an app: focus
-  // goes back to the door it came from. It used to land on <body>, so a keyboard had to walk the
-  // whole dock again to reach the place it had just left.
-  function closeDockMore(back) {
+  // `back` = the home was DISMISSED (Escape, a press beside it), not used to open an app: focus goes back to the
+  // dock's tile that opened it («בית», or the door at the dock's end), else to «בית». It used to land on <body>, so a
+  // keyboard had to walk the whole dock again to reach the place it had just left.
+  function closeHome(back) {
     if (!root) return;
-    const ov = root.querySelector(".dk-more");
+    const ov = root.querySelector(".dk-home");
+    homeRedraw = null;
+    const from = homeFrom;
+    homeFrom = null;
     if (!ov) return;
     ov.remove();
-    const door = back && dock && dock.querySelector(".dk-more-ic");
+    const door = back && dock && ((from && from.isConnected && from) || dock.querySelector(".dk-home-ic"));
     if (door) door.focus();
   }
 
@@ -1645,6 +1685,13 @@
     const nowKinds = new Set(d.shown.map(g => g.kind));
     const born = seenKinds ? new Set([...nowKinds].filter(k => !seenKinds.has(k))) : new Set();
     seenKinds = new Set(d.all.map(g => g.kind));
+    // «בית» first, always — the right edge, the page being right to left — as on the phone's bar: every app, in the
+    // home's groups (openHome). A fixed slot of the budget (dockBudget), like the desk's own tools.
+    const home = h("button", "dk-ic dk-c0 dk-home-ic", icon("home") + '<span class="tip">בית — כל האפליקציות</span>');
+    home.setAttribute("aria-label", "בית — כל האפליקציות");
+    home.setAttribute("aria-haspopup", "dialog");
+    home.addEventListener("click", () => openHome(null, home));
+    dock.appendChild(home);
     d.shown.forEach(g => {
       const slot = groupTile(g);
       if (born.has(g.kind)) slot.classList.add("dk-born");
@@ -1714,10 +1761,16 @@
     }
   }
   function onKey(e) {
-    // an open dialog is over the desktop (DGO-1634): the desktop's own keys (E, S, M, 4, ?) wait for it to close
-    if (!root || document.querySelector(".modal-ov")) return;
+    // an open dialog is over the desktop (DGO-1634): the desktop's own keys (E, S, M, 4, ?) wait for it to close —
+    // and so does ⌘K's palette: its Escape is its own, and «בית» under it stays (the second reader, DGO-2132)
+    if (!root || document.querySelector(".modal-ov") || document.querySelector(".pal-ov")) return;
+    // «בית» open is a dialog over the desk too: Escape closes it, and no other key is the desk's — a letter typed
+    // with the focus on its back button or a card duplicated windows (D), opened Exposé (E), reset the desk (4)
+    if (root.querySelector(".dk-home")) {
+      if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); closeHome(true); }
+      return;
+    }
     if (e.key === "Escape") {
-      if (root.querySelector(".dk-more")) { closeDockMore(true); return; }
       if (menuEl) { closeMenu(); return; }
       if (helpEl.classList.contains("show")) { toggleHelp(false); return; }
       if (expose) { exitExpose(null); return; }
@@ -1968,47 +2021,42 @@
     window.addEventListener("keydown", onKey, true);
     root.addEventListener("pointerdown", onRootDown, true);
     emit("mount");
-    if (!restoreLayout()) openDefaults();
+    restoreLayout();                      // a fresh desk opens nothing by itself: route() opens what the address names
     clockT = setInterval(tickClock, 20000);
   }
-  function unmount() {
-    if (!root) return;
-    saveLayout();
-    emit("unmount");
-    compact = false;
-    if (barRO) { barRO.disconnect(); barRO = null; }
-    clearInterval(clockT);
-    // EVERY timer this mount started, not just the clock. The toast's 1.9s timer outlived the desk it
-    // belonged to and fired into a null `toastEl` — measured live on the running console: turning the
-    // mode off right after a toast left `Cannot read properties of null (reading 'classList')` in the
-    // console (DGO-535). `saveT` and `resizeRaf` are guarded where they run, so they were only waste;
-    // they are cleared here for the same reason as the toast — a mount's timers die with the mount.
-    // Each is reset to 0: `resizeRaf` and `saveT` are their callers' "already scheduled" flags, and a
-    // cleared timer that leaves its flag set would make the next resize a no-op forever.
-    clearTimeout(toastT); toastT = 0;
-    clearTimeout(saveT); saveT = 0;
-    clearTimeout(resizeRaf); resizeRaf = 0;
-    window.removeEventListener("pointermove", onMove);
-    window.removeEventListener("pointerup", onUp);
-    window.removeEventListener("pointercancel", onUp);
-    window.removeEventListener("keydown", onKey, true);
-    closeMenu();
-    root.remove();
-    root = cvBg = cvFx = layer = dimEl = bar = dock = snapEl = helpEl = toastEl = null;
-    wins = [];
-    order = [];
-    focused = drag = expose = flash = null;
-    ho = null;                          // a hand-off's windows went with the desk (handoffs.js keeps the trip)
-    document.documentElement.classList.remove("dk-on");
-  }
-  const wanted = () => asked || !!load(K.on, false);
+  // (No unmount: the desk is not taken down once it is up — DGO-2132. A screen that narrows keeps it, compact, below.)
   const wideEnough = () => window.innerWidth >= CFG.MIN_WIDTH;
+  // A console SHOWN BY ANOTHER CONSOLE — a linked office's «המרכז», mounted under /a/console-home.<office>/ (mount.js,
+  // DGO_MOUNT) and framed in a window of this desk — is that window's content, not a computer's screen: it never mounts
+  // a desk of its own (a maximized window, or an ultrawide's first one, is 1024px wide, and it grew a desk inside a
+  // desk — the second reader, DGO-2132). A page that frames the console and is no console (the public site's
+  // simulator) still gets the desk.
+  // A desk's window names its frame (createWin): `window.name` is what a page can read about its frame on ANY origin —
+  // a peer's «המרכז» on its own host is cross-origin, where neither DGO_MOUNT nor the parent can be read (round 2).
+  // DGO_MOUNT counts only as ANOTHER CONSOLE's mount (`/a/console-home.<office>`): mount.js sets it to any base path
+  // that is not `/`, and the simulation (file://…/platform-sim.html) and the public site's simulator are served below
+  // one — the desktop flow suite caught it: they lost their desk (probe 6, 2026-11-20).
+  const inDesk = () => {
+    if (window.name === DESK_FRAME || /\/a\/console-home\.[^/]+$/.test(String(window.DGO_MOUNT || ""))) return true;
+    try { return window.parent !== window && !!window.parent.BinaDesktop; } catch (e) { return false; }
+  };
+  // The desk comes up over a page whose phone shell may already run an app in its one frame (a window opened narrow,
+  // then widened): that frame is emptied, and the address opens as a window — never one app twice (a meeting's camera
+  // and sound twice, the second reader).
+  function takeOver() {
+    const f = document.getElementById("frame");
+    if (f && f.getAttribute("src") && f.getAttribute("src") !== "about:blank") f.src = "about:blank";
+    const sheet = document.querySelector(".switcher");   // the phone's «פתוחים»: the desk's windows are its open apps
+    if (sheet) sheet.remove();
+    mount();
+    if (typeof route === "function") route();
+  }
 
   // A desktop that is already up and gets NARROWER — a side pane dragged in, a window halved — stays
   // up in a compact form: the focused window fills the screen and every other one waits behind it,
-  // still loaded. Handing back to the classic shell here would tear every window down and reload its
+  // still loaded. Handing back to the phone's shell here would tear every window down and reload its
   // page, an agent's running chat and the live browser it drives included. A screen that is narrow
-  // from the start (a phone) never mounts the desktop at all; that is the classic shell's job.
+  // from the start (a phone) never mounts the desktop at all; that is the phone's shell's job.
   //
   // COMPACT IS THE CLASSIC SHELL'S SHAPE, NOT LESS OF IT (DGO-1637). It used to hide the menu bar and
   // keep the dock it had at the wide width: the search and every menu were gone, the dock ran off the
@@ -2076,7 +2124,8 @@
         buildDock();
         return;
       }
-      if (!root && wanted() && wideEnough()) { mount(); if (typeof route === "function") route(); return; }
+      // a page that opened narrow and was widened: the desk comes up, and the address opens in it
+      if (!root && !inDesk() && wideEnough()) { takeOver(); return; }
       if (!root) return;
       if (compact) setCompact(false);   // back to the full desktop; positions rescale from the width it had
       const oldW = G.W;
@@ -2113,10 +2162,10 @@
     prefs = Object.assign({}, DEF_PREFS, load(K.prefs, {}));
     const row = (k, label, note, on) => '<label class="dk-row"><input type="checkbox" data-k="' + k + '"' + (on ? " checked" : "") + "><b>" + label + "</b>" +
       (note ? '<span class="sub">' + note + "</span>" : "") + "</label>";
+    // No switch for the desk itself: on a screen 1024px wide or wider it IS the console (DGO-2132).
     c.innerHTML = '<div class="wcard dk-set"><h3>שולחן עבודה</h3>' +
-      '<div class="sub">מצב תצוגה שבו כל יישום נפתח בחלון משלו. במרכז המסך אזור המיקוד; חלון שנגרר אל אחד הצדדים מתכווץ ונשאר חי ופעיל. ' +
+      '<div class="sub">במחשב כל יישום נפתח בחלון משלו. במרכז המסך אזור המיקוד; חלון שנגרר אל אחד הצדדים מתכווץ ונשאר חי ופעיל. ' +
       "ניעור של חלון שולח את כל השאר לצדדים, וחלון שמפרסם יישומון הופך לכפתור.</div>" +
-      row("on", "מצב שולחן עבודה", "במסכים ברוחב 1024 פיקסלים ומעלה", wanted()) +
       row("grid", "רקע רשת מתיחה", "הרשת נדחסת בצדדים באותה עקומה שמכווצת את החלונות", prefs.bg === "grid") +
       row("pill", "תפריט עליון ממורכז", "התפריט נמשך אל אזור המיקוד", prefs.pill) +
       row("rails", "מסילות אור בזמן גרירה", "", prefs.rails) +
@@ -2131,8 +2180,7 @@
       const k = inp.dataset.k;
       if (k === "reset") { inp.addEventListener("click", () => target.reset()); return; }
       inp.addEventListener("change", () => {
-        if (k === "on") { if (inp.checked) target.enable(); else target.disable(); }
-        else if (k === "grid") target.setPref("bg", inp.checked ? "grid" : "wallpaper");
+        if (k === "grid") target.setPref("bg", inp.checked ? "grid" : "wallpaper");
         else if (k === "live") target.setPref("live", Number(inp.value) || DEF_PREFS.live);
         else target.setPref(k, inp.checked);
       });
@@ -2143,30 +2191,30 @@
   }
 
   const api = {
-    // called by app.js boot() once MODULES is loaded, right before the first route()
-    boot() { booted = true; if (!BARE && wanted() && wideEnough()) mount(); },
+    // called by app.js boot() once MODULES is loaded, right before the first route(): a wide screen gets the desk
+    boot() {
+      booted = true;
+      try { localStorage.removeItem("do-desktop"); } catch (e) { /* the old switch's key: nothing reads it any more */ }
+      // a console shown in a desk window keeps the phone's shell at every width — its home and its bar are the way
+      // around it there (style.css html.in-desk; round 2: a wide window of it had no navigation at all)
+      if (inDesk()) document.documentElement.classList.add("in-desk");
+      if (!BARE && !inDesk() && wideEnough()) mount();
+    },
     isOn: () => !!root,
+    // «בית»: every app in the home's groups, or one office's page (route(): a bare address, `#/o/<office>`)
+    home: office => openHome(office),
     openModule: (m, rest) => openModule(m, rest),
-    refresh() { if (root) buildDock(); },
+    refresh() { if (!root) return; buildDock(); if (homeRedraw) homeRedraw(); },
     askOwnHosts() { wins.forEach(w => { if (w.ext && w.ext.ask && !w.sleeping) askOwnHost(w); }); },
     askAnyway(id) { const w = wins.find(x => x.mid === "ext:" + id); if (w) { w.ext.anyway = true; askOwnHost(w); } },
     renderSettings,
     setPref,
     reset() { if (root) resetDesk(); else try { localStorage.removeItem(K.layout); } catch (e) { /* ignore */ } },
+    // The desk is not a choice (DGO-2132): this only puts it up NOW where it is not up yet and the screen is wide
+    // enough — a tool that drives a page it sized after load. There is no way to take it down.
     enable() {
-      asked = false;                    // a person asked; the URL's ask has served its purpose
-      save(K.on, true);
-      if (BARE || root) return;
-      if (!wideEnough()) return;
-      mount();
-      if (typeof route === "function") route();
-    },
-    disable() {
-      asked = false;
-      save(K.on, false);
-      if (!root) return;
-      unmount();
-      if (typeof route === "function") route();
+      if (BARE || root || inDesk() || !wideEnough()) return;
+      takeOver();
     },
     // an app on its own host (embed:false), opened as a window — app-management's "open" calls this
     openExternal: spec => openExternal(spec),

@@ -165,7 +165,8 @@ def subject(cert_pem: str) -> str:
 def load_or_create_cert(data_dir: str, p12_path: str = "", p12_pass: str = "",
                         office: str = "") -> tuple[str, str]:
     """(key_pem, cert_pem) — the office's PKCS#12 when one is connected, else a self-signed pair, made once, in
-    the office's own name (`office`, the deployment's BUSINESS_NAME; it said «BINA Solutions» on every office).
+    the office's own name (`office`: ESIGN_OFFICE_NAME, else the deployment's BUSINESS_NAME — DGO-2125; it said
+    «BINA Solutions» on every office).
 
     The self-signed pair proves the bytes did not change; it does not prove WHO the signer is, which is
     the audit trail's job and, for a document that needs it, a registered CA's (research §3.3).

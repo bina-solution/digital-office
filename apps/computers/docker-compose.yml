@@ -82,9 +82,10 @@ services:
       - traefik.http.routers.computers-share-https.service=computers
       - traefik.http.routers.computers-share-https.middlewares=hsts@file
     volumes:
-      # the office keypair, known_hosts and the probe cache — losing this volume means re-approving
-      # the key on every machine, so it is kept (data.on_uninstall: prompt)
-      - computers_state:/data
+      # the office keypair, known_hosts and the probe cache — losing them means re-approving the key on every
+      # machine, so they are kept (data.on_uninstall: prompt). In the DGO folder's data/computers/state (DGO-2019); it
+      # was the volume computers_state, moved once by `bbox run` (app.json data.moved_from)
+      - ../../data/computers/state:/data
       # which offices are linked and which of their apps they give (the compiled registry), read-only
       - ../../.generated/registry:/registry:ro
       # the office's ONE flow.v1 publisher (DGO-1402) — the platform's file, never a copy of it here
@@ -113,9 +114,6 @@ services:
       options:
         max-size: 5m
         max-file: '3'
-
-volumes:
-  computers_state:
 
 networks:
   traefik-network:

@@ -23,7 +23,8 @@ services:
       # the canonical `download` op's content-addressed cache (dlcache.py) — a cache, regenerated
       - DRIVE_DLCACHE_DIR=/data/.dlcache
     volumes:
-      - drive_google_data:/data
+      # in the DGO folder's data/drive-google/state (DGO-2019); it was the volume drive_google_data, moved once
+      - ../../data/drive-google/state:/data
     networks:
       - traefik-network
     healthcheck:
@@ -44,9 +45,6 @@ services:
       options:
         max-size: 5m
         max-file: '3'
-
-volumes:
-  drive_google_data:
 
 networks:
   traefik-network:

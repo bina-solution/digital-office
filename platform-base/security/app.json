@@ -40,7 +40,7 @@
       "port": 8995,
       "auth": "sso",
       "module": {
-        "group": "ראשי",
+        "group": "ניהול הלשכה",
         "icon": "shield",
         "embed": true,
         "alias": "security",
@@ -61,7 +61,9 @@
     }
   },
   "data": {
-    "volumes": ["security_data", "security_sensor"],
+    "volumes": [],
+    "paths": ["data/security/data", "data/security/sensor"],
+    "moved_from": {"data/security/data": "security_data", "data/security/sensor": "security_sensor"},
     "on_uninstall": "keep"
   },
   "resources": {

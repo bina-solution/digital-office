@@ -97,6 +97,7 @@ PROOF_CONTEXT = b"dgo-join/1 offer\n"
 #: failure or a refusal.
 POLL_EVERY = 5
 RETRY_EVERY = 30
+RETRY_CAP = 900                  # a host that keeps failing is asked at least every 15 minutes, never less often
 REFUSED_REST = 900
 DEFAULT_INVITE_TTL = 7 * 86400
 
@@ -645,6 +646,7 @@ class Joiner:
         self.live: dict = {}         # the request being waited on: {rid, poll, offer_rid, hub}
         self.last: dict = {"state": "off"}
         self.rest_until = 0.0
+        self.fails = 0               # failures in a row: each doubles the rest, up to RETRY_CAP (DGO-2111 root 22)
         self.force = False           # `again`: ask even though a record of the host is here
 
     def _cfg(self) -> dict | None:
@@ -675,7 +677,7 @@ class Joiner:
         (a host that lost this office's record, a revoked invite replaced) — and forget a refusal.
         The record stays until the new grant replaces it: a link that works keeps working meanwhile."""
         with self.lock:
-            self.live, self.rest_until, self.force = {}, 0.0, True
+            self.live, self.rest_until, self.force, self.fails = {}, 0.0, True, 0
         return self._say("asking", note="ביקשתי להצטרף מחדש")
 
     def _holds_link(self, cfg: dict) -> str:
@@ -704,14 +706,18 @@ class Joiner:
             if self.now() < self.rest_until:
                 return self.last
             try:
-                if self.live and self.live.get("hub") == cfg["hub"]:
-                    return self._wait(cfg)
-                return self._ask(cfg)
+                out = self._wait(cfg) if self.live and self.live.get("hub") == cfg["hub"] else self._ask(cfg)
+                self.fails = 0
+                return out
             except PairError as e:
                 self.live = {}
+                self.fails += 1
                 # a host that SAID no (an invite it does not hold, a refused request) is not asked
-                # again every half minute
-                self.rest_until = self.now() + (REFUSED_REST if e.status == 403 else RETRY_EVERY)
+                # again every half minute — nor one that does not answer: each failure in a row doubles the rest,
+                # up to RETRY_CAP (the MacBook asked link.exf, which served traefik's default certificate, 1,071
+                # times a day: DGO-2111 root 22)
+                self.rest_until = self.now() + (REFUSED_REST if e.status == 403
+                                                else min(RETRY_EVERY * 2 ** min(self.fails - 1, 10), RETRY_CAP))
                 return self._say("failed", hub=cfg["hub"], error=str(e))
 
     def _ask(self, cfg: dict) -> dict:

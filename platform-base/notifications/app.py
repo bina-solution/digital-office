@@ -222,7 +222,8 @@ def _row(r):
     return d
 
 
-def create_notification(source, title, *, source_id=None, body="", level="info", link="", meta=None):
+def create_notification(source, title, *, source_id=None, body="", level="info", link="", meta=None,
+                        resolves=None):
     """Upsert-by-(source,source_id). Returns (id, created:bool).
 
     Dedup with RECURRENCE awareness: re-polling the same GlitchTip issue must not spawn a
@@ -231,11 +232,24 @@ def create_notification(source, title, *, source_id=None, body="", level="info",
     and mark it unread again, so a recurring error doesn't sit silently as a stale "43m ago".
     A refresh with NO new occurrence only updates display fields and leaves read-state alone.
 
+    A notice can END an episode (DGO-2111). Before this, only GlitchTip rows were ever retired, so a
+    producer's «back» never closed its «down». On vps1, 217 of dgo-extend's 218 unread rows were outages
+    long over. Two ways to end one:
+    - ``meta.state == "resolved"``: this notice's own episode is over, and its row is written READ, even when
+      it rewrites the «down» row of the same source_id (meet's watch and autoheal's «works again» do this).
+    - ``resolves``: OTHER rows of the same source that this notice ends become read. dgo-extend's
+      «link-up-…» ends the «link-down-…» and «link-slow-…» rows of the same episode.
+    A producer closes only its own rows (the same ``source``), never another's.
+    - ``meta.state == "log"``: a RECORD, nothing to act on (bina-ds' «סדר … נפתח»), is also written read. A
+      producer says it; the board never guesses. A take («המשרד התעדכן») is NEWS by the owner's DGO-1329, so it
+      stays unread.
+
     Two-step (INSERT OR IGNORE, then UPDATE-if-existed) so `created` is reliable."""
     now = _now()
     meta = meta or {}
     meta_s = json.dumps(meta, ensure_ascii=False)
     last_seen = meta.get("lastSeen") or now  # GlitchTip's real last-occurrence time
+    resolved = meta.get("state") in ("resolved", "log")   # nothing left to act on: the row is written read
 
     def _cnt(m):
         try:
@@ -248,8 +262,8 @@ def create_notification(source, title, *, source_id=None, body="", level="info",
         cur = c.execute(
             """INSERT OR IGNORE INTO notifications
                  (source, source_id, title, body, level, link, meta, is_read, created_at, updated_at, last_seen)
-                 VALUES(?,?,?,?,?,?,?,0,?,?,?)""",
-            (source, source_id, title, body, level, link, meta_s, now, now, last_seen),
+                 VALUES(?,?,?,?,?,?,?,?,?,?,?)""",
+            (source, source_id, title, body, level, link, meta_s, 1 if resolved else 0, now, now, last_seen),
         )
         created = cur.rowcount == 1
         if not created:  # already exists
@@ -275,6 +289,13 @@ def create_notification(source, title, *, source_id=None, body="", level="info",
                        WHERE source=? AND source_id IS ?""",
                     (title, body, level, link, meta_s, now, last_seen, source, source_id),
                 )
+            if resolved:  # the episode is over: the row is read, whatever the «down» it rewrote was
+                c.execute("UPDATE notifications SET is_read=1 WHERE source=? AND source_id IS ?", (source, source_id))
+        if resolves:  # …and the rows of the same source this notice ends (never another producer's)
+            c.executemany(
+                "UPDATE notifications SET is_read=1, updated_at=? WHERE source=? AND source_id=? AND is_read=0",
+                [(now, source, s) for s in resolves if s != source_id],
+            )
         row = c.execute(
             "SELECT id FROM notifications WHERE source=? AND source_id IS ?", (source, source_id)
         ).fetchone()
@@ -501,11 +522,57 @@ def get_notification(nid):
     return (jsonify(_row(r)) if r else (jsonify(error="not_found"), 404))
 
 
+#: the link's door, by CONTAINER name (`<name>-<deployment>`): apps/computers/caller.py DOOR_HOPS, the same rule.
+#: A network alias any compose file could also declare is not the door.
+DOOR_HOPS = ("dgo-net", "dgo-link")
+_DOOR = {"at": 0.0, "addrs": set()}
+
+
+def _door_addrs(fresh: bool = False) -> set:
+    """The door's addresses, read again once a minute (15 s while there is none: a link made a moment ago is
+    noticed soon, and a cached miss is never a permission). `fresh` reads them now, at most every 5 s (a door
+    recreated with a new address is found at once, not a minute later)."""
+    now = time.time()
+    if _DOOR["at"] and now - _DOOR["at"] < (5 if fresh else (60 if _DOOR["addrs"] else 15)):
+        return _DOOR["addrs"]
+    dep = os.getenv("DEPLOYMENT_NAME", "bina-deployment")
+    out: set = set()
+    for name in DOOR_HOPS:
+        try:
+            for info in socket.getaddrinfo(f"{name}-{dep}", None, proto=socket.IPPROTO_TCP):
+                out.add(str(info[4][0]))
+        except OSError:
+            continue
+    _DOOR.update(at=now, addrs=out)
+    return out
+
+
+#: an office id, as link_identity.OFFICE_RE reads it (platform-base/connections/link_identity.py)
+_OFFICE_RE = r"[a-z][a-z0-9-]{1,30}"
+
+
+def _from_office():
+    """The LINKED office a notice came from (DGO-2111, root 2): the office header the link's door writes, believed
+    only from the door's own address — any container on this network can write the header (link_identity.py's
+    rule). "" for this office's own posters, which is every notice there was before; None for a request from the
+    door that names no valid office, which is refused rather than taken as this office's own."""
+    import re
+    office = (request.headers.get("x-dgo-office") or "").strip().lower()
+    if not office:
+        return ""
+    addr = request.remote_addr or ""
+    if addr not in _door_addrs() and addr not in _door_addrs(fresh=True):
+        return ""
+    return office if re.fullmatch(_OFFICE_RE, office) else None
+
+
 @app.post("/api/notifications")
 def post_notification():
     """Create a notification from ANY source (the extensibility hook). Body:
-    {source, title, [source_id, body, level, link, meta]}. `meta.actions` are the notice's answers
-    ([{id, label, op, args}], flow.py): a list that is not one is refused, never trimmed."""
+    {source, title, [source_id, body, level, link, meta, resolves]}. `meta.actions` are the notice's answers
+    ([{id, label, op, args}], flow.py): a list that is not one is refused, never trimmed. `meta.state:
+    "resolved"` and `resolves` (the source_ids, of the same source, that this notice ends) close an episode
+    (create_notification). A `resolves` that is not a list of up to 50 names is refused, never trimmed."""
     b = request.get_json(silent=True) or {}
     if not b.get("source") or not b.get("title"):
         return jsonify(error="source and title required"), 400
@@ -514,9 +581,28 @@ def post_notification():
     _, bad = flow.actions_of(b.get("meta"))
     if bad:
         return jsonify(error=bad), 400
+    resolves = b.get("resolves")
+    if resolves is not None and (not isinstance(resolves, list) or len(resolves) > 50
+                                 or not all(isinstance(s, str) and s.strip() for s in resolves)):
+        return jsonify(error="resolves is a list of up to 50 source_ids"), 400
+    title, source_id, meta, link = b["title"], b.get("source_id"), b.get("meta"), b.get("link", "")
+    office = _from_office()
+    if office is None:
+        return jsonify(error="the link's door named no valid office"), 403
+    if office:
+        # A board-less office's notice, carried here over the link (the MacBook's and the Dell's, DGO-2111 root 2).
+        # Its episodes are its own: its ids never meet this office's same-named one. It says where it comes from.
+        # What would act HERE is dropped: its answers (meta.actions) would run on this office, a relative link would
+        # open this office's app, and meta.to names this office's people.
+        meta = {k: v for k, v in (meta or {}).items() if k not in ("actions", "to")}
+        meta["office"] = office
+        source_id = f"{office}:{source_id}" if source_id else None
+        resolves = [f"{office}:{s}" for s in resolves] if resolves else resolves
+        title = f"{office} · {title}"
+        link = link if str(link or "").startswith(("http://", "https://")) else ""
     nid, created = create_notification(
-        b["source"], b["title"], source_id=b.get("source_id"), body=b.get("body", ""),
-        level=b.get("level", "info"), link=b.get("link", ""), meta=b.get("meta"),
+        b["source"], title, source_id=source_id, body=b.get("body", ""),
+        level=b.get("level", "info"), link=link, meta=meta, resolves=resolves,
     )
     return jsonify(id=nid, created=created), (201 if created else 200)
 

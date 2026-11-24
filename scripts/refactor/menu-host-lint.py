@@ -44,10 +44,9 @@ if hasattr(sys.stdout, "reconfigure"):
 ROOT = Path(__file__).resolve().parents[2]
 
 #: The pages that still keep a shell of their own, each with why — remove a line when its page is fixed.
-KNOWN = {
-    "platform-base/console/static/index.html":
-        "the console IS the shell: its menu's column is its own layout (#app, style.css), the rail every office "
-        "opens on — not an app that adopts the component's host",
+KNOWN: dict[str, str] = {
+    # [2026-11-20] the console LEFT this list: it has no side menu any more — a computer is the desk, and the phone's
+    # shell navigates by its home and its bar (DGO-2132).
 }
 
 VOID = {"area", "base", "br", "col", "embed", "hr", "img", "input", "link", "meta", "param", "source", "track", "wbr"}

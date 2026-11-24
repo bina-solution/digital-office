@@ -132,6 +132,31 @@ class TaskWatchdogTests(unittest.TestCase):
         self.assertIn("stall_timeout", body)
         self.assertIn("inspecting", body)
 
+    def test_a_full_queue_is_capacity_one_row_a_day_not_a_person(self):
+        # DGO-2111 root 16: a task that never left the queue met a full browser. Its notice is ONE row under a
+        # stable id («browser-capacity»), new once a day at the day's first timeout, counting the day's timeouts, and
+        # it says no person is wanted. Not «נדרש אדם» under each slug.
+        with tempfile.TemporaryDirectory() as directory, patch.object(MODULE, "TASKS", Path(directory) / "tasks"), \
+                patch.object(MODULE, "DATA", Path(directory)):
+            calls = []
+            first = 10 + MODULE.ALLOCATED_STALL_SECONDS + 1
+            with patch.object(MODULE, "NOTIFICATIONS_URL", "http://notifications.test:8977"), \
+                    patch.object(MODULE.handoff, "notify_human", side_effect=lambda slug, body, link, url=None, title=None, since=None: calls.append((slug, body, title, since)) or True), \
+                    patch.object(MODULE, "broker_command", return_value={"ok": True}), \
+                    patch.object(MODULE, "span_close_tab"), patch.object(MODULE, "span_watchdog_stale"):
+                write_task(str(Path(directory) / "tasks"), "q1", {"slug": "q1", "state": "active", "stage": "allocated", "created_at": 10, "heartbeat_at": 10})
+                self.assertEqual(MODULE.sweep(current=first), ["q1"])
+                write_task(str(Path(directory) / "tasks"), "q2", {"slug": "q2", "state": "active", "stage": "allocated", "created_at": 20, "heartbeat_at": 20})
+                self.assertEqual(MODULE.sweep(current=first + 60), ["q2"])
+        self.assertEqual(len(calls), 2)
+        self.assertEqual({c[0] for c in calls}, {"browser-capacity"}, "one stable row, never a row per task")
+        self.assertEqual([c[3] for c in calls], [first, first], "the day's first timeout is its time, all day")
+        self.assertIn("1 משימות", calls[0][1])
+        self.assertIn("2 משימות", calls[1][1], "the count shows a queue that stays full")
+        self.assertIn("«q2»", calls[1][1])
+        self.assertIn("לא צעד של אדם", calls[1][1])
+        self.assertNotIn("נדרש אדם", calls[1][2])
+
     def _sweep_with_spans(self, task_payload: dict, current: int, spans_enabled: bool = True):
         """Run one sweep with urllib.request.urlopen mocked; returns (stalled, span POSTs)."""
         posts = []

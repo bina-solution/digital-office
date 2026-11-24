@@ -11,7 +11,7 @@
   "desktopName": "dgo-desktop.desktop",
   "scripts": {
     "start": "electron .",
-    "test": "node --test test/offices.test.mjs",
+    "test": "node --test test/offices.test.mjs test/icons.test.mjs",
     "dist": "electron-builder --publish never"
   },
   "devDependencies": {

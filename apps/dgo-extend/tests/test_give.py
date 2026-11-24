@@ -248,12 +248,120 @@ def main() -> int:
         check("bina-ds" not in w and "browser42" not in w, f"the herd's names are not withheld from vps1: {sorted(w)}")
         check("claude-terminal" in w and "connections" in w, f"…and what it does not name still is: {sorted(w)}")
 
+    # ── a DOOR the herd gives (DGO-2125): the HP's signer page, narrowed to /s/ and opened, to vps1 ──────────────
+    door_herd = HERD.replace("telegram, newsflow, project-pln]",
+                             "telegram, newsflow, project-pln, {door: esign-public, paths: [/s/], public: true}]", 1)
+    check(door_herd != HERD, "the test's herd file holds the door line")
+
+    def door_registry():
+        reg = Path(os.environ["DGO_REGISTRY_DIR"])
+        (reg / "office.apps.json").write_text(json.dumps(dict(REGISTRY, services=[
+            {"app": "esign", "alias": "esign-public", "port": 8080}])), encoding="utf-8")
+
+    def doors_of(office: str) -> dict:
+        return {s["alias"]: s for s in app.build_catalog(office=office).get("services") or []}
+
+    setup("hp-laptop", INCIDENT, herd=door_herd)          # a map written with no `services` at all
+    door_registry()
+    v = doors_of("vps1")
+    check(v.get("esign-public", {}).get("paths") == ["/s/"] and v["esign-public"].get("public") is True,
+          f"the herd gives vps1 the door, narrowed and opened, though the map names no door: {v}")
+    check("esign-public" not in doors_of("macbook"), f"…and no other office: {doors_of('macbook')}")
+    check(on_disk() == INCIDENT and cv.home_serve_written() == INCIDENT,
+          f"the door is never written into home.json, and a writer reads back the map as written: {on_disk()}")
+    # the map's own entry for it: the herd's paths and consent win — and NEVER WIDER for an office the map named. One
+    # alias holds one spec: an office keeps the door only when the herd's spec is no wider for it (the second reader)
+    herd_spec = {"paths": ["/s/"], "public": True}
+    for mine, want, why in (
+            ({"to": ["macbook"], "paths": ["/api/"]}, ["vps1"], "other paths: the MacBook would gain /s/ and consent"),
+            ({"to": ["macbook"], "paths": ["/s/"]}, ["vps1"], "no consent in the map: the MacBook would gain it"),
+            ({"to": "claude-cloud"}, ["vps1"], "an office the herd never named, given no consent"),
+            ({"to": ["macbook"], "paths": ["/s/"], "public": True}, ["macbook", "vps1"], "the same spec: kept"),
+            ({"to": ["macbook"], "paths": ["/s/", "/x/"], "public": True}, ["macbook", "vps1"], "wider, consented: kept"),
+            # the map's entry judged as publishable_services reads it, never its raw flags (the second reader)
+            ({"to": ["macbook"], "public": True}, ["vps1"], "the whole door: no consent counts without paths"),
+            ({"to": ["macbook"], "paths": ["/"], "public": True}, ["vps1"], "`/`: no consent counts for the whole app"),
+            ({"to": ["macbook"], "paths": ["/", "/x/%2e"], "public": True}, ["vps1"], "a path that is none: it gave nothing"),
+            ({"paths": ["/s/"]}, ["vps1"], "no `to` (wherever only allows): the herd's offices name it")):
+        setup("hp-laptop", dict(INCIDENT, services={"esign-public": mine}), herd=door_herd)
+        door_registry()
+        eff = cv.home_office()["serve"]["services"]["esign-public"]
+        check(eff == dict(herd_spec, to=want), f"{why}: {mine} → {eff}")
+    # a writer that puts the door in `exclude` does not close it either, and the rest of `exclude` stays
+    setup("hp-laptop", dict(INCIDENT, exclude=["esign-public", "calculator"]), herd=door_herd)
+    door_registry()
+    check("esign-public" in doors_of("vps1") and cv.home_office()["serve"].get("exclude") == ["calculator"],
+          f"`exclude` does not close the herd's door: {cv.home_office()['serve'].get('exclude')}")
+    # …and a door `exclude` gave to nobody goes to the herd's offices alone, never back to the map's own
+    setup("hp-laptop", dict(INCIDENT, exclude=["esign-public"],
+                            services={"esign-public": {"to": ["macbook"], "paths": ["/s/"], "public": True}}),
+          herd=door_herd)
+    door_registry()
+    eff = cv.home_office()["serve"]
+    check(eff["services"]["esign-public"]["to"] == ["vps1"] and "esign-public" not in doors_of("macbook"),
+          f"an excluded door goes to the herd's offices alone: {eff['services']['esign-public']}")
+    # a door line that names an APP re-opens nothing: an app's name stays in `exclude`, and the app stays closed
+    app_herd = HERD.replace("telegram, newsflow, project-pln]",
+                            "telegram, newsflow, project-pln, {door: esign, paths: [/s/], public: true}]", 1)
+    setup("hp-laptop", {"*": {}, "exclude": ["esign"]}, herd=app_herd)
+    reg = Path(os.environ["DGO_REGISTRY_DIR"])
+    (reg / "office.apps.json").write_text(json.dumps(dict(
+        REGISTRY, apps=REGISTRY["apps"] + [{"app": "esign", "alias": "esign", "name": "חתימות", "port": 8080}],
+        services=[{"app": "esign", "alias": "esign-public", "port": 8080}])), encoding="utf-8")
+    eff = cv.home_office()["serve"]
+    check(eff.get("exclude") == ["esign"] and "services" not in eff and "esign" not in given("macbook"),
+          f"a door line naming an app gives nothing and re-opens nothing: {eff}, macbook {given('macbook')}")
+    # a door this office's registry does not have gives nothing
+    setup("hp-laptop", INCIDENT, herd=HERD.replace(
+        "telegram, newsflow, project-pln]", "telegram, newsflow, project-pln, {door: nothere, paths: [/s/]}]", 1))
+    door_registry()
+    check("services" not in cv.home_office()["serve"], "a door the registry does not list gives nothing")
+    # an office narrowed to nothing still gets the door the herd names for it (its `to`, not `only`, decides)
+    setup("hp-laptop", dict(INCIDENT, only={"vps1": []}), herd=door_herd)
+    door_registry()
+    check("esign-public" in doors_of("vps1"), f"`only.vps1: []` keeps the herd's door: {doors_of('vps1')}")
+    # a peer whose record here holds another key gets no door by the herd file
+    setup("hp-laptop", INCIDENT, herd=door_herd, records=dict(RECORDS, vps1=OTHER))
+    door_registry()
+    check("esign-public" not in doors_of("vps1"), "a peer whose record holds another key gets no door")
+    # by key, not by name
+    setup("hp-laptop", INCIDENT, herd=door_herd, my_key=OTHER)
+    door_registry()
+    check("esign-public" not in doors_of("vps1"), "an office whose key is not the herd's gives no door by it")
+    # a door that breaks the rule gives nothing: a typo never opens more than was written
+    for bad in ("{door: esign-public, public: true}",                  # no paths: the whole door
+                "{door: esign-public, paths: [/], public: true}",       # the whole app, opened
+                "{door: esign-public, paths: [/s/../x/]}",
+                "{door: esign-public, paths: [/s/], public: 'yes'}",
+                "{door: esign-public, paths: [/s/], to: [dell]}",       # a key the rule does not take
+                "{door: Esign_Public, paths: [/s/]}"):
+        setup("hp-laptop", INCIDENT, herd=HERD.replace("telegram, newsflow, project-pln]",
+                                                      "telegram, newsflow, project-pln, " + bad + "]", 1))
+        door_registry()
+        check(not doors_of("vps1") and "services" not in cv.home_office()["serve"],
+              f"a door that breaks the rule gives nothing: {bad}")
+    # one door, two offices, two answers: given to none
+    setup("hp-laptop", INCIDENT, herd=door_herd.replace(
+        "macbook: [bina-ds, bina-claude, browser42, computers, project-pln]",
+        "macbook: [bina-ds, bina-claude, browser42, computers, project-pln, {door: esign-public, paths: [/x/]}]", 1))
+    door_registry()
+    check(not doors_of("vps1") and not doors_of("macbook"), "one door given with two answers is given to none")
+    # the apps' floor does not move for a door in the line
+    setup("hp-laptop", INCIDENT, herd=door_herd)
+    door_registry()
+    check({"bina", "bina-claude", "browser42", "plane"} <= set(given("vps1")),
+          f"the apps' floor is the same beside a door: {given('vps1')}")
+
     # ── THE REAL FILE ──────────────────────────────────────────────────────────────────────────────────────────
     real = (REPO / "apps" / "computers" / "herd.yaml").read_text(encoding="utf-8")
     setup("hp-laptop", INCIDENT, herd=real)
     for peer, apps in (("vps1", ("bina", "bina-claude", "browser42", "plane")), ("macbook", ("bina", "computers"))):
         for a in apps:
             check(a in given(peer), f"apps/computers/herd.yaml gives {peer} the HP's {a}: {given(peer)}")
+    door_registry()
+    v = doors_of("vps1")
+    check(v.get("esign-public", {}).get("paths") == ["/s/"] and v["esign-public"].get("public") is True,
+          f"apps/computers/herd.yaml gives vps1 the HP's signer door, narrowed and opened (DGO-2125): {v}")
     setup("macbook", {"*": {}}, herd=real)
     check(cv.home_office()["serve"] == {"*": {}}, "the real file gives nothing from the MacBook: no change there")
 

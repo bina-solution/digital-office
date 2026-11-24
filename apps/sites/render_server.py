@@ -15,7 +15,7 @@ Three properties this service keeps, because a score nobody can reproduce is a s
     static CSS engine, so the number here is the number `beautiful <url>` prints;
   * every viewport the designer checks (desktop 1280×800, tablet 768×1024, mobile 375×812), because
     a page that scores 90 on a laptop and 48 on a phone is a broken page, not an average;
-  * the PNGs are KEPT, under the shared volume, so "the score dropped 12 points" can be answered by
+  * the PNGs are KEPT, in the shared store (data/sites/renders), so "the score dropped 12 points" can be answered by
     looking at the two screenshots instead of arguing about the formula.
 """
 from __future__ import annotations

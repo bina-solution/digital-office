@@ -36,4 +36,10 @@ case "$email" in
   ""|*@example.com|*@example.org|*@example.net|*@*.invalid|*@*.test|*@localhost|*@*.localhost|person95.x@example.com)
     echo "[traefik] TRAEFIK_ACME_EMAIL=${email:-<unset>} is one Let's Encrypt REFUSES — no certificate"
     echo "[traefik]   will ever be issued and every https host will warn. Set a real address in .env." ;;
+  *@*.*) ;;
+  *)
+    # the HP's form (2026-11-18/19, DGO-2111 root 18): «invalidContact … needs at least one dot» — no @, or a domain
+    # with no dot, refused the same way
+    echo "[traefik] TRAEFIK_ACME_EMAIL=${email} has no domain with a dot — one Let's Encrypt REFUSES: no certificate"
+    echo "[traefik]   will ever be issued and every https host will warn. Set a real address in .env." ;;
 esac

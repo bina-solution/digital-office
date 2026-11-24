@@ -597,7 +597,7 @@ def api_site_findings(sid: str, resolved: int = 0):
 
 @app.get("/api/sites/{sid}/shot")
 def api_site_shot(sid: str, file: str):
-    """A rendered screenshot the beauty check kept. Served from the shared render volume, so the
+    """A rendered screenshot the beauty check kept. Served from the shared render store (data/sites/renders), so the
     office never has to copy a 400 KB PNG through a database."""
     site, bad = _site_or_404(sid)
     if bad:

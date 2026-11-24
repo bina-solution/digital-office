@@ -40,21 +40,41 @@ What it is: a thin shell. Every screen inside the window is the office's own con
 ```bash
 cd packaging/desktop
 npm ci
-npm test                 # the rules of src/offices.js (node --test, no Electron)
+npm test                 # the rules of src/offices.js and the icons (node --test, no Electron)
 npm start                # the app, unpackaged
-npx electron-builder --linux deb rpm --publish never      # or --mac dmg --universal, --win nsis
+npx electron-builder --linux deb rpm AppImage --publish never   # or --mac dmg --universal (on a Mac), --win nsis
 ```
+
+A Windows installer built on Linux needs Wine (electron-builder's `electronuserland/builder:wine` image has it).
+
+The icons are `build/icons/`, rendered from the office's mark by `scripts/app_icons.py`; every system's icon is made
+from the 512.
 
 The simulation of its screens, driving the same `src/ui/` files with a stand-in for the app's bridge:
 `sim/index.html` (how to serve it is in its header).
 
+## How it ships
+
+`.github/workflows/desktop-app.yml` builds the installers on every version tag, on GitHub's own machines in the public
+copy, and attaches them to that version's release:
+
+| system | the file | installs to |
+|---|---|---|
+| Windows 10/11 x64 | `dgo-desktop-win-x64.exe` | this user's programs, no administrator; the Start menu and the desktop |
+| macOS 13+ (Electron 45's floor), Apple silicon and Intel | `dgo-desktop-mac-universal.dmg` | Applications (dragged there) |
+| Debian, Ubuntu | `dgo-desktop-linux-amd64.deb` | the launcher's list of apps |
+| Fedora, RHEL | `dgo-desktop-linux-x86_64.rpm` | the launcher's list of apps |
+| any Linux | `dgo-desktop-linux-x86_64.AppImage` | wherever it is put |
+
+The names never carry the version, so `https://github.com/bina-solution/digital-office/releases/latest/download/<name>`
+is always the newest. The docs' download page, with each system's first-run warning, is
+`docs/src/content/docs/{he,en}/use/desktop-app.md`.
+
 ## Not yet — the owner's accounts (DGO-1980, «בעלים»)
 
-- **Signing.** The builds are unsigned (macOS: ad-hoc), so Windows shows SmartScreen's «unknown publisher» and macOS
-  asks for right-click → Open the first time. Waiting on:
+- **Signing.** The builds are unsigned (macOS: ad-hoc), so Windows shows SmartScreen («More info → Run anyway») and
+  macOS refuses the first open until «Open Anyway» in Privacy & Security. Waiting on:
   - Apple's Developer ID, the hardened runtime and notarization;
   - a Windows code-signing certificate, and the Microsoft Store.
 - **Updates** (electron-updater, stable and beta channels) need signed builds and the download's own domain.
 - **The ≤5 MB `dgo-install`** stays the download, and its signed manifest installs this app (the research, §5.1).
-
-CI: `.github/workflows/desktop-app.yml` builds the three systems, unsigned, for the team.

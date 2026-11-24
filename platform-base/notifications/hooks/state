@@ -1,0 +1,26 @@
+#!/usr/bin/env bash
+#: state — what this app holds, one `<name> <value>` per line:  ./bbox notifications state
+#: The rows of every table of notifications.db, and the fingerprint of the web-push key (vapid.pem: a new key cuts
+#: off every phone that subscribed). The data move (platform/manager/datahome.py, DGO-2019) reads it before it moves
+#: data/notifications and again after, and sends the store back to its volume when anything went missing.
+set -uo pipefail
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
+case "${1:-}" in -h|--help) sed -n 's/^#: //p' "${BASH_SOURCE[0]}"; exit 0 ;; esac
+# The data move names the container it measures; by hand, it is the office's own.
+if [ -n "${DGO_STATE_CONTAINER:-}" ]; then
+  inside() { docker exec -i "${DGO_STATE_CONTAINER}" "$@"; }
+else
+  . "${REPO_ROOT}/scripts/lib.sh"
+  inside() { dcx exec -T notifications "$@"; }
+fi
+inside python - <<'PY'
+import hashlib, sqlite3
+c = sqlite3.connect("file:/data/notifications.db?mode=ro", uri=True)
+for (t,) in c.execute("select name from sqlite_master where type='table' and name not like 'sqlite_%' order by name"):
+    print(f"rows.{t}", c.execute(f'select count(*) from "{t}"').fetchone()[0])
+try:
+    print("vapid", hashlib.sha256(open("/data/vapid.pem", "rb").read()).hexdigest()[:16])
+except OSError:
+    print("vapid none")
+PY

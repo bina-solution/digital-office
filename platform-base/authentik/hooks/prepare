@@ -50,14 +50,17 @@ REPO_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
 # sentinel the stack-wide `--wait` is about to gate on anyway. Same guard the head start had.
 running "authentik-server-${DN}" && exit 0
 
-# COLD vs WARM, decided by OUR OWN volume — the probe that used to live in bbox. It is these
-# migrations and this serial blueprint application that dominate a cold start, so the presence
-# of this app's database volume is the precise signal that they have already run once.
-# Project name derived, not hardcoded: bbox invokes compose with `--project-directory .` from the
-# repo root, so the prefix is the repo directory's name. Guessing wrong only reads as "cold" and
-# costs a larger ceiling on a wait that usually returns early — never a false ready.
-proj="${COMPOSE_PROJECT_NAME:-$(basename "${REPO_ROOT}" | tr '[:upper:]' '[:lower:]')}"
-if docker volume inspect "${proj}_authentik_postgres_data" >/dev/null 2>&1; then
+# COLD vs WARM, decided by OUR OWN database — the probe that used to live in bbox. It is these
+# migrations and this serial blueprint application that dominate a cold start, so this app's
+# database already being there is the precise signal that they have already run once: its folder
+# data/authentik/db holding anything (since DGO-2019; postgres' own 700 folder, which this user may
+# not list, holds its data), or its old volume (an office whose move waits, or one moved and
+# rolled back). Guessing wrong only reads as "cold" and costs a larger ceiling on a wait that
+# usually returns early — never a false ready.
+proj="$(office_project)"
+db="${REPO_ROOT}/data/authentik/db"
+if { [ -d "${db}" ] && [ -n "$(ls -A "${db}" 2>/dev/null || echo unreadable)" ]; } \
+   || docker volume inspect "${proj}_authentik_postgres_data" >/dev/null 2>&1; then
   wt=300 cap=600     # warm: state already exists, nothing to migrate
   say "[authentik] starting identity first — waiting for the SSO sentinel while authentik works (${cap}s at most)…"
 else

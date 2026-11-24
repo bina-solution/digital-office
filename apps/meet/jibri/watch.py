@@ -91,6 +91,8 @@ QUIET_PEAK = 300     # of 32767: a 30-s segment whose loudest sample is below th
 
 PROGRESS = re.compile(r"^Jibri (\d{4}-\d\d-\d\d \d\d:\d\d:\d\d)\.(\d{3}) .*?(?:frame=|size=).*?time=(\d+):(\d\d):(\d\d(?:\.\d+)?).*?speed=\s*([\d.]+)x")
 STARTING = re.compile(r"^Jibri (\d{4}-\d\d-\d\d \d\d:\d\d:\d\d)\.(\d{3}) .*?\[session_id=([0-9a-f-]+)\] JibriSubprocess\.launch#\d+: Starting ffmpeg with: \[(.*)\]")
+STAMP = re.compile(r"^Jibri (\d{4}-\d\d-\d\d \d\d:\d\d:\d\d)\.(\d{3}) ")   # any Jibri log line's own time
+FROZE = 15          # seconds of no progress before Jibri's stop: a freeze that ran into the end, not the end
 TROUBLE = re.compile(r"(?i)\b(error|cannot|could not|failed|invalid|no such|broken pipe|connection refused|pa_|pulse)")
 HARMLESS = re.compile(r"(?i)(^Jibri .*\[(libx264|aac|mp4|x11grab|pulse) @ 0x[0-9a-f]+\] (i8c|kb/s|Qavg|frame|mb |coded|ref|8x8|transform|direct|consecutive|final rate|i16|P16|B16|PSNR|SSIM|Weighted)|Exiting normally|deprecated|Guessed Channel Layout|Starting ffmpeg|Stream mapping|Press \[q\]|Input #\d+, (pulse|x11grab), from)")
 # What Whisper writes into near-silence and crosstalk, measured on this office (2026-10-27, qacap2: three people,
@@ -225,6 +227,23 @@ class Recording:
         self.captions = 0
         self.caption_lag = []
         self.captions_live = None    # the newest captions decision and its reason (captions_live()), for capture.json
+        self.ending = False          # Jibri stopped this recording's ffmpeg: what follows is the file being finished
+        self.froze = None            # seconds ffmpeg was silent before that stop, when FROZE or more: a real fault
+
+    def stopped_at(self):
+        """When Jibri stopped THIS recording's ffmpeg: the stamp of its own «JibriSubprocess.stop» line for the session,
+        the line find() reads. None while there is none.
+        After the stop, ffmpeg logs no progress while Jibri, still BUSY, finishes the file, for 26–28 s. That silence
+        was judged a stall, so all 14 «ההקלטה הסתיימה בזמן תקלה» on vps1 were false, each with a «losing sound» in the
+        room (DGO-2111 root 8)."""
+        text, _ = tail(JLOG, 200000)
+        tag = f"[session_id={self.session}]"
+        for line in text.splitlines():
+            if "JibriSubprocess.stop" in line and tag in line:
+                # the FIRST stop line: a later one (a kill 30 s on, exf107) would add its delay to the silence
+                m = STAMP.match(line)
+                return parse_stamp(m.group(1), m.group(2)) if m else time.time()
+        return None
 
     @property
     def stem(self):
@@ -677,9 +696,15 @@ def main():
                 caps.end()
                 caps = None
             rec.read_progress()
-            if rec.state != "ok":
-                rec.events.append({"at": int(time.time()), "state": "ended-degraded", "for": round(time.time() - rec.degraded_at, 1)})
-                notify("ok", f"ההקלטה של {rec.room} הסתיימה בזמן תקלה", "The recording ended while degraded; see capture.json beside it.", rec.session, rec.room)
+            if rec.state != "ok" or rec.froze:
+                # a real fault: degraded before the end, or a freeze that ran into Jibri's stop (the second reader:
+                # a freeze cut by the stop logs no late progress, so only the silence before the stop shows it).
+                # «ended» is a warning, news; the normal end is no longer judged at all, so it says nothing here.
+                why = (f"ffmpeg froze {rec.froze:.0f} s before Jibri stopped it" if rec.froze else
+                       f"degraded for {time.time() - rec.degraded_at:.0f} s")
+                rec.events.append({"at": int(time.time()), "state": "ended-degraded", "why": why})
+                notify("ended", f"ההקלטה של {rec.room} הסתיימה בזמן תקלה",
+                       f"The recording ended during a fault: {why}; see capture.json beside it.", rec.session, rec.room)
             capture_json(rec, stat)
             log(f"recording {rec.session} ended: wall {time.time() - rec.started:.0f} s, recorded {rec.last_time[1] if rec.last_time else '?'} s, "
                 f"speed {rec.speed}, min pace {rec.min_pace}, state {rec.state}")
@@ -687,6 +712,22 @@ def main():
             told_paused = False
             continue
         rec.read_progress()
+        # ffmpeg quiet for a while, and Jibri stopped it: the end, not a stall (asked only then; the log is not small)
+        stop = rec.stopped_at() if (not rec.ending and rec.last_time and time.time() - rec.last_time[0] > 5) else None
+        if stop:
+            rec.ending = True
+            silent = stop - rec.last_time[0]
+            if silent >= FROZE:
+                rec.froze = silent            # the progress stopped long before the stop: a freeze, said at the end
+            rec.events.append({"at": int(time.time()), "state": "ending", "silent_before_stop": round(silent, 1)})
+            log(f"recording {rec.session[:8]}: Jibri stopped ffmpeg ({silent:.0f} s after its last progress) — "
+                "finishing the file, not judged from here")
+            if caps:                          # nothing more to caption, and finalize.sh needs the memory
+                caps.end(wait=False)
+                caps = None
+        if rec.ending:
+            prev_stat = stat
+            continue
         bad, why, numbers = judge(rec, healthy, stat, prev_stat)
         prev_stat = stat
         if bad:

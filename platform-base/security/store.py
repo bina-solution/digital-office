@@ -1,4 +1,4 @@
-"""store — the security app's memory: one SQLite file in the app's volume, one lock, WAL.
+"""store — the security app's memory: one SQLite file in the app's store (data/security/data), one lock, WAL.
 
 What is kept, and for how long
   hit       every request that reached the edge (and every link-door request), raw, 3 days

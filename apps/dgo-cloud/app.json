@@ -32,7 +32,7 @@
       "auth": "none",
       "emit_labels": true,
       "module": {
-        "group": "עסק",
+        "group": "ניהול העסק",
         "icon": "server",
         "embed": true,
         "alias": "dgo-cloud",
@@ -65,9 +65,9 @@
     }
   ],
   "data": {
-    "volumes": [
-      "dgo_cloud_data"
-    ],
+    "volumes": [],
+    "paths": ["data/dgo-cloud/state"],
+    "moved_from": {"data/dgo-cloud/state": "dgo_cloud_data"},
     "on_uninstall": "keep"
   },
   "resources": {

@@ -38,7 +38,7 @@
       "service": "element-desktop",
       "emit_labels": true,
       "module": {
-        "group": "עסק", "icon": "message", "embed": true, "alias": "element", "id": "element",
+        "group": "תקשורת", "icon": "message", "embed": true, "alias": "element", "id": "element",
         "name": "אלמנט", "desc": "Matrix: החדרים והשיחות, בלקוח הרשמי",
         "url": "http://element-desktop:3000/",
         "passthrough": [{ "path": "/api", "transport": "websocket", "match": "prefix", "strip_mount_prefix": true }]

@@ -7,12 +7,14 @@ on a LINKED office — and that state only exists while the peer registry holds 
 map has no view for it, so the mark could regress to a plain local tile and every map would stay
 green. This drives the running console, asserts the mark, and captures the pixels.
 
-What it asserts, per viewport:
-  * the remote tile is drawn (`.bnv-item.is-remote`) with the office in its row and in its tooltip;
-  * an alias that is BOTH local and remote yields TWO rows with two different ids (the two-tiles
-    rule — the remote one carries the mark, the local one does not);
-  * an office that does not answer reads `… לא זמינה כרגע` in the tooltip and `… לא זמינה` in the
-    row, and its mark is the quiet one (`.is-offline`).
+What it asserts, per viewport, on the HOME — the console's navigator since the side rail went (DGO-2132): the
+phone's home in its content at 390, and «בית» over the desk at 1440 (the rules of DGO-2122 — one tile per KIND of
+app for this business's own herd, and another business's office as a card of its own):
+  * a remote app is reachable from the home — its own tile when it is the only copy of its kind here, else
+    its office's card (`o:<office>`) — and that tile or card names the office in its tooltip;
+  * an alias that runs BOTH here and on a linked office is ONE tile, this office's own, and the other copy
+    is on its office's page (`#/o/<office>`);
+  * an office that does not answer dims its tile (`.is-offline`) and says `… לא זמינה כרגע` in the tooltip.
 Non-zero exit on the first failed assertion, so it can gate.
 
     python3 scripts/remote-ui-capture.py                       # http://console:8000, /tmp/out
@@ -44,7 +46,7 @@ VIEWPORTS = {"desktop": {"width": 1440, "height": 900}, "mobile": {"width": 390,
 #: What the peer rows are, filled from the LIVE registry at run time. Nothing here names an office:
 #: the peer records are the deployment's own data — they appear when an office is linked and vanish
 #: when it is not — and a script that hard-codes `hp-laptop` turns "the office was unlinked" into
-#: "the capture failed". The RULE is asserted over whatever is actually on the rail.
+#: "the capture failed". The RULE is asserted over whatever is actually on the home.
 SUBJECTS: dict[str, dict] = {}
 
 FAILURES: list[str] = []
@@ -86,73 +88,47 @@ def discover(pg) -> None:
             SUBJECTS["offline"] = m
             break
     print("  subjects: " + (", ".join(f"{k}={v['id']}" for k, v in SUBJECTS.items())
-                            or "none — no linked office is publishing apps to this rail"))
+                            or "none — no linked office is publishing apps to this home"))
+
+
+def open_home(pg, office: str = "") -> None:
+    """The home, open: «בית» over the desk on a computer (desktop.js, DGO-2132), the phone's home in its content.
+    With `office`, that machine's or office's own page (`#/o/<office>`)."""
+    pg.evaluate("""o => { if (window.BinaDesktop && BinaDesktop.isOn()) BinaDesktop.home(o || undefined);
+                          else location.hash = o ? '#/o/' + encodeURIComponent(o) : '#/'; }""", office)
+    pg.wait_for_timeout(1000)
 
 
 def rows(pg) -> list[dict]:
-    """Every rail row as the DOM actually holds it — the tile, the office column and the tooltip."""
-    return pg.evaluate("""() => [...document.querySelectorAll('#nav .bnv-item')].map(a => ({
-        id: a.dataset.id || '', title: a.title || '',
-        remote: a.classList.contains('is-remote'),
-        offline: a.classList.contains('is-offline'),
-        office: (a.querySelector('.bnv-meta')?.dataset.office) || '',
-        meta: (a.querySelector('.bnv-meta')?.textContent) || ''}))""")
+    """Every place of the open home as the DOM holds it — an app's tile (its id) or a machine's or office's card
+    (`o:<office>`), with its address and its tooltip."""
+    # `said`: the tooltip AND the words drawn on it — an office's card writes «לא זמינה כרגע» in its own line, not in
+    # its tooltip (which is the office's name), and a tile writes it under its name as well as in its tooltip.
+    return pg.evaluate("""() => [...document.querySelectorAll('.lt[data-hid], .lo[data-office]')].map(a => ({
+        id: a.dataset.hid || 'o:' + a.dataset.office, title: a.title || '', href: a.getAttribute('href') || '',
+        said: (a.title || '') + ' ' + (a.innerText || ''),
+        offline: a.classList.contains('is-offline') || a.classList.contains('is-off')}))""")
 
 
-def open_drawer(pg) -> bool:
-    """Make the rail's rows PAINTABLE at 390px so the mark can be photographed.
-
-    A phone puts the menu behind the shell's own drawer (bina-nav.css §4), and this shell does not
-    ship the component's burger: on 390px the aside is simply the off-canvas panel the phone rail
-    lives in, and the rows inside it are their normal selves the moment it is on screen. So this
-    forces the PANEL into the viewport (`transform:none` + `position:fixed` on the aside) and touches
-    no row, no colour and no class of the component — the pixels captured are the component's own.
-    """
-    return bool(pg.evaluate("""() => {
-        const n = document.querySelector('#side') || document.querySelector('.bnv');
-        if (!n) return false;
-        n.classList.add('is-open');
-        n.style.display = 'flex';       // at 390px the shell drops the aside entirely
-        n.style.transform = 'none';
-        n.style.position = 'fixed';
-        n.style.insetBlock = '0';
-        n.style.insetInlineStart = '0';
-        n.style.zIndex = '60';
-        n.style.width = 'min(84vw,320px)';
-        return true; }"""))
+def place(item_id: str) -> str:
+    """The selector of one place on the home: an app's tile, or an office's card."""
+    return f".lo[data-office='{item_id[2:]}']" if item_id.startswith("o:") else f".lt[data-hid='{item_id}']"
 
 
-def close_drawer(pg) -> None:
-    """Put the phone panel back where the shell keeps it: the launcher capture is the CONTENT area,
-    and a forced panel left on screen would cover the tiles it is meant to show."""
-    pg.evaluate("""() => {
-        const n = document.querySelector('#side') || document.querySelector('.bnv');
-        if (!n) return;
-        n.classList.remove('is-open');
-        for (const k of ['display', 'transform', 'position', 'insetBlock', 'insetInlineStart', 'zIndex', 'width'])
-            n.style[k] = ''; }""")
+def where(seen: dict, subj: dict) -> dict | None:
+    """The place a remote app is reached by: its own tile, or its office's card (DGO-2122)."""
+    return seen.get(subj["id"]) or seen.get("o:" + str((subj.get("remote") or {}).get("office") or ""))
 
 
 def capture(pg, out: pathlib.Path, profile: str, name: str, selector: str, pad: int = 12) -> None:
-    """Screenshot the SUBJECT, not the window.
-
-    A full-window shot of one row is 95% empty page, and three of them (remote / duplicate /
-    offline) come out byte-identical — a folder of proofs that prove nothing apart. So the clip is
-    the nav column when the subject is a rail row (which is what "in the rail, with its office" has
-    to show), and the element's own box otherwise.
-    """
+    """Screenshot the SUBJECT, not the window: the element's own box (a tile, a card, the home), so three proofs
+    (remote / duplicate / offline) cannot come out as the same picture of a page."""
     el = pg.query_selector(selector)
     if el:
         el.scroll_into_view_if_needed()
     pg.wait_for_timeout(250)
     path = out / f"{profile}__{name}.png"
-    nav = pg.query_selector("#nav .bnv-item") if selector.startswith("#nav") else None
-    if nav:
-        box = pg.eval_on_selector("#nav", """n => { const r = n.getBoundingClientRect();
-            return {x: r.x, y: r.y, width: r.width, height: r.height}; }""")
-        pg.screenshot(path=str(path), clip={"x": max(box["x"] - pad, 0), "y": max(box["y"] - pad, 0),
-                                            "width": box["width"] + 2 * pad, "height": box["height"] + 2 * pad})
-    elif el:
+    if el:
         box = el.bounding_box() or {}
         if box:
             pg.screenshot(path=str(path), clip={"x": max(box["x"] - pad, 0), "y": max(box["y"] - pad, 0),
@@ -180,95 +156,88 @@ def main() -> int:
             errors: list[str] = []
             pg.on("pageerror", lambda e: errors.append(str(e)))
             pg.on("console", lambda m: errors.append(m.text) if m.type == "error" else None)
+            # An office that was never onboarded is landed on the install wizard instead (`boot()`, "first-run
+            # landing"), and this deployment's business name comes from apitools, which may not be installed:
+            # the endpoint is answered for the page so the tiles draw. Nothing is written.
+            pg.route(re.compile(r"/api/business(\?.*)?$"), lambda route: route.fulfill(
+                status=200, content_type="application/json",
+                body='{"onboarded": true, "name": "הלשכה הדיגיטלית", "id": "bina"}'))
             pg.goto(args.url, wait_until="networkidle")
-            # ATTACHED, not visible: at 390px the rail is the component's drawer (bina-nav.css §4)
-            # and every row is `display:none` until the drawer is opened — the markup is there, and
-            # "the tile exists and is marked" is exactly what is being asserted.
-            pg.wait_for_selector("#nav .bnv-item", state="attached", timeout=20000)
-            open_drawer(pg)
+            pg.wait_for_timeout(1200)
+            desk = bool(pg.evaluate("() => !!(window.BinaDesktop && BinaDesktop.isOn())"))
+            check(f"{profile}/{'a computer is the desk' if profile == 'desktop' else 'a phone is the home and its bar'}",
+                  desk == (profile == "desktop"), f"desk={desk}")
             if profile == "desktop":
                 discover(pg)          # the subjects are this deployment's data, not this file's list
+            open_home(pg)
             seen = {r["id"]: r for r in rows(pg)}
-            check(f"{profile}/the rail shows remote tiles at all", bool(seen), "no rail rows resolved")
+            check(f"{profile}/the home draws its tiles", any(not k.startswith("o:") for k in seen),
+                  "no tile resolved")
 
             subj = SUBJECTS.get("remote")
             if subj is None:
-                check(f"{profile}/a remote tile is drawn with the mark", False,
+                check(f"{profile}/a remote app is reachable from the home", False,
                       "no remote tile in the registry")
             else:
-                r = seen.get(subj["id"])
-                check(f"{profile}/a remote tile is drawn with the mark", bool(r and r["remote"]),
-                      f"rows={sorted(seen)}")
+                r = where(seen, subj)
+                check(f"{profile}/a remote app is reachable from the home — its tile or its office's card",
+                      bool(r), f"places={sorted(seen)}")
                 if r:
-                    # The tooltip is `<app> · <office LABEL>` and `data-office` is the office's ID.
-                    # Asserting the ID appears in the title would fail on a correct tile, so both
-                    # halves come from the registry's own record: the label is what a person reads,
-                    # the id is what the row carries for anything machine-readable.
+                    # The tooltip names the office by its LABEL — what a person reads — taken from the
+                    # registry's own record, as the place's address carries the id.
                     label = str((subj.get("remote") or {}).get("label") or "")
                     if isinstance((subj.get("remote") or {}).get("label"), dict):
                         lab = subj["remote"]["label"]
                         label = str(lab.get("he") or lab.get("en") or "")
-                    check(f"{profile}/the remote tile names its office in words",
-                          bool(label) and label in r["title"] and r["office"] == subj["remote"]["office"],
-                          f"title={r['title']!r} office={r['office']!r} label={label!r}")
-                    capture(pg, out, profile, "remote-tile", f"#nav .bnv-item[data-id='{subj['id']}']")
+                    check(f"{profile}/the home names its office in words",
+                          bool(label) and label in r["title"], f"title={r['title']!r} label={label!r}")
+                    capture(pg, out, profile, "remote-tile", place(r["id"]))
+                # …and a linked office outside the herd is a card of its own, never tiles mixed into the home
+                foreign = [m for m in [subj] + [SUBJECTS.get(k) for k in ("duplicate", "offline")]
+                           if m and not (m.get("remote") or {}).get("herd")]
+                if foreign:
+                    office = str(foreign[0]["remote"].get("office") or "")
+                    check(f"{profile}/a linked office outside the herd is a card on the home",
+                          ("o:" + office) in seen, f"office={office!r} places={sorted(seen)}")
 
             dup = SUBJECTS.get("duplicate")
             if dup is None:
                 print("  note  no alias runs both here and on a linked office — "
-                      "the two-tiles case is not on this rail")
+                      "the one-tile-per-kind case is not on this home")
             else:
                 local, remote = seen.get(dup["local"]), seen.get(dup["id"])
-                check(f"{profile}/a duplicate alias yields TWO rows", bool(local and remote),
-                      f"local={bool(local)} remote={bool(remote)}")
-                check(f"{profile}/only the remote row of the pair is marked",
-                      bool(local and remote and remote["remote"] and not local["remote"]))
-                if remote:
-                    capture(pg, out, profile, "duplicate-tile", f"#nav .bnv-item[data-id='{dup['id']}']")
+                check(f"{profile}/an alias that runs here and on a linked office is ONE tile, this office's own",
+                      bool(local) and not remote, f"local={bool(local)} remote={bool(remote)}")
+                office = str((dup.get("remote") or {}).get("office") or "")
+                open_home(pg, office)
+                check(f"{profile}/…and the other copy is on its office's page",
+                      pg.evaluate("id => !!document.querySelector(`.lt[data-hid='${id}']`)", dup["id"]))
+                open_home(pg)
 
             off = SUBJECTS.get("offline")
             if off is None:
                 print("  note  no linked office reports ok=false — "
-                      "the unreachable case is not on this rail")
+                      "the unreachable case is not on this home")
             else:
-                r = seen.get(off["id"])
-                check(f"{profile}/an unreachable office says so",
-                      bool(r and r["remote"] and r["offline"]
-                           and "לא זמינה כרגע" in r["title"] and "לא זמינה" in r["meta"]),
-                      f"title={r and r['title']!r} meta={r and r['meta']!r} offline={r and r['offline']}")
+                r = where(seen, off)
+                check(f"{profile}/an unreachable office says so: its tile or card dims and says it in words",
+                      bool(r and r["offline"] and "לא זמינה כרגע" in r["said"]),
+                      f"said={r and r['said']!r} offline={r and r['offline']}")
                 if r:
-                    capture(pg, out, profile, "offline-tile", f"#nav .bnv-item[data-id='{off['id']}']")
+                    capture(pg, out, profile, "offline-tile", place(r["id"]))
 
-            # The launcher is the NO-ROUTE state, and on a phone it is the only place the whole app
-            # list is visible. On a DESKTOP the launcher does not exist at all — the rail IS it (owner
-            # decision, app.js renderHome) — so this capture is taken at 390, where it does. An office
-            # that was never onboarded is landed on the install wizard instead (`boot()`, "first-run
-            # landing"), and this deployment's business name comes from apitools, which is not
-            # installed here: the endpoint is answered for the page so the tiles draw. Nothing is written.
-            close_drawer(pg)
-            pg.set_viewport_size(VIEWPORTS["mobile"])
-            pg.route(re.compile(r"/api/business(\?.*)?$"), lambda route: route.fulfill(
-                status=200, content_type="application/json",
-                body='{"onboarded": true, "name": "הלשכה הדיגיטלית", "id": "bina"}'))
-            pg.reload(wait_until="networkidle")
-            pg.wait_for_selector("#nav .bnv-item", state="attached", timeout=20000)
-            # `location.hash = "#/"` and NOT a URL rewrite: the launcher is what `route()` renders for
-            # a bare `#/` on a phone (app.js: `if (PHONE.matches && MODULES.length) return renderHome()`),
-            # and that runs on a hashchange only. Rewriting the URL in place fires no event and leaves
-            # whatever screen was already open — the trap this hit first.
-            pg.evaluate("() => { location.hash = '#/'; }")
-            pg.wait_for_timeout(1400)
-            check(f"{profile}/the launcher marks the remote tile",
-                  pg.evaluate("() => !!document.querySelector('.htile.is-remote')"))
-            if pg.evaluate("() => !!document.querySelector('.htile.is-remote')"):
-                capture(pg, out, profile, "launcher", "#content .htile.is-remote")
+            home = ".dk-home .dk-more-box" if desk else "#content .lh"
+            if pg.query_selector(home):
+                capture(pg, out, profile, "home", home)
             pg.unroute(re.compile(r"/api/business(\?.*)?$"))
-            pg.set_viewport_size(vp)
-            pg.wait_for_timeout(400)
-            check(f"{profile}/the phone bar and the drawer carry the mark",
-                  pg.evaluate("""() => !!document.querySelector('.bn-item.is-remote')
-                                 || !!document.querySelector('#nav .bnv-item.is-remote')"""))
-            if profile == "mobile":
+            if desk:
+                check(f"{profile}/the dock starts at «בית»",
+                      pg.evaluate("""() => { const b = document.querySelector('.dk-dock > *');
+                                     return !!b && (b.getAttribute('aria-label') || '').startsWith('בית'); }"""))
+            else:
+                check(f"{profile}/the phone bar starts at «בית»",
+                      pg.evaluate("""() => { const b = document.querySelector('.bottomnav .bn-item');
+                                     return !!b && b.getAttribute('href') === '#/'; }"""))
                 capture(pg, out, profile, "bottom-bar", ".bottomnav")
             check(f"{profile}/no JS error while rendering remote tiles",
                   not [e for e in errors if "Failed to load resource" not in e], "; ".join(errors[:3]))

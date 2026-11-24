@@ -51,6 +51,9 @@ jobs:
       || contains(github.event.head_commit.message, '[office-images]')
       || contains(github.event.head_commit.message, '[office-images:')
     runs-on: [self-hosted, portable, ssd]
+    permissions:
+      contents: write   # the draft release the images are attached to
+      actions: write    # scripts/ci/step-aside: whether a version's proof is waiting, and the cancel of this run
     timeout-minutes: 105   # 60 for the builds, up to 45 that ops/prejob_waitfree.sh may hold it
     env:
       MSG: ${{ github.event.head_commit.message }}
@@ -59,6 +62,27 @@ jobs:
       REG: ghcr.io/bina-solution/digital-office
       BINFMT: tonistiigi/binfmt:qemu-v10.2.3@sha256:400a4873b838d1b89194d982c45e5fb3cda4593fbfd7e08a02e76b03b21166f0
     steps:
+      # A VERSION'S PROOF GOES FIRST (DGO-1819; the king, DGO-2123): an `[office-images]` push yields to a queued or
+      # running proof of dgo-stable, cancelling its own run in seconds, and that proof's last job (re-ask) asks it again
+      # once it has ended; a proof's clearing cancels it while it waits (step-aside's YIELDING). At its first step only,
+      # as public-copy's copy and the line's APK (decided 2026-11-20): a watcher would cancel up to 60 minutes of QEMU
+      # builds whenever a batch is pushed, every 20–40 minutes, and none would ever finish. A hand-run is an explicit
+      # ask, and goes.
+      - uses: actions/checkout@v4
+        if: startsWith(github.ref, 'refs/heads/') && github.ref != 'refs/heads/dgo-stable'
+        with:
+          fetch-depth: 1
+          filter: blob:none
+          sparse-checkout: scripts/ci/step-aside
+          sparse-checkout-cone-mode: false
+          path: .step-aside
+          persist-credentials: false
+      - name: A version's proof goes first (scripts/ci/step-aside)
+        if: startsWith(github.ref, 'refs/heads/') && github.ref != 'refs/heads/dgo-stable'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: bash .step-aside/scripts/ci/step-aside && rm -rf .step-aside
+
       - uses: actions/checkout@v4
         with:
           persist-credentials: false

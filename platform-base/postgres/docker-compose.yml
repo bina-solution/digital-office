@@ -42,8 +42,13 @@ services:
     # NOTE: the INDOX schema is deliberately NOT applied at initdb — the "INDOX Seed Fixtures"
     # workflow is the ONE creation path (as the postgres role). An initdb copy created the tables
     # as supabase_admin and broke the workflow's idempotent ALTERs ("must be owner of table").
-    - supabase_db_data:/var/lib/postgresql/data:Z
-    - db-config:/etc/postgresql-custom
+    # the platform database (Drive's index, the business documents, INDOX's schemas): in the DGO folder's
+    # data/postgres/db (DGO-2019; it was the volume supabase_db_data, moved once by `bbox run` with the database
+    # stopped). Backed up by hooks/backup's pg_dump, never as files (SKIPVOL)
+    - ../../data/postgres/db:/var/lib/postgresql/data:Z
+    # pgsodium's ROOT KEY (pgsodium_root.key, under which every vault secret is encrypted) beside the image's own
+    # config, in data/postgres/config (DGO-2019; it was the volume db-config, which docker filled from the image)
+    - ../../data/postgres/config:/etc/postgresql-custom
     healthcheck:
       test: [CMD, pg_isready, -U, postgres, -h, localhost]
       interval: ${HEALTHCHECK_INTERVAL:-30s}
@@ -69,9 +74,6 @@ services:
     networks:
       supabase-net: null
       traefik-network: { aliases: [supabase-db] }
-volumes:
-  supabase_db_data: null
-  db-config: null
 networks:
   supabase-net: null
   traefik-network:

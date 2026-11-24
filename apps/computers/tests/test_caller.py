@@ -96,7 +96,7 @@ def check(name, got, want):
 L_ = "computer_local-local"
 check("door: exec on the shared computer", C.door_allows("POST", f"/api/computers/{L_}/exec"), True)
 check("door: probe on the shared computer", C.door_allows("POST", f"/api/computers/{L_}/probe"), True)
-check("door: exec on vps1", C.door_allows("POST", "/api/computers/computer_ssh-df3d4270/exec"), False)
+check("door: exec on vps1", C.door_allows("POST", "/api/computers/computer_ssh-00000005/exec"), False)
 check("door: delete a machine", C.door_allows("DELETE", f"/api/computers/{L_}"), False)
 check("door: add a machine", C.door_allows("POST", "/api/computers"), False)
 check("door: a share", C.door_allows("POST", f"/api/computers/{L_}/shares"), False)
@@ -107,7 +107,7 @@ check("door: open a shell on the shared computer", C.door_allows("POST", f"/api/
 check("door: type into it", C.door_allows("POST", f"/api/computers/{L_}/shell/0a1b2c3d4e5f6071/input"), True)
 check("door: resize it", C.door_allows("POST", f"/api/computers/{L_}/shell/0a1b2c3d4e5f6071/resize"), True)
 check("door: close it", C.door_allows("DELETE", f"/api/computers/{L_}/shell/0a1b2c3d4e5f6071"), True)
-check("door: a shell on vps1", C.door_allows("POST", "/api/computers/computer_ssh-df3d4270/shell"), False)
+check("door: a shell on vps1", C.door_allows("POST", "/api/computers/computer_ssh-00000005/shell"), False)
 check("door: DELETE the shell route itself", C.door_allows("DELETE", f"/api/computers/{L_}/shell"), False)
 check("door: DELETE a session's input", C.door_allows("DELETE", f"/api/computers/{L_}/shell/0a1b/input"), False)
 check("door: a session id that is not one", C.door_allows("POST", f"/api/computers/{L_}/shell/../exec"), False)

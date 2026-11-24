@@ -41,7 +41,7 @@ from edge import Routers, Tail
 from geo import Geo
 from herd import Herd
 from hostinfo import HostInfo
-from firsts import ban_answer, is_news, new_addresses
+from firsts import ban_answer, is_news, new_addresses, rings
 from jails import Jails, ban_seconds
 from store import Store, day_of
 from egress import Policy as EgressPolicy, PolicyError as EgressPolicyError
@@ -344,6 +344,7 @@ def start_tails() -> None:
 
 _known_countries: set = set()
 _known_addrs: set = set()      # addresses decided about (firsts.py); seeded from Trust.signed at the first read
+_known_places: set = set()     # (country, provider, user) that got in already: firsts.rings (DGO-2111 root 9)
 _addr_watch = {"since": 0.0}   # when this process began watching for new addresses (firsts.is_news)
 _addr_sent: list = []          # times of the last hour's new-address notices
 ADDR_PER_HOUR = 6              # more than this in an hour is the board's (the events), not the owner's phone
@@ -402,6 +403,16 @@ def ingest_hits() -> None:
             _addr_watch["since"] = time.time()
             _known_addrs.update(trust.signed)
             _known_addrs.add("")
+            # the places (country, provider, user) sign-ins already came from: a new address of one of them is the
+            # board's, not the phone's (firsts.rings, DGO-2111 root 9). Only a public address that signed in (never the
+            # herd's own or this office's, which share a provider with strangers) and was never banned (its reader).
+            try:
+                _known_places.update((r["cc"] or "", r["org"] or "", r["user"] or "") for r in store.q(
+                    "SELECT DISTINCT s.ip, a.cc, a.org, s.user FROM signin s JOIN addr a ON a.ip=s.ip "
+                    "WHERE s.verdict='ok' AND s.ip NOT IN (SELECT ip FROM ban UNION SELECT ip FROM ban_log)")
+                    if trust.why(r["ip"]) == "signed-in")
+            except Exception as e:                 # noqa: BLE001 — no places known: every new address rings, as before
+                print(f"security: the known places were not read: {type(e).__name__}: {e}"[:300], flush=True)
         now = time.time()
         for h in new_addresses(batch, _known_addrs, trust.signed):
             ip = h["ip"]
@@ -418,9 +429,16 @@ def ingest_hits() -> None:
                             + " — כתובת שלא נכנסה לכאן קודם.")
                     store.event("address", "info", title, body, ip)
                     _addr_sent[:] = [t for t in _addr_sent if now - t < 3600]
-                    if len(_addr_sent) < ADDR_PER_HOUR:
+                    banned = {(r["cc"] or "", r["org"] or "") for r in store.q(
+                        "SELECT DISTINCT a.cc, a.org FROM addr a WHERE a.ip IN (SELECT ip FROM ban UNION SELECT ip FROM ban_log)")}
+                    ring = rings(place, who.get("user"), _known_places, banned)
+                    told = False
+                    if ring and len(_addr_sent) < ADDR_PER_HOUR:
                         _addr_sent.append(now)
                         notify(title, body, "warning", f"addr:{ip}", ban_answer(ip))
+                        told = True
+                    if told or not ring:   # a place is learned only once the owner was told of it (never by the cap)
+                        _known_places.add((place.get("cc") or "", place.get("org") or "", who.get("user") or ""))
                 _known_addrs.add(ip)               # decided: news told, or the past/the herd's own — never asked again
             except Exception as e:                 # noqa: BLE001 — judged again at its next hit, never lost
                 print(f"security: a new address was not judged ({ip}): {type(e).__name__}: {e}"[:300], flush=True)

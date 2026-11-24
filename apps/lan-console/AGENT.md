@@ -27,7 +27,8 @@ How it fits together:
   - `lan-signin` is the forward-auth image signing in at `auth.<LAN_DOMAIN>`; its hand-off gives the console and every
     app nested under the name a cookie of its own.
   - The office's forward-auth cannot serve this: it sends every browser to signin.<domain>, which a phone cannot resolve.
-  - It reads forward-auth's users file read-only from forward-auth's own volume (`forward_auth_data`): one set of
+  - It reads forward-auth's users file read-only from forward-auth's own store (`data/forward-auth/state`, DGO-2019;
+    on an office that still runs forward-auth from its old volume, the data move puts this mount there too): one set of
     accounts, never a copy of the hashes. While an office migrates it takes the same legacy pair, so a phone signed in
     to authentik on this name is not asked again.
   - `hooks/prepare` removes the authentik proxy outpost this entry had before (`lan-outpost`); nothing is provisioned.

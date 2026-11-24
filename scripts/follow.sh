@@ -6,6 +6,7 @@
 #     ./bbox follow status        what is declared, where this office stands, the last cycle
 #     ./bbox follow install        install or remove the host timer from the declaration (`bbox run` does this)
 #     ./bbox follow clear          after a session repaired a stopped take by hand: forget it, follow again
+#     ./bbox follow clear services after a session put the services right by hand: the next cycle closes their row
 #
 # WHY. Nothing kept an office current: it took dgo-stable only when a person or a session merged it by hand. The
 # HP drifted 761 commits in ten days, and every door that would have let another office update it was itself new
@@ -36,7 +37,8 @@
 #      office whose DGO_FOLLOW IS its DGO_BRANCH — a client office on the public release (both `main`), which may not
 #      push — takes only this: each public commit is a version already cut after its gates, and nothing is pushed back.
 #   4. Otherwise the target is the newest first-parent commit of origin/DGO_FOLLOW whose gates run SUCCEEDED: GitHub's
-#      API, with the checkout's own git credential (in memory, handed to curl on stdin, never in argv); where that
+#      API, with the checkout's own git credential (in memory, handed to curl on stdin, never in argv) — a run that
+#      succeeded, or one still in progress whose `green` job already did (only re-ask is left, DGO-2123); where that
 #      cannot be read, the ref refs/green/DGO_FOLLOW that gates-hosted moves forward on every green run (git data, so
 #      any path that brings the code brings it).
 #   A TAKE: refused before anything moves when the index holds staged changes, a modified file is one the target
@@ -45,7 +47,10 @@
 #   target touches it — but a dgo-stable take that would change which apps it DECLARES enabled (another office's
 #   decision, merged into dgo-stable) is undone before anything runs. Then `bbox run`, and every service that was
 #   running and healthy before must be running and healthy after (one that vanished counts, unless the take retired it
-#   from the compiled model; services that cannot be read count). Healthy, and
+#   from the compiled model; services that cannot be read count). An app switched in the checkout (the owner on his
+#   console, a session's proof) is «switched», never «lost»: a service of an app the checkout declares off in so many
+#   words, which the compiled model no longer declares, is spared and named, and the take's line names a switch made
+#   while it ran (the king's decision, 2026-11-20). Healthy, and
 #   HEAD still the merge → push (never forced). Not → `git reset --keep` to the commit before (never pushed, so no
 #   published history changes), `bbox run` again, and the target is not taken again until a newer one is green.
 # The owner hears what failed: ONE row in the notice centre (source `follow`), written once per distinct text,
@@ -104,7 +109,11 @@ KEEP_AFTER="${DGO_FOLLOW_KEEP_AFTER:-21600}"
 UNIT=dgo-follow
 DRY=0
 HEAL=0                                  # `bbox follow heal`: office_heal, and nothing after it
+APPS_START="?" MODEL_START="" SWITCHED=""   # a take's start, and its switches (note_switched): none, never inherited
 export GIT_TERMINAL_PROMPT=0            # a timer has no terminal: a missing credential fails, never waits
+# Every compose command a cycle runs (`bbox run`, a folder's or a held service's `up`) waits for a quiet moment of an app
+# at work, even one it names: nobody pressed anything (lib.sh compose_when_idle_split, DGO-2129)
+export BBOX_RECREATE_WHEN_IDLE=1
 # Every HTTP transfer a cycle makes is bounded like its probe (DGO-1876). A door that answered the probe and then goes
 # silent mid-pack fails the fetch or the push in a minute, and the cycle says so. The MacBook's door did exactly that
 # from 10:09Z on 2026-11-13, its engine's share hung; without the bound the cycle, and every later one, waited for its
@@ -160,6 +169,88 @@ all_clear() {   # close the open row, if there is one
   [ -n "$(st_get NOTICE)" ] || return 0
   post_notice info "המשרד מעודכן שוב — ${OFFICE}" "back to normal: $1" && st_set NOTICE "" TOLD_PENDING ""
 }   # (a take line still waiting is old news once the office is back to normal: never said after it)
+
+# THE SERVICES' OWN ROW (DGO-2123; the king's second reader, 2026-11-20). An alarm about services after a take — on the
+# code from before it, or fallen — is no reason a take is blocked: the green commit IS in the branch, so the «current»
+# path's all_clear closed the office's row while they still ran the old code (a failed rebuild, the next cycle), or in
+# the very cycle that said it (folders_retry failing again). Such an alarm has a row of its own (follow:svc:<office>),
+# which all_clear never touches: only a cycle that finds its cause gone closes it (svc_clear).
+#
+# The row holds CAUSES (SVC_CAUSES, «kind:name» each), and each closes by its own proof alone (its second reader):
+#   images:<svc>     a rebuild of it that worked (svc_drop, in a take) — never stale_images' file times, which call a
+#                    cache-hit image old for ever (issues/stale-images-reads-file-times-…)
+#   folders:<svc>    no recreate waits for it any more (FOLDERS_PENDING)
+#   fell:<svc>       good in two cycles in a row, after the one that said it (fell → settling → gone): one reading of a
+#                    service that restarts and restarts can say «running» between two crashes (the third reader)
+#   unchecked:<sha>  nothing the follow runs: a later take's check reads only ITS diff, never the one that could not be
+#                    read (the third reader) — a session that looked says so: `bbox follow clear services`
+# A service the office no longer declares holds nothing. The row closes when no cause is left; `follow clear services`
+# drops them all, and the next cycle closes it (and posts again until it could).
+svc_name() { [[ "$1" =~ ^[A-Za-z0-9][A-Za-z0-9_.-]*$ ]]; }   # a service's name — never a word of a sentence
+tell_svc() {   # title body kind [name…] — told once per distinct text on the services' row; its causes kept once told
+  local key t="$1" b="$2" kind="$3" n causes
+  shift 3
+  key="$(printf '%s\n%s' "${t}" "${b}" | cksum | cut -d' ' -f1)"
+  say "${t} — ${b}"
+  [ "${DRY}" = 1 ] && return 0
+  causes="$(st_get SVC_CAUSES)"
+  for n in "$@"; do
+    svc_name "${n}" || continue
+    [[ " ${causes} " == *" ${kind}:${n} "* ]] || causes="${causes:+${causes} }${kind}:${n}"
+  done
+  if [ "$(st_get SVC_NOTICE)" != "${key}" ]; then
+    post_notice error "${t}" "${b}" "svc:${OFFICE}" || return 1   # not told: nothing kept for it, as tell() keeps nothing
+    st_set SVC_NOTICE "${key}" SVC_TOLD "${causes}"                # SVC_TOLD: what the row's text speaks for
+  fi
+  st_set SVC_CAUSES "${causes}"
+}
+svc_drop() {   # kind name… — causes the calling path proved gone; with no name, none (never «all of the kind»)
+  [ "${DRY}" = 1 ] && return 0
+  local kind="$1" c n gone out=""
+  shift
+  [ $# -gt 0 ] || return 0
+  for c in $(st_get SVC_CAUSES); do
+    gone=""
+    if [ "${c%%:*}" = "${kind}" ]; then for n in "$@"; do [ "${c#*:}" != "${n}" ] || gone=1; done; fi
+    [ -n "${gone}" ] || out="${out:+${out} }${c}"
+  done
+  st_set SVC_CAUSES "${out}"
+}
+svc_clear() {   # a cycle, before anything it tells: drop the causes found gone; close the row when none is left
+  [ "${DRY}" = 1 ] && return 0
+  [ -n "$(st_get SVC_NOTICE)" ] || return 0
+  local causes c kind name out="" declared="" good="" pending
+  causes="$(st_get SVC_CAUSES)"
+  if [ -n "${causes}" ]; then
+    # cannot tell — unreadable, or EMPTY (a model with no service is a compose that read no file: G7) — the row stays
+    declared="$(model_services 2>/dev/null)" && [ -n "${declared}" ] || return 0
+    good="$(services 2>/dev/null | good_names)" || return 0
+    pending=" $(st_get FOLDERS_PENDING | cut -s -d' ' -f2-) "
+    for c in ${causes}; do
+      kind="${c%%:*}" name="${c#*:}"
+      if [ "${kind}" != unchecked ]; then
+        grep -qxF -- "${name}" <<<"${declared}" || continue      # retired, renamed: nothing left to wait for
+        case "${kind}" in
+          folders)  [[ "${pending}" == *" ${name}:"* ]] || continue ;;
+          fell)     grep -qxF -- "${name}" <<<"${good}" && c="settling:${name}" ;;   # good once: once more to go
+          settling) if grep -qxF -- "${name}" <<<"${good}"; then continue; else c="fell:${name}"; fi ;;
+        esac
+      fi
+      out="${out:+${out} }${c}"
+    done
+    st_set SVC_CAUSES "${out}"
+    if [ -n "${out}" ]; then
+      # some went — here, or in a take (svc_drop) — and some stay: the row says what holds it now, not the last alarm
+      # (the third reader); a cause between its two good readings is still the same cause
+      [ "$(sed 's/settling:/fell:/g' <<<"${out}")" = "$(st_get SVC_TOLD | sed 's/settling:/fell:/g')" ] \
+        || { post_notice error "עדיין פתוח: שירותים אחרי עדכון — ${OFFICE}" "Still open: ${out} (bbox follow status; once put right by hand: bbox follow clear services)." "svc:${OFFICE}" \
+             && st_set SVC_TOLD "${out}"; } || true
+      return 0
+    fi
+  fi
+  post_notice info "השירותים רצים שוב על הקוד העדכני — ${OFFICE}" "back to normal: every service ${BRANCH} $(short HEAD) runs is on its code" "svc:${OFFICE}" \
+    && st_set SVC_NOTICE "" SVC_CAUSES "" SVC_TOLD ""
+}
 told_took() {   # what tgt — a good take of dgo-stable is news too (DGO-1329: «every important event», a take first
   # among them): said in a row of its own (follow:took:<office>:<sha>, the kind first so a rule can match every
   # office's), so the office's open row is never overwritten by good news; its body is the taken commit's subject
@@ -188,6 +279,12 @@ via_names() {   # the offices DGO_FOLLOW_VIA names, in order, without their path
   local e out=""
   for e in ${_VIA_LIST[@]+"${_VIA_LIST[@]}"}; do out="${out:+${out}, }${e%%:*}"; done
   printf '%s' "${out}"
+}
+git_said() {   # what git printed → its verdict in one line: its first fatal:/error: (not a warning printed before it),
+  # else its last line (-a: a line git's proxy wrote in another encoding is still text), without the URL git repeats
+  local line
+  line="$(grep -a -m1 -E '^(fatal|error):' <<<"$1" || tail -n 1 <<<"$1")"
+  sed -E "s/^fatal: unable to access '[^']*': /fatal: /" <<<"${line}"
 }
 resolve_src() {   # SRC = origin, or the first git app of DGO_FOLLOW_VIA that ANSWERS now, in order; fails, said
   SRC=origin; VIA_USED=""; VIA_WHY=""
@@ -220,11 +317,9 @@ print(int((d.get("registry") or {}).get("link_port") or d["app"]["port"]))' 2>/d
     err="$( { ${cap} git -C "${REPO_ROOT}" -c http.lowSpeedLimit=1 -c "http.lowSpeedTime=${probe}" \
                 ls-remote -q --exit-code "${url}" "refs/heads/${FOLLOW}" >/dev/null; } 2>&1 )"; rc=$?
     if [ "${rc}" != 0 ]; then
-      # git's own verdict (fatal:/error:), not a warning printed before it; else its last line (-a: a line git's proxy
-      # wrote in another encoding is still text). Without the URL git repeats — it is on the line above — so the cause
-      # fits («… returned error: 502»), and cut by characters, not bytes: the git proxy's errors are Hebrew
-      line="$(grep -a -m1 -E '^(fatal|error):' <<<"${err}" || tail -n 1 <<<"${err}")"
-      line="$(sed -E "s/^fatal: unable to access '[^']*': /fatal: /" <<<"${line}")"
+      # git's own verdict (git_said). Without the URL git repeats — it is on the line above — so the cause fits
+      # («… returned error: 502»), and cut by characters, not bytes: the git proxy's errors are Hebrew
+      line="$(git_said "${err}")"
       why="exit ${rc}${line:+: ${line:0:120}}"
       say "${office}'s git app, at its door :${port}, does not answer (${why})"
       VIA_WHY="${VIA_WHY:+${VIA_WHY}; }${office}: ${why}"; continue
@@ -260,12 +355,29 @@ gh_api() {   # <path under repos/<owner>/<repo>/> → GitHub's JSON for it, with
 }
 green_shas() {   # the commits of DGO_FOLLOW whose ${GATES} run succeeded, one per line; fails when none can be read
   if [ -n "${DGO_FOLLOW_GREEN_CMD:-}" ]; then "${DGO_FOLLOW_GREEN_CMD}"; return; fi
-  local ref="" api=""
+  local ref="" api="" going="" id sha
   # Every green run, where the checkout can read GitHub's API.
   api="$(gh_api "actions/workflows/${GATES}/runs?branch=${FOLLOW}&status=success&per_page=100" \
     | python3 -c 'import json, sys
 for r in json.load(sys.stdin).get("workflow_runs", []):
     print(r["head_sha"])' 2>/dev/null)" || api=""
+  # …and a run still IN PROGRESS whose verdict is in: its `green` job succeeded (the gates and the carrier passed and
+  # refs/green moved), and what is left — re-ask, continue-on-error — cannot change it. re-ask waits for the one runner
+  # behind the very runs it asks again, and until it ends the run is not «success»: batch 88 was green, refs/green had
+  # moved, and every office that reads the API kept the version before (DGO-2123, measured 2026-11-20 on vps1).
+  going="$(gh_api "actions/workflows/${GATES}/runs?branch=${FOLLOW}&per_page=20" | python3 -c 'import json, sys
+for r in json.load(sys.stdin).get("workflow_runs", []):
+    if r.get("status") != "completed":
+        print(r["id"], r["head_sha"])' 2>/dev/null)" || going=""
+  while read -r id sha; do
+    [ -n "${id}" ] || continue
+    gh_api "actions/runs/${id}/jobs?filter=latest&per_page=100" | python3 -c 'import json, sys
+sys.exit(0 if any(j.get("name") == "green" and j.get("conclusion") == "success"
+                  for j in json.load(sys.stdin).get("jobs", [])) else 1)' 2>/dev/null \
+      && api="${api:+${api}$'\n'}${sha}"
+  done <<EOF
+${going}
+EOF
   [ -z "${api}" ] || { printf '%s\n' "${api}"; return 0; }
   # Where the API cannot be read: gates-hosted's own record as git data (its green job moves refs/green/<branch> to
   # each green commit), from wherever this cycle fetches. Only then — a ref is a weaker word than the API: refs/green
@@ -436,11 +548,32 @@ lost() {   # before after → every service that was good before and is not good
   # before only by leaning on one that is bad before and after (leaning), is not the take's to answer for — and is
   # said, on stderr, so the cycle's log names it. A service that VANISHED is judged as ever: a dead dependency leaves
   # its dependent created or exited, never gone.
-  local n line model spared="" by
+  local n line model spared="" by off_pairs="" sw_off="" app
   model="$(model_services)" || model=""
   [ "${LOST_SPARE:-1}" = 0 ] || spared="$(leaning "$1" "$2")" || spared=""
+  # OFF BY THE OWNER'S WORD (above the take): asked only when something good before is not good now, and only of a model
+  # that can be read. It is spared in a rollback's report too, whatever LOST_SPARE says: «still not healthy» over an app
+  # its owner switched off would be false.
+  # (outside a take, recover's or a retry's, neither SWITCHED nor MODEL_START is set, so nothing can be spared: not asked)
+  if [ -n "${model}" ] && [ -n "${SWITCHED:-}${MODEL_START:-}" ] \
+     && [ -n "$(comm -23 <(good_names <<<"$1" | sort) <(good_names <<<"$2" | sort))" ]; then
+    off_pairs="$(declared_off_services || true)"
+    sw_off="$(awk '$2 == "off" {print $1}' <<<"${SWITCHED:-}")"
+  fi
   printf '%s\n' "$1" | good_names | while read -r n; do
     line="$(printf '%s\n' "$2" | awk -v n="${n}" '$1 == n')"
+    grep -qxF -- "${n}" <<<"$(good_names <<<"${line}")" && continue   # good now: nothing lost
+    # …and switched by the OWNER, never by the take: switched off while the take ran, or already out of the compiled model
+    # when it began (its render done, its containers still stopping). An app the state named off all along, which the
+    # take's own change dropped from the model (a required provider: resolve()), is the take's (the third reading).
+    app="$(awk -v n="${n}" '$2 == n {print $1; exit}' <<<"${off_pairs}")"
+    if [ -n "${app}" ] && ! grep -qxF -- "${n}" <<<"${model}" \
+       && { grep -qxF -- "${app}" <<<"${sw_off}" \
+            || { [ -n "${MODEL_START:-}" ] && ! grep -qxF -- "${n}" <<<"${MODEL_START}"; }; }; then
+      say "${n} — its app ${app} is declared off and the compiled model no longer declares it: not the take's to answer for" >&2
+      logline "spared: ${n} — its app ${app} is declared off, and the compiled model no longer declares it"
+      continue
+    fi
     if [ -z "${line}" ]; then
       [ -n "${model}" ] && ! grep -qxF -- "${n}" <<<"${model}" && retired "${n}" && continue
       echo "${n} gone"
@@ -458,17 +591,105 @@ lost() {   # before after → every service that was good before and is not good
 # The apps platform.state.yaml at <rev> DECLARES enabled, by reconcile.py's own rule (disposition(): `state:` when it is
 # one of its words, else `enabled: true|false`, else disabled) — the office's own decisions, not the resolved set (a
 # release that adds a base app changes that for every office, and is exactly what following is for). Fails when the
-# file cannot be read or parsed.
+# file cannot be read or parsed. An office of the public line keeps platform.state.yaml as its own file, out of git (the
+# public copy tracks only platform.state.default.yaml): no merge can change it — a target that adds it is refused before
+# the merge (the `present` check) — so it is read from the checkout at either revision (DGO-2126 on the line; the same
+# root on Examplex's office, DGO-2015, on hp-dgo — the two fixes met in «dgo-stable takes hp-dgo», and this is hp-dgo's,
+# which also fails closed when git cannot read the index). A failed `git show` still fails the read (pipefail).
+# own_state — 0 when platform.state.yaml is the office's own (not in the index: untracked), 1 when it is tracked, 2 when
+# git cannot say (an index it cannot read): a caller fails closed on 2, as a read from the commit would.
+own_state() {
+  local t
+  t="$(git -C "${REPO_ROOT}" ls-files -- platform.state.yaml)" || return 2
+  [ -z "${t}" ]
+}
 declared_apps() {
-  git show "$1:platform.state.yaml" 2>/dev/null | python3 -c 'import sys, yaml
-apps = (yaml.safe_load(sys.stdin) or {}).get("apps") or {}
+  # The apps declared on as of commit $1. An office whose platform.state.yaml is untracked keeps it as its own (a
+  # client's office on the public copy: the copy ignores the file and ships none), so no commit holds it and no merge
+  # can change it: the office's own file is the answer for every revision, and none at all is no apps. Read from the
+  # commit alone, it failed for both sides, and every take of main on Examplex's office ended «skipped» (38 cycles,
+  # 2026-11-17 → 11-18; DGO-2015).
+  local own; own_state; own=$?
+  [ "${own}" = 2 ] && return 1
+  { if [ "${own}" = 1 ]; then
+      git show "$1:platform.state.yaml" 2>/dev/null
+    elif [ -e "${REPO_ROOT}/platform.state.yaml" ]; then
+      cat "${REPO_ROOT}/platform.state.yaml" 2>/dev/null
+    else
+      false   # no state file at all is no answer, never «no apps»: the line's own rule and test (DGO-2126)
+    fi; } | enabled_apps
+}
+enabled_apps() { state_apps enabled; }   # a platform.state.yaml on stdin → the apps it declares on, one per line
+off_apps() { state_apps off; }           # …→ the apps it declares OFF in so many words, never one it does not name
+state_apps() {   # enabled|off — reconcile.py's disposition() on a platform.state.yaml on stdin; fails when it cannot be parsed
+  # `state:` when it is one of its words, else `enabled: true|false`, else disabled by default. OFF is only what the
+  # file SAYS (disabled, archived, enabled: false): an app it does not name may be a base app that runs by default.
+  python3 -c 'import sys, yaml
+mode = sys.argv[1]
+apps =(yaml.safe_load(sys.stdin.read()) or {}).get("apps") or {}
 for aid, e in sorted(apps.items()):
     e = e if isinstance(e, dict) else {}
     st = str(e.get("state") or "").strip().lower()
-    if st not in ("enabled", "disabled", "archived"):
-        st = ("enabled" if e.get("enabled") else "disabled") if "enabled" in e else "disabled"
-    if st == "enabled":
-        print(aid)' 2>/dev/null
+    said = st in ("enabled", "disabled", "archived")
+    if not said:
+        said = "enabled" in e
+        st = ("enabled" if e.get("enabled") else "disabled") if said else "disabled"
+    if (mode == "enabled" and st == "enabled") or (mode == "off" and said and st != "enabled"):
+        print(aid)' "$1" 2>/dev/null
+}
+# SWITCHED DURING THE TAKE (the king's decision, 2026-11-20: issues/an-app-switched-during-a-take-is-counted-as-lost-…).
+# A take snapshots its services when it starts and judges them after its run, and `bbox run` compiles the CHECKOUT's
+# platform.state.yaml, while declared_apps reads git's. An app switched in the checkout in between was invisible: on
+# vps1 a proof switched image-store off while the take of 113 ran, its two services counted as lost, and a good version
+# was rolled back with a failure row for the owner. The owner's own switch on his console would do the same.
+# - OFF BY THE OWNER'S WORD (lost(): declared_off_services). A lost service that the compiled model no longer declares,
+#   of an app the checkout declares off in so many words NOW, is spared and named when the OWNER made it so:
+#   - switched off while the take ran, or
+#   - already out of the model when the take began (MODEL_START). `bbox apps disable` writes the state and renders,
+#     then stops the containers one by one, so a baseline read in between sees them good (the second reader).
+#   It is judged by what runs: a provider another enabled app requires stays compiled in and running (resolve()), and
+#   one the state named off all along that the take's own change drops from the model is the take's (its third
+#   reading). An app the file does not name is never «off»: a base app runs by default.
+# - SWITCHED (the take's line): the checkout's apps when the take began (APPS_START) against each later read. An app
+#   switched ON needs no spare: its services were in no baseline, and one that ran before for another reason is judged.
+checkout_apps() {   # the apps the checkout's platform.state.yaml declares on now; fails when it is missing or unparsable
+  [ -e "${REPO_ROOT}/platform.state.yaml" ] || return 1
+  enabled_apps < "${REPO_ROOT}/platform.state.yaml"
+}
+switched_apps() {   # the apps declared on when the take began → "<app> on|off" for each switched since; fails unread
+  local now; now="$(checkout_apps)" || return 1
+  comm -13 <(sed '/^$/d' <<<"$1" | sort) <(sed '/^$/d' <<<"${now}" | sort) | sed 's/$/ on/'
+  comm -23 <(sed '/^$/d' <<<"$1" | sort) <(sed '/^$/d' <<<"${now}" | sort) | sed 's/$/ off/'
+}
+app_services() {   # app… → "<app> <service>" for each service each declares, as the compiler reads them
+  # The compiler's own `compose-services`: the compose file its app.json names, in any catalog root (apps/,
+  # platform-base/, instances/), never a glob. A standalone quick-start file beside it (any-concurrency's) declares
+  # n8n's own services, and a glob would have spared a broken n8n (the second reader). An app the catalog does not know
+  # (a retired one its state still names) answers nothing, and never silences the others (its third reading).
+  if [ -n "${DGO_FOLLOW_APP_SERVICES_CMD:-}" ]; then "${DGO_FOLLOW_APP_SERVICES_CMD}" "$@" || true; return 0; fi
+  local a
+  for a in "$@"; do
+    ( cd "${REPO_ROOT}" && python3 platform/manager/reconcile.py compose-services --app "${a}" 2>/dev/null ) \
+      | sed "s/^/${a} /" || true
+  done
+  return 0
+}
+declared_off_services() {   # → "<app> <service>" for each app the checkout declares OFF now; fails when it cannot be read
+  # (not lib.sh's off_services, which reads the resolved set for stop_off_apps: this one is the take's)
+  local off
+  [ -e "${REPO_ROOT}/platform.state.yaml" ] || return 1
+  off="$(off_apps < "${REPO_ROOT}/platform.state.yaml")" || return 1
+  [ -n "${off}" ] || return 0
+  # shellcheck disable=SC2086 — one app id per word
+  app_services ${off}
+}
+note_switched() {   # SWITCHED: "<app> on|off" for each app the checkout switched since APPS_START — the take's line
+  # Added up: a later read that cannot be made, or that finds the switch undone, takes nothing back from an earlier one.
+  local s
+  [ "${APPS_START-?}" != "?" ] || return 0          # not in a take, or the checkout could not be read when it began
+  s="$(switched_apps "${APPS_START}")" || return 0   # unreadable now: what an earlier read found stands
+  SWITCHED="$(printf '%s\n%s\n' "${SWITCHED}" "${s}" | sed '/^$/d' | awk '!seen[$0]++')"
+  [ -z "${SWITCHED}" ] || say "switched during the take: ${SWITCHED//$'\n'/, }"
 }
 busy_apps() {   # "<app>: <what it said>" for every enabled app whose own hooks/busy says it is in use right now
   # An app knows when recreating it would hurt someone (Meet: a call in progress) — bbox names none of them. A hook
@@ -481,6 +702,78 @@ busy_apps() {   # "<app>: <what it said>" for every enabled app whose own hooks/
     [ -n "${aid}" ] && [ -x "${hook}" ] || continue
     said="$(${cap} bash "${hook}" </dev/null 2>/dev/null)" && printf '%s: %s\n' "${aid}" "$(printf '%s' "${said}" | head -1)"
   done
+}
+when_idle_ids() {   # the enabled apps recreated only while idle (app.json "recreate": "when-idle"), one id per line
+  if [ -n "${DGO_FOLLOW_WHEN_IDLE_CMD:-}" ]; then "${DGO_FOLLOW_WHEN_IDLE_CMD}"; return; fi
+  ( cd "${REPO_ROOT}" && python3 platform/manager/when_idle.py apps 2>/dev/null ) | cut -f1
+}
+take_busy() {   # the busy apps that hold a WHOLE take back (Meet: a call). A «when-idle» app holds only its own running
+  # containers, which the bring-up leaves alone while it is at work (lib.sh compose_when_idle_split, DGO-2129). Holding
+  # the whole take for it would never take anything: the HP's agents work all day.
+  local busy idle
+  busy="$(busy_apps)"; [ -n "${busy}" ] || return 0
+  idle="$(when_idle_ids)"
+  if [ -z "${idle}" ]; then printf '%s\n' "${busy}"; return 0; fi
+  awk -F': ' 'NR == FNR { w[$1] = 1; next } !($1 in w)' <(printf '%s\n' "${idle}") <(printf '%s\n' "${busy}")
+}
+held_retry() {   # what an `up` held because its app was at work (data/.held/<service>, lib.sh when_idle_held): brought up
+  # again each cycle. dcx asks the app again and holds it once more while it is busy. When it is idle: the build the held
+  # command had asked (the note says so), the app's backup, the recreate, then the sessions it cut are resumed (its
+  # before/after-recreate hooks). A note is removed only by an `up` of it that succeeded.
+  local d="${REPO_ROOT}/data/.held" f s declared list=""
+  [ -d "${d}" ] || [ -n "$(st_get HELD_TOLD)" ] || return 0
+  if [ -d "${d}" ]; then
+    declared="$(model_services 2>/dev/null)" || { logline "held: the declared services cannot be read — the retry waits"; return 0; }
+    for f in "${d}"/*; do
+      [ -f "${f}" ] || continue
+      s="$(basename "${f}")"
+      if grep -qFx -- "${s}" <<<"${declared}"; then list="${list}${list:+ }${s}"; else rm -f "${f}"; fi   # retired since
+    done
+  fi
+  # (nothing held now: only the rows of holds that ended are closed, below)
+  if [ -n "${list}" ]; then
+    say "held while their app was at work: ${list} — asked again"
+    if [ -n "${DGO_FOLLOW_RUN_CMD:-}" ]; then
+      "${DGO_FOLLOW_RUN_CMD}" held ${list}
+    else
+      # --wait: a recreate here is health-checked as a take's is; one that never gets healthy keeps its note, and says so
+      # shellcheck disable=SC2086 — a list of service names
+      "${REPO_ROOT}/scripts/dc" up -d --no-deps --wait --wait-timeout 300 ${list} \
+        > "${STATE_DIR}/run-$(date -u '+%Y%m%dT%H%M%S')-held.log" 2>&1 \
+        || logline "held: bringing up ${list} failed or did not get healthy (data/follow/run-*-held.log)"
+    fi
+  fi
+  # Still held after hours means its app was never idle at a cycle: a session's job that never ends, a watcher left
+  # running. That could hold it for good with nobody the wiser, so the office is told, once per hold, with what its
+  # app says; whoever knows decides (BBOX_RECREATE_BUSY=1 brings it up now). DGO-2129's third reader. In a row of its own
+  # (held:<office>:<service>): the office's one row is the take's, and the cycle's own «back to normal» would close it.
+  local now since said key told keep="" age
+  now="$(date -u +%s)"; told="$(st_get HELD_TOLD)"
+  for s in ${list}; do
+    f="${d}/${s}"
+    [ -f "${f}" ] || continue
+    since="$(cut -f1 "${f}")"; said="$(cut -f3 "${f}")"; key="${s}@${since// /_}"
+    case " ${told} " in *" ${key} "*) keep="${keep} ${key}"; continue ;; esac
+    # the note's own time, read the same way on GNU and BSD userlands (`date -d` is GNU's only)
+    age="$(python3 -c 'import datetime, sys
+t = datetime.datetime.strptime(sys.argv[1], "%Y-%m-%d %H:%M:%S UTC").replace(tzinfo=datetime.timezone.utc)
+print(int(float(sys.argv[2]) - t.timestamp()))' "${since}" "${now}" 2>/dev/null)" || age=0
+    [ "${age:-0}" -ge "${DGO_FOLLOW_HELD_TELL_S:-21600}" ] || continue
+    post_notice warning "שירות ממתין שעות לרגע שקט — ${OFFICE}" \
+      "${s} has been held since ${since}: its app is at work (${said}). follow brings it up at the first quiet cycle; BBOX_RECREATE_BUSY=1 brings it up now, and cuts what runs there." \
+      "held:${OFFICE}:${s}" || continue
+    keep="${keep} ${key}"
+  done
+  # a told hold that ended closes its own row; one whose closing could not be posted is tried again next cycle
+  local k
+  for k in ${told}; do
+    case " ${keep} " in *" ${k} "*) continue ;; esac
+    s="${k%%@*}"
+    if [ -f "${d}/${s}" ]; then keep="${keep} ${k}"; continue; fi   # held again since: its row closes when that hold ends
+    post_notice info "שירות חזר לפעול — ${OFFICE}" "${s} is held no more: its app was idle at a cycle, and it was brought up." \
+      "held:${OFFICE}:${s}" || keep="${keep} ${k}"
+  done
+  [ "${keep# }" = "${told}" ] || st_set HELD_TOLD "${keep# }"
 }
 
 office_disk() {   # admit | reclaim | free — the disk floor of a take (lib.sh disk_admit, disk_reclaim, disk_free_gb)
@@ -510,6 +803,129 @@ room() {   # 0 when a take may build here; otherwise the cycle is put off, and t
   [ -n "$(st_get NOTICE)" ] || tell "לא ניתן לעדכן: הדיסק כמעט מלא — ${OFFICE}" "Free space is under the floor of $(disk_floor_gb) GiB (BBOX_DISK_MIN_GB) even after the dangling images and the build cache were given back: no take builds here until space is freed. What holds it: ./bbox machine storage."
   finish skipped "disk: $(office_disk free) GiB free, under the floor of $(disk_floor_gb) GiB"
   return 1
+}
+
+# READY-MADE IMAGES (DGO-2123; the design: research_notes/CICD 2026-11/images.md). A take BUILDS what changed: vps1
+# built batch 98 for ~8 minutes at load 26 on its two cores. Where this office runs the image store's mirror
+# (apps/image-store) AND opted in — DGO_FOLLOW_IMAGES=1 in its .env: one office first, measured, then the rest — the
+# take PULLS the images the line's proof named for its very target (refs/images/<line>), tags each under the name its
+# compose file gives it, builds the other first-party images itself (an unchanged one is a cache hit), and runs `bbox
+# run` without --build (BBOX_PREBUILT): `--build` would build again what was just pulled. Any step that fails, and the
+# take builds as it always did — never half pulled: a build overwrites whatever tag a pull had set.
+# AN IMAGE STANDS IN FOR THIS OFFICE'S OWN BUILD ONLY WHERE IT IS THAT BUILD (images_choose; the reader, DGO-2123):
+# a service of this office runs it; that service builds from the image's own directory with its own Dockerfile and
+# declares nothing else (build args, a target or a second context make another image: project-pln's Hebrew build,
+# app-management's compose version); and this office's tree there is the target's — its own commits or edits in that
+# directory are what it runs, not the line's. Every other image is built here, with the rest.
+IMAGES_ENGINE="${DGO_FOLLOW_ENGINE_CMD:-docker}"
+images_config() {   # the office's compiled compose config as JSON: what each service runs and builds, and from what
+  if [ -n "${DGO_FOLLOW_CONFIG_CMD:-}" ]; then "${DGO_FOLLOW_CONFIG_CMD}"; return; fi
+  ( cd "${REPO_ROOT}" && dcx config --format json 2>/dev/null )
+}
+images_choose() {   # stdin: «id digest name dir» per named image; $1 the target, $2 the config's file, $3 the tag →
+  # «PULL id digest name», «WHY id <why it is built here>», then «OTHERS <every service that builds here>»; exit 3 when
+  # the config cannot be read
+  TGT="$1" CFG="$2" TAG="$3" ROOT="${REPO_ROOT}" python3 -c '
+import json, os, subprocess, sys
+try:
+    with open(os.environ["CFG"], encoding="utf-8") as f:
+        services = json.load(f).get("services") or {}
+except (OSError, ValueError, AttributeError):
+    sys.exit(3)
+root, tgt, tag = os.environ["ROOT"], os.environ["TGT"], os.environ["TAG"]
+builds = {s: v for s, v in services.items() if isinstance(v, dict) and v.get("build")}
+
+def plain(build, d):
+    if isinstance(build, str):
+        build = {"context": build}
+    if not isinstance(build, dict):
+        return "its build here cannot be read"
+    extra = sorted(k for k in build if k not in ("context", "dockerfile"))
+    if extra:
+        return "its build here declares " + ", ".join(extra)
+    if os.path.realpath(os.path.join(root, str(build.get("context") or "."))) != os.path.realpath(os.path.join(root, d)):
+        return "it builds here from %s, not %s" % (build.get("context"), d)
+    if str(build.get("dockerfile") or "Dockerfile") not in ("Dockerfile", "./Dockerfile"):
+        return "it builds here %s, not its Dockerfile" % build.get("dockerfile")
+    return None
+
+def git(*args):
+    return subprocess.run(["git", "-C", root, *args], capture_output=True, text=True)
+
+pulled = set()
+for line in sys.stdin.read().splitlines():
+    parts = line.split()
+    if len(parts) != 4:
+        continue
+    i, digest, name, d = parts
+    users = sorted(s for s, v in builds.items() if v.get("image") == "%s:%s" % (name, tag))
+    why = "no service of this office runs %s:%s" % (name, tag) if not users else \
+        next((w for w in (plain(builds[s]["build"], d) for s in users) if w), None)
+    if not why and (git("diff", "--quiet", tgt, "--", d).returncode != 0
+                    or git("ls-files", "--others", "--exclude-standard", "--", d).stdout.strip()):
+        why = "this office holds %s other than the target does (its own commits or edits there)" % d
+    if why:
+        print("WHY", i, why)
+        continue
+    print("PULL", i, digest, name)
+    pulled.update(users)
+print("OTHERS", " ".join(sorted(s for s in builds if s not in pulled)))'
+}
+images_build() {   # the services that were not pulled, built as compose builds them
+  if [ -n "${DGO_FOLLOW_BUILD_CMD:-}" ]; then "${DGO_FOLLOW_BUILD_CMD}" "$@"; return; fi
+  ( cd "${REPO_ROOT}" && dcx build "$@" )
+}
+images_pull() {   # $1 the target → 0: its images pulled and the rest built, so the take runs with BBOX_PREBUILT; 1: as today
+  local tgt="$1" lines port tag id digest name pulled="" others t0 cfg choice pulls whys w
+  [ "$(read_env DGO_FOLLOW_IMAGES)" = 1 ] || return 1
+  t0="$(date +%s)"
+  if ! "${IMAGES_ENGINE}" ps -q --filter "name=^image-store-${DN}\$" --filter status=running 2>/dev/null | grep -q .; then
+    say "images: this office runs no image store — the take builds"; return 1
+  fi
+  if ! git -C "${REPO_ROOT}" fetch -q "${SRC}" "+refs/images/${FOLLOW}:refs/follow/images/${FOLLOW}" 2>/dev/null; then
+    say "images: refs/images/${FOLLOW} could not be read — the take builds"; return 1
+  fi
+  # only the images the proof named for THIS target: a list of another version's is no answer for this one
+  if ! lines="$(git -C "${REPO_ROOT}" show "refs/follow/images/${FOLLOW}:images.json" 2>/dev/null | TGT="${tgt}" python3 -c '
+import json, os, sys
+d = json.load(sys.stdin)
+if d.get("green") != os.environ["TGT"]:
+    sys.exit(3)
+for i, e in sorted((d.get("images") or {}).items()):
+    if isinstance(e, dict) and str(e.get("digest") or "").startswith("sha256:") and e.get("name") and e.get("dir"):
+        print(i, e["digest"], e["name"], e["dir"])')" || [ -z "${lines}" ]; then
+    say "images: the line named no images for $(short "${tgt}") — the take builds"; return 1
+  fi
+  port="$(read_env REGISTRY_HOST_PORT)"; port="${port:-5055}"
+  tag="$(read_env IMAGE_TAG)"; tag="${tag:-latest}"
+  cfg="$(mktemp)" || { say "images: no temporary file for this office's compose config — the take builds"; return 1; }
+  if ! images_config > "${cfg}" 2>/dev/null || ! choice="$(printf '%s\n' "${lines}" | images_choose "${tgt}" "${cfg}" "${tag}")"; then
+    rm -f "${cfg}"; say "images: this office's compose config could not be read — the take builds"; return 1
+  fi
+  rm -f "${cfg}"
+  whys="$(sed -n 's/^WHY \([^ ]*\) /\1: /p' <<< "${choice}")"
+  [ -z "${whys}" ] || while IFS= read -r w; do say "images: built here, not pulled — ${w}"; done <<< "${whys}"
+  pulls="$(sed -n 's/^PULL //p' <<< "${choice}")"
+  others="$(sed -n 's/^OTHERS *//p' <<< "${choice}")"
+  if [ -z "${pulls}" ]; then
+    say "images: none of the line's images stands in for this office's own build — the take builds"; return 1
+  fi
+  while read -r id digest name; do
+    [ -n "${id}" ] || continue
+    # through the mirror on this machine's loopback: the engine fetches only the layers it lacks, the mirror only the
+    # blobs IT lacks, over the link
+    if ! "${IMAGES_ENGINE}" pull -q "127.0.0.1:${port}/${id}@${digest}" >/dev/null 2>&1 \
+       || ! "${IMAGES_ENGINE}" tag "127.0.0.1:${port}/${id}@${digest}" "${name}:${tag}" >/dev/null 2>&1; then
+      say "images: ${id} (${digest:0:19}…) could not be pulled through the mirror — the take builds"; return 1
+    fi
+    pulled="${pulled}${pulled:+ }${id}"
+  done <<< "${pulls}"
+  # shellcheck disable=SC2086 — service names
+  if [ -n "${others}" ] && ! images_build ${others}; then
+    say "images: what was not pulled did not build — the take builds"; return 1
+  fi
+  say "images: pulled ${pulled}; built ${others:-nothing else}; $(( $(date +%s) - t0 ))s — the take runs without --build"
+  return 0
 }
 
 office_run() {   # bbox run, logged; the exit code is the run's
@@ -684,9 +1100,13 @@ folders_retry() {   # a cycle after a take: what folders_refresh left (busy, or 
   local before after bad=""
   before="$(settle)" || { logline "folders: the services cannot be read — the retry waits"; return 0; }
   folders_refresh "${since}" "${live[@]}" \
-    || tell "שירות רץ על קוד ישן אחרי עדכון — ${OFFICE}" "${names} mount their code as a folder the last take changed, and recreating them failed again (data/follow/run-*-recreate.log): they run the code from before it until recreated."
+    || tell_svc "שירות רץ על קוד ישן אחרי עדכון — ${OFFICE}" "${names} mount their code as a folder the last take changed, and recreating them failed again (data/follow/run-*-recreate.log): they run the code from before it until recreated." folders ${names}
   if after="$(settle)"; then bad="$(lost "${before}" "${after}")"; else bad="the services cannot be read"; fi
-  [ -z "${bad}" ] || tell "שירות נפל אחרי עדכון — ${OFFICE}" "Recreating ${names}, whose code is mounted as a folder the last take changed, left: ${bad//$'\n'/, }. A session must look."
+  # the services the loss names — or, when the services could not be read at all, the ones just recreated (never the
+  # first word of that sentence: its second reader)
+  local fell="${names}"; [ "${bad}" = "the services cannot be read" ] || fell="$(awk '{print $1}' <<<"${bad}")"
+  # shellcheck disable=SC2086 — the names, one word each
+  [ -z "${bad}" ] || tell_svc "שירות נפל אחרי עדכון — ${OFFICE}" "Recreating ${names}, whose code is mounted as a folder the last take changed, left: ${bad//$'\n'/, }. A session must look." fell ${fell}
   return 0
 }
 
@@ -879,17 +1299,49 @@ left_work() {   # path target → 0 when the change here is left work: a file th
   [ -e "${REPO_ROOT}/$1" ] || [ -L "${REPO_ROOT}/$1" ] || return 1
   [ "$(untouched_for "$1")" -ge "${KEEP_AFTER}" ] || here_carried "$1" "$2"
 }
-settle_carried() {   # target conflicts(newline list) → 0 when every conflict was carried content, resolved and committed
-  local tgt="$1" p
-  while IFS= read -r p; do [ -z "${p}" ] || carried "${p}" "${tgt}" || return 1; done <<<"$2"
+settle_carried() {   # target conflicts(newline list) → 0 when every conflict was carried content — or this office's own
+  # platform.state.yaml (keep_own_state) — resolved and committed
+  local tgt="$1" p state="" rest
+  while IFS= read -r p; do
+    [ -n "${p}" ] || continue
+    if [ "${p}" = platform.state.yaml ]; then state=1; continue; fi
+    carried "${p}" "${tgt}" || return 1
+  done <<<"$2"
+  rest="$(grep -vFx platform.state.yaml <<<"$2" | sed '/^$/d' || true)"
   while IFS= read -r p; do
     [ -n "${p}" ] || continue
     if git cat-file -e "${tgt}:${p}" 2>/dev/null; then git --literal-pathspecs checkout -q "${tgt}" -- "${p}" || return 1
     else git --literal-pathspecs rm -q -- "${p}" || return 1; fi   # DGO_FOLLOW removed it; the office's copy was carried
-  done <<<"$2"
-  git commit -q -m "follow: take ${FOLLOW} $(short "${tgt}") into ${BRANCH} (${GATES} green); content ${FOLLOW} itself carried, its versions taken: $(tr '\n' ' ' <<<"$2")" \
-    || return 1
-  say "the take's conflicts were content ${FOLLOW} itself had carried: $(tr '\n' ' ' <<<"$2")— its versions taken"
+  done <<<"${rest}"
+  [ -z "${state}" ] || keep_own_state || return 1
+  # the message in steps: an apostrophe inside "${x:+…}" opens a quote in bash, and broke the whole file once
+  local msg="follow: take ${FOLLOW} $(short "${tgt}") into ${BRANCH} (${GATES} green)"
+  [ -z "${rest}" ] || msg="${msg}; content ${FOLLOW} itself carried, its versions taken: $(tr '\n' ' ' <<<"${rest}")"
+  [ -z "${state}" ] || msg="${msg}; platform.state.yaml conflicted, this office's own kept"
+  git commit -q -m "${msg}" || return 1
+  # …and what was resolved stays the checkout owner's: the post-commit hook gives back only what differs from the first
+  # parent, and a path resolved to this office's own version does not (the second reader: a root-owned
+  # platform.state.yaml refused the next `bbox apps enable` on the HP and the Dell)
+  printf '%s\n' "$2" | sed '/^$/d' | tr '\n' '\0' | bash "${REPO_ROOT}/scripts/checkout-owner.sh" restore 2>/dev/null || true
+  [ -z "${rest}" ] || say "the take's conflicts were content ${FOLLOW} itself had carried: $(tr '\n' ' ' <<<"${rest}")— its versions taken"
+  if [ -n "${state}" ]; then
+    say "platform.state.yaml conflicted with ${FOLLOW}: this office's own kept, whole"
+    # told, in a row of its own: a version whose code needs a change of its state would run on the state before it
+    post_notice warning "platform.state.yaml של ${FOLLOW} לא נלקח — ${OFFICE}" "Taking ${FOLLOW} $(short "${tgt}") into ${BRANCH}, platform.state.yaml conflicted: this office's own was kept, whole, and ${FOLLOW}'s changes to it were not taken (git diff ${BRANCH} $(short "${tgt}") -- platform.state.yaml). A session looks when the version needs them." "state:${OFFICE}:$(short "${tgt}")" || true
+  fi
+}
+
+# THIS OFFICE'S OWN STATE, ON A CONFLICT (the king, 2026-11-20, DGO-2123). dgo-stable has held other offices'
+# platform.state.yaml (carried(), above), and the take by hand that met a conflict there kept the office's own, the
+# whole file: vps1's cycle of 10:37Z stopped on batch 91 for it until the king took it by hand (ee8a0239f, whose
+# platform.state.yaml is its first parent's). So in a take of DGO_FOLLOW a conflicted platform.state.yaml is this
+# office's own, whole — no three-way merge, which let another office's lines that do not overlap (its sign-in binding,
+# its peers, its instances) in through the conflict (this rule's second reader). What it does NOT do: a clean merge
+# still brings the target's lines in, as before, guarded by the apps check alone; and the target's changes to the file
+# that this conflict drops are told (settle_carried), never silent. git writes the file (G33's one writer aside).
+keep_own_state() {   # mid-merge: platform.state.yaml, this office's version staged → 0; removed here → 1
+  git cat-file -e :2:platform.state.yaml 2>/dev/null || return 1   # removed HERE: not this rule's to settle
+  git checkout -q --ours -- platform.state.yaml && git add -- platform.state.yaml
 }
 
 take() {   # ref what — merge ref into BRANCH, run, verify, push or roll back
@@ -971,7 +1423,7 @@ take() {   # ref what — merge ref into BRANCH, run, verify, push or roll back
     finish blocked "files already where the take adds them: ${present}"; return 1
   fi
   # an app in use right now (a meeting) is not recreated under its people: the next cycle tries again
-  local busy; busy="$(busy_apps)"
+  local busy; busy="$(take_busy)"
   if [ -n "${busy}" ]; then finish skipped "busy — ${busy//$'\n'/; }"; return 0; fi
   if [ "${DRY}" = 1 ]; then
     say "would take ${what} $(short "${tgt}") into ${BRANCH} at $(short HEAD): $(git rev-list --count "HEAD..${tgt}") commit(s), $(printf '%s\n' "${changed}" | sed '/^$/d' | wc -l | tr -d ' ') file(s)"
@@ -982,9 +1434,18 @@ take() {   # ref what — merge ref into BRANCH, run, verify, push or roll back
     return 0
   fi
   room || return 0
+  # every check above has passed, so this take will run: a CI job on the slot is asked to make room now (want_gap)
+  if [ -n "${CI_ON_SLOT}" ]; then
+    want_gap || { finish skipped "a heavy job holds the slot: ${CI_ON_SLOT%% |*} — ${GAP_WHY}"; return 0; }
+  fi
   before="$(settle)" || { finish skipped "the services cannot be read before the take"; return 0; }
+  # with the services: the take's line names what the checkout switched from here (an app switched off just before,
+  # its containers still being stopped, is lost()'s: off by the owner's word)
+  APPS_START="$(checkout_apps)" || APPS_START="?"
+  MODEL_START="$(model_services)" || MODEL_START=""   # what an app switched off just before had already left
+  SWITCHED=""
   # asked again: the baseline may have waited minutes, and a meeting may have begun in them — seconds before the merge
-  busy="$(busy_apps)"
+  busy="$(take_busy)"
   if [ -n "${busy}" ]; then finish skipped "busy — ${busy//$'\n'/; }"; return 0; fi
   export GIT_AUTHOR_NAME="dgo-follow (${OFFICE})" GIT_COMMITTER_NAME="dgo-follow (${OFFICE})"
   export GIT_AUTHOR_EMAIL="${GIT_AUTHOR_EMAIL:-$(git config user.email || echo "follow@${OFFICE}.invalid")}"
@@ -1045,7 +1506,15 @@ take() {   # ref what — merge ref into BRANCH, run, verify, push or roll back
   # Another office's state, merged into dgo-stable, must not decide which apps run HERE. (The office's own branch, taken
   # from origin, IS this office's decision: not checked.)
   TAKE_PREV="${prev}" TAKE_MERGED="${merged}" TAKE_APPS_MOVED=0
-  if ! apps_before="$(declared_apps "${prev}")" || ! apps_after="$(declared_apps "${merged}")"; then
+  # An office's own state file (untracked) is one file, not two revisions: it is read once, so a write between two
+  # reads is never taken for a move (DGO-2015's second reader).
+  local read_ok
+  if own_state; then
+    apps_before="$(declared_apps "${merged}")"; read_ok=$?; apps_after="${apps_before}"
+  else
+    apps_before="$(declared_apps "${prev}")" && apps_after="$(declared_apps "${merged}")"; read_ok=$?
+  fi
+  if [ "${read_ok}" != 0 ]; then
     reset_keep "${prev}" 2>/dev/null || { finish failed "the declared apps cannot be read, and undoing the merge was refused"; return 1; }
     st_set TAKING "" MERGED "" BEFORE ""
     if [ -n "$(declared_apps "${prev}")" ]; then   # ours reads, the merged one does not: the target's fault, not retried
@@ -1053,7 +1522,7 @@ take() {   # ref what — merge ref into BRANCH, run, verify, push or roll back
       tell "לא ניתן לעדכן: platform.state.yaml שבור אחרי המיזוג — ${OFFICE}" "Merged with ${what} $(short "${tgt}"), platform.state.yaml cannot be parsed. Nothing ran; ${BRANCH} is back at $(short "${prev}"). A session must merge it by hand."
       finish failed "platform.state.yaml unreadable after merging $(short "${tgt}")"; return 1
     fi
-    finish skipped "the apps platform.state.yaml declares cannot be read (python3 + yaml) — nothing ran"; return 0
+    finish skipped "the apps platform.state.yaml declares cannot be read (the file, or python3 + yaml) — nothing ran"; return 0
   fi
   [ "${apps_after}" = "${apps_before}" ] || TAKE_APPS_MOVED=1
   if [ "${what}" = "${FOLLOW}" ] && [ "${TAKE_APPS_MOVED}" = 1 ]; then
@@ -1067,20 +1536,34 @@ take() {   # ref what — merge ref into BRANCH, run, verify, push or roll back
   fi
   say "took ${what} $(short "${tgt}") into ${BRANCH} — bringing the office up on it"
   local took_at; took_at="$(date +%s)"   # a container started from here on runs the take's code (folders_changed)
-  rc=0; office_run take || rc=$?
-  if after="$(settle)"; then bad="$(lost "${before}" "${after}")"; else bad="the services cannot be read"; fi
+  # ready-made images (images_pull): pulled, and the rest built — then the run builds nothing again; else as always
+  rc=0
+  if images_pull "${tgt}"; then BBOX_PREBUILT=1 office_run take || rc=$?; else office_run take || rc=$?; fi
+  if after="$(settle)"; then note_switched; bad="$(lost "${before}" "${after}")"; else bad="the services cannot be read"; fi
   [ "${rc}" = 0 ] || bad="${bad:+${bad}$'\n'}bbox run exited ${rc}"
-  if [ -n "${bad}" ]; then rollback "${prev}" "${merged}" "${tgt}" "${bad//$'\n'/, }"; return 1; fi
+  if [ -n "${bad}" ]; then
+    rollback "${prev}" "${merged}" "${tgt}" "${bad//$'\n'/, }${SWITCHED:+; switched during the take: ${SWITCHED//$'\n'/, }}"
+    return 1
+  fi
   st_set VERIFIED "${merged}"     # healthy: what recover() trusts, origin's ref being no proof for an own-branch take
   # WHAT WAS MERGED IS WHAT RUNS (DGO-1356). A service whose image is older than its own build files runs the code
   # from before the take: measured 2026-11-05 on the Dell, dgo-extend and dgo-carry ran images from before the relay
   # its checkout had held for three days, so the relay line in its .env did nothing. Exactly those are built again;
   # a build that fails is said. The take stands either way: its code is merged and the office is healthy.
-  local old rebuilt=1; old="$(old_images 2>/dev/null)" || old=""
+  local old rebuilt=1 s; old="$(old_images 2>/dev/null)" || old=""
+  # …but not one the bring-up held while its app was at work: its note carries the build, and held_retry makes it at a
+  # quiet cycle (DGO-2129). Built here, it would only be held once more, after a build that waits on nobody.
+  if [ -n "${old}" ] && [ -d "${REPO_ROOT}/data/.held" ]; then
+    old="$(for s in ${old}; do [ -e "${REPO_ROOT}/data/.held/${s}" ] || printf '%s ' "${s}"; done)"; old="${old% }"
+  fi
   if [ -n "${old}" ]; then
     say "images older than their sources after the take: ${old} — building exactly these"
     # shellcheck disable=SC2086
-    office_rebuild ${old} || { tell "שירותים רצים על קוד ישן אחרי עדכון — ${OFFICE}" "After taking ${what} $(short "${tgt}"), ${old} run images older than their sources and building them again failed (data/follow/run-*-rebuild.log): the code is merged, and those services run the code from before it." && rebuilt=0; }
+    if office_rebuild ${old}; then
+      svc_drop images ${old}   # a rebuild that worked: what an earlier one left on the old code is current now
+    else
+      tell_svc "שירותים רצים על קוד ישן אחרי עדכון — ${OFFICE}" "After taking ${what} $(short "${tgt}"), ${old} run images older than their sources and building them again failed (data/follow/run-*-rebuild.log): the code is merged, and those services run the code from before it. A later take that rebuilds them closes this; once put right by hand: bbox follow clear services." images ${old} && rebuilt=0
+    fi
   fi
   # …and a service whose read-only FOLDER mount holds a file the merge changed, still running what it loaded before the
   # take (folders_changed). Its recreate is the first time the merged code runs, so it is judged like the bring-up (F3):
@@ -1090,25 +1573,31 @@ take() {   # ref what — merge ref into BRANCH, run, verify, push or roll back
   local -a fl=()
   if ! folded="$(folders_changed "${prev}" "${merged}" "${took_at}")"; then
     # nothing to keep for a retry (the services are unknown), and the next cycle finds HEAD at the target: said, once
-    tell "לא נבדקו שירותים שהקוד שלהם מותקן כתיקייה — ${OFFICE}" "After taking ${what} $(short "${tgt}"), the services whose code is mounted as a folder could not be checked (data/follow/log): one may run the code from before the take. A session must look." && rebuilt=0
-  elif [ -n "${folded}" ]; then
+    # …on the services' row: the «green is in the branch» path re-checks nothing, so it must not close it (its reader)
+    tell_svc "לא נבדקו שירותים שהקוד שלהם מותקן כתיקייה — ${OFFICE}" "After taking ${what} $(short "${tgt}"), the services whose code is mounted as a folder could not be checked (data/follow/log): one may run the code from before the take. A session must look, and then: bbox follow clear services." unchecked "$(short "${tgt}")" && rebuilt=0
+    folded=""   # whatever a failed check printed is no list to recreate (as before: this branch recreated nothing)
+  fi   # (a later take's check that runs is no answer to this one: it reads its own diff — the third reader)
+  if [ -n "${folded}" ]; then
     while IFS= read -r fl_svc; do [ -n "${fl_svc}" ] && fl+=("${fl_svc}"); done <<<"${folded}"
     folders_refresh "${took_at}" "${fl[@]}" \
-      || { tell "שירות רץ על קוד ישן אחרי עדכון — ${OFFICE}" "After taking ${what} $(short "${tgt}"), recreating the services whose code is mounted as a folder the take changed failed (data/follow/run-*-recreate.log): they run the code from before it; the next cycle tries again." && rebuilt=0; }
-    if after="$(settle)"; then bad_after="$(lost "${before}" "${after}")"; else bad_after="the services cannot be read"; fi
+      || { tell_svc "שירות רץ על קוד ישן אחרי עדכון — ${OFFICE}" "After taking ${what} $(short "${tgt}"), recreating the services whose code is mounted as a folder the take changed failed (data/follow/run-*-recreate.log): they run the code from before it; the next cycle tries again." folders $(printf '%s\n' "${fl[@]}" | awk '{print $1}') && rebuilt=0; }
+    if after="$(settle)"; then note_switched; bad_after="$(lost "${before}" "${after}")"; else bad_after="the services cannot be read"; fi
+    local fell_after; fell_after="$(printf '%s\n' "${fl[@]}" | awk '{print $1}')"
+    [ "${bad_after}" = "the services cannot be read" ] || fell_after="$(awk '{print $1}' <<<"${bad_after}")"
+    # shellcheck disable=SC2086 — the names, one word each
     [ -z "${bad_after}" ] \
-      || { tell "שירות נפל אחרי עדכון — ${OFFICE}" "After taking ${what} $(short "${tgt}"), recreating the services whose code is mounted as a folder the take changed left: ${bad_after//$'\n'/, }. The take is merged; a session must look." && rebuilt=0; }
+      || { tell_svc "שירות נפל אחרי עדכון — ${OFFICE}" "After taking ${what} $(short "${tgt}"), recreating the services whose code is mounted as a folder the take changed left: ${bad_after//$'\n'/, }. The take is merged; a session must look." fell ${fell_after} && rebuilt=0; }
   fi
   if [ "$(git rev-parse HEAD)" != "${merged}" ]; then moved_on_top "${tgt}"; return 1; fi
   local held=""; [ "$(git rev-parse -q --verify "refs/remotes/origin/${BRANCH}")" = "${merged}" ] && held=1
   # the merge itself, not HEAD: a commit landing between the check above and the push is never pushed unchecked
   if push_branch "${merged}"; then
     st_set TAKING "" MERGED "" BEFORE "" FAILED_TARGET "" FAILED_AT "" FAILED_HEAD "" PUSH_PENDING ""
-    finish took "${what} $(short "${tgt}") into ${BRANCH} at $(short HEAD), healthy, $([ -n "${held}" ] && echo "origin's own commit (nothing to push)" || echo pushed)${VIA_USED:+, through ${VIA_USED}}"
+    finish took "${what} $(short "${tgt}") into ${BRANCH} at $(short HEAD), healthy, $([ -n "${held}" ] && echo "origin's own commit (nothing to push)" || echo pushed)${VIA_USED:+, through ${VIA_USED}}${SWITCHED:+; switched during the take: ${SWITCHED//$'\n'/, }}"
     [ "${rebuilt}" = 0 ] || told_took "${what}" "${tgt}"   # a failed rebuild's row names the take, and stays open
   else
     st_set TAKING "" MERGED "" BEFORE "" FAILED_TARGET "" FAILED_AT "" FAILED_HEAD "" PUSH_PENDING "${merged}"
-    finish took "${what} $(short "${tgt}") into ${BRANCH}, healthy — the push${VIA_USED:+ through ${VIA_USED}} was refused, the next cycle pushes again"
+    finish took "${what} $(short "${tgt}") into ${BRANCH}, healthy — the push${VIA_USED:+ through ${VIA_USED}} was refused, the next cycle pushes again${SWITCHED:+; switched during the take: ${SWITCHED//$'\n'/, }}"
     tell "המשרד עודכן אבל הענף לא נדחף — ${OFFICE}" "${BRANCH} took ${what} $(short "${tgt}") and is healthy, but pushing it${VIA_USED:+ through ${VIA_USED}} was refused; the next cycle pushes again."
   fi
   # What the take's builds replaced is given back now, not the day the disk is full (DGO-1393): the dangling images —
@@ -1167,21 +1656,94 @@ recover() {   # an open take from a cycle that did not finish → 0 to go on, 1 
   return 0
 }
 
+# ── a take gets its gap (DGO-2164) ───────────────────────────────────────────────────────────────
+# One heavy job at a time on a machine (lib.sh heavy_admit). On an office that runs the CI runner, its jobs hold that
+# slot one after another while the line moves, and a cycle that only skipped on a held slot took only when its minute
+# fell between two jobs. The Dell's one take by itself since 11-13 needed its runner paused by hand (04:01–04:45Z), and
+# on 11-22 four of its cycles in a row met a job there. So a cycle that finds a CI job on the slot still reads the line
+# (CI_ON_SLOT). take(), once every check of its own has passed, asks the runner to stand aside: it holds the lock
+# heavy.want, which the runner's agent honours between jobs (apps/ci-runner/agent.sh). The job running finishes, the
+# next ones wait on GitHub, and the owner's own pause is never touched. take() waits, bounded, until the runner says
+# its listener stopped, the slot is free and the load has settled. ONE process holds the lock and ends with this cycle
+# (`tail --pid`), so the kernel lets go of it however the cycle ends, a kill included, and nothing the take starts
+# inherits it. The second reader of a first version found the flaws this one is built against (on DGO-2164).
+GAP_WAIT="${DGO_FOLLOW_GAP_WAIT_S:-3600}"     # the longest wait for the running job: a proof takes ~15 min, a leg ~8
+GAP_SETTLE="${DGO_FOLLOW_GAP_SETTLE_S:-300}"  # …and for the load the job leaves behind to fall under MAX_LOAD
+GAP_POLL="${DGO_FOLLOW_GAP_POLL_S:-15}"
+for _g in GAP_WAIT GAP_SETTLE GAP_POLL; do    # 1–99999 s, or the default, said: a 0 poll would spin
+  case "${!_g}" in ''|*[!0-9]*|0*|??????*)
+    warn "DGO_FOLLOW_${_g}_S=${!_g} is not 1–99999 seconds — the default applies"
+    case "${_g}" in GAP_WAIT) GAP_WAIT=3600 ;; GAP_SETTLE) GAP_SETTLE=300 ;; GAP_POLL) GAP_POLL=15 ;; esac ;;
+  esac
+done
+CI_ON_SLOT=""                                 # the CI job's holder line, when this cycle met one on the slot
+WANT_LOCK="${REPO_ROOT}/data/.locks/heavy.want"
+WANT_HOLDER="" GAP_WHY=""
+over_load() {   # 0 when the 1-minute load is over MAX_LOAD (the CPU count when it is not declared)
+  local cpus load
+  cpus="$(getconf _NPROCESSORS_ONLN 2>/dev/null || echo 1)"
+  load="$(cut -d' ' -f1 /proc/loadavg 2>/dev/null || echo 0)"
+  awk -v l="${load}" -v c="${cpus}" -v m="${MAX_LOAD}" 'BEGIN {exit !(l > (m == "" ? c : m))}'
+}
+runner_listening() {   # «false» once the runner's listener is stopped (no job can start); «true»; or «» unread
+  "${DGO_FOLLOW_BBOX:-${REPO_ROOT}/bbox}" ci-runner status --json 2>/dev/null | python3 -c 'import json, sys
+d = json.load(sys.stdin).get("data") or {}
+print("true" if d.get("listener") else "false")' 2>/dev/null
+}
+want_release() { [ -z "${WANT_HOLDER}" ] || kill "${WANT_HOLDER}" 2>/dev/null; WANT_HOLDER=""; }
+want_gap() {   # → 0 once the runner stands aside, the slot is free and the load settled; 1 to skip (GAP_WHY)
+  local waited=0 settled=0 heard unread=0
+  mkdir -p "${REPO_ROOT}/data/.locks" || { GAP_WHY="no locks folder"; return 1; }
+  # created writable by anyone (umask 0): a cycle as root must not leave a lock a cycle as the office's user cannot open
+  bash -c 'umask 0; exec 9>>"$1" || exit 1; flock -w 5 9 || exit 1; exec tail --pid="$2" -f /dev/null' _ "${WANT_LOCK}" "$$" &
+  WANT_HOLDER=$!
+  say "a take is due and a CI job holds the slot (${CI_ON_SLOT%% |*}): the runner is asked to stand aside"
+  while :; do
+    kill -0 "${WANT_HOLDER}" 2>/dev/null || { WANT_HOLDER=""; GAP_WHY="the want lock could not be held"; return 1; }
+    heard="$(runner_listening)"
+    # a runner whose status cannot be read four times running (its app restarting, an answer that is not its JSON)
+    # is not waited on for the hour: the lock is let go at once, and the next cycle asks again (the second reader)
+    if [ -z "${heard}" ]; then unread=$((unread + 1)); else unread=0; fi
+    [ "${unread}" -lt 4 ] || { want_release; GAP_WHY="the runner's status could not be read"; return 1; }
+    [ "${heard}" = false ] && [ "$(heavy_slot_status)" = free ] && break
+    [ "${waited}" -lt "${GAP_WAIT}" ] || { want_release; GAP_WHY="no gap within ${GAP_WAIT}s"; return 1; }
+    sleep "${GAP_POLL}"; waited=$((waited + GAP_POLL))
+  done
+  while over_load; do
+    [ "${settled}" -lt "${GAP_SETTLE}" ] || { want_release; GAP_WHY="the load stayed over its ceiling ${settled}s after the job"; return 1; }
+    sleep "${GAP_POLL}"; settled=$((settled + GAP_POLL))
+  done
+  say "the runner stands aside and the slot is free after ${waited}s (the load settled in ${settled}s) — the take goes on"
+  return 0
+}
+
 # ── one cycle ─────────────────────────────────────────────────────────────────────────────────────
 cycle() {
-  local cpus load gd green target
+  local cpus load gd green target slot
   if [ "${DRY}" != 1 ]; then
     # under a heavy job the heal waits for the next trigger or cycle — said, since not every heavy job runs an `up`
     if [ "$(heavy_slot_status)" = free ]; then office_heal; else say "the heal is put off: a heavy job holds the slot"; fi
   fi
   [ "${HEAL}" = 0 ] || return 0
+  # The services' row (tell_svc) closes only when a cycle finds its causes gone — never by all_clear. Asked FIRST, so it
+  # judges what earlier cycles said, never what this one is about to say (a service that fell this minute reads
+  # «running» between two restarts); and before «DGO_FOLLOW is empty», so an office that stopped following can close it.
+  [ "${DRY}" = 1 ] || svc_clear
   [ -n "${FOLLOW}" ] || { say "DGO_FOLLOW is empty — this office does not follow"; return 0; }
   [ -n "${BRANCH}" ] || { tell "לא ניתן לעקוב: DGO_BRANCH ריק — ${OFFICE}" "DGO_FOLLOW=${FOLLOW} is declared, but the office's own branch (DGO_BRANCH) is not: nothing is merged without it."; return 1; }
   mkdir -p "${REPO_ROOT}/data/.locks" "${STATE_DIR}" || return 1
-  if [ "$(heavy_slot_status)" != free ]; then finish skipped "a heavy job holds the slot: $(heavy_slot_status)"; return 0; fi
+  # A CI job on the slot: the cycle still reads the line, and a take asks the runner to stand aside (want_gap) —
+  # unless a take is open (recover() may need the slot). Anything else on the slot (a build, a recreate, a take) is
+  # waited out, as before.
+  slot="$(heavy_slot_status)"
+  if [ "${slot}" != free ]; then
+    case "${slot}" in "ci "*) [ "${DRY}" = 1 ] || [ -n "$(st_get TAKING)" ] || CI_ON_SLOT="${slot}" ;; esac
+    [ -n "${CI_ON_SLOT}" ] || { finish skipped "a heavy job holds the slot: ${slot}"; return 0; }
+  fi
   cpus="$(getconf _NPROCESSORS_ONLN 2>/dev/null || echo 1)"
   load="$(cut -d' ' -f1 /proc/loadavg 2>/dev/null || echo 0)"
-  if awk -v l="${load}" -v c="${cpus}" -v m="${MAX_LOAD}" 'BEGIN {exit !(l > (m == "" ? c : m))}'; then
+  # …a CI job's load is that job's own: want_gap waits for it to settle before a take
+  if [ -z "${CI_ON_SLOT}" ] && awk -v l="${load}" -v c="${cpus}" -v m="${MAX_LOAD}" 'BEGIN {exit !(l > (m == "" ? c : m))}'; then
     finish skipped "load ${load} on ${cpus} CPU(s)"; return 0
   fi
   [ "$(git rev-parse --abbrev-ref HEAD)" = "${BRANCH}" ] \
@@ -1198,7 +1760,9 @@ cycle() {
   fi
   # a folder-mounted service an earlier take could not recreate (its app was busy, or the recreate failed): again now —
   # before the fetch, which it does not need (a fetch that fails would otherwise hold it back too)
-  [ "${DRY}" = 1 ] || folders_retry
+  # (not under a CI job: their recreates would wait behind it for the slot; a later cycle retries them)
+  [ "${DRY}" = 1 ] || [ -n "${CI_ON_SLOT}" ] || folders_retry
+  [ "${DRY}" = 1 ] || [ -n "${CI_ON_SLOT}" ] || held_retry
   # a declaration to fix: an office whose own path does not start with / (`vps1:git/gh/…`) — said as that, first, so it
   # is never read as «no path of its own» below
   local e bad=""
@@ -1213,8 +1777,17 @@ cycle() {
     finish blocked "DGO_FOLLOW_VIA=${VIA} without DGO_FOLLOW_VIA_PATH"; return 1
   fi
   resolve_src || { finish skipped "the git app of $(via_names) cannot be reached (DGO_FOLLOW_VIA)${VIA_WHY:+ — ${VIA_WHY:0:300}}"; return 0; }
-  git fetch -q "${SRC}" "+refs/heads/${FOLLOW}:refs/remotes/origin/${FOLLOW}" 2>/dev/null \
-    || { finish skipped "fetch of ${FOLLOW} failed${VIA_USED:+ (through ${VIA_USED})}"; return 0; }
+  # A fetch that fails says git's own verdict and how long it took. Without them the Dell said «fetch of dgo-stable
+  # failed (through macbook)» on every cycle for nine days, and nobody could tell a pack that stopped on its way (git's
+  # low-speed bound, NET_SLOW) from a refusal in its own checkout (a ref it could not lock): 11-22, its git app's door
+  # handed the whole pack over (5.2 MB in 2.6 s) and the cycle still failed a minute later (DGO-2164).
+  local fetch_t0 fetch_err
+  fetch_t0="$(date +%s)"
+  if ! fetch_err="$(git fetch -q "${SRC}" "+refs/heads/${FOLLOW}:refs/remotes/origin/${FOLLOW}" 2>&1 >/dev/null)"; then
+    fetch_err="$(git_said "${fetch_err}")"
+    finish skipped "fetch of ${FOLLOW} failed${VIA_USED:+ (through ${VIA_USED})} after $(( $(date +%s) - fetch_t0 )) s${fetch_err:+: ${fetch_err:0:200}}"
+    return 0
+  fi
   st_set LAST_VIA "${VIA_USED}"   # which office's git app served it (empty: origin itself) — `status` says, a take's line too
   git fetch -q "${SRC}" "+refs/heads/${BRANCH}:refs/remotes/origin/${BRANCH}" 2>/dev/null || true
   [ "${DRY}" = 1 ] || recover || return 0
@@ -1276,8 +1849,15 @@ case "${1:-}" in
   status)  status ;;
   install) install_timer ;;
   clear)
-    st_set TAKING "" MERGED "" VERIFIED "" BEFORE "" WHY "" FAILED_TARGET "" FAILED_AT "" FAILED_HEAD ""
-    say "follow: the open take and the failed target are forgotten — the next cycle follows ${FOLLOW:-<nothing>} again" ;;
-  -h|--help) sed -n '2,9p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//' ;;
-  *) die "usage: bbox follow [--dry-run] | heal | status | install | clear" ;;
+    if [ "${2:-}" = services ]; then
+      # the services' row (tell_svc), after a session put it right by hand: its causes go, and the next cycle's
+      # svc_clear closes the row — and posts again until it could (a close posted here and lost would never return)
+      say "follow: the services' row's causes are dropped ($(st_get SVC_CAUSES)) — the next cycle closes it"
+      st_set SVC_CAUSES ""
+    else
+      st_set TAKING "" MERGED "" VERIFIED "" BEFORE "" WHY "" FAILED_TARGET "" FAILED_AT "" FAILED_HEAD ""
+      say "follow: the open take and the failed target are forgotten — the next cycle follows ${FOLLOW:-<nothing>} again"
+    fi ;;
+  -h|--help) sed -n '2,10p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//' ;;
+  *) die "usage: bbox follow [--dry-run] | heal | status | install | clear [services]" ;;
 esac

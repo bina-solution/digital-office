@@ -27,7 +27,7 @@ factq plane_comments "$(q 'select count(*) from issue_comments;')"
 
 # The object store, as an INDEX and as BYTES. The index is rows in the database (`file_assets` is
 # what Plane actually serves from — attachments, avatars, covers and page files all land there); the
-# bytes live in `project_pln_minio`, which the generic volume tar carries.
+# bytes live in data/project-pln/files (the volume `project_pln_minio` until DGO-2019), which the archive carries.
 factq plane_assets "$(q 'select count(*) from file_assets;')"
 factq plane_attachment_rows "$(q 'select count(*) from issue_attachments;')"
 factq plane_assets_sha "$(q "select coalesce(md5(string_agg(id::text || coalesce(asset,'') || coalesce(entity_type,'') || coalesce(size::text,''), '|' order by id)), 'empty') from file_assets;")"

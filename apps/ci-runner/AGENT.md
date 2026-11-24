@@ -18,6 +18,10 @@ service installed by hand on a machine. It runs where an office enables it (the 
   through its socket, and the engine resolves a job's bind mounts on the host. The steps a job runs in the agent are
   bounded by its ceiling (2 cores, 4 GB); what it starts through the socket runs beside it — the slot is what keeps
   one heavy job at a time.
+- Its registration is on the volume (`/state/registration`, copied in at each listener start, never printed). The
+  Dell's is its host runner's own (`portable-ssd`), moved there 2026-11-20 (DGO-1797); github-runner.service is
+  retired, /opt/actions-runner kept as the backup. One registration holds ONE GitHub session: never run both. Back
+  to the host only on the owner's word: pause, `./bbox apps disable ci-runner`, then the unit via as-host-root.sh.
 
 ## How to operate it
 - `./bbox ci-runner status` — up or not (from the heartbeat: older than a minute is «לא רץ»), the labels GitHub holds
@@ -44,10 +48,10 @@ runs one at a time in the office's checkout, in a clean environment and its own 
 - The desk as a condition (after a week of «would wait» lines, AGENTS rule 8); load never is. A short job (`decide`)
   waits for the slot like a long one. The holder's end on a real job is read from the runner's source (hooks run as
   `bash -e`; the orphan cleanup comes after the completed hook): `postjob.sh` records «given back» on every job.
-- `/dev/kvm`: not mounted, so the runner carries the `portable` label only; the `ssd` jobs (Android, export-verify)
-  stay with the host's runner until the emulator is an app. The screen warns when GitHub gives this runner `ssd`.
-- Its registration: a SECOND registration of the repository, labelled `self-hosted,portable`, placed on the volume
-  (`/state/registration`) — an owner's step on the item; the agent only copies what is placed.
+- The `ssd` jobs come here now; none has run here yet. Toolchains come from the setup-* actions into the tool cache,
+  keys from GitHub, never from the host: each first run is its proof. No `/dev/kvm`: the Android check asks the
+  office's device (`check.py`), its host-way job fails here. The screen's `ssd` warning is expected now, and needs a
+  token that may list runners (`github-runner-token-local`); without one: «לא ידוע».
 - A stop of the agent mid-job loses the job (60 s grace); pause first. A pause from the screen, and asking the job
   door from it, wait for the office's one shared sign-in check (its own item).
 - The door's heavy jobs (`gates`, `go-test`, `baseline`, `drill` at a sha), each its own decision. BEFORE ANY OFFICE

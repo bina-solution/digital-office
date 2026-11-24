@@ -63,8 +63,10 @@ fits()     { [ "$(avail_mb)" -ge $(( NEED_GB * 1024 )) ]; }
 ready()    { fits && [ "$(pkg_c)" -lt "${MAX_START_C}" ] && [ "$(up_s)" -ge "${MIN_UPTIME_S}" ]; }
 state()    { echo "$(avail_mb) MB available (need ${NEED_GB} GB, class ${CLASS}), CPU $(pkg_c)°C (under ${MAX_START_C}), up $(up_s)s (at least ${MIN_UPTIME_S})"; }
 
-# one line of the job's record (the screen reads jobs.jsonl) and one event on the office's stream (flow.v1)
-record() { python3 "${HERE}/record.py" "$@" || true; }
+# one line of the job's record (the screen reads jobs.jsonl) and one event on the office's stream (flow.v1) — with the
+# agent image's own python, never the `python3` a job put first on PATH (postjob.sh says why)
+PY="${CI_RUNNER_PYTHON:-/usr/bin/python3}"
+record() { "${PY}" "${HERE}/record.py" "$@" || echo "prejob: the job's record was not written (${PY} exit $?)" >&2; }
 
 # the job's worker process (its name a setting only so a test names its own stand-in, never the real one)
 WORKER_COMM="${CI_RUNNER_WORKER_COMM:-Runner.Worker}"

@@ -22,7 +22,7 @@ if (!app.requestSingleInstanceLock()) app.exit(0);
 
 const UI = path.join(__dirname, 'ui');
 const ICONS = app.isPackaged ? path.join(process.resourcesPath, 'icons')
-  : path.join(__dirname, '..', '..', '..', 'platform-base', 'console', 'static', 'icons');   // the console's own icons
+  : path.join(__dirname, '..', 'build', 'icons');   // the app's icons (scripts/app_icons.py renders them from the mark)
 const RAIL = 64;
 
 let t, lang;                 // the words, once the system's language is known
@@ -87,7 +87,7 @@ async function probe(address) {
   try { tries = O.candidates(address); } catch (e) { return { error: e.message }; }
   let answered = false;
   for (const origin of tries) {
-    const r = await ask(`${origin}/manifest.webmanifest`);
+    const r = await ask(`${origin}${O.PROBE_PATH}`);
     if (r.status) answered = true;
     const seen = O.readProbe(origin, r);
     if (seen.kind !== 'not-office') return seen;

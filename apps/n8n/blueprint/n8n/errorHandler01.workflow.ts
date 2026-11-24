@@ -66,7 +66,12 @@ import { workflow, node, links } from '@n8n-as-code/transformer';
     active: true,
     isArchived: false,
     tags: ['shared', 'n8n-app', 'role:infra', 'app:n8n'],
-    settings: { executionOrder: 'v1' },
+    // executionTimeout (DGO-2111, measured on vps1 2026-11-20): one Error Handler run holds one of a worker's slots
+    // (--concurrency=4) for as long as it runs. Its Redis node retries without end when the credential is refused, and
+    // vps1's was, so 8 runs filled both workers at 17:33Z and the whole office's n8n stood still behind them. 253 jobs
+    // were waiting, the oldest since 13:24Z. An error report takes seconds, so a run that has not finished in two
+    // minutes is cut, and the slot comes back.
+    settings: { executionOrder: 'v1', executionTimeout: 120 },
 })
 export class ErrorHandlerWorkflow {
     // =====================================================================

@@ -106,6 +106,7 @@ export default defineConfig({
 					translations: { en: 'Using the office' },
 					items: [
 						{ slug: 'use/console' },
+							{ slug: 'use/desktop-app' },
 						{ slug: 'use/sign-in' },
 						{ slug: 'use/add-app' },
 						{ slug: 'use/files' },

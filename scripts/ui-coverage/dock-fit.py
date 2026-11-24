@@ -94,11 +94,18 @@ PROBES = """
   const lab = far && (typeof far.remote.label === 'string' ? far.remote.label
                       : (far.remote.label || {}).he || (far.remote.label || {}).en || far.remote.office);
   return {id: ascii ? String(ascii.id) : '', typedId: ascii ? String(ascii.id).toUpperCase() : '',
+          // the panel is the desk's «בית» (DGO-2132): one tile per KIND, so the app is found by its kind's tile
+          kind: ascii && typeof kindOf === 'function' ? kindOf(ascii) : '',
           office: lab ? String(lab).toLowerCase() === String(lab) ? String(lab).toUpperCase() : String(lab).toLowerCase() : ''};
 }
 """
 
-HITS = "() => [...document.querySelectorAll('.dk-more .htile')].map(e => e.dataset.mid)"
+#: What «בית»'s search keeps: the kinds (app.js kindOf over each tile's module — a kind stays when any of its copies
+#: answers) and the offices (`o:<office>`: an office outside this business's herd is a card, never tiles of its own).
+HITS = """() => [...document.querySelectorAll('.dk-home .lt[data-hid], .dk-home .lo[data-office]')].map(e => {
+  if (e.dataset.office) return 'o:' + e.dataset.office;
+  const m = (typeof MODULES !== 'undefined' ? MODULES : []).find(x => x.id === e.dataset.hid);
+  return m && typeof kindOf === 'function' ? kindOf(m) : e.dataset.hid; })"""
 
 #: DGO-1637 — the desk on a screen NARROWER than it was opened at («התפריט … נחתך באמצע ברגע שהמסך
 #: צר מדי, זה באג»). Compact hid the bar (search and menus gone), kept the wide dock as a sideways
@@ -358,16 +365,18 @@ PANEL = """
   const box = ov.querySelector('.dk-more-box'), list = ov.querySelector('.dk-more-list');
   if (!box || !list) return null;
   const lb = list.getBoundingClientRect();
-  const tiles = [...ov.querySelectorAll('.htile')];
+  // the door opens the desk's «בית» (DGO-2132): the home's own tiles, one per KIND of app
+  const tiles = [...ov.querySelectorAll('.lt')];
   // Every tile is inside the SCROLLER's box horizontally — the panel's list is the one place the
   // design allows a scroll ("inside the overflow panel, not on the dock"), so what is asserted is
   // that nothing spills sideways out of it and that every app is present at all.
   const sideways = tiles.filter(e => { const t = e.getBoundingClientRect();
     return t.left < lb.left - .5 || t.right > lb.right + .5; }).length;
   // …and that a NAME is whole: not cut sideways, not cut below its second line.
-  const cut = tiles.map(e => e.querySelector('.htile-nm')).filter(n => n &&
+  const cut = tiles.map(e => e.querySelector('.lt-nm')).filter(n => n &&
     (n.scrollWidth > n.clientWidth + 1 || n.scrollHeight > n.clientHeight + 1)).map(n => n.textContent);
-  return {tiles: tiles.length, sideways: sideways, boxWidth: box.getBoundingClientRect().width, cut: cut,
+  const kinds = typeof homeModel === 'function' ? homeModel().kinds.length : -1;
+  return {tiles: tiles.length, kinds: kinds, sideways: sideways, boxWidth: box.getBoundingClientRect().width, cut: cut,
           scrolls: list.scrollHeight > list.clientHeight + 1,
           hasSearch: !!ov.querySelector('.dk-more-q'),
           focused: document.activeElement === ov.querySelector('.dk-more-q')};
@@ -457,8 +466,9 @@ def run(url: str, widths: list[str], keep: str, narrow: list[str] = (), phones: 
                     panel = f"{pm['tiles']} tiles, scrolls={pm['scrolls']}"
                     if pm["sideways"]:
                         problems.append(f"{pm['sideways']} panel tile(s) spill out of the panel's box")
-                    if pm["tiles"] < m["apps"]:
-                        problems.append(f"the panel shows {pm['tiles']} tiles for {m['apps']} apps")
+                    # «בית» is one tile per kind (DGO-2122): every kind is there, the copies on their office's page
+                    if pm["tiles"] < pm["kinds"]:
+                        problems.append(f"the panel shows {pm['tiles']} tiles for {pm['kinds']} kinds of app")
                     if not pm["hasSearch"] or not pm["focused"]:
                         problems.append("the panel has no focused search field")
                     if pm["boxWidth"] > int(w) - 30:
@@ -471,7 +481,7 @@ def run(url: str, widths: list[str], keep: str, narrow: list[str] = (), phones: 
                     if probe and probe["typedId"]:
                         page.fill(".dk-more-q", probe["typedId"])
                         page.wait_for_timeout(150)
-                        if probe["id"] not in page.evaluate(HITS):
+                        if (probe.get("kind") or probe["id"]) not in page.evaluate(HITS):
                             problems.append(f"typing {probe['typedId']!r} does not find the app `{probe['id']}`")
                     if probe and probe["office"]:
                         page.fill(".dk-more-q", probe["office"])
@@ -491,7 +501,7 @@ def run(url: str, widths: list[str], keep: str, narrow: list[str] = (), phones: 
                     page.wait_for_timeout(300)
                     # …and a panel tile is REACHABLE: clicking one opens the app (a window here).
                     before = len(page.query_selector_all(".dk-win"))
-                    page.click(".dk-more-box .htile")
+                    page.click(".dk-more-box .lt")
                     page.wait_for_timeout(600)
                     after = len(page.query_selector_all(".dk-win"))
                     if after <= before:

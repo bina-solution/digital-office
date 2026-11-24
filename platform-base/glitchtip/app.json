@@ -71,7 +71,7 @@
         "name": "GlitchTip",
         "icon": "alert",
         "desc": "מעקב שגיאות ואירועים",
-        "group": "תשתית",
+        "group": "פיתוח ואוטומציות",
         "order": 220,
         "embed": false
       }
@@ -85,10 +85,9 @@
     }
   },
   "data": {
-    "volumes": [
-      "glitchtip_postgres_data",
-      "glitchtip_uploads"
-    ],
+    "volumes": [],
+    "paths": ["data/glitchtip/db", "data/glitchtip/uploads"],
+    "moved_from": {"data/glitchtip/db": "glitchtip_postgres_data", "data/glitchtip/uploads": "glitchtip_uploads"},
     "on_uninstall": "prompt",
     "sql": [
       {

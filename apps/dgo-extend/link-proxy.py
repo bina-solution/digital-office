@@ -96,6 +96,12 @@ AUTHORITY = re.compile(r"^[a-z0-9]([a-z0-9.\-]{0,251})?(:\d{1,5})?\Z")
 #: A door's path allow-list entry (DGO-945) — `catalog.PATH_RE`: absolute, plain segments only, and
 #: linear: each repeat ends at its slash (a nested `(…+/?)*` backtracked for hours on one request line).
 PATH = re.compile(r"^/(?:[A-Za-z0-9._~-]+/)*[A-Za-z0-9._~-]*\Z")
+#: A REQUEST's target, read against those entries: the same plain segments, and a colon inside one — RFC 3986's own
+#: pchar, and every digest a registry is asked by (`/v2/<name>/blobs/sha256:<hex>`; DGO-2123: through the link the
+#: image store's manifest came by tag and nothing by digest). Nothing that could be read two ways comes with it: an
+#: absolute-form target never starts with `/`, `//` is an empty segment the pattern refuses, and `%`, `\` and dot
+#: segments stay refused. The declared entries keep PATH, catalog.PATH_RE's twin.
+TARGET = re.compile(r"^/(?:[A-Za-z0-9._~:-]+/)*[A-Za-z0-9._~:-]*\Z")
 #: The headers that say where a request CAME FROM. A door with no tile is called by a machine, and the
 #: service behind it may decide by the caller's address (n8n's webhook allow-list reads `req.ip`
 #: through one trusted hop), so what the peer claims about it is removed, never passed on.
@@ -104,6 +110,11 @@ FORWARDED = (b"x-forwarded-for", b"x-real-ip", b"forwarded", b"x-forwarded-host"
 
 def _plain_path(p) -> bool:
     return isinstance(p, str) and bool(PATH.match(p)) and "/../" not in f"{p}/" and "/./" not in f"{p}/"
+
+
+def _plain_target(p) -> bool:
+    """A request target the door can read one way only — `_plain_path`'s rule, with a colon inside a segment."""
+    return isinstance(p, str) and bool(TARGET.match(p)) and "/../" not in f"{p}/" and "/./" not in f"{p}/"
 
 
 def _path_allowed(head: bytes, paths: tuple) -> bool:
@@ -117,7 +128,7 @@ def _path_allowed(head: bytes, paths: tuple) -> bool:
     if len(parts) != 3:
         return False
     target = parts[1].split("?", 1)[0].split("#", 1)[0]
-    if not target.startswith("/") or "%" in target or "\\" in target or not _plain_path(target):
+    if not target.startswith("/") or "%" in target or "\\" in target or not _plain_target(target):
         return False
     return any(target == p or (p.endswith("/") and target.startswith(p)) for p in paths)
 

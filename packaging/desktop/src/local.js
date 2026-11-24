@@ -5,7 +5,7 @@
 const { spawn } = require('node:child_process');
 const fs = require('node:fs');
 const path = require('node:path');
-const { candidates } = require('./offices');
+const { candidates, PROBE_PATH } = require('./offices');
 
 // this computer's office: where the address «localhost» leads, by the one rule every typed address follows
 const ORIGIN = candidates('localhost')[0];
@@ -15,7 +15,7 @@ const INSTALL_URL = 'https://digital-office.co.il/';
 
 /** Whether the office here answers: its console, or the sign-in's redirect in front of it. `ask` is main.js's. */
 async function running(ask) {
-  const r = await ask(`${ORIGIN}/manifest.webmanifest`);
+  const r = await ask(`${ORIGIN}${PROBE_PATH}`);
   return r.status > 0 && r.status < 500;
 }
 

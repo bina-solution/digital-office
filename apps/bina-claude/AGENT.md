@@ -24,6 +24,11 @@ timeline's lane `bina_claude` (flow). Its sessions are office data on one volume
   `bina-claude-2` (or `-work`) — its own desktop, volume, tile «קלוד דסקטופ 2» and sign-in. Every verb above takes
   the copy's id in place of `bina-claude` (`./bbox bina-claude-2 signed-in`, `--app bina-claude-2`).
   `./bbox apps instance list|remove`; ai/context/app-instances.md.
+- **At most 4 turns at once** (`BINA_CLAUDE_MAX_TURNS` in the office's .env; 0 = no cap; DGO-2126 — the HP
+  starved on ten). A turn asked for beyond it waits in the adapter's line (adapter/turn-queue.mjs): the answer is
+  202 `queued` with its place and `qid`, and it goes by itself when a turn ends. `show` counts what waits; what the
+  line gave up on is in the session's `line_failed`, by `qid`. Turns started on the app's own screen are counted,
+  never held.
 - The app's sessions run with full access to the checkout and the engine, like Azaria, and reach Azaria with
   `./bbox agent …`.
 - Never restart bina-claude-desktop from a session it is running, and back up its `/config` (the volume's

@@ -34,6 +34,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { StringDecoder } from "node:string_decoder";
+import { shrink } from "./records.mjs";
 
 const LABEL_MAX = 120;
 const EXCERPT = 60;
@@ -325,7 +326,8 @@ export function createSpanStore({ roots, now = () => Date.now(), chunk = CHUNK, 
         for (const line of lines) {
           if (!line.trim()) continue;
           // A line this file cannot read, or a record of a shape it does not expect, costs that line only.
-          try { ingest(t, JSON.parse(line)); } catch { /* the next line */ }
+          // shrink (records.mjs): a record of megabytes is parsed with its long strings cut; every label is bounded anyway
+          try { ingest(t, JSON.parse(shrink(line))); } catch { /* the next line */ }
         }
       }
     } catch { /* gone or unreadable now: the next read goes on from where this one stopped */ }

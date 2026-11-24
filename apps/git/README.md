@@ -31,7 +31,7 @@ containers):
 |---|---|---|
 | upstream requirement | **8 vCPU / 16 GB** baseline, **8 GB** floor, 40 GB disk ([docs.gitlab.com](https://docs.gitlab.com/install/requirements/)) | no published floor; measured **144 MiB idle** |
 | image | 1.5 GB compressed | 197 MB |
-| database | PostgreSQL (own instance, 5–12 GB) | sqlite (in its own volume) |
+| database | PostgreSQL (own instance, 5–12 GB) | sqlite (in its own store, `data/git/forge`) |
 | what the office needs from it | browse/issue/PR/release | browse/issue/PR/release |
 
 GitLab on this machine would not be "slow" — it would exhaust a guest whose swap is already saturated

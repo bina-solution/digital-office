@@ -103,6 +103,7 @@ type Server struct {
 	registry string // GENERATED_REGISTRY: the compiled console.modules.yaml
 	peers    string // CONSOLE_PEERS_DIR: the remote placements and link.json
 	version  string // BUILD_VERSION, stripped, or "dev"
+	own      string // DGO_OFFICE_ID, stripped and lowered: _own_office()'s first answer (herdIDs, modules.go)
 	office   *officeRecord
 	door     http.Handler            // /a/app-management/ to a control plane on a socket (plane.go), or nil
 	doors    map[string]http.Handler // Config.Doors
@@ -191,6 +192,8 @@ func New(c Config) (*Server, error) {
 	if s.version = pyval.Strip(v); s.version == "" {
 		s.version = "dev"
 	}
+	own, _ := c.Lookup("DGO_OFFICE_ID")
+	s.own = strings.ToLower(pyval.Strip(own))
 	return s, nil
 }
 

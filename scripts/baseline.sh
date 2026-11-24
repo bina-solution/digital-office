@@ -63,7 +63,7 @@ need_docker
 if [ "${BASELINE_SKIP_RESET:-0}" != 1 ] && [ "${BASELINE_RESET:-}" != wipe ]; then
   _held=0; office_holds_data || _held=$?   # the form that survives `set -e`, as in bbox
   if [ "${_held}" != 1 ]; then
-    printf '%s\n' "baseline: refused — this office ($(office_project)) $([ "${_held}" = 0 ] && echo holds containers or volumes || echo may hold data: the engine did not say), and P1's reset would WIPE them (down -v). Choose, by name:" \
+    printf '%s\n' "baseline: refused — this office ($(office_project)) $([ "${_held}" = 0 ] && echo holds containers, volumes or stores in data/ || echo may hold data: the engine did not say), and P1's reset would WIPE its containers and volumes (down -v; data/ stays as it is). Choose, by name:" \
       "  BASELINE_RESET=wipe ./bbox baseline        wipe it, then prove a fresh baseline" \
       "  BASELINE_SKIP_RESET=1 ./bbox baseline      prove the office as it runs, nothing wiped" >&2
     rm -f "${RESULTS}"

@@ -30,6 +30,9 @@ services:
       - HOME=/data/home
       - BINA_CLAUDE_STATE=/data/bina-claude
       - BINA_CLAUDE_ADAPTER_PORT=3091
+      # at most this many turns at once; one asked for beyond it waits in the adapter's line and its sender is
+      # told so (adapter/turn-queue.mjs, DGO-2126 — the HP starved on ten at once); 0 = no cap
+      - BINA_CLAUDE_MAX_TURNS=${BINA_CLAUDE_MAX_TURNS:-4}
       - AGENT_TOKEN_FILE=/data/bina-claude/api-token
       # the desktop app's user (below): the adapter writes the app's brief and settings as that user
       - BINA_CLAUDE_DESKTOP_PUID=${BINA_CLAUDE_DESKTOP_PUID:-1000}

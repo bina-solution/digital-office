@@ -256,9 +256,13 @@ def open_side(pg, fl):
     # the drive's own drawer, then the office's side menu (BinaNav — the mail's, the notifications'): each has
     # its own button (the menu's is named by the component's attribute: not every screen gives it an id), and
     # says it is open on the menu itself
-    for toggle, opened in (('#sideToggle', 'aside.side.open'), ('[data-nav-toggle]', '#sideNav.is-open')):
+    # (the drive's front of 2026-10-28 opens its side from the bottom tabs' «עוד», `[data-place="more"]`, as
+    #  `aside.fx-side.open`: it has no #sideToggle — the second reader of 7c26bea2f)
+    for toggle, opened in (('#sideToggle', 'aside.side.open'), ('[data-nav-toggle]', '#sideNav.is-open'),
+                           ('[data-place="more"]', 'aside.fx-side.open')):
         try:
-            tog = fl.locator(toggle)
+            # the button a person SEES: a page may carry two, its own in a bar it hides and the component's (DGO-2170)
+            tog = fl.locator(toggle + ':visible')
             if tog.count() and tog.first.is_visible():
                 if fl.locator(opened).count() == 0:
                     tog.first.click(timeout=2500); pg.wait_for_timeout(400)
@@ -329,7 +333,40 @@ def rail(pg, fl, sel, *alts):
 def open_app(pg, mod, wait=2600):
     pg.goto(target_url()); pg.wait_for_timeout(800)
     pg.evaluate("h=>location.hash=h", mod); pg.wait_for_timeout(wait)
-    return pg.frame_locator('iframe')
+    desk_front(pg)
+    return app_frame(pg)
+
+
+#: On the desk (a computer, DGO-2132) the app in view is a WINDOW: the suites measure it as a person works in it —
+#: the one window, maximized (the desk's focus zone, but at least the apps' desktop width: 1200px of a 1440 screen,
+#: desktop.js APP_W, DGO-2156; it was the zone alone, 906px, and three apps broke there) — and the windows of
+#: the screens measured before do not stand around it (the desk keeps its layout across loads, and every address
+#: opened another). With «בית» standing — an address that named no app — nothing is touched: maximizing a window
+#: there would move the address to that window's app and hide the «no such screen» the suite reads next.
+DESK_FRONT = """() => {
+  if (!(window.BinaDesktop && BinaDesktop.isOn()) || document.querySelector('.dk-home')) return false;
+  const wm = BinaDesktop.wm, f = wm.focused();
+  wm.wins().forEach(w => { if (w !== f) wm.close(w); });
+  if (f && !f.max) { const t = f.el && f.el.querySelector('.dk-tb');
+    if (t) t.dispatchEvent(new MouseEvent('dblclick', {bubbles: true})); }
+  return true;
+}"""
+
+
+def desk_front(pg):
+    if pg.evaluate(DESK_FRONT):
+        pg.wait_for_timeout(700)        # the window grows and the app reflows into it
+
+
+def on_desk(pg):
+    """A computer's console is the desk (desktop.js, DGO-2132): every screen 1024px wide or wider, the suite's 1440."""
+    return bool(pg.evaluate("() => !!(window.BinaDesktop && BinaDesktop.isOn())"))
+
+
+def app_frame(pg):
+    """The frame the app in view is drawn in: on the desk the focused window's (a desk keeps a frame per window, and
+    the shell's own one stands hidden under it), on a phone the shell's one frame."""
+    return pg.frame_locator('.dk-win.focused iframe' if on_desk(pg) else 'iframe')
 
 
 # ══ DRIVE ════════════════════════════════════════════════════════════════════════════════════════
@@ -563,10 +600,24 @@ def drive_flows(pg, errs):
     check('drive/global search', fl.locator('tr[data-id]').count() > 20,
           fl.locator('tr[data-id]').count())
 
-    # account switch changes the drive
-    pg.locator('.dosw-top .dosw-btn').first.click(); pg.wait_for_timeout(700)
-    pg.locator('.dosw-menu .dosw-it').nth(3).click(); pg.wait_for_timeout(2400)
-    check('drive/account switch', True)
+    # account switch changes the drive. Since DGO-1390 the drive lists every drive in its own side («כוננים»), as
+    # live; the simulation's chip is drawn in no drive (its side is `aside.fx-side`, the overlay looks for
+    # `aside.side`), and it was pressed in the office's bar, where nothing has stood since 11-11 (f332e6c5c). So the
+    # switch is the side's: another drive, and that drive is the one marked as shown. The check was `True`.
+    # A drive NOT shown is pressed (`open` returns at once on the shown one, which would pass on nothing).
+    open_side(pg, fl)
+    n = fl.locator('.nav-i.drv button.drv-pick').count()
+    on = fl.locator('.nav-i.drv.on button.drv-pick')
+    was = on.first.get_attribute('title') if on.count() else None
+    other = fl.locator('.nav-i.drv:not(.on) button.drv-pick')
+    want = other.first.get_attribute('title') if other.count() else None
+    if want:
+        other.first.click(timeout=6000); pg.wait_for_timeout(2400)
+        open_side(pg, fl)
+    shown = on.first.get_attribute('title') if on.count() else None
+    check('drive/account switch: another drive in «כוננים» is the one shown',
+          bool(want) and on.count() == 1 and shown == want and shown != was,
+          {'drives': n, 'was': was, 'want': want, 'shown': shown})
 
 
 # ══ MAIL ═════════════════════════════════════════════════════════════════════════════════════════
@@ -740,10 +791,25 @@ def mail_flows(pg, errs):
         return
     mail_settings_flows(pg, fl, view)
 
-    # account switch swaps the mailbox
-    pg.locator('.dosw-top .dosw-btn').first.click(); pg.wait_for_timeout(700)
-    pg.locator('.dosw-menu .dosw-it').nth(2).click(); pg.wait_for_timeout(2400)
-    check('mail/account switch', fl.locator('.gm-row').count() >= 0)
+    # account switch swaps the mailbox. Since DGO-1390 the mail lists every mailbox in its own side («חשבונות»), as
+    # live, and a press shows that one in this window (the agents' default is a choice of its own, asked); the chip
+    # it pressed was in the office's bar, where nothing has stood since 11-11 (f332e6c5c). So: another mailbox, and
+    # that one carries the «shown» mark. The check was `.gm-row` count >= 0.
+    # A mailbox NOT shown is pressed: «ברירת מחדל» above keeps the shown one shown, and `openMailbox` returns at once on
+    # it — pressing the second row pressed the shown one, and the check passed on nothing (the second reader).
+    open_side(pg, fl)
+    n = fl.locator('#sideNav [data-bnv-id^="mb:"]:not([data-bnv-id="mb:connect"])').count()
+    on = fl.locator('#sideNav [data-bnv-id^="mb:"]:has(.mb-on)')
+    was = on.first.get_attribute('data-bnv-id') if on.count() else None
+    other = fl.locator('#sideNav [data-bnv-id^="mb:"]:not([data-bnv-id="mb:connect"]):not(:has(.mb-on))')
+    want = other.first.get_attribute('data-bnv-id') if other.count() else None
+    if want:
+        other.first.click(timeout=6000); pg.wait_for_timeout(2400)
+        open_side(pg, fl)
+    shown = on.first.get_attribute('data-bnv-id') if on.count() else None
+    check('mail/account switch: another mailbox in «חשבונות» is the one shown',
+          bool(want) and on.count() == 1 and shown == want and shown != was,
+          {'mailboxes': n, 'was': was, 'want': want, 'shown': shown})
 
 
 def mail_settings_flows(pg, fl, view):
@@ -869,7 +935,16 @@ def mail_settings_flows(pg, fl, view):
           rows() == n0 and 'שרת הדואר המקומי' in told(), told()[:80])
     untell()
     fl.locator('#setTabs [data-sec="connect"]').click(timeout=6000); pg.wait_for_timeout(1300)
-    fl.locator('#cwConns [data-sel="local"]').click(timeout=6000); pg.wait_for_timeout(1500)
+    fl.locator('#cwConns [data-sel="local"]').click(timeout=6000); pg.wait_for_timeout(600)
+    # the agents' default is a shared, lasting choice, so the office asks it first, naming the mailbox (DGO-1390,
+    # selectConn) — the suite pressed on without an answer and the question's backdrop took its next press
+    # (issues/the-flows-mail-suite-never-answers-the-agents-default-question.yaml)
+    q = asked()
+    check("mail/making the local account the agents' default is asked first, naming the mailbox",
+          q.get('title') == 'ברירת המחדל של הסוכנים?' and bool(q.get('facts')), q)
+    if fl.locator('.bask-card').count():
+        fl.locator('.bask-card .bask-btn.primary').click(timeout=4000)
+    pg.wait_for_timeout(1500)
     # a new account re-reads the screen from its ADDRESS — and a page framed from a file has none, so the
     # simulation lands on the inbox where an office stays on the settings
     if not fl.locator('#setPane:not(.hidden)').count():
@@ -963,10 +1038,18 @@ def indox_flows(pg, errs):
 
     worded('the dashboard')
     counted('the dashboard', '.statelegend b, .bigstat .v, .bar-val')
-    # (the instance chip's second line was the table's name in the database: «incoming_documents»)
-    chip = pg.evaluate(r"""() => { const s = document.querySelector('.dosw-top .dosw-btn small'); const t = s ? s.textContent.trim() : '';
-        return /^[a-z0-9_.]+$/.test(t) ? t : ''; }""")
-    check("indox/the instance chip names the company — the table it is kept in is not its second line", not chip, chip)
+    # (the instance chip's second line was the table's name in the database: «incoming_documents». The chip is INDOX's
+    #  own InstanceSwitcher now, in the side menu's foot, and what it SHOWS is read — an identifier may stand in its
+    #  title, one hover away. A switch that is not there is a failure, not an empty answer: this read `.dosw-top`,
+    #  gone since 11-11, and passed on '')
+    isw = fl.locator('#sideNav button[aria-haspopup="listbox"]')
+    if isw.count():
+        chip = isw.first.evaluate(r"""b => b.textContent.trim().split(/\s*·\s*|\n/).filter(t => /^[a-z0-9_.]+$/.test(t))""")
+        check("indox/the instance chip names the company — the table it is kept in is not its second line",
+              chip == [], chip)
+    else:   # the simulation's own INDOX (digital-office/sim/apps/indox) draws no InstanceSwitcher: said, not passed
+        print("  (indox/the instance chip: this INDOX draws no instance switch — the simulation's copy has none; the live "
+              "one is InstanceSwitcher in its side menu's foot — not measured here)")
     # the documents table lands one click away and carries the whole repo
     tab('מסמכים', 3000)
     body = fl.locator('body').inner_text()
@@ -1216,31 +1299,43 @@ def indox_flows(pg, errs):
     runs = lambda: fl.locator('button.link.danger', has_text='מחק').count()
     removal('deleting an extraction run', lambda: fl.locator('button.link.danger', has_text='מחק').first.click(timeout=6000), runs, '1/1')
 
-    # switching instance swaps the whole INDOX — table, settings, registry, and SCALE
+    # switching instance swaps the whole INDOX — table, settings, registry, and SCALE. INDOX switches in its own
+    # InstanceSwitcher, in the side menu's foot, as live; the simulation draws it no chip (no `aside.side` when the
+    # overlay runs), and the one pressed here was in the office's bar, where nothing has stood since 11-11 (f332e6c5c)
     tab('מסמכים', 3000)
     before = fl.locator('body').inner_text()
-    pg.locator('.dosw-top .dosw-btn').first.click(); pg.wait_for_timeout(800)
-    items = pg.locator('.dosw-menu .dosw-it')
-    if items.count() > 1:
-        items.nth(1).click(); pg.wait_for_timeout(3200)
-        check('indox/instance switch changes the repo',
-              fl.locator('body').inner_text() != before)
+    open_side(pg, fl)
+    sw = fl.locator('#sideNav button[aria-haspopup="listbox"]')
+    if not sw.count():      # the simulation's own INDOX draws no InstanceSwitcher: said, never passed on nothing
+        print("  (indox/instance switch: this INDOX draws no instance switch — the simulation's copy has none; the live "
+              "one is InstanceSwitcher in its side menu's foot — not measured here)")
+        return
+    sw.first.click(timeout=6000); pg.wait_for_timeout(800)
+    other = fl.locator('[role="listbox"] [role="option"][aria-selected="false"]')     # an instance NOT the active one
+    n = other.count()
+    if n:
+        other.first.click(timeout=6000); pg.wait_for_timeout(3200)
+    check('indox/instance switch changes the repo',
+          n > 0 and fl.locator('body').inner_text() != before, {'other instances': n})
 
 
 # ══ CONSOLE ══════════════════════════════════════════════════════════════════════════════════════
 def console_flows(pg, errs):
     print("\nCONSOLE")
     pg.goto(target_url()); pg.wait_for_timeout(1200)
-    # every rail destination reaches a screen with content. The rail marks each entry with
-    # data-id (not an href) — it drives the hash itself — so that is what we walk.
-    # `#nav`, not `nav`: the console's menu is `<div id="nav" class="bnv-scroll">` (the component's
-    # own markup, platform-base/bina-ui/bina-nav.css), so a bare element selector matched NOTHING and
-    # this check reported "the rail has no destinations" against a rail that was rendering thirteen
-    # rows. The 10-entry floor stays: that is what fails a rail which genuinely did not load.
-    ids = pg.evaluate("() => [...document.querySelectorAll('#nav a[data-id]')].map(a => a.dataset.id)")
-    check('console/rail has destinations', len(ids) >= 10, len(ids))
-    for mod in ids:
-        pg.evaluate("m=>location.hash='/m/'+m", mod)
+    # every place the HOME offers reaches a screen with content. The home is the console's navigator (DGO-2122,
+    # DGO-2132: no side rail) — the phone's home in its content, or «בית» over the desk on a computer — and each tile
+    # and card is a link to its own address: an app (`#/m/<id>`, data-hid) or a linked machine or office
+    # (`#/o/<office>`, data-office) — so the walk follows each one's own href, and the apps are the ones counted.
+    # The 10-entry floor stays: that is what fails a home which genuinely did not load.
+    pg.evaluate("() => { if (window.BinaDesktop && BinaDesktop.isOn()) BinaDesktop.home(); else location.hash = '#/'; }")
+    pg.wait_for_timeout(1200)
+    rows = pg.evaluate("() => [...document.querySelectorAll('.lt[data-hid], .lo[data-office]')]"
+                       ".map(a => [a.dataset.hid || 'o:' + a.dataset.office, a.getAttribute('href') || ''])")
+    ids = [i for i, _ in rows if i and not i.startswith('o:')]
+    check('console/home has destinations', len(ids) >= 10, len(ids))
+    for mod, href in rows:
+        pg.evaluate("h=>location.hash=h", href or '#/m/' + mod)
         pg.wait_for_timeout(1800)
         # The console keeps a spent about:blank iframe around when it switches to one of its own
         # native screens, so "the first non-main frame" is not the app — read whichever frame
@@ -1253,7 +1348,7 @@ def console_flows(pg, errs):
                 t = ''
             if len(t.strip()) > len(best.strip()):
                 best = t
-        check(f'console/{mod}', len(best.strip()) > 20, len(best.strip()))
+        check(f'console/{mod or "home"}', len(best.strip()) > 20, len(best.strip()))
 
     # THE APPS SCREEN, driven. It is the real frontend over a mock of its API (it was the simulator's
     # placeholder for a week, and "has more than 20 characters" passed over the placeholder too): a
@@ -1261,6 +1356,7 @@ def console_flows(pg, errs):
     # own card and offers to be switched on again.
     if 'apps' in ids:
         pg.evaluate("location.hash = '/m/apps'"); pg.wait_for_timeout(1800)
+        desk_front(pg)                  # on the desk: the screen's window, maximized — as a person works in it
         fr = next((f for f in pg.frames if f != pg.main_frame and f.locator('article.card[data-id]').count()), None)
         cards = fr.locator('article.card[data-id]').count() if fr else 0
         check('console/apps · the real screen: a card for every installed app', cards >= 4, cards)
@@ -1269,7 +1365,8 @@ def console_flows(pg, errs):
             # still stands the frame's whole height: it ended where the content did, half way down the
             # screen, for as long as the list took to load (seen on a running office, 2026-10-09).
             find = fr.locator('.bnv .bnv-search input')
-            if pg.viewport_size['width'] >= 840 and find.count():
+            # the menu answers the FRAME's width (its container), not the page's: on the desk the frame is a window
+            if fr.evaluate("() => innerWidth") >= 840 and find.count():
                 find.first.fill('אין-אפליקציה-כזאת'); pg.wait_for_timeout(600)
                 short = fr.evaluate("""() => { const m = document.querySelector('.bnv').getBoundingClientRect();
                   return { cards: document.querySelectorAll('article.card').length, menu_ends: Math.round(m.bottom),
@@ -1527,6 +1624,34 @@ def console_flows(pg, errs):
     # the shell does with it — the one decision that, wrong, shows the owner a browser error page.
     own = pg.evaluate(OWN_HOST)
     check('console/own host · this console cannot frame a sign-in', own['asks'], own)
+    if own.get('classic'):
+        own_host_classic(own)
+    else:
+        print("  (console/own host: the shell's one frame is the phone's — a computer is the desk, DGO-2132; "
+              "the phone run asks it, and the desk's window is asked below)")
+    d = own['desk']
+    if d is None:                       # a phone has no desktop; at any other size that is a failure
+        if '--mobile' not in sys.argv:
+            check('console/own host · desktop mode mounts', False, 'no desktop on a wide viewport')
+    else:
+        gone = d['unsigned'].get('missing') or d['signed'].get('missing')
+        if gone:
+            # the same idiom the suite uses for a module this office does not run: the flow is NOT
+            # run, and it says why — instead of three checks failing about an empty string.
+            print(f"  (console/own host: {gone} — this office has no linked-office window; that flow is not run)")
+        else:
+            check('console/own host · desktop window, unsigned: the card over an empty frame, and the page stays',
+                  'נדרשת כניסה' in d['unsigned']['card'] and not d['unsigned']['src'] and not d['unsigned']['went'],
+                  d['unsigned'])
+            check('console/own host · desktop window, signed in after returning: the app, no card',
+                  not d['signed']['card'] and d['signed']['src'] == d['url'], d)
+            check('console/own host · desktop window being opened, unsigned: the same trip, back to that window',
+                  len(d['went']) == 1 and d['went'][0].endswith('/.dgo/enter/m/plane.here'), d['went'])
+    console_flows_after_own_host(pg)
+
+
+def own_host_classic(own):
+    """The phone's shell (its one content frame): what it does with each answer the edge gives an own-host tile."""
     t = own['trip']
     check('console/own host · unsigned: the browser is taken to this office\'s sign-in on that host, and back to the tile',
           not t['framed'] and len(t['went']) == 1 and 'bina.macbook' in t['went'][0]
@@ -1557,25 +1682,10 @@ def console_flows(pg, errs):
     check('console/own host · an app of this office: the same card, no office named',
           not h['framed'] and 'נדרשת כניסה' in h['text'] and 'לשכת' not in h['text']
           and 'undefined' not in h['text'] and h['button'] == 'כניסה', h)
-    d = own['desk']
-    if d is None:                       # a phone has no desktop; at any other size that is a failure
-        if '--mobile' not in sys.argv:
-            check('console/own host · desktop mode mounts', False, 'no desktop on a wide viewport')
-    else:
-        gone = d['unsigned'].get('missing') or d['signed'].get('missing')
-        if gone:
-            # the same idiom the suite uses for a module this office does not run: the flow is NOT
-            # run, and it says why — instead of three checks failing about an empty string.
-            print(f"  (console/own host: {gone} — this office has no linked-office window; that flow is not run)")
-        else:
-            check('console/own host · desktop window, unsigned: the card over an empty frame, and the page stays',
-                  'נדרשת כניסה' in d['unsigned']['card'] and not d['unsigned']['src'] and not d['unsigned']['went'],
-                  d['unsigned'])
-            check('console/own host · desktop window, signed in after returning: the app, no card',
-                  not d['signed']['card'] and d['signed']['src'] == d['url'], d)
-            check('console/own host · desktop window being opened, unsigned: the same trip, back to that window',
-                  len(d['went']) == 1 and d['went'][0].endswith('/.dgo/enter/m/plane.here'), d['went'])
 
+
+def console_flows_after_own_host(pg):
+    """The rest of the console suite: search, a linked office that stops answering, sign-in, a tab left open."""
     # FINDING AN APP BY TYPING. One matcher answers ⌘K and the desktop dock's «עוד» panel
     # (app.js `moduleMatches`), and it used to be a case-sensitive search of the Hebrew name: typing
     # `drive` or `DRIVE` found nothing in an office that has it. A person types what they call the
@@ -1592,8 +1702,20 @@ def console_flows(pg, errs):
     # blank frame and fifteen hours of tiles that looked alive. Then the office comes back, and
     # nothing may need a reload to say so.
     link = pg.evaluate(LINK_DOWN)
+    if not link.get('classic'):
+        print("  (console/link down: the shell's own card is the phone's — a computer is the desk, DGO-2132; "
+              "the phone run asks it)")
+    else:
+        link_down_checks(link)
+    console_flows_tail(pg)
+
+
+def link_down_checks(link):
+    """A linked office stops answering, then comes back: its tiles on the home and the shell's card (the phone's)."""
+    # (DGO-2122: a herd machine's tile carries no office tag — the herd is one business — so the office is named in
+    # the tile's words, its tooltip, with the hop that fell.)
     check('console/link down · every tile of that office is marked before anything is opened, and says which hop fell',
-          all(r and r['off'] and r['meta'] == 'MacBook' and 'לא זמינה כרגע' in r['tip']
+          all(r and r['off'] and 'MacBook' in r['tip'] and 'לא זמינה כרגע' in r['tip']
               and 'המנהרה אליה לא מעבירה תנועה' in r['tip'] for r in link['marked']), link['marked'])
     check('console/link down · its own-host tile opens as a card naming the office and the hop — nothing is framed',
           not link['card']['framed'] and 'MacBook' in link['card']['text']
@@ -1603,21 +1725,24 @@ def console_flows(pg, errs):
           len(link['again']) == 1 and 'notes.macbook' in link['again'][0]
           and not link['card_again']['framed'] and link['card_again']['card'], [link['again'], link['card_again']])
     check('console/link down · the office is back: the marks go and the card becomes the app, with no reload',
-          all(r and not r['off'] and 'לא זמינה' not in r['tip'] for r in link['back']['rail'])
+          all(r and not r['off'] and 'לא זמינה' not in r['tip'] for r in link['back']['tiles'])
           and len(link['back']['framed']) == 1 and link['alive'], link['back'])
-    # The rail's office column is 5em: the state is FORM there (the tag's colour, the row dimmed),
-    # so it is the form that is asserted — it must differ between "not answering" and "back".
-    check('console/link down · the rail says it in form: the office tag changes colour and the row dims',
-          all(a['color'] != b['color'] and a['dim'] < 1 and b['dim'] == 1
-              for a, b in zip(link['marked'], link['back']['rail'])), [link['marked'], link['back']['rail']])
+    # The state is FORM on the home (the tile's glyph dimmed), so it is the form that is asserted — it must differ
+    # between "not answering" and "back".
+    check('console/link down · the home says it in form: the tile dims, and is whole again once the office is back',
+          all(a and b and a['dim'] < 1 and b['dim'] == 1
+              for a, b in zip(link['marked'], link['back']['tiles'])), [link['marked'], link['back']['tiles']])
     check('console/link down · a verdict that turns under a working app redraws the marks and reloads nothing',
-          not link['in_view']['framed'] and link['in_view']['rail']['off'] and link['in_view']['bar'],
+          not link['in_view']['framed'] and (link['in_view']['tile'] or {}).get('off') and link['in_view']['bar'],
           link['in_view'])
     if link.get('home') is not None:
-        check('console/link down · phone launcher: the tile itself says its office is unavailable',
-              link['home'].get('off') and link['home'].get('lines') == ['MacBook', 'לא זמינה כרגע']
+        check('console/link down · phone home: the tile itself says its office is unavailable, in words',
+              link['home'].get('off') and link['home'].get('text') == 'MacBook לא זמינה כרגע'
               and not link['home'].get('cut'), link['home'])
 
+
+def console_flows_tail(pg):
+    """The console suite's last part: the page's own sign-in, and a tab left open while the office changes."""
     # THE PAGE'S OWN SIGN-IN RAN OUT. The edge answers the page's question with a redirect to the
     # identity provider; the page says so (one button) when somebody is using it, and takes the
     # top-level load at once when nobody is — a return to the tab — but never twice in a row.
@@ -1637,6 +1762,10 @@ def console_flows(pg, errs):
           stays['tile'] and stays['alive'], stays)
     check('console/stays open · a new shell build is not loaded under a person\'s hands',
           stays['alive_after_new_build_in_view'], stays)
+    # …and no window of a stood-in peer goes into the next load: the desk (DGO-2132) restores its saved windows, and
+    # the stood-in tile's (OWN_HOST's `plane.here`, host `plane`) asked `file://plane/.dgo/signed-in` there — four
+    # JS errors in every desktop run (issues/the-desktop-flow-verdict-is-red-on-seven-js-errors-…)
+    pg.evaluate(DROP_STOOD_IN_WINDOWS)
     try:
         pg.evaluate("() => { freshen(true); }")           # the next navigation: the page goes away
     except Exception:
@@ -1646,13 +1775,11 @@ def console_flows(pg, errs):
           pg.evaluate("() => window.__drawn_before_the_new_build === undefined"))
 
 
-# The palette, asked for an app the way a person types it: an id from the rail whose Hebrew label
+# The palette, asked for an app the way a person types it: an id from the registry whose Hebrew name
 # does not contain it (so it is the ID that has to match), lower-case and upper-case.
 FIND_BY_TYPING = """() => {
-  const rail = [...document.querySelectorAll('#nav a[data-id]')];
-  const a = rail.find(x => /^[a-z][a-z0-9-]+$/.test(x.dataset.id)
-                        && !x.textContent.toLowerCase().includes(x.dataset.id));
-  const id = a ? a.dataset.id : '';
+  const a = MODULES.find(m => /^[a-z][a-z0-9-]+$/.test(m.id) && !String(m.name || '').toLowerCase().includes(m.id));
+  const id = a ? a.id : '';
   openPalette();
   const input = document.querySelector('#palInput');
   const typed = q => { input.value = q; input.dispatchEvent(new Event('input', {bubbles: true}));
@@ -1711,25 +1838,32 @@ OWN_HOST = """async () => {
     return {framed: framed.slice(), text: c.innerText, bar: document.querySelector('#viewTitle').innerText,
             button: b ? b.textContent.trim() : '', href: b ? b.getAttribute('href') : '', title: b ? b.title : ''};
   };
-  const out = {asks: noNestedHost(location.hostname)};
-  tried(own.id, 0);                                      // never tried: the browser is taken there
-  out.trip = Object.assign(await open(own.id, 'opaqueredirect'), {went: trips.slice()});
-  tried(own.id, Date.now());                             // tried a moment ago and it still asks: the card
-  out.unsigned = Object.assign(await open(own.id, 'opaqueredirect'), {went: trips.slice()});
-  out.noname = await open(own.id, '');
-  out.signed = await open(own.id, 'cors');
-  out.asked = asked.slice(); asked.length = 0;
-  const through = await open(door.id, 'cors');
-  out.door = {framed: through.framed, asked: asked.length, bar: through.bar};
-  tried(here.id, Date.now());
-  out.here = await open(here.id, 'opaqueredirect');
+  // THE SHELL'S ONE FRAME exists where the shell is the phone's — every screen under 1024px. A computer is the desk
+  // (DGO-2132), where the same tile is a window: that half is asked below, and this one is the phone run's.
+  const out = {asks: noNestedHost(location.hostname), classic: !(window.BinaDesktop && BinaDesktop.isOn())};
+  if (out.classic) {
+    tried(own.id, 0);                                    // never tried: the browser is taken there
+    out.trip = Object.assign(await open(own.id, 'opaqueredirect'), {went: trips.slice()});
+    tried(own.id, Date.now());                           // tried a moment ago and it still asks: the card
+    out.unsigned = Object.assign(await open(own.id, 'opaqueredirect'), {went: trips.slice()});
+    out.noname = await open(own.id, '');
+    out.signed = await open(own.id, 'cors');
+    out.asked = asked.slice(); asked.length = 0;
+    const through = await open(door.id, 'cors');
+    out.door = {framed: through.framed, asked: asked.length, bar: through.bar};
+    tried(here.id, Date.now());
+    out.here = await open(here.id, 'opaqueredirect');
+  } else {
+    tried(here.id, Date.now()); answer = 'opaqueredirect';   // the tile in view is the window, as the phone run leaves it
+    location.hash = '#/m/' + here.id;
+  }
   // The same tile as a desktop WINDOW. Its address is stood in for (the sim has no host to nest
   // under); what is checked is what the window shows for each answer of the edge.
   out.desk = null;
   const realUrl = externalUrl, wait = () => new Promise(done => setTimeout(done, 150));
   externalUrl = (m) => m.id === here.id ? 'http://127.0.0.1:9/' : realUrl(m);
   answer = 'opaqueredirect';
-  BinaDesktop.enable();
+  BinaDesktop.enable();                 // a phone: no room for it; a computer: already up (DGO-2132)
   if (BinaDesktop.isOn()) {
     const seen = async (a) => {
       answer = a; BinaDesktop.askOwnHosts(); await wait();
@@ -1753,8 +1887,9 @@ OWN_HOST = """async () => {
     tried(here.id, 0); answer = 'opaqueredirect';        // …and a window that is being OPENED goes itself
     BinaDesktop.openModule(here); await wait();
     out.desk.went = trips.slice();
-    document.querySelector('.dk-win.external .dk-l.close')?.click();
-    BinaDesktop.disable();
+    // …and EVERY window of the stood-in tiles goes: on a desk up from the start (DGO-2132) the tile's window was opened
+    // before this half began, and one left behind kept asking its host (file://plane/.dgo/signed-in) on every freshen
+    document.querySelectorAll('.dk-win.external .dk-l.close').forEach((b) => b.click());
   }
   externalUrl = realUrl; leaveFor = real.leave; enterOwnHost.gone = false;
   window.fetch = real.fetch; showEmbed = real.showEmbed;
@@ -1799,14 +1934,19 @@ SIGNED_OUT = """async () => {
 # registry says is unreachable, then reachable, then unreachable again. The registry and the page's
 # "what should I have been drawn from" question are stood in for; the frame is counted, not loaded.
 LINK_DOWN = """async () => {
+  // the shell's own card for an app whose office is not answering is drawn in its one content frame — the phone's
+  // shell (every screen under 1024px); a computer is the desk (DGO-2132), and the phone run asks this
+  if (window.BinaDesktop && BinaDesktop.isOn()) return {classic: false};
   window.__link_down_page = true;
   const why = 'המנהרה אליה לא מעבירה תנועה: היא כבויה, מנותקת מהרשת, או שהקישור נפל.';
-  const from = (ok) => Object.assign({office: 'macbook', label: {he: 'MacBook'}}, ok ? {ok: true} : {ok: false, why});
+  // a machine of THIS business's herd (`herd: true`, DGO-2122), whose two apps are kinds no local app is — so each is
+  // a tile of its own on the home, and the marks are theirs to carry
+  const from = (ok) => Object.assign({office: 'macbook', label: {he: 'MacBook'}, herd: true}, ok ? {ok: true} : {ok: false, why});
   const tiles = (ok) => [
-    {id: 'notes.macbook', name: 'פתקים', icon: 'file', group: 'עסק', external: true, host: 'notes.macbook',
-     embed: '/a/notes/', remote: from(ok)},
-    {id: 'drive.macbook', name: 'דרייב', icon: 'folder', group: 'עסק', external: true, host: 'drive.macbook',
-     embed: '/a/drive/', proxy: '/a/drive.macbook/', remote: from(ok)}];
+    {id: 'notes.macbook', alias: 'notes-of-mac', name: 'פתקים', icon: 'file', group: 'עסק', external: true,
+     host: 'notes.macbook', embed: '/a/notes/', remote: from(ok)},
+    {id: 'drive.macbook', alias: 'drive-of-mac', name: 'דרייב', icon: 'folder', group: 'עסק', external: true,
+     host: 'drive.macbook', embed: '/a/drive/', proxy: '/a/drive.macbook/', remote: from(ok)}];
   const real = {fetch: window.fetch.bind(window), showEmbed, externalFallback, hash: location.hash};
   const drawn = await real.fetch('/api/version').then(r => r.json()).catch(() => ({}));   // what this page was drawn from
   const framed = [];
@@ -1828,22 +1968,30 @@ LINK_DOWN = """async () => {
   showEmbed = (u) => { framed.push(u); };
   externalFallback = () => {};                       // the frame is stood in for: nothing to look at
   const settle = () => new Promise(done => setTimeout(done, 200));
-  const rail = (id) => { const a = document.querySelector('#nav a[data-id="' + id + '"]');
-    const meta = a && a.querySelector('.bnv-meta');
-    return a ? {off: a.classList.contains('is-offline'), tip: a.title, meta: meta ? meta.textContent : '',
-                color: meta ? getComputedStyle(meta).color : '',
-                dim: +getComputedStyle(a.querySelector('.bnv-label')).opacity} : null; };
+  // The app's tile on the HOME, the console's navigator (no side rail, DGO-2132), drawn by the shell's own homeBody
+  // off-screen while an app is in view — so its FORM is measured (the glyph dimmed), not only its class.
+  const tile = (id) => {
+    const box = document.createElement('div');
+    box.style.cssText = 'position:fixed;top:0;inset-inline-start:-9999px;width:390px';
+    box.innerHTML = homeBody(homeModel().kinds, [], []);
+    document.body.appendChild(box);
+    const a = box.querySelector('.lt[data-hid="' + id + '"]');
+    const r = a ? {off: a.classList.contains('is-offline'), tip: a.title,
+                   says: (a.querySelector('.lt-off') || {}).textContent || '',
+                   dim: +getComputedStyle(a.querySelector('.lt-ic')).opacity} : null;
+    box.remove();
+    return r;
+  };
   const barOff = () => !!document.querySelector('#viewTitle .vt-office.is-off');
-  const out = {home: null};
+  const out = {classic: true, home: null};
   // measured unreachable: marked before anything is opened
   await freshen(false, true); await settle();
-  out.marked = [rail('notes.macbook'), rail('drive.macbook')];
+  out.marked = [tile('notes.macbook'), tile('drive.macbook')];
   if (matchMedia('(max-width: 640px)').matches) {
     renderHome();
-    const t = document.querySelector('.htile[data-hid="drive.macbook"]');
-    const line = t && t.querySelector('.htile-office');
-    out.home = line ? {off: t.classList.contains('is-offline'),
-                       lines: [...line.childNodes].filter(n => n.nodeType === 3).map(n => n.textContent),
+    const t = document.querySelector('.lt[data-hid="drive.macbook"]');
+    const line = t && t.querySelector('.lt-off');
+    out.home = line ? {off: t.classList.contains('is-offline'), text: line.textContent,
                        cut: line.scrollWidth > line.clientWidth + 1} : {};
   }
   // its own-host tile: the card, naming the office and the hop — and nothing framed
@@ -1860,12 +2008,12 @@ LINK_DOWN = """async () => {
   out.card_again = {framed: framed.slice(), card: !!document.querySelector('#content .xn')};
   // the office is back: the page learns it at its next question — the marks go, the card becomes the app
   ok = true; turn++; await freshen(false, true); await settle();
-  out.back = {rail: [rail('notes.macbook'), rail('drive.macbook')], framed: framed.slice()};
+  out.back = {tiles: [tile('notes.macbook'), tile('drive.macbook')], framed: framed.slice()};
   // a verdict that turns while a WORKING app is in view redraws the marks and reloads nothing
   location.hash = '#/m/drive.macbook'; await settle();
   framed.length = 0;
   ok = false; turn++; await freshen(false, true); await settle();
-  out.in_view = {framed: framed.slice(), rail: rail('drive.macbook'), bar: barOff()};
+  out.in_view = {framed: framed.slice(), tile: tile('drive.macbook'), bar: barOff()};
   out.alive = window.__link_down_page === true;
   await new Promise(done => setTimeout(done, 2600));   // the shell's own "did the frame come up" timers pass
   window.fetch = real.fetch; showEmbed = real.showEmbed; externalFallback = real.externalFallback;
@@ -1873,6 +2021,22 @@ LINK_DOWN = """async () => {
   await freshen(false);                              // …and the page is its own again
   location.hash = real.hash;
   return out;
+}"""
+
+
+# -> closes the windows of the tiles the halves above stood in (a linked office's, which exist in no registry here) and
+#    keeps none of them in the desk's saved layout (`do-desktop-layout`, desktop.js K.layout), so the next load
+#    restores no window that asks a host that does not exist. The desk saves 400 ms after a close (saveSoon).
+DROP_STOOD_IN_WINDOWS = """async () => {
+  if (!(window.BinaDesktop && BinaDesktop.isOn && BinaDesktop.isOn())) return 0;
+  const shut = document.querySelectorAll('.dk-win.external .dk-l.close');
+  shut.forEach((b) => b.click());
+  await new Promise((r) => setTimeout(r, 700));
+  try {
+    const k = 'do-desktop-layout', L = JSON.parse(localStorage.getItem(k) || 'null');
+    if (L && Array.isArray(L.wins)) localStorage.setItem(k, JSON.stringify(Object.assign(L, {wins: L.wins.filter((w) => !w.ext)})));
+  } catch (e) { /* no layout kept: nothing to restore */ }
+  return shut.length;
 }"""
 
 
@@ -1895,7 +2059,7 @@ STAYS_OPEN = """async () => {
     return {ok: true, json: async () => ({modules: listed.concat([more])})};
   };
   await freshen(false);
-  const out = {tile: !!document.querySelector('#nav a[data-id="linked.later"]'),
+  const out = {tile: MODULES.some(m => m.id === 'linked.later'),
                alive: window.__drawn_before_the_new_build === true};
   says = {registry: 'another', shell: 'a newer build'};
   await freshen(false);
@@ -2042,8 +2206,12 @@ LOADED_PROBE = r"""() => { const text = (document.body ? document.body.innerText
     none: none.slice(0, 3),
     blank: !!rows && seen(menu) && ![...rows.querySelectorAll('*')].some(e => seen(e) && e.textContent.trim()),
     says: text.slice(0, 70) }; }"""
-# -> what the simulation's instance chip (the console's top bar) says of the account in view, or null
-CHIP_PROBE = r"""() => { const b = document.querySelector('.dosw-top .dosw-btn'); return b ? b.getAttribute('aria-label') : null; }"""
+# -> what an app's OWN account switch says, read in its frame — its side's list or its InstanceSwitcher, and the
+#    simulation's chip where one still stands (`.dosw`, in the app's side) — or null when none is drawn. It read the
+#    console's top bar, where no chip has stood since 11-11 (f332e6c5c), so it could never catch a «מחובר».
+SWITCH_OF = {'drive': '.nav-i.drv', 'mail': '#sideNav [data-bnv-id^="mb:"]',
+             'incoming': '#sideNav button[aria-haspopup="listbox"]'}
+CHIP_PROBE = r"""els => els.length ? els.map(e => ((e.getAttribute('aria-label') || '') + ' ' + e.textContent).trim()).join(' · ') : null"""
 # -> the rows of NUMBER TILES in this frame that leave one alone: a grid or a wrapping row of three or more boxes
 #    of one kind, each holding a short value set large, whose last row holds exactly ONE under a row of three or more
 ALONE_PROBE = r"""() => { const out = [];
@@ -2123,6 +2291,7 @@ def screen(pg, suite, m):
     t0 = time.monotonic()
     pg.evaluate("x => location.hash = '/m/' + x", m)
     r = drawn.wait(pg.evaluate, pg.wait_for_timeout, since=t0, at_least_ms=2200)
+    desk_front(pg)
     if not here(pg):
         check(f'{suite}/{m}', False, f'the page left the office for {pg.url[:80]}')
         pg.goto(target_url()); pg.wait_for_timeout(900)
@@ -2143,6 +2312,9 @@ def screen(pg, suite, m):
     # shown, so a check that only asked for the text called every module after the first "no such
     # screen" — nine of them, and the suite passed green over a third of its flows.
     nosuch = pg.evaluate("""() => {
+      // on the desk (DGO-2132) an address naming no app opens «בית» with a line over it, and no window: an app that
+      // exists closes «בית» as its window opens — so «בית» still standing is the desk's «no such screen»
+      if (window.BinaDesktop && BinaDesktop.isOn()) return !!document.querySelector('.dk-home');
       const c = document.querySelector('#content');
       if (!c || c.classList.contains('hidden')) return false;
       const h = c.querySelector('.wcard h3');
@@ -2433,7 +2605,10 @@ def layout_flows(pg, errs):
                     #      עדיין» under «לא ניתן להתחבר לתיבה»; the vault's menu — three rows that are constants —
                     #      stood as a blank column; and the simulation's instance chip went on saying «מחובר»,
                     #      beside a green dot, of a list of accounts it could not read.
-                    chip = pg.evaluate(CHIP_PROBE) if m in WITH_INSTANCES else None
+                    # in the frame `loaded` just loaded again (framed: the largest in sight) — a phone keeps spent
+                    # frames, and the first iframe could be one of them, read as nothing (the second reader)
+                    fr = framed(pg) if m in SWITCH_OF else None
+                    chip = fr.locator(SWITCH_OF[m] + ', .dosw .dosw-btn').evaluate_all(CHIP_PROBE) if fr else None
                     check(f'layout/{m} coming up while its service {when}: what was not read is not said to be empty, missing or connected',
                           not got.get('none') and not got.get('blank') and 'מחובר' not in (chip or ''),
                           {'none': got.get('none'), 'blank': got.get('blank'), 'chip': chip})
@@ -2635,7 +2810,7 @@ def menu_rules(pg, fr, menu, m, at):
               stays['to_foot'] and stays['stays'], stays)
     try:
         if kind == 'drawer' and not menu['lost']:
-            fr.locator('[data-nav-toggle]').first.click(timeout=4000); pg.wait_for_timeout(500)
+            fr.locator('[data-nav-toggle]:visible').first.click(timeout=4000); pg.wait_for_timeout(500)   # the one in sight
             over = said()
             pg.keyboard.press('Escape'); pg.wait_for_timeout(400)
             check(f'layout/{m} …the button opens it over the page{at}, and Escape shuts it',
@@ -3872,7 +4047,8 @@ def window_flows(pg, errs):
             check(f'windows/no JS error while they stand open on {screen}', not fresh, fresh[:3])
     finally:
         (shots / 'drawn-log.json').write_text(json.dumps(took, ensure_ascii=False, indent=1), encoding='utf-8')
-        pg.evaluate("() => { if (window.BinaDesktop) { BinaDesktop.reset(); BinaDesktop.disable(); } }")
+        # the desk is not taken down (a computer's only shell, DGO-2132): its windows are put away for the next suite
+        pg.evaluate("() => { if (window.BinaDesktop) BinaDesktop.reset(); }")
         pg.set_viewport_size(size)
         pg.goto(target_url()); pg.wait_for_timeout(600)
 

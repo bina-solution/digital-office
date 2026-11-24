@@ -65,9 +65,13 @@ services:
       AUTHENTIK_DISABLE_UPDATE_CHECK: ${AUTHENTIK_DISABLE_UPDATE_CHECK:-true}
       AUTHENTIK_DISABLE_STARTUP_ANALYTICS: ${AUTHENTIK_DISABLE_STARTUP_ANALYTICS:-true}
     volumes:
-    - authentik_media:/media
-    - authentik_templates:/templates
-    - ./blueprints:/blueprints/custom
+    # the uploads (the office's logo, its icons) and the email templates, in data/authentik/{media,templates}
+    # (DGO-2019; they were the volumes authentik_media and authentik_templates, moved once by `bbox run`)
+    - ../../data/authentik/media:/media
+    - ../../data/authentik/templates:/templates
+    # the office's blueprints, read only: the tracked ones and zz-generated-apps.yaml, which the compiler writes on
+    # the host (reconcile.py GENERATED_BLUEPRINT) — authentik writes nothing there
+    - ./blueprints:/blueprints/custom:ro
     depends_on:
       authentik-postgres:
         condition: service_healthy
@@ -165,9 +169,13 @@ services:
       # profile (platform/profiles/perf-profiles.yml); a profile that says nothing keeps the default.
       AUTHENTIK_WORKER__CONCURRENCY: ${AUTHENTIK_WORKER_CONCURRENCY:-2}
     volumes:
-    - authentik_media:/media
-    - authentik_templates:/templates
-    - ./blueprints:/blueprints/custom
+    # the uploads (the office's logo, its icons) and the email templates, in data/authentik/{media,templates}
+    # (DGO-2019; they were the volumes authentik_media and authentik_templates, moved once by `bbox run`)
+    - ../../data/authentik/media:/media
+    - ../../data/authentik/templates:/templates
+    # the office's blueprints, read only: the tracked ones and zz-generated-apps.yaml, which the compiler writes on
+    # the host (reconcile.py GENERATED_BLUEPRINT) — authentik writes nothing there
+    - ./blueprints:/blueprints/custom:ro
     depends_on:
       authentik-postgres:
         condition: service_healthy
@@ -245,7 +253,7 @@ services:
       AUTHENTIK_BOOTSTRAP_USER: ${AUTHENTIK_BOOTSTRAP_USER:-akadmin}
       AUTHENTIK_BOOTSTRAP_PASSWORD: ${AUTHENTIK_BOOTSTRAP_PASSWORD:-}
     volumes:
-    - ./blueprints:/blueprints/custom
+    - ./blueprints:/blueprints/custom:ro
     - ./bootstrap.sh:/bootstrap.sh:ro
     - ./outpost-ready.py:/outpost-ready.py:ro
     depends_on:
@@ -275,7 +283,10 @@ services:
       POSTGRES_PASSWORD: ${AUTHENTIK_POSTGRES_PASSWORD}
       POSTGRES_DB: authentik
     volumes:
-    - authentik_postgres_data:/var/lib/postgresql/data
+    # every user, group, flow and token of the office's sign-in: in data/authentik/db (DGO-2019; it was the volume
+    # authentik_postgres_data, moved once by `bbox run` with the database stopped). Backed up by hooks/backup's
+    # pg_dump, never as files (SKIPVOL)
+    - ../../data/authentik/db:/var/lib/postgresql/data
     networks:
     - authentik-internal
     logging:
@@ -291,10 +302,6 @@ services:
       timeout: ${HEALTHCHECK_TIMEOUT:-5s}
       retries: 5
       start_period: 20s
-volumes:
-  authentik_media: null
-  authentik_templates: null
-  authentik_postgres_data: null
 networks:
   traefik-network:
     external: true

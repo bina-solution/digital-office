@@ -411,14 +411,18 @@ office_project() {
   printf '%s' "${pn:-digital-office}"
 }
 
-# office_holds_data — 0: this checkout's office has containers or volumes on the engine; 1: it has none; 2: the
-# engine did not say (a caller about to write secrets or wipe data takes 2 as «it may»).
+# office_holds_data — 0: this checkout's office has containers or volumes on the engine, or a store that moved to its
+# data/ holds data (DGO-2019: an office whose volumes are folders now); 1: it has none; 2: the engine, or a manifest,
+# did not say (a caller about to write secrets or wipe data takes 2 as «it may»).
 office_holds_data() {
-  local pn c v; pn="$(office_project)"
+  local pn c v rc; pn="$(office_project)"
   c="$(docker ps -aq --filter "label=com.docker.compose.project=${pn}" 2>/dev/null)" || return 2
   v="$(docker volume ls -q --filter "label=com.docker.compose.project=${pn}" 2>/dev/null)" || return 2
   [ -n "${c}${v}" ] && return 0
-  return 1
+  # the stores' folders, by every manifest's data.moved_from — the one reading of them (env-secrets.py moved_stores).
+  # «None» is its own code, 10 (MOVED_NONE): a crash exits 1, and is «unknown» with everything else
+  rc=0; python3 "$(npath "${REPO_ROOT}/scripts/env-secrets.py")" --moved-data >/dev/null 2>&1 || rc=$?
+  case "${rc}" in 0) return 0 ;; 10) return 1 ;; *) return 2 ;; esac
 }
 
 # office_unnamed — 0 when .env names no office: BUSINESS_NAME is empty AND the office's domain resolves to nothing
@@ -444,6 +448,51 @@ compose_args() {
     # tr -d '\r': Windows python prints CRLF, and a trailing CR inside the path makes docker
     # fail with "The filename, directory name, or volume label syntax is incorrect."
   done < <( cd "${REPO_ROOT}" && python3 platform/manager/reconcile.py compose-files 2>/dev/null | tr -d '\r' )
+  # A folder the office MOVED out of (`bbox home move`, DGO-2019) runs no compose: it is the same project, and a `dc up`
+  # here would recreate every container on this stale copy (bbox refuses there too; scripts/dc reads only this file)
+  if [ -f "${REPO_ROOT}/MOVED-TO.txt" ]; then
+    echo "[bbox] this folder was moved — the office runs from $(head -1 "${REPO_ROOT}/MOVED-TO.txt"): compose is not run here" >&2
+    a="${a} -f MOVED-TO.txt-this-folder-was-moved.yml"
+  fi
+  # A store that cannot move to data/<app>/ on this office yet runs from its volume (DGO-2019): one file per app,
+  # written by platform/manager/datahome.py at every bbox run, and read only while that app is compiled — a file
+  # naming a service compose no longer has would fail every command of the office. A store whose move no run has
+  # decided yet is added here first (`waits`: files only, no engine), so a change that lands between two runs — a
+  # pull, a commit in the checkout — never starts an app on an empty folder before `bbox run` has looked at it.
+  # FAILS CLOSED, narrowly: when `waits` cannot read the stores, an app whose move no run has decided (no record in
+  # data/.moves/<app>/, no wait file) is given a compose file that does not exist, so compose refuses to run instead
+  # of starting that app on an empty folder; the message says why. An app already decided is never held.
+  # The same for an app that READS such a store (a bind into data/<that app>/): held until the store is decided.
+  local moving m aid undecided="" inc raid
+  moving="$(grep -ls '"moved_from"' "${REPO_ROOT}"/platform-base/*/app.json "${REPO_ROOT}"/apps/*/app.json \
+              "${REPO_ROOT}"/instances/*/app.json 2>/dev/null || true)"
+  if [ -n "${moving}" ] \
+     && ! ( cd "${REPO_ROOT}" && COMPOSE_PROJECT_NAME="$(office_project)" python3 platform/manager/datahome.py waits ) \
+          >/dev/null 2>&1; then
+    for m in ${moving}; do
+      aid="$(basename "$(dirname "${m}")")"
+      [ -d "${REPO_ROOT}/data/.moves/${aid}" ] && continue
+      undecided="${undecided} ${aid}"
+      [ -f "${REPO_ROOT}/data/.moves/wait/${aid}.yml" ] && continue
+      echo "[bbox] ${aid}: the data move cannot say where its state is (platform/manager/datahome.py waits failed) — compose is not run until it can: ./bbox data plan" >&2
+      a="${a} -f data/.moves/REFUSED-${aid}-see-bbox-data-plan.yml"
+    done
+    while IFS= read -r inc; do
+      raid="$(basename "$(dirname "${inc}")")"
+      [ -f "${REPO_ROOT}/data/.moves/wait/${raid}.yml" ] && continue
+      for aid in ${undecided}; do
+        [ "${aid}" != "${raid}" ] && grep -qE "data/${aid}([^A-Za-z0-9_.-]|\$)" "${REPO_ROOT}/${inc}" 2>/dev/null || continue
+        echo "[bbox] ${raid}: it reads ${aid}'s store, which the data move cannot place yet (waits failed) — compose is not run until it can: ./bbox data plan" >&2
+        a="${a} -f data/.moves/REFUSED-${raid}-see-bbox-data-plan.yml"
+        break
+      done
+    done < <(sed -n 's/^- \(.*\/docker-compose\.yml\)$/\1/p' "${REPO_ROOT}/.generated/compose.yml" 2>/dev/null)
+  fi
+  for f in "${REPO_ROOT}"/data/.moves/wait/*.yml; do
+    [ -f "${f}" ] || continue
+    grep -qF "/$(basename "${f}" .yml)/docker-compose.yml" "${REPO_ROOT}/.generated/compose.yml" 2>/dev/null \
+      && a="${a} -f data/.moves/wait/$(basename "${f}")"
+  done
   # OVERLAYS — extra -f files appended AFTER the compiled ones, so compose merges them on top.
   # scripts/dc has always read this; dcx (i.e. every bbox verb) did not, so an overlay applied
   # under ./scripts/dc and silently did nothing under ./bbox run. That split also meant
@@ -674,16 +723,42 @@ dcx() {
   if compose_is_recreate "$@"; then bbox_assert_engine_socket; fi
   deploy_ledger_gate "$@" || return 1      # never a build or recreate that drops what runs here
   compose_admit "$@" || return 1     # a build on a disk under its floor, where the office enforces it (DGO-1393)
-  local rc=0
-  if compose_self_guard _dcx_run "$@"; then rc="${COMPOSE_GUARD_RC}"; else _dcx_run "$@" || rc=$?; fi
+  local rc=0 later=0 held_rc=0
+  local -a asked=("$@")
+  # an app at work is not recreated under its people (DGO-2129): its services leave the command, and come up after it
+  if compose_when_idle_split _dcx_run "$@"; then
+    later=1
+    set -- "${DCX_MAIN_ARGS[@]}"
+  fi
+  if [ $# -gt 0 ]; then
+    if compose_self_guard _dcx_run "$@"; then rc="${COMPOSE_GUARD_RC}"; else _dcx_run "$@" || rc=$?; fi
+  fi
+  if [ "${later}" = 1 ]; then
+    if [ "${rc}" -eq 0 ]; then
+      compose_when_idle_up _dcx_run || rc=$?
+      # held (75) is no failure of what DID run: its refreshes, caps and ledger below still happen; 75 comes back last
+      if [ "${rc}" -eq 75 ]; then held_rc=75; rc=0; fi
+    else
+      say "${cy}$(printf '%s\n' "${COMPOSE_LATER[@]}" | cut -f5 | tr '\n' ' ')not brought up: the command before them failed${c0}"
+    fi
+  fi
   # What `up` created holds its declared cap; the machine's budget is told to the kernel here
   # (never by a dry run, which is a question) — after whatever lives in a replaced container's
   # network has been put back in the one that replaced it.
   # Asked of the COMPOSE SUBCOMMAND (compose_is_up), never of the whole argument string: `dcx exec … tasks.py
   # comment EXF-1 "…backed up both files…"` used to read as an `up`, so a task comment that said "up" put every
   # container's CPU cap back to the budget and ran netns_rejoin (EXF-262, 2026-10-30).
-  if [ "${rc}" -eq 0 ] && compose_is_up "$@"; then filemount_refresh "$@"; netns_rejoin || rc=$?; cpu_caps_apply; fi
-  [ "${rc}" -ne 0 ] || deploy_ledger_record "$@"
+  # filemount_refresh only for what this command ran itself: with no arguments it would read as a bare `up`, and the
+  # «when-idle» services were refreshed inside their own quiet window (compose_when_idle_up). image_refresh (the line's:
+  # a `--build` that left a container on its old image) over everything the command was ASKED — it touches only stale
+  # containers, and the «when-idle» ones were recreated in their own window («dgo-stable takes hp-dgo», DGO-2120).
+  if [ "${rc}" -eq 0 ] && compose_is_up "${asked[@]}"; then
+    if [ $# -gt 0 ]; then filemount_refresh "$@"; fi
+    image_refresh "${asked[@]}"
+    netns_rejoin || rc=$?; cpu_caps_apply
+  fi
+  [ "${rc}" -ne 0 ] || deploy_ledger_record "${asked[@]}"
+  [ "${rc}" -ne 0 ] || rc="${held_rc}"
   return "${rc}"
 }
 
@@ -949,6 +1024,110 @@ for c in rows:
   return 0
 }
 
+# image_refresh — a container follows its image when the image is rebuilt (or pulled) under the same tag.
+#
+# `up -d --build <svc>` should recreate what it built. On vps1, 2026-11-20 11:12Z (compose v2.38.2), autoheal and
+# apitools printed «Built» and then «Running»: the containers kept their old images while :latest moved on, the office
+# ran the code before, and nothing said so — only `--force-recreate` put them on the new ones
+# (issues/dc-up-build-builds-a-new-image-and-leaves-the-container-on-the-old-one.yaml). So after every `up`, a running
+# container whose image is not the one its tag names NOW is recreated. It is state that is read, as by the passes
+# beside it, so it also puts right what an earlier `up` or a bare `build` left behind. Its bounds are filemount_refresh's
+# — the services the `up` named (every one for a bare `up`), declared ones, never the container this runs in — and a
+# tag that no longer resolves is no reason (recreating would build or pull it: the container is left as it is). A
+# container still on another image after the recreate is said in red; the `up` stays a success (DGO-2123).
+image_refresh() {
+  local -a named=() declared=()
+  local ids stale s keep held self left
+  while [ $# -gt 0 ]; do case "$1" in up) shift; break ;; *) shift ;; esac; done
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      -t|--timeout|--wait-timeout|--scale|--pull|--exit-code-from|--attach|--no-attach) shift; [ $# -gt 0 ] && shift ;;
+      -*) shift ;;
+      *)  named+=("$1"); shift ;;
+    esac
+  done
+  ids="$(_dcx_run ps -q 2>/dev/null)" || return 0
+  [ -n "${ids}" ] || return 0
+  # shellcheck disable=SC2086 — a list of container ids
+  stale="$(_image_stale ${ids})"
+  [ -n "${stale}" ] || return 0
+  # the compiled config only now, when something IS stale (as filemount_refresh)
+  while IFS= read -r s; do [ -n "${s}" ] && declared+=("${s}"); done < <(_dcx_run config --services 2>/dev/null || true)
+  [ "${#declared[@]}" -gt 0 ] || return 0
+  # never the container this runs in: the self guard's own answer first (it has just built that image and handed its
+  # recreate to the self-update hook, so it is ALWAYS stale here), then docker's. Inside a container whose own service
+  # cannot be named, nothing is recreated at all: a recreate from inside it would stop this very command (the reader)
+  self="${COMPOSE_SELF:-}"
+  [ -n "${self}" ] || self="$(bbox_self_service 2>/dev/null || true)"
+  # BBOX_DOCKERENV: where «this runs in a container» is read — /.dockerenv, unless a test says otherwise. The test that
+  # read the real one passed on the Mac and failed in the CI runner, which IS a container (batch 95, G72)
+  if [ -z "${self}" ] && [ -f "${BBOX_DOCKERENV:-/.dockerenv}" ]; then
+    say "${cy}not recreating $(tr '\n' ' ' <<<"${stale}")— this runs in a container whose own service cannot be named${c0}"
+    return 0
+  fi
+  keep="" held=""
+  while IFS= read -r s; do
+    [ -n "${s}" ] && [ "${s}" != "${self}" ] || continue
+    [[ " ${declared[*]} " == *" ${s} "* ]] || continue
+    [ "${#named[@]}" -eq 0 ] || [[ " ${named[*]} " == *" ${s} "* ]] || continue
+    # a «when-idle» service HELD for a quiet cycle (data/.held/<service>, DGO-2129) keeps its container until then: an
+    # app at work is never recreated under its people. A take whose images were built before its `up` leaves it on
+    # the image before, so it reads stale here; the cycle that brings it up clears the note first, and refreshes it
+    # then (the review of batch 105's merge, whose dcx hands this every service the command was asked)
+    if [ -n "${REPO_ROOT:-}" ] && [ -e "${REPO_ROOT}/data/.held/${s}" ]; then held="${held}${s} "; continue; fi
+    keep="${keep}${s} "
+  done <<< "${stale}"
+  [ -z "${held}" ] || say "${cy}not recreating ${held}— held for a quiet cycle (data/.held): its new image waits with it${c0}"
+  [ -n "${keep}" ] || return 0
+  say "recreating ${keep}— its image was rebuilt under the same tag, and the container still ran the one before"
+  # shellcheck disable=SC2086 — a list of service names
+  _dcx_run up -d --no-deps --force-recreate ${keep} || say "${cy}could not recreate ${keep}(above)${c0}"
+  ids="$(_dcx_run ps -q 2>/dev/null)" || return 0
+  # `if`, not `&&`: a loop whose last read is no recreated service would end non-zero, and kill a `set -e` caller
+  # (bbox apply, bbox rollback) right here (the reader)
+  # shellcheck disable=SC2086 — a list of container ids
+  left="$(_image_stale ${ids} | while IFS= read -r s; do if [[ " ${keep}" == *" ${s} "* ]]; then printf '%s ' "${s}"; fi; done)" || left=""
+  [ -z "${left}" ] || say "${cr}${left}still running an image that is not the one its tag names — this office runs the code before it (issues/dc-up-build-builds-a-new-image-and-leaves-the-container-on-the-old-one.yaml)${c0}"
+  return 0
+}
+
+# _image_stale <container ids…> — the compose services whose RUNNING container's image is not the image its tag names
+# now, one per line. A ref pinned to a digest or to an image ID is its own image, always; a tag that no longer resolves
+# says nothing. Docker Hub's long names are read as `docker image ls` writes them (docker.io/library/nginx:x → nginx:x).
+_image_stale() {
+  local refs
+  refs="$(docker image ls --no-trunc --format '{{.Repository}}:{{.Tag}} {{.ID}}' 2>/dev/null)" || return 0
+  # the refs as a file (a process substitution), never the environment: one environment string stops at 128 KiB,
+  # about 1,100 images, dangling ones counted — and then python3 would not start and nothing be said (the reader)
+  docker inspect "$@" 2>/dev/null | python3 -c '
+import json, os, sys
+now = {}
+for ln in open(sys.argv[1], encoding="utf-8", errors="replace").read().splitlines():
+    ref, _, iid = ln.strip().rpartition(" ")
+    if ref and "<none>" not in ref:
+        now[ref] = iid
+try:
+    rows = json.load(sys.stdin)
+except ValueError:
+    sys.exit(0)
+for c in rows:
+    if not (c.get("State") or {}).get("Running"):
+        continue
+    cfg = c.get("Config") or {}
+    ref = cfg.get("Image") or ""
+    if not ref or "@" in ref or ref.startswith("sha256:"):
+        continue
+    for p in ("docker.io/library/", "docker.io/"):
+        if ref.startswith(p):
+            ref = ref[len(p):]
+            break
+    if ":" not in ref.rsplit("/", 1)[-1]:
+        ref += ":latest"
+    if ref in now and now[ref] != c.get("Image"):
+        print((cfg.get("Labels") or {}).get("com.docker.compose.service", ""))' <(printf '%s\n' "${refs}") 2>/dev/null \
+    | sort -u | grep . || true
+}
+
 # cpu_caps_apply — every running container gets the CPU quota the budget gives its service NOW.
 #
 # The budget (gate G65) is a scale over every ENABLED app, so it moves whenever one is switched on
@@ -1121,6 +1300,14 @@ disk_free_gb() {
   # On the Mac host neither is the guest's disk: that one is read inside the guest (machine).
   if [ -n "${root}" ] && [ -d "${root}" ]; then b="$(df -Pk "${root}" 2>/dev/null | awk 'NR == 2 {print int($4 / 1048576)}')"
   elif [ -f /.dockerenv ]; then b="$(df -Pk / 2>/dev/null | awk 'NR == 2 {print int($4 / 1048576)}')"; fi
+  # …and under WSL, the Windows drive the distro's own disk is a FILE on (ext4.vhdx): once the office's folder lives on
+  # that disk (`bbox home move`, DGO-2019) nothing above reads C:, while every byte written still grows C:
+  if [ -d /mnt/c ] && grep -qi microsoft /proc/sys/kernel/osrelease 2>/dev/null; then
+    local c; c="$(df -Pk /mnt/c 2>/dev/null | awk 'NR == 2 {print int($4 / 1048576)}')"
+    if [ -n "${c}" ]; then
+      if [ -z "${a}" ] || [ "${c}" -lt "${a}" ]; then a="${c}"; fi
+    fi
+  fi
   if [ -n "${a}" ] && [ -n "${b}" ]; then [ "${a}" -le "${b}" ] && echo "${a}" || echo "${b}"; else echo "${a}${b}"; fi
 }
 
@@ -1144,14 +1331,18 @@ disk_reclaim() {
   return 0
 }
 
-# disk_floor_gb — the free GiB a heavy job needs: BBOX_DISK_MIN_GB from the environment or .env; else 20 when the
-# checkout is on a Windows drive under WSL (/mnt/<drive>/…) — that drive also holds the growing .vhdx, 20 GB is the rule
-# since DGO-625 and the floor platform-keepalive.ps1's health check calls unhealthy — and 5 anywhere else (vps1 builds
-# with 10 GB free of 99; a build needs a few GB, and none should start with less).
+# disk_floor_gb — the free GiB a heavy job needs: BBOX_DISK_MIN_GB from the environment or .env; else 20 under WSL —
+# the Windows drive holds the growing .vhdx whether the checkout is on it (/mnt/<drive>/…) or on the distro's own disk
+# after `bbox home move` (DGO-2019), 20 GB is the rule since DGO-625 and the floor platform-keepalive.ps1's health check
+# calls unhealthy — and 5 anywhere else (vps1 builds with 10 GB free of 99; a build needs a few GB, and none should
+# start with less).
 disk_floor_gb() {
   local floor="${BBOX_DISK_MIN_GB:-$(read_env_value BBOX_DISK_MIN_GB)}"
   case "${floor}" in
-    ''|*[!0-9]*) case "${REPO_ROOT}" in /mnt/[a-z]/*) floor=20 ;; *) floor=5 ;; esac ;;
+    ''|*[!0-9]*)
+      floor=5
+      case "${REPO_ROOT}" in /mnt/[a-z]/*) floor=20 ;; esac
+      grep -qi microsoft /proc/sys/kernel/osrelease 2>/dev/null && floor=20 ;;
   esac
   echo "${floor}"
 }
@@ -1516,6 +1707,319 @@ compose_self_guard() {
   }
   bash "${helper}" launch "${sub}" "${flags[@]}" || rc=$?
   COMPOSE_GUARD_RC="${rc}"; return 0
+}
+
+# ── WHEN IDLE: an app at work is not recreated under its people (DGO-2129) ──────────────────────────
+# Claude Desktop hosts every agent session of the office. On 2026-11-19 the HP's follow took dgo-stable, and its
+# `bbox run` recreated bina-claude-desktop-hp at 18:39Z mid-work: the release's gates, Examplex, BS Group and the rest
+# died with it, and nobody was resumed until the morning. An app says it hosts such work in its app.json,
+# `"recreate": "when-idle"` (platform/manager/when_idle.py lists them). Its own hooks/busy says when it is at work, by
+# the contract of every busy hook (Meet's): exit 0 and a line when busy, exit 1 when idle. Names no app.
+#   * An `up`/`create`/`restart` that touches a RUNNING «when-idle» app runs without that app's services, and brings
+#     them up AFTER the rest, one app at a time (compose_when_idle_up). «Touches» means it names one of them, or names
+#     none (the whole stack). The services that need one of them go with them (compose would recreate them for one).
+#     So the rest of the command never waits for them, and its own refreshes (filemount_refresh) never reach them.
+#   * There, just before it, the app is asked whether it is at work. A busy app is held: said, and noted in
+#     data/.held/<service>; follow brings it up at a quiet cycle (follow.sh held_retry). A hook that cannot answer is
+#     taken as at work: a recreate is never taken on a guess. A build (the command's --build, or one a held command had
+#     asked) runs first, and the app is asked again after it, so a long build opens no window for a session to start in.
+#     A held restart or --force-recreate is noted as such, and the retry does what it asked: a force as one, a restart
+#     as an `up` and then a restart if nothing changed. A note is only removed by a command that did what it waits for.
+#   * The go is BBOX_RECREATE_BUSY=1, and only that. Naming the service is not a go: an agent's `scripts/dc up
+#     bina-claude-desktop` would cut every session as surely as a take (DGO-2129's second reader). A command that names
+#     the service and is held says so and exits 75, so a caller (the apps screen's update) never reports a false ok.
+#     follow runs with BBOX_RECREATE_WHEN_IDLE=1: what it names is held like a whole-stack `up`, and that exits 0.
+#   * Before a recreate (idle, or the go): the app's hooks/before-recreate. Claude Desktop backs up its keyring and its
+#     config, and notes the sessions at work. If it fails, the app is left as it runs: no recreate without its backup.
+#   * After it: the services whose container changed (a new one, or a restart) go to its hooks/after-recreate. Claude
+#     Desktop resumes every session the recreate cut, one message each. It runs inside the command (the heavy slot the
+#     command was admitted with stays held meanwhile): a resume left to a detached process would die with follow's unit.
+# An instance's hooks are its template's, run with DGO_INSTANCE_* as bbox runs them. Every probe fails closed:
+#   * a catalog that cannot be read is answered from the last list read (data/when-idle.apps; hooks folders relative to
+#     the checkout, so it holds from /workspace/office and from /mnt/c/… alike), said; with none ever read, the command
+#     runs as it always did, said;
+#   * a hook the app ships (when_idle.py says which) that cannot be read when it is needed holds the app;
+#   * an engine that cannot say what runs is taken as running all of it.
+# A dry run is a question, and is never split.
+DCX_MAIN_ARGS=()       # the command without the «when-idle» services; empty when nothing else is left to run
+DCX_LATER_PRE=()       # compose's own options, the subcommand and its options, for the step after it
+DCX_LATER_SUB=""
+DCX_LATER_OPTS=()
+DCX_LATER_NAMED=0      # 1 when the command named its services (a held one is then its caller's to know: exit 75)
+COMPOSE_LATER=()       # "<app>\t<hooks dir>\t<instance of|->\t<key|->\t<services>\t<go|idle>\t<hooks it ships>" per app
+
+#: when_idle_hook <seconds> <hook> <app> <instance of|-> <key|-> [args…] — an app's hook, as bbox runs it: an instance's
+#: is its template's, told which copy it acts for (bbox, DGO-1920).
+when_idle_hook() {
+  local cap="$1" h="$2" aid="$3" of="$4" key="$5"; shift 5
+  local -a t=(); command -v timeout >/dev/null 2>&1 && t=(timeout -k 5 "${cap}")
+  if [ "${of}" != - ]; then
+    DGO_INSTANCE_ID="${aid}" DGO_INSTANCE_OF="${of}" DGO_INSTANCE_KEY="${key}" "${t[@]}" bash "${h}" "$@"
+  else
+    ( unset DGO_INSTANCE_ID DGO_INSTANCE_OF DGO_INSTANCE_KEY; "${t[@]}" bash "${h}" "$@" )
+  fi
+}
+
+#: when_idle_busy <hooks dir> <app> <of|-> <key|-> <hooks it ships> — 0, and what it said, while the app is at work; 1
+#: when it is idle. One whose hooks/busy cannot be read, or cannot answer (it hangs, or fails), is at work — and so is
+#: one that declares "when-idle" and ships no hooks/busy at all: nothing can ever say it is idle (follow tells the
+#: office of a hold that lasts).
+when_idle_busy() {
+  local out r
+  case ",$5," in *,busy,*) ;; *) echo "it declares recreate: when-idle and ships no hooks/busy, so nothing can say it is idle"; return 0 ;; esac
+  [ -r "$1/busy" ] || { echo "its hooks/busy cannot be read ($1), so it is taken as at work"; return 0; }
+  out="$(when_idle_hook 30 "$1/busy" "$2" "$3" "$4" </dev/null 2>/dev/null)"; r=$?
+  case "${r}" in
+    0) out="$(head -1 <<<"${out}")"; printf '%s\n' "${out:-its hooks/busy says it is at work}"; return 0 ;;
+    1) return 1 ;;
+    *) printf 'its hooks/busy did not answer (exit %s), so it is taken as at work\n' "${r}"; return 0 ;;
+  esac
+}
+
+#: when_idle_held <app> <why> <built 0|1> <wants force|restart|-> <service>… — said, and noted in data/.held/<service>
+#: for follow's next cycle: since when, which app, why, whether the command built ("build"), and what it asked beyond
+#: an up: "force" (--force-recreate) or "restart". The first time is kept, and a build or a want once asked is never
+#: forgotten (force outranks restart): it is what the held service is waiting for.
+when_idle_held() {
+  local aid="$1" said="$2" b="$3" w="$4" s f since was; shift 4
+  mkdir -p "${REPO_ROOT}/data/.held" 2>/dev/null || true
+  for s in "$@"; do
+    f="${REPO_ROOT}/data/.held/${s}"
+    since="$(cut -f1 "${f}" 2>/dev/null)" || since=""
+    [ -n "${since}" ] || since="$(date -u '+%F %T UTC')"
+    was="$(cut -f4 "${f}" 2>/dev/null)" || was=""
+    if [ "${was}" = build ]; then b=1; fi
+    was="$(cut -f5 "${f}" 2>/dev/null)" || was=""
+    case "${was}/${w}" in force/*|*/force) w=force ;; restart/*|*/restart) w=restart ;; *) w=- ;; esac
+    printf '%s\t%s\t%s\t%s\t%s\n' "${since}" "${aid}" "${said}" "$( [ "${b}" = 1 ] && echo build || echo -)" "${w}" \
+      > "${f}" 2>/dev/null || true
+  done
+  say "${cy}held: $* (${aid}) not recreated — ${said}${c0}; follow brings it up at a quiet cycle (BBOX_RECREATE_BUSY=1 goes now)"
+}
+
+#: when_idle_marks RUNNER <service>… — "<service> <container id> <started at>" per container of them, sorted: what
+#: changes when one is recreated (a new id) or restarted (a new start).
+when_idle_marks() {
+  local runner="$1" svc id; shift
+  "${runner}" "${DCX_LATER_PRE[@]}" ps -a --format '{{.Service}} {{.ID}}' "$@" 2>/dev/null | while read -r svc id; do
+    if [ -n "${id}" ]; then printf '%s %s %s\n' "${svc}" "${id}" "$(docker inspect -f '{{.State.StartedAt}}' "${id}" 2>/dev/null)"; fi
+  done | sort
+}
+
+#: compose_when_idle_split RUNNER ARGS… — 0 when ARGS touch a running «when-idle» app. Then DCX_MAIN_ARGS is the command
+#: without its services (empty: nothing else is left to run), and COMPOSE_LATER is what compose_when_idle_up brings up
+#: after it. 1 when the command stays as it is.
+compose_when_idle_split() {
+  local runner="$1"; shift
+  DCX_MAIN_ARGS=(); DCX_LATER_PRE=(); DCX_LATER_SUB=""; DCX_LATER_OPTS=(); DCX_LATER_NAMED=0; COMPOSE_LATER=()
+  local -a pre=() opts=() svcs=() keep=()
+  local sub="" s apps aid own deps hooks of key ships named touched live mode later="" running="" asked=0 implicit=0
+  local last="${REPO_ROOT}/data/when-idle.apps"
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      -f|--file|-p|--project-name|--profile|--env-file|--project-directory|--ansi|--progress|--parallel)
+        pre+=("$1"); [ $# -gt 1 ] && { pre+=("$2"); shift; }; shift ;;
+      -*) pre+=("$1"); shift ;;
+      *)  sub="$1"; shift; break ;;
+    esac
+  done
+  case "${sub}" in up|create|restart) ;; *) return 1 ;; esac
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      -t|--timeout|--wait-timeout|--scale|--pull|--exit-code-from|--attach|--no-attach|-s|--signal|--rmi)
+        opts+=("$1"); [ $# -gt 1 ] && { opts+=("$2"); shift; }; shift ;;
+      -*) opts+=("$1"); shift ;;
+      *)  svcs+=("$1"); shift ;;
+    esac
+  done
+  for s in "${pre[@]}" "${opts[@]}"; do [ "${s}" != --dry-run ] || return 1; done
+  if apps="$(cd "${REPO_ROOT}" && python3 platform/manager/when_idle.py apps 2>/dev/null)"; then
+    if [ "$(cat "${last}" 2>/dev/null)" != "${apps}" ]; then
+      { mkdir -p "${REPO_ROOT}/data" && printf '%s\n' "${apps}" > "${last}.tmp" && mv -f "${last}.tmp" "${last}"; } 2>/dev/null || true
+    fi
+  elif [ -f "${last}" ]; then
+    apps="$(cat "${last}")"
+    warn "the apps recreated only while idle cannot be read now (platform/manager/when_idle.py): the last list read ($(date -u -r "${last}" '+%F %T UTC' 2>/dev/null)) holds"
+  else
+    warn "the apps recreated only while idle cannot be read (platform/manager/when_idle.py), and none were ever read here: nothing waits for a quiet moment"
+    return 1
+  fi
+  [ -n "${apps}" ] || return 1
+  if [ "${#svcs[@]}" -eq 0 ]; then
+    implicit=1
+    while IFS= read -r s; do [ -n "${s}" ] && svcs+=("${s}"); done < <("${runner}" "${pre[@]}" config --services 2>/dev/null)
+    [ "${#svcs[@]}" -gt 0 ] || return 1                    # compose cannot list them: it says why when it runs
+  fi
+  # here-strings, never `printf | grep -q`: under pipefail a grep that leaves early fails its writer (DGO-1848)
+  named="$(printf '%s\n' "${svcs[@]}")"
+  while IFS=$'\t' read -r aid own deps hooks of key ships; do
+    [ -n "${aid}" ] || continue
+    [ "${deps}" != - ] || deps=""
+    case "${hooks}" in /*) ;; *) hooks="${REPO_ROOT}/${hooks}" ;; esac   # relative to the checkout this runs from
+    [ -n "${ships}" ] || ships="busy,before-recreate,after-recreate"     # a list from before it said: all, fail closed
+    touched=""
+    for s in ${own} ${deps}; do
+      if grep -qFx -- "${s}" <<<"${named}"; then touched="${touched}${touched:+ }${s}"; fi
+    done
+    [ -n "${touched}" ] || continue                        # the command touches none of it: compose is not even asked
+    if [ "${asked}" = 0 ]; then
+      # an engine that cannot say what runs is taken as running all of it: the hold fails closed
+      running="$("${runner}" "${pre[@]}" ps --services --status running 2>/dev/null)" || running="*"
+      asked=1
+    fi
+    live=""
+    for s in ${own}; do
+      if [ "${running}" = "*" ] || grep -qFx -- "${s}" <<<"${running}"; then live=1; fi
+    done
+    [ -n "${live}" ] || continue                           # none of it runs: there is nobody to cut
+    mode=idle
+    if [ "${BBOX_RECREATE_BUSY:-}" = 1 ]; then mode=go; fi
+    COMPOSE_LATER+=("${aid}"$'\t'"${hooks}"$'\t'"${of}"$'\t'"${key}"$'\t'"${touched}"$'\t'"${mode}"$'\t'"${ships}")
+    later="${later}$(tr ' ' '\n' <<<"${touched}")"$'\n'
+  done <<<"${apps}"
+  [ "${#COMPOSE_LATER[@]}" -gt 0 ] || return 1
+  for s in "${svcs[@]}"; do
+    if ! grep -qFx -- "${s}" <<<"${later}"; then keep+=("${s}"); fi
+  done
+  if [ "${#keep[@]}" -gt 0 ]; then DCX_MAIN_ARGS=("${pre[@]}" "${sub}" "${opts[@]}" "${keep[@]}"); fi
+  DCX_LATER_PRE=("${pre[@]}"); DCX_LATER_SUB="${sub}"; DCX_LATER_OPTS=("${opts[@]}")
+  if [ "${implicit}" = 0 ] && [ "${BBOX_RECREATE_WHEN_IDLE:-}" != 1 ]; then DCX_LATER_NAMED=1; fi
+  return 0
+}
+
+#: compose_when_idle_up RUNNER — the step after the command: each app of COMPOSE_LATER asked whether it is at work, then
+#: built, backed up, brought up (through the self guard, as any command), and handed what changed. Non-zero when a
+#: build, a backup on the go, or the command itself failed; 75 when a command that named the service was held. A held
+#: app is otherwise no failure: it is said, and waits for follow.
+compose_when_idle_up() {
+  local runner="$1" line aid hooks of key touched mode ships said out r rc=0 build want asub s h before after changed held=0
+  local kept noted rs again running
+  local -a opts=()
+  for line in "${COMPOSE_LATER[@]}"; do
+    IFS=$'\t' read -r aid hooks of key touched mode ships <<<"${line}"
+    build=0; want=-; asub="${DCX_LATER_SUB}"; opts=(); kept=""
+    [ "${asub}" != restart ] || want=restart
+    for s in "${DCX_LATER_OPTS[@]}"; do
+      case "${s}" in --build) build=1 ;; --force-recreate) want=force; opts+=("${s}") ;; *) opts+=("${s}") ;; esac
+    done
+    noted=0; rs=""                        # rs: the services a restart is asked of (this command's, or a held one's)
+    [ "${asub}" != restart ] || rs="${touched}"
+    for s in ${touched}; do
+      [ -f "${REPO_ROOT}/data/.held/${s}" ] || continue
+      noted=1
+      if [ "$(cut -f4 "${REPO_ROOT}/data/.held/${s}" 2>/dev/null)" = build ]; then build=1; fi
+      case "$(cut -f5 "${REPO_ROOT}/data/.held/${s}" 2>/dev/null)" in
+        force) want=force ;;
+        restart) [ "${want}" = force ] || want=restart; case " ${rs} " in *" ${s} "*) ;; *) rs="${rs}${rs:+ }${s}" ;; esac ;;
+      esac
+    done
+    # What a held command asked beyond an `up` is what the service waits for: a plain `up` would find nothing to change.
+    #   * a `restart` of a service that has a note (a build, a force, a restart, or a plain `up` held — a take's under
+    #     BBOX_PREBUILT) runs as an `up`: a restart keeps the old container, and would remove the note undone;
+    #   * a held --force-recreate comes back as one — but never beside --no-recreate, which compose refuses; a command
+    #     with --no-recreate leaves any note in place, since it never does what a note waits for;
+    #   * a held restart comes back as an `up` (whatever else is due converges), then as a restart of each service that
+    #     asked for one and that the `up` did not replace — never as a recreate it did not ask for (DGO-2016).
+    if [ "${asub}" = restart ] && { [ "${noted}" = 1 ] || [ "${build}" = 1 ] || [ "${want}" = force ]; }; then
+      asub=up; opts=(-d "${opts[@]}")
+    fi
+    if [ "${asub}" = up ] || [ "${asub}" = create ]; then
+      case " ${opts[*]} " in
+        *" --no-recreate "*)
+          if [ "${noted}" = 1 ]; then kept="its --no-recreate does not do what the held note waits for"; fi ;;
+        *)
+          if [ "${want}" = force ]; then
+            case " ${opts[*]} " in *" --force-recreate "*) ;; *) opts+=(--force-recreate) ;; esac
+          fi ;;
+      esac
+    fi
+    # A hook it ships that cannot be read now (a path gone, a drive answering EIO) holds it: never a recreate without
+    # its backup, nor one whose sessions nobody could resume. Its hooks/busy is asked below, the same way.
+    said=""
+    for h in before-recreate after-recreate; do
+      case ",${ships}," in *",${h},"*) [ -r "${hooks}/${h}" ] || said="its ${h} cannot be read (${hooks})" ;; esac
+    done
+    if [ -n "${said}" ]; then
+      if [ "${mode}" = idle ]; then when_idle_held "${aid}" "${said}" "${build}" "${want}" ${touched}; held=1
+      else say "${cr}${aid}: ${touched} not recreated — ${said}${c0}"; rc=1; fi
+      continue
+    fi
+    if [ "${mode}" = idle ] && said="$(when_idle_busy "${hooks}" "${aid}" "${of}" "${key}" "${ships}")"; then
+      when_idle_held "${aid}" "${said}" "${build}" "${want}" ${touched}; held=1; continue
+    fi
+    if [ "${build}" = 1 ]; then
+      # shellcheck disable=SC2086 — a list of service names
+      if ! "${runner}" "${DCX_LATER_PRE[@]}" build ${touched}; then
+        say "${cr}${aid}: the build failed — ${touched} go on running as they were${c0}"; rc=1; continue
+      fi
+      if [ "${mode}" = idle ] && said="$(when_idle_busy "${hooks}" "${aid}" "${of}" "${key}" "${ships}")"; then
+        when_idle_held "${aid}" "${said} (after its build)" 1 "${want}" ${touched}; held=1; continue
+      fi
+    fi
+    case ",${ships}," in
+      *,before-recreate,*)
+        if out="$(DGO_RECREATE_SERVICES="${touched}" when_idle_hook 600 "${hooks}/before-recreate" "${aid}" "${of}" "${key}" </dev/null 2>&1)"; then
+          [ -z "${out}" ] || printf '%s\n' "${out}" | sed "s/^/[${aid}] /"
+        else
+          said="its before-recreate failed: $(tail -1 <<<"${out}")"
+          if [ "${mode}" = idle ]; then when_idle_held "${aid}" "${said}" "${build}" "${want}" ${touched}; held=1
+          else say "${cr}${aid}: ${touched} not recreated — ${said}${c0}"; rc=1; fi
+          continue
+        fi ;;
+    esac
+    before="$(when_idle_marks "${runner}" ${touched})" || before=""
+    r=0
+    # shellcheck disable=SC2086 — a list of service names
+    if compose_self_guard "${runner}" "${DCX_LATER_PRE[@]}" "${asub}" "${opts[@]}" ${touched}; then
+      r="${COMPOSE_GUARD_RC}"
+    else
+      "${runner}" "${DCX_LATER_PRE[@]}" "${asub}" "${opts[@]}" ${touched} || r=$?
+    fi
+    # shellcheck disable=SC2086 — a list of service names
+    if [ "${r}" -eq 0 ] && [ "${asub}" = up ]; then filemount_refresh "${DCX_LATER_PRE[@]}" up ${touched}; fi
+    after="$(when_idle_marks "${runner}" ${touched})" || after=""
+    changed="$(comm -13 <(printf '%s\n' "${before}") <(printf '%s\n' "${after}") | awk 'NF { print $1 }' | sort -u | tr '\n' ' ')"
+    changed="${changed% }"
+    if [ "${r}" -eq 0 ] && [ -n "${rs}" ] && [ "${asub}" != restart ] && [ -z "${kept}" ]; then
+      # the held restart, of each service that asked for one, runs and the `up` did not replace — per service, never
+      # the app as a whole: its one-shot (a home maker) starts again at every `up`, which is no restart of the others
+      running="$("${runner}" "${DCX_LATER_PRE[@]}" ps --services --status running 2>/dev/null)" || running=""
+      again=""
+      for s in ${rs}; do
+        case " ${changed} " in *" ${s} "*) continue ;; esac
+        if grep -qFx -- "${s}" <<<"${running}"; then again="${again}${again:+ }${s}"; fi
+      done
+      if [ -n "${again}" ]; then
+        # shellcheck disable=SC2086 — a list of service names
+        if compose_self_guard "${runner}" "${DCX_LATER_PRE[@]}" restart ${again}; then
+          r="${COMPOSE_GUARD_RC}"
+        else
+          "${runner}" "${DCX_LATER_PRE[@]}" restart ${again} || r=$?
+        fi
+        after="$(when_idle_marks "${runner}" ${touched})" || after=""
+        changed="$(comm -13 <(printf '%s\n' "${before}") <(printf '%s\n' "${after}") | awk 'NF { print $1 }' | sort -u | tr '\n' ' ')"
+        changed="${changed% }"
+      fi
+    fi
+    if [ "${r}" -eq 0 ] && [ -n "${kept}" ]; then
+      say "${cy}${aid}: the note of ${touched} stays — ${kept}${c0}"
+    elif [ "${r}" -eq 0 ]; then
+      for s in ${touched}; do rm -f "${REPO_ROOT}/data/.held/${s}" 2>/dev/null || true; done   # it is as declared now
+    else
+      say "${cr}${aid}: \`${asub}\` of ${touched} failed (exit ${r})${c0}"; rc="${r}"
+    fi
+    case ",${ships}," in *,after-recreate,*) ;; *) continue ;; esac
+    [ -n "${changed}" ] || continue
+    if out="$(DGO_RECREATE_SERVICES="${changed}" when_idle_hook 1800 "${hooks}/after-recreate" "${aid}" "${of}" "${key}" </dev/null 2>&1)"; then
+      [ -z "${out}" ] || printf '%s\n' "${out}" | sed "s/^/[${aid}] /"
+    else
+      warn "${aid}: ${changed} recreated, and its after-recreate failed: $(tail -1 <<<"${out}")"
+    fi
+  done
+  if [ "${rc}" -eq 0 ] && [ "${held}" = 1 ] && [ "${DCX_LATER_NAMED}" = 1 ]; then
+    say "${cy}this command named what was held, and did not do it (exit 75)${c0}"; rc=75
+  fi
+  return "${rc}"
 }
 
 # npath — a path the NATIVE binaries understand. No-op on Linux.
@@ -2296,7 +2800,7 @@ stale_images() {
 # _stale_image_rows — stale_images' measurement: every running compose service with a build context, "svc (Nh) …"
 _stale_image_rows() {
   ( cd "${REPO_ROOT}" && python3 - <<'PY'
-import datetime, os, pathlib, subprocess, glob
+import datetime, os, pathlib, re, subprocess, glob
 try:
     import yaml
 except Exception:
@@ -2337,6 +2841,18 @@ for svc, ctx in sorted(ctx_by_svc.items()):
         continue
     image = subprocess.run(['docker', 'inspect', '-f', '{{.Image}}', name[0]],
                            capture_output=True, text=True).stdout.strip()
+    # An image that names the commit it was built from (org.opencontainers.image.revision: the line's ready-made
+    # images, scripts/ci/push-images.sh) is current while its context holds what that commit holds. A take's merge
+    # rewrites the files, and so their times, never what they hold: every image a take pulled read «older than its
+    # sources» and was built again (the reader, DGO-2123).
+    rev = subprocess.run(['docker', 'image', 'inspect', '-f',
+                          '{{index .Config.Labels "org.opencontainers.image.revision"}}', image],
+                         capture_output=True, text=True).stdout.strip() if image else ''
+    if re.fullmatch(r'[0-9a-f]{40}', rev) and subprocess.run(
+            ['git', 'diff', '--quiet', rev, '--', str(ctx)], capture_output=True).returncode == 0 and not subprocess.run(
+            ['git', 'ls-files', '--others', '--exclude-standard', '--', str(ctx)],
+            capture_output=True, text=True).stdout.strip():
+        continue
     created = subprocess.run(['docker', 'image', 'inspect', '-f', '{{.Created}}', image],
                              capture_output=True, text=True).stdout.strip() if image else ''
     if not created:

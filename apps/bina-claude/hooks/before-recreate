@@ -1,0 +1,59 @@
+#!/usr/bin/env bash
+#: before-recreate — what Claude Desktop keeps before the office recreates it (DGO-2129):  run by the office, not by hand
+# Run by the office (lib.sh compose_when_idle_up) right before it recreates or restarts this copy: when it is idle, or
+# on the go (BBOX_RECREATE_BUSY=1). Two things, kept in the copy's own home, /config/.dgo-recreate (0700, the app
+# user's, as the keyring is). That is the volume the sign-in itself lives in, so whoever can read the backup could
+# already read the keyring. Never the checkout, which every copy's sessions read (DGO-2129's second reader). Not root's
+# either: bina-claude-desktop-home re-owns the whole home at every `up` when one file in it is not the app user's.
+#   * backup-<time>.tar (0600, the newest five kept, and the oldest) — what its sign-in lives in: the keyring (.local/share/keyrings and
+#     its password, .keyring-pass) and the app's config, cookie jar included. A recreate once lost a sign-in, cause not
+#     yet found (DGO-2016); with this, the jar and the key of the moment before are there to compare, or to put back;
+#   * at-work — the sessions at work now (apps/bina-claude/at-work.py ids), which after-recreate resumes.
+# Exit non-zero when the backup could not be made: the office then leaves the copy as it runs.
+set -uo pipefail
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
+. "${REPO_ROOT}/scripts/lib.sh" || { echo "scripts/lib.sh cannot be read: no backup, so it is not recreated"; exit 1; }
+case "${1:-}" in -h|--help) sed -n 's/^#: //p' "${BASH_SOURCE[0]}"; exit 0 ;; esac
+DN="$(read_env_value DEPLOYMENT_NAME)"; DN="${DN:-bina-deployment}"
+APP="${DGO_INSTANCE_ID:-bina-claude}"; DESK="${APP}-desktop-${DN}"
+# the desktop as compose labels it in this office's project, whatever its name (hooks/busy finds it the same way)
+names="$(docker ps --filter "label=com.docker.compose.project=$(office_project)" \
+  --filter "label=com.docker.compose.service=${APP}-desktop" --format '{{.Names}}' 2>/dev/null)" \
+  || { echo "the engine cannot be asked whether ${DESK} runs: no backup"; exit 1; }
+if [ -z "${names}" ]; then
+  # «nothing to keep» only when no such desktop runs at all: a project that could not be named is no proof
+  any="$(docker ps --filter "label=com.docker.compose.service=${APP}-desktop" --format '{{.Names}}' 2>/dev/null)" \
+    || { echo "the engine cannot be asked whether ${DESK} runs: no backup"; exit 1; }
+  [ -n "${any}" ] || { echo "${DESK} does not run: nothing to keep"; exit 0; }
+  echo "${APP}'s desktop runs ($(head -1 <<<"${any}")), but not in the project $(office_project): no backup, so it is not recreated"
+  exit 1
+fi
+grep -qxF -- "${DESK}" <<<"${names}" || DESK="$(head -1 <<<"${names}")"
+# GNU tar exits 1 for a file that changed while it was read (the cookie jar of a running app), and it is in the archive
+kept="$(docker exec -u 0 -e T="$(date -u +%Y%m%dT%H%M%SZ)" "${DESK}" sh -c '
+  umask 077; d=/config/.dgo-recreate
+  mkdir -p "$d" && chmod 700 "$d" && chown "${PUID:-1000}:${PGID:-1000}" "$d" && cd /config || exit 1
+  rm -f "$d/at-work"                   # whom to resume is the list of this moment, never an older one left behind
+  set --
+  for p in .local/share/keyrings .keyring-pass .config/Claude/config.json ".config/Claude/Local State" \
+           .config/Claude/Cookies .config/Claude/Cookies-journal; do
+    if [ -e "$p" ]; then set -- "$@" "$p"; fi
+  done
+  [ $# -gt 0 ] || { echo "nothing to keep"; exit 0; }
+  tar -cf "$d/backup-$T.tar.part" "$@"; r=$?
+  if [ "$r" -gt 1 ] || [ ! -s "$d/backup-$T.tar.part" ]; then rm -f "$d/backup-$T.tar.part"; echo "tar exited $r"; exit 1; fi
+  mv -f "$d/backup-$T.tar.part" "$d/backup-$T.tar" || exit 1
+  # the newest five, and the oldest one too: an update that keeps failing to come up retries each cycle, and its
+  # backups must never push out the one taken before the first recreate (the evidence DGO-2016 looks for)
+  ls -1t "$d"/backup-*.tar | tail -n +6 | sed "\$d" | while IFS= read -r old; do rm -f "$old"; done
+  chown -R "${PUID:-1000}:${PGID:-1000}" "$d" || exit 1
+  echo "kept $d/backup-$T.tar"' 2>&1)" \
+  || { echo "the keyring and config of ${DESK} could not be backed up (${kept##*$'\n'}): it is not recreated"; exit 1; }
+kept="${kept##*$'\n'}"
+ids="$(docker exec -i "${DESK}" python3 - ids < "$(npath "${REPO_ROOT}")/apps/bina-claude/at-work.py" 2>/dev/null)" \
+  || { echo "${APP}: ${kept}; the sessions at work could not be read, so none will be resumed"; ids=""; }
+printf '%s\n' "${ids}" | docker exec -i -u 0 "${DESK}" sh -c 'umask 077; f=/config/.dgo-recreate/at-work
+  cat > "$f" && chown "${PUID:-1000}:${PGID:-1000}" "$f"' \
+  || { echo "${APP}: ${kept}; the sessions at work could not be noted, so none will be resumed"; exit 0; }
+echo "${APP}: ${kept}; $(grep -c . <<<"${ids}") session(s) at work, resumed after"

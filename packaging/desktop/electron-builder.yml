@@ -1,25 +1,28 @@
-# The desktop app's packages (DGO-1972): what a person downloads and installs, after which the office is in the
-# computer's list of apps — the Start menu, Applications and Launchpad, a Linux launcher.
+# The desktop app's installers (DGO-1972): what a person downloads and installs, after which the office is in the
+# computer's list of apps — the Start menu, Applications and Launchpad, a Linux launcher — and opens in the app's own
+# window. Nothing else is needed: no browser.
 #
-# UNSIGNED for now, for the team (.github/workflows/desktop-app.yml). Signing waits on the owner's accounts
-# (DGO-1980, «בעלים»): Apple's Developer ID and notarization, a Windows code-signing certificate, the Microsoft Store.
-# Until then Windows shows SmartScreen's «unknown publisher», and macOS needs a right-click → Open the first time.
+# Built by .github/workflows/desktop-app.yml on every version tag and attached to that version's release, under the
+# names below, which never carry the version: so `releases/latest/download/<name>` is always the newest one (the docs'
+# download page links those). UNSIGNED until the owner's accounts arrive (DGO-1980, «בעלים»): Apple's Developer ID and
+# notarization, a Windows code-signing certificate, the Microsoft Store. What each system says until then, and the
+# one click it needs, is on that page.
 #
 # The names a person reads are Hebrew (the shortcut, the launcher, the Dock); the files' and folders' names stay
 # ASCII («Digital Office», dgo-desktop-*), so no installer, path or updater ever meets a name it cannot spell.
 appId: il.co.digital-office.desktop
 productName: Digital Office
 copyright: © BINA Solutions
-artifactName: dgo-desktop-${version}-${os}-${arch}.${ext}
+artifactName: dgo-desktop-${os}-${arch}.${ext}
 directories:
   output: dist
 files:
   - src/**
   - package.json
-# the console's own icons (platform-base/console/app_icons.py renders them from the mark): one picture, not a copy
-icon: ../../platform-base/console/static/icons/icon-512.png
+# rendered from the office's mark by scripts/app_icons.py; every system's icon is made from the 512
+icon: build/icons/icon-512.png
 extraResources:
-  - from: ../../platform-base/console/static/icons
+  - from: build/icons
     to: icons
 protocols:
   - name: Digital Office
@@ -35,7 +38,8 @@ electronFuses:
   onlyLoadAppFromAsar: true
 
 linux:
-  target: [deb, rpm]
+  # .deb for Debian and Ubuntu, .rpm for Fedora and RHEL, an AppImage for any other: one file, made executable, run
+  target: [deb, rpm, AppImage]
   category: Office
   executableName: dgo-desktop
   maintainer: BINA Solutions
@@ -71,9 +75,13 @@ mac:
     CFBundleDisplayName: הלשכה הדיגיטלית
 
 win:
-  target: [nsis]
+  target:
+    - target: nsis
+      arch: [x64]
 
 nsis:
+  # one click, for this user only: no administrator's password, and the app lands in the Start menu (and on the
+  # desktop) under its Hebrew name; it uninstalls from Settings → Apps like any other
   oneClick: true
   perMachine: false
   shortcutName: הלשכה הדיגיטלית

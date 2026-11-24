@@ -17,7 +17,7 @@
 # forward-auth sends every browser to signin.<domain>, which a phone cannot resolve, so this entry has a
 # sign-in of its own: the same image, signing in at `auth.<LAN_DOMAIN>` (FORWARD_AUTH_EXTERNAL_URL), whose
 # hand-off gives the console and every app nested under the name a cookie of its own. It reads the
-# office's ONE users file, read-only, from forward-auth's own volume — not a copy of the password hashes —
+# office's ONE users file, read-only, from forward-auth's own store — not a copy of the password hashes —
 # so an account forward-auth knows is an account here, and one it drops is gone here on the next request.
 services:
   lan-signin:
@@ -42,8 +42,9 @@ services:
       - TZ=${TZ:-Asia/Jerusalem}
     volumes:
       # forward-auth's own state (platform-base/forward-auth), read-only: the users file, and the legacy
-      # sessions snapshot while an office migrates
-      - forward_auth_data:/etc/forward-auth:ro
+      # sessions snapshot while an office migrates. Its folder in the DGO folder's data/ (DGO-2019); where
+      # forward-auth still runs from its old volume, the data move puts this mount on that volume too.
+      - ../../data/forward-auth/state:/etc/forward-auth:ro
     networks:
       - traefik-network
     labels:
@@ -132,11 +133,6 @@ services:
       options:
         max-size: 2m
         max-file: '2'
-
-# forward-auth's volume (platform-base/forward-auth/docker-compose.yml declares the same name): the office's
-# compose includes both files into one project, where one name is one volume, mounted read-only above
-volumes:
-  forward_auth_data:
 
 networks:
   traefik-network:

@@ -97,8 +97,11 @@ services:
     - APITOOLS_MIN_EFFECTIVE_DPI=${APITOOLS_MIN_EFFECTIVE_DPI:-100}
     - APITOOLS_VISION_MAX_PX=${APITOOLS_VISION_MAX_PX:-68000000}
     volumes:
-    - ./storage:/app/.storage
-    - ./logs:/app/logs
+    # the OCR store (its cache files, the rendered pages, the drawings) and its logs: in the DGO folder's
+    # data/apitools/{storage,logs} (DGO-2019; they were the source tree's ./storage and ./logs, moved once by
+    # `bbox run` — moved_from `path:` — and left there as they were)
+    - ../../data/apitools/storage:/app/.storage
+    - ../../data/apitools/logs:/app/logs
     networks:
     - traefik-network
     healthcheck:
@@ -311,8 +314,13 @@ services:
     - SPEECH_DIARIZE_MODEL=${SPEECH_DIARIZE_MODEL:-/opt/diarize}
     - SPEECH_DEFAULT_LANGUAGE=${SPEECH_DEFAULT_LANGUAGE:-he}
     - SPEECH_PREFETCH=${SPEECH_PREFETCH:-0}
+    # every transcription is one bar on the event stream (flow.v1, DGO-1886): `dgo:flow:apitools`, on the
+    # office redis, which «כל מקביל» reads
+    - REDIS_PASSWORD=${REDIS_PASSWORD:-}
     volumes:
     - apitools_asr_data:/data
+    # the office's ONE flow.v1 publisher (DGO-1402) — the platform's file, never a copy of it here
+    - ../../platform-base/redis/flowpub.py:/opt/dgo/flowpub.py:ro
     networks:
     - traefik-network
     healthcheck:

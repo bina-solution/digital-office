@@ -6,7 +6,8 @@
 #  * NO SECRET IS MOUNTED HERE. Every account is an INSTANCE in the credential plane
 #    (protocols git_github_token / git_gitlab_token / git_forge_local), read at call time from
 #    `connections`; neither container's environment carries a token, a .env entry or a key file.
-#    That is why the `git` volume below holds only the active-account pointer.
+#    That is why the `git` service's store below holds no secret: the active-account pointer, the mirror registry
+#    and the mirrors' scratch copies.
 #
 #  * it is on `traefik-network` under the name `git`, because the smart-HTTP git proxy it serves is
 #    a REMOTE for real `git` clients: the office agent clones and pushes with
@@ -43,6 +44,9 @@ services:
       # the credential plane: every git account is an instance there, nothing is stored here
       - CONNECTIONS_URL=${CONNECTIONS_URL:-http://connections:8990}
       - GIT_STATE_DIR=/data
+      # GitHub's webhook deliveries: the door of apps/github-hooks that no router names (DGO-2155). Where that app is
+      # not enabled it does not answer, and the drain asks once a minute; empty turns the drain off
+      - WEBHOOK_SOURCE=${GIT_WEBHOOK_SOURCE-http://github-hooks:8980}
       # how long a token probe (whoami) is trusted before the account row is re-checked
       - GIT_PROBE_TTL=${GIT_PROBE_TTL:-60}
       # the local forge, as a provider like any other: in-network for API/proxy calls…
@@ -67,10 +71,11 @@ services:
       # is a second copy of every mirror on disk; set 0 to trade that for bandwidth.
       - GIT_MIRROR_KEEP_SCRATCH=${GIT_MIRROR_KEEP_SCRATCH:-1}
     volumes:
-      # the active-account pointer, the probe cache and the mirror registry. All reconstructible:
+      # the active-account pointer, the mirror registry and the mirrors' scratch copies. All reconstructible:
       # the accounts themselves are in the vault, and a mirror is a copy of something that lives
-      # somewhere else, which is why losing this volume costs a re-pick and a re-sync.
-      - git_state:/data
+      # somewhere else, which is why losing this store costs a re-pick and a re-sync.
+      # In the DGO folder's data/git/state (DGO-2019); it was the volume git_state, moved once by `bbox run`.
+      - ../../data/git/state:/data
     networks:
       - traefik-network
     healthcheck:
@@ -160,7 +165,9 @@ services:
       - USER_UID=1000
       - USER_GID=1000
     volumes:
-      - forge_data:/data
+      # the forge's repositories and its sqlite database, in the DGO folder's data/git/forge (DGO-2019; it was the
+      # volume forge_data). Its start takes /data/git and /data/gitea for USER_UID, as it did on the volume
+      - ../../data/git/forge:/data
     networks:
       - traefik-network
     healthcheck:
@@ -186,10 +193,6 @@ services:
       options:
         max-size: 5m
         max-file: '3'
-
-volumes:
-  git_state:
-  forge_data:
 
 networks:
   traefik-network:

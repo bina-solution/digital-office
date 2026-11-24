@@ -30,7 +30,9 @@ services:
       - DRIVE_LEDGER_PATH=/data/profile-ledger.json
       - DRIVE_CACHE_DIR=/data/cache
     volumes:
-      - drive_local_data:/data
+      # the profile ledger and the thumbnail cache — in the DGO folder's data/drive-local/state (DGO-2019); it was the
+      # volume drive_local_data, moved once by `bbox run`
+      - ../../data/drive-local/state:/data
     networks:
       - traefik-network
       - supabase-net
@@ -53,9 +55,6 @@ services:
       options:
         max-size: 5m
         max-file: '3'
-
-volumes:
-  drive_local_data:
 
 networks:
   traefik-network:

@@ -42,6 +42,80 @@ class Target(unittest.TestCase):
         self.assertEqual(MODULE.target({"Host": "h"}, "x"), "https://h/x")
 
 
+class Moved(unittest.TestCase):
+    """An office that moved (DGO-2013): its former names send every host to the same host under the new name."""
+
+    def setUp(self):
+        self.saved = (MODULE.SUFFIX, MODULE.FORMER)
+        MODULE.SUFFIX, MODULE.FORMER = "bina-solutions.co.il", ("staging.digital-office.co.il",)
+
+    def tearDown(self):
+        MODULE.SUFFIX, MODULE.FORMER = self.saved
+
+    def test_a_former_host_goes_to_the_same_host_under_the_new_name(self):
+        h = {"X-Forwarded-Host": "console.staging.digital-office.co.il", "X-Forwarded-Uri": "/go/DGO-1?x=1"}
+        self.assertEqual(MODULE.target(h, "/"), "https://console.bina-solutions.co.il/go/DGO-1?x=1")
+
+    def test_a_deeper_host_keeps_every_label(self):
+        h = {"X-Forwarded-Host": "plane.hp-laptop.console.staging.digital-office.co.il"}
+        self.assertEqual(MODULE.target(h, "/a"), "https://plane.hp-laptop.console.bina-solutions.co.il/a")
+
+    def test_the_former_apex_goes_to_the_new_apex_and_a_port_is_dropped(self):
+        self.assertEqual(MODULE.target({"Host": "staging.digital-office.co.il:443"}, "/"),
+                         "https://bina-solutions.co.il/")
+
+    def test_the_current_name_is_not_moved(self):
+        self.assertEqual(MODULE.target({"Host": "console.bina-solutions.co.il"}, "/x"),
+                         "https://console.bina-solutions.co.il/x")
+
+    def test_a_name_that_only_ends_like_a_former_one_is_refused(self):
+        self.assertIsNone(MODULE.target({"Host": "evilstaging.digital-office.co.il"}, "/x"))
+
+    def test_an_office_moved_into_a_subdomain_of_its_former_name_stays_put(self):
+        MODULE.SUFFIX, MODULE.FORMER = "bina.example.com", ("example.com",)
+        self.assertEqual(MODULE.target({"Host": "console.bina.example.com"}, "/"), "https://console.bina.example.com/")
+        self.assertEqual(MODULE.target({"Host": "console.example.com"}, "/"), "https://console.bina.example.com/")
+
+    def test_an_office_moved_out_of_a_subdomain_takes_the_longer_former_name(self):
+        MODULE.SUFFIX, MODULE.FORMER = "example.com", ("staging.example.com",)
+        self.assertEqual(MODULE.target({"Host": "n8n.staging.example.com"}, "/w"), "https://n8n.example.com/w")
+
+    def test_no_former_name_moves_nothing(self):
+        MODULE.FORMER = ()
+        self.assertIsNone(MODULE.target({"Host": "console.staging.digital-office.co.il"}, "/"))
+
+    def test_port_80_upgrades_a_former_host_where_it_is(self):
+        # vps1, 2026-11-20: n8n stays on staging, and http://n8n.staging…/healthz was moved to a name nothing serves.
+        # On port 80 the former host goes to https on the SAME name; websecure moves it only if nothing serves it there.
+        h = {"X-Forwarded-Host": "n8n.staging.digital-office.co.il", "X-Forwarded-Uri": "/webhook/abc?x=1",
+             "X-Forwarded-Proto": "http"}
+        self.assertEqual(MODULE.target(h, "/"), "https://n8n.staging.digital-office.co.il/webhook/abc?x=1")
+
+    def test_port_80_drops_the_cleartext_port_when_it_upgrades(self):
+        # the second reader: `http://host:80/…` (a webhook client keeps the :80) must not become https on port 80
+        h = {"X-Forwarded-Host": "n8n.staging.digital-office.co.il:80", "X-Forwarded-Proto": "http"}
+        self.assertEqual(MODULE.target(h, "/x"), "https://n8n.staging.digital-office.co.il/x")
+
+    def test_https_moves_a_former_host(self):
+        h = {"X-Forwarded-Host": "console.staging.digital-office.co.il", "X-Forwarded-Uri": "/x",
+             "X-Forwarded-Proto": "https"}
+        self.assertEqual(MODULE.target(h, "/"), "https://console.bina-solutions.co.il/x")
+
+    def test_port_80_still_refuses_a_name_of_no_office(self):
+        for bad in ("evilstaging.digital-office.co.il", "evil.com"):
+            self.assertIsNone(MODULE.target({"Host": bad, "X-Forwarded-Proto": "http"}, "/x"), bad)
+
+    def test_port_80_keeps_the_current_name_as_before(self):
+        self.assertEqual(MODULE.target({"Host": "console.bina-solutions.co.il", "X-Forwarded-Proto": "http"}, "/x"),
+                         "https://console.bina-solutions.co.il/x")
+
+    def test_a_query_or_fragment_in_the_host_is_refused(self):
+        # the second reader of 0d64d3b23: a direct caller's `evil.com?.staging…` made `https://evil.com?.bina…/`
+        for bad in ("evil.com?.staging.digital-office.co.il", "evil.com#.staging.digital-office.co.il"):
+            for proto in ("http", "https", ""):
+                self.assertIsNone(MODULE.target({"X-Forwarded-Host": bad, "X-Forwarded-Proto": proto}, "/x"), bad)
+
+
 class Live(unittest.TestCase):
     """The real handler, on a real socket: the status and the Location, for both methods."""
 
@@ -70,6 +144,15 @@ class Live(unittest.TestCase):
     def test_post_is_308_and_the_method_is_kept(self):
         status, loc = self.call("POST", "/webhook/x", {"Host": "n8n.example.com", "Content-Length": "0"})
         self.assertEqual((status, loc), (308, "https://n8n.example.com/webhook/x"))
+
+    def test_a_former_hosts_post_is_308_to_the_new_name(self):
+        saved = (MODULE.SUFFIX, MODULE.FORMER)
+        MODULE.SUFFIX, MODULE.FORMER = "new.example.com", ("old.example.net",)
+        try:
+            status, loc = self.call("POST", "/webhook/x", {"Host": "n8n.old.example.net", "Content-Length": "0"})
+        finally:
+            MODULE.SUFFIX, MODULE.FORMER = saved
+        self.assertEqual((status, loc), (308, "https://n8n.new.example.com/webhook/x"))
 
     def test_healthz_answers_and_does_not_redirect(self):
         status, loc = self.call("GET", "/healthz", {"Host": "https-redirect"})

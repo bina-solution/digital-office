@@ -12,7 +12,9 @@ services:
     container_name: redisinsight-${DEPLOYMENT_NAME:-bina-deployment}
     restart: unless-stopped
     volumes:
-    - redisinsight_data:/data
+    # in the DGO folder's data/redisinsight/state (DGO-2019; it was the volume redisinsight_data, moved once by
+    # `bbox run`). The image runs as `node`: a new folder takes the image's owner from its /data (the engine's SEED)
+    - ../../data/redisinsight/state:/data
     networks:
     - traefik-network
     logging:
@@ -37,8 +39,6 @@ services:
     - traefik.http.routers.redisinsight-https.service=redisinsight
     - traefik.http.routers.redisinsight-https.middlewares=hsts@file,authentik-admins@file
     - traefik.http.services.redisinsight.loadbalancer.server.port=5540
-volumes:
-  redisinsight_data: null
 networks:
   traefik-network:
     external: true

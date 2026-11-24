@@ -25,6 +25,11 @@ admin_apps) reaches only the office its line names wherever the withholding runs
 foreign office from every office (DGO-1360), and toward the home offices too from an office in `admin_by_name`
 (DGO-863, app.py `_admin_withheld`).
 
+A DOOR, TOO (DGO-2125). A door with no tile — the HP's signer page, which vps1 opens to the internet — is given the
+same way, as an item of the line: `vps1: [..., {door: esign-public, paths: [/s/], public: true}]`. Its paths and its
+consent are the herd's (`doors`, `merge_doors`): a writer that sends a map without `services`, or with the door in
+`exclude`, no longer closes every client's signing link, and no other office ever gets more of it than the map gave.
+
 BY KEY, NOT BY NAME (as DGO-1355's relay): the floor applies only when THIS office's own WireGuard key is the one
 the herd file gives the entry its name points at, and only toward a peer whose record here holds the herd file's
 key for that peer's entry. A client's office runs this same checkout; a machine that happens to be called `vps1`
@@ -53,6 +58,11 @@ _RESERVED = ("exclude", "only", "label", "identity", "shared", "services")
 _WILDCARD = "*"
 #: An app id or an alias, as `serve.only` takes one (app.py api_link_serve).
 NAME_RE = re.compile(r"^[a-z][a-z0-9-]{0,30}\Z")
+#: A door in a `give:` line (DGO-2125): `{door: <alias>, paths: [...], public: true}` — the keys catalog.clean_services
+#: takes for `serve.services`, and only those. catalog.ALIAS_RE and catalog.PATH_RE, repeated so this module stands alone.
+DOOR_KEYS = ("door", "paths", "public")
+_ALIAS_RE = re.compile(r"^[a-z][a-z0-9-]{0,30}\Z")
+_DOOR_PATH_RE = re.compile(r"^/(?:[A-Za-z0-9._~-]+/)*[A-Za-z0-9._~-]*\Z")
 
 #: (key, doc), read and replaced as ONE value: a thread can never pair one call's key with another call's doc
 _cache: dict = {"entry": (None, {})}
@@ -167,12 +177,10 @@ def _names(value) -> set:
     return out
 
 
-def floor(doc: dict, home: dict, records: list) -> dict:
-    """{peer id as THIS office's record names it: {app names}} — what the herd says this office always gives.
-
-    `home` is this office's record (its `id` and `identity`), `records` its records of its peers (`id`,
-    `identity`). Empty when the herd file names no `give:` for this office, when this office is not the herd's by
-    key, or for a peer whose record here does not hold the herd file's key for it."""
+def _given(doc: dict, home: dict, records: list) -> dict:
+    """{peer id as THIS office's record names it: [items as the herd file writes them]} — the `give:` lines toward each
+    peer whose record here holds the herd file's key for it, when THIS office is the herd's by key. The checks `floor`
+    always made, shared with `doors`; the items are names and doors as written, and each reader takes its own kind."""
     if not doc:
         return {}
     me = entry_of(doc, str((home or {}).get("id") or ""))
@@ -180,8 +188,8 @@ def floor(doc: dict, home: dict, records: list) -> dict:
     mine: dict = {}
     for giver, given in table.items():                    # every key that names this office (its name, an alias)
         if me and entry_of(doc, str(giver)) == me and isinstance(given, dict):
-            for peer_name, apps in given.items():
-                mine.setdefault(str(peer_name), []).extend(sorted(_names(apps)))
+            for peer_name, items in given.items():
+                mine.setdefault(str(peer_name), []).extend(items if isinstance(items, list) else [items])
     if not mine:
         return {}
     want = _herd_key(doc, me)
@@ -191,10 +199,9 @@ def floor(doc: dict, home: dict, records: list) -> dict:
               "`give:` is not applied here", (home or {}).get("id"), me)
         return {}
     out: dict = {}
-    for peer_name, apps in mine.items():
+    for peer_name, items in mine.items():
         entry = entry_of(doc, str(peer_name))
-        names = _names(apps)
-        if not entry or not names or entry == me:
+        if not entry or not items or entry == me:
             continue
         key = _herd_key(doc, entry)
         for rec in records or []:
@@ -204,11 +211,156 @@ def floor(doc: dict, home: dict, records: list) -> dict:
             if entry_of(doc, rid) != entry:
                 continue
             if not key or _key(rec.get("identity")) != key:
-                _once("the herd file gives %s apps from this office, but this office's record of %s holds another "
-                      "key — nothing is given to it by the herd file", entry, rid)
+                _once("the herd file gives %s apps or doors from this office, but this office's record of %s holds "
+                      "another key — nothing is given to it by the herd file", entry, rid)
                 continue
+            out.setdefault(rid, []).extend(items)
+    return out
+
+
+def floor(doc: dict, home: dict, records: list) -> dict:
+    """{peer id as THIS office's record names it: {app names}} — what the herd says this office always gives.
+
+    `home` is this office's record (its `id` and `identity`), `records` its records of its peers (`id`,
+    `identity`). Empty when the herd file names no `give:` for this office, when this office is not the herd's by
+    key, or for a peer whose record here does not hold the herd file's key for it. A door in a line is `doors`'."""
+    out: dict = {}
+    for rid, items in _given(doc, home, records).items():
+        names = _names(items)
+        if names:
             out.setdefault(rid, set()).update(names)
     return out
+
+
+def _plain(p) -> bool:
+    """catalog.plain_path, repeated so this module stands alone: absolute, no dot segment, nothing escaped."""
+    return isinstance(p, str) and bool(_DOOR_PATH_RE.match(p)) and "/../" not in f"{p}/" and "/./" not in f"{p}/"
+
+
+def _door(item: dict):
+    """(alias, paths, public) of a herd file's door item, or None when it is not one: an alias; paths, a list of
+    plain absolute paths, never empty, never `/` when the door is opened to the internet; `public` true or false;
+    nothing but those keys (catalog.clean_services' rule — and the herd's door is always narrowed to paths)."""
+    if set(item) - set(DOOR_KEYS):
+        return None
+    alias = str(item.get("door") or "").strip().lower()
+    paths = item.get("paths")
+    paths = [paths] if isinstance(paths, str) else paths
+    public = item.get("public", False)
+    if not _ALIAS_RE.match(alias) or not isinstance(public, bool):
+        return None
+    if not isinstance(paths, list) or not paths or not all(_plain(p) for p in paths) or (public and "/" in paths):
+        return None
+    return alias, sorted(set(paths)), public
+
+
+def doors(doc: dict, home: dict, records: list, registry=None) -> dict:
+    """{alias: {"to": {peer ids}, "paths": [...], "public": bool}} — the doors with no tile the herd file says this
+    office always gives (DGO-2125), by key as `floor`: an item `{door: esign-public, paths: [/s/], public: true}` in
+    a `give:` line. A door that breaks the rule (`_door`) gives nothing, with a line: a typo must never open more
+    than was written. One alias given with other paths or another consent to two offices gives nothing either: a
+    door answers one set of paths, and a disagreement is not settled by a guess. And a door is given only when THIS
+    office's registry lists it among its doors and no app goes by its name: a line that names an app would take the
+    app's name out of `exclude` and re-open the whole app (the second reader). No registry, no door."""
+    known = {_low(r.get("alias")) for r in ((registry or {}).get("services") or []) if isinstance(r, dict)}
+    apps = {_low(r.get(k)) for r in _rows(registry) for k in ("app", "alias")}
+    out: dict = {}
+    bad: set = set()
+    for rid, items in _given(doc, home, records).items():
+        for it in items:
+            if not isinstance(it, dict):
+                continue
+            spec = _door(it)
+            if spec is None:
+                _once("the herd file's door %r toward %s is not one (door, paths, public) — it gives nothing", it, rid)
+                continue
+            alias, paths, public = spec
+            have = out.get(alias)
+            if have and (have["paths"] != paths or have["public"] != public):
+                bad.add(alias)
+                continue
+            out.setdefault(alias, {"to": set(), "paths": paths, "public": public})["to"].add(rid)
+    for alias in sorted(bad):
+        _once("the herd file gives the door %s with other paths or consent to two offices — it gives it to none", alias)
+        out.pop(alias, None)
+    for alias in sorted(out):
+        if alias not in known or alias in apps:
+            _once("the herd file's door %s is not a door of this office's registry, or an app goes by that name — it "
+                  "gives nothing", alias)
+            out.pop(alias)
+    return out
+
+
+def _within(paths, given) -> bool:
+    """Do all `paths` lie inside `given` — a door's own narrowing, None being the whole door — as a door matches them
+    (an exact path, or under a prefix that ends in `/`)?"""
+    if given is None:
+        return True
+    given = [given] if isinstance(given, str) else given
+    return isinstance(given, list) and all(
+        any(p == str(g) or (str(g).endswith("/") and p.startswith(str(g))) for g in given) for p in paths)
+
+
+def _map_door(old):
+    """What a map's own entry for a door gives, read as catalog.publishable_services reads it: (offices, paths,
+    consent) — paths None for the whole door, and consent only beside paths that are all plain and none `/` — or
+    None when it names no offices (no `to`: wherever `only` allows) or gives nothing (a path that is no path closes
+    the whole door). Its raw flags are never taken at their word (the second reader)."""
+    if not isinstance(old, dict) or old.get("to") is None:
+        return None
+    paths = old.get("paths")
+    if paths is not None:
+        paths = [str(p) for p in (paths if isinstance(paths, list) else [paths])]
+        if not paths or not all(_plain(p) for p in paths):
+            return None
+    to = old["to"]
+    offices = {str(o).strip().lower() for o in ([to] if isinstance(to, str) else to if isinstance(to, list) else [])
+               if str(o).strip()}
+    return offices, paths, old.get("public") is True and bool(paths) and "/" not in paths
+
+
+def merge_doors(serve_map, given_doors: dict) -> dict:
+    """`serve_map` with the herd's doors in `services` — a NEW map; `serve_map` is not changed (DGO-2125).
+
+    A door the herd gives carries the herd's paths and consent (`public`), whatever the map says, and leaves
+    `exclude`, which gives it to nobody: no writer of the volume narrows or withdraws it. NEVER WIDER for anybody
+    else. One alias holds one spec, so an office the map gave the door to keeps it only when the herd's spec is no
+    wider for it, judged as the map's entry really gives (`_map_door`): paths inside the map's own (or the whole
+    door) and no consent the map did not really give. Every other office loses it, with a line, because closing is
+    the safe side. A union of offices would have handed the internet consent to an office nobody consented for (the
+    second reader). A door `exclude` gave to nobody, or the map gives with no offices or nothing as written, goes to
+    the herd's offices alone. `doors` gives no alias an app goes by, so `exclude` never re-opens an app here. No
+    other key moves."""
+    if not given_doors:
+        return serve_map
+    base = dict(serve_map) if isinstance(serve_map, dict) else {}
+    table = dict(base.get("services")) if isinstance(base.get("services"), dict) else {}
+    ex = base.get("exclude")
+    ex = [ex] if isinstance(ex, str) else (list(ex) if isinstance(ex, list) else None)
+    excluded = {_low(x) for x in ex or []}
+    for alias, d in sorted(given_doors.items()):
+        to = set(d["to"])
+        old = table.get(alias)
+        mine = _map_door(old)
+        if alias in excluded:
+            _once("the serve map's `exclude` gives the door %s to nobody: the herd file's offices alone get it", alias)
+        elif mine is not None:
+            offices, paths, consent = mine
+            if _within(d["paths"], paths) and (not d["public"] or consent):
+                to |= offices
+            elif offices - to:
+                _once("the serve map gives the door %s to %s too: the herd file's paths or consent would widen it for "
+                      "them, so they lose it", alias, ", ".join(sorted(offices - to)))
+        elif isinstance(old, dict):
+            _once("the serve map's own entry for the door %s names no offices or gives nothing as written: the herd "
+                  "file's line names who gets it", alias)
+        table[alias] = {"to": sorted(to), "paths": list(d["paths"]), "public": bool(d["public"])}
+    base["services"] = table
+    if ex is not None:
+        kept = [x for x in ex if _low(x) not in given_doors]
+        if len(kept) != len(ex):
+            base["exclude"] = kept
+    return base
 
 
 def _rows(registry) -> list:

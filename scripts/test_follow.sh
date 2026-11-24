@@ -41,10 +41,13 @@ cat > "${T}/bin/run" <<'EOF'
 #!/bin/sh
 # bbox run: records itself, leaves the services as health.<take|rollback> says, does what do.<take> says
 echo "$1" >> "${STUB}/runs"
+echo "$1:${BBOX_PREBUILT:-unset}" >> "${STUB}/prebuilt"
 echo "$1:${BBOX_DISK_ADMITTED:-unset}" >> "${STUB}/admitted"
 echo "$1:${BBOX_ALLOW_ROLLBACK:-unset}" >> "${STUB}/allow"
+echo "$1:${BBOX_RECREATE_WHEN_IDLE:-unset}" >> "${STUB}/whenidle-env"
 [ "$1" = rebuild ] && echo "$*" >> "${STUB}/rebuilt"
 [ "$1" = recreate ] && echo "$*" >> "${STUB}/recreated"
+[ "$1" = held ] && echo "$*" >> "${STUB}/held"
 [ -f "${STUB}/health.$1" ] && cp "${STUB}/health.$1" "${STUB}/health"
 [ -f "${STUB}/do.$1" ] && . "${STUB}/do.$1"
 exit "$(cat "${STUB}/rc.$1" 2>/dev/null || echo 0)"
@@ -53,6 +56,16 @@ cat > "${T}/bin/health" <<'EOF'
 #!/bin/sh
 [ -e "${STUB}/health.unreadable" ] && exit 1
 cat "${STUB}/health"
+EOF
+cat > "${T}/bin/appsvc" <<'EOF'
+#!/bin/sh
+# the compiler's `compose-services --app <id>` for each app named, as "<id> <service>": STUB/appsvc.<id>. An app the
+# catalog does not know fails as the compiler's call does (exit 1), after the others answered: 7b's `zz`, a retired app
+rc=0
+for a in "$@"; do
+  if [ -f "${STUB}/appsvc.${a}" ]; then sed "s/^/${a} /" "${STUB}/appsvc.${a}"; else echo "unknown app '${a}'" >&2; rc=1; fi
+done
+exit "${rc}"
 EOF
 cat > "${T}/bin/model" <<'EOF'
 #!/bin/sh
@@ -75,6 +88,11 @@ EOF
 cat > "${T}/bin/busy" <<'EOF'
 #!/bin/sh
 cat "${STUB}/busy" 2>/dev/null
+EOF
+cat > "${T}/bin/whenidle" <<'EOF'
+#!/bin/sh
+# the apps recreated only while idle (app.json "recreate": "when-idle"), one id per line (none unless a case writes them)
+cat "${STUB}/whenidle" 2>/dev/null
 EOF
 cat > "${T}/bin/notify" <<'EOF'
 #!/bin/sh
@@ -114,6 +132,7 @@ cat > "${T}/bin/gh" <<'EOF'
 #!/bin/sh
 # GitHub's API (gh_api) for the REAL line_wait: <path> → the canned reply in $STUB/gh/<name>; none = cannot be read
 case "$1" in
+  actions/workflows/*/runs*status=success*) f=runs-success ;;   # green_shas' list of runs that succeeded
   actions/workflows/*/runs*) f=runs ;;
   actions/runs/*/jobs*) f="jobs-$(printf '%s' "$1" | sed 's#^actions/runs/\([0-9]*\)/.*#\1#')" ;;
   actions/runners) f=runners ;;
@@ -122,18 +141,42 @@ esac
 [ -f "${STUB}/gh/${f}" ] || exit 1
 cat "${STUB}/gh/${f}"
 EOF
+cat > "${T}/bin/engine" <<'EOF'
+#!/bin/sh
+# the engine's CLI for ready-made images (images_pull): the store runs while store.up exists; a pull or a tag fails
+# while pull.fail exists; every call is logged
+echo "$*" >> "${STUB}/engine"
+case "$1" in
+  ps)   [ -f "${STUB}/store.up" ] && echo 3f2a9c ;;
+  pull) [ ! -f "${STUB}/pull.fail" ] ;;
+  tag)  [ ! -f "${STUB}/pull.fail" ] ;;
+esac
+EOF
+cat > "${T}/bin/config" <<'EOF'
+#!/bin/sh
+# the office's compiled compose config (images_config): STUB/config.json, its @ROOT@ the office's own checkout
+[ -f "${STUB}/config.json" ] || exit 1
+sed "s#@ROOT@#${REPO_ROOT}#g" "${STUB}/config.json"
+EOF
+cat > "${T}/bin/build" <<'EOF'
+#!/bin/sh
+echo "$*" >> "${STUB}/built"; [ ! -f "${STUB}/build.fail" ]
+EOF
 chmod +x "${T}/bin/"*
+export DGO_FOLLOW_ENGINE_CMD="${T}/bin/engine" DGO_FOLLOW_CONFIG_CMD="${T}/bin/config" \
+       DGO_FOLLOW_BUILD_CMD="${T}/bin/build"
 export STUB="${T}/stub"
 export DGO_FOLLOW_LINE_CMD="${T}/bin/line"
 unset DGO_FOLLOW_LINE_WAIT_MIN
 export DGO_FOLLOW_GREEN_CMD="${T}/bin/green" DGO_FOLLOW_RUN_CMD="${T}/bin/run" DGO_FOLLOW_HEALTH_CMD="${T}/bin/health" \
        DGO_FOLLOW_MODEL_CMD="${T}/bin/model" DGO_FOLLOW_NOTIFY_CMD="${T}/bin/notify" DGO_FOLLOW_BUSY_CMD="${T}/bin/busy" \
        DGO_FOLLOW_OLD_IMAGES_CMD="${T}/bin/old" DGO_FOLLOW_DEPS_CMD="${T}/bin/deps" DGO_FOLLOW_INSPECT_CMD="${T}/bin/inspect" \
-       DGO_FOLLOW_MAX_LOAD=100000 DGO_FOLLOW_SETTLE=0
+       DGO_FOLLOW_WHEN_IDLE_CMD="${T}/bin/whenidle" DGO_FOLLOW_MAX_LOAD=100000 DGO_FOLLOW_SETTLE=0
 unset DGO_FOLLOW_COPY DGO_FOLLOW_LOCKED DGO_FOLLOW_VIA_PROBE_S   # a runner's own bound would hide .env's (5d)
 export PYTHONIOENCODING=utf-8   # this file runs python (5d's doors) and holds Hebrew: UTF-8 io on Windows too (G10)
 export DGO_FOLLOW_DISK_CMD="${T}/bin/disk"
 export DGO_FOLLOW_HEAL_CMD="${T}/bin/heal"
+export DGO_FOLLOW_APP_SERVICES_CMD="${T}/bin/appsvc"
 
 # fresh — origin with dgo-stable and o-dgo at one commit, the office cloned on o-dgo, two healthy services, nothing green
 fresh() {
@@ -187,6 +230,16 @@ ok "not following: what a reboot left out of a shared network namespace is still
 fresh; h="$(head_of)"; stable code.txt two >/dev/null; follow
 ok "nothing green: not taken" '[ "$(head_of)" = "${h}" ] && [ "$(notices)" = 0 ]'
 
+# 2b. the checkout itself refuses the fetch (a ref lock that a killed fetch left behind): skipped, and its line says
+# git's own verdict and the seconds — never «fetch … failed» alone, all the Dell said for nine days (DGO-2164). Once
+# the lock is gone, the next cycle takes.
+fresh; h="$(head_of)"; g="$(stable code.txt two green)"
+mkdir -p "${O}/.git/refs/remotes/origin" && : > "${O}/.git/refs/remotes/origin/dgo-stable.lock"; follow
+ok "a ref the checkout cannot lock: not taken, skipped with git's own words and the seconds" \
+   '[ "$(head_of)" = "${h}" ] && [ "$(st LAST_RESULT)" = skipped ] && grep -Eq "^fetch of dgo-stable failed after [0-9]+ s: (error|fatal): .*dgo-stable" <<<"$(st LAST_DETAIL)" && grep -q "lock" <<<"$(st LAST_DETAIL)"'
+rm -f "${O}/.git/refs/remotes/origin/dgo-stable.lock"; follow
+ok "…and with the lock gone, the next cycle takes" 'has "${g}" && [ "$(runs)" = "take " ]'
+
 # 3. a green commit: taken, one run, pushed to the office's own branch, the take told once; then current
 fresh; g="$(stable code.txt two green)"; follow
 ok "green: taken, one run, pushed, the take told" 'has "${g}" && [ "$(runs)" = "take " ] && [ "$(origin_of o-dgo)" = "$(head_of)" ] && took_told "${g}"'
@@ -194,6 +247,22 @@ ok "green: the take says what came in" 'grep -q "| stable: code.txt | took:test:
 ok "green: dgo-stable itself untouched" '[ "$(origin_of dgo-stable)" = "${g}" ]'
 follow
 ok "then current: no second run, the take not told again" '[ "$(runs)" = "take " ] && [ "$(st LAST_RESULT)" = current ] && took_told "${g}"'
+
+# 3s. a client's office on the public copy: platform.state.yaml is its own, ignored, in no commit (DGO-2015: Examplex's
+#     follow «skipped» every take, 38 cycles, reading the declared apps out of commits that hold no such file)
+fresh; ( cd "${O}" && git rm -q --cached platform.state.yaml && echo /platform.state.yaml >> .gitignore \
+  && git commit -qam "the state is the office's own" && git push -q origin HEAD:o-dgo HEAD:dgo-stable )
+g="$(stable code.txt two green)"; follow
+ok "the office's own state file: a green commit is taken, one run" 'has "${g}" && [ "$(runs)" = "take " ] && ! grep -q skipped "${T}/out"'
+ok "…and the file is still the office's, untouched" 'grep -q "a: { state: enabled }" "${O}/platform.state.yaml" && ! git -C "${O}" ls-files --error-unmatch platform.state.yaml >/dev/null 2>&1'
+# 3s'. …and an office with no state file at all: NOT «no apps» — a read that fails is no answer, so nothing is taken.
+#      (Changed in «dgo-stable takes hp-dgo», 2026-11-20: hp-dgo said «the take goes on» (DGO-2015) and the line said
+#      «nothing taken» (14c, DGO-2126) for the same office. The line's rule is kept: «no apps declared» would read as every
+#      app removed, and an office with no state file is a broken office, not an empty one. A test change, said apart.)
+fresh; ( cd "${O}" && git rm -q --cached platform.state.yaml && rm -f platform.state.yaml && echo /platform.state.yaml >> .gitignore \
+  && git commit -qam "no state file" && git push -q origin HEAD:o-dgo HEAD:dgo-stable )
+h="$(head_of)"; g="$(stable code.txt two green)"; follow
+ok "no state file of its own: nothing taken, nothing ran (the line's rule, 14c)" '[ "$(head_of)" = "${h}" ] && [ -z "$(runs)" ]'
 
 # 3a. the notice centre is down when the take is told: the line waits, and the next cycle tells it — once
 fresh; g="$(stable code.txt two green)"; touch "${STUB}/notify.fail"; follow
@@ -221,6 +290,38 @@ ok "busy: not taken, no run, nobody told" '[ "$(head_of)" = "${h}" ] && [ "$(run
 rm -f "${STUB}/busy"; follow
 ok "busy: taken once the meeting is over" 'has "${g}"'
 
+# 3w. an app recreated only while idle (app.json "recreate": "when-idle", DGO-2129) holds back its own running containers
+#     (the bring-up's hold, lib.sh compose_when_idle_split), never the whole take: Claude Desktop's sessions work all
+#     day, and the HP would never have taken anything again. The take's bring-up runs with BBOX_RECREATE_WHEN_IDLE=1,
+#     so even a service a cycle names waits for its quiet moment (nobody pressed anything)
+fresh; g="$(stable code.txt two green)"; echo "bina-claude: 9 Claude session(s) at work" > "${STUB}/busy"
+echo bina-claude > "${STUB}/whenidle"; follow
+ok "a «when-idle» app at work: the take goes on, its containers left to the bring-up's hold" \
+  'has "${g}" && [ "$(runs)" = "take " ] && grep -qx "take:1" "${STUB}/whenidle-env"'
+fresh; h="$(head_of)"; g="$(stable code.txt two green)"; printf 'bina-claude: 9 at work\nmeet: a call in progress\n' > "${STUB}/busy"
+echo bina-claude > "${STUB}/whenidle"; follow
+ok "…a meeting still holds the whole take, and the «when-idle» app is not named for it" \
+  '[ "$(head_of)" = "${h}" ] && [ "$(runs)" = "" ] && grep -q "meet: a call" <<<"$(st LAST_DETAIL)" && ! grep -q bina-claude <<<"$(st LAST_DETAIL)"'
+# 3h. what a bring-up held while its app was at work (data/.held/<service>) is brought up again every cycle: the bring-up
+#     asks the app again (BBOX_RECREATE_WHEN_IDLE=1: it names the service, and still waits for a quiet moment), holds it
+#     once more while it is busy, and builds first when the note says so; a service the office no longer declares is
+#     forgotten
+fresh; mkdir -p "${O}/data/.held"; : > "${O}/data/.held/web"; : > "${O}/data/.held/gone"; follow
+ok "held: a held service is brought up again, as a cycle's (when idle), and a retired one forgotten" \
+  'grep -qx "held web" "${STUB}/held" 2>/dev/null && grep -qx "held:1" "${STUB}/whenidle-env" && [ ! -e "${O}/data/.held/gone" ]'
+# 3h'. still held after hours (its app never idle at a cycle: a job that never ends) — the office is told, once per hold,
+#      with what its app says; a fresh hold is not told
+fresh; mkdir -p "${O}/data/.held"
+printf '%s\tx\t9 Claude session(s) at work\t-\t-\n' "$(date -u -d '-7 hours' '+%F %T UTC')" > "${O}/data/.held/web"
+printf '%s\tx\t2 at work\t-\t-\n' "$(date -u '+%F %T UTC')" > "${O}/data/.held/db"; follow
+ok "held for hours: the office is told, with what its app says; a fresh hold is not" \
+  '[ "$(grep -c "שירות ממתין שעות" "${STUB}/notices" 2>/dev/null)" = 1 ] && grep -q "web has been held since .*9 Claude session" "${STUB}/notices" && ! grep -q "db has been held" "${STUB}/notices"'
+follow
+ok "…and told once: the next cycle says nothing more" '[ "$(grep -c "שירות ממתין שעות" "${STUB}/notices" 2>/dev/null)" = 1 ]'
+rm -f "${O}/data/.held/web" "${O}/data/.held/db"; follow
+ok "…and the hold that ended closes its own row" \
+  'grep -q "^info | שירות חזר לפעול .* | held:test:web$" "${STUB}/notices" && [ -z "$(st HELD_TOLD)" ]'
+
 # 3c. what was merged is what runs (DGO-1356): a service whose image is older than its own build files after the take is
 # built again — exactly that one; a build that fails is said, and the take stands (merged, healthy, pushed)
 fresh; g="$(stable code.txt two green)"; echo web > "${STUB}/old"; follow
@@ -228,6 +329,28 @@ ok "old image after a take: built again, exactly that service" 'has "${g}" && [ 
 fresh; g="$(stable code.txt two green)"; echo web > "${STUB}/old"; echo 1 > "${STUB}/rc.rebuild"; follow
 ok "a rebuild that fails: said, and the take stands" 'has "${g}" && [ "$(origin_of o-dgo)" = "$(head_of)" ] && grep -q "קוד ישן" "${STUB}/notices"'
 ok "a rebuild that fails: its row stays open, no take line closes it" '[ "$(notices)" = 1 ] && grep -q "קוד ישן" <<<"$(tail -1 "${STUB}/notices")"'
+# …nor the next cycle, whose «green is in the branch» closed it while web still ran the image from before (the king's
+#    second reader, 2026-11-20): the services have a row of their own, which only a cycle that finds the cause gone closes
+ok "…said on the services' own row (follow:svc:<office>)" 'grep -q "קוד ישן .* | svc:test$" "${STUB}/notices"'
+follow
+ok "the next cycle, web still on the old image: the row stays open" '[ "$(st LAST_RESULT)" = current ] && [ -n "$(st SVC_NOTICE)" ] && ! grep -qE "מעודכן שוב|הקוד העדכני" "${STUB}/notices"'
+# …only a rebuild of web that WORKS answers it — a later take's (stale_images' file times are no proof: a cache-hit image
+#    stays «old» for ever); the cycle after it closes the row
+rm -f "${STUB}/rc.rebuild"; g2="$(stable code.txt three green)"; follow; follow
+ok "…a later take whose rebuild of web works: the next cycle closes the row, on its own id" 'has "${g2}" && grep -q "הקוד העדכני — test | .* | svc:test$" "${STUB}/notices" && [ -z "$(st SVC_NOTICE)" ] && [ -z "$(st SVC_CAUSES)" ]'
+# …two causes of one kind: a later rebuild of web alone drops web's, and the row says what still holds it (api's)
+fresh; printf 'web\napi\ndb\ninit\n' > "${STUB}/model"; printf 'web running healthy\napi running healthy\ndb running -\ninit done -\n' > "${STUB}/health"
+g="$(stable code.txt two green)"; printf 'web\napi\n' > "${STUB}/old"; echo 1 > "${STUB}/rc.rebuild"; follow
+rm -f "${STUB}/rc.rebuild"; echo web > "${STUB}/old"; g2="$(stable code.txt three green)"; follow; follow
+ok "two causes of one kind: web rebuilt drops only web's; the row now names what holds it" '[ "$(st SVC_CAUSES)" = "images:api" ] && grep -q "Still open: images:api" "${STUB}/notices"'
+# …the services' model unreadable or EMPTY (a compose that read no file) is «cannot tell», never «every service retired»
+: > "${STUB}/model"; follow
+ok "…an empty model: the row stays as it is" '[ "$(st SVC_CAUSES)" = "images:api" ] && [ -n "$(st SVC_NOTICE)" ]'
+# …a service the office no longer declares holds nothing — and a close the notice centre missed is posted by a later cycle
+printf 'web\ndb\ninit\n' > "${STUB}/model"; touch "${STUB}/notify.fail"; follow
+ok "…api no longer declared, the notice centre down: not closed, kept for the next cycle" '[ -n "$(st SVC_NOTICE)" ] && [ -z "$(st SVC_CAUSES)" ]'
+rm -f "${STUB}/notify.fail"; follow
+ok "…the next cycle posts the close" '[ -z "$(st SVC_NOTICE)" ] && [ "$(grep -c "הקוד העדכני — test" "${STUB}/notices")" = 1 ]'
 fresh; g="$(stable code.txt two green)"; follow
 ok "nothing old: no rebuild" '[ "$(runs)" = "take " ] && [ ! -e "${STUB}/rebuilt" ]'
 # …and listed by the MERGED lib.sh, not the one the cycle sourced before the merge: vps1's take of 55 (2026-11-13) ran
@@ -277,6 +400,14 @@ folder_case apps/x/server/governor.py "web ${OLD} ${O}/apps/x/server"; echo 1 > 
 ok "a recreate that fails: said, the take stands and is pushed, the service kept for the next cycle" 'has "${g}" && [ "$(origin_of o-dgo)" = "$(head_of)" ] && grep -q "קוד ישן" "${STUB}/notices" && ! grep -q "המשרד התעדכן" "${STUB}/notices" && [ "$(st FOLDERS_PENDING | cut -d" " -f2-)" = "web:x" ]'
 rm -f "${STUB}/rc.recreate"; follow
 ok "…and the next cycle recreates it, and forgets it" '[ "$(grep -c "recreate web" "${STUB}/recreated")" = 2 ] && [ -z "$(st FOLDERS_PENDING)" ]'
+# …a retry that fails AGAIN is said on the services' row, and the same cycle's «green is in the branch» leaves it open
+#    (it rewrote the office's one row as «המשרד מעודכן שוב» before — the king's second reader); a retry that works closes it
+folder_case apps/x/server/governor.py "web ${OLD} ${O}/apps/x/server"; echo 1 > "${STUB}/rc.recreate"; follow; follow
+ok "a retry that fails again: said on the services' row, the same cycle leaves it open" '[ -n "$(st FOLDERS_PENDING)" ] && [ -n "$(st SVC_NOTICE)" ] && grep -q "failed again .* | svc:test$" "${STUB}/notices" && ! grep -qE "מעודכן שוב|הקוד העדכני" "${STUB}/notices"'
+rm -f "${STUB}/rc.recreate"; follow
+ok "…a retry that recreates it: no recreate waits; the row is judged by the NEXT cycle" '[ -z "$(st FOLDERS_PENDING)" ] && [ -n "$(st SVC_NOTICE)" ]'
+follow
+ok "…which closes the services' row, on its own id" 'grep -q "הקוד העדכני — test | .* | svc:test$" "${STUB}/notices" && [ -z "$(st SVC_NOTICE)" ] && [ -z "$(st SVC_CAUSES)" ]'
 # …an app that is busy by the time of the recreate (a meeting started during the take's bring-up) is left alone (F4)
 folder_case apps/x/server/governor.py "web ${OLD} ${O}/apps/x/server"
 echo 'echo "x: a session in progress" > "${STUB}/busy"' > "${STUB}/do.take"; follow
@@ -307,9 +438,32 @@ rm -f "${STUB}/do.recreate"
 folder_case apps/x/server/governor.py "web ${OLD} ${O}/apps/x/server"; echo 1 > "${STUB}/rc.recreate"; follow
 rm -f "${STUB}/rc.recreate"; printf 'web running unhealthy\ndb running -\ninit done -\n' > "${STUB}/health.recreate"; follow
 ok "a retried recreate that leaves a service unhealthy: said" 'grep -q "שירות נפל" "${STUB}/notices" && [ -z "$(st FOLDERS_PENDING)" ]'
+# …the fallen service holds the services' row while it stays unhealthy; good in two cycles in a row closes it (one reading
+#    of a service that restarts and restarts says «running» between two crashes — the third reader)
+follow
+ok "…a fallen service holds the services' row open while unhealthy" '[ -n "$(st SVC_NOTICE)" ] && [[ " $(st SVC_CAUSES) " == *" fell:web "* ]] && ! grep -q "הקוד העדכני" "${STUB}/notices"'
+rm -f "${STUB}/health.recreate"; printf 'web running healthy\ndb running -\ninit done -\n' > "${STUB}/health"; follow
+ok "…good once: not yet" '[ -n "$(st SVC_NOTICE)" ] && [[ " $(st SVC_CAUSES) " == *" settling:web "* ]] && ! grep -q "הקוד העדכני" "${STUB}/notices"'
+printf 'web running unhealthy\ndb running -\ninit done -\n' > "${STUB}/health"; follow
+ok "…down again before the second reading: back to fallen" '[[ " $(st SVC_CAUSES) " == *" fell:web "* ]]'
+printf 'web running healthy\ndb running -\ninit done -\n' > "${STUB}/health"; follow; follow
+ok "…good twice in a row: the row closes" 'grep -q "הקוד העדכני — test | .* | svc:test$" "${STUB}/notices" && [ -z "$(st SVC_NOTICE)" ]'
 # …a folder that cannot be checked during a take (the containers unreadable) is said, never a silent «nothing changed»
 folder_case apps/x/server/governor.py "web ${OLD} ${O}/apps/x/server"; echo 'not json' > "${STUB}/inspect.json"; follow
 ok "the containers cannot be read after a take: said, no «took» line" 'has "${g}" && grep -q "לא נבדקו" "${STUB}/notices" && ! grep -q "המשרד התעדכן" "${STUB}/notices"'
+# …on the services' row: the next cycle re-checks nothing, so it must not close it (the «green is in the branch» path
+#    did, as «המשרד מעודכן שוב» — its second reader); nor a later take, whose own check reads only ITS diff (web still
+#    started before the first take — the third reader); a session that looked says so, and the next cycle closes it
+follow
+ok "…the next cycle, nothing re-checked: the row stays open" '[[ "$(st SVC_CAUSES)" == unchecked:* ]] && ! grep -qE "מעודכן שוב|הקוד העדכני" "${STUB}/notices"'
+inspect_of "web ${OLD} ${O}/apps/x/server"; g2="$(stable code.txt three green)"; follow; follow
+ok "…a later take that does not touch the folder: still open" 'has "${g2}" && [[ "$(st SVC_CAUSES)" == unchecked:* ]] && ! grep -q "הקוד העדכני" "${STUB}/notices"'
+REPO_ROOT="${O}" bash "${HERE}/follow.sh" clear >/dev/null 2>&1; follow
+ok "…a plain \`follow clear\` (a take's) leaves the services' row alone" '[[ "$(st SVC_CAUSES)" == unchecked:* ]] && ! grep -q "הקוד העדכני" "${STUB}/notices"'
+REPO_ROOT="${O}" bash "${HERE}/follow.sh" clear services >/dev/null 2>&1
+ok "…\`follow clear services\` drops its causes; the row waits for the next cycle" '[ -z "$(st SVC_CAUSES)" ] && [ -n "$(st SVC_NOTICE)" ]'
+follow
+ok "…which closes it" 'grep -q "הקוד העדכני — test | .* | svc:test$" "${STUB}/notices" && [ -z "$(st SVC_NOTICE)" ]'
 
 # 4. a newer commit that is NOT green after a green one: only the green one is taken
 fresh; g="$(stable code.txt two green)"; n="$(stable other.txt y)"; follow
@@ -362,6 +516,20 @@ DGO_FOLLOW_GREEN_CMD= follow
 ok "no green ref and no API: nothing taken, and said" '[ "$(head_of)" = "${h}" ] && grep -q "no green" <<<"$(st LAST_DETAIL)"'
 git -C "${T}/origin.git" update-ref refs/green/dgo-stable "${g}"; DGO_FOLLOW_GREEN_CMD= follow
 ok "refs/green/dgo-stable read from the remote: its commit taken, the newer one not" 'has "${g}" && ! has "${n}" && [ "$(runs)" = "take " ]'
+
+# 5b'. the REAL green_shas on GitHub's replies (DGO-2123): a proof run still IN PROGRESS — its re-ask job queued behind
+#      the one runner — whose `green` job succeeded is green, as refs/green already says; one whose green has not run
+#      is not. Batch 88 was green with refs/green moved, and every office that reads the API kept the version before.
+fresh; h="$(head_of)"; g="$(stable code.txt two)"; mkdir -p "${STUB}/gh"
+printf '{"workflow_runs":[]}' > "${STUB}/gh/runs-success"
+printf '{"workflow_runs":[{"id":21,"status":"in_progress","head_sha":"%s"}]}' "${g}" > "${STUB}/gh/runs"
+printf '{"jobs":[{"name":"gates","status":"completed","conclusion":"success"},{"name":"green","status":"queued","conclusion":null},{"name":"re-ask","status":"queued","conclusion":null}]}' > "${STUB}/gh/jobs-21"
+DGO_FOLLOW_GREEN_CMD= DGO_FOLLOW_GH_CMD="${T}/bin/gh" follow
+ok "the real green_shas: a proof in progress whose green job has not run is no green" '[ "$(head_of)" = "${h}" ]'
+printf '{"jobs":[{"name":"gates","status":"completed","conclusion":"success"},{"name":"green","status":"completed","conclusion":"success"},{"name":"re-ask","status":"queued","conclusion":null}]}' > "${STUB}/gh/jobs-21"
+DGO_FOLLOW_GREEN_CMD= DGO_FOLLOW_GH_CMD="${T}/bin/gh" follow
+ok "…its green job succeeded and only re-ask waits for the runner: green, and taken" 'has "${g}" && [ "$(runs)" = "take " ]'
+rm -rf "${STUB}/gh"
 
 # 5c. an office with no credential of its own follows THROUGH a linked office's git app (DGO_FOLLOW_VIA): fetched from
 # and pushed to the address resolved this cycle; origin itself is never reached. `bbox remote` is played by a stub
@@ -512,6 +680,10 @@ t0="$(date +%s)"; env -u http_proxy -u HTTP_PROXY -u all_proxy -u ALL_PROXY DGO_
 t1="$(date +%s)"; kill "${half}" 2>/dev/null; wait "${half}" 2>/dev/null
 ok "via list: a door that answers the probe and goes silent on the pack — the fetch is cut within its bound, skipped, said" \
    '[ -n "${hport}" ] && [ "$(head_of)" = "${h}" ] && [ "$(st LAST_RESULT)" = skipped ] && grep -q "fetch of dgo-stable failed (through half)" <<<"$(st LAST_DETAIL)" && grep -q "through the git app of half" "${T}/out" && [ -s "${T}/half.post" ] && [ $((t1 - $(cat "${T}/half.post"))) -ge 14 ] && [ $((t1 - t0)) -lt 90 ]'
+# …and the cycle's line says git's own verdict and the seconds the fetch took, so a pack that stopped on its way is told
+# apart from a refusal in the checkout (DGO-2164: the Dell said «fetch … failed (through macbook)» alone for nine days)
+ok "via list: the silent door's cut fetch — its line has the seconds it took and git's own error" \
+   'grep -Eq "^fetch of dgo-stable failed \(through half\) after (1[4-9]|[2-8][0-9]) s: (error|fatal): " <<<"$(st LAST_DETAIL)"'
 
 # ── health ─────────────────────────────────────────────────────────────────────────────────────────
 # 6. a service turns unhealthy: rolled back, run again, never pushed, told once, not retried; a newer green is
@@ -579,6 +751,94 @@ printf 'web running healthy\ndb running -\ninit done -\nbroker exited -\nside ru
 printf 'web running healthy\ndb running -\ninit done -\nbroker exited -\nside exited -\n' > "${STUB}/health.take"
 printf 'web\ndb\ninit\nbroker\nside\n' > "${STUB}/model"; printf 'side web\n' > "${STUB}/deps"; cp "${STUB}/health" "${STUB}/health.rollback"; follow
 ok "the same fall on a dependency that was good: rolled back, named" '[ "$(head_of)" = "${h}" ] && grep -q "side exited" "${STUB}/notices"'
+
+# 7b. AN APP SWITCHED DURING THE TAKE is «switched», never «lost» (the king's decision, 2026-11-20). `bbox run` compiles
+# the CHECKOUT's platform.state.yaml; DGO-2123's proof on vps1 switched image-store off in it while the take of 113
+# ran, the take counted its two services as lost, and a good version was rolled back with a failure row for the owner.
+# The owner's own switch on his console is the same act. App `s` (two services) is committed on the office branch; the
+# checkout declares it on or off, uncommitted, as `bbox apps` and the console leave it; `do.take` switches it mid-take.
+switched_app() {   # [on|off] — app s on the office branch; the checkout declares it so when asked (else: does not name it)
+  mkdir -p "${O}/apps/s" && printf 'services:\n  s-web:\n    image: s\n  s-side:\n    image: t\n' > "${O}/apps/s/docker-compose.yml"
+  git -C "${O}" add apps/s && git -C "${O}" commit -qm "app s" && git -C "${O}" push -q origin o-dgo
+  # the two states as `bbox apps enable|disable` writes them: OFF is said in so many words. `zz`, off too and sorting
+  # after s, is an app the catalog no longer knows (retired): its unknown answer must never silence s's (third reading)
+  printf 'apps:\n  a: { state: enabled }\n  e: { enabled: false }\n  s: { state: disabled, by: cli }\n  zz: { state: disabled }\n\nremote:\n  fetched: 1\n' > "${STUB}/state.off"
+  printf 'apps:\n  a: { state: enabled }\n  e: { enabled: false }\n  s: { state: enabled, by: cli }\n  zz: { state: disabled }\n\nremote:\n  fetched: 1\n' > "${STUB}/state.on"
+  printf 's-web\ns-side\n' > "${STUB}/appsvc.s"   # what the compiler says app s declares
+  case "${1:-}" in on|off) cp "${STUB}/state.$1" "${O}/platform.state.yaml" ;; esac
+  return 0
+}
+fresh; switched_app on; g="$(stable code.txt two green)"
+printf 'web running healthy\ndb running -\ninit done -\ns-web running healthy\ns-side running -\n' > "${STUB}/health"
+printf 'web\ndb\ninit\ns-web\ns-side\n' > "${STUB}/model"
+printf 'web running healthy\ndb running -\ninit done -\n' > "${STUB}/health.take"
+printf 'cp "${STUB}/state.off" "${REPO_ROOT}/platform.state.yaml"; printf "web\\\\ndb\\\\ninit\\\\n" > "${STUB}/model"\n' > "${STUB}/do.take"
+cp "${STUB}/health" "${STUB}/health.rollback"; follow
+ok "an app switched OFF during the take: taken, nothing rolled back" 'has "${g}" && [ "$(runs)" = "take " ] && took_told "${g}"'
+ok "…the take's line names the switch" 'grep -q "took dgo-stable .*, healthy, pushed; switched during the take: s off$" "${O}/data/follow/log"'
+ok "…and each of its services is spared by name in the follow's log" \
+   'grep -q "spared: s-web — its app s is declared off, and the compiled model no longer declares it" "${O}/data/follow/log" && grep -q "spared: s-side — its app s is declared off" "${O}/data/follow/log"'
+# …switched ON during the take: its services were in no baseline and nothing of theirs is lost — taken, and said
+fresh; switched_app; g="$(stable code.txt two green)"
+printf 'web running healthy\ndb running -\ninit done -\ns-web running unhealthy\ns-side running -\n' > "${STUB}/health.take"
+printf 'cp "${STUB}/state.on" "${REPO_ROOT}/platform.state.yaml"; printf "web\\\\ndb\\\\ninit\\\\ns-web\\\\ns-side\\\\n" > "${STUB}/model"\n' > "${STUB}/do.take"
+cp "${STUB}/health" "${STUB}/health.rollback"; follow
+ok "an app switched ON during the take: taken, nothing rolled back, the switch in its line" \
+   'has "${g}" && [ "$(runs)" = "take " ] && grep -q "healthy, pushed; switched during the take: s on$" "${O}/data/follow/log"'
+# …a switch spares its OWN services only: another service lost in the same take still rolls it back, named alone
+fresh; switched_app on; h="$(head_of)"; stable code.txt two green >/dev/null
+printf 'web running healthy\ndb running -\ninit done -\ns-web running healthy\ns-side running -\n' > "${STUB}/health"
+printf 'web\ndb\ninit\ns-web\ns-side\n' > "${STUB}/model"
+printf 'web running healthy\ninit done -\n' > "${STUB}/health.take"
+printf 'cp "${STUB}/state.off" "${REPO_ROOT}/platform.state.yaml"; printf "web\\\\ndb\\\\ninit\\\\n" > "${STUB}/model"\n' > "${STUB}/do.take"
+cp "${STUB}/health" "${STUB}/health.rollback"; follow
+ok "switched off AND another service lost: rolled back for db alone, the switch said" \
+   '[ "$(head_of)" = "${h}" ] && grep -q "db gone; switched during the take: s off" "${STUB}/notices" && ! grep -q "s-web" "${STUB}/notices"'
+# …switched off but STILL in the compiled model (a provider another enabled app requires runs on: resolve()), and
+# broken by the take: judged as ever — rolled back, named (the second reader: spare by what runs, not by what is declared)
+fresh; switched_app on; h="$(head_of)"; stable code.txt two green >/dev/null
+printf 'web running healthy\ndb running -\ninit done -\ns-web running healthy\ns-side running -\n' > "${STUB}/health"
+printf 'web\ndb\ninit\ns-web\ns-side\n' > "${STUB}/model"
+printf 'web running healthy\ndb running -\ninit done -\ns-web running unhealthy\ns-side running -\n' > "${STUB}/health.take"
+printf 'cp "${STUB}/state.off" "${REPO_ROOT}/platform.state.yaml"\n' > "${STUB}/do.take"
+cp "${STUB}/health" "${STUB}/health.rollback"; follow
+ok "switched off but still compiled in, and broken: rolled back, named — no spare" \
+   '[ "$(head_of)" = "${h}" ] && grep -q "s-web running unhealthy" "${STUB}/notices"'
+# …switched off just BEFORE the take, its containers still being stopped when the baseline is read (`bbox apps disable`
+# writes the state and renders, then stops them one by one: the second reader's window): off by the owner's word, so
+# its services are spared and the take kept — and nothing was switched WHILE it ran, so its line names no switch
+fresh; switched_app off; g="$(stable code.txt two green)"
+printf 'web running healthy\ndb running -\ninit done -\ns-web running healthy\ns-side running -\n' > "${STUB}/health"
+printf 'web\ndb\ninit\n' > "${STUB}/model"; printf 'web running healthy\ndb running -\ninit done -\n' > "${STUB}/health.take"
+cp "${STUB}/health" "${STUB}/health.rollback"; follow
+ok "switched off just before the take, its containers still stopping at the baseline: taken, spared by name" \
+   'has "${g}" && [ "$(runs)" = "take " ] && grep -q "spared: s-web — its app s is declared off" "${O}/data/follow/log" && ! grep -q "switched during the take" "${O}/data/follow/log"'
+# …but an app the state named off ALL ALONG, still compiled in when the take began (a provider another enabled app
+# requires runs on: resolve()), that the take's OWN change drops from the model: the take's, never the owner's — rolled
+# back, named (the third reading)
+fresh; switched_app off; h="$(head_of)"; stable code.txt two green >/dev/null
+printf 'web running healthy\ndb running -\ninit done -\ns-web running healthy\ns-side running -\n' > "${STUB}/health"
+printf 'web\ndb\ninit\ns-web\ns-side\n' > "${STUB}/model"; printf 'web running healthy\ndb running -\ninit done -\n' > "${STUB}/health.take"
+printf 'printf "web\\\\ndb\\\\ninit\\\\n" > "${STUB}/model"\n' > "${STUB}/do.take"
+cp "${STUB}/health" "${STUB}/health.rollback"; follow
+ok "off all along, still compiled in at the start, dropped by the take itself: rolled back, named — no spare" \
+   '[ "$(head_of)" = "${h}" ] && grep -q "s-web gone" "${STUB}/notices" && ! grep -q "spared: s-web" "${O}/data/follow/log"'
+# …and an app the state does not NAME is never «off» (a base app runs by default): out of the model before the take and
+# gone after, it is lost as ever — rolled back, named
+fresh; switched_app; h="$(head_of)"; stable code.txt two green >/dev/null
+printf 'web running healthy\ndb running -\ninit done -\ns-web running healthy\ns-side running -\n' > "${STUB}/health"
+printf 'web\ndb\ninit\n' > "${STUB}/model"; printf 'web running healthy\ndb running -\ninit done -\n' > "${STUB}/health.take"
+cp "${STUB}/health" "${STUB}/health.rollback"; follow
+ok "an app the state does not name, gone with the model: rolled back, named — never «off»" \
+   '[ "$(head_of)" = "${h}" ] && grep -q "s-web gone" "${STUB}/notices" && ! grep -q "spared: s-web" "${O}/data/follow/log"'
+# …and an app NOT switched has no spare: its own service gone is lost as ever — rolled back, named
+fresh; switched_app on; h="$(head_of)"; stable code.txt two green >/dev/null
+printf 'web running healthy\ndb running -\ninit done -\ns-web running healthy\ns-side running -\n' > "${STUB}/health"
+printf 'web\ndb\ninit\ns-web\ns-side\n' > "${STUB}/model"
+printf 'web running healthy\ndb running -\ninit done -\ns-side running -\n' > "${STUB}/health.take"
+cp "${STUB}/health" "${STUB}/health.rollback"; follow
+ok "an app left on, its service gone: rolled back, named — no switch, no spare" \
+   '[ "$(head_of)" = "${h}" ] && grep -q "s-web gone" "${STUB}/notices" && ! grep -q "switched during the take" "${O}/data/follow/log"'
 
 # 8. the services cannot be read after the take (dc broken by the merge): rolled back, never called healthy
 fresh; h="$(head_of)"; stable code.txt two green >/dev/null; printf 'touch "${STUB}/health.unreadable"\n' > "${STUB}/do.take"
@@ -698,6 +958,61 @@ fresh; sed -i 's/fetched: 1/fetched: 2/' "${O}/platform.state.yaml"
 git -C "${T}/side" rev-parse HEAD >> "${STUB}/green"; follow
 ok "platform state: dgo-stable's line and the office's own both kept" 'grep -q "b: { state: disabled }" "${O}/platform.state.yaml" && grep -q "fetched: 2" "${O}/platform.state.yaml"'
 ok "platform state: committed on o-dgo, nothing left uncommitted" '[ -z "$(git -C "${O}" diff --name-only HEAD)" ] && grep -q "own platform state" <<<"$(git -C "${O}" log --format=%s)"'
+
+# 14a. an office of the public line keeps platform.state.yaml as its own file, ignored and never tracked (the public
+#      copy tracks only platform.state.default.yaml): the apps it declares are read from the checkout, and a green
+#      commit is taken. Read from git, every cycle there said «skipped … cannot be read» and no such office ever took a
+#      release (Examplek, 2026-11-20, DGO-2126).
+public_office() {   # fresh, but on the public line: platform.state.yaml ignored and never tracked, the office's own copy
+  fresh
+  rm -rf "${T}/origin.git" "${O}"; git init -q --bare "${T}/origin.git"
+  ( cd "${T}/seed" && git rm -q --cached platform.state.yaml && printf '/platform.state.yaml\n' >> .gitignore \
+    && git add .gitignore && git commit -q --amend -m base && git branch -f dgo-stable && git branch -f o-dgo \
+    && git push -q "${T}/origin.git" dgo-stable o-dgo )
+  git clone -q -b o-dgo "${T}/origin.git" "${O}" && cp "${T}/seed/platform.state.yaml" "${O}/platform.state.yaml"
+  printf 'DEPLOYMENT_NAME=t\nDGO_OFFICE_ID=test\nDGO_BRANCH=o-dgo\nDGO_FOLLOW=dgo-stable\n' > "${O}/.env"
+}
+public_office; g="$(stable code.txt two green)"; follow
+ok "the public line: the office's own untracked state is read, and a green commit is taken" 'has "${g}" && took_told "${g}" && [ "$(st LAST_RESULT)" = took ]'
+ok "…its state file stays the office's own: untracked, unchanged" '[ -z "$(git -C "${O}" ls-files platform.state.yaml)" ] && grep -q "fetched: 1" "${O}/platform.state.yaml"'
+# 14b. …in a client office's own shape (5a): it follows its own branch and may not push — origin's new commit is taken
+public_office; sed -i 's/^DGO_FOLLOW=.*/DGO_FOLLOW=o-dgo/' "${O}/.env"; git -C "${O}" remote set-url --push origin "${T}/no-right.git"
+git clone -q -b o-dgo "${T}/origin.git" "${T}/peer"
+( cd "${T}/peer" && printf 'v\n' > version.txt && git add version.txt && git commit -qm "version one" && git push -q origin o-dgo ); p="$(git -C "${T}/peer" rev-parse HEAD)"
+follow
+ok "the public line, its own branch: origin's new commit taken, with one run, nothing to push" '[ "$(head_of)" = "${p}" ] && [ "$(runs)" = "take " ] && [ "$(st LAST_RESULT)" = took ] && [ -z "$(st PUSH_PENDING)" ]'
+# 14c. …and with no state file at all, nothing is taken and nothing runs: a read that fails is never «no apps declared»
+public_office; rm "${O}/platform.state.yaml"; h="$(head_of)"; g="$(stable code.txt two green)"; follow
+ok "the public line, no state file: nothing taken, nothing ran, the target not blamed" '[ "$(head_of)" = "${h}" ] && [ "$(st LAST_RESULT)" = skipped ] && [ -z "$(st FAILED_TARGET)" ] && [ -z "$(runs)" ]'
+
+# 14d. a CONFLICT in platform.state.yaml (the king, 2026-11-20): the office's branch and dgo-stable changed the same
+#      line. vps1's cycle stopped there on batch 91 until a take by hand kept the office's own, whole (ee8a0239f); so
+#      does the follow now — and none of the target's other lines comes in through the conflict (another office's
+#      binding, peers or instances: the second reader of a three-way merge)
+fresh; ( cd "${O}" && sed -i 's/fetched: 1/fetched: 2/' platform.state.yaml && git commit -qam "office: fetched 2" && git push -q origin o-dgo )
+( cd "${T}" && git clone -q -b dgo-stable "${T}/origin.git" side && cd side \
+  && sed -i 's/fetched: 1/fetched: 3/' platform.state.yaml && sed -i '1i # a note of the line' platform.state.yaml \
+  && git commit -qam "stable: fetched 3, a note" && git push -q origin dgo-stable )
+g="$(git -C "${T}/side" rev-parse HEAD)"; echo "${g}" >> "${STUB}/green"; follow
+ok "platform state conflict: taken, the office's own file kept whole" 'has "${g}" && grep -q "fetched: 2" "${O}/platform.state.yaml" && ! grep -q "a note of the line" "${O}/platform.state.yaml" && ! grep -q "<<<<<<<" "${O}/platform.state.yaml" && [ "$(st LAST_RESULT)" = took ]'
+ok "…said in the merge's own commit" 'grep -q "platform.state.yaml conflicted, this office.s own kept" <<<"$(git -C "${O}" log --format=%s)"'
+# 14e. …and a change of the target's that would enable an app here does not come in through the conflict either: taken,
+#      with this office's apps as they were (without a conflict, case 15 refuses such a take and tells it)
+fresh; ( cd "${O}" && sed -i 's/fetched: 1/fetched: 2/' platform.state.yaml && git commit -qam "office: fetched 2" && git push -q origin o-dgo ); h="$(head_of)"
+( cd "${T}" && git clone -q -b dgo-stable "${T}/origin.git" side && cd side \
+  && sed -i 's/fetched: 1/fetched: 3/' platform.state.yaml \
+  && sed -i 's/  a: { state: enabled }/  a: { state: enabled }\n  c: { state: enabled }/' platform.state.yaml \
+  && git commit -qam "stable: fetched 3, app c on" && git push -q origin dgo-stable )
+g="$(git -C "${T}/side" rev-parse HEAD)"; echo "${g}" >> "${STUB}/green"; follow
+ok "platform state conflict, the line enabling an app: taken, c not enabled here" 'has "${g}" && [ "$(st LAST_RESULT)" = took ] && ! grep -q "  c: { state: enabled }" "${O}/platform.state.yaml" && grep -q "fetched: 2" "${O}/platform.state.yaml"'
+# 14f. …and a platform.state.yaml conflict beside one in the office's own code still stops the take
+fresh; ( cd "${O}" && sed -i 's/fetched: 1/fetched: 2/' platform.state.yaml && printf 'office\n' > code.txt \
+  && git commit -qam "office: state and code" && git push -q origin o-dgo ); h="$(head_of)"
+( cd "${T}" && git clone -q -b dgo-stable "${T}/origin.git" side && cd side \
+  && sed -i 's/fetched: 1/fetched: 3/' platform.state.yaml && printf 'stable\n' > code.txt \
+  && git commit -qam "stable: state and code" && git push -q origin dgo-stable )
+git -C "${T}/side" rev-parse HEAD >> "${STUB}/green"; follow
+ok "platform state and the office's code both conflict: aborted, unchanged, the code told" '[ "$(head_of)" = "${h}" ] && [ ! -e "${O}/.git/MERGE_HEAD" ] && [ -z "$(git -C "${O}" diff --name-only HEAD)" ] && grep -q code.txt "${STUB}/notices"'
 
 # 15. dgo-stable would change WHICH apps run here (another office's state): undone before anything runs, told
 fresh; h="$(head_of)"
@@ -834,6 +1149,76 @@ ok "push refused: taken, told, pending" 'has "${g}" && [ "$(origin_of o-dgo)" !=
 rm -f "${STUB}/reject"; follow
 ok "push refused: pushed by the next cycle, the row closed" '[ "$(origin_of o-dgo)" = "$(head_of)" ] && grep -q "^info" <<<"$(tail -1 "${STUB}/notices")" && ! grep -q "המשרד התעדכן" "${STUB}/notices"'
 
+# ── ready-made images (DGO-2123: research_notes/CICD 2026-11/images.md) ───────────────────────────────
+# named_images <sha> [<more entries>] — the line's proof named images for this commit: refs/images/dgo-stable on
+# origin, images.json — x, built from apps/x, and whatever more entries are given (`,"y":{…}`)
+named_images() {
+  local blob tree commit
+  blob="$(printf '{"green":"%s","built":["x"],"images":{"x":{"digest":"sha256:%s","name":"ghcr.io/bina-solution/digital-office/x","built_from":"%s","dir":"apps/x"}%s}}\n' "$1" "$(printf 'a%.0s' $(seq 64))" "$1" "${2:-}" | git -C "${T}/origin.git" hash-object -w --stdin)"
+  tree="$(printf '100644 blob %s\timages.json\n' "${blob}" | git -C "${T}/origin.git" mktree)"
+  commit="$(git -C "${T}/origin.git" -c user.name=t -c user.email=t@t commit-tree "${tree}" -m images)"
+  git -C "${T}/origin.git" update-ref refs/images/dgo-stable "${commit}"
+}
+# config_of [<x's build>] [<more services>] — this office's compiled config: the service xs runs x, built plainly from
+# apps/x (or as given); web builds from source; db is pulled from elsewhere, as compose names it
+config_of() {
+  local xb='{"context":"@ROOT@/apps/x","dockerfile":"Dockerfile"}'
+  [ -z "${1:-}" ] || xb="$1"
+  printf '{"services":{"xs":{"image":"ghcr.io/bina-solution/digital-office/x:latest","build":%s},"web":{"image":"w","build":{"context":"@ROOT@/apps/web","dockerfile":"Dockerfile"}},"db":{"image":"d"}%s}}\n' "${xb}" "${2:-}" > "${STUB}/config.json"
+}
+opt_in() { printf 'DGO_FOLLOW_IMAGES=1\n' >> "${O}/.env"; }
+prebuilt() { tr '\n' ' ' < "${STUB}/prebuilt" 2>/dev/null; }
+
+# i1. opted in, the store running, the target's images named: pulled through the mirror, tagged as compose names them,
+# the rest built, and the run builds nothing again
+fresh; opt_in; config_of; touch "${STUB}/store.up"; g="$(stable code.txt two green)"; named_images "${g}"; follow
+ok "images: pulled through the mirror on the loopback, by digest" 'grep -q "^pull -q 127.0.0.1:5055/x@sha256:a\{64\}$" "${STUB}/engine"'
+ok "images: tagged under the name its compose file gives it" 'grep -q "^tag 127.0.0.1:5055/x@sha256:a\{64\} ghcr.io/bina-solution/digital-office/x:latest$" "${STUB}/engine"'
+ok "images: what was not pulled is built, and the run builds nothing again (BBOX_PREBUILT)" '[ "$(cat "${STUB}/built")" = web ] && [ "$(prebuilt)" = "take:1 " ] && has "${g}" && grep -q "images: pulled x; built web" "${T}/out"'
+
+# i2. not opted in: the take as always — no question to the engine, the run builds
+fresh; touch "${STUB}/store.up"; g="$(stable code.txt two green)"; named_images "${g}"; follow
+ok "images: an office that did not opt in builds as always, asking the engine nothing" '[ ! -f "${STUB}/engine" ] && [ "$(prebuilt)" = "take:unset " ] && has "${g}"'
+
+# i3. opted in, no store on this office: the take builds
+fresh; opt_in; g="$(stable code.txt two green)"; named_images "${g}"; follow
+ok "images: no image store here — the take builds" '[ "$(prebuilt)" = "take:unset " ] && grep -q "images: this office runs no image store — the take builds" "${T}/out" && ! grep -q "^pull" "${STUB}/engine"'
+
+# i4. the images named are another version's: no answer for this one
+fresh; opt_in; touch "${STUB}/store.up"; g="$(stable code.txt two green)"; named_images "$(printf 'b%.0s' $(seq 40))"; follow
+ok "images: another version's list is no answer for this target — the take builds" '[ "$(prebuilt)" = "take:unset " ] && grep -q "images: the line named no images for" "${T}/out" && ! grep -q "^pull" "${STUB}/engine"'
+
+# i5. a pull that fails, and a build of the rest that fails: never half pulled, the take builds as always
+fresh; opt_in; config_of; touch "${STUB}/store.up" "${STUB}/pull.fail"; g="$(stable code.txt two green)"; named_images "${g}"; follow
+ok "images: a pull that fails — the take builds" '[ "$(prebuilt)" = "take:unset " ] && grep -q "images: x (sha256:aaaaaaaaaaaa…) could not be pulled through the mirror — the take builds" "${T}/out"'
+fresh; opt_in; config_of; touch "${STUB}/store.up" "${STUB}/build.fail"; g="$(stable code.txt two green)"; named_images "${g}"; follow
+ok "images: the rest did not build — the take builds" '[ "$(prebuilt)" = "take:unset " ] && grep -q "images: what was not pulled did not build — the take builds" "${T}/out"'
+fresh; opt_in; touch "${STUB}/store.up"; g="$(stable code.txt two green)"; named_images "${g}"; follow
+ok "images: this office's compose config cannot be read — the take builds" '[ "$(prebuilt)" = "take:unset " ] && grep -q "images: this office.s compose config could not be read — the take builds" "${T}/out" && ! grep -q "^pull" "${STUB}/engine"'
+
+# i6. this office's own tree in the image's directory is not the target's (the reader, DGO-2123): the image was built
+# from the target's tree alone, so it would run the line's x and drop this office's own commits or edits there
+fresh; opt_in; config_of; touch "${STUB}/store.up"; printf 'mine\n' > "${O}/apps/x/mine.txt"; g="$(stable code.txt two green)"; named_images "${g}"; follow
+ok "images: an edit of this office's own in apps/x — x is built here, and nothing else stands in: the take builds" '[ "$(prebuilt)" = "take:unset " ] && ! grep -q "^pull" "${STUB}/engine" && grep -q "images: built here, not pulled — x: this office holds apps/x other than the target does" "${T}/out" && grep -q "images: none of the line.s images stands in for this office.s own build — the take builds" "${T}/out" && has "${g}"'
+fresh; opt_in; config_of; touch "${STUB}/store.up"
+( cd "${O}" && printf 'own\n' > apps/x/own.txt && git add apps/x/own.txt && git -c user.name=t -c user.email=t@t commit -qm "own: apps/x" )
+g="$(stable code.txt two green)"; named_images "${g}"; follow
+ok "images: a commit of this office's own in apps/x — x is built here" '[ "$(prebuilt)" = "take:unset " ] && ! grep -q "^pull" "${STUB}/engine" && grep -q "images: built here, not pulled — x: this office holds apps/x other than the target does" "${T}/out" && has "${g}"'
+
+# i7. named, and no service of this office runs it (the reader: android-emulator, ollama… an office does not run, and
+# names no service uses): never pulled
+fresh; opt_in; config_of; touch "${STUB}/store.up"; g="$(stable code.txt two green)"
+named_images "${g}" ',"far":{"digest":"sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc","name":"ghcr.io/bina-solution/digital-office/far","built_from":"x","dir":"apps/far"}'; follow
+ok "images: an image no service here runs is never pulled, and what is run is" '! grep -q "^pull -q 127.0.0.1:5055/far@" "${STUB}/engine" && grep -q "^pull -q 127.0.0.1:5055/x@" "${STUB}/engine" && grep -q "images: built here, not pulled — far: no service of this office runs ghcr.io/bina-solution/digital-office/far:latest" "${T}/out" && [ "$(prebuilt)" = "take:1 " ]'
+
+# i8. a build that declares more than its own directory and Dockerfile is another image (the reader: project-pln's
+# Hebrew build args): it is built here with the rest, while the plain one is pulled
+fresh; opt_in; touch "${STUB}/store.up"
+config_of '{"context":"@ROOT@/apps/x","dockerfile":"Dockerfile","args":{"PLANE_HE_WEB_URL":"u"}}' ',"ys":{"image":"ghcr.io/bina-solution/digital-office/y:latest","build":{"context":"@ROOT@/apps/y","dockerfile":"Dockerfile"}}'
+g="$(stable code.txt two green)"
+named_images "${g}" ',"y":{"digest":"sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd","name":"ghcr.io/bina-solution/digital-office/y","built_from":"x","dir":"apps/y"}'; follow
+ok "images: a build with args is built here, the plain one pulled" '! grep -q "^pull -q 127.0.0.1:5055/x@" "${STUB}/engine" && grep -q "^pull -q 127.0.0.1:5055/y@" "${STUB}/engine" && [ "$(cat "${STUB}/built")" = "web xs" ] && grep -q "images: built here, not pulled — x: its build here declares args" "${T}/out" && [ "$(prebuilt)" = "take:1 " ]'
+
 # ── the rest ───────────────────────────────────────────────────────────────────────────────────────
 # 21. --dry-run: says what it would do, writes nothing
 fresh; h="$(head_of)"; stable code.txt two green >/dev/null; follow --dry-run
@@ -854,6 +1239,78 @@ ok "follow heal under a heavy job: nothing healed, and it says so (not every hea
 kill "${hp}" 2>/dev/null; wait "${hp}" 2>/dev/null
 fresh; mkdir -p "${O}/data/.locks"; flock "${O}/data/.locks/follow" sleep 5 & sleep 0.5; follow heal; wait
 ok "follow heal beside a cycle: leaves at once, nothing healed (the cycle healed first)" 'grep -q "another follow cycle is running" "${T}/out" && [ ! -e "${STUB}/heals" ]'
+
+# 21d. A TAKE GETS ITS GAP (DGO-2164). A CI job holds the slot one job after another; a cycle that only skipped on it
+# took only when its minute fell between two jobs. Now take(), once its own checks pass, holds heavy.want, which the
+# runner's agent honours between jobs. `bbox ci-runner status` is played by a stub whose listener stops exactly while
+# that lock is held (unless STUB/runner.busy), and the CI job lets the slot go the moment a take holds it (as a job
+# ends) — no timing races. A wrapper around the run stub records whether the lock was held when `bbox run` ran.
+cat > "${T}/bin/bbox-want" <<'EOF'
+#!/bin/sh
+[ "$1 $2" = "ci-runner status" ] || exit 2
+[ -e "${STUB}/runner.unread" ] && { echo "[ci-runner] the app did not answer" >&2; exit 3; }
+w="${REPO_ROOT}/data/.locks/heavy.want"
+if [ ! -e "${STUB}/runner.busy" ] && [ -e "$w" ] && ! flock -n "$w" true; then l=false; else l=true; fi
+echo "status $l" >> "${STUB}/runner"
+echo "{\"ok\": true, \"op\": \"status\", \"data\": {\"agent\": \"paused\", \"listener\": $l, \"paused\": false, \"now\": null}}"
+EOF
+cat > "${T}/bin/run-want" <<'EOF'
+#!/bin/sh
+w="${REPO_ROOT}/data/.locks/heavy.want"
+if [ -e "$w" ] && ! flock -n "$w" true; then echo "$1 held" >> "${STUB}/want-at-run"; else echo "$1 free" >> "${STUB}/want-at-run"; fi
+exec "${RUN_REAL}" "$@"
+EOF
+chmod +x "${T}/bin/bbox-want" "${T}/bin/run-want"
+ci_job() {   # a CI job holds the slot — with prejob.sh's holder line — until a take holds heavy.want (or 60 s)
+  mkdir -p "${O}/data/.locks"
+  printf 'ci gates-hosted · abc1234 · run 1 | pid 1 on h | since 2026-11-22 12:00:00 UTC\n' > "${O}/data/.locks/heavy.holder"
+  ( flock "${O}/data/.locks/heavy" sh -c 'n=0; until [ -e "$1" ] && ! flock -n "$1" true; do sleep 0.2; n=$((n + 1)); [ "$n" -lt 300 ] || exit 0; done' _ "${O}/data/.locks/heavy.want" ) & hp=$!
+  sleep 0.5
+}
+want_follow() { RUN_REAL="${T}/bin/run" DGO_FOLLOW_RUN_CMD="${T}/bin/run-want" DGO_FOLLOW_BBOX="${T}/bin/bbox-want" \
+                DGO_FOLLOW_GAP_POLL_S=1 DGO_FOLLOW_GAP_WAIT_S="${GAPW:-30}" DGO_FOLLOW_GAP_SETTLE_S=3 follow "$@"; }
+want_free() {   # heavy.want held by nobody, within 3 s (its holder notices the cycle's end within a second)
+  local i; for i in $(seq 1 15); do
+    { [ ! -e "${O}/data/.locks/heavy.want" ] || flock -n "${O}/data/.locks/heavy.want" true; } && return 0; sleep 0.2
+  done; return 1
+}
+done_job() { kill "${hp}" 2>/dev/null; wait "${hp}" 2>/dev/null; }
+fresh; g="$(stable code.txt two green)"; ci_job; want_follow; done_job
+ok "a CI job on the slot and a take due: the runner stands aside, the job ends, taken with the lock held, and let go after" \
+   'has "${g}" && [ "$(runs)" = "take " ] && [ "$(head -1 "${STUB}/want-at-run")" = "take held" ] && want_free && grep -q "the runner is asked to stand aside" "${T}/out" && grep -q "status false" "${STUB}/runner"'
+fresh; git -C "${T}/origin.git" rev-parse dgo-stable >> "${STUB}/green"; ci_job; want_follow; done_job
+ok "a CI job on the slot and nothing new to take: read as current, the runner never asked" \
+   '[ "$(st LAST_RESULT)" = current ] && [ ! -e "${O}/data/.locks/heavy.want" ] && [ ! -e "${STUB}/runner" ]'
+fresh; g="$(stable code.txt two green)"; mkdir -p "${O}/data/follow"
+printf 'FAILED_TARGET=%s\nFAILED_AT=x\n' "${g}" > "${O}/data/follow/state"; ci_job; want_follow; done_job
+ok "…a take that would wait on its failed target: «waiting» before any gap is asked" \
+   '[ "$(st LAST_RESULT)" = waiting ] && ! has "${g}" && [ ! -e "${O}/data/.locks/heavy.want" ] && [ ! -e "${STUB}/runner" ]'
+fresh; g="$(stable code.txt two green)"; touch "${STUB}/runner.busy"; ci_job; GAPW=3 want_follow; done_job
+ok "…the runner never stands aside within the bound: no take, the lock let go, said" \
+   '! has "${g}" && [ "$(runs)" = "" ] && want_free && grep -q "no gap within 3s" <<<"$(st LAST_DETAIL)"'
+fresh; g="$(stable code.txt two green)"; ci_job; DGO_FOLLOW_MAX_LOAD=0 want_follow; done_job
+ok "…the load never settles after the job: no take, the lock let go, said" \
+   '! has "${g}" && [ "$(runs)" = "" ] && want_free && grep -q "the load stayed over its ceiling" <<<"$(st LAST_DETAIL)"'
+fresh; g="$(stable code.txt two green)"; touch "${STUB}/runner.busy"; ci_job; GAPW=60 want_follow & fp=$!
+for _ in $(seq 1 50); do pgrep -f "tail --pid=[0-9]" >/dev/null && break; sleep 0.2; done   # past its exec, not the bash -c
+cp=""   # the cycle the holder watches — only one whose command line is THIS test's copy of follow.sh, never another's
+for p in $(pgrep -af "tail --pid=" | sed -nE 's/.*tail --pid=([0-9]+).*/\1/p'); do
+  tr '\0' ' ' < "/proc/${p}/cmdline" 2>/dev/null | grep -qF "${T}/tmp/dgo-follow" && { cp="${p}"; break; }
+done
+[ -n "${cp}" ] && kill -9 "${cp}" 2>/dev/null; wait "${fp}" 2>/dev/null; done_job
+ok "…the cycle killed while it waits (kill -9): the lock goes with it, nothing taken" '[ -n "${cp}" ] && want_free && ! has "${g}"'
+fresh; g="$(stable code.txt two green)"; mkdir -p "${O}/data/.locks"
+printf 'bbox run take | pid 1 on h | since 2026-11-22 12:00:00 UTC\n' > "${O}/data/.locks/heavy.holder"
+( flock "${O}/data/.locks/heavy" sleep 6 ) & hp=$!; sleep 0.5; want_follow; done_job
+ok "a heavy job that is not CI on the slot: put off as before, nothing asked of the runner" \
+   '! has "${g}" && grep -q "heavy job holds the slot: bbox run take" <<<"$(st LAST_DETAIL)" && [ ! -e "${O}/data/.locks/heavy.want" ] && [ ! -e "${STUB}/runner" ]'
+fresh; g="$(stable code.txt two green)"; mkdir -p "${O}/data/follow"
+printf 'TAKING=%s %s\n' "$(head_of)" "${g}" > "${O}/data/follow/state"; ci_job; want_follow; done_job
+ok "…a CI job on the slot while a take is open: put off as before (its settling may need the slot), nothing asked" \
+   '! has "${g}" && grep -q "heavy job holds the slot: ci gates-hosted" <<<"$(st LAST_DETAIL)" && [ ! -e "${O}/data/.locks/heavy.want" ] && [ ! -e "${STUB}/runner" ]'
+fresh; g="$(stable code.txt two green)"; touch "${STUB}/runner.unread"; ci_job; GAPW=60 want_follow; done_job
+ok "…the runner's status cannot be read: the lock let go after four tries, not held the whole bound" \
+   '! has "${g}" && want_free && grep -q "the runner.s status could not be read" <<<"$(st LAST_DETAIL)"'
 
 # 22. the checkout and origin's o-dgo diverged: nothing merged, told
 fresh; git clone -q -b o-dgo "${T}/origin.git" "${T}/peer"

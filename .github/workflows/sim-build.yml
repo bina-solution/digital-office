@@ -1,6 +1,6 @@
 name: sim-build
 
-# THE SIMULATION, REBUILT FROM TODAY'S SOURCES AND DRIVEN, on GitHub's own runner (DGO-459).
+# THE SIMULATION, REBUILT FROM TODAY'S SOURCES AND DRIVEN (DGO-459), on the Dell's runner since GitHub's stopped (below).
 #
 # digital-office/platform-sim.html is the single-file simulation of the platform (digital-office/sim/README.md):
 # every app's LIVE frontend, embedded, with a mock of the service it talks to. It is the specification the
@@ -19,11 +19,24 @@ name: sim-build
 #   gh run download <run> -n platform-sim -n sim-verdicts
 #
 # The trigger is what the simulation EMBEDS (build.mjs's APPS, the shared UI files it inlines) and what drives
-# it (scripts/ui-coverage): an edit to a live frontend is how the simulation goes stale. A newer push cancels
-# an older run of the same branch.
+# it (scripts/ui-coverage): an edit to a live frontend is how the simulation goes stale. A newer asked run cancels
+# an older asked run of the same branch; an unasked push cancels nothing (`concurrency`, below).
+#
+# ON THE DELL'S RUNNER, WHEN ASKED (the king, DGO-2123): GitHub's runners take no job while billing is stopped, the
+# MacBook builds nothing, the HP's C: is full, and the Dell's host runs nothing a session starts — its self-hosted
+# runner, an office app, is the one route there. One job at a time, under the runner's CPU and memory ceilings
+# (ops/prejob_waitfree.sh holds it while the machine is hot or short), recorded in the runner's own job log. Asked, not
+# automatic: a push to an office branch whose head commit's message says «Sim: run» (anywhere in it), or a hand-run.
+# «Sim: run» runs the desktop flow suites; «Sim: run all» adds the phone suites and the ui-map, for a quiet gap;
+# «Sim: run desktop|phone|map» names phases; a hand-run runs all (the king, 2026-11-20). On the one runner, a
+# 15–20-minute Chromium job after every UI push would stand before every branch's gates. It yields to a
+# version's proof at its first step, as public-copy's copy and the line's APK do. A watcher would cancel its
+# Chromium runs at every batch, and none would finish. A proof's clearing cancels it while it waits, and the proof's
+# re-ask asks it again. Never on the line.
 
 on:
   push:
+    branches-ignore: [dgo-stable]
     paths:
       - 'digital-office/sim/**'
       - 'apps/drive/static/**'
@@ -46,15 +59,42 @@ permissions:
   contents: read
 
 concurrency:
-  group: sim-build-${{ github.ref }}
+  # Only an ASKED run joins its branch's group, so a newer asked run cancels an older one. An unasked push (its job
+  # skipped) gets a group of its own and cancels nothing: on a branch every session pushes to, a push that merely
+  # touched a sim path cancelled the asked run queued before it (7c26bea2f's, 2026-11-20, nearly)
+  group: "${{ (github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, 'Sim: run')) && format('sim-build-{0}', github.ref) || format('sim-build-unasked-{0}', github.run_id) }}"
   cancel-in-progress: true
 
 jobs:
   build:
-    runs-on: ubuntu-latest
-    timeout-minutes: 60
+    # Asked: a push whose head commit's message says «Sim: run», or a hand-run (the header)
+    if: "github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, 'Sim: run')"
+    runs-on: [self-hosted, portable]
+    permissions:
+      contents: read
+      actions: write   # scripts/ci/step-aside: whether a version's proof is waiting, and the cancel of this run
+    timeout-minutes: 105   # 60 for the build and the suites + up to 45 that ops/prejob_waitfree.sh may hold it
     steps:
+      # A VERSION'S PROOF GOES FIRST (the header): asked at this first step only, its run cancelled in seconds while a
+      # proof of dgo-stable waits, and asked again by that proof's re-ask
       - uses: actions/checkout@v4
+        if: startsWith(github.ref, 'refs/heads/') && github.ref != 'refs/heads/dgo-stable'
+        with:
+          fetch-depth: 1
+          filter: blob:none
+          sparse-checkout: scripts/ci/step-aside
+          sparse-checkout-cone-mode: false
+          path: .step-aside
+          persist-credentials: false
+      - name: A version's proof goes first (scripts/ci/step-aside)
+        if: startsWith(github.ref, 'refs/heads/') && github.ref != 'refs/heads/dgo-stable'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: bash .step-aside/scripts/ci/step-aside && rm -rf .step-aside
+
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
 
       - uses: actions/setup-node@v4
         with:
@@ -74,23 +114,64 @@ jobs:
           node sim/verify-sim.mjs 2>&1 | tee ../sim-verify.txt
 
       - name: The flow suites per size, and the map with its fit (each one's verdict kept)
+        env:
+          # the head commit's message, as data in the environment, never pasted into the script (what was asked, below)
+          HEAD_MSG: ${{ github.event.head_commit.message }}
         run: |
           set -uo pipefail
+          # WHAT WAS ASKED (the king's decision, DGO-2123). On the one runner the three phases held it 44 min (44816690292):
+          # - «Sim: run» runs the desktop flow suites only;
+          # - «Sim: run all» runs desktop, phone and the ui-map, for a quiet gap between batches;
+          # - «Sim: run desktop», «… phone», «… map» (any of them, on that line) run only those;
+          # - a hand-run has no message to choose by, and runs all three.
+          want="$(printf '%s\n' "${HEAD_MSG:-}" | sed -n 's/.*Sim: run\(.*\)$/\1/p' | head -1)"
+          case " ${want} " in
+            *" all "*) want="desktop phone map" ;;
+            *" desktop "*|*" phone "*|*" map "*) ;;
+            *) if [ -n "${HEAD_MSG:-}" ]; then want="desktop"; else want="desktop phone map"; fi ;;
+          esac
+          asked() { case " ${want} " in *" $1 "*) return 0 ;; esac; echo "not asked (this run asked: ${want})" > "$2"; return 1; }
+          echo "asked: ${want}"
+          # Playwright's own node needs libatomic1 before it can install anything (an Ubuntu base lacks it: measured
+          # 2026-11-20 in a plain container — «libatomic.so.1» and then every suite «Connection closed»). The runner is
+          # root, and what it installs stays in the runner's container: the first run fetches, the next ones find it.
+          # EACH PHASE'S SECONDS (DGO-2123): on the Dell's runner this step held the one runner 44 min (44816690292,
+          # 2026-11-20), against 15–20 on GitHub's. Which phase is the cost is said here, so a shorter asked run is cut
+          # from a measurement, never a guess. The line is kept with the verdicts (phases.txt).
+          t=$(date +%s); took() { echo "phase $1: $(( $(date +%s) - t )) s" | tee -a phases.txt; t=$(date +%s); }
+          command -v apt-get >/dev/null && { dpkg -s libatomic1 >/dev/null 2>&1 \
+            || { apt-get update -qq && apt-get install -y -qq --no-install-recommends libatomic1; } >/dev/null; }
+          # ITS OWN VENV (DGO-2123). setup-python's 3.12 is the runner's shared tool cache, and this step's `pip install`
+          # there reached the gates' own Python: batch 117's G72 ran five browser tests with no browser (2026-11-21).
+          # Nothing is installed outside this venv, and the runner empties RUNNER_TEMP after the job.
+          python -m venv "${RUNNER_TEMP}/sim-venv" && . "${RUNNER_TEMP}/sim-venv/bin/activate"
           pip install --quiet playwright pillow pyyaml
           python -m playwright install --with-deps chromium >/dev/null
+          took install
           rc=0
           # no suite named = every suite but the live-only ones, the desktop-mode windows included
-          python digital-office/sim/flow-qa.py            > flow-desktop.log 2>&1 || rc=1
-          python digital-office/sim/flow-qa.py --mobile   > flow-phone.log   2>&1 || rc=1
+          if asked desktop flow-desktop.log; then
+            python digital-office/sim/flow-qa.py          > flow-desktop.log 2>&1 || rc=1; took "desktop flows"
+          fi
+          if asked phone flow-phone.log; then
+            python digital-office/sim/flow-qa.py --mobile > flow-phone.log   2>&1 || rc=1; took "phone flows"
+          fi
           # every panel at every profile (scripts/ui-coverage/view-profiles.yaml), photographed AND measured:
           # which screens scroll sideways on a phone and a tablet (DGO-158; warn only, for now)
-          python digital-office/sim/ui-map.py --all       > ui-map.log       2>&1 || rc=1
+          if asked map ui-map.log; then
+            python digital-office/sim/ui-map.py --all     > ui-map.log       2>&1 || rc=1; took "ui-map"
+          fi
           for f in flow-desktop.log flow-phone.log; do echo "== $f"; tail -15 "$f"; done
           echo "== ui-map.log (fit)"; sed -n '/^fit (DGO-158)/,$p' ui-map.log
           exit $rc
 
+      # GitHub's artifact store may refuse while the account's billing is stopped: the verdict above is the job's, never
+      # the upload's
       - name: Keep the simulation (a good build only)
-        if: steps.build.outcome == 'success'
+        # always(): a red flow suite after it is no reason to withhold a good build (without it, GitHub's implied
+        # success() skipped this on 44816690292, whose build and verify had passed)
+        if: always() && steps.build.outcome == 'success'
+        continue-on-error: true
         uses: actions/upload-artifact@v4
         with:
           name: platform-sim
@@ -99,11 +180,13 @@ jobs:
 
       - name: Keep the verdicts (always)
         if: always()
+        continue-on-error: true
         uses: actions/upload-artifact@v4
         with:
           name: sim-verdicts
           path: |
             sim-verify.txt
+            phases.txt
             flow-desktop.log
             flow-phone.log
             ui-map.log

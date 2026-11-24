@@ -11,8 +11,8 @@
 #   Xvnc (display + VNC) · fluxbox (window manager) · websockify (noVNC, the live view) ·
 #   localhost-forward (*.localhost → Traefik) · broker (tab groups ↔ the extension) · handoff.py (the
 #   gate and the hand-off link) · the internal forwarder (all four to browser42's own network) ·
-#   cloakserve (Chromium, CDP) — every helper under `keep`; and five loops: Xvnc watchdog, the window,
-#   the CDP watchdog, the profile snapshot, idle sleep. Every background loop starts with `set +e`:
+#   cloakserve (Chromium, CDP) — every helper under `keep`; and four loops: Xvnc watchdog, the window,
+#   the CDP watchdog, idle sleep (a fifth, the profile snapshot, is retired: §4h). Every background loop starts with `set +e`:
 #   a subshell inherits `set -e`, and one failing probe used to end a loop for good.
 set -euo pipefail
 
@@ -406,192 +406,23 @@ fi
     sleep 10
   done ) &
 
-# 4h. PROFILE GUARD — the profile must never be lost.
-#
-#     (It was numbered 4f until 2026-09-27. Two sections shared that number and two shared 4g —
-#     the loopback broker and the CDP watchdog already owned them — because later work was appended
-#     without renumbering, which made every "see §4f" in this file and in ai/context point at two
-#     different places. New sections take the next FREE number; never reuse one.)
-#
-#     What deleted it is gone: cloakserve deleted — and, patched, later moved aside — the WHOLE profile
-#     when Chrome missed its CDP wait (2026-09-22, 09-27, 09-30); patch-cloakserve.py now leaves it where
-#     it is (DGO-1921). What remains here is the disaster copy, for a profile lost by a path nobody
-#     patched (a torn or deleted volume, a future image bump):
-#       * the snapshot lives OUTSIDE the container volume, on the host (data/browser42/ → /data), so it
-#         survives a container recreate, an image rebuild and the volume itself;
-#       * it is the profile WITHOUT the caches Chrome rebuilds by itself: on 2026-11-17 each copy was
-#         2.0 GB on C:, 1.9 GB of it cache;
-#       * it is replaced only by a profile that LOOKS real (a wiped one has ~0-1 cookies) and holds at
-#         least 90% of the snapshot's cookies. A logged-out profile overwrote a logged-in snapshot on
-#         2026-09-27 (25 cookies over 33); "only MORE cookies" stopped that and froze the snapshot
-#         instead — cookies expire, and nothing signed in after 2026-11-13 was in it by 11-17;
-#       * it is taken only when a sign-in file was written since the last one: every 30 minutes, when
-#         Chrome falls asleep (a stopped Chrome is the consistent copy), and on a stop if Docker's 10 s
-#         allow it (a copy cut short is never used, and no copy is in place until it is whole);
-#       * the copy it replaces is kept as SNAPSHOT_DIR.prev, so protecting it cannot be the step that
-#         loses the last good state, and every boot restores it when the profile looks wiped.
-PROFILE_DIR=/profile/__default__
-SNAPSHOT_DIR=/data/profile-snapshot
-MIN_COOKIES=3
-# Exported because the cookie counter runs in a python subprocess and reads it from the environment —
-# a plain shell variable would silently fall back to its default path.
-export PROFILE_DIR SNAPSHOT_DIR
-
-cookie_count_in() {
-    python3 - "$1" <<'PY' 2>/dev/null || echo 0
-import os, shutil, sqlite3, sys, tempfile, time
-src = os.path.join(sys.argv[1], "Default/Cookies")
-for attempt in range(3):
-    try:
-        # Copy the WAL and SHM alongside the DB: Chromium keeps the cookie store in WAL mode, and a
-        # copy of the main file alone can present ZERO rows while the live data sits in the -wal.
-        # That false "wiped" reading is what kept the runtime guard asleep during the 2026-09-23
-        # acceptance test, so this is not a detail.
-        # The copy is removed on the way out: a bare mkdtemp() here left one 1.3 MB directory per
-        # count, ~5,000 a day, 20,383 of them (25 GB of cookie copies) in the container's /tmp by
-        # 2026-11-17, which filled the HP's C: to 99% (DGO-1917).
-        with tempfile.TemporaryDirectory() as tmp:
-            for suffix in ("", "-wal", "-shm"):
-                if os.path.exists(src + suffix):
-                    shutil.copy(src + suffix, os.path.join(tmp, "Cookies" + suffix))
-            db = sqlite3.connect(os.path.join(tmp, "Cookies"))
-            try:
-                count = db.execute("select count(*) from cookies").fetchone()[0]
-            finally:
-                db.close()
-        print(count)                       # after the cleanup: a retry never prints a second number
-        break
-    except Exception:
-        if attempt == 2:
-            print(0)
-        else:
-            time.sleep(1)
-PY
-}
-
-# The directory is an ARGUMENT, not the exported PROFILE_DIR: `PROFILE_DIR=x func` leaks the override
-# back into this shell for the rest of the script (bash keeps a function's prefix assignments), after
-# which every read of the LIVE profile would silently be a read of the snapshot instead.
-profile_cookie_count() { cookie_count_in "${PROFILE_DIR}"; }
-snapshot_cookie_count() { cookie_count_in "${SNAPSHOT_DIR}"; }
-
-snapshot_dir_is_real() {
-    [ -s "$1/Local State" ] || return 1
-    [ -s "$1/Default/Cookies" ] || return 1
-    return 0
-}
-snapshot_is_real() { snapshot_dir_is_real "${SNAPSHOT_DIR}"; }
-
-profile_is_real() {
-    [ -s "${PROFILE_DIR}/Local State" ] || return 1
-    [ -s "${PROFILE_DIR}/Default/Cookies" ] || return 1
-    [ "$(profile_cookie_count)" -ge "${MIN_COOKIES}" ] 2>/dev/null || return 1
-    return 0
-}
-
-# The profile without what Chrome rebuilds by itself (caches, service workers) and without its Singleton*
-# locks. A file Chrome removes while the copy runs (a journal) is skipped; any other error — a full disk,
-# a refused write — fails the copy, and a failed copy is never used.
-copy_without_caches() {
-    python3 - "$1" "$2" <<'PY' 2>/dev/null
-import shutil, sys
-SKIP = {"Cache", "Code Cache", "GPUCache", "Service Worker", "GrShaderCache", "ShaderCache", "GraphiteDawnCache",
-        "DawnGraphiteCache", "DawnWebGPUCache", "GPUPersistentCache", "component_crx_cache", "extensions_crx_cache"}
-def copy(src, dst):
-    try:
-        shutil.copy2(src, dst)
-    except FileNotFoundError:
-        pass
-try:
-    shutil.copytree(sys.argv[1], sys.argv[2], symlinks=True, copy_function=copy,
-                    ignore=lambda _, names: [n for n in names if n in SKIP or n.startswith("Singleton")])
-except shutil.Error as error:
-    if any("No such file or directory" not in str(why) for _, _, why in error.args[0]):
-        sys.exit(1)
-PY
-}
-
-# The newest whole second a sign-in file was written at. Whole seconds because the snapshot is on C:
-# (drvfs keeps no more), and a nanosecond compare would make every live file newer than its own copy.
-signins_written() {
-    local f m newest=0
-    for f in Cookies Cookies-journal Cookies-wal "Login Data" "Login Data-journal" "Login Data-wal"; do
-        m="$(stat -c %Y "$1/Default/${f}" 2>/dev/null || echo 0)"
-        [ "${m}" -gt "${newest}" ] && newest="${m}"
-    done
-    echo "${newest}"
-}
-
-snapshot_profile() {
-    ( set +e
-      flock -n 9 || exit 0                   # the 30-minute loop, a sleep and a stop can meet: one at a time
-      # A rotation cut short (a stop's kill) can leave the last good copy in .prev only: it goes back
-      # first, so the comparison below is made against it and the rotation never drops it.
-      if ! snapshot_is_real && snapshot_dir_is_real "${SNAPSHOT_DIR}.prev"; then
-          rm -rf "${SNAPSHOT_DIR}"
-          mv -T "${SNAPSHOT_DIR}.prev" "${SNAPSHOT_DIR}" || exit 0
-      fi
-      # Nothing new to protect: no sign-in file was written since the snapshot was taken.
-      if snapshot_is_real && [ "$(signins_written "${PROFILE_DIR}")" -le "$(signins_written "${SNAPSHOT_DIR}")" ]; then
-          exit 0
-      fi
-      profile_is_real || { echo "[profile-guard] live profile looks wiped — snapshot NOT replaced" >&2; exit 0; }
-      live="$(profile_cookie_count)"; case "${live}" in ''|*[!0-9]*) exit 0 ;; esac
-      if snapshot_is_real; then
-          have="$(snapshot_cookie_count)"; case "${have}" in ''|*[!0-9]*) have=0 ;; esac
-          if [ $(( live * 10 )) -lt $(( have * 9 )) ]; then
-              echo "[profile-guard] live profile holds under 90% of the snapshot's cookies (${live} of ${have}) — snapshot NOT replaced" >&2
-              exit 0
-          fi
-      fi
-      rm -rf "${SNAPSHOT_DIR}.new"
-      [ ! -e "${SNAPSHOT_DIR}.new" ] || { echo "[profile-guard] ${SNAPSHOT_DIR}.new cannot be removed — snapshot NOT replaced" >&2; exit 0; }
-      if ! copy_without_caches "${PROFILE_DIR}" "${SNAPSHOT_DIR}.new"; then
-          rm -rf "${SNAPSHOT_DIR}.new"; echo "[profile-guard] the copy failed — snapshot NOT replaced" >&2; exit 0
-      fi
-      got="$(cookie_count_in "${SNAPSHOT_DIR}.new")"; case "${got}" in ''|*[!0-9]*) got=0 ;; esac
-      if ! snapshot_dir_is_real "${SNAPSHOT_DIR}.new" || [ $(( got * 10 )) -lt $(( live * 9 )) ]; then
-          rm -rf "${SNAPSHOT_DIR}.new"
-          echo "[profile-guard] the copy holds ${got} of ${live} cookies — snapshot NOT replaced" >&2
-          exit 0
-      fi
-      # Rotate so that one of SNAPSHOT_DIR and .prev is the last good copy at every step (what a boot
-      # restores from); the generation before that goes only once the new one is in place.
-      rm -rf "${SNAPSHOT_DIR}.old"
-      if [ -e "${SNAPSHOT_DIR}.prev" ]; then mv -T "${SNAPSHOT_DIR}.prev" "${SNAPSHOT_DIR}.old" || exit 0; fi
-      if [ -e "${SNAPSHOT_DIR}" ] && ! mv -T "${SNAPSHOT_DIR}" "${SNAPSHOT_DIR}.prev"; then
-          mv -T "${SNAPSHOT_DIR}.old" "${SNAPSHOT_DIR}.prev"; exit 0
-      fi
-      if ! mv -T "${SNAPSHOT_DIR}.new" "${SNAPSHOT_DIR}"; then
-          mv -T "${SNAPSHOT_DIR}.prev" "${SNAPSHOT_DIR}"; mv -T "${SNAPSHOT_DIR}.old" "${SNAPSHOT_DIR}.prev"; exit 0
-      fi
-      rm -rf "${SNAPSHOT_DIR}.old"
-      echo "[profile-guard] snapshot updated ($(du -sh "${SNAPSHOT_DIR}" 2>/dev/null | cut -f1), cookies=${got})" >&2
-    ) 9>/tmp/.b42-snapshot.lock
-}
-
-restore_profile_if_wiped() {
-    # The copy to restore FROM: the current snapshot, or the generation it replaced when the current
-    # one is itself unreadable. Restoring from neither is the one outcome that loses a login.
-    local src="${SNAPSHOT_DIR}"
-    if ! snapshot_dir_is_real "${src}" && snapshot_dir_is_real "${SNAPSHOT_DIR}.prev"; then
-        src="${SNAPSHOT_DIR}.prev"
-    fi
-    snapshot_dir_is_real "${src}" || return 0
-    profile_is_real && return 0
-    echo "[profile-guard] profile is missing or wiped — restoring from ${src}" >&2
-    rm -rf "${PROFILE_DIR}" && mkdir -p "${PROFILE_DIR}"
-    cp -a "${src}/." "${PROFILE_DIR}/" 2>/dev/null || true
-    echo "[profile-guard] restored: cookies=$(profile_cookie_count) at $(du -sh "${PROFILE_DIR}" 2>/dev/null | cut -f1)" >&2
-}
-
-restore_profile_if_wiped
-
-# Every 30 minutes, so the snapshot tracks real use rather than the state at boot. (Until DGO-1921 a
-# second loop also counted cookies every 20 s to catch cloakserve replacing the profile mid-life, and a
-# boot step promoted cloakserve's moved-aside copies back; both undid what patch-cloakserve.py now
-# stops at the root.)
-( set +e; sleep 120; while :; do snapshot_profile; sleep 1800; done ) &
+# 4h. (RETIRED 2026-11-24, DGO-2188 — the number is not reused.) THE PROFILE GUARD: until then this script kept
+#     a second copy of the whole profile in data/browser42/profile-snapshot — counted the cookies of the
+#     profile and of the copy (each count a copy of the cookie store into /tmp), copied the profile every
+#     30 minutes, at every sleep and at every stop, rotated three generations, and restored the copy at boot
+#     when the profile «looked wiped». It was made for a cloakserve that deleted the profile (2026-09-22,
+#     09-27, 09-30), and patch-cloakserve.py removed that at its root on 2026-11-17 (DGO-1921). What the
+#     guard itself then did to the office:
+#       * 20,383 cookie copies, 25 GB, in /tmp filled the HP's C: to 99% (DGO-1917);
+#       * 2.0 GB a copy on C:, 1.9 GB of it cache, and a snapshot frozen for four days by its own rule;
+#       * 2026-11-20 09:53Z, the HP's C: answering I/O errors: `rm -rf profile-snapshot.new` failed on
+#         dozens of paths, the rotation was left in pieces (the «protected» copy is 12 KB since), Chrome
+#         stopped answering beside it, and the office browser stayed down for four days;
+#       * every stop waited for a copy before it let the container end.
+#     The profile is the app's state and is kept like every app's: in its declared store (app.json `data`),
+#     which the office's backup carries. Nothing here copies it, counts it, or puts it back: a copy another
+#     generation of this script made (data/browser42/profile-snapshot*, archive/) is left exactly where it
+#     is, for a person to use by hand (README.md).
 
 # 4e. Clear stale Chrome singleton locks before launch. ⚠️ This is what makes
 #     logins/cookies actually survive a restart. On an unclean stop (docker
@@ -769,7 +600,7 @@ do_sleep() {
     rm -f "${SLEEP_REQUEST}"
     # The next launch is a wake: prepare as a boot does (§4e-bis) — unless a client has launched one already.
     [ -z "$(chrome_pid)" ] && prepare_profile
-    snapshot_profile >/dev/null 2>&1 || true      # a stopped Chrome is the one consistent copy
+    return 0
 }
 wake_up() {
     echo "[idle-sleep] waking: $1" >&2
@@ -855,11 +686,10 @@ cloakserve \
     --data-dir=/profile \
     ${CLOAK_EXTRA_ARGS:-} &
 B42_CHILD=$!
-# Snapshot the profile AFTER the browser has stopped writing, so the copy is consistent — and the
-# last thing this script does before it dies is protect the logins it was serving.
-trap 'kill -TERM "${B42_CHILD}" 2>/dev/null; wait "${B42_CHILD}"; snapshot_profile >/dev/null 2>&1 || true; exit 0' TERM INT
+# A stop ends when Chrome has ended, and does nothing else: until DGO-2188 it then copied the whole profile
+# (§4h), inside Docker's ten seconds.
+trap 'kill -TERM "${B42_CHILD}" 2>/dev/null; wait "${B42_CHILD}"; exit 0' TERM INT
 wait "${B42_CHILD}"
 B42_EXIT=$?
 echo "[start-browser] cloakserve exited (${B42_EXIT}) — exiting for a clean Docker restart" >&2
-snapshot_profile >/dev/null 2>&1 || true
 exit "${B42_EXIT}"

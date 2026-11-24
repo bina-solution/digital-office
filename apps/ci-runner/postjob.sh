@@ -20,5 +20,11 @@ if [ -r "${HOLD}" ] && is_hook; then
     *)         slot=" · the heavy-job slot was not held at the end" ;;
   esac
 fi
-python3 "${HERE}/record.py" ended 0 "$(awk '/MemAvailable/ {printf "%d MB available", $2/1024}' /proc/meminfo)${slot}" || true
+# THE AGENT IMAGE'S OWN PYTHON, never the `python3` first on PATH: this hook runs with the job's PATH, and after
+# actions/setup-python that is the tool cache's interpreter, which cannot load its libpython without the
+# LD_LIBRARY_PATH the job's steps had — it exited 127, `|| true` hid it, and not one job's end was recorded on the
+# Dell (DGO-1797, 2026-11-20: three «started», no «ended»). A record that fails is said, never the job's failure.
+PY="${CI_RUNNER_PYTHON:-/usr/bin/python3}"
+"${PY}" "${HERE}/record.py" ended 0 "$(awk '/MemAvailable/ {printf "%d MB available", $2/1024}' /proc/meminfo)${slot}" \
+  || echo "postjob: the job's end was not recorded (${PY} exit $?)" >&2
 exit 0

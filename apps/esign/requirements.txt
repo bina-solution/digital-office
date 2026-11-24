@@ -7,3 +7,7 @@ reportlab==5.1.0
 python-bidi==0.6.12
 argon2-cffi==25.1.0
 redis==8.1.0
+# «מילוי וחתימה» (DGO-2139): a document's pages as pictures for a phone, and the words and lines that mark where it
+# is filled and signed. pdfium (Apache-2.0/BSD) in a 4 MB wheel; the test stage already pinned the same version.
+pypdfium2==5.15.2
+pillow==12.0.0

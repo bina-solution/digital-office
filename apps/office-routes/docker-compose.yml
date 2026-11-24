@@ -2,7 +2,7 @@
 #
 # Three things about this compose are load-bearing and easy to get wrong:
 #
-#  * NO HOST MOUNT AT ALL, deliberately. The first version of this app mounted the machine's root
+#  * NO HOST MOUNT but its own store (data/office-routes/state, DGO-2019), deliberately. The first version mounted the machine's root
 #    read-only to read its addresses; measured 2026-10-12, that answers with the CONTAINER's
 #    namespace (`/proc/net/route` → eth0 172.18.0.1), so it offered an address no phone could dial.
 #    Which addresses the machine holds is a fact of the machine: the screen takes what the office
@@ -51,7 +51,8 @@ services:
       - OFFICE_ROUTES_EDGE_PORT=${OFFICE_ROUTES_EDGE_PORT:-80}
       - OFFICE_ROUTES_STATE_DIR=/data
     volumes:
-      - office_routes_state:/data
+      # in the DGO folder's data/office-routes/state (DGO-2019); it was the volume office_routes_state, moved once
+      - ../../data/office-routes/state:/data
     networks:
       - traefik-network
     healthcheck:
@@ -75,9 +76,6 @@ services:
       options:
         max-size: 5m
         max-file: '3'
-
-volumes:
-  office_routes_state:
 
 networks:
   traefik-network:

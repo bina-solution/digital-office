@@ -113,9 +113,9 @@
     }
   },
   "data": {
-    "volumes": [
-      "drive_local_data"
-    ],
+    "volumes": [],
+    "paths": ["data/drive-local/state"],
+    "moved_from": {"data/drive-local/state": "drive_local_data"},
     "on_uninstall": "prompt",
     "sql": [
       {

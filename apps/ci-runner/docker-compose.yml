@@ -17,7 +17,6 @@ services:
     environment:
       - CI_RUNNER_STATE=/state
       - CI_RUNNER_REPO=${CI_RUNNER_REPO:-bina-solution/digital-office}
-      - CI_RUNNER_LABELS=${CI_RUNNER_LABELS:-self-hosted,portable}
       # the event stream (flow.v1, DGO-1402) rides the office redis: `dgo:flow:ci-runner`
       - REDIS_PASSWORD=${REDIS_PASSWORD:-}
       # the job door (door.py, DGO-1797 package 9): the linked offices this office takes named jobs from — empty is

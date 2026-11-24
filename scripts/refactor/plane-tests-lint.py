@@ -66,10 +66,20 @@ module path, so every package the image has stays the image's. What still cannot
 why: its app is not part of this office, its image is not on this engine, or it is not a unit test
 at all (it asked for a service on the loopback, and a container with no network has none).
 `run-gates.py --live` — `bbox baseline`'s live lane — runs the gate this way.
+
+SEVERAL AT A TIME (`G72_JOBS=<n>`, DGO-2123). Run one after another, the 457 tests took 996 s of the version's
+proof — 61% of every gates job (measured on the Dell, 2026-11-19: research_notes/CICD 2026-11/tables.md §8), mostly
+an interpreter starting 457 times. With G72_JOBS above 1 the tests run that many at a time, a DIRECTORY's tests always
+one after another in one worker (tests beside one plane share its fixtures, files and ports far more often than two
+apps' tests do). A test that FAILS beside the others is run again ALONE: its verdict is that run's, and when it passes
+alone it is NAMED, on its line and in the summary — a test that shares something with another is a fault to fix, not
+a red line. Unset (or 1) is the old order, one at a time; `--in-images` always is. Each line carries its seconds, and
+the slowest ten are said before the verdict.
 """
 from __future__ import annotations
 
 import argparse
+import concurrent.futures
 import json
 import os
 import pathlib
@@ -78,6 +88,9 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import threading
+import time
+from collections import defaultdict
 
 if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
@@ -150,6 +163,8 @@ def run(test: pathlib.Path, repo: pathlib.Path) -> tuple[str, str]:
     # reader of DGO-1040); such a server now prints why it died, and the rule above reads a missing package.
     if re.search(NO_NAME, out):
         return "NOT RUN", "it asks a live office's service by name, and that name does not resolve here"
+    if re.search(NO_BROWSER, out):
+        return "NOT RUN", "it starts a browser through playwright, which has none here (`playwright install`)"
     # A test that could not run HERE may say so itself, with the reason, on one line: `NOT RUN <why>`.
     # It ran nothing, so it is not a pass; what it would have checked was never checked, so it is not a
     # failure either — and --strict still counts it (computers' test_door.sh, whose throwaway containers
@@ -190,6 +205,12 @@ def said_failure(out: str, fallback: str) -> str:
 #: words, and node's, for the .mjs tests).
 NO_NAME = (r"Temporary failure in name resolution|Name or service not known|nodename nor servname provided"
            r"|No address associated with hostname|getaddrinfo (ENOTFOUND|EAI_AGAIN)\b")
+#: playwright's OWN words for a browser it does not have: its package imports, and the executable it would start is not
+#: there. An environment fact, as a missing package is (DGO-2123: batch 117, 2026-11-21, after another job's `pip install
+#: playwright` reached this Python, three such tests went red on «Failed to launch chromium because executable doesn't
+#: exist»). Only these words: a browser that starts and then fails is a FAIL as ever.
+NO_BROWSER = (r"BrowserType\.launch: (?:Failed to launch \w+ because e|E)xecutable doesn't exist"
+              r"|Executable doesn't exist at \S*ms-playwright")
 
 
 def built_images(repo: pathlib.Path) -> dict[str, str] | None:
@@ -339,7 +360,44 @@ def own_steps(tests: list[pathlib.Path], repo: pathlib.Path) -> set[pathlib.Path
     return {t for t in tests if t.relative_to(repo).as_posix() in ci}
 
 
-def check(repo: pathlib.Path, strict: bool, in_images: bool = False) -> int:
+def run_all(tests: list[pathlib.Path], repo: pathlib.Path, jobs: int, runner=None):
+    """({test: (verdict, said, seconds)}, [the tests that passed only ALONE]) — one at a time, or `jobs` at a time with
+    a directory's tests one after another; in the second case a test that FAILED is run again alone, and that run is
+    its verdict (the docstring: SEVERAL AT A TIME)."""
+    runner = runner or run
+
+    def timed(t):
+        began = time.monotonic()
+        verdict, said = runner(t, repo)
+        return verdict, said, time.monotonic() - began
+
+    if jobs <= 1:
+        return {t: timed(t) for t in tests}, []
+    groups: dict[pathlib.Path, list[pathlib.Path]] = defaultdict(list)
+    for t in tests:
+        groups[t.parent].append(t)
+    out: dict[pathlib.Path, tuple[str, str, float]] = {}
+    with concurrent.futures.ThreadPoolExecutor(max_workers=jobs) as ex:
+        # the largest directories first, so the run does not end on one long directory alone
+        for done in ex.map(lambda ts: [(t, timed(t)) for t in ts], sorted(groups.values(), key=len, reverse=True)):
+            out.update(done)
+    alone = []
+    for t in tests:
+        # a hang is not asked twice (900 s more), and only a PASS alone turns a failure: a re-run that says NOT RUN
+        # never erases the failure before it (the second reader of 33fb4e34f)
+        if out[t][0] != "FAIL" or out[t][1].startswith("still running after"):
+            continue
+        verdict, said, took = timed(t)
+        if verdict == "PASS":
+            alone.append(t)
+            out[t] = ("PASS", f"{said} — passed ALONE; it FAILED beside other tests: {out[t][1]}", out[t][2] + took)
+        else:
+            out[t] = ("FAIL", out[t][1] + (f" (alone too: {said})" if said != out[t][1] else " (alone too)"),
+                      out[t][2] + took)
+    return out, alone
+
+
+def check(repo: pathlib.Path, strict: bool, in_images: bool = False, jobs: int | None = None) -> int:
     tests = discover(repo)
     elsewhere = own_steps(tests, repo)
     counts = {"PASS": 0, "FAIL": 0, "NOT RUN": 0}
@@ -352,17 +410,27 @@ def check(repo: pathlib.Path, strict: bool, in_images: bool = False) -> int:
     if in_images and built is None:
         print("  --in-images: there is no office to ask here (no engine, or no compiled project) — "
               "every test is run on this machine only")
+    if jobs is None:
+        try:
+            jobs = int(os.environ.get("G72_JOBS") or 1)
+        except ValueError:
+            jobs = 1
+    jobs = 1 if in_images else max(1, jobs)                  # the image path packs and runs one at a time
+    began = time.monotonic()
+    results: dict[pathlib.Path, tuple[str, str, float]] = {}
+    alone: list[pathlib.Path] = []
     try:
+        results, alone = run_all([t for t in tests if t not in elsewhere], repo, jobs)
         for t in tests:
             rel = t.relative_to(repo).as_posix()
             if t in elsewhere:
                 print(f"  step      {rel}  — a step of its own in ci-verify.yml; not run a second time")
                 continue
-            verdict, said = run(t, repo)
+            verdict, said, took = results[t]
             if verdict == "NOT RUN" and built is not None and t.suffix == ".py":
                 verdict, said = run_in_image(t, repo, built, kit, tars)
             counts[verdict] += 1
-            print(f"  {verdict:8}  {rel}  — {said}")
+            print(f"  {verdict:8}  {rel}  — {said}  ({took:.1f} s)")
             if verdict == "FAIL":
                 failed.append(f"  FAIL      {rel}  — {said}")
     finally:
@@ -372,6 +440,19 @@ def check(repo: pathlib.Path, strict: bool, in_images: bool = False) -> int:
         print("  FAIL      no test was found beside any plane or app — the discovery is broken, not they")
         return 1
     bad = counts["FAIL"] + (counts["NOT RUN"] if strict else 0)
+    slowest = sorted(((v[2], t) for t, v in results.items()), key=lambda st: st[0], reverse=True)[:10]
+    print("\n  the slowest: " + ", ".join(f"{t.relative_to(repo).as_posix()} {s:.0f} s" for s, t in slowest))
+    # One worker runs a directory's tests one after another (SEVERAL AT A TIME), so a directory's sum is how long it
+    # held that worker. The longest one is the floor under this gate's seconds, whatever else is cut (DGO-2123).
+    held: dict[str, float] = defaultdict(float)
+    for t, v in results.items():
+        held[t.parent.relative_to(repo).as_posix()] += v[2]
+    print("  the longest directories: " + ", ".join(
+        f"{d} {s:.0f} s" for d, s in sorted(held.items(), key=lambda ds: ds[1], reverse=True)[:5]))
+    if alone:
+        print("\n  passed only ALONE — each shares something with another test (a file, a port, a name): fix it")
+        for t in alone:
+            print(f"  ALONE     {t.relative_to(repo).as_posix()}")
     # What failed is said AGAIN, last. The gates lane shows a failing gate's last eight lines, and a
     # test that failed among the first of fifty is not in them: "1 failed", and nothing to say which
     # (2026-10-09 — one did, in a run under load, and three runs after it could not find it again).
@@ -379,15 +460,18 @@ def check(repo: pathlib.Path, strict: bool, in_images: bool = False) -> int:
         print("\n  the ones that failed:")
         for line in failed[-5:]:
             print(line)
-    print(f"\nG72 {'FAIL' if bad else 'PASS'} — {counts['PASS']} ran and passed, {counts['FAIL']} failed, "
+    print(f"\nG72 {'FAIL' if bad else 'PASS'} — {counts['PASS']} ran and passed"
+          + (f" ({len(alone)} only alone)" if alone else "") + f", {counts['FAIL']} failed, "
           f"{counts['NOT RUN']} could NOT be run on this machine"
           + (" or in an image of this office" if built is not None else "") + f", {len(elsewhere)} are steps of their own"
-          + (" (--strict: a test that was not run is a failure)" if strict and counts["NOT RUN"] else ""))
+          + (" (--strict: a test that was not run is a failure)" if strict and counts["NOT RUN"] else "")
+          + f" — {time.monotonic() - began:.0f} s, {jobs} at a time")
     return 1 if bad else 0
 
 
 def self_test() -> int:
     """A tree with one test of each outcome: the gate must tell them apart, and must not be green."""
+    parallel: list = []
     tmp = pathlib.Path(tempfile.mkdtemp())
     try:
         plane = tmp / "platform-base" / "thing"
@@ -409,6 +493,11 @@ def self_test() -> int:
         (plane / "test_no_runner.py").write_text(
             'import sys\nif __name__ == "__main__":\n'
             '    sys.exit(sys.executable + ": No module named pytest")\n', encoding="utf-8")
+        # playwright importable with no browser to start (batch 117, DGO-2123): NOT RUN, an environment fact
+        (plane / "test_no_browser.py").write_text(
+            'import sys\nif __name__ == "__main__":\n    print("playwright._impl._errors.Error: BrowserType.launch: Failed to'
+            ' launch chromium because executable doesn\'t exist at /root/.cache/ms-playwright/chromium-1/chrome")\n'
+            '    sys.exit(1)\n', encoding="utf-8")
         # a test that runs nothing here and says why is NOT RUN, not a FAIL (it needs the docker daemon)
         (plane / "test_cannot_run.sh").write_text(
             '#!/usr/bin/env bash\necho "NOT RUN its containers need the docker daemon, and there is none here"\n'
@@ -435,14 +524,54 @@ def self_test() -> int:
         got = {t.name: run(t, tmp)[0] for t in discover(tmp)}
         want = {"test_fails.py": "FAIL", "test_needs.py": "NOT RUN", "test_no_runner.py": "NOT RUN",
                 "test_live_name.py": "NOT RUN", "test_loopback.py": "FAIL", "test_cannot_run.sh": "NOT RUN",
+                "test_no_browser.py": "NOT RUN",
                 "test_passes.py": "PASS", "test_beside.py": "PASS", "test_below.py": "PASS", "ui-selfcheck.py": "PASS",
                 "catalog_selftest.py": "PASS", "connect-selftest.py": "PASS", "test_map_tool.py": "PASS"}
         ok = got == want and check(tmp, strict=False) == 1
+        # several at a time (G72_JOBS): the same verdicts as one at a time, and the gate as red
+        par, par_alone = run_all(discover(tmp), tmp, 3)
+        parallel = [{t.name: v[0] for t, v in par.items()} == want, par_alone == [],
+                    check(tmp, strict=False, jobs=3) == 1]
         (plane / "test_fails.py").unlink()
         (plane / "test_loopback.py").unlink()
         ok = ok and check(tmp, strict=False) == 0 and check(tmp, strict=True) == 1
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
+    # …a test that FAILS beside the others and passes alone is run again, counted by that run, and named; a test that
+    # fails alone too stays a failure; never two tests of one directory at once; one at a time, nothing is run twice
+    def stand_in():
+        calls, busy, worst, lock = defaultdict(int), defaultdict(int), defaultdict(int), threading.Lock()
+
+        def runner(t, _repo):
+            with lock:
+                calls[t.name] += 1
+                busy[t.parent] += 1
+                worst[t.parent] = max(worst[t.parent], busy[t.parent])
+            time.sleep(0.05)
+            with lock:
+                busy[t.parent] -= 1
+            if t.name == "test_shy.py" and calls[t.name] == 1:
+                return "FAIL", "a port in use"
+            if t.name == "test_hang.py":
+                return "FAIL", "still running after 900 s"
+            if t.name == "test_vanish.py":       # fails beside the others, and alone says it could not run
+                return ("FAIL", "assert 1 == 2") if calls[t.name] == 1 else ("NOT RUN", "needs node")
+            return ("FAIL", "assert 1 == 2") if t.name == "test_broken.py" else ("PASS", "fine")
+        return runner, calls, worst
+
+    fake = ([pathlib.Path("/x/a") / n for n in ("test_1.py", "test_2.py", "test_shy.py")]
+            + [pathlib.Path("/x/b") / n for n in ("test_3.py", "test_broken.py", "test_hang.py", "test_vanish.py")])
+    runner, calls, worst = stand_in()
+    res, alone = run_all(fake, pathlib.Path("/x"), 2, runner=runner)
+    parallel += [res[fake[2]][0] == "PASS" and "passed ALONE" in res[fake[2]][1] and alone == [fake[2]],
+                 res[fake[4]][0] == "FAIL" and calls["test_broken.py"] == 2,
+                 max(worst.values()) == 1, all(res[t][0] == "PASS" for t in (fake[0], fake[1], fake[3])),
+                 res[fake[5]][0] == "FAIL" and calls["test_hang.py"] == 1,          # a hang is not asked twice
+                 res[fake[6]][0] == "FAIL" and "alone too" in res[fake[6]][1]]       # NOT RUN erases no failure
+    runner, calls, _ = stand_in()
+    res, alone = run_all(fake, pathlib.Path("/x"), 1, runner=runner)
+    parallel += [res[fake[2]][0] == "FAIL" and alone == [] and max(calls.values()) == 1]
+    ok = ok and all(parallel)
     # …and the half that runs a test in its app's image: which image, and what its answer means
     built = {"apps/mail": "mail-all", "apps/mail/mailapi": "mailapi", "platform-base/console": "console"}
     image = [
@@ -471,9 +600,11 @@ def self_test() -> int:
     ]
     ok = ok and all(image)
     print("\nplane-tests-lint self-test: "
-          + ("13/13 outcomes told apart (planes, apps, self-tests, the map's tools, a live name, a refused loopback, a test that says it could not run); a failing test fails the gate, an unrunnable one "
-             f"only under --strict; {sum(image)}/{len(image)} about a test's own image"
-             if ok else "FAILED — got " + str(got) + " · image cases " + str(image)))
+          + ("14/14 outcomes told apart (planes, apps, self-tests, the map's tools, a live name, a refused loopback, a browser playwright has not, a test that says it could not run); a failing test fails the gate, an unrunnable one "
+             f"only under --strict; {sum(parallel)}/{len(parallel)} several at a time; "
+             f"{sum(image)}/{len(image)} about a test's own image"
+             if ok else "FAILED — got " + str(got) + " · several at a time " + str(parallel)
+             + " · image cases " + str(image)))
     return 0 if ok else 1
 
 

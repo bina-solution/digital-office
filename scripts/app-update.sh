@@ -369,8 +369,14 @@ for svc in "$@"; do
   # migrate containers (glitchtip-migrate, mailserver-init), which an update must run — and recreates one whose
   # definition changed. A dependency's own compose file always reached this from the checkout; the compile
   # above adds only what the compiler lays over it (routing labels, the broker).
-  out="$(dc up -d --force-recreate "${svc}" 2>&1)"
+  urc=0; out="$(dc up -d --force-recreate "${svc}" 2>&1)" || urc=$?
   printf '%s\n' "${out}" | tail -3 | sed 's/^/  /'
+  # 75: its app is at work, and the bring-up held the recreate (lib.sh compose_when_idle_up, DGO-2129). The old
+  # container runs on healthy, so the health check below would read as a success: said, left pending, not ok.
+  if [ "${urc}" -eq 75 ]; then
+    say "  held — ${svc}'s app is at work, so it was not recreated: follow brings it up at a quiet cycle (BBOX_RECREATE_BUSY=1 goes now)"
+    bad=1; continue
+  fi
   if printf '%s\n' "${out}" | grep -q "handed off\|handed to a helper"; then
     say "  handed to bina-ds's own self-update helper (its recreate is done from outside this"
     say "  container, and the conversation that asked is continued when it is back) — see"

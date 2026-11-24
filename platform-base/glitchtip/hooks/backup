@@ -39,7 +39,7 @@ mv "${OUT}/glitchtip.dump.part" "${OUT}/glitchtip.dump"
 echo "ARTIFACT glitchtip.dump"
 
 q() { docker exec "${C}" psql -U "${U}" -d "${D}" -tAc "$1" 2>/dev/null | tr -d '\r' | tr -d ' '; }
-factq organizations "$(q 'select count(*) from organizations_organization;')"
+factq organizations "$(q 'select count(*) from organizations_ext_organization;')"   # glitchtip 6.x's table (DGO-2019's reader)
 factq projects "$(q 'select count(*) from projects_project;')"
 factq project_keys "$(q 'select count(*) from projects_projectkey;')"
 factq issues "$(q 'select count(*) from issue_events_issue;')"

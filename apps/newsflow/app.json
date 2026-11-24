@@ -47,7 +47,7 @@
       "port": 8991,
       "auth": "sso",
       "module": {
-        "group": "ראשי",
+        "group": "העסק ברשת",
         "icon": "globe",
         "embed": true,
         "alias": "newsflow",
@@ -85,10 +85,15 @@
     }
   },
   "data": {
-    "volumes": [
-      "newsflow_data"
+    "volumes": [],
+    "paths": [
+      "data/newsflow/state"
     ],
-    "on_uninstall": "keep"
+    "moved_from": {
+      "data/newsflow/state": "newsflow_data"
+    },
+    "on_uninstall": "keep",
+    "note": "The feed: every article collected, its mentions, the owner's reviews and every run — one SQLite file, newsflow.db. The sources are declared in main.py, not here."
   },
   "resources": {
     "cpus": "0.25",

@@ -64,7 +64,9 @@ services:
       # the engine, through connections' own read-only door (DGO-1794) — identity.py speaks tcp://host:port
       - DOCKER_SOCK=tcp://connections-docker-proxy:2375
     volumes:
-      - connections_vault:/app/data      # encrypted vault persists
+      # the encrypted vault and the grants log, in the DGO folder's data/connections/vault (DGO-2019); it was the
+      # volume connections_vault, moved once by `bbox run`. Opened by CONNECTIONS_ROOT_KEY in .env
+      - ../../data/connections/vault:/app/data
       - ../../.generated/registry:/app/generated:ro   # compiled registries (see gate G9)
       # the office's ONE flow.v1 publisher (DGO-1402) — the platform's file, never a copy of it here
       - ../redis/flowpub.py:/opt/dgo/flowpub.py:ro
@@ -160,8 +162,6 @@ services:
     logging:
       driver: json-file
       options: {max-size: 5m, max-file: '3'}
-volumes:
-  connections_vault:
 networks:
   traefik-network:
     external: true

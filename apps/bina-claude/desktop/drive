@@ -57,9 +57,14 @@ COPY_PATIENCE = 4 # how long a composer that should hold the text is asked for i
 SENTINEL = "⁣drive-nothing-selected⁣"
 started = time.monotonic()
 pressed = False   # Return went into the app: from here on, an end that is not a confirmation is unknown
+typed = False     # the text went into a composer (pasted, or a link that fills it was followed): see out()
 
 
 def out(ok, **kw):
+    # a refusal once the text went into a composer, before Return: it may wait there, unsent (`left`) — the owner can
+    # still send it from the app, so its caller must never send it again blind (DGO-2126)
+    if not ok and typed and not pressed:
+        kw["left"] = True
     print(json.dumps({"ok": ok, **kw}, ensure_ascii=False))
     return 0 if ok else 1
 
@@ -245,7 +250,7 @@ def clipboard_again():
 
 def fill(text, prefilled):
     """Leave the composer holding exactly `text`, focused; or say why not. The clipboard is put back."""
-    global _restore
+    global _restore, typed
     old = clip_get()
     _restore = old
     try:
@@ -259,6 +264,7 @@ def fill(text, prefilled):
             # collapse what select-all selected first: if a stalled app answered the copy late, a draft of the
             # owner's read as «empty», and a paste over its selection would have replaced it (second reader)
             press("End")
+            typed = True                          # from the paste on, a refusal may leave the text in the composer
             press("ctrl+v")
             # the paste is served before the read-back puts its marker on the clipboard: a stalled app that pasted
             # LATE would paste the marker (second reader) — the margin a stall measured on the HP needed
@@ -371,6 +377,7 @@ def said(path, text, since_ms):
 
 
 def new(text):
+    global typed
     before = set(records())
     t0 = int(time.time() * 1000)
     q = urllib.parse.quote(text)
@@ -380,6 +387,7 @@ def new(text):
     # for new sessions — the office, once it was chosen there (the folder chip of the New page).
     if not delivered_link("claude://code/new" + (f"?q={q}" if prefilled else "")):
         return out(False, code="dropped", error=f"the app kept dropping the link (its view was loading; {MAIN_LOG})")
+    typed = typed or prefilled                    # the link it followed put the text in the New page's composer
     why = fill(text, prefilled)
     if why:
         return out(False, code="not-sent", error=f"nothing was sent: {why}")
@@ -541,7 +549,86 @@ def home(folder):
     return out(True, folder=folder)
 
 
+def lstart(pid):
+    """The process's start as Claude Code writes `procStart`: `LC_ALL=C TZ=UTC ps -o lstart= -p <pid>` («Fri Nov 20
+    07:52:27 2026», measured on the MacBook 2026-11-20: equal for every live file). "" when no process has the pid
+    (ps answers 1 and says nothing, on Linux and on the Mac); None when that is not known — ps missing, slow, or
+    failing for its own reason."""
+    try:
+        p = subprocess.run(["ps", "-o", "lstart=", "-p", str(pid)], capture_output=True, text=True, timeout=2,
+                           env={**os.environ, "LC_ALL": "C", "TZ": "UTC"})
+    except (OSError, subprocess.SubprocessError):
+        return None
+    out = " ".join(p.stdout.split())
+    if out:
+        return out
+    return "" if p.returncode == 1 and not p.stderr.strip() else None
+
+
+def pid_domain():
+    """This system's pid space, as Claude Code names it in a live file's `pidDomain`: «darwin» on the Mac; on Linux
+    (and WSL) «linux:<machine-id>:<pid namespace>» (read in Claude Code 2.1.326's Linux build). A file whose domain is
+    another one holds a pid of another system's processes."""
+    if sys.platform != "linux":
+        return sys.platform
+    try:
+        with open("/etc/machine-id", encoding="utf-8") as f:
+            machine = f.read().strip()
+    except OSError:
+        machine = ""
+    try:
+        ns = os.readlink("/proc/self/ns/pid")
+    except OSError:
+        ns = ""
+    return f"linux:{machine}:{ns}"
+
+
+def gone(j):
+    """Is the live file's process SHOWN gone: no process has its pid, or another one does now (its start is not the
+    file's procStart — a `ps -o lstart=` text; an older file's clock ticks are compared with /proc)? What this cannot
+    judge is not gone. (alive() above, which status() reads, compares that text with ticks, so on Linux it calls every
+    live process gone: issues/the-desktop-drivers-busy-guard-is-blind-on-linux-every-live-session-reads-as-gone.yaml.)"""
+    try:
+        pid = int(j.get("pid"))
+    except (TypeError, ValueError):
+        return False
+    if j.get("pidDomain") and j.get("pidDomain") != pid_domain():
+        return False                              # a pid of another system's processes: this one cannot judge it
+    if os.path.isdir("/proc/self") and not os.path.exists(f"/proc/{pid}"):
+        return True
+    start = " ".join(str(j.get("procStart") or "").split())
+    if not start:
+        return False
+    if start.isdigit():
+        try:
+            with open(f"/proc/{pid}/stat", encoding="utf-8") as f:
+                fields = f.read().rsplit(")", 1)[1].split()
+            return len(fields) > 19 and fields[19] != start
+        except (OSError, IndexError):
+            return False
+    now = lstart(pid)
+    return now is not None and now != start
+
+
+def dead_live():
+    """The live files a killed process left behind: their process is SHOWN gone (gone() above). The adapter, which
+    cannot see this container's processes, stops counting them as turns that run — its cap of running turns would
+    otherwise keep a slot for a `claude` the memory killer took, until the app restarts (DGO-2126)."""
+    dead = []
+    for p in sorted(glob.glob(LIVE)):
+        try:
+            with open(p, encoding="utf-8") as f:
+                j = json.load(f)
+        except (OSError, ValueError):
+            continue
+        if isinstance(j, dict) and gone(j):
+            dead.append({"file": os.path.basename(p), "startedAt": j.get("startedAt")})
+    return dead
+
+
 def main(argv):
+    if argv and argv[0] == "live":                # reads /proc only: no key, no lock, no display
+        return out(True, dead=dead_live())
     if argv and argv[0] == "home":
         os.environ.setdefault("DISPLAY", ":1")
         with open(LOCK, "w") as lk:
@@ -551,7 +638,8 @@ def main(argv):
                 return out(False, code="locked", error="another call is driving the app; nothing was sent")
             return home(argv[1] if len(argv) > 1 else os.environ.get("BBOX_REPO_HOST") or "/workspace/office")
     if not argv or argv[0] not in ("new", "send", "cancel") or (argv[0] in ("send", "cancel") and len(argv) < 2):
-        print("usage: drive new | drive send local_<id>   (the text on stdin) | drive cancel local_<id> | drive home [<folder>]",
+        print("usage: drive new | drive send local_<id>   (the text on stdin) | drive cancel local_<id> | drive home [<folder>]"
+              " | drive live",
               file=sys.stderr)
         return 2
     text = "" if argv[0] == "cancel" else sys.stdin.read().strip()

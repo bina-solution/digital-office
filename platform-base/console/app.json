@@ -58,7 +58,7 @@
       "auth": "sso",
       "emit_labels": false,
       "module": {
-        "group": "ראשי",
+        "group": "ניהול הלשכה",
         "icon": "home",
         "embed": false,
         "path_mount": true,
@@ -76,7 +76,9 @@
     }
   },
   "data": {
-    "volumes": ["console_links"],
+    "volumes": [],
+    "paths": ["data/console/links"],
+    "moved_from": {"data/console/links": "console_links"},
     "on_uninstall": "keep"
   },
   "observability": {

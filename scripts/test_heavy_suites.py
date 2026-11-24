@@ -11,6 +11,7 @@ cannot run must. Each suite works in its own temp directory; none touches this c
 """
 from __future__ import annotations
 
+import importlib.util
 import shutil
 import subprocess
 import sys
@@ -24,6 +25,16 @@ bash4 = not need and subprocess.run(["bash", "-c", "[ \"${BASH_VERSINFO[0]}\" -g
 if need or not bash4 or not Path("/proc/self").is_dir():
     print(f"NOT RUN needs {', '.join(need) or ('bash 4' if not bash4 else '/proc')} (Linux, as the offices run)")
     sys.exit(1)
+
+# ON THE CI, ONLY WHEN WHAT IT TESTS CHANGED SINCE THE LAST GREEN (scripts/ci/since_green.py; 36 s of G72's one
+# `scripts/` worker on batches 114 and 115): the three suites, the lib.sh they source, the two ops scripts they run, and
+# the thresholds heavy-ready.sh sources
+SUBJECTS = ("scripts/test_heavy_suites.py", *(f"scripts/{s}" for s in SUITES), "scripts/lib.sh",
+            "scripts/ops/heavy-ready.sh", "scripts/ops/heavy-hold.sh", "scripts/ops/admission-thresholds.sh")
+_spec = importlib.util.spec_from_file_location("since_green", HERE / "ci" / "since_green.py")
+since_green = importlib.util.module_from_spec(_spec)
+_spec.loader.exec_module(since_green)
+since_green.or_not_run(HERE.parent, SUBJECTS)
 
 failed = []
 for suite in SUITES:

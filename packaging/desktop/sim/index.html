@@ -214,7 +214,7 @@ document.addEventListener('click', (e) => {
   if (![$('menu'), $('trayBtn'), $('scenes')].some((el) => el.contains(e.target))) $('menu').hidden = true;
 });
 for (const id of ['barMark', 'taskMark', 'trayMark']) {
-  $(id).innerHTML = '<img alt="" src="../../../platform-base/console/static/icons/icon-192.png" style="width:100%;height:100%">';
+  $(id).innerHTML = '<img alt="" src="../build/icons/icon-192.png" style="width:100%;height:100%">';
 }
 $('rail').src = '../src/ui/rail.html';        // only now: the rail asks dgoSim as it loads
 const start = SCENES[q.get('scene')] ? q.get('scene') : 'first';

@@ -151,11 +151,11 @@
       ],
       "module": {
         "id": "n8n",
-        "group": "תשתית",
+        "group": "פיתוח ואוטומציות",
         "icon": "workflow",
         "embed": false,
         "external": true,
-        "name": "n8n",
+        "name": "אוטומציות",
         "desc": "מנוע האוטומציה והתהליכים: האוטומציות של האפליקציות, הרצות ועריכה",
         "order": 210
       }
@@ -169,10 +169,9 @@
     }
   },
   "data": {
-    "volumes": [
-      "n8n_storage",
-      "postgres_storage"
-    ],
+    "volumes": [],
+    "paths": ["data/n8n/db", "data/n8n/home"],
+    "moved_from": {"data/n8n/db": "postgres_storage", "data/n8n/home": "n8n_storage"},
     "writers": [
       "n8n",
       "n8n-webhook",

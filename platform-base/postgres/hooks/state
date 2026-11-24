@@ -1,0 +1,49 @@
+#!/usr/bin/env bash
+#: state — what the platform database holds, one `<name> <value>` per line:  ./bbox postgres state
+#: In its database (data/postgres/db): Drive's files and objects, the business documents, the vault's secrets and the
+#: tables of every schema the office made — -1 for a table this version does not have. Beside it
+#: (data/postgres/config): a fingerprint of pgsodium's root key (`k` + a hash's prefix, never the key; `none` when
+#: there is no key, `unreadable` when there is one this hook may not read), which must stay the same — every vault
+#: secret is encrypted under it, and a database that came up without it decrypts none. Counts only, never a name or
+#: a value. Nothing at all while the database does not answer: the key alone would let a move go ahead checking
+#: nothing of the rows, and a missing count after a move sends a good move back (the second reader).
+#: The data move (platform/manager/datahome.py, DGO-2019) reads it before it moves a store and again after, and sends
+#: the store back to its volume when what it held is gone. Plain sh: one image, both stores in its one container.
+set -uo pipefail
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
+case "${1:-}" in -h|--help) sed -n 's/^#: //p' "${BASH_SOURCE[0]}"; exit 0 ;; esac
+# The data move names the container it measures; by hand, it is the office's own database.
+if [ -n "${DGO_STATE_CONTAINER:-}" ]; then
+  inside() { docker exec -i "${DGO_STATE_CONTAINER}" "$@"; }
+else
+  . "${REPO_ROOT}/scripts/lib.sh"
+  inside() { dcx exec -T db "$@"; }
+fi
+inside sh -s <<'SH'
+# the local socket, as postgres with the container's own password — every count in ONE query: a database that
+# answers half says nothing. Each table looked up AT RUN TIME (query_to_xml): postgres resolves every table a query
+# names before it runs it, a CASE branch never taken included
+c() { printf "case when to_regclass('%s') is null then -1 else (xpath('/row/c/text()', query_to_xml('select count(*) as c from %s', false, true, '')))[1]::text::int end" "$1" "$1"; }
+q="select $(c public.drive_files), $(c storage.objects), $(c public.business_documents), $(c vault.secrets),
+  (select count(*) from information_schema.tables where table_schema not in ('pg_catalog', 'information_schema'))"
+# a database just started, or briefly out of connections, answers on a later try: five, 3 s apart
+n=""; i=0
+while [ "${i}" -lt 5 ]; do
+  # …each try bounded: a count waiting behind a migration's lock gives up, never holds the move to its limit
+  n="$(PGCONNECT_TIMEOUT=10 PGOPTIONS='-c lock_timeout=5s -c statement_timeout=20s' \
+    PGPASSWORD="${POSTGRES_PASSWORD:-${PGPASSWORD:-}}" psql -U postgres -d "${POSTGRES_DB:-postgres}" -tA -F' ' \
+    -c "${q}" 2>/dev/null)" && [ "$(set -- ${n}; echo "$#")" = 5 ] && break
+  n=""; i=$((i + 1)); sleep 3
+done
+[ -n "${n}" ] || exit 0
+set -- ${n}
+f=/etc/postgresql-custom/pgsodium_root.key
+if [ ! -e "${f}" ]; then key=none
+elif [ ! -r "${f}" ]; then key=unreadable
+else key="k$(sha256sum "${f}" | cut -c1-16)"
+fi
+echo "config.key ${key}"
+echo "db.drive_files $1"; echo "db.storage_objects $2"; echo "db.business_documents $3"; echo "db.vault_secrets $4"
+echo "db.tables $5"
+SH

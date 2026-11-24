@@ -235,9 +235,10 @@ def github(now: float | None = None) -> dict:
                     labels = [lb.get("name") for lb in mine.get("labels") or []]
                     data["runner"] = {"name": name, "status": mine.get("status"), "busy": mine.get("busy"),
                                       "labels": labels,
-                                      # the ssd jobs (the Android workflows, export-verify) need the emulator's
-                                      # device and the host's runner: this app should not carry that label yet
-                                      "warning": "התווית ssd על המריץ הזה: הוא ייקח עבודות שהוא לא יכול להריץ"
+                                      # ssd: on the Dell this agent runs its host runner's registration
+                                      # (portable-ssd, DGO-1797), so the ssd jobs come here — expected; what it
+                                      # cannot give them is /dev/kvm (not mounted), and the screen says that
+                                      "warning": "התווית ssd על המריץ הזה: עבודה שצריכה את kvm של המחשב תיכשל כאן"
                                       if "ssd" in labels else None}
                 else:
                     data["runner"] = {"name": name, "labels": None,

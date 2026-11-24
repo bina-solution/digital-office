@@ -1,0 +1,48 @@
+{
+  "id": "image-store",
+  "title": {
+    "he": "מאגר התמונות",
+    "en": "Image registry"
+  },
+  "layer": 3,
+  "kind": "service",
+  "page": "base",
+  "version": "0.1.0",
+  "summary": {
+    "he": "התמונות שהבדיקה של הקו בנתה, לפי חותמת, כדי שכל משרד ימשוך אותן במקום לבנות: במחשב שבונה הוא המקור, ובכל משרד אחר הוא עותק שמושך מהמקור דרך הקישור",
+    "en": "The images the line's proof built, by digest, so that every office pulls them instead of building: the origin on the machine that builds, and on every other office a mirror that pulls from it over the link"
+  },
+  "capabilities": [
+    {
+      "name": "image-registry",
+      "type": "protocol",
+      "endpoint": "http://image-store-door:5000",
+      "link": true,
+      "required_ops": ["pull"]
+    }
+  ],
+  "use": [],
+  "connections": [],
+  "compose": "docker-compose.yml",
+  "agent": {
+    "context": "AGENT.md",
+    "order": 89
+  },
+  "health": {
+    "structural": "auto",
+    "probe": {
+      "http": "http://image-store:5000/v2/",
+      "interval": "30s"
+    }
+  },
+  "data": {
+    "volumes": ["image_store_data"],
+    "cache": ["image_store_data"],
+    "on_uninstall": "prompt",
+    "note": "The images by digest: made again, never a backup's (G118). On the origin, the next green proof builds any image the store does not hold (push-images.sh reads the store before it keeps an entry), so a lost volume costs one longer proof. On a mirror they are a cache of the origin's, refetched over the link."
+  },
+  "resources": {
+    "cpus": "0.75",
+    "memory": "384M"
+  }
+}

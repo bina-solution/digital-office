@@ -103,7 +103,7 @@
       "port": 8979,
       "auth": "sso",
       "module": {
-        "group": "עסק",
+        "group": "העסק ברשת",
         "icon": "browser",
         "embed": true,
         "alias": "sites",
@@ -132,10 +132,9 @@
     }
   },
   "data": {
-    "volumes": [
-      "sites_state",
-      "sites_renders"
-    ],
+    "volumes": [],
+    "paths": ["data/sites/state", "data/sites/renders"],
+    "moved_from": {"data/sites/state": "sites_state", "data/sites/renders": "sites_renders"},
     "on_uninstall": "prompt"
   },
   "resources": {

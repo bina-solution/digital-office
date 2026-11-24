@@ -21,7 +21,7 @@ import groupfeed  # noqa: E402
 HERD = os.path.join(TMP, "herd.yaml")
 with open(HERD, "w", encoding="utf-8") as fh:
     fh.write("apps:\n  telegram: hp-laptop\n")
-MAIN, OLD, OTHER = -1001234567890, -5551441246, -1009999999999
+MAIN, OLD, OTHER = -1001234567890, -1234567892, -1009999999999
 
 
 def rows(*ids, chat=MAIN):

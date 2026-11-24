@@ -84,6 +84,16 @@ data/browser42/
 data/bina-ds/
 data/power/
 data/lan/
+# Every app's state lives in data/<app>/ of the DGO folder, and the move's own ledger in data/.moves/ (DGO-2019,
+# ai/context/build-your-first-app.md «Where an app keeps its state») — never in git (gate G118, H6). The folders of
+# data/ that hold tracked tools and reports are named back in; a new one is named here too.
+/data/*/
+!/data/ground-truth/
+!/data/owner-reports/
+!/data/reports/
+!/data/research/
+!/data/_e2e/
+!/data/_attic_agent_drafts/
 # the frame gate's latest verdict per app (platform/manager/framecheck.py, #63)
 data/platform/
 production/n8n/workflows/_*

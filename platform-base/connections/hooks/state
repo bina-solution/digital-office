@@ -1,0 +1,46 @@
+#!/usr/bin/env bash
+#: state — what this app holds, one `<name> <value>` per line:  ./bbox connections state
+#: Whether the app opens its vault with the office's key (/healthz: readable or unreadable; nothing while it has no
+#: vault), and the lines of the grants log and its rotated copy (every broker decision: a secret handed out, a
+#: refusal). Never a secret, a name or a count of what the vault holds. The data move (platform/manager/datahome.py,
+#: DGO-2019) reads it before it moves data/connections/vault and again after, and sends the store back to its volume
+#: when the app no longer opens the vault it opened before.
+set -uo pipefail
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
+case "${1:-}" in -h|--help) sed -n 's/^#: //p' "${BASH_SOURCE[0]}"; exit 0 ;; esac
+# The data move names the container it measures; by hand, it is the office's own.
+if [ -n "${DGO_STATE_CONTAINER:-}" ]; then
+  inside() { docker exec -i "${DGO_STATE_CONTAINER}" "$@"; }
+else
+  . "${REPO_ROOT}/scripts/lib.sh"
+  inside() { dcx exec -T connections "$@"; }
+fi
+inside python - <<'PY'
+import json, os, sys, urllib.request
+# the vault's path is the app's own, fixed (app.py VAULT_PATH); CONN_DATA_DIR moves the grants log alone (broker.py)
+logs = os.environ.get("CONN_DATA_DIR") or "/app/data"
+if os.path.isfile("/app/data/vault.enc"):
+    # the app's own answer: it decrypts the vault with CONNECTIONS_ROOT_KEY (vault_read), or says it cannot — said
+    # first, alone, so nothing after it can lose it
+    try:
+        with urllib.request.urlopen(f"http://localhost:{os.environ.get('PORT', '8990')}/healthz", timeout=20) as r:
+            print("vault", json.load(r).get("vault") or "unknown", flush=True)
+    except Exception:                       # noqa: BLE001 — not up: nothing said, and the move waits
+        sys.exit(0)
+# no vault yet: no `vault` key at all — «none» may become «readable» between the two reads (a grant writes it), and
+# the check compares only what was said before
+# the log and the one it rotated to at its cap (broker.py): together they never fall to 0 across a rotation. Bytes:
+# a line a crash tore is still a line; a log that cannot be read says nothing, never a count
+n = 0
+try:
+    for name in ("grants.jsonl", "grants.jsonl.1"):
+        try:
+            with open(os.path.join(logs, name), "rb") as fh:
+                n += sum(1 for line in fh if line.strip())
+        except FileNotFoundError:
+            pass
+except OSError:
+    sys.exit(0)
+print("grants.lines", n)
+PY

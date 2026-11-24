@@ -35,7 +35,8 @@ services:
       # The fixture panel the zone editor's selftest drives (served by the generic domains app).
       - DOMAINS_FIXTURE_URL=${DOMAINS_FIXTURE_URL:-http://domains:8980/internal/fixture/panel}
     volumes:
-      - domain_internic_state:/data
+      # in the DGO folder's data/domain-internic/state (DGO-2019); it was the volume domain_internic_state, moved once
+      - ../../data/domain-internic/state:/data
       # the office's ONE flow.v1 publisher (DGO-1402) — the platform's file, never a copy of it here
       - ../../platform-base/redis/flowpub.py:/opt/dgo/flowpub.py:ro
     networks:
@@ -61,9 +62,6 @@ services:
       options:
         max-size: 5m
         max-file: '3'
-
-volumes:
-  domain_internic_state:
 
 networks:
   traefik-network:

@@ -43,6 +43,7 @@ import credentials
 import mirrors
 import proxy
 import repoindex
+import webhooks
 from adapters import GitError, adapter_for
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
@@ -979,3 +980,19 @@ def _startup():
     # per-request credential resolution, and one container with one volume cannot run two syncs at
     # once — which is the property that keeps a 5 GiB engine from being filled by two clones.
     mirrors.start_scheduler()
+    # GitHub's webhook deliveries, kept by the public intake (apps/github-hooks), taken over its office-network door
+    # and judged here: the HMAC, dedupe, the events log (webhooks.py, DGO-2155). Where that app is not enabled the
+    # door does not answer, and the drain asks once a minute.
+    if webhooks.start(os.environ.get("WEBHOOK_SOURCE", ""), Path(os.environ.get("GIT_STATE_DIR", "/data"))):
+        log.info("webhook drain up")
+
+
+@app.get("/api/webhooks")
+def webhooks_state():
+    """What the drain last did, and how many events it holds: the screen's and the CLI's view of the intake."""
+    p = Path(os.environ.get("GIT_STATE_DIR", "/data")) / "events.jsonl"
+    try:
+        n = sum(1 for _ in p.open(encoding="utf-8"))
+    except OSError:
+        n = 0
+    return {"last_pass": webhooks.LAST.get("at"), "counts": webhooks.LAST.get("counts"), "events": n}

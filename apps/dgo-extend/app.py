@@ -1738,10 +1738,31 @@ def _admin_withheld(office: str) -> frozenset:
     who = str(office or "").strip().lower()
     if not who:
         return frozenset()
-    doc = _herd_doc()
+    doc, last = _herd_doc(), _HERD_GOOD["doc"]
+    try:
+        present = HERD_FILE.exists()
+    except OSError:
+        present = True                       # a folder this process cannot enter is no proof that the file is gone
+    # FAILS CLOSED (DGO-2111 root 23). Withholding nothing here gave a public office every admin surface the moment
+    # one bad commit reached it. Its second reader's cases, each measured:
+    # - a file cut by a take between its `offices:` and its `admin_apps:` still parses: the rules read whole hold;
+    # - a file there that does not read, or a take's moment between deleting and writing it (the folder is
+    #   mounted): the last rules read hold;
+    # - with none read since the start, "*": nothing at all is given to another office until the file reads again,
+    #   every row and port included (catalog.given_by_name).
+    if doc and last and last.get("admin_apps") and not doc.get("admin_apps"):
+        doc = last
+    if not doc and (present or last):
+        doc = last or {}
+        if not doc:
+            if "unreadable" not in _WITHHOLD_SAID:
+                _WITHHOLD_SAID.add("unreadable")
+                log.warning("the herd file %s is there but cannot be read — every app is withheld from every other "
+                            "office until it reads again", HERD_FILE)
+            return frozenset({"*"})
     if not doc:
-        if not _WITHHOLD_SAID:
-            _WITHHOLD_SAID.add(1)
+        if "absent" not in _WITHHOLD_SAID:
+            _WITHHOLD_SAID.add("absent")
             log.warning("the herd file %s is not here — no admin surface is withheld from a public office", HERD_FILE)
         return frozenset()
     # FAILS CLOSED (second reader): this office applies the rule when its NAME is one of the herd's. Its key is not
@@ -2233,11 +2254,19 @@ NOTIFICATIONS_URL = os.environ.get("NOTIFICATIONS_URL", "http://notifications:89
 
 
 def _notify(source_id: str, title: str, body: str, level: str) -> bool:
-    """One row in the office's notifications, deduplicated by `source_id` (one per outage)."""
+    """One row in the office's notifications, deduplicated by `source_id` (one per outage).
+
+    A return ends its outage (DGO-2111). «link-up-<office>-<since>» names the «link-down-…» and «link-slow-…» rows
+    of the same episode in `resolves`, and says `state: resolved`, so the board marks them read. On vps1, 217 of
+    218 unread dgo-extend rows were outages long over. A board too old to know `resolves` ignores it."""
+    payload = {"source": "dgo-extend", "source_id": source_id, "title": title,
+               "body": body, "level": level, "link": "/#/m/dgo-extend"}
+    if source_id.startswith("link-up-"):
+        episode = source_id[len("link-up-"):]
+        payload["resolves"] = [f"link-down-{episode}", f"link-slow-{episode}"]
+        payload["meta"] = {"state": "resolved"}
     try:
-        r = requests.post(f"{NOTIFICATIONS_URL}/api/notifications", timeout=8,
-                          json={"source": "dgo-extend", "source_id": source_id, "title": title,
-                                "body": body, "level": level, "link": "/#/m/dgo-extend"})
+        r = requests.post(f"{NOTIFICATIONS_URL}/api/notifications", timeout=8, json=payload)
         return r.status_code in (200, 201)
     except requests.RequestException as e:
         log.warning("link alert not delivered (%s): %s", source_id, e)
@@ -2875,7 +2904,18 @@ def _herd_doc() -> dict:
         log.warning("the herd file %s cannot be read (%s: %s) — nothing is derived from it",
                     HERD_FILE, type(e).__name__, str(e)[:200])
         return {}
-    return doc if isinstance(doc, dict) and isinstance(doc.get("offices"), dict) else {}
+    if isinstance(doc, dict) and isinstance(doc.get("offices"), dict):
+        # the rules _admin_withheld falls back on (fails closed) — never replaced by a file with no admin_apps once one
+        # with them was read: a take cutting the file between the two parses, and must not become «the last good»
+        if doc.get("admin_apps") or not (_HERD_GOOD["doc"] or {}).get("admin_apps"):
+            _HERD_GOOD["doc"] = doc
+        return doc
+    return {}
+
+
+#: The last herd file this process read whole. A file that is THERE but cannot be read (a ScannerError, a take that
+#: wrote half of it) must not turn the admin withholding off (DGO-2111 root 23): _admin_withheld keeps these rules.
+_HERD_GOOD: dict = {"doc": None}
 
 
 def _herd_entry(doc: dict, oid: str) -> str:

@@ -8,7 +8,7 @@ and the app carried its own traefik labels, none of which named `authentik@file`
 the editor, n8n's own sign-in page and `/rest/settings` answered the whole internet: measured
 2026-11-09 07:50-08:05 UTC from outside — `https://n8n.exampleu.digital-office.co.il/` and `/signin`
 answered `200` (not `302` to the sign-in), `/rest/settings` answered `200` to anyone, and within two
-minutes of Exampleu's edge restarting two scanners (93.184.216.46, 93.184.216.47) loaded the editor with
+minutes of Exampleu's edge restarting two scanners (93.184.216.47, 93.184.216.48) loaded the editor with
 every asset. The same on vps1, the herd's public door. n8n's own password was the only lock left
 (DGO-1594).
 

@@ -55,7 +55,7 @@
       "auth": "sso",
       "emit_labels": false,
       "module": {
-        "group": "תשתית",
+        "group": "בינה מלאכותית",
         "icon": "brain",
         "embed": true,
         "alias": "ollama",

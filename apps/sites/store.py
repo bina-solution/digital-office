@@ -9,7 +9,7 @@ model, the way `drive`'s tables are drive's) and would cost a hard dependency on
 app whose whole job is to tell you when something is DOWN. An app that watches your sites must not
 be the app that fails because a database it does not need is unreachable.
 
-The file lives in `sites_state` (declared in app.json), so `bbox data backup` covers it and
+The file lives in data/sites/state (the volume `sites_state` until DGO-2019; app.json), so `bbox data backup` covers it and
 reinstalling the app does not lose the history.
 
 Two nouns, and they are deliberately different

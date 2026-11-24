@@ -95,7 +95,7 @@
         "name": "Supabase Studio",
         "icon": "database",
         "desc": "מסד הנתונים והטבלאות",
-        "group": "תשתית",
+        "group": "פיתוח ואוטומציות",
         "order": 230,
         "embed": false
       },
@@ -116,9 +116,9 @@
     }
   },
   "data": {
-    "volumes": [
-      "supabase_storage_data"
-    ],
+    "volumes": [],
+    "paths": ["data/supabase/storage"],
+    "moved_from": {"data/supabase/storage": "supabase_storage_data"},
     "on_uninstall": "keep",
     "sql": [
       {

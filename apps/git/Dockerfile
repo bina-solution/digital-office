@@ -15,7 +15,7 @@ RUN apt-get update \
  && apt-get install -y --no-install-recommends git \
  && rm -rf /var/lib/apt/lists/*
 
-COPY app.py accounts.py proxy.py credentials.py mirrors.py bootstrap.py repoindex.py ./
+COPY app.py accounts.py proxy.py credentials.py mirrors.py bootstrap.py repoindex.py webhooks.py ./
 COPY adapters/ ./adapters/
 # The end-to-end proof lives in the image so the owner can run it against the live service:
 #   docker exec -it git-<DEPLOYMENT_NAME> python3 /app/selftest.py [--read-only]

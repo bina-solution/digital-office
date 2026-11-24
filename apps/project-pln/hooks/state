@@ -1,0 +1,48 @@
+#!/usr/bin/env bash
+#: state — what this app holds, one `<name> <value>` per line:  ./bbox project-pln state
+#: In its database (data/project-pln/db, read in plane-db): the workspaces, projects and work items — -1 for a table
+#: this version does not have. In the object store (data/project-pln/files, read in plane-minio): its objects. In the
+#: cache (data/project-pln/redis, read in plane-redis): whether it has its dump (1 or 0). In the app
+#: (data/project-pln/state, read in project-pln): its files, and a fingerprint of the instance's keys (a hash's prefix,
+#: never a key) — which must stay the same. The data move (platform/manager/datahome.py, DGO-2019) reads it before it
+#: moves a store and again after, and sends the store back to its volume when what it held is gone. Plain sh: four
+#: images, each branch chosen by what its container mounts.
+set -uo pipefail
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
+case "${1:-}" in -h|--help) sed -n 's/^#: //p' "${BASH_SOURCE[0]}"; exit 0 ;; esac
+# The data move names the container it measures; by hand, it is the office's own database.
+if [ -n "${DGO_STATE_CONTAINER:-}" ]; then
+  inside() { docker exec -i "${DGO_STATE_CONTAINER}" "$@"; }
+else
+  . "${REPO_ROOT}/scripts/lib.sh"
+  inside() { dcx exec -T plane-db "$@"; }
+fi
+inside sh -s <<'SH'
+# the branch by what this container MOUNTS, never by which tools its image happens to have
+if [ -d /app/data ]; then
+  # the app: its own files, and a fingerprint of the instance's keys — an app that came up on an empty folder writes
+  # NEW keys (entrypoint.sh), which a count of files never sees; a 16-hex prefix of a hash, never the keys
+  echo "state.files $(ls -A /app/data 2>/dev/null | wc -l)"
+  k="$(sha256sum /app/data/plane.env.secrets 2>/dev/null)"
+  # `k` before the prefix: always a word, compared as one — an all-digit prefix would be compared as a count
+  echo "state.keys $([ -n "${k}" ] && printf 'k%s' "$(printf '%s' "${k}" | cut -c1-16)" || echo none)"
+elif [ -d /var/lib/postgresql/data ] && command -v psql >/dev/null 2>&1; then
+  # the local socket, as its POSTGRES_USER role — every count in ONE query, each table looked up at run time
+  # (query_to_xml): postgres resolves every table a query names before it runs it, a branch never taken included
+  c() { printf "case when to_regclass('%s') is null then -1 else (xpath('/row/c/text()', query_to_xml('select count(*) as c from %s', false, true, '')))[1]::text::int end" "$1" "$1"; }
+  # its own password too (the container has it): an office whose local socket is not `trust` still answers
+  n="$(PGPASSWORD="${POSTGRES_PASSWORD:-}" psql -U "${POSTGRES_USER:-plane}" -d "${POSTGRES_DB:-plane}" -tA -F' ' -c "select
+    $(c workspaces), $(c projects), $(c issues)" 2>/dev/null)" || exit 0
+  set -- ${n}
+  [ "$#" = 3 ] || exit 0
+  echo "db.workspaces $1"; echo "db.projects $2"; echo "db.issues $3"
+elif [ -d /export ]; then
+  # its objects, one xl.meta each — MinIO makes .minio.sys on an EMPTY store, so a size is never 0 and would never see
+  # one; its image has neither `find` nor `grep`, so `du -a` and the shell's own `case`
+  du -a /export/uploads 2>/dev/null | { n=0; while read -r _ p; do case "${p}" in */xl.meta) n=$((n + 1)) ;; esac; done
+                                        echo "files.objects ${n}"; }
+elif [ -d /data ]; then
+  echo "redis.dump $([ -s /data/dump.rdb ] && echo 1 || echo 0)"
+fi
+SH

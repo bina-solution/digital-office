@@ -17,21 +17,29 @@ on:
 
 permissions:
   contents: read
-  actions: write   # scripts/ci/step-aside: whether a version's proof is waiting, and the cancel of this run
 
 jobs:
   copy:
     if: contains(github.event.head_commit.message, '[public-copy]')
+    # one copy per branch: a newer copy of the same branch covers an older one, and a run that waits here is replaced
+    # only by such a copy. One group for every branch let a re-asked copy of the line push out a waiting mac-dgo copy,
+    # which then read as cleared away and was asked again at the next proof, and back (the reader of DGO-2123's change)
     concurrency:
-      group: public-copy
+      group: public-copy-${{ github.ref }}
       cancel-in-progress: false
     runs-on: [self-hosted, portable, ssd]
+    permissions:
+      contents: read
+      actions: write   # scripts/ci/step-aside: whether a version's proof is waiting, and the cancel of this run
     timeout-minutes: 60
     steps:
-      # a version's proof goes first (DGO-1819): on any branch but dgo-stable this job yields to a queued or running
-      # gates-hosted run of dgo-stable, cancelling its own run in seconds — push the trigger again once that run ended
+      # A VERSION'S PROOF GOES FIRST (DGO-1819), and on dgo-stable too (--line-too, DGO-2123): this job yields to a
+      # queued or running gates-hosted run of dgo-stable, cancelling its own run in seconds, and that proof's last job
+      # (re-ask) asks it again once it has ended. A batch whose message asks for a copy started the copy and the proof
+      # at once, and the copy (15–29 minutes on the Dell, 2026-11-20) could take the runner first: the copy of a version
+      # now follows its proof. A push that asks for no copy skips this job, and owes nothing.
       - uses: actions/checkout@v4
-        if: startsWith(github.ref, 'refs/heads/') && github.ref != 'refs/heads/dgo-stable'
+        if: startsWith(github.ref, 'refs/heads/')
         with:
           fetch-depth: 1
           filter: blob:none
@@ -40,15 +48,33 @@ jobs:
           path: .step-aside
           persist-credentials: false
       - name: A version's proof goes first (scripts/ci/step-aside)
-        if: startsWith(github.ref, 'refs/heads/') && github.ref != 'refs/heads/dgo-stable'
+        if: startsWith(github.ref, 'refs/heads/')
         env:
           GH_TOKEN: ${{ github.token }}
-        run: bash .step-aside/scripts/ci/step-aside && rm -rf .step-aside
+        run: bash .step-aside/scripts/ci/step-aside --line-too && rm -rf .step-aside
 
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0          # the export reads the commit through git (git archive)
+          # NOT in .git/config: the job's token can also cancel runs (`actions: write`, step-aside's), and pip and the
+          # exporter run below. The one fetch that needs it is the next step's, with the token in that command's
+          # environment alone (the second reader of DGO-2123's change, 2026-11-20)
           persist-credentials: false
+
+      # refs/green/dgo-stable of this PRIVATE repository: with no credential it failed («could not read Username», run
+      # 44702030254). The header is the one actions/checkout itself writes, handed to this one git command through
+      # git's own GIT_CONFIG_* environment — never .git/config, never a command line (proven on the Mac, 2026-11-20:
+      # with it the private ref is read, without it git asks for a user name)
+      - name: The green line's commit (refs/green/dgo-stable)
+        if: github.ref != 'refs/heads/dgo-stable'
+        env:
+          FETCH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0="http.${GITHUB_SERVER_URL}/.extraheader" \
+            GIT_CONFIG_VALUE_0="AUTHORIZATION: basic $(printf 'x-access-token:%s' "${FETCH_TOKEN}" | base64 | tr -d '\n')" \
+            git fetch -q origin '+refs/green/dgo-stable:refs/remotes/origin/green/dgo-stable'
+          echo "refs/green/dgo-stable is $(git rev-parse --short origin/green/dgo-stable)"
 
       # the export parses every JavaScript file it changed, and a file it could not check fails it — the Dell's
       # runner has no node of its own (export-verify.yml, run 41541423988)
@@ -56,14 +82,20 @@ jobs:
         with:
           node-version: '22'
 
+      # …and a Python whose pip installs: the runner's own python3 is externally managed and its pip refused pyyaml
+      # («FAILED to install pyyaml», run 44701724873, 2026-11-20, DGO-2126) — the Python gates-hosted.yml uses on the
+      # same runner
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
       - name: The public copy, and its own checks
         run: |
           set -euo pipefail
           bash scripts/ci/pip-ensure.sh yaml:pyyaml
           if [ "${GITHUB_REF}" = "refs/heads/dgo-stable" ]; then rev="${GITHUB_SHA}"
           else
-            git fetch -q origin '+refs/green/dgo-stable:refs/remotes/origin/green/dgo-stable'
-            rev="$(git rev-parse origin/green/dgo-stable)"
+            rev="$(git rev-parse origin/green/dgo-stable)"   # fetched by the step above
           fi
           echo "the copy of ${rev}, made by the exporter of ${GITHUB_SHA}"
           out="${RUNNER_TEMP}/public"; rm -rf "${out}"; mkdir -p "${out}"

@@ -1,0 +1,54 @@
+# notify-relay — an office with no notice board of its own carries its notices to the herd's board (DGO-2111, root 2).
+#
+# Every poster in an office reaches the board as http://notifications:8977, some through NOTIFICATIONS_URL and many
+# written into their code. On an office whose board is disabled (the MacBook, the Dell), that name answered nothing and
+# every notice was lost: the Mac's full disk on 2026-11-20 said nothing. This container takes the name `notifications`
+# on the office network and carries each POST to the hub's board over the link: the hub's `alerts` door, whose address
+# the compiler wrote in .generated/registry/remote.<hub>.alerts.json. The hub's board marks the notice as this
+# office's (platform-base/notifications/app.py `_from_office`). A notice the hub does not take now is kept in the
+# volume, in order, and sent when it answers.
+#
+# NEVER on an office that runs its own board: the name would answer twice. relay.py refuses to serve when
+# `notifications-<deployment>` exists, and says so in its log.
+services:
+  notify-relay:
+    image: python:3.12-alpine
+    pull_policy: missing
+    container_name: notify-relay-${DEPLOYMENT_NAME:-bina-deployment}
+    restart: unless-stopped
+    command: ["python3", "/app/relay.py"]
+    environment:
+      - DEPLOYMENT_NAME=${DEPLOYMENT_NAME:-bina-deployment}
+      # the herd's board: the hub office whose `alerts` this office is given over the link
+      - NOTIFY_RELAY_HUB=${NOTIFY_RELAY_HUB:-hp-laptop}
+    volumes:
+      # this directory, not one file: a single-file bind mount goes stale when the file is replaced (DGO-2111 root 13)
+      - ./:/app:ro
+      - ../../.generated/registry:/registry:ro
+      # the notices kept while the hub does not answer (spool.jsonl): state, so in the DGO folder's
+      # data/notify-relay/spool (DGO-2019, gate G118); it was the volume notify_relay_data, moved once by `bbox run`
+      - ../../data/notify-relay/spool:/data
+    networks:
+      traefik-network:
+        aliases:
+          - notifications
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8977/health', timeout=5)"]
+      interval: ${HEALTHCHECK_INTERVAL:-30s}
+      timeout: ${HEALTHCHECK_TIMEOUT:-10s}
+      retries: 3
+      start_period: 10s
+    deploy:
+      resources:
+        limits:
+          cpus: '0.1'
+          memory: 48M
+    logging:
+      driver: ${LOGGING_DRIVER:-json-file}
+      options:
+        max-size: 2m
+        max-file: '2'
+
+networks:
+  traefik-network:
+    external: true

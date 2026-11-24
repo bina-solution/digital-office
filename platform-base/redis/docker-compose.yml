@@ -57,7 +57,10 @@ services:
     - --protected-mode
     - 'yes'
     volumes:
-    - redis_data:/data
+    # its dump (n8n's queue and caches, the flow streams, authentik's sessions): in the DGO folder's data/redis/data
+    # (DGO-2019; it was the volume redis_data, moved once by `bbox run`) — claimed by hooks/backup, which carries no
+    # key by design (stale locks and job ids), and re-proves that at every export
+    - ../../data/redis/data:/data
     networks:
     - traefik-network
     logging:
@@ -83,8 +86,6 @@ services:
       timeout: ${HEALTHCHECK_TIMEOUT:-5s}
       retries: 5
       start_period: 10s
-volumes:
-  redis_data: null
 networks:
   traefik-network:
     external: true

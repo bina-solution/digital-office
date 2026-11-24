@@ -65,7 +65,8 @@ log = logging.getLogger(__name__)
 
 PROTOCOL = "mail_imap_local"
 
-# The app's own volume (gmail_imap_data), beside active.json and the per-profile labels/ directory.
+# The app's own store (data/mail/imap; the volume gmail_imap_data before DGO-2019), beside active.json and the
+# per-profile labels/ directory.
 # App-local ON PURPOSE: a connections outage must degrade a LIST, not erase this deployment's
 # knowledge of who exists.
 LEDGER_PATH = os.environ.get("MAIL_PROFILE_LEDGER_PATH", "/data/engine-profiles.json")

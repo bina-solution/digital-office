@@ -1,0 +1,29 @@
+#!/usr/bin/env bash
+#: status — the image store's role (origin, or mirror of whose door), its repositories and the space they hold, as JSON:  ./bbox image-store status
+# Asks the registry's own API from inside its container (busybox wget), and the volume's size there.
+set -uo pipefail
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
+. "${REPO_ROOT}/scripts/lib.sh"
+case "${1:-}" in -h|--help) sed -n 's/^#: //p' "${BASH_SOURCE[0]}"; exit 0 ;; esac
+# one shell in the container: the catalog, the upstream it was given, the space — and a line that says which failed
+out="$(dcx exec -T image-store sh -c '
+  cat=$(wget -q -O - http://127.0.0.1:5000/v2/_catalog 2>/dev/null) || cat=""
+  printf "catalog=%s\n" "${cat}"
+  printf "upstream=%s\n" "${REGISTRY_PROXY_REMOTEURL:-}"
+  printf "kib=%s\n" "$(du -sk /var/lib/registry 2>/dev/null | cut -f1)"' 2>&1)" || {
+  printf '{"ok": false, "op": "status", "error": "the image-store container did not answer (is the app enabled and up?)"}\n'
+  exit 1
+}
+printf '%s\n' "${out}" | python3 -c '
+import json, sys
+kv = dict(line.split("=", 1) for line in sys.stdin.read().splitlines() if "=" in line)
+try:
+    repos = json.loads(kv.get("catalog") or "{}").get("repositories") or []
+except ValueError:
+    repos = None
+up = kv.get("upstream", "")
+data = {"role": "mirror" if up else "origin", "upstream": up or None,
+        "repositories": repos, "kib": int(kv["kib"]) if kv.get("kib", "").isdigit() else None}
+print(json.dumps({"ok": repos is not None, "op": "status", "data": data}, ensure_ascii=False, indent=1))
+sys.exit(0 if repos is not None else 1)'

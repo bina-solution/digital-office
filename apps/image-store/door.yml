@@ -1,0 +1,25 @@
+# The image store's DOOR (DGO-2123): the store's own storage, read-only. It is what a linked office reaches over its
+# link (the capability image-registry, link: true). Pull and look, never push or delete: a linked office that is taken
+# over (vps1 is the public door) can neither fill the origin's disk, 92% full on 2026-11-20, nor remove its images (the
+# reader of DGO-2123). The volume is mounted read-only too, so the filesystem refuses a write this file would allow.
+version: 0.1
+log:
+  fields:
+    service: image-store-door
+storage:
+  cache:
+    blobdescriptor: inmemory
+  filesystem:
+    rootdirectory: /var/lib/registry
+  delete:
+    enabled: false
+  maintenance:
+    readonly:
+      enabled: true
+    # nothing to purge in a store it may not write
+    uploadpurging:
+      enabled: false
+http:
+  addr: :5000
+  headers:
+    X-Content-Type-Options: [nosniff]

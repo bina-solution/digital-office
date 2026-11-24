@@ -2,7 +2,8 @@
 FROM node:24-bookworm-slim
 
 # pnpm is what the harness uses to manage a profile's plugins (`dsh plugin` shells out to it).
-RUN corepack enable && corepack prepare pnpm@10 --activate
+# pnpm itself pinned: the version that wrote and checks harness/profile/pnpm-lock.yaml (DGO-2126)
+RUN corepack enable && corepack prepare pnpm@10.34.9 --activate
 
 # ── the office's hands ─────────────────────────────────────────────────────────────────────────
 # The agent that lives here (עזריה, see harness/profile/agents/) operates the office itself: it runs
@@ -30,14 +31,18 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # dependencies resolve identically in the image and in a checkout.
 WORKDIR /opt/bina
 COPY plugins ./plugins
-# The install layer depends on the manifest alone (and on the plugins it links by `file:`). The rest
-# of the profile — cordis.patch.yml, agent-presets — lands AFTER the install, so editing a row or a
-# preset never re-runs `pnpm install`, the heaviest step of this image (a full harness install; on
-# the 5 GB engine it is what wedged the daemon on 2026-09-30).
-COPY harness/profile/package.json ./harness/profile/package.json
+# The install layer depends on the manifest and its lockfile alone (and on the plugins it links by `file:`). The
+# rest of the profile — cordis.patch.yml, agent-presets — lands AFTER the install, so editing a row or a preset never
+# re-runs `pnpm install`, the heaviest step of this image (a full harness install; on the 5 GB engine it is what
+# wedged the daemon on 2026-09-30). The lockfile is the tree that was tested, installed FROZEN: an office builds
+# exactly it, never what npm published minutes before. On 2026-11-20 a `^` range let @earendil-works/pi-ai 1.6.0 in
+# three minutes after its publish, npm did not serve its pi-schema 1.6.0 yet, and a client office's take of 0.3.3
+# failed here (DGO-2126). The profile's manifest changed without its lockfile now fails this build instead of
+# drifting; a plugin's own package.json is NOT compared by a frozen install — change one, regenerate the lockfile.
+COPY harness/profile/package.json harness/profile/pnpm-lock.yaml ./harness/profile/
 # The Hebrew bundle is generated from its JSON dictionaries; the build refuses key-set drift.
 RUN cd plugins/locale-he && node build-client.mjs
-RUN cd harness/profile && pnpm install --prod --no-frozen-lockfile && test -x node_modules/.bin/dsh
+RUN cd harness/profile && pnpm install --prod --frozen-lockfile && test -x node_modules/.bin/dsh
 COPY harness/profile ./harness/profile
 # The one node-side customization (see harness/customize.sh): trust the edge's identity header.
 COPY harness/customize.sh ./harness/customize.sh

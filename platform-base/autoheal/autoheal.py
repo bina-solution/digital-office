@@ -207,8 +207,12 @@ def log(msg):
     print(f"{time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime())} autoheal: {msg}", flush=True)
 
 
-def notify(level, title, body, name, event_id):
+def notify(level, title, body, name, event_id, state=None):
     """Surface an event on the platform's own notification centre. Best-effort by design.
+
+    `state="resolved"` says the episode is over (DGO-2111). Posted under the alarm's own source_id, it turns
+    that row into the «back» line and the board marks it read. Before this, «works again» and a container that
+    recovered left the alarm unread for good.
 
     Never raises and never blocks the loop: the notifications app being down must not stop the
     estate from healing itself. The stdout line above is the durable record; this is the one a
@@ -228,6 +232,8 @@ def notify(level, title, body, name, event_id):
         "level": level,
         "meta": {"container": name, "deployment": os.environ.get("DEPLOYMENT_NAME", "")},
     }
+    if state:
+        payload["meta"]["state"] = state
     try:
         req = urllib.request.Request(
             NOTIFY_URL,
@@ -921,6 +927,12 @@ def wait_for_project(sleep=time.sleep, alarm_after=5):
         "it is asked again every minute. If it never answers: set DEPLOYMENT_NAME to this office's "
         "deployment name, or start this service from its compose file.")
     misses, told = 1, False
+    # ONE NOTICE PER EPISODE (DGO-2111). The id was `no-project:<now>`, new every minute, so each minute past the
+    # fifth added a row of its own: the HP's board held 10,650 of them (11-05 → 11-13), 98% of everything unread,
+    # and «works again» was a row of its own beside them, so none of them ever closed. One id for the episode: each
+    # minute updates the same notice (its body counts the minutes), and «works again» is posted under that same id,
+    # at info, so it replaces the alarm instead of standing next to it.
+    episode = f"no-project:{int(time.time())}"
     while True:
         _heartbeat(0, refused="no-project")
         if misses >= alarm_after:
@@ -929,7 +941,7 @@ def wait_for_project(sleep=time.sleep, alarm_after=5):
                    "מדווח על אף מכולה: במנוע אחד יכולות לשבת שתי לשכות, ופעולה על מכולה של השכן היא נזק "
                    "אמיתי. הוא שואל שוב כל דקה. אם זה לא עובר: לוודא ש-DEPLOYMENT_NAME מתאים לשם הלשכה "
                    f"({os.environ.get('DEPLOYMENT_NAME') or 'bina-deployment'}) ולקום מהקומפוז שלה.",
-                   "autoheal", f"no-project:{int(time.time())}")
+                   "autoheal", episode)
             told = True
         sleep(60)
         project = own_project()
@@ -938,7 +950,7 @@ def wait_for_project(sleep=time.sleep, alarm_after=5):
             if told:
                 notify("info", "הריפוי העצמי פועל שוב",
                        f"הפרויקט שלו ענה אחרי {misses} דקות ({project}): מעכשיו הוא מפעיל מחדש ומדווח כרגיל.",
-                       "autoheal", f"project-back:{int(time.time())}")
+                       "autoheal", episode, state="resolved")
             return project
         misses += 1
 
@@ -1085,9 +1097,18 @@ def main():
             ids = {(r.get("Names") or ["/?"])[0].lstrip("/"): r.get("Id") for r in sick
                    if (r.get("Labels") or {}).get(LABEL) != "true"}
             now = time.time()
+            began = dict(since)                      # each episode's start, which names its notice
             since, noticed, due, recovered = watch_step(since, noticed, set(ids), now)
             for name in recovered:
                 log(f"{name}: no longer unhealthy (it had been reported)")
+                # «no longer unhealthy» is not «healthy»: a container that exited, crash-loops (each restart is
+                # `starting` again), is being recreated or is gone also leaves the list. Only a reading that says
+                # running AND healthy closes the alarm (the second reader of DGO-2111); otherwise it stays unread.
+                seen = (inspect(name) or {}).get("State") or {}
+                if name in began and seen.get("Running") and (seen.get("Health") or {}).get("Status") == "healthy":
+                    notify("info", f"{name} תקין שוב",
+                           f"אחרי {max(1, int((now - began[name]) / 60))} דקות במצב לא תקין.",
+                           name, f"unhealthy:{int(began[name])}", state="resolved")
             for name in due:
                 mins = int((now - since[name]) / 60)
                 detail = last_probe(inspect(ids[name]) or {})
@@ -1410,9 +1431,11 @@ def selftest():
     def ask():
         return answers.pop(0) if answers else "mydgo"
 
+    ids, states = [], []             # each notice's id: one episode is ONE notice (DGO-2111); and its end
     try:
         g["own_project"] = ask
-        g["notify"] = lambda level, title, body, name, event_id: told.append(level)
+        g["notify"] = lambda level, title, body, name, event_id, state=None: (
+            told.append(level), ids.append(event_id), states.append(state))
         g["_heartbeat"] = lambda watching, refused="": beats.append(refused)
         try:
             got = wait_for_project(sleep=nap)
@@ -1428,6 +1451,11 @@ def selftest():
             got = str(e)
         check("six minutes without an answer -> the alarm from the fifth minute, then once «works again»",
               (got, told, len(slept)), ("mydgo", ["error", "error", "info"], 6))
+        check("…and all three are ONE notice: one id for the episode, «works again» under it too (DGO-2111: the HP's "
+              "board held N rows of one alarm, a new id a minute)",
+              (len(ids), len(set(ids)), ids[0].startswith("no-project:") if ids else None), (3, 1, True))
+        check("…and «works again» ENDS the episode: state=resolved, so the board marks the alarm read (DGO-2111: "
+              "the alarm stayed unread after it was over)", states, [None, None, "resolved"])
         answers[:] = ["mydgo"]
         told.clear(), slept.clear(), beats.clear()
         check("an answer at start -> no refusal, no wait, no alarm",

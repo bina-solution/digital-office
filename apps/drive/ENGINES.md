@@ -69,9 +69,11 @@ path that climbs (`.`/`..`) is refused before any hand-over.
   `apps/drive-google/` (with the Google OAuth client's id for refreshing a token).
 - `drive` keeps `connections_client.py` (the vault list, the binding), `uploads.py`, `extensions.py`,
   `cli.py`, `static/`, and gains `engines.py` (finding the engines, the remote adapter).
-- Volumes: `drive` keeps `localdrive_data` (the binding, the extension registry, upload sessions);
-  `drive-local` has `drive_local_data` (the profile ledger, its pictures and waveforms — regenerated);
-  `drive-google` has `drive_google_data` (the download cache — regenerated).
+- Stores (DGO-2019; the volumes they were in parentheses): `drive` keeps `data/drive/state` (`localdrive_data`: the
+  binding, the extension registry, upload sessions); `drive-local` has `data/drive-local/state` (`drive_local_data`:
+  the profile ledger, its pictures and waveforms — regenerated);
+  `drive-google` has `data/drive-google/state` (the download cache — regenerated; the volume `drive_google_data` until
+  DGO-2019).
 
 ## Every account of every engine, one list
 
@@ -83,8 +85,8 @@ and never resolve to another drive. The side of «קבצים» shows them all un
 ## For backup (DGO-1505)
 
 What to keep, by app: `drive-local` holds the office's files (supabase-db tables `drive_files`,
-`drive_folders`, `drive_profiles`; storage bucket `drive`; volume `drive_local_data`); `drive` holds the
-binding and the extension registry (volume `localdrive_data`; `uploads/` there is in-flight data);
+`drive_folders`, `drive_profiles`; storage bucket `drive`; `data/drive-local/state`); `drive` holds the
+binding and the extension registry (`data/drive/state`; `uploads/` there is in-flight data);
 `drive-google` holds only a cache. A backup that writes to «a chosen files app» writes through `drive`'s
 `PUT /api/fs/content?path=…&connection_id=…` (any engine's account, by its connection id).
 

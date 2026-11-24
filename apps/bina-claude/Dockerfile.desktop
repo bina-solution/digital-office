@@ -70,6 +70,7 @@ RUN mkdir -p /custom-cont-init.d \
 # the first start's copy.
 COPY desktop/autostart /usr/local/bin/bina-claude-desktop
 RUN chmod 755 /usr/local/bin/bina-claude-desktop \
+ && command -v xprop && command -v xdotool \
  && printf '/usr/local/bin/bina-claude-desktop\n' > /defaults/autostart \
  && mkdir -p /workspace && chown 1000:1000 /workspace
 # /workspace is the desktop user's, so the launcher can keep /workspace/office pointing at the checkout,

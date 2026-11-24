@@ -253,6 +253,8 @@ class Account:
             self.reason = None
             self._lost_said = False
             client.add_event_handler(on_message, events.NewMessage())
+            # a sender's edit is said too: a request kept the words it arrived with (DGO-1995)
+            client.add_event_handler(on_edit, events.MessageEdited())
             # a group that becomes a supergroup changes its id: the service message says so (DGO-1318)
             client.add_event_handler(on_migrate, events.Raw((types.UpdateNewMessage, types.UpdateNewChannelMessage)))
             self._watch_task = asyncio.create_task(self._watch_disconnect(client))
@@ -360,6 +362,43 @@ async def on_message(event) -> None:
         "media": media,
         "reply_to": getattr(msg.reply_to, "reply_to_msg_id", None) if msg.reply_to else None})
 
+
+async def on_edit(event) -> None:
+    """A message of a watched chat was EDITED by its sender: the stream says its words as they are now
+    (`message.edited`), so the group's desk shows the request he means and not the one he replaced (DGO-1995: msg
+    1129 was edited from «…ותצרף לאזור חיפה» to «…אולי כגליל מערבי», and the desk kept the first)."""
+    w = watched().get(str(event.chat_id))
+    if w is None:
+        return
+    msg = event.message
+    # Telethon raises this for EVERY edit update, and Telegram sends those for more than a person's edit: a link's
+    # preview filled in, a bot hiding its keyboard (edit_hide), poll results, reactions — the desk's own marks are
+    # reactions on his requests (the second reader). Only a message with an edit date that is new is an edit.
+    stamp = getattr(msg, "edit_date", None)
+    if stamp is None or getattr(msg, "edit_hide", False):
+        return
+    key = (event.chat_id, msg.id)
+    if EDITS_SAID.get(key) == stamp:
+        return
+    EDITS_SAID[key] = stamp
+    while len(EDITS_SAID) > 2000:                            # a bounded memory: the oldest said edit goes first
+        EDITS_SAID.pop(next(iter(EDITS_SAID)))
+    try:
+        sender = await event.get_sender()
+    except Exception:                                        # noqa: BLE001
+        sender = None
+    who = chat_title(sender) if sender is not None else ""
+    text = TOKEN_RE.sub("[טוקן של בוט — הוסתר]", msg.message or "")
+    line = text.replace("\n", " ").strip()
+    title = f"«{w['title']}» · {who} · נערכה: {line[:160]}" if who else f"«{w['title']}» · נערכה: {line[:160]}"
+    await FLOW.publish("message.edited", title, {
+        "chat_id": event.chat_id, "chat": w["title"], "message_id": msg.id, "sender": who,
+        "sender_id": getattr(sender, "id", None), "out": bool(msg.out), "text": text[:TEXT_MAX],
+        "media": media_of(msg)})
+
+
+#: the edit date last said per (chat, message): a reaction on an edited message re-sends the same edit
+EDITS_SAID: dict = {}
 
 #: what a person calls each kind of attachment, for the line in the stream
 MEDIA_LABEL = {"photo": "תמונה", "video": "וידאו", "voice": "הודעה קולית", "audio": "שמע", "sticker": "מדבקה",
