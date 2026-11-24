@@ -37,6 +37,7 @@ import (
 	"github.com/bina-solution/digital-office/packaging/dgo/internal/native"
 	"github.com/bina-solution/digital-office/packaging/dgo/internal/serve"
 	"github.com/bina-solution/digital-office/packaging/dgo/internal/store"
+	"github.com/bina-solution/digital-office/packaging/dgo/internal/versions"
 )
 
 var version = "dev" // -ldflags "-X main.version=…"
@@ -185,6 +186,10 @@ func plan(root string, args []string, goos string) (invocation, error) {
 	}
 	if sv, ok := store.Verbs[verb]; ok { // the store (internal/store): native on every OS, before the WSL hand-off
 		return invocation{native: func(out, errw io.Writer) int { return sv(root, args[1:], out, errw) }, why: "store verb, native"}, nil
+	}
+	if verb == "versions" { // «ניהול גרסאות» (internal/versions, DGO-2138): reads git on every OS, so before the hand-off
+		return invocation{native: func(out, errw io.Writer) int { return versions.Main(root, args[1:], out, errw) },
+			why: "versions verb, native"}, nil
 	}
 	// `engine doctor|plan` read the engine natively, on every OS — so before the Windows hand-off below.
 	// Every other `engine` verb (start, stop, shell …) stays bbox's; DGO_ENGINE=bbox hands these two back.
@@ -395,6 +400,7 @@ func help(root string) string {
 	fmt.Fprintf(&b, "the compiler (native: %s; the rest delegated to platform/manager/reconcile.py until step 2 is done):\n  dgo ", strings.Join(native, ", "))
 	b.WriteString(strings.Join(compilerVerbs, " | "))
 	b.WriteString("\n\nthe app store's signed index (native):\n  dgo index build | verify | install --dry-run")
+	b.WriteString("\n\nversions — «ניהול גרסאות» (native):\n  dgo versions status [--json]")
 	b.WriteString("\n\napps (each verb is a file in the app's hooks/):\n")
 	for _, r := range roots {
 		entries, _ := os.ReadDir(filepath.Join(root, r))

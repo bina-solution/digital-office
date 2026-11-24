@@ -75,7 +75,7 @@
       "port": 8980,
       "auth": "sso",
       "module": {
-        "group": "עסק",
+        "group": "העסק ברשת",
         "icon": "link",
         "embed": true,
         "alias": "domains",
@@ -104,9 +104,9 @@
     }
   },
   "data": {
-    "volumes": [
-      "domains_state"
-    ],
+    "volumes": [],
+    "paths": ["data/domains/state"],
+    "moved_from": {"data/domains/state": "domains_state"},
     "on_uninstall": "keep"
   },
   "resources": {

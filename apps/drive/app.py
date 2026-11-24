@@ -211,17 +211,21 @@ def _body():
     return {}
 
 
-def _override():
+def _override(body=True):
     """(profile_id, connection_id) for this call (§2).
 
     Two spellings of one idea, because the two callers think in different nouns: automation names a
     CONNECTION (it holds ids), the profile UI names a PROFILE. Both land on the same choke point.
+
+    `body=False` is for a route whose body IS a file (PUT /api/fs/content): its drive is named in the
+    address only. Parsing a file as a form or as JSON would eat it (or answer 413 over Flask's form-memory
+    limit), and a file's own `connection_id` must never choose the drive it is written to (DGO-2042).
     """
-    b = _body()
+    b = _body() if body else {}
     cid = (request.args.get("connection_id") or b.get("connection_id")
-           or request.form.get("connection_id"))
+           or (request.form.get("connection_id") if body else None))
     pid = (request.args.get("profile_id") or b.get("profile_id")
-           or request.form.get("profile_id"))
+           or (request.form.get("profile_id") if body else None))
     return pid or None, cid or None
 
 
@@ -265,19 +269,20 @@ def _explicit_connection_required():
     )
 
 
-def _use(require_explicit=False):
+def _use(require_explicit=False, body=True):
     """(instance, adapter) for this request — and the check that makes a credential a CONSTRAINT
     rather than a second way in.
 
     A request presenting profile B's key while naming profile A's connection is REFUSED; without
     this, `connection_id` would be a field the caller controls that decides whose files they get.
     A session request (no credential) has no claimed identity to contradict, and it is already
-    behind the deployment's forward-auth.
+    behind the deployment's forward-auth. `body=False`: the identity is read from the address and
+    the headers only, never from the body (see `_override`).
     """
-    pid, cid = _override()
+    pid, cid = _override(body)
     if require_explicit and not pid and not cid:
         _explicit_connection_required()
-    key = _presented_key()
+    key = _presented_key(body)
     inst = _resolve_instance(pid, cid)
     if key and not inst.get("is_private"):
         # a key is checked by the engine that issues keys, whatever drive it names: an invalid one is a 401
@@ -401,16 +406,17 @@ def _ids(b):
 
 
 # ── the rings ─────────────────────────────────────────────────────────────────────
-def _presented_key():
+def _presented_key(body=True):
     """The credential on this request, or None. NEVER read from the query string: a secret in a URL
-    ends up in access logs, referrer headers and browser history."""
+    ends up in access logs, referrer headers and browser history. `body=False`: headers only — a
+    file's own `profile_key` is not a credential (DGO-2042)."""
     direct = request.headers.get(PROFILE_KEY_HEADER)
     if direct:
         return direct.strip()
     auth = request.headers.get("Authorization") or ""
     if auth[:7].lower() == "bearer ":
         return auth[7:].strip()
-    return (_body().get("profile_key") or "").strip() or None
+    return ((_body().get("profile_key") or "").strip() or None) if body else None
 
 
 def acting_profile():
@@ -901,26 +907,28 @@ def api_fs_put():
     on demand; `mode=new` (the default) keeps an existing file and names this one «x (2).mp4»,
     `mode=replace` trashes the existing one first, `mode=exclusive` refuses (409) when the path is
     taken. The body streams through a temp file (md5 and size must be known before storage takes it),
-    so a recording of any size is fine."""
-    _, ad = _use()
+    so a recording of any size is fine.
+
+    The body IS the file, whatever its Content-Type, and the drive is named only in the address and the
+    headers. `_use()` used to look for a connection in `request.form` and in a JSON body before this route
+    read the stream, so a body labelled as a form (`curl -d`, urllib's default) or as JSON was parsed away:
+    the file was stored EMPTY with a 201, after `mode=replace` had already trashed the good copy (DGO-2042,
+    issues/a-drive-upload-sent-as-a-form-is-stored-empty-and-replace-trashes-the-good-copy.yaml); a JSON
+    file's own `connection_id` chose the drive; and a form body over Flask's form-memory limit got a 413.
+    Now the drive is resolved first, from the address and the headers (`body=False`), and nothing is
+    trashed before the body is known to be acceptable: a multipart envelope is refused (415, it is not a
+    file: POST /api/upload takes forms), an empty body is refused unless the caller asks for an empty file
+    (`empty=1`), and so is one over the limit. A store that fails AFTER the trash still leaves the old copy
+    only in the trash (the issue's open task)."""
     path = request.args.get("path") or ""
     parts = path.rstrip("/").rsplit("/", 1)
     if len(parts) != 2 or not parts[1].strip():
         return jsonify({"error": "path must end in a file name"}), 400
     mode = request.args.get("mode") or "new"
-    folder = _need(ad, "ensure_path", "נתיבים")(parts[0] or "/", request.args.get("system") or None)
-    name = parts[1]
-    if mode == "replace":
-        old = ad.resolve_path(path)
-        if old and old[0] == "file":
-            ad.trash([old[1]["id"]])
-    elif mode == "exclusive":
-        # a create that FAILS when the name is taken (DGO-1505: restic writes each pack once, under its own
-        # name, and a second copy under the same name — Google allows that — would be read as the first)
-        if ad.resolve_path(path):
-            return jsonify({"error": f"כבר יש פריט בנתיב {path}", "path": path}), 409
-    else:
-        name = ad.free_name(folder, name)
+    if request.mimetype == "multipart/form-data":
+        return jsonify({"error": "PUT שומר את הקובץ עצמו, ומה שהגיע הוא טופס. שלחו את הבתים של הקובץ "
+                                 "(או POST /api/upload לטופס). לא נשמר כלום ושום קובץ לא הוחלף.", "path": path}), 415
+    _, ad = _use(body=False)
     with tempfile.TemporaryFile(dir=os.environ.get("DRIVE_UPLOAD_DIR", "/data/uploads")
                                 if os.path.isdir(os.environ.get("DRIVE_UPLOAD_DIR", "/data/uploads")) else None) as tmp:
         h, size = hashlib.md5(), 0
@@ -930,8 +938,26 @@ def api_fs_put():
             size += len(buf)
         if size > uploads.MAX_SIZE:
             return jsonify({"error": "הקובץ גדול מהמותר"}), 413
+        if size == 0 and request.args.get("empty") != "1":
+            return jsonify({"error": f"לא התקבל תוכן לקובץ {path}, ולכן לא נשמר כלום ושום קובץ לא הוחלף. "
+                                     "קובץ ריק בכוונה: empty=1 בכתובת (ב-bbox drive put: ‎--empty)", "path": path}), 400
+        folder = _need(ad, "ensure_path", "נתיבים")(parts[0] or "/", request.args.get("system") or None)
+        name = parts[1]
+        if mode == "replace":
+            old = ad.resolve_path(path)
+            if old and old[0] == "file":
+                ad.trash([old[1]["id"]])
+        elif mode == "exclusive":
+            # a create that FAILS when the name is taken (DGO-1505: restic writes each pack once, under its own
+            # name, and a second copy under the same name — Google allows that — would be read as the first)
+            if ad.resolve_path(path):
+                return jsonify({"error": f"כבר יש פריט בנתיב {path}", "path": path}), 409
+        else:
+            name = ad.free_name(folder, name)
+        # a form's label says nothing about the file inside it: as with no label at all, its name decides its type
+        mime = None if request.mimetype == "application/x-www-form-urlencoded" else request.headers.get("Content-Type")
         tmp.seek(0)
-        item = _store(ad, tmp, size, h.hexdigest(), name, request.headers.get("Content-Type"), folder)
+        item = _store(ad, tmp, size, h.hexdigest(), name, mime, folder)
     return jsonify({"file": item, "path": ad.path_of(folder).rstrip("/") + "/" + item["name"]}), 201
 
 

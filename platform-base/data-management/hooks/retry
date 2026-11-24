@@ -1,0 +1,3 @@
+#!/usr/bin/env bash
+#: retry <app>… — a store whose move into data/<app>/ failed is tried again at the next `bbox run` (DGO-2019):  ./bbox data retry <app>
+DATAHOME_VERB=retry exec bash "$(dirname "${BASH_SOURCE[0]}")/plan" "$@"

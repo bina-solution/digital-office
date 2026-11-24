@@ -85,7 +85,7 @@
         "/public/"
       ],
       "module": {
-        "group": "עסק",
+        "group": "העסק ברשת",
         "icon": "message",
         "embed": true,
         "alias": "social-list",
@@ -114,9 +114,9 @@
     }
   },
   "data": {
-    "volumes": [
-      "social_list_state"
-    ],
+    "volumes": [],
+    "paths": ["data/social-list/state"],
+    "moved_from": {"data/social-list/state": "social_list_state"},
     "on_uninstall": "keep"
   },
   "resources": {

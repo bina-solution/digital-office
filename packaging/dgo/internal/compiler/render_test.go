@@ -645,6 +645,24 @@ func TestRenderMatchesPython(t *testing.T) {
 		{name: "a door its office did not open to the internet: left out with a line, the render goes on", argv: render,
 			state: withoutRemote(state) + strings.Replace(publishShapes, ", public: true}", "}", 1),
 			files: map[string]string{".env": "BUSINESS_NAME=Bina\nDEPLOYMENT_DOMAIN=staging.digital-office.co.il\n"}},
+		// DGO-2125: a further domain the office declares its own (PUBLISH_DOMAINS) — the company's name, not staging
+		{name: "a published door under a further domain the office declares (PUBLISH_DOMAINS)", argv: render,
+			state: withoutRemote(state) + strings.Replace(publishShapes, "sign.staging.digital-office.co.il", "sign.bina-solutions.co.il", 1),
+			files: map[string]string{".env": "BUSINESS_NAME=Bina\nDEPLOYMENT_DOMAIN=staging.digital-office.co.il\n" +
+				"PUBLISH_DOMAINS=\" .Bina-Solutions.co.il, x.example\"\n"}},
+		{name: "a host that only ends like a declared domain: PUBLISH PLAN REFUSED, every domain named", argv: render,
+			state: withoutRemote(state) + strings.Replace(publishShapes, "sign.staging.digital-office.co.il", "sign.evilbina-solutions.co.il", 1),
+			files: map[string]string{".env": "BUSINESS_NAME=Bina\nDEPLOYMENT_DOMAIN=staging.digital-office.co.il\nPUBLISH_DOMAINS=bina-solutions.co.il\n"}},
+		{name: "a further domain that is no domain: PUBLISH PLAN REFUSED, each by name", argv: render,
+			state: withoutRemote(state) + publishShapes,
+			files: map[string]string{".env": "BUSINESS_NAME=Bina\nDEPLOYMENT_DOMAIN=staging.digital-office.co.il\n" +
+				"PUBLISH_DOMAINS=bina-solutions.co.il:443,93.184.216.5 localhost\n"}},
+		{name: "the office's own name under a further domain that is its parent: PUBLISH PLAN REFUSED", argv: render,
+			state: withoutRemote(state) + strings.Replace(publishShapes, "sign.staging.digital-office.co.il", "staging.digital-office.co.il", 1),
+			files: map[string]string{".env": "BUSINESS_NAME=Bina\nDEPLOYMENT_DOMAIN=staging.digital-office.co.il\nPUBLISH_DOMAINS=digital-office.co.il\n"}},
+		{name: "an office with no public domain publishes under no further one: PUBLISH PLAN REFUSED", argv: render,
+			state: withoutRemote(state) + strings.Replace(publishShapes, "sign.staging.digital-office.co.il", "sign.bina-solutions.co.il", 1),
+			files: map[string]string{".env": "BUSINESS_NAME=Bina\nDEPLOYMENT_DOMAIN=localhost\nPUBLISH_DOMAINS=bina-solutions.co.il\n"}},
 		{name: "the office's vault on a herd office, every declared document present (render_vault)", argv: render,
 			files: map[string]string{".env": "BUSINESS_NAME=Bina\nDEPLOYMENT_NAME=bina\nDGO_OFFICE_ID=hp-laptop\n"},
 			setup: func(t *testing.T, _ []string, dir string) { copyVaultSources(t, dir) }},
@@ -713,15 +731,30 @@ func TestRenderMatchesPython(t *testing.T) {
 		{name: "a vault row that is no mapping: reconcile.py raises", argv: render, dies: true,
 			files: map[string]string{vaultManifestRel: "notes: [just-a-name]\n"}},
 		// the console's bar on a phone: an app that asks for it says `tab: true`, and the tile carries it — on an
-		// embedded tile and a framed one; a false, a word and a number carry nothing, as reconcile.py's `is True`
-		{name: "tiles that ask for the phone bar: tab true on an embedded and a framed one, nothing for false, a word or 1 (DGO-1800)", argv: render,
+		// embedded tile and a framed one; a false carries nothing. (A word or a number the manifest schema refuses —
+		// «'routing'[1].module.tab must be boolean» — and then the whole render stops before any tile: with them in it
+		// this case compared two refusals and no tile at all, measured 2026-11-20, DGO-2122. reconcile.py's `is True`
+		// on such values is pinned in platform/manager/test_resolve.py instead.)
+		{name: "tiles that ask for the phone bar: tab true on an embedded and a framed one, nothing for false (DGO-1800)", argv: render,
 			state: withApps(t, state, "enabled", "zz-tab"),
 			files: map[string]string{"apps/zz-tab/app.json": manifestJSON("zz-tab", `"routing":[`+
 				`{"host":"zt","port":80,"module":{"id":"zt","alias":"zt","name":"t","icon":"x","group":"עסק","tab":true}},`+
 				`{"host":"zu","port":81,"module":{"id":"zu","alias":"zu","name":"u","icon":"x","group":"עסק","external":true,"tab":true}},`+
-				`{"host":"zv","port":82,"module":{"id":"zv","alias":"zv","name":"v","icon":"x","group":"עסק","tab":"yes"}},`+
-				`{"host":"zw","port":83,"module":{"id":"zw","alias":"zw","name":"w","icon":"x","group":"עסק","tab":false}},`+
-				`{"host":"zx","port":84,"module":{"id":"zx","alias":"zx","name":"x","icon":"x","group":"עסק","external":true,"tab":1}}]`)}},
+				`{"host":"zw","port":83,"module":{"id":"zw","alias":"zw","name":"w","icon":"x","group":"עסק","tab":false}}]`)}},
+		// …and a LINKED office's tile of such an app (DGO-2122): its place read from THIS office's copy of the manifest
+		// (serve.module_tab), on the module the tile opens only — a true, a false, a module id the app does not
+		// declare, and a peer that names no module (the app's id then, which no module here is)
+		{name: "linked tiles take the bar's place their app asks for here: true only, on the module the tile opens (DGO-2122)", argv: render,
+			state: withoutRemote(state) + "remote:\n- office: hp-laptop\n  address: 10.79.9.2\n  label: HP\n  apps:\n" +
+				"  - {app: zz-tab, alias: zt, port: 80, module: {kind: external, id: zt}}\n" +
+				"  - {app: zz-tab, alias: zu, port: 81, module: {kind: embedded, id: zu}, host: zu.localhost}\n" +
+				"  - {app: zz-tab, alias: zw, port: 83, module: {kind: external, id: zw}}\n" +
+				"  - {app: zz-tab, alias: zq, port: 85, module: {kind: external, id: nosuch}}\n" +
+				"  - {app: zz-tab, alias: zr, port: 86}\n",
+			files: map[string]string{"apps/zz-tab/app.json": manifestJSON("zz-tab", `"routing":[`+
+				`{"host":"zt","port":80,"module":{"id":"zt","alias":"zt","name":"t","icon":"x","group":"עסק","tab":true}},`+
+				`{"host":"zu","port":81,"module":{"id":"zu","alias":"zu","name":"u","icon":"x","group":"עסק","external":true,"tab":true}},`+
+				`{"host":"zw","port":83,"module":{"id":"zw","alias":"zw","name":"w","icon":"x","group":"עסק","tab":false}}]`)}},
 		// a memory limit an .env sets too high (DGO-1797, package 7): the warning render prints on stderr — an .env
 		// value raising a service above its app's declared 512m; a literal far past half of any machine (G30's, not
 		// this), an int, a word and a reference with nothing set say nothing
@@ -759,6 +792,8 @@ func TestRenderMatchesPython(t *testing.T) {
 			files: map[string]string{".env": envDomain}},
 		{name: "every app enabled on a .localhost edge with a port: framed hosts and their port twins", argv: render, state: all,
 			files: map[string]string{".env": envLocalPort}},
+		{name: "a moved office: its former names sent on; a non-name, a .localhost name, a repeat and a parent left out (DGO-2013)", argv: render, state: all,
+			files: map[string]string{".env": envDomain + "DGO_FORMER_DOMAINS= Staging.Example.net., bad_name, x.localhost, staging.example.net,old-name.example.org,example.co.il\r\n"}},
 		{name: "the console on the LAN under its name: every shared app's lan form (DGO-1126)", argv: render,
 			state: withApps(t, withoutRemote(state), "enabled", "lan-console") + remoteShapes,
 			files: map[string]string{".env": envLocalPort + "LAN_ADDRESS=192.168.16.100\nLAN_PORT= 8081 \n"}},

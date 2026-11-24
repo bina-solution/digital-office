@@ -143,10 +143,12 @@ def cannot_have_instances(m: dict) -> str:
     if m.get("blueprints"):
         return f"{aid} carries n8n workflows, whose ids are fixed: a second copy would overwrite the first's"
     data = m.get("data") if isinstance(m.get("data"), dict) else {}
-    shared = [k for k in ("paths", "sql", "kv") if data.get(k)]
+    # its own home data/<app>/… is the copy's own too (data/<app>-<key>/…, DGO-2019); any other path is shared
+    foreign = [p for p in data.get("paths") or [] if not own_home(str(p), aid)]
+    shared = (["paths"] if foreign else []) + [k for k in ("sql", "kv") if data.get(k)]
     if shared:
-        return (f"{aid} keeps data outside its own volumes (app.json data.{', data.'.join(shared)}), which a copy "
-                f"would share with the first: only an app whose data is all in named volumes is copied")
+        return (f"{aid} keeps data outside its own volumes and its own data/{aid}/ (app.json "
+                f"data.{', data.'.join(shared)}), which a copy would share with the first")
     folders = [v for v in data.get("volumes") or [] if not (isinstance(v, str) and VOLUME_RE.match(v))]
     if folders:
         return (f"{aid} keeps data in a host folder (app.json data.volumes: {folders[0]}), which a copy would share "
@@ -221,7 +223,8 @@ def _not_self_contained(m: dict, compose: dict, d: pathlib.Path) -> str:
             if (var and var.group(1) in OFFICE_HANDS) or str(src or "").endswith("docker.sock"):
                 return (f"{aid}'s {svc} mounts the office itself (its checkout or the engine), so a copy would be a "
                         f"second hand on the same office; {say}")
-            # a host folder (./state, /srv/x) the app may WRITE: both copies would write it — read-only config is fine
+            # a host folder (./state, /srv/x) the app may WRITE: both copies would write it — read-only config is fine,
+            # and so is the app's own home data/<app>/…, which the copy gets as data/<app>-<key>/… (DGO-2019)
             if isinstance(v, dict):
                 bind = v.get("type") == "bind"
                 ro = bool(v.get("read_only"))
@@ -229,7 +232,8 @@ def _not_self_contained(m: dict, compose: dict, d: pathlib.Path) -> str:
                 parts = _split_colon(str(v))
                 bind = len(parts) >= 2 and parts[0] not in own and parts[0].startswith(("/", ".", "~", "$"))
                 ro = len(parts) >= 3 and "ro" in parts[2].split(",")
-            if bind and not ro and not (var and var.group(1) in SHARED_SOURCES):
+            home = isinstance(src, str) and src.startswith(".") and own_home(_repo_rel(d, src), aid)
+            if bind and not ro and not home and not (var and var.group(1) in SHARED_SOURCES):
                 return f"{aid}'s {svc} writes a host folder ({src}), which a copy would share; {say}"
     names = "|".join(re.escape(s) for s in services)
     # an ADDRESS: `<scheme>://svc` (a URL) or `svc:<port>` — never a path segment (/opt/bina-claude/), never another
@@ -309,6 +313,17 @@ def derive_manifest(tpl: dict, iid: str, key: str, title: dict | None, services:
             data["volumes"] = [derive_volume(v, key) if isinstance(v, str) else v for v in data["volumes"]]
         if isinstance(data.get("writers"), list):
             data["writers"] = [derive_name(w, of, iid) if isinstance(w, str) else w for w in data["writers"]]
+        # the copy's own home, data/<iid>/…, and the copy's own old volume moved into it (DGO-2019)
+        def home(p):
+            return ("data/" + iid + p[len("data/" + of):]) if isinstance(p, str) and own_home(p, of) else p
+        if isinstance(data.get("paths"), list):
+            data["paths"] = [home(p) for p in data["paths"]]
+        if isinstance(data.get("moved_from"), dict):
+            # a volume compose never made (`external:<name>`, datamoves.EXTERNAL) is the template's one hand-made
+            # volume, and a folder of the DGO folder (`path:<folder>`, datamoves.PATH) the template's own old folder:
+            # a copy had neither
+            data["moved_from"] = {home(p): derive_volume(v, key) for p, v in data["moved_from"].items()
+                                  if not str(v).startswith(("external:", "path:"))}
     cli = m.get("cli")
     if isinstance(cli, dict) and isinstance(cli.get("alias"), str):
         cli["alias"] = f"{cli['alias']}-{key}"
@@ -353,16 +368,35 @@ def derive_manifest(tpl: dict, iid: str, key: str, title: dict | None, services:
 # The copy is written again at every render (reconcile.sync_instances), so a change to the template reaches
 # every instance at the next compile. instances/<id>/ sits at the depth of apps/<id>/, and every relative path
 # of the template's is rewritten from the instance's folder (`./adapter` → `../../apps/bina-claude/adapter`).
-def _relocate(p, src: pathlib.Path, dst: pathlib.Path):
-    """A path of the template's compose as the instance's must write it — and a `${VAR:-<path>}` default too."""
+def _relocate(p, src: pathlib.Path, dst: pathlib.Path, home: tuple[str, str] | None = None):
+    """A path of the template's compose as the instance's must write it — and a `${VAR:-<path>}` default too. With
+    `home` (template id, instance id), a path in the template's own data/<of>/ is the copy's data/<iid>/ (DGO-2019):
+    `../../data/bina-claude/home` → `../../data/bina-claude-2/home`."""
     if not isinstance(p, str):
         return p
     m = re.fullmatch(r"(\$\{\w+:?-)(\.{1,2}(?:/[^}]*)?)(\})", p)
     if m:
-        return m.group(1) + _relocate(m.group(2), src, dst) + m.group(3)
+        return m.group(1) + _relocate(m.group(2), src, dst, home) + m.group(3)
     if p == "." or p.startswith(("./", "../")) or p == "..":
-        return os.path.relpath(os.path.normpath(src / p), dst).replace(os.sep, "/")
+        target = pathlib.Path(os.path.normpath(src / p))
+        rel = _repo_rel(src, p)
+        if home and own_home(rel, home[0]):
+            target = REPO / ("data/" + home[1] + rel[len("data/" + home[0]):])
+        return os.path.relpath(target, dst).replace(os.sep, "/")
     return p
+
+
+def _repo_rel(d: pathlib.Path, p: str) -> str:
+    """A path of a compose in `d`, repo-relative ('' outside the repo)."""
+    try:
+        return pathlib.Path(os.path.normpath(d / p)).relative_to(REPO).as_posix()
+    except ValueError:
+        return ""
+
+
+def own_home(rel: str, aid: str) -> bool:
+    """Is this repo-relative path in the app's own home, data/<aid>/ (DGO-2019)?"""
+    return rel == f"data/{aid}" or rel.startswith(f"data/{aid}/")
 
 
 def _split_colon(text: str) -> list[str]:
@@ -478,14 +512,14 @@ def derive_compose(tpl: dict, compose: dict, src: pathlib.Path, dst: pathlib.Pat
                 if v.get("type", "volume") == "volume" and _own_source(v.get("source"), own, key):
                     v["source"] = _own_source(v["source"], own, key)
                 elif v.get("type") == "bind":
-                    v["source"] = _relocate(v.get("source"), src, dst)
+                    v["source"] = _relocate(v.get("source"), src, dst, (of, iid))
                 mounts.append(v)
                 continue
             p = _split_colon(str(v))
             if _own_source(p[0], own, key):
                 p[0] = _own_source(p[0], own, key)
             elif len(p) >= 2:
-                p[0] = _relocate(p[0], src, dst)
+                p[0] = _relocate(p[0], src, dst, (of, iid))
             mounts.append(":".join(p))
         if mounts:
             new["volumes"] = mounts

@@ -118,7 +118,7 @@
       "auth": "sso",
       "emit_labels": false,
       "module": {
-        "group": "עסק",
+        "group": "תקשורת",
         "icon": "mail",
         "embed": true,
         "alias": "mailview",
@@ -148,13 +148,10 @@
     }
   },
   "data": {
-    "volumes": [
-      "gmail_imap_data",
-      "mail_data",
-      "mail_state",
-      "mail_config",
-      "mail_logs"
-    ],
+    "volumes": [],
+    "paths": ["data/mail/imap", "data/mail/mailboxes", "data/mail/state", "data/mail/logs", "data/mail/config"],
+    "moved_from": {"data/mail/imap": "gmail_imap_data", "data/mail/mailboxes": "mail_data",
+                   "data/mail/state": "mail_state", "data/mail/logs": "mail_logs", "data/mail/config": "mail_config"},
     "writers": [
       "mailboxd",
       "mailapi"

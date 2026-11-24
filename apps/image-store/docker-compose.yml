@@ -1,0 +1,93 @@
+# image-store — «מאגר התמונות»: the images the line's proof built, by digest, so that an office's take PULLS them and
+# builds nothing (DGO-2123, research_notes/CICD 2026-11/images.md). vps1's take of batch 98 built for ~8 minutes at
+# load 26 on its two cores; the HP broke its C: mount on a take; the Mac builds inside its engine.
+#
+# One app, two roles, by one setting:
+#   * the ORIGIN (REGISTRY_ORIGIN_URL empty) — on the machine whose CI runner builds (the Dell). The proof's tail job pushes
+#     each changed image to it through the engine at 127.0.0.1, and the office serves its door to the linked offices:
+#     `serve: {services: {image-registry: {to: [...]}}}` (a door with no tile, DGO-945). The door is image-store-door
+#     below, the same storage READ-ONLY: a linked office pulls, and never pushes or deletes (the reader, DGO-2123).
+#   * a MIRROR (REGISTRY_ORIGIN_URL = the origin's door, http://image-registry.<origin office>:<door port>) — on every
+#     other office. A pull-through cache: what the engine asks of it and it does not hold, it fetches over the link,
+#     once, and keeps. It takes no push.
+# The engine pulls at 127.0.0.1:${REGISTRY_HOST_PORT}: a loopback registry needs no TLS and no daemon setting
+# (insecure-registries), and the engine fetches only the layers it lacks.
+services:
+  image-store:
+    image: registry:2.8.3
+    pull_policy: missing
+    container_name: image-store-${DEPLOYMENT_NAME:-bina-deployment}
+    hostname: image-store
+    restart: unless-stopped
+    environment:
+      - REGISTRY_HTTP_ADDR=:5000
+      # the origin keeps the last green versions only: deleting a digest is how its space is given back (the Dell's
+      # disk was 92% full on 2026-11-20)
+      - REGISTRY_STORAGE_DELETE_ENABLED=true
+      # empty: this office is the origin; set: a mirror of the origin's door
+      - REGISTRY_PROXY_REMOTEURL=${REGISTRY_ORIGIN_URL:-}
+    # JUSTIFIED: the engine's own pulls (and, on the origin, the proof's pushes) — on the machine's loopback alone, never
+    # on an interface; a linked office reaches the origin through its link door, never this port
+    ports:
+      - "127.0.0.1:${REGISTRY_HOST_PORT:-5055}:5000"
+    volumes:
+      - image_store_data:/var/lib/registry
+    networks:
+      - traefik-network
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:5000/v2/"]
+      interval: ${HEALTHCHECK_INTERVAL:-30s}
+      timeout: ${HEALTHCHECK_TIMEOUT:-10s}
+      retries: 3
+      start_period: 10s
+    deploy:
+      resources:
+        limits:
+          # a registry serves files: its work is the disk and the link, not the CPU
+          cpus: '0.5'
+          memory: 256M
+    logging:
+      driver: ${LOGGING_DRIVER:-json-file}
+      options:
+        max-size: 5m
+        max-file: '3'
+
+  # THE DOOR — what a linked office reaches (app.json: the capability image-registry, link: true). The store's own
+  # storage, read-only twice over: door.yml says so to the registry, and the volume is mounted :ro, so the filesystem
+  # refuses what the registry would allow. Without it, the origin's write API was every linked office's: a taken-over
+  # vps1 could fill the Dell's disk, 92% full on 2026-11-20, or delete its images (the reader, DGO-2123). No port: the
+  # link door alone. On a mirror it holds the mirror's cache, read-only, and nothing serves it unless the office says so.
+  image-store-door:
+    image: registry:2.8.3
+    pull_policy: missing
+    container_name: image-store-door-${DEPLOYMENT_NAME:-bina-deployment}
+    hostname: image-store-door
+    restart: unless-stopped
+    volumes:
+      - image_store_data:/var/lib/registry:ro
+      - ./door.yml:/etc/docker/registry/config.yml:ro
+    networks:
+      - traefik-network
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:5000/v2/"]
+      interval: ${HEALTHCHECK_INTERVAL:-30s}
+      timeout: ${HEALTHCHECK_TIMEOUT:-10s}
+      retries: 3
+      start_period: 10s
+    deploy:
+      resources:
+        limits:
+          cpus: '0.25'
+          memory: 128M
+    logging:
+      driver: ${LOGGING_DRIVER:-json-file}
+      options:
+        max-size: 5m
+        max-file: '3'
+
+volumes:
+  image_store_data:
+
+networks:
+  traefik-network:
+    external: true

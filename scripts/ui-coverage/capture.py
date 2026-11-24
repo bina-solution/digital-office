@@ -623,6 +623,32 @@ def apply_subs(text: str, subs: dict) -> str:
     return text
 
 
+# A COMPUTER'S CONSOLE IS THE DESK (DGO-2132): at 1024px and wider the shell's one frame (#frame) stands hidden under
+# the desk's windows. An app's view is taken where that frame IS the screen — `?bare=1`, the console view a desk
+# window shows, which mounts no desk and draws the app across the whole viewport; the console's OWN states (its
+# home, its search, its open apps) are taken on the desk itself, as a computer shows them.
+DESK_MIN = 1024
+
+
+def shell_url(url: str, app: str) -> str:
+    """The console address a view is opened at: `?bare=1` for an app framed by the console at a desk's width."""
+    if VIEWPORT["width"] < DESK_MIN or app == "console" or not url.startswith("/#/m/"):
+        return url
+    return "/?bare=1" + url[1:]
+
+
+def clear_leftovers(page) -> None:
+    """Escape for what a view before may have left open — but never the desk's «בית»: on a computer it IS what a bare
+    address shows, and an Escape here photographed an empty desk instead (DGO-2132, the second reader's round 2)."""
+    try:
+        if page.evaluate("() => !!document.querySelector('.dk-home')"):
+            return
+        page.keyboard.press("Escape")
+        page.wait_for_timeout(200)
+    except Exception:
+        pass
+
+
 # ── the walk ─────────────────────────────────────────────────────────────────
 
 def base_url(view: dict, envmap: dict) -> str:
@@ -1125,6 +1151,7 @@ def main() -> int:
                         print(f"  - {v['id']:<24} SKIP  {note}")
                         checkpoint()
                         continue
+                    url = shell_url(url, app)
                     full = base + (url if url.startswith("/") else "/" + url)
                     # A hash-only change is a SAME-DOCUMENT navigation: the browser does
                     # not reload, so whatever the previous view left open stays open.
@@ -1150,11 +1177,7 @@ def main() -> int:
                             settle(page)
                         except Exception:
                             pass
-                    try:                      # belt and braces for non-hash leftovers
-                        page.keyboard.press("Escape")
-                        page.wait_for_timeout(200)
-                    except Exception:
-                        pass
+                    clear_leftovers(page)     # belt and braces for non-hash leftovers
                     if v.get("steps"):
                         err = run_steps(page, v["steps"])
                         if err:
@@ -1216,7 +1239,7 @@ def main() -> int:
                 png = OUT / f"{name}.png"
                 status, note, regions = "failed", "", []
                 try:
-                    url = apply_subs(v.get("url") or "/", subs)
+                    url = shell_url(apply_subs(v.get("url") or "/", subs), app)
                     full = base + (url if url.startswith("/") else "/" + url)
                     if v["auth"] == "authentik":
                         open_gated(page, full)
@@ -1228,11 +1251,7 @@ def main() -> int:
                         settle(page)
                     except Exception:
                         pass
-                    try:
-                        page.keyboard.press("Escape")
-                        page.wait_for_timeout(200)
-                    except Exception:
-                        pass
+                    clear_leftovers(page)
                     if v.get("steps"):
                         note = run_steps(page, v["steps"]) or ""
                     page.wait_for_timeout(900)

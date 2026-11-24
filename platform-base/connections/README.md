@@ -122,9 +122,28 @@ the migration is per-app, reversible, and costs un-migrated apps nothing.
   `otpauth://` URI. **Written once, never read back by a human**: `reveal` refuses the kind over the
   network and the screen offers no reveal button (only the operator inside the container, who holds
   the root key anyway, can still see it); to move the secret, re-enrol at the provider. The mint
-  refuses an unidentified caller in every mode — `warn` never applies to it. Backup = the vault
-  volume (`connections_vault`), already in the backup set (`scripts/lib.sh`, `data-management/`) —
-  there is nothing else to copy.
+  refuses an unidentified caller in every mode — `warn` never applies to it. Backup = the vault's
+  store, `data/connections/vault` in the DGO folder (the volume `connections_vault` until its move on that office, DGO-2019),
+  already in the backup set (`data-management/`) — there is nothing else to copy.
+
+### What protects it, in one sentence (DGO-1640)
+
+The vault is **AES-128-CBC + HMAC** (Fernet) under **one root key in `.env`**; a copy of the vault
+file without that key is useless, and a copy WITH it — `.env` — opens everything, which is why `.env`
+is the file to guard. `./bbox connections vault-check` prints that as facts (size, mode, that the file
+is a Fernet token, whether the key is the public development one, whether an old key is still
+accepted) and names a public key as a finding instead of a boolean. Two things are **not** protected
+and are said so where they are used: Chromium's mirrored password store in the browser's container
+(its key is derived and public), and the page after a fill (a filled field holds the value).
+
+### A LOGIN card — address, user name, password, «להציע בדפדפן» (DGO-1640)
+
+`POST /api/logins {address, username, password, autofill}` makes one card: the password is the row's
+only secret, the **address and the user name are clear** (the screen and the browser bridge must read
+them without a reveal), the id is derived from the address (the same site twice updates one row), and
+`autofill: false` means the value stays in the vault and is **never** written into Chromium's password
+store. `PUT /api/cred/<id>/prefs {"autofill": false}` flips it later; both are `_audit`-logged. The
+screen has its own button for it («סיסמה חדשה») — a login and a secret are different acts.
 
 ## Run it (against the live stack)
 ```bash

@@ -1,0 +1,41 @@
+#!/usr/bin/env bash
+#: state — what the mail app holds, one `<name> <value>` per line:  ./bbox mail state
+#: In the mail server (data/mail/{mailboxes,state,config}): its mailboxes and their files, its queue's files, its
+#: accounts, and a fingerprint of the DKIM private key the first line of its KeyTable names (`k` + a hash's prefix,
+#: never the key) — which must stay the same, or every message it signs fails the receivers' check. In mailapi
+#: (data/mail/imap): its files. Counts only, never a name or a value.
+#: The data move (platform/manager/datahome.py, DGO-2019) reads it before it moves a store and again after, and sends
+#: the store back to its volume when what it held is gone. Plain sh: two images, each branch by what it mounts.
+set -uo pipefail
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
+case "${1:-}" in -h|--help) sed -n 's/^#: //p' "${BASH_SOURCE[0]}"; exit 0 ;; esac
+# The data move names the container it measures; by hand, it is the office's own mail server.
+if [ -n "${DGO_STATE_CONTAINER:-}" ]; then
+  inside() { docker exec -i "${DGO_STATE_CONTAINER}" "$@"; }
+else
+  . "${REPO_ROOT}/scripts/lib.sh"
+  inside() { dcx exec -T mailserver "$@"; }
+fi
+inside sh -s <<'SH'
+# the branch by what only that container MOUNTS: mailapi's python image has a /var/mail of its own (Debian's), so the
+# mail server is the one with /tmp/docker-mailserver — or /var/mail alone, a store of its proven by itself
+if [ -d /tmp/docker-mailserver ] || { [ -d /var/mail ] && [ ! -d /data ]; }; then
+  echo "mail.mailboxes $(find /var/mail -mindepth 2 -maxdepth 2 -type d 2>/dev/null | wc -l)"
+  echo "mail.files $(find /var/mail -type f 2>/dev/null | wc -l)"
+  echo "state.files $(find /var/mail-state -type f 2>/dev/null | wc -l)"
+  if [ -d /tmp/docker-mailserver ]; then
+    c=/tmp/docker-mailserver
+    n="$(grep -c . "${c}/postfix-accounts.cf" 2>/dev/null)"
+    echo "config.accounts ${n:-0}"
+    # the key the first line of opendkim's KeyTable names (mailserver-init writes MAIL_DOMAIN's first): a key minted
+    # later for a domain added beside it never changes the fingerprint
+    k="$(sed -n '1s#.*:\(/etc/opendkim/[^ ]*\)$#\1#p' "${c}/opendkim/KeyTable" 2>/dev/null)"
+    k="${k:+${c}/opendkim/${k#/etc/opendkim/}}"
+    [ -n "${k}" ] && [ -f "${k}" ] || k="$(find "${c}/opendkim/keys" -name '*.private' 2>/dev/null | sort | head -1)"
+    echo "config.dkim $([ -n "${k}" ] && printf 'k%s' "$(sha256sum "${k}" | cut -c1-16)" || echo none)"
+  fi
+elif [ -d /data ]; then
+  echo "imap.files $(find /data -type f 2>/dev/null | wc -l)"
+fi
+SH

@@ -67,7 +67,8 @@ services:
     volumes:
       # the catalogue cache, the poster cache and the active-account pointer. Losing this loses a
       # re-scan, not the films: the films are in Telegram and the login is in the vault.
-      - telegram_tv_data:/data
+      # in the DGO folder's data/telegram-tv/state (DGO-2019); it was the volume telegram_tv_data, moved once
+      - ../../data/telegram-tv/state:/data
     networks:
       - traefik-network
     healthcheck:
@@ -94,9 +95,6 @@ services:
       options:
         max-size: 5m
         max-file: '3'
-
-volumes:
-  telegram_tv_data:
 
 networks:
   traefik-network:

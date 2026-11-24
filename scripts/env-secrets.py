@@ -21,7 +21,8 @@ Supabase anon/service keys are HS256 JWTs signed by the office's own SUPABASE_JW
 
 FRESH. A secret that unlocks data cannot change once the data exists: a new CONNECTIONS_ROOT_KEY locks
 the vault, a new POSTGRES_PASSWORD meets a database made with the old one. So `--if-fresh` (what `bbox run`,
-converge and the installer call) fills every key only while none of DATA_VOLUMES exists on this machine.
+converge and the installer call) fills every key only while none of DATA_VOLUMES exists on this machine —
+as a volume, or as the folder of the DGO folder's data/ it moved to (data.moved_from, DGO-2019).
 With data, it makes only an EMPTY key whose own app keeps no data yet (LOCKED_BY): an app switched on later
 needs its keys. A real value, or a placeholder in use, is never replaced; the keys still empty or still a
 value the template once published (PUBLIC, sha256 only) are named, which is the hand-off to the rotation
@@ -106,7 +107,8 @@ APP_MADE = ("N8N_API_KEY", "GLITCHTIP_ADMIN_PASSWORD", "PORTAINER_ADMIN_PASSWORD
 PLACEHOLDER = re.compile(r"CHANGE_ME|change_me\w*|dev-root-key-not-for-production|your[-_]\S*|<[^>]*>")
 
 #: The volumes a secret of .env unlocks, matched by suffix (converge.py DATA_VOLUMES, and n8n, glitchtip,
-#: plane): none of them on this machine means the office has no data, and --if-fresh fills every key.
+#: plane): none of them on this machine means the office has no data, and --if-fresh fills every key. A store
+#: that moved to data/<app>/<store> (its app.json data.moved_from names the volume) counts as that volume.
 DATA_VOLUMES = ("connections_vault", "supabase_db_data", "authentik_postgres_data", "postgres_storage",
                 "n8n_storage", "glitchtip_postgres_data", "project_pln_db", "project_pln_minio")
 
@@ -266,9 +268,53 @@ def write(path, text, backup=True):
     os.replace(tmp, real)
 
 
-def data_volumes():
-    """The DATA_VOLUMES suffixes present on this machine (empty = no data), or None when docker cannot be
-    asked (which is never "no data")."""
+#: `--moved-data`'s «no store that moved to data/ holds data»: a code no crash exits with (lib.sh office_holds_data,
+#: packaging/dgo's movedData). Anything but 0 and this is «unknown».
+MOVED_NONE = 10
+
+
+def moved_stores(root):
+    """{old volume: [folders]} from every manifest's data.moved_from under the checkout `root` (DGO-2019): a store
+    that moved to the DGO folder's data/<app>/<store> is the data its volume held, and an office installed after the
+    move never had the volume at all. Only what is not there is skipped: a manifest that cannot be read (an I/O
+    error, no permission, not JSON) RAISES — never "nothing moved here" (the second reader)."""
+    out = {}
+    for layer in ("apps", "platform-base"):
+        try:
+            names = sorted(os.listdir(os.path.join(root, layer)))
+        except (FileNotFoundError, NotADirectoryError):
+            continue
+        for aid in names:
+            try:
+                with open(os.path.join(root, layer, aid, "app.json"), encoding="utf-8") as fh:
+                    moved = (json.load(fh).get("data") or {}).get("moved_from") or {}
+            except (FileNotFoundError, NotADirectoryError):
+                continue
+            for rel, old in moved.items():
+                out.setdefault(old, []).append(os.path.join(root, rel))
+    return out
+
+
+def holds_data(folder):
+    """A folder that holds anything — or that cannot be looked into (a database's 0700 directory, read by an
+    unprivileged bbox), or that sits behind a link that leads nowhere (data/ on a disk not mounted) — is data:
+    never "fresh"."""
+    try:
+        return bool(os.listdir(folder))
+    except FileNotFoundError:
+        p = folder
+        while p != os.path.dirname(p):
+            if os.path.islink(p) and not os.path.exists(p):
+                return True
+            p = os.path.dirname(p)
+        return False
+    except OSError:
+        return True
+
+
+def data_volumes(root=ROOT):
+    """The DATA_VOLUMES suffixes present on this machine (empty = no data) — a volume, or the folder of the checkout
+    `root` it moved to — or None when docker cannot be asked or a manifest cannot be read (never "no data")."""
     try:
         out = subprocess.run(["docker", "volume", "ls", "--format", "{{.Name}}"], capture_output=True,
                              text=True, timeout=30)
@@ -277,7 +323,13 @@ def data_volumes():
     if out.returncode != 0:
         return None
     pat = re.compile(r"(?:^|_)(%s)$" % "|".join(DATA_VOLUMES))
-    return {m.group(1) for m in map(pat.search, out.stdout.split()) if m}
+    try:
+        moved = moved_stores(root)
+    except (OSError, ValueError) as e:
+        print(f"env-secrets: a manifest could not be read ({e})", file=sys.stderr)
+        return None
+    return ({m.group(1) for m in map(pat.search, out.stdout.split()) if m}
+            | {v for v in DATA_VOLUMES if any(holds_data(f) for f in moved.get(v, ()))})
 
 
 def public_hashes():
@@ -1070,6 +1122,21 @@ def main(argv):
     path = os.path.join(ROOT, ".env")
     if "--env" in argv:
         path = argv[argv.index("--env") + 1]
+    if "--moved-data" in argv:
+        # lib.sh's office_holds_data (bbox run's no-.env guard), after the containers and the volumes: 0 a store that
+        # moved to the checkout's data/ holds data (one line per old volume), NONE (10) none, 2 a manifest cannot be
+        # read. «None» has a code of its own: 1 is what ANY crash exits with (an I/O error at import, an odd manifest),
+        # and a crash read as «none» would mint secrets over the folders (the guards' second reader). The checkout of
+        # --env when it is given, this one's otherwise
+        try:
+            moved = moved_stores(os.path.dirname(os.path.abspath(path)))
+        except (OSError, ValueError) as e:
+            print(f"env-secrets: a manifest could not be read ({e})", file=sys.stderr)
+            return 2
+        held = sorted(v for v, folders in moved.items() if any(holds_data(f) for f in folders))
+        for v in held:
+            print(v)
+        return 0 if held else MOVED_NONE
     modes = [m for m in ("--fill", "--if-fresh", "--check", "--rotate") if m in argv]
     if len(modes) > 1:                    # `--rotate --fill --plan` would have minted: one mode a run, said
         print(f"env-secrets: one mode at a time — {' and '.join(modes)} were given together; nothing written",
@@ -1080,10 +1147,11 @@ def main(argv):
         print(f"env-secrets: {len(filled)} secret(s) minted for this office" + (f": {', '.join(filled)}" if filled else ""))
         return 0
     if "--if-fresh" in argv:
-        present = data_volumes()
+        present = data_volumes(os.path.dirname(os.path.abspath(path)))   # the .env's own checkout: its data/
         if present is None:
             left = still_public(path)
-            print("env-secrets: docker could not be asked whether this office has data, so nothing is written"
+            print("env-secrets: docker or the office's manifests could not be asked whether this office has data, so "
+                  "nothing is written"
                   + (f". {len(left)} secret(s) are empty or still public: {', '.join(left)}" if left else ""),
                   file=sys.stderr)
             return 0

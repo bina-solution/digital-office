@@ -1189,6 +1189,49 @@ def test_an_app_that_lists_its_hand_offs_is_asked_from_its_tile_here_and_on_a_li
     assert rc.handoffs_address("x", {"handoffs": "/v1/handoffs"}, {"port": 80}) == "", "no agent door, no address"
 
 
+def test_a_linked_tile_takes_its_place_in_the_phone_bar_from_this_offices_manifest():
+    """DGO-2122: on the MacBook, where «מסמכים שלי» and the files are the HP's and vps1's copies, the phone's bar
+    was «בית · עזריה · פתוחים»: a linked tile carried no `tab`, though its app asks for a place (measured on the
+    live registry, 2026-11-20). The flag is read from THIS office's copy of the manifest, as `tile: false` and
+    `handoffs` are — from the real manifests: a copy here would go on passing after the declaration went."""
+    root = HERE.parent.parent
+    cat = {a: json.loads((root / f"apps/{a}/app.json").read_text(encoding="utf-8"))
+           for a in ("my-docs", "indox", "browser42")}
+
+    def asks(aid):
+        return [m.get("id") or aid for m in (r.get("module") or {} for r in cat[aid].get("routing") or [])
+                if m.get("tab") is True]
+    assert asks("my-docs") == ["my-docs"] and asks("indox") == ["incoming"] and asks("browser42") == []
+
+    def app(aid, alias, module_id):
+        return {"app": aid, "alias": alias, "port": 80, "agent_api_port": None, "name": alias, "icon": "x",
+                "group": "ניהול העסק", "desc": "", "order": 1, "host": "", "module": {"kind": "external"},
+                "module_id": module_id}
+    linked = [{"office": "hp-laptop", "address": "10.79.3.1", "label": {"he": "HP", "en": "HP"}, "apps": [
+        app("my-docs", "my-docs", "my-docs"),
+        app("indox", "incoming", "incoming"),             # the app's id is not its module's: the module's counts
+        app("browser42", "browser42", "browser42"),       # an app that asks for no place
+        app("indox", "other", "elsewhere"),               # a module the app does not ask a place for
+        app("bina-claude-2", "bina-claude-2", "bina-claude-2"),   # an instance this office does not carry
+    ]}]
+    far = {t["id"]: t for t in rc.serve.module_entries(linked, cat)}
+    assert far["my-docs.hp-laptop"]["tab"] is True
+    assert far["incoming.hp-laptop"]["tab"] is True
+    for tile in ("browser42.hp-laptop", "other.hp-laptop", "bina-claude-2.hp-laptop"):
+        assert "tab" not in far[tile], tile
+    assert rc.serve.module_tab(cat, "my-docs", None) is True, "no module id: the app's own"
+    # only `true` counts, as for a tile of this office
+    for odd in ("yes", 1, None, False):
+        man = json.loads(json.dumps(cat["my-docs"]))
+        for r in man["routing"]:
+            if r.get("module"):
+                r["module"]["tab"] = odd
+        assert rc.serve.module_tab({"my-docs": man}, "my-docs", "my-docs") is False, odd
+    # a routing that is no list of mappings asks for nothing (the Go twin refuses it the same way)
+    for broken in ({"x": 1}, ["x"], "routing", 7):
+        assert rc.serve.module_tab({"a": {"routing": broken}}, "a", "a") is False, broken
+
+
 def test_an_app_that_states_no_door_keeps_the_capability_derivation_exactly():
     """Every other app: the stated door is additive, so the derivation must not move at all."""
     bina_ds = app("bina-ds", caps=[{"name": "office-agent", "type": "protocol",
@@ -1283,6 +1326,23 @@ def test_a_workflow_reaches_an_app_of_a_linked_office_by_its_door_and_a_local_on
         "http://apitools-asr:8987": "http://speech.dell:9005"}
     assert rc.link_endpoints(cat, {"apitools"}, served, {"apitools": {"linked": "vps1"}}).get(
         "http://apitools-asr:8987") is None
+    # An implicit choice among SEVERAL offices is said (the warning stage, DGO-2111): the map is unchanged, the note
+    # names every candidate and the way to choose. One office alone is no choice and says nothing.
+    two = served + [{"office": "client", "link_port": 9007, "apps": [{"app": "project-pln", "alias": "plane", "port": 80}]}]
+    notes = []
+    m = rc.link_endpoints(cat, set(), two, notes=notes)
+    assert m["http://project-pln:80"] == "http://plane.vps1:9003"
+    assert any("2 linked offices give `plane` (vps1, client)" in n and "linked:" in n for n in notes), notes
+    alone = []
+    rc.link_endpoints(cat, set(), served, notes=alone)
+    assert not any("linked offices give" in n for n in alone), alone
+    # …and `linked:` names the office for an app that does not run here too: that one, and no other
+    assert rc.link_endpoints(cat, set(), two, {"project-pln": {"linked": "client"}})[
+        "http://project-pln:80"] == "http://plane.client:9007"
+    named = []
+    m = rc.link_endpoints(cat, set(), two, {"project-pln": {"linked": "nowhere"}}, notes=named)
+    assert "http://project-pln:80" not in m, "a named office that gives no door: the address stays as it is"
+    assert any("`linked: nowhere`" in n for n in named), named
     assert rc.linked_from({"linked": "Dell"}) == "dell" and rc.linked_from({"linked": "a b"}) == ""
     # …and with the app NOT running here, two offices giving the same door: the named one, not the first
     both = [{"office": "macbook", "link_port": 9002, "apps": [],

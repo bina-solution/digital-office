@@ -1,0 +1,217 @@
+/* esign — «מילוי וחתימה» (DGO-2139): the one link of a signing event, on a phone first.
+ *
+ * Who opens it picks their side in the document, answers only that side's questions, sees them in place on the real
+ * page, and signs where the document has its signature line. Loaded after esign.css, whose generated block holds the
+ * office's palette and font: this file names tokens and writes no colour of its own (G27/G82). Everything sits under
+ * .fill, so the other esign pages keep their own rules.
+ *
+ * A page's own coordinates are physical (a PDF has a left edge, whatever the language), so the boxes drawn on a page
+ * are placed with left/top from the data, in fill.js; every LAYOUT rule here is logical (inline-start/end).
+ */
+/* --paper-ink: what is written ON the document — a page is paper in every theme, so its ink is the palette's ink on a
+   light fill, which no dark ground re-points (the second reader: a phone in dark mode signed in near-white) */
+.fill{--paper-ink:var(--lime-ink);
+  --r:16px;--r-sm:10px;--bar:76px;--p1:var(--sky-d);--p2:var(--olive);--p3:var(--violet);--p4:var(--lime-d);
+  --p1-soft:var(--sky-soft);--p2-soft:var(--olive-soft);--p3-soft:var(--plum-soft);--p4-soft:var(--lime-soft);
+  max-width:600px;margin:0 auto;padding:0 16px calc(var(--bar) + 24px);font-size:15px;line-height:1.55}
+.fill *{-webkit-tap-highlight-color:transparent}
+.fill [hidden]{display:none !important}
+
+/* ── the band: whose document this is ───────────────────────────────────────────────────────────── */
+.f-top{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:14px 0 10px;
+  border-bottom:1px solid var(--line);margin-bottom:16px}
+.f-top .who{font-size:14px;font-weight:700;color:var(--ink);display:flex;align-items:center;gap:6px;min-width:0}
+.f-top .who .dgo{font-weight:400;color:var(--muted);font-size:12.5px}
+.f-top .lock{font-size:12px;color:var(--muted);display:flex;align-items:center;gap:5px;white-space:nowrap}
+.f-ic{width:16px;height:16px;flex:none;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+
+/* ── the document, as a card ────────────────────────────────────────────────────────────────────── */
+.f-doc{display:flex;gap:14px;align-items:flex-start;background:var(--surface);border:1px solid var(--line);
+  border-radius:var(--r);padding:14px;margin-bottom:18px;box-shadow:var(--shadow)}
+.f-doc .thumb{width:76px;flex:none;border:1px solid var(--line);border-radius:6px;overflow:hidden;background:var(--surface-2);
+  aspect-ratio:210/297}
+.f-doc .thumb img{display:block;width:100%;height:100%;object-fit:cover}
+.f-doc h1{font-size:18px;font-weight:800;margin:0 0 4px;line-height:1.3}
+.f-doc .meta{font-size:12.5px;color:var(--muted);margin:0 0 8px}
+.f-link{background:none;border:0;padding:0;color:var(--sky-d);font:inherit;font-size:13.5px;font-weight:600;cursor:pointer;
+  display:inline-flex;align-items:center;gap:5px;text-decoration:none}
+
+/* ── who are you in this document ───────────────────────────────────────────────────────────────── */
+.f-h2{font-size:17px;font-weight:800;margin:4px 0 4px}
+.f-lead{font-size:13.5px;color:var(--muted);margin:0 0 12px}
+.f-parties{display:grid;gap:10px;margin:0 0 18px;padding:0;list-style:none}
+.f-party{position:relative;display:flex;align-items:center;gap:12px;width:100%;text-align:start;background:var(--surface);
+  color:var(--ink);border:1px solid var(--line);border-radius:var(--r);padding:14px 14px 14px 12px;min-height:72px;
+  font:inherit;cursor:pointer;box-shadow:var(--shadow);transition:border-color .15s,transform .05s}
+.f-party:hover{border-color:var(--accent)}
+.f-party:active{transform:scale(.99)}
+.f-party:focus-visible{outline:3px solid var(--sky-line);outline-offset:2px}
+.f-party .dot{width:12px;height:44px;border-radius:6px;flex:none;background:var(--pc)}
+.f-party .txt{flex:1;min-width:0}
+.f-party .name{display:block;font-size:16px;font-weight:800;line-height:1.3}
+.f-party .note{display:block;font-size:13px;color:var(--muted)}
+.f-party .go{flex:none;color:var(--muted)}
+.f-party[aria-disabled="true"]{cursor:default;box-shadow:none;background:var(--surface-2)}
+.f-party[aria-disabled="true"]:hover{border-color:var(--line)}
+.f-party[data-p="1"]{--pc:var(--p1);--pcs:var(--p1-soft)}.f-party[data-p="2"]{--pc:var(--p2);--pcs:var(--p2-soft)}
+.f-party[data-p="3"]{--pc:var(--p3);--pcs:var(--p3-soft)}.f-party[data-p="4"]{--pc:var(--p4);--pcs:var(--p4-soft)}
+.f-pill{display:inline-flex;align-items:center;gap:5px;padding:3px 10px;border-radius:999px;font-size:12px;font-weight:700;
+  white-space:nowrap;margin-top:4px;border:1px solid transparent}
+.f-pill.wait{background:var(--lime-soft);color:var(--lime-d);border-color:var(--lime-line)}
+.f-pill.busy{background:var(--sky-soft);color:var(--sky-d);border-color:var(--sky-line)}
+.f-pill.done{background:var(--olive-soft);color:var(--olive-d);border-color:var(--olive-line)}
+.f-pill.mine{background:var(--surface);color:var(--ink);border-color:var(--line)}
+
+.f-how{display:grid;grid-template-columns:repeat(3,1fr);gap:1px;background:var(--line);border:1px solid var(--line);
+  border-radius:var(--r-sm);overflow:hidden;margin:0 0 16px}
+.f-how div{background:var(--surface);padding:10px 8px;text-align:center;font-size:12.5px;color:var(--muted)}
+.f-how b{display:block;color:var(--ink);font-size:13.5px}
+.f-foot{font-size:12px;color:var(--muted);text-align:center;margin:18px 0 0}
+
+/* ── the steps of one side ──────────────────────────────────────────────────────────────────────── */
+.f-side{display:flex;align-items:center;gap:8px;margin:0 0 4px;font-size:13px;color:var(--muted)}
+.f-side .sw{width:10px;height:10px;border-radius:50%;background:var(--pc)}
+.f-side[data-p="1"]{--pc:var(--p1)}.f-side[data-p="2"]{--pc:var(--p2)}.f-side[data-p="3"]{--pc:var(--p3)}.f-side[data-p="4"]{--pc:var(--p4)}
+.f-prog{display:flex;gap:6px;margin:8px 0 16px}
+.f-prog i{flex:1;height:5px;border-radius:3px;background:var(--line)}
+.f-prog i.on{background:var(--accent)}
+.f-step{font-size:12.5px;color:var(--muted);margin:0 0 2px}
+.f-title{font-size:21px;font-weight:800;line-height:1.3;margin:0 0 6px}
+.f-sub{font-size:14px;color:var(--muted);margin:0 0 18px}
+
+.f-q{margin:0 0 18px}
+.f-q label{display:block;font-size:15px;font-weight:700;color:var(--ink);margin:0 0 3px}
+.f-q .opt{font-weight:400;color:var(--muted);font-size:13px}
+.f-q .help{display:block;font-size:13px;color:var(--muted);margin:0 0 7px}
+.f-q input[type=text],.f-q input[type=tel],.f-q input[type=email],.f-q input[type=date],.f-q input[type=number],.f-q select,
+.f-q textarea{width:100%;min-height:50px;padding:12px 14px;border:1.5px solid var(--line);border-radius:12px;
+  background:var(--surface);color:var(--ink);font:inherit;font-size:16px;transition:border-color .15s}
+.f-q textarea{min-height:96px;resize:vertical}
+.f-q input:focus,.f-q select:focus,.f-q textarea:focus{outline:none;border-color:var(--sky-d);box-shadow:0 0 0 3px var(--sky-soft)}
+.f-q .ltr{direction:ltr;text-align:end;unicode-bidi:plaintext}
+.f-q.bad input,.f-q.bad select,.f-q.bad textarea{border-color:var(--plum)}
+.f-q .why{display:flex;gap:6px;align-items:flex-start;color:var(--plum-d);font-size:13.5px;font-weight:600;margin:6px 0 0}
+.f-q .why.soft{color:var(--lime-d);font-weight:500}
+.f-wide{width:100%;flex:1}
+.f-q label.f-btn{display:flex;font-size:15px;margin:0}
+.f-check{display:flex;gap:10px;align-items:flex-start;font-size:15px;cursor:pointer}
+.f-check input{width:22px;height:22px;margin:2px 0 0;flex:none}
+.f-choice{display:grid;gap:8px}
+.f-choice label{display:flex;align-items:center;gap:10px;border:1.5px solid var(--line);border-radius:12px;padding:12px 14px;
+  font-weight:600;cursor:pointer;margin:0}
+.f-choice input{width:20px;height:20px;margin:0}
+
+/* the answers, to check before signing («בדיקת הפרטים») */
+.f-sum{list-style:none;margin:0 0 16px;padding:0;border:1px solid var(--line);border-radius:var(--r-sm);background:var(--surface)}
+.f-sum li{display:grid;grid-template-columns:1fr auto;grid-template-areas:"k e" "v e";gap:1px 12px;align-items:center;
+  padding:10px 14px;border-bottom:1px solid var(--line)}
+.f-sum li:last-child{border-bottom:0}
+.f-sum .k{grid-area:k;font-size:12.5px;color:var(--muted)}
+.f-sum .v{grid-area:v;min-width:0;font-weight:700;overflow-wrap:anywhere;text-align:start}
+.f-sum .v[dir="ltr"]{text-align:end;unicode-bidi:isolate}
+.f-sum .opt{font-weight:400;color:var(--muted)}
+.f-sum .e{grid-area:e}
+.f-more{margin:-4px 0 16px}
+
+/* ── the real page, with the values in their places ─────────────────────────────────────────────── */
+.f-pages{display:grid;gap:14px;margin:0 0 16px}
+.f-page{position:relative;border:1px solid var(--line);border-radius:6px;overflow:hidden;background:var(--surface);
+  box-shadow:var(--shadow)}
+.f-page img{display:block;width:100%;height:auto;user-select:none;-webkit-user-drag:none}
+.f-page .pno{position:absolute;inset-block-end:6px;inset-inline-start:8px;font-size:11px;color:var(--muted);
+  background:var(--surface);border:1px solid var(--line);border-radius:999px;padding:0 7px}
+/* a part of a page, drawn large: the page inside is moved and sized from data-crop in fill.js */
+.f-crop{position:relative;overflow:hidden;border:1px solid var(--line);border-radius:10px;background:var(--surface);
+  box-shadow:var(--shadow)}
+.f-crop .f-page{position:absolute;border:0;border-radius:0;box-shadow:none}
+.f-crop .pno{display:none}
+.f-box{position:absolute;display:flex;align-items:flex-end;justify-content:flex-start;overflow:visible;border-radius:4px;
+  color:var(--paper-ink);font-family:Heebo,var(--font);font-weight:500;line-height:1;white-space:nowrap;direction:rtl}
+.f-box span{display:block;max-width:100%;overflow:hidden;text-overflow:ellipsis;padding:0 2px 1px}
+/* a place ON the page: the page is white paper in every theme, so its marks are the hues' FILLS (which no dark ground
+   re-points) as a light wash and a line, and its words are paper's ink — the soft tints of the dark ground were dark
+   boxes over the white page, the text in them unreadable */
+.f-box.mine{background:color-mix(in srgb,var(--pf) 18%,transparent);outline:2px solid var(--pf);outline-offset:0}
+.f-box.todo{background:color-mix(in srgb,var(--pf) 18%,transparent);outline:2px dashed var(--pf);outline-offset:0;
+  justify-content:center;align-items:center}
+.f-box.todo span{font-family:var(--font);font-weight:700;color:var(--paper-ink);font-size:max(10px,.8em)}
+.f-box.sig img{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;object-position:center bottom}
+.f-box[data-p="1"]{--pf:var(--sky)}.f-box[data-p="2"]{--pf:var(--olive)}
+.f-box[data-p="3"]{--pf:var(--plum)}.f-box[data-p="4"]{--pf:var(--lime)}
+.f-box.pulse{animation:f-pulse 1.6s ease-in-out 2}
+@keyframes f-pulse{50%{box-shadow:0 0 0 8px var(--pcs)}}
+@media (prefers-reduced-motion:reduce){.f-box.pulse{animation:none}}
+
+/* ── signing ────────────────────────────────────────────────────────────────────────────────────── */
+.f-tabs{display:grid;grid-template-columns:1fr 1fr;gap:4px;background:var(--surface-2);border:1px solid var(--line);
+  border-radius:12px;padding:4px;margin:0 0 12px}
+.f-tabs button{background:none;color:var(--muted);border:0;border-radius:9px;padding:10px;font:inherit;font-weight:700;
+  font-size:14px;cursor:pointer;min-height:44px}
+.f-tabs button[aria-selected="true"]{background:var(--surface);color:var(--ink);box-shadow:var(--shadow)}
+.f-pad{position:relative;background:var(--surface);border:1.5px solid var(--line);border-radius:var(--r);height:200px;
+  touch-action:none;overflow:hidden}
+.f-pad canvas{position:absolute;inset:0;width:100%;height:100%;touch-action:none;cursor:crosshair}
+.f-pad .base{position:absolute;inset-inline:22px;inset-block-end:52px;border-top:1.5px solid var(--line);pointer-events:none}
+.f-pad .x{position:absolute;inset-inline-start:22px;inset-block-end:58px;font-size:20px;color:var(--muted);pointer-events:none}
+.f-pad .hint{position:absolute;inset-inline:0;inset-block-end:16px;text-align:center;font-size:13px;color:var(--muted);
+  pointer-events:none}
+.f-pad.inked .hint{visibility:hidden}
+.f-padbar{display:flex;justify-content:space-between;align-items:center;margin:8px 0 14px;font-size:13px;color:var(--muted)}
+.f-typed input{font-size:18px}
+.f-consent{display:flex;gap:10px;align-items:flex-start;background:var(--surface);border:1px solid var(--line);
+  border-radius:var(--r-sm);padding:12px 14px;margin:0 0 14px;font-size:13.5px;line-height:1.55;cursor:pointer}
+.f-consent input{width:22px;height:22px;margin:1px 0 0;flex:none}
+
+/* ── the bar that always holds the next step ────────────────────────────────────────────────────── */
+.f-bar{position:fixed;inset-inline:0;inset-block-end:0;z-index:5;background:var(--surface);border-top:1px solid var(--line);
+  padding:12px 16px calc(12px + env(safe-area-inset-bottom));box-shadow:var(--shadow)}
+.f-bar .in{max-width:600px;margin:0 auto;display:flex;gap:10px}
+.f-btn{flex:1;display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:52px;border-radius:14px;
+  border:0;background:var(--accent);color:var(--accent-ink);font:inherit;font-size:16.5px;font-weight:800;cursor:pointer;
+  padding:0 18px;text-decoration:none}
+.f-btn.ghost{flex:0 0 auto;background:var(--surface-2);color:var(--ink);border:1px solid var(--line);font-weight:700}
+.f-btn:disabled{opacity:.5;cursor:default}
+.f-btn:focus-visible{outline:3px solid var(--sky-line);outline-offset:2px}
+.f-btn .spin{width:18px;height:18px;border:2.5px solid currentColor;border-inline-end-color:transparent;border-radius:50%;
+  animation:f-spin .8s linear infinite}
+@keyframes f-spin{to{transform:rotate(360deg)}}
+
+/* ── notices, and the end ───────────────────────────────────────────────────────────────────────── */
+.f-note{display:flex;gap:10px;align-items:flex-start;border-radius:var(--r-sm);padding:12px 14px;font-size:13.5px;margin:0 0 14px;
+  background:var(--sky-soft);color:var(--ink);border:1px solid var(--sky-line)}
+.f-note.warn{background:var(--lime-soft);border-color:var(--lime-line)}
+.f-note.bad{background:var(--plum-soft);border-color:var(--plum-line)}
+.f-done{text-align:center;padding:26px 6px 8px}
+.f-done .ok{width:72px;height:72px;margin:0 auto 12px;border-radius:50%;background:var(--olive);color:var(--olive-ink);
+  display:flex;align-items:center;justify-content:center}
+.f-done .ok svg{width:38px;height:38px;stroke-width:3}
+.f-done h2{font-size:22px;font-weight:800;margin:0 0 6px}
+.f-done p{color:var(--muted);margin:0 0 4px}
+.f-left{list-style:none;margin:16px 0;padding:0;display:grid;gap:8px;text-align:start}
+.f-left li{display:flex;align-items:center;justify-content:space-between;gap:10px;background:var(--surface);
+  border:1px solid var(--line);border-radius:var(--r-sm);padding:10px 14px;font-weight:700}
+.f-left li .f-pill{margin:0}
+
+/* a question asked on the page (a personal code, a side open elsewhere) — never the browser's own prompt */
+.f-modal{position:fixed;inset:0;z-index:30;background:var(--scrim);display:flex;align-items:flex-end;justify-content:center;
+  padding:16px}
+.f-dlg{width:min(460px,100%);background:var(--surface);color:var(--ink);border-radius:18px;padding:20px 18px 16px;
+  box-shadow:var(--shadow-lg);font-size:15px}
+.f-dlg h2{font-size:19px;font-weight:800;margin:0 0 6px}
+.f-dlg p{margin:0 0 14px;color:var(--muted);line-height:1.55}
+.f-dlg .why{color:var(--plum-d);font-weight:600;display:flex;gap:6px}
+.f-dlg-acts{display:flex;gap:10px}
+@media (min-width:600px){.f-modal{align-items:center}}
+
+/* the whole document, opened from the card */
+.f-sheet{position:fixed;inset:0;z-index:10;background:var(--bg);overflow:auto;padding:0 12px 90px}
+.f-sheet .hd{position:sticky;top:0;z-index:2;display:flex;align-items:center;justify-content:space-between;gap:10px;
+  background:var(--bg);padding:12px 4px;border-bottom:1px solid var(--line);margin-bottom:12px}
+.f-sheet .hd b{font-size:15px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.f-sheet .f-pages{max-width:760px;margin:0 auto}
+
+@media (min-width:760px){
+  .fill{max-width:680px;padding-top:12px}
+  .f-title{font-size:24px}
+  .f-pad{height:230px}
+}

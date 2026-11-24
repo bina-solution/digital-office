@@ -152,7 +152,7 @@
         "name": "דפדפן הלשכה",
         "icon": "monitor",
         "desc": "דפדפן ענן חי לאוטומציה ו-QA",
-        "group": "עסק",
+        "group": "עבודה וקבצים",
         "order": 260,
         "embed": true,
         "alias": "browser42",

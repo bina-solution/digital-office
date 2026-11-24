@@ -135,6 +135,7 @@ func healthyHost(via, root string) map[string]reply {
 	r[at(`sh -c cd "$1" && pwd -P sh `+root)] = ok(root + "\n")
 	r[at("docker -H unix:///run/bbox-docker.sock ps -aq"+label)] = ok("")
 	r[at("docker -H unix:///run/bbox-docker.sock volume ls -q"+label)] = ok("")
+	r[at("sh -c "+movedDataSh+" sh "+root)] = ok("10\n") // …and no store that moved to its data/ holds data (DGO-2019)
 	if via != "" {
 		r[at("test -f "+root+"/bbox")] = ok("")
 		r[at("cat /proc/meminfo")] = ok(meminfo(10188772))
@@ -284,7 +285,7 @@ func TestDoctorOnAHealthyEngineOfEachSystem(t *testing.T) {
 			line(pass, "docker", "Docker 28.5.2 (API 1.51, min 1.24)"),
 			// no .env in the guest: bbox run's first step is scripts/ci-env.sh, which writes the floor
 			line(note, "profile", "ci-small (written to .env by scripts/ci-env.sh, which bbox run runs first here) · 4 cores, 4.8 GiB in the guest\n"),
-			line(note, "office", "no .env: bbox run generates a local one for the macOS engine (DEPLOYMENT_NAME=local, edge on :8080) — this checkout's office (mydgo) holds no containers or volumes"),
+			line(note, "office", "no .env: bbox run generates a local one for the macOS engine (DEPLOYMENT_NAME=local, edge on :8080) — this checkout's office (mydgo) holds no containers, volumes or stores in data/"),
 			"\nhealthy\n",
 		}},
 		{linuxBox(t), []string{
@@ -444,7 +445,7 @@ func brokenCases() []broken {
 			delete(r.files, linRoot+"/.env")
 			r.cmds["docker -H unix:///run/bbox-docker.sock volume ls -q --filter label=com.docker.compose.project=office"] = ok("office_pgdata\n")
 		}, []string{
-			line(fail, "office", "no .env, but this checkout's office (office) already has containers or volumes — its .env is missing, not new"),
+			line(fail, "office", "no .env, but this checkout's office (office) already has containers, volumes or stores in data/ — its .env is missing, not new"),
 			"fix: " + heldFix,
 		}},
 		{"linux: no .env, and the engine does not say what the office holds", linuxBox, func(r *rec) {
@@ -475,14 +476,14 @@ func TestThePlanSaysTheOfficesEnvStep(t *testing.T) {
 	delete(held.files, linRoot+"/.env")
 	held.cmds["docker -H unix:///run/bbox-docker.sock ps -aq --filter label=com.docker.compose.project=office"] = ok("3f2a9c\n")
 	out, _ = held.answer(t, "plan")
-	has(t, out, "— here: refused: this checkout's office (office) already has containers or volumes — its .env is missing, not new")
+	has(t, out, "— here: refused: this checkout's office (office) already has containers, volumes or stores in data/ — its .env is missing, not new")
 	named := linuxBox(t)
 	named.files[linRoot+"/.env"] = "BUSINESS_NAME=\nDEPLOYMENT_DOMAIN=.digital-office.co.il\n"
 	out, _ = named.answer(t, "plan")
 	has(t, out, "(lib.sh office_unnamed): refused, «"+unnamedSaid+"» — here: refused")
 	// the sandbox before its first run: nothing answers yet, so the question waits for the engine bbox starts
 	doc, _ := sandboxBox(t).answer(t, "doctor")
-	has(t, doc, line(note, "office", "no .env: bbox run asks its engine, once it answers, whether this checkout's office (office) holds containers or volumes"))
+	has(t, doc, line(note, "office", "no .env: bbox run asks its engine, once it answers, whether this checkout's office (office) holds containers, volumes or stores in data/"))
 	// a stranger's Linux with no docker at all: need_docker stops bbox run, so the .env step is never reached —
 	// said as that, never «it runs» (the reader of the twin)
 	bare := sandboxBox(t)
@@ -730,14 +731,14 @@ func TestPlanOnMacOSFollowsTheGuestsState(t *testing.T) {
 	out, _ = box.answer(t, "plan")
 	has(t, out, "create the guest bbox — here: it does not exist",
 		lima+" start --name=bbox --tty=false --cpus=4 --memory=5 --disk=60 --mount=/Users/u:w '--set=.vmOpts.vz.rosetta.enabled=true | .vmOpts.vz.rosetta.binfmt=true' /Users/u/MyDGO/packaging/macos/engine.yaml",
-		lima+" shell bbox sudo docker version --format '{{.Server.Version}}'",
+		lima+" shell --workdir / bbox sudo docker version --format '{{.Server.Version}}'",
 		" env BBOX_IN_GUEST=1 ./bbox run") // nothing forwarded yet, so nothing handed over
 	hasNot(t, out, "— here: /usr/bin/docker") // the guest was not asked: every branch, with its condition
 
 	box = macBox(t)
 	box.cmds[macLima+" list --format {{.Name}} {{.Status}}"] = ok("bbox Stopped\n")
 	out, _ = box.answer(t, "plan")
-	has(t, out, "start the guest bbox — here: Stopped", lima+" start --tty=false bbox")
+	has(t, out, "start the guest bbox — here: Stopped", lima+" start --tty=false --timeout=4m bbox")
 }
 
 func TestPlanOnTheCloudSandboxStartsDockerdAndGeneratesTheEnv(t *testing.T) {
@@ -765,7 +766,8 @@ var readOnly = []string{
 	"lsof -nP -iUDP:", macLima + " shell bbox -- ss -lunH",
 	"sh -c for c do command -v $c || :; done sh ", "systemctl cat docker.service",
 	"test -f ", "test -x ", "stat -L -c %F ", "cat /proc/meminfo", "cat " + dropInConf, coresKey,
-	`sh -c cd "$1" && pwd -P sh `, // the checkout's physical path (office_project)
+	`sh -c cd "$1" && pwd -P sh `,   // the checkout's physical path (office_project)
+	"sh -c " + movedDataSh + " sh ", // the stores that moved to its data/ (office_holds_data, env-secrets.py --moved-data)
 }
 
 // TestTheLookOnlyReads asks every recorded machine — healthy, broken, the tunnel's states — both

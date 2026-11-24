@@ -817,7 +817,7 @@ def x_reveal_states(_m) -> list[dict]:
     # my-docs: open the document detail drawer (seeded docs make it real), + customer/item rows
     S += [("my-docs", "state-doc-drawer", "מסמכים שלי · פרטי מסמך",
            [{"js": D + "typeof show==='function'&&show('docs')"},
-            {"js": "var r=document.querySelector('#docsTable tbody tr,table tbody tr[onclick],table tbody tr');"
+            {"js": "var r=document.querySelector('#docsTable a.lst-row,table tbody tr[onclick],table tbody tr');"
                    "if(r){r.click()} else {var o=document.getElementById('overlay'),dr=document.getElementById('drawer');"
                    "if(o)o.classList.remove('hidden'); if(dr)dr.classList.remove('hidden');}"}]),
           ("my-docs", "state-customer-drawer", "מסמכים שלי · לקוח",
@@ -997,7 +997,6 @@ def x_reveal_states(_m) -> list[dict]:
                 url = "/install.html"
             else:
                 drivers = {"state-palette": "typeof openPalette==='function'&&openPalette()",
-                           "state-rail-collapsed": "typeof toggleRail==='function'&&toggleRail()",
                            "state-apps": "location.hash='#/m/apps'"}
                 steps = [{"js": drivers[vid]}]
                 url = "/#/"

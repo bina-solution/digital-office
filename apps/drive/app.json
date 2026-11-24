@@ -80,7 +80,7 @@
       ],
       "emit_labels": false,
       "module": {
-        "group": "עסק",
+        "group": "עבודה וקבצים",
         "icon": "folder",
         "embed": true,
         "alias": "drive",
@@ -107,7 +107,7 @@
       "auth": "none",
       "emit_labels": false,
       "module": {
-        "group": "עסק",
+        "group": "תקשורת",
         "icon": "mic",
         "embed": true,
         "alias": "recorder",
@@ -128,9 +128,9 @@
     }
   },
   "data": {
-    "volumes": [
-      "localdrive_data"
-    ],
+    "volumes": [],
+    "paths": ["data/drive/state"],
+    "moved_from": {"data/drive/state": "localdrive_data"},
     "on_uninstall": "prompt"
   },
   "observability": {

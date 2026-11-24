@@ -5,7 +5,8 @@
 
 What is asked, on this tree: every app has the four parts (palette, menu, address, phone) and the section lists
 exactly the apps with a tile; each part is what its gate says — palette a colour count from G82's own scan, None
-exactly where G82 reads no file of the app; «own» menus exactly G107's KNOWN owners (the console among them); an
+exactly where G82 reads no file of the app; «own» menus exactly G107's KNOWN owners (the console no longer: it
+left that list with its side rail, DGO-2132); an
 address only for an app with a tile the shell frames (`embed`), its ✗ set exactly G83's own `unrouted()` over
 them, hello-bina «allowed» by G83's ALLOWED, n8n (a link-out tile) None; phone not read from files (None); and the
 parts decide no cell (`compare` finds nothing lost or closed when every part changes).
@@ -49,7 +50,9 @@ class Parts(unittest.TestCase):
         known = {measure._owner(rel) for rel in menu.KNOWN}
         own = {aid for aid, p in self.parts.items() if p["menu"] == "own"}
         self.assertEqual(own, known)                  # G107 passes on this tree: «own» is exactly its KNOWN debt
-        self.assertEqual(self.parts["console"]["menu"], "own")
+        # the console LEFT G107's list with its side rail (DGO-2132, 8d6e77066): no shell of its own any more — its
+        # pages carry no menu G107 reads («unread»), and were one to come back it must be the shared grid, never «own»
+        self.assertNotEqual(self.parts["console"]["menu"], "own")
 
     def test_address_is_g83s_verdict_on_g83s_selection(self):
         route = measure._gate("embed-route-lint")

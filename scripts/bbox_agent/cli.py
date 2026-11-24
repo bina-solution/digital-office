@@ -182,6 +182,52 @@ def _upload_all(c: Client, sid: str, files: list) -> list:
     return refs
 
 
+def _through_line(c: Client, sent, sid: str, follow: bool) -> Optional[str]:
+    """A provider at its cap of running turns (bina-claude: BINA_CLAUDE_MAX_TURNS, DGO-2126) answers a message with
+    `queued`, its place in the line, the line's id for it (`qid`) and a note: the note is said (stderr). A follower
+    waits — asking every 3 s — until the line has sent it: a promise (`pending-…`) answers with its session's own id;
+    a session's summary stops listing the message's id in its `line`. None: the line will not send it — its session is
+    gone (nothing was sent), or it may have been delivered (never send it again blind); its summary says which."""
+    if not (isinstance(sent, dict) and sent.get("queued")):
+        return sid
+    print(yellow(sent.get("note") or f"queued: #{sent.get('queue')} in line"), file=sys.stderr)
+    if not follow:
+        return sid
+    pending = str(sid).startswith("pending-")
+    qid = sent.get("qid")
+    if not pending and not qid:
+        return sid                                     # a provider that names no id: its stream is the answer
+    try:
+        while True:
+            time.sleep(3)
+            s = c.call("GET", f"/v1/sessions/{sid}")
+            if not isinstance(s, dict):
+                continue
+            if pending:
+                if s.get("failed"):
+                    print(red(f"the line could not start it ({s['failed']}) — " +
+                              ("it may have been delivered: look at the app before sending it again"
+                               if s.get("maybe", True) else "nothing was sent")), file=sys.stderr)
+                    return None
+                if s.get("id") and s.get("id") != sid:
+                    sid, pending = s["id"], False      # started: a later message of ours may still wait in its line
+                    if not qid:
+                        return sid
+                continue
+            if qid in (s.get("line") or []):
+                continue
+            gave_up = next((f for f in (s.get("line_failed") or []) if isinstance(f, dict) and f.get("qid") == qid), None)
+            if gave_up:
+                print(red(f"the line could not send it ({gave_up.get('code')}) — " +
+                          ("it may have been delivered: look at the app before sending it again" if gave_up.get("maybe")
+                           else "nothing was sent")), file=sys.stderr)
+                return None
+            return sid
+    except KeyboardInterrupt:
+        print(dim(f"detached — it stays in line and goes by itself (bbox agent show {sid} says where it is)"), file=sys.stderr)
+        raise
+
+
 def cmd_new(c: Client, a) -> int:
     text = text_arg(a.text)
     body = {"cwd": a.cwd} if a.cwd else {}
@@ -197,9 +243,12 @@ def cmd_new(c: Client, a) -> int:
     # sessions, DGO-1298) answers the first one with the session's real id.
     sid = (sent.get("id") if isinstance(sent, dict) else None) or sid
     if a.json:
-        jout({"id": sid, "preset": r.get("preset")})
+        jout({"id": sid, "preset": r.get("preset")} | ({"queued": True, "queue": sent.get("queue")} if isinstance(sent, dict) and sent.get("queued") else {}))
     else:
         out(sid)
+    sid = _through_line(c, sent, sid, a.follow)
+    if sid is None:
+        return 3
     return _follow(c, sid, until_idle=True, thinking=a.thinking, verbose=a.verbose) if a.follow else 0
 
 
@@ -207,9 +256,11 @@ def cmd_send(c: Client, a) -> int:
     text = text_arg(a.text)
     sid = sid_of(c, a.id)
     files = _upload_all(c, sid, a.file)
-    c.call("POST", f"/v1/sessions/{sid}/messages", {"text": text, "steer": bool(a.steer), "files": files})
+    sent = c.call("POST", f"/v1/sessions/{sid}/messages", {"text": text, "steer": bool(a.steer), "files": files})
     if not a.follow:
         out(f"{'steered into' if a.steer else 'queued for'} {sid}")
+    if _through_line(c, sent, sid, a.follow) is None:
+        return 3
     return _follow(c, sid, until_idle=True, thinking=a.thinking, verbose=a.verbose) if a.follow else 0
 
 
@@ -610,17 +661,21 @@ def cmd_do(c: Client, a) -> int:
         text += "\n" + " ".join(a.text)
     if a.session:
         sid = sid_of(c, a.session)
-        c.call("POST", f"/v1/sessions/{sid}/messages", {"text": text, "steer": False, "files": []})
+        sent = c.call("POST", f"/v1/sessions/{sid}/messages", {"text": text, "steer": False, "files": []})
         if not a.json:
             out(f"queued for {sid}: {text.splitlines()[0]}")
     else:
         r = c.call("POST", "/v1/sessions", {"title": ref} | ({"preset": a.preset} if a.preset else {}))
         sid = r["id"]
-        c.call("POST", f"/v1/sessions/{sid}/messages", {"text": text, "files": []})
+        sent = c.call("POST", f"/v1/sessions/{sid}/messages", {"text": text, "files": []})
+        sid = (sent.get("id") if isinstance(sent, dict) else None) or sid
         if not a.json:
             out(f"{sid}  ← {text.splitlines()[0]}")
     if a.json:
-        jout({"id": sid, "ref": ref, "text": text})
+        jout({"id": sid, "ref": ref, "text": text} | ({"queued": True, "queue": sent.get("queue")} if isinstance(sent, dict) and sent.get("queued") else {}))
+    sid = _through_line(c, sent, sid, a.follow)
+    if sid is None:
+        return 3
     return _follow(c, sid, until_idle=True, thinking=a.thinking, verbose=a.verbose) if a.follow else 0
 
 

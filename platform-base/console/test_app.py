@@ -519,6 +519,58 @@ def test_a_linked_office_tile_carries_what_was_measured_about_its_office():
     assert "הלשכה ענתה (404)." in answered and "הלשכה שותקת." not in answered
 
 
+def test_a_linked_machine_of_this_business_is_marked_herd_and_another_business_is_not():
+    """DGO-2122: the home folds the herd's copies of an app into one tile per kind, and draws another business's office
+    as a card of its own. The fact it reads is `remote.herd`, from herd.offices.json (its offices and their other
+    names) — only when THIS office is in that herd, since every office compiles the same file, a client's too. A file
+    caught half-written is read again next time, never remembered as «no herd» under its mtime."""
+    import json
+    import os
+    import tempfile
+
+    real = (app.GENERATED, os.environ.get("DGO_OFFICE_ID"), dict(app._HERD))
+    app.GENERATED = tempfile.mkdtemp()
+    herd = pathlib.Path(app.GENERATED) / "herd.offices.json"
+    whole = json.dumps({"offices": {"macbook": {"aliases": []}, "dell": {"aliases": ["portable-ubuntu"]},
+                                    "vps1": {"aliases": []}}})
+
+    def tile(office):
+        return {"id": f"drive.{office}", "embed": "/a/drive/", "remote": {"office": office, "label": office}}
+
+    def judged(own, fresh=True):
+        os.environ["DGO_OFFICE_ID"] = own
+        if fresh:
+            app._HERD.update(mtime=None, ids=frozenset())
+        out = app._judged([tile("macbook"), tile("portable-ubuntu"), tile("exampleu"), {"id": "drive", "embed": "/a/drive/"}])
+        return [bool(t["remote"].get("herd")) for t in out[:3]], out[3]
+
+    try:
+        herd.write_text(whole, encoding="utf-8")
+        ours, local = judged("vps1")
+        theirs, _ = judged("exampleu")
+        herd.write_text('{"offices": {"macbook"', encoding="utf-8")       # the compiler's truncate-then-write, caught
+        half, _ = judged("vps1")
+        cached_half = app._HERD["mtime"]
+        stamp = os.stat(herd).st_mtime
+        herd.write_text(whole, encoding="utf-8")
+        os.utime(herd, (stamp, stamp))                                     # …and finished within the same mtime tick
+        after, _ = judged("vps1", fresh=False)
+    finally:
+        app.GENERATED = real[0]
+        if real[1] is None:
+            os.environ.pop("DGO_OFFICE_ID", None)
+        else:
+            os.environ["DGO_OFFICE_ID"] = real[1]
+        app._HERD.clear()
+        app._HERD.update(real[2])
+
+    assert ours == [True, True, False]           # the Mac; the Dell by its other name; a client's office is not
+    assert local == {"id": "drive", "embed": "/a/drive/"}                # a local tile carries no mark
+    assert theirs == [False, False, False]       # a client's office runs the same tree: our machines are not its herd
+    assert half == [False, False, False] and cached_half is None          # a half file is not remembered…
+    assert after == [True, True, False]                                    # …so the whole one is read, same mtime or not
+
+
 # ── #63: an app that refuses to be framed is said so, never a dead window ─────────────────────────
 def _verdict(headers, console="https://console.office.example", app_origin="https://svc.office.example"):
     return app.frame_verdict(headers, console, app_origin)

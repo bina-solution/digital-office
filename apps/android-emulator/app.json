@@ -48,7 +48,7 @@
       "auth": "sso",
       "emit_labels": false,
       "module": {
-        "group": "תשתית",
+        "group": "פיתוח ואוטומציות",
         "icon": "monitor",
         "embed": true,
         "alias": "android-emulator",

@@ -450,6 +450,7 @@ if u:
 # does Android's office unit (run_verdict); onboarding, baseline.sh and the macOS engine's first run go on and say so.
 BBOX_RUN_PROBLEMS=""
 BBOX_RUN_FATAL=""
+BBOX_RUN_HELD=""      # a service this run named was held while its app was at work (DGO-2129): the run ends with 75
 BBOX_NL=$'\n'   # outside the quotes: `$'…'` inside "${…:+…}" needs extquote (the second reader)
 #: run_problem fatal|soft "<what>" — one line for the run's end; a fatal one makes the run exit 3. A kind that is
 # neither (a typo, an old call) is read as fatal, and its words kept: a problem is never lost or quietly softened.
@@ -493,6 +494,8 @@ run_verdict() {
   else
     say "up. check health with: bbox status"
   fi
+  # a service this run named was held while its app was at work (DGO-2129): said above, and told by its exit
+  if [ -n "${BBOX_RUN_HELD:-}" ]; then say "${cy}held, not done: what it named waits for a quiet moment (exit 75)${c0}"; exit 75; fi
 }
 # ── the app command surface, read from the apps themselves ────────────────────────────────────
 # bbox must not contain a list of apps, their aliases, or their verbs. These three helpers derive
@@ -651,6 +654,9 @@ ${c1}Lifecycle${c0}
                           healthy, or the old value back — compose's own dry run proves it reached them; any
                           other class is refused (\`plan\` names its steps)
   bbox logs [svc] [-f]    show logs (all services, or one)
+  bbox home status|move [--to DIR] [--dry-run]
+                          where the DGO folder is and whether it holds databases; on Windows the one move off C:
+                          onto WSL's own disk — run from the new folder, and only then the old one marked
   bbox rename-address [--dry-run] <old-domain> <new-domain>
                           the office moved to another domain: every enabled app that keeps people's
                           addresses moves its own accounts, then its own .env keys, <local>@<old> →
@@ -758,6 +764,12 @@ EOF
 }
 
 cmd="${1:-help}"; shift || true
+# A folder the office MOVED out of (`bbox home move`, DGO-2019) runs nothing: it is the same compose project, so a run
+# here would recreate every container on this old copy — the databases back on the day of the move, the newer writes
+# orphaned in the new folder. Only `home status` answers; bbox.cmd here hands every command to the new folder.
+if [ -f "${REPO_ROOT}/MOVED-TO.txt" ] && { [ "${cmd}" != home ] || [ "${1:-status}" != status ]; }; then
+  die "this folder was moved: the office runs from $(head -1 "${REPO_ROOT}/MOVED-TO.txt") — run bbox there (from Windows, bbox.cmd in this folder hands over)"
+fi
 # global --force flag
 FORCE=0; args=(); for a in "$@"; do [ "$a" = "--force" ] && FORCE=1 || args+=("$a"); done; set -- "${args[@]+"${args[@]}"}"
 
@@ -819,7 +831,7 @@ case "${cmd}" in
       [ "${_held}" != 2 ] \
         || die "no .env, and the engine did not say whether this checkout's office ($(office_project)) already has data — nothing is generated until it can (a lost .env must never get new secrets over old volumes)."
       [ "${_held}" != 0 ] \
-        || die "no .env, but this checkout's office ($(office_project)) already has containers or volumes — its .env is missing, not new. Restore it (a backup's .env, or the office's vault); a new one would not open the data that is there."
+        || die "no .env, but this checkout's office ($(office_project)) already has containers, volumes or stores in data/ — its .env is missing, not new. Restore it (a backup's .env, or the office's vault); a new one would not open the data that is there."
       if [ -n "${BBOX_IN_GUEST:-}" ]; then
         say "no .env — generating a local one for the macOS engine (scripts/ci-env.sh, DEPLOYMENT_NAME=local, edge on :8080)…"
         ( cd "${REPO_ROOT}" && CI_DEPLOYMENT_NAME=local CI_EDGE_PORT=8080 bash scripts/ci-env.sh ) >/dev/null 2>&1 || say "${cy}ci-env.sh reported an issue${c0}"
@@ -856,6 +868,28 @@ $(printf '%s\n' "${held}" | sed 's/^/    /')
   Bring that project down where it was started, or remove just these containers (their volumes are kept):
     docker rm -f $(printf '%s\n' "${held}" | awk '{print $1}' | tr '\n' ' ')
   then run this again."
+    # Every app's state in the DGO folder's data/<app>/ (DGO-2019), before any hook or `up` touches it: a store whose
+    # compose now binds its folder moves there from its old volume — what uses the volume stopped, the volume copied
+    # and compared file by file, the volume itself left as it was — or runs on from its volume where this office
+    # cannot hold it yet (data/.moves/wait/). A failed move is said and loses nothing: the store keeps its volume.
+    # What a move stopped is brought back at once (its `REUP` line), on its folder — or on its volume when the move did
+    # not hold — not at the `up` after every hook and build: the office's sign-in was down for the whole run otherwise.
+    _dh_up="" _dh_rc=0
+    while IFS= read -r _dh_l; do
+      case "${_dh_l}" in
+        "REUP "*) _dh_up="${_dh_l#REUP }" ;;
+        "RC "*) _dh_rc="${_dh_l#RC }" ;;
+        *) printf '%s\n' "${_dh_l}" ;;
+      esac
+    done < <(cd "${REPO_ROOT}" && COMPOSE_PROJECT_NAME="$(office_project)" python3 platform/manager/datahome.py ensure "$@" 2>&1; echo "RC $?")
+    if [ -n "${_dh_up}" ]; then
+      say "bringing back what the data move stopped: ${_dh_up}"
+      # one by one: a service that cannot come up yet (its image not built) never keeps the others down
+      for _dh_s in ${_dh_up}; do
+        dc up -d --no-deps --no-build "${_dh_s}" || say "${cy}${_dh_s} did not come back now; the run's up brings it${c0}"
+      done
+    fi
+    [ "${_dh_rc}" = 0 ] || run_problem soft "a store did not move to data/ (above): it runs from its volume, nothing was lost"
     # `|| true`: a failed bootstrap is LOUD (run_app_hooks names the app) but must not deny
     # every later app its own prepare, nor abort a bring-up that is otherwise fine.
     run_app_hooks prepare || true   # each app's OWN bootstrap; bbox names none of them
@@ -953,11 +987,18 @@ $(printf '%s\n' "${held}" | sed 's/^/    /')
     _bf="--build"; [ -n "${BBOX_PREBUILT:-}" ] && _bf=""
     # The time is measured, not the ceiling repeated: `--wait` also returns at the FIRST container that
     # turns unhealthy, and "within 3600s" printed one minute in sent the reader to the wrong cause (DGO-1040).
-    _wt0="$(date +%s)"
-    dc up -d ${_bf} --wait --wait-timeout "${_wt}" "$@" \
-      || { _ws="$(( $(date +%s) - _wt0 ))"
-           say "${cy}not all services healthy after ${_ws}s (builds and the wait; the wait allows ${_wt}s) — a build failed, a service turned unhealthy, or the time ran out: the lines above say which — check 'bbox status' / 'bbox logs'${c0}"
-           run_problem fatal "not all services healthy after ${_ws}s (builds and the wait; the wait allows ${_wt}s), or a build in that \`up\` failed (above)"; }
+    _wt0="$(date +%s)"; _urc=0
+    dc up -d ${_bf} --wait --wait-timeout "${_wt}" "$@" || _urc=$?
+    # 75: a service this run named belongs to an app at work, and the bring-up held it (lib.sh compose_when_idle_up,
+    # DGO-2129): everything else came up, and the held line above says what waits and why. Not a failed bring-up.
+    if [ "${_urc}" -eq 75 ]; then
+      say "${cy}held: what an app at work runs was not recreated (the line above) — follow brings it up at a quiet cycle; BBOX_RECREATE_BUSY=1 goes now${c0}"
+      BBOX_RUN_HELD=1                      # run_verdict ends the run with 75, as dcx did: a caller is told it was not done
+    elif [ "${_urc}" -ne 0 ]; then
+      _ws="$(( $(date +%s) - _wt0 ))"
+      say "${cy}not all services healthy after ${_ws}s (builds and the wait; the wait allows ${_wt}s) — a build failed, a service turned unhealthy, or the time ran out: the lines above say which — check 'bbox status' / 'bbox logs'${c0}"
+      run_problem fatal "not all services healthy after ${_ws}s (builds and the wait; the wait allows ${_wt}s), or a build in that \`up\` failed (above)"
+    fi
     # Safety net: --wait can return (timeout) with services still 'Created' that were waiting on a
     # slow depends_on (e.g. n8n workers wait for n8n main service_healthy; first-run migrations +
     # image builds can exceed the window). A plain `up -d` now starts them — their deps have since
@@ -995,6 +1036,16 @@ $(printf '%s\n' "${held}" | sed 's/^/    /')
     _rec="$(printf '%s\n' "${_late}" | sed 's/\x1b\[[0-9;]*[A-Za-z]//g' \
               | awk '$1 == "Container" && $NF == "Recreated" {print $2}' | sort -u | tr '\n' ' ')"
     [ -z "${_rec}" ] || say "the second up re-created: ${_rec}"
+    # …and what moved to data/ this run is checked now that it is up (DGO-2019): its containers healthy, its
+    # hooks/state the same as before the move. A store that fails goes back to its volume — untouched since the
+    # move — and its services come up on it again (the `REUP` line).
+    _dh_rc=0
+    _dh="$(cd "${REPO_ROOT}" && COMPOSE_PROJECT_NAME="$(office_project)" python3 platform/manager/datahome.py verify 2>&1)" \
+      || _dh_rc=$?
+    printf '%s\n' "${_dh}" | grep -v '^REUP ' | grep . || true
+    _dh_re="$(printf '%s\n' "${_dh}" | sed -n 's/^REUP //p')"
+    [ -z "${_dh_re}" ] || dc up -d ${_dh_re} || true
+    [ "${_dh_rc}" = 0 ] || run_problem soft "a store moved to data/ failed its check (above) and runs from its volume again"
     # NOTE: the INDOX UI 'בדיקות' (tests) tab drives the n8n E2E suites via lane webhooks (part of
     # the core n8n stack) — it does not need feature-validation-api. That service is
     # apps/apitools/feature-validation, a CI/dev quality tool reached via `bbox test apitools`
@@ -1100,6 +1151,17 @@ for s in (d.get("services") or {}).values():
     fi ;;
   status)
     need_docker
+    # A STATUS NEVER DIES ON A CHECK IT CANNOT MAKE (DGO-2003). This file runs under `set -euo pipefail`, and each
+    # line below is a check: the first that failed ended the status after its first line, exit 1, saying nothing.
+    # Examplex's office, 2026-11-18, inside Bina Claude's container: root, but no CAP_NET_ADMIN, so `nft list tables`
+    # was refused, and the owner saw one line and «Exit code 1». Making each command the block runs fail in turn
+    # (scripts/test_bbox_status_checks.py) found the rest that would end it: the containers' docker|awk, nft even
+    # crashing (the very case its own line reports, DGO-1358), and any lib.sh probe below that ever returns
+    # non-zero (today they end in `|| true`). So the checks run with errexit off (pipefail stays: a probe's own
+    # failed pipe is still its failure); one that fails says so in its own line, and the rest still print.
+    # need_docker above stays a precondition: with no engine to ask there is nothing to report.
+    set +e
+    not_checked() { echo "  ${cy}${1}: not checked — it failed here (exit ${2})${c0}"; }
     # …and the compose PROJECT these answers are about: a checkout reached by a path compose names
     # differently talks to a project of its own, and "0 containers" from it reads as "the office is down".
     say "deployment ${DN} · compose project $(dcx config --format json 2>/dev/null | python3 -c 'import json,sys; print(json.load(sys.stdin).get("name") or "?")' 2>/dev/null || echo '?')"
@@ -1117,7 +1179,11 @@ for s in (d.get("services") or {}).values():
     #                                                                  reading /api/reconcile makes)
     # An app HELD UP because an enabled app requires it is inside the closure and stays a real one.
     off="$(off_services || true)"
-    docker ps -a --format '{{.Names}}\t{{.Status}}\t{{.Label "com.docker.compose.service"}}' \
+    # the engine's list first: a `docker ps` that failed must not reach the count as «0 up / 0 declared on»
+    _ps_ok=1
+    _ps_out="$(docker ps -a --format '{{.Names}}\t{{.Status}}\t{{.Label "com.docker.compose.service"}}')" \
+      || { not_checked "the running list (docker ps)" $?; _ps_ok=; }
+    [ -z "${_ps_ok}" ] || printf '%s\n' "${_ps_out}" \
       | awk -F'\t' -v dn="-${DN}" -v off="${off}" -v cg="${cg}" -v cy="${cy}" -v cr="${cr}" -v c0="${c0}" '
         BEGIN { n = split(off, r, "\n")
                 for (i = 1; i <= n; i++) { split(r[i], c, "\t")
@@ -1147,17 +1213,17 @@ for s in (d.get("services") or {}).values():
             printf "  %sdeclared off:%s %s — platform.state.yaml declares them off, so this is the declared state, not a fault\n", cy, c0, named
           }
           if (drift != "") printf "  %sdrift:%s %s — declared off yet running; '"'"'bbox apps disable <app>'"'"' stops it, '"'"'bbox apps enable <app>'"'"' makes it real\n", cy, c0, drift
-        }'
+        }' || not_checked "the count" $?
     # …the ones another compose project holds under this stack's names (lib.sh: foreign_containers)
-    held="$(foreign_containers)"
+    held="$(foreign_containers)" || not_checked "names another compose project holds" $?
     [ -z "${held}" ] || printf '%s\n' "${held}" | sed "s/^/  ${cr}held by another compose project:${c0} /"
     # …and the containers running an image their tag no longer points at (lib.sh: image_drift): a
     # rebuild nobody replaced — every file on disk says the fix is in, and the browser gets the old code.
-    drift="$(image_drift)"
+    drift="$(image_drift)" || not_checked "images older than their tag" $?
     [ -z "${drift}" ] || printf '%s\n' "${drift}" | sed "s/^/  ${cr}running an older image than its tag:${c0} /"
     # …and the traefik RULES two containers claim (lib.sh: shared_hosts) — this office's edge reads
     # every container on the engine, so another stack's router can own a host this office also serves.
-    hosts="$(shared_hosts)"
+    hosts="$(shared_hosts)" || not_checked "routing rules more than one container claims" $?
     if [ -n "${hosts}" ]; then
       echo "  ${cy}a routing rule more than one container claims:${c0}"
       printf '%s\n' "${hosts}" | sed "s/^/    /"
@@ -1165,7 +1231,7 @@ for s in (d.get("services") or {}).values():
     fi
     # …and the NAMES our containers share with another stack on the same network (lib.sh: shared_names):
     # docker round-robins a name two containers answer to, so half the calls land in the other office.
-    shared="$(shared_names)"
+    shared="$(shared_names)" || not_checked "names more than one container answers to" $?
     if [ -n "${shared}" ]; then
       echo "  ${cy}a name more than one container answers to:${c0}"
       printf '%s\n' "${shared}" | sed "s/^/    /"
@@ -1178,13 +1244,20 @@ for s in (d.get("services") or {}).values():
     # …and the IMAGES that are older than the files they were built from: a bring-up without --build
     # re-creates the container and runs the OLD code, so this one is invisible in both the files and
     # `docker ps` (eng-013 instance 3; measured 2026-10-11 — 9 services, one of them 4.3 days behind).
-    stale_img="$(stale_images)"
+    stale_img="$(stale_images)" || not_checked "images older than their sources" $?
     [ -z "${stale_img}" ] || echo "  ${cy}images older than their sources:${c0} ${stale_img}— ${c1}rebuild${c0} (up -d --build), a re-create runs the old code"
     # …and the HOST's own firewall tool, which must still read what this office's sensor writes into the host's
     # namespace (DGO-1358: vps1's nft 1.0.6 segfaulted on every ruleset nft 1.1.3 wrote, and a tunnel died on it)
     if command -v nft >/dev/null 2>&1 && [ "$(id -u)" = 0 ]; then
-      nft list tables >/dev/null 2>&1; _nftrc=$?
-      [ "${_nftrc}" -lt 128 ] || echo "  ${cr}the host's nft cannot read its own ruleset (exit ${_nftrc}):${c0} a table written by a newer nft — the security sensor's image must write with the host's nft or older (DGO-1358)"
+      _nfterr="$(nft list tables 2>&1 >/dev/null)"; _nftrc=$?
+      if [ "${_nftrc}" -ge 128 ]; then
+        echo "  ${cr}the host's nft cannot read its own ruleset (exit ${_nftrc}):${c0} a table written by a newer nft — the security sensor's image must write with the host's nft or older (DGO-1358)"
+      elif grep -q 'Operation not permitted' <<<"${_nfterr}"; then
+        # refused, not broken: a container's root without NET_ADMIN (Bina Claude's) may not read the host's firewall
+        echo "  ${cy}firewall: not readable from here (nft exit ${_nftrc})${c0} — status on the host itself reads it"
+      elif [ "${_nftrc}" != 0 ]; then
+        echo "  ${cr}firewall: nft failed (exit ${_nftrc}):${c0} $(head -1 <<<"${_nfterr}")"
+      fi
     fi
     [ -x "${REPO_ROOT}/apps/n8n/hooks/status" ] && bash "${REPO_ROOT}/apps/n8n/hooks/status" --brief || true ;;
   verify)
@@ -1266,6 +1339,16 @@ for s in (d.get("services") or {}).values():
               ( cd "${REPO_ROOT}" && exec python3 "$(npath "${SCRIPTS}/env-secrets.py")" --env .env --rotate "$@" ) ;;
       *)      die "bbox secrets check | plan [KEY…] | rotate KEY…" ;;
     esac ;;
+
+  # `bbox data plan|check|retry` (DGO-2019) are data-management's hooks, reached by the generic dispatch below: `data`
+  # is that app's alias, and a case here answered before it, so `bbox data view|export|import` were unreachable.
+
+  home)
+    # bbox home status|move — where the DGO folder is and whether it can hold the office's databases; on Windows,
+    # the one move off C: (drvfs) onto WSL's own disk: stopped, copied, compared, run from the new folder, and only
+    # then the old one marked (scripts/home-move.sh, DGO-2019 — the product root of DGO-1999). It restarts the whole
+    # office, so it runs on the host — from Windows, `bbox.cmd home move`.
+    exec bash "$(npath "${SCRIPTS}/home-move.sh")" "$@" ;;
 
   export|import)
     # Move a whole deployment to another machine. See scripts/deployment-archive.py for why a zip

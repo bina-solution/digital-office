@@ -51,6 +51,14 @@ class StuckTests(unittest.TestCase):
         self.assertEqual(max(w for w, _ in seen), 60)
         self.assertFalse(any(d for _, d in seen))
 
+    def test_a_message_waiting_in_the_doors_line_ahead_is_busy_not_stuck(self):
+        # bina-claude's line (DGO-2126): a message to the session already waits there, and this one goes after it
+        at_cap = ('the agent door did not take the message: HTTP 429 {"error":"a message to this session waits in the '
+                  'line: nothing was sent — send again when it is in","code":"at-cap"}')
+        seen = self.rounds("2-1", at_cap, 12, 120)
+        self.assertEqual(max(w for w, _ in seen), 60)
+        self.assertFalse(any(d for _, d in seen))
+
     def test_the_group_is_told_once_at_ten_minutes_of_nothing_sent(self):
         seen = self.rounds("3-0", NOT_SENT, 30, 100)                  # 50 minutes, a round every 100 s
         told = [i for i, (_, d) in enumerate(seen) if d]

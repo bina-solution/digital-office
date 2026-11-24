@@ -51,7 +51,7 @@
       "port": 8080,
       "auth": "sso",
       "module": {
-        "group": "תשתית",
+        "group": "פיתוח ואוטומציות",
         "icon": "server",
         "embed": true,
         "tile": false,

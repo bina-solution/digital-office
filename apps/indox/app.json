@@ -1,7 +1,7 @@
 {
   "id": "indox",
   "title": {
-    "he": "מסמכים",
+    "he": "מסמכים נכנסים",
     "en": "INDOX"
   },
   "layer": 3,
@@ -168,13 +168,13 @@
       "service": "incoming-documents",
       "emit_labels": false,
       "module": {
-        "group": "עסק",
+        "group": "ניהול העסק",
         "icon": "inbox",
         "embed": true,
         "alias": "incoming",
         "id": "incoming",
-        "name": "מסמכים",
-        "desc": "עיבוד מסמכים אוטומטי (INDOX)",
+        "name": "נכנסים",
+        "desc": "מסמכים נכנסים — עיבוד אוטומטי (INDOX)",
         "order": 0,
         "tab": true,
         "url_env": "INCOMING_UI_URL",

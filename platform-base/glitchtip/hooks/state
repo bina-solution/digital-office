@@ -1,0 +1,32 @@
+#!/usr/bin/env bash
+#: state — what this app holds, one `<name> <value>` per line:  ./bbox glitchtip state
+#: In its database (data/glitchtip/db, read in glitchtip-postgres): its organisations, projects and users — never the
+#: events, which it prunes by age; -1 for a table this version does not have. In the app (data/glitchtip/uploads):
+#: the uploaded files. Counts only. The data move (platform/manager/datahome.py, DGO-2019) reads it before it moves a
+#: store and again after, and sends the store back to its volume when what it held is gone. Plain sh: two images.
+set -uo pipefail
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
+case "${1:-}" in -h|--help) sed -n 's/^#: //p' "${BASH_SOURCE[0]}"; exit 0 ;; esac
+# The data move names the container it measures; by hand, it is the office's own database.
+if [ -n "${DGO_STATE_CONTAINER:-}" ]; then
+  inside() { docker exec -i "${DGO_STATE_CONTAINER}" "$@"; }
+else
+  . "${REPO_ROOT}/scripts/lib.sh"
+  inside() { dcx exec -T glitchtip-postgres "$@"; }
+fi
+inside sh -s <<'SH'
+if command -v psql >/dev/null 2>&1; then
+  # the local socket, as its POSTGRES_USER role — every count in ONE query: a database that answers half says nothing.
+  # Each count is run by name AT RUN TIME (query_to_xml): postgres resolves every table a query names before it runs
+  # it, a CASE branch never taken included, so a table this version lacks would fail the whole query (its reader)
+  c() { printf "case when to_regclass('%s') is null then -1 else (xpath('/row/c/text()', query_to_xml('select count(*) as c from %s', false, true, '')))[1]::text::int end" "$1" "$1"; }
+  n="$(psql -U "${POSTGRES_USER:-glitchtip}" -d "${POSTGRES_DB:-glitchtip}" -tA -F' ' -c "select
+    $(c organizations_ext_organization), $(c projects_project), $(c users_user)" 2>/dev/null)" || exit 0
+  set -- ${n}
+  [ "$#" = 3 ] || exit 0
+  echo "db.organizations $1"; echo "db.projects $2"; echo "db.users $3"
+else
+  echo "uploads.files $(find /code/uploads -type f 2>/dev/null | wc -l)"
+fi
+SH

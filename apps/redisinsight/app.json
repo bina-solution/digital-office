@@ -45,7 +45,7 @@
         "name": "RedisInsight",
         "icon": "activity",
         "desc": "מטמון ותורים (Redis)",
-        "group": "תשתית",
+        "group": "פיתוח ואוטומציות",
         "order": 250,
         "embed": false
       },
@@ -62,9 +62,9 @@
     "structural": "auto"
   },
   "data": {
-    "volumes": [
-      "redisinsight_data"
-    ],
+    "volumes": [],
+    "paths": ["data/redisinsight/state"],
+    "moved_from": {"data/redisinsight/state": "redisinsight_data"},
     "on_uninstall": "prompt"
   },
   "resources": {

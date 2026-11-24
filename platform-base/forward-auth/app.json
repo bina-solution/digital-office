@@ -46,9 +46,11 @@
     }
   },
   "data": {
-    "volumes": ["forward_auth_data"],
+    "volumes": [],
+    "paths": ["data/forward-auth/state"],
+    "moved_from": {"data/forward-auth/state": "forward_auth_data"},
     "on_uninstall": "keep",
-    "note": "Its one fact — who may sign in — is the users file in the forward_auth_data volume, written once at first-run setup (DGO-1090); during a migration it also reads authentik's own database, never writing it."
+    "note": "Its one fact — who may sign in — is the users file in data/forward-auth/state (the forward_auth_data volume until DGO-2019 moved it), written once at first-run setup (DGO-1090); during a migration it also reads authentik's own database, never writing it. lan-console's sign-in reads the same folder, read-only."
   },
   "resources": {
     "memory": "64M"

@@ -141,7 +141,7 @@ if [ ! -f "${REPO_ROOT}/.env" ]; then
   # server office would first declare its apps and apply its host baseline (the fourth reader, DGO-1782)
   _held=0; office_holds_data || _held=$?   # the form that survives `set -e`, as in bbox
   if [ "${_held}" != 1 ]; then
-    echo "no .env, and this checkout's office ($(office_project)) $([ "${_held}" = 0 ] && echo "already has containers or volumes — its .env is missing, not new: restore it (a backup's .env, or the office's vault)" || echo "may have data — the engine did not say"). Nothing is generated over it."
+    echo "no .env, and this checkout's office ($(office_project)) $([ "${_held}" = 0 ] && echo "already has containers, volumes or stores in data/ — its .env is missing, not new: restore it (a backup's .env, or the office's vault)" || echo "may have data — the engine did not say"). Nothing is generated over it."
     exit 1
   fi
   say "no .env — 'bbox run' below makes a LOCAL office (every app at <name>.localhost); an office with a domain brings its own .env"

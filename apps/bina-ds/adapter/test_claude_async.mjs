@@ -3,8 +3,9 @@
 // «מילי שניות». A conversation opened here is the app's promise (`pending-…`) until its first message starts it;
 // its read then names the id it goes on under (`resolved`). A message still on its way says so (`sending`); one the
 // app did not take says why in Hebrew and gives its words back (`failed`); the next message of a conversation waits
-// until the one before it is in (409); and the app is handed one message at a time. A fake agent.v1 app that keeps
-// a promise as bina-claude does stands in for the real one. Run: node test_claude_async.mjs
+// until the one before it is in (409); and the app is handed one message at a time. A message the app's line holds
+// (its cap of running turns, DGO-2126) is on its way until the line sends it, and one the line gave up on says why.
+// A fake agent.v1 app that keeps a promise as bina-claude does stands in for the real one. Run: node test_claude_async.mjs
 import http from "node:http";
 import { randomUUID } from "node:crypto";
 import { mkdtempSync, rmSync } from "node:fs";
@@ -31,7 +32,13 @@ async function until(cond, ms = 5000) {
 const APP_UNSENT = new Set(["no-text", "not-sent", "dropped", "locked", "busy", "waiting", "no-window", "no-app", "no-app-session", "not-focused", "no-session", "no-exec"]);
 function fakeApp() {
   const state = { calls: [], started: [], promises: new Map(), n: 0, slow: 0, refuse: null, inflight: 0, most: 0,
-                  starting: new Set(), failedStart: new Map(), failReads: false };
+                  starting: new Set(), failedStart: new Map(), failReads: false,
+                  // its line (bina-claude's cap of running turns): a message to a started conversation waits in it,
+                  // under the id the line gives it (qid)
+                  lineMode: false, line: new Map(), lineFailed: new Map(), lastQid: null, linePlace: null, summary404: 0,
+                  promiseLine: false, queuedPromises: new Set(), failPromiseReads: 0 };
+  // where each waiting message stands in the whole line: the session's first at `linePlace`, the next behind it
+  const placesOf = (line) => line.map((_, i) => (state.linePlace ?? 1) + i);
   const server = http.createServer(async (req, res) => {
     let body = "";
     for await (const c of req) body += c;
@@ -48,9 +55,19 @@ function fakeApp() {
     const one = /^\/v1\/sessions\/([^/?]+)$/.exec(req.url);
     if (one && req.method === "GET") {
       const pid = decodeURIComponent(one[1]);
+      // a started conversation: its summary, with what waits in the line for it and what the line last gave up on
+      if (state.started.some((s) => s.id === pid)) {
+        if (state.summary404 > 0) { state.summary404 -= 1; return send(404, { error: "no such session", code: "no-session" }); }
+        const line = state.line.get(pid) || [];
+        return send(200, { id: pid, title: "started", queue: line.length, line, line_places: placesOf(line),
+                           line_place: line.length ? (state.linePlace ?? 1) : 0, line_failed: state.lineFailed.get(pid) || [] });
+      }
       if (!state.promises.has(pid)) return send(404, { error: "no such session", code: "no-session" });
+      if (state.failPromiseReads > 0) { state.failPromiseReads -= 1; return send(500, { error: "the app is restarting" }); }
       if (state.promises.get(pid)) return send(200, { id: state.promises.get(pid), title: "started" });
-      return send(200, { id: pid, blank: true, starting: state.starting.has(pid), ...(state.failedStart.has(pid) ? { failed: state.failedStart.get(pid) } : {}) });
+      return send(200, { id: pid, blank: true, starting: state.starting.has(pid) || state.queuedPromises.has(pid),
+                         ...(state.queuedPromises.has(pid) ? { queued: true, queue: 1 } : {}),
+                         ...(state.failedStart.has(pid) ? { failed: state.failedStart.get(pid) } : {}) });
     }
     const m = /^\/v1\/sessions\/([^/?]+)\/(messages|cancel|events)/.exec(req.url);
     if (!m) return send(404, { error: "no" });
@@ -66,6 +83,10 @@ function fakeApp() {
           if (promise && !APP_UNSENT.has(state.refuse)) state.failedStart.set(given, state.refuse);   // as bina-claude keeps it
           return send(409, { error: "nothing was sent: the text is not in the composer", code: state.refuse });
         }
+        if (state.promises.has(given) && !real && state.promiseLine) {   // at the cap: its first message waits in the line
+          state.queuedPromises.add(given);
+          return send(202, { accepted: true, queued: true, queue: 1, qid: randomUUID(), id: given, note: "#1 in line" });
+        }
         if (state.promises.has(given) && !real) {
           const id = `local_started-${++state.n}`;
           state.promises.set(given, id);
@@ -73,13 +94,23 @@ function fakeApp() {
           return send(202, { accepted: true, queue: 0, id });
         }
         if (!state.started.some((s) => s.id === real)) return send(404, { error: "no such session", code: "no-session" });
+        if (state.lineMode) {                            // at the cap: in the line, as bina-claude answers it
+          const line = state.line.get(real) || [];
+          state.lastQid = randomUUID(); line.push(state.lastQid); state.line.set(real, line);
+          const at = state.linePlace ?? line.length;
+          return send(202, { accepted: true, queued: true, queue: at, qid: state.lastQid, note: `#${at} in line` });
+        }
         return send(202, { accepted: true, queue: 0 });
       } finally { state.inflight -= 1; state.starting.delete(given); }
     }
     if (state.promises.has(given) && !real) return send(409, { error: `${given} starts with its first message`, code: "not-started" });
     if (!state.started.some((s) => s.id === real)) return send(404, { error: "no such session", code: "no-session" });
     if (m[2] === "messages" && state.failReads) return send(500, { error: "the transcript could not be read" });
-    if (m[2] === "messages") return send(200, { events: [{ seq: 0, type: "user", text: "שלום", at: new Date().toISOString() }], has_more: false });
+    if (m[2] === "messages") {
+      const line = state.line.get(real) || [];
+      return send(200, { events: [{ seq: 0, type: "user", text: "שלום", at: new Date().toISOString() }], has_more: false,
+                         ...(line.length ? { line, line_places: placesOf(line) } : {}) });
+    }
     if (m[2] === "cancel" && state.cancelRefuse) return send(409, { error: "the app is busy", code: state.cancelRefuse });
     if (m[2] === "cancel") return send(200, { id: real, cancelled: true });
     res.writeHead(200, { "content-type": "text/event-stream" });
@@ -303,6 +334,122 @@ app.state.cancelRefuse = "busy";
 const busyStop = await call("POST", `/ui/sessions/${real}/cancel`, {});
 check([busyStop.status, /עסוקה כרגע בשיחה אחרת/.test((busyStop.data && busyStop.data.error) || "")], [409, true], "a stop the app refuses as busy: said as a stop");
 app.state.cancelRefuse = null;
+
+// 10. the app's line (bina-claude's cap of running turns, DGO-2126): a message it holds is still on its way — the
+// screen keeps it and the next one waits — until the line sends it; one the line gave up on is said with its words:
+// «not sent» when nothing was pressed, «not known» when it may have gone. Another message's failure is not this one's.
+const toLine = async (text) => {
+  const n = posts(`/v1/sessions/${real}/messages`);
+  const res = await call("POST", `/ui/sessions/${real}/messages`, { text });
+  await until(() => posts(`/v1/sessions/${real}/messages`) === n + 1 && app.state.inflight === 0);
+  await sleep(30);                                               // the door has read the app's answer
+  return res;
+};
+app.state.lineMode = true;
+app.state.linePlace = 2;                                          // one message of another conversation waits ahead
+const queued = await toLine("בתור");
+r = await read(real);
+check([queued.status, r.data.sending, r.data.queued, r.data.failed], [202, true, 2, undefined],
+  "a message the app's line holds: still on its way, and its place in the line said");
+app.state.linePlace = 1;
+r = await read(real);
+check([r.data.sending, r.data.queued], [true, 1], "…the one ahead went: its place moves up");
+app.state.linePlace = 2;
+app.state.line.set(real, ["q-ahead-of-it", app.state.lastQid]);  // another sender's message to it waits ahead of it
+r = await read(real);
+check(r.data.queued, 3, "…its own place in the line, not the session's first message's");
+app.state.linePlace = 1;
+app.state.line.set(real, [app.state.lastQid]);
+const sentSoFar = posts(`/v1/sessions/${real}/messages`);
+const behind = await call("POST", `/ui/sessions/${real}/messages`, { text: "עוד אחת" });
+check([behind.status, posts(`/v1/sessions/${real}/messages`)], [409, sentSoFar], "…and the next one waits for it (409): nothing more is sent");
+app.state.summary404 = 1;                                         // the app's record caught mid-write: one 404
+r = await read(real);
+check([r.data.sending, r.data.failed], [true, undefined], "one 404 alone is not «gone»: still on its way");
+app.state.line.set(real, ["another-senders-qid"]);               // the line sent it; another sender's message waits
+r = await read(real);
+check([r.data.sending, r.data.queued, r.data.failed, r.data.events.length], [undefined, undefined, undefined, 1],
+  "the line sent it (another's still waiting): no longer on its way, nothing failed, the conversation read");
+app.state.linePlace = null;
+const gaveUp = (code, maybe) => { app.state.line.set(real, []); app.state.lineFailed.set(real, [{ qid: app.state.lastQid, code, maybe, at: Date.now() }]); };
+await toLine("נדחה בתור");
+gaveUp("no-session", false);                                      // the one «nothing pressed» end that leaves the line
+r = await read(real);
+let lf = r.data.failed || {};
+check([r.data.sending, lf.text, lf.maybe, /לא נמצאה/.test(lf.error || "")], [undefined, "נדחה בתור", undefined, true],
+  "the line gave it up having pressed nothing: not sent, said in Hebrew, its words back");
+await toLine("אולי נשלח מהתור");
+gaveUp("unknown", true);
+r = await read(real);
+lf = r.data.failed || {};
+check([r.data.sending, lf.text, lf.maybe, /לא ידוע/.test(lf.error || "")], [undefined, "אולי נשלח מהתור", true, true],
+  "…having maybe sent it: not known, with its words");
+await toLine("נשאר בתיבה");
+gaveUp("left-in-composer", true);
+r = await read(real);
+lf = r.data.failed || {};
+check([lf.maybe, /נכנסה לתיבת הכתיבה/.test(lf.error || "")], [true, true],
+  "…its text left in the app's composer: not known, never offered again, said where it waits");
+app.state.summary404 = 2;                                         // the conversation is gone from the app
+await toLine("לשיחה שנמחקה");
+await read(real);
+r = await read(real);
+lf = r.data.failed || {};
+check([r.data.sending, lf.text, lf.maybe], [undefined, "לשיחה שנמחקה", undefined], "a 404 twice running: gone — not sent, its words back");
+app.state.summary404 = 0;
+await toLine("שלי");
+app.state.line.set(real, []);
+app.state.lineFailed.set(real, [{ qid: "another-senders-qid", code: "not-sent", maybe: false, at: Date.now() }]);
+r = await read(real);
+check([r.data.sending, r.data.failed], [undefined, undefined], "another message's failure is not this one's: it was sent");
+app.state.lineMode = false;
+
+// 11. a new conversation at the app's cap: its first message waits in the app's line — the conversation is in the
+// list at once and stays there, on its way, until the line starts it; then it is listed under the id it started as
+app.state.promiseLine = true;
+const qm = await call("POST", "/ui/sessions", { engine: "claude", text: "בתור לשיחה חדשה" });
+const qp = qm.data.id;
+await until(() => app.state.queuedPromises.has(qp) && app.state.inflight === 0);
+await sleep(30);
+const qRow = (await call("GET", "/ui/sessions")).data.sessions.find((s) => s.id === qp);
+check([!!qRow, qRow && qRow.sending, qRow && qRow.running], [true, true, true],
+  "a new conversation whose first message waits in the app's line: in the list, on its way");
+r = await read(qp);
+check([r.data.sending, r.data.queued, r.data.failed, r.data.resolved], [true, 1, undefined, undefined],
+  "…and its read says it is on its way, first in the line");
+const startedId = `local_started-${++app.state.n}`;                 // the line starts it
+app.state.promises.set(qp, startedId); app.state.queuedPromises.delete(qp);
+app.state.started.push({ id: startedId, title: "בתור לשיחה חדשה", updated_at: new Date().toISOString(), from: qp });
+const afterStart = (await call("GET", "/ui/sessions")).data.sessions;
+check([afterStart.some((s) => s.id === qp), (afterStart.find((s) => s.id === startedId) || {}).from], [false, qp],
+  "once the line starts it, the list names the started conversation, and the promise it came from");
+r = await read(qp);
+check([r.data.resolved, r.data.sending], [startedId, undefined], "…and its read names the id it started as");
+
+// 12. a long wait in the line, the app unreachable now and then: only five minutes of unbroken silence is «not known»
+const um = await call("POST", "/ui/sessions", { engine: "claude", text: "ממתינה הרבה זמן" });
+const up = um.data.id;
+await until(() => app.state.queuedPromises.has(up) && app.state.inflight === 0);
+await sleep(30);
+app.state.failPromiseReads = 1;
+r = await read(up);
+check([r.data.sending, r.data.failed], [true, undefined], "the app did not answer once: still on its way");
+r = await read(up);
+check([r.data.sending, r.data.queued], [true, 1], "…it answers again: waiting in its line");
+const realNow = Date.now;
+Date.now = () => realNow() + 6 * 60000;          // six minutes on, still in the line, and one read fails again
+try { app.state.failPromiseReads = 1; r = await read(up); } finally { Date.now = realNow; }
+check([r.data.sending, r.data.failed], [true, undefined], "…a failed read after a long wait in which the app answered: never «not known»");
+app.state.promiseLine = false;
+
+// 13. a door that holds no record of the message (it restarted): the app's read says what waits, and where
+app.state.line.set(real, ["q-from-before-the-restart"]);
+app.state.linePlace = 3;
+const nr = await readOn(fresh(), real);
+check([nr.data.sending, nr.data.queued, nr.data.failed], [true, 3, undefined],
+  "a door that restarted still says its conversation's message waits in the line, and its place");
+app.state.line.set(real, []);
+app.state.linePlace = null;
 
 app.server.close();
 rmSync(office, { recursive: true, force: true });

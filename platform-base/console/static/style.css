@@ -155,541 +155,8 @@
 /* @bina-theme-tokens:end */
 /* @palette:end */
 
-/* @bina-nav:start */
-/* ── §1 the vocabulary ────────────────────────────────────────────────────── */
-.bnv{
-  --bnv-bg:var(--surface-2);
-  --bnv-ink:var(--ink);
-  --bnv-ink-2:var(--muted);
-  --bnv-hover:color-mix(in srgb, var(--bnv-ink) 6%, transparent);
-  --bnv-active:color-mix(in srgb, var(--bnv-ink) 10%, transparent);
-  --bnv-brand:var(--accent);
-  --bnv-brand-ink:var(--accent-d);
-  --bnv-brand-soft:var(--accent-soft);
-  --bnv-line:var(--line);
-
-  /* geometry — the rail (§3) and the sizes (§4) change THESE, never a rule */
-  --bnv-pad:8px 10px;
-  --bnv-gap:2px;
-  --bnv-row-w:100%;
-  --bnv-row-h:36px;
-  --bnv-row-pad:7px 8px;
-  --bnv-row-gap:8px;
-  --bnv-row-justify:flex-start;
-  --bnv-head-h:52px;
-  --bnv-head-pad:4px 6px 10px;
-  --bnv-head-justify:flex-start;
-  --bnv-primary-w:100%;
-  --bnv-primary-h:44px;
-  --bnv-primary-pad:10px 12px;
-  --bnv-primary-justify:flex-start;
-  --bnv-foot-align:stretch;
-  /* what a rail takes away — `none` per part, because only the owner of a rule may say what
-     that rule's display IS. A `display:none!important`-style override cannot be undone by a
-     narrower container, and a phone must be able to bring these back.
-     A rail takes away WORDS, never a way in: the names, the group heads, the search's field, and
-     «הצג עוד» (which is words) — so the rows «הצג עוד» folds are all there in a rail (`--bnv-rest`),
-     the search stays as its magnifier, and the collapse control stays, turned round, under the
-     avatar. It used to take those three away too: a rail had no search, was missing the folded
-     rows, and — once a person had chosen it — nothing left to press that would bring the menu back. */
-  --bnv-text:block;
-  --bnv-ghead:flex;
-  --bnv-field:block;     /* the search's field */
-  --bnv-more:block;
-  --bnv-rest:none;       /* the rows folded behind «הצג עוד», while they are folded */
-  --bnv-head-dir:row;    /* the brand row: avatar · name · collapse — a rail stacks what is left of it */
-  --bnv-turn:none;       /* the collapse control's arrow */
-  --bnv-side:252px;      /* read by .appgrid — the only width the host asks for */
-  --bnv-off:-100%;       /* where a closed drawer parks; flipped for RTL below */
-
-  background:var(--bnv-bg);
-  color:var(--bnv-ink);
-  display:flex;
-  flex-direction:column;
-  gap:var(--bnv-gap);
-  box-sizing:border-box;
-  height:100%;
-  min-height:0;
-  padding:var(--bnv-pad);
-  font-size:14px;
-  overflow:hidden;
-}
-
-/* ── §2 the parts ─────────────────────────────────────────────────────────── */
-.bnv-scroll{
-  flex:1;
-  min-height:0;
-  display:flex;
-  flex-direction:column;
-  gap:var(--bnv-gap);
-  overflow-y:auto;
-  overflow-x:hidden;
-  overscroll-behavior:contain;
-  scrollbar-width:thin;
-}
-.bnv-list{display:flex;flex-direction:column;gap:var(--bnv-gap);min-width:0}
-
-/* brand row: square avatar · name (+ one line of context) · the collapse control */
-.bnv-head{
-  display:flex;
-  flex-direction:var(--bnv-head-dir);
-  align-items:center;
-  justify-content:var(--bnv-head-justify);
-  gap:10px;
-  min-height:var(--bnv-head-h);
-  padding:var(--bnv-head-pad);
-  flex:none;
-  overflow:hidden;
-}
-.bnv-avatar{
-  width:28px;height:28px;border-radius:8px;flex:none;
-  display:grid;place-items:center;overflow:hidden;
-  background:var(--bnv-brand-soft);color:var(--bnv-brand-ink);
-  font-weight:800;font-size:14px;line-height:1;
-}
-.bnv-avatar img{width:100%;height:100%;object-fit:cover;display:block}
-.bnv-head-text{flex:1;min-width:0;display:var(--bnv-text)}
-/* (a brand line reads its own way — `dir=auto`, so what is cut is its end — and still sits on the menu's side) */
-.bnv-head b,.bnv-head small{text-align:-webkit-match-parent;text-align:match-parent}
-.bnv-head b{display:block;font-size:16px;line-height:22px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.bnv-head small{display:block;color:var(--bnv-ink-2);font-size:11px;line-height:15px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.bnv-collapse{
-  flex:none;width:28px;height:28px;padding:0;border:0;border-radius:8px;
-  background:transparent;color:var(--bnv-ink-2);
-  display:grid;place-items:center;cursor:pointer;
-}
-.bnv-collapse:hover{background:var(--bnv-hover);color:var(--bnv-ink)}
-.bnv-collapse:focus-visible{outline:2px solid var(--bnv-ink);outline-offset:-2px}
-.bnv-collapse svg{width:16px;height:16px;transform:var(--bnv-turn)}
-
-/* the ONE flat primary action — the same object in every app, at finger size */
-.bnv-primary{
-  box-sizing:border-box;flex:none;width:var(--bnv-primary-w);min-height:var(--bnv-primary-h);
-  display:flex;align-items:center;justify-content:var(--bnv-primary-justify);gap:8px;
-  padding:var(--bnv-primary-pad);border:0;border-radius:10px;
-  background:var(--bnv-brand-soft);color:var(--bnv-brand-ink);
-  font:inherit;font-size:14px;line-height:22px;font-weight:600;
-  text-align:start;text-decoration:none;cursor:pointer;
-}
-.bnv-primary:hover{background:color-mix(in srgb, var(--bnv-brand) 16%, transparent)}
-.bnv-primary:active{background:color-mix(in srgb, var(--bnv-brand) 24%, transparent)}
-.bnv-primary:focus-visible{outline:2px solid var(--bnv-brand);outline-offset:2px}
-.bnv-primary .bnv-label{flex:1}
-.bnv-primary[aria-disabled="true"],.bnv-primary:disabled{opacity:.5;cursor:default}
-
-/* a group: a named block of rows, with its own header */
-.bnv-group{display:flex;flex-direction:column;gap:var(--bnv-gap);min-width:0}
-.bnv-ghead{display:var(--bnv-ghead);align-items:center;gap:2px;min-height:28px;padding:6px 6px 0;flex:none}
-.bnv-gtitle{
-  flex:1;min-width:0;display:var(--bnv-text);
-  color:var(--bnv-ink-2);font-size:11px;line-height:16px;font-weight:600;letter-spacing:.04em;
-  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
-}
-/* a group action is a small icon button, and there are never more than two */
-.bnv-act{
-  flex:none;width:26px;height:26px;padding:0;border:0;border-radius:7px;
-  background:transparent;color:var(--bnv-ink-2);display:inline-flex;align-items:center;justify-content:center;cursor:pointer;
-}
-.bnv-act:hover{background:var(--bnv-hover);color:var(--bnv-ink)}
-.bnv-act:focus-visible{outline:2px solid var(--bnv-ink);outline-offset:-2px}
-.bnv-act svg{width:15px;height:15px}
-
-/* search lives IN the menu — which is what frees the top of the page for content.
-   Its magnifier is a button (it puts the keyboard in the field), and in a rail it is the whole box:
-   the field is gone (`--bnv-field`), and a press opens the menu over the page, on the field. */
-.bnv-search{
-  display:flex;align-items:center;justify-content:var(--bnv-row-justify);flex:none;
-  margin:0 2px;min-height:34px;
-  border:1px solid var(--bnv-line);border-radius:8px;background:var(--bnv-bg);cursor:pointer;
-}
-.bnv-search button{
-  flex:none;align-self:stretch;width:30px;padding:0;border:0;border-radius:7px;
-  background:transparent;color:var(--bnv-ink-2);
-  display:inline-flex;align-items:center;justify-content:center;cursor:pointer;
-}
-.bnv-search button:hover{color:var(--bnv-ink)}
-.bnv-search button:focus-visible{outline:2px solid var(--bnv-ink);outline-offset:-2px}
-.bnv-search svg{width:15px;height:15px;flex:none}
-.bnv-search input{
-  display:var(--bnv-field);
-  flex:1;min-width:0;padding:7px 0;padding-inline-end:9px;border:0;background:transparent;color:inherit;
-  font:inherit;font-size:13px;line-height:20px;cursor:text;
-}
-.bnv-search input:focus{outline:none}
-.bnv-search:focus-within{border-color:color-mix(in srgb, var(--bnv-brand) 45%, transparent)}
-.bnv-search[hidden]{display:none}
-
-/* the row */
-.bnv-item{
-  box-sizing:border-box;
-  width:var(--bnv-row-w);
-  min-width:0;
-  min-height:var(--bnv-row-h);
-  display:flex;
-  align-items:center;
-  justify-content:var(--bnv-row-justify);
-  gap:var(--bnv-row-gap);
-  padding:var(--bnv-row-pad);
-  border:0;
-  border-radius:8px;
-  background:transparent;
-  color:var(--bnv-ink-2);
-  font:inherit;
-  font-size:14px;
-  line-height:22px;
-  font-weight:500;
-  text-align:start;
-  text-decoration:none;
-  cursor:pointer;
-}
-.bnv-item:hover{background:var(--bnv-hover);color:var(--bnv-ink)}
-.bnv-item:active{background:var(--bnv-active)}
-.bnv-item.is-active,.bnv-item[aria-current="page"]{
-  background:var(--bnv-active);
-  color:var(--bnv-ink);
-  font-weight:500;
-}
-.bnv-item:focus-visible{outline:2px solid var(--bnv-ink);outline-offset:-2px}
-.bnv-item[aria-disabled="true"],.bnv-item:disabled{opacity:.5;cursor:default}
-
-/* a REMOTE app — one that runs on a LINKED office, not on this machine
-   (ai/context/dgo-remote-apps.md §4). The row is a row like any other: same height, same hover,
-   same active tint. What says "not this machine" is one corner bracket in the logo's apps-line
-   colour, mirrored at the row's inline-start corner in BOTH directions (logical properties only —
-   this component has no physical direction anywhere, and the mark is not going to be the first).
-   The colour is the palette's «look here» in its line step (the lime the mark's apps carry). */
-.bnv-item.is-remote{position:relative}
-.bnv-item.is-remote::after{
-  content:"";position:absolute;inset-block-start:3px;inset-inline-start:3px;
-  width:7px;height:7px;pointer-events:none;
-  border-block-start:2px solid var(--lime-d);
-  border-inline-start:2px solid var(--lime-d);
-  border-start-start-radius:3px;
-}
-/* the office did not answer: the mark goes quiet, the row keeps its place — a tile that vanishes
-   is a tile nobody can ask about. The state is FORM here, not words: the office's tag (capped at
-   5em below — "MacBook לא זמינה" was drawn as "…acBook") turns the failure colour and the row dims;
-   the sentence is the row's tooltip. */
-.bnv-item.is-remote.is-offline::after{border-color:var(--bnv-ink-2)}
-/* …and the mark takes the OFFICE's own colour where the row knows which office it is: the shell adds
-   `office-<id>` (console/static/app.js, remoteCls) and the hue is the palette's family
-   `--office-hp/-mac/-vps` — declared in theme-tokens.css and nowhere else (G27/G82). An office with no
-   token keeps the lime this mark ships with, so a fourth office needs one token and no CSS. */
-.bnv-item.office-hp.is-remote::after{border-color:var(--office-hp)}
-.bnv-item.office-mac.is-remote::after{border-color:var(--office-mac)}
-.bnv-item.office-vps.is-remote::after{border-color:var(--office-vps)}
-.bnv-item.is-offline :is(.bnv-ic,.bnv-label){opacity:.72}
-.bnv-item.is-offline .bnv-meta{color:var(--danger)}
-/* `hidden` is how the search filters rows, and it has to beat `display:flex` above */
-.bnv-item[hidden],.bnv-empty[hidden],.bnv-group[hidden]{display:none}
-.bnv-ic{width:18px;height:18px;flex:none;display:inline-flex;align-items:center;justify-content:center}
-.bnv-ic svg,.bnv-ic .ic-svg{width:18px;height:18px;display:block}
-/* the label is what gives way — never the row, never the container.
-   A label that is a NAME someone gave (a folder, a mailbox) carries `dir="auto"`: it is cut at ITS
-   end, not the row's — «Plane — HP ומק» lost its first letters in a narrow rail («…ne — HP ומק») —
-   and `match-parent` keeps it on the row's reading edge whichever way it reads. */
-.bnv-label{flex:1;min-width:0;display:var(--bnv-text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
-  text-align:-webkit-match-parent;text-align:match-parent}
-/* the SECOND column: a count, a size, a time. Tabular, so a list of them aligns. */
-.bnv-meta{
-  flex:none;display:var(--bnv-text);color:var(--bnv-ink-2);
-  font-size:12px;line-height:18px;font-variant-numeric:tabular-nums;
-}
-/* A REMOTE row's meta is a NAME, not a count — and a name may be long ("שרת פיתוח בינה סלושנס").
-   With `flex:none` (above) it held its full width, so the LABEL took the loss: measured on the live
-   rail (218px), `מסמכים שלי` — 73px of text — was drawn in 44px, while the office name kept 124px.
-   That inverts what a row is for: the app is the subject, the office is commentary.
-
-   `flex:0 1 auto` alone does NOT fix it, and that is worth writing down: the row is not overflowing
-   (18 + 8 + 44 + 8 + 124 + 16 = 218), so there is no shrink pressure to resolve — the label simply
-   sits at min-content while the meta takes what it asks for. Nothing is "squeezed out" to shrink.
-
-   So the meta gets a CAP of `min(40%, 5em)` — and the measurement is why it is a formula and not a
-   percentage. At the console's live rail (218px), a 40% cap left the office 81px and still ellipsized
-   the app name by 16px (`חיבורים ומפתחות`, 103px). Swept on the live row: 40% → name 87 (clipped),
-   30% → 107 (fits) + office 61, 26% → 115 + 53, 22% → 124 + 44. `5em` is 60px of office at this
-   font — the shortest tag that still names an office — and it leaves the label 107px, its full
-   width. The percentage half keeps a WIDE rail from giving the office an unbounded share; `flex:0 8`
-   then resolves what is left in the label's favour. `.is-remote` and not every meta on purpose: a
-   count has no office to name, and its fixed slot is what makes a column of them line up.
-
-   …and it reads the way its WORDS do. An office's name is a Latin one («claude-cloud»), and in the
-   row's right-to-left direction this box cut it on the side it starts: «…laude-cloud» was drawn on
-   six screens of the live office (2026-11-02 — drive, mail, concurrency, alerts, connections, apps),
-   the same row every time. `direction:ltr` puts the cut on the name's own end, and `plaintext` takes
-   the box's direction from its first strong character, so an office named in Hebrew keeps its
-   beginning too. The `5em` cap stays as measured: it is what leaves the app's name its full width,
-   and a name cut at its END is what the row's tooltip (`remoteTip`) is for. */
-.bnv-item.is-remote .bnv-meta{
-  flex:0 8 auto;min-width:0;max-inline-size:min(40%,5em);
-  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
-  direction:ltr;unicode-bidi:plaintext;
-}
-/* trailing slot: a badge, a dot, a chevron. `nowrap` so it can never wrap into a second line.
-   In a RAIL it is the one thing a row still says beside its icon (a count, a dot), so it stays — pinned to
-   the icon's corner and small (`--bnv-tail-pos`, set by the two rail states in §3/§4). As a second column it
-   overflowed a 36px row: social-list's count, domains' (DGO-1591); connections had pinned its own, in every
-   state, so its drawer drew the count on the row's corner. The whole menu and the drawer keep it in line. */
-.bnv-item{position:relative}
-.bnv-tail{flex:none;display:inline-flex;align-items:center;gap:6px;white-space:nowrap;color:var(--bnv-ink-2);
-  font-size:var(--bnv-tail-fs,12px);line-height:var(--bnv-tail-lh,normal);
-  position:var(--bnv-tail-pos,static);inset-block-start:2px;inset-inline-end:2px}
-.bnv-item:hover .bnv-tail,.bnv-item.is-active .bnv-tail{color:inherit}
-.bnv-badge{
-  flex:none;min-width:18px;height:18px;padding:0 5px;border-radius:999px;
-  background:var(--bnv-brand-soft);color:var(--bnv-brand-ink);
-  font-size:11px;line-height:18px;font-weight:700;text-align:center;
-}
-.bnv-item:hover .bnv-badge,.bnv-item.is-active .bnv-badge{background:color-mix(in srgb, var(--bnv-brand) 22%, transparent)}
-
-/* Priority+: the rows that did not fit, and the one row that reveals them. (A rail has no such
-   row to press — it is words — so there the folded rows are simply there: `--bnv-rest`.) */
-.bnv-rest{display:var(--bnv-rest);flex-direction:column;gap:var(--bnv-gap);min-width:0}
-.bnv-rest.is-open{display:flex}
-.bnv-more{
-  display:var(--bnv-more);flex:none;width:100%;min-height:28px;padding:4px 8px;border:0;border-radius:8px;
-  background:transparent;color:var(--bnv-ink-2);font:inherit;font-size:12px;font-weight:600;
-  text-align:start;cursor:pointer;
-}
-.bnv-more:hover{background:var(--bnv-hover);color:var(--bnv-ink)}
-.bnv-empty{padding:6px 8px;color:var(--bnv-ink-2);font-size:12px;line-height:18px}
-
-.bnv-foot{
-  flex:none;margin-top:auto;padding-top:10px;border-top:1px solid var(--bnv-line);
-  min-width:0;display:flex;flex-direction:column;gap:var(--bnv-gap);align-items:var(--bnv-foot-align);
-}
-.bnv-foot-text{
-  display:var(--bnv-text);padding:0 8px;max-width:100%;color:var(--bnv-ink-2);
-  font-size:11px;line-height:16px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
-}
-.bnv-sep{height:1px;background:var(--bnv-line);margin:6px 8px;flex:none}
-
-/* ── §3 the rail: one state, two triggers, a list of values ────────────────── */
-/* `.bnv.is-rail` — a rail somebody chose: the menu's own collapse control (remembered per app),
-   or a host that collapses the menu by itself.
-   `.rail-host .bnv` — a host whose grid column decides and cannot put a class on the aside.
-   Both write the SAME values as the medium size class in §4, so the rail exists once.
-   The values are a rail's while it is SHUT. Opened — by its collapse control, or by its search —
-   it is the whole menu again, the values above, standing over the page (the rule under these).
-   `:where()` keeps that condition out of the selector's weight: the drawer of a phone-sized frame
-   must still out-rank a rail saved on a desktop. */
-:is(.bnv.is-rail,.rail-host .bnv):where(:not(.is-open)){
-  --bnv-pad:12px 10px;
-  --bnv-gap:6px;
-  --bnv-row-w:36px;
-  --bnv-row-h:36px;
-  --bnv-row-pad:0;
-  --bnv-row-gap:0;
-  --bnv-row-justify:center;
-  --bnv-head-h:36px;
-  --bnv-head-pad:0 0 10px;
-  --bnv-head-justify:center;
-  --bnv-primary-w:36px;
-  --bnv-primary-h:36px;
-  --bnv-primary-pad:0;
-  --bnv-primary-justify:center;
-  --bnv-foot-align:center;
-  --bnv-text:none;
-  --bnv-ghead:none;
-  --bnv-field:none;
-  --bnv-more:none;
-  --bnv-rest:flex;
-  --bnv-head-dir:column;
-  --bnv-turn:rotate(180deg);
-  --bnv-tail-pos:absolute;
-  --bnv-tail-fs:10px;
-  --bnv-tail-lh:1;
-}
-/* An OPENED rail: the whole menu, standing over the page until a row is picked or it is shut — the
-   way to a rail's search, and to the names of its rows. (The rail by width says the same in §4.) */
-:is(.bnv.is-rail,.rail-host .bnv).is-open{position:fixed;inset-block:0;inset-inline-start:0;z-index:60;width:min(84vw,320px);box-shadow:var(--shadow-lg)}
-
-/* ── §4 the sizes ─────────────────────────────────────────────────────────── */
-/* The app declares ONE container (`.bnv-host`, on the element that wraps the shell) and one grid
-   (`.appgrid`, whose side column is `--bnv-side`). From there: ≥840px the full menu, 600–839px the
-   rail, <600px a drawer over one pane. Nothing here names a breakpoint of the WINDOW: the menu
-   answers the space it is actually given, so the same app is right in a 940px pane, in a 2000px
-   desktop, and on a 390px phone — which is exactly what a viewport query cannot do. */
-.bnv-host{container-type:inline-size;container-name:bnav}
-.appgrid{
-  display:grid;
-  grid-template-columns:var(--bnv-side,252px) minmax(0,1fr);
-  min-width:0;
-}
-/* …and its `min-height:0` (an app may scroll inside a fixed shell) carries NO weight, so that a
-   page which scrolls can say `min-height:100dvh` of its grid wherever it likes. At one class this
-   line beat a page that said so ABOVE the block: the menu's panel ended where the content did, half
-   way down the screen. Three pages moved their two lines below the block for it; the fourth — the
-   apps screen, whose list is short for as long as it loads — never did. */
-:where(.appgrid){min-height:0}
-/* THE MENU STAYS. Where the PAGE scrolls, the menu's cell is as tall as the page and the menu left
-   with it: by the end of a long list the notifications' filters and the apps' sections were a
-   screen and a half up, over a column left empty (2026-10-09, the live office: 2360px of page). It
-   is a frame tall at the most, and holds on to the frame's top. `:where()` keeps this at one class:
-   the drawer and the opened rail — `position:fixed`, at two classes and more — still say where
-   THEY stand. */
-:where(.appgrid) > .bnv{position:sticky;inset-block-start:0;max-height:100dvh}
-/* Which column the CONTENT is in — owned here, not by each app.
-   The menu is `position:fixed` below 600px, and a fixed child is not a grid item: the browser
-   places the remaining in-flow child (the content) into COLUMN 1, which is the side column. So the
-   content inherited the menu's width — 252px on a desktop, 56/64px in the rail, and 0px once the
-   phone collapses the side column. Measured 2026-10-01 at 390x844: `.pg` was 24px wide, mailview's
-   phone score was clipping 0.0/15, and every adopter's phone layout was a sliver.
-   It survived a green map because the DESKTOP profile has a fine pointer and a static aside: there
-   the menu IS a grid item, the content auto-places into column 2, and nothing looks wrong. */
-.appgrid > :not(.bnv):not(.bnv-scrim):not(.bnv-burger):not(.bnv-drawer){
-  grid-column:2;
-  min-width:0;
-}
-/* the burger: shown only where the menu is a drawer, and it is row-sized there */
-.bnv-burger{
-  display:none;flex:none;width:44px;height:44px;padding:0;border:0;border-radius:10px;
-  background:transparent;color:inherit;align-items:center;justify-content:center;cursor:pointer;
-}
-.bnv-burger:hover{background:color-mix(in srgb, currentColor 8%, transparent)}
-.bnv-burger:focus-visible{outline:2px solid currentColor;outline-offset:-2px}
-.bnv-burger svg{width:20px;height:20px}
-/* The burger the BASE draws for a page that placed none (the script adds `html.bnv-float` once it
-   has): the same 44/48px target, parked in the corner a phone leaves free and ABOVE the scrim, so
-   the one button both opens the menu and shuts it. Its own test is the window and not a container —
-   the button lives on `body`, outside the menu's container, and a container query cannot see it.
-   Measured 2026-10-12: without this, `sites`, `domains` and `drive` had no way into their menu on a
-   phone at all. */
-.bnv-burger.is-float{
-  display:none;position:fixed;z-index:56;
-  inset-block-end:calc(12px + env(safe-area-inset-bottom, 0px));inset-inline-start:12px;
-  width:48px;height:48px;border-radius:50%;
-  background:var(--surface);color:var(--ink);border:1px solid var(--line);box-shadow:var(--elev-2);
-}
-@media (max-width:599px){ html.bnv-float .bnv-burger.is-float{display:inline-flex} }
-.bnv-scrim{
-  position:fixed;inset:0;z-index:55;border:0;padding:0;
-  background:var(--scrim);   /* the palette's own: mixed from the menu's ink it was a WHITE veil wherever that ink is light */
-  opacity:0;visibility:hidden;transition:opacity .18s ease;
-}
-.bnv-scrim.is-open{opacity:1;visibility:visible}
-
-/* medium — the rail, chosen by container width instead of by a class */
-@container bnav (max-width:839px){
-  .appgrid{--bnv-side:56px}
-  .bnv:where(:not(.is-open)){
-    --bnv-pad:12px 10px;
-    --bnv-gap:6px;
-    --bnv-row-w:36px;
-    --bnv-row-h:36px;
-    --bnv-row-pad:0;
-    --bnv-row-gap:0;
-    --bnv-row-justify:center;
-    --bnv-head-h:36px;
-    --bnv-head-pad:0 0 10px;
-    --bnv-head-justify:center;
-    --bnv-primary-w:36px;
-    --bnv-primary-h:36px;
-    --bnv-primary-pad:0;
-    --bnv-primary-justify:center;
-    --bnv-foot-align:center;
-    --bnv-text:none;
-    --bnv-ghead:none;
-    --bnv-field:none;
-    --bnv-more:none;
-    --bnv-rest:flex;
-    --bnv-head-dir:column;
-    --bnv-turn:rotate(180deg);
-    --bnv-tail-pos:absolute;
-    --bnv-tail-fs:10px;
-    --bnv-tail-lh:1;
-  }
-  .bnv.is-open{position:fixed;inset-block:0;inset-inline-start:0;z-index:60;width:min(84vw,320px);box-shadow:var(--shadow-lg)}
-}
-/* …and a rail somebody CHOSE takes a rail's column — where the frame is wide enough to have given the
-   menu its whole one (below that the two size classes already say). Nothing said it: the icons of a
-   chosen rail stood in a column 252px wide. */
-@container bnav (min-width:840px){
-  .appgrid:has(> .bnv.is-rail){--bnv-side:56px}
-}
-/* compact — one pane, and the menu becomes a drawer over it.
-   `:is(.bnv,.bnv.is-rail,.rail-host .bnv)` is deliberate: a rail saved on a desktop must NOT
-   survive into a phone, so this block has to out-rank the class trigger and the host class. */
-@container bnav (max-width:599px){
-  .appgrid{--bnv-side:0px}
-  .bnv-burger{display:inline-flex}
-  :is(.bnv,.bnv.is-rail,.rail-host .bnv){
-    position:fixed;inset-block:0;inset-inline-start:0;z-index:60;
-    width:min(84vw,320px);box-sizing:border-box;
-    transform:translateX(var(--bnv-off,-100%));
-    transition:transform .18s ease;
-    --bnv-pad:8px 10px;
-    --bnv-gap:2px;
-    --bnv-row-w:100%;
-    --bnv-row-h:44px;
-    --bnv-row-pad:10px 8px;
-    --bnv-row-gap:8px;
-    --bnv-row-justify:flex-start;
-    --bnv-head-h:52px;
-    --bnv-head-pad:4px 6px 10px;
-    --bnv-head-justify:flex-start;
-    --bnv-primary-w:100%;
-    --bnv-primary-h:44px;
-    --bnv-primary-pad:10px 12px;
-    --bnv-primary-justify:flex-start;
-    --bnv-foot-align:stretch;
-    --bnv-text:block;
-    --bnv-ghead:flex;
-    --bnv-field:block;
-    --bnv-more:block;
-    --bnv-rest:none;
-    --bnv-head-dir:row;
-    --bnv-turn:none;
-    --bnv-tail-pos:static;
-    --bnv-tail-fs:12px;
-    --bnv-tail-lh:normal;
-  }
-  /* The shadow is the OPEN drawer's. On the parked one it still painted: a 40px grey band down the
-     screen edge, over the page, in every app that carries this menu (seen in five, 2026-10-06). */
-  :is(.bnv,.bnv.is-rail,.rail-host .bnv).is-open{
-    transform:none;
-    box-shadow:var(--shadow-lg);
-  }
-}
-/* in RTL the drawer parks on the other side — the only direction-dependent line in this file */
-:is([dir="rtl"],:dir(rtl)) .bnv{--bnv-off:100%}
-
-/* touch: the same rows, sized for a finger. bina keeps 36px on every pointer; a phone needs 44. */
-@media (pointer:coarse){
-  .bnv-item{min-height:44px;padding:10px 8px}
-  .bnv-primary{min-height:44px}
-  .bnv-search{min-height:44px}
-  .bnv-act{width:36px;height:36px}
-  :is(.bnv.is-rail,.rail-host .bnv):where(:not(.is-open)) .bnv-item{width:44px;height:44px;min-height:44px}
-  /* THE RAIL IS A RAIL ONLY IN THE RAIL RANGE. This rule used to read `(max-width:839px)`, which
-     also covers the compact range — and because it comes AFTER the compact block (§4), the same
-     specificity meant it won there: on any touch device narrower than 600px `--bnv-side` was 64px
-     instead of 0, so the drawer opened over a content column 64px wide.
-     Measured 2026-10-01 on the office's own capture at 390x844 (`is_mobile`/`has_touch`, i.e. the
-     profile the phone map uses): `.pg` came out 64px wide and mailview scored clipping 0.0/15 —
-     "text cut with no way to reach it" was not the app's layout, it was this line. The desktop
-     capture never saw it (fine pointer), which is why it survived a green map on both profiles. */
-  @container bnav (min-width:600px) and (max-width:839px){
-    .appgrid{--bnv-side:64px}
-  }
-  @container bnav (min-width:840px){
-    .appgrid:has(> .bnv.is-rail){--bnv-side:64px}
-  }
-}
-/* a SHORT panel — the menu of a window dragged small. Its head, its button and its foot are most
-   of 224px, and the rows were left a sliver to scroll in (measured 2026-10-07 in the drive's
-   menu: 20px for 416px of rows). There the PANEL scrolls, rows and all. */
-@media (max-height:399px){
-  .bnv{overflow-y:auto;overscroll-behavior:contain}
-  .bnv-scroll{flex:none;overflow:visible}
-  /* …and the page's own menu buttons are a cursor's size there, not a finger's: 44px of a head is a
-     fifth of such a window (a touch screen keeps the finger's size — it is not this window). */
-  @media (pointer:fine){.bnv-burger{width:32px;height:32px;border-radius:8px}}
-}
-@media (prefers-reduced-motion:reduce){
-  .bnv,.bnv *,.bnv-scrim{transition:none!important;animation:none!important}
-}
-/* @bina-nav:end */
+/* (No shared side-menu block here since DGO-2132: the console draws no side menu — G27 no longer lists this file
+   among the menu's carriers, scripts/refactor/theme-token-lint.py NAV_TARGETS.) */
 
 /* Reduced motion: keep functional feedback, drop anything long or looping. */
 @media (prefers-reduced-motion:reduce){
@@ -720,30 +187,18 @@ body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--font);font
 /* C16 — the SHELL owns the viewport; every region takes the height it is given.
    100dvh, not 100vh: on mobile the browser chrome counts toward vh, so the shell ends up
    taller than the visible area and scrolls behind the URL bar. */
-#app{display:grid;grid-template-columns:238px 1fr;height:100dvh;overflow:hidden}
+/* One column: no side rail (DGO-2132). A computer is the desk (desktop.css), and this shell — every screen narrower
+   than 1024px — navigates by the home and the bar under it. */
+#app{display:grid;grid-template-columns:minmax(0,1fr);height:100dvh;overflow:hidden}
 
-/* sidebar — the shared side menu (platform-base/bina-ui/bina-nav.css, gate G27).
-   The shell only RE-POINTS the component's tokens at its own palette; every dimension, the
-   active state and the rail geometry live in the component, so this file can never drift
-   away from the other apps' menus again. */
-/* The shell used to re-point the component at its own dark-green palette (--side). That made
-   the console's menu a different product from the apps' menus — visible the moment two of them
-   sit side by side. The menu now uses the component's own tokens in every app, light and dark
-   alike; --side survives only as the mobile TAB BAR's fill, which is a different component. */
-.side{--bnv-bg:var(--surface-2);--bnv-ink:var(--ink);--bnv-ink-2:var(--muted);--bnv-line:var(--line)}
-.brand{display:flex;align-items:center;gap:10px}
 /* the i0 mark (digital-office/brand/io, version 7): tile r22 %, one cap radius (0.27 × stroke) on
    every stroke end. ONE colourway, in the office's palette — the olive tile, its ink for the
-   drawing, lime on the head and the apps — because the two places that carry it (this menu, the
-   desktop's bar) are the same surface now, and an olive tile stands on it light or dark. */
-.brand .logo{width:32px;height:32px;flex:none;display:block}
+   drawing, lime on the head and the apps — on the home's title here and on the desk's bar, the
+   same surface, so an olive tile stands on it light or dark. */
 .logo svg,.dk-logo svg{display:block;width:100%;height:100%}
 .logo .t,.dk-logo .t{fill:var(--mark-tile)} .logo .m,.dk-logo .m{fill:var(--mark-glyph)} .logo .a,.dk-logo .a{fill:var(--mark-accent)}
-.brand b{font-size:18px;letter-spacing:.01em}
-.brand small{display:block;color:var(--bnv-ink-2);font-size:11px;font-weight:600;line-height:1.35}
 /* ── modern stroke icons (SVG, monochrome, inherit currentColor) — replaces emoji ── */
 .ic-svg{display:block;flex:none}
-.bnv-ic .ic-svg{width:18px;height:18px}
 .pal-ic{display:inline-flex;align-items:center;justify-content:center}
 .pal-ic .ic-svg{width:19px;height:19px}
 .bn-ic{display:inline-flex;align-items:center;justify-content:center}
@@ -754,7 +209,6 @@ body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--font);font
 .pill .ic-svg{width:12px;height:12px;vertical-align:-2px;margin-inline-end:2px}
 /* A2 — the icons that were characters. They inherit the button's colour and size like every other
    one, instead of arriving at whatever weight the reader's font stack picked. */
-#railToggle .ic-svg{width:18px;height:18px}
 .modal-h .ghost .ic-svg{width:16px;height:16px}
 .modal-h .ghost{display:grid;place-items:center;background:transparent;border:1px solid var(--line);border-radius:8px;width:30px;height:30px;cursor:pointer;color:var(--muted);padding:0}
 .modal-h .ghost:hover{border-color:var(--accent);color:var(--accent-d)}
@@ -762,8 +216,6 @@ body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--font);font
 .card .ext{display:inline-flex;align-items:center;color:var(--muted);margin-inline-start:5px;vertical-align:middle}
 .card .ext .ic-svg{width:13px;height:13px}
 .card.tool .ic{color:var(--muted)}
-.bnv-foot .user{font-size:12.5px;color:var(--bnv-ink-2)}
-.bnv-foot .user b{color:var(--bnv-ink)}
 
 /* main */
 .main{display:flex;flex-direction:column;min-width:0;overflow:hidden}
@@ -771,10 +223,6 @@ body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--font);font
    taller on the two whose app puts a two-line chip in it (the Drive's account, the computer
    picker) — the whole page jumped by a few pixels on the way in and out of them. */
 .topbar{display:flex;align-items:center;justify-content:space-between;gap:16px;height:62px;box-sizing:border-box;padding:0 22px;border-bottom:1px solid var(--line);background:var(--surface)}
-/* the rail's list is longer than most screens: its last rows fade, so a cut row reads as "more" —
-   and the row a person is ON is brought to rest above the fade, not inside it (`scroll-padding`:
-   the current app's row sat half faded at the list's edge, reading as the one that is NOT chosen) */
-#nav.bnv-scroll{-webkit-mask-image:linear-gradient(var(--ink) calc(100% - 26px),transparent);mask-image:linear-gradient(var(--ink) calc(100% - 26px),transparent);padding-bottom:22px;scroll-padding-block-end:30px}
 .topbar h1{font-size:18px;margin:0}
 /* a linked office's tile: the office, beside the title — ink on the page, so it is not a state colour */
 .topbar h1{display:flex;align-items:center;gap:9px;min-width:0}
@@ -790,7 +238,6 @@ body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--font);font
    uses, which is why the hue rules are scoped away from `.is-offline` / `.is-off`.
    The chip takes the hue as a DOT and not as its text: it is an ink-on-surface pill, and a hue as
    text on it is a contrast lottery; a dot carries the colour and leaves the label legible. */
-.bnv-item:not(.is-offline) .bnv-meta[data-office-hue]{color:var(--office-hue)}
 .vt-office[data-office-hue]::before{content:"";display:inline-block;width:8px;height:8px;border-radius:50%;
   background:var(--office-hue);margin-inline-end:6px;vertical-align:1px}
 .vt-office[data-office-hue].is-off::before{background:var(--muted)}
@@ -898,7 +345,7 @@ body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--font);font
 .hidden{display:none!important}
 .spin{color:var(--muted);padding:30px;text-align:center}
 
-/* ── nav upgrades: topbar controls, collapsible rail, ⌘K palette, responsive ── */
+/* ── nav upgrades: topbar controls, ⌘K palette, responsive ── */
 .tb-left{display:flex;align-items:center;gap:10px;min-width:0}
 .tb-right{display:flex;align-items:center;gap:14px}
 .icon-btn{background:transparent;border:1px solid var(--line);border-radius:9px;width:34px;height:34px;cursor:pointer;font-size:15px;color:var(--ink);display:grid;place-items:center;flex:none}
@@ -906,10 +353,6 @@ body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--font);font
 .search-btn{display:flex;align-items:center;gap:8px;background:var(--bg);border:1px solid var(--line);border-radius:9px;padding:7px 12px;cursor:pointer;color:var(--muted);font-family:inherit;font-size:13px;white-space:nowrap}   /* «חיפוש בדואר» when an app lends its search (DGO-1507): one line, never two */
 .search-btn:hover{border-color:var(--accent);color:var(--accent-d)}
 .search-btn .kbd{font-size:11px;background:var(--surface);border:1px solid var(--line);border-radius:5px;padding:1px 6px}
-
-/* collapsed icon rail (manual toggle) */
-/* the rail is `.rail-host` on the shell; the component owns what a rail looks like */
-#app.rail-collapsed{grid-template-columns:56px 1fr}
 
 /* ⌘K command palette */
 .pal-ov{position:fixed;inset:0;background:var(--scrim);display:flex;justify-content:center;align-items:flex-start;padding-top:12vh;z-index:120}
@@ -926,49 +369,32 @@ body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--font);font
 
 /* ── a REMOTE app: ONE mark, every surface of the shell ─────────────────────────────────────────
    An app that runs on a LINKED office (ai/context/dgo-remote-apps.md §4) is not copied, installed or
-   disabled here — it runs where it runs, and it appears in the rail, the launcher, the phone
-   launcher, the phone's recent-apps cards and the desktop dock exactly like a local one. The whole
-   of what says "not this machine" is a corner bracket in the logo's apps-line colour, and the
-   office's own name in the tooltip / beside the name.
-
-   The rail's copy of this rule lives in the side-menu COMPONENT (`bina-nav.css`, `.bnv-item.is-remote`)
-   because a rail the component draws is a rail the component marks; these are the shell's own
-   surfaces, in one rule rather than five. `is-offline` is what the office last MEASURED about the
-   link (the registry's `remote.ok`, see remoteInfo in app.js) — and it never blanks the tile: it
-   says which office is not answering, in Hebrew. */
-:is(.htile,.pal-item,.bottomnav .bn-item,.sw-card).is-remote{position:relative}
-:is(.htile,.pal-item,.bottomnav .bn-item,.sw-card).is-remote::after{
+   disabled here — it runs where it runs, and it appears in the search, the phone's bar, the phone's
+   recent-apps cards and the desk's dock exactly like a local one (the home folds it into its kind's
+   one tile, DGO-2122). The whole of what says "not this machine" is a corner bracket in the logo's
+   apps-line colour, and the office's own name in the tooltip / beside the name — the shell's own
+   surfaces, in one rule. `is-offline` is what the office last MEASURED about the link (the registry's
+   `remote.ok`, see remoteInfo in app.js) — and it never blanks the tile: it says which office is not
+   answering, in Hebrew. */
+:is(.pal-item,.bottomnav .bn-item,.sw-card).is-remote{position:relative}
+:is(.pal-item,.bottomnav .bn-item,.sw-card).is-remote::after{
   content:"";position:absolute;inset-block-start:4px;inset-inline-start:4px;
   width:7px;height:7px;pointer-events:none;
   border-block-start:2px solid var(--lime-d);
   border-inline-start:2px solid var(--lime-d);
   border-start-start-radius:3px;
 }
-.bottomnav .bn-item.is-remote::after{border-color:var(--lime)}   /* the tab bar is a fill: on it, the hue itself */
-:is(.htile,.pal-item,.bottomnav .bn-item,.sw-card).is-remote.is-offline::after{border-color:var(--muted)}
+:is(.pal-item,.bottomnav .bn-item,.sw-card).is-remote.is-offline::after{border-color:var(--muted)}
 /* THE OFFICE'S OWN COLOUR, BY NAME (flt-004). The bracket above says "not this machine"; this says
    WHICH other machine — the hue the office publishes as a NAME (`remote.mark.color`), painted by the
    palette's own `[data-office-hue="…"]` rules so nothing here names a colour. One rule for every
-   shell surface that carries the attribute (the launcher tile, the palette row, the phone tab bar,
-   the switcher card). OFFLINE IS NOT AN OFFICE COLOUR and keeps the muted bracket it already had:
-   the mark is an identity, never a health state — an office that stopped answering still has one. */
-:is(.htile,.pal-item,.bottomnav .bn-item,.sw-card)[data-office-hue]::after{border-color:var(--office-hue)}
-/* the office's name under a phone tile — the second half of "two tiles for one alias", and the
-   line that carries "… לא זמינה כרגע" when that office is not answering */
-.htile-office{font-size:10.5px;line-height:13px;font-weight:600;color:var(--muted);
-              max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.htile-office.off{color:var(--danger);white-space:normal;text-align:center}
-.htile.is-offline :is(.htile-ic,.htile-nm){opacity:.72}
+   shell surface that carries the attribute (the palette row, the phone tab bar, the switcher card).
+   OFFLINE IS NOT AN OFFICE COLOUR and keeps the muted bracket it already had: the mark is an
+   identity, never a health state — an office that stopped answering still has one. */
+:is(.pal-item,.bottomnav .bn-item,.sw-card)[data-office-hue]::after{border-color:var(--office-hue)}
 
-/* bottom tab bar — mobile only */
+/* bottom tab bar — this shell's, below the desk's 1024px (the block under «phone» below draws it) */
 .bottomnav{display:none}
-
-
-/* tablet: auto-collapse the rail to an icon strip for more content width */
-@media (max-width:1024px) and (min-width:641px){
-  #app{grid-template-columns:56px 1fr}
-  #railToggle{display:none}
-}
 
 /* ── open apps (phone) ───────────────────────────────────────────────────────────
    Cards, not windows: a phone switches between apps by looking at them. The list is MRU and
@@ -1004,6 +430,11 @@ body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--font);font
 .sw-x{position:absolute;top:6px;inset-inline-start:6px;width:32px;height:32px;border-radius:50%;
       border:0;background:var(--surface-2);color:var(--muted);cursor:pointer;display:grid;place-items:center}
 .sw-x .ic-svg{width:16px;height:16px}
+/* nothing open yet (DGO-2122): said, with the way to every app — the press used to draw nothing */
+.sw-none{margin:6px 16px max(20px, env(safe-area-inset-bottom, 0px));padding:18px 16px;border-radius:18px;background:var(--surface);
+         color:var(--ink);text-align:center}
+.sw-none p{margin:0 0 12px;font-size:13px}
+.sw-none .btn{display:inline-block}
 
 /* ── the phone launcher ──────────────────────────────────────────────────────────
    The rail is hidden below 640px, and a bottom bar of four items cannot reach sixteen apps.
@@ -1068,7 +499,80 @@ html[data-card] body{margin:0;padding:0 16px;box-sizing:border-box;background:va
 /* a page that is the card and nothing else (a frame's card, the sign-in pages): the wall is the window's */
 html[data-card] .xn::before,html[data-card] .xn::after{position:fixed}
 /* @card:end */
-.home{display:flex;flex-direction:column;gap:14px;padding:4px 0 8px}
+/* ── THE HOME (DGO-2122) ─────────────────────────────────────────────────────────────────────────────
+   The office's apps in the home's groups (app.js GROUPS), one tile per kind, and the machines and offices it is
+   linked to — a phone's launcher and a desktop's, one markup. A tile is the app's glyph on a squircle in its group's
+   colour and the name under it, nothing more: no card around each tile and no grey line under it (the old tile was a
+   bordered card with an olive outline glyph, every app the same colour). The colour is a palette FAMILY by name
+   (`data-hue`), so it turns with the theme and nothing here names a colour (G82). */
+.lh{display:flex;flex-direction:column;gap:28px;padding:6px 0 10px}
+.lh-main,.lh-side{display:flex;flex-direction:column;gap:26px;min-width:0}
+.lh-h{margin:0 2px 12px;font-size:15px;font-weight:800;line-height:1.3;color:var(--ink)}
+.lh-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:18px 6px}
+.lt{--lt:var(--muted);--lt-ink:var(--surface);display:flex;flex-direction:column;align-items:center;gap:7px;min-width:0;
+  padding:2px 0;color:var(--ink);text-decoration:none;-webkit-tap-highlight-color:transparent;border-radius:14px}
+.lt[data-hue="olive"]{--lt:var(--olive);--lt-ink:var(--olive-ink)}
+.lt[data-hue="sky"]{--lt:var(--sky);--lt-ink:var(--sky-ink)}
+.lt[data-hue="lime"]{--lt:var(--lime);--lt-ink:var(--lime-ink)}
+.lt[data-hue="plum"]{--lt:var(--plum);--lt-ink:var(--plum-ink)}
+.lt[data-hue="violet"]{--lt:var(--violet);--lt-ink:var(--surface)}
+.lt-ic{position:relative;width:58px;height:58px;flex:none;display:grid;place-items:center;border-radius:17px;
+  background:var(--lt);color:var(--lt-ink);box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--lt-ink) 10%,transparent),var(--shadow);
+  transition:transform var(--dur-fast) var(--ease-standard)}
+.lt-ic>.ic-svg{width:28px;height:28px}
+.lt-nm{max-width:100%;font-size:12px;line-height:15px;font-weight:600;text-align:center;overflow:hidden;
+  display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow-wrap:break-word}
+.lt:active .lt-ic{transform:scale(.94)}
+.lt:focus-visible{outline:2px solid var(--accent);outline-offset:3px}
+.lt.is-offline .lt-ic{opacity:.55}
+.lt-off{max-width:100%;margin-top:-4px;font-size:10.5px;line-height:13px;font-weight:600;color:var(--danger);text-align:center}
+/* a linked machine or office: its animal in its hue, its name, how many apps it gives (or that it does not answer) */
+.lh-offs{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.lo,.lo-head{display:flex;align-items:center;gap:10px;min-width:0;background:var(--surface);border:1px solid var(--line);color:var(--ink)}
+.lo{min-height:60px;padding:10px 12px;border-radius:14px;text-decoration:none;-webkit-tap-highlight-color:transparent}
+.lo:hover{border-color:var(--olive-line)}
+.lo:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.lo-ic{width:38px;height:38px;flex:none;display:grid;place-items:center;border-radius:11px;color:var(--office-hue,var(--muted));
+  background:color-mix(in srgb,var(--office-hue,var(--muted)) 15%,var(--surface))}
+.lo-ic .ic-svg{width:22px;height:22px}
+.lo-tx{display:flex;flex-direction:column;gap:1px;min-width:0}
+.lo-tx b{font-size:13.5px;line-height:1.3;font-weight:700;overflow:hidden;overflow-wrap:break-word;
+  display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2}
+.lo-tx small{font-size:12px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+:is(.lo,.lo-head).is-off .lo-tx small{color:var(--danger)}
+:is(.lo,.lo-head).is-off .lo-ic{opacity:.72}
+/* an office's own page (#/o/<office>): the office first, then its apps */
+.lo-head{padding:14px 16px;border-radius:16px}
+.lo-head .lo-ic{width:46px;height:46px;border-radius:13px}
+.lo-head .lo-ic .ic-svg{width:26px;height:26px}
+.lo-head .lo-tx b{font-size:16px;font-weight:800}
+.lo-head .lo-tx small{white-space:normal}
+/* the home has nothing open to enlarge */
+html.at-home #focusBtn{display:none}
+/* the home's title: the office's mark and name */
+.vt-brand{display:inline-flex;align-items:center;gap:9px;min-width:0}
+/* a wider screen — a tablet here, the desk's «בית» on a computer (desktop.css): the groups are cards, two to a row
+   where two fit, and the machines and offices are a band under them */
+@media (min-width:641px){
+  .lh{gap:22px;max-width:1320px;margin:0 auto;padding:0 0 12px}
+  /* two cards to a row where two fit (the home's own width, whatever the rail does), a row's cards one height, and an
+     odd last card takes the whole row: no card stands alone beside a hole */
+  .lh{container-type:inline-size}
+  .lh-main{display:grid;grid-template-columns:minmax(0,1fr);gap:14px;align-items:stretch}
+  .lh-side{gap:22px}
+  .lh-sec{background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:14px 18px 16px}
+  .lh-grid{grid-template-columns:repeat(auto-fill,minmax(88px,1fr));gap:14px 6px}
+  .lh-offs-sec{background:none;border:0;padding:0}
+  .lh-offs{grid-template-columns:repeat(auto-fill,minmax(230px,1fr))}
+  .lh-office .lo-head{grid-column:1/-1}
+  .lt{padding:4px 0}
+  .lt:hover .lt-ic{transform:translateY(-2px)}
+}
+@container (min-width:780px){
+  .lh-main{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .lh-main>.lh-sec:last-child:nth-child(odd of .lh-sec){grid-column:1/-1}
+}
+@media (prefers-reduced-motion:reduce){ .lt-ic{transition:none} .lt:active .lt-ic,.lt:hover .lt-ic{transform:none} }
 /* the account button (DGO-1621, moved to the top bar by DGO-1892): the person's initial in the office mark's colours,
    the bar's last control on every screen; the shell's own icon button, round. Its colours win over .icon-btn:hover
    (same weight, later), so hover and focus are a ring in the mark's accent */
@@ -1088,46 +592,58 @@ html[data-card] .xn::before,html[data-card] .xn::after{position:fixed}
 .me-out:hover,.me-out:focus-visible{background:var(--surface-2)}
 .me-out .ic-svg{width:18px;height:18px;flex:none}
 .me-none{padding:10px;font-size:12.5px;color:var(--muted)}
-#userBox[role=button],.brand .logo[role=button]{cursor:pointer}
-.home-group{color:var(--muted);font-size:11px;font-weight:700;letter-spacing:.06em;
-            margin:6px 2px -6px;text-transform:uppercase}
-.home-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(84px,1fr));gap:10px}
-.htile{display:flex;flex-direction:column;align-items:center;justify-content:flex-start;gap:7px;
-       padding:14px 6px 12px;border-radius:16px;text-decoration:none;color:var(--ink);
-       background:var(--surface);border:1px solid var(--line);min-width:0;
-       transition:background .12s,border-color .12s}
-.htile:active{background:var(--surface-2)}
-.htile-ic{width:26px;height:26px;display:grid;place-items:center;color:var(--accent-d);flex:none}
-.htile-ic .ic-svg{width:26px;height:26px}
-.htile-nm{font-size:11.5px;line-height:15px;font-weight:600;text-align:center;min-width:0;
-          max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-@media (pointer:coarse){ .htile{min-height:92px} }
+/* C1 — the build, visible: the account menu's last line (it stood at the foot of the side rail until the rail went,
+   DGO-2132). Quiet: readable when you go looking for it, invisible when you are not. */
+.me-ver{padding:6px 10px 2px;font-size:11px;letter-spacing:.02em;color:var(--muted);text-align:start}
 
-/* phone: hide the rail, show a bottom tab bar */
-@media (max-width:640px){
-  #app{grid-template-columns:1fr}
-  .side,#railToggle{display:none}
-  .content{padding:16px 14px 76px}
-  .embed{inset:0 0 60px 0}
+/* THE BAR (DGO-2122): the surface with a hairline, not a band of the accent; the tab that is the screen is the accent —
+   its glyph on a soft pill and its name — and the others are quiet. Five at most (app.js). Drawn here once; WHERE it
+   stands is said under it (the phone's shell, and a console in a desk's window). */
+.bottomnav{position:fixed;inset-block-end:0;inset-inline:0;height:calc(64px + env(safe-area-inset-bottom,0px));
+  padding-bottom:env(safe-area-inset-bottom,0px);background:var(--surface);border-top:1px solid var(--line);z-index:60;
+  justify-content:space-around;align-items:stretch}
+.bn-item{flex:1;min-width:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;color:var(--muted);
+  text-decoration:none;font-size:11.5px;font-weight:600;cursor:pointer;-webkit-tap-highlight-color:transparent}
+.bn-item .bn-ic{position:relative;width:54px;height:30px;border-radius:var(--radius-pill);transition:background var(--dur-fast) var(--ease-standard)}
+.bn-item.active{color:var(--accent-d)}
+.bn-item.active .bn-ic{background:var(--accent-soft)}
+.bn-item:focus-visible{outline:2px solid var(--accent);outline-offset:-4px;border-radius:12px}
+/* «פתוחים» is a button (Space and Enter), drawn as its siblings */
+.bottomnav button.bn-item{appearance:none;-webkit-appearance:none;margin:0;padding:0;border:0;background:none;font-family:inherit}
+.bn-nm{max-width:100%;padding:0 2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.bn-badge{transform:none;inset-block-start:-2px;inset-inline-start:calc(50% + 6px)}
+/* The office's animal on a tab (flt-004): ON THE ICON, at its end edge — a phone shows no tooltip, so the half of
+   the mark that is a colour needs the half that can be named; on the icon and not beside the label, because a tab
+   is a fifth of the bar: «מסמכים שלי» with the animal beside it was «מסמכים של…» (DGO-2122). */
+.bn-item .bn-ic .office-animal{position:absolute;inset-block-end:1px;inset-inline-end:4px;margin:0;width:12px;height:12px}
+.bn-item .bn-ic .office-animal svg{width:12px;height:12px}
+
+/* the phone's shell — at every width under the desk's 1024px (DGO-2132: a tablet is a large phone here, never a rail):
+   the bottom tab bar, and the room the content and the frame leave for it. `.98`: a zoomed screen can be a fraction
+   of a pixel under 1024, and there neither this shell nor the desk would stand (the second reader). */
+@media (max-width:1023.98px){
+  .content{padding:16px 14px calc(88px + env(safe-area-inset-bottom,0px))}
+  .embed{inset:0 0 calc(64px + env(safe-area-inset-bottom,0px)) 0}
   /* …and the reservation goes with the bar it reserves for. Full screen hides the tab bar
      (desktop.css: html.bare .bottomnav), so without this line that mode reclaims only the top bar's
      58px and leaves a 60px hole under the app. Measured in the simulation before it was written —
      digital-office/sim/console-fullscreen-mock.src.html, which is what a mock is for. */
   html.bare .embed{inset:0}
+  html.bare .content{padding-bottom:16px}   /* a console view inside a desk window has no bar under it either */
   /* phone reclaims the band */
   .topbar{height:58px;padding:0 14px}
   .topbar h1{font-size:16px}
   .search-btn>span:first-child,.search-btn .kbd{display:none}
   .search-btn{padding:7px 10px}
-  .bottomnav{display:flex;position:fixed;bottom:0;inset-inline:0;height:60px;background:var(--side);border-top:1px solid var(--side-line);z-index:60;justify-content:space-around;align-items:stretch}
-  .bn-item{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;color:var(--side-mut);text-decoration:none;font-size:11.5px;cursor:pointer}
-  .bn-item.active{color:var(--side-ink)}
-  .bn-ic{font-size:19px;line-height:1}
-  /* The office's animal on a tab (flt-004): beside the label, at the label's own size — a phone shows
-     no tooltip, so the half of the mark that is a colour needs the half that can be named. */
-  .bn-item .office-animal{width:11px;height:11px;vertical-align:-1px}
-  .bn-item .office-animal svg{width:11px;height:11px}
+  .bottomnav{display:flex}
 }
+/* …and a console shown in a desk's window (desktop.js inDesk: a linked office's «המרכז») keeps that way around at any
+   width — no desk grows there, and with no side rail the bar is its navigation (the second reader, round 2) */
+html.in-desk .bottomnav{display:flex}
+html.in-desk .content{padding-bottom:calc(88px + env(safe-area-inset-bottom,0px))}
+html.in-desk .embed{inset:0 0 calc(64px + env(safe-area-inset-bottom,0px)) 0}
+html.in-desk.bare .content{padding-bottom:16px}
+html.in-desk.bare .embed{inset:0}
 
 /* ── full screen (app.js: applyFocus) ─────────────────────────────────────────────
    What the mode hides is desktop.css's own `html.bare` rule — the same one a console view inside a
@@ -1169,10 +685,3 @@ html.focus-armed .focus-exit .txt,.focus-exit:hover .txt,.focus-exit:focus-visib
   .modal .btn,.modal .btn.ghost{min-height:44px}
 }
 
-/* C1 — build version, pinned under the side nav. Deliberately quiet: it must be readable when you
-   go looking for it and invisible when you are not. */
-.side .build{
-  margin-top:auto; padding:10px 6px 2px; font-size:11px; letter-spacing:.02em;
-  color:var(--side-mut); opacity:.75; direction:ltr; text-align:left;
-  font-variant-numeric:tabular-nums;
-}

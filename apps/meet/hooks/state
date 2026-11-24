@@ -1,0 +1,31 @@
+#!/usr/bin/env bash
+#: state — what the meetings app holds, one `<name> <value>` per line:  ./bbox meet state
+#: In the recorder (data/meet/recordings): the recordings — every .mp4 — and the sessions' metadata files. In prosody
+#: (data/meet/prosody): the meetings' live captions (meet-captions/, mod_meet_captions — transcripts meet-start files
+#: with each meeting) younger than the prune can take within two days — it removes those older than
+#: MEET_CAPTIONS_KEEP_DAYS at every start, and a count that fell by itself would send a good move back — and its other
+#: files. Counts only, never a name.
+#: The data move (platform/manager/datahome.py, DGO-2019) reads it before it moves a store and again after, and sends
+#: the store back to its volume when what it held is gone. Plain sh: each branch by what its container mounts.
+set -uo pipefail
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
+case "${1:-}" in -h|--help) sed -n 's/^#: //p' "${BASH_SOURCE[0]}"; exit 0 ;; esac
+# The data move names the container it measures; by hand, it is the office's own recorder.
+if [ -n "${DGO_STATE_CONTAINER:-}" ]; then
+  inside() { docker exec -i "${DGO_STATE_CONTAINER}" "$@"; }
+else
+  . "${REPO_ROOT}/scripts/lib.sh"
+  inside() { dcx exec -T meet-jibri "$@"; }
+fi
+inside sh -s <<'SH'
+if [ -d /storage ]; then
+  echo "recordings.mp4 $(find /storage -type f -name '*.mp4' 2>/dev/null | wc -l)"
+  echo "recordings.metadata $(find /storage -type f -name metadata.json 2>/dev/null | wc -l)"
+elif [ -d /var/lib/prosody ]; then
+  d="${MEET_CAPTIONS_DIR:-/var/lib/prosody/meet-captions}"; keep="${MEET_CAPTIONS_KEEP_DAYS:-30}"
+  young=$(( keep > 2 ? keep - 2 : 1 ))
+  echo "prosody.captions $(find "${d}" -type f -mtime "-${young}" 2>/dev/null | wc -l)"
+  echo "prosody.other $(find /var/lib/prosody -type f ! -path "${d}/*" 2>/dev/null | wc -l)"
+fi
+SH

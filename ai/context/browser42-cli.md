@@ -338,26 +338,27 @@ guard would have missed that one, which is why the fix watches for the life of t
 > a profile can still be lost by a path nobody patched.
 
 **What stands in the way now** (DGO-1921, 2026-11-17: `apps/browser42/patch-cloakserve.py`, built into
-the image, and `start-browser.sh` §4h). The quarantine above, the boot step that promoted quarantined
+the image; `start-browser.sh` §4h, which stood beside it, was retired on 2026-11-24 — the table's second
+row). The quarantine above, the boot step that promoted quarantined
 copies back, and a 20-second runtime watcher were removed: all three undid a move that no longer happens.
 
 | Layer | What it does |
 |---|---|
 | No destructive recovery | `patch-cloakserve.py`: for `RESERVED_SEEDS` cloakserve neither deletes nor moves the profile, at shutdown or after a failed launch (it logs an error and the next launch reuses it), and its launch lock is never dropped while held — two Chromes on one profile was the other way a launch failed. This is the one that removes the cause. |
-| Snapshot outside the volume | The profile WITHOUT caches (~110 MB, not 2 GB) is copied to `data/browser42/profile-snapshot/` on the *host* — it survives a recreate, a rebuild and the volume itself. Every 30 min and at sleep, and only when a sign-in file was written since the last copy. |
-| Wipe-proof replacement | A snapshot is replaced only by a whole copy (its own cookie database opened and counted) of a live profile that still looks real (`Local State` + `Cookies` + ≥3 cookie rows) and holds **at least 90%** of the snapshot's cookies. "Strictly more" (2026-09-27) froze the snapshot: cookies expire, and from 11-13 to 11-17 nothing newly signed in was in it. 90% still refuses the 09-27 case (25 of 33). |
-| Kept generation | The copy it replaces is kept as `profile-snapshot.prev`, and at every step of the rotation one of the two is the last good copy; the restore falls back to `.prev`. |
-| Restore at boot | Every start checks the profile first and restores the snapshot when it looks wiped. |
+| ~~Snapshot outside the volume · wipe-proof replacement · kept generation · restore at boot~~ | **Retired 2026-11-24 (DGO-2188).** `start-browser.sh` no longer copies the profile, counts its cookies or restores a copy. With the cause removed (the row above), what was left was the guard's own cost: 25 GB of cookie copies in `/tmp` (DGO-1917), 2 GB a copy on C:, and on 2026-11-20 a rotation torn by C:'s I/O errors that took the HP's browser down for four days and left the «protected» copy at 12 KB. The profile is the app's declared state, carried by the office's backup; copies an office still holds in `data/browser42/` are left there for a person. |
 | No premature kill | The CDP watchdog now waits for the **first successful probe** (15 min backstop) instead of a fixed 45s grace — the old grace was shorter than a cold start, so it killed a browser that was still coming up, and that restart is what turned a slow start into the 09-22 wipe. |
 
-**Which copy is the backup (decided 2026-11-10, DGO-327).** Two copies, two jobs, and neither is the only
-home of a password (the credential plane holds the logins too: «One login, two stores» above):
-- **The snapshot** (`data/browser42/profile-snapshot/` and its `.prev`) is THE automatic backup of this
-  host's browser: the guard promotes into it, monotone in cookies, and restores from it at boot and at run time.
+**Which copy is the backup (decided 2026-11-10, DGO-327; the first bullet changed 2026-11-24, DGO-2188).** Two
+copies, two jobs, and neither is the only home of a password (the credential plane holds the logins too: «One
+login, two stores» above):
+- **The office's backup** carries the profile, as it carries every app's declared state (`app.json` `data`,
+  `bbox export`, the data-management app). Until 2026-11-24 a snapshot in `data/browser42/profile-snapshot/` was
+  «THE automatic backup»; nothing writes it any more (the table above says why).
 - **`bbox b42 state dump|load`** is the MANUAL, encrypted copy that leaves the machine: dumped by a person or an
   operator once a session is worth keeping (a WhatsApp pairing), and restored by `hooks/onboard` into a new
-  office's empty browser. It is not wired into the guard's promotion: it stops the browser, and it refuses
-  without `BROWSER42_STATE_PASSPHRASE` — empty on the HP — so run every five minutes it would fail every time.
+  office's empty browser. It stops the browser, and it refuses without `BROWSER42_STATE_PASSPHRASE`.
+
+*The rest of this section is the retired guard's history, kept for what it measured: none of it runs today.*
 
 **The 2026-09-27 failure, and why the guard above did not catch it.** The guard reasoned about
 "wiped" (0–1 cookies) and had no notion of "logged out". A profile that is signed out of everything

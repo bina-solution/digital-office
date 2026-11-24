@@ -7,7 +7,7 @@
 #   meet-jvb      the video bridge — the media. Its UDP port is the only media path and is published
 #                 on the machine; hooks/prepare opens it on an office with a public domain
 #   meet-jibri    the recorder (Jitsi's own, Jibri): joins a room as a hidden participant when a
-#                 recording starts and writes it to the volume meet_recordings — the office's copy
+#                 recording starts and writes it to data/meet/recordings — the office's copy
 #   meet-start    the host's door, no screen of its own: the console tile lands on Jitsi's welcome
 #                 page; "I am the host" and the welcome card's "new meeting" come here for a short
 #                 JWT and go straight back into Jitsi; it also lists the recordings
@@ -105,7 +105,10 @@ services:
       - /tmp:size=16M,mode=1777,noexec
       - /config:size=1M,mode=1755
     volumes:
-      - meet_prosody_data:/var/lib/prosody
+      # prosody's store — the meetings' live captions (meet-captions/, mod_meet_captions: transcripts meet-start files
+      # with each meeting, kept MEET_CAPTIONS_KEEP_DAYS) beside its own files: in data/meet/prosody (DGO-2019; it was
+      # the volume meet_prosody_data, moved once by `bbox run`)
+      - ../../data/meet/prosody:/var/lib/prosody
       # Every meeting a host opens is recorded from its start, from any client (DGO-831), whoever
       # shares a screen is told by the server that it is shared (DGO-832), and whoever's microphone
       # is on but sends nothing is told that too (DGO-959): the image's own plugin folder, loaded on
@@ -295,7 +298,9 @@ services:
       - traefik.tcp.routers.meet-turn.rule=HostSNI(`${MEET_TURN_BASE_URL:-meet-turn.${DEPLOYMENT_DOMAIN:-localhost}}`)
       - traefik.tcp.routers.meet-turn.entrypoints=websecure
       - traefik.tcp.routers.meet-turn.tls=true
-      - traefik.tcp.routers.meet-turn.tls.certresolver=myresolver
+      # the edge's resolver as every TLS router names it: EMPTY on an office with no public name (lib.sh
+      # export_cert_resolver), so a `.localhost` office never asks Let's Encrypt for meet-turn (DGO-2111)
+      - traefik.tcp.routers.meet-turn.tls.certresolver=${TRAEFIK_CERTRESOLVER-myresolver}
       - traefik.tcp.routers.meet-turn.service=meet-turn
       - traefik.tcp.services.meet-turn.loadbalancer.server.port=3478
     networks:
@@ -330,9 +335,10 @@ services:
       - /tmp:size=256M,mode=1777,noexec
       - /config:size=1M,mode=1755
     volumes:
-      # /storage is owned by the image's own user, so the volume is too: recordings/<session>/*.mp4
-      # and the session's metadata.json (the room, who was there), and Jibri's logs.
-      - meet_recordings:/storage
+      # /storage is owned by the image's own user, so the store is too: recordings/<session>/*.mp4
+      # and the session's metadata.json (the room, who was there), and Jibri's logs. In data/meet/recordings
+      # (DGO-2019; it was the volume meet_recordings, moved once by `bbox run`, owner kept)
+      - ../../data/meet/recordings:/storage
       # Run by Jibri after each recording: the meeting's audio beside the video (DGO-834).
       - ./jibri/finalize.sh:/usr/local/bin/meet-finalize.sh:ro
       # …which rebuilds an mp4 left with no index by a killed ffmpeg (MEET-48): python3 + ffmpeg only.
@@ -434,7 +440,7 @@ services:
     command: ["python", "-u", "server.py"]
     volumes:
       - ./start:/app:ro
-      - meet_recordings:/recordings:ro
+      - ../../data/meet/recordings:/recordings:ro
       # the office's ONE flow.v1 publisher (DGO-1402) — the platform's file, never a copy of it here
       - ../../platform-base/redis/flowpub.py:/opt/dgo/flowpub.py:ro
     environment:
@@ -516,10 +522,6 @@ services:
     logging:
       driver: json-file
       options: { max-size: "10m", max-file: "3" }
-
-volumes:
-  meet_prosody_data:
-  meet_recordings:
 
 networks:
   traefik-network:

@@ -47,7 +47,7 @@
       "port": 8080,
       "auth": "sso",
       "module": {
-        "group": "תשתית",
+        "group": "ניהול הלשכה",
         "icon": "database",
         "embed": true,
         "alias": "data-management",
@@ -68,9 +68,9 @@
     }
   },
   "data": {
-    "volumes": [
-      "data_management_state"
-    ],
+    "volumes": [],
+    "paths": ["data/data-management/state"],
+    "moved_from": {"data/data-management/state": "data_management_state"},
     "on_uninstall": "keep"
   },
   "resources": {

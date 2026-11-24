@@ -81,7 +81,29 @@
   // the official Claude app's own tile — the first app's, or an instance's (`bina-claude-2`, DGO-1920) — by the
   // office's ONE link form, `<console>/go/<app>`, which the console resolves at click time and which survives the
   // sign-in (platform-base/console/links.py, gate G95)
-  const officialClaude = (app) => `${sibling("console")}/go/${/^bina-claude(-[A-Za-z0-9_.-]{1,60})?$/.test(app || "") ? app : "bina-claude"}`;
+  const claudeId = (app) => (/^bina-claude(-[A-Za-z0-9_.-]{1,60})?$/.test(app || "") ? app : "bina-claude");
+  const officialClaude = (app) => `${sibling("console")}/go/${claudeId(app)}`;
+  // the office's apps screen, opened on a Claude app's card (DGO-2126): where the office does not run one, its
+  // own «התקן» installs it (the one place an app is installed, with its room check); where it runs one that does
+  // not answer, the card says what it is (stopped, off) and offers what fits
+  const installClaude = (app) => `${sibling("console")}/go/apps?app=${claudeId(app)}`;
+  // what a Claude app that does not answer IS (DGO-2126, its second reader): the office does not run it (never
+  // installed, turned off or archived — `declared` false), it runs it and it does not answer now (true), or that is
+  // not known (null); and when even `installed` was not said, nothing is known. Every place that shows an app's state
+  // reads it here, so the place card, the sheets and the footer never disagree.
+  function claudeState(c) {
+    if (c && c.installed) return c.signed_in ? "on" : "out";
+    if (!c || typeof c.installed !== "boolean") return "unknown";
+    return c.declared === false ? "absent" : c.declared === true ? "down" : "silent";
+  }
+  const CLAUDE_WORD = { absent: "לא פועל בלשכה", down: "מותקן, לא עונה כרגע", silent: "לא עונה כרגע", unknown: "לא ידוע כרגע" };
+  // the one action that fits a Claude app that does not answer: its install, its card, or nothing
+  const claudeFix = (c, cls) => {
+    const s = claudeState(c);
+    if (s === "absent") return `<a class="btn sm" href="${esc(installClaude(c.id))}" target="${outTarget}" rel="noopener" title="מסך האפליקציות של הלשכה נפתח על קלוד דסקטופ">${ic("plus", "sm")}התקנה</a>`;
+    if (s === "down" || s === "silent") return `<a class="btn sm ghost${cls || ""}" href="${esc(installClaude(c.id))}" target="${outTarget}" rel="noopener" title="מסך האפליקציות של הלשכה נפתח על קלוד דסקטופ">${ic("ext", "sm")}במסך האפליקציות</a>`;
+    return "";
+  };
   const outTarget = window.top !== window ? "_top" : "_blank";
 
   // ── Markdown, escaped FIRST: nothing in a reply can become markup of its own ─────────────────
@@ -269,6 +291,8 @@
     // Claude's door takes a message at once and hands it to the app in the background (DGO-2044): the
     // conversations whose message is still being handed over, and the ones whose message was not sent (why, and its words)
     handing: new Set(), unsent: {},
+    // …and, of those, the ones waiting in the Claude app's line (its cap of turns at once, DGO-2126): id → place
+    queued: {},
     // a message the stream already showed in its conversation (the app took it; the door's hand-over is finishing),
     // and the promises (`pending-…`) that started, each → the id it goes on under
     landed: new Set(), adopted: new Map(),
@@ -433,7 +457,8 @@
   }
   function renderFoot() {
     const all = claudes(), on = all.filter((x) => x.installed && x.signed_in).length, any = all.some((x) => x.installed);
-    const state = !st.models ? "בודק…" : !any ? "Claude לא מותקן בלשכה"
+    // none answers: not run by the office at all, or run and not answering (DGO-2126)
+    const state = !st.models ? "בודק…" : !any ? (all.length && all.every((x) => claudeState(x) === "absent") ? "Claude לא פועל בלשכה" : "Claude לא עונה כרגע")
       : all.length > 1 ? `${on} מתוך ${all.length} אפליקציות Claude מחוברות` : on ? "Claude מחובר" : "Claude לא מחובר";
     const dot = any ? (on ? "ok" : "wait") : "";
     el.foot.innerHTML = `
@@ -506,14 +531,16 @@
     }
     // every Claude app of the office: the first, and each further account (DGO-1920 instances)
     for (const c of claudes()) out.push({ key: `claude:${c.id}`, pick: { engine: "claude", app: c.id }, icon: "msg", name: claudeName(c.id),
-                                          sub: c.key ? "חשבון Claude נוסף" : "האפליקציה הרשמית", ok: !!(c.installed && c.signed_in), off: !c.installed });
+                                          sub: c.key ? "חשבון Claude נוסף" : "האפליקציה הרשמית", ok: !!(c.installed && c.signed_in),
+                                          // not run by the office at all, or run and not answering: two different things (DGO-2126)
+                                          off: claudeState(c) === "absent", down: !c.installed && claudeState(c) !== "absent" });
     return out;
   }
   const placeOf = (ch) => (ch.engine === "claude" ? `claude:${(claudeApp(ch.app) || claudeApp() || { id: "bina-claude" }).id}` : ch.provider && isLocal(ch.provider) ? ch.provider : "cloud");
   function placesHTML() {
     const sel = placeOf(engineChoice());
     const cards = places().map((p) => {
-      const why = p.ok ? "" : p.off ? "לא מותקן בלשכה" : p.key.startsWith("claude:") ? "לא מחובר" : p.icon === "cpu" ? "לא עונה כרגע" : "צריך מפתח";
+      const why = p.ok ? "" : p.off ? "לא פועל בלשכה" : p.down ? "לא עונה כרגע" : p.key.startsWith("claude:") ? "לא מחובר" : p.icon === "cpu" ? "לא עונה כרגע" : "צריך מפתח";
       return `<button type="button" class="place" role="radio" aria-checked="${p.ok && p.key === sel}" ${p.ok ? `data-pick='${esc(JSON.stringify(p.pick))}'` : `data-act="providers"`} title="${esc(why || p.sub)}">
         ${ic(p.icon)}<span class="pn">${esc(p.name)}</span><small dir="auto">${esc(p.sub)}</small>${why ? `<em>${esc(why)}</em>` : ""}</button>`;
     }).join("");
@@ -534,7 +561,8 @@
     el.top.innerHTML = `
       <button type="button" class="icbtn only-phone" data-act="drawer" title="כל השיחות" aria-label="כל השיחות">${ic("menu")}</button>
       <div class="ttl"><b dir="auto">${esc(ttl)}</b><small>${sub}</small></div>
-      ${running ? `<span class="runpill only-desk"><span class="dot run"></span>עובד</span>` : ""}
+      ${!running ? "" : s && st.queued[s.id] ? `<span class="runpill only-desk"><span class="dot wait"></span>בתור</span>`
+        : `<span class="runpill only-desk"><span class="dot run"></span>עובד</span>`}
       <a class="icbtn" href="${esc(outLink)}" target="${outTarget}" rel="noopener" title="${s && s.engine === "claude" ? "פתיחה באפליקציית Claude הרשמית" : "פתיחה בממשק המלא"}" aria-label="פתיחה מחוץ למסך">${ic("ext", "sm")}</a>
       <button type="button" class="icbtn only-phone" data-act="new" title="שיחה חדשה" aria-label="שיחה חדשה">${ic("new")}</button>`;
   }
@@ -727,6 +755,10 @@
     if (st.outbox && st.outbox.id === st.cur) {
       out.push(info(`o${st.outbox.text.length}`, `<div class="uwrap"><div class="msg-u" dir="auto">${esc(st.outbox.text)}${st.outbox.files ? `<div class="ufiles">${st.outbox.files.map((f) => `<span>${ic("file", "sm")}${esc(f)}</span>`).join("")}</div>` : ""}</div></div>`));
       out.push(info("status", `<div class="typing" role="status"><span class="dot run"></span>${st.outbox.claude ? "שולחים ל-Claude…" : st.outbox.files ? "מעלים את הקבצים ושולחים לעזריה…" : "שולחים לעזריה…"}</div>`));
+    } else if (st.handing.has(st.cur) && st.queued[st.cur]) {
+      // the office's Claude runs as many turns as it may at once: this message waits its turn, and goes by itself
+      const q = st.queued[st.cur];
+      out.push(info(`queued${q}`, `<div class="typing" role="status"><span class="dot wait"></span>בתור ל-Claude${q > 1 ? ` · מקום ${q}` : ""} — ההודעה תיכנס לבד כשאחת השיחות שרצות עכשיו תסתיים</div>`));
     } else if (st.handing.has(st.cur)) {
       out.push(info("status", `<div class="typing" role="status"><span class="dot run"></span>מעבירים ל-Claude דרך האפליקציה הרשמית…</div>`));
     } else if (live &&!(st.stream.id === st.cur && (st.stream.text || st.stream.think)) && !(tail && tail.live) && !(s && s.waiting)) {
@@ -809,7 +841,7 @@
     if (queue) { btn.className = "send queue"; btn.disabled = false; btn.title = "לתור — עזריה יקרא את זה אחרי הצעד הנוכחי"; btn.setAttribute("aria-label", "שליחה לתור"); btn.innerHTML = ic("up"); btn.dataset.act = "send"; }
     // a message still being handed to the Claude app: nothing to stop yet (the app has not started the turn), and the
     // next message waits until this one is in
-    else if (s && st.handing.has(s.id)) { btn.className = "send"; btn.disabled = true; btn.title = "ההודעה נמסרת ל-Claude — אפשר לשלוח כשהיא נכנסת"; btn.setAttribute("aria-label", "שליחה"); btn.innerHTML = ic("up"); btn.dataset.act = "send"; }
+    else if (s && st.handing.has(s.id)) { btn.className = "send"; btn.disabled = true; btn.title = st.queued[s.id] ? "ההודעה בתור ל-Claude — אפשר לשלוח כשהיא נכנסת" : "ההודעה נמסרת ל-Claude — אפשר לשלוח כשהיא נכנסת"; btn.setAttribute("aria-label", "שליחה"); btn.innerHTML = ic("up"); btn.dataset.act = "send"; }
     // in the conversation already, but the hand-over is finishing (a second or two): stopping comes right after
     else if (s && st.landed.has(s.id)) { btn.className = "send stop"; btn.disabled = true; btn.title = "עוד רגע אפשר לעצור"; btn.setAttribute("aria-label", "עצירה"); btn.innerHTML = ic("stop"); btn.dataset.act = "stop"; }
     else if (running) { btn.className = "send stop"; btn.disabled = false; btn.title = "עצירה"; btn.setAttribute("aria-label", "עצירה"); btn.innerHTML = ic("stop"); btn.dataset.act = "stop"; }
@@ -909,9 +941,16 @@
         }
         // each Claude app of the office: the first, and every further account
         const apps = Array.isArray(p.claudes) && p.claudes.length ? p.claudes : [{ id: "bina-claude", key: "", ...(p.claude || {}) }];
-        h += `<div class="ogrp">אפליקציות שמותקנות בלשכה</div>`;
-        for (const c of apps) h += `<div class="prow"><span class="pic">${ic("msg")}</span><span class="pt"><b dir="auto">${esc(c.key ? ((c.title && (c.title.he || c.title.en)) || `Claude ${c.key}`) : "Claude")}</b><small><span class="dot ${c.installed ? (c.signed_in ? "ok" : "wait") : ""}"></span>${c.installed ? (c.signed_in ? `מחובר · מנוי Claude${c.active ? ` · ${Number(c.active) === 1 ? "שיחה אחת עובדת עכשיו" : `${Number(c.active)} שיחות עובדות עכשיו`}` : ""}` : "מותקן, לא מחובר") : "לא פועל"}</small></span>
-          ${c.installed ? `<a class="btn sm ghost" href="${esc(officialClaude(c.id))}" target="${outTarget}" rel="noopener">${ic(c.signed_in ? "ext" : "login", "sm")}${c.signed_in ? "פתיחה" : "התחברות"}</a>` : ""}</div>`;
+        h += `<div class="ogrp">אפליקציות</div>`;
+        for (const c of apps) {
+          // the app's state and the one action that fits it (claudeState above, DGO-2126)
+          const state = c.installed ? (c.signed_in ? `מחובר · מנוי Claude${c.active ? ` · ${Number(c.active) === 1 ? "שיחה אחת עובדת עכשיו" : `${Number(c.active)} שיחות עובדות עכשיו`}` : ""}` : "מותקן, לא מחובר")
+            : CLAUDE_WORD[claudeState(c)];
+          const act = c.installed ? `<a class="btn sm ghost" href="${esc(officialClaude(c.id))}" target="${outTarget}" rel="noopener">${ic(c.signed_in ? "ext" : "login", "sm")}${c.signed_in ? "פתיחה" : "התחברות"}</a>`
+            : claudeFix(c);
+          h += `<div class="prow"><span class="pic">${ic("msg")}</span><span class="pt"><b dir="auto">${esc(c.key ? ((c.title && (c.title.he || c.title.en)) || `Claude ${c.key}`) : "Claude")}</b><small><span class="dot ${c.installed ? (c.signed_in ? "ok" : "wait") : ""}"></span>${state}</small></span>
+          ${act}</div>`;
+        }
         h += `<p class="why">מפתח לא עובר במסך הזה: הוא נשמר ב«חיבורים ומפתחות» של הלשכה, ועזריה קורא אותו משם בכל בקשה. כל הגדרות המודלים — ב<a href="${esc(fullUi(null))}" target="${outTarget}" rel="noopener">ממשק המלא</a>.</p>`;
       }
       el.pop.innerHTML = h + `</div></div>`;
@@ -924,12 +963,12 @@
       const blocks = apps.map((c) => {
         const n = (st.sessions || []).filter((s) => s.engine === "claude" && (s.app || "bina-claude") === c.id).length;
         return `${apps.length > 1 ? `<div class="ogrp" dir="auto">${esc(claudeName(c.id))}</div>` : ""}<div class="facts">
-          <div><small>מצב</small><span>${c.installed ? (c.signed_in ? `<span class="dot ok"></span>מחובר` : `<span class="dot wait"></span>לא מחובר`) : "לא פועל"}</span></div>
+          <div><small>מצב</small><span>${c.installed ? (c.signed_in ? `<span class="dot ok"></span>מחובר` : `<span class="dot wait"></span>לא מחובר`) : CLAUDE_WORD[claudeState(c)]}</span></div>
           <div><small>איפה רץ</small><span>אפליקציית Claude הרשמית</span></div>
           <div><small>שיחות</small><span>${n}</span></div>
           <div><small>עובדות עכשיו</small><span>${esc(Number(c.active) || 0)}</span></div>
         </div>
-        <div class="btns"><a class="btn${c.signed_in ? " ghost" : ""}" href="${esc(officialClaude(c.id))}" target="${outTarget}" rel="noopener">${ic(c.signed_in ? "ext" : "login", "sm")}${c.signed_in ? "פתיחת האפליקציה הרשמית" : "התחברות ל-Claude"}</a></div>`;
+        <div class="btns">${c.installed ? `<a class="btn${c.signed_in ? " ghost" : ""}" href="${esc(officialClaude(c.id))}" target="${outTarget}" rel="noopener">${ic(c.signed_in ? "ext" : "login", "sm")}${c.signed_in ? "פתיחת האפליקציה הרשמית" : "התחברות ל-Claude"}</a>` : claudeFix(c)}</div>`;
       }).join("");
       el.pop.innerHTML = `<div class="scrim" data-act="close"><div class="sheet" role="dialog" aria-modal="true" aria-label="Claude בתוך עזריה">
         <h3>${ic("msg", "sm")}Claude בתוך עזריה<span class="sp"></span><button type="button" class="icbtn" data-act="close" title="סגירה" aria-label="סגירה">${ic("x")}</button></h3>
@@ -1049,6 +1088,7 @@
     }
     if (st.pending && st.pending.id === pid) st.pending.id = real;
     if (st.handing.delete(pid)) st.handing.add(real);
+    delete st.queued[pid];                                           // started: it waits in no line any more
     delete st.unsent[pid];
     if (st.drafts[pid] !== undefined) { if (!st.drafts[real]) st.drafts[real] = st.drafts[pid]; delete st.drafts[pid]; }
     if (st.pins.has(pid)) { st.pins.delete(pid); st.pins.add(real); store.set("azaria.pins", [...st.pins]); }
@@ -1062,11 +1102,13 @@
   // the words go back to the composer they left (unless the person is already writing something else there).
   // Answers whether that changed what the conversation shows.
   function told(id, r) {
-    const now = () => `${st.handing.has(id)}:${st.unsent[id] ? st.unsent[id].at : ""}`;
+    const now = () => `${st.handing.has(id)}:${st.queued[id] || 0}:${st.unsent[id] ? st.unsent[id].at : ""}`;
     const before = now();
     // still on its way — unless the stream already showed it in the conversation (the app took it)
     if (r.sending && !st.landed.has(id)) st.handing.add(id);
     else { st.handing.delete(id); if (!r.sending) st.landed.delete(id); }
+    // waiting in the Claude app's line: its place, said instead of «handing over» until the line sends it
+    if (st.handing.has(id) && Number(r.queued) > 0) st.queued[id] = Number(r.queued); else delete st.queued[id];
     const f = r.failed && typeof r.failed === "object" ? r.failed : null;
     const said = f ? `${!!f.maybe}|${f.error}` : "";                  // the same verdict read again is not said again
     if (!f) delete st.unsent[id];
@@ -1132,7 +1174,8 @@
       st.events = events; st.loadedFor = id; st.sig = sig;
       const p = st.pending;
       if (p && p.id === id && arrived(events, p) && st.handing.delete(id)) { st.landed.add(id); updateSend(); }
-      if (p && p.id === id && (arrived(events, p) || Date.now() - p.at > 180000)) st.pending = null;
+      // the bubble goes when the message is in — or three minutes on, unless it is still on its way (a line holds it)
+      if (p && p.id === id && (arrived(events, p) || (Date.now() - p.at > 180000 && !st.handing.has(id)))) st.pending = null;
       if (changed && all) {
         // earlier messages arrive ABOVE the reader: the place on the screen stays where it was
         const fromBottom = el.body.scrollHeight - el.body.scrollTop;

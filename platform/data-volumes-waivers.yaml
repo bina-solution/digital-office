@@ -17,12 +17,6 @@ dashboard:
   # is ../../data/lan, declared in dashboard's data.volumes.
   - "dashboard_lan_sock"
 
-lan-console:
-  # forward-auth's own volume (the office's users file), mounted READ-ONLY by lan-signin so the sign-in on
-  # the LAN reads the office's one set of accounts, never a copy of the hashes (r030-002). forward-auth
-  # declares it in its own data.volumes and the backup carries it from there; lan-console writes nothing to it.
-  - "forward_auth_data"
-
 bina-claude:
   # The same vault, for the desktop app's sessions (DGO-1642) — obsidian's volume, carried from obsidian.
   - "obsidian_vault"

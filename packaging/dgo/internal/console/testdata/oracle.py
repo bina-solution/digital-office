@@ -26,7 +26,10 @@ def main():
     # Only what the spec says reaches the app: no telemetry DSN from the developer's shell, and the
     # two planes app.py could dial point at a port nothing listens on — the oracle never asks the
     # network anything (the routes that would are proxied by the Go server, not compared).
-    for name in ("SENTRY_DSN", "BUILD_VERSION", "GENERATED_REGISTRY", "CONSOLE_PEERS_DIR", "PLATFORM_SERVICES"):
+    # …and no office id from the runner's own shell (DGO-2122, the second reader): the herd cases set it, or say it
+    # is unset, in the spec — a runner that exported DGO_OFFICE_ID made Python mark the herd where Go did not.
+    for name in ("SENTRY_DSN", "BUILD_VERSION", "GENERATED_REGISTRY", "CONSOLE_PEERS_DIR", "PLATFORM_SERVICES",
+                 "DGO_OFFICE_ID"):
         os.environ.pop(name, None)
     os.environ["APP_MANAGEMENT_URL"] = os.environ["CONNECTIONS_URL"] = "http://127.0.0.1:9"
     os.environ.update(spec["env"])

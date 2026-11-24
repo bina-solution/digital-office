@@ -38,8 +38,9 @@ services:
       # the event stream (flow.v1, DGO-1402) rides the office redis: `dgo:flow:drive`
       - REDIS_PASSWORD=${REDIS_PASSWORD:-}
     volumes:
-      # the active-connection pointer (active.json), the extension registry and the upload sessions
-      - localdrive_data:/data
+      # the active-connection pointer (active.json), the extension registry and the upload sessions — in the DGO
+      # folder's data/drive/state (DGO-2019); it was the volume localdrive_data, moved once by `bbox run`
+      - ../../data/drive/state:/data
       - ../../.generated/registry:/registry:ro   # compiled registries: which drive-* engine apps exist (G9)
       # the office's ONE flow.v1 publisher (DGO-1402) — the platform's file, never a copy of it here
       - ../../platform-base/redis/flowpub.py:/opt/dgo/flowpub.py:ro
@@ -104,11 +105,6 @@ services:
       options:
         max-size: 5m
         max-file: '3'
-
-volumes:
-  # NAME DELIBERATELY UNCHANGED. The service is `drive` now, but renaming this volume
-  # would orphan every byte already in digital-office_localdrive_data.
-  localdrive_data:
 
 networks:
   traefik-network:

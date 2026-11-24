@@ -35,6 +35,10 @@ concurrency:
 
 jobs:
   plan:
+    # GitHub's runners take no job while the account's billing is stopped: every push here turned red in seconds and
+    # tested nothing (30 of 30 in 2026-11-13…20, DGO-2123). A push asks only when the repository variable
+    # HOSTED_RUNNERS is `on` — set it when GitHub's runners take jobs again; a hand-run always asks.
+    if: github.event_name == 'workflow_dispatch' || vars.HOSTED_RUNNERS == 'on'
     runs-on: ubuntu-latest
     outputs:
       apps: ${{ steps.set.outputs.apps }}

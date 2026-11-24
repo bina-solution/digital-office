@@ -27,13 +27,19 @@ services:
       - ESIGN_DATA=/data
       # the address the signer's link is minted on: the office's own host, never a container name
       - ESIGN_BASE_URL=${ESIGN_BASE_URL:-http://esign.${DEPLOYMENT_DOMAIN:-localhost}:8080}
-      - ESIGN_DRIVE_FOLDER=${ESIGN_DRIVE_FOLDER:-חתימות}
+      # …unless the signer's page is published on another office's edge (DGO-2125): its full https address, and
+      # the link is minted there. ESIGN_BASE_URL stays this office's own host: the routers below and the sign-in.
+      - ESIGN_PUBLIC_URL=${ESIGN_PUBLIC_URL:-}
+      # under «מסמכים», so «ארכיון» (the documents index: /מסמכים, /לקוחות, /מחקרים) lists every signed copy (DGO-2125)
+      - ESIGN_DRIVE_FOLDER=${ESIGN_DRIVE_FOLDER:-מסמכים/חתימות}
       - ESIGN_MAX_UPLOAD=${ESIGN_MAX_UPLOAD:-41943040}
       # an office PKCS#12, when the owner connects one (a registered CA's, or the office's own)
       - ESIGN_CERT_P12=${ESIGN_CERT_P12:-}
       - ESIGN_CERT_PASS=${ESIGN_CERT_PASS:-}
-      # the office's name: in its self-signed key (made once) and in each signature's location
-      - ESIGN_OFFICE_NAME=${BUSINESS_NAME:-}
+      # the office's name: in its self-signed key (made once), in each signature's location and on the signer's
+      # pages. Its own variable first: a deployment's BUSINESS_NAME may not be the name a customer reads (the HP's
+      # is «Example», from its first setup), and a key is made once, at the first signature (DGO-2125)
+      - ESIGN_OFFICE_NAME=${ESIGN_OFFICE_NAME:-${BUSINESS_NAME:-}}
       # an RFC 3161 time-stamping authority (PAdES B-T); empty = no trusted time and nothing called outside
       - ESIGN_TSA_URL=${ESIGN_TSA_URL:-}
       - DRIVE_URL=${DRIVE_URL:-http://drive:8975}
@@ -45,8 +51,10 @@ services:
       - REDIS_PASSWORD=${REDIS_PASSWORD:-}
       - TZ=${TZ:-Asia/Jerusalem}
     volumes:
-      # the envelopes, the documents, the signed copies, the audit trail and the signing key
-      - esign_data:/data
+      # the envelopes, the documents, the signed copies, the audit trail and the signing key — in the DGO folder's
+      # data/esign/state (DGO-2019), owned by the image's user `esign` (hooks/prepare gives it a folder made before the
+      # image); it was the volume esign_data, moved once by `bbox run`
+      - ../../data/esign/state:/data
     networks:
       - traefik-network
     labels:
@@ -99,9 +107,6 @@ services:
       options:
         max-size: 5m
         max-file: '3'
-
-volumes:
-  esign_data:
 
 networks:
   traefik-network:

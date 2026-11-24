@@ -6,7 +6,7 @@ e-mail), pays ₪99 a month by Cardcom, and gets a managed DGO of their own on a
 the admin screen («ניהול»). It runs on vps1, the herd's storefront. Notes and decisions: `.claude/notes/DGO-1893.md`;
 the providers' API facts: `research_notes/DGO cloud 2026-11-15/`.
 
-## The pieces (one stdlib-Python service, one SQLite file in `dgo_cloud_data`)
+## The pieces (one stdlib-Python service, one SQLite file in `data/dgo-cloud/state`, the volume `dgo_cloud_data` until DGO-2019)
 
 | module | what | the outside party |
 |---|---|---|

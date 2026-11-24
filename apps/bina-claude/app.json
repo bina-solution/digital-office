@@ -9,6 +9,7 @@
   "kind": "service",
   "page": "ai",
   "multi_instance": true,
+  "recreate": "when-idle",
   "version": "0.1.0",
   "summary": {
     "he": "אפליקציית Claude Desktop הרשמית בתוך הלשכה, בכניסה אחת לכל מופע — מסך בקונסול, ו-CLI, API וזרימה על אותה כניסה. מופע נוסף = חשבון Claude נוסף",
@@ -71,7 +72,7 @@
       "service": "bina-claude-desktop",
       "emit_labels": true,
       "module": {
-        "group": "ראשי",
+        "group": "בינה מלאכותית",
         "icon": "sparkles",
         "embed": true,
         "alias": "bina-claude",

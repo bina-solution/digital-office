@@ -129,8 +129,10 @@ def cmd_import(a):
             kept += 1; continue
         if a.dry_run:
             say(f"would put {f['path']}"); made += 1; continue
+        # a person's empty file moves as an empty file: the drive refuses an empty body unless asked (DGO-2042)
         code, out = call("PUT", "/api/fs/content", a.connection, data=blobs[f["path"]],
-                         ctype="application/octet-stream", path=a.dest.rstrip("/") + "/" + f["path"], mode="exclusive")
+                         ctype="application/octet-stream", path=a.dest.rstrip("/") + "/" + f["path"], mode="exclusive",
+                         **({} if blobs[f["path"]] else {"empty": "1"}))
         if code not in (200, 201):
             raise SystemExit(f"[drive-move] {f['path']}: HTTP {code} {out!r}")
         made += 1

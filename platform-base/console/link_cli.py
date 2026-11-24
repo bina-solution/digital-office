@@ -19,7 +19,7 @@ phone `localhost` is the phone).
 
 Where: the herd's hub (apps/computers/herd.yaml `hub:`) is the console the owner works from away from home, so a
 link is built THERE. Run anywhere else, the verb runs on the hub through `bbox via` (once: BBOX_VIA stops a second
-hop). The ledger is the hub console's own (its volume, app.py `links_record`): one line per link given and per
+hop). The ledger is the hub console's own (its store data/console/links, app.py `links_record`): one line per link given and per
 check, never edited; the console opens every link given again every 15 minutes and writes a notice for a link that
 stopped opening (`links_recheck`).
 """
@@ -93,7 +93,7 @@ def console_container() -> str:
 
 
 #: What runs IN the console's own process (`docker exec … python3 -c`): the check, and the ledger it keeps in its own
-#: volume (app.py `links_check`, `links_record`, `links_recheck`, `links_given`) — no route exposes any of it.
+#: store (app.py `links_check`, `links_record`, `links_recheck`, `links_given`) — no route exposes any of it.
 IN_CONSOLE = """
 import json, sys
 sys.path.insert(0, '/app')

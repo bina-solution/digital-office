@@ -258,6 +258,54 @@ def main() -> int:
                 check(False, f"an unknown count must stop the step, not read as 0: {broken}")
             except converge.StepFailed:
                 pass
+        # the store that moved to the DGO folder (DGO-2019) counts as its volume: the real command, on a fake docker
+        # that lists no volume (then one), over an office whose vault is data/connections/vault (moved_from)
+        with tempfile.TemporaryDirectory() as tmp:
+            home, fake = Path(tmp, "office"), Path(tmp, "bin")
+            app, vault = home / "platform-base" / "connections", home / "data" / "connections" / "vault"
+            app.mkdir(parents=True)
+            vault.mkdir(parents=True)
+            fake.mkdir()
+            (app / "app.json").write_text('{"data": {"moved_from": {"data/connections/vault": "connections_vault"}}}')
+            (fake / "docker").write_text("#!/bin/sh\ncat \"$(dirname \"$0\")/volumes\" 2>/dev/null; exit 0\n")
+            (fake / "docker").chmod(0o755)
+            local = dict(office, path=str(home))
+
+            def here(m, cmd, t=0):
+                r = subprocess.run(["bash", "-c", cmd], capture_output=True, text=True, timeout=30,
+                                   env={**os.environ, "PATH": f"{fake}{os.pathsep}{os.environ.get('PATH', '')}"})
+                return {"code": r.returncode, "stdout": r.stdout, "stderr": r.stderr}
+            converge.exec_on = here
+            check(converge._office_data(local) == 0, "an empty moved folder and no volume: no data")
+            (vault / "vault.enc").write_text("x")
+            check(converge._office_data(local) == 1, "the vault's folder holds it: the office has data")
+            (fake / "volumes").write_text("mydgo_connections_vault\nmydgo_supabase_db_data\n")
+            check(converge._office_data(local) == 2, "the vault in its folder and its old volume count once, with the db")
+            (fake / "volumes").unlink()
+            (vault / "vault.enc").unlink()
+            vault.chmod(0)
+            try:
+                if not os.access(vault, os.R_OK):                # root reads anything: not testable as root
+                    check(converge._office_data(local) == 1, "a folder that cannot be looked into is data")
+            finally:
+                vault.chmod(0o755)
+            check(converge._office_data(dict(office, path=str(Path(tmp, "none")))) == 0,
+                  "an office folder not there yet: its volumes alone")
+            (fake / "volumes").write_text("mydgo_connections_vault\n")
+            check(converge._office_data(dict(office, path=str(Path(tmp, "none")))) == 1,
+                  "…which still count when the folder is not there")
+            (fake / "volumes").unlink()
+            # a manifest that is there but cannot be read says nothing about a move: unknown stops the step
+            (app / "app.json").write_text("{ not json")
+            try:
+                converge._office_data(local)
+                check(False, "a manifest that is not JSON must stop the step, not read as no data")
+            except converge.StepFailed as e:
+                check("app.json" in e.args[0], f"…with the folder half's own words: {e.args[0]}")
+            (app / "app.json").write_text('{"data": {"moved_from": {"data/connections/vault": "connections_vault"}}}')
+            vault.rmdir()
+            vault.symlink_to(Path(tmp, "no-such-disk"))
+            check(converge._office_data(local) == 1, "a store behind a link that leads nowhere is data")
         moved = []
         converge.exec_on = lambda m, cmd, t=0: {"code": 0, "stdout": "2\n"}
         converge.must = lambda m, cmd, t, why: moved.append(cmd) or "TEMPLATE=1\n"

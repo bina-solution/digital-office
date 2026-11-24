@@ -67,7 +67,8 @@ services:
       - "${DGOCLOUD_DNS_BIND:-127.0.0.1}:${DGOCLOUD_DNS_HOST_PORT:-5353}:5353/tcp"
     volumes:
       # the database: accounts, subscriptions, payments, the wallet, the nodes, usage, the audit
-      - dgo_cloud_data:/data
+      # in the DGO folder's data/dgo-cloud/state (DGO-2019); it was the volume dgo_cloud_data, moved once by `bbox run`
+      - ../../data/dgo-cloud/state:/data
     networks:
       - traefik-network
     healthcheck:
@@ -81,9 +82,6 @@ services:
         limits:
           cpus: "0.5"
           memory: 256M
-
-volumes:
-  dgo_cloud_data:
 
 networks:
   traefik-network:

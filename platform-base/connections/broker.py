@@ -63,8 +63,9 @@ LOOPBACK = {"127.0.0.1", "::1", "localhost"}
 # and rewrites the whole file per event — so a busy grant path both loses history and multiplies the
 # chance of clobbering the vault itself. Grants go to their own file: one line per event, opened in
 # append mode (atomic for writes under PIPE_BUF on POSIX), flushed and fsync'd, so a `docker kill`
-# cannot lose the record of a secret that was already handed out. It lives on the connections_vault
-# volume, so it survives container replacement.
+# cannot lose the record of a secret that was already handed out. It lives beside the vault, in the DGO
+# folder's data/connections/vault (the volume connections_vault until its move on that office, DGO-2019), so it
+# survives container replacement.
 _audit_lock = threading.Lock()
 
 
@@ -97,7 +98,14 @@ def audit(event, decision, ident, **extra):
         with _audit_lock:
             os.makedirs(DATA_DIR, exist_ok=True)
             _rotate_if_needed()
-            with open(GRANT_LOG, "a", encoding="utf-8") as f:
+            # 0600: the log sits in the DGO folder now, readable by the host's users unless it says otherwise — and a
+            # log made 0644 before is narrowed at its next line (DGO-2019, the vault's second reader)
+            fd = os.open(GRANT_LOG, os.O_WRONLY | os.O_APPEND | os.O_CREAT, 0o600)
+            try:
+                os.fchmod(fd, 0o600)
+            except OSError:                 # a filesystem that refuses chmod even to root: logged all the same, and
+                pass                        # the descriptor is never left open (the vault's second reader)
+            with os.fdopen(fd, "a", encoding="utf-8") as f:
                 f.write(json.dumps(rec, ensure_ascii=False) + "\n")
                 f.flush()
                 os.fsync(f.fileno())

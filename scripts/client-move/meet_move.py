@@ -108,14 +108,18 @@ def cmd_place(a):
         src = os.path.join(src_base, rel)
         if os.path.getsize(src) != info["size"] or sha(src) != info["sha256"]:   # the staged copy is never rewritten
             raise SystemExit(f"[meet-move] {rel}: the staged copy is not the source's (manifest) — refusing")
-        want = expected(rel, src, ch)
+        # only the two small flow files are read whole (to rewrite them): a recording is hashed as it streams
+        data = expected(rel, src, ch) if rel.split("/", 1)[-1] in REWRITTEN and any(ch) else None
+        want = hashlib.sha256(data).hexdigest() if data is not None else info["sha256"]
         dst = os.path.join(dst_base, rel)
         if os.path.exists(dst):
-            if sha(dst) == hashlib.sha256(want).hexdigest():
+            if sha(dst) == want:
                 kept += 1; continue
             raise SystemExit(f"[meet-move] {dst} is there with other bytes — a meeting is never overwritten; refusing "
                              f"(nothing was written)")
-        plan.append((rel, dst, want if rel.split("/", 1)[-1] in REWRITTEN and any(ch) else None, src))
+        plan.append((rel, dst, data, src))
+    # Jibri's metadata.json last: it is what tells the target's meet that a recording is finished (DGO-1861)
+    plan.sort(key=lambda p: p[0].endswith("/metadata.json"))
     for rel in m["files"]:
         stale = os.path.join(dst_base, rel) + ".part"     # a run that died mid-write left it: never a file of the move
         if os.path.exists(stale) and not a.dry_run:
@@ -127,6 +131,10 @@ def cmd_place(a):
         tmp = dst + ".part"
         if data is None:
             shutil.copyfile(src, tmp)
+            # its time too: the target's meet lists recordings by it, and a «פגישות» row without a page for 14 days
+            # from it (DGO-1861) — a copy stamped «now» was the newest recording there, whatever day it was made
+            t = os.stat(src)
+            os.utime(tmp, ns=(t.st_atime_ns, t.st_mtime_ns))
         else:
             with open(tmp, "wb") as f:
                 f.write(data)

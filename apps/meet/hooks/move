@@ -1,0 +1,18 @@
+#!/usr/bin/env bash
+#: move <room> --from <office> --to <office> [--remove] [--dry-run] — a recorded meeting into another office's meet, byte for byte (its recording, sound, the recorder's notes and its page), through the computers app; --remove takes it out of the source only after the target verified it, and keeps a backup there:  ./bbox meet move exu104 --from exampleu --to computer_ssh-00000005 --remove
+# An office is `local`, a linked office's name, or a computer id (`./bbox computers list`). A run prints its id first;
+# `--resume <run>` continues one that stopped. The steps, the backup and what the target makes by itself:
+# apps/meet/tools/move/move.py. It runs in this office's computers container — the door to every machine of the herd —
+# with host.py and scripts/client-move/meet_move.py handed to it to carry.
+set -uo pipefail
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
+case "${1:-}" in ""|-h|--help) sed -n 's/^#: //p' "${BASH_SOURCE[0]}"; exit 0 ;; esac
+CONTAINER="$(docker ps --filter 'name=^computers-' --format '{{.Names}}' 2>/dev/null | head -1)"
+[ -n "${CONTAINER}" ] || { echo "meet move: the computers app is not running here — it is the door to both offices" >&2; exit 3; }
+T="${REPO_ROOT}/apps/meet/tools/move"
+TTY=(-i); [ -t 0 ] && [ -t 1 ] && TTY=(-it)   # a terminal's Ctrl-C reaches the mover (hooks/ssh's way), not only docker
+exec docker exec "${TTY[@]}" -w /app \
+  -e "MEET_MOVE_HOST=$(cat "${T}/host.py")" \
+  -e "MEET_MOVE_TOOL=$(cat "${REPO_ROOT}/scripts/client-move/meet_move.py")" \
+  "${CONTAINER}" python3 -c "$(cat "${T}/move.py")" "$@"

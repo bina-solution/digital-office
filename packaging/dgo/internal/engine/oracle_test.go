@@ -1047,7 +1047,8 @@ type quote struct{ file, bash, said string }
 // quotes is every command and message dgo engine copies from bbox and its neighbours.
 var quotes = []quote{
 	{"bbox.cmd", `wsl.exe -d Ubuntu -e wslpath -a "!BBOX_DIR!"`, `wsl.exe -d Ubuntu -e wslpath -a "C:\Users\u\MyDGO"`},
-	{"bbox.cmd", `powershell -NoProfile -ExecutionPolicy Bypass -File "%BBOX_DIR%\scripts\windows\platform-keepalive.ps1" -Install`,
+	// the folder the keepalive installs from: %BBOX_DIR%, or the one a moved office came from (bbox home move, DGO-2019)
+	{"bbox.cmd", `powershell -NoProfile -ExecutionPolicy Bypass -File "%BBOX_KEEPALIVE_DIR%\scripts\windows\platform-keepalive.ps1" -Install`,
 		`powershell -NoProfile -ExecutionPolicy Bypass -File "C:\Users\u\MyDGO\scripts\windows\platform-keepalive.ps1" -Install`},
 	{"bbox.cmd", `powershell -NoProfile -ExecutionPolicy Bypass -File "%BBOX_DIR%\scripts\windows\firewall-converge.ps1"`,
 		`powershell -NoProfile -ExecutionPolicy Bypass -File "C:\Users\u\MyDGO\scripts\windows\firewall-converge.ps1"`},
@@ -1078,6 +1079,7 @@ var quotes = []quote{
 	{"bbox", `( cd "${REPO_ROOT}" && bash scripts/ci-env.sh )`, "cd /srv/office && bash scripts/ci-env.sh"},
 	{"bbox", `exec "${REPO_ROOT}/bbox" run "$@"`, "exec ./bbox run"},
 	{"bbox", "python3 scripts/env-secrets.py --env .env --if-fresh", "python3 scripts/env-secrets.py --env .env --if-fresh"},
+	{"scripts/lib.sh", `python3 "${REPO_ROOT}/scripts/env-secrets.py" --moved-data`, "/scripts/env-secrets.py --moved-data"},
 	{"bbox", "ensure_rendered; ensure_network; ensure_perf_profile", "ensure_rendered (the compiler renders .generated/), ensure_network"},
 	{"bbox", `held="$(foreign_containers)"`, "foreign_containers (a name this stack needs, held by another compose project, stops the run)"},
 	{"bbox", "run_app_hooks prepare || true", "run_app_hooks prepare"},
@@ -1123,8 +1125,9 @@ var quotes = []quote{
 		"'--set=.vmOpts.vz.rosetta.enabled=true | .vmOpts.vz.rosetta.binfmt=true'"},
 	{"packaging/macos/engine.sh", `ok "Rosetta present — amd64 images will run too"`, "present — amd64 images will run too"},
 	{"packaging/macos/engine.sh", "only arm64 images will run (optional: softwareupdate --install-rosetta)", "only arm64 images will run (optional: softwareupdate --install-rosetta)"},
-	{"packaging/macos/engine.sh", `lima start --tty=false "${INSTANCE}"`, " start --tty=false bbox"},
-	{"packaging/macos/engine.sh", `lima shell "${INSTANCE}" sudo docker version --format '{{.Server.Version}}'`, " shell bbox sudo docker version --format '{{.Server.Version}}'"},
+	// engine.sh's start and dockerd probe since 3aa885ee7 (DGO-1964): --timeout=4m, and the probe from `--workdir /`
+	{"packaging/macos/engine.sh", `lima start --tty=false --timeout=4m "${INSTANCE}"`, " start --tty=false --timeout=4m bbox"},
+	{"packaging/macos/engine.sh", `lima shell --workdir / "${INSTANCE}" sudo docker version --format '{{.Server.Version}}'`, " shell --workdir / bbox sudo docker version --format '{{.Server.Version}}'"},
 	{"packaging/macos/engine.sh", "engine is up but dockerd does not answer inside it", "engine is up but dockerd does not answer inside it"},
 	{"packaging/macos/engine.sh", `nohup /usr/bin/python3 "${HERE}/power-agent.py" --repo "${REPO_ROOT}" --watch-pid "${ha}"`,
 		"nohup /usr/bin/python3 /Users/u/MyDGO/packaging/macos/power-agent.py --repo /Users/u/MyDGO --watch-pid"},

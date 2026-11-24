@@ -11,6 +11,6 @@ no office runs it), and it ships off. No connection is pre-wired: a person adds 
   `./scripts/dc`.
 - It connects with the full password and has no read-only mode. A `DEL` or a `FLUSH` here hits the
   shared Redis, which holds n8n's queue and authentik's data (database 1). Only on the owner's words.
-- Uninstalling it asks about its volume (`on_uninstall: prompt`).
+- Uninstalling it asks about its store, `data/redisinsight/state` (`on_uninstall: prompt`).
 
 Gates: G23 (a gallery app ships disabled).

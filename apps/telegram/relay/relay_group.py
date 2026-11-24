@@ -171,7 +171,9 @@ class Stuck:
     `tell_after` seconds. «Once» means once it was SENT: a notice that failed is due again on the next round. It is
     said again only for another message."""
 
-    BUSY = ("mid-turn", "(busy)")
+    # «at-cap»: a message of the same promise already waits in the door's line (bina-claude, DGO-2126) — it goes when
+    # that one is in, so it is the session working, not stuck
+    BUSY = ("mid-turn", "(busy)", "at-cap")
 
     def __init__(self, tell_after: float = 600, clock=time.time):
         self.tell_after, self.clock = tell_after, clock
@@ -256,7 +258,10 @@ def tell_agent(session: str, text: str, token_path: str) -> None:
     """POST the line to the session — the door `./bbox agent send <id> <text>` uses."""
     base = os.environ.get("AGENT_URL", "http://bina-ds:3081").rstrip("/")
     url = base + "/v1/sessions/" + session + "/messages"
-    body = json.dumps({"text": text}, ensure_ascii=False).encode("utf-8")
+    # `queue: false`: a door with a cap of running turns (bina-claude, DGO-2126) never holds this message in a line —
+    # this loop takes any 202 as delivered and could never hear what a line did with it later. It goes to the app at
+    # once, as before the cap, and a busy or waiting session refuses it as it always did (handled below and by Stuck)
+    body = json.dumps({"text": text, "queue": False}, ensure_ascii=False).encode("utf-8")
     last = ""
     for attempt, delay in enumerate((0, 5, 20), start=1):
         if delay:
@@ -442,6 +447,28 @@ def note_saved_file(r, ev: dict) -> bool:
             raise
         log(f"the record of {data.get('message_id')} did not take its drive path ({e})")
         return False
+
+
+def note_edit(r, ev: dict) -> dict:
+    """The sender edited a message (`message.edited`, DGO-1995): its quote shows the words as they are now (MSGS,
+    keeping the time it was sent), and a REQUEST's record does too (desk.EDITS, the relay's own hash). Returns the
+    request's record when its words changed, so the answerer is told; {} otherwise. Like the ledger's other writes,
+    never the reason the relay stops: a refused write costs the edit, not the run."""
+    data = ev.get("data") or {}
+    if desk is None or data.get("chat_id") is None or data.get("message_id") is None:
+        return {}
+    try:
+        was = desk.recall(r, data["chat_id"], data["message_id"]) or {}
+        before = (desk.load(r, data["chat_id"], data["message_id"]) or {}).get("text") or ""
+        desk.remember(r, data, was.get("at") or ev.get("at") or "")
+        if desk.add_edit(r, data["chat_id"], data["message_id"], data.get("text") or "", ev.get("at") or ""):
+            rec = desk.load(r, data["chat_id"], data["message_id"]) or {}
+            return {**rec, "was": before} if rec else {}
+    except Exception as e:                                   # noqa: BLE001 — see the docstring
+        if _lost_socket(e):
+            raise
+        log("msg %s: its edit was not recorded (%s)" % (data.get("message_id"), str(e)[:200]))
+    return {}
 
 
 def note_group_message(r, ev: dict, bot_names) -> tuple:
@@ -642,6 +669,20 @@ def main(argv) -> int:
                           "app": fields.get("app") or "telegram", "data": data}
                     if ev["type"] == "media.saved" and in_chat(ev, args.chat, args.chat_id):
                         note_saved_file(r, ev)                  # the record carries the drive path (DGO-1805)
+                        cursor = eid
+                        write_state(state_file, eid)
+                        continue
+                    if ev["type"] == "message.edited" and in_chat(ev, args.chat, args.chat_id):
+                        rec = note_edit(r, ev)                  # the record shows his words as they are now (DGO-1995)
+                        if rec:
+                            line = ("✏ msg %s: %s edited a request (%s) — now: «%s» · it was: «%s»"
+                                    % (rec.get("message_id"), rec.get("sender") or "", rec.get("state") or "",
+                                       (rec.get("text") or "")[:400], (rec.get("was") or "")[:200]))
+                            try:
+                                tell_agent(args.session, line, token_path)
+                            except Exception as e:      # noqa: BLE001 — the record already shows the edit
+                                log("msg %s: its edit was recorded, not delivered (%s)"
+                                    % (rec.get("message_id"), str(e)[:200]))
                         cursor = eid
                         write_state(state_file, eid)
                         continue

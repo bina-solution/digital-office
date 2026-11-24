@@ -28,6 +28,8 @@ import { createSpanStore, liveSessions } from "./spans.mjs";
 import { createWatch, desktopSignIn } from "./signin-watch.mjs";
 import { APP_ID, TILE, desktopContainer } from "./identity.mjs";
 import { createHomeFolder } from "./home-folder.mjs";
+import { capOf, createTurnQueue } from "./turn-queue.mjs";
+import { bounded, shrink, textOf } from "./records.mjs";
 
 const PORT = Number(process.env.BINA_CLAUDE_ADAPTER_PORT || 3091);
 const STATE = process.env.BINA_CLAUDE_STATE || "/data/bina-claude";
@@ -75,6 +77,7 @@ function live() {
     try {
       const j = JSON.parse(fs.readFileSync(f, "utf8"));
       if (!j.hostSessionId || (since && (j.startedAt || 0) < since)) continue;
+      j._file = path.basename(f);                     // which file: the cap's dead-file verdict is by file (deadFile)
       const had = out.get(j.hostSessionId);
       if (!had || (j.startedAt || 0) > (had.startedAt || 0)) out.set(j.hostSessionId, j);
     } catch { /* mid-write */ }
@@ -124,13 +127,19 @@ function transcriptOf(rec) {
 }
 
 function summary(rec, state) {
+  const sid = rec.sessionId, line = turns.qids(sid), from = promiseOf(sid) || turns.promiseOf(sid);
   return {
-    id: rec.sessionId, title: rec.title || "", running: !!state && MID_TURN.has(state.status), blank: false,
+    id: sid, title: rec.title || "", running: !!state && MID_TURN.has(state.status), blank: false,
     waiting_for: (state && state.status === "waiting" && (state.waitingFor || "the owner")) || null,
     created_at: iso(rec.createdAt), updated_at: iso(rec.lastActivityAt || rec.createdAt), preset: "claude-desktop",
     permissions: rec.permissionMode || null, model: rec.model ? { provider: "anthropic", model: rec.model } : null,
-    goal: null, todos: [], turns: rec.completedTurns || 0, tokens: {}, queue: 0, cwd: rec.cwd || null,
+    goal: null, todos: [], turns: rec.completedTurns || 0, tokens: {}, cwd: rec.cwd || null,
     claude_session: rec.cliSessionId || null, archived: !!rec.isArchived,
+    // the line (turn-queue.mjs, DGO-2126): what waits for this session (`line`, the ids its senders were given, in
+    // order; `line_places`, each one's place in the whole line; `line_place`, the first's) and what the line gave up
+    // on (`line_failed`, a day); the promise it was started from (a day too)
+    queue: line.length, line, line_places: line.map((q) => turns.placeOf(q)), line_place: turns.place(sid),
+    line_failed: turns.failedFor(sid), ...(from ? { from } : {}),
   };
 }
 
@@ -140,10 +149,163 @@ const pending = new Map();   // pending id → {at, start: the in-flight start, 
 const delivered = new Map(); // app id → {at, seq}: when this adapter delivered, and the events it had then
 
 setInterval(() => {            // a promise nobody kept: forgotten after a day
-  for (const [k, v] of pending) if (Date.now() - v.at > 86400000) pending.delete(k);
+  for (const [k, v] of pending) if (Date.now() - v.at > 86400000 && !turns.place(k)) pending.delete(k);
 }, 3600000).unref();
+// the promise an app session was started from (a pending id), while this adapter knows it
+const promiseOf = (sid) => { for (const [k, v] of pending) if (v.id === sid) return k; return null; };
+
+// How many turns run at once (turn-queue.mjs, DGO-2126): the app's sessions in a turn (busy, or waiting on the owner —
+// its process stays), started here or on the app's screen, plus a turn this adapter delivered that the app does not
+// show yet (until it shows it, 20 s at most). A turn asked for at the cap waits in the line, and the sender is told.
+// What the driver answers when it pressed nothing (a retry may go again); every other failure — not
+// confirmed, no answer — may have been delivered. Here, above the line: it reads this when it loads.
+const UNSENT = new Set(["no-text", "not-sent", "dropped", "locked", "busy", "waiting", "no-window", "no-app", "no-app-session", "not-focused", "no-session", "no-exec"]);
+const MAX_TURNS = capOf(process.env.BINA_CLAUDE_MAX_TURNS, (m) => console.error(m));
+const midTurn = (st, id) => { const s = st.get(id); return !!s && MID_TURN.has(s.status); };
+function activeTurns() {
+  const st = live(), now = Date.now();
+  let n = 0;
+  for (const s of st.values()) if (MID_TURN.has(s.status) && !deadFile(s)) n++;
+  for (const [id, d] of delivered) {
+    if (midTurn(st, id)) d.shown = true;                 // the app shows it: counted above from now on
+    else if (!d.shown && now - d.at < 20000) n++;
+  }
+  return n;
+}
+// the session a line item will reach: a "send" names it; a "new" once its promise was kept has one too
+const sessionOf = (it) => (it.kind === "new" ? (pending.get(it.target) || {}).id : it.target) || null;
+// Live files a killed process left behind (an app that lost a `claude` to the memory killer keeps its «busy» file):
+// never a turn that runs, or the cap would hold a slot for it until the app restarts. The desktop's own /proc says
+// which (`drive live`; this container cannot see those processes) — asked only while turns wait at the cap, at most
+// once a minute, pressing nothing and taking no lock.
+let deadLive = new Set(), deadAskedAt = 0;
+// The verdict counts for the cap and the line's readiness only — everywhere else the files are read as they are — and
+// never against a file written in the last two minutes: a process that runs writes its own (DGO-2126).
+const deadFile = (s) => !!s && deadLive.has(`${s._file}:${s.startedAt ?? null}`) &&
+  Date.now() - (Number(s.updatedAt) || Number(s.statusUpdatedAt) || 0) > 120000;
+function askDead() {
+  deadAskedAt = Date.now();
+  let source;
+  try { source = fs.readFileSync(DRIVE, "utf8"); } catch { return; }
+  const p = spawn("docker", ["exec", "-u", "abc", "-e", "HOME=/config", DESKTOP, "python3", "-I", "-c", source, "live"],
+                  { stdio: ["ignore", "pipe", "ignore"] });
+  let out = "";
+  const kill = setTimeout(() => p.kill("SIGKILL"), 20000);
+  p.stdout.on("data", (d) => { out += d; });
+  p.on("error", () => clearTimeout(kill));
+  p.on("close", () => {
+    clearTimeout(kill);
+    try {
+      const j = JSON.parse(out.trim().split("\n").pop());
+      if (j && j.ok && Array.isArray(j.dead)) deadLive = new Set(j.dead.map((d) => `${d.file}:${d.startedAt}`));
+    } catch { /* no answer: what was known stays */ }
+  });
+}
+const turns = createTurnQueue({
+  file: path.join(STATE, "turn-queue.json"), cap: MAX_TURNS, active: activeTurns,
+  every: Number(process.env.BINA_CLAUDE_LINE_EVERY_MS) || 3000,     // how often the line looks (tests: short)
+  ready: (it) => {                                    // its session is not in a turn (a dead process's file is not one)
+    const sid = sessionOf(it), s = sid && live().get(sid);
+    return !s || !MID_TURN.has(s.status) || deadFile(s);
+  },
+  // pressed nothing — but a session that is gone does not come back: that one leaves the line at once
+  retryable: (e) => UNSENT.has(e.code) && e.code !== "no-session",
+  // refused for the owner's own work in the app — another page up, or a draft in that box (the driver's own words) —
+  // given up soon (OWNER_TRIES); a machine that struggles (a key that did not land, the driver's own failure) is not
+  owners: (e) => e.code === "not-focused" || (e.code === "not-sent" && /composer is not empty/.test(String(e.message || ""))),
+  blocked: () => { if (Date.now() - deadAskedAt > 60000) askDead(); },
+  start: async (it) => {
+    if (it.kind === "new") {
+      const pd = pending.get(it.target) || { at: Date.now(), start: null, id: null };
+      pending.set(it.target, pd);
+      // what the line keeps on disk decides, after a restart too: a promise it started goes on in that session; one
+      // whose start may have been delivered is never started again — this later message of it was not sent (whether
+      // that session exists is not known: its sender looks at the app)
+      if (!pd.id && turns.keptOf(it.target)) pd.id = turns.keptOf(it.target);
+      if (pd.failed || (!pd.id && turns.failedFor(it.target).some((x) => x.maybe))) {
+        throw new Fail(409, "no-session", `${it.target}'s start may have been delivered, so this later message was not sent`);
+      }
+      if (!pd.id) {                                     // its first message starts it
+        pd.id = await startSession(it.text);
+        turns.keep(it.target, pd.id);                  // kept a day; what else waits for it goes to its session (on disk)
+        return pd.id;
+      }
+      it = { kind: "send", target: pd.id, text: it.text };   // a later message to a promise already kept
+    }
+    // a record caught mid-write reads as none: read again before the session is called gone
+    let rec = records().get(it.target);
+    if (!rec) { await new Promise((r) => setTimeout(r, 500)); rec = records().get(it.target); }
+    if (!rec) throw new Fail(404, "no-session", `the app has no session ${it.target}`);
+    await sendTo(rec, it.text);
+    return it.target;
+  },
+  // only what may have been delivered, whose text was left in the app's composer, or whose session is gone leaves the
+  // line: it is kept a day beside the line, where its sender finds it by its qid
+  failed: (it, e) => {
+    const code = e.code || "unknown", maybe = !UNSENT.has(code);
+    const sid = sessionOf(it);
+    if (sid) {                                          // a message to a session (or to a promise already kept)
+      turns.noteFailed(sid, it.qid, code, maybe);
+      console.error(`[bina-claude] a queued message to ${sid} ended «${code}»: ${e.message}`);
+      return;
+    }
+    turns.noteFailed(it.target, it.qid, code, maybe);
+    const pd = pending.get(it.target) || { at: Date.now(), start: null, id: null };
+    pending.set(it.target, pd);
+    endPromise(pd, code, maybe, e.message);
+  },
+});
+const queuedNote = (place) => `#${place} in line: it goes by itself when a turn ends — at most ${MAX_TURNS} run at ` +
+  `once on this office's Claude (BINA_CLAUDE_MAX_TURNS)`;
+// A message to an app session (its route, and a promise's message whose session the line started while the message
+// was read). It waits in the line when a message to this session already waits there (it goes after it), or at the
+// cap when the session is idle; a session in its own turn is refused by the driver, as before. Never while a drive
+// runs: that drive may be this very message, retried, and the line would send it twice — the driver says «locked».
+// A sender that cannot follow a line asks not to be queued (`queue: false` — the Telegram relay takes any 202 as
+// delivered): it is never held by the line at all. It goes to the driver at once, exactly as before the cap, and is
+// counted like the owner's own typing (one sender, one message at a time: a turn over the cap at most). A busy or
+// waiting session refuses it as it always did, so its sender learns what it always learned; it may pass another
+// sender's queued message to the same session, never one of its own.
+async function takeMessage(rec, b) {
+  const id = rec.sessionId;
+  const text = String(b.text || "").trim();
+  if (!text) throw new Fail(400, "no-text", "a message needs text");
+  if (b.steer) throw notHere("steer");
+  if (Array.isArray(b.files) && b.files.length) throw notHere("a file");
+  if (b.queue !== false && !driving && (turns.count(id) || (!midTurn(live(), id) && !turns.allows()))) {
+    const { place, qid } = turns.enqueue("send", id, text);
+    return [202, { accepted: true, queued: true, queue: place, qid, note: queuedNote(place) }];
+  }
+  await sendTo(rec, text);
+  return [202, { accepted: true, queue: 0 }];
+}
+
+// How a promise's start that the line gave up on ends it. One that may have been delivered keeps that answer for good
+// (`failed`, and a rejected start: a retry of the message gets it, never a second start), and a later message's «not
+// sent» never hides it. One that sent nothing is only said (`unsent`): the next message starts the promise as usual.
+function endPromise(pd, code, maybe, why) {
+  if (pd.failed) return;
+  if (!maybe) { pd.unsent = code; return; }
+  pd.failed = code;
+  pd.start = Promise.reject(new Fail(502, code, why));
+  pd.start.catch(() => {});
+}
 
 function find(given) {
+  // a promise of the line outlives an adapter restart (`pending` is in memory; the line and its outcomes are on disk):
+  // still waiting, started as a session, or given up — then why, and its answer is kept
+  if (!pending.has(given) && given.startsWith("pending-")) {
+    // its own end is the first thing the line gave up on for it (a later message's «not sent» comes after) — known
+    // even while a later message of it still waits: that one will never start it
+    const id = turns.keptOf(given), ends = !id ? turns.failedFor(given) : [];
+    if (id || ends.length || turns.place(given)) {
+      const pd = { at: Date.now(), start: null, id: id || null };
+      // a start that may have been delivered is its answer for good; else the last «not sent» is only said
+      const lost = ends.find((x) => x.maybe) || ends[ends.length - 1];
+      if (lost) endPromise(pd, lost.code, !!lost.maybe, `${given}'s start ended «${lost.code}»`);
+      pending.set(given, pd);
+    }
+  }
   if (pending.has(given)) {
     const real = pending.get(given).id;
     if (!real) return { pendingId: given };
@@ -213,15 +375,17 @@ function parse(p, r) {
     if (p.open) out.push(ev("turn.end", { reason: "interrupted" }));
     p.turn++;
     p.open = true;
-    out.push(ev("turn.start"), ev("user", { text, source: "user" }));
+    out.push(ev("turn.start"), ev("user", { text: textOf(text), source: "user" }));
     return out;
   }
   if (r.type === "assistant" && r.message) {
     out.push(ev("step.start"));
+    // What an event KEEPS is bounded (records.mjs): a tool's arguments were kept whole — a file it wrote, megabytes —
+    // in each of the last 3,000 events, and the adapter died of its heap once a minute on the HP (DGO-2188).
     for (const c of r.message.content || []) {
-      if (c.type === "text" && c.text) out.push(ev("assistant", { text: c.text }));
-      else if (c.type === "thinking" && c.thinking) out.push(ev("reasoning", { text: c.thinking }));
-      else if (c.type === "tool_use") out.push(ev("tool.call", { id: c.id, name: c.name, args: c.input }));
+      if (c.type === "text" && c.text) out.push(ev("assistant", { text: textOf(c.text) }));
+      else if (c.type === "thinking" && c.thinking) out.push(ev("reasoning", { text: textOf(c.thinking) }));
+      else if (c.type === "tool_use") out.push(ev("tool.call", { id: c.id, name: c.name, args: bounded(c.input) }));
     }
     out.push(ev("step.end"));
     return out;
@@ -261,7 +425,8 @@ function refresh(rec) {
       for (const line of lines) {
         if (!line.trim()) continue;
         let r;
-        try { r = JSON.parse(line); } catch { continue; }
+        // shrink: a record of megabytes (the HP's longest line was 26.6 MB) is parsed with its long strings cut
+        try { r = JSON.parse(shrink(line)); } catch { continue; }
         for (const e of parse(p, r)) for (const send of p.subs) send(e.type, e, e.seq);
       }
     }
@@ -299,9 +464,8 @@ setInterval(() => {
 // One at a time: two hands on one keyboard interleave. A second call is refused, not queued: one that
 // waited its turn behind a long drive would outlive its caller, who retries — and the message goes twice.
 let driving = false;
-// What the driver answers when it pressed nothing (a retry may go again); every other failure — not
-// confirmed, no answer — may have been delivered.
-const UNSENT = new Set(["no-text", "not-sent", "dropped", "locked", "busy", "waiting", "no-window", "no-app", "no-app-session", "not-focused", "no-session", "no-exec"]);
+// (UNSENT — what the driver answers when it pressed nothing — is declared above the turn line, which reads it when
+// it loads.)
 
 function drive(args, text) {
   if (driving) return Promise.reject(new Fail(409, "locked", "another call is driving the app right now; nothing was sent — send again when it ends"));
@@ -334,6 +498,9 @@ function drive(args, text) {
       // container answer 1 (measured, client 29.9) or 125 with their own words, the driver's never.
       else if (!j && !out.trim() && ([125, 126, 127].includes(code) ||
                /^(Error response from daemon|Cannot connect to the Docker daemon|Error: No such container)/m.test(err))) reject(new Fail(502, "no-exec", `the driver did not run (docker exec ${code}): ${err.trim() || "no reason given"} — nothing was sent`));
+      // a refusal after the text went into the app's composer (pasted, or a link filled it) leaves it there, unsent:
+      // the owner may still send it from the app, so it is «not known», never tried again blind (DGO-2126)
+      else if (j && j.left) reject(new Fail(409, "left-in-composer", `${j.error || j.code} — the text may wait in the app's composer, unsent: look at the app before sending it again`));
       else reject(new Fail(j && ["busy", "waiting", "locked", "not-focused"].includes(j.code) ? 409 : 502, (j && j.code) || "unknown",
                            (j && j.error) || err.trim() || `the driver said nothing (is ${DESKTOP} running?) — the message may or may not have been delivered`));
     });
@@ -729,7 +896,8 @@ async function route(req, res, url) {
                   signout: { since_ms: signout.began, seen: signout.seen, posted: signout.posted,
                              notice: signout.notice, attempted: signout.attempted,
                              last_in_ms: signout.last_in, grace_s: ALARM_GRACE / 1000 },
-                  active: [...live().values()].filter((s) => MID_TURN.has(s.status)).length };
+                  active: [...live().values()].filter((s) => MID_TURN.has(s.status)).length,
+                  max_turns: MAX_TURNS, queued: turns.length() };
     if (url.searchParams.get("deep")) { const t = Date.now(); out.sessions = records().size; out.list_ms = Date.now() - t; }
     return out;
   }
@@ -755,7 +923,18 @@ async function route(req, res, url) {
   }
   if (p === "/v1/sessions" && req.method === "POST") {
     const b = await json(req);
-    if (typeof b.text === "string" && b.text.trim()) return [201, { id: await startSession(b.text.trim()), preset: "claude-desktop" }];
+    if (typeof b.text === "string" && b.text.trim()) {
+      // at the cap: a promise of the session, its message in the line. Never while a drive runs: that drive may be
+      // this very message, retried by a caller whose answer never came back, and the line would send it again — it
+      // gets the driver's «locked», as before the cap
+      if (!driving && !turns.allows()) {
+        const id = `pending-${crypto.randomUUID()}`;
+        pending.set(id, { at: Date.now(), start: null, id: null });
+        const { place, qid } = turns.enqueue("new", id, b.text.trim());
+        return [202, { id, preset: "claude-desktop", queued: true, queue: place, qid, note: queuedNote(place) }];
+      }
+      return [201, { id: await startSession(b.text.trim()), preset: "claude-desktop" }];
+    }
     const id = `pending-${crypto.randomUUID()}`;
     pending.set(id, { at: Date.now(), start: null, id: null });
     return [201, { id, preset: "claude-desktop" }];
@@ -773,40 +952,73 @@ async function route(req, res, url) {
   if (hit.pendingId) {
     // Before its first message only one thing can happen to it: that message starts it.
     if (verb === "messages" && req.method === "POST") {
-      const text = String((await json(req)).text || "").trim();
+      const pb = await json(req);
+      const text = String(pb.text || "").trim();
       if (!text) throw new Fail(400, "no-text", "a message needs text");
       // One start per promise: a second POST while the first runs (a retry) waits for the same session.
       // A start that pressed nothing may be tried again; one that may have started a session keeps its
       // answer, so a retry never starts a second one.
       const pd = pending.get(given);
-      if (!pd.start) pd.start = startSession(text).then((id) => { pd.id = id; return id; }, (e) => { if (UNSENT.has(e.code)) pd.start = null; else pd.failed = e.code || "unknown"; throw e; });
+      // the line may have started this promise while its message was being read: then the message goes to that
+      // session — never a second start. (A start of this route's own, pd.start, keeps its de-duplication below.)
+      if (pd.id && !pd.start) {
+        let started = records().get(pd.id);
+        if (!started) { await new Promise((r) => setTimeout(r, 500)); started = records().get(pd.id); }
+        if (!started) throw new Fail(409, "not-sent", `${given} has just started as ${pd.id}, not shown by the app yet: nothing was sent — send again in a moment`);
+        const [status, answer] = await takeMessage(started, pb);
+        return [status, { ...answer, id: started.sessionId }];
+      }
+      delete pd.unsent;                                 // an earlier start that sent nothing is not this message's answer
+      // at the cap, or a message of it already waits (it goes after it; a retry of the same keeps its place and id).
+      // A start that may have been delivered keeps its answer in pd.start: a later message gets that answer. A sender
+      // that cannot follow a line (`queue: false`) is never queued: it starts now, counted — unless a message of this
+      // promise waits, which goes first (429 «at-cap»).
+      if (!pd.start && pb.queue === false && turns.place(given)) {
+        throw new Fail(429, "at-cap", `a message of ${given} waits in the line: nothing was sent — send again when it is in`);
+      }
+      if (!pd.start && pb.queue !== false && (turns.place(given) || !turns.allows())) {
+        const { place, qid } = turns.enqueue("new", given, text);
+        return [202, { accepted: true, queued: true, queue: place, qid, id: given, note: queuedNote(place) }];
+      }
+      // what became of it is written beside the line too (a day): after a restart the promise still reads as the
+      // session it became, or — a start that may have been delivered — as that, never started a second time
+      if (!pd.start) pd.start = startSession(text).then((id) => { pd.id = id; turns.keep(given, id); return id; }, (e) => {
+        if (UNSENT.has(e.code)) pd.start = null;
+        else { pd.failed = e.code || "unknown"; turns.noteFailed(given, "direct", pd.failed, true); }
+        throw e;
+      });
       return [202, { accepted: true, queue: 0, id: await pd.start }];
     }
     // read before it started: whether its start is under way, or why a start that may have sent ended (a caller that
     // lost its own record of it — Azaria's door after a restart — learns here what became of its message, DGO-2044)
     if (!verb && req.method === "GET") {
       const pd = pending.get(given);
+      // a promise waiting in the line IS starting — the line starts it by itself: a reader that took «not starting»
+      // for «never sent» (Azaria's door, ui.mjs) would tell the person the message was lost and have it sent twice.
+      // One whose start ended (it may have been delivered) never starts again, whatever of it still waits: that is
+      // its answer.
+      const queue = turns.place(given), failed = pd && pd.failed;
+      // a start the line gave up on having sent nothing: said while nothing of it waits or runs (`maybe` false)
+      const unsent = pd && !failed && !queue && !pd.start ? pd.unsent : null;
       return { id: given, title: "", running: false, blank: true, preset: "claude-desktop", turns: 0,
-               starting: !!(pd && pd.start && !pd.failed), ...(pd && pd.failed ? { failed: pd.failed } : {}) };
+               starting: !failed && !!(queue || (pd && pd.start)),
+               ...(failed ? { failed, maybe: true } : unsent ? { failed: unsent, maybe: false } : {}),
+               ...(queue && !failed ? { queued: true, queue } : {}) };
     }
     throw new Fail(409, "not-started", `${given} starts with its first message`);
   }
   const rec = hit.rec;
   const id = rec.sessionId;
   if (!verb && req.method === "GET") return summary(rec, live().get(id));
-  if (verb === "messages" && req.method === "POST") {
-    const b = await json(req);
-    const text = String(b.text || "").trim();
-    if (!text) throw new Fail(400, "no-text", "a message needs text");
-    if (b.steer) throw notHere("steer");
-    if (Array.isArray(b.files) && b.files.length) throw notHere("a file");
-    await sendTo(rec, text);
-    return [202, { accepted: true, queue: 0 }];
-  }
+  if (verb === "messages" && req.method === "POST") return takeMessage(rec, await json(req));
   if (verb === "messages") {
     const limit = Math.max(1, Math.min(500, Number(url.searchParams.get("limit") || 50)));
     const evs = refresh(rec).events;
-    return { events: evs.slice(-limit), has_more: evs.length > limit };
+    // what waits in the line for this session rides with every read (DGO-2126): a reader that lost its own record of
+    // what it sent (Azaria's door after a restart) still sees «queued», and where
+    const line = turns.qids(id);
+    return { events: evs.slice(-limit), has_more: evs.length > limit,
+             ...(line.length ? { line, line_places: line.map((q) => turns.placeOf(q)) } : {}) };
   }
   if (verb === "events") {
     const history = Math.max(0, Number(url.searchParams.get("history") || 0));
@@ -823,7 +1035,8 @@ async function route(req, res, url) {
     // one this adapter delivered in the last two minutes (only a turn that began AFTER the delivery, never
     // the one before it), or else the one running.
     if (since < 0) {
-      const d = delivered.get(id);
+      // a message of this session still in the line is not delivered yet: the turn to replay is the one it starts
+      const d = turns.place(id) ? null : delivered.get(id);
       const last = past.length ? past[past.length - 1].seq : 0;
       const start = d && Date.now() - d.at < 120000
         ? evs.find((e) => e.type === "turn.start" && e.seq > d.seq)
@@ -851,6 +1064,8 @@ async function route(req, res, url) {
 function main() {
   fs.mkdirSync(STATE, { recursive: true });
   TOKEN = fs.readFileSync(TOKEN_FILE, "utf8").trim();
+  turns.start();   // the line (turn-queue.mjs): starts a waiting turn when one ends
+  console.error(`[bina-claude] at most ${MAX_TURNS || "any number of"} turn(s) at once (BINA_CLAUDE_MAX_TURNS); ${turns.length()} waiting`);
   // DGO-1430's alarm (alarmTick) is NOT started: the sign-in watch above (signin-watch.mjs, DGO-1684) is the one
   // alarm. Both posted `source: bina-claude` at level error, so every sign-out rang the phone and the group twice,
   // and this one also spoke on a fresh office that was never signed in (the release that took both lines,

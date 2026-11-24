@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-#: restore n8n's database + .n8n volume from a `bbox export` archive
+#: restore n8n's database + its .n8n store (data/n8n/home, or its volume while the move waits) from a `bbox export` archive
 #
 # restore <indir> <mode>   — invoked by scripts/deployment-archive.py, never by hand.
 #
@@ -22,15 +22,26 @@ PGU="$(read_env POSTGRES_USER)"; PGD="$(read_env POSTGRES_DB)"; PGP="$(read_env 
 PROJ="$(archive_project)"
 
 [ -f "${IN}/n8n.dump" ] || { echo "[n8n/restore] ${IN}/n8n.dump missing" >&2; exit 1; }
+# the database must be there to receive the dump BEFORE the home is written: a restore that cannot reach it leaves no
+# half-restored office (a home of one day over a database of another)
+running "${PG_CONTAINER}" || { echo "[n8n/restore] ${PG_CONTAINER} is not running" >&2; exit 1; }
 
 # ── 1. stop the writers ─────────────────────────────────────────────────────────────────────────
 # Not `dcx down`: the postgres container must stay up to receive the dump.
 archive_stop n8n n8n-worker-1 n8n-worker-2 n8n-task-runners n8n-worker-1-runners n8n-worker-2-runners
 
-# ── 2. the .n8n volume ──────────────────────────────────────────────────────────────────────────
+# ── 2. the .n8n store ───────────────────────────────────────────────────────────────────────────
 if [ -f "${IN}/n8n_storage.tar.gz" ]; then
-  docker volume create "${PROJ}_n8n_storage" >/dev/null
-  docker run --rm -v "${PROJ}_n8n_storage:/v" -v "${IN}:/in:ro" alpine sh -c \
+  # Where n8n keeps it HERE: the DGO folder's data/n8n/home since DGO-2019, or its volume while that move waits — the
+  # n8n container of this office says (stopped above), else the engine's record (archive_store): on a new office, or
+  # one that waits (the HP until its folder leaves C:), the volume — which the next `bbox run` moves into the folder,
+  # as it moves any old volume
+  HOME_DST="$(archive_store n8n /home/node/.n8n n8n data/n8n/home n8n_storage)" || exit 1
+  case "${HOME_DST}" in
+    /*) mkdir -p "${HOME_DST}" ;;
+    *)  docker volume create "${HOME_DST}" >/dev/null ;;
+  esac
+  docker run --rm -v "${HOME_DST}:/v" -v "${IN}:/in:ro" alpine sh -c \
     'rm -rf /v/* /v/.[!.]* 2>/dev/null; tar xzf /in/n8n_storage.tar.gz -C /v' \
     || { echo "[n8n/restore] volume restore failed" >&2; exit 1; }
 fi

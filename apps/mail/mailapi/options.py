@@ -1,6 +1,7 @@
 """The organizer options plane — THE store of label rules (RELEASE-DECISIONS N1 + N2).
 
-ONE document, ``/data/organizer-defaults.json`` on the ``gmail_imap_data`` volume::
+ONE document, ``/data/organizer-defaults.json`` in the app's own store (``data/mail/imap``; the ``gmail_imap_data``
+volume before DGO-2019)::
 
     {"mail": {"organizer": {"mode": "default", "rules": [ROW, ...]}},
      "saved_at": "<iso>",

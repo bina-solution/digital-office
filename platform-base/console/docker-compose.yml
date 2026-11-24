@@ -45,7 +45,8 @@ services:
     volumes:
       - ../../.generated/registry:/app/generated:ro   # compiled registries (see gate G9)
       # the links a person was given, and every time each was opened again (DGO-1433, app.py `links_record`)
-      - console_links:/app/links
+      # in the DGO folder's data/console/links (DGO-2019); it was the volume console_links, moved once by `bbox run`
+      - ../../data/console/links:/app/links
     networks: [traefik-network]
     healthcheck:
       test: ["CMD-SHELL", "python -c \"import urllib.request,sys;sys.exit(0 if urllib.request.urlopen('http://localhost:8000/healthz',timeout=3).status==200 else 1)\""]
@@ -127,7 +128,5 @@ services:
       - traefik.http.middlewares.console-apex.redirectregex.regex=^https?://[^/]+/?(.*)$$
       - traefik.http.middlewares.console-apex.redirectregex.replacement=https://${CONSOLE_BASE_URL:-console.${DEPLOYMENT_DOMAIN:-localhost}}/$${1}
     logging: {driver: json-file, options: {max-size: 5m, max-file: '3'}}
-volumes:
-  console_links:
 networks:
   traefik-network: {external: true}

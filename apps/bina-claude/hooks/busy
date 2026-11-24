@@ -1,0 +1,39 @@
+#!/usr/bin/env bash
+#: busy — exit 0 and a line while this copy's Claude Desktop has sessions at work, exit 1 when it has none:  ./bbox bina-claude busy
+# The contract of every app's hooks/busy (Meet's: a call in progress). The office asks it before it recreates the app
+# (app.json "recreate": "when-idle", lib.sh compose_when_idle_up; DGO-2129). Every agent session runs in the desktop's
+# container, and a recreate cuts them mid-work: the HP's follow did, on 2026-11-19 at 18:39Z. The count is the desktop's
+# own live files, each one's process alive (apps/bina-claude/at-work.py). The adapter's /v1/health is not asked: it
+# reads the status alone, and on the HP one dead session said busy for good. A desktop that does not run cuts nothing
+# (exit 1). One that runs and cannot be counted is at work (exit 0, and why): a recreate is never taken on a guess.
+# So is any exit this hook did not choose (a bash error exits 1, which would read as idle). Nothing secret is read or
+# printed.
+set -uo pipefail
+trap 'rc=$?; if [ "${rc}" -ne 0 ] && [ -z "${IDLE:-}" ]; then echo "the busy hook of ${DGO_INSTANCE_ID:-bina-claude} failed (exit ${rc}): taken as at work"; exit 0; fi' EXIT
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
+. "${REPO_ROOT}/scripts/lib.sh" || { echo "scripts/lib.sh cannot be read, so it is taken as at work"; exit 0; }
+case "${1:-}" in -h|--help) sed -n 's/^#: //p' "${BASH_SOURCE[0]}"; exit 0 ;; esac
+DN="$(read_env_value DEPLOYMENT_NAME)"; DN="${DN:-bina-deployment}"
+APP="${DGO_INSTANCE_ID:-bina-claude}"            # this copy (bbox sets DGO_INSTANCE_ID for an instance, DGO-1920)
+DESK="${APP}-desktop-${DN}"
+TO="$(timeout_bin)"
+# The desktop as compose labels it in this office's project, whatever its name: a name rebuilt from .env that misses
+# would read as «not running», and another project's desktop on the same engine is not this one.
+# here-strings, never `docker ps | grep -q`: under pipefail a grep that leaves early fails its writer (DGO-1848)
+names="$(docker ps --filter "label=com.docker.compose.project=$(office_project)" \
+  --filter "label=com.docker.compose.service=${APP}-desktop" --format '{{.Names}}' 2>/dev/null)" \
+  || { echo "the engine cannot be asked whether ${DESK} runs"; exit 0; }
+if [ -z "${names}" ]; then
+  # none in this office's project: idle only when no such desktop runs at all, since a project that could not be named
+  # (an empty or a wrong office_project) must never read as «nothing runs»
+  any="$(docker ps --filter "label=com.docker.compose.service=${APP}-desktop" --format '{{.Names}}' 2>/dev/null)" \
+    || { echo "the engine cannot be asked whether ${DESK} runs"; exit 0; }
+  [ -n "${any}" ] || { IDLE=1; exit 1; }
+  echo "${APP}'s desktop runs ($(head -1 <<<"${any}")), but not in the project $(office_project): taken as at work"; exit 0
+fi
+grep -qxF -- "${DESK}" <<<"${names}" || DESK="$(head -1 <<<"${names}")"
+n="$(${TO:+${TO} -k 5 20} docker exec -i "${DESK}" python3 - count < "$(npath "${REPO_ROOT}")/apps/bina-claude/at-work.py" 2>/dev/null)"
+[[ "${n}" =~ ^[0-9]+$ ]] || { echo "the sessions of ${APP} cannot be counted (its desktop did not answer)"; exit 0; }
+[ "${n}" -gt 0 ] || { IDLE=1; exit 1; }
+echo "${n} Claude session(s) at work in ${APP}"

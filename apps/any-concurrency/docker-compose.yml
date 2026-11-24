@@ -81,9 +81,10 @@ services:
     # Project socket on the host side — see the note in platform-base/traefik/docker-compose.yml.
     - ${BBOX_DOCKER_SOCK:-/var/run/docker.sock}:/var/run/docker.sock:ro
     # n8n's user folder, READ-ONLY: the event-bus log lives here and every n8n process (main and
-    # every worker) shares this one volume. Read-only is the whole safety story — this service
-    # never writes into n8n's state, and mounting it changes nothing about n8n itself.
-    - n8n_storage:/n8n-data:ro
+    # every worker) shares this one store, n8n's data/n8n/home (the volume n8n_storage until DGO-2019:
+    # while n8n's store waits on that volume, the engine's wait file keeps this read there too).
+    # Read-only is the whole safety story — this service never writes into n8n's state.
+    - ../../data/n8n/home:/n8n-data:ro
     healthcheck:
       test:
       - CMD-SHELL
@@ -113,10 +114,6 @@ services:
     # a server office's only — a `.localhost` office has no certificate and port 80 is the office.
     - traefik.http.routers.any-concurrency-https.middlewares=hsts@file,authentik-admins@file
     - traefik.http.services.any-concurrency.loadbalancer.server.port=8080
-volumes:
-  # Declared by apps/n8n too; compose `include` merges the identical definition, and both
-  # resolve to the one project volume <project>_n8n_storage that n8n already owns and writes.
-  n8n_storage: null
 networks:
   traefik-network:
     external: true

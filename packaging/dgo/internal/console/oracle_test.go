@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"io/fs"
 	"math"
 	"net/http"
 	"net/http/httptest"
@@ -110,16 +111,26 @@ func newOffice(t *testing.T) office {
 	o := office{repo: repo, root: root, py: py, static: filepath.Join(root, "static"),
 		gen: filepath.Join(root, "generated"), peers: filepath.Join(root, "peers.d")}
 	shell := filepath.Join(repo, "platform-base", "console", "static")
-	entries, err := os.ReadDir(shell)
+	// the shell's TREE, as the image holds it: a folder of it (static/icons/, DGO-1972) at its own path, never read
+	// as a file — read flat, it failed 30 of these tests on every branch from 2026-11-19 (issues/go-test-console-
+	// fixture-copies-static-flat-and-fails-on-the-icons-folder.yaml)
+	err := filepath.WalkDir(shell, func(p string, d fs.DirEntry, err error) error {
+		if err != nil || d.IsDir() {
+			return err
+		}
+		body, err := os.ReadFile(p)
+		if err != nil {
+			return err
+		}
+		rel, err := filepath.Rel(shell, p)
+		if err != nil {
+			return err
+		}
+		o.write(t, "static/"+filepath.ToSlash(rel), string(body))
+		return nil
+	})
 	if err != nil {
 		t.Fatal(err)
-	}
-	for _, e := range entries {
-		body, err := os.ReadFile(filepath.Join(shell, e.Name()))
-		if err != nil {
-			t.Fatal(err)
-		}
-		o.write(t, "static/"+e.Name(), string(body))
 	}
 	text := strings.Repeat("// one line of the shell, and another\n", 40)
 	var gz bytes.Buffer // a pre-compressed asset: served as it is, its coding named by its suffix
@@ -600,6 +611,28 @@ func TestJSONRoutesMatchFlask(t *testing.T) {
 	}
 	t.Run("working office", func(t *testing.T) { o := working(t, now); compare(t, o, o.env(), jsonRequests()) })
 	t.Run("stale measurement", func(t *testing.T) { o := working(t, now-3600); compare(t, o, o.env(), jsonRequests()) })
+	// DGO-2122: a linked office of THIS office's herd carries remote.herd — by its id or another name — and only on
+	// an office that is itself in the herd; a herd file of another shape is no herd.
+	herd := func(t *testing.T, own string, doc any) {
+		o := working(t, now)
+		o.writeJSON(t, "generated/herd.offices.json", doc)
+		env := o.env()
+		if own != "" {
+			env["DGO_OFFICE_ID"] = own
+		}
+		compare(t, o, env, jsonRequests())
+	}
+	ours := obj{"offices": obj{"vps1": obj{"aliases": []any{}}, "macbook": obj{"aliases": []any{" Mac ", "", 0}}, "zz": obj{}}}
+	t.Run("a herd this office is in", func(t *testing.T) { herd(t, " VPS1 ", ours) })
+	t.Run("a herd this office is not in", func(t *testing.T) { herd(t, "exampleu", ours) })
+	t.Run("a herd and no office id", func(t *testing.T) { herd(t, "", ours) })
+	t.Run("a herd by another name", func(t *testing.T) { herd(t, "mac", ours) })
+	t.Run("a herd of another shape", func(t *testing.T) {
+		herd(t, "vps1", obj{"offices": []any{"vps1", "macbook"}})
+	})
+	t.Run("aliases written as a word", func(t *testing.T) {
+		herd(t, "z", obj{"offices": obj{"vps1": obj{"aliases": "zq"}}})
+	})
 	t.Run("no compiled registry", func(t *testing.T) {
 		o := working(t, now)
 		if err := os.Remove(filepath.Join(o.gen, "console.modules.yaml")); err != nil {

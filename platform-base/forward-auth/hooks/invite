@@ -9,7 +9,7 @@
 # The service keeps only the code's SHA-256; the code goes to ONE place, this terminal, as the link. Send it
 # to the person yourself. A new invitation for the same person replaces the old link. The person becomes a
 # user of the group `people`: every app behind the sign-in opens for them but the office's admins' apps (an
-# app.json's `people: admins`), which answer 403 (DGO-1755). Runs the image's own binary on the service's own volume
+# app.json's `people: admins`), which answer 403 (DGO-1755). Runs the image's own binary on the service's own store
 # (`dc run`, the prepare hook's way: a scratch image has no shell to write with).
 set -euo pipefail
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"

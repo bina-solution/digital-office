@@ -2330,6 +2330,30 @@ def server_office():
 
 _SERVER_OFFICE = None
 
+_DOMAIN_NAME = re.compile(r"^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$")
+
+
+def former_domains():
+    """The names this office HAD (`DGO_FORMER_DOMAINS`, comma-separated) — what zz-https.yaml sends on (DGO-2013).
+
+    Only real domain names, never `localhost`, never the office's CURRENT name and never a name the current one
+    sits under: the routers match every host under a former name, so `example.com` as the former name of
+    `bina.example.com` would catch the office's own hosts too, and a host of the current name is redirected to
+    itself — a loop (the second reader's probe: `drive.bina.example.com` → `https://drive.bina.example.com/`).
+    A value that is not a name is said and left out, so one typo never takes the others with it."""
+    current = (_envfile_value("DEPLOYMENT_DOMAIN") or "").strip().lower().strip(".")
+    out = []
+    for part in (_envfile_value("DGO_FORMER_DOMAINS") or "").split(","):
+        d = part.strip().lower().strip(".")
+        if not d or d in out:
+            continue
+        if d == current or current.endswith("." + d) or not _DOMAIN_NAME.match(d) or d.endswith(".localhost"):
+            print(f"  [https] DGO_FORMER_DOMAINS: '{d}' is not a former name of this office — left out",
+                  file=sys.stderr)    # the Go twin prints the same bytes (TestRenderMatchesPython reads stderr)
+            continue
+        out.append(d)
+    return out
+
 
 def sso_middleware(admins=False):
     """The office's sign-in in front of a signed-in route: `authentik@file`, or — for an app whose app.json says
@@ -3128,8 +3152,9 @@ def render(cat, order, state):
     # written. Only this office's own malformed `publish:` stops the render. A door the serving office no longer
     # gives, narrows or opens to the internet is only LEFT OUT, with a line, because a change on the other office
     # must never stop every render here (it closes the door: fail closed).
-    published, perrs, pdropped = serve.publish_plan(state, served,
-                                                    _envfile_value("DEPLOYMENT_DOMAIN") or "localhost", cat)
+    published, perrs, pdropped = serve.publish_plan(
+        state, served, _envfile_value("DEPLOYMENT_DOMAIN") or "localhost", cat,
+        serve.publish_domains(_envfile_value(serve.PUBLISH_DOMAINS_ENV)))
     if perrs:
         sys.exit("PUBLISH PLAN REFUSED:\n" + "\n".join(f"  - {e}" for e in perrs))
     for line in pdropped:
@@ -3210,12 +3235,35 @@ def render_https_redirect(cat, order):
         REFERENCED only on a server office, where a certificate exists. `includeSubDomains` is on:
         every app of the office is a subdomain of one name.
 
+    The office's FORMER names (DGO-2013) go through the same service. An office that moved to another domain
+    declares the names it had (`DGO_FORMER_DOMAINS`), and every host under one is sent, 308, to the same host
+    under DEPLOYMENT_DOMAIN — so the links already out (work items, group lines, bookmarks, invites, OAuth
+    callbacks) keep opening. Two routers carry it, on the former names only:
+      * on `web`, priority 1000001: to https on the SAME name (https-redirect's server.py, `X-Forwarded-Proto:
+        http`), never cleartext; the ACME challenge is excluded there too. The move happens on `websecure`. Moving
+        on port 80 sent hosts an app still serves at the old name (vps1's n8n, meet, auth: the second reader
+        of 0d64d3b23, measured 2026-11-20) to a name nothing serves.
+      * on `websecure`, priority 2: below every router an app writes for a host (traefik's default priority
+        is the rule's length; the priority-1 fallbacks — the console's apex and floor, drive's and esign's UI —
+        name current hosts only), so a machine door an app keeps serving at its old name (the link door, for
+        the offices that have not taken the new herd file yet — a 308 on a websocket is a dropped link) wins
+        over the redirect. A host under a former name that no certificate was ever ordered for gets traefik's
+        default certificate on https, and so does its port-80 upgrade (links out name hosts that were served, so
+        theirs are stored). `tls: {}` and no
+        resolver: a HostRegexp names no domain to order, and the old names' certificates are the ones already
+        in acme.json, which traefik renews — every stored certificate near expiry, routed or not (v3.3,
+        provider.go renewCertificates) — for as long as their DNS points at this office.
+    It needs the answering app in the compiled set and a server office, as the port-80 router does. A server
+    office pulls the app in unless `HTTPS_REDIRECT=off`; an office that closed port 80 AND moved enables
+    https-redirect itself, and then only its former names are sent on.
+
     The file is generated into traefik's own config directory, like zz-serve.yaml, because the file
     provider is the one place a static upstream and a routing decision that is not an app's can live.
     """
     dest = REPO / "platform-base/traefik/config/zz-https.yaml"
-    redirect = (server_office() and "https-redirect" in order
-                and (_envfile_value("HTTPS_REDIRECT") or "").strip().lower() != "off")
+    answering = server_office() and "https-redirect" in order
+    redirect = answering and (_envfile_value("HTTPS_REDIRECT") or "").strip().lower() != "off"
+    former = former_domains() if answering else []
     head = [
         "# GENERATED by platform/manager/reconcile.py — DO NOT EDIT. Gitignored; see gate G9.",
         "#",
@@ -3231,6 +3279,15 @@ def render_https_redirect(cat, order):
         "        stsSeconds: 31536000",
         "        stsIncludeSubdomains: true",
     ]
+    if redirect or former:
+        head += [
+            "    port80-https:",
+            "      forwardAuth:",
+            "        address: http://https-redirect:8079",
+            "        trustForwardHeader: false   # traefik REBUILDS X-Forwarded-*, so the Location is the",
+            "                                    # host it actually received, never one a client wrote",
+            "  routers:",
+        ]
     if redirect:
         domain = re.escape((_envfile_value("DEPLOYMENT_DOMAIN") or "").strip())
         # Name-scoped, not a bare catch-all: `^(?:.+\\.)?<domain>$` is this office's own names — the
@@ -3239,12 +3296,6 @@ def render_https_redirect(cat, order):
         # machine's address (that probe reads the answer's host to say "this is our edge"). The one
         # thing a catch-all bought was redirecting a stranger's Host header, which is not wanted.
         head += [
-            "    port80-https:",
-            "      forwardAuth:",
-            "        address: http://https-redirect:8079",
-            "        trustForwardHeader: false   # traefik REBUILDS X-Forwarded-*, so the Location is the",
-            "                                    # host it actually received, never one a client wrote",
-            "  routers:",
             "    dgo-port80:",
             f"      rule: HostRegexp(`^(?:.+\\.)?{domain}$`) && PathPrefix(`/`) && !PathPrefix(`/.well-known/acme-challenge/`)",
             "      entryPoints:",
@@ -3253,6 +3304,31 @@ def render_https_redirect(cat, order):
             "      middlewares:",
             "      - port80-https",
             "      service: dgo-port80",
+        ]
+    if former:
+        names = "|".join(re.escape(d) for d in former)
+        head += [
+            "    dgo-former-http:",
+            f"      rule: HostRegexp(`^(?:.+\\.)?(?:{names})$`) && PathPrefix(`/`) && !PathPrefix(`/.well-known/acme-challenge/`)",
+            "      entryPoints:",
+            "      - web",
+            "      priority: 1000001",
+            "      middlewares:",
+            "      - port80-https",
+            "      service: dgo-port80",
+            "    dgo-former:",
+            f"      rule: HostRegexp(`^(?:.+\\.)?(?:{names})$`)",
+            "      entryPoints:",
+            "      - websecure",
+            "      priority: 2",
+            "      middlewares:",
+            "      - hsts",
+            "      - port80-https",
+            "      service: dgo-port80",
+            "      tls: {}",
+        ]
+    if redirect or former:
+        head += [
             "  services:",
             "    dgo-port80:",
             "      loadBalancer:",
@@ -3539,12 +3615,13 @@ def link_endpoints(cat, enabled, served, entries=None, notes=None) -> dict:
     wins — unless its entry names the office its link capabilities are used from (`linked_from`):
     then those, and only those, go to that office's door.
     """
-    doors, door_of = {}, {}
+    doors, door_of, offers = {}, {}, {}
     for e in served or []:
         for app in list(e["apps"]) + list(e.get("services") or []):
             url = f"http://{app['alias']}.{e['office']}:{e.get('link_port') or app['port']}"
             doors.setdefault((app["app"], app["alias"]), url)
             door_of[(e["office"], app["app"], app["alias"])] = url
+            offers.setdefault((app["app"], app["alias"]), []).append(e["office"])
     out = {}
     for aid in sorted(cat):
         man = cat[aid]
@@ -3559,10 +3636,13 @@ def link_endpoints(cat, enabled, served, entries=None, notes=None) -> dict:
         for (host, port), alias, is_cap in bases:
             if not (host and alias):
                 continue
-            if office and is_cap:
+            if office and (is_cap or aid not in enabled):
                 # An office the entry NAMES is the only one used for its link capabilities, the app
                 # here or not: the owner's "on the Dell, always" never moves to whichever office comes
                 # first when the Dell stops giving it — the call keeps the app's own address, and says so.
+                # So too for an app that does not run here: its addresses go to the named office alone
+                # (DGO-2111 — never to a client's office because it sorts first). No office used `linked:`
+                # on 2026-11-20 (the Mac, the line, the HP, vps1), so this changed no running workflow.
                 url = door_of.get((office, aid, alias))
                 if not url and notes is not None:
                     notes.append(f"{aid}: `linked: {office}`, but {office} gives no `{alias}` door to this "
@@ -3571,6 +3651,13 @@ def link_endpoints(cat, enabled, served, entries=None, notes=None) -> dict:
                 continue
             else:
                 url = doors.get((aid, alias))
+                many = offers.get((aid, alias)) or []
+                if url and len(many) > 1 and notes is not None:
+                    # WARN, the first stage of a contract tightened (non-negotiable 8): the office was picked by
+                    # the order of `remote:`, and on the MacBook that put the board, Plane and «קבצים» on a
+                    # client's office (issues/a-disabled-apps-calls-go-to-whichever-linked-office-comes-first-…)
+                    notes.append(f"{aid}: {len(many)} linked offices give `{alias}` ({', '.join(many)}); "
+                                 f"{url} was taken because it comes first. Name one with `linked:` on {aid}")
             if url:
                 out.setdefault(f"http://{host}:{port}", url)
     return out

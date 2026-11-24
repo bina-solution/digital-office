@@ -1055,7 +1055,7 @@ func (m *machine) office(s System, h host, env []byte) {
 	m.project = officeProject(h.env("COMPOSE_PROJECT_NAME"), root)
 	switch {
 	case m.dockerHost != "":
-		m.holds = []int{holdsData, holdsNothing, holdsUnsaid}[officeHoldsData(s, h, m.dockerHost, m.project)]
+		m.holds = []int{holdsData, holdsNothing, holdsUnsaid}[officeHoldsData(s, h, m.dockerHost, m.project, root)]
 	case !m.engineComes():
 		m.holds = holdsUnreached
 	}
@@ -1064,13 +1064,13 @@ func (m *machine) office(s System, h host, env []byte) {
 	case holdsUnreached:
 		m.add(note, "office", "no .env: not reached — bbox run stops at need_docker first (no engine it can ask or start)", "")
 	case holdsData:
-		m.add(fail, "office", "no .env, but "+what+" already has containers or volumes — its .env is missing, not new", heldFix)
+		m.add(fail, "office", "no .env, but "+what+" already has containers, volumes or stores in data/ — its .env is missing, not new", heldFix)
 	case holdsUnsaid:
 		m.add(fail, "office", "no .env, and the engine did not say whether "+what+" "+unsaidTail, "")
 	case holdsNothing:
-		m.add(note, "office", "no .env: bbox run generates "+m.generated()+" — "+what+" holds no containers or volumes", "")
+		m.add(note, "office", "no .env: bbox run generates "+m.generated()+" — "+what+" holds no containers, volumes or stores in data/", "")
 	default:
-		m.add(note, "office", "no .env: bbox run asks its engine, once it answers, whether "+what+" holds containers or volumes — none: it generates "+
+		m.add(note, "office", "no .env: bbox run asks its engine, once it answers, whether "+what+" holds containers, volumes or stores in data/ — none: it generates "+
 			m.generated()+"; some: it refuses", "")
 	}
 }

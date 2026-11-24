@@ -215,7 +215,10 @@ def query(doc_type=None, status=None, customer_id=None, issuer_id=None,
         sql += ' AND created_at>=%s'; a.append(date_from)
     if date_to:
         sql += ' AND created_at<=%s'; a.append(date_to)
-    sql += ' ORDER BY created_at DESC LIMIT %s OFFSET %s'; a += [int(limit), int(offset)]
+    # …then by id: one order across pages. An imported history gives a day's documents one `created_at` (its date at
+    # midnight), and Postgres may order tied rows anew on every page — «מסמכים» reads the ledger page by page, and a
+    # document came on two pages and another on none (DGO-2169, the second reader)
+    sql += ' ORDER BY created_at DESC, id DESC LIMIT %s OFFSET %s'; a += [int(limit), int(offset)]
     with Cursor() as cur:
         return cur.run(sql, tuple(a)).all()
 
@@ -431,8 +434,8 @@ def is_credit(rec):
     """A credit note — its own type, or one from before it had a type: an INVOICE row in series CN with a negative
     total (DGO-2029, the second reader: those were offered «ביטול», which issued a second credit and dropped the first
     from the report; the third: a positive invoice someone numbered in CN is a sale, and cancels like one). And any
-    document that cancels another — An imported negative receipt (the fifth reader: cancelling it brought the receipt it cancelled
-    back into the income)."""
+    document that cancels another — an imported negative receipt (the fifth reader: cancelling it brought the receipt
+    it cancelled back into the income)."""
     if rec.get('doc_type') == 'CREDIT_NOTE' or rec.get('cancels'):
         return True
     try:
@@ -592,6 +595,8 @@ TYPE_NAMES = {'חשבון עסקה': 'PAYMENT_REQUEST', 'דרישת תשלום':
               'חשבונית מס זיכוי': 'CREDIT_NOTE', 'חשבונית זיכוי': 'CREDIT_NOTE', 'הצעת מחיר': 'QUOTE'}
 #: the types an import keeps: a tax document only with its VAT said (subtotal + vat), never guessed from a total
 _IMPORTABLE = ('PAYMENT_REQUEST', 'RECEIPT', 'QUOTE', 'INVOICE', 'INVOICE_RECEIPT', 'CREDIT_NOTE')
+#: an imported type that is served as it was issued, with no «העתק» copy: the one a customer signs (DGO-2125)
+_SIGNED_AS_ISSUED = ('QUOTE',)
 _TAXED = ('INVOICE', 'INVOICE_RECEIPT', 'CREDIT_NOTE')
 
 
@@ -620,7 +625,8 @@ def import_issued(rows, source='', actor='import'):
 
     Each becomes a row of the ledger with its own number, date, customer and amount. Its original PDF is the stored
     original — counted as served, since it went out from that system — and its copy is that file with its «מקור»
-    taken off and «העתק» drawn in its place (house.stamp_copy); the screen shows that copy, never a redraw. A
+    taken off and «העתק» drawn in its place (house.stamp_copy); the screen shows that copy, never a redraw. A quote
+    keeps no copy: it is the document a customer signs, so it is served and shown as it was issued (DGO-2125). A
     cancelling document carries a negative amount, as its PDF does. Imported documents are not in the tamper chain:
     they were not issued here. This only keeps the rows: what they say of each other (a request paid, a document
     cancelled) and where each series goes on are settled once all are in (settle_imported), so an import sent in
@@ -707,7 +713,10 @@ def import_issued(rows, source='', actor='import'):
         if pays:
             model['refs'] = {'source': {'kind': 'חשבון עסקה', 'number': pays}}
         pdf = base64.b64decode(r['pdf_b64'])
-        copy = stamp_copy(pdf, note='מארכיון %s' % source if source else '')
+        # a quote keeps no copy: it is the document a customer SIGNS, so it reaches its signer as the quote itself, not a
+        # «העתק» from an archive, and the house prints no label on a quote of its own (printed_label) — DGO-2125. Every
+        # other type keeps its «העתק» copy, a payment request too, whose face Morning printed «מקור» (DGO-2042)
+        copy = None if t in _SIGNED_AS_ISSUED else stamp_copy(pdf, note='מארכיון %s' % source if source else '')
         when = '%s-%s-%s' % (parts[2], parts[1].zfill(2), parts[0].zfill(2))
         did = 'doc_' + uuid.uuid4().hex[:16]
         with Cursor() as cur:
@@ -717,7 +726,7 @@ def import_issued(rows, source='', actor='import'):
                     'VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,now(),%s,%s)',
                     (did, number, t, ISSUED, TYPE_SERIES.get(t, 'A'), parts[2], int(number),
                      (supplier or {}).get('company_id'), customer.get('name'), totals[0], 0, totals[1], totals[2],
-                     model, _blob(cur, pdf), _blob(cur, copy), 'pdf', when, when))
+                     model, _blob(cur, pdf), _blob(cur, copy) if copy else None, 'pdf', when, when))
             _event(cur, did, 'import', ('%s · %s' % (source, r.get('file') or number))[:200], actor)
         imported.append(number)
     return {'imported': imported, 'skipped': skipped}

@@ -76,7 +76,7 @@
       "auth": "sso",
       "url_env": "MEET_START_BASE_URL",
       "module": {
-        "group": "עסק",
+        "group": "תקשורת",
         "icon": "monitor",
         "embed": true,
         "alias": "meet",
@@ -105,12 +105,11 @@
     }
   },
   "data": {
-    "volumes": [
-      "meet_prosody_data",
-      "meet_recordings"
-    ],
+    "volumes": [],
+    "paths": ["data/meet/prosody", "data/meet/recordings"],
+    "moved_from": {"data/meet/prosody": "meet_prosody_data", "data/meet/recordings": "meet_recordings"},
     "on_uninstall": "keep",
-    "note": "meet_recordings is the office's record of its meetings: recordings/<session>/<room>_<time>.mp4 and metadata.json (the room, who was there), written by the recorder and listed in the tile. meet_prosody_data is the XMPP server's accounts (re-registered from .env on every start)."
+    "note": "data/meet/recordings (the volume meet_recordings until DGO-2019) is the office's record of its meetings: recordings/<session>/<room>_<time>.mp4 and metadata.json (the room, who was there), written by the recorder and listed in the tile. data/meet/prosody (meet_prosody_data) is prosody's store: the meetings' live captions (meet-captions/, the transcripts meet-start files with each meeting, kept MEET_CAPTIONS_KEEP_DAYS) beside its own files — state, never a cache."
   },
   "resources": {
     "cpus": "4.85",

@@ -136,7 +136,7 @@ def http(method: str, url: str, body: dict | None = None, timeout: int = 60):
 
 
 # ── the history: every ATTEMPT, kept where it happened ───────────────────────────────────────────
-# Append-only, one JSON line per attempt, in this app's own volume. Both halves matter and for
+# Append-only, one JSON line per attempt, in this app's own store (data/office-routes/state). Both halves matter and for
 # different reasons: an OPENING is a door the office now answers on and must be attributable
 # ("who opened it, when, on which address"), and a REFUSAL is the record that the guard worked —
 # a screen that says "not answering" and writes nothing is a claim nobody can check afterwards.

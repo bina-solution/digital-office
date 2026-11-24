@@ -60,6 +60,11 @@ ANSWERS = "dgo:desk:answers"
 #: where a request's file went in the office's drive (`media.saved`, DGO-1805) — the relay's alone, like ANSWERS, so
 #: it never rewrites a record the answerer is editing; `load` puts it on the record as `media.path`
 FILES = "dgo:desk:files"
+#: the sender's EDIT of a request (`message.edited`, DGO-1995) — the relay's alone, like FILES: `load` shows the words
+#: as they are now and keeps the words at receipt beside them. Without it a request kept the text it arrived with,
+#: and an answerer worked from words the sender had replaced (msg 1129: «…ותצרף לאזור חיפה», edited to «…אולי
+#: כגליל מערבי»; a worker built the first and was stopped only by reading Telegram itself)
+EDITS = "dgo:desk:edits"
 MSGS = "dgo:desk:msgs:%s"
 STREAM = "dgo:flow:telegram"           # written through flowpub (_event below), which caps it and renews its TTL
 TTL = int(os.environ.get("DESK_TTL_SECONDS") or str(30 * 86400))
@@ -276,7 +281,34 @@ def load(r, chat_id, message_id):
         path = r.cmd("HGET", FILES, field(chat_id, message_id))
         if path:
             rec["media"] = {**(rec.get("media") or {}), "path": path}
+        with_edit(rec, _json(r.cmd("HGET", EDITS, field(chat_id, message_id))))
     return rec
+
+
+def with_edit(rec: dict, ed) -> dict:
+    """The record as the sender's words are NOW: `text` is the last edit's, `text_at_receipt` the words it arrived
+    with, `edited` when. A record with no edit is returned as it is."""
+    if isinstance(ed, dict) and ed.get("text") is not None and ed.get("text") != rec.get("text"):
+        rec["text_at_receipt"] = rec.get("text") or ""
+        rec["text"] = ed["text"]
+        rec["edited"] = ed.get("at") or ""
+    return rec
+
+
+def add_edit(r, chat_id, message_id, text: str, at: str = "") -> bool:
+    """The sender edited a request: its words as they are now, written by the relay alone (the record the answerer
+    may be editing is never rewritten), renewed like every desk key. False when the words did not change — an
+    edit of the media or a link preview alone is not a new ask."""
+    text = (text or "").strip()[:TEXT_KEEP]
+    rec = _json(r.cmd("HGET", REQUESTS, field(chat_id, message_id)))
+    if rec is None:
+        return False
+    before = _json(r.cmd("HGET", EDITS, field(chat_id, message_id))) or {}
+    if text == (before.get("text") if before else rec.get("text")):
+        return False
+    r.cmd("HSET", EDITS, field(chat_id, message_id), json.dumps({"text": text, "at": at or now()}, ensure_ascii=False))
+    r.cmd("EXPIRE", EDITS, TTL)
+    return True
 
 
 def add_file(r, chat_id, message_id, path: str) -> None:
@@ -344,6 +376,10 @@ def store(r, rec: dict, event: bool = True) -> None:
         # the path lives in FILES alone (load puts it back): a record stored with it would show it in one listing
         # and not in another
         keep["media"] = {k: v for k, v in rec["media"].items() if k != "path"}
+    if "text_at_receipt" in keep:
+        # …and the sender's edit lives in EDITS alone (load puts it on): the record keeps the words it arrived with
+        keep["text"] = keep.pop("text_at_receipt")
+        keep.pop("edited", None)
     r.cmd("HSET", REQUESTS, field(rec["chat_id"], rec["message_id"]), json.dumps(keep, ensure_ascii=False))
     r.cmd("EXPIRE", REQUESTS, TTL)
     if event:
@@ -375,6 +411,8 @@ def all_records(r) -> list:
     by = _answer_map(r)
     files = r.cmd("HGETALL", FILES) or []                    # each request's saved file, read once — as load() does
     paths = dict(zip((str(k) for k in files[0::2]), files[1::2]))
+    edits = r.cmd("HGETALL", EDITS) or []                    # …and its sender's last edit
+    eds = dict(zip((str(k) for k in edits[0::2]), edits[1::2]))
     out = []
     for key, raw in zip(flat[0::2], flat[1::2]):
         rec = _json(raw)
@@ -383,6 +421,7 @@ def all_records(r) -> list:
         rec["answers"] = sorted(set(rec.get("answers") or []) | set(by.get(str(key), [])))
         if paths.get(str(key)):
             rec["media"] = {**(rec.get("media") or {}), "path": paths[str(key)]}
+        with_edit(rec, _json(eds.get(str(key))))
         out.append(rec)
     return out
 
@@ -404,6 +443,9 @@ def prune(r, t: float) -> int:
     for f in r.cmd("HKEYS", FILES) or []:                   # a file's path leaves with its request
         if str(f) not in keep:
             r.cmd("HDEL", FILES, f)
+    for f in r.cmd("HKEYS", EDITS) or []:                   # …and so does its sender's edit
+        if str(f) not in keep:
+            r.cmd("HDEL", EDITS, f)
     return gone
 
 

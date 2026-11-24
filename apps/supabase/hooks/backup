@@ -46,6 +46,8 @@ factq storage_buckets "$(q 'select count(*) from storage.buckets;')"
 # that carries the volume and loses the rows (the exact defect this hook was split out to fix)
 # cannot report success.
 factq storage_sha "$(q "select coalesce(md5(string_agg(id::text||coalesce(name,''), '|' order by id)), 'empty') from storage.objects;")"
-# NB: supabase_storage_data is NOT claimed with SKIPVOL. The driver's generic volume tar is the
-# right tool for it — it is a plain file tree — and claiming it here would only move working code.
+# NB: the bytes — data/supabase/storage since DGO-2019, the volume supabase_storage_data before — are
+# NOT claimed with SKIPVOL. The driver's generic copy is the right tool for them (a folder with data/,
+# the volume while its move waits) — it is a plain file tree — and claiming it here would only move
+# working code.
 exit 0

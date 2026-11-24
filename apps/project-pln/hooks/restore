@@ -4,8 +4,9 @@
 # restore <indir> <mode>   — invoked by scripts/deployment-archive.py, never by hand.
 #
 # WHAT ARRIVES AND WHO PUTS IT BACK. hooks/backup carries the database as `plane.dump` and claims
-# `project_pln_db`, so the archiver restores the other volumes (the object store's bytes, the
-# instance's own secret keys in `project_pln_data`) and this hook loads the dump. That is the only
+# `project_pln_db`, so the archiver restores the other stores (the object store's bytes, the
+# instance's own secret keys — data/project-pln/{files,state}, the volumes project_pln_minio and project_pln_data
+# until DGO-2019) and this hook loads the dump. That is the only
 # shape that works when the archive is opened on ANOTHER office — moving this app between two linked
 # offices — because a postgres data directory carries the password it was initialised with and this
 # office dials its cluster with its own (`PLANE_DB_PASSWORD` in its own .env). The dump goes into the

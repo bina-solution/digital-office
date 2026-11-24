@@ -15,9 +15,9 @@ automations work on), and a command that writes says so on stderr.
     tree [path] [--depth N]             the folders under a folder
     file <path>                         one file or folder, as JSON (alias: stat)
     get <path>                          the file's bytes to stdout (alias: download)
-    put <path> [--replace]              stdin into the file at <path>: folders are made on the way, an
-                                        existing name is kept and this one is «name (2)» unless --replace
-                                        (alias: upload)
+    put <path> [--replace] [--empty]    stdin into the file at <path>: folders are made on the way, an
+                                        existing name is kept and this one is «name (2)» unless --replace;
+                                        an empty stdin is refused unless --empty (alias: upload)
     mkdir <path>                        get-or-create a folder path
     mv <path> <folder path>             move a file or a folder into another folder
     rename <path> <new name>
@@ -252,7 +252,9 @@ def main(argv):
             shutil.copyfileobj(sys.stdin.buffer, tmp, 1 << 20)
             size = tmp.tell()
             tmp.seek(0)
-            d = call("PUT", "/api/fs/content", {"path": rest[0], "mode": "replace" if "--replace" in rest else "new"},
+            # an empty file only when it is asked for: the drive refuses an empty body otherwise (DGO-2042)
+            d = call("PUT", "/api/fs/content", {"path": rest[0], "mode": "replace" if "--replace" in rest else "new",
+                                                **({"empty": "1"} if "--empty" in rest else {})},
                      body=tmp, headers={"Content-Length": str(size), "Content-Type": "application/octet-stream"})
         print(f"{d['path']}\t{human(d['file'].get('size'))}")
         return 0

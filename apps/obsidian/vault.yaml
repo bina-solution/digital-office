@@ -69,6 +69,11 @@ notes:
     scope: office
     title: "מופעים — יותר מעותק אחד של אפליקציה בלשכה (כמה «קלוד דסקטופ», כל אחד בחשבון משלו)"
 
+  - to: "Architecture/המידע של כל אפליקציה בתיקייה data.md"
+    from: ai/context/data-home.md
+    scope: office
+    title: "המידע של כל אפליקציה ב-data/<app> של תיקיית הלשכה — התקן, המדידה של כל האפליקציות, וההעברה"
+
   - to: "Architecture/חוזה השירות.md"
     from: ai/context/platform-service-contract.md
     scope: office

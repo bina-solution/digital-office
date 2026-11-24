@@ -109,6 +109,10 @@ REMOTE_SIGN_IN = "authentik-admins@file"
 #: of the business opens `https://sign.<domain>/s/<token>` on the herd's public office, and the request
 #: crosses the link to the office that holds the key and the documents. Read by `publish_plan`.
 PUBLISH_BLOCK = "publish"
+#: The further domains an office declares its own for `publish:`, beside DEPLOYMENT_DOMAIN (DGO-2125): its .env names
+#: them, comma-separated, so an office named under the platform's domain may also publish under a company's own
+#: (`sign.example.co.il`). Read by `publish_domains`.
+PUBLISH_DOMAINS_ENV = "PUBLISH_DOMAINS"
 #: A door's path (`/s/`, `/webhook/meet-recordings`): absolute, plain URL characters — the serving office's
 #: own rule for the paths it narrows a door to (apps/dgo-extend/catalog.py PATH_RE + plain_path), so a door
 #: it publishes is never refused here; its link door checks the raw request line against them (link-proxy.py).
@@ -118,6 +122,28 @@ DOOR_PATH_RE = re.compile(r"^/(?:[A-Za-z0-9._~-]+/)*[A-Za-z0-9._~-]*\Z")
 def door_path(p) -> bool:
     """Is `p` a path a door may be narrowed to — absolute, no `.` or `..` segment, nothing escaped?"""
     return isinstance(p, str) and bool(DOOR_PATH_RE.match(p)) and "/../" not in f"{p}/" and "/./" not in f"{p}/"
+
+
+def publish_domains(raw) -> list[str]:
+    """`PUBLISH_DOMAINS` as a list: split on commas and spaces, lower-case, a leading dot dropped, each once, in its
+    order. A malformed name is kept as written, so `publish_plan` refuses it by name instead of skipping it."""
+    out: list[str] = []
+    for d in re.split(r"[\t\n\f\r ,]+", str(raw or "")):         # the Go twin's whitespace, exactly
+        d = d.strip().lower().lstrip(".")
+        if d and d not in out:
+            out.append(d)
+    return out
+
+
+def _a_domain(d: str) -> bool:
+    """A further domain is a dotted name: no port, no path, no trailing dot, and never an address."""
+    if not AUTHORITY_RE.match(d) or ":" in d or "." not in d or d.endswith("."):
+        return False
+    try:
+        ipaddress.ip_address(d)
+    except ValueError:
+        return True
+    return False
 
 
 #: What every published door wears on this edge, defined in the same file (traefik drops a router whose
@@ -586,6 +612,30 @@ def handoffs_path(cat: dict, app_id) -> str:
     return path if isinstance(path, str) and HANDOFFS_PATH.fullmatch(path) else ""
 
 
+def module_tab(cat: dict, app_id, module_id) -> bool:
+    """Does the module a linked tile opens ask for a place in the phone's bar (`routing[].module.tab: true`,
+    DGO-1800) — in THIS office's copy of the app's manifest, read as `_tileless` and `handoffs_path` read it?
+
+    A linked tile carried no `tab` at all, so on the MacBook, where the documents and the files are the HP's
+    and vps1's copies, the phone's bar was «בית», one app and «פתוחים» (DGO-2122, measured on its live registry
+    2026-11-20). The flag is the app's own, in the one repository every office carries: it holds for a peer that
+    predates it, and nothing changes between the offices. Only `true` counts, as for a tile of this office, and
+    only on the module the tile opens: the serving office's module id (plan() defaults it to the app's id) against
+    each routed module's `id`, or the app's where it names none. A peer that sends no module id is matched by the
+    app's id, so an app whose module is named otherwise (indox's `incoming`) gets no place from it — none, never a
+    wrong one. A routing that is no list of mappings asks for nothing (the Go twin reads it with the same refusal)."""
+    app = (cat or {}).get(app_id)
+    routes = (app.get("routing") or []) if isinstance(app, dict) else []
+    if not isinstance(routes, list) or not all(isinstance(r, dict) for r in routes):
+        return False
+    want = str(module_id or app_id)
+    for r in routes:
+        m = r.get("module")
+        if isinstance(m, dict) and m and m.get("tab") is True and str(m.get("id") or app_id) == want:
+            return True
+    return False
+
+
 def module_entries(entries: list[dict], cat: dict, taken=None) -> list[dict]:
     """The console tiles a `remote:` entry produces — ONE PER (OFFICE, ALIAS).
 
@@ -668,6 +718,8 @@ def module_entries(entries: list[dict], cat: dict, taken=None) -> list[dict]:
                             # (`module_id`, what `#/m/…` carries). Either lands on this tile.
                             "alias": app["alias"], "module_id": app.get("module_id") or ""}),
                 *asked,
+                # …and its place in the phone's bar, when the app's own manifest asks for one (DGO-2122)
+                *([("tab", True)] if module_tab(cat, app.get("app"), app.get("module_id")) else []),
             ]))
     return out
 
@@ -972,7 +1024,7 @@ def render_aliases(entries: list[dict]) -> str | None:
 
 
 def publish_plan(state: dict, served: list[dict], domain: str = "",
-                 cat: dict | None = None) -> tuple[list[dict], list[str], list[str]]:
+                 cat: dict | None = None, more: list[str] | tuple = ()) -> tuple[list[dict], list[str], list[str]]:
     """Check `publish:` against the doors linked offices give this one: (published, errors, dropped).
 
     `publish:` opens ONE door of a linked office to the internet on THIS office's edge (DGO-2050). The example is
@@ -984,11 +1036,19 @@ def publish_plan(state: dict, served: list[dict], domain: str = "",
             door: esign-public.hp-laptop          # <the door's alias>.<the office that serves it>
             paths: [/s/]
 
+    A host lies under this office's own domain, or under a further domain it declares its own (`more`, its .env's
+    PUBLISH_DOMAINS, `publish_domains`), such as a company's own beside the office's name (DGO-2125). vps1 needs
+    none: its own domain is bina-solutions.digital-office.co.il, and the door is at sign.<that>. Declaring a domain
+    says its names point at this office: the certificate
+    is an HTTP-01 order, and one for a name that points elsewhere is an ACME loop (DGO-901). Under a further domain
+    no app of this office is routed by its name, so the check against those names is for this office's own domain.
+
     TWO KINDS OF NO, and only one stops the render:
-    - `errors`: this office's own declaration is malformed. Not a list, not an object, a host that is no host,
-      lies off this office's public domain or is a name one of its own apps is routed under, a host or a door
-      twice, two doors whose routers would share a name, a path that is no path or is `/` (the whole app). The
-      render stops, as for any malformed state, before the edge's files are written.
+    - `errors`: this office's own declaration is malformed. Not a list, not an object, a further domain that is
+      no domain, a host that is no host, lies off this office's domains, is the office's own name (under a further
+      domain that is its parent) or is a name one of its own apps is routed under, a host or a door twice, two
+      doors whose routers would share a name, a path that is no path or is `/` (the whole app). The render stops,
+      as for any malformed state, before the edge's files are written.
     - `dropped`: the SERVING office decides, and it decided otherwise. It no longer gives this door, did not
       narrow it to paths, did not open it to the internet (`public: true` in its serve.services, its consent to
       this), or narrowed it to paths that do not hold the ones asked for. The door is LEFT OUT with a line, and
@@ -1015,6 +1075,15 @@ def publish_plan(state: dict, served: list[dict], domain: str = "",
     hosts: set[str] = set()
     taken: set[str] = set()
     names: set[str] = set()
+    further: list[str] = []
+    for d in more or ():
+        d = str(d).strip().lower()
+        if not _a_domain(d):
+            errs.append(f"{PUBLISH_DOMAINS_ENV}: {d!r} אינו דומיין (שם עם נקודה, בלי פורט, בלי נתיב ובלא כתובת)")
+        elif d != domain and d not in further:
+            further.append(d)
+    # an office with no public domain publishes nothing, whatever further domains it names: it has no edge
+    mine = [] if domain in ("", "localhost") else [domain] + further
     for i, item in enumerate(raw):
         where = f"{PUBLISH_BLOCK}[{i}]"
         if not isinstance(item, dict):
@@ -1024,12 +1093,17 @@ def publish_plan(state: dict, served: list[dict], domain: str = "",
         if not AUTHORITY_RE.match(host) or ":" in host or "." not in host:
             errs.append(f"{where}.host {item.get('host')!r} אינו שם מארח (בלי פורט ובלי נתיב)")
             continue
-        if domain in ("", "localhost") or not host.endswith("." + domain):
-            errs.append(f"{where}.host {host}: אינו תחת הדומיין של הלשכה הזו ({domain or 'אין לה דומיין'}) — "
+        under = next((d for d in mine if host.endswith("." + d)), "")
+        if not under:
+            errs.append(f"{where}.host {host}: אינו תחת הדומיין של הלשכה הזו "
+                        f"({', '.join(mine) or domain or 'אין לה דומיין'}) — "
                         f"רק לשכה עם דומיין ציבורי מפרסמת, ורק תחתיו")
             continue
-        first = host[:-(len(domain) + 1)].split(".")[-1]
-        if first in routed:
+        if host == domain:          # under a further domain that is its parent: still the office's own name
+            errs.append(f"{where}.host {host}: הוא שם הלשכה עצמה, לא שם תחתיו — שם משנה, למשל sign.{domain}")
+            continue
+        first = host[:-(len(under) + 1)].split(".")[-1]
+        if under == domain and first in routed:
             errs.append(f"{where}.host {host}: {first}.{domain} כבר מנותב לאפליקציה של הלשכה הזו — "
                         f"שם אחר, למשל sign")
             continue
@@ -1611,6 +1685,31 @@ def selftest() -> list[str]:
             problems.append(f"publishing on {taken_host}, a name this office already routes, must be refused")
     if publish_plan({"publish": [pub]}, pentries, dom, owned)[1]:
         problems.append("a free name (sign) must publish beside the office's own routed names")
+    # a further domain the office declares its own (PUBLISH_DOMAINS, DGO-2125): a host under it publishes, a host that
+    # only ends like it does not, and an office with no public domain publishes under none
+    company = dict(pub, host="sign.bina-solutions.co.il")
+    got = publish_plan({"publish": [company]}, pentries, dom, owned, ["bina-solutions.co.il"])
+    if got[1] or got[2] or len(got[0]) != 1 or got[0][0]["host"] != "sign.bina-solutions.co.il":
+        problems.append(f"a host under a further domain the office declares must publish: {got}")
+    if not publish_plan({"publish": [company]}, pentries, dom)[1]:
+        problems.append("a host under a domain the office does not declare must be refused")
+    if not publish_plan({"publish": [dict(pub, host="sign.evilbina-solutions.co.il")]}, pentries, dom, None,
+                        ["bina-solutions.co.il"])[1]:
+        problems.append("a host that only ends like a declared domain must be refused")
+    if not publish_plan({"publish": [company]}, pentries, "localhost", None, ["bina-solutions.co.il"])[1]:
+        problems.append("an office without a public domain must not publish under a further one either")
+    if not publish_plan({"publish": [dict(pub, host=dom)]}, pentries, dom, None, ["digital-office.co.il"])[1]:
+        problems.append("the office's own name must be refused even under a further domain that is its parent")
+    for bad in ("bina-solutions.co.il:443", "localhost", "93.184.216.5", "bina-solutions.co.il.", "a/b.co.il"):
+        if not publish_plan({"publish": [pub]}, pentries, dom, None, [bad])[1]:
+            problems.append(f"a further domain {bad!r} that is no domain must be refused")
+    if publish_domains(" Bina-Solutions.co.il, .x.example  bina-solutions.co.il") != ["bina-solutions.co.il",
+                                                                                        "x.example"]:
+        problems.append("PUBLISH_DOMAINS must split on commas and spaces, lower-case, drop a leading dot, once each")
+    # this office's routed names are checked on its own domain: under a further one no app of it is routed by name
+    if publish_plan({"publish": [dict(pub, host="esign.bina-solutions.co.il")]}, pentries, dom, owned,
+                    ["bina-solutions.co.il"])[1]:
+        problems.append("a further domain routes no app of this office by its name: esign there is free")
     # …and what the SERVING office decided only leaves the door out, with a line, and never stops the render
     open_door = run({"remote": [dict(hp, services=[{"app": "esign", "alias": "esign-public", "port": 8080,
                                                     "public": True}])]})[0]

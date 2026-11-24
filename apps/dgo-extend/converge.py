@@ -421,12 +421,16 @@ for vd in /var/lib/docker/volumes/*/; do
   m=$(du -sm "$vd" 2>/dev/null | cut -f1)
   vol_mb=$(( vol_mb + ${m:-0} ))
 done
+# …and the DGO folder's data/, which the snapshot takes too (2b below); data/ with its slash: a data/ that is a link
+# (to another disk) is measured where it leads
+data_mb=$(du -sm "$P/data/" 2>/dev/null | cut -f1)
+vol_mb=$(( vol_mb + ${data_mb:-0} ))
 need_mb=$(( vol_mb * 125 / 100 ))                 # the tar itself plus the copy it is written into
 min_mb=${DGO_BACKUP_MIN_FREE_MB:-3000}
 free_mb=$(df -Pm /root | awk 'NR==2{print $4}')
 if [ "${free_mb:-0}" -lt $(( need_mb + min_mb )) ]; then
   echo "BACKUP_SKIPPED=1"
-  echo "SKIP_REASON=אין מקום לגיבוי: ${free_mb}MB פנויים, צריך ~$(( need_mb + min_mb ))MB (${vol_mb}MB volumes + ${min_mb}MB מרווח). הגיבוי דולג — אשמור על הקיים."
+  echo "SKIP_REASON=אין מקום לגיבוי: ${free_mb}MB פנויים, צריך ~$(( need_mb + min_mb ))MB (${vol_mb}MB volumes ו-data/ + ${min_mb}MB מרווח). הגיבוי דולג — אשמור על הקיים."
   echo "ENOUGH=0"
   exit 0
 fi
@@ -486,6 +490,25 @@ for v in $(docker volume ls -q); do
   fi
 done
 
+# ── 2b. the DGO folder's data/: every app's stores since they left their volumes (DGO-2019) ──────
+# A store that moved out of its volume is no volume any more, and the loop above leaves it out: the stores that
+# moved (sites, telegram, security…) were in no pre-upgrade backup (the secret guards' second reader). The whole
+# folder, hot, as the volumes above (1 = a file changed while read); the locks are runtime, never carried. Its
+# contents, from inside it: a data/ that is a link (to another disk) is carried, not the link.
+if [ -d "$P/data/" ]; then
+  rc=0
+  tar czf "$D/data.tar.gz" -C "$P/data/" --exclude=./.locks . 2>"$D/data.err" || rc=$?
+  if [ "$rc" = "0" ] || [ "$rc" = "1" ]; then
+    echo "   data/ $(du -h "$D/data.tar.gz" | cut -f1)$([ "$rc" = 1 ] && echo ' (הקבצים השתנו תוך כדי קריאה)')"
+    rm -f "$D/data.err"
+  else
+    echo "WARN: tar failed for data/ (קוד $rc): $(head -c 200 "$D/data.err" | tr '\n' ' ')"
+    rm -f "$D/data.tar.gz"
+  fi
+elif [ -e "$P/data" ] || [ -L "$P/data" ]; then
+  echo "WARN: data/ is there but cannot be entered (a link that leads nowhere?) — NOT backed up"
+fi
+
 # ── 3. the config that a git checkout does NOT carry: the office's own secrets ──────────────────
 for f in .env platform.state.yaml; do [ -f "$P/$f" ] && cp -a "$P/$f" "$D/etc/"; done
 find "$P" -maxdepth 3 -name acme.json -exec cp -a {} "$D/etc/" \; 2>/dev/null || true
@@ -500,11 +523,14 @@ find "$P" -maxdepth 3 -name acme.json -exec cp -a {} "$D/etc/" \; 2>/dev/null ||
   echo
   echo "pg dumps:"; ls -1 "$D/pg" 2>/dev/null
   echo "volumes:"; ls -1 "$D/vol" 2>/dev/null
+  echo "data: (the contents of data/: extract into <checkout>/data/)"
+  ls -1 "$D/data.tar.gz" 2>/dev/null || true                  # set -e: none there is said, never the end
   echo "etc:"; ls -1 "$D/etc" 2>/dev/null
 } > "$D/MANIFEST"
 
 echo "PG=$(ls -1 "$D/pg" 2>/dev/null | wc -l)"
 echo "VOL=$(ls -1 "$D/vol" 2>/dev/null | wc -l)"
+echo "DATA=$([ -f "$D/data.tar.gz" ] && echo 1 || echo 0)"
 echo "SIZE=$(du -sh "$D" | cut -f1)"
 echo "BYTES=$(du -sb "$D" | cut -f1)"
 echo "BACKUP_DONE=$D"
@@ -1410,16 +1436,73 @@ print('NAME=' + vals.get('DEPLOYMENT_NAME', ''))
 #: folder name compose cannot use), and a guess at it here once read a live office as empty.
 DATA_VOLUMES = ("connections_vault", "supabase_db_data", "authentik_postgres_data")
 
+#: …and the store that moved to the DGO folder's data/<app>/<store> counts as its volume (DGO-2019): the app.json
+#: data.moved_from of the office's own checkout names the volume, and an office installed after the move has the
+#: folder and never had the volume. A folder that holds anything, cannot be looked into, or sits behind a link that
+#: leads nowhere is data. One line per volume whose folder is data; an office folder not there yet is none; a
+#: manifest that cannot be read (an I/O error, no permission, not JSON) exits 3 — unknown, never "nothing moved"
+#: (scripts/env-secrets.py moved_stores/holds_data say the same).
+MOVED_DATA = r"""
+import json, os, sys
+root, keys = sys.argv[1], set(sys.argv[2:])
+def held(folder):
+    try:
+        return bool(os.listdir(folder))
+    except FileNotFoundError:
+        p = folder
+        while p != os.path.dirname(p):
+            if os.path.islink(p) and not os.path.exists(p):
+                return True
+            p = os.path.dirname(p)
+        return False
+    except OSError:
+        return True
+try:
+    os.stat(root)
+except FileNotFoundError:
+    if held(root):                    # the office folder behind a link that leads nowhere: unknown, never "none"
+        print(f"the office's folder {root} is behind a link that leads nowhere", file=sys.stderr)
+        sys.exit(3)
+    sys.exit(0)
+try:
+    for layer in ("apps", "platform-base"):
+        try:
+            names = sorted(os.listdir(os.path.join(root, layer)))
+        except (FileNotFoundError, NotADirectoryError):
+            continue
+        for aid in names:
+            try:
+                with open(os.path.join(root, layer, aid, "app.json"), encoding="utf-8") as fh:
+                    moved = (json.load(fh).get("data") or {}).get("moved_from") or {}
+            except (FileNotFoundError, NotADirectoryError):
+                continue
+            for rel, old in moved.items():
+                if old in keys and held(os.path.join(root, rel)):
+                    print(old)
+except (OSError, ValueError) as e:
+    print(f"the office's manifests could not be read: {e}", file=sys.stderr)
+    sys.exit(3)
+"""
+
 
 def _office_data(office: dict) -> int:
-    """How many of DATA_VOLUMES exist on the office's machine — 0 = nothing a new secret could lock.
+    """How many of DATA_VOLUMES exist on the office's machine — as a volume, or as the folder it moved to — 0 =
+    nothing a new secret could lock.
 
-    Unknown is never 0: when docker cannot be asked (no answer, daemon down, no permission) the step
-    stops, because the two decisions this answers — replace a template .env, mint a vault key — are
-    exactly the ones that lock an office out of its own data when they are wrong."""
+    Unknown is never 0: when docker cannot be asked (no answer, daemon down, no permission), or the office's folders
+    cannot be read, the step stops, because the two decisions this answers — replace a template .env, mint a vault
+    key — are exactly the ones that lock an office out of its own data when they are wrong."""
     pattern = "(^|_)(%s)$" % "|".join(DATA_VOLUMES)
+    p = q(office["path"])
     out = exec_on(office["machine"], f"n=$(docker volume ls --format '{{{{.Name}}}}') || exit 7; "
-                                     f"printf '%s\\n' \"$n\" | grep -cE {q(pattern)} || true", 30)
+                                     f"f=$(python3 -c {q(MOVED_DATA)} {p} {' '.join(DATA_VOLUMES)}) || exit 8; "
+                                     f"{{ printf '%s\\n' \"$n\" | grep -oE {q(pattern)} | sed 's/^_//'; "
+                                     f"printf '%s\\n' \"$f\"; }} | sort -u | grep -c . || true", 30)
+    if out.get("code") == 8:
+        # the folder half: a manifest or the office's folder could not be read (or no python3) — its own words
+        raise StepFailed("לא ניתן לדעת אם ללשכה כבר יש נתונים — קבצי ה-app.json של הלשכה לא נקראו במחשב",
+                         "בדוק שתיקיית הלשכה קריאה ושיש python3 במחשב, והרץ שוב. השלב לא יחליף סודות בלי לדעת.",
+                         (out.get("stderr") or "")[-800:])
     try:
         if out.get("code") != 0:
             raise ValueError(out.get("code"))
@@ -2509,15 +2592,50 @@ def paired_records() -> list[dict]:
     return _records(lambda d: str(d.get("kind") or "") == "paired")
 
 
+#: path → (file signature, parsed doc). A declaration is PARSED again only when its file changes (DGO-2111, root 6):
+#: measured on the HP 2026-11-20, one `build_catalog` called declarations() 23 times and spent 6.5 of its 11.3 s
+#: (profiled) re-parsing the same YAML files, so a peer's catalog pull missed its 8 s under load and the link read
+#: «connected, the check did not answer». The rule is give.load_herd's: the key is the file's identity and both of its
+#: clocks, and a file younger than give.RACY_S is read again every time, never trusted to its key (git's «racily
+#: clean»). Every caller gets its own deep copy: a caller that edits a declaration must never edit the cache.
+_PARSED: dict = {}
+
+
+def _parsed(f: Path):
+    import copy
+    import give
+    now = time.time()   # BEFORE the stat: a reader that stalls after its read must not age the file it read (reader)
+    try:
+        st = f.stat()
+    except OSError:
+        _PARSED.pop(str(f), None)
+        return None
+    sig = (st.st_ino, st.st_mtime_ns, st.st_ctime_ns, st.st_size)
+    hit = _PARSED.get(str(f))
+    if hit is not None and hit[0] == sig:
+        return copy.deepcopy(hit[1])
+    try:
+        d = yaml.safe_load(f.read_text(encoding="utf-8"))
+    except (OSError, yaml.YAMLError):
+        return None
+    try:
+        same = f.stat()                                  # a write between the stat and the read: not trusted to `sig`
+        settled = (same.st_ino, same.st_mtime_ns, same.st_ctime_ns, same.st_size) == sig
+    except OSError:
+        settled = False
+    if settled and abs(now - max(st.st_mtime, st.st_ctime)) >= give.RACY_S:
+        _PARSED[str(f)] = (sig, d)
+    else:
+        _PARSED.pop(str(f), None)
+    return copy.deepcopy(d)
+
+
 def _records(want) -> list[dict]:
     out = []
     if not DECL_DIR.exists():
         return out
     for f in sorted(DECL_DIR.glob("*.yaml")):
-        try:
-            d = yaml.safe_load(f.read_text(encoding="utf-8"))
-        except (OSError, yaml.YAMLError):
-            continue
+        d = _parsed(f)
         if isinstance(d, dict) and d.get("id") and want(d):
             out.append(d)
     return out
@@ -2589,9 +2707,11 @@ def with_give(doc: dict) -> dict:
     """`doc` with the herd's floor merged into a COPY of its `serve:` (give.py) — `doc` itself when the herd
     gives nothing here. A failure costs the floor, never the record: this runs inside every catalog answer."""
     out = doc
+    herd = decl = None                                  # read once, for the apps and the doors (DGO-2125)
     try:
         import give
-        given = give.floor(give.load_herd(), doc, declarations())
+        herd, decl = give.load_herd(), declarations()
+        given = give.floor(herd, doc, decl)
         if given:
             registry = catalog.load_registry(os.environ.get("DGO_REGISTRY_DIR", "/registry"))
             out = dict(doc)
@@ -2604,6 +2724,19 @@ def with_give(doc: dict) -> dict:
             give._once("the herd's give: was not applied (%s: %s)", type(e).__name__, str(e)[:200])
         except Exception:                               # noqa: BLE001
             log.warning("the herd's give: was not applied (%s)", type(e).__name__)
+    # …and the doors with no tile the herd gives (DGO-2125: the HP's signer page to vps1, narrowed and opened), in a try
+    # of their own: a door that fails costs the doors, never the apps' floor above
+    try:
+        import give
+        given_doors = give.doors(herd if herd is not None else give.load_herd(), doc,
+                                 decl if decl is not None else declarations(),
+                                 catalog.load_registry(os.environ.get("DGO_REGISTRY_DIR", "/registry")))
+        if given_doors:
+            out = dict(out)
+            out["serve"] = give.merge_doors(out.get("serve"), given_doors)
+            out.setdefault("serve_written", doc.get("serve") or {})
+    except Exception as e:                              # noqa: BLE001 — see the docstring
+        log.warning("the herd's doors were not applied (%s: %s)", type(e).__name__, str(e)[:200])
     # a client's office we set up is given NOTHING of ours, whatever `serve:` or the floor says (clients.py, DGO-964):
     # the one-way link's second guard, beside the client joiner's own — in a try of its own, so a floor that fails
     # never takes the cut with it

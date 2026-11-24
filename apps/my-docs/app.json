@@ -1,8 +1,8 @@
 {
   "id": "my-docs",
   "title": {
-    "he": "מסמכים שלי",
-    "en": "My Docs"
+    "he": "מסמכים",
+    "en": "Documents"
   },
   "layer": 3,
   "kind": "service",
@@ -68,14 +68,15 @@
       "auth": "sso",
       "emit_labels": false,
       "module": {
-        "group": "עסק",
+        "group": "ניהול העסק",
         "icon": "file-text",
         "embed": true,
         "alias": "my-docs",
         "id": "my-docs",
-        "name": "מסמכים שלי",
-        "desc": "ניהול מסמכים עסקיים",
+        "name": "מסמכים",
+        "desc": "הצעות מחיר, חשבוניות וקבלות — יצירה, שליחה וחתימה",
         "order": 1,
+        "tab": true,
         "url_env": "MY_DOCS_URL",
         "url": "http://my-docs:8000"
       },

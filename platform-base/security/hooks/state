@@ -1,0 +1,34 @@
+#!/usr/bin/env bash
+#: state — what this app holds, one `<name> <value>` per line:  ./bbox security state
+#: Its mode (observe or enforce: the owner's choice), every address it has seen and every ban it logged (security.db),
+#: and whether the sensor's store holds what the app wants enforced (desired.json, written again at every start: it
+#: says the store is there and written, not what it held). The data move
+#: (platform/manager/datahome.py, DGO-2019) reads it before it moves a store and again after, and sends the store back
+#: to its volume when what it held is gone.
+set -uo pipefail
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
+case "${1:-}" in -h|--help) sed -n 's/^#: //p' "${BASH_SOURCE[0]}"; exit 0 ;; esac
+# The data move names the container it measures; by hand, it is the office's own.
+if [ -n "${DGO_STATE_CONTAINER:-}" ]; then
+  inside() { docker exec -i "${DGO_STATE_CONTAINER}" "$@"; }
+else
+  . "${REPO_ROOT}/scripts/lib.sh"
+  inside() { dcx exec -T security "$@"; }
+fi
+inside python - <<'PY'
+import os, sqlite3
+db = os.path.join(os.environ.get("SECURITY_DATA", "/data"), "security.db")
+out = []
+if os.path.isfile(db):
+    # never an active ban or a sample: they expire on their own; an address is kept 180 days, a ban's log line a year
+    c = sqlite3.connect(f"file:{db}?mode=ro", uri=True, timeout=30)
+    mode = c.execute("select v from kv where k='mode'").fetchone()
+    out.append(("mode", mode[0] if mode else "none"))
+    out += [(f"rows.{t}", c.execute(f'select count(*) from "{t}"').fetchone()[0]) for t in ("addr", "ban_log")]
+sensor = os.environ.get("SENSOR_DIR", "/sensor")
+if os.path.isdir(sensor):
+    out.append(("sensor.desired", "yes" if os.path.isfile(os.path.join(sensor, "desired.json")) else "no"))
+for k, v in out:
+    print(k, v)
+PY

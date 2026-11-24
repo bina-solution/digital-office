@@ -338,6 +338,84 @@ var BinaNav = (function () {
     }
   }
 
+  /* ── the way in ───────────────────────────────────────────────────────────────
+     The component's own 48px button for the menu over the page: on `body`, in the corner a phone leaves
+     free, and shown (`html.bnv-float` + the stylesheet's compact window) while NONE of the page's own
+     `[data-nav-toggle]` is on the screen. A page that placed none always had it (sites, domains and drive
+     had no way into their menu on a phone, 2026-10-12). A page that placed its own in a bar it hides on
+     some screens had nothing there: mail's ☰ is in its top bar, a phone hides that bar on a message, on the
+     settings and on the tag rules (19880d330), and off its list the menu — «נשלח», the settings — could not
+     be opened at all (measured on vps1 2026-11-21 at 390×844, DGO-2170). So every page gets the button, and
+     it looks again whenever the page may have changed what it shows: the page's own comes back and this one
+     goes, so the two are never on the screen together. While a modal dialog stands over the page it goes too:
+     it sits above that dialog's backdrop (mail's is at z-index 40, this at 56), and a menu opened beside a
+     dialog is no way anywhere. One per document, whichever menu made it. Its press is the menu's that holds the
+     page now: a MOUNTED menu's over a static one's (`adoptOne` runs first on a page whose menu is in its markup and
+     is mounted later — computers), and a later mount of the same element over the earlier one (computers mounts
+     its side again as its data changes) — with the stale press the button raised a scrim no close would lower. */
+  var floating = null, floatPress = null, floatOwner = null;
+  /** On the screen, as a person sees it: a box (`shown`), and not made invisible — a closed drawer is often
+   *  `visibility:hidden` (app-management's). Not «inside the window»: a bar scrolled away is still the page's,
+   *  and nothing here is asked again on a scroll. */
+  function onScreen(n, doc) {
+    if (!shown(n)) return false;
+    try {
+      var view = (doc && doc.defaultView) || (typeof window !== "undefined" ? window : null);
+      var cs = view && typeof view.getComputedStyle === "function" ? view.getComputedStyle(n) : null;
+      if (cs && (cs.visibility === "hidden" || cs.opacity === "0")) return false;
+    } catch (e) { /* what cannot be asked is taken as shown */ }
+    return true;
+  }
+  /** `owner`: the element a mounted menu was given, or nothing for a static one. */
+  function wayIn(doc, press, owner) {
+    if (press && (!floatPress || (owner && (!floatOwner || floatOwner === owner)))) { floatPress = press; floatOwner = owner || null; }
+    if (floating) return floating;
+    var b = el("button", "bnv-burger is-float");
+    b.type = "button";
+    b.setAttribute("data-nav-toggle", "menu");
+    b.setAttribute("data-bnv-bound", "1");             // its one press is the one below: no `bindToggles` takes it
+    b.setAttribute("aria-label", LABELS.open);
+    b.setAttribute("aria-expanded", "false");
+    b.innerHTML = svg("menu");
+    b.addEventListener("click", function (ev) {
+      if (ev && ev.preventDefault) ev.preventDefault();
+      if (floatPress) b.setAttribute("aria-expanded", String(!!floatPress()));
+    });
+    (doc.body || doc.documentElement).appendChild(b);
+    floating = b;
+    var html = doc.documentElement;
+    if (!html || !html.classList) return b;
+    var anyOnScreen = function (sel) {
+      var ns = doc.querySelectorAll(sel);
+      for (var i = 0; i < ns.length; i++) if (ns[i] !== b && onScreen(ns[i], doc)) return true;
+      return false;
+    };
+    var queued = false;
+    var look = function () {
+      queued = false;
+      try { html.classList.toggle("bnv-float", !anyOnScreen("[data-nav-toggle]") && !anyOnScreen('[aria-modal="true"]')); }
+      catch (e) { /* the last answer stands */ }
+    };
+    var later = function () {
+      if (queued) return;
+      queued = true;
+      if (typeof requestAnimationFrame === "function") requestAnimationFrame(look); else setTimeout(look, 0);
+    };
+    look();
+    try {
+      // what a page changes to hide a bar: a class, `hidden`, a style, the screen it names on `body` — or the window
+      if (typeof MutationObserver === "function" && doc.body) {
+        new MutationObserver(later).observe(doc.body, { subtree: true, childList: true, attributes: true,
+          attributeFilter: ["class", "hidden", "style", "data-screen"] });
+      }
+      if (typeof window !== "undefined" && window && typeof window.addEventListener === "function") {
+        window.addEventListener("resize", later);
+        window.addEventListener("load", later);
+      }
+    } catch (e) { /* no watcher: the button keeps the first look's answer */ }
+    return b;
+  }
+
   /* ── the mounted menu ─────────────────────────────────────────────────────── */
   function build(root, cfg) {
     var ctx = {
@@ -469,8 +547,8 @@ var BinaNav = (function () {
     //     menu nowhere, and `drive` parked its drawer off-canvas at x=404 of a 390px phone — three
     //     apps whose navigation a phone could not reach at all. So the menu marks the element it was
     //     given as the container, which is exactly what its own sizes answer.
-    //   · A page that placed no `[data-nav-toggle]` gets one from here: a 48px button in the corner
-    //     a phone leaves free, shown only in the compact frame (`html.bnv-float` + the stylesheet).
+    //   · The way in is the component's too (`wayIn`): its own 48px button in the corner a phone
+    //     leaves free, shown in the compact frame whenever none of the page's `[data-nav-toggle]` is.
     function ownFrame() {
       // A frame that cannot be asked is not a frame to fail in: every step is guarded, and losing
       // the fallback button is the most a limited host can cost.
@@ -480,12 +558,7 @@ var BinaNav = (function () {
           parent.classList.add("bnv-host");
         }
         if (typeof document.querySelector !== "function") return;
-        if (document.querySelector("[data-nav-toggle]")) return;
-        var b = el("button", "bnv-burger is-float");
-        b.type = "button";
-        b.setAttribute("data-nav-toggle", "menu");
-        (document.body || document.documentElement).appendChild(b);
-        if (document.documentElement && document.documentElement.classList) document.documentElement.classList.add("bnv-float");
+        wayIn(document, function () { api.toggle(); return api.isOpen(); }, root);
       } catch (e) { /* the menu still draws: the button is the only thing that can be missing */ }
     }
 
@@ -794,21 +867,14 @@ var BinaNav = (function () {
           });
           mhead.appendChild(cbtn);
         }
-        // …and the way in: the component's own 48px button, exactly as a page that placed none
-        if (typeof doc.querySelector === "function" && !doc.querySelector("[data-nav-toggle]")) {
-          var b = el("button", "bnv-burger is-float");
-          b.type = "button";
-          b.setAttribute("data-nav-toggle", "menu");
-          b.setAttribute("aria-label", LABELS.open);
-          b.innerHTML = svg("menu");
-          b.addEventListener("click", function () {
+        // …and the way in: the component's own 48px button, exactly as a mounted menu has it (`wayIn`)
+        if (typeof doc.querySelector === "function" && typeof doc.querySelectorAll === "function") {
+          wayIn(doc, function () {
             var open = !menu.classList.contains("is-open");
             menu.classList.toggle("is-open", open);
             scrim.classList.toggle("is-open", open);
-            b.setAttribute("aria-expanded", String(open));
+            return open;
           });
-          (doc.body || doc.documentElement).appendChild(b);
-          if (doc.documentElement && doc.documentElement.classList) doc.documentElement.classList.add("bnv-float");
         }
       } catch (e) { /* one menu that cannot be adopted is not the other menus' problem */ }
   }

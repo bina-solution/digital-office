@@ -68,7 +68,7 @@
         "name": "Authentik",
         "icon": "shield",
         "desc": "זהויות, הרשאות ו-SSO",
-        "group": "תשתית",
+        "group": "ניהול הלשכה",
         "order": 240,
         "embed": false
       }
@@ -82,15 +82,16 @@
     }
   },
   "data": {
-    "volumes": [
-      "authentik_media",
-      "authentik_templates",
-      "authentik_postgres_data"
-    ],
+    "volumes": [],
     "on_uninstall": "keep",
     "paths": [
-      "platform-base/authentik/blueprints"
+      "platform-base/authentik/blueprints",
+      "data/authentik/db",
+      "data/authentik/media",
+      "data/authentik/templates"
     ],
+    "moved_from": {"data/authentik/db": "authentik_postgres_data", "data/authentik/media": "authentik_media",
+                   "data/authentik/templates": "authentik_templates"},
     "sql": [
       {
         "instance": "authentik-postgres",

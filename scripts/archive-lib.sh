@@ -64,6 +64,36 @@ archive_project() {
   printf '%s' "${COMPOSE_PROJECT_NAME:-$(basename "${REPO_ROOT}" | tr '[:upper:]' '[:lower:]')}"
 }
 
+# archive_store <service> <target> <app> <data/app/store> <old volume key> — where a store a hook backs up or restores
+# itself lives NOW (DGO-2019): a volume by its name, or a folder by its path. The service's container of THIS office
+# (by compose's labels, stopped or running) says, by what it mounts at <target>. With none (removed, or a new office):
+# the engine's own record of the store — the folder once a run decided it (moved, found ready, or seeded), its volume
+# until then (waiting, failed, in CONFLICT, never run), as `bbox run` would leave it; a record that cannot be read is a
+# failure, never a guess. Never the old volume by name alone: a move leaves it as it was.
+archive_store() {
+  local svc="$1" tgt="$2" app="$3" rel="$4" key="$5" pn c src led r
+  pn="$(office_project)"                           # compose's own name for this checkout (lib.sh), as its labels carry
+  c="$(docker ps -aq --filter "label=com.docker.compose.project=${pn}" --filter "label=com.docker.compose.service=${svc}" \
+        --filter "label=com.docker.compose.oneoff=False" 2>/dev/null | head -1)"
+  if [ -n "${c}" ]; then
+    src="$(docker inspect --type container -f "{{range .Mounts}}{{if eq .Destination \"${tgt}\"}}{{if eq .Type \"volume\"}}{{.Name}}{{else}}{{.Source}}{{end}}{{end}}{{end}}" "${c}" 2>/dev/null)"
+    [ -n "${src}" ] && { printf '%s' "${src}"; return 0; }
+  fi
+  local sub="${rel#data/${app}/}"
+  [ "${sub}" = "${rel}" ] && sub="_"               # data/<app> itself: `_.json` (datamoves.ledger_name)
+  led="${REPO_ROOT}/data/.moves/${app}/$(printf '%s' "${sub}" | sed 's#/#__#g').json"
+  if [ -e "${led}" ]; then
+    # decided (moved, found ready, seeded) and neither failed nor in CONFLICT — which keeps a store on its volume
+    r="$(python3 -c 'import json,sys; r=json.load(open(sys.argv[1])); print("folder" if not r.get("failed") and not r.get("conflict_at") and (r.get("moved_at") or r.get("ready_at") or r.get("seeded_at")) else "volume")' "${led}" 2>/dev/null)"
+    case "${r}" in
+      folder) printf '%s' "${REPO_ROOT}/${rel}"; return 0 ;;
+      volume) ;;
+      *) echo "[archive-lib] ${led} cannot be read: where ${rel} lives now is not known — never guessed" >&2; return 1 ;;
+    esac
+  fi
+  printf '%s' "${pn}_${key}"
+}
+
 # factq <name> <value> [<relation>] — emit one FACT line; an empty value is the literal `absent` ONLY
 # when <relation> is named and the database says it does not exist (`to_regclass`, asked through the
 # hook's own `q`). With no relation, or a relation that exists, an empty value stays an empty fact,

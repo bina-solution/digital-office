@@ -32,8 +32,20 @@ HOW. There is already exactly one compiler — `apps/n8n/tooling/wrap.mjs`, the 
 compiles a whole DIRECTORY at a time (69 workflows in one call for apps/indox/blueprint/n8n), so
 results are cached per directory: a gate reading twenty blueprints from one app pays for one
 compile, not twenty.
+
+ACROSS GATES, ONE COMPILE (`N8N_BP_CACHE=<dir>`, DGO-2123). That cache lived and died with one process, and every
+gate is a process of its own: each of the ~17 gates that read blueprints compiled every directory again — about 18 s
+each, a fifth of the version's proof (research_notes/CICD 2026-11/tables.md §8). With N8N_BP_CACHE naming a directory,
+a directory's compiled workflows are kept there under the hash of its files and of the transformer, so a later gate —
+another process — reads them back instead of compiling. scripts/ci/gates.sh makes one for its run and removes it after;
+nothing else sets it, so `bbox n8n push` and every other caller compile as before. A cache that cannot be read is a
+miss, never an answer, and an entry is written whole or not at all (a rename). The key holds the transformer's
+own files too (every `.mjs` beside wrap.mjs, and its lockfile): literal-check.mjs decides what a compile refuses.
 """
+from __future__ import annotations   # `float | None` below, on an interpreter older than 3.10 too
+
 import atexit
+import hashlib
 import json
 import os
 import pathlib
@@ -119,10 +131,62 @@ def _node():
     return None
 
 
+def _shared_key(src: pathlib.Path) -> str:
+    """The shared cache's key for a directory: its path, every file under it, and the transformer itself — wrap.mjs,
+    the modules beside it and its lockfile."""
+    h = hashlib.sha256(str(src).encode("utf-8"))
+    tool = WRAP.parent
+    for p in [WRAP] + sorted(q for q in tool.glob("*.mjs") if q != WRAP) + [tool / "package-lock.json"]:
+        if p.is_file():
+            h.update(b"\0" + p.name.encode("utf-8") + b"\0" + p.read_bytes())
+    for p in sorted(src.rglob("*")):
+        if p.is_file():
+            h.update(b"\0" + p.relative_to(src).as_posix().encode("utf-8") + b"\0" + p.read_bytes())
+    return h.hexdigest()[:40]
+
+
+def _shared_get(src: pathlib.Path):
+    """(key, {stem: dict} or None) from N8N_BP_CACHE; (None, None) when there is none or it cannot be read."""
+    shared = os.environ.get("N8N_BP_CACHE", "")
+    if not shared or not WRAP.exists():
+        return None, None
+    try:
+        key = _shared_key(src)
+        hit = pathlib.Path(shared) / key
+        if not hit.is_dir():
+            return key, None
+        return key, {p.stem: json.loads(p.read_text(encoding="utf-8")) for p in hit.glob("*.json")}
+    except (OSError, ValueError):
+        return None, None
+
+
+def _shared_put(key: str, out: str) -> None:
+    """Keep a compile's JSON under `key`, whole or not at all: written beside, then renamed into place."""
+    shared = pathlib.Path(os.environ.get("N8N_BP_CACHE", ""))
+    tmp = None
+    try:
+        # no `prefix=` here: G100 (blueprint-tmp-test) reads the module's extraction prefix from its first mkdtemp
+        # that names one — the second reader of 33fb4e34f found this line had become it, and G100 red
+        tmp = tempfile.mkdtemp(dir=str(shared))
+        for p in pathlib.Path(out).glob("*.json"):
+            shutil.copyfile(p, pathlib.Path(tmp) / p.name)
+        os.replace(tmp, shared / key)          # another run wrote the same key first: it stays, ours goes
+        tmp = None
+    except OSError:
+        pass
+    finally:
+        if tmp:
+            shutil.rmtree(tmp, ignore_errors=True)
+
+
 def _compile_dir(src: pathlib.Path) -> dict:
     """Compile every .workflow.ts in `src` once; return {stem: workflow-dict}."""
     if src in _CACHE:
         return _CACHE[src]
+    key, got = _shared_get(src)
+    if got is not None:
+        _CACHE[src] = got
+        return got
     if not WRAP.exists():
         raise CompileError(
             "the transformer is missing at %s — cannot read blueprints as code" % WRAP)
@@ -149,6 +213,8 @@ def _compile_dir(src: pathlib.Path) -> dict:
             got[p.stem] = json.loads(p.read_text(encoding="utf-8"))
         except json.JSONDecodeError as ex:      # a compiler that emits non-JSON is a real bug
             raise CompileError("wrap.mjs emitted invalid JSON for %s: %s" % (p.name, ex))
+    if key:
+        _shared_put(key, out)
     _CACHE[src] = got
     return got
 

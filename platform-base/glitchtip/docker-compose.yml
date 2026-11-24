@@ -31,7 +31,8 @@ services:
     - ENABLE_USER_REGISTRATION=${GLITCHTIP_ENABLE_REGISTRATION:-false}
     - ENABLE_ORGANIZATION_CREATION=${GLITCHTIP_ENABLE_ORG_CREATION:-false}
     volumes:
-    - glitchtip_uploads:/code/uploads
+    # uploaded files, in the DGO folder's data/glitchtip/uploads (DGO-2019; it was the volume glitchtip_uploads)
+    - ../../data/glitchtip/uploads:/code/uploads
     networks:
     - traefik-network
     - glitchtip-internal
@@ -108,7 +109,8 @@ services:
     - CELERY_WORKER_AUTOSCALE=1,3
     - GLITCHTIP_MAX_EVENT_LIFE_DAYS=${GLITCHTIP_MAX_EVENT_LIFE_DAYS:-90}
     volumes:
-    - glitchtip_uploads:/code/uploads
+    # uploaded files, in the DGO folder's data/glitchtip/uploads (DGO-2019; it was the volume glitchtip_uploads)
+    - ../../data/glitchtip/uploads:/code/uploads
     networks:
     - glitchtip-internal
     depends_on:
@@ -168,7 +170,10 @@ services:
     - POSTGRES_USER=glitchtip
     - POSTGRES_PASSWORD=${GLITCHTIP_DB_PASSWORD:?set in .env}
     volumes:
-    - glitchtip_postgres_data:/var/lib/postgresql/data
+    # the database, in the DGO folder's data/glitchtip/db (DGO-2019; it was the volume glitchtip_postgres_data, moved
+    # once by `bbox run` with the database stopped). Backed up by hooks/backup's pg_dump in full mode (config mode carries
+    # none, by its own decision), never as files (SKIPVOL)
+    - ../../data/glitchtip/db:/var/lib/postgresql/data
     networks:
     - glitchtip-internal
     healthcheck:
@@ -208,9 +213,6 @@ services:
       options:
         max-size: 10m
         max-file: '3'
-volumes:
-  glitchtip_uploads: null
-  glitchtip_postgres_data: null
 networks:
   traefik-network:
     external: true

@@ -58,7 +58,8 @@ services:
       DATABASE_URL: postgres://supabase_storage_admin:${SUPABASE_DB_PASSWORD}@supabase-db:5432/${SUPABASE_DB_NAME:-postgres}
       STORAGE_PUBLIC_URL: ${SUPABASE_PROTOCOL:-https}://${SUPABASE_BASE_URL}
       REQUEST_ALLOW_X_FORWARDED_PATH: 'true'
-      FILE_SIZE_LIMIT: ${SUPABASE_FILE_SIZE_LIMIT:-52428800}
+      # drive's DRIVE_MAX_UPLOAD reads the same key with the same default: «קבצים» and its store agree (DGO-1785)
+      FILE_SIZE_LIMIT: ${SUPABASE_FILE_SIZE_LIMIT:-2147483648}
       STORAGE_BACKEND: file
       FILE_STORAGE_BACKEND_PATH: /var/lib/storage
       TENANT_ID: stub
@@ -66,7 +67,9 @@ services:
       GLOBAL_S3_BUCKET: stub
       ENABLE_IMAGE_TRANSFORMATION: 'false'
     volumes:
-    - supabase_storage_data:/var/lib/storage:z
+    # Drive's bytes — every file the office's drive holds, by the object ids storage.objects indexes: in the DGO
+    # folder's data/supabase/storage (DGO-2019; it was the volume supabase_storage_data, moved once by `bbox run`)
+    - ../../data/supabase/storage:/var/lib/storage:z
     # traefik-network: n8n's 'drive api - local' backend stores/serves bytes here, and traefik
     # routes drive.localhost file links to the public bucket (see compose.override.yml labels).
     networks: [supabase-net, traefik-network]
@@ -208,8 +211,6 @@ services:
     - traefik.http.routers.supabase-studio-https.service=supabase-studio
     - traefik.http.routers.supabase-studio-https.middlewares=hsts@file,authentik-admins@file
     - traefik.http.services.supabase-studio.loadbalancer.server.port=3000
-volumes:
-  supabase_storage_data: null
 networks:
   supabase-net: null
   traefik-network:

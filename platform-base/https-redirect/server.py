@@ -24,6 +24,14 @@ challenge path excluded so HTTP-01 renewals keep working.
 THE RULE. Anything else is 308 to the same host and path over https. The host and path come from
 traefik's own `X-Forwarded-*` — never from anything a client can set, because traefik rebuilds those
 from the request it received (its forwardAuth runs with `trustForwardHeader: false`).
+
+AN OFFICE THAT MOVED (DGO-2013). An office whose domain changed keeps its old names in DNS, and every link
+already out — a work item, a group line, a bookmark, an invite, an OAuth callback — names them. Those names
+are declared (`DGO_FORMER_DOMAINS`, reaching here as `HTTPS_REDIRECT_FORMER`), the compiler routes them here
+on both entrypoints (zz-https.yaml). On https a host under one of them is sent to the SAME host under the
+office's current name: `console.<former>/go/DGO-1` → `https://console.<current>/go/DGO-1`. On port 80 it is first
+sent to https on its own name, so a host an app still serves at the old name keeps working (target()). Still 308:
+an old webhook's POST keeps its method and its body.
 """
 import json
 import os
@@ -37,6 +45,26 @@ PORT = int(os.environ.get("HTTPS_REDIRECT_PORT", "8079"))
 # EMPTY means "do not judge the host" (an office whose name nobody configured), never "allow anything"
 # — the host still has to survive target()'s own checks.
 SUFFIX = (os.environ.get("HTTPS_REDIRECT_SUFFIX") or "").strip().lower().lstrip(".")
+# The office's FORMER names (DGO-2013), comma-separated; empty = the office never moved.
+FORMER = tuple(d for d in (p.strip().lower().strip(".") for p in
+                           (os.environ.get("HTTPS_REDIRECT_FORMER") or "").split(",")) if d)
+
+
+def moved(host):
+    """The same host under the office's current name, when `host` is under one of its FORMER names; else None.
+
+    The longest former name that holds the host decides, and a host the CURRENT name holds more closely stays
+    where it is: an office that moved from `example.com` to `bina.example.com` must not send
+    `console.bina.example.com` to `console.bina.bina.example.com`. A port is dropped — the new name is https's."""
+    if not SUFFIX or not FORMER:
+        return None
+    bare = host.split(":", 1)[0].lower().rstrip(".")
+    best = max((d for d in FORMER if bare == d or bare.endswith("." + d)), key=len, default=None)
+    if best is None:
+        return None
+    if (bare == SUFFIX or bare.endswith("." + SUFFIX)) and len(SUFFIX) >= len(best):
+        return None
+    return bare[:len(bare) - len(best)] + SUFFIX
 
 
 def allowed_host(host):
@@ -56,11 +84,25 @@ def target(headers, path):
 
     `X-Forwarded-Host` first: traefik writes it from the Host header it received, and it is the only
     one of the two that survives a proxy in front of it. `X-Forwarded-Uri` carries the path AND the
-    query; the request's own path is the fallback for a direct call."""
+    query; the request's own path is the fallback for a direct call.
+
+    PORT 80 ONLY UPGRADES A FORMER NAME (the second reader of 0d64d3b23, then measured on vps1 2026-11-20). An
+    office that moved can still serve some hosts at an old name: vps1's n8n, meet, auth and security stay on
+    staging. `dgo-former-http` outranks every app's port-80 router, so moving on port 80 sent
+    `http://n8n.staging…/healthz` to `https://n8n.bina-solutions…`, where nothing serves it, and an http webhook
+    with it. On port 80 (traefik's forwardAuth says `X-Forwarded-Proto: http`) a former host is sent to https on the
+    SAME name. There a host still served keeps its own router, and only the hosts nothing serves reach `dgo-former`
+    (websecure, priority 2), which moves them. A direct call, with no X-Forwarded-Proto, moves as before."""
     host = (headers.get("X-Forwarded-Host") or headers.get("Host") or "").strip()
-    if not host or any(c in host for c in " \t\r\n/\\@") or host.startswith("."):
+    if not host or any(c in host for c in " \t\r\n/\\@?#") or host.startswith("."):
         return None                     # no host, or one that would make a Location another origin
-    if not allowed_host(host):
+    cleartext = (headers.get("X-Forwarded-Proto") or "").strip().lower() == "http"
+    new = moved(host)
+    if new and not cleartext:
+        host = new
+    elif new:                             # a former host on port 80: upgraded where it is, without :80
+        host = host.split(":", 1)[0].lower().rstrip(".")
+    elif not allowed_host(host):
         return None
     uri = headers.get("X-Forwarded-Uri") or path or "/"
     if not uri.startswith("/"):

@@ -107,6 +107,32 @@ def notify_stalled(task: dict, failure: dict) -> bool:
     if handoff is None or not NOTIFICATIONS_URL:
         return False
     slug = str(task.get("slug") or "")
+    if failure.get("code") == "queue_timeout":
+        # A task that never left the queue met a full browser: capacity, not a person's step. It was posted as
+        # «נדרש אדם» under its own slug, one warning row per task (45 of the HP's 99 unread rows, DGO-2111 root 16).
+        # Now it is ONE row under a stable id, new once a day. Its time is the day's FIRST timeout (a real moment, the
+        # same all day, so the row is not news again within the day). Its text counts the day's timeouts, so a queue
+        # that stays full shows in the number (the second reader: midnight was a false time, and a hidden count).
+        at = int(task.get("updated_at") or time.time())
+        day = at // 86400
+        tally = DATA / ".capacity-day.json"
+        try:
+            seen = json.loads(tally.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            seen = {}
+        if seen.get("day") != day:
+            seen = {"day": day, "first": at, "count": 0}
+        seen["count"] = int(seen.get("count", 0)) + 1
+        try:                                           # tmp + replace: a write cut short never resets the day
+            tmp = tally.with_suffix(".json.tmp")
+            tmp.write_text(json.dumps(seen), encoding="utf-8")
+            tmp.replace(tally)
+        except OSError:
+            pass
+        body = (f"{seen['count']} משימות לא התחילו היום, האחרונה «{slug}»: התור של דפדפן הלשכה מלא (queue_timeout). "
+                "זו קיבולת, לא צעד של אדם — משימות חדשות יתחילו כשהעומס ירד.")
+        return handoff.notify_human("browser-capacity", body, handoff.view_link(), url=NOTIFICATIONS_URL,
+                                    title="דפדפן הלשכה עמוס — משימות לא התחילו", since=seen["first"])
     body = (f"המשימה «{slug}» נעצרה בשלב «{failure.get('stage', '?')}» ({failure.get('code', '?')}) "
             "והכרטיסייה שלה שוחררה. דפדפן הלשכה נמצא בקישור.")
     return handoff.notify_human(slug, body, handoff.view_link(), url=NOTIFICATIONS_URL,

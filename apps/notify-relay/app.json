@@ -1,0 +1,40 @@
+{
+  "id": "notify-relay",
+  "title": {
+    "he": "ממסר ההתראות",
+    "en": "Notice relay"
+  },
+  "layer": 3,
+  "kind": "service",
+  "page": "base",
+  "version": "0.1.0",
+  "summary": {
+    "he": "בלשכה בלי לוח התראות משלה: כל התראה של הלשכה נמסרת ללוח של העדר דרך הקישור, ונשמרת עד שהלוח עונה",
+    "en": "On an office with no notice board of its own: every notice is carried to the herd's board over the link, and kept until it answers"
+  },
+  "capabilities": [],
+  "use": [
+    {
+      "capability": "notify",
+      "strength": "conflicts",
+      "reason": "the office's own board (the provider of notify) and this relay both answer the name `notifications`: never both enabled (the compiler refuses the plan, naming both)"
+    }
+  ],
+  "connections": [],
+  "compose": "docker-compose.yml",
+  "agent": {
+    "context": "AGENT.md",
+    "order": 97
+  },
+  "data": {
+    "volumes": [],
+    "paths": ["data/notify-relay/spool"],
+    "moved_from": {"data/notify-relay/spool": "notify_relay_data"},
+    "on_uninstall": "keep",
+    "note": "The notices kept, in order, while the hub's board does not answer (spool.jsonl, capped: the oldest go first, said in the log)."
+  },
+  "resources": {
+    "cpus": "0.1",
+    "memory": "48M"
+  }
+}

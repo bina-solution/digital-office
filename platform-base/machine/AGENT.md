@@ -26,6 +26,9 @@ has `./bbox engine power status`.
 ## Rules
 
 - Reading is free, and it is how you check load and disk before a build.
+- **It tells the office's notices** when the disk fills (`machine-disk`, at 80% and 92%), and when free
+  memory stays under 5% for a minute (`machine-memory`, an error under 2%). Each is posted once, and a
+  recovery closes it; memory closes at 10%. Proof: `test_memory_alarm.py`, run in the machine image.
 - **Cleanup prunes the whole engine**: every stopped container, every unused image, or the build
   cache.
   - It answers 403 unless the action is in `MACHINE_CLEANUP_ALLOWED_ACTIONS`, which is empty by

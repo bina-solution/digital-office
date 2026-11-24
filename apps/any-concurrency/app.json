@@ -61,7 +61,7 @@
       },
       "emit_labels": false,
       "module": {
-        "group": "תשתית",
+        "group": "פיתוח ואוטומציות",
         "icon": "activity",
         "embed": true,
         "alias": "any-concurrency",
@@ -82,10 +82,9 @@
     }
   },
   "data": {
-    "shares": [
-      "n8n_storage"
-    ],
-    "on_uninstall": "keep"
+    "volumes": [],
+    "on_uninstall": "keep",
+    "note": "Reads n8n's store data/n8n/home read-only (the event-bus log); n8n owns it (its data.paths), so it is backed up, restored and purged with n8n, never with any-concurrency (DGO-1510). It was the shared volume n8n_storage until DGO-2019."
   },
   "observability": {
     "sentry_platform": "python"

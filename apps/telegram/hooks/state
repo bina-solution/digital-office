@@ -1,0 +1,28 @@
+#!/usr/bin/env bash
+#: state — what this app holds, one `<name> <value>` per line:  ./bbox telegram state
+#: The chats the office listens to (watch.json) and the account that is active (active.json; the login itself is in
+#: the connections vault, not here). The data move (platform/manager/datahome.py, DGO-2019) reads it before it moves
+#: data/telegram/state and again after, and sends the store back to its volume when the app no longer holds them.
+set -uo pipefail
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
+case "${1:-}" in -h|--help) sed -n 's/^#: //p' "${BASH_SOURCE[0]}"; exit 0 ;; esac
+# The data move names the container it measures; by hand, it is the office's own.
+if [ -n "${DGO_STATE_CONTAINER:-}" ]; then
+  inside() { docker exec -i "${DGO_STATE_CONTAINER}" "$@"; }
+else
+  . "${REPO_ROOT}/scripts/lib.sh"
+  inside() { dcx exec -T telegram "$@"; }
+fi
+inside python - <<'PY'
+import json, os
+d = os.environ.get("TG_DATA_DIR", "/data")
+def read(name):
+    try:
+        with open(os.path.join(d, name), encoding="utf-8") as fh:
+            return json.load(fh) or {}
+    except (OSError, ValueError):
+        return {}
+print("watch.chats", len(read("watch.json").get("chats") or []))
+print("active", read("active.json").get("deployment") or "none")
+PY

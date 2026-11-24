@@ -27,7 +27,8 @@ services:
       - SOCIAL_URL=${SOCIAL_URL:-http://social-list:8986}
       - SITES_URL=${SITES_URL:-http://sites:8979}
     volumes:
-      - digital_assets_state:/data
+      # in the DGO folder's data/digital-assets/state (DGO-2019); it was the volume digital_assets_state, moved once
+      - ../../data/digital-assets/state:/data
     networks:
       - traefik-network
     healthcheck:
@@ -51,9 +52,6 @@ services:
       options:
         max-size: 5m
         max-file: '3'
-
-volumes:
-  digital_assets_state:
 
 networks:
   traefik-network:

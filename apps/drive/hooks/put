@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-#: put — a local file into «קבצים»:  ./bbox drive [-p <drive>] put ./doc.pdf /מסמכים/   (a path ending in / keeps the name; --replace)
+#: put — a local file into «קבצים»:  ./bbox drive [-p <drive>] put ./doc.pdf /מסמכים/   (a path ending in / keeps the name; --replace; --empty for an empty file)
 # Folders on the way are created. An existing name is kept and the new file is called «name (2)», unless
 # --replace (which moves the old one to the trash). The app's one door (hooks/cli → apps/drive/cli.py).
 exec bash "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/cli" put "$@"

@@ -215,6 +215,23 @@ else:
                              capture_output=True, text=True)
         check("a job the machine cannot take is refused at the door, and says why", got.returncode == 1 and
               "never freed up" in got.stderr, got.stderr)
+        # the completed hook runs with the JOB's PATH: after actions/setup-python its first `python3` is the tool
+        # cache's, which exits 127 without the steps' LD_LIBRARY_PATH — on the Dell no job's end was recorded
+        job_path = Path(d) / "job-path"
+        job_path.mkdir()
+        (job_path / "python3").write_text("#!/bin/sh\nexit 127\n", encoding="utf-8")
+        (job_path / "python3").chmod(0o755)
+        jobs = Path(d) / "jobs.jsonl"
+        before = len(jobs.read_text(encoding="utf-8").splitlines()) if jobs.exists() else 0
+        # the interpreter the hook must use is named (the image's own in the agent; this test's here, so a Mac's
+        # /usr/bin/python3 shim or a CI_RUNNER_PYTHON from outside never decides it)
+        got = subprocess.run([*hook, str(APP / "postjob.sh")], capture_output=True, text=True, timeout=30,
+                             env=dict(base, PATH=f"{job_path}:{base['PATH']}", CI_RUNNER_PYTHON=sys.executable))
+        lines = jobs.read_text(encoding="utf-8").splitlines() if jobs.exists() else []
+        last = json.loads(lines[-1]) if lines else {}
+        check("a job's end is recorded although the job left a broken python3 first on PATH (setup-python's)",
+              got.returncode == 0 and len(lines) == before + 1 and last.get("kind") == "ended",
+              (got.stderr, before, len(lines), last))
 
         # the office's heavy-job slot (scripts/ops/heavy-hold.sh, DGO-1797 package 6): a job takes it at its start
         # and gives it back at its end; one another job holds refuses it at the door, and says by whom

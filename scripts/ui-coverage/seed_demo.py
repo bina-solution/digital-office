@@ -36,20 +36,20 @@ BUSINESS = {
     "company_id": "514789234",
     "address": "הרחוב הראשי 1, מודיעין",
     "email": "person98@example.com",
-    "phone": "08-0000025",
+    "phone": "08-0000026",
 }
 
 CUSTOMERS = [
     {"name": "א.ב. הדוגמה בע\"מ", "company_id": "500000286", "city": "מודיעין",
-     "email": "person99@example.com", "phone": "08-0000026"},
+     "email": "person99@example.com", "phone": "08-0000027"},
     {"name": "פלוני סוכנויות בע\"מ", "company_id": "500000054", "city": "מושב הדוגמה",
-     "email": "person100@example.com", "phone": "03-0000027"},
+     "email": "person100@example.com", "phone": "03-0000028"},
     {"name": "ספק כף תעשיות", "company_id": "500000088", "city": "אשדוד",
-     "email": "person101@example.com", "phone": "08-0000028"},
+     "email": "person101@example.com", "phone": "08-0000029"},
     {"name": "אלמוני שיווק", "company_id": "500000021", "city": "פתח תקווה",
-     "email": "person102@example.com", "phone": "03-0000029"},
+     "email": "person102@example.com", "phone": "03-0000030"},
     {"name": "ספק יוד", "company_id": "500000310", "city": "חיפה",
-     "email": "person103@example.com", "phone": "04-0000030"},
+     "email": "person103@example.com", "phone": "04-0000031"},
 ]
 
 ITEMS = [

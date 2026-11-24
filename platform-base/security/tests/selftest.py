@@ -91,20 +91,20 @@ def real_client_hello(host):
 
 
 def test_bpf_and_parsers():
-    resp = dns_response(0x1234, "api.github.com", ["93.184.216.23"], cname="github.map.fastly.net")
+    resp = dns_response(0x1234, "api.github.com", ["93.184.216.24"], cname="github.map.fastly.net")
     pkt = ip4("8.8.8.8", "172.18.0.12", 17, udp(53, 41000, resp))
     check("bpf: a DNS answer passes", np.bpf_run(np.BPF_DNS_SNI, pkt) > 0)
     q = ip4("172.18.0.12", "8.8.8.8", 17, udp(41000, 53, dns_query(7, "api.github.com")))
     check("bpf: a DNS question is dropped", np.bpf_run(np.BPF_DNS_SNI, q) == 0)
     ch = real_client_hello("updates.example.org")
     check("ssl made a ClientHello", ch[:1] == b"\x16" and ch[5:6] == b"\x01", ch[:8].hex())
-    syn_data = ip4("172.18.0.12", "93.184.216.25", 6, tcp(50000, 443, ch))
+    syn_data = ip4("172.18.0.12", "93.184.216.26", 6, tcp(50000, 443, ch))
     check("bpf: a ClientHello to 443 passes", np.bpf_run(np.BPF_DNS_SNI, syn_data) > 0)
-    ack = ip4("172.18.0.12", "93.184.216.25", 6, tcp(50000, 443, b"", flags=0x10))
+    ack = ip4("172.18.0.12", "93.184.216.26", 6, tcp(50000, 443, b"", flags=0x10))
     check("bpf: an empty segment to 443 is dropped", np.bpf_run(np.BPF_DNS_SNI, ack) == 0)
-    app = ip4("172.18.0.12", "93.184.216.25", 6, tcp(50000, 443, b"\x17\x03\x03\x00\x10" + b"x" * 16))
+    app = ip4("172.18.0.12", "93.184.216.26", 6, tcp(50000, 443, b"\x17\x03\x03\x00\x10" + b"x" * 16))
     check("bpf: application data to 443 is dropped", np.bpf_run(np.BPF_DNS_SNI, app) == 0)
-    http = ip4("172.18.0.12", "93.184.216.25", 6, tcp(50000, 80, b"GET / HTTP/1.1\r\n\r\n"))
+    http = ip4("172.18.0.12", "93.184.216.26", 6, tcp(50000, 80, b"GET / HTTP/1.1\r\n\r\n"))
     check("bpf: plain http is dropped", np.bpf_run(np.BPF_DNS_SNI, http) == 0)
     frag = ip4("8.8.8.8", "172.18.0.12", 17, udp(53, 41000, resp), frag=0x0010)
     check("bpf: a non-first fragment is dropped", np.bpf_run(np.BPF_DNS_SNI, frag) == 0)
@@ -115,7 +115,7 @@ def test_bpf_and_parsers():
     check("ipv4: udp parsed", p and p["proto"] == "udp" and p["sport"] == 53 and p["dst"] == "172.18.0.12", p)
     a = np.dns_answer(p["payload"])
     check("dns: name", a and a["name"] == "api.github.com", a)
-    check("dns: address and cname", a and a["ips"] == ["93.184.216.23"] and a["cnames"] == ["github.map.fastly.net"], a)
+    check("dns: address and cname", a and a["ips"] == ["93.184.216.24"] and a["cnames"] == ["github.map.fastly.net"], a)
     check("dns: a question is not an answer", np.dns_answer(dns_query(7, "x.org")) is None)
     check("dns: junk", np.dns_answer(b"\x00" * 5) is None and np.dns_answer(os.urandom(40)) in (None,) or True)
 
@@ -128,11 +128,11 @@ def test_bpf_and_parsers():
 
 
 def test_conntrack():
-    new = ("[1729485600.123456]\t    [NEW] ipv4     2 tcp      6 120 SYN_SENT src=172.18.0.12 dst=93.184.216.26 "
-           "sport=48512 dport=443 [UNREPLIED] src=93.184.216.26 dst=93.184.216.5 sport=443 dport=48512")
+    new = ("[1729485600.123456]\t    [NEW] ipv4     2 tcp      6 120 SYN_SENT src=172.18.0.12 dst=93.184.216.27 "
+           "sport=48512 dport=443 [UNREPLIED] src=93.184.216.27 dst=93.184.216.5 sport=443 dport=48512")
     e = np.conntrack_line(new)
     check("ct: new", e and e["kind"] == "NEW" and e["proto"] == "tcp" and e["src"] == "172.18.0.12"
-          and e["dst"] == "93.184.216.26" and e["dport"] == 443 and e["nat_src"] == "93.184.216.5", e)
+          and e["dst"] == "93.184.216.27" and e["dport"] == 443 and e["nat_src"] == "93.184.216.5", e)
     dest = ("[1729485601.5] [DESTROY] ipv4     2 udp      17 src=172.18.0.5 dst=8.8.8.8 sport=41000 dport=53 "
             "packets=1 bytes=72 src=8.8.8.8 dst=93.184.216.5 sport=53 dport=41000 packets=1 bytes=88")
     d = np.conntrack_line(dest)
@@ -147,7 +147,7 @@ def test_edge_lines():
     check("clf: parsed", r and r["ip"] == "93.184.216.12" and r["status"] == 302 and r["router"] == "console-https@docker"
           and r["ms"] == 2, r)
     check("clf: epoch", r and abs(r["ts"] - 1792549104) < 2, r and r["ts"])
-    none_router = ('93.184.216.27 - - [21/Oct/2026:02:18:24 +0000] "GET /.env HTTP/1.1" 404 19 "-" "zgrab/0.x" 9 "-" "-" 0ms')
+    none_router = ('93.184.216.28 - - [21/Oct/2026:02:18:24 +0000] "GET /.env HTTP/1.1" 404 19 "-" "zgrab/0.x" 9 "-" "-" 0ms')
     n = np.clf_line(none_router)
     check("clf: unrouted request", n and n["router"] == "" and n["path"] == "/.env" and n["status"] == 404, n)
     js = ('{"ClientHost":"203.0.113.9","RequestHost":"Console.Staging.Example","RequestMethod":"POST",'
@@ -163,11 +163,11 @@ def test_edge_lines():
 def test_auth_lines():
     cases = [
         ("Accepted publickey for root from 93.184.216.12 port 51234 ssh2: ED25519 SHA256:abcDEF/123", "ok", "93.184.216.12"),
-        ("Invalid user admin from 93.184.216.28 port 40000", "fail", "93.184.216.28"),
-        ("Failed password for invalid user test from 93.184.216.29 port 40001 ssh2", "fail", "93.184.216.29"),
-        ("Connection closed by invalid user oracle 93.184.216.30 port 40002 [preauth]", "fail", "93.184.216.30"),
-        ("banner exchange: Connection from 93.184.216.31 port 40003: invalid format", "fail", "93.184.216.31"),
-        ("Connection closed by 93.184.216.32 port 40004 [preauth]", "probe", "93.184.216.32"),
+        ("Invalid user admin from 93.184.216.29 port 40000", "fail", "93.184.216.29"),
+        ("Failed password for invalid user test from 93.184.216.30 port 40001 ssh2", "fail", "93.184.216.30"),
+        ("Connection closed by invalid user oracle 93.184.216.31 port 40002 [preauth]", "fail", "93.184.216.31"),
+        ("banner exchange: Connection from 93.184.216.32 port 40003: invalid format", "fail", "93.184.216.32"),
+        ("Connection closed by 93.184.216.33 port 40004 [preauth]", "probe", "93.184.216.33"),
     ]
     for msg, verdict, ip in cases:
         r = np.sshd_message(msg)
@@ -175,18 +175,18 @@ def test_auth_lines():
     ok = np.sshd_message(cases[0][0])
     check("sshd: key fingerprint", ok and ok["fp"] == "SHA256:abcDEF/123", ok)
     check("sshd: session line ignored", np.sshd_message("pam_unix(sshd:session): session opened for user root") is None)
-    ev = np.authentik_event('{"action": "login_failed", "client_ip": "93.184.216.33", "context": {"username": "admin"},'
+    ev = np.authentik_event('{"action": "login_failed", "client_ip": "93.184.216.34", "context": {"username": "admin"},'
                             ' "timestamp": "2026-10-21T02:00:00.000Z", "event": "Created Event"}')
-    check("authentik: failed sign-in", ev and ev["action"] == "login_failed" and ev["ip"] == "93.184.216.33"
+    check("authentik: failed sign-in", ev and ev["action"] == "login_failed" and ev["ip"] == "93.184.216.34"
           and ev["user"] == "admin", ev)
     check("authentik: other lines ignored", np.authentik_event('{"event": "request", "path": "/"}') is None)
     # forward-auth's own lines (handlers.go, setup.go), as its log prints them
-    fa = np.forward_auth_event('2026/11/02 23:40:01 forward-auth: sign-in failed: user="ad\\"min" ip="93.184.216.33"')
-    check("forward-auth: failed sign-in", fa and fa["action"] == "login_failed" and fa["ip"] == "93.184.216.33"
+    fa = np.forward_auth_event('2026/11/02 23:40:01 forward-auth: sign-in failed: user="ad\\"min" ip="93.184.216.34"')
+    check("forward-auth: failed sign-in", fa and fa["action"] == "login_failed" and fa["ip"] == "93.184.216.34"
           and fa["user"] == 'ad"min' and fa["ts"] is None, fa)
     fa = np.forward_auth_event('forward-auth: signed in: user="owner" ip="192.168.16.100"')
     check("forward-auth: sign-in", fa and fa["action"] == "login" and fa["how"] == "password", fa)
-    fa = np.forward_auth_event('forward-auth: sign-in refused, 37 s of a block left: user="x" ip="93.184.216.33"')
+    fa = np.forward_auth_event('forward-auth: sign-in refused, 37 s of a block left: user="x" ip="93.184.216.34"')
     check("forward-auth: a blocked attempt is a failure", fa and fa["action"] == "login_failed"
           and fa["how"] == "blocked", fa)
     fa = np.forward_auth_event('forward-auth: first-run setup done: owner="owner" ip="10.0.0.2"')
@@ -221,26 +221,26 @@ def test_jails():
     now = time.time()
     j = jails.Jails(allow=lambda ip: ip == "93.184.216.12")
     for i in range(20):
-        j.feed_hit({"ts": now - 60 + i, "ip": "93.184.216.34", "status": 404, "kind": "none", "path": f"/x{i}"})
+        j.feed_hit({"ts": now - 60 + i, "ip": "93.184.216.35", "status": 404, "kind": "none", "path": f"/x{i}"})
     for i in range(30):
         j.feed_hit({"ts": now - 60 + i, "ip": "93.184.216.12", "status": 404, "kind": "none", "path": "/.env"})
-    j.feed_hit({"ts": now, "ip": "93.184.216.35", "status": 404, "kind": "public", "path": "/.git/config"})
-    j.feed_hit({"ts": now, "ip": "93.184.216.35", "status": 404, "kind": "public", "path": "/wp-login.php"})
-    j.feed_hit({"ts": now, "ip": "93.184.216.35", "status": 404, "kind": "public", "path": "/.env"})
+    j.feed_hit({"ts": now, "ip": "93.184.216.36", "status": 404, "kind": "public", "path": "/.git/config"})
+    j.feed_hit({"ts": now, "ip": "93.184.216.36", "status": 404, "kind": "public", "path": "/wp-login.php"})
+    j.feed_hit({"ts": now, "ip": "93.184.216.36", "status": 404, "kind": "public", "path": "/.env"})
     for i in range(6):
-        j.feed_auth({"ts": now - 30 + i, "ip": "93.184.216.33", "action": "login_failed", "user": "admin"})
+        j.feed_auth({"ts": now - 30 + i, "ip": "93.184.216.34", "action": "login_failed", "user": "admin"})
     for i in range(6):
-        j.feed_ssh({"ts": now - 30 + i, "ip": "93.184.216.28", "verdict": "fail", "user": "root"})
+        j.feed_ssh({"ts": now - 30 + i, "ip": "93.184.216.29", "verdict": "fail", "user": "root"})
     got = {d["ip"]: d for d in j.decide(now)}
-    check("jail: scanner by volume", "93.184.216.34" in got and got["93.184.216.34"]["jail"] == "scan", got.keys())
-    check("jail: scanner by probe paths", "93.184.216.35" in got, got.keys())
-    check("jail: sign-in failures", got.get("93.184.216.33", {}).get("jail") == "auth", got.get("93.184.216.33"))
-    check("jail: sshd", got.get("93.184.216.28", {}).get("jail") == "sshd", got.get("93.184.216.28"))
+    check("jail: scanner by volume", "93.184.216.35" in got and got["93.184.216.35"]["jail"] == "scan", got.keys())
+    check("jail: scanner by probe paths", "93.184.216.36" in got, got.keys())
+    check("jail: sign-in failures", got.get("93.184.216.34", {}).get("jail") == "auth", got.get("93.184.216.34"))
+    check("jail: sshd", got.get("93.184.216.29", {}).get("jail") == "sshd", got.get("93.184.216.29"))
     check("jail: the owner is never banned", "93.184.216.12" not in got)
     check("jail: escalation", jails.ban_seconds(1) == 3600 and jails.ban_seconds(2) == 4 * 3600
           and jails.ban_seconds(9) == 7 * 86400)
     again = {d["ip"] for d in j.decide(now + 5)}
-    check("jail: one decision per offence", "93.184.216.34" not in again, again)
+    check("jail: one decision per offence", "93.184.216.35" not in again, again)
 
 
 def test_stun_only_behind_nat():
@@ -265,8 +265,8 @@ def test_egress():
     check("egress: the edge's certificates are declared", ok(["traefik-deployment"], ["acme-v02.api.letsencrypt.org"]))
     check("egress: image pulls by name under *.docker.io", ok(["@host"], ["registry-1.docker.io"]))
     check("egress: `*.docker.io` is not docker.io itself", not ok(["@host"], ["docker.io"]))
-    check("egress: the resolver has no name, its port says it", ok(["@host"], [], "93.184.216.36", ["53/udp"]))
-    check("egress: a port 53 flow among others is not «@dns»", not ok(["@host"], [], "93.184.216.36", ["53/udp", "443/tcp"]))
+    check("egress: the resolver has no name, its port says it", ok(["@host"], [], "93.184.216.37", ["53/udp"]))
+    check("egress: a port 53 flow among others is not «@dns»", not ok(["@host"], [], "93.184.216.37", ["53/udp", "443/tcp"]))
     check("egress: the security app's map database", ok(["security"], ["download.db-ip.com"]))
     check("egress: an office's own addition (the owner's Claude SSH CLI)", ok(["@host"], ["api.anthropic.com"]))
     check("egress: n8n to Telegram is undeclared", not ok(["n8n"], ["api.telegram.org"]))
@@ -304,7 +304,7 @@ def test_egress():
         check("egress: a missing declaration is an error, never «no rules»", True)
     check("egress: n8n's telemetry is undeclared (it was on: DGO-1561)", not ok(["n8n-webhook"], ["telemetry.n8n.io"]))
     check("egress: Kong's anonymous reports are undeclared", not ok(["kong"], ["kong-hf.konghq.com"], ports=("61833/tcp",)))
-    why = p.judge(["n8n", "security"], ["api.telegram.org"], "93.184.216.37", ["443/tcp"], "")[1]
+    why = p.judge(["n8n", "security"], ["api.telegram.org"], "93.184.216.38", ["443/tcp"], "")[1]
     check("egress: the answer names the apps nobody declared", why == "undeclared: n8n, security", why)
 
 
@@ -330,23 +330,23 @@ def test_egress_names_are_the_resolvers():
 
 def test_nft_script():
     import sensor
-    s = sensor.nft_script({"mode": "enforce", "bans": [{"ip": "93.184.216.34", "until": time.time() + 600},
+    s = sensor.nft_script({"mode": "enforce", "bans": [{"ip": "93.184.216.35", "until": time.time() + 600},
                                                       {"ip": "2606:2800:220:1::4", "until": time.time() + 60},
                                                       {"ip": "10.0.0.1", "until": time.time() + 60},
                                                       {"ip": "2001:db8::1", "until": time.time() + 60},
                                                       {"ip": "not-an-ip", "until": time.time() + 60}],
-                           "blocks": [{"ip": "93.184.216.38", "until": 0}]}, now=time.time())
+                           "blocks": [{"ip": "93.184.216.39", "until": 0}]}, now=time.time())
     check("nft: one table, never deleted", "add table inet dgo_security" in s and "delete table" not in s, s)
     check("nft: chains flushed and rebuilt in the same transaction",
           s.count("flush chain inet dgo_security") == 3 and "hook prerouting priority -300" in s, s)
-    check("nft: v4 ban with timeout", "93.184.216.34 timeout" in s, s)
+    check("nft: v4 ban with timeout", "93.184.216.35 timeout" in s, s)
     check("nft: v6 ban", "2606:2800:220:1::4 timeout" in s, s)
     check("nft: a private address is never banned", "10.0.0.1" not in s, s)
     check("nft: a documentation address is never banned", "2001:db8::1" not in s, s)
     check("nft: garbage never reaches nft", "not-an-ip" not in s, s)
-    check("nft: an outbound block without expiry", "93.184.216.38 }" in s and "block4" in s, s)
-    obs = sensor.nft_script({"mode": "observe", "bans": [{"ip": "93.184.216.34", "until": time.time() + 600}]}, now=time.time())
-    check("nft: observe mode bans nobody", "93.184.216.34" not in obs, obs)
+    check("nft: an outbound block without expiry", "93.184.216.39 }" in s and "block4" in s, s)
+    obs = sensor.nft_script({"mode": "observe", "bans": [{"ip": "93.184.216.35", "until": time.time() + 600}]}, now=time.time())
+    check("nft: observe mode bans nobody", "93.184.216.35" not in obs, obs)
 
 
 def test_nft_crash_backs_off():
@@ -404,26 +404,26 @@ def test_volume():
     check("vol: a separate script — it never touches the ban sets", "ban4" not in s and "block4" not in s, s)
     check("vol: private and multicast are not volume", "10.0.0.0/8" in s and "224.0.0.0/3" in s and "fe80::/10" in s, s)
     doc = {"nftables": [{"metainfo": {}}, {"set": {"name": "vol_out4", "elem": [
-        {"elem": {"val": "93.184.216.38", "timeout": 7200, "expires": 7100, "counter": {"packets": 10, "bytes": 1500}}},
+        {"elem": {"val": "93.184.216.39", "timeout": 7200, "expires": 7100, "counter": {"packets": 10, "bytes": 1500}}},
         "8.8.8.8"]}}]}
-    check("vol: elements parsed, a bare one skipped", sensor.vol_elements(doc) == {"93.184.216.38": (10, 1500)},
+    check("vol: elements parsed, a bare one skipped", sensor.vol_elements(doc) == {"93.184.216.39": (10, 1500)},
           sensor.vol_elements(doc))
     keep = sensor.SENSOR_DIR
     with tempfile.TemporaryDirectory() as tmp:
         sensor.SENSOR_DIR = tmp
         try:
             v = sensor.Volume()
-            a = v.step({"vol_out4": {"93.184.216.38": (10, 1500)}, "vol_in4": {"93.184.216.38": (8, 9000)}})
+            a = v.step({"vol_out4": {"93.184.216.39": (10, 1500)}, "vol_in4": {"93.184.216.39": (8, 9000)}})
             check("vol: the first reading is all growth",
-                  a == [{"ip": "93.184.216.38", "out": 1500, "in": 9000, "pout": 10, "pin": 8}], a)
-            b = v.step({"vol_out4": {"93.184.216.38": (12, 1700)}, "vol_in4": {"93.184.216.38": (8, 9000)}})
-            check("vol: then only what grew", b == [{"ip": "93.184.216.38", "out": 200, "in": 0, "pout": 2, "pin": 0}], b)
+                  a == [{"ip": "93.184.216.39", "out": 1500, "in": 9000, "pout": 10, "pin": 8}], a)
+            b = v.step({"vol_out4": {"93.184.216.39": (12, 1700)}, "vol_in4": {"93.184.216.39": (8, 9000)}})
+            check("vol: then only what grew", b == [{"ip": "93.184.216.39", "out": 200, "in": 0, "pout": 2, "pin": 0}], b)
             again = sensor.Volume()
-            c = again.step({"vol_out4": {"93.184.216.38": (12, 1700)}})
+            c = again.step({"vol_out4": {"93.184.216.39": (12, 1700)}})
             check("vol: a restarted sensor does not count twice", c == [], c)
-            d = again.step({"vol_out4": {"93.184.216.38": (3, 300)}})
+            d = again.step({"vol_out4": {"93.184.216.39": (3, 300)}})
             check("vol: an element that expired and came back counts from zero",
-                  d == [{"ip": "93.184.216.38", "out": 300, "in": 0, "pout": 3, "pin": 0}], d)
+                  d == [{"ip": "93.184.216.39", "out": 300, "in": 0, "pout": 3, "pin": 0}], d)
         finally:
             sensor.SENSOR_DIR = keep
 
@@ -563,6 +563,22 @@ def test_firsts():
     ans = firsts.ban_answer("198.51.100.7")
     check("firsts: the answer is «חסום», this office's security.ban of that address",
           ans == [{"id": "block", "label": "חסום", "op": "security.ban", "args": {"ip": "198.51.100.7"}}], ans)
+    # DGO-2111 root 9: the owner's carrier gives him a new address every day; only a new PLACE rings his phone
+    places = {("IL", "Partner Communications", "owner")}
+    check("firsts: the same user, country and provider: the board's, not the phone's",
+          not firsts.rings({"cc": "IL", "org": "Partner Communications"}, "owner", places))
+    check("firsts: a new provider rings", firsts.rings({"cc": "IL", "org": "Cellcom"}, "owner", places))
+    check("firsts: a new country rings (the 11-08 akadmin sign-in from a US home ISP)",
+          firsts.rings({"cc": "US", "org": "Partner Communications"}, "owner", places))
+    check("firsts: another user from the same place rings",
+          firsts.rings({"cc": "IL", "org": "Partner Communications"}, "akadmin", places))
+    check("firsts: a place with no provider or no country on record rings: nothing to compare",
+          firsts.rings({"cc": "IL", "org": ""}, "owner", places) and firsts.rings({}, "owner", places))
+    check("firsts: no user on record rings: an empty user is no one known",
+          firsts.rings({"cc": "IL", "org": "Partner Communications"}, "", places | {("IL", "Partner Communications", "")}))
+    check("firsts: a place an address was banned from rings again, even for a known user (a thief's new address)",
+          firsts.rings({"cc": "IL", "org": "Partner Communications"}, "owner", places,
+                       {("IL", "Partner Communications")}))
 
 
 def test_verdict():
@@ -575,14 +591,14 @@ def test_verdict():
     with tempfile.TemporaryDirectory() as tmp:
         st = Store(os.path.join(tmp, "s.db"))
         now = time.time()
-        OWNER, SCAN, HUNTER, CRAWLER, PROBER = "93.184.216.12", "93.184.216.39", "93.184.216.40", "93.184.216.41", "93.184.216.42"
+        OWNER, SCAN, HUNTER, CRAWLER, PROBER = "93.184.216.12", "93.184.216.40", "93.184.216.41", "93.184.216.42", "93.184.216.43"
         hits = ([{"ts": now - 600, "ip": OWNER, "kind": "private", "app": "console", "method": "GET", "path": "/api/me", "status": 200}] * 5 +
                 [{"ts": now - 500, "ip": "172.18.0.1", "kind": "private", "app": "console", "method": "GET", "path": "/", "status": 200}] * 2 +
                 [{"ts": now - 400, "ip": SCAN, "kind": "private", "app": "console", "method": "GET", "path": "/", "status": 302}] * 3 +
                 [{"ts": now - 300, "ip": HUNTER, "kind": "auth", "app": "forward-auth", "method": "GET", "path": "/.env", "status": 302},
                  {"ts": now - 300, "ip": HUNTER, "kind": "public", "app": "meet", "method": "GET", "path": "/api/v1/.env", "status": 200}] +
                 [{"ts": now - 200, "ip": CRAWLER, "kind": "public", "app": "n8n", "method": "GET", "path": "/assets/a.js", "status": 200}] * 4 +
-                [{"ts": now - 100, "ip": "93.184.216.43", "kind": "none", "app": "", "method": "GET", "path": "/", "status": 404}])
+                [{"ts": now - 100, "ip": "93.184.216.44", "kind": "none", "app": "", "method": "GET", "path": "/", "status": 404}])
         st.add_hits(hits)
         st.add_signins([{"ts": now - 900, "ip": OWNER, "src": "sso", "verdict": "ok", "user": "akadmin", "how": "password", "fp": ""},
                         {"ts": now - 800, "ip": "172.18.0.36", "src": "ssh", "verdict": "ok", "user": "root", "how": "publickey", "fp": "x"},
@@ -637,7 +653,7 @@ def test_verdict():
         v1 = verdict.compute(st, why, facts, 24, now=now)
         check("verdict: a sign-out is no failure, a stranger's failure is not the owner's typo",
               v1["signins"]["people"] == {"ok": 1, "typo": 1} and v1["signins"]["strangers"]["sso_fail"] == 1, v1["signins"])
-        st.add_hits([{"ts": now - 20, "ip": "93.184.216.44", "kind": "private", "app": "drive", "method": "GET", "path": "/", "status": 200}])
+        st.add_hits([{"ts": now - 20, "ip": "93.184.216.45", "kind": "private", "app": "drive", "method": "GET", "path": "/", "status": 200}])
         v1 = verdict.compute(st, why, facts, 24, now=now)
         check("verdict: the owner's own session from a neighbouring address is not «got in»", v1["got_in"] == 0, v1["got_in"])
         signed.add("203.0.113.50")              # Trust.why says «signed-in» after ANY SSH success…
@@ -665,26 +681,26 @@ def test_scan_an_innocent_404():
     """A 404 on `/` (or the favicon) is the internet asking whether anything is there — not a scan."""
     now = time.time()
     jail = jl.Jails()
-    for i in range(24):          # 93.184.216.19 and its three neighbours, measured on Exampleu
-        jail.feed_hit({"ip": "93.184.216.19", "kind": "none", "path": "/", "status": 404, "ts": now - 60 + i})
+    for i in range(24):          # 93.184.216.20 and its three neighbours, measured on Exampleu
+        jail.feed_hit({"ip": "93.184.216.20", "kind": "none", "path": "/", "status": 404, "ts": now - 60 + i})
     for i in range(20):
-        jail.feed_hit({"ip": "93.184.216.20", "kind": "none", "path": "/favicon.ico", "status": 404, "ts": now - 60 + i})
+        jail.feed_hit({"ip": "93.184.216.21", "kind": "none", "path": "/favicon.ico", "status": 404, "ts": now - 60 + i})
     check("scan jail: 24 `GET /` 404s on a name nobody routes are not a scan", jail.decide(now) == [],
           jail.decide(now))
     # …and reading the answers is still a scan: the same jail, the same count, real paths
     peek = jl.Jails()
     for i in range(13):
-        peek.feed_hit({"ip": "93.184.216.45", "kind": "none", "path": "/.env", "status": 404, "ts": now - 60 + i})
+        peek.feed_hit({"ip": "93.184.216.46", "kind": "none", "path": "/.env", "status": 404, "ts": now - 60 + i})
     got = peek.decide(now)
     check("scan jail: 13 `/.env` 404s from one address are still a decision",
-          len(got) == 1 and got[0]["ip"] == "93.184.216.45" and ".env" in got[0]["reason"], got)
+          len(got) == 1 and got[0]["ip"] == "93.184.216.46" and ".env" in got[0]["reason"], got)
 
 
 def test_one_ssh_attempt():
     """sshd writes one failed attempt as two lines on the same socket — one attempt, one count."""
     one = getattr(sn, "one_attempt", None)
-    bad = np.sshd_message("Invalid user admin from 93.184.216.19 port 51234")
-    same = np.sshd_message("Failed password for invalid user admin from 93.184.216.19 port 51234 ssh2")
+    bad = np.sshd_message("Invalid user admin from 93.184.216.20 port 51234")
+    same = np.sshd_message("Failed password for invalid user admin from 93.184.216.20 port 51234 ssh2")
     check("sshd: both lines of one attempt name the same port", bad and same and bad.get("port") == same.get("port") == 51234,
           (bad, same))
     check("sshd: a failure carries its reason (not just «fail»)",
@@ -695,10 +711,10 @@ def test_one_ssh_attempt():
     conns: dict = {}
     bad["ts"], same["ts"] = 1000.0, 1000.4
     check("sshd: one attempt is counted once", one(conns, bad) is True and one(conns, same) is False, conns)
-    other = np.sshd_message("Failed password for invalid user admin from 93.184.216.19 port 51999 ssh2")
+    other = np.sshd_message("Failed password for invalid user admin from 93.184.216.20 port 51999 ssh2")
     other["ts"] = 1030.0
     check("sshd: a second attempt on a new connection still counts", one(conns, other) is True)
-    ok = np.sshd_message("Accepted publickey for root from 93.184.216.19 port 51234 ssh2: RSA SHA256:abc")
+    ok = np.sshd_message("Accepted publickey for root from 93.184.216.20 port 51234 ssh2: RSA SHA256:abc")
     ok["ts"] = 1040.0
     check("sshd: a sign-in on a connection that first failed is never dropped", one(conns, ok) is True)
 
@@ -712,12 +728,12 @@ def test_detail_totals_behind_the_cap():
         return
     s = st.Store(os.path.join(tempfile.mkdtemp(), "t.db"))
     now = time.time()
-    s.add_hits([{"ts": now - 5, "ip": "93.184.216.19", "kind": "none", "app": "", "office": "", "host": "",
+    s.add_hits([{"ts": now - 5, "ip": "93.184.216.20", "kind": "none", "app": "", "office": "", "host": "",
                  "method": "GET", "path": "/", "status": 404, "bytes": 0, "ms": 1, "ua": "", "user": "",
                  "router": "", "src": "edge"} for _ in range(350)])
-    t = s.detail_totals("93.184.216.19")
-    shown = len(s.q("SELECT ts FROM hit WHERE ip=? ORDER BY ts DESC LIMIT 300", ("93.184.216.19",)))
-    check("inbound detail: 350 requests, 300 shown — the total says 350", t.get("hits") == 350 == len(s.q("SELECT ts FROM hit WHERE ip=?", ("93.184.216.19",))) and shown == 300,
+    t = s.detail_totals("93.184.216.20")
+    shown = len(s.q("SELECT ts FROM hit WHERE ip=? ORDER BY ts DESC LIMIT 300", ("93.184.216.20",)))
+    check("inbound detail: 350 requests, 300 shown — the total says 350", t.get("hits") == 350 == len(s.q("SELECT ts FROM hit WHERE ip=?", ("93.184.216.20",))) and shown == 300,
           {"totals": t, "shown": shown})
     check("inbound detail: an address never seen totals zero, not nothing", s.detail_totals("203.0.113.99").get("hits") == 0)
 
@@ -731,9 +747,9 @@ def test_failed_signins_are_itemized():
         return
     s = st.Store(os.path.join(tempfile.mkdtemp(), "t.db"))
     now = time.time()
-    rows = [{"ts": now - 10 + i, "ip": "93.184.216.19", "src": "ssh", "verdict": "fail", "user": f"u{i}",
+    rows = [{"ts": now - 10 + i, "ip": "93.184.216.20", "src": "ssh", "verdict": "fail", "user": f"u{i}",
              "how": "invalid-user" if i % 2 else "password", "fp": ""} for i in range(9)]
-    rows += [{"ts": now - 9 + i, "ip": "93.184.216.45", "src": "sso", "verdict": "fail", "user": "admin",
+    rows += [{"ts": now - 9 + i, "ip": "93.184.216.46", "src": "sso", "verdict": "fail", "user": "admin",
               "how": "password", "fp": ""} for i in range(5)]
     s.add_signins(rows)
     got = itemized(s, now - 60)
@@ -745,7 +761,7 @@ def test_failed_signins_are_itemized():
     # …and the list is BOUNDED while the number stays true: an address under attack may fail thousands of
     # times, and a page that builds a megabyte of JSON is the same defect pointing the other way.
     big = st.Store(os.path.join(tempfile.mkdtemp(), "t.db"))
-    big.add_signins([{"ts": now - 30, "ip": "93.184.216.45", "src": "ssh", "verdict": "fail", "user": f"u{i}",
+    big.add_signins([{"ts": now - 30, "ip": "93.184.216.46", "src": "ssh", "verdict": "fail", "user": f"u{i}",
                       "how": "password", "fp": ""} for i in range(2500)])
     capped = itemized(big, now - 60)
     check("sign-ins: 2500 failures are itemized up to the limit and the total says 2500",
@@ -777,7 +793,7 @@ def test_acme_validation_is_visible():
     jail = jl.Jails()
     now = time.time()
     for i in range(24):
-        jail.feed_hit({"ip": "93.184.216.45", "kind": "acme", "path": "/.well-known/acme-challenge/tok", "status": 404,
+        jail.feed_hit({"ip": "93.184.216.46", "kind": "acme", "path": "/.well-known/acme-challenge/tok", "status": 404,
                        "ts": now - 60 + i})
     check("edge: a failing validation is never scan evidence", jail.decide(now) == [], jail.watching(now))
 

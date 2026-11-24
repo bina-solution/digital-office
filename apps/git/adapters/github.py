@@ -13,12 +13,15 @@ Two GitHub facts shape this file:
 """
 from __future__ import annotations
 
+import math
+
 import httpx
 
 from credentials import CredentialError, credential_for
 from credentials import normalize_host as credential_host
 
 from .base import GitError, b64, describe, norm_repo, split_repo, unb64
+from .pacing import PACER, Paced
 
 API_VERSION = "2022-11-28"          # pinned; the default drifts, and the drift is silent
 UA = "bina-office-git/0.1 (+digital-office)"
@@ -56,6 +59,15 @@ class GitHubAdapter:
         return h
 
     def _req(self, method: str, path: str, *, params=None, json=None, allow=(200, 201, 204)):
+        # GitHub's secondary limits (80 writes a minute, 500 an hour, per account), kept here before GitHub has to
+        # enforce them in the owner's name (adapters/pacing.py, DGO-2155)
+        try:
+            PACER.take(f"{self.host}|{self.cid or self.default_namespace or 'account'}", method)
+        except Paced as e:
+            m = max(1, math.ceil(e.retry_after / 60))
+            when = "דקה אחת" if m == 1 else f"{m} דקות"
+            raise GitError(f"הגבלת הכתיבה של GitHub (80 בדקה, 500 בשעה) — אפשר לנסות שוב בעוד {when}.",
+                           status=429, detail=f"paced: retry after {e.retry_after:.0f}s", kind="rate")
         try:
             r = self._c.request(method, f"{self.api}{path}", headers=self._headers(),
                                 params=params, json=json)

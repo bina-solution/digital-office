@@ -38,7 +38,8 @@ services:
       - DOMAINS_EXPIRY_WARN_DAYS=${DOMAINS_EXPIRY_WARN_DAYS:-60}
       - DOMAINS_EXPIRY_URGENT_DAYS=${DOMAINS_EXPIRY_URGENT_DAYS:-14}
     volumes:
-      - domains_state:/data
+      # in the DGO folder's data/domains/state (DGO-2019); it was the volume domains_state, moved once by `bbox run`
+      - ../../data/domains/state:/data
       - ../../.generated/registry:/registry:ro   # compiled registries: which domain-* provider apps exist (G9)
     networks:
       - traefik-network
@@ -64,9 +65,6 @@ services:
       options:
         max-size: 5m
         max-file: '3'
-
-volumes:
-  domains_state:
 
 networks:
   traefik-network:

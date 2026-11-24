@@ -1,5 +1,5 @@
 # The control centre's page and the state its collector writes (DGO-1124). The page is apps/dashboard/static,
-# mounted read-only; /data/ is the collector's volume (mounted at /state: /data is caddy's own directory),
+# mounted read-only; /data/ is the collector's store, data/dashboard/state (mounted at /state: /data is caddy's own directory),
 # read fresh on every request.
 :80 {
 	handle_path /data/* {

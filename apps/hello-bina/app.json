@@ -26,7 +26,7 @@
       "auth": "sso",
       "emit_labels": true,
       "module": {
-        "group": "עסק",
+        "group": "פיתוח ואוטומציות",
         "icon": "box",
         "embed": true,
         "alias": "hello-bina",

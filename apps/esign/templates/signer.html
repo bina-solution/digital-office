@@ -11,7 +11,7 @@
 <div class="wrap">
   <div class="top">
     <h1>לחתימה</h1>
-    <span class="sub">בינה סלושנס · <span class="dgo"><span class="dgo-mark"><!-- @bina-brand:start --><svg viewBox="53.57 53.57 892.86 892.86" aria-hidden="true" focusable="false"><rect class="t" x="53.57" y="53.57" width="892.86" height="892.86" rx="196.43"/><rect x="267.32" y="276.79" width="71.25" height="71.25" rx="19.24" class="a"/><rect x="267.32" y="419.29" width="71.25" height="285" rx="19.24" class="m"/><path d="M429.06 276.79H675.59A19.24 19.24 0 0 1 694.82 296.02V685.05A19.24 19.24 0 0 1 675.59 704.29H429.06A19.24 19.24 0 0 1 409.82 685.05V296.02A19.24 19.24 0 0 1 429.06 276.79ZM500.31 348.04A19.24 19.24 0 0 0 481.07 367.27V613.8A19.24 19.24 0 0 0 500.31 633.04H604.34A19.24 19.24 0 0 0 623.57 613.8V367.27A19.24 19.24 0 0 0 604.34 348.04Z" class="m"/><rect x="516.7" y="419.29" width="71.25" height="142.5" rx="19.24" class="a"/></svg><!-- @bina-brand:end --></span>הלשכה הדיגיטלית</span></span>
+    <span class="sub">{% if office_name %}{{ office_name }} · {% endif %}<span class="dgo"><span class="dgo-mark"><!-- @bina-brand:start --><svg viewBox="53.57 53.57 892.86 892.86" aria-hidden="true" focusable="false"><rect class="t" x="53.57" y="53.57" width="892.86" height="892.86" rx="196.43"/><rect x="267.32" y="276.79" width="71.25" height="71.25" rx="19.24" class="a"/><rect x="267.32" y="419.29" width="71.25" height="285" rx="19.24" class="m"/><path d="M429.06 276.79H675.59A19.24 19.24 0 0 1 694.82 296.02V685.05A19.24 19.24 0 0 1 675.59 704.29H429.06A19.24 19.24 0 0 1 409.82 685.05V296.02A19.24 19.24 0 0 1 429.06 276.79ZM500.31 348.04A19.24 19.24 0 0 0 481.07 367.27V613.8A19.24 19.24 0 0 0 500.31 633.04H604.34A19.24 19.24 0 0 0 623.57 613.8V367.27A19.24 19.24 0 0 0 604.34 348.04Z" class="m"/><rect x="516.7" y="419.29" width="71.25" height="142.5" rx="19.24" class="a"/></svg><!-- @bina-brand:end --></span>הלשכה הדיגיטלית</span></span>
   </div>
 
   {% if error %}<div class="err">{{ error }}</div>{% endif %}
@@ -28,6 +28,9 @@
       </form>
       <p class="note">הסיסמה נשלחה אליך בנפרד מהקישור, בדרך שסיכמתם.</p>
     {% else %}
+      {# a phone's browser may draw no PDF inside a frame (Android's Chrome leaves it empty): the same bytes, opened in
+         the phone's own viewer, so the signer reads what they sign — above the frame, where a phone sees it (DGO-2125) #}
+      <p class="note"><a href="/s/{{ request.view_args['token'] }}/doc" target="_blank" rel="noopener">פתיחת המסמך במסך מלא</a></p>
       <iframe class="doc" src="/s/{{ request.view_args['token'] }}/doc#toolbar=0" title="המסמך"></iframe>
       <form class="sign" method="post" action="/s/{{ request.view_args['token'] }}/sign">
         <label for="name">שם החותם, כפי שיופיע על המסמך</label>

@@ -185,8 +185,16 @@ input:focus,select:focus{outline:2px solid var(--accent-soft);border-color:var(-
 .hero-card .hc-sub b{color:var(--olive-ink);font-weight:700}
 .kpi-strip{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px}
 .kpi{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:16px 18px;
-  box-shadow:var(--shadow);display:flex;flex-direction:column;justify-content:center}
-.kpi .kv{font-size:23px;font-weight:800;line-height:1;font-variant-numeric:tabular-nums}
+  box-shadow:var(--shadow);display:flex;flex-direction:column;justify-content:center;container-type:inline-size}
+/* each figure sized by its own card, never past it: with a document open beside the dashboard (≥1280px) a card is a
+   hundred pixels, and «₪11,542.37» was cut to «l,542.37» (DGO-2169, seen in the round's own pictures) */
+/* (18cqi: a six-figure average with 7% to spare on a wider face — Segoe UI on the HP, DejaVu; 11.5cqi: an
+   eight-figure total. The plain size first: a browser without `cqi` keeps it — the reader) */
+.kpi .kv{font-size:23px;font-size:clamp(14px,18cqi,23px);font-weight:800;line-height:1;font-variant-numeric:tabular-nums}
+.hero-card{container-type:inline-size}.hero-card .hc-amount{font-size:clamp(24px,11.5cqi,38px)}
+/* the dashboard's two columns by ITS width, not the window's: beside an open document it is a narrow frame too */
+#stats{container-type:inline-size}
+@container (max-width:900px){.dash-top{grid-template-columns:1fr}}
 .kpi .kl{color:var(--muted);font-size:12.5px;margin-top:8px}
 .chart-card{background:var(--surface);border:1px solid var(--line);border-radius:16px;
   padding:18px 24px 14px;box-shadow:var(--shadow)}
@@ -221,13 +229,6 @@ td.num{font-variant-numeric:tabular-nums;font-family:ui-monospace,Menlo,Consolas
 .chip.sent{background:var(--violet-soft);color:var(--violet)}
 .chip.paid{background:var(--accent-soft);color:var(--accent-d)}
 .chip.cancelled{background:var(--danger-soft);color:var(--red)}
-/* the documents list on a narrow screen: a two-line row (app.js NARROW_DOCS) — a cell lays its content out in a row,
-   so the two lines are one column of their own */
-.bina-table .dlw{display:flex;flex-direction:column;justify-content:center;flex:1;min-width:0;width:100%;line-height:1.35}
-.bina-table .dl{line-height:1.35;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.bina-table .dl2{font-size:12px;color:var(--muted);margin-top:2px}
-.bina-table .dl .chip{padding-block:1px}
-#docsTable.docs-narrow .bt-btn[title="צפיפות שורות"]{display:none}   /* «צפוף» (34px) would cut the second line */
 
 .filters{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px}
 .filters button{background:var(--surface);border:1px solid var(--line);color:var(--muted);padding:7px 14px;font-weight:600;font-size:13px}
@@ -302,11 +303,25 @@ textarea:focus{outline:2px solid var(--accent-soft);border-color:var(--accent)}
 .preview-b{flex:1;overflow:auto;position:relative}
 .preview-b::before{content:"";display:block;height:calc(var(--pv-h,600px) + 8px)}
 .preview-b iframe{position:absolute;top:4px;inset-inline-start:4px;border:0;transform-origin:top right;background:transparent}
-/* below a wide desk the form and the sheet stack: the form first, the document under it, one scroll */
+/* below a wide desk the form and the sheet do not fit side by side: ONE AT A TIME (DGO-2169) — «טופס» or «המסמך», the
+   switch at the top; they stacked in one scroll, the document out of sight while typing and redrawn all the same.
+   The total stays in sight in the buttons' row (#edTotal), whichever is shown */
+.ed-seg{display:none}
+.ed-total{margin-inline-start:auto;font-weight:800;font-size:15px;white-space:nowrap}
 @media (max-width:1100px){
   .stage{grid-template-columns:minmax(0,1fr);overflow:auto}
-  .stage .editor-b{border-inline-end:0;border-bottom:1px solid var(--line);overflow:visible}
+  .stage .editor-b{border-inline-end:0;overflow:visible}
   .preview{min-height:72vh}
+  .ed-seg{display:flex;gap:4px;margin:10px 16px 4px;background:var(--surface-2);border:1px solid var(--line);border-radius:999px;
+    padding:3px;position:sticky;top:0;z-index:2}
+  .ed-seg button{flex:1;border:0;background:transparent;border-radius:999px;padding:7px;font:inherit;font-weight:600;color:var(--muted);
+    cursor:pointer;min-height:38px}
+  .ed-seg button[aria-pressed="true"]{background:var(--surface);color:var(--ink);box-shadow:var(--shadow)}
+  .stage[data-show="form"] .preview{display:none}
+  .stage[data-show="doc"] #docForm{display:none}
+  /* the buttons' row wraps on a phone: the total on a line of its own above them (it overflowed beside four) */
+  .editor-f{flex-wrap:wrap;row-gap:8px}
+  .ed-total{order:-1;flex-basis:100%;margin-inline-start:0}
 }
 .part-ed{border:1px solid var(--line);border-radius:10px;padding:10px;display:flex;flex-direction:column;gap:8px;margin-bottom:10px;background:var(--surface)}
 .pe-h{display:flex;gap:8px;align-items:center}
@@ -322,6 +337,9 @@ table.lines td.per-c{text-align:center;width:52px}
 .arch-path{font-size:11.5px;direction:rtl}
 .arch-more{font-size:12px;margin-top:8px}
 #archTable tr[data-i]{cursor:pointer}
+#archTable tr[data-i]:focus-visible{background:var(--accent-soft)}   /* the keyboard's row, as the mouse's */
+/* the form waits for its type's template: it looks it (a quick one never flashes — the dimming starts after .15 s) */
+#docForm[aria-busy="true"],#editorFoot[inert]{opacity:.55;transition:opacity .15s .15s}
 /* a name or a folder with no space in it («TaxReceiptInvoiceSales_3344938_…_84222ada-….pdf», 90 letters) held its
    column at its whole width: at 600px the files were a 997px table in a 562px box, and .tablewrap clipped the date
    and «מקור» (measured on our 559 files). The name breaks anywhere; the client or folder breaks only a word that
@@ -346,6 +364,38 @@ table.lines td.per-c{text-align:center;width:52px}
 .events li::before{content:"";position:absolute;inset-inline-start:0;top:5px;width:7px;height:7px;
   border-radius:50%;background:var(--accent)}
 .events li .t{color:var(--muted);font-size:11px}
+/* «קישורים» (DGO-2047): the links a document went out in — to look at it, to sign it — above its trail */
+.links:empty{display:none}
+.links{margin-bottom:18px;padding-bottom:14px;border-bottom:1px solid var(--line)}
+.links ul{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:12px}
+.links li{font-size:12.5px}
+.links .lk-h{display:flex;flex-wrap:wrap;align-items:center;gap:6px}
+.links .chip{font-size:10.5px;padding:2px 8px}
+.links .t{color:var(--muted);font-size:11px;margin-top:2px}
+.links .lk-acts{display:flex;gap:6px;margin-top:6px;flex-wrap:wrap}
+.links .lk-acts .sm{height:26px;padding:4px 9px;font-size:12px}
+.saved-at{align-self:center;font-size:12px}
+/* a link shown whole with the ways to send it, and the short form before it — the office's dialog look */
+.lcard-scrim{position:fixed;inset:0;z-index:2147482990;display:grid;place-items:center;padding:16px;background:var(--scrim)}
+.lcard{width:min(480px,100%);max-height:100%;overflow:auto;box-sizing:border-box;background:var(--surface);color:var(--ink);
+  border:1px solid var(--line);border-radius:16px;padding:20px;box-shadow:var(--shadow-lg);outline:0;
+  display:flex;flex-direction:column;gap:10px;text-align:start}
+.lcard h2{margin:0;font-size:16px;font-weight:800}
+.lcard p{margin:0;font-size:13px}
+.lcard dl{display:grid;grid-template-columns:auto 1fr;gap:4px 12px;margin:0;padding:10px 12px;background:var(--surface-2);
+  border:1px solid var(--line);border-radius:9px}
+.lcard dt{color:var(--muted);font-size:11px;font-weight:600}
+.lcard dd{margin:0;font-size:12.5px;font-weight:600;overflow-wrap:anywhere}
+.lc-link{display:flex;gap:8px;align-items:center}
+.lc-link input{flex:1;min-width:0;font-size:12.5px;color:var(--blue)}
+.lc-warn{font-size:12px;padding:8px 10px;border-radius:9px;background:var(--warn-soft);color:var(--warn)}
+.lc-acts{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:4px}
+.lc-sp{flex:1}
+.lcard a.btn{display:inline-flex;align-items:center;border-radius:8px;text-decoration:none;cursor:pointer}
+.lcard label{display:grid;gap:5px;font-size:12px;font-weight:600;color:var(--muted)}
+.lcard label small{font-weight:400}
+.lc-said{color:var(--red);font-size:12.5px}.lc-said:empty{display:none}
+@media (pointer:coarse){.lcard .sm{height:40px}}
 
 
 /* narrow: the name and «מסמך חדש» share the first line, the tabs are the second */
@@ -389,8 +439,7 @@ table.lines td.per-c{text-align:center;width:52px}
 .row2 label{display:block;font-size:12.5px;color:var(--muted);font-weight:600}
 .row2 label input,.row2 label select{margin-top:5px}
 .listhead{display:flex;gap:12px;margin-bottom:16px;align-items:center}
-.listhead input{max-width:320px;min-width:0}
-.listhead .primary{margin-inline-start:auto;flex:none;white-space:nowrap}   /* at phone width the search gives way, not the button's label */
+.listhead .primary{margin-inline-start:auto;flex:none;white-space:nowrap}   /* at phone width the label never wraps */
 .card-form{background:var(--surface);border:1px solid var(--line);border-radius:12px;
   padding:22px;max-width:640px;box-shadow:var(--shadow)}
 .card-form .primary{margin-top:6px}
@@ -423,3 +472,153 @@ button .ic-svg.ic-end{margin-inline:5px 0}   /* a mark AFTER the label («הפק
   display:inline-block;vertical-align:middle;margin-inline-end:8px;opacity:.55;
 }
 .side nav a.active .nav-dot{opacity:1}
+
+/* ── «מסמכים»: THE LIST (doc-list.js, DGO-2169) ─────────────────────────────────────────────────────────────────────
+   A list of links, not a sheet: a row is a document's address, hovered, focused and marked like one. Desktop: one line
+   of five parts. A phone (≤720px): a card of two lines — the document and its sum, the customer and its state. */
+.lst-tools{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:10px}
+.lst-search{flex:1 1 260px;min-width:0;display:flex;align-items:center;gap:8px;background:var(--surface);
+  border:1px solid var(--line);border-radius:999px;padding:7px 14px}
+.lst-search:focus-within{border-color:var(--olive);box-shadow:0 0 0 3px var(--olive-soft)}
+.lst-search input{border:0;background:transparent;outline:0;flex:1;min-width:0;font:inherit;color:var(--ink);padding:2px 0}
+.lst-mag{width:14px;height:14px;border:2px solid var(--muted);border-radius:50%;position:relative;flex:none}
+.lst-mag::after{content:"";position:absolute;width:6px;height:2px;background:var(--muted);inset-inline-start:-5px;bottom:-3px;
+  transform:rotate(-45deg);border-radius:1px}
+.lst-chips{display:flex;gap:6px;overflow-x:auto;padding-bottom:2px;scrollbar-width:none;margin-bottom:12px}
+.lst-chip{border:1px solid var(--line);background:var(--surface);color:var(--ink);border-radius:999px;padding:6px 12px;
+  font:inherit;font-size:13px;white-space:nowrap;display:inline-flex;gap:6px;align-items:center;cursor:pointer;min-height:34px}
+.lst-chip:hover{border-color:var(--olive-line)}
+.lst-chip[aria-pressed="true"]{background:var(--ink);color:var(--surface);border-color:var(--ink)}
+.lst-c{opacity:.7;font-size:12px}
+.lst-count{margin:-4px 2px 8px;font-size:12.5px}
+.lst-count:empty{display:none}
+.lst-rows{background:var(--surface);border:1px solid var(--line);border-radius:12px;overflow:hidden}
+.lst-row{display:grid;grid-template-columns:minmax(0,1.2fr) minmax(0,1.5fr) 130px 110px;gap:14px;align-items:center;
+  padding:12px 16px;border-bottom:1px solid var(--line);text-decoration:none;color:inherit;position:relative;
+  background:var(--surface);transition:background .12s}
+.lst-row:last-of-type{border-bottom:0}
+.lst-row:hover{background:var(--surface-2)}
+.lst-row:active{background:var(--olive-soft)}
+.lst-row:focus-visible{outline:2px solid var(--olive);outline-offset:-2px}
+.lst-row[aria-current="true"]{background:var(--olive-soft)}
+.lst-row[aria-current="true"]::before{content:"";position:absolute;inset-block:8px;inset-inline-start:0;width:3px;
+  border-radius:3px;background:var(--olive)}
+.lst-t{display:flex;flex-direction:column;min-width:0}
+.lst-t b{font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.lst-when{color:var(--muted);font-size:12.5px;align-self:flex-start}   /* under its name: .num is LTR, the line is not */
+.lst-cust{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.lst-amt{font-weight:600;justify-self:end}
+.lst-st{justify-self:start}
+.lst-more{display:block;width:100%;border:0;border-top:1px solid var(--line);background:var(--surface-2);color:var(--olive-d);
+  font:inherit;font-weight:600;padding:12px;cursor:pointer}
+.lst-empty{padding:40px 16px;text-align:center;color:var(--muted);line-height:1.8}
+.lst-sk{display:grid;gap:1px;background:var(--line)}
+.lst-sk div{height:52px;background:linear-gradient(90deg,var(--surface),var(--surface-2),var(--surface));background-size:300% 100%;
+  animation:lst-sh 1.1s infinite}
+@keyframes lst-sh{0%{background-position:100% 0}100%{background-position:0 0}}
+@media (max-width:720px){
+  .lst-row{grid-template-columns:minmax(0,1fr) auto;grid-template-areas:"t amt" "cust st";gap:4px 12px;padding:13px 14px}
+  .lst-t{grid-area:t}.lst-amt{grid-area:amt}
+  .lst-cust{grid-area:cust;color:var(--muted);font-size:14px}
+  .lst-st{grid-area:st;justify-self:end}
+  .lst-chip{min-height:38px}
+}
+@media (prefers-reduced-motion:reduce){.lst-row{transition:none}.lst-sk div{animation:none}}
+
+/* ── «מסמכים»: WHAT AN OPEN DOCUMENT SAYS (doc-panel.js, DGO-2169) ──────────────────────────────────────────────────
+   One sentence of where it stands and its next step as the main button; under it, what happened to it, in order. */
+.dp-head{display:flex;flex-direction:column;gap:4px;padding:14px 16px 0}
+.dp-k{color:var(--muted);font-size:13px}
+.dp-cust{margin:0;font-size:20px;line-height:1.25;font-weight:700;text-wrap:balance;overflow-wrap:anywhere}
+.dp-sum{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.dp-big{font-size:24px;font-weight:700}
+.dp-next{margin:12px 16px 0;border:1px solid var(--olive-line);background:var(--olive-soft);border-radius:12px;padding:12px 14px;
+  display:flex;flex-direction:column;gap:10px}
+.dp-next p{margin:0;line-height:1.55}
+.dp-acts{display:flex;gap:8px;flex-wrap:wrap}
+.dp-more{padding:10px 16px 0}
+.dp-more summary{cursor:pointer;color:var(--olive-d);font-weight:600;font-size:13.5px;list-style:none;display:inline-flex;gap:6px;
+  align-items:center;padding:4px 0}
+.dp-more summary::-webkit-details-marker{display:none}
+.dp-more summary::after{content:"";width:7px;height:7px;border-right:2px solid currentColor;border-bottom:2px solid currentColor;
+  transform:rotate(45deg) translateY(-2px)}   /* (physical sides: a chevron that points DOWN in either direction) */
+.dp-more[open] summary::after{transform:rotate(-135deg)}
+.dp-more .drawer-actions{padding:8px 0 0;border:0}
+/* the drawer: its head, next step and «עוד פעולות» above the document and its timeline; on a phone the whole drawer
+   scrolls (its body had overflow:hidden, and the trail under the 58vh sheet was cut off — the code audit, C) */
+.drawer-top{border-bottom:1px solid var(--line);padding-bottom:12px}
+.dp-sk{background:none;gap:8px;padding:4px 0}
+.dp-sk div{height:18px;border-radius:9px;width:60%}
+.dp-sk div+div{height:26px;width:40%}
+#dMore[hidden]{display:none}
+@media (max-width:720px){
+  .drawer{overflow-y:auto;width:100vw}
+  .drawer-b{overflow:visible;flex:none}
+  .events{overflow:visible;border-inline-start:0;border-top:1px solid var(--line)}
+}
+/* A WIDE SCREEN: THE DOCUMENT BESIDE THE LIST (the simulation's split, DGO-2169). The drawer leaves the overlay and
+   sits at the list's end (the left, in Hebrew) under the bar; the list stays where it was and keeps taking clicks —
+   another row opens in the same place, the row it shows marked. A narrower screen keeps the drawer over the page. */
+@media (min-width:1280px){
+  body.split .overlay{display:none}
+  /* the bar stays at the top while the list scrolls (the drawer's top is the bar's HEIGHT — measured against the
+     window, a scrolled list put it 1400px above the screen: the reader) */
+  body.split .side{position:sticky;top:0;z-index:45}
+  body.split .drawer{inset-inline-start:auto;inset-inline-end:0;top:var(--bar-h,64px);width:560px;box-shadow:none;
+    border-inline-start:1px solid var(--line);overflow-y:auto}
+  body.split .main{margin-inline-end:560px}
+  body.split .drawer-b{grid-template-columns:1fr;overflow:visible;flex:none}
+  body.split #dPdfBox{height:72vh}
+  body.split .events{overflow:visible;border-inline-start:0;border-top:1px solid var(--line)}
+}
+/* the editor is modal: an open document steps aside while it is up («מסמך חדש» beside an open document opened the
+   editor UNDER the drawer — both z-index 50, the drawer later in the page: the reader) and comes back when it closes */
+body:has(#editor:not(.hidden)) #drawer{display:none}
+/* a short screen, however wide (a phone on its side, 844×390): the head and the step leave the sheet ~70px — the
+   drawer scrolls as a whole there too, the sheet its own height (the reader) */
+@media (max-height:560px){
+  .drawer{overflow-y:auto}
+  .drawer-b{overflow:visible;flex:none}
+  #dPdfBox{height:80vh}
+  .events{overflow:visible}
+}
+.dp-tl{list-style:none;margin:0;padding:0}
+.events .dp-tl li{display:grid;grid-template-columns:16px minmax(0,1fr) auto;gap:10px;align-items:start;padding:7px 0;
+  position:relative;font-size:13px}
+.events .dp-tl li::before{content:"";position:absolute;inset-inline-start:7px;top:21px;bottom:-7px;width:2px;height:auto;
+  border-radius:0;background:var(--line)}
+.dp-tl li:last-child::before{display:none}
+.dp-tl .dp-dot{width:12px;height:12px;border-radius:50%;margin:4px 2px;background:var(--olive-line);display:block}
+.dp-tl li.done .dp-dot{background:var(--olive)}
+.dp-tl li.now .dp-dot{background:var(--lime-d);box-shadow:0 0 0 4px var(--lime-soft)}
+.dp-tl span:not(.dp-dot){min-width:0;overflow-wrap:anywhere}
+.dp-tl small{color:var(--muted);font-size:12px;white-space:nowrap}
+
+/* ── «מסמכים»: SENDING A LINK (send-sheet.js, DGO-2169) — WhatsApp first; a sheet from the bottom on a phone ─────── */
+.ss-scrim{position:fixed;inset:0;z-index:90;background:var(--scrim);display:flex;align-items:center;justify-content:center;
+  padding:16px;opacity:0;transition:opacity .15s}
+.ss-scrim.on{opacity:1}
+.ss{width:min(480px,100%);max-height:calc(100vh - 32px);overflow:auto;background:var(--surface);color:var(--ink);border-radius:16px;
+  box-shadow:var(--shadow-lg);padding:14px 18px 18px;display:flex;flex-direction:column;gap:12px;outline:0}
+.ss-grab{display:none;width:40px;height:5px;border-radius:3px;background:var(--line);align-self:center}
+.ss h2{margin:0;font-size:18px}
+.ss-note{margin:0;color:var(--muted);font-size:13.5px;line-height:1.55}
+.ss-facts{display:grid;grid-template-columns:auto 1fr;gap:4px 14px;margin:0;font-size:13.5px}
+.ss-facts dt{color:var(--muted)}.ss-facts dd{margin:0}
+.ss-opts{display:grid;gap:8px}
+.ss-opt{display:flex;gap:12px;align-items:center;border:1px solid var(--line);background:var(--surface);color:var(--ink);
+  border-radius:12px;padding:11px 12px;text-align:start;text-decoration:none;font:inherit;cursor:pointer;min-height:56px}
+.ss-opt:hover{border-color:var(--olive-line);background:var(--surface-2)}
+.ss-opt b{display:block;font-weight:600}
+.ss-opt span span{color:var(--muted);font-size:13px}
+.ss-ic{width:38px;height:38px;border-radius:10px;display:grid;place-items:center;background:var(--olive-soft);color:var(--olive-d);flex:none}
+.ss-wa{border-color:var(--olive-line);background:var(--olive-soft)}
+.ss-wa .ss-ic{background:var(--olive);color:var(--olive-ink)}
+.ss-link{border:1px solid var(--line);background:var(--surface-2);color:var(--muted);border-radius:8px;padding:8px 10px;font-size:12px;width:100%}
+.ss-foot{display:flex;gap:8px;justify-content:center;flex-wrap:wrap}
+@media (max-width:720px){
+  .ss-scrim{align-items:flex-end;padding:0}
+  .ss{width:100%;border-radius:20px 20px 0 0;padding-bottom:calc(18px + env(safe-area-inset-bottom,0px));max-height:90vh}
+  .ss-grab{display:block}
+}
+@media (prefers-reduced-motion:reduce){.ss-scrim{transition:none}}

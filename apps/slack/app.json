@@ -38,7 +38,7 @@
       "service": "slack-desktop",
       "emit_labels": true,
       "module": {
-        "group": "עסק", "icon": "message", "embed": true, "alias": "slack", "id": "slack",
+        "group": "תקשורת", "icon": "message", "embed": true, "alias": "slack", "id": "slack",
         "name": "סלאק", "desc": "הערוצים וההודעות של Slack, בלקוח הרשמי",
         "url": "http://slack-desktop:3000/",
         "passthrough": [{ "path": "/api", "transport": "websocket", "match": "prefix", "strip_mount_prefix": true }]

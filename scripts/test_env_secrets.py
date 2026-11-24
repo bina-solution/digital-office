@@ -147,6 +147,94 @@ class EnvSecrets(unittest.TestCase):
         self.assertEqual(v["SUPABASE_DB_PASSWORD"], "")                          # its data is
         self.assertEqual(v["CONNECTIONS_ROOT_KEY"], "")
 
+    def test_a_store_moved_to_the_dgo_folder_is_data(self):
+        """DGO-2019: the vault in data/connections/vault (its app.json moved_from names connections_vault) and no
+        volume at all — an office installed after the move — is an office WITH data: its key is never minted."""
+        app = os.path.join(self.dir, "platform-base", "connections")
+        os.makedirs(app)
+        with open(os.path.join(app, "app.json"), "w") as fh:
+            json.dump({"id": "connections", "data": {"moved_from": {"data/connections/vault": "connections_vault"}}}, fh)
+        vault = os.path.join(self.dir, "data", "connections", "vault")
+        os.makedirs(vault)
+        self.docker("exit 0")                                     # docker answers: no volume at all
+        _, out = self.run_it("--if-fresh")                        # an empty folder is no data: fresh
+        self.assertTrue(values(self.env)["CONNECTIONS_ROOT_KEY"])
+        shutil.copy(os.path.join(REPO, ".env.ex"), self.env)
+        with open(os.path.join(vault, "vault.enc"), "w") as fh:
+            fh.write("x")
+        _, out = self.run_it("--if-fresh")
+        v = values(self.env)
+        self.assertEqual(v["CONNECTIONS_ROOT_KEY"], "")           # its data is there
+        self.assertTrue(v["GLITCHTIP_DB_PASSWORD"])               # an app whose data is not, gets its keys
+        self.assertIn("this office has data", out)
+        os.remove(os.path.join(vault, "vault.enc"))               # empty, and it cannot be looked into: data too
+        os.chmod(vault, 0)
+        try:
+            if os.access(vault, os.R_OK):                         # root reads anything: the case is not testable
+                self.skipTest("running as root")
+            shutil.copy(os.path.join(REPO, ".env.ex"), self.env)
+            self.run_it("--if-fresh")
+            self.assertEqual(values(self.env)["CONNECTIONS_ROOT_KEY"], "")
+        finally:
+            os.chmod(vault, 0o755)
+
+    def test_moved_data_answers_lib_sh(self):
+        """`--moved-data`, lib.sh's office_holds_data's last question (bbox run's no-.env guard): 0 and the old
+        volume's name when a store that moved to data/ holds data, 10 (MOVED_NONE) when none does, 2 when a manifest
+        cannot be read — never 1, which is what any crash exits with."""
+        app = os.path.join(self.dir, "platform-base", "connections")
+        os.makedirs(app)
+        with open(os.path.join(app, "app.json"), "w") as fh:
+            json.dump({"id": "connections", "data": {"moved_from": {"data/connections/vault": "connections_vault"}}}, fh)
+        code, out = self.run_it("--moved-data")
+        self.assertEqual((code, out.strip()), (10, ""))                  # the folder is not there: none
+        vault = os.path.join(self.dir, "data", "connections", "vault")
+        os.makedirs(vault)
+        with open(os.path.join(vault, "vault.enc"), "w") as fh:
+            fh.write("x")
+        code, out = self.run_it("--moved-data")
+        self.assertEqual((code, out.strip()), (0, "connections_vault"))
+        with open(os.path.join(app, "app.json"), "w") as fh:
+            fh.write("{ not json")
+        code, _ = self.run_it("--moved-data")
+        self.assertEqual(code, 2)
+        with open(os.path.join(app, "app.json"), "w") as fh:
+            json.dump({"data": {"moved_from": ["data/connections/vault"]}}, fh)    # a shape it does not expect
+        code, _ = self.run_it("--moved-data")
+        self.assertNotIn(code, (0, 10))                                  # whatever it is, never «data» or «none»
+
+    def test_a_manifest_that_cannot_be_read_is_never_fresh(self):
+        """An app.json that is there but cannot be read (no permission, an I/O error) or is not JSON says nothing
+        about whether its store moved: unknown, so nothing is written — never "nothing moved here" (the second
+        reader). A store behind a link that leads nowhere (data/ on a disk not mounted) is data."""
+        app = os.path.join(self.dir, "platform-base", "connections")
+        os.makedirs(app)
+        manifest = os.path.join(app, "app.json")
+        self.docker("exit 0")
+        with open(self.env, "rb") as fh:
+            before = fh.read()
+        with open(manifest, "w") as fh:
+            fh.write("{ not json")
+        _, out = self.run_it("--if-fresh")
+        with open(self.env, "rb") as fh:
+            self.assertEqual(fh.read(), before, out)
+        self.assertIn("could not be asked", out)
+        with open(manifest, "w") as fh:
+            json.dump({"id": "connections", "data": {"moved_from": {"data/connections/vault": "connections_vault"}}}, fh)
+        os.chmod(manifest, 0)
+        try:
+            if not os.access(manifest, os.R_OK):              # root reads anything: not testable as root
+                _, out = self.run_it("--if-fresh")
+                with open(self.env, "rb") as fh:
+                    self.assertEqual(fh.read(), before, out)
+        finally:
+            os.chmod(manifest, 0o644)
+        os.makedirs(os.path.join(self.dir, "data", "connections"))
+        os.symlink(os.path.join(self.dir, "no-such-disk"), os.path.join(self.dir, "data", "connections", "vault"))
+        _, out = self.run_it("--if-fresh")
+        self.assertEqual(values(self.env)["CONNECTIONS_ROOT_KEY"], "")   # behind a dead link: data, never minted over
+        self.assertIn("this office has data", out)                       # …counted as data, not "unknown"
+
     def test_docker_without_an_answer_is_never_fresh(self):
         self.docker("exit 1")
         with open(self.env, "rb") as fh:

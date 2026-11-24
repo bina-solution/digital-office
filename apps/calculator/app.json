@@ -20,7 +20,7 @@
       "port": 8997,
       "auth": "sso",
       "module": {
-        "group": "ראשי",
+        "group": "עבודה וקבצים",
         "icon": "grid",
         "embed": true,
         "alias": "calculator",

@@ -54,15 +54,18 @@ Every app of this release, from its own manifest (`app.json` — its title, in E
 | [`entities`](entities/) | Entities · ישויות | Everyone the business works with — people and organizations — in one place, each with its roles: customer, supplier, company, salesperson, contact. Documents and the whole office take them from here |
 | [`esign`](esign/) | Signatures · חתימות | A document goes out for signature as one link (with a per-document password if wanted), the signer signs, and the signed copy lands in «קבצים» — and the link opens nothing else in the office |
 | [`git`](git/) | Version control · ניהול גרסאות | An abstraction over the VCS APIs — GitHub/GitLab accounts, a local forge (Forgejo) that hosts and DISPLAYS every repository, mirrors of external repos, and code pushes acting as the owner |
+| [`github-hooks`](github-hooks/) | GitHub webhook intake · קליטת אירועי GitHub | The public door GitHub posts events to: keeps each delivery as it came and answers at once, knowing no secret and no account; the git app verifies and records |
 | [`google-workspace-agent`](google-workspace-agent/) | Google Workspace Agent · סוכן Google Workspace | MCP servers exposing Google Drive, Sheets and Gmail to n8n AI agents, plus an integration health probe. Automation only — this app owns no container. |
 | [`hello-bina`](hello-bina/) | Hello Bina · שלום בינה | A third-party sample app — one tiny static page |
-| [`indox`](indox/) | INDOX · מסמכים | End-to-end incoming-document processing — sync, extract, file and browse |
+| [`image-store`](image-store/) | Image registry · מאגר התמונות | The images the line's proof built, by digest, so that every office pulls them instead of building: the origin on the machine that builds, and on every other office a mirror that pulls from it over the link |
+| [`indox`](indox/) | INDOX · מסמכים נכנסים | End-to-end incoming-document processing — sync, extract, file and browse |
 | [`lan-console`](lan-console/) | Console on the LAN · הקונסול ברשת המקומית | This office's console at its LAN address, for a phone on the same Wi-Fi, with the same sign-in |
 | [`mail`](mail/) | Mail · מייל | The whole mail capability — local mailbox, external-provider adapters, one abstraction API, and a UI |
 | [`meet`](meet/) | Video meetings · פגישות לשכה | The office's video meetings — Jitsi Meet in Hebrew, from a browser or a phone; hosts sign in with the office account, guests join by link |
-| [`my-docs`](my-docs/) | My Docs · מסמכים שלי | Business document ledger — invoices and documents |
+| [`my-docs`](my-docs/) | Documents · מסמכים | Business document ledger — invoices and documents |
 | [`n8n`](n8n/) | Automations · אוטומציות | The automation engine — schedules, triggers, workflows |
 | [`newsflow`](newsflow/) | NewsFlow · זרימת חדשות | Every news item that matters to BINA Solutions — collected through the office browser, organised by category, in one place |
+| [`notify-relay`](notify-relay/) | Notice relay · ממסר ההתראות | On an office with no notice board of its own: every notice is carried to the herd's board over the link, and kept until it answers |
 | [`obsidian`](obsidian/) | Obsidian · אובסידיאן | The office's vault — real Obsidian in the browser, on the office's vault folder |
 | [`office-routes`](office-routes/) | Network · ניהול רשת | The office's own routes — what is reachable, from where, and at which address. Closed by default; opened from this screen. |
 | [`ollama`](ollama/) | Ollama · מודלים מקומיים | Run local LLMs on your own hardware |

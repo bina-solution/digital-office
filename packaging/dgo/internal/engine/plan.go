@@ -95,7 +95,9 @@ func (m *machine) planMac(p *planner) {
 	}
 	create := lima + " start --name=" + m.inst + " --tty=false --cpus=" + m.cpus + " --memory=" + m.mem + " --disk=" + m.disk +
 		" --mount=" + m.home + ":w" + rosetta + " " + m.root + "/packaging/macos/engine.yaml"
-	start := lima + " start --tty=false " + m.inst
+	// engine.sh since 3aa885ee7 (DGO-1964): a start waits 4 minutes, not limactl's 10, for a «running» that a
+	// stopped guest's frozen probe may never send
+	start := lima + " start --tty=false --timeout=4m " + m.inst
 	landed := ""
 	if m.limaOK {
 		landed = " — here: it has landed"
@@ -116,7 +118,7 @@ func (m *machine) planMac(p *planner) {
 	}
 	if m.state != "Running" {
 		p.step("prove dockerd answers inside it, else: engine is up but dockerd does not answer inside it",
-			lima+" shell "+m.inst+" sudo docker version --format '{{.Server.Version}}'")
+			lima+" shell --workdir / "+m.inst+" sudo docker version --format '{{.Server.Version}}'")
 	}
 	p.step("the power agent keeps the Mac awake by the console's policy, tied to the guest's host agent (none with BBOX_POWER_AGENT=0)",
 		"nohup /usr/bin/python3 "+m.root+"/packaging/macos/power-agent.py --repo "+m.root+" --watch-pid <the guest's ha.pid> &")
@@ -207,16 +209,17 @@ func (m *machine) planInside(p *planner, root string) {
 	case m.holds == holdsUnreached:
 		skip = "not reached: bbox run stops at need_docker first"
 	case m.holds == holdsData:
-		skip = "refused: this checkout's office (" + pn + ") already has containers or volumes — its .env is missing, not new"
+		skip = "refused: this checkout's office (" + pn + ") already has containers, volumes or stores in data/ — its .env is missing, not new"
 	case m.holds == holdsUnsaid:
 		skip = "refused: the engine did not say whether this checkout's office (" + pn + ") " + unsaidTail
 	}
-	p.step("no .env, on ANY machine (DGO-1782): first, does this checkout's office already hold containers or volumes (lib.sh "+
-		"office_holds_data) — some: refused, «its .env is missing, not new. "+heldFix+"»; the engine silent: refused («… "+
+	p.step("no .env, on ANY machine (DGO-1782): first, does this checkout's office already hold containers, volumes or stores "+
+		"in data/ (lib.sh office_holds_data; a store that moved to data/ by its manifest's data.moved_from, DGO-2019) — some: refused, «its .env is missing, not new. "+heldFix+"»; the engine silent: refused («… "+
 		unsaidTail+"»); none: one is generated — in the macOS guest a local one on :8080, on a cloud sandbox (a MITM "+
 		"proxy CA) a secretless one, anywhere else a LOCAL office (DEPLOYMENT_NAME=local, every app at <name>.localhost) — and "+
 		"bbox run starts over"+m.here(m.generatesEnv(), runs, skip),
-		"docker ps -aq --filter "+label, "docker volume ls -q --filter "+label, "cd "+root+" && "+gen, "exec ./bbox run")
+		"docker ps -aq --filter "+label, "docker volume ls -q --filter "+label, "python3 "+root+"/scripts/env-secrets.py --moved-data",
+		"cd "+root+" && "+gen, "exec ./bbox run")
 	p.step("with a .env that names no office — BUSINESS_NAME empty and DEPLOYMENT_DOMAIN beginning with «.» (lib.sh office_unnamed): " +
 		"refused, «" + unnamedSaid + "»" + m.here(m.envFile && m.unnamed, "refused", "it names one, or there is none yet"))
 	p.sub("then ensure_secrets (DGO-1220): the office's own secrets, filled only while this machine holds none of the office's data volumes; with data nothing is written, and the keys still empty or still a value the template published are named",

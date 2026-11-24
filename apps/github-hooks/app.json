@@ -1,0 +1,42 @@
+{
+  "id": "github-hooks",
+  "title": {
+    "he": "קליטת אירועי GitHub",
+    "en": "GitHub webhook intake"
+  },
+  "layer": 3,
+  "kind": "service",
+  "page": "base",
+  "version": "0.1.0",
+  "summary": {
+    "he": "הדלת הציבורית שאליה GitHub שולח אירועים: שומרת כל משלוח כמו שהגיע ועונה מיד, בלי סוד ובלי חשבון. אפליקציית git מאמתת ורושמת",
+    "en": "The public door GitHub posts events to: keeps each delivery as it came and answers at once, knowing no secret and no account; the git app verifies and records"
+  },
+  "capabilities": [],
+  "use": [],
+  "connections": [],
+  "routing": [
+    {
+      "host": "github-hooks",
+      "port": 8979,
+      "service": "github-hooks",
+      "name": "github-hooks",
+      "auth": "none"
+    }
+  ],
+  "compose": "docker-compose.yml",
+  "agent": {
+    "context": "AGENT.md",
+    "order": 31
+  },
+  "data": {
+    "volumes": [],
+    "paths": ["data/github-hooks/spool"],
+    "on_uninstall": "keep",
+    "note": "The deliveries GitHub posted and git has not judged yet, one JSON file each (bounded: 2000 files, 100 MB), and .rejected/ (the newest 200 that failed their signature). No secret is ever written here."
+  },
+  "resources": {
+    "cpus": "0.1",
+    "memory": "48M"
+  }
+}

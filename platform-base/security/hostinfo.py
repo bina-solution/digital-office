@@ -4,7 +4,7 @@ the `machine` app had, moved here so that one base app observes the machine and 
 
 Same answer as machine's `/api/overview` (the shape Computers draws), from narrower mounts: the host's
 /proc is the kernel's and needs no mount; the disk is the partition the office's data lives on (this
-app's own volume), and the operating system's name is one file (`/etc/os-release`, read-only) — not
+app's own store, data/security/data in the DGO folder, or its volume while the move waits), and the operating system's name is one file (`/etc/os-release`, read-only) — not
 the whole host filesystem machine mounted (issues/sec-the-machine-app-mounts-the-whole-host-filesystem).
 """
 from __future__ import annotations

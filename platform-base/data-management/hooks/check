@@ -1,0 +1,3 @@
+#!/usr/bin/env bash
+#: check [--json] — what a running office still keeps outside the DGO folder's data/: volumes and container layers (DGO-2019):  ./bbox data check
+DATAHOME_VERB=check exec bash "$(dirname "${BASH_SOURCE[0]}")/plan" "$@"

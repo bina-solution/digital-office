@@ -1,0 +1,61 @@
+# github-hooks — the public door GitHub posts its webhook events to (DGO-2155, DGO-2138 §7.4).
+#
+# Its own app, not a service of `git`: the compiler runs every service of an enabled app, so a public door inside git
+# would open on every office that runs git. It opens only where an office enables this app and names its router in
+# its own `public:` (vps1, once the GitHub App of DGO-2144 exists).
+# - :8979 is GitHub's: the router above (auth none). It knows no secret and writes each delivery to the spool.
+# - :8980 is git's: no router names it, so it is reached on the office network only, and it answers the `git`
+#   service's address alone (intake.py `_peer_ok`). git takes a batch there, verifies each HMAC with the App's
+#   webhook_secret from the vault, and acks.
+# The two apps share no volume.
+services:
+  github-hooks:
+    image: python:3.12-alpine
+    pull_policy: missing
+    init: true                      # python as PID 1 ignores SIGTERM: every stop would wait its 10 s
+    container_name: github-hooks-${DEPLOYMENT_NAME:-bina-deployment}
+    hostname: github-hooks
+    restart: unless-stopped
+    # the spool is made the unprivileged user's, then the door runs as that user (no root behind a public port)
+    command: ["sh", "-c", "chown 65534:65534 /spool && exec su -s /bin/sh nobody -c 'exec python3 /app/intake.py'"]
+    environment:
+      - WEBHOOK_SPOOL=/spool
+      - WEBHOOK_INTAKE_PORT=8979
+      - WEBHOOK_INTERNAL_PORT=8980
+      - WEBHOOK_INTERNAL_PEER=git
+      # the GitHub App ids this office takes deliveries for — public numbers; empty = it takes none (403)
+      - WEBHOOK_APP_IDS=${GITHUB_APP_IDS:-}
+    volumes:
+      # this directory, not one file: a single-file bind mount goes stale when the file is replaced (DGO-2111 root 13)
+      - ./:/app:ro
+      - ../../data/github-hooks/spool:/spool
+    read_only: true
+    cap_drop: [ALL]
+    cap_add: [CHOWN, SETUID, SETGID]
+    security_opt: ["no-new-privileges:true"]
+    networks:
+      - traefik-network
+    healthcheck:
+      # both doors: GitHub's answers, and git's still listens (a dead internal thread would leave the queue undrained)
+      test: ["CMD", "python3", "-c", "import socket, urllib.request; urllib.request.urlopen('http://127.0.0.1:8979/healthz', timeout=5); socket.create_connection(('127.0.0.1', 8980), 5).close()"]
+      interval: ${HEALTHCHECK_INTERVAL:-30s}
+      timeout: ${HEALTHCHECK_TIMEOUT:-10s}
+      retries: 3
+      start_period: 10s
+    deploy:
+      resources:
+        limits:
+          cpus: '0.1'
+          memory: 48M
+        reservations:
+          cpus: '0.01'
+          memory: 16M
+    logging:
+      driver: ${LOGGING_DRIVER:-json-file}
+      options:
+        max-size: 2m
+        max-file: '2'
+
+networks:
+  traefik-network:
+    external: true

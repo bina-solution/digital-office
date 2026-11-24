@@ -65,7 +65,7 @@
       ],
       "emit_labels": false,
       "module": {
-        "group": "הגדרות",
+        "group": "ניהול הלשכה",
         "icon": "key",
         "embed": true,
         "alias": "connections",
@@ -84,9 +84,9 @@
     }
   },
   "data": {
-    "volumes": [
-      "connections_vault"
-    ],
+    "volumes": [],
+    "paths": ["data/connections/vault"],
+    "moved_from": {"data/connections/vault": "connections_vault"},
     "on_uninstall": "keep"
   },
   "observability": {

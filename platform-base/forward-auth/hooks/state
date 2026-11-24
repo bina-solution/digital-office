@@ -1,0 +1,37 @@
+#!/usr/bin/env bash
+#: state — what this app holds, one `<name> <value>` per line:  ./bbox forward-auth state
+#: Who may sign in: the number of accounts in the users file, and whether the first-run `setup` file is there. Never a
+#: name or a hash. The data move (platform/manager/datahome.py, DGO-2019) reads it before it moves data/forward-auth/state
+#: and again after, and sends the store back to its volume when the accounts are gone: an empty users file locks the
+#: whole office out. The image is `scratch` — no shell to run inside — so the file is read out with `docker cp`.
+#: A service that is not running says NOTHING (exit 1): the move then waits for it, rather than compare a «0» it never read.
+set -uo pipefail
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
+case "${1:-}" in -h|--help) sed -n 's/^#: //p' "${BASH_SOURCE[0]}"; exit 0 ;; esac
+# The data move names the container it measures; by hand, it is the office's own (compose's default name included).
+c="${DGO_STATE_CONTAINER:-}"
+if [ -z "${c}" ]; then
+  . "${REPO_ROOT}/scripts/lib.sh"
+  dn="$(read_env DEPLOYMENT_NAME)"
+  c="forward-auth-${dn:-bina-deployment}"
+fi
+[ "$(docker inspect -f '{{.State.Running}}' "${c}" 2>/dev/null)" = true ] || exit 1
+# one account per line; the file's own `#` lines (first-run setup writes one) and blank lines are not accounts. No
+# users file yet (before the first run's setup) is 0; a read that failed for any other reason says nothing (exit 1)
+# (the file only ever passes through the pipe — never a temporary file a killed hook would leave holding the hashes;
+# only docker's error text is kept, to tell «not there yet» from a read that failed)
+e="$(mktemp)"; trap 'rm -f "${e}"' EXIT
+r="$(docker cp "${c}:/etc/forward-auth/users" - 2> "${e}" | tar -xO 2>/dev/null | grep -cvE '^[[:space:]]*(#|$)'
+     echo "${PIPESTATUS[0]} ${PIPESTATUS[1]}")"
+count="$(printf '%s\n' "${r}" | head -1)"
+read -r cp_rc tar_rc <<< "$(printf '%s\n' "${r}" | tail -1)"
+if [ "${cp_rc}" = 0 ] && [ "${tar_rc}" = 0 ]; then
+  users="${count}"
+elif [ "${cp_rc}" != 0 ] && grep -qi "could not find" "${e}"; then
+  users=0
+else
+  exit 1
+fi
+echo "users ${users}"
+if docker cp "${c}:/etc/forward-auth/setup" - >/dev/null 2>&1; then echo "setup.file yes"; else echo "setup.file no"; fi

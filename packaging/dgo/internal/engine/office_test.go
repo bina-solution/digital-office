@@ -1,6 +1,7 @@
 package engine
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -71,30 +72,43 @@ office_project`,
 }
 
 // TestHoldsDataMatchesLibSh runs scripts/lib.sh's office_holds_data — the engine's containers, then its
-// volumes, of the checkout's project — beside officeHoldsData, on each answer the engine can give.
+// volumes, of the checkout's project, then the stores that moved to its data/ (env-secrets.py --moved-data,
+// DGO-2019) — beside officeHoldsData, on each answer the engine and the checkout can give.
 func TestHoldsDataMatchesLibSh(t *testing.T) {
 	funcs := shFunc(t, "scripts/lib.sh", "office_project", "office_holds_data")
-	const pn, dh = "office", "unix:///run/bbox-docker.sock"
+	const pn, dh, root = "office", "unix:///run/bbox-docker.sock", "/office"
 	ps, vols := "ps -aq --filter label=com.docker.compose.project="+pn, "volume ls -q --filter label=com.docker.compose.project="+pn
 	cases := []struct {
 		name    string
 		answers map[string]reply
+		moved   int // env-secrets.py --moved-data's exit: 0 a moved store holds data, 10 none, 2 a manifest unread,
+		//             1 a crash, 127 no python3; -1 not reached (the engine said first)
 	}{
-		{"nothing of it", map[string]reply{ps: ok(""), vols: ok("")}},
-		{"answers that are only newlines are nothing ($(…) drops them)", map[string]reply{ps: ok("\n"), vols: ok("\n\n")}},
-		{"a stopped container", map[string]reply{ps: ok("3f2a9c\n"), vols: ok("")}},
-		{"volumes only (its containers removed)", map[string]reply{ps: ok(""), vols: ok("office_pgdata\noffice_redis\n")}},
-		{"the engine refuses the first question", map[string]reply{ps: no("permission denied"), vols: ok("")}},
-		{"the engine refuses the second", map[string]reply{ps: ok(""), vols: no("Cannot connect to the Docker daemon")}},
+		{"nothing of it", map[string]reply{ps: ok(""), vols: ok("")}, 10},
+		{"answers that are only newlines are nothing ($(…) drops them)", map[string]reply{ps: ok("\n"), vols: ok("\n\n")}, 10},
+		{"a stopped container", map[string]reply{ps: ok("3f2a9c\n"), vols: ok("")}, -1},
+		{"volumes only (its containers removed)", map[string]reply{ps: ok(""), vols: ok("office_pgdata\noffice_redis\n")}, -1},
+		{"the engine refuses the first question", map[string]reply{ps: no("permission denied"), vols: ok("")}, -1},
+		{"the engine refuses the second", map[string]reply{ps: ok(""), vols: no("Cannot connect to the Docker daemon")}, -1},
+		{"nothing on the engine, and a store that moved to data/ holds data", map[string]reply{ps: ok(""), vols: ok("")}, 0},
+		{"nothing on the engine, and a manifest that cannot be read", map[string]reply{ps: ok(""), vols: ok("")}, 2},
+		{"nothing on the engine, and no python3 to ask", map[string]reply{ps: ok(""), vols: ok("")}, 127},
+		{"nothing on the engine, and the question crashes (exit 1: never «none»)", map[string]reply{ps: ok(""), vols: ok("")}, 1},
 	}
 	for _, c := range cases {
-		_, stderr, code := shell(t, "export COMPOSE_PROJECT_NAME="+pn, funcs, `office_holds_data || exit $?`,
-			map[string]string{"docker": stub("docker", c.answers), "basename": realTool("basename")})
+		stubs := map[string]string{"docker": stub("docker", c.answers), "basename": realTool("basename")}
+		if c.moved >= 0 && c.moved != 127 {
+			stubs["python3"] = fmt.Sprintf("#!/bin/sh\nexit %d\n", c.moved)
+		}
+		_, stderr, code := shell(t, "export COMPOSE_PROJECT_NAME="+pn+"; REPO_ROOT="+root, funcs, `office_holds_data || exit $?`, stubs)
 		r := &rec{goos: "linux", cmds: map[string]reply{}, env: map[string]string{}}
 		for k, a := range c.answers {
 			r.cmds["docker -H "+dh+" "+k] = a
 		}
-		if got := officeHoldsData(r.system(t), host{env: func(string) string { return "" }}, dh, pn); got != code {
+		if c.moved >= 0 {
+			r.cmds["sh -c "+movedDataSh+" sh "+root] = ok(fmt.Sprintf("%d\n", c.moved))
+		}
+		if got := officeHoldsData(r.system(t), host{env: func(string) string { return "" }}, dh, pn, root); got != code {
 			t.Errorf("%s: go %d, lib.sh %d (%s)", c.name, got, code, strings.TrimSpace(stderr))
 		}
 	}

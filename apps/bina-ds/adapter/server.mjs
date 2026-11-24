@@ -521,8 +521,11 @@ function sederGrant(day) {
  *  resurfaces when meta.count grows, so the constant «seder-door» it used to send made every cycle's
  *  notice after the first fold silently into the first one (DGO-582: «ואיש לא ידע»). */
 function notifyOffice(title, body, link, { id, level } = {}) {
-  const payload = JSON.stringify({ source: "bina-ds", source_id: `seder-door:${id || Date.now()}`, level: level || "info",
-    title, body, ...(link ? { link } : {}) });
+  // an info notice («סדר … נפתח») is a record, nothing to act on: `state: log` writes it read (DGO-2111 — 34 of
+  // vps1's 188 unread rows were the clock's openings); a warning («לא נסגר», «נעצר») stays news
+  const lvl = level || "info";
+  const payload = JSON.stringify({ source: "bina-ds", source_id: `seder-door:${id || Date.now()}`, level: lvl,
+    title, body, ...(link ? { link } : {}), ...(lvl === "info" ? { meta: { state: "log" } } : {}) });
   fetch(process.env.BINA_DS_NOTIFY_URL || "http://notifications:8977/api/notifications", {
     method: "POST", headers: { "content-type": "application/json" }, body: payload, signal: AbortSignal.timeout(8000),
   }).catch(() => {});
@@ -1233,28 +1236,17 @@ createServer(async (req, res) => {
   res.end(JSON.stringify(payload));
 }).listen(PORT, "0.0.0.0", () => console.log(`bina-ds adapter: ${VERSION} + the timeline lane on :${PORT} (stream: ${WS ? "ws" : "unavailable"})`));
 
-// ── the conversations written by an older harness, brought to its format once ───────────────────
-// DeepSeek Harness 0.2.x keeps a session in a newer log format and migrates an older one only when
-// the session is OPENED; until then it lists it by its cached title alone (no preset, model,
-// permissions or turns — `bbox agent list|show` and the screen's own row both say less than they
-// should). So once the harness answers, every session it reports `migration-required` is opened the
-// cheapest way the API offers — a rename to the title it already has, which resumes it, writes the new
-// log beside the old one (the old file stays on the volume) and starts no turn. Sequential, once per
-// adapter start; a failure is logged and left for the screen to open. EXU-64.
-(async function migrateOldSessions() {
-  for (let i = 0; i < 60; i++) {
-    try { await fetch(`${HARNESS}/`, { redirect: "manual", signal: AbortSignal.timeout(4000) }); break; } catch { await new Promise((r) => setTimeout(r, 5000)); }
-  }
-  let items;
-  try { items = (await rpc("session/list", { _request: {} }, 600000))?.items || []; } catch (e) { console.log(`adapter: migration skipped — ${e.message}`); return; }
-  const old = items.filter((s) => s.formatStatus === "migration-required");
-  if (!old.length) return;
-  let done = 0;
-  for (const s of old) {
-    const title = s.projections?.values?.title;
-    if (typeof title !== "string" || !title) continue;   // a blank session has nothing to show and migrates when opened
-    try { await rpc("session/rename", { request: { sessionId: s.sessionId, title } }); done++; } catch (e) { console.log(`adapter: ${s.sessionId} not migrated — ${e.message}`); }
-  }
-  console.log(`adapter: ${done} of ${old.length} sessions from the older harness brought to its current format`);
-  live.refreshList(true);
-})();
+// ── the conversations written by an older harness: migrated when they are next written to ─────────
+// DeepSeek Harness 0.2.x keeps a session in a newer log format. An older one is migrated when it is
+// resumed: a message, a rename, an edit, a retry. Reading it (the screen's follow, `bbox agent messages`)
+// decodes it in memory, writes nothing and keeps nothing loaded. Until it is resumed, the list knows only
+// its cached title (no preset, model, permissions or turns). Until DGO-2126 this adapter resumed every
+// `migration-required` session at each start (a rename to its own title, EXU-64), so that the list said
+// everything about them. It no longer does (DGO-2111 root 20). The harness keeps a resumed session until
+// its process ends (0.2.2-rc.3 has no idle eviction and no close call).
+// - The HP's harness died at its 1120 MB heap limit 22 minutes after a start, inside the loop.
+// - The MacBook's, which resumed 79 of 168 that way on 2026-11-20, held 822 MB seven hours later.
+// - vps1's, where all 103 were refused, held 205 MB.
+// On those two, after a first pass the loop found only what a rename cannot migrate (a subagent's
+// session, «owned by subagent routing», or one whose preset the office no longer has), and it retried
+// them at every start.

@@ -1,0 +1,109 @@
+# data-home-pending — what gate G118 (scripts/refactor/data-home-lint.py) finds and the tree may still hold.
+#
+# The standard (DGO-2019, ai/context/build-your-first-app.md «Where an app keeps its state»): an app's state is host
+# folders data/<app>/<store> of the DGO folder. This list is the RATCHET of the day it was written, 2026-11-18:
+#   pending: a finding still to move — the app's change (compose bind, data.paths, data.moved_from, hooks/state)
+#            takes its line off, and `bbox run` moves the bytes (platform/manager/datahome.py). Nothing is added here.
+#   waived:  a finding that is not the app's state, with its reason. A waiver without a reason is a pending line.
+# A line that matches nothing fails the gate (stale), so the list only shrinks.
+# Each line is "<rule> <subject>" as `python3 scripts/refactor/data-home-lint.py --findings` prints it. The size on
+# the HP and what each store holds: ai/context/data-home.md.
+
+android-emulator:
+  pending:
+    - "H1 android_emulator_apks"
+bina-claude:
+  pending:
+    - "H1 bina_claude_home"       # 2.4 GB on the HP: the sign-in, sessions, memory — the DGO-1924 session's change
+    - "H1 obsidian_vault"         # obsidian's: binds data/obsidian/vault once obsidian has moved
+bina-ds:
+  pending:
+    - "H1 bina_ds_home"
+    - "H1 obsidian_vault"
+browser42:
+  pending:
+    - "H1 cloakprofile"           # 2.0 GB on the HP: every site's sign-in
+    - "H1 browser42_caddy_data"
+    - "H1 browser42_caddy_config"
+cad:
+  pending:
+    - "H1 cad_config"
+    - "H1 cad_projects"
+cad-api:
+  pending:
+    - "H1 cad_projects"           # cad's: binds data/cad/projects once cad has moved
+chat:
+  pending:
+    - "H2 ./data"                 # the WhatsApp session, inside the source tree
+    - "H1 wa_media"
+    - "H1 chat_relay_git"
+    - "H1 chat_relay_media"
+ci-runner:
+  pending:
+    - "H1 ci_runner_state"
+  waived:
+    # each job's checkout and build scratch, rebuilt by the next job; bound at the same path for the job's own
+    # `docker run -v` (G26's waiver says the same)
+    - "H2 /var/lib/dgo-ci-runner/work"
+dashboard:
+  pending:
+    - "H2 ../../data/lan"         # → data/dashboard/lan
+  waived:
+    # the LAN switch's unix socket (/run/lan/api.sock), a rendezvous the collector makes again at every start —
+    # nothing in it is state; a named volume because two containers meet there
+    - "H1 dashboard_lan_sock"
+data-management:
+  waived:
+    # the archive root: the backup's own destination, outside the folder it backs up on purpose (G26's waiver)
+    - "H2 /var/backups/bbox"
+dgo-extend:
+  pending:
+    - "H1 dgo_extend_state"
+    - "H1 dgo_extend_peers"
+    - "H1 dgo_identity"           # the office's identity: a lost one is a new office to every peer
+    - "H1 dgo_tunnel"
+    - "H1 dgo_carry"
+    - "H1 dgo_doorlog"
+    - "H2 /var/lib/bbox/.dgo/doors"   # live: <checkout>/.dgo/doors, a hidden folder of the checkout
+element:
+  pending:
+    - "H1 element_home"
+indox:
+  pending:
+    - "H2 ./storage"              # inside the source tree
+machine:
+  pending:
+    - "H2 ../../data/power"       # → data/machine/power
+n8n:
+  waived:
+    # the tracked workflow source, written on purpose by `bbox n8n pull` (an export into the tree): source, not state
+    - "H2 ./blueprint/n8n"
+obsidian:
+  pending:
+    - "H1 obsidian_vault"
+    - "H1 obsidian_state"
+    - "H1 obsidian_app"
+openhands:
+  pending:
+    - "H2 /root/digital-office"
+    - "H1 openhands_state"
+    - "H1 openhands_config"
+    - "H1 llm_gateway_config"
+    - "H2 /root/digital-office/ai/obsidian"
+    - "H2 /root/digital-office/apps/openhands/downloads"
+portainer:
+  pending:
+    - "H1 portainer_data"
+    - "H2 ./portainer_password.txt"
+signal:
+  pending:
+    - "H1 signal_home"
+slack:
+  pending:
+    - "H1 slack_home"
+traefik:
+  pending:
+    - "H2 ./config"               # acme.json: every TLS key → data/traefik/acme, the tracked config read-only
+examplex:
+  pending:
+    - "H1 examplex_data"

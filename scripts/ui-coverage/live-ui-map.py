@@ -190,7 +190,9 @@ STANDIN_JS = r"""(() => {
 #: panel, each "drawn" in no time: 2026-10-09, a running office whose entry had become its install
 #: wizard read as a healthy tile, and only the picture said otherwise. So the map looks before it
 #: opens anything, and photographs nothing there.
-NOT_THE_SHELL_JS = r"""(() => document.querySelector('#nav') && document.querySelector('#content') ? ''
+#: (The shell is known by `#app` and `#content`, which both of its forms carry — `#nav` was its side rail, gone with
+#: DGO-2132.)
+NOT_THE_SHELL_JS = r"""(() => document.querySelector('#app') && document.querySelector('#content') ? ''
   : (document.title.trim() || location.pathname || 'a page with no title'))()"""
 
 
@@ -984,6 +986,12 @@ def main():
         return 0
 
     prof = profiles[a.profile]
+    # A computer's console is the desk (DGO-2132): at 1024px and wider the shell's one frame stands hidden under the
+    # desk's windows. Every panel is then taken in the console view a desk window shows — `?bare=1`, no desk mounted —
+    # where that frame is the app across the whole viewport.
+    if url and prof["width"] >= 1024:
+        page_part, _, hash_part = url.partition("#")
+        url = page_part + ("&" if "?" in page_part else "?") + "bare=1" + (("#" + hash_part) if hash_part else "")
     out = a.out or (OUT_ROOT / (a.profile + ("-tiles" if a.tiles else "")))
     out.mkdir(parents=True, exist_ok=True)
 

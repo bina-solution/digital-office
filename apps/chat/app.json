@@ -141,7 +141,7 @@
       "auth": "sso",
       "emit_labels": false,
       "module": {
-        "group": "עסק",
+        "group": "תקשורת",
         "icon": "message",
         "embed": true,
         "alias": "chat",

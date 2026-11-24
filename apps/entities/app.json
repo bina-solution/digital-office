@@ -30,7 +30,7 @@
       "port": 8999,
       "auth": "sso",
       "module": {
-        "group": "עסק",
+        "group": "ניהול העסק",
         "icon": "book",
         "embed": true,
         "alias": "entities",
@@ -54,7 +54,9 @@
   "health": { "structural": "auto", "probe": { "http": "http://entities:8999/healthz", "interval": "30s" } },
   "resources": { "cpus": "0.2", "memory": "128M" },
   "data": {
-    "volumes": ["entities_data"],
+    "volumes": [],
+    "paths": ["data/entities/state"],
+    "moved_from": {"data/entities/state": "entities_data"},
     "on_uninstall": "keep",
     "note": "The people and organizations the business works with, their roles, relations, where each import came from, and the audit of every change — one SQLite file, entities.db. An entity is archived, never deleted: an issued document may name it."
   },

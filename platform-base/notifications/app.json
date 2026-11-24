@@ -56,7 +56,7 @@
       "auth": "sso",
       "emit_labels": false,
       "module": {
-        "group": "תשתית",
+        "group": "ניהול הלשכה",
         "icon": "bell",
         "embed": true,
         "alias": "alerts",
@@ -77,7 +77,9 @@
     }
   },
   "data": {
-    "volumes": ["notifications_data"],
+    "volumes": [],
+    "paths": ["data/notifications"],
+    "moved_from": {"data/notifications": "notifications_data"},
     "on_uninstall": "keep"
   },
   "observability": {

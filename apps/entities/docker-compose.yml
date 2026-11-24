@@ -13,17 +13,23 @@ services:
       # the platform — never a copy of it here (platform-base/forward-auth/signin.py says why)
       additional_contexts:
         dgo: ../../platform-base/forward-auth
+        # …and the verifier of the link door's signature it asks for a linked office's person (DGO-2135)
+        dgolink: ../../platform-base/connections
     container_name: entities-${DEPLOYMENT_NAME:-bina-deployment}
     hostname: entities
     restart: unless-stopped
     environment:
       - ENTITIES_DATA=/data
+      # the door knows the link's door by its container name, `dgo-net-<deployment>` (signin.Link)
+      - DEPLOYMENT_NAME=${DEPLOYMENT_NAME:-bina-deployment}
       # a service (the documents' ledger, an n8n flow) calls with it; minted per office (scripts/env-secrets.py)
       - ENTITIES_API_TOKEN=${ENTITIES_API_TOKEN:-}
       - TZ=${ENTITIES_TZ:-Asia/Jerusalem}
     volumes:
-      # the people and organizations the business works with (data.on_uninstall: keep)
-      - entities_data:/data
+      # the people and organizations the business works with (data.on_uninstall: keep). In the DGO folder's
+      # data/entities/state (DGO-2019); it was the volume entities_data, moved once by `bbox run` (app.json
+      # data.moved_from)
+      - ../../data/entities/state:/data
     networks:
       - traefik-network
     healthcheck:
@@ -43,9 +49,6 @@ services:
       options:
         max-size: 5m
         max-file: '3'
-
-volumes:
-  entities_data:
 
 networks:
   traefik-network:

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-#: snapshot n8n's own state (database dump + the .n8n volume) for `bbox export`
+#: snapshot n8n's own state (database dump + its .n8n store: data/n8n/home, or its volume while the move waits) for `bbox export`
 #
 # backup <outdir> <mode>   — invoked by scripts/deployment-archive.py, never by hand.
 #
@@ -58,7 +58,7 @@ mv "${OUT}/n8n.dump.part" "${OUT}/n8n.dump"
 echo "ARTIFACT n8n.dump"
 echo "SKIPVOL postgres_storage"
 
-# ── 2. the .n8n volume ──────────────────────────────────────────────────────────────────────────
+# ── 2. the .n8n store ───────────────────────────────────────────────────────────────────────────
 # What is actually in it, measured: `nodes/` 204 MB (the five community node packages this estate's
 # workflows import — carried in BOTH modes, because a restore that has to reach npm is a restore
 # that fails on an offline machine), `storage/` 1.6 GB in N files (execution BINARY data, since
@@ -73,7 +73,17 @@ echo "SKIPVOL postgres_storage"
 PROJ="$(archive_project)"
 VOLEX=()
 [ "${MODE}" = "config" ] && VOLEX=(--exclude ./storage --exclude "./n8nEventLog*")
-docker run --rm -v "${PROJ}_n8n_storage:/v:ro" -v "${OUT}:/out" alpine \
+# Where n8n keeps it: the DGO folder's data/n8n/home since DGO-2019, or its volume while that move waits — the n8n
+# container of this office says (stopped: a quiesced export stops it), else the engine's record (archive_store). Never
+# the old volume by name alone: the move leaves it as it was, and this hook claims the store (SKIPVOL), so the archive
+# carries nothing else of it (data-home.md).
+HOME_SRC="$(archive_store n8n /home/node/.n8n n8n data/n8n/home n8n_storage)" || exit 1
+# …and it is there: `-v` of a name or a path that is not would make an empty one, and an empty home be the backup
+case "${HOME_SRC}" in
+  /*) [ -d "${HOME_SRC}" ] ;;
+  *)  docker volume inspect "${HOME_SRC}" >/dev/null 2>&1 ;;
+esac || { echo "[n8n/backup] n8n's home ${HOME_SRC} is not there — nothing to carry, and nothing is made" >&2; exit 1; }
+docker run --rm -v "${HOME_SRC}:/v:ro" -v "${OUT}:/out" alpine \
   tar czf /out/n8n_storage.tar.gz.part "${VOLEX[@]}" -C /v . \
   || { echo "[n8n/backup] volume tar failed" >&2; exit 1; }
 mv "${OUT}/n8n_storage.tar.gz.part" "${OUT}/n8n_storage.tar.gz"

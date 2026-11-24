@@ -78,12 +78,13 @@ jobs:
         module: [packaging/trust, packaging/dgo, packaging/installer, packaging/relsign, platform-base/forward-auth]
     steps:
       # A VERSION'S PROOF GOES FIRST (DGO-1819): the price above, measured — on 2026-11-11 a version's proof stood
-      # 45 minutes behind office-branch jobs. On any branch but dgo-stable this job asks scripts/ci/step-aside first,
+      # 45 minutes behind office-branch jobs; on 2026-11-19 batch 84's proof waited behind its own go-test and 85's, so
+      # on dgo-stable too (--line-too, DGO-2111: the proof's last job asks it again). This job asks scripts/ci/step-aside first,
       # when the runner takes it: while a gates-hosted run of dgo-stable is queued or running, it cancels its own run in
       # seconds (the run reads «cancelled», never a green). A running run still drains; a superseded head is not a
       # reason (the group's comment above: DGO-1797); a hand-run, a tag or a pull request never steps aside.
       - uses: actions/checkout@v4
-        if: startsWith(github.ref, 'refs/heads/') && github.ref != 'refs/heads/dgo-stable'
+        if: startsWith(github.ref, 'refs/heads/')
         with:
           fetch-depth: 1
           filter: blob:none
@@ -92,12 +93,16 @@ jobs:
           path: .step-aside
           persist-credentials: false
       - name: A version's proof goes first (scripts/ci/step-aside)
-        if: startsWith(github.ref, 'refs/heads/') && github.ref != 'refs/heads/dgo-stable'
+        if: startsWith(github.ref, 'refs/heads/')
         env:
           GH_TOKEN: ${{ github.token }}
-        run: bash .step-aside/scripts/ci/step-aside && rm -rf .step-aside
+        run: bash .step-aside/scripts/ci/step-aside --line-too && rm -rf .step-aside
 
       - uses: actions/checkout@v4
+        with:
+          # the job's token (`actions: write`, for step-aside) stays out of the tests' git config: the watcher beside
+          # the test step is the one that holds it (DGO-2123's second reader)
+          persist-credentials: false
 
       - uses: actions/setup-go@v5
         with:
@@ -133,8 +138,15 @@ jobs:
           # The oracles FAIL instead of skipping when what they compare against is missing (Python,
           # PyYAML, Flask, the checkout's state file) — the skip below is the second guard, not the first.
           DGO_ORACLE_REQUIRED: "1"
+          STEP_ASIDE_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
+          # A version's proof pushed while this leg tests still goes first: asked every 30 s, not only at the job's
+          # first step (step-aside --watch, DGO-2123) — packaging/dgo's leg holds the runner eight minutes. Its token
+          # goes to the watcher alone, never into the tests' environment.
+          GH_TOKEN="${STEP_ASIDE_TOKEN}" bash "${GITHUB_WORKSPACE}/scripts/ci/step-aside" --watch --line-too & watcher=$!
+          unset STEP_ASIDE_TOKEN
+          trap 'kill "${watcher}" 2>/dev/null || true' EXIT
           # The compiler's oracle package takes 5–11 minutes on a loaded machine (measured 2026-10-15: 685 s
           # on Windows, 678 s in WSL) — past go test's default 10-minute timeout, which would read as a hang.
           # -p 2: two packages at a time, not one per CPU. On the Dell (an i7-5500U laptop, 4 threads) the full

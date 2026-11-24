@@ -3,7 +3,7 @@
 compose_map.py — assemble every captured view into ONE big mockup image of the platform.
 
 Layout follows the product's own information architecture rather than an arbitrary grid:
-sections come from the console's `modules.yaml` groups (ראשי / עסק / תשתית / הגדרות),
+sections come from the apps' home groups, in the console's order (app.js GROUPS, DGO-2122),
 then first-party apps that aren't console modules, then third-party. Seeing the map
 should feel like seeing the system, not like seeing a directory listing.
 
@@ -45,7 +45,8 @@ MUTED = (140, 150, 168)
 SECTION = (86, 160, 255)
 OK, BAD, SKIP = (64, 190, 120), (226, 88, 88), (150, 130, 60)
 
-GROUP_ORDER = ["ראשי", "עסק", "תשתית", "הגדרות"]
+GROUP_ORDER = ["בינה מלאכותית", "ניהול העסק", "עבודה וקבצים", "תקשורת", "העסק ברשת", "ניהול הלשכה",
+               "פיתוח ואוטומציות", "ראשי", "עסק", "תשתית", "הגדרות"]   # the old four still come from older manifests
 
 
 def _font(size: int, bold: bool = False):

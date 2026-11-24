@@ -1,7 +1,8 @@
 # apps/project-pln — Plane Community Edition (AGPL-3.0-only) as one office app.
 #
 # One application container plus four dependencies it cannot live without, each pinned and each with
-# its own volume. Why they are not the platform's own services:
+# its own store in the DGO folder's data/project-pln/ (volumes until DGO-2019). Why they are not the platform's own
+# services:
 #
 #   * plane-db   Plane requires PostgreSQL 15.7+ and starts its own with max_connections=1000; its
 #                migrations own the schema. Sharing the platform db would mean one tenant of a
@@ -112,7 +113,7 @@ services:
       - DGO_IDENTITY=${DGO_IDENTITY:-authentik}
       - PLANE_SSO_OUTPOST=${PLANE_SSO_OUTPOST:-}
       # Where the DECLARED office-identity → Plane-account map is applied (bootstrap.yaml `sso:`,
-      # written by bootstrap.py into this app's own volume). No file = no SSO: Plane's own sign-in
+      # written by bootstrap.py into this app's own store, data/project-pln/state). No file = no SSO: Plane's own sign-in
       # is then the only door, exactly as before this change.
       - PLANE_SSO_MAP=${PLANE_SSO_MAP:-/app/data/office-identity.json}
       # The credential plane, for the one thing this app does in it: `bootstrap.py` stores the
@@ -121,8 +122,10 @@ services:
       # In-network only; nothing here is exposed to a browser.
       - CONNECTIONS_URL=${CONNECTIONS_URL:-http://connections:8990}
     volumes:
-      - project_pln_data:/app/data
-      - project_pln_logs:/app/logs
+      # the instance's own keys and state, and its logs — in the DGO folder's data/project-pln/{state,logs} (DGO-2019;
+      # they were the volumes project_pln_data and project_pln_logs, moved once by `bbox run`)
+      - ../../data/project-pln/state:/app/data
+      - ../../data/project-pln/logs:/app/logs
     depends_on:
       plane-db:
         condition: service_healthy
@@ -184,7 +187,9 @@ services:
       POSTGRES_PASSWORD: ${PLANE_DB_PASSWORD:?set PLANE_DB_PASSWORD in .env — scripts/ci-env.sh mints it on a fresh machine}
       POSTGRES_DB: plane
     volumes:
-      - project_pln_db:/var/lib/postgresql/data
+      # every work item: in the DGO folder's data/project-pln/db (DGO-2019; it was the volume project_pln_db, moved
+      # once by `bbox run` with the database stopped). Backed up by hooks/backup's pg_dump, never as files (SKIPVOL)
+      - ../../data/project-pln/db:/var/lib/postgresql/data
     networks: [project-pln-net]
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U plane -d plane"]
@@ -201,7 +206,9 @@ services:
     image: valkey/valkey:7.2.11-alpine
     restart: unless-stopped
     volumes:
-      - project_pln_redis:/data
+      # cache, sessions and broker of THIS instance, in data/project-pln/redis (DGO-2019; it was project_pln_redis) —
+      # claimed by hooks/backup and never carried
+      - ../../data/project-pln/redis:/data
     networks: [project-pln-net]
     healthcheck:
       test: ["CMD", "valkey-cli", "ping"]
@@ -229,7 +236,13 @@ services:
       # process could find is one it must never apply by itself.
       MINIO_UPDATE: off
     volumes:
-      - project_pln_minio:/export
+      # the attachments, in data/project-pln/files (DGO-2019; it was the volume project_pln_minio)
+      - ../../data/project-pln/files:/export
+      # the image's own VOLUME /data: an anonymous volume until DGO-2019, which compose carries over at every
+      # recreate. MinIO keeps nothing there (/export is its store), but only a BIND ends it: compose carries the old
+      # container's anonymous volume over a tmpfs (short or long syntax, measured on compose 2.40), never over a bind.
+      # The old one is left as found, detached, as a move leaves every old volume
+      - ../../data/project-pln/minio-data:/data
     networks: [project-pln-net]
     healthcheck:
       test: ["CMD", "mc", "ready", "local"]
@@ -240,13 +253,6 @@ services:
     deploy:
       resources:
         limits: { cpus: '0.3', memory: 320M }
-
-volumes:
-  project_pln_data:
-  project_pln_logs:
-  project_pln_db:
-  project_pln_redis:
-  project_pln_minio:
 
 networks:
   traefik-network:

@@ -50,7 +50,7 @@
       "port": 8984,
       "auth": "sso",
       "module": {
-        "group": "ראשי",
+        "group": "תקשורת",
         "icon": "message",
         "embed": true,
         "alias": "telegram",
@@ -79,9 +79,9 @@
     }
   },
   "data": {
-    "volumes": [
-      "telegram_data"
-    ],
+    "volumes": [],
+    "paths": ["data/telegram/state"],
+    "moved_from": {"data/telegram/state": "telegram_data"},
     "on_uninstall": "keep"
   },
   "resources": {

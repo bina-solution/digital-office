@@ -81,6 +81,19 @@ DEPLOYMENT_DOMAIN=${COMPANY_SLUG}.${COMPANY_BASE_DOMAIN}
 # does not match `drive.dev.example.digital-office…`, so those hosts resolved nowhere and no
 # certificate could be issued for them. Keep it equal unless you also publish a second wildcard.
 DEV_DOMAIN=${DEPLOYMENT_DOMAIN}
+# The office's FORMER names, comma-separated (DGO-2013). An office that moved to another domain keeps its old
+# names in DNS, and every host under one answers 308 to the same host under DEPLOYMENT_DOMAIN
+# (platform-base/https-redirect, routed in zz-https.yaml), so the links already out keep opening — work items,
+# group lines, bookmarks, invites, OAuth callbacks. A door an app still serves at an old name keeps serving it.
+# Empty: the office never moved.
+DGO_FORMER_DOMAINS=
+
+# The further domains this office's public names are under, beside DEPLOYMENT_DOMAIN (DGO-2125): a door in
+# platform.state.yaml's `publish:` may take a host under one of them: a company's own domain beside the office's name
+# (`sign.example.co.il`). Comma-separated; empty = its own domain only (vps1 needs none). A
+# name published under one must point at THIS office (an A record): its certificate is an HTTP-01 order, and one
+# for a name that points elsewhere fails again and again (DGO-901).
+PUBLISH_DOMAINS=
 
 # Nested-Docker / low-limit hosts (e.g. CI sandboxes): the n8n Postgres requests a high
 # open-files ulimit. If the runtime rejects it ("operation not permitted"), cap it here.
@@ -246,6 +259,16 @@ APITOOLS_MAX_CONCURRENT_OCR=
 APITOOLS_MAX_CONCURRENT_JSON_QUERY=
 APITOOLS_DB_HOST=
 MY_DOCS_BASE_URL=my-docs.${DEPLOYMENT_DOMAIN}
+# The https address a signer's link is minted on, when this office's signer page is published on another office's
+# edge (DGO-2125: the HP sets https://sign.bina-solutions.digital-office.co.il, which vps1's `publish:` opens; a bare
+# name is taken
+# as https). Empty = esign's own host. Never put it in ESIGN_BASE_URL: that is the host esign's own screen is routed
+# and signed in at.
+ESIGN_PUBLIC_URL=
+# The office's name as a customer reads it: on esign's signer pages, and in its signing key, which is made ONCE, at
+# the first signature (DGO-2125). Empty = BUSINESS_NAME. Set it before the first signature when BUSINESS_NAME is not
+# that name (the HP's is «Example», from its first setup; Bina's is «בינה סולושנס»).
+ESIGN_OFFICE_NAME=
 # drive's UI host. MUST be declared for the same reason as CONSOLE/CONNECTIONS below: the
 # authentik blueprint gates drive via `!Env [DRIVE_BASE_URL, drive.localhost]`, and an undeclared
 # var silently becomes a provider for drive.localhost — unreachable on a domain, 404 with no hint.
@@ -500,6 +523,13 @@ MAIL_ENABLE_CLAMAV=0
 # EVER ARRIVES — and no health check can detect that, because every probe runs inside the network.
 # A public deployment: 0.0.0.0.
 MAIL_BIND=127.0.0.1
+# Inbound STARTTLS on 25, for a public deployment (DGO-87). `letsencrypt` with MAIL_ACME_JSON = the
+# absolute path of Traefik's store (<checkout>/platform-base/traefik/config/acme.json), which already
+# holds the certificate for MAIL_FQDN because the mail UI is served at that host. Set both, or neither:
+# TLS without a store stops the mail server at start. The compose network's clients see the same EHLO
+# as without it, and Dovecot keeps its plaintext login for mailapi (mailserver-init).
+MAIL_SSL_TYPE=
+MAIL_ACME_JSON=
 # The mailboxes on this server. LOCALMAIL_USER is the PRIMARY and stays a scalar — it is the one
 # account mailapi authenticates as. LOCALMAIL_EXTRA_USERS is every mailbox that exists only to
 # RECEIVE (a per-company address, a role address): comma- or space-separated, each entry `name`
@@ -532,6 +562,11 @@ LOCALMAIL_USER=admin
 # minted per office by scripts/env-secrets.py: 48 random hex characters
 LOCALMAIL_PW=
 LOCALMAIL_EXTRA_USERS=
+# Addresses delivered to a mailbox (DGO-87): `alias:target`, comma- or space-separated, either side a
+# bare name (qualified with MAIL_DOMAIN) or a full address at a domain this server serves; the same
+# alias twice has two targets. An alias that is also a mailbox keeps its own copy. Example, the
+# company's own domain into the primary: admin@<company domain>:admin hello@<company domain>:admin
+LOCALMAIL_ALIASES=
 
 
 # inbox service. LOCAL-FIRST by default: a clean install serves the built-in local mailbox
@@ -866,6 +901,12 @@ BINA_CLAUDE_NOTIFY_URL=http://notifications:8977/api/notifications
 # whose .env sets TZ=Etc/UTC (the HP does) would otherwise name an hour he does not read (DGO-1357).
 # A zone the runtime does not know is logged, once, and the hours are said in UTC: never silently.
 BINA_CLAUDE_TZ=
+# How many turns the office's Claude runs at once (DGO-2126). A turn asked for beyond it — a new conversation's
+# first message, or a message to an idle one — waits in the adapter's line, its sender is told «queued» and its
+# place, and the line starts it when a turn ends; a turn typed on the app's own screen is counted, never held. The
+# HP starved on ten at once (2026-11-20). Empty = 4; 0 = no cap; a whole number up to 64 — anything else is logged
+# and 4 is used.
+BINA_CLAUDE_MAX_TURNS=
 
 # Feature Validation API
 FV_BASE_URL=fv.${DEV_DOMAIN}
@@ -899,7 +940,11 @@ SUPABASE_ANON_KEY=
 SUPABASE_SERVICE_KEY=
 SUPABASE_BASE_URL=supabase.${DEV_DOMAIN}
 SUPABASE_STUDIO_BASE_URL=supabase-studio.${DEV_DOMAIN}
-SUPABASE_FILE_SIZE_LIMIT=52428800
+# The largest file «קבצים» takes: ONE value, read by drive (DRIVE_MAX_UPLOAD) and by supabase storage
+# (FILE_SIZE_LIMIT), so the two never disagree. 2 GiB (DGO-1785): 50 MB refused every meeting video over ~18
+# minutes (exu101: 388 MB for 2:13 h). Both stream, so memory does not grow with it; disk does: a file holds about
+# twice its size while it is stored (the upload's part, then storage's copy).
+SUPABASE_FILE_SIZE_LIMIT=2147483648
 SUPABASE_STORAGE_BUCKET=default
 # The Supabase dashboard (Studio/kong) login password — apps/supabase/app.json declares it, and its
 # compose defaults it to CHANGE_ME. Generate with: openssl rand -hex 24

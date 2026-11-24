@@ -91,7 +91,8 @@ SYSTEM_MARK = "data-management"
 # ── targets ─────────────────────────────────────────────────────────────────────────────────────
 #
 # A target is where one repository lives. They are written by the screen that picks them (ob-9);
-# until then by hand, into the service's own volume. The file is read on every request, so a change
+# until then by hand, into the service's own store — data/data-management/state (its old volume
+# data_management_state only where the office still waits on the move). The file is read on every request, so a change
 # needs no restart, and a malformed file is a 503 naming itself, never a guess.
 #
 # `url` is the files app's generic API, written by whoever picks the target, from the compiled

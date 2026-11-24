@@ -122,10 +122,11 @@ const (
 	holdsUnreached
 )
 
-// officeHoldsData is office_holds_data, its exit code: 0 the project has containers or volumes, 1 none, 2 the
-// engine did not say — the engine bbox exported (need_docker) asked, its containers, then its volumes. A failed
-// query is «did not say»: never an empty office.
-func officeHoldsData(s System, h host, dockerHost, pn string) int {
+// officeHoldsData is office_holds_data, its exit code: 0 the project has containers or volumes, or a store that
+// moved to the checkout's data/ holds data (DGO-2019), 1 none, 2 the engine or a manifest did not say — the engine
+// bbox exported (need_docker) asked, its containers, then its volumes, then the checkout at root its stores
+// (movedData). A failed query is «did not say»: never an empty office.
+func officeHoldsData(s System, h host, dockerHost, pn, root string) int {
 	label := "label=com.docker.compose.project=" + pn
 	c, err := h.run(s, "docker", "-H", dockerHost, "ps", "-aq", "--filter", label)
 	if err != nil {
@@ -139,5 +140,26 @@ func officeHoldsData(s System, h host, dockerHost, pn string) int {
 	if strings.TrimRight(c, "\n")+strings.TrimRight(v, "\n") != "" {
 		return 0
 	}
-	return 1
+	return movedData(s, h, root)
+}
+
+// movedDataSh is lib.sh's own question, its exit status said on stdout: env-secrets.py --moved-data, the one reading
+// of every manifest's data.moved_from and of the folders the stores moved to.
+const movedDataSh = `python3 "$1/scripts/env-secrets.py" --moved-data >/dev/null 2>&1; echo "$?"`
+
+// movedData is office_holds_data's last question: 0 a store that moved to the checkout's data/ holds data, 1 none
+// (its own exit, 10: a crash exits 1), 2 not said — python3 missing, a manifest that cannot be read, a crash, the
+// host not answering.
+func movedData(s System, h host, root string) int {
+	out, err := h.run(s, "sh", "-c", movedDataSh, "sh", root)
+	if err != nil {
+		return 2
+	}
+	switch strings.TrimSpace(out) {
+	case "0":
+		return 0
+	case "10":
+		return 1
+	}
+	return 2
 }

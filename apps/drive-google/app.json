@@ -57,9 +57,9 @@
     }
   },
   "data": {
-    "volumes": [
-      "drive_google_data"
-    ],
+    "volumes": [],
+    "paths": ["data/drive-google/state"],
+    "moved_from": {"data/drive-google/state": "drive_google_data"},
     "on_uninstall": "purge"
   },
   "observability": {

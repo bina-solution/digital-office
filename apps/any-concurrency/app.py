@@ -1020,6 +1020,33 @@ async def _discover_traefik_container(docker: aiodocker.Docker) -> str | None:
     return None
 
 
+#: How often a quiet log follow says it is still attached to a RUNNING container (seconds). Under the n8n lanes'
+#: N8N_LANES_STUCK_S (300) on purpose: one failed inspect must not make a quiet lane look stuck and re-attach.
+FOLLOW_ALIVE_S = float(os.environ.get("FOLLOW_ALIVE_S", "120"))
+
+
+async def _follow_alive(container, health: dict[str, Any]) -> None:
+    """While a log follow is attached, its source stays ok for as long as the container RUNS — a quiet log is not a
+    silent source. traefik writes no line unless something fails, and n8n's main and webhook write none while nothing
+    runs, so «no line for a day» read as «the source went silent». Raphael's collector watch (24 h) raised that every
+    day: the HP's traefik, n8n-bg:main and n8n-bg:webhook stood 3.2 h without a line on 2026-11-20 while their
+    containers ran for days (DGO-2111, root 19). `last_event` still says when a line last came; a container that
+    stops running, or cannot be read, marks the source not ok as before."""
+    while True:
+        await asyncio.sleep(FOLLOW_ALIVE_S)
+        try:
+            info = await asyncio.wait_for(container.show(), 30)   # bounded, as custom_log_loop bounds its get
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:                        # noqa: BLE001 — said on the source, the follow decides
+            _mark_source(health, False, repr(exc))
+            continue
+        if (info.get("State") or {}).get("Running"):
+            _mark_source(health, True)
+        else:
+            _mark_source(health, False, "the container is not running")
+
+
 async def traefik_log_loop(docker: aiodocker.Docker, store: RingStore, broadcast, health: dict[str, Any]) -> None:
     """Tail traefik container logs and parse CLF access lines into spans."""
     while True:
@@ -1054,15 +1081,19 @@ async def traefik_log_loop(docker: aiodocker.Docker, store: RingStore, broadcast
                 _mark_source(health, False, repr(exc))
                 print(f"[traefik] snapshot failed: {type(exc).__name__}: {exc!r}")
 
-            # Now follow
-            async for line in container.log(stdout=True, stderr=False, follow=True, tail=0):
-                span = _parse_traefik_line(line.rstrip("\n"))
-                if not span:
-                    continue
-                new = await store.upsert_many([span])
-                _mark_source(health, True, event=True)
-                if new:
-                    await broadcast({"type": "delta", "rows": new})
+            # Now follow — and say it is still attached while the log is quiet (_follow_alive)
+            alive = asyncio.create_task(_follow_alive(container, health))
+            try:
+                async for line in container.log(stdout=True, stderr=False, follow=True, tail=0):
+                    span = _parse_traefik_line(line.rstrip("\n"))
+                    if not span:
+                        continue
+                    new = await store.upsert_many([span])
+                    _mark_source(health, True, event=True)
+                    if new:
+                        await broadcast({"type": "delta", "rows": new})
+            finally:
+                alive.cancel()
         except asyncio.CancelledError:
             raise
         except Exception as exc:
@@ -1155,14 +1186,18 @@ async def logspan_log_loop(docker: aiodocker.Docker, store: RingStore, broadcast
                 _mark_source(health, False, repr(exc))
                 print(f"[logspan] snapshot failed: {type(exc).__name__}: {exc!r}")
 
-            async for line in container.log(stdout=True, stderr=True, follow=True, tail=0, timestamps=True):
-                span = _process(line.rstrip("\n"))
-                if not span:
-                    continue
-                new = await store.upsert_many([span])
-                _mark_source(health, True, event=True)
-                if new:
-                    await broadcast({"type": "delta", "rows": new})
+            alive = asyncio.create_task(_follow_alive(container, health))   # a quiet log is not a silent source
+            try:
+                async for line in container.log(stdout=True, stderr=True, follow=True, tail=0, timestamps=True):
+                    span = _process(line.rstrip("\n"))
+                    if not span:
+                        continue
+                    new = await store.upsert_many([span])
+                    _mark_source(health, True, event=True)
+                    if new:
+                        await broadcast({"type": "delta", "rows": new})
+            finally:
+                alive.cancel()
         except asyncio.CancelledError:
             raise
         except Exception as exc:
@@ -1603,14 +1638,18 @@ async def custom_log_loop(
                 _mark_source(health, False, repr(exc))
                 print(f"[{tag}] snapshot failed: {type(exc).__name__}: {exc!r}")
 
-            async for line in container.log(stdout=True, stderr=True, follow=True, tail=0, timestamps=True):
-                spans = _parse(line.rstrip("\n"))
-                if not spans:
-                    continue
-                new = await store.upsert_many(spans)
-                _mark_source(health, True, event=True)
-                if new:
-                    await broadcast({"type": "delta", "rows": new})
+            alive = asyncio.create_task(_follow_alive(container, health))   # a quiet lane is not a silent one
+            try:
+                async for line in container.log(stdout=True, stderr=True, follow=True, tail=0, timestamps=True):
+                    spans = _parse(line.rstrip("\n"))
+                    if not spans:
+                        continue
+                    new = await store.upsert_many(spans)
+                    _mark_source(health, True, event=True)
+                    if new:
+                        await broadcast({"type": "delta", "rows": new})
+            finally:
+                alive.cancel()
         except asyncio.CancelledError:
             raise
         except Exception as exc:
@@ -2903,6 +2942,8 @@ async def get_sources() -> dict[str, Any]:
             # the health record keeps it as `last_error`; reading `error` made every reason null, so a
             # lane down for three days reached raphael's notice as a bare "ok=false"
             "error": h.get("last_error"),
+            # when a line last came: `last_ok` also moves while a quiet follow is attached (_follow_alive)
+            "last_event": h.get("last_event"),
             "config": conf,
         }
 

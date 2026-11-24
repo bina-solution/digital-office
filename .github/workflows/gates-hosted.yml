@@ -38,7 +38,10 @@ permissions:
 # So every job here that takes the runner for a branch other than dgo-stable asks scripts/ci/step-aside first: while
 # a gates-hosted run of dgo-stable is queued or running, it cancels its own run in seconds (the run reads
 # «cancelled», never a green) — the cancel is that job's own `actions: write`. A RUNNING proof still drains; a
-# superseded head is NOT a reason (above: that is DGO-1797's); a hand-run never steps aside; the groups are unchanged.
+# superseded head alone is NOT a reason (above: that is DGO-1797's), a newer run of the branch that will test it is
+# (step-aside's «superseded», DGO-2123); a hand-run never steps aside; the groups are unchanged. The job that yields
+# clears the way first — every other run waiting for the runner that would yield too — and the proof does the same at
+# the end of its own jobs (`--clear`), so its next job is next.
 
 jobs:
   # THE QUESTION, asked once, in git's own words. It used to be `contains(head_commit.message,
@@ -82,6 +85,7 @@ jobs:
     timeout-minutes: 50
     outputs:
       gates: ${{ steps.marker.outputs.gates }}
+      store: ${{ steps.store.outputs.answers }}
     steps:
       # The one file it runs, not the tree: the commit (for its message) and scripts/ci/gates-asked's blob,
       # sparse and blob-less, in a directory of its own — the gates job's full checkout of the workspace is
@@ -124,6 +128,28 @@ jobs:
             echo "::warning::this commit asked for the gates with «[gates]» in its subject — still honoured for one release; write the trailer «Gates: run» on its own line above Co-Authored-By"
           fi
 
+      # READY-MADE IMAGES (the `images` job below): asked HERE, on the runner the proof already holds — where no image
+      # store answers, that job is skipped at once instead of waiting for the one runner, and holding it, before green
+      - id: store
+        name: Is there an image store on this runner's office?
+        if: github.event_name == 'push' && github.ref == 'refs/heads/dgo-stable' && steps.marker.outputs.gates == 'true'
+        continue-on-error: true
+        timeout-minutes: 1
+        run: |
+          if curl -fsS --max-time 5 -o /dev/null http://image-store:5000/v2/; then echo "answers=true" >> "$GITHUB_OUTPUT"
+          else echo "answers=false" >> "$GITHUB_OUTPUT"; echo "no image store answers here: the images job is skipped, and every office builds as today"; fi
+
+      # A VERSION'S PROOF KEEPS THE RUNNER (DGO-2123): the branch jobs queued while a job of the proof works would take
+      # the runner before its next job, each only to yield (batch 100, 2026-11-20: five between its decide and its
+      # gates). They are cancelled at the end of decide, gates and carrier, and this proof's re-ask asks them again
+      # (scripts/ci/step-aside, «clear the way»). It never touches the proof's verdict.
+      - name: The proof's next job goes next (scripts/ci/step-aside --clear)
+        if: github.event_name == 'push' && github.ref == 'refs/heads/dgo-stable' && steps.marker.outputs.gates == 'true'
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: bash .decide/scripts/ci/step-aside --clear
+
   gates:
     needs: decide
     if: needs.decide.outputs.gates == 'true'
@@ -136,6 +162,8 @@ jobs:
       contents: read
       actions: write   # scripts/ci/step-aside (decide's)
     timeout-minutes: 90
+    outputs:
+      forward_auth: ${{ steps.forward_auth.outputs.changed }}
     steps:
       # asked again HERE, when the runner takes this job: `decide` answered minutes or hours before (the header)
       - uses: actions/checkout@v4
@@ -157,6 +185,29 @@ jobs:
         with:
           persist-credentials: false
 
+      # THE LAST GREEN (refs/green/dgo-stable), fetched with the job's token in this command's environment alone: a suite
+      # that tests one part of the tree asks whether the tree changed there since the last green (scripts/
+      # test_follow_suite.py: the take's 225 checks, ~5 minutes). Since the commit before would not do: a red batch that
+      # broke the take, then one that leaves the take alone, would turn green with the take untested. It cannot fail the
+      # job, and is no soft step either (a verdict's job has none, scripts/test_gates_lanes.py): bounded at 60 s, and any
+      # failure leaves no green here, so every such suite runs.
+      - name: The last green, for the suites that test one part of the tree
+        timeout-minutes: 3
+        env:
+          FETCH_TOKEN: ${{ github.token }}
+        run: |
+          # the green an earlier job left in this workspace goes first: a fetch that fails must leave none, never an
+          # older one (a revert to what that older green held would read as unchanged — the second reader)
+          git update-ref -d refs/remotes/origin/green/dgo-stable 2>/dev/null || true
+          GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0="http.${GITHUB_SERVER_URL}/.extraheader" \
+            GIT_CONFIG_VALUE_0="AUTHORIZATION: basic $(printf 'x-access-token:%s' "${FETCH_TOKEN}" | base64 | tr -d '\n')" \
+            timeout 60 git fetch -q --depth=1 origin '+refs/green/dgo-stable:refs/remotes/origin/green/dgo-stable' \
+            2>/dev/null || echo "refs/green/dgo-stable could not be fetched: every suite runs"
+          # …and THIS job's green is named for the suites (scripts/ci/since_green.py reads DGO_LAST_GREEN, never the ref
+          # alone): a job that fetched none, as ci-verify's G72 in the same workspace, measures from nothing and runs all
+          echo "DGO_LAST_GREEN=$(git rev-parse -q --verify 'refs/remotes/origin/green/dgo-stable^{commit}' || true)" \
+            >> "${GITHUB_ENV}"
+
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
@@ -168,15 +219,173 @@ jobs:
       - name: What the gates read with
         run: |
           set -euo pipefail
+          # THE GATES' PYTHON IS THEIRS (DGO-2123). setup-python's 3.12 lives in the runner's tool cache, which every job
+          # on the one self-hosted runner shares. sim-build's `pip install playwright` landed in it (2026-11-20), and
+          # batch 117's G72 then ran five browser tests with no browser to start (job 136597284196). What another job
+          # left there that G72 reads as «run me» goes first: playwright. sim-build now installs into a venv of its own.
+          python3 -m pip uninstall -y -q playwright 2>/dev/null || true
           python3 -m pip install --quiet pyyaml
           npm ci --prefix apps/n8n/tooling --no-audit --no-fund
           python3 --version; node --version
 
-      - name: Every gate
+      # FAIL FAST (DGO-2123): every self-test and every gate under ~10 s first — about two minutes — and the slow ones
+      # (gates.sh's SLOW) only once those passed: a red a seconds-long gate finds ends the job in minutes, not after
+      # the half hour (4 of 9 red proofs in 2026-11-13…20 carried one; batch 87 stood red all night on one). The two
+      # steps share one blueprint compile (N8N_BP_CACHE, in the job's own temp, which the runner empties per job).
+      #
+      # A VERSION'S PROOF GOES FIRST WHILE THE GATES RUN TOO (DGO-2123). Asked only at the job's first step, an office
+      # branch's gates job that took the runner before a proof was pushed held it its whole twenty minutes (batch 89's,
+      # 2026-11-20: pushed 08:50Z, behind mac-dgo's gates of 08:44 until a person cancelled them at 08:58). So each lane
+      # starts `step-aside --watch` beside gates.sh: a question every 30 s, and at a proof ahead the same cancel and
+      # notice as the first step's (the proof's re-ask runs the job again). On dgo-stable it asks nothing: the job IS
+      # the proof. Its token goes to the watcher alone, never into the gates' environment.
+      - name: Every gate — the fast lane (self-tests and every gate under ~10 s)
+        env:
+          N8N_BP_CACHE: ${{ runner.temp }}/n8nbp-cache
+          STEP_ASIDE_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           echo "gates at $(git rev-parse --short HEAD)"
-          NODE_BIN="$(command -v node)" bash scripts/ci/gates.sh
+          GH_TOKEN="${STEP_ASIDE_TOKEN}" bash scripts/ci/step-aside --watch & watcher=$!
+          unset STEP_ASIDE_TOKEN
+          trap 'kill "${watcher}" 2>/dev/null || true' EXIT
+          NODE_BIN="$(command -v node)" bash scripts/ci/gates.sh --fast
+
+      # On an office branch's push the slow lane is the `slow` job's (below); here it runs for the line and a hand-run
+      - name: Every gate — the slow lane
+        if: github.ref == 'refs/heads/dgo-stable' || github.event_name == 'workflow_dispatch'
+        env:
+          N8N_BP_CACHE: ${{ runner.temp }}/n8nbp-cache
+          STEP_ASIDE_TOKEN: ${{ github.token }}
+          # G72's 457 tests two at a time, a directory's one after another (plane-tests-lint.py: SEVERAL AT A TIME):
+          # one at a time they were 996 of the job's 1,640 s (2026-11-19, DGO-2123). Two, as go-test's `-p 2`: the
+          # Dell's full width ran it to 96 °C (DGO-1122).
+          G72_JOBS: "2"
+        run: |
+          set -euo pipefail
+          echo "gates at $(git rev-parse --short HEAD)"
+          GH_TOKEN="${STEP_ASIDE_TOKEN}" bash scripts/ci/step-aside --watch & watcher=$!
+          unset STEP_ASIDE_TOKEN
+          trap 'kill "${watcher}" 2>/dev/null || true' EXIT
+          NODE_BIN="$(command -v node)" bash scripts/ci/gates.sh --slow
+
+      # the `go` job's question: did forward-auth change since the last green (fetched above)? With no green here, yes
+      - id: forward_auth
+        name: Does forward-auth change since the last green? (the go job's question)
+        if: github.event_name == 'push' && github.ref == 'refs/heads/dgo-stable'
+        run: |
+          green="$(git rev-parse -q --verify 'refs/remotes/origin/green/dgo-stable^{commit}' || true)"
+          if [ -n "${green}" ] && git diff --quiet "${green}" HEAD -- platform-base/forward-auth; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+            echo "forward-auth changed since the last green (${green:-none here}): the go job tests it before green"
+          fi
+
+      # only when this job passed: a red proof's next job is its re-ask alone, and the runs waiting then may go ahead of
+      # it (step-aside's «last job alone is left») — cleared, they would hang on re-ask (the second reader)
+      - name: The proof's next job goes next (scripts/ci/step-aside --clear)
+        if: github.event_name == 'push' && github.ref == 'refs/heads/dgo-stable'
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: bash scripts/ci/step-aside --clear
+
+  # AN OFFICE BRANCH'S SLOW LANE IS A JOB OF ITS OWN (DGO-2123), queued only once the fast lane passed: a red that
+  # lane finds is the push's verdict within minutes of its job taking the runner, and a proof pushed later takes the
+  # runner from the slow job alone (it yields; the proof's re-ask asks it again), never from a fast lane that has
+  # answered. Measured 2026-11-20: from 08:39Z no mac-dgo gates run reached a verdict all day — each was superseded,
+  # yielded or cancelled by hand before its twenty minutes were up — and batch 99 went red on three one-second gates
+  # (G27, G89, screen-words) its branch never ran. On dgo-stable and in a hand-run the gates job keeps both lanes: a
+  # proof never gives the runner back between them.
+  slow:
+    needs: [decide, gates]
+    if: needs.decide.outputs.gates == 'true' && github.event_name == 'push' && github.ref != 'refs/heads/dgo-stable'
+    # as the gates job's: the running one finishes, a newer one replaces only the one still waiting
+    concurrency:
+      group: gates-hosted-slow-${{ github.ref }}
+      cancel-in-progress: false
+    runs-on: [self-hosted, portable]
+    permissions:
+      contents: read
+      actions: write   # scripts/ci/step-aside (decide's)
+    timeout-minutes: 90
+    steps:
+      # asked again HERE, when the runner takes this job: the fast lane passed minutes or hours before
+      - uses: actions/checkout@v4
+        if: startsWith(github.ref, 'refs/heads/') && github.ref != 'refs/heads/dgo-stable'
+        with:
+          fetch-depth: 1
+          filter: blob:none
+          sparse-checkout: scripts/ci/step-aside
+          sparse-checkout-cone-mode: false
+          path: .step-aside
+          persist-credentials: false
+      - name: A version's proof goes first (scripts/ci/step-aside)
+        if: startsWith(github.ref, 'refs/heads/') && github.ref != 'refs/heads/dgo-stable'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: bash .step-aside/scripts/ci/step-aside && rm -rf .step-aside
+
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      # THE LAST GREEN (refs/green/dgo-stable), fetched with the job's token in this command's environment alone: a suite
+      # that tests one part of the tree asks whether the tree changed there since the last green (scripts/
+      # test_follow_suite.py: the take's 225 checks, ~5 minutes). Since the commit before would not do: a red batch that
+      # broke the take, then one that leaves the take alone, would turn green with the take untested. It cannot fail the
+      # job, and is no soft step either (a verdict's job has none, scripts/test_gates_lanes.py): bounded at 60 s, and any
+      # failure leaves no green here, so every such suite runs.
+      - name: The last green, for the suites that test one part of the tree
+        timeout-minutes: 3
+        env:
+          FETCH_TOKEN: ${{ github.token }}
+        run: |
+          # the green an earlier job left in this workspace goes first: a fetch that fails must leave none, never an
+          # older one (a revert to what that older green held would read as unchanged — the second reader)
+          git update-ref -d refs/remotes/origin/green/dgo-stable 2>/dev/null || true
+          GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0="http.${GITHUB_SERVER_URL}/.extraheader" \
+            GIT_CONFIG_VALUE_0="AUTHORIZATION: basic $(printf 'x-access-token:%s' "${FETCH_TOKEN}" | base64 | tr -d '\n')" \
+            timeout 60 git fetch -q --depth=1 origin '+refs/green/dgo-stable:refs/remotes/origin/green/dgo-stable' \
+            2>/dev/null || echo "refs/green/dgo-stable could not be fetched: every suite runs"
+          # …and THIS job's green is named for the suites (scripts/ci/since_green.py reads DGO_LAST_GREEN, never the ref
+          # alone): a job that fetched none, as ci-verify's G72 in the same workspace, measures from nothing and runs all
+          echo "DGO_LAST_GREEN=$(git rev-parse -q --verify 'refs/remotes/origin/green/dgo-stable^{commit}' || true)" \
+            >> "${GITHUB_ENV}"
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: What the gates read with
+        run: |
+          set -euo pipefail
+          # THE GATES' PYTHON IS THEIRS (DGO-2123). setup-python's 3.12 lives in the runner's tool cache, which every job
+          # on the one self-hosted runner shares. sim-build's `pip install playwright` landed in it (2026-11-20), and
+          # batch 117's G72 then ran five browser tests with no browser to start (job 136597284196). What another job
+          # left there that G72 reads as «run me» goes first: playwright. sim-build now installs into a venv of its own.
+          python3 -m pip uninstall -y -q playwright 2>/dev/null || true
+          python3 -m pip install --quiet pyyaml
+          npm ci --prefix apps/n8n/tooling --no-audit --no-fund
+          python3 --version; node --version
+
+      - name: Every gate — the slow lane
+        env:
+          N8N_BP_CACHE: ${{ runner.temp }}/n8nbp-cache
+          STEP_ASIDE_TOKEN: ${{ github.token }}
+          G72_JOBS: "2"   # the gates job's reason, above
+        run: |
+          set -euo pipefail
+          echo "gates at $(git rev-parse --short HEAD)"
+          GH_TOKEN="${STEP_ASIDE_TOKEN}" bash scripts/ci/step-aside --watch & watcher=$!
+          unset STEP_ASIDE_TOKEN
+          trap 'kill "${watcher}" 2>/dev/null || true' EXIT
+          NODE_BIN="$(command -v node)" bash scripts/ci/gates.sh --slow
 
   # The link's TCP path and the hub's relay (apps/dgo-extend/carrier). Its tests ran only inside its image
   # build, and go-test.yml runs on the Dell's runner (paused since 2026-10-21, DGO-830) over other modules:
@@ -229,6 +438,63 @@ jobs:
           if [ -n "${unformatted}" ]; then echo "::error::not gofmt-formatted: ${unformatted}"; gofmt -d .; exit 1; fi
           CGO_ENABLED=0 go test -count=1 -timeout 10m ./...
 
+      - name: The proof's next job goes next (scripts/ci/step-aside --clear)
+        if: github.event_name == 'push' && github.ref == 'refs/heads/dgo-stable'
+        continue-on-error: true
+        working-directory: .
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: bash scripts/ci/step-aside --clear
+
+  # THE GO THE OFFICES RUN, BEFORE GREEN (DGO-2123; issues/the-lines-go-tests-gate-nothing-…): forward-auth, the
+  # office's sign-in gate, built into its image. The line's own go-test steps aside for every next proof, and on
+  # 2026-11-20 it finished not once while green moved twenty times. Here forward-auth is tested only when it changed
+  # since the last green (the gates job's question), and green waits for it; a batch that leaves it alone pays nothing.
+  # packaging/* is the native compiler and the release tools, which no take runs: its verdict belongs to a release.
+  go:
+    needs: [decide, gates]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/dgo-stable' && needs.decide.outputs.gates == 'true' && needs.gates.outputs.forward_auth == 'true'
+    runs-on: [self-hosted, portable]
+    permissions:
+      contents: read
+      actions: write   # scripts/ci/step-aside --clear, its last step alone
+    timeout-minutes: 75   # its steps' limits (30) + up to 45 that ops/prejob_waitfree.sh may hold it
+    steps:
+      # in a directory of its own: the runner keeps one workspace for every job, and a sparse checkout there would
+      # write a blob-less filter into its git config that every later job's fetch inherits (the second reader), as
+      # decide's .decide and re-ask's .re-ask are kept apart for the same reason
+      - uses: actions/checkout@v4
+        timeout-minutes: 10
+        with:
+          sparse-checkout: |
+            platform-base/forward-auth
+            scripts/ci
+          path: .go
+          persist-credentials: false
+      - uses: actions/setup-go@v5
+        timeout-minutes: 5
+        with:
+          go-version: '1.22'
+          cache: false   # a stdlib-only module, as go-test.yml's
+      - name: vet, gofmt and the tests of platform-base/forward-auth
+        working-directory: .go/platform-base/forward-auth
+        timeout-minutes: 15
+        run: |
+          set -euo pipefail
+          go vet ./...
+          unformatted="$(gofmt -l .)"
+          if [ -n "${unformatted}" ]; then echo "::error::not gofmt-formatted: ${unformatted}"; exit 1; fi
+          go test -count=1 -timeout 10m ./...
+
+      # only when its tests passed, as decide's, the gates' and the carrier's: the branch jobs queued while it worked
+      # would each take the runner before green, only to yield (27–67 s apiece — the second reader)
+      - name: The proof's next job goes next (scripts/ci/step-aside --clear)
+        if: github.event_name == 'push' && github.ref == 'refs/heads/dgo-stable'
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: bash .go/scripts/ci/step-aside --clear
+
   # GREEN AS GIT DATA (r030-205, DGO-1233). An office follows dgo-stable by taking its newest commit whose gates
   # passed (scripts/follow.sh). Reading that from this workflow's runs takes a GitHub token, and an office that
   # reaches git only through a linked office's git proxy (the HP, through the Mac's) has none. So when both jobs
@@ -237,11 +503,84 @@ jobs:
   # does not descend from the ref is refused, so a late run of an older commit never moves it back (said). Any other
   # refusal fails THIS job, loudly — never the run: continue-on-error keeps the gates' own verdict, which is what
   # the offices that read the API take a commit on. The one job that writes.
-  green:
+  # READY-MADE IMAGES (DGO-2123; the design: research_notes/CICD 2026-11/images.md). An office's take BUILDS what
+  # changed: vps1 built batch 98 for ~8 minutes at load 26 on its two cores, the HP broke its C: mount on a take. Here,
+  # once the gates passed, every first-party image whose build context changed since the last green is built ONCE, on
+  # this runner, and pushed by digest to the office's image store (apps/image-store, its origin); green then names the
+  # digests in refs/images/dgo-stable, and a take pulls them through its own mirror. BEFORE green, because an office
+  # takes the moment green succeeds: images pushed after it would find every office already building. Skipped where
+  # decide found no store (no job, no wait for the runner); never the proof's verdict: the job may fail as a whole
+  # (continue-on-error — a run that ended «failure» would be no version for an office that reads the API, follow.sh
+  # green_shas, though green had moved), each step has a limit of its own below the job's (a step past its limit
+  # fails; the job's own limit would cancel the run), and green asks only that the gates and the carrier passed.
+  images:
     needs: [decide, gates, carrier]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/dgo-stable' && needs.decide.outputs.gates == 'true' && needs.decide.outputs.store == 'true'
+    runs-on: [self-hosted, portable]
+    continue-on-error: true
+    timeout-minutes: 120   # its steps' limits (70) + up to 45 that ops/prejob_waitfree.sh may hold it
+    permissions:
+      contents: read
+    outputs:
+      images: ${{ steps.push.outputs.images }}
+    steps:
+      - uses: actions/checkout@v4
+        timeout-minutes: 10
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      # the last green, and the images it named: fetched with the job's token in this command's environment alone
+      - name: The last green, and the images it named (refs/green, refs/images)
+        continue-on-error: true
+        timeout-minutes: 5
+        env:
+          FETCH_TOKEN: ${{ github.token }}
+        run: |
+          set -uo pipefail
+          for r in green images; do
+            GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0="http.${GITHUB_SERVER_URL}/.extraheader" \
+              GIT_CONFIG_VALUE_0="AUTHORIZATION: basic $(printf 'x-access-token:%s' "${FETCH_TOKEN}" | base64 | tr -d '\n')" \
+              git fetch -q origin "+refs/${r}/dgo-stable:refs/remotes/origin/${r}/dgo-stable" 2>/dev/null \
+              || echo "refs/${r}/dgo-stable: none yet"
+          done
+
+      # a BuildKit builder of the job's own, capped as office-images.yml's (the Dell froze under load on 11-01)
+      - id: builder
+        uses: docker/setup-buildx-action@v3
+        continue-on-error: true
+        timeout-minutes: 10
+        with:
+          driver: docker-container
+          use: false
+          driver-opts: |
+            restart-policy=no
+            memory=5g
+            memory-swap=5g
+            cpu-period=100000
+            cpu-quota=200000
+
+      # only in the capped builder: with none, nothing is built — never an uncapped build on the Dell
+      - id: push
+        name: What changed, built once and pushed by digest (scripts/ci/push-images.sh)
+        if: steps.builder.outcome == 'success' && steps.builder.outputs.name != ''
+        continue-on-error: true
+        timeout-minutes: 45
+        env:
+          BUILDER: ${{ steps.builder.outputs.name }}
+        run: |
+          set -uo pipefail
+          json="$(bash scripts/ci/push-images.sh)" || json=""
+          echo "images=${json}" >> "$GITHUB_OUTPUT"
+          if [ -n "${json}" ]; then echo "images.json: ${json}"; else echo "this proof names no image"; fi
+
+  green:
+    needs: [decide, gates, carrier, images, go]
     # a PUSH only: a hand-run (`workflow_dispatch`) proves the gates, and publishing refs/green from a
     # hand-run is a different act — the offices that follow it treat that ref as "this batch passed".
-    if: github.event_name == 'push' && github.ref == 'refs/heads/dgo-stable' && needs.decide.outputs.gates == 'true' 
+    # The gates and the carrier must have passed, and forward-auth's Go tests where they ran (`go`, skipped when it did
+    # not change); the images job's result is never asked (it is not the proof).
+    if: "!cancelled() && github.event_name == 'push' && github.ref == 'refs/heads/dgo-stable' && needs.decide.outputs.gates == 'true' && needs.gates.result == 'success' && needs.carrier.result == 'success' && (needs.go.result == 'success' || needs.go.result == 'skipped')"
     runs-on: [self-hosted, portable]
     continue-on-error: true
     timeout-minutes: 60   # 5 for the push + up to 45 that ops/prejob_waitfree.sh may hold it (as the carrier's)
@@ -255,6 +594,36 @@ jobs:
         with:
           fetch-depth: 0
           persist-credentials: true   # the push below authenticates with this job's own token
+
+      # the digests this proof's images job named, BEFORE refs/green moves: an office that sees the green finds them.
+      # A commit of one file, images.json, on top of the last one: the ref only moves forward, as refs/green — and
+      # only for a commit that descends from the green it would stand beside: a late run of an older commit names
+      # nothing over a newer green (its refs/green push below is refused the same way)
+      - name: refs/images/dgo-stable → the images this proof named
+        if: needs.images.outputs.images != ''
+        timeout-minutes: 5
+        env:
+          IMAGES_JSON: ${{ needs.images.outputs.images }}
+        run: |
+          set -uo pipefail
+          git fetch -q origin '+refs/green/dgo-stable:refs/remotes/origin/green/dgo-stable' 2>/dev/null || true
+          green="$(git rev-parse -q --verify refs/remotes/origin/green/dgo-stable || true)"
+          if [ -n "${green}" ] && ! git merge-base --is-ancestor "${green}" "${GITHUB_SHA}"; then
+            echo "::notice::refs/green/dgo-stable already holds a newer green (${green}): the images of ${GITHUB_SHA} are not named over it"
+            exit 0
+          fi
+          git fetch -q origin '+refs/images/dgo-stable:refs/remotes/origin/images/dgo-stable' 2>/dev/null || true
+          parent="$(git rev-parse -q --verify refs/remotes/origin/images/dgo-stable || true)"
+          blob="$(printf '%s\n' "${IMAGES_JSON}" | git hash-object -w --stdin)"
+          tree="$(printf '100644 blob %s\timages.json\n' "${blob}" | git mktree)"
+          commit="$(git -c user.name=gates-hosted -c user.email=ci@localhost commit-tree "${tree}" ${parent:+-p "${parent}"} \
+            -m "the images of ${GITHUB_SHA}")"
+          if out="$(git push origin "${commit}:refs/images/dgo-stable" 2>&1)"; then
+            echo "refs/images/dgo-stable names the images of ${GITHUB_SHA}"
+          else
+            printf '%s\n' "${out}"
+            echo "::warning::refs/images/dgo-stable was not moved — every office builds this version as it does today"
+          fi
 
       - name: refs/green/dgo-stable → this commit
         timeout-minutes: 5
@@ -270,16 +639,64 @@ jobs:
             exit 1
           fi
 
+  # READY-MADE IMAGES' RETENTION (DGO-2123): the store keeps the images the last three lists name, and fewer while it is
+  # over its cap (4 GiB: the Dell had 19.6 GB free on 2026-11-20, read through its office). The rest is deleted through
+  # the store's own API, never through the read-only door, and garbage-collected in its container
+  # (scripts/ci/store-retention.sh, scripts/ci/prune-images.py). A JOB OF ITS OWN AFTER GREEN: an office that reads the
+  # API takes a running proof once its green job ended «success» (follow.sh green_shas), so green must not wait for this
+  # (the second reader). The lists are fetched fresh into an empty repository: a fetch that fails leaves no list, and a
+  # store with no list deletes nothing — never a list an earlier job left, which would delete what the newest names.
+  retention:
+    needs: [decide, green]
+    if: "!cancelled() && github.event_name == 'push' && github.ref == 'refs/heads/dgo-stable' && needs.decide.outputs.store == 'true' && needs.green.result == 'success'"
+    runs-on: [self-hosted, portable]
+    continue-on-error: true
+    timeout-minutes: 70   # its steps' limits (25) + up to 45 that ops/prejob_waitfree.sh may hold it
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        timeout-minutes: 5
+        with:
+          fetch-depth: 1
+          filter: blob:none
+          sparse-checkout: |
+            scripts/ci/prune-images.py
+            scripts/ci/store-retention.sh
+          sparse-checkout-cone-mode: false
+          path: .retention
+          persist-credentials: false
+      - name: The store keeps what the last lists name, under its cap (scripts/ci/store-retention.sh)
+        timeout-minutes: 20
+        env:
+          FETCH_TOKEN: ${{ github.token }}
+        run: |
+          set -uo pipefail
+          lists="${RUNNER_TEMP:?}/image-lists.git"
+          rm -rf "${lists}" && git init -q --bare "${lists}"
+          GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0="http.${GITHUB_SERVER_URL}/.extraheader" \
+            GIT_CONFIG_VALUE_0="AUTHORIZATION: basic $(printf 'x-access-token:%s' "${FETCH_TOKEN}" | base64 | tr -d '\n')" \
+            timeout 120 git --git-dir="${lists}" fetch -q "${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}" \
+            '+refs/images/dgo-stable:refs/remotes/origin/images/dgo-stable' 2>/dev/null \
+            || echo "refs/images/dgo-stable could not be fetched: no list here, so nothing is deleted"
+          GIT_DIR="${lists}" bash .retention/scripts/ci/store-retention.sh
+
   # The proof is over: the office-branch runs that stepped aside for it (scripts/ci/step-aside) are asked again —
   # per workflow and branch the newest run that tested something, when step-aside cancelled it — unless another proof
   # still waits (scripts/ci/re-ask.py, DGO-1848). Here and not as a `workflow_run` workflow: that trigger fires only
   # from the default branch's file. Whatever the proof's verdict (`always()`); never its verdict (continue-on-error).
+  # After a hand-run proof of dgo-stable too (DGO-2123): step-aside yields to one as to any proof, and with no re-ask
+  # of its own the runs that stepped aside waited for the next push (the second reader).
   re-ask:
     needs: [decide, gates, carrier, green]
-    if: always() && github.event_name == 'push' && github.ref == 'refs/heads/dgo-stable'
+    if: always() && github.ref == 'refs/heads/dgo-stable'
     runs-on: [self-hosted, portable]
     continue-on-error: true
-    timeout-minutes: 5
+    # 5 for the job + up to 45 that ops/prejob_waitfree.sh may hold it, as every job here: at 5, a hold of more than
+    # 5 minutes after the hot gates job would time it out (none did in 2026-11-13…20, the longest was 2 s), and since
+    # the line's own go-test and APK build step aside too (DGO-2123) that would leave them until the next push to
+    # dgo-stable (the second reader)
+    timeout-minutes: 50
     permissions:
       actions: write    # read the runs, and run again the jobs that stepped aside
       checks: read      # read step-aside's notice on a job (its check run's annotations)
@@ -297,4 +714,6 @@ jobs:
       - name: The runs that stepped aside for this proof, asked again
         env:
           GH_TOKEN: ${{ github.token }}
+          # what the gates ended in: only a green proof answers for a branch's run (re-ask's «covered»)
+          PROOF_GATES: ${{ needs.gates.result }}
         run: python3 .re-ask/scripts/ci/re-ask.py

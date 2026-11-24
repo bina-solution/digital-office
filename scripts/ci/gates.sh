@@ -2,7 +2,9 @@
 # gates.sh — run every architecture/hardening gate. THE list lives here.
 #
 #   scripts/ci/gates.sh            run them all; non-zero if any fails
-#   scripts/ci/gates.sh --list     print the gate script names, one per line
+#   scripts/ci/gates.sh --fast     every self-test and every gate not in SLOW (the proof's first step)
+#   scripts/ci/gates.sh --slow     the gates in SLOW alone (the proof's second step, once --fast passed)
+#   scripts/ci/gates.sh --list     print the gate script names, one per line (with --fast/--slow: that lane's)
 #   scripts/ci/gates.sh --verify-ci  assert ci-verify.yml enumerates exactly this list
 #
 # WHY ONE LIST. The gates were enumerated in two places that had already drifted:
@@ -205,6 +207,14 @@ GATES=(
   # ── An app's operations, declared once (DGO-1244), each with its faces (DGO-1246): a verb with its hook file, a
   # screen action. Stage 1 warns (exit 0) with the counts; --strict is the next stage.
   ops-faces-lint            # G117 every op an app declares has a verb with its hook, and a screen action
+  # ── A bind mount of a FILE keeps the inode it was given, and git replaces files: the HP's n8n workers lost their
+  # liveness script (I/O error, 11-18), browser42's runner three of its files (11-10). Stage 1 warns (exit 0).
+  single-file-bind-lint     # G119 no compose mounts a single tracked file; mount the app's directory instead
+  # ── «Backup simply copies that data folder» (the owner, 2026-11-18, DGO-2019): an app's state is in data/<app>/ and
+  # nowhere else. A ratchet over platform/data-home-pending.yaml, which is only ever shortened. From d349cecd2 only
+  # ci-verify.yml named it, and ci-verify does not run on the line, so no proof ran it until it joined this list, once
+  # its last unlisted finding had moved (notify-relay's spool, dd5489c87).
+  data-home-lint            # G118 every app keeps its state in data/<app>/: no named or anonymous volume for state
   # ── From hp-dgo (DGO-1393, DGO-1619, DGO-1642), taken by the release (DGO-969). G100 and G101 kept the numbers
   # hp-dgo gave them, free here; hp-dgo's G99 and G102 were spent on this line (no-phone-home-lint, app-coupling-lint),
   # so those two are G111 and G112 now.
@@ -221,7 +231,7 @@ GATES=(
 
 #: Gates that also ship a --self-test. Proving a gate CAN fail is part of running it: a gate only
 #: ever observed passing has not been tested (GATES.md, "Adding a gate", step 3).
-SELF_TESTED=(image-pin-lint capability-use-lint stalled-pagination-lint unread-error-lint undefined-name-lint desktop-windows-lint palette-lint embed-coverage-lint embed-route-lint route-claim-lint screen-words-lint registry-drift-lint raw-exception-lint issue-file-lint manifest-lint layer0-lint engine-bypass-lint state-writer-lint legacy-ref-lint browser42-site-neutrality-lint paginated-list-lint source-id-lint dangling-workflow-ref-lint trigger-schema-drift-lint fixture-live-key-lint switch-fallback-lint dead-activation-lint n8n-loop-order-lint drive-connection-lint app-tag-lint noop-success-lint dropped-signal-lint node-credential-lint swallowed-subcall-lint fixture-delete-scope-lint credential-blank-lint plane-tests-lint compose-pin-lint endpoint-credential-lint open-destructive-webhook-lint identity-header-lint exposure-lint link-write-guard-lint counted-plural-lint pinned-credential-lint heredoc-substitution-lint cpu-budget-lint tracked-secret-lint env-template-secret-lint checkout-owner-lint office-link-lint human-ui-auth-lint no-phone-home-lint reporter-target-lint webhook-auth-lint one-claude-lint tile-screen-lint menu-host-lint wrapped-app-lint schema-migration-drift-lint lifted-copy-lint app-standard-lint empty-env-lint log-rotation-lint public-route-lint ops-faces-lint)
+SELF_TESTED=(image-pin-lint capability-use-lint stalled-pagination-lint unread-error-lint undefined-name-lint desktop-windows-lint palette-lint embed-coverage-lint embed-route-lint route-claim-lint screen-words-lint registry-drift-lint raw-exception-lint issue-file-lint manifest-lint layer0-lint engine-bypass-lint state-writer-lint legacy-ref-lint browser42-site-neutrality-lint paginated-list-lint source-id-lint dangling-workflow-ref-lint trigger-schema-drift-lint fixture-live-key-lint switch-fallback-lint dead-activation-lint n8n-loop-order-lint drive-connection-lint app-tag-lint noop-success-lint dropped-signal-lint node-credential-lint swallowed-subcall-lint fixture-delete-scope-lint credential-blank-lint plane-tests-lint compose-pin-lint endpoint-credential-lint open-destructive-webhook-lint identity-header-lint exposure-lint link-write-guard-lint counted-plural-lint pinned-credential-lint heredoc-substitution-lint cpu-budget-lint tracked-secret-lint env-template-secret-lint checkout-owner-lint office-link-lint human-ui-auth-lint no-phone-home-lint reporter-target-lint webhook-auth-lint one-claude-lint tile-screen-lint menu-host-lint wrapped-app-lint schema-migration-drift-lint lifted-copy-lint app-standard-lint empty-env-lint log-rotation-lint public-route-lint ops-faces-lint single-file-bind-lint data-home-lint)
 
 #: Gates CI runs with --strict: the end state, not the scoreboard a migration reads. This runner
 #: called every gate bare, so for as long as they had findings G9 (layering) and G25 (capability
@@ -229,9 +239,33 @@ SELF_TESTED=(image-pin-lint capability-use-lint stalled-pagination-lint unread-e
 #: the two lists this file exists to end, one level down. --verify-ci now compares the flags too.
 STRICT=(ownership-lint layering-lint blueprint-dep-lint capability-use-lint)
 
-if [ "${1:-}" = "--list" ]; then printf '%s\n' "${GATES[@]}"; exit 0; fi
+#: The gates over ~10 s each on the Dell (2026-11-19, research_notes/CICD 2026-11/tables.md §8; every gates log says
+#: each gate's seconds since DGO-2123). FAIL FAST: a version's proof runs `--fast` first — every self-test and every
+#: OTHER gate, about two minutes — and `--slow`, these, only once that passed. A red a seconds-long gate finds then
+#: ends the proof in minutes, not after the half hour: 4 of the week's 9 red proofs carried one, and batch 87 stood
+#: red all night on one (G75, DGO-2111). No flag runs them all in the one order — `bbox baseline`,
+#: fresh-machine-check. A name here that is not in GATES is refused by --verify-ci.
+SLOW=(plane-tests-lint tracked-secret-lint undefined-name-lint unread-error-lint dropped-signal-lint tenancy-lint source-id-lint app-tag-lint app-standard-lint swallowed-subcall-lint open-destructive-webhook-lint drive-connection-lint workflow-input-lint trigger-schema-drift-lint switch-fallback-lint noop-success-lint node-credential-lint n8n-loop-order-lint fixture-delete-scope-lint endpoint-credential-lint dead-activation-lint dangling-workflow-ref-lint webhook-auth-lint engine-bypass-lint compile-lint)
 
-if [ "${1:-}" = "--verify-ci" ]; then
+# --fast / --slow choose the lane (above), anywhere among the arguments; --list then lists that lane's gates
+lane=all
+for a in "$@"; do case "${a}" in --fast) lane=fast ;; --slow) lane=slow ;; esac; done
+in_lane() {   # $1 a gate: 0 when this run's lane runs it
+  case "${lane}:  ${SLOW[*]} " in
+    all:*) return 0 ;;
+    fast:*" $1 "*) return 1 ;;
+    fast:*) return 0 ;;
+    slow:*" $1 "*) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+case " $* " in
+  *" --list "*) for g in "${GATES[@]}"; do in_lane "${g}" && printf '%s\n' "${g}"; done; exit 0 ;;
+esac
+
+verify=""; case " $* " in *" --verify-ci "*) verify=1 ;; esac   # anywhere among the arguments, as --list
+if [ -n "${verify}" ]; then
   wf="${REPO_ROOT}/.github/workflows/ci-verify.yml"
   rc=0
   for g in "${GATES[@]}"; do
@@ -317,34 +351,72 @@ if [ "${1:-}" = "--verify-ci" ]; then
   done
   [ "$(grep -c '\["--strict"\]' "${REPO_ROOT}/scripts/refactor/run-gates.py")" = "${#STRICT[@]}" ] || {
     echo "  run-gates.py GATE_ARGS passes --strict to a gate the STRICT list does not name"; rc=1; }
+  for g in "${SLOW[@]}"; do
+    case " ${GATES[*]} " in
+      *" ${g} "*) ;;
+      *) echo "  IN SLOW BUT NOT IN GATES (a lane of nothing): ${g}"; rc=1 ;;
+    esac
+  done
   [ "$rc" = 0 ] && echo "gates: ci-verify.yml enumerates all ${#GATES[@]} gates with the same flags, and every gate + self-test script exists" \
                 || echo "gates: registry has drifted (see above)"
   exit "$rc"
 fi
 
-fail=0; failed=()
-for g in "${SELF_TESTED[@]}"; do
-  if ! out=$(python3 "scripts/refactor/${g}.py" --self-test 2>&1); then
-    echo "  SELF-TEST FAIL  ${g}"; printf '%s\n' "${out}" | tail -6 | sed 's/^/      /'
-    fail=$((fail+1)); failed+=("${g}:self-test")
-  else
-    printf '  self-test  %s\n' "$(printf '%s' "${out}" | tail -1)"
-  fi
-done
+# ONE COMPILE OF EACH BLUEPRINT DIRECTORY FOR THE WHOLE RUN (DGO-2123). Every gate is a process of its own, and each
+# of the ~17 that read blueprints compiled every directory again — about 18 s a gate on the Dell, a fifth of a
+# version's proof. scripts/refactor/n8n_blueprint.py keeps a compile under the hash of its directory's files in the
+# directory N8N_BP_CACHE names, for the next gate to read back; this run makes one and removes it when it ends. One the
+# caller already named (the proof's two lanes share one) is used as it is, made if it is not there yet, and left.
+# Its name starts `n8n-bp-`: a run killed before its EXIT trap leaves it to the sweep every blueprint read makes of
+# such dirs once they are 12 hours old (n8n_blueprint.prune_stale, G100) — never to the disk for good.
+if [ -n "${N8N_BP_CACHE:-}" ]; then
+  mkdir -p "${N8N_BP_CACHE}" 2>/dev/null || true
+elif N8N_BP_CACHE="$(mktemp -d "${TMPDIR:-/tmp}/n8n-bp-cache.XXXXXX")"; then
+  export N8N_BP_CACHE
+  trap 'rm -rf "${N8N_BP_CACHE}"' EXIT
+fi
+
+# Each line says its seconds (DGO-2123): where a proof's half hour goes is read off the log, not guessed. The self-tests
+# run in the fast lane (all 66 took 29 s), the gates in their lane (SLOW, above).
+fail=0; failed=(); began=${SECONDS}; ran=0; tested=0
+if [ "${lane}" != slow ]; then
+  for g in "${SELF_TESTED[@]}"; do
+    t=${SECONDS}; tested=$((tested+1))
+    if ! out=$(python3 "scripts/refactor/${g}.py" --self-test 2>&1); then
+      echo "  SELF-TEST FAIL  ${g}  ($((SECONDS - t)) s)"; printf '%s\n' "${out}" | tail -6 | sed 's/^/      /'
+      fail=$((fail+1)); failed+=("${g}:self-test")
+    else
+      printf '  self-test  %s  (%s s)\n' "$(printf '%s' "${out}" | tail -1)" "$((SECONDS - t))"
+    fi
+  done
+fi
 for g in "${GATES[@]}"; do
+  in_lane "${g}" || continue
   strict=""; case " ${STRICT[*]} " in *" ${g} "*) strict=--strict ;; esac
+  t=${SECONDS}; ran=$((ran+1))
   if out=$(python3 "scripts/refactor/${g}.py" ${strict} 2>&1); then
-    printf '  PASS  %s\n' "${g}"
+    printf '  PASS  %s  (%s s)\n' "${g}" "$((SECONDS - t))"
+    # a pass that names a test which passed only ALONE (G72 several at a time) says so here, where the log is read
+    # — a passing gate's own output is not shown, and the name would be lost (the second reader of 33fb4e34f)
+    while IFS= read -r line; do
+      printf '      %s\n' "${line}"
+      [ -z "${GITHUB_ACTIONS:-}" ] || echo "::warning title=${g}::passed only alone (it shares something with another test): ${line#*ALONE}"
+    done < <(printf '%s\n' "${out}" | grep -E '^  ALONE ' || true)
+    # …and G72's ten slowest tests and its longest directories (one worker each), so the next cut of the proof's
+    # longest gate is chosen from its own log
+    printf '%s\n' "${out}" | grep -E '^  the (slowest|longest directories): ' | sed 's/^/      /' || true
   else
-    printf '  FAIL  %s\n' "${g}"; printf '%s\n' "${out}" | tail -8 | sed 's/^/      /'
+    printf '  FAIL  %s  (%s s)\n' "${g}" "$((SECONDS - t))"; printf '%s\n' "${out}" | tail -8 | sed 's/^/      /'
     fail=$((fail+1)); failed+=("${g}")
   fi
 done
 
 echo
+of=""; [ "${lane}" = all ] || of=" — the ${lane} lane (${ran} of ${#GATES[@]} gates)"
+echo "gates: $((SECONDS - began)) s in all${of}"
 if [ "${fail}" -eq 0 ]; then
-  echo "gates: ${#GATES[@]}/${#GATES[@]} PASS (+${#SELF_TESTED[@]} self-tests)"
+  echo "gates: ${ran}/${ran} PASS (+${tested} self-tests)${of}"
 else
-  echo "gates: ${fail} FAILING — ${failed[*]}"
+  echo "gates: ${fail} FAILING — ${failed[*]}${of}"
 fi
 exit "$((fail > 0))"

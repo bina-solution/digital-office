@@ -1,0 +1,44 @@
+#!/usr/bin/env bash
+#: prepare — esign's store belongs to the image's own user (`esign`), so the service can write it
+# prepare — invoked generically by `bbox run` for every enabled app that has one, after the data move (DGO-2019).
+#
+# The store is the DGO folder's data/esign/state. A volume the move brings keeps its owners (the move copies it as
+# root, owners kept), and a folder seeded from the image is the image's /data, owned by `esign`. On a fresh office the
+# engine now waits on the volume while the image is not built (docker fills it as `esign`) and moves it at the next
+# run; but a folder made otherwise (by hand, by an older engine) is the bbox user's, and esign (USER esign, never root:
+# it holds the signing key) could not write its first envelope. So a store folder that holds NOTHING and is not the
+# image's user's is given to that user, with the image's own mode for it. One that holds anything — or that cannot be
+# looked into — is never touched: its owners are the data's own.
+#   Done the data move's way: a throwaway root container on the folder (no sudo, never a password prompt in a run).
+# Skipped where the engine's uids are not the host's (userns-remap, rootless) or the engine is another machine.
+set -uo pipefail
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
+dir="${REPO_ROOT}/data/esign/state"
+[ -d "${dir}" ] || exit 0                                       # not decided yet, or still on its volume: nothing to do
+case "${DOCKER_HOST:-}" in tcp://*|ssh://*) exit 0 ;; esac
+case "$(docker info --format '{{json .SecurityOptions}}' 2>/dev/null || true)" in *name=userns*|*name=rootless*) exit 0 ;; esac
+helper="${DATAHOME_HELPER_IMAGE:-alpine:3}"
+# empty, as root sees it — a folder that cannot be looked into counts as holding data
+docker run --rm --network none --entrypoint sh -v "${dir}:/s:ro" "${helper}" -c 'e="$(ls -A /s)" && [ -z "$e" ]' \
+  >/dev/null 2>&1 || exit 0
+# the image's user and its mode for /data: from the Dockerfile this commit builds (`useradd --uid`), and from the image
+# when it is here (never pulled: it is built, and this runs before the build) — they must agree
+want="$(awk '/useradd/ {for (i = 1; i <= NF; i++) if ($i == "-u" || $i == "--uid") print $(i + 1) ":" $(i + 1)}' \
+  "${REPO_ROOT}/apps/esign/Dockerfile" | head -1)"
+mode=755
+. "${REPO_ROOT}/scripts/lib.sh"
+tag="$(read_env_value IMAGE_TAG)"
+seen="$(docker run --rm --pull never --network none --entrypoint sh "esign:${tag:-latest}" -c 'stat -c %u:%g:%a /data' 2>/dev/null || true)"
+if [ -n "${seen}" ]; then
+  [ -z "${want}" ] || [ "${seen%:*}" = "${want}" ] || { echo "[esign] the image's user (${seen%:*}) is not the Dockerfile's (${want}): data/esign/state keeps its owner"; exit 0; }
+  want="${seen%:*}"; mode="${seen##*:}"
+fi
+printf '%s' "${want}" | grep -Eq '^[0-9]+:[0-9]+$' || { echo "[esign] could not tell the image's user: data/esign/state keeps its owner"; exit 0; }
+printf '%s' "${mode}" | grep -Eq '^[0-7]{3,4}$' || mode=755
+[ "$(stat -c %u:%g "${dir}")" = "${want}" ] && exit 0
+if docker run --rm --network none --entrypoint sh -v "${dir}:/s" "${helper}" -c "chown ${want} /s && chmod ${mode} /s" \
+     >/dev/null 2>&1; then
+  echo "[esign] its new store data/esign/state now belongs to the image's user (${want}, ${mode})"
+else
+  echo "[esign] its new store data/esign/state could not be given to the image's user (${want}) — the helper ${helper} did not run, or the filesystem refused the owner; the next \`bbox run\` seeds the empty store from the built image"
+fi

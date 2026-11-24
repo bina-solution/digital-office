@@ -100,7 +100,7 @@
       "name": "azaria",
       "url_env": "AZARIA_BASE_URL",
       "module": {
-        "group": "ראשי",
+        "group": "בינה מלאכותית",
         "icon": "bot",
         "embed": true,
         "alias": "bina",
@@ -108,6 +108,7 @@
         "name": "עזריה",
         "desc": "הסוכן של הלשכה — כל השיחות, של עזריה ושל Claude, במקום אחד",
         "order": 1,
+        "tab": true,
         "url": "http://bina-ds:3081",
         "url_env": "BINA_DS_URL",
         "passthrough": [
