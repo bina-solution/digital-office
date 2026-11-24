@@ -136,6 +136,12 @@ const localStorage = {
   setItem: (k, v) => store.set(k, String(v)),
 };
 const getComputedStyle = () => ({ overflowY: "visible" });
+/* The watcher the component sets on `body` for its own way in: here, its callbacks, called when a promise
+   below changes what the page shows — and the next frame is now. */
+const watchers = [], observed = [];
+globalThis.MutationObserver = class { constructor(f) { watchers.push(f); } observe(target, opts) { observed.push({ target, opts }); } };
+globalThis.requestAnimationFrame = (f) => f();
+const pageChanged = () => watchers.forEach((f) => f([]));
 
 /* ── the component, taken out of the source the same way G27 copies it ─────── */
 const text = readFileSync(SRC, "utf8");
@@ -341,6 +347,105 @@ ok("a button the page marks as the search's opens the menu on its search",
   findBtn.innerHTML.includes("<svg") && paged.classList.contains("is-open") && found === 1);
 nav4.close();
 menuBtn.remove(); findBtn.remove();
+
+/* …and the component's own stays the way in while the page's is off the screen. Mail's ☰ is in a bar its
+   phone hides off the list (19880d330): from a message, the settings or the rules its menu could not be
+   opened at all (DGO-2170). A part off the screen is one with no boxes, as above. */
+const barBtn = document.body.appendChild(new El("button"));
+barBtn.setAttribute("data-nav-toggle", "תפריט");
+barBtn.getClientRects = () => [{}];
+pageChanged();
+ok("a page whose own ☰ is on the screen shows only its own",
+  watchers.length === 1 && !document.documentElement.classList.contains("bnv-float"));
+const watch = observed[0] || { opts: {} }, filterOf = watch.opts.attributeFilter || [];
+ok("…and the component watches the page where a bar is hidden: body, its whole tree, the screen it names",
+  watch.target === document.body && watch.opts.subtree === true && watch.opts.attributes === true
+  && watch.opts.childList === true && ["class", "hidden", "style", "data-screen"].every((a) => filterOf.includes(a)),
+  JSON.stringify(watch.opts));
+barBtn.getClientRects = () => [];
+pageChanged();
+ok("…when the page hides it with its bar, the component's own is the way in",
+  document.documentElement.classList.contains("bnv-float"));
+const dialog = document.body.appendChild(new El("div"));
+dialog.setAttribute("role", "dialog");
+dialog.setAttribute("aria-modal", "true");
+pageChanged();
+ok("…but not while a modal dialog stands over the page: it would be above the dialog's backdrop",
+  !document.documentElement.classList.contains("bnv-float"));
+dialog.getClientRects = () => [];
+pageChanged();
+ok("…and back once the dialog is closed", document.documentElement.classList.contains("bnv-float"));
+dialog.remove();
+barBtn.getClientRects = () => [{}];
+pageChanged();
+ok("…and when the page's comes back, the component's goes: never two",
+  !document.documentElement.classList.contains("bnv-float"));
+ok("one way in per document, whichever menu made it",
+  document.body.children.filter((c) => c.classList.contains("is-float")).length === 1);
+fallbackBurger.fire("click");
+const floatOpened = root.classList.contains("is-open") && fallbackBurger.getAttribute("aria-expanded") === "true";
+fallbackBurger.fire("click");
+ok("a press on it opens the first mounted menu and a second shuts it — one press, not two that cancel",
+  floatOpened && !root.classList.contains("is-open") && fallbackBurger.getAttribute("aria-expanded") === "false");
+barBtn.remove();
+pageChanged();
+/* …a bar scrolled away is still the page's: nothing is asked again on a scroll, so «outside the window» would stand
+   while the bar came back, and both buttons would show (computers' header scrolls with its page). One made invisible
+   is not on the screen. */
+const seenAs = { visibility: "visible" };
+document.defaultView = { getComputedStyle: () => ({ visibility: seenAs.visibility, opacity: "1" }), innerWidth: 390, innerHeight: 844 };
+const scrolledBar = document.body.appendChild(new El("button"));
+scrolledBar.setAttribute("data-nav-toggle", "תפריט");
+scrolledBar.getClientRects = () => [{}];
+scrolledBar.getBoundingClientRect = () => ({ left: 330, right: 374, top: -300, bottom: -256 });
+pageChanged();
+ok("a page whose ☰ is scrolled out of the window still shows only its own: nothing asks again on a scroll",
+  !document.documentElement.classList.contains("bnv-float"));
+seenAs.visibility = "hidden";
+pageChanged();
+ok("…and one made invisible (visibility:hidden) is not on the screen: the component's is the way in",
+  document.documentElement.classList.contains("bnv-float"));
+scrolledBar.remove();
+delete document.defaultView;
+pageChanged();
+
+/* …and on a page whose menu is in its MARKUP and is mounted later (computers), the static adoption makes the button
+   first. The mounted menu takes its press over: with the static one it raised a scrim of its own, which no way the
+   mounted menu closes would lower. A second copy of the component, on a page of its own. */
+const doc2 = {
+  createElement: (t) => new El(t), body: new El("body"), documentElement: new El("html"), addEventListener() {},
+  querySelector: (sel) => doc2.querySelectorAll(sel)[0] || null,
+  querySelectorAll: (sel) => (sel === ".bnv:not([data-bnv-mounted])"
+    ? walk(doc2.body).filter((n) => n.classList.contains("bnv") && n.getAttribute("data-bnv-mounted") === null)
+    : doc2.body.querySelectorAll(sel)),
+};
+const BinaNav2 = new Function("document", "localStorage", "getComputedStyle", `${block}; return BinaNav;`)(
+  doc2, localStorage, getComputedStyle,
+);
+const marked = doc2.body.appendChild(new El("div")).appendChild(new El("aside"));
+marked.className = "bnv";
+BinaNav2.adopt(doc2);
+const float2 = doc2.body.children.find((c) => c.classList.contains("is-float"));
+const nav5 = BinaNav2.mount(marked, { id: "late-selftest", brand: { name: "מחשבים", avatar: "מ" },
+                                      sections: [{ id: "s", items: [{ id: "a", label: "אחד" }] }] });
+const openScrims = () => doc2.body.children.filter((c) => c.classList.contains("bnv-scrim") && c.classList.contains("is-open")).length;
+float2 && float2.fire("click");
+const lateOpened = marked.classList.contains("is-open") && openScrims() === 1;
+nav5.close();
+ok("a menu mounted after the static adoption takes the button's press: it opens that menu, and its close leaves no scrim",
+  !!float2 && lateOpened && !marked.classList.contains("is-open") && openScrims() === 0,
+  JSON.stringify({ float: !!float2, lateOpened, open: marked.classList.contains("is-open"), scrims: openScrims() }));
+/* …and a menu mounted AGAIN on the same element (computers mounts its side again as its data changes) takes the press
+   from its earlier mount: with the first one's, the button raised that mount's scrim, which the later mount's close —
+   a row picked — never lowers. */
+const nav6 = BinaNav2.mount(marked, { id: "late-selftest", brand: { name: "מחשבים", avatar: "מ" },
+                                      sections: [{ id: "s", items: [{ id: "b", label: "שניים" }] }] });
+float2 && float2.fire("click");
+const againOpened = marked.classList.contains("is-open");
+nav6.close();
+ok("a menu mounted again on the same element takes the press from its earlier mount: its close leaves no scrim",
+  !!float2 && againOpened && !marked.classList.contains("is-open") && openScrims() === 0,
+  JSON.stringify({ againOpened, open: marked.classList.contains("is-open"), scrims: openScrims() }));
 
 /* the two older shapes must keep working: an app mid-migration is not a broken app */
 const flat = new El("nav");

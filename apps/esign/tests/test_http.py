@@ -8,6 +8,7 @@ import json
 import os
 import sys
 import threading
+import urllib.parse
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
 import pytest
@@ -85,6 +86,8 @@ def stub(monkeypatch):
     monkeypatch.setenv("DRIVE_URL", s.url)
     monkeypatch.setenv("NOTIFICATIONS_URL", s.url)
     monkeypatch.setenv("ESIGN_BASE_URL", "http://esign.test")
+    monkeypatch.delenv("ESIGN_PUBLIC_URL", raising=False)   # an office's published address is not the test's
+    monkeypatch.delenv("ESIGN_DRIVE_FOLDER", raising=False)  # …nor its folder: the default is what is tested
     monkeypatch.setenv("ESIGN_RENDER_URL", "")          # no documents renderer: the plain certificate page
     yield s
     s.stop()
@@ -133,6 +136,32 @@ def test_a_new_envelope_is_already_sent_and_its_link_works(cl):
     got = create(cl)
     assert got["envelope"]["status"] == "sent"
     assert cl.get("/s/%s" % token_of(got["link"])).status_code == 200
+
+
+def test_the_signer_page_names_the_office_and_opens_the_document_full_screen(cl, monkeypatch):
+    """DGO-2125: the page a customer signs on names the office as ESIGN_OFFICE_NAME says (it said «בינה סלושנס»,
+    misspelled, on every office), and offers the document itself, which a phone's browser may not draw in a frame."""
+    monkeypatch.setenv("ESIGN_OFFICE_NAME", "בינה סולושנס")
+    tok = token_of(create(cl)["link"])
+    html = cl.get("/s/%s" % tok).get_data(as_text=True)
+    assert "בינה סולושנס · " in html and "סלושנס" not in html
+    assert 'href="/s/%s/doc" target="_blank"' % tok in html
+    monkeypatch.setenv("ESIGN_OFFICE_NAME", "")
+    html = cl.get("/s/%s" % tok).get_data(as_text=True)
+    assert "סלושנס" not in html and "סולושנס" not in html and "dgo-mark" in html   # no name: the mark alone
+
+
+def test_the_link_is_minted_on_the_published_address_when_there_is_one(cl, monkeypatch):
+    """DGO-2125: the HP's signer page is published on vps1's edge, so the customer's link is that address. The
+    office's own host (ESIGN_BASE_URL: its routers and its sign-in) does not move for it, and a blank one is none."""
+    monkeypatch.setenv("ESIGN_PUBLIC_URL", "https://sign.bina-solutions.co.il/")
+    got = create(cl)
+    assert got["link"].startswith("https://sign.bina-solutions.co.il/s/")
+    assert cl.get("/s/%s" % token_of(got["link"])).status_code == 200
+    monkeypatch.setenv("ESIGN_PUBLIC_URL", "sign.bina-solutions.co.il")      # a bare name: the edge's https
+    assert create(cl)["link"].startswith("https://sign.bina-solutions.co.il/s/")
+    monkeypatch.setenv("ESIGN_PUBLIC_URL", " ")
+    assert create(cl)["link"].startswith("http://esign.test/s/")
 
 
 def test_a_non_pdf_is_refused(cl):
@@ -232,6 +261,9 @@ def test_signing_produces_a_pades_pdf_copies_it_to_drive_and_notifies(cl, stub):
     posts = [c for c in stub.calls if c[0] == "POST"]
     assert puts and "mode=" not in puts[0][1] and "path=" in puts[0][1]
     assert puts[0][3].startswith(b"%PDF")
+    # under «מסמכים», in the day's folder: «ארכיון» lists what is there (DGO-2125)
+    folder = urllib.parse.unquote(puts[0][1].split("path=", 1)[1]).split("/")
+    assert folder[1:3] == ["מסמכים", "חתימות"] and len(folder[3]) == 10 and folder[3][4] == "-", folder
     assert posts and json.loads(posts[0][3].decode("utf-8"))["source_id"] == "esign-%s" % eid
 
     pdf = cl.get("/api/envelopes/%s/download" % eid)

@@ -67,6 +67,9 @@ def _load_archiver():
 
 
 ARCHIVER = _load_archiver()
+#: the data move's ledger, as the archiver reads it (DGO-2019): which old volumes a store still runs from. Absent on a
+#: checkout from before it, where every app's volumes are its `data.volumes`.
+DATAMOVES = getattr(ARCHIVER, "datamoves", None)
 
 
 def _docker(args, timeout=90):
@@ -117,6 +120,8 @@ def all_apps():
             except Exception:                             # noqa: BLE001
                 continue
             hooks = d / "hooks"
+            # the old volume of a store whose move into data/<app>/ is not proven yet is still the app's (DGO-2019)
+            carried = DATAMOVES.carried_volumes(REPO, man.get("id", d.name), man) if DATAMOVES else []
             out.append({
                 "root": root,
                 "id": man.get("id", d.name),
@@ -124,7 +129,7 @@ def all_apps():
                 "layer": man.get("layer"),
                 "kind": man.get("kind"),
                 "enabled": (man.get("id", d.name) in enabled) if enabled else None,
-                "volumes": ((man.get("data") or {}).get("volumes") or []),
+                "volumes": ((man.get("data") or {}).get("volumes") or []) + carried,
                 # The rest of the app's declared ownership. `volumes` alone was never the whole
                 # story: apitools keeps 17.8GB in a bind and 730MB of tables, and declared neither.
                 "paths": ((man.get("data") or {}).get("paths") or []),

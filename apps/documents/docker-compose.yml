@@ -2,7 +2,7 @@
 #
 # An index, not a second book: the issued documents stay in apitools' ledger, the incoming ones in INDOX, and this
 # service READS both (server/documents_core.py: a read-only client, one resolve() choke point) into its own SQLite on
-# its own volume — dropped, it is rebuilt from them. No image to build: python:3.12-alpine runs server/ as mounted.
+# its own store (data/documents/state) — dropped, it is rebuilt from them. No image to build: python:3.12-alpine runs server/ as mounted.
 # The screen comes after the owner's pick of the mock (DGO-1630), so the host is routed behind sign-in and has no tile.
 services:
   documents:
@@ -32,7 +32,8 @@ services:
       TZ: Asia/Jerusalem
     volumes:
       - ./server:/app:ro
-      - documents_data:/data
+      # in the DGO folder's data/documents/state (DGO-2019); it was the volume documents_data, moved once by `bbox run`
+      - ../../data/documents/state:/data
       # the office's ONE flow.v1 publisher (DGO-1402) — the platform's file, never a copy of it here
       - ../../platform-base/redis/flowpub.py:/opt/dgo/flowpub.py:ro
     networks:
@@ -50,9 +51,6 @@ services:
     logging:
       driver: json-file
       options: { max-size: "5m", max-file: "3" }
-
-volumes:
-  documents_data:
 
 networks:
   traefik-network:

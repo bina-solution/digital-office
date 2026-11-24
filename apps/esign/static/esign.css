@@ -130,6 +130,9 @@
 @font-face{font-family:"Segoe UI";src:local("Segoe UI Semibold Italic");font-weight:500 600;font-style:italic;unicode-range:U+0590-05FF,U+FB1D-FB4F}
 @font-face{font-family:"Segoe UI";src:local("Segoe UI Bold Italic");font-weight:700 900;font-style:italic;unicode-range:U+0590-05FF,U+FB1D-FB4F}
 /* @bina-theme-tokens:end */
+/* this screen's own type (the palette block names none): without it every page here fell back to the browser's serif —
+   the signer's page read in Times on a phone (DGO-2139) */
+:root{--font:"Segoe UI",system-ui,-apple-system,"Noto Sans Hebrew","Assistant",Arial,sans-serif}
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--font);line-height:1.5}
 .wrap{max-width:820px;margin:0 auto;padding:28px 20px 60px}
@@ -173,3 +176,9 @@ th{color:var(--muted);font-weight:600;font-size:12px}
 .dgo-mark .t{fill:var(--mark-tile)}.dgo-mark .m{fill:var(--mark-glyph)}.dgo-mark .a{fill:var(--mark-accent)}
 .link{word-break:break-all;font-size:12.5px;background:var(--surface-2);border:1px solid var(--line);
   border-radius:8px;padding:8px 10px;color:var(--sky-d)}
+/* the view page's two ways on: keep the file, or open it whole (a phone shows a framed PDF's first page only) */
+.acts{display:flex;flex-wrap:wrap;gap:8px;margin:12px 0 4px}
+a.btn{display:inline-block;background:var(--olive);color:var(--olive-ink);border-radius:9px;padding:10px 18px;
+  font-size:14px;font-weight:600;text-decoration:none}
+a.btn.ghost{background:var(--surface-2);color:var(--ink);border:1px solid var(--line)}
+@media (pointer:coarse){a.btn{padding:12px 18px}}

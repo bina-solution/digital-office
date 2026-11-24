@@ -10,7 +10,8 @@ no restart, because the company's domain records already exist (ai/context/mail-
 The question this service exists to answer is not *how* to write that line. It is **who** may.
 
 ── why this is a separate container and not four routes in mailapi ───────────────────────────────
-`mailapi` mounts the same volume READ-ONLY today (`mail_config:/mailconfig:ro`) so the setup
+`mailapi` mounts the same store READ-ONLY today (`data/mail/config:/mailconfig:ro`; the volume mail_config before
+DGO-2019) so the setup
 checker can read the PUBLIC half of the DKIM key. Making that mount read-write would have been one
 character of diff, and it is the wrong character. That volume is not "the accounts file"; it is the
 mail server's entire configuration:
@@ -29,8 +30,8 @@ it can write here.
 
 So the privilege is separated by MOUNT, not by discipline:
 
-    mailapi    mail_config:/mailconfig:ro     reads exactly one file (<selector>.txt, public)
-    mailboxd   mail_config:/cfg               writes exactly one file, and cannot be reached
+    mailapi    data/mail/config:/mailconfig:ro   reads exactly one file (<selector>.txt, public)
+    mailboxd   data/mail/config:/cfg             writes exactly one file, and cannot be reached
                                               from outside the compose network at all
 
 This process has no traefik labels, no published port, no authentication of its own and needs

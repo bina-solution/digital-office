@@ -5,7 +5,10 @@ import (
 	"encoding/hex"
 	"fmt"
 	"io"
+	"net"
 	"path/filepath"
+	"regexp"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -27,7 +30,12 @@ const (
 	enterPath    = "/.dgo/enter"     // ENTER_PATH: this office's sign-in, then the console again
 	// REMOTE_SIGN_IN: the sign-in in front of every form that reaches a linked office's app (DGO-1755)
 	remoteSignIn = "authentik-admins@file"
+	// PUBLISH_DOMAINS_ENV: the further domains an office declares its own for `publish:` (DGO-2125)
+	publishDomainsEnv = "PUBLISH_DOMAINS"
 )
+
+// domainSplitRE is publish_domains' separator: commas and the whitespace both languages agree on.
+var domainSplitRE = regexp.MustCompile(`[\t\n\f\r ,]+`)
 
 // ownHost is OWN_HOST: what the tile of an app that keeps its own host names — the question and the
 // way in.
@@ -174,6 +182,37 @@ func handoffsPath(cat *Catalog, appID string) string {
 	return handoffsPathOf(a.doc)
 }
 
+// moduleTab is serve.module_tab(): does the module a linked tile opens ask for a place in the phone's bar
+// (`routing[].module.tab: true`, DGO-1800) — in THIS office's copy of the app's manifest, as tileless reads it?
+// Only a true counts, and only on the routed module whose id (or, naming none, the app's) is the tile's module
+// id — a peer that sends none is matched by the app's id, so a module named otherwise gets no place from it, never
+// a wrong one. A routing that is no list of mappings asks for nothing (DGO-2122: the MacBook's bar had one app,
+// its documents and files being linked copies).
+func moduleTab(cat *Catalog, appID, moduleID string) bool {
+	a := cat.Apps[appID]
+	if a == nil {
+		return false
+	}
+	routes, err := dicts(get(a.doc, "routing"), appID+": routing")
+	if err != nil {
+		return false
+	}
+	want := moduleID
+	if want == "" {
+		want = appID
+	}
+	for _, r := range routes {
+		m, ok := get(r, "module").(*yamlish.Map)
+		if !ok || m.Len() == 0 {
+			continue
+		}
+		if getOr(m, "tab", nil) == true && pyval.Str(either(get(m, "id"), appID)) == want {
+			return true
+		}
+	}
+	return false
+}
+
 // moduleEntries is module_entries(): the console tile of each remote app, one per (office, alias) —
 // external, namespaced `<alias>.<office>`, marked with its office. The office's label and mark are the
 // entry's own objects, as in Python, so the registry writes them once and refers to them after. An app
@@ -215,6 +254,10 @@ func moduleEntries(served []remoteEntry, cat *Catalog) []any {
 			// THIS office's copy of the manifest, as serve.handoffs_path
 			if h := handoffsPath(cat, a.app); h != "" && truthy(a.apiPort) {
 				t.Set("handoffs", "http://"+tile+":"+pyval.Str(a.apiPort)+h)
+			}
+			// …and its place in the phone's bar, when the app's own manifest asks for one (DGO-2122)
+			if moduleTab(cat, a.app, a.moduleID) {
+				t.Set("tab", true)
 			}
 			out = append(out, t)
 		}
@@ -507,12 +550,35 @@ type publishedDoor struct {
 	paths                               []string
 }
 
-// publishPlan is serve.publish_plan(state, served, domain): the `publish:` block checked against the doors
-// linked offices give this one. It returns the doors this office opens, the refusals of its OWN malformed
+// publishDomains is serve.publish_domains: PUBLISH_DOMAINS split on commas and spaces, lower-case, a leading dot
+// dropped, each once, in its order. A malformed name is kept as written, for publishPlan to refuse by name.
+func publishDomains(raw string) []string {
+	var out []string
+	for _, d := range domainSplitRE.Split(raw, -1) {
+		d = strings.TrimLeft(pyLower(pyval.Strip(d)), ".")
+		if d != "" && !slices.Contains(out, d) {
+			out = append(out, d)
+		}
+	}
+	return out
+}
+
+// aDomain is serve._a_domain: a further domain is a dotted name — no port, no path, no trailing dot, never an
+// address.
+func aDomain(d string) bool {
+	if !authorityRE.MatchString(d) || strings.Contains(d, ":") || !strings.Contains(d, ".") || strings.HasSuffix(d, ".") {
+		return false
+	}
+	return net.ParseIP(d) == nil
+}
+
+// publishPlan is serve.publish_plan(state, served, domain, cat, more): the `publish:` block checked against the
+// doors linked offices give this one. It returns the doors this office opens, the refusals of its OWN malformed
 // declaration (they stop the render) and the doors left out because the serving office decided otherwise
 // (lines, never a stop), each in Python's words and order. Only a door its serving office narrowed to paths
-// and opened to the internet (`public: true`) is ever published.
-func publishPlan(st *State, served []remoteEntry, domain string, cat *Catalog) ([]publishedDoor, []string, []string) {
+// and opened to the internet (`public: true`) is ever published. A host lies under this office's domain or under
+// a further one it declares its own (`more`, PUBLISH_DOMAINS, DGO-2125); its routed names are checked on its own.
+func publishPlan(st *State, served []remoteEntry, domain string, cat *Catalog, more []string) ([]publishedDoor, []string, []string) {
 	raw, _ := st.Doc.Get("publish")
 	if noBlock(raw) {
 		return nil, nil, nil
@@ -552,6 +618,21 @@ func publishPlan(st *State, served []remoteEntry, domain string, cat *Catalog) (
 	var out []publishedDoor
 	var errs, dropped []string
 	hosts, taken, names := map[string]bool{}, map[string]bool{}, map[string]bool{}
+	// the further domains this office declares its own, each refused by name when it is no domain
+	var further []string
+	for _, d := range more {
+		d = pyLower(pyval.Strip(d))
+		if !aDomain(d) {
+			errs = append(errs, fmt.Sprintf("%s: %s אינו דומיין (שם עם נקודה, בלי פורט, בלי נתיב ובלא כתובת)", publishDomainsEnv, pyval.Repr(d)))
+		} else if d != domain && !slices.Contains(further, d) {
+			further = append(further, d)
+		}
+	}
+	// an office with no public domain publishes nothing, whatever further domains it names: it has no edge
+	var mine []string
+	if domain != "" && domain != "localhost" {
+		mine = append([]string{domain}, further...)
+	}
 	for i, rawItem := range block {
 		where := fmt.Sprintf("publish[%d]", i)
 		item, ok := rawItem.(*yamlish.Map)
@@ -565,19 +646,33 @@ func publishPlan(st *State, served []remoteEntry, domain string, cat *Catalog) (
 			errs = append(errs, fmt.Sprintf("%s.host %s אינו שם מארח (בלי פורט ובלי נתיב)", where, pyval.Repr(hostRaw)))
 			continue
 		}
-		if domain == "" || domain == "localhost" || !strings.HasSuffix(host, "."+domain) {
-			named := domain
+		under := ""
+		for _, d := range mine {
+			if strings.HasSuffix(host, "."+d) {
+				under = d
+				break
+			}
+		}
+		if under == "" {
+			named := strings.Join(mine, ", ")
+			if named == "" {
+				named = domain
+			}
 			if named == "" {
 				named = "אין לה דומיין"
 			}
 			errs = append(errs, fmt.Sprintf("%s.host %s: אינו תחת הדומיין של הלשכה הזו (%s) — רק לשכה עם דומיין ציבורי מפרסמת, ורק תחתיו", where, host, named))
 			continue
 		}
-		first := host[:len(host)-len(domain)-1]
+		if host == domain { // under a further domain that is its parent: still the office's own name
+			errs = append(errs, fmt.Sprintf("%s.host %s: הוא שם הלשכה עצמה, לא שם תחתיו — שם משנה, למשל sign.%s", where, host, domain))
+			continue
+		}
+		first := host[:len(host)-len(under)-1]
 		if i := strings.LastIndex(first, "."); i >= 0 {
 			first = first[i+1:]
 		}
-		if routed[first] {
+		if under == domain && routed[first] {
 			errs = append(errs, fmt.Sprintf("%s.host %s: %s.%s כבר מנותב לאפליקציה של הלשכה הזו — שם אחר, למשל sign", where, host, first, domain))
 			continue
 		}

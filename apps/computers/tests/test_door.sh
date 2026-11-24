@@ -13,6 +13,13 @@
 set -uo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO="$(cd "${HERE}/../../.." && pwd)"
+# ON THE CI, ONLY WHEN WHAT IT TESTS CHANGED SINCE THE LAST GREEN (scripts/ci/since_green.py; DGO-2123). It was the
+# line's slowest suite, 195–313 s of G72 on batches 112–115. What it tests: the door hook and the lib.sh it runs on
+# (the only two files its throwaway checkout holds), and onboard's executable bit. Only the rule's own NOT RUN line
+# skips; anything else (no python, a broken call, a crash) runs the suite.
+said="$(python3 "${REPO}/scripts/ci/since_green.py" "${REPO}" apps/computers/hooks/door apps/computers/hooks/onboard \
+  scripts/lib.sh apps/computers/tests/test_door.sh 2>/dev/null)"
+case "${said}" in "NOT RUN "*) printf '%s\n' "${said}"; exit 1 ;; esac
 IMAGE="${1:-$(docker ps --filter 'name=^computers-' --format '{{.Image}}' | head -1)}"
 [ -n "${IMAGE}" ] || { echo "no image: pass one (a Debian with ssh-keygen)"; exit 2; }
 # The throwaway containers bind ${T} as /repo, and the docker daemon resolves a bind's SOURCE on the HOST —
@@ -21,7 +28,9 @@ IMAGE="${1:-$(docker ps --filter 'name=^computers-' --format '{{.Image}}' | head
 # there, and the run said "install rc=127": a FAIL for a machine where the door was never reached. The checkout
 # is mounted at its host path, so a directory inside it is seen on both sides; where writing there fails it
 # falls back to mktemp, and the probe below decides whether the daemon can see it at all.
-T="$(mktemp -d "${REPO}/.door-test.XXXXXX" 2>/dev/null || mktemp -d)"; trap 'rm -rf "${T}"' EXIT
+T="$(mktemp -d "${REPO}/.door-test.XXXXXX" 2>/dev/null || mktemp -d)"
+# the machines' apt cache (below) is written by their root: it goes through a machine of the same image, then the rest
+trap 'docker run --rm -v "${T}:/t" --entrypoint sh "${IMAGE}" -c "rm -rf /t/apt" >/dev/null 2>&1; rm -rf "${T}"' EXIT
 fails=0
 # Can the daemon SEE ${T}? A marker it must find through a bind of this very image, before any check runs:
 # containers that never got the hooks have not failed — they did not run — and it says so, and why. (G72's
@@ -35,6 +44,13 @@ if ! docker run --rm -v "${T}:/probe:ro" --entrypoint sh "${IMAGE}" -c 'test -f 
   exit 3
 fi
 rm -f "${T}/.probe"
+# ONE APT CACHE FOR EVERY MACHINE (the king, DGO-2123): this suite was 266 of G72's 769 s in batch 112, and nearly all
+# of it was each throwaway machine fetching Debian's package lists and openssh-server again. Every machine now sees the
+# same lists and downloaded packages (its image's docker-clean, which deletes them after each install, is taken out), so
+# the first fetches and the rest install from it. What each case proves is unchanged: the door's own install still runs
+# apt on a machine with no sshd, and the hook's fallback (`apt-get update` when apt knows no package) is still what the
+# first machine and case 6, whose lists are taken away, go through.
+APT="${T}/apt"; mkdir -p "${APT}/archives/partial" "${APT}/lists/partial"
 # here-strings, never `printf | grep -q`: under pipefail a grep -q that leaves early fails its printf (SIGPIPE)
 check() {   # name expected-line output
   if grep -qxF -- "$2" <<<"$3"; then echo "PASS  $1"; else echo "FAIL  $1"; sed 's/^/      | /' <<<"$3" | tail -15; fails=$((fails + 1)); fi
@@ -56,9 +72,11 @@ repo r; repo office 'COMPUTERS_LOCAL_USER=office'
 in_box() {
   local r="$1" s="$2"; shift 2
   docker run --rm -i --entrypoint bash -v "${T}/${r}:/repo:ro" -e REPO_ROOT=/repo -e LANG=C.UTF-8 \
+    -v "${APT}/archives:/var/cache/apt/archives" -v "${APT}/lists:/var/lib/apt/lists" \
     -e DOOR_PUBKEY_FILE=/root/office_key.pub -e DOOR_SUBNETS=10.254.254.0/24 -e DOOR_GATEWAY=127.0.0.1 "$@" \
     "${IMAGE}" -s <<EOF
 set -u
+rm -f /etc/apt/apt.conf.d/docker-clean
 ssh-keygen -q -t ed25519 -N '' -f /root/office_key -C office >/dev/null
 door() { bash /repo/apps/computers/hooks/door "\$@"; }
 key() { ssh -n -q -i /root/office_key -o BatchMode=yes -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=5 "\$@"; }

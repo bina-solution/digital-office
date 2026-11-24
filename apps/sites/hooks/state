@@ -1,0 +1,34 @@
+#!/usr/bin/env bash
+#: state — what this app holds, one `<name> <value>` per line:  ./bbox sites state
+#: The sites it manages and the checks it ran (sites.db), and the files of public/, its cached copy of every site it
+#: serves; told the renderer's container (data/sites/renders), the screenshots the beauty check kept. The data move
+#: (platform/manager/datahome.py, DGO-2019) reads it before it moves a store and again after, and sends the store back
+#: to its volume when what it held is gone.
+set -uo pipefail
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
+case "${1:-}" in -h|--help) sed -n 's/^#: //p' "${BASH_SOURCE[0]}"; exit 0 ;; esac
+# The data move names the container it measures; by hand, it is the office's own.
+if [ -n "${DGO_STATE_CONTAINER:-}" ]; then
+  inside() { docker exec -i "${DGO_STATE_CONTAINER}" "$@"; }
+else
+  . "${REPO_ROOT}/scripts/lib.sh"
+  inside() { dcx exec -T sites "$@"; }
+fi
+inside python - <<'PY'
+import os, sqlite3
+state = os.environ.get("SITES_STATE_DIR", "/data")
+db = os.environ.get("SITES_DB", os.path.join(state, "sites.db"))
+out = []
+if os.path.isfile(db):
+    # only what a minute cannot take away: the samples, visits and findings are pruned by age as the app runs
+    c = sqlite3.connect(f"file:{db}?mode=ro", uri=True, timeout=30)
+    out += [(f"rows.{t}", c.execute(f'select count(*) from "{t}"').fetchone()[0]) for t in ("sites", "runs")]
+    public = os.environ.get("SITES_PUBLIC_DIR", os.path.join(state, "public"))
+    out.append(("public.files", sum(len(f) for _, _, f in os.walk(public))))
+renders = os.environ.get("SITES_RENDER_DIR", "/renders")
+if os.path.isdir(renders):
+    out.append(("renders.files", sum(len(f) for _, _, f in os.walk(renders))))
+for k, v in out:
+    print(k, v)
+PY

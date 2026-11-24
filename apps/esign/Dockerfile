@@ -14,7 +14,7 @@ WORKDIR /app
 COPY requirements.txt ./
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY store.py pdfsign.py clients.py server.py ./
+COPY store.py pdfsign.py clients.py server.py fill.py fillpdf.py ./
 COPY templates/ ./templates/
 COPY static/ ./static/
 

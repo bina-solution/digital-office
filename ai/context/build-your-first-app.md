@@ -105,10 +105,15 @@ one copy allowed.
 ```jsonc
 "routing": [
   { "host": "hello-bina", "port": 80, "auth": "sso",
-    "module": { "group": "עסק", "icon": "box", "embed": true, "alias": "hello-bina",
+    "module": { "group": "פיתוח ואוטומציות", "icon": "box", "embed": true, "alias": "hello-bina",
                 "name": "שלום בינה", "desc": "…", "order": 80 } }
 ]
 ```
+
+`module.group` is one of the home's seven groups, which the console draws in this order and colour (app.js `GROUPS`,
+DGO-2122): «בינה מלאכותית» · «ניהול העסק» · «עבודה וקבצים» · «תקשורת» · «העסק ברשת» · «ניהול הלשכה» · «פיתוח
+ואוטומציות». A word the console does not know lands in «אפליקציות נוספות». `module.tab: true` asks for one of the
+phone bar's three places; the first three such apps in the home's order get them. The console names no app (G9).
 
 The compiler emits **every** traefik label, the authentik proxy provider, the outpost binding and
 the console tile from this. Do not hand-write traefik labels; `emit_labels: false` exists only for
@@ -300,8 +305,90 @@ docker socket and grants only what this manifest declares.
 
 ### Data — what survives you
 
+#### Where an app keeps its state
+
+The rule is the owner's (2026-11-18, DGO-2019): everything your app must not lose lives in the DGO folder, in
+`data/<your-app>/`. Backing up the office means copying `data/`. Losing a container, re-creating it, updating it or
+removing it never loses anything.
+
+```yaml
+# apps/myapp/docker-compose.yml — always a NAMED store, data/myapp/<store>, even the first: a second one then sits
+# beside it, never inside it (a bind inside another store's folder is that store's, and moves with it)
+services:
+  myapp:
+    volumes:
+      - ../../data/myapp/state:/data           # a bind into the DGO folder, never a named volume
+      - ./config.toml:/etc/myapp.toml:ro       # tracked config: read-only, not state
+```
+
 ```jsonc
-"data": { "volumes": ["myapp_data"], "on_uninstall": "keep" }
+"data": { "paths": ["data/myapp/state"], "on_uninstall": "keep" }
+```
+
+What that means for your app:
+
+- **No named volume for state.** A docker volume lives in the engine's own storage, which no folder copy reaches and
+  which a `docker volume prune`, a new engine or a new machine takes with it.
+  - The one exception is a store the office can fetch or rebuild again: a pinned model, a socket two containers
+    meet at. List it in `data.cache`, and say why.
+- **No anonymous volume.** If your image declares `VOLUME /x`, mount `/x` from `data/myapp/…`. Otherwise docker
+  hides an unnamed volume behind it.
+- **Nothing that matters in the container's own layer.** Everything outside your mounts is gone at the next
+  re-create.
+  - This includes a sign-in, a key, a generated config you can't regenerate, a database file in the image's
+    default path, and a browser profile.
+  - Point the app's paths at your mounts (`HOME=/data`, `--user-data-dir=/data/profile`, `XDG_*`).
+  - `/tmp` and caches are fine there.
+- **Not in your own source folder.** `./storage` inside `apps/myapp/` is state in the source tree.
+- **Another app's home is read-only to you.** Bind `../../data/<other>/<store>:ro`, and only for an app you depend
+  on.
+- **A copy of your app** (DGO-1920) gets `data/myapp-<key>/` by itself: the generator rewrites `data/myapp/` in its
+  compose and manifest.
+- **The first start of a new store**: the platform seeds the folder with what your image ships at the mount point,
+  with the image's owner (`bbox run`, `platform/manager/datahome.py`). So don't `chown` your data at every start.
+- **`hooks/state`** (recommended for anything with a database or a sign-in): prints `<name> <value>` lines that say
+  what your app holds, such as the rows of each table, whether it is signed in, or a key's fingerprint.
+  - When the platform moves a store, it reads them before and after. A value that is not a number must be equal,
+    and a count that was above zero must still be above zero (an app that came up on an empty store says 0).
+    Otherwise it puts the store back where it was.
+  - Print no secret and no personal address: the values land in `data/.moves/`.
+  - Example: `platform-base/notifications/hooks/state`.
+
+**An app that kept its state in a volume** moves it once:
+
+1. Bind the folder.
+2. Drop the volume from the compose.
+3. Say where the bytes come from:
+
+```jsonc
+"data": { "paths": ["data/myapp/state"], "moved_from": { "data/myapp/state": "myapp_data" }, "on_uninstall": "keep" }
+```
+
+At the next `bbox run` on each office, before `up`:
+
+1. The platform stops what uses `myapp_data`.
+2. It copies the volume into `data/myapp/state` (owners, modes and times kept).
+3. It compares the two trees file by file, and writes `data/.moves/myapp/state.json`.
+4. After `up`, it checks health and `hooks/state`.
+
+The volume itself is left as it was. A rolled-back update runs on it, and a later run moves it again. A move that
+failed waits on its volume until `./bbox data retry myapp`, and until a move is proven the backup carries the volume.
+
+An office whose DGO folder can't hold a database runs the store from its volume until it can, through
+`data/.moves/wait/<app>.yml`. Examples: WSL's `/mnt/c`, or a hypervisor share.
+
+`./bbox data plan` says what each store is and will be. `./bbox data check` lists what a running office still keeps
+outside `data/`. The measure and every app's stores are in
+[data-home.md](data-home.md).
+
+G118 (`scripts/refactor/data-home-lint.py`) fails a named volume, an anonymous one, a writable bind outside your home,
+a store `data.paths` does not name, or a `data/` folder git does not ignore. `platform/data-home-pending.yaml` is
+the shrinking list of what the tree still has to move.
+
+#### What happens to it on uninstall
+
+```jsonc
+"data": { "paths": ["data/myapp/state"], "on_uninstall": "keep" }
 ```
 
 `keep` (default) or `purge`. Choose `keep` unless the data is genuinely worthless without the app;
@@ -316,7 +403,8 @@ and starts them again after. Each must be a service of your compose whose `conta
 If your compose mounts a volume ANOTHER app creates (any-concurrency reads n8n's `n8n_storage`), name it in
 `"shares": ["n8n_storage"]`, never in your `volumes`: a volume has one owner, the app it is backed up, restored and
 purged with. Your `--app` export and import skip it and say whose it is, and your `uninstall --purge` leaves it
-(G26 fails a volume in two apps' `volumes`, DGO-1510).
+(G26 fails a volume in two apps' `volumes`, DGO-1510). Once the owner has moved to its `data/<owner>/`, bind that
+folder read-only instead.
 
 ### Health and readiness
 
@@ -473,6 +561,7 @@ python3 scripts/refactor/healthcheck-lint.py            # G18 the probe binary e
 python3 scripts/refactor/image-pin-lint.py              # G15 third-party images are pinned
 python3 scripts/refactor/theme-token-lint.py            # G27 your screen's copy of the palette IS the palette
 python3 scripts/refactor/palette-lint.py                # G82 your screen names no colour of its own
+python3 scripts/refactor/data-home-lint.py              # G118 your state is in data/<your-app>/, and only there
 bash scripts/fresh-machine-check.sh                     # a bare clone still compiles
 ```
 

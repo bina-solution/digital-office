@@ -32,15 +32,14 @@ when it exits, and every loop starts with `set +e`)
 | `browser42-window.py` | sets compact (Chrome's own fullscreen, what F11 toggles) or standard as a state, over Chrome's own DevTools port |
 | loop: the window | makes a new window compact once (not one the hand-off made standard); keeps a non-fullscreen one fitted and maximized; closes extra windows once, when the first appears within 5 minutes of boot |
 | loop: CDP watchdog | a Chrome alive whose CDP stopped answering for 60 s → the container restarts |
-| loop: profile snapshot | every 30 min and at sleep (at a stop if Docker's 10 s allow): the profile without caches, only when a sign-in file was written since the last one |
 | loop: idle sleep | Chrome exits gracefully after the idle limit the reaper decides; the next use wakes it |
 
 **What it writes, and what removes it**
 
 | where | what | removed by |
 |---|---|---|
-| `/profile` (volume `cloakprofile`) | the owner's profile — sign-ins, cookies, saved passwords | never (`bbox b42 state reset --yes` is the owner's) |
-| `data/browser42/profile-snapshot` (+ `.prev`) | the profile without caches, the disaster copy | replaced only by a whole copy holding ≥ 90% of its cookies; the one before is kept as `.prev` |
+| `/profile` (volume `cloakprofile`) | the owner's profile — sign-ins, cookies, saved passwords. The app's declared state (app.json `data`): the office's backup carries it, like every app's | never (`bbox b42 state reset --yes` is the owner's) |
+| `data/browser42/profile-snapshot*`, `archive/profile-snapshot-*` | **written by nothing since 2026-11-24** (DGO-2188). Copies of the profile an earlier `start-browser.sh` made every 30 minutes (its §4h says what that cost); whatever an office still holds is left where it is | a person: `cp -a <copy>/. /profile/__default__/` into a stopped browser brings one back; removing them is the owner's |
 | `data/browser42/tasks/<slug>` | a task's record, journal and evidence | the watchdog, 14 days after its last write (`BROWSER42_TASK_KEEP_DAYS`) |
 | `data/browser42/output` | the MCP's console logs and files | the watchdog, after 7 days (`BROWSER42_OUTPUT_KEEP_DAYS`) |
 | `data/browser42/groups`, `handoffs` | a group's manifest; a hand-off's state | `bbox b42 close` / `gc`; the hand-off's end |

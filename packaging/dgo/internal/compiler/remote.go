@@ -33,7 +33,7 @@ var (
 	authorityRE = regexp.MustCompile(`^[a-z0-9]([a-z0-9.\-]{0,251})?(:\p{Nd}{1,5})?\z`)
 	// DOOR_PATH_RE (DGO-2050): a door's path — absolute, plain URL characters (catalog.py's PATH_RE)
 	doorPathRE = regexp.MustCompile(`^/(?:[A-Za-z0-9._~-]+/)*[A-Za-z0-9._~-]*\z`)
-	wgAddress   = regexp.MustCompile(`^` + pyval.SpaceClass + `*Address` + pyval.SpaceClass + `*=` + pyval.SpaceClass + `*([0-9]{1,3}(?:\.[0-9]{1,3}){3})`)
+	wgAddress  = regexp.MustCompile(`^` + pyval.SpaceClass + `*Address` + pyval.SpaceClass + `*=` + pyval.SpaceClass + `*([0-9]{1,3}(?:\.[0-9]{1,3}){3})`)
 )
 
 // remoteApp is one app of a linked office as plan() accepts it (its `clean` row).

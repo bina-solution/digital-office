@@ -167,6 +167,25 @@ create table if not exists public.indox_instances (
   constraint indox_instances_id_shape   check (id ~ '^[a-z][a-z0-9_]*$'),
   constraint indox_instances_schema_law check (schema_name = 'indox_' || id)
 );
+-- The scheduler's two other global tables, which indox01 reads beside indox_instances. The 2026-08 cutover made them
+-- by hand on one office and nothing in the repo ever created them: on vps1, where indox's workflows run with its app
+-- off, indox01 failed every tick for 10.5 days (GlitchTip N8N-16, 6,938 events, DGO-2111 root 5). Empty, the clock
+-- reads `indox.auto.on` as false and dispatches nothing; switching automation on is a row here, an office's decision.
+create table if not exists public.app_settings (
+  app   text not null,
+  key   text not null,
+  value text,
+  primary key (app, key)
+);
+create table if not exists public.app_schedule_state (
+  app         text not null,
+  instance    text not null,
+  job         text not null,
+  last_run_at timestamptz,
+  last_exec   text,
+  last_note   text,
+  primary key (app, instance, job)
+);
 SQL
   local bad n
   bad="$(docker exec "${PG}" psql -U postgres -d postgres -tAc \

@@ -40,6 +40,15 @@ group_alive() { [ -n "${LISTENER}" ] && kill -0 -- "-${LISTENER}" 2>/dev/null; }
 # is a setting only so a test on a host that is ITSELF a runner can name its own stand-in: there the host's real
 # Runner.Worker (the job running the test) read as «a job», and a pause never came (the Dell's gates, 2026-11-11).
 job_now() { pgrep -f -- "${CI_RUNNER_JOB_MATCH:-Runner.Worker}" >/dev/null 2>&1; }
+# A TAKE THAT WANTS THE SLOT (scripts/follow.sh, DGO-2164): the office's follow holds the lock heavy.want, in the
+# office's locks folder that prejob.sh's slot shares, for as long as its take needs the machine. Meanwhile the runner
+# stands aside between jobs, as it does when paused: the running job finishes, the next ones wait on GitHub. It never
+# writes /state/paused, which stays the screen's and the owner's. The kernel lets go of the lock with its holder,
+# whatever ends it, so a killed take cannot keep the runner aside. «paused» on the heartbeat, which is what the screen
+# then shows.
+WANT="${CI_RUNNER_WANT:-${CI_RUNNER_LOCKS:-/data/locks}/heavy.want}"
+# HELD is flock's conflict exit alone (-E 75): a lock it cannot even try (no flock, no access) never parks the runner
+wanted() { [ -e "${WANT}" ] || return 1; flock -n -E 75 "${WANT}" true 2>/dev/null; [ "$?" = 75 ]; }
 
 beat() {   # the screen's one source for «is it up»: written every round, read as stale after a minute
   printf '{"state":"%s","listener":%s,"job":%s,"at":"%s"}\n' "$1" "$(group_alive && echo true || echo false)" \
@@ -86,7 +95,8 @@ pause_step() {
   sleep 1
   job_now && return 1                                       # a job was taken in that second: it runs, and finishes
   stop_listener 30
-  say "listener stopped between jobs (paused on the screen)"
+  if [ -e "${STATE}/paused" ]; then say "listener stopped between jobs (paused on the screen)"
+  else say "listener stopped between jobs (the office's take wants the slot: ${WANT})"; fi
 }
 
 # the job door's worker (door.py, DGO-1797 package 9): it runs the named jobs a linked office asked for, one at a time,
@@ -118,7 +128,7 @@ while :; do
   door_up
   if ! registered; then
     beat unregistered
-  elif [ -e "${STATE}/paused" ]; then
+  elif [ -e "${STATE}/paused" ] || wanted; then
     if pause_step; then beat paused; else beat pausing; tick=1; fi
   elif group_alive; then                                    # run.sh may be gone while its listener still works
     beat running

@@ -55,7 +55,7 @@ docker() {
 die() { echo "DIE $*" >> "$LOG"; exit 9; }
 _dcx_run() { echo "COMPOSE $*" >> "$LOG"; return 5; }
 for f in export_host_tz export_cert_resolver bbox_assert_engine_socket compose_admit deploy_ledger_gate \
-         deploy_ledger_record cpu_caps_apply netns_rejoin filemount_refresh; do eval "$f() { :; }"; done
+         deploy_ledger_record cpu_caps_apply netns_rejoin filemount_refresh image_refresh; do eval "$f() { :; }"; done
 compose_is_recreate() { return 1; }
 compose_is_up() { return 1; }
 compose_self_guard() { return 1; }

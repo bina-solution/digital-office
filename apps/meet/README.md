@@ -48,7 +48,7 @@ STUN is not used: every call's media goes through the office's own bridge, nothi
 ## Recording, by default (the owner: «by default the videos to be saved … in the VPS»)
 
 The official recorder, Jibri (`ghcr.io/jitsi/jibri:stable-11248`: Chrome + ffmpeg, a 2 GB shm, no
-kernel module in this release), writes each meeting into this app's volume `meet_recordings` on the
+kernel module in this release), writes each meeting into this app's store `data/meet/recordings` (the volume `meet_recordings` before DGO-2019) on the
 office's own server.
 
 **The server starts it** (DGO-831, the owner: «שזה יקליט לי את המסך גם כשאני לבד וישמור הכל»).
@@ -130,7 +130,7 @@ The owner asked (2026-10-21) where the automations run, believing it was on the 
 
 | What | Where | Why there |
 |---|---|---|
-| Jitsi, the recorder, the recordings | vps1 (`meet`, `meet-jibri`, volume `meet_recordings`) | a public office: phones and guests reach it |
+| Jitsi, the recorder, the recordings | vps1 (`meet`, `meet-jibri`, the folder `data/meet/recordings`) | a public office: phones and guests reach it |
 | The transcriber (`apitools-asr`, ivrit.ai + Whisper) | vps1 | beside the audio; nothing leaves the office |
 | The workflow `meetRecordings01` | **vps1's own n8n** (`n8n-staging`), imported by `bbox n8n push meet` | an app's blueprints go into the n8n of the office that runs the app (app-management `_blueprint_apply`); one n8n per office, never federated |
 | Plane, project MEET | the HP (`project-pln`), reached from vps1 through the link | the office's one Plane |
@@ -421,7 +421,7 @@ the background only if notifications are allowed (DGO-959): that page and the sh
 
 ### Recording — the office's record of its meetings
 `meet-jibri` (Chrome in a virtual screen + ffmpeg, 1280×720) writes
-`recordings/<session>/<room>_<time>.mp4` and, at the end, `metadata.json` into `meet_recordings`;
+`recordings/<session>/<room>_<time>.mp4` and, at the end, `metadata.json` into `data/meet/recordings`;
 `jibri/finalize.sh` adds `<room>_<time>.ogg`, the sound, for the transcript.
 `prosody/mod_meet_auto_record.lua` starts it once per room when the first host is in, from any
 client, alone too (`MEET_AUTO_RECORD`, default 1): the button's request, from the host's session.
@@ -437,6 +437,26 @@ but the bridge never heard them → the same, 10 s after the bridge lists them; 
 nothing for `MEET_SILENT_MIC_SECONDS` (20; 0 = all off) → the Android advice. Once per state, «✅»
 when audio arrives. `web/plugin.head.html` shows the same as a red banner on the page (never on the
 recorder's page) with an «Enable microphone» button that asks the browser again.
+
+**A meeting into another office's meet — `./bbox meet move <room> --from <office> --to <office> [--remove]`**
+(DGO-1861: exu104 was held in Exampleu's office and was Bina Solutions' meeting). A meeting is its folders in the
+volume — `recordings/<session>/` whole (the video, the sound, the recorder's notes, `flow/` once processed) and
+`flows/<room>/` — and from them the target makes its transcripts and MEET item (the workflow takes a recording with no
+item), its first page and its copies in Drive by itself. Not carried: what people added in the source's Drive folder
+of the meeting (`.meet-flow/edits.jsonl`, `items.json`, `uploads.json`, uploads). The verb runs in this office's
+computers container (`apps/meet/tools/move/move.py`): the source's folders, once finished by meet's own rule, are copied
+with their manifest (size, sha256 and time of every file, `scripts/client-move/meet_move.py`'s shape) into
+`/var/backups/bbox/meet-move/<room>-<time>/staged` on the source's own disk — the backup, which stays — then carried in
+4 MB pieces read by the app's exec (through the link for a linked office; 16 MB pieces pushed the app past its 160 MB
+and it restarted) and written as one tar stream over SSH, or by exec pieces to a target behind a link; nothing is kept
+on the office that drives it. On the target `meet_move place` (never over other bytes; owner and times kept,
+`metadata.json` last) and `verify`. `--remove` takes the folders out of the source only while they are still byte for
+byte the backup (set aside, checked again, then deleted), and puts the meeting's folder in the source's Drive into
+Drive's trash when it is of a moved recording and holds only meet's own copies (anything a person added keeps it there,
+named). A step that surely did not run is asked again; one that may still be running is not (the run's lock on each
+machine). A run prints its id; `--resume <run>` continues it from its backup and its carried copy. A meeting with no
+page keeps the «פגישות» row 14 days from its recording's time — on any office; «קדימה» gives it its page.
+`--dry-run` says what would move and writes nothing. Tests: `python3 apps/meet/tools/move/test_move.py`.
 
 **The recorder's watchdog** (`jibri/watch.py`, an s6 longrun inside meet-jibri, `jibri/s6/`; examplef
 2026-10-26: a recorder starved to 0.48 core lost 40 % of every second and told nobody). While Jibri

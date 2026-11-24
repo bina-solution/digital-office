@@ -58,5 +58,29 @@ class Internal(unittest.TestCase):
             self.passed(text)
 
 
+class ChatOfTitle(unittest.TestCase):
+    """The watched list as the telegram app answered on 2026-11-20: the group was renamed after it became a
+    supergroup, so its old title is carried by the dead id alone."""
+
+    WATCHED = [{"id": -1234567892, "title": "Bina Solutions Main", "kind": "group", "migrated_to": -1001234567890},
+               {"id": -1001234567890, "title": "בינה פתרונות ראשי", "kind": "group", "migrated_from": -1234567892}]
+
+    def setUp(self):
+        self.api = say_group.api
+        say_group.api = lambda url: {"watched": self.WATCHED}
+
+    def tearDown(self):
+        say_group.api = self.api
+
+    def test_the_old_title_follows_the_move(self):
+        self.assertEqual(say_group.chat_id_of("Bina Solutions Main", ""), "-1001234567890")
+
+    def test_the_new_title_is_the_supergroup(self):
+        self.assertEqual(say_group.chat_id_of("בינה פתרונות ראשי", ""), "-1001234567890")
+
+    def test_an_explicit_id_is_taken_as_given(self):
+        self.assertEqual(say_group.chat_id_of("Bina Solutions Main", "-42"), "-42")
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=1)

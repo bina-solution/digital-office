@@ -29,7 +29,7 @@
       "port": 8988,
       "auth": "sso",
       "module": {
-        "group": "תשתית",
+        "group": "פיתוח ואוטומציות",
         "icon": "activity",
         "embed": true,
         "alias": "ci-runner",

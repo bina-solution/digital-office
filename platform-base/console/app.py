@@ -303,17 +303,61 @@ def _link_verdicts():
         return {}
 
 
+# ── is a linked office one of THIS business's machines ───────────────────────────────────────
+# A linked office is either a machine of the herd this office belongs to — the offices the compiler writes into
+# `herd.offices.json`, and their other names — or another business's office this one is linked to. The home
+# draws the first as the business's own apps, one tile per kind, and the second as an office of its own (DGO-2122:
+# the owner's Mac reached 115 tiles on his phone, 101 of them other machines' copies and other businesses' apps).
+# Only the fact goes on the tile, `remote.herd`; the shell decides how to draw it. No file, no herd: every linked
+# office is then an office of its own, which is what a single machine linked to a client is. …and only a herd THIS
+# office is in: every office compiles the same herd file from the same tree, a client's too, and there the herd's
+# machines are another business (the rule reconcile's `_this_office_is_in_the_herd` and herd_home.py keep).
+_HERD = {"mtime": None, "ids": frozenset()}
+
+
+def _herd_ids():
+    path = os.path.join(GENERATED, "herd.offices.json")
+    try:
+        mtime = os.stat(path).st_mtime
+    except OSError:
+        return frozenset()
+    if mtime != _HERD["mtime"]:
+        ids = set()
+        try:
+            with open(path, encoding="utf-8") as f:
+                offices = (json.load(f) or {}).get("offices") or {}
+            for oid, o in offices.items():
+                ids.add(str(oid).strip().lower())
+                ids.update(str(a).strip().lower() for a in ((o or {}).get("aliases") or []) if a)
+        except (OSError, ValueError, AttributeError, TypeError):
+            return frozenset()          # half-written (the compiler truncates, then writes): read again next time
+        try:
+            own = _own_office()
+        except (AttributeError, TypeError, ValueError):
+            own = ""                    # a record whose `office` is not an object: no herd, never a 500 of the tiles
+        _HERD.update(mtime=mtime, ids=frozenset(ids) if own and own in ids else frozenset())
+    return _HERD["ids"]
+
+
 def _judged(tiles):
     """The tiles, each linked-office one carrying what was measured about ITS office: `remote.ok`,
     and `remote.why` when it is not. Unmeasured stays absent — the shell marks `false`, never a guess.
     No time goes on the tile: it is part of what a page compares itself with (`/api/version`), and a
-    verdict that has not changed must not look like a registry that has."""
+    verdict that has not changed must not look like a registry that has. …and `remote.herd` when the
+    office is one of this business's own machines (`_herd_ids`)."""
     seen = _link_verdicts()
+    herd = _herd_ids()
     for m in tiles:
         r = m.get("remote")
-        v = seen.get(str(r.get("office") or "")) if isinstance(r, dict) else None
+        if not isinstance(r, dict):
+            continue
+        office = str(r.get("office") or "")
+        v = seen.get(office)
         if v and v.get("ok") is not None:
-            m["remote"] = {**r, "ok": bool(v["ok"]), **({} if v["ok"] else {"why": str(v.get("why") or "")})}
+            r = {**r, "ok": bool(v["ok"]), **({} if v["ok"] else {"why": str(v.get("why") or "")})}
+        if office.strip().lower() in herd:
+            r = {**r, "herd": True}
+        m["remote"] = r
     return tiles
 
 
@@ -1756,7 +1800,7 @@ def links_check(ref, user, query=""):
 
 # ── the ledger: every link a person was given, opened again every 15 minutes (DGO-1433) ─────────────────
 # A link is a record: what was given, to whom, as whom it was opened, when, and every time it was opened again —
-# one line each, appended, never edited (LINKS_DIR, the console's own volume). `bbox console link` records a link
+# one line each, appended, never edited (LINKS_DIR, the console's own store: data/console/links). `bbox console link` records a link
 # only after links_check passed; the console opens every link given again every LINKS_RECHECK_SECONDS (gunicorn's
 # one worker starts the loop, gunicorn.conf.py), and a link that STOPPED opening is a notice in the office's
 # notifications, with the sentence why — before the owner meets it; one that came back closes it.

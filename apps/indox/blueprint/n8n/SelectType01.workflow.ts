@@ -183,7 +183,7 @@ function normalizeAmount(val) {
 // [six-digit collision 2026-09-02, owner Decision 5] The company key is the FULL significant digit
 // string, not the last six. Truncating to six let two unrelated companies whose numbers share a
 // tail read as the same company — in the corroboration test (a false "agree") and in the trusted
-// lookup (the wrong company vouched for). Leading zeros are dropped so '0500000024' and
+// lookup (the wrong company vouched for). Leading zeros are dropped so '0500000025' and
 // '500000020' still meet, which is the only tolerance the truncation was buying.
 function normalizeCompanyID(val) {
   if (!hasReal(val)) return null;

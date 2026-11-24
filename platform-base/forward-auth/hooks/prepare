@@ -3,7 +3,7 @@
 # prepare — forward-auth's bring-up bootstrap (DGO-1090). Invoked generically by `bbox run` for every
 # enabled app that has one; bbox does not name this app.
 #
-# On a FRESH office nobody has been made yet: forward-auth's volume (forward_auth_data) has no users
+# On a FRESH office nobody has been made yet: forward-auth's store (data/forward-auth/state) has no users
 # file. So this mints a one-time code, hands the service ONLY its SHA-256 — through the binary itself,
 # `forward-auth -first-run`, since a scratch image has no shell to write with — and prints the link that
 # makes the office's owner (platform-base/forward-auth/setup.go). The line goes to bbox's output: on
@@ -32,7 +32,7 @@ if [ -z "${BBOX_PREBUILT:-}" ]; then
   fi
 fi
 
-# ask <flag>: the service's one-word answer (owner-exists, pending, imported) from its own volume; on a
+# ask <flag>: the service's one-word answer (owner-exists, pending, imported) from its own store; on a
 # miss, its last lines, so a failure says what happened.
 ask() {
   local out word
@@ -41,34 +41,48 @@ ask() {
   if [ -n "${word}" ]; then echo "${word}"; else printf 'none: %s\n' "$(printf '%s\n' "${out}" | tail -n 3 | tr '\n' ' ')"; fi
 }
 
-# THE VOLUME'S FILES BELONG TO THE IMAGE'S USER — 65534, the Dockerfile's USER since 2b7f1b522. A file there owned by
+# THE STORE'S FILES BELONG TO THE IMAGE'S USER — 65534, the Dockerfile's USER since 2b7f1b522. A file there owned by
 # anyone else is one the service cannot open: on the MacBook the users file was 0:0 0600 (written as root by the
 # migration of 2026-11-03), and a rebuilt image crash-looped «open /etc/forward-auth/users: permission denied» — the
 # office's sign-in down until a hand chown (2026-11-11). The image has no shell (FROM scratch), so it is done here, on
-# the volume's mountpoint: only what is not 65534's, never a value read or changed — through `${sudo}`, as every other
-# step of this hook. Where it cannot, it says the one command that does it, and the hook goes on.
-#   Only the volume's root and what sits directly in it (the service keeps one flat directory, and writes into the root
+# the store itself: only what is not 65534's, never a value read or changed — through `${sudo}`, as every other step
+# of this hook. Where it cannot, it says the one command that does it, and the hook goes on.
+#   The store is the folder data/forward-auth/state (DGO-2019) — moved there by `bbox run` before this hook (on a fresh
+# office the engine first waits on the volume while the image is not built, and moves it at the next run), or made by
+# hand, where nothing gave it its owner. Only where the office
+# still runs it from its old volume (a wait file, data/.moves/wait/forward-auth.yml) is the volume's mountpoint the
+# store; a volume the store has moved out of is never touched (the move compares it, and a rollback runs on it).
+#   Only the store's root and what sits directly in it (the service keeps one flat directory, and writes into the root
 # by CreateTemp + Rename), and only files and directories: a symlink is never followed — `-type` reads the link itself,
 # `chown -h` changes a link that took a file's place between the two finds, never what it names. Skipped where the
 # host's uids are not the container's (userns-remap, rootless: the container's 65534 is another host uid) and where
 # the engine is another machine (its mountpoint is not a path here).
 fa_volume_owner() {
-  local proj vol dir foreign names="" f fix
+  local proj vol dir foreign names="" f fix folder=yes
   case "${DOCKER_HOST:-}" in tcp://*|ssh://*) return 0 ;; esac
   case "$(docker info --format '{{json .SecurityOptions}}' 2>/dev/null || true)" in *name=userns*|*name=rootless*) return 0 ;; esac
-  proj="$(office_project)" || return 0
-  vol="$(docker volume ls -q --filter "label=com.docker.compose.project=${proj}" \
-         --filter "label=com.docker.compose.volume=forward_auth_data" 2>/dev/null | head -n 1)" || return 0
-  # a volume made before compose labelled it (`docker volume create`, a migration) goes by compose's name for it
-  if [ -z "${vol}" ] && docker volume inspect "${proj}_forward_auth_data" >/dev/null 2>&1; then
-    vol="${proj}_forward_auth_data"
+  dir="${REPO_ROOT}/data/forward-auth/state"
+  if [ -f "${REPO_ROOT}/data/.moves/wait/forward-auth.yml" ] || [ ! -d "${dir}" ]; then
+    folder=""
+    proj="$(office_project)" || return 0
+    vol="$(docker volume ls -q --filter "label=com.docker.compose.project=${proj}" \
+           --filter "label=com.docker.compose.volume=forward_auth_data" 2>/dev/null | head -n 1)" || return 0
+    # a volume made before compose labelled it (`docker volume create`, a migration) goes by compose's name for it
+    if [ -z "${vol}" ] && docker volume inspect "${proj}_forward_auth_data" >/dev/null 2>&1; then
+      vol="${proj}_forward_auth_data"
+    fi
+    [ -n "${vol}" ] || return 0                                 # a fresh office: compose makes it, already right
+    dir="$(docker volume inspect -f '{{.Mountpoint}}' "${vol}" 2>/dev/null)" || return 0
+    [ -n "${dir}" ] || return 0
   fi
-  [ -n "${vol}" ] || return 0                                   # a fresh office: compose makes it, already right
-  dir="$(docker volume inspect -f '{{.Mountpoint}}' "${vol}" 2>/dev/null)" || return 0
-  [ -n "${dir}" ] || return 0
+  # …and the image's own mode for it, 700: a folder `bbox run` made before the image was here has the umask's — the
+  # users file inside is 600 either way, but nobody else on the machine lists what the service keeps
+  if [ -n "${folder}" ] && [ "$(${sudo} stat -c %a "${dir}" 2>/dev/null)" != 700 ]; then
+    ${sudo} chmod 700 "${dir}" 2>/dev/null || echo "[forward-auth] ${dir} is not 700 and could not be made so: sudo chmod 700 $(printf '%q' "${dir}")"
+  fi
   fix="sudo find $(printf '%q' "${dir}") -maxdepth 1 ! -user 65534 -exec chown -h 65534:65534 {} +"
   if ! foreign="$(${sudo} find "${dir}" -maxdepth 1 \( -type f -o -type d \) ! -user 65534 2>/dev/null)"; then
-    echo "[forward-auth] could not check who owns its volume's files (${dir} is not readable here); if the service says «permission denied», run: ${fix}"
+    echo "[forward-auth] could not check who owns its store's files (${dir} is not readable here); if the service says «permission denied», run: ${fix}"
     return 0
   fi
   [ -n "${foreign}" ] || return 0
@@ -77,15 +91,15 @@ fa_volume_owner() {
     names="${names}${f} "
   done <<< "${foreign}"
   if ${sudo} find "${dir}" -maxdepth 1 \( -type f -o -type d \) ! -user 65534 -exec chown -h 65534:65534 {} + 2>/dev/null; then
-    echo "[forward-auth] its volume's files now belong to the service's user (65534): ${names}"
+    echo "[forward-auth] its store's files now belong to the service's user (65534): ${names}"
   else
-    echo "[forward-auth] its volume holds files the service cannot open (not owned by 65534): ${names}— run: ${fix}"
+    echo "[forward-auth] its store holds files the service cannot open (not owned by 65534): ${names}— run: ${fix}"
   fi
 }
 . "${REPO_ROOT}/scripts/lib.sh"   # office_project
 fa_volume_owner
 
-# A users file the migration prepared on this machine before the state moved into the volume comes in
+# A users file the migration prepared on this machine before the state moved into the service's store comes in
 # once; the old file stays, renamed, beside where it was.
 if ${sudo} test -s "${old_users}"; then
   old="$(${sudo} cat "${old_users}")"
@@ -94,13 +108,13 @@ if ${sudo} test -s "${old_users}"; then
   case "${said}" in
     imported)
       ${sudo} mv "${old_users}" "${kept}"
-      echo "[forward-auth] ${old_users} is in the service's volume now; the old file is kept as ${kept}" ;;
+      echo "[forward-auth] ${old_users} is in the service's store now; the old file is kept as ${kept}" ;;
     owner-exists)
       ${sudo} mv "${old_users}" "${kept}"
-      echo "[forward-auth] the volume already has its users file; ${old_users} was NOT merged into it, and is kept as ${kept}" ;;
+      echo "[forward-auth] the store already has its users file; ${old_users} was NOT merged into it, and is kept as ${kept}" ;;
     *)
       # left where it is, and the office goes on to its first run: a link beats a service with no users
-      echo "[forward-auth] ${old_users} could not come into the service's volume (${said}); it stays where it is" ;;
+      echo "[forward-auth] ${old_users} could not come into the service's store (${said}); it stays where it is" ;;
   esac
 fi
 

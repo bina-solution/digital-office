@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+#: plan [--json] — every app's state in the DGO folder's data/<app>/ (DGO-2019): what each store is and will be (moved by `bbox run`, or waiting on its volume and why):  ./bbox data plan
+# The move itself is `bbox run`'s (platform/manager/datahome.py). plan, check and retry are its three readers, and they
+# are this file: check and retry run it with their own verb. They were a case in bbox until batch 107, where `data`
+# answered before this app's alias did and hid `bbox data view|export|import` (G31).
+set -uo pipefail
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
+. "${REPO_ROOT}/scripts/lib.sh"
+verb="${DATAHOME_VERB:-plan}"
+case "${1:-}" in -h|--help) sed -n 's/^#: //p' "${SCRIPT_DIR}/${verb}"; exit 0 ;; esac
+bbox_select_engine || { echo "[bbox data ${verb}] the project engine is not reachable — \`./bbox run\` starts it" >&2; exit 1; }
+cd "${REPO_ROOT}" || exit 1
+COMPOSE_PROJECT_NAME="$(office_project)" exec python3 "$(npath "${REPO_ROOT}/platform/manager/datahome.py")" "${verb}" "$@"

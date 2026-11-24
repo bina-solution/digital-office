@@ -116,6 +116,8 @@ TARGETS = [
     "apps/ollama/front/index.html",
     # [2026-11-10] the office's GitHub runner as an app, «מריץ CI» (DGO-1797)
     "apps/ci-runner/static/index.html",
+    # [2026-11-19] the office's voice: every spoken line as a job a person can see (DGO-2045 follow-up)
+    "apps/voice/static/index.html",
     # [2026-11-13] the office's Android phone: its state, start/stop and the live display, in place of noVNC alone
     "apps/android-emulator/server/screen/index.html",
     # [2026-11-10] the card over the office browser's screen when it does not connect (DGO-437): drawn inside
@@ -202,11 +204,15 @@ FONT_TARGETS = [
     "platform-base/forward-auth/ui/page.css",
     "apps/browser42/viewer/card.css",
     "apps/ci-runner/static/index.html",
+    "apps/voice/static/index.html",
     "apps/android-emulator/server/screen/index.html",
     # [2026-11-11] the three client screens of Exampleu's group, which used var(--font) and never defined it (DGO-1782)
     "apps/examplem-io/static/index.html",
     "apps/assets/static/index.html",
     "apps/loans/static/index.html",
+    # [2026-11-24] the desktop app's own screens — the same fault a second time: var(--font) used, never defined, and
+    # the installed app's first run drawn in a serif (DGO-2188). Its frames inherit from no office page.
+    "packaging/desktop/src/ui/shell.css",
 ]
 
 
@@ -272,7 +278,8 @@ PAGE_TARGETS: list[str] = [
 ]
 
 NAV_TARGETS: list[str] = [
-    "platform-base/console/static/style.css",
+    # [2026-11-20] `platform-base/console/static/style.css` LEFT this row: the console draws no side menu any more —
+    # a computer is the desk, and every narrower screen navigates by its home and its bar (DGO-2132).
     "apps/dgo-extend/static/connect.html",
     "platform-base/data-management/static/index.html",
     "apps/mail/mailview/static/index.html",
@@ -363,6 +370,10 @@ BLOCKS = [
                  # (the owner, DGO-1846) — one copy per page, so this gate checks every one
                  "apps/esign/templates/done.html", "apps/esign/templates/sentence.html",
                  "apps/esign/templates/signer.html",
+                 # [2026-11-20] one link for every party of a document: its fill-and-sign page (DGO-2139)
+                 "apps/esign/templates/fill.html",
+                 # [2026-11-22] a link to LOOK at a document, the same door as a signature (DGO-2047, landed for DGO-2169)
+                 "apps/esign/templates/viewer.html",
                  # [2026-11-18] the desktop app's first run and its rail («this computer») wear the mark (DGO-1972)
                  "packaging/desktop/src/ui/welcome.html", "packaging/desktop/src/ui/rail.html"]},
     # THE CARD, AND THE LOGO WALL IT STANDS ON (DGO-1501, 2026-11-09). The card a screen shows when it

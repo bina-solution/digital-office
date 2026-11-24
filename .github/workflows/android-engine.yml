@@ -40,6 +40,9 @@ permissions:
 # run cancels itself in seconds and says to dispatch it again once that run has ended — never while the qemu job
 # (GitHub's runner, beside the guest) is in progress: the guard reads the run's jobs first, and the cancel would stop
 # it too. Only the guest job has `actions: write`; the qemu job keeps the workflow's permissions.
+# NOT ON dgo-stable (no --line-too, unlike go-test and android-app's apk, DGO-2111): an `[android-engine]` push's APK
+# waits for the engine built from the same commit and reads a cancelled engine run as a failed one — a guest that
+# stepped aside there would turn that APK red (the second reader of DGO-2123). No such push in 2026-11-13…20.
 
 jobs:
   # The guest the engine boots: the MacBook engine's own (packaging/macos/engine.yaml's pinned Ubuntu 24.04

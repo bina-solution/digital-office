@@ -1,52 +1,108 @@
 name: desktop-app
 
-# The Digital Office desktop app (DGO-1972): packaging/desktop, built for Windows, macOS and Linux, UNSIGNED, for the
-# team. The packages are the run's artifacts (30 days). Signed builds, the store and updates wait on the owner's
-# accounts (DGO-1980, «בעלים»): until then Windows shows SmartScreen's «unknown publisher», and macOS (an ad-hoc
-# signature) needs right-click → Open the first time.
+# The Digital Office desktop app's installers (DGO-1972): packaging/desktop built for Windows (.exe), macOS (.dmg) and
+# Linux (.deb, .rpm, AppImage) on every version tag, and attached to that version's release. That release is the one
+# place they are downloaded from; the docs' download page links `releases/latest/download/<name>`, and the names
+# (electron-builder.yml's artifactName) never carry the version, so those links always give the newest.
 #
-# GitHub's own machines, one per system, named and never "-latest" (fresh-install.yml's rule). Not the Dell's one
-# runner, so scripts/ci/step-aside has nothing to yield here: a version's proof never waits behind this.
+# UNSIGNED until the owner's accounts arrive (DGO-1980, «בעלים»): Windows shows SmartScreen («More info → Run anyway»)
+# and macOS refuses the first open until «Open Anyway» in Privacy & Security; the download page says so, click by click.
 #
-# When: a push to dgo-stable that touches the app (or the console's icons, which are its icons), and a dispatch from
-# any ref (`gh workflow run desktop-app.yml --ref hp-dgo`).
+# Where: the public copy (bina-solution/digital-office), on GitHub's own machines, one per system, named and never
+# "-latest" (fresh-install.yml's rule). The private repository's account cannot start GitHub's machines while its
+# payment is due (DGO-1116), and a .dmg is made only on a Mac, so the job does not run there at all.
+#
+# When:
+#   * a version tag (v0.3.3): the installers go to that tag's release — a DRAFT made here if there is none yet, which
+#     is published by hand once its page is checked (release-binaries.yml's rule), or the release already made.
+#     Attaching adds files and nothing else: the notes stay as written. A published release only gains the installers
+#     it lacks; one already there is replaced only by a dispatch with `replace` (a replaced file is gone from
+#     `latest/download` for the seconds of its upload);
+#   * a dispatch: with `tag`, the same for that tag's release (built from the tag); without it, a build of the ref
+#     dispatched from, attached nowhere — what it made is listed in the run's summary.
 
 on:
   push:
-    branches: [dgo-stable]
-    paths:
-      - packaging/desktop/**
-      - platform-base/console/static/icons/**
-      - .github/workflows/desktop-app.yml
+    tags: ['v*']
   workflow_dispatch:
+    inputs:
+      tag:
+        description: "A version tag (v0.3.3) to build and whose release gets the installers. Empty: build only"
+        default: ""
+      replace:
+        description: "Replace installers already in a PUBLISHED release"
+        type: boolean
+        default: false
 
 permissions:
-  contents: read
+  contents: write   # one step: attaching the installers to the tag's release
 
 concurrency:
-  group: desktop-app-${{ github.ref }}
-  cancel-in-progress: true
+  # one group per tag, whether its push or a dispatch started the run: two at once would each make a draft
+  group: desktop-app-${{ inputs.tag || github.ref_name }}
+  cancel-in-progress: false   # a run cancelled mid-upload would leave a release half filled
 
 jobs:
+  release:
+    if: ${{ !github.event.repository.private }}
+    runs-on: ubuntu-24.04
+    outputs:
+      tag: ${{ steps.t.outputs.tag }}
+      version: ${{ steps.t.outputs.version }}
+      published: ${{ steps.t.outputs.published }}
+    steps:
+      - name: The tag, and its release
+        id: t
+        env:
+          GH_TOKEN: ${{ github.token }}
+          INPUT_TAG: ${{ inputs.tag }}
+        run: |
+          set -euo pipefail
+          if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then tag="${GITHUB_REF_NAME}"; else tag="${INPUT_TAG}"; fi
+          if [ -z "${tag}" ]; then
+            { echo "tag="; echo "version="; echo "published=false"; } >> "$GITHUB_OUTPUT"
+            echo "a build only: nothing is attached" | tee -a "$GITHUB_STEP_SUMMARY"; exit 0
+          fi
+          [[ "${tag}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "::error::${tag} is not a version tag (vX.Y.Z)"; exit 1; }
+          { echo "tag=${tag}"; echo "version=${tag#v}"; } >> "$GITHUB_OUTPUT"
+          # only "not found" makes one: a view that failed otherwise (network, rate limit) would leave two
+          if draft="$(gh release view "${tag}" -R "${GITHUB_REPOSITORY}" --json isDraft --jq .isDraft 2>&1)"; then
+            echo "published=$([ "${draft}" = false ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
+            echo "release ${tag} exists (draft: ${draft})" | tee -a "$GITHUB_STEP_SUMMARY"
+          elif printf '%s' "${draft}" | grep -qi "not found"; then
+            gh release create "${tag}" -R "${GITHUB_REPOSITORY}" --draft --verify-tag --title "DGO ${tag#v}" \
+              --notes "The Digital Office desktop app ${tag#v}: Windows, macOS and Linux installers (unsigned)."
+            echo "published=false" >> "$GITHUB_OUTPUT"
+            echo "release ${tag}: a draft, made here" | tee -a "$GITHUB_STEP_SUMMARY"
+          else
+            echo "::error::could not tell whether release ${tag} exists: ${draft}"; exit 1
+          fi
+
   build:
+    # No HOSTED_RUNNERS question here (bf36054c4 asked it of a push to dgo-stable, DGO-2123): this workflow no longer
+    # starts on a branch push at all, and in the private repository `release` is skipped, so this job is too — nothing
+    # is asked of GitHub's machines there, and nothing turns red.
+    needs: release
     strategy:
       fail-fast: false
       matrix:
         include:
-          - os: ubuntu-24.04
-            target: --linux deb rpm
+          - os: windows-2025
+            target: --win nsis --x64
           - os: macos-15
             target: --mac dmg --universal
-          - os: windows-2025
-            target: --win nsis
+          - os: ubuntu-24.04
+            target: --linux deb rpm AppImage --x64
     runs-on: ${{ matrix.os }}
     timeout-minutes: 45
     defaults:
       run:
+        shell: bash
         working-directory: packaging/desktop
     steps:
       - uses: actions/checkout@v4
         with:
+          ref: ${{ needs.release.outputs.tag || github.ref }}
           persist-credentials: false
       - uses: actions/setup-node@v4
         with:
@@ -61,14 +117,181 @@ jobs:
       - name: Build, unsigned
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: "false"   # no signing identity is looked for (DGO-1980)
-        run: npx electron-builder ${{ matrix.target }} --publish never
+          VERSION: ${{ needs.release.outputs.version }}
+        run: |
+          set -euo pipefail
+          # the version a person sees in Settings → Apps, About and the package manager is the release's
+          npx electron-builder ${{ matrix.target }} --publish never ${VERSION:+-c.extraMetadata.version=${VERSION}}
+          ls -la dist
+
+      # THE PROOF, on this clean machine, before anything is attached: the installer a person downloads installs, the
+      # system lists the app, and the app opens in its own window with no browser involved. The pictures are kept
+      # with the run (dgo-desktop-proof-<system>); a failure here attaches nothing.
+      - name: Installs and opens (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          Add-Type -AssemblyName System.Windows.Forms, System.Drawing
+          function Shot($name) {   # a picture for the person; the checks around it are the proof
+            try {
+              $b = [System.Windows.Forms.SystemInformation]::VirtualScreen
+              $bmp = New-Object System.Drawing.Bitmap $b.Width, $b.Height
+              [System.Drawing.Graphics]::FromImage($bmp).CopyFromScreen($b.Left, $b.Top, 0, 0, $bmp.Size)
+              $bmp.Save((Join-Path $PWD "proof\$name"), [System.Drawing.Imaging.ImageFormat]::Png)
+            } catch { Write-Output "::warning::no picture ${name}: $_" }
+          }
+          New-Item -ItemType Directory -Force proof | Out-Null
+          $setup = Get-ChildItem dist\dgo-desktop-*.exe | Select-Object -First 1
+          Start-Process $setup.FullName -ArgumentList '/S' -Wait
+          # Settings → Apps: the uninstall entry, which also says where the app went (a one-click install for this
+          # user names its folder after the package, %LOCALAPPDATA%\Programs\dgo-desktop)
+          $entry = Get-ItemProperty 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\*' |
+            Where-Object { $_.DisplayName -like 'Digital Office*' } | Select-Object -First 1   # the version is added
+          if (-not $entry) { throw 'not in Settings → Apps' }
+          "Settings → Apps: $($entry.DisplayName)"
+          # WHERE: the entry's InstallLocation when the installer writes one. electron-builder's does not — it keeps
+          # that under a key of its own (Software\<the entry's key name>, a GUID) — so the folder is the
+          # uninstaller's, which the entry always names, or its icon's. This step read InstallLocation alone and
+          # stopped on a null path at its first run on a clean machine (v0.3.4, 2026-11-24, DGO-2188): the app was
+          # installed and listed, and nothing was attached.
+          $dir = "$($entry.InstallLocation)".Trim('"')
+          if (-not $dir -and "$($entry.UninstallString)" -match '^\s*"([^"]+)"') { $dir = Split-Path $Matches[1] }
+          if (-not $dir -and $entry.DisplayIcon) { $dir = Split-Path (("$($entry.DisplayIcon)" -replace ',-?\d+$', '').Trim('"')) }
+          if (-not $dir) { throw 'the Settings → Apps entry does not say where the app is' }
+          $app = Join-Path $dir 'Digital Office.exe'
+          if (-not (Test-Path $app)) { throw "not installed: $app" }
+          # the Start menu's entry: a shortcut in this user's Programs that starts the installed app. Read through
+          # the shell itself (Shell.Application): WScript.Shell answers an EMPTY target for a shortcut whose NAME
+          # the system's ANSI code page cannot write, and the app's entry is named in Hebrew — on a runner (code
+          # page 1252) that read «no Start-menu entry» for an entry that was there (a build-only run, 2026-11-24;
+          # the same on a Hebrew Windows with a CJK name: WScript.Shell «», Shell.Application the target).
+          $shell = New-Object -ComObject Shell.Application
+          function LinkTarget($file) {
+            $item = $shell.Namespace($file.DirectoryName).ParseName($file.Name)
+            if ($item -and $item.IsLink) { "$($item.GetLink.Path)" } else { '' }
+          }
+          $links = @(Get-ChildItem (Join-Path $env:APPDATA 'Microsoft\Windows\Start Menu\Programs') -Recurse -Filter *.lnk)
+          $lnk = $links | Where-Object { (LinkTarget $_) -eq $app } | Select-Object -First 1
+          if (-not $lnk) {
+            $seen = ($links | ForEach-Object { LinkTarget $_ } | Where-Object { $_ } | Select-Object -Unique -First 8) -join '; '
+            throw "no Start-menu entry starts the app ($($links.Count) shortcuts read; they start: $seen)"
+          }
+          "Start menu: $($lnk.FullName) → $app"
+          Start-Process $lnk.FullName
+          $p = $null
+          for ($i = 0; $i -lt 30 -and -not $p; $i++) {
+            Start-Sleep 1; $p = Get-Process 'Digital Office' -ErrorAction SilentlyContinue | Where-Object MainWindowHandle -ne 0 | Select-Object -First 1
+          }
+          if (-not $p) { throw 'the app opened no window' }
+          Start-Sleep 5
+          $p = Get-Process -Id $p.Id -ErrorAction SilentlyContinue
+          if (-not $p -or $p.MainWindowHandle -eq 0) { throw 'the app closed its window again' }
+          "the app's window: «$($p.MainWindowTitle)»"
+          Shot 'windows-app-window.png'
+          # no browser involved: none of the app's own processes started one (Edge on a runner may run by itself)
+          $ours = @(Get-CimInstance Win32_Process -Filter "Name='Digital Office.exe'" | ForEach-Object ProcessId)
+          $spawned = @(Get-CimInstance Win32_Process | Where-Object {
+            $_.Name -in 'chrome.exe', 'msedge.exe', 'firefox.exe' -and $_.ParentProcessId -in $ours })
+          if ($spawned.Count) { throw "the app started a browser: $($spawned.Name -join ', ')" }
+          "no browser started by the app ($($ours.Count) processes of its own)"
+          # the Start menu itself, opened with the Windows key
+          Add-Type -Namespace K -Name U -MemberDefinition '[DllImport("user32.dll")] public static extern void keybd_event(byte k, byte s, uint f, System.UIntPtr e);'
+          [K.U]::keybd_event(0x5B, 0, 0, [UIntPtr]::Zero); [K.U]::keybd_event(0x5B, 0, 2, [UIntPtr]::Zero)
+          Start-Sleep 3
+          Shot 'windows-start-menu.png'
+          [K.U]::keybd_event(0x1B, 0, 0, [UIntPtr]::Zero); [K.U]::keybd_event(0x1B, 0, 2, [UIntPtr]::Zero)
+          Stop-Process -Name 'Digital Office' -Force -ErrorAction SilentlyContinue
+      - name: Installs and opens (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          set -euo pipefail
+          mkdir -p proof
+          dmg=$(ls dist/dgo-desktop-*.dmg | head -1)
+          mnt=$(hdiutil attach -nobrowse "${dmg}" | awk -F'\t' '/\/Volumes\// {print $NF; exit}')
+          cp -R "${mnt}/Digital Office.app" /Applications/
+          hdiutil detach "${mnt}" -quiet
+          codesign --verify --deep --strict "/Applications/Digital Office.app" \
+            || { echo "::error::the app's signature does not verify: macOS would refuse it"; exit 1; }
+          echo "signature: ad-hoc, intact"
+          browsers() { ps -axo comm= | grep -c -E '/(Google Chrome|Safari|firefox)$' || true; }   # BSD pgrep counts nothing
+          before=$(browsers)
+          open -a "/Applications/Digital Office.app"
+          for i in $(seq 30); do pgrep -f 'Digital Office.app/Contents/MacOS' >/dev/null && break; sleep 1; done
+          pgrep -f 'Digital Office.app/Contents/MacOS' >/dev/null || { echo "::error::the app did not start"; exit 1; }
+          sleep 10
+          pgrep -f 'Digital Office.app/Contents/MacOS' >/dev/null || { echo "::error::the app stopped after it started"; exit 1; }
+          screencapture -x proof/macos-app-window.png || echo "::warning::no picture of the window"
+          after=$(browsers)
+          [ "${after:-0}" -le "${before:-0}" ] || { echo "::error::a browser started with the app"; exit 1; }
+          echo "in Applications: $(ls -d /Applications/Digital\ Office.app); browsers running: ${before:-0} before, ${after:-0} after"
+          pkill -f 'Digital Office.app/Contents/MacOS' || true
+      - name: Installs and opens (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          set -euo pipefail
+          mkdir -p proof
+          sudo apt-get install -y -qq xvfb xdotool imagemagick "./$(ls dist/dgo-desktop-*.deb | head -1)"
+          grep -E '^(Name|Exec|StartupWMClass)' /usr/share/applications/dgo-desktop.desktop
+          Xvfb :99 -screen 0 1440x900x24 & sleep 2
+          before=$(pgrep -c -x 'chrome|firefox|chromium' || true)
+          DISPLAY=:99 dgo-desktop > app.log 2>&1 &
+          app=$!
+          # a VISIBLE window of the app's class, the one its launcher entry names (StartupWMClass)
+          win=$(DISPLAY=:99 timeout 40 xdotool search --sync --onlyvisible --class --classname '^dgo-desktop$' 2>/dev/null | head -1 || true)
+          [ -n "${win}" ] || { cat app.log; echo "::error::the app opened no window"; exit 1; }
+          echo "the app's window: «$(DISPLAY=:99 xdotool getwindowname "${win}")»"
+          sleep 8
+          kill -0 "${app}" 2>/dev/null || { cat app.log; echo "::error::the app stopped after it opened"; exit 1; }
+          DISPLAY=:99 import -window root proof/linux-app-window.png || echo "::warning::no picture of the window"
+          after=$(pgrep -c -x 'chrome|firefox|chromium' || true)
+          [ "${after:-0}" -le "${before:-0}" ] || { echo "::error::a browser started with the app"; exit 1; }
+          echo "browsers running: ${before:-0} before, ${after:-0} after"
+          pkill -x dgo-desktop || true
       - uses: actions/upload-artifact@v4
+        if: always()
         with:
-          name: dgo-desktop-${{ runner.os }}
-          path: |
-            packaging/desktop/dist/*.deb
-            packaging/desktop/dist/*.rpm
-            packaging/desktop/dist/*.dmg
-            packaging/desktop/dist/*.exe
-          if-no-files-found: error
+          name: dgo-desktop-proof-${{ runner.os }}
+          path: packaging/desktop/proof/
+          if-no-files-found: warn
           retention-days: 30
+
+      - name: Attached to the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.release.outputs.tag }}
+          PUBLISHED: ${{ needs.release.outputs.published }}
+          REPLACE: ${{ inputs.replace && 'true' || 'false' }}
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          files=(dist/dgo-desktop-*.exe dist/dgo-desktop-*.dmg dist/dgo-desktop-*.deb dist/dgo-desktop-*.rpm dist/dgo-desktop-*.AppImage)
+          [ "${#files[@]}" -gt 0 ] || { echo "::error::the build made no installer"; exit 1; }
+          # the download page's links name these files with no version: a tag built before that rule (its own
+          # electron-builder.yml) would attach names nothing links to
+          for f in "${files[@]}"; do
+            [[ "${f#dist/}" =~ ^dgo-desktop-(win|mac|linux)-[A-Za-z0-9_]+\.(exe|dmg|deb|rpm|AppImage)$ ]] \
+              || { echo "::error::${f#dist/} carries more than the system and the architecture — this tree predates the constant names"; exit 1; }
+          done
+          {
+            echo "### ${{ runner.os }}"
+            echo '```'
+            for f in "${files[@]}"; do printf '%s  %s bytes  sha256 %s\n' "${f#dist/}" "$(wc -c < "$f" | tr -d ' ')" \
+              "$( (sha256sum "$f" 2>/dev/null || shasum -a 256 "$f") | cut -d' ' -f1)"; done
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          if [ -z "${TAG}" ]; then echo "a build only: nothing attached"; exit 0; fi
+          if [ "${PUBLISHED}" = true ] && [ "${REPLACE}" != true ]; then
+            # a published release keeps what it has: only the installers it lacks are added. An upload cut short
+            # leaves its file in the `starter` state, which is not there for a link (scripts/release/android-public.sh)
+            have="$(gh release view "${TAG}" -R "${GITHUB_REPOSITORY}" --json assets \
+              --jq '.assets[] | select(.state == "uploaded") | .name')"
+            add=()
+            for f in "${files[@]}"; do grep -qxF "${f#dist/}" <<<"${have}" || add+=("$f"); done
+            if [ "${#add[@]}" -eq 0 ]; then echo "${TAG} has these installers already" | tee -a "$GITHUB_STEP_SUMMARY"; exit 0; fi
+            gh release upload "${TAG}" "${add[@]}" -R "${GITHUB_REPOSITORY}"
+            echo "added to the published ${TAG}: ${add[*]#dist/}" | tee -a "$GITHUB_STEP_SUMMARY"
+          else
+            gh release upload "${TAG}" "${files[@]}" -R "${GITHUB_REPOSITORY}" --clobber
+            echo "attached to ${TAG}: ${files[*]#dist/}" | tee -a "$GITHUB_STEP_SUMMARY"
+          fi

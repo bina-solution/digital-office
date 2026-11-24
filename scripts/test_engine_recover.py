@@ -420,5 +420,14 @@ class AgentRecovers(unittest.TestCase):
         self.assertFalse(self.mod.pid_alive(child), "the grandchild was killed with its group")
 
 
+#: What this suite tests, for the CI's «changed since the last green» (scripts/ci/since_green.py): 55 s of G72's one
+#: `scripts/` worker on batches 114 and 115. Its bash runs functions read out of engine.sh, against a throwaway repo,
+#: and the agent is loaded by its path (it reads only its sibling engine.sh, or the stub a case names).
+SUBJECTS = ("packaging/macos/engine.sh", "packaging/macos/power-agent.py", "scripts/test_engine_recover.py")
+
 if __name__ == "__main__":
+    _spec = importlib.util.spec_from_file_location("since_green", REPO / "scripts" / "ci" / "since_green.py")
+    since_green = importlib.util.module_from_spec(_spec)
+    _spec.loader.exec_module(since_green)
+    since_green.or_not_run(REPO, SUBJECTS)
     unittest.main(verbosity=2)

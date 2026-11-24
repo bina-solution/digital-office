@@ -121,7 +121,7 @@ COLLECT = r"""
 # has to name a component someone can point at in both trees. The `do-` prefix means "digital-office
 # overlay" — a sim-ism that has no business in production class names, which is why these differ.
 ALIAS = {
-    "do-version": "build",          # sim overlay/brand.js  ->  console .side .build
+    "do-version": "me-ver",         # sim overlay/brand.js  ->  console .me-ver (the account menu; the rail went, DGO-2132)
     "do-skip": "skiplink",          # sim overlay/responsive.js -> console .skiplink
 }
 

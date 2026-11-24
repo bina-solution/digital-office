@@ -66,6 +66,20 @@ $ErrorActionPreference = 'Stop'
 $LogDir  = Join-Path $env:LOCALAPPDATA 'platform-os'
 $LogFile = Join-Path $LogDir 'keepalive.log'
 
+# The office's folder: the one this script is in - or, when the office MOVED off C: onto WSL's own disk
+# (`bbox home move`, DGO-2019), the one that folder's MOVED-TO.txt names on its second line (the Windows path). The
+# scheduled tasks keep running THIS copy, on C:, on purpose: a monitor read from the disk it watches would be
+# silent exactly when WSL will not start (the move's second reader).
+function Get-OfficeRepo {
+    $here = Split-Path (Split-Path (Split-Path $PSCommandPath -Parent) -Parent) -Parent
+    $moved = Join-Path $here 'MOVED-TO.txt'
+    if (Test-Path -LiteralPath $moved) {
+        $to = (Get-Content -LiteralPath $moved -ErrorAction SilentlyContinue | Select-Object -Skip 1 -First 1)
+        if ($to) { return $to.Trim() }
+    }
+    return $here
+}
+
 function Write-Log {
     param([string]$Message)
     if (-not (Test-Path $LogDir)) { New-Item -ItemType Directory -Path $LogDir -Force | Out-Null }
@@ -79,6 +93,79 @@ function Get-ContainerCount {
     return (@($out | Where-Object { $_ -match '^[0-9a-f]{6,}$' })).Count
 }
 
+function Install-GuestGuard {
+    # THE GUEST'S OWN MEMORY GUARD (scripts\wsl\guest-memory.sh, DGO-2188). A new wsl.exe session needs 512 KB of
+    # contiguous memory inside the guest; when there is none, every wsl.exe times out (0x8007274c) while the office
+    # runs - 53 hours on the HP, 2026-11-22 to 11-24, ended only by restarting Windows. What keeps those blocks has
+    # to run INSIDE the guest (nothing from this side can get in once they are gone), so this side only puts it
+    # there: once, and again whenever the guard's file changed. One short wsl.exe call says what is installed (the
+    # guard's sha256 and the folder it mirrors its state into, and whether its timer runs).
+    # THE MIRROR IS THIS SIDE'S OWN FOLDER ($LogDir, on C:), never the office's: an office moved onto the guest's
+    # disk (`bbox home move`) is read from Windows through the guest - the door that is shut when this matters.
+    #
+    # CALLED FROM THE HEALTH CHECK, the one task that runs this script on a timer (every 5 minutes): the 2-minute
+    # task is the anchor (`wsl.exe ... sleep infinity`), and runs no line of this file (the second reader's first
+    # finding - as first written, nothing scheduled ever installed the guard).
+    #
+    # NOT UNDER 'Stop': with it, one line on a native command's stderr is a terminating error (PowerShell 5.1,
+    # also with 2>&1 and 2>$null), and the install's every refusal speaks on stderr - so each would have been
+    # swallowed below and retried every tick with nothing said. Here stderr is folded into the answer INSIDE the
+    # guest, the exit code is read, and a refusal is logged once per distinct text.
+    $ErrorActionPreference = 'Continue'
+    try {
+        $src = Join-Path (Split-Path $PSScriptRoot -Parent) 'wsl\guest-memory.sh'
+        if (-not (Test-Path -LiteralPath $src)) { return }
+        if (-not (Test-Path $LogDir)) { New-Item -ItemType Directory -Path $LogDir -Force | Out-Null }
+        $mirror = $LogDir
+        # hex on both sides: the folder's name itself never crosses wsl.exe's console to be compared
+        $sha  = [Security.Cryptography.SHA256]::Create()
+        $mirrorHash = -join ($sha.ComputeHash([Text.Encoding]::UTF8.GetBytes($mirror)) | ForEach-Object { $_.ToString('x2') })
+        $want = ((Get-FileHash -LiteralPath $src -Algorithm SHA256).Hash.ToLower() + ' ' + $mirrorHash)
+        # `; true`: the command's own exit is always 0, so a non-zero exit is wsl.exe saying no session got in -
+        # and then nothing is concluded from whatever text came back in place of an answer
+        $have = @(& wsl.exe -d $Distro -u root -e sh -c 'cat /etc/dgo/guest-memory.stamp 2>/dev/null; echo; systemctl is-active dgo-guest-memory.timer 2>/dev/null; true' 2>$null)
+        if ($LASTEXITCODE -ne 0) { return }
+        $stamp  = [string]($have | Select-Object -First 1)
+        $active = [bool]($have | Where-Object { "$_" -eq 'active' })
+        if ($stamp.Trim() -eq $want -and $active) { return }
+        $wslSrc = [string]((& wsl.exe -d $Distro -e wslpath -a "$src" 2>$null) | Select-Object -First 1)
+        if ($LASTEXITCODE -ne 0 -or $wslSrc -notlike '/*') { return }     # an error's text is not a path
+        $out = @(& wsl.exe -d $Distro -u root -e sh -c 'bash "$0" install --mirror "$1" 2>&1' "$wslSrc" "$mirror" 2>$null)
+        $code = $LASTEXITCODE
+        $warnFile = Join-Path $LogDir 'guest-memory.warn'
+        if ($code -eq 0) {
+            Write-Log "guest memory guard installed in '$Distro' ($($want.Substring(0, 12)))"
+            Remove-Item -LiteralPath $warnFile -ErrorAction SilentlyContinue
+        } else {
+            $said = ([string]($out | ForEach-Object { "$_" } | Where-Object { $_.Trim() } | Select-Object -Last 1)).Trim()
+            $warn = "guest memory guard did not install (exit $code): $said"
+            $last = ''
+            if (Test-Path -LiteralPath $warnFile) { $last = [string](Get-Content -LiteralPath $warnFile -Raw -ErrorAction SilentlyContinue) }
+            if ($last.Trim() -ne $warn) {
+                Write-Log "WARN  $warn"
+                Set-Content -LiteralPath $warnFile -Value $warn -Encoding utf8
+            }
+        }
+    } catch {
+        try { Write-Log "WARN  guest memory guard: $_" } catch { }
+    }
+}
+
+function Get-GuestMemory {
+    # What the guard measured at its last pass, read from this side's own folder on C: (its mirror) - WITHOUT
+    # wsl.exe, which is the one thing that cannot be had while the fault it guards against is there. $null when
+    # the file was not written in the last five minutes (the guard writes every minute): an old number is never
+    # shown as today's. The file's own time on THIS side's clock, never the guest's `at`: after the host slept,
+    # the guest's clock can be minutes behind or ahead, and a fresh reading would read stale for ever (or a stale
+    # one fresh).
+    try {
+        $f = Join-Path $LogDir 'guest-memory.json'
+        if (-not (Test-Path -LiteralPath $f)) { return $null }
+        if (((Get-Date).ToUniversalTime() - (Get-Item -LiteralPath $f).LastWriteTimeUtc).TotalSeconds -gt 300) { return $null }
+        return (Get-Content -LiteralPath $f -Raw -ErrorAction Stop | ConvertFrom-Json)
+    } catch { return $null }
+}
+
 function Invoke-Keepalive {
     # 1. Start the distro. Idempotent: no-op if running, boots it if stopped.
     #    -u root so it does not depend on the login user's shell profile succeeding.
@@ -90,6 +177,9 @@ function Invoke-Keepalive {
         Write-Log "FAIL  could not start distro '$Distro': $_"
         return
     }
+
+    # 1b. The guest's own memory guard, put there by this side (see Install-GuestGuard).
+    Install-GuestGuard
 
     # 2. docker enabled is not the same as docker active. A freshly booted distro may still
     #    be activating.
@@ -337,8 +427,12 @@ function Invoke-GracefulShutdown {
     # (n8n, supabase, plane, authentik), each answered CHECKPOINT; the neighbour's was left out.
     Write-Log "SHUTDOWN signal - a CHECKPOINT in every Postgres of this office (best effort)"
     $sw = [Diagnostics.Stopwatch]::StartNew()
-    $repo = Split-Path (Split-Path (Split-Path $PSCommandPath -Parent) -Parent) -Parent
-    $wd   = '/mnt/' + $repo.Substring(0, 1).ToLower() + ($repo.Substring(2) -replace '\\', '/')
+    $repo = Get-OfficeRepo
+    # The office's folder as the distro names it: asked of WSL itself, which reads both a C:\ path and a
+    # \\wsl.localhost\<distro>\... one (`bbox home move` puts the folder there, DGO-2019) - a path built by hand
+    # from the drive letter came out as /mnt/\... for the second, and the checkpoint then found no database.
+    $wd = ((& wsl.exe -d $Distro -e wslpath -a "$repo" 2>$null) | Select-Object -First 1)
+    if (-not $wd) { $wd = '/mnt/' + $repo.Substring(0, 1).ToLower() + ($repo.Substring(2) -replace '\\', '/') }
     $dbs  = @()
     try {
         $rows = & wsl.exe -d $Distro -u root -e docker -H unix:///run/bbox-docker.sock ps `
@@ -369,7 +463,7 @@ function Write-HostFacts {
     # A fact, never a failure: whatever goes wrong here is swallowed, and a file that stops being
     # written simply goes stale - the reader shows nothing rather than an old number.
     try {
-        $repo = Split-Path (Split-Path (Split-Path $PSCommandPath -Parent) -Parent) -Parent
+        $repo = Get-OfficeRepo
         $dir  = Join-Path $repo 'data\power'
         if (-not (Test-Path $dir)) { return }
         $os  = Get-CimInstance Win32_OperatingSystem
@@ -412,7 +506,7 @@ function Invoke-PowerHold {
     try {
         $hold = Join-Path $PSScriptRoot 'platform-power-hold.ps1'
         if (Test-Path $hold) {
-            $repo = Split-Path (Split-Path (Split-Path $PSCommandPath -Parent) -Parent) -Parent
+            $repo = Get-OfficeRepo
             & $hold -Repo $repo | Out-Null
         }
     } catch { }
@@ -445,6 +539,20 @@ function Invoke-HealthCheck {
 
     $count = 0; $execs = -1; $why = ''
     try {
+        # CAN A NEW SESSION GET IN AT ALL (DGO-2188)? Every reading below is asked through a new wsl.exe session.
+        # When none gets in, the census reads 0 containers and this check said "only 0 containers running" for 53
+        # hours of an office that was running (2026-11-22). Asked first, and named as what it is - with what the
+        # guest's own guard last measured, which reaches this side without wsl.exe.
+        & wsl.exe -d $Distro -u root -e /bin/true 2>$null | Out-Null
+        $sessionExit = $LASTEXITCODE
+        if ($sessionExit -ne 0) {
+            $g = Get-GuestMemory
+            $said = if ($g) { " the guest's guard, at its last pass: $($g.blocks) free 512 KB block(s), $($g.fails_2m) failed allocation(s) in 2 min" } else { " the guest's guard has written nothing for five minutes" }
+            throw "NO-SESSION no new wsl.exe session gets into '$Distro' (exit $sessionExit): nothing can be asked of the office from Windows, whether or not it runs;$said"
+        }
+        # a session got in: the guest's own guard is put there, or put there again when its file changed. HERE,
+        # because this check is the task that runs on a timer (Install-GuestGuard says why); it catches its own errors.
+        Install-GuestGuard
         $count = Get-ContainerCount
         # THE PIPELINE, WHERE THIS OFFICE HAS ONE. Its database is found by its compose SERVICE, not by a
         # container name: a name carries the deployment (this file asked for n8n-postgres-owner-laptop
@@ -481,14 +589,26 @@ function Invoke-HealthCheck {
         # THE VM'S MEMORY (DGO-625): every new wsl.exe session needs a 512 KB contiguous ring buffer (an
         # order-7 allocation, vmbus_alloc_ring). When the VM's memory is fragmented the kernel logs
         # "page allocation failure" and the new session times out (Wsl/Service/0x8007274c): the office
-        # keeps running, but nothing new can reach it. Counted over the last tick, from the kernel's log.
-        $frag = & wsl.exe -d $Distro -u root -e sh -c "journalctl -k --since '-6 min' --no-pager 2>/dev/null | grep -c 'page allocation failure'" 2>&1
-        $fails = [int](($frag | Where-Object { $_ -match '^\s*\d+\s*$' } | Select-Object -First 1))
-        if (-not $why -and $fails -gt 0) {
-            $why = "the WSL kernel failed $fails memory allocation(s) in 6 min - new wsl.exe sessions time out (0x8007274c) while the office runs"
+        # keeps running, but nothing new can reach it. The guest's own guard holds those blocks and says how
+        # many are left (DGO-2188, Get-GuestMemory); where it has written nothing, the kernel's log of the last
+        # tick is counted as before.
+        $g = Get-GuestMemory
+        if ($g) {
+            # three passes in a row, not one: a bad minute the guard repaired by itself is its work, not an alarm,
+            # and an alarm that fires and clears around a threshold is one nobody reads
+            if (-not $why -and -not $g.ok -and [int]$g.bad_passes -ge 3) {
+                $why = "the WSL guest is short of contiguous memory for $($g.bad_passes) minutes ($($g.why)) - new wsl.exe sessions will time out (0x8007274c) while the office runs"
+            }
+        } else {
+            $frag = & wsl.exe -d $Distro -u root -e sh -c "journalctl -k --since '-6 min' --no-pager 2>/dev/null | grep -c 'page allocation failure'" 2>&1
+            $fails = [int](($frag | Where-Object { $_ -match '^\s*\d+\s*$' } | Select-Object -First 1))
+            if (-not $why -and $fails -gt 0) {
+                $why = "the WSL kernel failed $fails memory allocation(s) in 6 min - new wsl.exe sessions time out (0x8007274c) while the office runs"
+            }
         }
     } catch {
-        $why = "health check itself failed: $_"
+        # the one failure that is a finding of its own, said as what it is (see the top of the try)
+        $why = if ("$_" -like 'NO-SESSION *') { "$_".Substring(11) } else { "health check itself failed: $_" }
     }
 
     $now = if ($why) { 'unhealthy' } else { 'healthy' }

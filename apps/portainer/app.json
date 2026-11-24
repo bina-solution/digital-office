@@ -44,7 +44,7 @@
         "name": "Portainer",
         "icon": "box",
         "desc": "ניהול מכולות Docker — root על מנוע הלשכה, מאחורי הכניסה של הלשכה",
-        "group": "תשתית",
+        "group": "פיתוח ואוטומציות",
         "order": 260,
         "embed": false
       }

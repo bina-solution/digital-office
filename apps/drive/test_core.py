@@ -177,6 +177,36 @@ with tempfile.TemporaryDirectory() as tmp:
     check("a part that cannot be removed after the store leaves the session done, not failed",
           st["state"] == "done" and (st.get("file") or {}).get("id") == "lfZ")
 
+    # a store slower than STALE_FINISH is one store: a 2 GiB file takes minutes, and the polls that came after 180 s
+    # read the session as abandoned and stored it again (DGO-1785, its second reader)
+    s = uploads.create("admin", 3, {"name": "slow.bin"})
+    uploads.append(s["id"], "admin", 0, io.BytesIO(b"xyz"), 3)
+    stores = []
+
+    def slow(src, size, md5, meta):
+        stores.append(src.read())
+        time.sleep(1.2)
+        return {"id": "lfS"}
+
+    stale = uploads.STALE_FINISH
+    uploads.STALE_FINISH = 0.3
+    try:
+        uploads.finish_async(s["id"], "admin", slow)
+        for _ in range(40):                       # the client's polls, as app.py's GET answers them
+            if uploads.status(s["id"], "admin")["state"] == "done":
+                break
+            if uploads.status(s["id"], "admin")["state"] == "complete":
+                uploads.finish_async(s["id"], "admin", slow)
+            time.sleep(0.05)
+    finally:
+        uploads.STALE_FINISH = stale
+    for _ in range(40):
+        if finished(s["id"]):
+            break
+        time.sleep(0.05)
+    check("a finish slower than STALE_FINISH stores the file once, and ends done",
+          stores == [b"xyz"] and uploads.status(s["id"], "admin")["state"] == "done")
+
 # ── names and paths: the office storage's own, held by apps/drive-local/test_engine.py (DGO-1500) ──
 
 print("\n" + ("ALL PASSED" if not FAILS else f"{len(FAILS)} FAILED: {FAILS}"))

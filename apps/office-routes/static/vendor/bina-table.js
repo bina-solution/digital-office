@@ -391,9 +391,6 @@
       grid.setAttribute('aria-label', 'טבלת נתונים');
       gridBox.appendChild(grid);
 
-      let lastPointer = 0;
-      grid.addEventListener('pointerdown', () => { lastPointer = performance.now(); });
-
       grid.addEventListener('beforeeditstart', (e) => {
         const d = e.detail || {};
         if (d.prop != null && typeof d.rowIndex === 'number')
@@ -445,12 +442,33 @@
         const prop = d.prop != null ? d.prop : (d.column || {}).prop;
         const ec = st.editCell;
         if (ec && (ec.rowIndex !== d.rowIndex || ec.prop !== prop)) st.editCell = null;
-        if (p.onRowClick && prop !== '__sel' && prop !== '__actions'
-            && performance.now() - lastPointer < 400) {
-          const row = pageView[d.rowIndex];
-          if (row) p.onRowClick(row, prop != null ? String(prop) : undefined);
-        }
       });
+
+      // A ROW OPENS ON ITS OWN CLICK (or Enter), never on a cell's focus. RevoGrid fires `afterfocus` only when
+      // focus MOVES, so a second click on the focused cell — after its drawer closed — did nothing, and a phone's
+      // tap could miss the 400 ms window after `pointerdown`: «אני לוחץ על פריט ולא ברור מה קורה» (the owner,
+      // DGO-2169). A cell names its row (`data-rgrow`) in the main row region; a click on a control inside a row
+      // (the selection box, the actions, a link) and a cell being edited are left to themselves.
+      if (p.onRowClick) {
+        const open = (ri, prop) => {
+          const row = pageView[ri];
+          if (row && prop !== '__sel' && prop !== '__actions') p.onRowClick(row, prop != null ? String(prop) : undefined);
+        };
+        grid.addEventListener('click', (e) => {
+          if (st.editCell || !e.target.closest) return;
+          if (e.target.closest('input,button,a,select,textarea,[role="button"],[role="checkbox"]')) return;
+          const cell = e.target.closest('[data-rgrow]');
+          const region = cell && cell.closest('revogr-data');
+          if (!cell || (region && region.getAttribute('type') && region.getAttribute('type') !== 'rgRow')) return;
+          const ci = Number(cell.getAttribute('data-rgcol'));
+          const ctype = region && region.getAttribute('col-type');
+          const cols = (!ctype || ctype === 'rgCol') ? (grid.columns || []).filter(c => !c.pin) : [];
+          open(Number(cell.getAttribute('data-rgrow')), (cols[ci] || {}).prop);
+        });
+        grid.addEventListener('keydown', (e) => {
+          if (e.key === 'Enter' && !st.editCell && typeof st.focusRow === 'number') open(st.focusRow);
+        });
+      }
 
       // the wrapper owns ALL sorting: engine sort is cancelled in both modes
       // (client: whole-view sort in view(); server: the parent refetches).

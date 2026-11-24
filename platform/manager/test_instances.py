@@ -257,6 +257,35 @@ def test_a_copy_must_be_self_contained_or_say_so():
     assert "${TPL_DATA_DIR_3:-tpl_home_3}:/more" in more["services"]["tpl-3"]["volumes"]
 
 
+def test_a_copy_has_its_own_data_home():
+    """An app that keeps its state in its own data/<app>/ (DGO-2019) is copied without saying multi_instance: the copy
+    binds data/<app>-<key>/, its manifest names that home, and the old volume a copy moves from is its own."""
+    d = _repo()
+    p, c = d / "apps" / "tpl" / "app.json", d / "apps" / "tpl" / "docker-compose.yml"
+    plain = {k: v for k, v in _manifest("tpl").items() if k != "multi_instance"}
+    plain["data"] = {"volumes": [], "paths": ["data/tpl/home", "data/tpl"],
+                     "moved_from": {"data/tpl/home": "tpl_home"}, "on_uninstall": "keep"}
+    p.write_text(json.dumps(plain), encoding="utf-8")
+    c.write_text("services:\n  tpl:\n    image: alpine:3.20\n    volumes:\n"
+                 "      - ../../data/tpl/home:/data\n      - type: bind\n        source: ../../data/tpl\n"
+                 "        target: /all\n      - ../../data/other/x:/peek:ro\n", encoding="utf-8")
+    assert inst.add("tpl") == "tpl-2"
+    m = json.loads((d / "instances" / "tpl-2" / "app.json").read_text(encoding="utf-8"))
+    assert m["data"]["paths"] == ["data/tpl-2/home", "data/tpl-2"]
+    assert m["data"]["moved_from"] == {"data/tpl-2/home": "tpl_home_2"}
+    s = inst.yaml.safe_load((d / "instances" / "tpl-2" / "docker-compose.yml").read_text(encoding="utf-8"))
+    v = s["services"]["tpl-2"]["volumes"]
+    assert v[0] == "../../data/tpl-2/home:/data" and v[1]["source"] == "../../data/tpl-2"
+    assert v[2] == "../../data/other/x:/peek:ro"                          # another app's home is not renamed
+    # a host folder of its own that is NOT under data/ is still shared by both copies
+    c.write_text("services:\n  tpl:\n    image: alpine:3.20\n    volumes:\n      - ./state:/state\n", encoding="utf-8")
+    inst._FILE_WHY.clear()
+    assert "writes a host folder (./state)" in _refused(inst.add, "tpl")
+    plain["data"]["paths"] = ["data/shared"]
+    p.write_text(json.dumps(plain), encoding="utf-8")
+    assert "data.paths" in _refused(inst.add, "tpl")                      # a path outside its home: shared
+
+
 def test_a_key_never_takes_a_name_the_office_has():
     d = _repo()
     # bina-claude --key desktop would be bina-claude-desktop: the FIRST copy's own desktop service and container

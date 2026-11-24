@@ -129,7 +129,9 @@ services:
     - 127.0.0.1:10001:5432
     restart: unless-stopped
     volumes:
-    - postgres_storage:/var/lib/postgresql/data
+    # workflows, credentials, executions — in the DGO folder's data/n8n/db (DGO-2019; it was the volume postgres_storage,
+    # moved once by `bbox run` with the database stopped). Backed up by hooks/backup's pg_dump, never as files (SKIPVOL)
+    - ../../data/n8n/db:/var/lib/postgresql/data
     logging:
       driver: json-file
       options:
@@ -333,7 +335,7 @@ services:
     hostname: n8n
     restart: unless-stopped
     volumes:
-    - n8n_storage:/home/node/.n8n
+    - ../../data/n8n/home:/home/node/.n8n
     - ./blueprint/n8n:/home/node/workflows
     logging:
       driver: ${LOGGING_DRIVER:-json-file}
@@ -544,7 +546,7 @@ services:
     # READ-ONLY. The probe only reads n8n's event log; this container must never write to the
     # volume n8n owns. It is the one place a deaf runner is visible from inside this container --
     # the launcher's /healthz cannot see it, which is the whole 2026-08-18 incident.
-    - n8n_storage:/n8n-data:ro
+    - ../../data/n8n/home:/n8n-data:ro
     - ./runner-liveness.sh:/runner-liveness.sh:ro
     labels:
       # OPT IN to platform-base/autoheal, on the same terms as the workers above: a sustained
@@ -804,7 +806,7 @@ services:
     # worker keeps advancing, so they cannot tell the two workers apart.
     #
     # The path is deliberately absolute and OUTSIDE /home/node/.n8n. That directory is the
-    # shared `n8n_storage` volume, mounted into n8n main and BOTH workers, so n8n's default
+    # shared `data/n8n/home` store (the `n8n_storage` volume until DGO-2019), mounted into n8n main and BOTH workers, so n8n's default
     # `logs/n8n.log` would interleave all three and destroy the per-worker attribution the
     # probe depends on. Absolute paths are honoured -- `path.isAbsolute(...)` in
     # @n8n/backend-common/dist/logging/logger.js. Console output is untouched, so `docker logs`
@@ -817,9 +819,11 @@ services:
     - N8N_LOG_FILE_SIZE_MAX=8
     - N8N_LOG_FILE_COUNT_MAX=2
     volumes:
-    - n8n_storage:/home/node/.n8n
+    - ../../data/n8n/home:/home/node/.n8n
     - ./blueprint/n8n:/home/node/workflows
-    - ./worker-liveness.sh:/worker-liveness.sh:ro
+    # the probes' DIRECTORY, never one file: a single-file bind keeps the inode git replaced, and on the HP's
+    # 9p mount the old one is gone outright (11-18: «can't open '/worker-liveness.sh': I/O error»; G119)
+    - ./probes:/probes:ro
     restart: unless-stopped
     labels:
       # OPT IN to platform-base/autoheal. `restart: unless-stopped` above reacts to the process
@@ -857,7 +861,7 @@ services:
       # would be a trap that only shows up on a Linux checkout.
       test:
       - CMD-SHELL
-      - sh /worker-liveness.sh
+      - sh /probes/worker-liveness.sh
       interval: ${HEALTHCHECK_INTERVAL:-30s}
       timeout: ${HEALTHCHECK_TIMEOUT:-10s}
       # 2, not 3: the probe already requires the fault to persist for its own grace window
@@ -909,7 +913,7 @@ services:
     # READ-ONLY. The probe only reads n8n's event log; this container must never write to the
     # volume n8n owns. It is the one place a deaf runner is visible from inside this container --
     # the launcher's /healthz cannot see it, which is the whole 2026-08-18 incident.
-    - n8n_storage:/n8n-data:ro
+    - ../../data/n8n/home:/n8n-data:ro
     - ./runner-liveness.sh:/runner-liveness.sh:ro
     labels:
       # OPT IN to platform-base/autoheal, on the same terms as the workers above: a sustained
@@ -1159,9 +1163,11 @@ services:
     - path: .env
       required: false
     volumes:
-    - n8n_storage:/home/node/.n8n
+    - ../../data/n8n/home:/home/node/.n8n
     - ./blueprint/n8n:/home/node/workflows
-    - ./worker-liveness.sh:/worker-liveness.sh:ro
+    # the probes' DIRECTORY, never one file: a single-file bind keeps the inode git replaced, and on the HP's
+    # 9p mount the old one is gone outright (11-18: «can't open '/worker-liveness.sh': I/O error»; G119)
+    - ./probes:/probes:ro
     depends_on:
       n8n-postgres:
         condition: service_healthy
@@ -1179,7 +1185,7 @@ services:
       # the one that wedged first.
       test:
       - CMD-SHELL
-      - sh /worker-liveness.sh
+      - sh /probes/worker-liveness.sh
       interval: ${HEALTHCHECK_INTERVAL:-30s}
       timeout: ${HEALTHCHECK_TIMEOUT:-10s}
       retries: 2
@@ -1199,7 +1205,7 @@ services:
     # READ-ONLY. The probe only reads n8n's event log; this container must never write to the
     # volume n8n owns. It is the one place a deaf runner is visible from inside this container --
     # the launcher's /healthz cannot see it, which is the whole 2026-08-18 incident.
-    - n8n_storage:/n8n-data:ro
+    - ../../data/n8n/home:/n8n-data:ro
     - ./runner-liveness.sh:/runner-liveness.sh:ro
     labels:
       # OPT IN to platform-base/autoheal, on the same terms as the workers above: a sustained
@@ -1300,9 +1306,6 @@ services:
       options:
         max-size: 5m
         max-file: '3'
-volumes:
-  n8n_storage: null
-  postgres_storage: null
 networks:
   traefik-network:
     external: true

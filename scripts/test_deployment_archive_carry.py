@@ -279,6 +279,32 @@ def _():
         A.installed_apps, A.app_manifest = saved
 
 
+@case("an old volume of a store now in data/<app>/ is restored too, whole or for the app alone (DGO-2019)")
+def _():
+    # a backup of an office that still ran a store from its volume (the HP's drvfs: every store waits) carries that
+    # volume; a restore that refused it brought forward-auth up with no account — the next `bbox run` moves it instead
+    checkout()
+    saved = (A.installed_apps, A.app_manifest)
+    try:
+        manifests = {"fa": {"data": {"volumes": [], "paths": ["data/fa/state", "data/fa/relay"],
+                                     "moved_from": {"data/fa/state": "fa_data", "data/fa/relay": "external:by_hand"}}}}
+        A.installed_apps = lambda: [("platform-base", "fa")]
+        A.app_manifest = lambda root, aid: manifests[aid]
+        arts = {"volumes/fa_data.tar.gz": {"kind": "volume", "app": "fa"},
+                "volumes/by_hand.tar.gz": {"kind": "volume", "app": "fa"}}
+        skips = A.restore_skips(arts, {"services": {}})
+        assert set(skips) == {"volumes/by_hand.tar.gz"}, skips          # never a volume compose did not make
+        A._assert_app_owns("fa", {"volumes/fa_data.tar.gz": arts["volumes/fa_data.tar.gz"]})   # its own: no refusal
+        try:
+            A._assert_app_owns("fa", {"volumes/vault_data.tar.gz": {"kind": "volume", "app": "fa"}})
+        except SystemExit as e:
+            assert "vault_data" in str(e), e
+        else:
+            raise AssertionError("another app's volume was taken as fa's")
+    finally:
+        A.installed_apps, A.app_manifest = saved
+
+
 @case("SQL is restored only into a database the app it is filed under declares here")
 def _():
     repo = checkout()

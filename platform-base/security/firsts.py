@@ -39,6 +39,21 @@ def is_news(why, first_ok, watching_since):
     return why == "signed-in" and bool(first_ok) and float(first_ok) > float(watching_since or 0)
 
 
+def rings(place, user, known_places, banned_places=()):
+    """Whether a new address's notice rings the owner's phone. Not when the same user already got in from the same
+    country AND the same provider: a mobile carrier hands its subscriber a new address every day, and each one rang
+    (DGO-2111 root 9). It rings for:
+    - a new provider, a new country or another user;
+    - a place with no country, no provider or no user on record, because there is nothing known to compare it with;
+    - a place an address was ever banned from, so a thief told once and banned cannot come back silent with a new
+      address from the same provider (the second reader).
+    The board keeps every new address either way."""
+    cc, org, who = str((place or {}).get("cc") or ""), str((place or {}).get("org") or ""), str(user or "")
+    if not cc or not org or not who or (cc, org) in set(banned_places or ()):
+        return True
+    return (cc, org, who) not in known_places
+
+
 def ban_answer(ip):
     """The «חסום» a notice offers: this office's own ban (the security app's POST /api/bans), executed HERE — a linked
     office may read this office's security and never write it (app.py guard_write)."""

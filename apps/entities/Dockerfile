@@ -13,6 +13,9 @@ COPY *.py ./
 COPY static/ ./static/
 # the office's one door for a Python app, from the platform (compose: build.additional_contexts `dgo`)
 COPY --from=dgo signin.py /opt/dgo/signin.py
+# …and the platform's one verifier of the link door's signature, which the door asks for a linked office's person
+# (DGO-2135; compose: build.additional_contexts `dgolink`)
+COPY --from=dgolink link_identity.py /opt/dgo/link_identity.py
 
 EXPOSE 8999
 # --no-proxy-headers: the caller's address is the socket's, never a header's — the loopback rule rests on it

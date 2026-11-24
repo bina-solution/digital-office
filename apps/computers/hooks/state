@@ -1,0 +1,26 @@
+#!/usr/bin/env bash
+#: state — what this app holds, one `<name> <value>` per line:  ./bbox computers state
+#: The office's own SSH key to the herd's computers (its fingerprint — the public half, never the key) and how many
+#: hosts it already knows. The data move (platform/manager/datahome.py, DGO-2019) reads it before it moves
+#: data/computers/state and again after, and sends the store back to its volume when the key is no longer the same: a
+#: new key would lock the office out of every computer it reaches.
+set -uo pipefail
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
+case "${1:-}" in -h|--help) sed -n 's/^#: //p' "${BASH_SOURCE[0]}"; exit 0 ;; esac
+# The data move names the container it measures; by hand, it is the office's own.
+if [ -n "${DGO_STATE_CONTAINER:-}" ]; then
+  inside() { docker exec -i "${DGO_STATE_CONTAINER}" "$@"; }
+else
+  . "${REPO_ROOT}/scripts/lib.sh"
+  inside() { dcx exec -T computers "$@"; }
+fi
+inside sh -s <<'SH'
+d="${COMPUTERS_STATE_DIR:-/data}/ssh"
+if [ -f "$d/office_key.pub" ]; then
+  echo "key $(ssh-keygen -lf "$d/office_key.pub" | awk '{print $2}')"
+else
+  echo "key none"
+fi
+echo "known.hosts $( [ -f "$d/known_hosts" ] && grep -c . "$d/known_hosts" || echo 0)"
+SH

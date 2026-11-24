@@ -160,6 +160,22 @@ await found({ method: "GET", socket: { remoteAddress: "127.0.0.1" }, on() {}, he
               async *[Symbol.asyncIterator]() {} }, r, "/ui/models", new URLSearchParams());
 check(JSON.parse(r.text).claudes.map((c) => [c.id, c.key]), [["bina-claude", ""], ["bina-claude-2", "2"]],
   "found from instances/: an instance of bina-claude whose id is its folder's and that runs — not a mismatched id, not another app's, not one turned off");
+// DGO-2126: whether the office RUNS the app (its resolved order) rides apart from whether it answers (bina-claude-2
+// answers nothing here: down is not «not installed»)
+check(JSON.parse(r.text).claudes.map((c) => [c.id, c.declared]), [["bina-claude", true], ["bina-claude-2", true]],
+  "declared by the resolved order, whether or not the app answers");
+check(JSON.parse(r.text).claudes[1].installed, false, "…and bina-claude-2, declared, answers nothing: installed false, declared true");
+const bare = mkdtempSync(path.join(tmpdir(), "office-"));             // an office that never installed Claude Desktop
+mkdirSync(path.join(bare, ".generated"), { recursive: true });
+writeFileSync(path.join(bare, ".generated", "resolved.json"), JSON.stringify({ order: ["console", "bina-ds"] }));
+const bareUi = createUi({ listSessions: async () => [], snapshotEvents: async () => [], prompt: async () => {}, rpc: async () => ({ groups: [] }),
+                          refreshList: () => {}, office: bare, claudeToken: async (app) => `tok-${app.id}` });
+const rb = { status: 0, text: "", writeHead(s) { this.status = s; }, end(t) { this.text = String(t || ""); }, write() {} };
+await bareUi({ method: "GET", socket: { remoteAddress: "127.0.0.1" }, on() {}, headers: { "x-test-signed-in": "owner", "sec-fetch-site": "same-origin" },
+               async *[Symbol.asyncIterator]() {} }, rb, "/ui/models", new URLSearchParams());
+check(JSON.parse(rb.text).claudes.map((c) => [c.id, c.declared]), [["bina-claude", false]],
+  "an office whose order has no bina-claude: declared false (the screen offers its install when it does not answer)");
+rmSync(bare, { recursive: true, force: true });
 
 for (const a of [one, two, three]) a.server.close();
 rmSync(office, { recursive: true, force: true });

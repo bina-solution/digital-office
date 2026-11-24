@@ -20,11 +20,33 @@ if "%BBOX_DIR:~-1%"=="\" set "BBOX_DIR=%BBOX_DIR:~0,-1%"
 REM ---------------------------------------------------------------------------------------------
 REM `bbox dialable` - whether another office can DIAL this one is a fact of the MACHINE: WSL's
 REM networking mode, which is one line in %UserProfile%\.wslconfig and a restart of WSL. Neither can
-REM be reached from inside the distro, so this verb is answered here and never handed over. It
-REM changes nothing without a typed YES (scripts\windows\wsl-mirrored.ps1 says why it is not part of
-REM `bbox run`): -Check reports only, -Undo puts the file back.
+REM be reached from inside the distro, so this verb is answered here and never handed over - not even
+REM by a moved folder below: its -Undo is the repair for a WSL that will not start, which is exactly
+REM when the new folder (on WSL's own disk) cannot be reached. It changes nothing without a typed YES
+REM (scripts\windows\wsl-mirrored.ps1 says why it is not part of `bbox run`): -Check reports only.
 if /i "%~1"=="dialable" (
   powershell -NoProfile -ExecutionPolicy Bypass -File "%BBOX_DIR%\scripts\windows\wsl-mirrored.ps1" %2 %3 %4
+  exit /b !errorlevel!
+)
+
+REM ---------------------------------------------------------------------------------------------
+REM This folder may be the OLD copy of an office that moved to WSL's own disk (`bbox home move`, DGO-2019): its
+REM MOVED-TO.txt names the new folder on its second line (in ASCII: the move names it so), and every command runs
+REM there. Read here, near the top, and never by rewriting this file - cmd.exe reads a batch file as it runs it, so
+REM a file replaced under it ends nowhere. A new folder that cannot be reached (WSL down) is said, never guessed.
+if exist "%BBOX_DIR%\MOVED-TO.txt" (
+  set "BBOX_MOVED_TO="
+  for /f "usebackq skip=1 delims=" %%t in ("%BBOX_DIR%\MOVED-TO.txt") do if not defined BBOX_MOVED_TO set "BBOX_MOVED_TO=%%t"
+  if not defined BBOX_MOVED_TO (
+    echo [bbox] this folder was moved, and MOVED-TO.txt does not say where. Open it to read the new folder.
+    exit /b 1
+  )
+  if not exist "!BBOX_MOVED_TO!\bbox.cmd" (
+    echo [bbox] the office moved to !BBOX_MOVED_TO!, which cannot be reached now - is WSL running? Try: wsl.exe -d Ubuntu -e true
+    exit /b 1
+  )
+  set "BBOX_MOVED_FROM=%BBOX_DIR%"
+  call "!BBOX_MOVED_TO!\bbox.cmd" %*
   exit /b !errorlevel!
 )
 
@@ -45,8 +67,13 @@ REM Installing here (not in ./bbox) is deliberate: it is a Windows Task Schedule
 REM be created from inside the distro. Idempotent, quiet, and never fails the run - if it cannot
 REM register, `bbox run` still proceeds and the operator simply does not get reboot survival.
 REM Runs BEFORE the handoff so the anchor also holds the distro open during a long first build.
+REM An office that MOVED onto WSL's own disk (DGO-2019) installs it from the OLD folder, on C: - the old bbox.cmd
+REM says which (BBOX_MOVED_FROM) when it hands over: a monitor read from the disk it watches would be silent exactly
+REM when WSL will not start. That copy follows MOVED-TO.txt to the office.
+set "BBOX_KEEPALIVE_DIR=%BBOX_DIR%"
+if defined BBOX_MOVED_FROM set "BBOX_KEEPALIVE_DIR=%BBOX_MOVED_FROM%"
 if /i "%~1"=="run" (
-  powershell -NoProfile -ExecutionPolicy Bypass -File "%BBOX_DIR%\scripts\windows\platform-keepalive.ps1" -Install >nul 2>&1
+  powershell -NoProfile -ExecutionPolicy Bypass -File "%BBOX_KEEPALIVE_DIR%\scripts\windows\platform-keepalive.ps1" -Install >nul 2>&1
   if errorlevel 1 echo [bbox] note: reboot-survival keepalive could not be registered; the stack will still run, but will not come back on its own after a restart.
   REM The Windows firewall is converged onto what .env DECLARES (the one UDP port a listening office
   REM publishes for its tunnel - DGO_WG_PUBLISH_BIND/PORT). Here and not in ./bbox for the same reason

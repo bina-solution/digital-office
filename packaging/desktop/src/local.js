@@ -5,7 +5,7 @@
 const { spawn } = require('node:child_process');
 const fs = require('node:fs');
 const path = require('node:path');
-const { candidates } = require('./offices');
+const { candidates, PROBE_PATH, readProbe } = require('./offices');
 
 // this computer's office: where the address «localhost» leads, by the one rule every typed address follows
 const ORIGIN = candidates('localhost')[0];
@@ -13,10 +13,29 @@ const ORIGIN = candidates('localhost')[0];
 // The download's own domain is the owner's step (DGO-1980); until then, the company's site.
 const INSTALL_URL = 'https://digital-office.co.il/';
 
-/** Whether the office here answers: its console, or the sign-in's redirect in front of it. `ask` is main.js's. */
+/**
+ * Whether the office here answers: its console's own record, or the sign-in's redirect in front of it — read as every
+ * typed address is (offices.js readProbe). `ask` is main.js's. Any answer under 500 used to count, so a computer with
+ * another web server on port 80 was told «the office is running on this computer» and offered «Open»: the first
+ * installers' proof on a clean Windows machine showed exactly that (v0.3.5, 2026-11-24, DGO-2188).
+ */
 async function running(ask) {
-  const r = await ask(`${ORIGIN}/manifest.webmanifest`);
-  return r.status > 0 && r.status < 500;
+  const r = await ask(`${ORIGIN}${PROBE_PATH}`);
+  return readProbe(ORIGIN, r || {}).kind !== 'not-office';
+}
+
+/**
+ * After `dgo run` ended well: whether the office answers AS an office, asked every `gapMs` and `tries` times at most.
+ * Its edge is up seconds before its console and its sign-in are, and what it answers until then (a 404) is no office
+ * to running() — so «starting» has to last until it is one, or the button comes back over an office that is coming up
+ * and a second press runs `dgo run` again (the second reader of running()'s reading, 2026-11-24).
+ */
+async function comesUp(ask, { tries = 30, gapMs = 2000, sleep = (ms) => new Promise((r) => setTimeout(r, ms)) } = {}) {
+  for (let i = 0; i < tries; i++) {
+    if (await running(ask)) return true;
+    if (i < tries - 1) await sleep(gapMs);
+  }
+  return false;
 }
 
 /**
@@ -50,4 +69,4 @@ function start(dgo, onLine) {
   });
 }
 
-module.exports = { ORIGIN, INSTALL_URL, running, findDgo, start };
+module.exports = { ORIGIN, INSTALL_URL, running, comesUp, findDgo, start };

@@ -1,14 +1,14 @@
-/* ── Desktop mode (desktop.js) ─────────────────────────────────────────────────────
-   The console's optional multi-window desktop, after Scott Jenson's Akademy 2026 spatial prototype
-   (ai/context/console-desktop-working-memory.md §3.S). Everything here is scoped under html.dk-on /
-   .dk / html.bare, so with the mode off the classic shell renders exactly as before.
+/* ── The desk (desktop.js) ─────────────────────────────────────────────────────────
+   The console on a computer — every screen 1024px wide or wider (DGO-2132) — a multi-window desktop
+   after Scott Jenson's Akademy 2026 spatial prototype (ai/context/console-desktop-working-memory.md
+   §3.S). Everything here is scoped under html.dk-on / .dk / html.bare: below 1024px the phone's
+   shell (style.css) renders without any of it.
    Colours: nothing here writes one. The stage is the palette's sky (`--desk`, and `--desk-ink` for
    what stands straight on it — bina-ui/theme-tokens.css); its bar, dock and panels are the surface,
    ink and hairline every screen uses, so they turn with the theme exactly as the windows do. */
 
-/* a console view shown INSIDE a desktop window: the same shell, without its own rail and top bar */
-html.bare #app{grid-template-columns:1fr}
-html.bare .side,html.bare .topbar,html.bare .bottomnav,html.bare .skiplink{display:none!important}
+/* a console view shown INSIDE a desktop window: the same shell, without its own top bar and tab bar */
+html.bare .topbar,html.bare .bottomnav,html.bare .skiplink{display:none!important}
 
 html.dk-on,html.dk-on body{overflow:hidden;height:100%}
 html.dk-on #app,html.dk-on .bottomnav,html.dk-on .skiplink{display:none!important}
@@ -143,34 +143,29 @@ html.dk-on #app,html.dk-on .bottomnav,html.dk-on .skiplink{display:none!importan
 .dk-c4{--dk-c:var(--violet)} .dk-c5{--dk-c:var(--olive-d)} .dk-c6{--dk-c:var(--muted)}
 .dk-ic,.dk-wg-btn,.dk-mem .chip{background-color:var(--dk-c);color:var(--dk-ci,var(--surface))}
 
-/* ── the «עוד» door, and the launcher it opens ─────────────────────────────────────────────
-   ONE tile in the dock's last slot, carrying the count of the apps behind it, opens the existing
-   grouped launcher: the same registry, the same `group` order, the same `.home-grid`/`.htile` grid
-   and the same filter-in-place idiom as the shell's home screen (and as BinaNav in the rail). The
-   panel is a surface like the home screen's own, so the launcher's tiles are drawn here exactly as
-   they are there: nothing of theirs is restyled, and the panel cannot drift from what it reuses. */
+/* ── «בית»: the desk's home, and the dock's tiles that open it (DGO-2122 · DGO-2132) ─────────────────
+   The dock's FIRST tile and, when apps are behind the dock's end, its last one (the door, with the
+   count) open the same panel: the phone's home itself — app.js homeBody, its `.lh` cards in the seven
+   groups and its `.lt` tiles, styled by style.css alone — over the desk, between the menu bar and
+   the dock. Nothing of the home's is restyled here, so the desk cannot draw a different home. */
 .dk-more-ic .dk-more-n{position:absolute;inset-block-start:-5px;inset-inline-start:-5px;min-width:17px;height:17px;padding:0 4px;
   border-radius:9px;background:var(--ink);color:var(--surface);font-size:11px;font-weight:700;line-height:17px;text-align:center}
-.dk-more{position:absolute;inset:0;z-index:9500;display:flex;align-items:flex-end;justify-content:center;
-  padding:0 16px 86px;background:var(--scrim);backdrop-filter:blur(2px);-webkit-backdrop-filter:blur(2px)}
-.dk-more-box{width:min(880px,100%);max-height:min(64vh,540px);display:flex;flex-direction:column;gap:10px;padding:14px;
-  background:var(--bg);border:1px solid var(--line);border-radius:20px;box-shadow:var(--shadow-lg)}
-.dk-more-head{display:flex;align-items:baseline;gap:8px;font-size:14px;font-weight:700}
+.dk-more{position:absolute;inset:0;z-index:9500;display:flex;align-items:stretch;justify-content:center;
+  padding:46px 24px 90px;background:var(--scrim);backdrop-filter:blur(2px);-webkit-backdrop-filter:blur(2px)}
+.dk-more-box{width:min(1180px,100%);max-height:100%;box-sizing:border-box;display:flex;flex-direction:column;gap:12px;
+  padding:16px 18px 18px;background:var(--bg);border:1px solid var(--line);border-radius:20px;box-shadow:var(--shadow-lg)}
+.dk-more-head{display:flex;align-items:baseline;gap:8px;min-height:30px;font-size:16px;font-weight:800}
 .dk-more-head small{color:var(--muted);font-size:12px;font-weight:400}
+.dk-more-head .btn{display:inline-flex;align-items:center;gap:6px}
+.dk-more-head .btn .ic-svg{width:15px;height:15px}
 .dk-more-q{width:100%;box-sizing:border-box;background:var(--surface);border:1px solid var(--line);
   border-radius:12px;color:inherit;font:inherit;font-size:14px;padding:8px 12px}
 .dk-more-q::placeholder{color:var(--muted)}
-.dk-more-list{overflow:auto;padding:2px;overscroll-behavior:contain}
-.dk-more-grp{margin:10px 2px 0;font-size:12.5px;font-weight:700;color:var(--muted)}
-.dk-more .htile{cursor:default}
-.dk-more .htile:hover{background:var(--accent-soft)}
-/* The launcher's tile is 84px wide with ONE line for a name — right for a phone's home screen, and
-   here it cut three of 24 names ("נכסים דיגיט…", "ניהול פרויק…", "דפדפן הל…") while half of every
-   row stood empty (hp-laptop, 2026-10-06). In this panel a tile is a little wider and a name may
-   take a second line; only a name longer than two lines is shortened, and then with its ellipsis. */
-.dk-more .home-grid{grid-template-columns:repeat(auto-fill,minmax(104px,1fr))}
-.dk-more .htile-nm{white-space:normal;overflow-wrap:anywhere;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2}
+.dk-more-list{flex:1;min-height:0;overflow:auto;padding:2px;overscroll-behavior:contain}
 .dk-more-none{padding:22px 8px;text-align:center;color:var(--muted);font-size:13px}
+/* the home's tiles answer a pointer on the desk as the dock's do */
+.dk-home .lt{cursor:default}
+.dk-home .lo{cursor:default}
 
 /* ── windows ── (overflow stays visible so a window's collection panel can sit beside it and move
    with it; the rounded corners are clipped by the title bar and the body instead) */

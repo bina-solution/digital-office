@@ -120,7 +120,7 @@ var binaNoAnswer = () => ({ ok: false, status: 0, json: async () => ({}), text: 
           <button class="x" type="button" data-close aria-label="סגירה">×</button></div>
         <div class="d-body">
           <section class="sec" id="sec-self"><h3>פרטים<button class="btn sm end" type="button" data-save="self">שמירה</button></h3>
-            <div class="kv"><label for="f-name">שם</label><input id="f-name" value="${esc(e.name)}" dir="auto">${fieldInputs(P.entity_fields, e.fields, 'f-')}</div></section>
+            <div class="kv"><label for="f-kind">סוג</label><select id="f-kind">${Object.entries(P.kinds).map(([k, v]) => `<option value="${esc(k)}"${k === e.kind ? ' selected' : ''}>${esc(v.he)}</option>`).join('')}</select><label for="f-name">שם</label><input id="f-name" value="${esc(e.name)}" dir="auto">${fieldInputs(P.entity_fields, e.fields, 'f-')}</div></section>
           ${Object.entries(e.roles).map(([r, vals]) => `<section class="sec" data-role-sec="${esc(r)}">
             <h3>${roleChip(r)}<button class="btn sm end" type="button" data-save="${esc(r)}">שמירה</button>
               <button class="btn sm danger" type="button" data-drop="${esc(r)}">הסרה</button></h3>
@@ -168,7 +168,7 @@ var binaNoAnswer = () => ({ ok: false, status: 0, json: async () => ({}), text: 
     const L = $('layer');
     const close = () => go(role ? 'r/' + role : '');
     L.querySelectorAll('[data-close]').forEach((b) => { b.onclick = close; });
-    const act = async (fn, msg) => { try { await fn(); await load(); toast(msg); render(); } catch (err) { toast(err.message); } };
+    const act = async (fn, msg, refused) => { try { await fn(); await load(); toast(msg); render(); } catch (err) { toast(err.message); if (refused) refused(); } };
     L.querySelectorAll('[data-add]').forEach((b) => { b.onclick = () => act(() => api('PUT', `entities/${e.id}/roles/${b.dataset.add}`, { fields: {} }), `נוסף התפקיד «${roleName(b.dataset.add)}»`); });
     L.querySelectorAll('[data-drop]').forEach((b) => {
       b.onclick = async () => {                               // off at once, and back with one click (its fields too)
@@ -181,7 +181,13 @@ var binaNoAnswer = () => ({ ok: false, status: 0, json: async () => ({}), text: 
     L.querySelectorAll('[data-save]').forEach((b) => {
       b.onclick = () => {
         const r = b.dataset.save;
-        if (r === 'self') return act(() => api('PATCH', `entities/${e.id}`, { name: $('f-name').value, fields: collect($('sec-self')) }), 'נשמר');
+        if (r === 'self') {
+          // a kind the store refused goes back to the stored one: left as chosen, every later save of «פרטים» would
+          // carry it again and be refused whole (the second reader, DGO-2101); what was typed elsewhere stays
+          const kind = $('f-kind').value;
+          return act(() => api('PATCH', `entities/${e.id}`, { name: $('f-name').value, fields: collect($('sec-self')), ...(kind !== e.kind ? { kind } : {}) }),
+            'נשמר', () => { if (kind !== e.kind) $('f-kind').value = e.kind; });
+        }
         return act(() => api('PUT', `entities/${e.id}/roles/${r}`, { fields: collect(L.querySelector(`[data-role-sec="${r}"]`)) }), 'נשמר');
       };
     });

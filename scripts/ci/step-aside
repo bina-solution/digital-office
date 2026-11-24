@@ -3,6 +3,8 @@
 #
 #   bash scripts/ci/step-aside                  # the first step of a job on [self-hosted, portable]
 #   bash scripts/ci/step-aside --dispatch-too   # …where a hand-run (workflow_dispatch) yields to a version's proof too
+#   bash scripts/ci/step-aside --watch &        # …and beside a long step's work: asked again every STEP_ASIDE_EVERY s
+#   bash scripts/ci/step-aside --clear          # a version's proof, at the end of its jobs: its next job goes next
 #
 # WHY (DGO-1819, issues/the-versions-proof-stands-behind-office-branch-jobs-on-the-one-runner-which-has-no-queue-
 # priorities.yaml). Every workflow's jobs run on the Dell's one self-hosted runner, and GitHub has no queue
@@ -24,7 +26,49 @@
 # cancel would stop it too, so the job runs with a warning. A job that has COMPLETED does not count: `decide` has
 # always completed by the time `gates` takes the runner, and a cancel does not undo what a finished job did.
 #
-# WHAT NEVER STEPS ASIDE. dgo-stable (the workflows do not even call this there). A ref that is not a branch — a tag,
+# THE LINE'S OTHER WORKFLOWS (--line-too, DGO-2111). A push to dgo-stable starts gates-hosted AND go-test AND the
+# Android builds at once, and the one runner took them in the order GitHub handed them out: on 2026-11-19 batch 87's
+# gates waited behind its own android-app build and its go-test (cancelled by hand), as batch 84's waited behind 85's
+# go-test. go-test's test, android-app's apk and public-copy's copy (DGO-2123: a batch asking for a copy started it
+# beside its proof) say --line-too, and then on dgo-stable too they yield to a queued or
+# running gates-hosted run of dgo-stable — the proof is what moves the line; the proof's own last job (re-ask) asks the
+# run again once it has ended. gates-hosted itself never says --line-too: it IS the proof (and a proof that said it
+# would yield to an older proof still running, which nothing asks again). android-app's phone and android-engine's
+# guest do not say it either (their workflows say why); scripts/test_ci_step_aside.py holds which jobs do (LINE_JOBS).
+#
+# WHILE THE JOB WORKS (--watch, DGO-2123). Asked only when a job took the runner, a branch's gates job that took it
+# BEFORE a version's proof was pushed held it its whole twenty minutes: on 2026-11-20 batch 89's proof, pushed 08:50Z,
+# stood behind mac-dgo 72feb47fe's gates (started 08:44, a commit the batch itself held) until a person cancelled that
+# run at 08:58. So gates-hosted's two lanes and go-test's legs start a watcher beside their work: a question every
+# STEP_ASIDE_EVERY seconds (30) — the line's ten newest runs, not five calls: the five at the job's start found any
+# older proof — and at the first proof ahead it steps aside exactly as at the start: the same cancel, the same
+# notice, so the proof's re-ask runs the job again from its first step. Watching, a «no» is printed only when it differs from the ask before
+# it, and a hand-run that never yields does not watch at all. Watching is also where the work so far is the price of a
+# wrong yes, so three things differ (the second reader of 5a220ad98): a proof in progress whose jobs cannot be read is
+# not ahead this turn (at the start it is), the cancel and its notice finish together even when the step's end kills
+# the watcher in between, and the notice starts on a line of its own (the work writes to the same pipe). A turn is
+# one call, two while a proof's last job (re-ask) waits for the runner — at most 240 an hour on the one runner.
+#
+# CLEAR THE WAY (DGO-2123). The jobs waiting for the runner took it one by one and yielded one by one: 27 to 67 s
+# each, three to nine of them before every proof on 2026-11-20 (batch 95: nine, 7.2 minutes). So the job that yields
+# first cancels, before its own run, every other run still WAITING for the runner that would yield too — a push run of
+# YIELDING's workflows on an office branch (`*-dgo`), or of the line's go-test and APK on dgo-stable, with no job at
+# work and a job queued for `portable`; never a hand-run, a pull request or a proof. The proof is next. Such a run owes
+# what a run that yielded owes: re-ask asks it again once the proof has ended (a gates-hosted or go-test run whose head
+# that proof held, green, is covered instead). And a version's proof clears the way for itself at the end of its jobs
+# (--clear) while it is green so far: the branch jobs queued while it worked would take the runner before its next job,
+# each to yield (batch 100: five between its decide and its gates). A red proof's next job is its re-ask alone.
+#
+# SUPERSEDED (DGO-2123). At its first step a job also asks whether a NEWER run of its workflow on its branch, whose head
+# holds this one's, will test or has tested the same job — waiting, running, or finished with a verdict (and, where the
+# workflow has a `decide`, asked by it). Then this run expires: it cancels itself and owes nothing (its notice's title
+# is `superseded`, which re-ask never asks again). Measured 2026-11-20: a vps1-dgo go-test re-asked from 12:35 on a
+# commit two pushes old, batch 99's go-test behind batch 100's, two mac-dgo gates runs of commits batch 100 held. The
+# newest run never expires — nothing newer exists — so a branch always gets the verdict of its newest push: what
+# DGO-1797 measured a «not the head» rule taking away (above). Only EXPIRES' workflows: an APK is not covered by a newer
+# run that built nothing (re-ask's line_build). Never while watching: a run at work finishes.
+#
+# WHAT NEVER STEPS ASIDE. dgo-stable without --line-too (gates-hosted, and public-copy's copy of the line). A ref that is not a branch — a tag,
 # a pull request's merge ref: it runs, and says nothing. A hand-run (workflow_dispatch) is an explicit ask: it yields
 # to a version's proof only where the workflow says --dispatch-too — the Android builds, whose runs off dgo-stable are
 # all hand-runs and an hour long on the runner; elsewhere it says the proof is ahead and runs.
@@ -37,23 +81,51 @@
 # holds each decision, with curl standing in for GitHub.
 set -uo pipefail
 
-dispatch_too=""
+dispatch_too="" line_too="" watch="" clear=""
 while [ $# -gt 0 ]; do
   case "$1" in
     --dispatch-too) dispatch_too=1; shift ;;
-    *) echo "usage: $0 [--dispatch-too]" >&2; exit 2 ;;
+    --line-too) line_too=1; shift ;;
+    --watch) watch=1; shift ;;
+    --clear) clear=1; shift ;;
+    *) echo "usage: $0 [--dispatch-too] [--line-too] [--watch] | --clear" >&2; exit 2 ;;
   esac
 done
 
 PROOF_BRANCH=dgo-stable
 PROOF_WORKFLOW=gates-hosted.yml
+# the workflows whose runner jobs keep this protocol — they call this guard first on an office branch, and re-ask asks
+# them again (scripts/ci/re-ask.py WORKFLOWS): the only runs the way is cleared of
+YIELDING="gates-hosted.yml go-test.yml android-app.yml android-engine.yml public-copy.yml office-images.yml sim-build.yml"
+# …and on dgo-stable the jobs of theirs that yield to the line's proof (--line-too; re-ask's LINE): a run of the line is
+# cleared only when every runner job it has waiting is one of these
+LINE_YIELDS="go-test.yml:test android-app.yml:apk public-copy.yml:copy"
+# the workflows whose runs expire when a newer run holds them (the header): never the Android builds
+EXPIRES="gates-hosted.yml go-test.yml public-copy.yml"
 api="${GITHUB_API_URL:-https://api.github.com}"
 repo="${GITHUB_REPOSITORY:-}"
 token="${GH_TOKEN:-${GITHUB_TOKEN:-}}"
 wait_s="${STEP_ASIDE_WAIT:-180}"
+every="${STEP_ASIDE_EVERY:-30}"   # 0: no pause (the tests); anything not a number: 30, never a loop with no pause
+case "${every}" in ''|*[!0-9]*) every=30 ;; esac
+watching="" said=""
+
+# a line of this ask: printed at once — or, watching, kept with the ask's others and printed only when they differ
+# from the ask before (a «no proof» every half minute for twenty minutes is noise; a change is news)
+say() {
+  if [ -n "${watching}" ]; then said="${said}$*"$'\n'; else echo "$*"; fi
+}
+
+# a line said at once, even while watching (then on a line of its own: the work writes to the same pipe) — what other
+# runs had done to them must never wait in `said` for a watcher that may be killed first (the second reader)
+tell() {
+  [ -z "${watching}" ] || echo
+  echo "$*"
+}
 
 decided() {   # $1 yes|no, then why
   local a="$1"; shift
+  if [ -n "${watching}" ] && [ "${a}" = no ]; then say "step-aside=${a} $*"; return 0; fi
   [ -z "${GITHUB_OUTPUT:-}" ] || echo "aside=${a}" >> "${GITHUB_OUTPUT}"
   echo "step-aside=${a} $*"
 }
@@ -64,9 +136,94 @@ gh_api() {    # $1 method, $2 path → the body on stdout, non-zero on any failu
     | curl -fsS --max-time 10 -X "$1" -H @- "${api}/$2"
 }
 
+# this run's workflow file (gates-hosted.yml), from GITHUB_WORKFLOW_REF (<owner>/<repo>/.github/workflows/<file>@<ref>)
+workflow_file() { local w="${GITHUB_WORKFLOW_REF:-}"; w="${w%%@*}"; printf '%s' "${w##*/}"; }
+
+# CLEAR THE WAY (the header): the runs that would take the runner before the proof $1, cancelled, each said. Sets
+# `cleared` to how many — left empty when GitHub did not list them.
+cleared=""
+clear_way() {   # $1 the proof's run id
+  local s body list="" c id n=0 names=""
+  cleared=""
+  for s in queued pending in_progress; do
+    if ! body="$(gh_api GET "repos/${repo}/actions/runs?status=${s}&per_page=100")"; then
+      tell "::warning::step-aside could not list the ${s} runs (above): the way for run $1 is not cleared"
+      return 0
+    fi
+    list="${list} $(printf '%s' "${body}" | OWN="${GITHUB_RUN_ID:-}" PROOF="$1" YIELDING="${YIELDING}" \
+      LINE_YIELDS="${LINE_YIELDS}" LINE="${PROOF_BRANCH}" PROOF_WF="${PROOF_WORKFLOW}" python3 -c '
+import json, os, re, sys
+line_wfs = {x.split(":")[0] for x in os.environ["LINE_YIELDS"].split()}
+for r in json.load(sys.stdin).get("workflow_runs") or []:
+    wf, br = str(r.get("path") or "").rsplit("/", 1)[-1], str(r.get("head_branch") or "")
+    if (str(r.get("id")) in (os.environ["OWN"], os.environ["PROOF"]) or wf not in os.environ["YIELDING"].split()
+            or r.get("event") != "push"):
+        continue                         # this run, the proof, another protocol, a hand-run or a pull request
+    if br == os.environ["LINE"]:
+        if wf == os.environ["PROOF_WF"] or wf not in line_wfs:
+            continue                     # a proof, or a run of the line that never yields to one
+    elif not re.fullmatch(r"[A-Za-z0-9._-]+-dgo", br):
+        continue                         # not an office branch: a tag, another branch
+    print("%s:%s:%s:%s" % (r["id"], wf, br, str(r.get("head_sha") or "")[:9]))' 2>/dev/null)"
+  done
+  for c in $(printf '%s\n' ${list} | sort -u); do
+    id="${c%%:*}"
+    body="$(gh_api GET "repos/${repo}/actions/runs/${id}/jobs?filter=latest&per_page=100")" || continue
+    # nothing of it at work (a cancel would stop that too), a job of it waiting for this runner — and on the line, every
+    # such job one that yields to the proof (android-app's phone does not: a minute's decision)
+    printf '%s' "${body}" | RUN="${c}" LINE="${PROOF_BRANCH}" LINE_YIELDS="${LINE_YIELDS}" python3 -c '
+import json, os, sys
+_, wf, br, _ = os.environ["RUN"].split(":", 3)
+jobs = [j for j in json.load(sys.stdin).get("jobs") or [] if isinstance(j, dict)]
+waiting = [j for j in jobs if j.get("status") in ("queued", "pending", "waiting") and "portable" in (j.get("labels") or [])]
+ok = {x.split(":")[1] for x in os.environ["LINE_YIELDS"].split() if x.split(":")[0] == wf}
+sys.exit(0 if waiting and not any(j.get("status") == "in_progress" for j in jobs)
+         and (br != os.environ["LINE"] or all(str(j.get("name") or "").split(" (")[0] in ok for j in waiting)) else 1)' \
+      2>/dev/null || continue
+    gh_api POST "repos/${repo}/actions/runs/${id}/cancel" >/dev/null || continue
+    # each cancel said as it is sent: a watcher killed halfway leaves no run cancelled without its line (the reader)
+    n=$((n + 1)); names="${c#*:}"
+    tell "step-aside: run ${id} (${names//:/ }) waited for the runner — cancelled, to clear the way for run $1"
+  done
+  cleared="${n}"
+  [ "${n}" -eq 0 ] || tell "step-aside: the way is cleared for run $1 — ${n} run(s) cancelled; re-ask asks each again once the proof has ended, unless the proof holds its head"
+}
+
+# A VERSION'S PROOF CLEARS THE WAY FOR ITS OWN NEXT JOB (--clear, the header), at the end of its decide, gates and
+# carrier. It never fails the proof: whatever GitHub answers, it ends 0, and only a proof's push may ask it.
+if [ -n "${clear}" ]; then
+  if [ "${GITHUB_REF:-}" != "refs/heads/${PROOF_BRANCH}" ] || [ "${GITHUB_EVENT_NAME:-}" != push ] \
+     || [ "$(workflow_file)" != "${PROOF_WORKFLOW}" ]; then
+    echo "step-aside: --clear is a version's proof's own step (a push of ${PROOF_BRANCH}, ${PROOF_WORKFLOW}) — nothing is cleared"
+    exit 0
+  fi
+  if [ -z "${repo}" ] || [ -z "${token}" ]; then
+    echo "::warning::step-aside has no repository or token to clear the way with (GITHUB_REPOSITORY, GH_TOKEN)"
+    exit 0
+  fi
+  # a proof already red keeps nothing back: its next job is its re-ask alone, which the waiting runs may go ahead of
+  # (proof_ended, below) — cleared, they would hang on that re-ask (the second reader of 59774eeb7)
+  if body="$(gh_api GET "repos/${repo}/actions/runs/${GITHUB_RUN_ID:-0}/jobs?filter=latest&per_page=100")" \
+     && red="$(printf '%s' "${body}" | python3 -c '
+import json, sys
+print(", ".join(str(j.get("name")) for j in json.load(sys.stdin).get("jobs") or []
+                if j.get("conclusion") in ("failure", "cancelled", "timed_out")))' 2>/dev/null)"; then
+    if [ -n "${red}" ]; then
+      echo "step-aside: this proof is red already (${red}) — its re-ask alone is left; nothing is cleared"
+      exit 0
+    fi
+  else
+    echo "::warning::step-aside could not read this proof's own jobs (above); the way is cleared all the same"
+  fi
+  clear_way "${GITHUB_RUN_ID:-}"
+  [ "${cleared}" != 0 ] || echo "step-aside: nothing waits for the runner ahead of this proof's next job"
+  exit 0
+fi
+
 case "${GITHUB_REF:-}" in
   "refs/heads/${PROOF_BRANCH}")
-    decided no "${PROOF_BRANCH}: a version's proof never steps aside"; exit 0 ;;
+    [ -n "${line_too}" ] || { decided no "${PROOF_BRANCH}: a version's proof never steps aside"; exit 0; }
+    branch="${PROOF_BRANCH}" ;;   # --line-too: a job of the line's other workflows, behind the line's proof
   refs/heads/?*)
     branch="${GITHUB_REF#refs/heads/}" ;;
   *)
@@ -78,7 +235,8 @@ if [ -z "${repo}" ] || [ -z "${token}" ]; then
   exit 0
 fi
 hand=""; [ "${GITHUB_EVENT_NAME:-}" != workflow_dispatch ] || hand=1
-what="office-branch job"; [ -z "${hand}" ] || what="hand-run"
+what="office-branch job"; [ "${branch}" != "${PROOF_BRANCH}" ] || what="job of the line's ${GITHUB_WORKFLOW:-other} workflow"
+[ -z "${hand}" ] || what="hand-run"
 run_url() { echo "${GITHUB_SERVER_URL:-https://github.com}/${repo}/actions/runs/$1"; }
 
 # this run's OTHER jobs in progress, their names on one line ("" for none); non-zero when GitHub did not answer.
@@ -99,76 +257,231 @@ print(", ".join(str(j.get("name") or j.get("id")) for j in json.load(sys.stdin).
                 if j.get("status") == "in_progress" and not ours(j)))'
 }
 
-step_aside() {   # $1 why, $2 what asks again
-  local others s
+step_aside() {   # $1 why, $2 what asks again, $3 the notice's title — step-aside (a yield to $proof), or superseded (it
+  # expires) — returns (1) only when the run does NOT step aside, why said
+  local others s title="${3:-step-aside}" verb="steps aside"
+  [ "${title}" = step-aside ] || verb="expires"
   if [ -z "${GITHUB_RUN_ID:-}" ]; then
-    echo "::warning::step-aside has no GITHUB_RUN_ID to cancel; this job runs"
-    decided no "no run to cancel: $1"; exit 0
+    say "::warning::step-aside has no GITHUB_RUN_ID to cancel; this job runs"
+    decided no "no run to cancel: $1"; return 1
   fi
   if ! others="$(others_at_work)"; then
-    echo "::warning::step-aside could not read run ${GITHUB_RUN_ID}'s own jobs (above); this job runs"
-    decided no "its run's jobs could not be read: $1"; exit 0
+    say "::warning::step-aside could not read run ${GITHUB_RUN_ID}'s own jobs (above); this job runs"
+    decided no "its run's jobs could not be read: $1"; return 1
   fi
   if [ -n "${others}" ]; then
-    echo "::warning::$1 — but run ${GITHUB_RUN_ID} has another job at work (${others}), which a cancel would stop too; this job runs"
-    decided no "another job of its run is in progress (${others}): $1"; exit 0
+    say "::warning::$1 — but run ${GITHUB_RUN_ID} has another job at work (${others}), which a cancel would stop too; this job runs"
+    decided no "another job of its run is in progress (${others}): $1"; return 1
   fi
+  # a yield clears the way first (the header): the runs waiting behind this one would each take the runner and yield
+  [ "${title}" != step-aside ] || clear_way "${proof}"
+  # watching, the cancel and its notice are one: a step whose work ends while the cancel is on its way kills the
+  # watcher (its trap), and a cancel that went through with no notice is a run re-ask never asks again (the second
+  # reader of 5a220ad98). So a TERM waits until both are done, and then ends the watcher.
+  [ -z "${watching}" ] || trap 'termed=1' TERM
   if ! gh_api POST "repos/${repo}/actions/runs/${GITHUB_RUN_ID}/cancel" >/dev/null; then
-    echo "::warning::step-aside could not cancel run ${GITHUB_RUN_ID} (above) — does this job grant \`actions: write\`? This job runs"
-    decided no "the cancel was refused: $1"; exit 0
+    [ -z "${watching}" ] || { trap - TERM; [ -z "${termed:-}" ] || exit 0; }
+    say "::warning::step-aside could not cancel run ${GITHUB_RUN_ID} (above) — does this job grant \`actions: write\`? This job runs"
+    decided no "the cancel was refused: $1"; return 1
   fi
-  # re-ask (scripts/ci/re-ask.py) knows a run that stepped aside by this notice alone — read as an annotation
-  echo "::notice title=step-aside::$1 — this ${what} steps aside; $2"
+  # watching: what this ask saw comes first, then the notice — printed now, before the runner stops this step, and
+  # after a newline of its own: the work writes to the same pipe, and a notice glued to half a line is not read
+  [ -z "${watching}" ] || { echo; [ -z "${said}" ] || printf '%s' "${said}"; said=""; }
+  # re-ask (scripts/ci/re-ask.py) knows a run that stepped aside — or that expired — by this notice alone, read as an
+  # annotation
+  echo "::notice title=${title}::$1 — this ${what} ${verb}; $2"
   decided yes "$1"
+  [ -z "${watching}" ] || { trap - TERM; [ -z "${termed:-}" ] || exit 0; }
   # the runner stops this step when the cancel reaches it, usually within seconds
   s=$(date +%s)
-  while [ $(( $(date +%s) - s )) -lt "${wait_s}" ]; do sleep 5; done
+  while [ $(( $(date +%s) - s )) -lt "${wait_s}" ]; do sleep 5 </dev/null >/dev/null 2>&1; done
+  if [ -n "${watching}" ]; then
+    # beside the work, an exit decides nothing: the run already reads «cancelled», and the step's own end is the work's
+    echo "::warning::run ${GITHUB_RUN_ID} was cancelled and the runner had not stopped this step ${wait_s} s later; watching ends"
+    exit 0
+  fi
   echo "::error::run ${GITHUB_RUN_ID} was cancelled and the runner had not stopped this job ${wait_s} s later: stopped here, red rather than a pass that tested nothing"
   exit 1
 }
 
 # A PROOF THAT HAS ENDED BUT ITS LAST JOB: every job but `re-ask` has completed. That job asks again the runs that
 # stepped aside (scripts/ci/re-ask.py), and its run reads «in progress» until it ends — a run it asks again must not
-# step aside for it once more. 0 = ended; anything else (another job still going, jobs that could not be read) = not.
+# step aside for it once more. 0 = ended; 1 = another job still going; 2 = its jobs could not be read.
 proof_ended() {   # $1 the proof's run id
   local body
-  body="$(gh_api GET "repos/${repo}/actions/runs/$1/jobs?filter=latest&per_page=100")" || return 1
+  body="$(gh_api GET "repos/${repo}/actions/runs/$1/jobs?filter=latest&per_page=100")" || return 2
   printf '%s' "${body}" | python3 -c '
 import json, sys
-jobs = json.load(sys.stdin).get("jobs") or []
+try:
+    jobs = json.load(sys.stdin).get("jobs") or []
+except Exception:
+    sys.exit(2)
 rest = [j for j in jobs if j.get("name") != "re-ask"]
 sys.exit(0 if len(rest) < len(jobs) and all(j.get("status") == "completed" for j in rest) else 1)'
 }
 
-# A VERSION'S PROOF AHEAD — one question per status, so a run of any age is seen (a newest-N list missed one)
-proof="" proof_status=""
-for s in queued pending waiting requested in_progress; do
-  if ! body="$(gh_api GET "repos/${repo}/actions/workflows/${PROOF_WORKFLOW}/runs?branch=${PROOF_BRANCH}&status=${s}&per_page=10")" \
-     || ! ids="$(printf '%s' "${body}" | python3 -c 'import json, sys; d = json.load(sys.stdin); print(" ".join(str(r["id"]) for r in d.get("workflow_runs") or [] if d.get("total_count")))')"; then
-    echo "::warning::step-aside could not ask GitHub whether a version's proof is ${s} (above); this job runs"
-    decided no "GitHub did not answer whether a version's proof is ${s}"
-    exit 0
+ahead_of_this() {   # $1 a run of the proof not yet over, $2 its status → 0 when this job yields to it
+  # never its own run: a proof's job that said --line-too would otherwise cancel ITSELF, and the line keep no verdict
+  # (it would still yield to an OLDER proof in progress — the reason the proof's jobs never say it at all)
+  if [ "$1" = "${GITHUB_RUN_ID:-}" ]; then
+    say "step-aside: run $1 is this job's own run — a run never steps aside for itself"
+    return 1
   fi
-  for id in ${ids}; do
-    if [ "${s}" = in_progress ] && proof_ended "${id}"; then
-      echo "step-aside: run ${id} is a version's proof whose last job (re-ask) alone is left — not ahead"
-      continue
-    fi
-    proof="${id}"; proof_status="${s}"; break
-  done
-  [ -z "${proof}" ] || break
-done
+  [ "$2" = in_progress ] || return 0
+  local e=0
+  proof_ended "$1" || e=$?
+  if [ "${e}" -eq 0 ]; then
+    say "step-aside: run $1 is a version's proof whose last job (re-ask) alone is left — not ahead"
+    return 1
+  fi
+  # jobs that could not be read: at the start such a proof is ahead (a yield then costs nothing); watching, the work
+  # so far is the price, and one 5xx while a proof's re-ask waits for the runner would throw it away — the next turn
+  # asks again (the second reader of 5a220ad98)
+  if [ "${e}" -ge 2 ] && [ -n "${watching}" ]; then
+    say "::warning::step-aside could not read the jobs of run $1 (a version's proof, in progress); not counted ahead this turn"
+    return 1
+  fi
+}
 
-if [ -z "${proof}" ]; then
-  decided no "${what} on ${branch}: no version's proof queued or running"
+# A VERSION'S PROOF AHEAD → 0 (proof, proof_status set), 1 none, 2 GitHub did not answer (failed: what was asked).
+# At the start one question per status, so a run of any age is seen (a newest-N list missed one); watching, one
+# question for the line's ten newest runs: a proof pushed since the start is among them.
+find_proof() {
+  local s body ids id
+  proof="" proof_status="" failed=""
+  if [ -n "${watching}" ]; then
+    failed="queued or running"
+    body="$(gh_api GET "repos/${repo}/actions/workflows/${PROOF_WORKFLOW}/runs?branch=${PROOF_BRANCH}&per_page=10")" \
+      && ids="$(printf '%s' "${body}" | python3 -c '
+import json, sys
+order = ("queued", "pending", "waiting", "requested", "in_progress")
+runs = [r for r in json.load(sys.stdin).get("workflow_runs") or [] if r.get("status") in order]
+print(" ".join("%s:%s" % (r["status"], r["id"]) for r in sorted(runs, key=lambda r: order.index(r["status"]))))')" \
+      || return 2
+    for id in ${ids}; do
+      ahead_of_this "${id#*:}" "${id%%:*}" || continue
+      proof="${id#*:}"; proof_status="${id%%:*}"; return 0
+    done
+    return 1
+  fi
+  for s in queued pending waiting requested in_progress; do
+    failed="${s}"
+    body="$(gh_api GET "repos/${repo}/actions/workflows/${PROOF_WORKFLOW}/runs?branch=${PROOF_BRANCH}&status=${s}&per_page=10")" \
+      && ids="$(printf '%s' "${body}" | python3 -c 'import json, sys; d = json.load(sys.stdin); print(" ".join(str(r["id"]) for r in d.get("workflow_runs") or [] if d.get("total_count")))')" \
+      || return 2
+    for id in ${ids}; do
+      ahead_of_this "${id}" "${s}" || continue
+      proof="${id}"; proof_status="${s}"; return 0
+    done
+  done
+  return 1
+}
+
+# A NEWER RUN THAT HOLDS THIS ONE (SUPERSEDED, the header) → 0 with `newer` and `newer_sha` set; 1 when there is none,
+# or when GitHub's answers do not say so
+newer="" newer_sha=""
+superseded_by() {   # $1 this run's workflow file
+  local body c id sha st
+  [ -n "${GITHUB_SHA:-}" ] && [ -n "$1" ] || return 1
+  body="$(gh_api GET "repos/${repo}/actions/workflows/$1/runs?branch=${branch}&event=push&per_page=20")" || return 1
+  for c in $(printf '%s' "${body}" | OWN="${GITHUB_RUN_ID:-0}" SHA="${GITHUB_SHA:-}" python3 -c '
+import json, os, sys
+own, sha = int(os.environ["OWN"] or 0), os.environ["SHA"]
+for r in json.load(sys.stdin).get("workflow_runs") or []:
+    if not isinstance(r.get("id"), int) or r["id"] <= own or not r.get("head_sha") or r["head_sha"] == sha:
+        continue                          # older, this one, or the same commit
+    if r.get("status") == "completed" and r.get("conclusion") not in ("success", "failure"):
+        continue                          # cancelled or skipped: it tested nothing, and may never
+    print("%s:%s:%s" % (r["id"], r.get("status"), r["head_sha"]))' 2>/dev/null); do
+    id="${c%%:*}" sha="${c##*:}" st="${c#*:}"; st="${st%%:*}"
+    body="$(gh_api GET "repos/${repo}/actions/runs/${id}/jobs?filter=latest&per_page=100")" || continue
+    # the same job there — waiting, running, or with a verdict — and, where the workflow has one, a `decide` that asked;
+    # none of its other jobs failed or stopped (a red fast lane: its slow job waits for nothing, and never runs). A run
+    # still waiting for its workflow's concurrency group lists NO job (GitHub makes them when it starts: measured,
+    # mac-dgo's go-test of 59774eeb7, «pending», 0 jobs). Only go-test's says what it will run: its group is the whole
+    # workflow's and its legs ask nothing of a push. public-copy's one job asks the push's message, so its run with no
+    # job listed yet may skip it (the reader of ac436e0b8)
+    printf '%s' "${body}" | JOB="${GITHUB_JOB:-}" STATUS="${st}" WHOLE="$([ "$1" != go-test.yml ] || echo 1)" python3 -c '
+import json, os, sys
+job = os.environ["JOB"]
+jobs = [j for j in json.load(sys.stdin).get("jobs") or [] if isinstance(j, dict)]
+if not jobs:
+    sys.exit(0 if job and os.environ["WHOLE"] and os.environ["STATUS"] == "pending" else 1)
+def mine(j): return j.get("name") == job or str(j.get("name") or "").startswith(job + " (")
+same = [j for j in jobs if job and mine(j)]
+live = ("queued", "pending", "waiting", "requested", "in_progress")
+sys.exit(0 if same and all(j.get("status") in live or j.get("conclusion") in ("success", "failure") for j in same)
+         and all(j.get("conclusion") == "success" for j in jobs if j.get("name") == "decide")
+         and not any(j.get("conclusion") in ("failure", "cancelled", "timed_out") for j in jobs if not mine(j))
+         else 1)' 2>/dev/null || continue
+    # …and whose head holds this run's: GitHub's own comparison says that head is «ahead» of this one
+    body="$(gh_api GET "repos/${repo}/compare/${GITHUB_SHA:-}...${sha}?per_page=1")" || continue
+    printf '%s' "${body}" | python3 -c 'import json, sys; sys.exit(0 if json.load(sys.stdin).get("status") == "ahead" else 1)' \
+      2>/dev/null || continue
+    newer="${id}" newer_sha="${sha}"
+    return 0
+  done
+  return 1
+}
+
+expire() {   # at a job's first step: a superseded run cancels itself and never returns; any other goes on
+  local wf head="${GITHUB_SHA:-}"
+  [ -z "${hand}" ] || return 0                       # a hand-run is an explicit ask: never superseded
+  # nor gates-hosted's `decide`: it answers whether its run tests at all, and a newer decide's success says nothing of
+  # whether that one does (it answers «no» to a push that did not ask) — the run's gates and slow jobs ask instead
+  [ "${GITHUB_JOB:-}" != decide ] || return 0
+  wf="$(workflow_file)"
+  case " ${EXPIRES} " in *" ${wf} "*) ;; *) return 0 ;; esac
+  superseded_by "${wf}" || return 0
+  step_aside "run ${newer} ($(run_url "${newer}")) tests this run's head (${head:0:9}) within its own (${newer_sha:0:9}): this run is superseded" \
+    "it owes nothing — re-ask never asks a superseded run again" superseded || return 0
+}
+
+ask() {   # one question: steps aside (and never returns), or says why this job runs
+  local rc ahead
+  find_proof; rc=$?
+  if [ "${rc}" -eq 2 ]; then
+    say "::warning::step-aside could not ask GitHub whether a version's proof is ${failed} (above); this job runs"
+    decided no "GitHub did not answer whether a version's proof is ${failed}"
+    return 0
+  fi
+  if [ "${rc}" -ne 0 ]; then
+    decided no "${what} on ${branch}: no version's proof queued or running"
+    return 0
+  fi
+  ahead="a version's proof is ahead (run ${proof}, ${proof_status}: $(run_url "${proof}"))"
+  if [ -z "${hand}" ]; then
+    step_aside "${ahead}" "the proof's last job (re-ask) asks again once it has ended" || return 0
+  elif [ -n "${dispatch_too}" ]; then
+    step_aside "${ahead}" "dispatch it again once run ${proof} has ended" || return 0
+  fi
+  say "::warning::${ahead} — this hand-run takes the runner all the same: a hand-run of this workflow never steps aside"
+  decided no "a hand-run on ${branch}: it does not yield to run ${proof}"
+}
+
+if [ -z "${watch}" ]; then
+  expire
+  ask
   exit 0
 fi
-ahead="a version's proof is ahead (run ${proof}, ${proof_status}: $(run_url "${proof}"))"
-if [ -z "${hand}" ]; then
-  step_aside "${ahead}" "the proof's last job (re-ask) asks again once it has ended"
-elif [ -n "${dispatch_too}" ]; then
-  step_aside "${ahead}" "dispatch it again once run ${proof} has ended"
+
+# WATCHING, in the background of a step's work (the header): asked until a proof is ahead, or the step kills it
+if [ -n "${hand}" ] && [ -z "${dispatch_too}" ]; then
+  decided no "a hand-run on ${branch}: it never steps aside, so nothing is watched"
+  exit 0
 fi
-echo "::warning::${ahead} — this hand-run takes the runner all the same: a hand-run of this workflow never steps aside"
-decided no "a hand-run on ${branch}: it does not yield to run ${proof}"
-exit 0
+echo "step-aside: asked again every ${every} s while this step works — a version's proof pushed meanwhile still goes first"
+err="$(mktemp "${RUNNER_TEMP:-${TMPDIR:-/tmp}}/step-aside.XXXXXX" 2>/dev/null)" || err=/dev/null
+trap '[ "${err}" = /dev/null ] || rm -f "${err}"' EXIT
+watching=1
+before=""
+while :; do
+  said=""
+  ask 2>"${err}"   # curl's own words on a failed question (the warning's «above») join the ask's lines
+  if [ "${err}" != /dev/null ] && [ -s "${err}" ]; then said="$(cat "${err}")"$'\n'"${said}"; fi
+  # «the same as before» leaves the digits out: curl's timeout says its milliseconds, and an outage is one outage
+  if [ "${said//[0-9]/}" != "${before}" ]; then printf '%s' "${said}"; before="${said//[0-9]/}"; fi
+  # the pause holds none of the step's descriptors: killed when its step ends, the watcher must leave nothing behind
+  # that keeps the step's output open — measured, a bare `sleep 30` held a 2-second step's pipe 31 seconds
+  sleep "${every}" </dev/null >/dev/null 2>&1
+done

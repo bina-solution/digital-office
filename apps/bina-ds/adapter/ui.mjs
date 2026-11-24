@@ -83,13 +83,16 @@ const appsCache = new Map();                                         // office �
 function claudeAppsIn(office) {
   const hit = appsCache.get(office);
   if (hit && Date.now() - hit.at < 30000) return hit.apps;
-  const apps = [{ id: CLAUDE_OF, key: "", title: null, api: CLAUDE_API, container: CLAUDE_CONTAINER }];
-  let names = [];
-  try { names = readdirSync(path.join(office, "instances")); }
-  catch (e) { if (!(e && e.code === "ENOENT")) return hit ? hit.apps : apps; }
   let on = null;
   try { const r = JSON.parse(readFileSync(path.join(office, ".generated", "resolved.json"), "utf8")); if (Array.isArray(r.order)) on = new Set(r.order); }
   catch { /* not compiled here: every declared one */ }
+  // `declared`: whether the office runs this app at all (the compiler's resolved order), apart from whether it
+  // ANSWERS — an app that is down, restarting or slow is not «not installed», and is never offered an install
+  // (second reader, DGO-2126). null: this office's order could not be read, so it is not known.
+  const apps = [{ id: CLAUDE_OF, key: "", title: null, api: CLAUDE_API, container: CLAUDE_CONTAINER, declared: on ? on.has(CLAUDE_OF) : null }];
+  let names = [];
+  try { names = readdirSync(path.join(office, "instances")); }
+  catch (e) { if (!(e && e.code === "ENOENT")) return hit ? hit.apps : apps; }
   let failed = false;
   for (const name of names.sort()) {
     if (!ID.test(name) || !name.startsWith(`${CLAUDE_OF}-`) || (on && !on.has(name))) continue;
@@ -98,7 +101,7 @@ function claudeAppsIn(office) {
     catch (e) { if (!(e && e.code === "ENOENT")) failed = true; continue; }
     if (!m || m.instance_of !== CLAUDE_OF || m.id !== name) continue;
     apps.push({ id: name, key: String(m.instance_key || ""), title: m.title && typeof m.title === "object" ? m.title : null,
-                api: `http://${name}:3091`, container: `${name}-${process.env.DEPLOYMENT_NAME || "bina-deployment"}` });
+                api: `http://${name}:3091`, container: `${name}-${process.env.DEPLOYMENT_NAME || "bina-deployment"}`, declared: on ? true : null });
   }
   if (failed && hit) return hit.apps;
   appsCache.set(office, { at: Date.now(), apps });
@@ -140,6 +143,8 @@ const CLAUDE_SAYS = {
   "no-session": "השיחה הזאת לא נמצאה באפליקציית Claude.",
   "not-confirmed": "ההודעה נמסרה ל-Claude אבל עוד לא מופיעה בשיחה. בדקו ברשימה לפני ששולחים שוב.",
   "unknown": "לא ידוע אם ההודעה נשלחה. בדקו ברשימה לפני ששולחים שוב.",
+  // the text went into the app's composer, and something stopped it before Return (a turn began, another page came up)
+  "left-in-composer": "ההודעה נכנסה לתיבת הכתיבה באפליקציית Claude אבל לא נשלחה — היא מחכה שם. אפשר לשלוח אותה משם.",
   "too-large": "ההודעה ארוכה מדי לאפליקציית Claude.",
   "no-text": "ההודעה ריקה.",
   "not-started": "השיחה עוד נפתחת באפליקציית Claude — אפשר לעצור אותה כשהיא מתחילה.",
@@ -240,7 +245,8 @@ async function claudeStatus(app) {
 }
 // What the screen is told about each Claude app: its id (the console's tile is `#/m/<id>`), its key and title, its state.
 const claudeFacts = async (apps) => (await Promise.all(apps.map((app) => claudeStatus(app))))
-  .map((s, i) => ({ id: apps[i].id, key: apps[i].key || "", title: apps[i].title, ...s }));
+  .map((s, i) => ({ id: apps[i].id, key: apps[i].key || "", title: apps[i].title,
+                    declared: typeof apps[i].declared === "boolean" ? apps[i].declared : null, ...s }));
 
 // ── where Azaria may run (DGO-2036): the cloud providers, where each one's key comes from, and the
 // office's computers that serve a local model ──────────────────────────────────────────────────────
@@ -346,6 +352,14 @@ export function createUi({ listSessions, snapshotEvents, prompt, rpc, refreshLis
     const run = (lanes.get(app.id) || Promise.resolve()).catch(() => {}).then(call);
     lanes.set(app.id, run.catch(() => {}));
     run.then((r) => {
+      // held in the app's line (its cap of running turns, bina-claude DGO-2126): still on its way — the list keeps
+      // it, and each read asks the app whether its line has sent it yet, or gave it up and why, by the id the line
+      // gave it (`qid`); a promise's read asks the promise (starting, started as …, or why not)
+      if (r && r.queued && sending.has(id)) {
+        Object.assign(sending.get(id), { queued: Date.now(), qid: typeof r.qid === "string" ? r.qid : null, place: Number(r.queue) || 1 });
+        refreshList(true);
+        return;
+      }
       sending.delete(id);
       if (r && typeof r.id === "string" && r.id !== id && ID.test(r.id)) resolve(id, r.id, app.id);
       refreshList(true);
@@ -384,6 +398,15 @@ export function createUi({ listSessions, snapshotEvents, prompt, rpc, refreshLis
     prune();
     const apps = appsNow();
     const [a, ...cs] = await Promise.allSettled([listSessions(false), ...apps.map((app) => claude(app, "GET", "/v1/sessions", null, 4000))]);
+    // a promise whose first message waited in the app's line, and that the line has started: the app's row names the
+    // promise it came from, so it is listed under its own id from now on (bina-claude, DGO-2126)
+    apps.forEach((app, i) => {
+      if (cs[i].status !== "fulfilled") return;
+      for (const s of cs[i].value?.sessions || []) {
+        const q = typeof s.from === "string" ? sending.get(s.from) : null;
+        if (q && q.queued && !resolvedTo.has(s.from) && ID.test(String(s.id))) { resolve(s.from, s.id, app.id); sending.delete(s.from); }
+      }
+    });
     const rows = [];
     // a conversation that started from a promise of this door says which (`from`): the screen moves the promise's pin,
     // draft and place to it, even when it was not the open conversation
@@ -469,35 +492,67 @@ export function createUi({ listSessions, snapshotEvents, prompt, rpc, refreshLis
   async function messages(id, limit, hint) {
     if (engineOf(id) === "claude") {
       // what is happening to a message handed over in the background, said with the conversation
-      const s = sending.get(id);
-      let f = failedSend.get(id), real = realOf(id), starting = false;
-      // A promise this door does not know (the door restarted, a deploy): the app keeps its promises and says what
-      // became of one — started (under its id), being started, refused (why), or never asked to start.
-      if (id.startsWith("pending-") && !s && !f && !real) {
+      let s = sending.get(id);
+      let f = failedSend.get(id), real = realOf(id), starting = false, place = 0;
+      const known = !!s;                                 // this door's own record of a message it handed over
+      // A message the app's line holds: the app's summary says whether it still waits (`line`, the waiting ids), or
+      // the line gave it up and why (`line_failed`, by id: never another sender's); otherwise the line sent it. A
+      // conversation the app no longer has: not sent. Not answering: still on its way.
+      if (s && s.queued && !id.startsWith("pending-")) {
+        let gone = false;
+        const said = await viaApp(id, hint, (app) => claude(app, "GET", `/v1/sessions/${encodeURIComponent(id)}`))
+          .catch((e) => { if (e instanceof UiError && e.status === 404) gone = true; return null; });
+        const waits = said && typeof said === "object" &&
+          (s.qid && Array.isArray(said.line) ? said.line.includes(s.qid) : Number(said.queue) > 0);
+        s.gone = gone ? (s.gone || 0) + 1 : 0;          // a 404 twice running: one alone may be a record mid-write
+        if (s.gone >= 2 || (said && typeof said === "object" && !waits)) {
+          const lf = said && s.qid && Array.isArray(said.line_failed) ? said.line_failed.find((x) => x && x.qid === s.qid) : null;
+          sending.delete(id);
+          if (s.gone >= 2) { f = failure({ code: "no-session" }, s.text); failedSend.set(id, f); }
+          else if (lf && typeof lf.code === "string") { f = failure({ code: lf.code }, s.text); failedSend.set(id, f); }
+          s = undefined;
+        } else if (waits) {                             // its place in the whole line, now
+          const i = s.qid && Array.isArray(said.line) ? said.line.indexOf(s.qid) : -1;
+          const at = i >= 0 && Array.isArray(said.line_places) ? Number(said.line_places[i]) : Number(said.line_place);
+          if (at > 0) s.place = at;
+        }
+        if (s) place = s.place || 0;
+      }
+      // A promise this door does not know (the door restarted, a deploy) — or one whose first message waits in the
+      // app's line — is asked of the app: started (under its id), being started, refused (why), or never asked.
+      if (id.startsWith("pending-") && !f && !real && (!s || s.queued)) {
         let via = null, gone = false;
         const said = await viaApp(id, hint, (app) => { via = app; return claude(app, "GET", `/v1/sessions/${encodeURIComponent(id)}`); })
           .catch((e) => { if (e instanceof UiError && e.status === 404) gone = true; return null; });
+        if (said || gone) unreached.delete(id);          // it answered: only an unbroken five minutes of silence counts
         const waited = Date.now() - (unreached.get(id) || Date.now());
+        const words = (s && s.text) || "";               // known when this door handed it over
         if (said && typeof said.id === "string" && said.id !== id && ID.test(said.id)) { resolve(id, said.id, (via || appOf(id, hint)).id); real = said.id; }
         // no app keeps this promise any more (it restarted, or a day went by): its start may have sent before it forgot
         else if (gone) {
-          f = { at: Date.now(), text: "", code: "no-session", maybe: true,
+          f = { at: Date.now(), text: words, code: "no-session", maybe: true,
                 error: "אפליקציית Claude כבר לא מכירה את השיחה הזאת — ייתכן שההודעה נשלחה לפני כן. בדקו ברשימה." };
           failedSend.set(id, f);
         }
         // the app cannot be asked right now (a deploy): still on its way, asked again next read — for five minutes
-        else if ((!said && waited < 300000) || (said && said.starting)) { starting = true; if (!said && !unreached.has(id)) unreached.set(id, Date.now()); }
-        else if (!said) { f = { at: Date.now(), text: "", code: "unknown", maybe: true, error: CLAUDE_SAYS.unknown }; failedSend.set(id, f); unreached.delete(id); }
+        else if ((!said && waited < 300000) || (said && said.starting)) {
+          starting = true;
+          if (said && said.queued) place = Number(said.queue) || 0;   // waiting in the app's line: its place
+          if (!said && !unreached.has(id)) unreached.set(id, Date.now());
+        }
+        else if (!said) { f = { at: Date.now(), text: words, code: "unknown", maybe: true, error: CLAUDE_SAYS.unknown }; failedSend.set(id, f); unreached.delete(id); }
         else {
           // what the app says is kept (the list then carries the row, and every later read says the same)
           const code = typeof said.failed === "string" ? said.failed : (said.blank ? "never-started" : "unknown");
-          f = { at: Date.now(), text: "", code,
+          f = { at: Date.now(), text: words, code,
                 error: code === "never-started" ? `ההודעה לא הגיעה לאפליקציית Claude. ${SENT_NOTHING}` : (CLAUDE_SAYS[code] || CLAUDE_SAYS.unknown),
                 ...(code === "never-started" || UNSENT.has(code) ? {} : { maybe: true }) };
           failedSend.set(id, f);
         }
+        if (s && (real || f)) { sending.delete(id); s = undefined; }   // the line started it, or it will not go
       }
-      const told = { ...(s || starting ? { sending: true } : {}),
+      // `queued`: its place in the Claude app's line, while it waits there (the screen says «בתור» instead of «מעבירים»)
+      const told = { ...(s || starting ? { sending: true } : {}), ...((s || starting) && place > 0 ? { queued: place } : {}),
                      ...(f ? { failed: { error: f.error, text: f.text, at: f.at, ...(f.code ? { code: f.code } : {}), ...(f.maybe ? { maybe: true } : {}) } } : {}),
                      ...(real ? { resolved: real } : {}) };
       // a conversation not started yet has nothing to read in the app: what is happening to it is the answer
@@ -512,7 +567,8 @@ export function createUi({ listSessions, snapshotEvents, prompt, rpc, refreshLis
             return { id, engine: "claude", app: app.id, events, more: false, capped: events.length >= 2990 };
           }
           const m = await claude(app, "GET", `/v1/sessions/${encodeURIComponent(read)}/messages?limit=${limit}`);
-          return { id, engine: "claude", app: app.id, events: m?.events || [], more: !!m?.has_more };
+          return { id, engine: "claude", app: app.id, events: m?.events || [], more: !!m?.has_more,
+                   ...(Array.isArray(m?.line) && m.line.length ? { line: m.line, places: m.line_places } : {}) };
         });
       } catch (e) {
         // the app could not be read, but what happened to the message handed over is known: that is the answer
@@ -520,7 +576,15 @@ export function createUi({ listSessions, snapshotEvents, prompt, rpc, refreshLis
         if (s || f || real) return { id, engine: "claude", ...told };
         throw e;
       }
-      return { ...r, ...told };
+      // A message of this conversation waits in the app's line though this door holds no record of it (it restarted,
+      // or another door or the CLI sent it): still «on its way», and its place — the app says so with every read.
+      // (When this door's own message has just gone, another sender's waiting one is not said as this one's.)
+      const { line, places, ...read_ } = r;
+      if (!known && !told.sending && !f && Array.isArray(line) && line.length) {
+        const at = Array.isArray(places) ? Number(places[0]) : 0;
+        Object.assign(told, { sending: true, ...(at > 0 ? { queued: at } : {}) });
+      }
+      return { ...read_, ...told };
     }
     const events = await snapshotEvents(id, limit);
     return { id, engine: "azaria", events, more: limit < ALL && events.length >= limit };

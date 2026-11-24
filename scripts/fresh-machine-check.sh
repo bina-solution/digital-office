@@ -46,7 +46,8 @@ git clone --quiet --no-hardlinks "${REPO_ROOT}" "${CLONE}" 2>/dev/null \
   || { bad "git clone failed"; exit 1; }
 cd "${CLONE}"
 # Only LOCAL/BUILD state is wrong here. `data/` legitimately ships .gitkeep files for compose bind
-# sources (browser42) — the same reason apps/apitools/{storage,logs} ship theirs.
+# sources (browser42) — the same reason apps/apitools/{storage,logs} shipped theirs until DGO-2019 (since then
+# the store is data/apitools/, which the data move makes before `up`).
 for junk in .env .generated ci-artifacts; do
   [ -e "${junk}" ] && { bad "a fresh clone should not contain ${junk} — it is committed by mistake"; rm -rf "${junk}"; }
 done

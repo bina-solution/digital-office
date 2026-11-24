@@ -3,21 +3,24 @@
 <head>
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1"/>
-<title>מסמכים שלי · ניהול מסמכים עסקיים</title>
+<title>מסמכים · הצעות מחיר, חשבוניות וקבלות</title>
 <link rel="stylesheet" href="style.css"/>
 <link rel="stylesheet" href="vendor/bina-table.css"/>
+<link rel="stylesheet" href="fill-editor.css"/>
 </head>
 <body>
 <div id="app">
   <aside class="side">
-    <div class="brand"><span class="logo"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M16 13H8"/><path d="M16 17H8"/><path d="M10 9H8"/></svg></span><b>מסמכים שלי</b></div>
+    <div class="brand"><span class="logo"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M16 13H8"/><path d="M16 17H8"/><path d="M10 9H8"/></svg></span><b>מסמכים</b></div>
     <nav>
-      <a data-view="dash" class="active"><span class="nav-dot"></span>לוח בקרה</a>
-      <a data-view="docs"><span class="nav-dot"></span>מסמכים</a>
-      <a data-view="archive" title="כל המסמכים — שהעסק הנפיק, שנכנסו, והקבצים ב«קבצים» — בחיפוש אחד"><span class="nav-dot"></span>ארכיון</a>
-      <a data-view="customers"><span class="nav-dot"></span>לקוחות</a>
-      <a data-view="items"><span class="nav-dot"></span>פריטים</a>
-      <a data-view="settings"><span class="nav-dot"></span>הגדרות עסק</a>
+      <!-- each a real link to its view's address: the keyboard reaches it, and a middle-click opens a tab -->
+      <a data-view="dash" href="dash" class="active"><span class="nav-dot"></span>לוח בקרה</a>
+      <a data-view="docs" href="docs"><span class="nav-dot"></span>מסמכים</a>
+      <a data-view="signatures" href="signatures" title="כל קישורי החתימה והצפייה, וחתימה על קובץ"><span class="nav-dot"></span>חתימות</a>
+      <a data-view="archive" href="archive" title="כל המסמכים — שהעסק הנפיק, שנכנסו, והקבצים ב«קבצים» — בחיפוש אחד"><span class="nav-dot"></span>ארכיון</a>
+      <a data-view="customers" href="customers"><span class="nav-dot"></span>לקוחות</a>
+      <a data-view="items" href="items"><span class="nav-dot"></span>פריטים</a>
+      <a data-view="settings" href="settings"><span class="nav-dot"></span>הגדרות עסק</a>
     </nav>
     <button id="newBtn" class="primary block"><svg class="ic-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14"/><path d="M12 5v14"/></svg> מסמך חדש</button>
     <div class="user" id="userBox">…</div>
@@ -36,8 +39,11 @@
     </section>
 
     <section id="view-docs" class="view hidden">
-      <div class="filters" id="filters"></div>
-      <div id="docsTable" class="tablewrap"></div>
+      <div id="docsTable"></div>
+    </section>
+
+    <section id="view-signatures" class="view hidden">
+      <div id="sigTable"></div>
     </section>
 
     <section id="view-archive" class="view hidden">
@@ -55,7 +61,7 @@
     </section>
 
     <section id="view-items" class="view hidden">
-      <div class="listhead"><input id="itemSearch" placeholder="חיפוש פריט…"/><button class="primary" id="addItem"><svg class="ic-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14"/><path d="M12 5v14"/></svg>פריט</button></div>
+      <div class="listhead"><button class="primary" id="addItem"><svg class="ic-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14"/><path d="M12 5v14"/></svg>פריט</button></div>
       <div id="itemTable" class="tablewrap"></div>
     </section>
 
@@ -68,7 +74,7 @@
 <!-- Onboarding -->
 <div id="onboard" class="onboard hidden">
   <div class="onboard-card">
-    <div class="brand big"><span class="logo"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M16 13H8"/><path d="M16 17H8"/><path d="M10 9H8"/></svg></span><b>מסמכים שלי</b></div>
+    <div class="brand big"><span class="logo"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M16 13H8"/><path d="M16 17H8"/><path d="M10 9H8"/></svg></span><b>מסמכים</b></div>
     <h2>ברוכים הבאים — הגדרת העסק</h2>
     <p class="sub">כמה פרטים כדי להתחיל להפיק מסמכים חוקיים. אפשר לערוך בכל עת ב״הגדרות עסק״.</p>
     <form id="onboardForm"></form>
@@ -82,6 +88,7 @@
   <div class="editor-h">
     <h2 id="editorTitle">מסמך חדש</h2>
     <div class="editor-h-acts">
+      <button class="ghost sm hidden" id="editLinkBtn" title="הקישור שפותח את הטיוטה הזאת בעורך, בלשכה">קישור לעריכה</button>
       <button class="ghost sm hidden" id="backToTypes" title="חזרה לבחירת סוג המסמך">כל סוגי המסמכים</button>
       <button class="ghost" id="closeEditor" title="סגירה בלי לשמור"><svg class="ic-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></button>
     </div>
@@ -89,7 +96,13 @@
   <!-- step 1: which document — every type this business issues, from the catalogue (DGO-2029) -->
   <div class="editor-b gallery" id="typeGallery"></div>
   <!-- step 2: the form beside the document itself, drawn as it is typed -->
-  <div class="stage hidden" id="stage">
+  <div class="stage hidden" id="stage" data-show="form">
+  <!-- a narrow screen: the form OR the document, one at a time (DGO-2169; hidden on a wide desk, where both stand) -->
+  <!-- two toggle buttons (aria-pressed), not tabs: on a wide desk both panes stand and the switch is hidden -->
+  <div class="ed-seg" role="group" aria-label="הטופס או המסמך">
+    <button type="button" data-t="form" aria-pressed="true">טופס</button>
+    <button type="button" data-t="doc" aria-pressed="false">המסמך</button>
+  </div>
   <div class="editor-b" id="docForm">
     <input type="hidden" id="fType"/>
     <div class="row">
@@ -173,23 +186,36 @@
   <div class="editor-f hidden" id="editorFoot">
     <button class="primary" id="issueNow">הפק מסמך<svg class="ic-svg ic-end" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 18-6-6 6-6"/></svg></button>
     <button class="ghost" id="saveDraft">שמור טיוטה</button>
+    <span class="muted saved-at" id="savedAt" aria-live="polite"></span>
+    <span class="ed-total" id="edTotal" aria-live="polite"></span>
   </div>
 </div>
 
 <!-- Document detail drawer -->
-<div id="drawer" class="drawer hidden" dir="rtl">
+<!-- Document detail drawer: where it stands and its next step first, every other act one row below, the document
+     itself, and what happened to it (DGO-2169) -->
+<div id="drawer" class="drawer hidden" dir="rtl" role="dialog" aria-labelledby="dCust">
   <div class="drawer-h">
     <div><span id="dNum" class="dnum"></span><span id="dStatus" class="chip"></span><span id="dSign" class="chip"></span><span id="dConv" class="conv-from"></span></div>
-    <button class="ghost" id="closeDrawer"><svg class="ic-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></button>
+    <button class="ghost" id="closeDrawer" aria-label="סגירת המסמך"><svg class="ic-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></button>
   </div>
-  <div class="drawer-actions" id="dActions"></div>
+  <div class="drawer-top">
+    <div class="dp-head" id="dHead"></div>
+    <div id="dNext"></div>
+    <details class="dp-more" id="dMore"><summary>עוד פעולות</summary><div class="drawer-actions" id="dActions"></div></details>
+  </div>
   <div class="drawer-b">
     <div class="preview-b" id="dPdfBox"><iframe id="dPdf" title="המסמך" sandbox="allow-same-origin"></iframe></div>
-    <div class="events"><h3>יומן פעולות</h3><ul id="dEvents"></ul></div>
+    <div class="events"><div class="links" id="dLinks"></div><h3>מה קרה עם המסמך</h3><div id="dEvents"></div></div>
   </div>
 </div>
 
 <script src="vendor/bina-table.js"></script>
+<script src="fill-editor.js"></script>
+<script src="doc-list.js"></script>
+<script src="sig-list.js"></script>
+<script src="doc-panel.js"></script>
+<script src="send-sheet.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

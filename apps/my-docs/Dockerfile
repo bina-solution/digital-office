@@ -1,7 +1,7 @@
 FROM python:3.12-slim
 WORKDIR /app
 RUN pip install --no-cache-dir flask==3.0.* requests==2.31.* gunicorn==23.0.* sentry-sdk
-COPY app.py .
+COPY app.py fill_bff.py errors_he.py ./
 COPY static ./static
 EXPOSE 8000
 # thin BFF: ONE worker + threads. A single process is required so the in-memory idempotency

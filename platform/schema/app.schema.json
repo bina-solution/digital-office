@@ -467,7 +467,15 @@
             "properties": {
               "group": {
                 "type": "string",
+                "description": "The home's group this app's tile stands in (DGO-2122): the console draws the seven in this order and colour. The four old words (ראשי, עסק, תשתית, הגדרות) are still accepted — an app written before, or one from a branch that has not taken this — and the console reads each as its nearest new group.",
                 "enum": [
+                  "בינה מלאכותית",
+                  "ניהול העסק",
+                  "עבודה וקבצים",
+                  "תקשורת",
+                  "העסק ברשת",
+                  "ניהול הלשכה",
+                  "פיתוח ואוטומציות",
                   "ראשי",
                   "עסק",
                   "תשתית",
@@ -769,6 +777,10 @@
             }
           }
         },
+        "note": {
+          "type": "string",
+          "description": "What the app's stores hold, in words — for the person who reads the manifest (DGO-2019)."
+        },
         "on_uninstall": {
           "type": "string",
           "enum": [
@@ -805,6 +817,17 @@
             "pattern": "^[a-z0-9_.-]+$"
           },
           "description": "Volumes this app's compose mounts that ANOTHER app owns (that app's `volumes`): backed up, restored and purged with their owner only — never carried by an export scoped to this app, written by an import scoped to it, or removed by its `uninstall --purge` (DGO-1510). G26: each is a named volume of this app's compose, owned by exactly one other app; and every volume is in one app's `volumes` only."
+        },
+        "moved_from": {
+          "type": "object",
+          "description": "Where a store's bytes were before the app kept them in the DGO folder (DGO-2019): {\"data/<app>/<store>\": \"<volume>\"}, the volume unprefixed — or, for a volume compose never made (a hand-made container's), its whole name as `external:<name>` — or, for a folder of the DGO folder the store was (a source-tree `./storage`), `path:<folder>`, relative to the DGO folder. `bbox run` moves that volume (or folder) into the folder once — copied, compared file by file, the old one itself left as it was — and runs the store from where it was while this office cannot move it yet (platform/manager/datahome.py). Each key is a path of `paths` that the compose binds; each value a volume the compose no longer declares, or a folder it no longer binds (data-home-lint H4).",
+          "propertyNames": {
+            "pattern": "^data/[a-z0-9][a-z0-9-]*(/[A-Za-z0-9_.-]+)*$"
+          },
+          "additionalProperties": {
+            "type": "string",
+            "pattern": "^((external:)?[a-z0-9][a-z0-9_.-]*|path:[A-Za-z0-9_.][A-Za-z0-9_.-]*(/[A-Za-z0-9_.][A-Za-z0-9_.-]*)*)$"
+          }
         }
       }
     },
@@ -1074,6 +1097,12 @@
         "pattern": "^/[A-Za-z0-9._~/-]+$"
       },
       "description": "Origin-root paths this app serves itself (the console: its own /api/* and /healthz). A layer-3 app that root-mounts a passthrough (module.passthrough[].mount=root) is compiled with these excluded, so it can take over /api/<x> without ever shadowing the shell's own routes."
+    },
+    "recreate": {
+      "type": "string",
+      "enum": ["any-time", "when-idle"],
+      "default": "any-time",
+      "description": "When the office may recreate or restart this app's RUNNING containers (DGO-2129). when-idle: it hosts work a recreate would kill (Claude Desktop's agent sessions). An up/create/restart then brings the rest of the office up first, and this app's services (and the services that need them) after it, only once its own hooks/busy says it is idle (exit 1; exit 0 and a line while busy; a hook that cannot answer is taken as busy). A busy app is held, said and noted in data/.held/, and follow brings it up at a quiet cycle. The go is BBOX_RECREATE_BUSY=1 only; a command that names a held service exits 75. Around a recreate, the app's hooks/before-recreate (a failure leaves it as it runs) and hooks/after-recreate (told the services that changed, in DGO_RECREATE_SERVICES) run, when it has them. An instance inherits it (lib.sh compose_when_idle_split)."
     },
     "multi_instance": {
       "type": "boolean",

@@ -17,14 +17,14 @@
 # container actually listens on — otherwise the container is healthy only by accident, or unhealthy
 # forever and restarted by autoheal.
 #
-# ITS STATE IS A NAMED VOLUME, forward_auth_data at /etc/forward-auth (DGO-1090): the users file — the
-# one fact this service holds, written once by first-run setup or, during a migration, from authentik's
-# own database — and, before the owner exists, the first-run code's hash (hooks/prepare writes it with
-# `forward-auth -first-run`; a scratch image has no shell). A volume, not a host directory, so the
-# office's backup carries it (app.json data.volumes; the archiver reads volume names) and nothing in the
-# checkout or on the host has to be made, owned or kept by hand. The image's /etc/forward-auth is 700
-# and owned by 65534 (the uid it runs as: `scratch` has no /etc/passwd, and a service whose whole job is
-# deciding who may enter does not run as root); a new volume starts as a copy of it.
+# ITS STATE IS THE DGO FOLDER'S data/forward-auth/state, at /etc/forward-auth (DGO-2019): the users file —
+# the one fact this service holds, written once by first-run setup or, during a migration, from
+# authentik's own database — and, before the owner exists, the first-run code's hash (hooks/prepare
+# writes it with `forward-auth -first-run`; a scratch image has no shell). It was the named volume
+# forward_auth_data (DGO-1090); `bbox run` moves it once (app.json data.moved_from) and the backup is a
+# copy of data/. The image's /etc/forward-auth is 700 and owned by 65534 (the uid it runs as: `scratch`
+# has no /etc/passwd, and a service whose whole job is deciding who may enter does not run as root); a
+# new folder starts as a copy of it, and hooks/prepare gives the service back any file it cannot open.
 services:
   forward-auth:
     # The image CI publishes for this commit (DGO-41). `pull_policy: missing` means it is fetched
@@ -62,9 +62,9 @@ services:
       - FORWARD_AUTH_LEGACY_SESSIONS=${FORWARD_AUTH_LEGACY_SESSIONS:-}
       - TZ=${TZ:-Asia/Jerusalem}
     volumes:
-      # The service's state (see the header): never the checkout, never /tmp — measured 2026-10-10, a
-      # wiped /tmp took the users file and the service crash-looped.
-      - forward_auth_data:/etc/forward-auth
+      # The service's state (see the header): the DGO folder's git-ignored data/, never the tracked tree,
+      # never /tmp — measured 2026-10-10, a wiped /tmp took the users file and the service crash-looped.
+      - ../../data/forward-auth/state:/etc/forward-auth
     networks:
       - traefik-network
     healthcheck:
@@ -84,9 +84,6 @@ services:
       resources:
         limits:
           memory: 64M
-
-volumes:
-  forward_auth_data:
 
 networks:
   traefik-network:

@@ -521,7 +521,9 @@ const stamp = (now) => fetch("/api/version", { cache: "no-store", redirect: "man
 // A changed verdict redraws every mark and reloads nothing: one catalog pull that timed out must not
 // take a working app out from under a person's hands. The one exception loses nothing — the shell's
 // own "office unreachable" card is what is showing, and the office is back.
-const tileKey = (m) => JSON.stringify(m, (k, v) => (k === "ok" || k === "why" ? undefined : v));
+// …and whether its office is one of this business's own machines (`remote.herd`, DGO-2122): an office that joins or
+// leaves the herd moves where its copies are shown, not the app that is open.
+const tileKey = (m) => JSON.stringify(m, (k, v) => (k === "ok" || k === "why" || k === "herd" ? undefined : v));
 function isOff(m) { return !!(remoteInfo(m) || {}).off; }
 async function freshen(navigating, returned) {
   const now = await stamp(navigating || returned);
@@ -536,7 +538,10 @@ async function freshen(navigating, returned) {
     const is = inView();
     const card = !$("#content").classList.contains("hidden") && $("#content .xn");
     if (wasKey !== tileKey(is) || (card && isOff(was) && !isOff(is))) return route();
-    if (is) setViewTitle(is);
+    // The home and an office's page are drawn FROM the registry: a new verdict, an app installed or linked, redraws
+    // them (DGO-2122, the second reader); the desk's home redraws itself (desktop.js refresh, from refreshModules).
+    if (document.documentElement.classList.contains("at-home")) return route();
+    if (is) { setViewTitle(is); setActive(is.id); }
   }
   if (navigating) return;
   if (window.BinaDesktop && BinaDesktop.isOn()) return BinaDesktop.askOwnHosts();
@@ -557,6 +562,11 @@ setInterval(() => { if (!document.hidden) freshen(false); }, 5 * 60 * 1000);
 // (a refused embed, a dead host). A same-origin frame that never left about:blank is the one that
 // can be detected; a cross-origin one throws and is by definition loaded.
 function externalFallback(m, url) {
+  // …and only while the address still names that app: a person who went to the home or to another screen during
+  // the 2.5 s would get this app's card over where they went (the second reader, DGO-2122) — openOwnHost asks the same.
+  // (A link may name the app by its alias or by another office's id: module-ref.js reads it, as route() did.)
+  const cur = parseModuleHash();
+  if (!cur || (BinaModuleRef.resolve(MODULES, cur[1]) || {}).id !== m.id) return;
   const f = $("#frame");
   let doc = null;
   try { doc = f && f.contentDocument; } catch (e) { return; }   // cross-origin: it loaded
@@ -575,7 +585,6 @@ function askAnyway(id) {
 // "address", or nothing — the frame was tried and did not come up.
 function renderExternalNotice(m, url, need) {
   $("#embedwrap").classList.add("hidden"); $("#content").classList.remove("hidden");
-  applyRail();                      // a card is the console's own view: the rail as the console's (DGO-160)
   setActive(m.id); setViewTitle(m);
   $("#content").innerHTML = externalNotice(m, url, need);
 }
@@ -640,7 +649,59 @@ function externalNotice(m, url, need, why) {
       ${action}
     </div></div>`;
 }
-const GROUPS = ["ראשי", "עסק", "תשתית", "הגדרות"];
+// ── THE HOME'S ORDER (DGO-2122) ──────────────────────────────────────────────────────────────────
+// The owner, 2026-11-20: «כל האפליקציות לניהול העסק הכל מאורגן נקי וגנרי מוכן לשוק הישראלי». An app says which of
+// these words it belongs to (`module.group` in its app.json, as it says its name and icon); the console knows the
+// words, their order and their colour, and never an app (gate G9). The four words that came before — ראשי, עסק,
+// תשתית, הגדרות — are what an office that has not taken this release still says, so each is read as the nearest
+// new word, and a word nobody knows lands in the last group, never on the floor.
+const GROUPS = ["בינה מלאכותית", "ניהול העסק", "עבודה וקבצים", "תקשורת", "העסק ברשת", "ניהול הלשכה", "פיתוח ואוטומציות", "אפליקציות נוספות"];
+// The colour of a group's tiles: a family of the one palette, by NAME (style.css draws `[data-hue]` from its tokens).
+// The two groups of the office's own machinery are the palette's grey: they are there, and they stay quiet.
+const GROUP_HUE = { "בינה מלאכותית": "violet", "ניהול העסק": "olive", "עבודה וקבצים": "lime", "תקשורת": "sky", "העסק ברשת": "plum" };
+const GROUP_WAS = { "ראשי": "ניהול העסק", "עסק": "ניהול העסק", "תשתית": "ניהול הלשכה", "הגדרות": "ניהול הלשכה" };
+function groupOf(m) {
+  const g = String((m && m.group) || "");
+  return GROUPS.includes(g) ? g : (GROUP_WAS[g] || GROUPS[GROUPS.length - 1]);
+}
+
+// ── ONE TILE PER KIND OF APP (DGO-2122; the desktop's dock has drawn it so since DGO-1426) ─────────────
+// A linked machine of THIS business (`remote.herd`, app.py `_herd_ids`) gives the home its apps, and its copy of an
+// app this office also runs is the same app: the home showed «עזריה» seven times on the owner's Mac, «מחשבים» eight.
+// So the home has one tile per kind (`bina.hp-laptop` and `bina` are one kind, `bina`), and it opens this office's
+// own copy first, then one whose office answers, then the first in the registry's order. Every copy stays one tap
+// away on its office's own page (`#/o/<office>`), which is also where another business's office lives: a linked
+// office that is not this herd is an office card on the home, never its apps mixed into this business's own.
+const kindOf = (m) => String((m && (m.alias || m.id)) || "").split(".")[0];
+const ownHerd = (m) => { const r = m && m.remote; return !r || typeof r !== "object" || r.herd === true; };
+function rather(a, b) {                       // should the kind's tile open copy `a` rather than `b`?
+  const ra = remoteInfo(a), rb = remoteInfo(b);
+  if (!ra !== !rb) return !ra;               // this office's own
+  if (ra && rb && ra.off !== rb.off) return !ra.off;   // one that answers
+  return false;                              // the first, in the registry's order
+}
+function homeModel() {
+  const kinds = new Map(), offices = new Map();
+  for (const m of MODULES) {
+    const r = remoteInfo(m);
+    if (r) {
+      let o = offices.get(r.office);
+      if (!o) offices.set(r.office, o = { id: r.office, label: r.label, hue: r.hue, animal: r.animal, off: r.off, herd: ownHerd(m), mods: [] });
+      o.mods.push(m);
+    }
+    if (!ownHerd(m)) continue;
+    const k = kindOf(m), e = kinds.get(k);
+    if (!e) kinds.set(k, { tile: m, copies: [m] });
+    else { e.copies.push(m); if (rather(m, e.tile)) e.tile = m; }
+  }
+  return { kinds: [...kinds.values()], offices: [...offices.values()] };
+}
+// …the home's tiles: one per kind, the copy each one opens
+const homeTiles = () => homeModel().kinds.map((e) => e.tile);
+function inGroups(mods) {
+  return GROUPS.map((g) => ({ g, hue: GROUP_HUE[g] || "grey", mods: mods.filter((m) => groupOf(m) === g) }))
+    .filter((s) => s.mods.length);
+}
 
 // ── REMOTE apps: an app that runs on a LINKED office ───────────────────────────────────────────
 // ai/context/dgo-remote-apps.md §4. A remote app is `(office, alias)`: it runs THERE, is never
@@ -761,14 +822,6 @@ function remoteTip(m) {
 // platform-base/bina-ui/theme-tokens.css (and only there — G27/G82), and `remoteInfo` already carries
 // the office's own id, so a row or a tile says WHOSE app it is without a second registry.
 const remoteCls = (m) => { const r = remoteInfo(m); return r ? " is-remote office-" + r.office + (r.off ? " is-offline" : "") : ""; };
-// The office line under a TILE (the phone launcher, the dock's «עוד» panel): whose app this is — and,
-// when that office is not answering, that it is not, on a line of its own. A phone has no tooltip,
-// and one line cut both halves ("MacBook לא זמי…").
-function officeLine(m) {
-  const r = remoteInfo(m);
-  return !r ? "" : `<span class="htile-office${r.off ? " off" : ""}">${r.animal ? `<span class="office-animal">${mIcon(r.animal)}</span>` : ""}${esc(r.label)}${r.off ? "<br>לא זמינה כרגע" : ""}</span>`;
-}
-
 // `data-office-hue="<name>"` — the office's colour, on whatever element the surface already builds for
 // that office (flt-004). The ONE spelling of the attribute: every surface that draws into a string
 // takes it from here (the launcher tile, the palette row, the switcher card, the chip in the title
@@ -802,7 +855,6 @@ function applyBrand(rec) {
   const office = rec && rec.installed && rec.office ? rec.office : null;
   const name = office && office.name ? String(office.name).trim() : "";
   const sub = name ? `ניהול תהליכים עסקיים של ${name}` : "ניהול תהליכים עסקיים";
-  const s = $("#brandSub"); if (s) s.textContent = sub;
   document.title = `הלשכה הדיגיטלית · ${sub}`;
 }
 
@@ -825,35 +877,19 @@ async function refreshModules(reroute = true) {
     if (m.proxy && m.external && NO_NESTED_HOST) { m.external = false; m.embed = m.proxy; }
     MODULES.push(m);
   }
-  buildNav();
   buildBottomNav();
-  if (window.BinaDesktop) BinaDesktop.refresh();   // desktop mode's dock lists the same modules
+  if (window.BinaDesktop) BinaDesktop.refresh();   // the desk's dock and its home list the same modules
   if (reroute) route();
 }
 
 async function boot() {
-  // Before the first answer arrives: an address that names an app — or names nothing, which opens the first tile —
-  // will be an app, so the rail is already the one it will be and does not fold under the person's eyes once the
-  // tiles are in (DGO-160). route() below settles it by the view it actually shows.
-  const addressesApp = () => /^(#\/?)?$|^#\/m\/(?!settings(?:[/?#]|$))/.test(location.hash);   // settings is the console's own
-  applyRail(addressesApp());
+  forgetRail();
   ME = await fetch("/api/me").then(r => r.json()).catch(() => ({ name: "אורח" }));
   tbMeInit();
-  $("#userBox").innerHTML = `מחובר/ת<br><b>${esc(ME.name)}</b>`;
-  signoutUrl();   // read once, early: desktop mode's office menu draws its «התנתקות» from it (DGO-1621)
-  // the office's mark and the «מחובר/ת» line open the account menu (DGO-1621)
-  for (const t of [$("#userBox"), document.querySelector(".brand .logo")].filter(Boolean)) {
-    t.setAttribute("role", "button"); t.tabIndex = 0; t.title = "החשבון שלך: מי מחובר, והתנתקות";
-    t.setAttribute("aria-haspopup", "menu"); t.setAttribute("aria-expanded", "false");
-    t.onclick = () => meMenu(t);
-    t.onkeydown = (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); meMenu(t); } };
-  }
+  signoutUrl();   // read once, early: the desk's office menu draws its «התנתקות» from it (DGO-1621)
+  // …and the same answer names the build in the account menu (meMenu: "is this the version with the fix?").
   STAMP = await stamp(true);
-  // …and the same answer names the build in the side nav (an unknown one leaves the placeholder).
-  if (STAMP && STAMP.version) $("#buildVer").textContent = "digital-office " + STAMP.version;
   await refreshModules(false);
-  applyRail(inApp() || addressesApp());
-  const rt = $("#railToggle"); if (rt) rt.onclick = toggleRail;
   const pb = $("#paletteBtn"); if (pb) pb.onclick = shellSearch;
   focusInit();
   buildBottomNav();
@@ -865,8 +901,8 @@ async function boot() {
   // above), because a deep link into an app must not show the generic brand line either.
   applyBrand(await getOffice());
   openLoad();
-  // Desktop mode (desktop.js, opt-in from the settings view) mounts before the first route, so that
-  // route() opens a WINDOW for the addressed module instead of filling the single frame.
+  // The desk (desktop.js) — the console on a screen 1024px wide or wider (DGO-2132) — mounts before the first route,
+  // so that route() opens a WINDOW for the addressed module, or the desk's home, instead of the phone's shell.
   if (window.BinaDesktop) BinaDesktop.boot();
   // A link that names the CONSOLE and is clicked INSIDE an app's frame is the shell's to open —
   // the frame would otherwise navigate itself and the desk would not move (frame-links.js says why,
@@ -970,19 +1006,16 @@ window.addEventListener("message", e => {
 });
 
 // ── phone mode ────────────────────────────────────────────────────────────────
-// The breakpoint the stylesheet already hides the rail at. Declared once here so the sheet and
-// the router cannot disagree about which mode the shell is in.
-const PHONE = window.matchMedia("(max-width: 640px)");
+// This shell is the phone's wherever the desk is not up (desktop.js — a computer, DGO-2132): every width under 1024px,
+// and a console shown in a desk's window at any width. style.css says where its bar stands; the one question the
+// script asks is whether the desk is up (renderSwitcher).
 
-// ── the home screen (phone only) ─────────────────────────────────────────────
-// On a desktop the rail IS the launcher — that was an owner decision (2026-09-25: the old
-// "לוח בקרה" screen only restated the rail beside it) and it still holds. On a phone the rail is
-// hidden, so the same decision leaves a user with a bottom bar of four items and no way to see the
-// other twelve apps. This is that screen, and it exists ONLY where the rail does not: the desktop
-// path through route() is untouched.
-//
-// The tiles come from MODULES — the compiled registry — so a newly installed app appears here by
-// itself, and the four pinned ids in the bottom bar are the only hard-coded thing left.
+// ── the home screen ──────────────────────────────────────────────────────────
+// The office's apps, in the home's groups (GROUPS), one tile per kind, and the offices it is linked to — on a phone
+// AND on a desktop (DGO-2122, the owner: «מסך הבית מושלם גם במובייל וגם בדסקטופ»). On a desktop the bare address
+// opened the FIRST tile by order instead, which on our offices was another machine's admins-only app; the old
+// «לוח בקרה» (2026-09-25) only restated the rail beside it, and this one is the launcher itself, drawn as one.
+// The tiles come from MODULES — the compiled registry — so a newly installed app appears here by itself.
 // THE ACCOUNT, AND THE WAY OUT (DGO-1621 — the owner, 2026-11-09: «אין לי אפשרות להתנתקות … אתה לוחץ על האייקון של
 // הלשכה הדיגיטלית, ואז … ניהול חשבון … תחשוב טוב טוב איפה לשים את זה … שיהיה נקי»; he cleared the browser's site
 // data to leave). One small menu, opened from the office's mark and from the «מחובר/ת» line (on a phone, from the
@@ -1024,7 +1057,10 @@ async function meMenu(anchor) {
   const m = el("div", "me-menu");
   m.setAttribute("role", "menu");
   const back = encodeURIComponent(location.origin + "/");
-  m.innerHTML = `<div class="me-who" title="${esc(ME.email || "")}">מחובר/ת בתור<b>${esc(ME.name)}</b></div>` +
+  // The build, visible (C1 — it stood at the foot of the side rail until the rail went, DGO-2132): "is this the
+  // version with the fix?" is answered here, not by guessing, and a stale cached shell is told from a broken deploy.
+  const ver = STAMP && STAMP.version ? `<div class="me-ver num" dir="ltr">digital-office ${esc(STAMP.version)}</div>` : "";
+  m.innerHTML = `<div class="me-who" title="${esc(ME.email || "")}">מחובר/ת בתור<b>${esc(ME.name)}</b></div>` + ver +
     (url
       ? `<a class="me-out" role="menuitem" href="${esc(url + (url.includes("?") ? "&" : "?") + "rd=" + back)}"
            title="יוצא מהלשכה בכל האפליקציות; הכניסה הבאה תבקש סיסמה">${mIcon("logout")}<span>התנתקות</span></a>`
@@ -1042,126 +1078,107 @@ async function meMenu(anchor) {
   if (out) out.focus();
 }
 
+// A tile of the home: the app's glyph on a squircle in its group's colour and its name under it. Which machine of the
+// herd runs the copy it opens is not the business's concern — the herd is one business — so it is said in the tooltip
+// only (and on that machine's page). An office that is not answering dims the tile, in FORM as the rail does, and says
+// so in WORDS under the name: a phone has no tooltip.
+function homeTile(m, copies) {
+  const r = remoteInfo(m);
+  const also = (copies || []).filter((c) => c !== m).map((c) => (remoteInfo(c) || {}).label || "הלשכה הזאת");
+  const tip = remoteTip(m) + (also.length ? ` · גם ב: ${also.join(", ")}` : "");
+  const off = r && r.off;
+  return `<a class="lt${off ? " is-offline" : ""}" href="#/m/${esc(m.id)}" data-hid="${esc(m.id)}" data-hue="${GROUP_HUE[groupOf(m)] || "grey"}" title="${esc(tip)}">` +
+    `<span class="lt-ic">${mIcon(m.icon)}</span><span class="lt-nm">${esc(m.name)}</span>` +
+    (off ? `<span class="lt-off">${esc(r.label)} לא זמינה כרגע</span>` : "") + `</a>`;
+}
+const appsCount = (n) => (n === 1 ? "אפליקציה אחת" : `${n} אפליקציות`);
+// An office's id in an address. A peer's record is not this office's to vouch for: a lone surrogate in it made
+// encodeURIComponent throw, and the home — the whole shell, once — went with it (the second reader, DGO-2122).
+const hashPart = (s) => { try { return encodeURIComponent(s); } catch (e) { return encodeURIComponent(String(s).replace(/[\ud800-\udfff]/g, String.fromCharCode(0xfffd))); } };
+function officeCard(o) {
+  return `<a class="lo${o.off ? " is-off" : ""}" href="#/o/${esc(hashPart(o.id))}" data-office="${esc(o.id)}"${o.hue ? ` data-office-hue="${esc(o.hue)}"` : ""} title="${esc(o.label)}">` +
+    `<span class="lo-ic">${mIcon(o.animal || "building")}</span>` +
+    `<span class="lo-tx"><b dir="auto">${esc(o.label)}</b><small>${o.off ? "לא זמינה כרגע" : appsCount(o.mods.length)}</small></span></a>`;
+}
+function homeSection(s, copiesOf) {
+  return `<section class="lh-sec" aria-label="${esc(s.g)}"><h2 class="lh-h">${esc(s.g)}</h2>` +
+    `<div class="lh-grid">${s.mods.map((m) => homeTile(m, copiesOf ? copiesOf(m) : null)).join("")}</div></section>`;
+}
+function officesSection(title, list) {
+  return !list.length ? "" : `<section class="lh-sec lh-offs-sec" aria-label="${esc(title)}"><h2 class="lh-h">${esc(title)}</h2>` +
+    `<div class="lh-offs">${list.map(officeCard).join("")}</div></section>`;
+}
+// The office's name and mark lead the top bar on the home (DGO-1892, DGO-1846). `at-home` takes full screen off the
+// bar there — on the home nothing is open to enlarge. The mark is the one copy index.html carries (#brandMark, G27).
+function homeTitle() {
+  const mark = document.getElementById("brandMark");
+  const svg = mark && mark.content ? mark.content.querySelector("svg") : null;
+  $("#viewTitle").innerHTML = `<span class="vt-brand"><span class="logo vt-home-logo" aria-hidden="true">${svg ? svg.outerHTML : ""}</span>הלשכה הדיגיטלית</span>`;
+  document.documentElement.classList.add("at-home");
+}
+
+// THE HOME'S BODY — one drawing for both shells (DGO-2132): the phone's home (renderHome) and the desk's «בית»
+// (desktop.js openHome) draw it from the same model, so a computer and a phone cannot show two different homes.
+// `kinds` are homeModel()'s (a tile per kind and its copies), `offices` the machines and offices to show, `extra`
+// apps the console does not frame (the desk's search adds them). "" when there is nothing at all to draw.
+function homeBody(kinds, offices, extra) {
+  const copies = new Map(kinds.map((e) => [e.tile, e.copies]));
+  const main = inGroups(kinds.map((e) => e.tile).concat(extra || [])).map((s) => homeSection(s, (m) => copies.get(m))).join("");
+  const side = officesSection("מחשבי הלשכה", offices.filter((o) => o.herd)) +
+    officesSection("לשכות מקושרות", offices.filter((o) => !o.herd));
+  if (!main && !side) return "";
+  return `<div class="lh"><div class="lh-main">${main}</div>` +
+    `${side ? `<aside class="lh-side" aria-label="מחשבים ולשכות">${side}</aside>` : ""}</div>`;
+}
+// A linked office's page, drawn for both shells as well: its head, and `mods` — its apps, or the ones a search kept.
+function officePage(o, mods) {
+  const r = remoteInfo(o.mods[0]) || {};
+  return `<div class="lh lh-office"><div class="lh-main">` +
+    `<div class="lo-head${o.off ? " is-off" : ""}"${o.hue ? ` data-office-hue="${esc(o.hue)}"` : ""}>` +
+    `<span class="lo-ic">${mIcon(o.animal || "building")}</span><span class="lo-tx"><b dir="auto">${esc(o.label)}</b>` +
+    `<small>${o.off ? `לא זמינה כרגע${r.why ? " — " + esc(r.why) : ""}` : `${o.herd ? "מחשב של הלשכה" : "לשכה מקושרת"} · ${appsCount(o.mods.length)}`}</small></span></div>` +
+    inGroups(mods).map((s) => homeSection(s, null)).join("") + `</div></div>`;
+}
+
 function renderHome() {
-  setActive(null);
+  setActive("");
   setViewTitle(null);
   showContent();
-  const groups = [];
-  for (const m of MODULES) {
-    let g = groups.find((x) => x.name === (m.group || ""));
-    if (!g) { g = { name: m.group || "", mods: [] }; groups.push(g); }
-    g.mods.push(m);
-  }
-  const tile = (m) => `<a class="htile${remoteCls(m)}"${officeHue(m)} href="#/m/${esc(m.id)}" data-hid="${esc(m.id)}">
-      <span class="htile-ic">${mIcon(m.icon)}</span>
-      <span class="htile-nm">${esc(m.name)}</span>
-      ${officeLine(m)}
-    </a>`;
-  $("#content").innerHTML = `<div class="home">
-    ${groups.map((g) => `${g.name ? `<div class="home-group">${esc(g.name)}</div>` : ""}
-      <div class="home-grid">${g.mods.map(tile).join("")}</div>`).join("")}
-  </div>`;
+  const { kinds, offices } = homeModel();
   // The home screen is its tiles (the owner, 2026-11-18, msg 1270, DGO-1892): no clock and no account button inside
   // the view — the office's name is the top bar's title here, and the account is the bar's last control (#tbMe).
-  $("#viewTitle").innerHTML = `<span class="logo vt-home-logo" aria-hidden="true">${(document.querySelector(".brand .logo svg") || {}).outerHTML || ""}</span>הלשכה הדיגיטלית`;
+  $("#content").innerHTML = homeBody(kinds, offices, []);
+  homeTitle();
 }
 
-function buildNav() {
-  // The markup is the shared side menu's (platform-base/bina-ui/bina-nav.css, gate G27):
-  // .bnv-scroll > .bnv-group > (.bnv-ghead > .bnv-gtitle) + .bnv-list > .bnv-item(.is-active) with
-  // .bnv-ic + .bnv-label. EXACTLY that, because the component can only hide what it can name: the
-  // group's name used to be bare text in `.bnv-group`, so in the icon rail — every tablet, and a
-  // desktop that collapsed it — the names stayed and were cut off at 56px (measured 2026-10-06).
-  // The shell contributes the ids and the handler — never a size, a colour or a hover state.
-  // A remote app's row is the same markup plus `is-remote`; the mark itself is declared in the
-  // component (bina-nav.css), because a rail the component draws is a rail the component marks.
-  const nav = $("#nav"); nav.innerHTML = "";
-  for (const g of GROUPS) {
-    const mods = MODULES.filter(m => m.group === g);
-    if (!mods.length) continue;
-    const grp = nav.appendChild(el("div", "bnv-group")), n = el("div", "bnv-list");
-    if (g) grp.appendChild(el("div", "bnv-ghead", `<span class="bnv-gtitle">${esc(g)}</span>`));
-    for (const m of mods) {
-      const r = remoteInfo(m);
-      const a = el("a", "bnv-item" + remoteCls(m),
-        `<span class="bnv-ic">${mIcon(m.icon)}</span><span class="bnv-label">${esc(m.name)}</span>` +
-        // The office's name is the SECOND column, and it is what tells the two tiles of one alias
-        // apart in the rail ("עזריה · MacBook" beside "עזריה"). An office that is not
-        // answering says so in FORM — the tag in the failure colour, the row dimmed (bina-nav.css,
-        // `.is-offline`) — and in words in the row's tooltip: the column is 5em, the words never fit.
-        (r ? `<span class="bnv-meta" data-office="${esc(r.office)}"${r.hue ? ` data-office-hue="${esc(r.hue)}"` : ""}>${esc(r.label)}</span>` : ""));
-      a.dataset.id = m.id; a.title = remoteTip(m);   // title = tooltip when the rail is collapsed to icons
-      a.onclick = () => location.hash = "#/m/" + m.id;   // external modules frame their own host
-      n.appendChild(a);
-    }
-    grp.appendChild(n);
+// A linked office's own page (`#/o/<office>`): every app it gives this office, in the home's groups — the copies the
+// home folds into one tile, and another business's apps, which the home never mixes into this business's own.
+function renderOffice(id) {
+  setViewTitle(null);
+  showContent();
+  // `at-home` on both answers: the page is drawn from the registry, so a registry that changes redraws it (freshen) —
+  // the card below too, which becomes the office's page the moment that office is linked (the second reader).
+  document.documentElement.classList.add("at-home");
+  const o = homeModel().offices.find((x) => x.id === id);
+  if (!o) {
+    setActive(null);
+    $("#content").innerHTML = `<div class="wcard"><h3>אין לשכה מקושרת בשם הזה</h3>` +
+      `<div class="sub">הכתובת מבקשת <bdi>${esc(id)}</bdi>, והלשכה הזאת לא מקושרת אליה כרגע. ` +
+      `<a href="#/">לכל האפליקציות</a></div></div>`;
+    return;
   }
+  setActive("");                          // an office's page is one of the home's: «בית» stays lit
+  $("#content").innerHTML = officePage(o, o.mods);
+  $("#viewTitle").textContent = o.label;
 }
 
-// ── collapsible icon rail ──────────────────────────────────────────────────────
-// The rail collapses to a 62px icon strip so an embedded app gets full width (VS Code / Slack model).
-// Manual toggle, persisted; also auto-collapses at tablet width via CSS.
-// The band where the rail is the only thing that fits. A media query cannot set a CLASS, and the
-// component's rail trigger is a class (so the geometry lives in one file) — so the shell asks the
-// same question in JS. The old version hid the labels with a second copy of the rail's rules in the
-// media query, which is exactly the duplication bina-nav.css exists to remove.
-const RAIL_BAND = window.matchMedia("(max-width:1024px) and (min-width:641px)");
-// WHILE AN APP IS OPEN, THE RAIL GETS OUT OF ITS WAY (DGO-160 · ai/context/platform-navigation-design.md §3.9 — the
-// owner: «should be perfect and auto collaps when using the apps»). On a desktop the rail is the whole menu on the
-// console's own views (#content: the home, install, connections, a card) and folds to its icons the moment a view
-// is an app (#embedwrap), so the app has the width; it comes back when the view is the console's again. That is
-// the desktop's DEFAULT, and the person's pin beats it: the toggle pins the opposite of what is shown, and a pin
-// that equals the default of the view it was set on is no pin (so one more press is «automatic» again). The tablet
-// band is a rail whatever is pinned (the full menu does not fit there). Evaluated on a change of VIEW (showEmbed,
-// showContent, a card) and of band only — never on the app's own navigation inside its frame, so the rail does not
-// breathe while one moves around inside an app; folding moves the grid's column, never the frame, so nothing reloads.
-const RAIL_PIN = "nav.pin.desktop";   // "rail" | "open" | absent (the default above)
-// The pin is read from storage ONCE and held: a browser that reads but cannot write (a full quota, a private
-// window) would otherwise keep answering the old value, and the toggle would do nothing (the second reader).
-let railPinHeld;
-function railPin() {
-  if (railPinHeld !== undefined) return railPinHeld;
-  railPinHeld = null;
-  try {
-    // the toggle's old key meant «always folded» when it was "1": carried over once as that pin
-    const old = localStorage.getItem("railCollapsed");
-    railPinHeld = localStorage.getItem(RAIL_PIN) || (old === "1" ? "rail" : null);
-    if (old !== null) {
-      if (railPinHeld) localStorage.setItem(RAIL_PIN, railPinHeld);
-      localStorage.removeItem("railCollapsed");
-    }
-  } catch (e) { /* no storage: the default, held as null */ }
-  return railPinHeld;
-}
-function setRailPin(pin) {
-  railPinHeld = pin;
-  try {
-    if (pin) localStorage.setItem(RAIL_PIN, pin); else localStorage.removeItem(RAIL_PIN);
-  } catch (e) { /* held above for this page's life */ }
-}
-function inApp() {
-  const w = document.getElementById("embedwrap");
-  return !!w && !w.classList.contains("hidden");
-}
-function applyRail(app = inApp()) {
-  const pin = railPin();
-  // A phone has no rail at all (the side is hidden, the tab bar is the menu): `.rail-collapsed`'s 56px column there
-  // would squeeze the whole app into it, since that rule outweighs the phone's one column (the second reader).
-  const collapsed = !PHONE.matches && (RAIL_BAND.matches || (pin ? pin === "rail" : app));
-  // ONE class on the shell. `.rail-host` is the component's own trigger, so what a rail looks
-  // like is defined in bina-nav.css for every app — the shell only says whether it is one.
-  document.getElementById("app").classList.toggle("rail-host", collapsed);
-  document.getElementById("app").classList.toggle("rail-collapsed", collapsed);
-  const t = $("#railToggle"); if (t) t.setAttribute("aria-expanded", String(!collapsed));
-}
-if (RAIL_BAND.addEventListener) RAIL_BAND.addEventListener("change", () => applyRail());
-if (PHONE.addEventListener) PHONE.addEventListener("change", () => applyRail());
-function toggleRail() {
-  // a rail here whatever is pinned (or, on a phone, no rail): a press would only hide a pin for the desktop
-  if (RAIL_BAND.matches || PHONE.matches) return;
-  const want = document.getElementById("app").classList.contains("rail-collapsed") ? "open" : "rail";
-  setRailPin(want === (inApp() ? "rail" : "open") ? null : want);
-  applyRail();
+// NO SIDE RAIL (DGO-2132 — the owner, 2026-11-20: «חייב לנקות את המצב קונסולה אחת ולתמיד»). This shell is the
+// phone's — and every screen narrower than the desk's 1024px — so its navigator is the home and the bar under it
+// (buildBottomNav); a computer is the desk (desktop.js), whose «בית» draws the same home. The rail that stood beside
+// the frame on a computer (the shared side menu's markup, its pin «nav.pin.desktop», its fold while an app was open,
+// DGO-160) went with the computer's old shell; the browser's old keys are taken out once at boot (forgetRail).
+function forgetRail() {
+  try { localStorage.removeItem("nav.pin.desktop"); localStorage.removeItem("railCollapsed"); } catch (e) { /* none kept */ }
 }
 
 // ── full screen: the app in the whole screen, and a way back that cannot be hidden ──────────────
@@ -1413,61 +1430,70 @@ window.addEventListener("keydown", e => {
   }
 });
 
-// ── mobile bottom tab bar (shown < 640px via CSS; the rail is hidden there) ──
-const BOTTOM_PICKS = 4;   // the bar holds seven: «בית», four apps, «פתוחים», «עוד» (the four it always had)
+// ── the bottom tab bar: this shell's navigator wherever the desk is not up (style.css says where it stands) ──
+// FIVE AT MOST (DGO-2122): «בית», three apps, «פתוחים» — every platform's guidance is three to five, labelled, and no
+// overflow tab. «עוד» went: it opened the screen search, which the top bar's search already is on every screen (the
+// one search, DGO-1507), and the home is every app.
+const BOTTOM_PICKS = 3;
 function buildBottomNav() {
   const old = document.querySelector(".bottomnav"); if (old) old.remove();
   // The apps that ASK for a place here (`routing[].module.tab: true` in their app.json, carried by the
-  // compiler), in rail order, at most four — the console names no app above it (gate G9; DGO-1800). An app
-  // that is not installed has no tile and so no place. A linked office's `remote:` tile carries no `tab`; an app
-  // PLACED on this office from another (dgo-extend) keeps the tile its own app.json gives, `tab` included.
-  const picks = GROUPS.flatMap(g => MODULES.filter(m => m.group === g && m.tab === true)).slice(0, BOTTOM_PICKS);
-  const bn = el("div", "bottomnav");
-  // Home first, always: on a phone it is the only way to the twelve apps the three picks below
-  // do not cover. `#/` renders the launcher (see route()).
-  const homeBtn = el("a", "bn-item", `<span class="bn-ic">${mIcon("home")}</span><span>בית</span>`);
-  homeBtn.dataset.id = "";
-  homeBtn.onclick = () => { location.hash = "#/"; };
+  // compiler), in the home's order, at most three — the console names no app above it (gate G9; DGO-1800). An app
+  // that is not installed has no tile and so no place. A linked office's tile carries the `tab` its app's manifest
+  // asks for — THIS office's copy, read by the compiler (serve.module_tab; DGO-2122: the MacBook's bar had one app,
+  // its documents and files being linked copies); an app PLACED on this office from another (dgo-extend) keeps the
+  // tile its own app.json gives, `tab` included. One place per kind, as on the home.
+  const tiles = homeTiles();
+  const picks = GROUPS.flatMap(g => tiles.filter(m => groupOf(m) === g && m.tab === true)).slice(0, BOTTOM_PICKS);
+  const bn = el("nav", "bottomnav");
+  bn.setAttribute("aria-label", "ניווט ראשי");
+  // Home first, always (the right edge: the page is right to left): it is every app. `#/` renders it (route()).
+  const homeBtn = el("a", "bn-item", `<span class="bn-ic">${mIcon("home")}</span><span class="bn-nm">בית</span>`);
+  homeBtn.dataset.id = ""; homeBtn.href = "#/"; homeBtn.title = "בית — כל האפליקציות";
   bn.appendChild(homeBtn);
   for (const m of picks) {
     // A pick that runs on a LINKED office carries the office's mark here too (flt-004): the hue on the
-    // tab (the palette's own rule colours the corner bracket) and the animal BESIDE THE NAME, because
-    // a phone has no tooltip and the mark would otherwise be a colour nobody can name.
+    // tab (the palette's own rule colours the corner bracket) and the animal ON THE ICON, because a phone
+    // has no tooltip and the mark would otherwise be a colour nobody can name — on the icon, not beside the
+    // name: a tab is a fifth of the bar, and «מסמכים שלי» with the animal beside it was «מסמכים של…» (DGO-2122).
     const r = remoteInfo(m);
     const a = el("a", "bn-item" + remoteCls(m),
-      `<span class="bn-ic">${mIcon(m.icon)}</span><span>${esc(m.name)}${r && r.animal ? ` <span class="office-animal">${mIcon(r.animal)}</span>` : ""}</span>`);
+      `<span class="bn-ic">${mIcon(m.icon)}${r && r.animal ? `<span class="office-animal">${mIcon(r.animal)}</span>` : ""}</span><span class="bn-nm">${esc(m.name)}</span>`);
     if (r && r.hue) a.dataset.officeHue = r.hue;
-    a.dataset.id = m.id; a.title = remoteTip(m); a.onclick = () => location.hash = "#/m/" + m.id;
+    a.dataset.id = m.id; a.href = "#/m/" + m.id; a.title = remoteTip(m);
     bn.appendChild(a);
   }
-  // Open apps, between the picks and "more": a phone user needs one tap back to what they were
-  // doing, not a search box. The count is the whole affordance that something is waiting.
-  const rec = el("a", "bn-item",
-    `<span class="bn-ic">${mIcon("layers")}<span class="bn-badge" id="bnOpen"></span></span><span>פתוחים</span>`);
+  // Open apps, last: a phone user needs one tap back to what they were doing. The count is the whole affordance
+  // that something is waiting, and with nothing open the sheet says so (renderSwitcher) instead of doing nothing.
+  const rec = el("button", "bn-item",
+    `<span class="bn-ic">${mIcon("layers")}<span class="bn-badge" id="bnOpen"></span></span><span class="bn-nm">פתוחים</span>`);
+  rec.type = "button"; rec.title = "האפליקציות שנפתחו בחלון הזה";
   rec.onclick = () => renderSwitcher();
   bn.appendChild(rec);
-  const more = el("a", "bn-item", `<span class="bn-ic">${mIcon("menu")}</span><span>עוד</span>`);
-  more.onclick = openPalette;
-  bn.appendChild(more);
   document.body.appendChild(bn);
 }
 
 function updateOpenBadge() {
   const b = document.getElementById("bnOpen");
   if (!b) return;
-  b.textContent = OPEN.length ? String(OPEN.length) : "";
-  b.classList.toggle("on", OPEN.length > 0);
+  // what the sheet will show: an app the registry no longer has is not open (the second reader of DGO-2122)
+  const n = OPEN.filter((e) => MODULES.some((x) => x.id === e.id)).length;
+  b.textContent = n ? String(n) : "";
+  b.classList.toggle("on", n > 0);
 }
 
 function setActive(id) {
   updateOpenBadge();
-  document.querySelectorAll(".bnv-item, .bottomnav .bn-item")
-    .forEach(a => a.classList.toggle(a.classList.contains("bnv-item") ? "is-active" : "active",
-                                     a.dataset.id === id));
-  // …and the open tile is IN VIEW in the rail: the list is longer than the screen, and for the
-  // tiles under the fold nothing was highlighted — the rail said no app was open.
-  const on = document.querySelector("#nav .bnv-item.is-active");
-  if (on) on.scrollIntoView({block: "nearest"});
+  // `""` is the home (a linked office's page is one of its pages), null nothing, an id the app in view. The bar has
+  // one place per KIND (DGO-2122), so an app opened from another machine's copy lights its kind's place.
+  const kindById = (x) => kindOf(MODULES.find((m) => m.id === x) || { id: x });
+  const k = id ? kindById(id) : null;
+  document.querySelectorAll(".bottomnav .bn-item").forEach((a) => {
+    const at = a.dataset.id;   // «בית» is "", an app its id, «פתוחים» none
+    const on = at === undefined ? false : at === "" ? id === "" : !!k && kindById(at) === k;
+    a.classList.toggle("active", on);
+    if (on) a.setAttribute("aria-current", "page"); else a.removeAttribute("aria-current");
+  });
 }
 // The top bar names the screen — and, for a linked office's tile, WHOSE it is. The same title over
 // the same «הסר» / «מחק סודות» was this office's screen and the other's; the only difference was a
@@ -1478,10 +1504,8 @@ function setViewTitle(m) {
     + (r ? `<span class="vt-office${r.off ? " is-off" : ""}"${r.hue ? ` data-office-hue="${esc(r.hue)}"` : ""} title="${esc(remoteTip(m))}">${r.animal ? `<span class="vt-animal">${mIcon(r.animal)}</span>` : ""}${esc(r.label)}</span>` : "");
 }
 
-// The rail IS the launcher: the shell has no home screen, so a hash naming no live module (first
-// load, or a bookmark to an uninstalled app) opens the FIRST tile in it. location.replace, not
-// assignment, so the dead hash doesn't become a history entry the back button returns to.
-// The ONE parser of the shell's hash grammar: #/m/<id>[/inner/path][?query].
+// The shell's addresses: `#/` the home, `#/o/<office>` a linked office's page (DGO-2122), `#/m/<id>…` an app.
+// The ONE parser of the shell's hash grammar for an app: #/m/<id>[/inner/path][?query].
 // [1] = module id, [2] = the embedded app's inner route (or undefined).
 function parseModuleHash() {
   return /^#\/m\/([^/?#]+)([/?].*)?$/.exec(location.hash || "#/");
@@ -1505,6 +1529,17 @@ function route() {
   // module address. Hijacking them to the fallback silently teleported the user to the
   // first module (measured live 2026-08-24).
   if (location.hash && !location.hash.startsWith("#/")) return;
+  document.documentElement.classList.remove("at-home");   // the home and an office's page put it back
+  // On a computer the screen is the desk (desktop.js, DGO-2132): an app opens as a window, and the home and an
+  // office's page are its «בית» over the desk — the same drawing as the phone's (homeBody, officePage).
+  const desk = !!(window.BinaDesktop && BinaDesktop.isOn());
+  // A linked office's own page: every app it gives this office (renderOffice; on the desk, inside its «בית»).
+  const om = /^#\/o\/([^/?#]+)/.exec(location.hash);
+  if (om && MODULES.length) {
+    let id = om[1];
+    try { id = decodeURIComponent(id); } catch (e) { /* kept as typed */ }
+    return desk ? BinaDesktop.home(id) : renderOffice(id);
+  }
   // Deep link: everything after the module id is the APP's inner route, handed to its
   // iframe. "המקור היחיד לסלקטור הוא הקישור" (owner, 2026-08-24): a console URL restores
   // the exact screen inside the exact app, same as the direct mount.
@@ -1534,13 +1569,18 @@ function route() {
   // office and made the live `layout` suite skip six of its modules and pass green (measured
   // 2026-10-13). With nothing in the registry this falls through to the old behaviour, and the
   // shell re-routes when the tiles arrive.
-  if (dm && MODULES.length) return renderNoSuchScreen(dm[1]);
-  // Phone: the rail is hidden, so the bare hash opens the launcher instead of teleporting into
-  // whichever app happens to be first in the registry.
-  if (PHONE.matches && MODULES.length) return renderHome();
-  const first = MODULES[0];
-  if (first) return location.replace("#/m/" + first.id);
-  return renderNoModules();
+  if (dm && MODULES.length) {
+    if (!desk) return renderNoSuchScreen(dm[1]);
+    BinaDesktop.home();                   // the desk has no page to say it on: «בית», and a line over it
+    return BinaDesktop.wm.toast(`אין בלשכה הזאת מסך בשם ${dm[1]}`);
+  }
+  // The bare address is the home on every screen (DGO-2122, DGO-2132) — never whichever app happens to be first in the
+  // registry, as it was on a computer, in both its shells.
+  if (MODULES.length) return desk ? BinaDesktop.home() : renderHome();
+  if (!desk) return renderNoModules();
+  // the desk hides the phone's content: the same sentence, said over the desk (the second reader, DGO-2132)
+  BinaDesktop.home();
+  return BinaDesktop.wm.toast("רשימת האפליקציות חזרה ריקה. ודאו שהשירותים פועלים, ורעננו את הדף.");
 }
 
 // "/a/incoming/" + "/repos/x?y=1" → "/a/incoming/repos/x?y=1"; a bare "?y=1" appends to the root.
@@ -1585,17 +1625,15 @@ function renderNoSuchScreen(id) {
   showContent();
   $("#content").innerHTML = `<div class="wcard"><h3>אין מסך בשם הזה בלשכה הזאת</h3>` +
     `<div class="sub">הכתובת מבקשת <bdi>${esc(id)}</bdi>, ולשכה הזאת לא מריצה אריח בשם הזה. ` +
-    `אפשר לבחור מסך מהסרגל — הכתובת נשארת כפי שהיא.</div></div>`;
+    `הכתובת נשארת כפי שהיא; כל המסכים של הלשכה <a href="#/">בבית</a>.</div></div>`;
 }
 
 function showContent() {
   $("#content").classList.remove("hidden"); $("#embedwrap").classList.add("hidden");
   syncShellSearch();                        // …and so does the bar's search, when an app had offered its own
-  applyRail();                              // the console's own view: the whole menu, unless pinned (DGO-160)
 }
 function showEmbed(url, service) {
   $("#embedwrap").classList.remove("hidden"); $("#content").classList.add("hidden");
-  applyRail();                              // an app: the rail folds to its icons, unless pinned (DGO-160)
   const f = $("#frame");
   // Skip the reload only when the frame is ALREADY THERE — compared against the frame's
   // LIVE location, never the src attribute. SPA navigation moves the frame without
@@ -1730,12 +1768,21 @@ function openClose(id) {
 
 // The switcher: the cards of what is open. Phone-only surface, like the home screen — on a
 // desktop the windows ARE the open apps, and desktop.js already draws them.
+let SW_ESC = null;   // the open sheet's Escape listener: a sheet drawn again (an app taken off it) replaces it
+let SW_FROM = null;  // what opened the sheet (the bar's «פתוחים»): a redraw keeps it, so Escape still returns there
 function renderSwitcher() {
-  const old = document.querySelector(".switcher"); if (old) old.remove();
-  if (!PHONE.matches || !OPEN.length) return;
+  const old = document.querySelector(".switcher");
+  if (!old) SW_FROM = document.activeElement;
+  if (old) old.remove();
+  if (SW_ESC) { document.removeEventListener("keydown", SW_ESC, true); SW_ESC = null; }
+  if (window.BinaDesktop && BinaDesktop.isOn()) return;   // the desk's windows ARE its open apps
+
   const ov = el("div", "switcher");
+  // Nothing open yet: the sheet says so, and where everything is — a press that drew nothing read as broken.
+  const none = !OPEN.some((e) => MODULES.some((x) => x.id === e.id));
   ov.innerHTML = `<div class="sw-head"><b>אפליקציות פתוחות</b>
       <button class="sw-close" type="button" aria-label="סגירה" title="סגירה">${mIcon("x")}</button></div>
+    ${none ? `<div class="sw-none"><p>עוד לא נפתחה אפליקציה בחלון הזה.</p><a class="btn sm" href="#/">לכל האפליקציות</a></div>` : ""}
     <div class="sw-list">${OPEN.map((e) => {
       const m = MODULES.find((x) => x.id === e.id);
       if (!m) return "";
@@ -1747,13 +1794,31 @@ function renderSwitcher() {
         <button class="sw-x" type="button" aria-label="הסרה" title="סגירת האפליקציה" data-x="${esc(m.id)}">${mIcon("x")}</button>
       </div>`;
     }).join("")}</div>`;
+  // A dialog a keyboard can use too (the second reader, DGO-2122): it takes the focus, Escape closes it, and the
+  // focus goes back to the bar's «פתוחים» that opened it.
+  ov.setAttribute("role", "dialog");
+  ov.setAttribute("aria-modal", "true");
+  ov.setAttribute("aria-label", "אפליקציות פתוחות");
+  const from = SW_FROM;
+  const close = (back) => {
+    ov.remove();
+    if (SW_ESC === onEsc) { document.removeEventListener("keydown", onEsc, true); SW_ESC = null; }
+    if (back && from && from.isConnected) from.focus();
+  };
+  const onEsc = (e) => { if (e.key === "Escape" && ov.isConnected) { e.preventDefault(); e.stopPropagation(); close(true); } };
+  document.addEventListener("keydown", onEsc, true);
+  SW_ESC = onEsc;
   document.body.appendChild(ov);
-  ov.querySelector(".sw-close").onclick = () => ov.remove();
-  ov.onclick = (e) => { if (e.target === ov) ov.remove(); };
+  ov.querySelector(".sw-close").onclick = () => close(true);
+  ov.onclick = (e) => {
+    if (e.target === ov) close(true);
+    else if (e.target.closest && e.target.closest(".sw-none a")) close(false);
+  };
+  (ov.querySelector("[data-open]") || ov.querySelector(".sw-none a") || ov.querySelector(".sw-close")).focus();
   ov.querySelectorAll("[data-open]").forEach((b) => {
     b.onclick = () => {
       const entry = OPEN.find((x) => x.id === b.dataset.open);
-      ov.remove();
+      close(false);
       location.hash = "#/m/" + b.dataset.open + ((entry && entry.route) || "");
     };
   });
@@ -1794,6 +1859,9 @@ function openModule(m, rest) {
   if (window.BinaDesktop && BinaDesktop.isOn()) return BinaDesktop.openModule(m, rest);
   if (m.external) {
     const url = externalUrl(m) + (rest || "");
+    // an app on its own host — another machine's, most of all — is an open app too: «פתוחים» on the owner's Mac,
+    // where 101 of 115 tiles are other machines', stayed empty whatever he opened (DGO-2122)
+    openTouch(m.id, rest || "");
     setActive(m.id); setViewTitle(m);
     // An office MEASURED unreachable gets the card, not the frame: on its own host a frame that
     // cannot load is the browser's error page, which nothing here can read, replace or explain

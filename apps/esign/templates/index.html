@@ -36,7 +36,7 @@
       <tr><th>מסמך</th><th>חותם</th><th>מצב</th><th>נשלח</th><th>נחתם</th></tr>
       {% for r in rows %}
       <tr>
-        <td>{{ r.doc_name }}</td>
+        <td>{{ r.doc_name }}{% if r.kind == 'view' %} <span class="pill draft">לצפייה</span>{% endif %}</td>
         <td>{{ r.signer_name }}</td>
         <td><span class="pill {{ r.status }}">{{ r.status }}</span></td>
         <td>{{ r.created_at[:16].replace('T', ' ') }}</td>

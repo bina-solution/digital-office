@@ -24,7 +24,9 @@ curl -s -X POST http://telegram:8984/api/watch -H 'content-type: application/jso
 ```
 
 Event types: `message.new` (data: chat_id, chat, message_id, sender, sender_id, out, text, media, reply_to —
-`media` is `{kind, label, name, size, mime}` or null, beside a caption, never instead of it),
+`media` is `{kind, label, name, size, mime}` or null, beside a caption, never instead of it), `message.edited`
+(the same data but `reply_to`: a message whose sender changed its words; the group's desk shows the words as they are
+now, DGO-1995),
 `account.connected`, `account.lost`, `watch.on` (also when a watched group becomes a supergroup: data
 `migrated_from`; the old id stays watched for its history), `watch.off`, `bot.token.stored`.
 The owner's marks (DGO-1320): 👀 ✍ 👌 🏆 (what each means is on DGO-1320); each is a `message.mark` event.

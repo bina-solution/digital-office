@@ -64,9 +64,11 @@ services:
     volumes:
       # the sites registry, the uptime samples, the visits and the findings. Losing it loses the
       # history, not the sites: everything it says about a machine can be re-read from the machine.
-      - sites_state:/data
+      # And public/ (SITES_PUBLIC_DIR), the cached copy of every site it serves.
+      # in the DGO folder's data/sites/state (DGO-2019); it was the volume sites_state, moved once by `bbox run`
+      - ../../data/sites/state:/data
       # the rendered screenshots, shared read-only with the renderer that writes them
-      - sites_renders:/renders:ro
+      - ../../data/sites/renders:/renders:ro
       # the office's ONE flow.v1 publisher (DGO-1402) — the platform's file, never a copy of it here
       - ../../platform-base/redis/flowpub.py:/opt/dgo/flowpub.py:ro
     networks:
@@ -108,7 +110,8 @@ services:
       # its own good intentions, and a beauty scan has no deadline that justifies it.
       - SITES_RENDER_CONCURRENCY=${SITES_RENDER_CONCURRENCY:-1}
     volumes:
-      - sites_renders:/renders
+      # the rendered sites, in the DGO folder's data/sites/renders (DGO-2019; it was the volume sites_renders)
+      - ../../data/sites/renders:/renders
     networks:
       - traefik-network
     shm_size: 512m          # Chromium's own requirement; the default 64M crashes tabs
@@ -134,10 +137,6 @@ services:
       options:
         max-size: 5m
         max-file: '3'
-
-volumes:
-  sites_state:
-  sites_renders:
 
 networks:
   traefik-network:

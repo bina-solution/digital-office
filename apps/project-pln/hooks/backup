@@ -12,8 +12,9 @@
 # matters, as a database that starts and then reports corruption in one table. A logical dump has
 # no such window. The same reasoning is why `platform-base/postgres/hooks/backup` exists.
 #
-# WHAT IS NOT CLAIMED, on purpose: `project_pln_minio` is a plain file tree of uploaded attachments,
-# avatars and cover images — the generic volume tar is the right tool for it (same call supabase
+# WHAT IS NOT CLAIMED, on purpose: the object store — data/project-pln/files since DGO-2019, the volume
+# `project_pln_minio` before — is a plain file tree of uploaded attachments, avatars and cover images; the
+# archive's generic copy of it (a folder now, a volume while its move waits) is the right tool for it (same call supabase
 # makes for `supabase_storage_data`), and it is portable: the pinned MinIO serves a volume written
 # under another office's root credentials (measured 2026-10-05 — written under one key pair, listed,
 # read and written under another). What this app adds for it are FACTS (hooks/facts): the index rows

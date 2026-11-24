@@ -52,7 +52,7 @@
       "auth": "sso",
       "emit_labels": true,
       "module": {
-        "group": "תשתית",
+        "group": "ניהול הלשכה",
         "icon": "activity",
         "embed": true,
         "alias": "dashboard",
@@ -73,7 +73,9 @@
     }
   ],
   "data": {
-    "volumes": ["dashboard_state", "../../data/lan"],
+    "volumes": ["../../data/lan"],
+    "paths": ["data/dashboard/state"],
+    "moved_from": {"data/dashboard/state": "dashboard_state"},
     "on_uninstall": "keep"
   },
   "resources": {

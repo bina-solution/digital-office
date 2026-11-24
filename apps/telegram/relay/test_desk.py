@@ -237,16 +237,50 @@ class Storage(unittest.TestCase):
         self.assertFalse(relay_group.note_saved_file(r, {**ev, "data": {**ev["data"], "message_id": 826}}))
         self.assertIsNone(desk.load(r, GROUP, 826))
 
+    def test_an_edited_request_shows_the_words_he_means_now(self):
+        # DGO-1995: msg 1129 arrived as «…ותצרף לאזור חיפה» and was edited to «…אולי כגליל מערבי»; the desk kept the
+        # first, and a worker built what he had replaced. The record shows his words as they are now, keeps the
+        # first beside them, and the answerer's write-back loses neither.
+        r = FakeRedis()
+        first = "בחלוקת האזורים: אזור נהריה ועכו תפצל מאזור צפון וגליל ותצרף לאזור חיפה"
+        now = "בחלוקת האזורים: אזור נהריה ועכו תפצל מאזור צפון וגליל אולי כגליל מערבי"
+        desk.create(r, desk.new_record(owner_msg(1129, first), T0))
+        desk.remember(r, owner_msg(1129, first), T0)
+        mine = desk.load(r, GROUP, 1129)                       # the answerer reads the record…
+        ev = {"type": "message.edited", "at": "2026-11-15T21:40:00Z", "data": owner_msg(1129, now)}
+        told = relay_group.note_edit(r, ev)                    # …the relay hears the edit meanwhile…
+        self.assertEqual((told["text"], told["text_at_receipt"], told["was"]), (now, first, first))
+        desk.store(r, desk.take(mine, ["DGO-1897"]))           # …and the answerer writes back: neither loses
+        back = desk.load(r, GROUP, 1129)
+        self.assertEqual((back["text"], back["text_at_receipt"], back["edited"]), (now, first, "2026-11-15T21:40:00Z"))
+        self.assertEqual((back["state"], back["items"]), ("working", ["DGO-1897"]))
+        self.assertEqual([x["text"] for x in desk.all_records(r) if x["message_id"] == 1129], [now])
+        self.assertEqual(desk.recall(r, GROUP, 1129)["text"], now)       # a quote of it is his words now…
+        self.assertEqual(desk.recall(r, GROUP, 1129)["at"], T0)          # …at the time he sent it
+        self.assertGreater(r.ttl.get(desk.EDITS, 0), 0)                  # renewed like every desk key
+        # the record the answerer stores keeps the words it arrived with: the edit lives in EDITS alone
+        self.assertEqual(json.loads(r.cmd("HGET", desk.REQUESTS, desk.field(GROUP, 1129)))["text"], first)
+        # the same words again (an edit of the preview alone) tells nobody; a message with no request neither
+        self.assertEqual(relay_group.note_edit(r, ev), {})
+        self.assertEqual(relay_group.note_edit(r, {**ev, "data": owner_msg(1130, "x")}), {})
+        self.assertIsNone(desk.load(r, GROUP, 1130))
+        # edited twice: the last words win, the first stay the first
+        desk.add_edit(r, GROUP, 1129, "שוב אחרת", "2026-11-15T22:00:00Z")
+        self.assertEqual((desk.load(r, GROUP, 1129)["text"], desk.load(r, GROUP, 1129)["text_at_receipt"]),
+                         ("שוב אחרת", first))
+
     def test_closed_records_are_pruned_after_two_weeks(self):
         r = FakeRedis()
         old = desk.drop(desk.new_record(owner_msg(187, "מי אנחנו ?"), T0), "answered", at=T0)
         desk.create(r, old)
         desk.add_file(r, GROUP, 187, "/טלגרם/x/187-video.mp4")
+        desk.add_edit(r, GROUP, 187, "מי אנחנו בעצם ?", T0)
         self.assertEqual(desk.prune(r, desk.parse_at(T0) + 3 * 86400), 0)
         self.assertEqual(r.cmd("HKEYS", desk.FILES), [desk.field(GROUP, 187)])   # kept while its request is
         self.assertEqual(desk.prune(r, desk.parse_at(T0) + 15 * 86400), 1)
         self.assertEqual(desk.all_records(r), [])
         self.assertEqual(r.cmd("HKEYS", desk.FILES) or [], [])                  # …and leaves with it
+        self.assertEqual(r.cmd("HKEYS", desk.EDITS) or [], [])                  # …and so does its edit
 
     def test_the_group_is_remembered_by_number_for_quotes(self):
         r = FakeRedis()
@@ -451,6 +485,24 @@ class TellAgent(unittest.TestCase):
                                                     "text yet — look at the app's screen", "code": "not-confirmed"}))
         self.tell(urlopen)
         self.assertEqual(len(sends), 1)
+
+    def test_text_left_in_the_apps_composer_is_retried_then_raised(self):
+        # the driver refuses a composer that is not empty, so a retry never pastes it twice; a lasting refusal is
+        # raised, so the cursor stays and Stuck tells the group (DGO-2126)
+        sends, urlopen = self.door(409, json.dumps({"error": "the session is mid-turn (busy); nothing was sent (the text "
+                                                    "stays in its composer, unsent)", "code": "left-in-composer"}))
+        with self.assertRaises(ConnectionError):
+            self.tell(urlopen)
+        self.assertEqual(len(sends), 3)
+
+    def test_it_asks_not_to_be_queued_and_a_429_is_retried_then_raised(self):
+        # a door with a cap of running turns (bina-claude, DGO-2126) would queue it, and a 202 is taken as delivered:
+        # the relay asks never to be held in a line; a 429 from any door is retried, then raised — the cursor stays
+        sends, urlopen = self.door(429, json.dumps({"error": "too many requests: nothing was sent", "code": "rate"}))
+        with self.assertRaises(ConnectionError):
+            self.tell(urlopen)
+        self.assertEqual(len(sends), 3)
+        self.assertEqual(json.loads(sends[0].data.decode("utf-8")).get("queue"), False, "it asks not to be queued")
 
     def test_busy_is_retried_and_then_raised(self):
         sends, urlopen = self.door(409, json.dumps({"error": "the session is mid-turn (busy); nothing was sent"}))

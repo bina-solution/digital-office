@@ -122,14 +122,30 @@ def _now() -> str:
     return datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
 
 
+def public_base() -> str:
+    """The address a signer's link is minted on, the one rule (server.public_base reads it here).
+
+    ESIGN_PUBLIC_URL when the office's signer page is published on another office's edge (DGO-2125: the HP's door at
+    https://sign.bina-solutions.digital-office.co.il, opened by vps1's `publish:`, DGO-2050). That edge serves the door
+    on https only,
+    so a name written without a scheme is that https address. Else ESIGN_BASE_URL. The public address is never
+    written into ESIGN_BASE_URL: that one is also the host this office routes esign's own screen under
+    (docker-compose.yml) and signs it in at (app.json `sso`)."""
+    public = os.environ.get("ESIGN_PUBLIC_URL", "").strip()
+    if public and "://" not in public:
+        public = "https://" + public
+    return (public or os.environ.get("ESIGN_BASE_URL", "http://esign.localhost:8080")).rstrip("/")
+
+
 def config() -> dict:
     return {
         "drive_url": os.environ.get("DRIVE_URL", "http://drive:8975").rstrip("/"),
-        "drive_folder": os.environ.get("ESIGN_DRIVE_FOLDER", "חתימות"),
+        # under «מסמכים»: «ארכיון» lists what is there (DGO-2125); /חתימות was a folder nothing indexed
+        "drive_folder": os.environ.get("ESIGN_DRIVE_FOLDER", "מסמכים/חתימות"),
         "notifications_url": os.environ.get("NOTIFICATIONS_URL", "http://notifications:8977").rstrip("/"),
         "redis_url": os.environ.get("REDIS_URL", ""),
         "redis_password": os.environ.get("REDIS_PASSWORD", ""),
-        "public_base": os.environ.get("ESIGN_BASE_URL", "http://esign.localhost:8080").rstrip("/"),
+        "public_base": public_base(),
         # the office's documents renderer (the ledger, apitools): the certificate in the house style
         "render_url": os.environ.get("ESIGN_RENDER_URL", "http://apitools:8080").rstrip("/"),
     }

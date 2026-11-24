@@ -139,7 +139,7 @@
       "port": 80,
       "auth": "sso",
       "module": {
-        "group": "עסק",
+        "group": "עבודה וקבצים",
         "icon": "check",
         "embed": true,
         "id": "project-pln",
@@ -177,13 +177,12 @@
     }
   },
   "data": {
-    "volumes": [
-      "project_pln_data",
-      "project_pln_logs",
-      "project_pln_db",
-      "project_pln_redis",
-      "project_pln_minio"
-    ],
+    "volumes": [],
+    "paths": ["data/project-pln/state", "data/project-pln/logs", "data/project-pln/db", "data/project-pln/redis",
+              "data/project-pln/files", "data/project-pln/minio-data"],
+    "moved_from": {"data/project-pln/state": "project_pln_data", "data/project-pln/logs": "project_pln_logs",
+                   "data/project-pln/db": "project_pln_db", "data/project-pln/redis": "project_pln_redis",
+                   "data/project-pln/files": "project_pln_minio"},
     "on_uninstall": "keep",
     "sql": [
       {

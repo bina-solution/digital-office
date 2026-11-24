@@ -33,7 +33,7 @@
       "port": 8080,
       "auth": "sso",
       "module": {
-        "group": "תשתית",
+        "group": "ניהול הלשכה",
         "icon": "server",
         "embed": true,
         "tile": false,

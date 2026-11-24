@@ -62,7 +62,7 @@ hub: vps1
 # …and the hub's console: where every link a PERSON is given opens — `https://<hub_console>/go/<ref>` (DGO-1433,
 # platform-base/console/links.py), built by `bbox console link`. The one console the owner reaches from anywhere,
 # his phone included; a `.localhost` console is the reader's own machine (RFC 6761), never a link.
-hub_console: console.staging.digital-office.co.il
+hub_console: console.bina-solutions.digital-office.co.il
 
 # What `*` never gives the hub (public), an office marked `public: true`, or an office that is not one of the
 # offices above (a client's, a sandbox): the vault, root commands and terminals, app management, git, security,
@@ -104,12 +104,22 @@ admin_apps: [connections, computers, app-management, git, security, console, cla
 give:
   hp-laptop:
     # bs-group: the CEO's one link (DGO-1974) — on the hub console he reaches from anywhere, and on his desk
-    vps1: [bina-ds, bina-claude, browser42, telegram, newsflow, project-pln, bs-group]
-    macbook: [bina-ds, bina-claude, browser42, computers, project-pln, machine, security, bs-group]
+    # my-docs (+ documents, its archive's search): the business's documents from his phone (DGO-2029/2042, 2026-11-19).
+    # vps1 already gets the HP's drive, which holds the same PDFs, so they open no new class; esign stays internal
+    # but for its narrow public door (DGO-2050). entities («ישויות», the herd's one, on the HP): on the hub console and
+    # the MacBook's too — the owner, 2026-11-20: «גם זהות וישויות צריך להופיע בלשכה שלנו» (DGO-2121)
+    # esign-public: that door — the signer's page alone (/s/), opened to the internet (`public`), which vps1 publishes
+    # at sign.bina-solutions.digital-office.co.il: the customer signs the quote there (DGO-2125). Given HERE, so no
+    # writer of the HP's serve map can close every client's signing link (give.doors)
+    vps1: [bina-ds, bina-claude, browser42, telegram, newsflow, project-pln, bs-group, my-docs, documents, entities,
+           {door: esign-public, paths: [/s/], public: true}]
+    macbook: [bina-ds, bina-claude, browser42, computers, project-pln, machine, security, bs-group, entities]
     dell: [security, machine, office-routes, bina-ds, bina-claude, browser42]
   macbook:
-    vps1: [domain-internic]       # the InterNIC provider of vps1's domains (DGO-1473)
-    hp-laptop: [computers, git, security, bina-ds]
+    # domain-internic: the InterNIC provider of vps1's domains (DGO-1473). digital-assets («זהות», the herd's one, on the
+    # MacBook): on the hub console and the HP's — the owner, 2026-11-20 (DGO-2121)
+    vps1: [domain-internic, digital-assets]
+    hp-laptop: [computers, git, security, bina-ds, digital-assets]
     dell: [security, git, bina-ds]
   vps1:
     macbook: [computers, machine, security, bina-ds, bina-claude]
@@ -187,6 +197,7 @@ apps:
   raphael: hp-laptop
   apitools: dell                 # OCR and ASR, after the measurement of DGO-930
   ollama: dell
+  voice: dell                    # the office's local voices (ONNX on the CPU): heavy work, beside the other models
   sites: vps1
   domains: vps1
   # a provider app runs where the account it drives lives — where its credential is typed and its browser

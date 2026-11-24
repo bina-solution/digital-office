@@ -16,7 +16,7 @@ folder an app writes into is marked (`system`) and cannot be renamed, moved or d
 ./bbox drive -p admin folders list / · tree / --depth 2 · file "/מסמכים/x.pdf" · storage
 ./bbox drive find הקלטה                           # names that hold a text, with their paths
 ./bbox drive get "/הקלטות/הקלטה חדשה 3.m4a" ci-artifacts/   # to this machine (streams; any size)
-./bbox drive put ./summary.md "/פגישות/2026-10-28/"          # into a folder (made on demand); --replace
+./bbox drive put ./summary.md "/פגישות/2026-10-28/"          # into a folder (made on demand); --replace; --empty
 ./bbox drive mkdir · mv <path> <folder> · rename <path> <name> · rm <path> (trash) · restore <name> · link <path>
 ./bbox drive help                                 # all of it
 ```
@@ -39,7 +39,9 @@ curl -s "http://drive:8975/api/fs?path=/&connection_id=drive_google_oauth-1a2b3c
 ```
 
 `PUT …/api/fs/content` keeps an existing file and names the new one «name (2)»; `&mode=replace` moves the
-old one to the trash first; `&mode=exclusive` refuses (409) when the path is taken. A file over ~100 MB from a browser goes through the resumable upload
+old one to the trash first; `&mode=exclusive` refuses (409) when the path is taken. The body is the file
+(a multipart form is refused, 415), and the drive is named only in the address or headers; an empty body
+is refused (400, nothing trashed) unless `&empty=1` (`put --empty`). A file over ~100 MB from a browser goes through the resumable upload
 (`POST /api/uploads`, tus 1.0) — from a container, the PUT above streams any size. A Google Doc, Sheet or
 Slides file has no bytes of its own: `content` exports it (a PDF inline, the Office file with `dl=1`).
 

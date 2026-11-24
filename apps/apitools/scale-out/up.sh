@@ -158,7 +158,15 @@ signer)
   # Mint-once-then-distribute. The alternative — setting SIGN_CERT_P12 to a real CA cert
   # on both instances — is strictly better and makes this a no-op; until then, one shared
   # dev cert beats two different ones.
-  SRC="$APP/storage/dev_signer.p12"
+  # where apitools keeps its store: the DGO folder's data/apitools/storage since DGO-2019, its source tree's ./storage
+  # while that move waits (a copy the move left there is never the store once it moved)
+  # — the folder once a run decided the store (moved, seeded on a new office, or found ready) and it did not fail, as
+  # scripts/archive-lib.sh archive_store reads the engine's record
+  SRC="$APP/../../data/apitools/storage/dev_signer.p12"
+  LED="$APP/../../data/.moves/apitools/storage.json"
+  if ! grep -Eq '"(moved|seeded|ready)_at"' "$LED" 2>/dev/null || grep -Eq '"(failed|conflict_at)"' "$LED" 2>/dev/null; then
+    SRC="$APP/storage/dev_signer.p12"
+  fi
   if [ ! -f "$SRC" ]; then
     echo "no $SRC on this box; nothing to distribute (it is minted on first signed /docGen)"
     exit 0

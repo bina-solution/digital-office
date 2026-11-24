@@ -35,11 +35,13 @@ def http(code):
     return urllib.error.HTTPError("http://drive", code, "refused", {}, io.BytesIO(b""))
 
 
-def run_passes(recs, refuse=(), error=None, passes=1, clock=None):
+def run_passes(recs, refuse=(), error=None, passes=1, clock=None, held=None, asks=None):
     """`passes` passes of to_drive over `recs`, the drive played in memory: (copied names, printed lines). `refuse`:
-    names the drive takes no file that big for; `error`: what every copy raises instead (an outage)."""
+    names the drive takes no file that big for; `error`: what every copy raises instead (an outage); `held`: the paths
+    the drive has before the first pass; `asks`: a list that gets each pass's number for every path the drive is
+    asked about."""
     copied, said, slept = [], [], {"n": 0}
-    held: set = set()
+    held = set(held or ())
     real = (server.recordings, server._in_drive, server._to_drive_one, server._drive, server.time.sleep,
             server.time.time, server.time.monotonic)
 
@@ -59,7 +61,12 @@ def run_passes(recs, refuse=(), error=None, passes=1, clock=None):
             raise Stop
 
     server.recordings = lambda limit=500: recs
-    server._in_drive = lambda path: path in held
+    def in_drive(path):
+        if asks is not None:
+            asks.append((slept["n"] + 1, path))
+        return path in held
+
+    server._in_drive = in_drive
     server._to_drive_one = to_drive_one
     server._drive = lambda *a, **k: (200, {})
     server.time.sleep = sleep
@@ -118,6 +125,32 @@ class ToDrive(unittest.TestCase):
         copied, said = run_passes(recs)
         self.assertEqual(copied, ["e100_2026-11-04-10-00-00.ogg", "exu102_2026-11-08-12-09-18.mp4",
                                   "exu102_2026-11-08-12-09-18.ogg"], f"the empty video is skipped, the rest go: {said}")
+
+    def test_a_file_the_drive_has_is_asked_about_once(self):
+        # the owner 2026-11-22, «אין סוף קריאות מיותרות בקבצים»: two `/api/fs` per recording every minute, for good
+        recs = [rec("s101", "exu101_2026-11-05-15-57-16", "2026-11-05 15:57"),
+                rec("s102", "exu102_2026-11-08-12-09-18", "2026-11-08 12:09")]
+        there = {"/פגישות/2026-11-05 · exu101/exu101_2026-11-05-15-57-16.mp4",
+                 "/פגישות/2026-11-05 · exu101/exu101_2026-11-05-15-57-16.ogg"}
+        asks = []
+        copied, _ = run_passes(recs, passes=3, held=there, asks=asks)
+        self.assertEqual(copied, ["exu102_2026-11-08-12-09-18.mp4", "exu102_2026-11-08-12-09-18.ogg"],
+                         "what the drive lacks is copied, what it has is not")
+        self.assertEqual(sorted(p for n, p in asks if n == 1), sorted(there | {
+            "/פגישות/2026-11-08 · exu102/exu102_2026-11-08-12-09-18.mp4",
+            "/פגישות/2026-11-08 · exu102/exu102_2026-11-08-12-09-18.ogg"}), "the first pass asks about each file once")
+        self.assertEqual([a for a in asks if a[0] > 1], [], "no later pass of that day asks the drive anything")
+        asks = []
+        run_passes(recs, passes=2, held=there, asks=asks, clock=[1e9])
+        self.assertEqual(len([a for a in asks if a[0] == 2]), 4,
+                         f"a day later each file is asked once more — what the drive lost goes back: {asks}")
+
+    def test_an_empty_recording_never_asks_the_drive(self):
+        empty = rec("s100", "e100_2026-11-04-10-00-00", "2026-11-04 10:00")
+        pathlib.Path(TMP, "s100", "e100_2026-11-04-10-00-00.mp4").write_bytes(b"")
+        asks = []
+        run_passes([empty], passes=2, asks=asks)
+        self.assertNotIn("e100_2026-11-04-10-00-00.mp4", " ".join(p for _, p in asks), "the disk is asked first")
 
     def test_an_outage_still_backs_off(self):
         recs = [rec("s102", "exu102_2026-11-08-12-09-18", "2026-11-08 12:09")]

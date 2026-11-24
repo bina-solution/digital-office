@@ -28,9 +28,10 @@ RUN CGO_ENABLED=0 GOOS="${TARGETOS}" GOARCH="${TARGETARCH}" go build -trimpath -
 
 FROM scratch
 COPY --from=build /out/forward-auth /forward-auth
-# The service's own directory, 700 and owned by the uid it runs as: a NEW named volume mounted here
-# (forward_auth_data) starts as a copy of it — ownership included — so the service can write the users
-# file at first-run setup and nobody else can list it (DGO-1090).
+# The service's own directory, 700 and owned by the uid it runs as: a NEW store mounted here
+# (data/forward-auth/state, which `bbox run` seeds from the image, DGO-2019) starts as a copy of it —
+# ownership included — so the service can write the users file at first-run setup and nobody else can
+# list it (DGO-1090).
 COPY --from=build --chown=65534:65534 /out/state /etc/forward-auth
 # By NUMBER, not by name: scratch has no /etc/passwd to name a user in, and a service whose whole
 # job is deciding who may enter must not run as root. 65534 is `nobody`, the uid the kernel reserves.

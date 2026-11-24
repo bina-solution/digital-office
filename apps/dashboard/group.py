@@ -831,6 +831,69 @@ def group_chat():
     return best[1]
 
 
+#: THE GROUP'S ID, KEPT (DGO-2111). group_chat() asks the telegram app, which answers from the OWNER'S account; while that
+#: account is not connected it answers 409, and the relay asked it every hour and after every restart — so the group went
+#: silent although the bot needs nothing but an id it had already found: 183 «not sent: HTTP Error 409» on the HP in four
+#: days, 16 lines given up (measured 2026-11-20). The id found is kept beside the state; a lookup that fails falls back to
+#: it — never to a chat Telegram has just refused (400/403: the group moved, so it must be found again).
+CHAT_FILE = os.environ.get("DASHBOARD_GROUP_CHAT_FILE", os.path.join(os.path.dirname(STATE) or ".", "group-chat.json"))
+
+
+def known_chat(path=None):
+    """The group id last found (CHAT_FILE), or None."""
+    try:
+        with open(path or CHAT_FILE, encoding="utf-8") as fh:
+            return int(json.load(fh)["chat"])
+    except (OSError, ValueError, KeyError, TypeError):
+        return None
+
+
+def keep_chat(chat, path=None):
+    """Write the group id found, atomically; a disk that refuses it is no reason for a line not to be said."""
+    path, tmp = path or CHAT_FILE, None
+    try:
+        d = os.path.dirname(path) or "."
+        os.makedirs(d, exist_ok=True)
+        fd, tmp = tempfile.mkstemp(dir=d, prefix=".group-chat-")
+        with os.fdopen(fd, "w", encoding="utf-8") as fh:
+            json.dump({"chat": int(chat), "at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())}, fh)
+        os.replace(tmp, path)
+    except (OSError, ValueError, TypeError):
+        if tmp:                                             # a half-written copy is not left behind (second reader)
+            try:
+                os.unlink(tmp)
+            except OSError:
+                pass
+
+
+def forget_chat(chat, path=None):
+    """Telegram refused `chat`: the kept id is dropped too, so a restart does not fall back to it."""
+    if chat is not None and known_chat(path) == chat:
+        try:
+            os.unlink(path or CHAT_FILE)
+        except OSError:
+            pass
+
+
+#: WHO CAN NOT BE ASKED. Only these mean «the owner's account cannot answer now» (409 while it is not connected, the
+#: telegram app or the network down): then the group already found is used. Any other answer — «no watched group of
+#: that name», a 404 — is the account answering, and it is believed (second reader: the fallback is that narrow).
+def unreachable(e):
+    if isinstance(e, urllib.error.HTTPError):
+        return e.code == 409
+    return isinstance(e, (urllib.error.URLError, OSError))
+
+
+def chat_refused(e):
+    """Telegram itself refusing the CHAT (not the text, not the vault): 403 (the bot was removed, or may not write),
+    or a 400 that names the chat («chat not found», «group chat was upgraded to a supergroup chat»)."""
+    if not isinstance(e, urllib.error.HTTPError):
+        return False
+    if e.code == 403:
+        return True
+    return e.code == 400 and "chat" in str(getattr(e, "msg", "") or e.reason or "").lower()
+
+
 def bot_token():
     """DASHBOARD_BOT_INSTANCE, or the vault's telegram_bot labelled «בוט טלגרם ראשי», or the only one there is."""
     inst = os.environ.get("DASHBOARD_BOT_INSTANCE", "")
@@ -897,7 +960,23 @@ def ref_links(text, hub, keys=OWN_KEYS):
 class Bot:
     def __init__(self):
         self.tok, self.tok_at, self.chat, self.chat_at, self.error = None, 0, None, 0, None
+        self.refused = None                     # the chat Telegram last refused (400/403): never fallen back to
         self.hub, self.keys = herd_links()
+
+    def find_chat(self):
+        """The group: asked again (group_chat), and when that cannot be asked — the owner's account not connected — the
+        id already in hand or kept on disk, unless it is the one Telegram just refused."""
+        try:
+            found = group_chat()
+        except Exception as e:                              # noqa: BLE001 — the fallback below, or the same error
+            cand = self.chat or known_chat()
+            if not unreachable(e) or cand is None or cand == self.refused:
+                raise
+            return cand
+        if found != known_chat():
+            keep_chat(found)
+        self.refused = None
+        return found
 
     def post_message(self, form):
         body = urllib.parse.urlencode(form).encode()
@@ -909,17 +988,26 @@ class Bot:
             if not self.tok or time.time() - self.tok_at > 600:
                 self.tok, self.tok_at = bot_token(), time.time()
             if not self.chat or time.time() - self.chat_at > 3600:
-                self.chat, self.chat_at = group_chat(), time.time()
+                self.chat, self.chat_at = self.find_chat(), time.time()
             form = {"chat_id": self.chat, "text": text, "disable_web_page_preview": "true"}
             links = ref_links(text, self.hub, self.keys)
             try:
-                res = self.post_message({**form, "entities": json.dumps(links)} if links else form)
+                try:
+                    res = self.post_message({**form, "entities": json.dumps(links)} if links else form)
+                except urllib.error.HTTPError as e:
+                    # a link is never why a line is not said: Telegram refusing the entities (400) is said again without
+                    # them, before the 400 below would read as «the group moved»
+                    if not (links and e.code == 400):
+                        raise
+                    res = self.post_message(form)
             except urllib.error.HTTPError as e:
-                # a link is never why a line is not said: Telegram refusing the entities (400) is said again without
-                # them, before the 400 below would read as «the group moved»
-                if not (links and e.code == 400):
-                    raise
-                res = self.post_message(form)
+                # TELEGRAM refused THIS CHAT (only the post's own answer counts — never the vault's or the telegram
+                # app's): the group moved, or the bot is out. It is found again, and never fallen back to.
+                if chat_refused(e):
+                    self.refused = self.chat
+                    forget_chat(self.chat)
+                    self.chat = None
+                raise
             self.error = None
             return res["result"]["message_id"]
         except Exception as e:                              # noqa: BLE001 — said in the state, never raised
@@ -928,11 +1016,8 @@ class Bot:
                 msg = msg.replace(self.tok, "<token>")
             self.error = redact(msg)[:300]
             print(f"dashboard-group: not sent: {self.error}", flush=True)
-            if isinstance(e, urllib.error.HTTPError):
-                if e.code in (401, 404):
-                    self.tok = None
-                if e.code in (400, 403):                    # not in that chat, or it moved: find the group again
-                    self.chat = None
+            if isinstance(e, urllib.error.HTTPError) and e.code in (401, 404):
+                self.tok = None
             return None
 
 

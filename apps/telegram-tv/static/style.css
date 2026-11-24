@@ -880,12 +880,13 @@ svg{width:1em;height:1em}
 .bnv-burger:hover{background:color-mix(in srgb, currentColor 8%, transparent)}
 .bnv-burger:focus-visible{outline:2px solid currentColor;outline-offset:-2px}
 .bnv-burger svg{width:20px;height:20px}
-/* The burger the BASE draws for a page that placed none (the script adds `html.bnv-float` once it
-   has): the same 44/48px target, parked in the corner a phone leaves free and ABOVE the scrim, so
+/* The burger the BASE draws while none of the page's own is on the screen (the script sets
+   `html.bnv-float` then — a page that placed none, or one whose own went with a bar it hides): the
+   same 44/48px target, parked in the corner a phone leaves free and ABOVE the scrim, so
    the one button both opens the menu and shuts it. Its own test is the window and not a container —
    the button lives on `body`, outside the menu's container, and a container query cannot see it.
    Measured 2026-10-12: without this, `sites`, `domains` and `drive` had no way into their menu on a
-   phone at all. */
+   phone at all; and off its list, neither had mail (DGO-2170). */
 .bnv-burger.is-float{
   display:none;position:fixed;z-index:56;
   inset-block-end:calc(12px + env(safe-area-inset-bottom, 0px));inset-inline-start:12px;
@@ -893,6 +894,10 @@ svg{width:1em;height:1em}
   background:var(--surface);color:var(--ink);border:1px solid var(--line);box-shadow:var(--elev-2);
 }
 @media (max-width:599px){ html.bnv-float .bnv-burger.is-float{display:inline-flex} }
+/* …and the ROOM it takes. A pane that scrolls to the frame's foot ends its last row under the button unless it
+   leaves this below it while the button stands there (mail's reader: «הדפס» lay under it, DGO-2170) — so such a
+   pane pads its end by `var(--bnv-float-room, 0px)`, which is nothing wherever the button is not drawn. */
+@media (max-width:599px){ html.bnv-float{--bnv-float-room:calc(72px + env(safe-area-inset-bottom, 0px))} }
 .bnv-scrim{
   position:fixed;inset:0;z-index:55;border:0;padding:0;
   background:var(--scrim);   /* the palette's own: mixed from the menu's ink it was a WHITE veil wherever that ink is light */

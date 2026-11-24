@@ -29,6 +29,14 @@ except Exception:                        # pragma: no cover - exercised by the f
 MAX_ATTEMPTS = 5
 LOCK_MINUTES = 15
 
+#: What an envelope is for. `sign`: one signer signs it (the app's first job). `view`: a read-only link to a document —
+#: the same token, expiry, password and revoke, and never a signature; its file may be replaced while it is open, so
+#: the link follows a document that is still being written (DGO-2047, «מסמכים חיים»).
+KINDS = ("sign", "view")
+
+#: Columns added after the first volumes were made: a volume from before them gets them on open, with their default.
+LATE_COLUMNS = (("kind", "TEXT NOT NULL DEFAULT 'sign'"), ("ref", "TEXT"))
+
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS envelopes (
   id            TEXT PRIMARY KEY,
@@ -59,7 +67,9 @@ CREATE TABLE IF NOT EXISTS envelopes (
   drive_path    TEXT,
   drive_state   TEXT,
   notice_state  TEXT,
-  closed_reason TEXT
+  closed_reason TEXT,
+  kind          TEXT NOT NULL DEFAULT 'sign',   -- sign | view (a read-only link to a document, DGO-2047)
+  ref           TEXT                           -- the caller's own name for the source (my-docs: the ledger id)
 );
 CREATE TABLE IF NOT EXISTS events (
   envelope_id TEXT NOT NULL,
@@ -134,6 +144,11 @@ class Store:
         self.conn = sqlite3.connect(path, check_same_thread=False)
         self.conn.row_factory = sqlite3.Row
         self.conn.executescript(SCHEMA)
+        have = {r[1] for r in self.conn.execute("PRAGMA table_info(envelopes)")}
+        for name, decl in LATE_COLUMNS:
+            if name not in have:
+                self.conn.execute(f"ALTER TABLE envelopes ADD COLUMN {name} {decl}")
+        self.conn.execute("CREATE INDEX IF NOT EXISTS envelopes_ref ON envelopes(ref)")
         self.conn.commit()
 
     def close(self) -> None:
@@ -143,7 +158,9 @@ class Store:
     def create(self, *, doc_name: str, doc_path: str, doc_sha256: str, doc_size: int,
                signer_name: str, sender: str, days: int = 14, page: int = 1,
                box: Iterable[float] | None = None, password: str | None = None,
-               signer_email: str = "") -> dict:
+               signer_email: str = "", kind: str = "sign", ref: str | None = None) -> dict:
+        if kind not in KINDS:
+            raise ValueError("kind must be one of %s" % ", ".join(KINDS))
         now = self.clock()
         token = secrets.token_urlsafe(32)
         eid = secrets.token_hex(8)
@@ -154,7 +171,7 @@ class Store:
             sender=sender, page=max(int(page or 1), 1),
             box=json.dumps(list(box)) if box else None,
             pw_hash=hash_password(password) if password else None,
-            token_hash=token_hash(token), attempts=0,
+            token_hash=token_hash(token), attempts=0, kind=kind, ref=(ref or None),
         )
         cols = ",".join(row)
         marks = ",".join("?" for _ in row)
@@ -175,9 +192,14 @@ class Store:
                                 (token_hash(token),)).fetchone()
         return dict(row) if row else None
 
-    def list(self, limit: int = 100) -> list[dict]:
-        rows = self.conn.execute(
-            "SELECT * FROM envelopes ORDER BY created_at DESC LIMIT ?", (int(limit),)).fetchall()
+    def list(self, limit: int = 100, ref: str | None = None) -> list[dict]:
+        if ref:
+            rows = self.conn.execute(
+                "SELECT * FROM envelopes WHERE ref=? ORDER BY created_at DESC, rowid DESC LIMIT ?",
+                (ref, int(limit))).fetchall()
+        else:
+            rows = self.conn.execute(
+                "SELECT * FROM envelopes ORDER BY created_at DESC LIMIT ?", (int(limit),)).fetchall()
         return [dict(r) for r in rows]
 
     def set(self, eid: str, **fields: Any) -> None:
@@ -224,8 +246,10 @@ class Store:
         Two windows posting the same link at the same moment used to stamp the document twice; this is
         the atomic step (one UPDATE, checked by its own row count) that makes the second one lose.
         """
+        # …and only an envelope made to be signed: a view link is never a signature, whatever reaches this (DGO-2047)
         cur = self.conn.execute(
-            "UPDATE envelopes SET status='signing' WHERE id=? AND status IN ('draft','sent','opened')",
+            "UPDATE envelopes SET status='signing' WHERE id=? AND kind='sign' "
+            "AND status IN ('draft','sent','opened')",
             (eid,))
         self.conn.commit()
         return cur.rowcount == 1

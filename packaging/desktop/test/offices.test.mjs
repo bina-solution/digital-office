@@ -84,12 +84,19 @@ test('what a probe answers is an origin the app keeps — the console tried firs
 
 test('a probe tells an office from anything else', () => {
   const vps = 'https://console.staging.digital-office.co.il';
-  // what vps1 answered, 2026-11-18
-  assert.deepEqual(o.readProbe(vps, { status: 302, location: 'https://auth.staging.digital-office.co.il/login?rd=https%3A%2F%2Fconsole.staging.digital-office.co.il%2Fmanifest.webmanifest&st=1' }),
+  assert.equal(o.PROBE_PATH, '/api/office');
+  // what vps1 and the HP answered to /api/office with no cookies, 2026-11-18
+  assert.deepEqual(o.readProbe(vps, { status: 302, location: 'https://auth.staging.digital-office.co.il/login?rd=https%3A%2F%2Fconsole.staging.digital-office.co.il%2Fapi%2Foffice&st=1' }),
     { kind: 'signin', origin: vps });
-  assert.deepEqual(o.readProbe(vps, { status: 200, json: { name: 'הלשכה הדיגיטלית', icons: [] } }),
-    { kind: 'office', origin: vps, name: 'הלשכה הדיגיטלית' });
+  assert.deepEqual(o.readProbe(HP.origin, { status: 302, location: 'http://auth.localhost/login?rd=http%3A%2F%2Fconsole.localhost%2Fapi%2Foffice&st=1' }),
+    { kind: 'signin', origin: HP.origin });
+  // a console with no sign-in in front answers its office's record (platform-base/console/app.py api_office)
+  assert.deepEqual(o.readProbe(vps, { status: 200, json: { office: { name: 'הלשכה בחיפה' }, installed: true } }),
+    { kind: 'office', origin: vps, name: 'הלשכה בחיפה' });
+  assert.deepEqual(o.readProbe(vps, { status: 200, json: { office: {}, installed: null } }),   // its plane can't be asked
+    { kind: 'office', origin: vps, name: 'staging' });
   assert.equal(o.readProbe(vps, { status: 302, location: 'https://evil.example/login?rd=https://other.example/' }).kind, 'not-office');
   assert.equal(o.readProbe(vps, { status: 404 }).kind, 'not-office');
+  assert.equal(o.readProbe(vps, { status: 200, json: null }).kind, 'not-office');            // a page, not the record
   assert.equal(o.readProbe(vps, { status: 200, json: { hello: 1 } }).kind, 'not-office');
 });

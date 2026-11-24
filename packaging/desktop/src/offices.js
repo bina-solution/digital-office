@@ -100,19 +100,23 @@ function labelOf(origin) {
 const partitionFor = (origin) =>
   `persist:office-${origin.toLowerCase().replace(/-/g, '--').replace(/[^a-z0-9-]+/g, '-')}`;
 
+/** What the app asks an address to learn whether it is an office: the console's own record of its office. */
+const PROBE_PATH = '/api/office';
+
 /**
- * A probe's answers → what the address is. `manifest`: the response to <origin>/manifest.webmanifest asked with no
- * cookies and no redirect followed ({status, location, json}). The console answers its manifest (an office with no
- * sign-in in front), or — what every office does — the edge answers with its sign-in: a redirect to a /login that
- * carries `rd`, back to this console.
+ * A probe's answers → what the address is. `answer`: the response to <origin>/api/office asked with no cookies and no
+ * redirect followed ({status, location, json}). The console answers its office's record, `{office, installed}` (an
+ * office with no sign-in in front), or — what every office does — the edge answers with its sign-in: a redirect to a
+ * /login that carries `rd`, back to this console.
  */
-function readProbe(origin, manifest) {
-  if (manifest.status === 200 && manifest.json && manifest.json.name && Array.isArray(manifest.json.icons)) {
-    return { kind: 'office', origin, name: manifest.json.name };
+function readProbe(origin, answer) {
+  const rec = answer.json;
+  if (answer.status === 200 && rec && rec.office && typeof rec.office === 'object' && 'installed' in rec) {
+    return { kind: 'office', origin, name: String(rec.office.name || labelOf(origin).label) };
   }
-  if (manifest.status >= 300 && manifest.status < 400 && manifest.location) {
+  if (answer.status >= 300 && answer.status < 400 && answer.location) {
     let to;
-    try { to = new URL(manifest.location, origin); } catch { return { kind: 'not-office', origin }; }
+    try { to = new URL(answer.location, origin); } catch { return { kind: 'not-office', origin }; }
     const rd = to.searchParams.get('rd') || '';
     if (/\/login\/?$/.test(to.pathname) && rd.startsWith(origin)) return { kind: 'signin', origin };
   }
@@ -120,5 +124,6 @@ function readProbe(origin, manifest) {
 }
 
 module.exports = {
-  candidates, isOfficeOrigin, scopeOf, inScope, mayGrant, mayOpenOutside, labelOf, partitionFor, readProbe, isPrivateHost,
+  candidates, isOfficeOrigin, scopeOf, inScope, mayGrant, mayOpenOutside, labelOf, partitionFor, PROBE_PATH, readProbe,
+  isPrivateHost,
 };

@@ -45,7 +45,7 @@
       "port": 8982,
       "auth": "sso",
       "module": {
-        "group": "ראשי",
+        "group": "תקשורת",
         "icon": "monitor",
         "embed": true,
         "alias": "telegram-tv",
@@ -74,9 +74,9 @@
     }
   },
   "data": {
-    "volumes": [
-      "telegram_tv_data"
-    ],
+    "volumes": [],
+    "paths": ["data/telegram-tv/state"],
+    "moved_from": {"data/telegram-tv/state": "telegram_tv_data"},
     "on_uninstall": "prompt"
   },
   "resources": {

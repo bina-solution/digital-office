@@ -1327,18 +1327,228 @@ def _said(job):
     return " · ".join(str(x) for x in (job.get("log") or [])[-4:])[:600]
 
 
+def _home_of(aid):
+    """data/<aid> — an app's own home in the DGO folder (an instance's id is <app>-<key>: its home data/<app>-<key>)."""
+    return f"data/{aid}"
+
+
+def _in_home(aid, p):
+    """`p` (a data.paths / data.moved_from key), normalised, when it is inside the app's own home — else None. Never a
+    path that normalises to something else (`data/x/.`, `data/x/../y`, a doubled `/`), never the home's neighbour
+    (data/bina-claude-2 is not data/bina-claude's)."""
+    p = str(p or "")
+    q = os.path.normpath(p)
+    if q != p.rstrip("/") or any(part in ("", ".", "..") for part in p.rstrip("/").split("/")):
+        return None
+    home = _home_of(aid)
+    return q if (q == home or q.startswith(home + "/")) else None
+
+
+def _stores(aid, m):
+    """The app's stores in its home, each with the exact docker volume it was or waits in (DGO-2019):
+    [(rel, volume)] — `data.moved_from`'s old volume (compose's `<project>_<key>`; `external:<name>` by its own name),
+    or, for a store with none, the volume datahome makes it wait in where the folder cannot hold it
+    (`<project>_dh_<app>_<store>`). A store that was a folder of the DGO folder (`path:<folder>`) has no volume: its
+    second half is that `path:<folder>`, normalised, where it waits. The stores are data.paths and the moved_from keys
+    together, so a manifest whose paths lag its moves still has every store."""
+    data = m.get("data") or {}
+    moved = data.get("moved_from") or {}
+    out = {}
+    for rel in list(data.get("paths") or []) + list(moved):
+        q = _in_home(aid, rel)
+        if not q or q in out:
+            continue
+        old = moved.get(rel) or moved.get(q)
+        if old and str(old).startswith("external:"):
+            vol = str(old)[len("external:"):]
+        elif old and str(old).startswith("path:"):
+            vol = "path:" + os.path.normpath(str(old)[len("path:"):])
+        else:
+            vol = f"{PROJECT}_{old}" if old else f"{PROJECT}_" + re.sub(r"[^a-z0-9_]", "_", "dh_" + q[len("data/"):].lower())
+        out[q] = vol
+    return sorted(out.items())
+
+
+def _store_volumes(m, aid=None):
+    """Every docker volume an app's data is in, by its EXACT name: `data.volumes` (compose's `<project>_<key>`) and the
+    volume of each store in its home (_stores). Never a bare name guessed for a compose key: a volume of another
+    project, or one made by hand, that happens to share it is not this app's."""
+    aid = aid or m.get("id") or ""
+    names = [f"{PROJECT}_{v if isinstance(v, str) else (v or {}).get('name')}"
+             for v in (m.get("data") or {}).get("volumes") or [] if v]
+    names += [vol for _rel, vol in _stores(aid, m) if not vol.startswith("path:")]
+    return list(dict.fromkeys(names))
+
+
+def _store_folders(m, held_only=False, aid=None):
+    """The app's stores in its home in the DGO folder (DGO-2019) — with held_only, those that hold anything (one that
+    cannot be read counts as held: never assumed empty), and the folder a `path:` store came from when it still holds
+    anything (where the store waits, or the copy its move left)."""
+    aid = aid or m.get("id") or ""
+    out = []
+    for rel, vol in _stores(aid, m):
+        if not held_only:
+            out.append(rel)
+            continue
+        out += [p for p in [rel] + ([vol[len("path:"):]] if vol.startswith("path:") else [])
+                if _folder_holds(os.path.join(REPO, p))]
+    return out
+
+
+def _folder_holds(path):
+    """Whether a folder holds anything — one that cannot be read does (never assumed empty); one that is not there
+    does not."""
+    try:
+        with os.scandir(path) as it:
+            return any(True for _ in it)
+    except FileNotFoundError:
+        return False
+    except OSError:
+        return True
+
+
 def _held_volumes(m):
-    """The app's declared volumes that already EXIST here — data this office holds for the app."""
+    """The app's data that already EXISTS here — its volumes (exact names) and its stores in data/ that hold anything:
+    data this office holds for the app."""
     client = docker_sdk.from_env()
     held = []
-    for v in (m.get("data") or {}).get("volumes") or []:
-        name = v if isinstance(v, str) else (v or {}).get("name")
+    for name in _store_volumes(m):
         try:
-            client.volumes.get(f"{PROJECT}_{name}")
+            client.volumes.get(name)
             held.append(name)
         except docker_sdk.errors.NotFound:
             pass
-    return held
+    return held + _store_folders(m, held_only=True)
+
+
+def _remove_exact_volumes(names):
+    """Remove docker volumes by their exact names; ([removed], [failures]). A missing one is nothing to remove."""
+    client = docker_sdk.from_env()
+    removed, failed = [], []
+    for n in names:
+        try:
+            client.volumes.get(n).remove(force=False)
+            removed.append(n)
+        except docker_sdk.errors.NotFound:
+            continue
+        except Exception as e:                                  # noqa: BLE001 — in use by a reader, said
+            failed.append(f"{n}: {e}")
+    return removed, failed
+
+
+def _readers_of(path_or_volume):
+    """The running containers that still mount this store — its folder (a host path) or its volume — after the app's
+    own are gone: another app's read of it (lan-console of forward-auth), or a hand-made container."""
+    client = docker_sdk.from_env()
+    out = []
+    for c in client.containers.list():
+        for mnt in (c.attrs.get("Mounts") or []):
+            if mnt.get("Type") == "volume":
+                hit = mnt.get("Name") == path_or_volume
+            else:
+                # the store itself, a part of it (a reader of a subfolder, datahome's subpath), or a folder above it
+                # INSIDE data/ (another app's whole home over it) — never the checkout or the machine's root, which
+                # the office's own hands mount (app-management, data-management, ci-runner, machine) and read no store
+                src = (mnt.get("Source") or "").rstrip("/")
+                data_root = os.path.join(REPO, "data")
+                above = (src == data_root or src.startswith(data_root + "/")) and path_or_volume.startswith(src + "/")
+                hit = bool(src) and (src == path_or_volume or src.startswith(path_or_volume + "/") or above)
+            if hit:
+                out.append(c.name)
+                break
+    return out
+
+
+def _remove_store_folders(aid, m):
+    """`uninstall --purge` of an app whose stores live in data/ (DGO-2019), store by store: a store another running
+    container still reads is refused and named; otherwise its volume goes, and only once that is gone (or never was)
+    its folder — so a purge that half-fails never leaves a volume full of data beside an empty folder, which the next
+    `bbox run` would move straight back. Only inside the app's own home, never through a symlinked home. When every
+    store went, the data move's record of the app goes too (data/.moves/<app>/, its wait file, the copies set aside):
+    a record left behind would read «moved» over an empty folder at the next install."""
+    removed, failed, kept = [], [], []                 # kept: a store that did not go (its record stays with it)
+    home = _home_of(aid)
+    home_full = os.path.join(REPO, home)
+    real_home = os.path.realpath(home_full)
+    data = m.get("data") or {}
+    for rel in list(data.get("paths") or []) + list(data.get("moved_from") or {}):
+        if str(rel).startswith("data/") and not _in_home(aid, rel):
+            failed.append(f"{rel}: not in {home}/ — never purged from here")   # said; no store of this app
+    if os.path.islink(home_full):
+        return removed, failed + [f"{home}: a link, not the app's own folder — never purged through it"]
+    stores = _stores(aid, m)
+    for rel, vol in stores:
+        full = os.path.join(REPO, rel)
+        # where it really is, before anything of it goes: the home itself, or inside the home — never past a link
+        parent = os.path.realpath(os.path.dirname(full))
+        inside = (rel == home and parent == os.path.realpath(os.path.join(REPO, "data"))) \
+            or parent == real_home or parent.startswith(real_home + os.sep)
+        if not inside:
+            failed.append(f"{rel}: resolves outside {home}/ — not purged")
+            kept.append(rel)
+            continue
+        if vol.startswith("path:") and _folder_holds(os.path.join(REPO, vol[len("path:"):])):
+            # moved from a folder of the source tree that still holds something (the copy its move left, or the store
+            # itself while it waits): a purge never deletes there, and without that folder emptied the store and its
+            # record stay — no record over a full old folder would move it straight back at the next install. An old
+            # folder that is empty or gone holds nothing: the store is purged as any other
+            failed.append(f"{rel}: moved from {vol[len('path:'):]}/, which still holds data in the source tree a purge "
+                          f"never deletes — not purged")
+            kept.append(rel)
+            continue
+        no_volume = vol.startswith("path:")                # a store that was a folder: no docker volume of it
+        readers = sorted(set(_readers_of(full) + ([] if no_volume else _readers_of(vol))))
+        if readers:
+            failed.append(f"{rel}: still read by {', '.join(readers)} — not purged")
+            kept.append(rel)
+            continue
+        gone, errs = _remove_exact_volumes([] if no_volume else [vol])
+        removed += gone
+        if errs:
+            failed += errs
+            kept.append(rel)
+            continue
+        try:
+            if os.path.isdir(full) and not os.path.islink(full):
+                shutil.rmtree(full)
+            elif os.path.lexists(full):
+                os.remove(full)                        # a link, or a store that is one file
+        except OSError as e:
+            failed.append(f"{rel}: {e}")
+        if os.path.lexists(full):
+            kept.append(rel)
+            if not failed or not failed[-1].startswith(rel + ":"):
+                failed.append(f"{rel}: still there after the purge")
+            continue
+        removed.append(rel)
+        # this store's own record goes with it (datamoves' name for it): a record left would read «moved» over an
+        # empty folder at the next install
+        sub = rel.split("/", 2)[2] if rel.count("/") >= 2 else "_"
+        led = os.path.join(REPO, "data", ".moves", aid, sub.replace("/", "__") + ".json")
+        if os.path.lexists(led):
+            try:
+                os.remove(led)
+                removed.append(os.path.relpath(led, REPO))
+            except OSError as e:
+                failed.append(f"{led}: {e}")
+    # the app's wait file always goes: it is no longer compiled, it may name a volume just removed, and the next run
+    # writes it again from the records of whatever was kept; its record folder and the copies set aside go when
+    # every store went
+    if stores:
+        tail = (f"data/.moves/{aid}", f"data/.moves/aside/{aid}") if not kept else ()
+        for p in (f"data/.moves/wait/{aid}.yml",) + tail:
+            full = os.path.join(REPO, p)
+            try:
+                if os.path.isdir(full) and not os.path.islink(full):
+                    shutil.rmtree(full)
+                elif os.path.lexists(full):
+                    os.remove(full)
+                else:
+                    continue
+                removed.append(p)
+            except OSError as e:
+                failed.append(f"{p}: {e}")
+    return removed, failed
 
 
 def _carry_in(aid, src):
@@ -1856,7 +2066,7 @@ def api_archive(aid):
             errs.append(f"recompile: {e}")
     return jsonify(ok=True, id=aid, archived=True, containers_removed=removed_c,
                    images_removed=removed_i, errors=errs,
-                   volumes_kept=(m.get("data") or {}).get("volumes") or [])
+                   volumes_kept=_store_volumes(m) + _store_folders(m))
 
 
 @app.post("/api/apps/<aid>/unarchive")
@@ -2546,6 +2756,9 @@ def api_uninstall(aid):
         removed_vols, vol_errs = ([], [])
         if purge:
             removed_vols, vol_errs = _remove_volumes((m.get("data") or {}).get("volumes") or [])
+            # …and each store in the app's home, store by store (its volume, then its folder, then the move's record)
+            dirs, dir_errs = _remove_store_folders(aid, m)
+            removed_vols, vol_errs = removed_vols + dirs, vol_errs + dir_errs
 
         # An instance (DGO-1920) is not kept in the catalog: its row and its folder go, and so does its tile.
         # Its data stays unless purged above — the same promise every app's uninstall makes.

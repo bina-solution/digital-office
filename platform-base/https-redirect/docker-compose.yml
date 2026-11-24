@@ -25,6 +25,8 @@ services:
       # the only hosts a Location may point at: this office's own name (the router's rule already
       # names it; this is the belt, for a caller that reaches 8079 from inside the office network)
       - HTTPS_REDIRECT_SUFFIX=${DEPLOYMENT_DOMAIN:-localhost}
+      # the office's former names (DGO-2013): on https a host under one goes to the same host under DEPLOYMENT_DOMAIN
+      - HTTPS_REDIRECT_FORMER=${DGO_FORMER_DOMAINS:-}
     networks:
       - traefik-network
     logging:

@@ -75,7 +75,7 @@
       "port": 8981,
       "auth": "sso",
       "module": {
-        "group": "עסק",
+        "group": "העסק ברשת",
         "icon": "link",
         "embed": true,
         "alias": "domain-internic",
@@ -104,9 +104,9 @@
     }
   },
   "data": {
-    "volumes": [
-      "domain_internic_state"
-    ],
+    "volumes": [],
+    "paths": ["data/domain-internic/state"],
+    "moved_from": {"data/domain-internic/state": "domain_internic_state"},
     "on_uninstall": "keep"
   },
   "resources": {

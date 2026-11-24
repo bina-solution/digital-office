@@ -39,9 +39,9 @@
     }
   },
   "data": {
-    "volumes": [
-      "office_routes_state"
-    ],
+    "volumes": [],
+    "paths": ["data/office-routes/state"],
+    "moved_from": {"data/office-routes/state": "office_routes_state"},
     "on_uninstall": "prompt"
   },
   "resources": {
@@ -61,7 +61,7 @@
       "port": 8080,
       "auth": "sso",
       "module": {
-        "group": "תשתית",
+        "group": "ניהול הלשכה",
         "icon": "link",
         "embed": true,
         "alias": "office-routes",

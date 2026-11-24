@@ -44,9 +44,9 @@
     "structural": "auto"
   },
   "data": {
-    "volumes": [
-      "redis_data"
-    ],
+    "volumes": [],
+    "paths": ["data/redis/data"],
+    "moved_from": {"data/redis/data": "redis_data"},
     "on_uninstall": "prompt"
   }
 }

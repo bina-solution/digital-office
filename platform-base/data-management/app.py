@@ -95,7 +95,7 @@ STALE_AFTER = 300.0          # seconds; a sweep this old is refreshed on next re
 # SNAP lives in memory, so a RESTARTED service had nothing to stand on: its page was placeholders for
 # as long as the first sweep took — 85 seconds on a laptop whose binds are walked over /mnt/c
 # (DGO-515; the maps' own rule read the screen as never drawn). The last sweep that completed is
-# therefore also written to the service's own volume (declared in app.json), and read back at start
+# therefore also written to the service's own store (data/data-management/state, app.json), and read back at start
 # as what it is: OLD numbers, carrying their own time, shown while the first sweep runs.
 #
 # It is never a sweep of THIS process: it fills SNAP["last"] and nothing else, so `state` stays

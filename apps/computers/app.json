@@ -80,7 +80,7 @@
         "/share/"
       ],
       "module": {
-        "group": "תשתית",
+        "group": "ניהול הלשכה",
         "icon": "monitor",
         "embed": true,
         "alias": "computers",
@@ -109,9 +109,9 @@
     }
   },
   "data": {
-    "volumes": [
-      "computers_state"
-    ],
+    "volumes": [],
+    "paths": ["data/computers/state"],
+    "moved_from": {"data/computers/state": "computers_state"},
     "on_uninstall": "prompt"
   },
   "resources": {

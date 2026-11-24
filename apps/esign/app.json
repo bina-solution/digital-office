@@ -55,8 +55,8 @@
       ],
       "engine": "drive_local",
       "profile": "admin",
-      "upload_folder": "חתימות",
-      "note": "The signed PDF and its audit PDF are written into «קבצים» by the drive app's own contract (PUT /api/fs/content), under /חתימות/<date>/ — never the drive root, and never overwriting an earlier copy."
+      "upload_folder": "מסמכים/חתימות",
+      "note": "The signed PDF and its audit PDF are written into «קבצים» by the drive app's own contract (PUT /api/fs/content), under /מסמכים/חתימות/<date>/ — inside the folders «ארכיון» lists (DGO-2125), never the drive root, and never overwriting an earlier copy."
     },
     {
       "capability": "notify",
@@ -84,9 +84,10 @@
         "/s/"
       ],
       "module": {
-        "group": "עסק",
+        "group": "ניהול העסק",
         "icon": "clipboard",
         "embed": true,
+        "tile": false,
         "alias": "esign",
         "id": "esign",
         "name": "חתימות",
@@ -113,9 +114,9 @@
     }
   },
   "data": {
-    "volumes": [
-      "esign_data"
-    ],
+    "volumes": [],
+    "paths": ["data/esign/state"],
+    "moved_from": {"data/esign/state": "esign_data"},
     "on_uninstall": "keep"
   },
   "resources": {

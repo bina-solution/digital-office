@@ -20,7 +20,7 @@ import uuid
 from pathlib import Path
 
 APP = Path(__file__).resolve().parents[1]
-need = [t for t in ("setsid", "pgrep", "jq") if not shutil.which(t)]
+need = [t for t in ("setsid", "pgrep", "jq", "flock") if not shutil.which(t)]
 if need or not Path("/proc").is_dir():
     print(f"NOT RUN needs {', '.join(need) or '/proc'} (Linux, as in the agent's image)")
     sys.exit(1)
@@ -73,8 +73,10 @@ with tempfile.TemporaryDirectory() as d:
     (runner / "run.sh").chmod(0o755)
     # the agent's job test is `pgrep -f Runner.Worker`; here it matches THIS run's stand-in only — on a host that is
     # itself a runner (the Dell's gates) the real Runner.Worker running this test read as a job, and no pause came
+    want = d / "heavy.want"                                   # the office's follow holds it while its take runs
     env = dict(os.environ, CI_RUNNER_STATE=str(state), CI_RUNNER_WORK=str(work), CI_RUNNER_HOME=str(runner),
-               CI_RUNNER_TICK="1", PATH=os.environ["PATH"], CI_RUNNER_JOB_MATCH=f"Runner.Worker-{MARK}")
+               CI_RUNNER_TICK="1", PATH=os.environ["PATH"], CI_RUNNER_JOB_MATCH=f"Runner.Worker-{MARK}",
+               CI_RUNNER_WANT=str(want))
     # …so production's own match, which the run above never takes, is held here as text: a typo in it would let a
     # pause stop a running job (the second reader)
     check("production's job match is Runner.Worker",
@@ -99,6 +101,21 @@ with tempfile.TemporaryDirectory() as d:
         os.unlink(state / "paused")
         check("resumed: the listener starts again",
               until(lambda: beat(state).get("state") == "running" and procs("Runner.Listener")), beat(state))
+
+        # A TAKE WANTS THE SLOT (scripts/follow.sh, DGO-2164): while another process holds heavy.want, the runner stands
+        # aside between jobs as paused, and the owner's pause file is never written. The holder is ONE process that owns
+        # the lock's descriptor (exec … sleep), so killing it is all a release takes, as when a cycle dies.
+        holder = subprocess.Popen(["bash", "-c", f'exec 9>>"{want}"; flock 9; exec sleep 1000'])
+        check("a take holds heavy.want: the runner stands aside between jobs («paused»), the pause file unwritten",
+              until(lambda: beat(state).get("state") == "paused" and not procs("Runner.Listener"))
+              and not (state / "paused").exists(), beat(state))
+        holder.kill(); holder.wait()
+        check("…its holder killed: the lock goes with it, and the listener starts again",
+              until(lambda: beat(state).get("state") == "running" and procs("Runner.Listener")), beat(state))
+        want.write_text("")
+        check("an unheld heavy.want (the file left from a take) changes nothing: still running",
+              (time.sleep(2.5) or True) and beat(state).get("state") == "running" and procs("Runner.Listener"),
+              beat(state))
 
         job = subprocess.Popen(["bash", "-c", f"exec -a Runner.Worker-{MARK} sleep 1000"])
         time.sleep(0.5)

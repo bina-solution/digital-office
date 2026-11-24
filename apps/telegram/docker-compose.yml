@@ -24,8 +24,10 @@ services:
       - TG_DEFAULT_API_HASH=${TV_DEFAULT_API_HASH:-00000000000000000000000000000000}
       - LOG_LEVEL=${TELEGRAM_LOG_LEVEL:-INFO}
     volumes:
-      # which account is active, and which chats are listened to. Losing it loses two choices, not the login.
-      - telegram_data:/data
+      # which account is active, and which chats are listened to. Losing it loses two choices, not the login. In the
+      # DGO folder's data/telegram/state (DGO-2019; a named store, so the relay's own can sit beside it); it was the
+      # volume telegram_data, moved once by `bbox run` (app.json data.moved_from)
+      - ../../data/telegram/state:/data
       # the office's ONE flow.v1 publisher (DGO-1402) — the platform's file, never a copy of it here
       - ../../platform-base/redis/flowpub.py:/opt/dgo/flowpub.py:ro
     networks:
@@ -50,9 +52,6 @@ services:
       options:
         max-size: 5m
         max-file: '3'
-
-volumes:
-  telegram_data:
 
 networks:
   traefik-network:

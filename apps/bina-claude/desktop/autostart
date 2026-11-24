@@ -35,6 +35,23 @@ command -v xdg-mime >/dev/null 2>&1 \
 BROWSER=/usr/local/bin/bina-claude-signin-browser
 export BROWSER
 
+# NEVER LEFT MINIMIZED (DGO-2001). This display has no taskbar and no window list, so a window that is
+# minimized (the app's own «–» at its top right, a thumb's width from its menu on a phone) has no way back:
+# the stream shows a black desktop while the app runs, signed in, behind it. Examplex's office, 2026-11-18: the
+# main window Iconic, every pixel of the display 0. So every 2 s a minimized window openbox manages is
+# brought back: activating it asks openbox (_NET_ACTIVE_WINDOW), which restores it. Openbox also calls a
+# window on another desktop Iconic; the base image's rc.xml keeps one desktop, so here it means minimized. A
+# window hidden on purpose (withdrawn) is not in the list and is left alone. Outside the loop below: one
+# watch per session.
+(
+  while sleep 2; do
+    for w in $(xprop -root _NET_CLIENT_LIST 2>/dev/null | grep -o '0x[0-9a-f]*'); do
+      xprop -id "${w}" WM_STATE 2>/dev/null | grep -q 'window state: Iconic' \
+        && xdotool windowactivate "${w}" 2>/dev/null
+    done
+  done
+) &
+
 # Brought back whenever it exits (a sign-out, a crash, the window closed): this display has one purpose.
 # --no-sandbox: Chromium's sandbox needs user namespaces docker's default seccomp denies; the container is
 # the sandbox. No GPU here.

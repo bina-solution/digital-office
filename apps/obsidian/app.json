@@ -24,7 +24,7 @@
       "auth": "sso",
       "emit_labels": true,
       "module": {
-        "group": "ראשי",
+        "group": "עבודה וקבצים",
         "icon": "book",
         "embed": true,
         "alias": "obsidian",

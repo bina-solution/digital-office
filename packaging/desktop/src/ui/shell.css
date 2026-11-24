@@ -127,6 +127,12 @@
 @font-face{font-family:"Segoe UI";src:local("Segoe UI Bold Italic");font-weight:700 900;font-style:italic;unicode-range:U+0590-05FF,U+FB1D-FB4F}
 /* @bina-theme-tokens:end */
 
+/* THE FAMILIES - the office's own list (platform-base/console/static/style.css, bina-ui.css). This sheet used
+   var(--font) and never gave it a value: with no value the whole `font` declaration below is none, and the first
+   run and the rail were drawn in the engine's default serif on every system - seen in the first installers' proof
+   pictures and on a Windows office (v0.3.5, 2026-11-24, DGO-2188). test/styles.test.mjs holds every variable. */
+:root{--font:"Segoe UI",system-ui,-apple-system,"Noto Sans Hebrew","Assistant",Arial,sans-serif}
+
 *{box-sizing:border-box}
 html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);font:15px/1.5 var(--font)}
 button,input{font:inherit;color:inherit}

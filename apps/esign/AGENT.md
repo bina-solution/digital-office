@@ -41,6 +41,17 @@ Canonical answers are `{"ok":true,"op":…,"data":…}`; a refusal is 4xx with a
 `/s/<token>/sign` (POST) · `/s/<token>/done`. With a password set, the bytes are **not served** until it
 is given; five wrong attempts lock the link for 15 minutes and every attempt is an audit event.
 
+## «מילוי וחתימה» — one link for every party (DGO-2139, `fill.py`)
+
+An **event** is one PDF, its sides and places (detected from the words under its lines), one token.
+`POST /api/events` (file, hints) → draft · `POST /api/events/<id>/send` (the map) → the link ·
+`/link` `/cancel` `/complete` (re-seal) · `GET /api/events?ref=`. Public: `/s/<token>` (the page),
+`/s/<token>/f/claim|answers|sign|state|seen` and `page/<n>` `sig/<side>` `final`. A side is claimed
+by one browser; the last signature seals ONE copy for all. A personal code is 6–8 digits: five wrong codes
+lock that browser (each lock doubles); 100 per link close the side until `/link` mints a new link.
+`/complete` re-makes a copy that failed, or re-delivers one «קבצים» refused — taken in the request, so a
+second press is refused (409).
+
 ## Rules
 
 - **The link is a bearer token, not a session.** It opens one envelope, is refused on every other path,
@@ -52,7 +63,7 @@ is given; five wrong attempts lock the link for 15 minutes and every attempt is 
   `POST /api/envelopes/<id>/retry` finishes the delivery, never a second signing.
 - **Never rewrite a signed envelope.** Signing twice is two envelopes; drive keeps an existing file and
   names the new one «name (2)».
-- The office's signing certificate is generated once on the volume (self-signed, in the office's name:
+- The office's signing certificate is generated once in the store, data/esign/state (self-signed, in the office's name:
   `ESIGN_OFFICE_NAME` ← BUSINESS_NAME) or connected as a PKCS#12 (`ESIGN_CERT_P12`/`ESIGN_CERT_PASS`); the
   certificate page names that key's subject. A self-signed signature proves the bytes did not change;
   it does not prove WHO signed — that is the audit trail's job, and for a document that needs it, a
@@ -68,7 +79,7 @@ is given; five wrong attempts lock the link for 15 minutes and every attempt is 
   a second public prefix would need the same line, and is a decision, not a convenience.
 - A draft envelope's link answers 404 until `/send` (or the CLI's flow, which sends on creation).
 - `./bbox esign new` copies the PDF into the container to post it; the copy is removed afterwards.
-- The signed PDF lives on the volume at `<data>/signed/<id>.pdf`; the office's copy is in «קבצים» under
-  `/חתימות/<YYYY-MM-DD>/`.
+- The signed PDF lives in the store at `<data>/signed/<id>.pdf`; the office's copy is in «קבצים» under
+  `/מסמכים/חתימות/<YYYY-MM-DD>/`, which «ארכיון» lists (DGO-2125).
 - **Sending to a person outside the office is the owner's act** — this app produces the link, not the
   message.

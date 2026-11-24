@@ -67,8 +67,11 @@ Updating the harness version (what EXU-64 did for 0.2.2-rc.3):
    it reports, `node apply-he.mjs <translations.json>`, `node build-client.mjs --check`;
 4. the plugins' own tests (`node --test plugins/*/test/*.test.mjs`).
 
-Sessions written by an older harness are migrated when opened; the adapter opens every one of them once
-at start (a rename to its own title), so the list and `bbox agent show` say everything about them.
+The harness migrates a session written by an older harness when someone next writes to it (a message,
+a rename, an edit). Reading one decodes it in memory and keeps nothing loaded. Until someone writes to
+it, the list, the screen's model label and `bbox agent show` know only its title. The adapter no longer
+resumes them all at start (DGO-2126): the harness keeps a resumed session until its process ends, and the
+HP's harness died at its 1120 MB heap limit inside that loop (DGO-2111 root 20).
 
 ## On the office timeline (כל מקביל)
 

@@ -589,7 +589,8 @@ def c_door_with_no_tile_is_narrow():
     if catalog.publishable_services(registry, narrowed, "vps1") or \
             not catalog.publishable_services(registry, narrowed, "hp-laptop"):
         problems.append("`serve.only` must narrow a door with no `to` exactly as it narrows an app")
-    for bad in (["/webhook/../rest/workflows"], ["webhook"], [], ["/a/%2e%2e"], ["/a\n"]):
+    # a colon is a request target's own (a registry's digests, below), never a declared path's (the second reader)
+    for bad in (["/webhook/../rest/workflows"], ["webhook"], [], ["/a/%2e%2e"], ["/a\n"], ["/v2/x:y"]):
         if catalog.publishable_services(registry, {"services": {"workflow-hooks": {"paths": bad}}}, "vps1"):
             problems.append(f"paths {bad!r} must give no door at all")
         if not catalog.clean_services({"workflow-hooks": {"paths": bad}})[1]:
@@ -667,10 +668,28 @@ def c_door_with_no_tile_is_narrow():
     kept = door_mod.Door.rewrite(b"GET / HTTP/1.1\r\nHost: drive\r\nX-Forwarded-For: 93.184.216.7\r\n\r\n", "")
     if b"X-Forwarded-For: 93.184.216.7" not in kept:
         problems.append("an app's route must keep X-Forwarded-For as before")
+    # A registry's door (DGO-2123, the image store's, given on `/v2/`): every blob and every pinned manifest is asked
+    # by DIGEST, `/v2/<name>/blobs/sha256:<hex>`. A colon inside a path segment is RFC 3986's own pchar, and the
+    # door refused it: through the link the manifest by tag came (200) and nothing by digest (404 no-app), measured
+    # HP → vps1 on 2026-11-20. It passes now, and nothing that could be read two ways comes with it.
+    digest = b"sha256:" + b"a" * 64
+    for target in (b"/v2/t/manifests/" + digest, b"/v2/t/blobs/" + digest):
+        reg_port, reg_seen = _upstream()   # one connection each: the stand-in answers once
+        registry_door = dict(published, office="hp-laptop", services=[dict(got[0], port=reg_port, paths=["/v2/"])])
+        answer = _asked_the_door(_door(registry_door, "vps1"), "workflow-hooks.hp-laptop",
+                                 b"GET " + target + b" HTTP/1.1\r\nHost: workflow-hooks.hp-laptop\r\n\r\n")
+        if not answer.startswith(b"HTTP/1.1 200") or target not in (reg_seen.get("head") or b""):
+            problems.append(f"a digest path under the door's /v2/ must reach the service, got {answer[:60]!r}")
+    registry_door = dict(published, office="hp-laptop", services=[dict(got[0], port=port, paths=["/v2/"])])
+    for target in (b"/v2/t/manifests/sha256%3Aaa", b"/v2/t/../x:1", b"//evil:80/v2/x", b"/v2//x:y"):
+        answer = _asked_the_door(_door(registry_door, "vps1"), "workflow-hooks.hp-laptop",
+                                 b"GET " + target + b" HTTP/1.1\r\nHost: workflow-hooks.hp-laptop\r\n\r\n")
+        if _headers(answer).get("x-dgo-door") != ["no-app"]:
+            problems.append(f"{target!r} could be read two ways and must still be refused, got {answer[:60]!r}")
 
     # The second reader's findings on this claim (DGO-945, round 2), each held here:
     # a path is that path — under it only when it ends in `/` …
-    for target in (b"/webhook/meet-recordings/other", b"/webhook/meet-recordingsX"):
+    for target in (b"/webhook/meet-recordings/other", b"/webhook/meet-recordingsX", b"/webhook/meet-recordings:x"):
         answer = _asked_the_door(_door(doc, "vps1"), "workflow-hooks.hp-laptop",
                                  b"POST " + target + b" HTTP/1.1\r\nHost: workflow-hooks.hp-laptop\r\n\r\n")
         if _headers(answer).get("x-dgo-door") != ["no-app"]:
@@ -685,6 +704,7 @@ def c_door_with_no_tile_is_narrow():
     # …a path the regex cannot be made to hang on (it took 0.5 s at 24 characters, doubling) …
     started = time.time()
     door_mod._plain_path("/" + "a" * 5000 + "!")
+    door_mod._plain_target("/" + "a" * 5000 + "!")
     catalog.plain_path("/" + "a" * 5000 + "!")
     if time.time() - started > 0.5:
         problems.append("the door's path rule must run in linear time")

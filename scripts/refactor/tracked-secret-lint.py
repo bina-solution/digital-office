@@ -30,6 +30,7 @@ entry went in the same commit.
 """
 import argparse
 import collections
+import hashlib
 import importlib.util
 import os
 import re
@@ -94,6 +95,50 @@ RUN = re.compile(r"[A-Za-z0-9+/]{40,}")
 ARMOR = re.compile(r"^[\s>#/*'\"]*[A-Za-z][A-Za-z-]*:\s")   # Proc-Type: 4,ENCRYPTED — DEK-Info: — Version: —
 BELOW = 4
 
+#: What every match of a pattern holds in the TEXT — the start of the match, or what its lookbehind must see — so a
+#: file that holds none of a kind's literals is not asked that kind's pattern (DGO-2123). Measured 2026-11-20: the
+#: gate's 96–132 s of every proof were the regex engine's own, each of the 25 patterns ~2–3.5 s over the 6,177 tracked
+#: text files, and `in` costs a fraction of that. The patterns are case-sensitive, and so is `in`. A kind not named
+#: here is asked of every file; the self-test proves each literal on a sample of its own pattern (SAMPLES), and a
+#: pattern with no sample fails it — a literal that a match need not hold would hide that match.
+LITERALS = {
+    "anthropic-key": ("sk-ant-",), "openai-key": ("sk-",), "stripe-key": ("sk_", "rk_"),
+    "stripe-webhook-secret": ("whsec_",),
+    "github-token": ("ghp_", "gho_", "ghu_", "ghs_", "ghr_", "github_pat_"), "gitlab-token": ("glpat-",),
+    "slack-token": ("xox",), "aws-key-id": ("AKIA", "ASIA"), "azure-account-key": ("AccountKey=",),
+    "google-api-key": ("AIza",), "google-oauth-token": ("ya29.",), "google-refresh-token": ("1//0",),
+    "google-client-secret": ("GOCSPX-",), "sendgrid-key": ("SG.",), "supabase-token": ("sbp_",),
+    "meta-token": ("EAA",), "huggingface-token": ("hf_",), "npm-token": ("npm_",), "digitalocean-token": ("dop_v1_",),
+    "firecrawl-key": ("fc-",), "telegram-token": (":AA",), "slack-webhook": ("hooks.slack.com/services/",),
+    "discord-webhook": ("/api/webhooks/",), "jwt": ("eyJ",), "private-key": ("PRIVATE KEY",),
+}
+
+#: The pattern each literal above was checked against, as a fingerprint of its text and flags (sha256 of
+#: `pattern \0 flags`, 12 hex): the export's TOKENS change, and a WIDENED pattern — one more alternative, a flag —
+#: could match a value its literal does not hold while its old sample still passed (the second reader). The self-test
+#: fails on any difference: re-check that kind's literal against its new pattern, then write its new pin here.
+PINS = {
+    "anthropic-key": "4b70fb4b368d", "openai-key": "e952cf757ac0", "stripe-key": "76cc0ff12093",
+    "stripe-webhook-secret": "f95a25d89fc5", "github-token": "3f089f383c7a", "gitlab-token": "71e6e16a6305",
+    "slack-token": "d61c2294fb01", "aws-key-id": "60c1d1d74239", "azure-account-key": "aa3fb92bf451",
+    "google-api-key": "ad6baa2ba029", "google-oauth-token": "24011c6a100f", "google-refresh-token": "b389fda2df5d",
+    "google-client-secret": "ef123f387652", "sendgrid-key": "a6ecbce75daf", "supabase-token": "ef43e131ce95",
+    "meta-token": "e2b5ce8ecd5b", "huggingface-token": "8b2b96bfb30b", "npm-token": "097dc738f02f",
+    "digitalocean-token": "313f0b33cc74", "firecrawl-key": "6404831787d7", "telegram-token": "fcfcba75fd9b",
+    "slack-webhook": "40d6d94402fb", "discord-webhook": "f56c2bbdce39", "jwt": "e31739d443c8",
+    "private-key": "038c6a4fbe16",
+}
+
+
+def pin(rx):
+    return hashlib.sha256(f"{rx.pattern}\0{rx.flags}".encode("utf-8")).hexdigest()[:12]
+
+
+def holds(kind, text):
+    """Might `text` hold a match of `kind`? Yes when it holds one of its literals, or when it has none."""
+    lits = LITERALS.get(kind)
+    return lits is None or any(lit in text for lit in lits)
+
 
 def definitions(release=RELEASE):
     """('skip', None) for a tree without scripts/release/, ('missing', None) for one with the directory and not
@@ -128,13 +173,19 @@ def body_below(lines, n):
 
 
 def scan(pe, text):
-    """[(line, kind)] for one file's text; lines counted on "\\n", as grep -n counts them."""
-    found, lines = [], text.split("\n")
+    """[(line, kind)] for one file's text; lines counted on "\\n", as grep -n counts them. Only the patterns whose
+    literal the text holds are asked (LITERALS) — the same findings, in the same order."""
+    tokens = [(kind, rx) for kind, rx, _ in pe.TOKENS if holds(kind, text)]
+    key = holds("private-key", text)
+    found = []
+    if not tokens and not key:
+        return found
+    lines = text.split("\n")
     for n, line in enumerate(lines, 1):
-        for kind, rx, _ in pe.TOKENS:
+        for kind, rx in tokens:
             if rx.search(line):
                 found.append((n, kind))
-        m = pe.KEY_BEGIN.search(line)
+        m = pe.KEY_BEGIN.search(line) if key else None
         if m and (keyish(line[m.end():]) or body_below(lines, n)):
             found.append((n, "private-key"))
     return found
@@ -222,6 +273,75 @@ def self_test(pe):
         got = scan(pe, text)
         if got != want:
             bad.append(f"{name}: got {got}, want {want}")
+    # each kind's literals (LITERALS) on samples of its OWN pattern, one per literal and each with two fillers — a
+    # literal its match need not hold would hide that match, and one that runs into a filler passes only one of them
+    # (DGO-2123, the second reader). Built here from pieces, so this file never holds the shapes it asks for.
+    def fill(f, n):
+        return (f * n)[:n]
+
+    shapes = {   # kind → (literal, filler) → a value its pattern matches
+        "anthropic-key": lambda lit, f: lit + fill(f, 20), "openai-key": lambda lit, f: lit + fill(f, 32),
+        "stripe-key": lambda lit, f: lit + "live_" + fill(f, 16), "stripe-webhook-secret": lambda lit, f: lit + fill(f, 24),
+        "github-token": lambda lit, f: lit + fill(f, 30), "gitlab-token": lambda lit, f: lit + fill(f, 20),
+        "slack-token": lambda lit, f: lit + "b-" + fill(f, 10), "aws-key-id": lambda lit, f: lit + fill(f.upper(), 16),
+        "azure-account-key": lambda lit, f: lit + fill(f, 40), "google-api-key": lambda lit, f: lit + fill(f, 35),
+        "google-oauth-token": lambda lit, f: lit + fill(f, 20), "google-refresh-token": lambda lit, f: lit + fill(f, 20),
+        "google-client-secret": lambda lit, f: lit + fill(f, 20),
+        "sendgrid-key": lambda lit, f: lit + fill(f, 16) + "." + fill(f, 16),
+        "supabase-token": lambda lit, f: lit + fill(HEX[f], 40), "meta-token": lambda lit, f: lit + fill(f, 30),
+        "huggingface-token": lambda lit, f: lit + fill(f, 30), "npm-token": lambda lit, f: lit + fill(f, 36),
+        "digitalocean-token": lambda lit, f: lit + fill(HEX[f], 64), "firecrawl-key": lambda lit, f: lit + fill(HEX[f], 32),
+        "telegram-token": lambda lit, f: "123456789" + lit + fill(f, 33),
+        "slack-webhook": lambda lit, f: lit + "T" + f + "/B" + f + "/" + fill(f, 16),
+        "discord-webhook": lambda lit, f: lit + "1" * 15 + "/" + fill(f, 30),
+        "jwt": lambda lit, f: lit + fill(f, 8) + "." + lit + fill(f, 8) + "." + fill(f, 8),
+    }
+    HEX = {"Q7": "9f", "z4": "e3"}
+    # What each pattern's matches START with — every alternative — or what its lookbehind must see: read off the
+    # export's patterns, and written here apart from LITERALS ON PURPOSE. The samples are built from these, so a literal
+    # longer than its pattern's start ("sk-a"), or one alternative short (no "ASIA"), misses a sample and fails here;
+    # built from LITERALS, every sample would hold its own literal and prove nothing.
+    starts = {
+        "anthropic-key": ("sk-ant-",), "openai-key": ("sk-",), "stripe-key": ("sk_", "rk_"),
+        "stripe-webhook-secret": ("whsec_",),
+        "github-token": ("ghp_", "gho_", "ghu_", "ghs_", "ghr_", "github_pat_"), "gitlab-token": ("glpat-",),
+        "slack-token": ("xox",), "aws-key-id": ("AKIA", "ASIA"), "azure-account-key": ("AccountKey=",),
+        "google-api-key": ("AIza",), "google-oauth-token": ("ya29.",), "google-refresh-token": ("1//0",),
+        "google-client-secret": ("GOCSPX-",), "sendgrid-key": ("SG.",), "supabase-token": ("sbp_",),
+        "meta-token": ("EAA",), "huggingface-token": ("hf_",), "npm-token": ("npm_",), "digitalocean-token": ("dop_v1_",),
+        "firecrawl-key": ("fc-",), "telegram-token": (":AA",), "slack-webhook": ("hooks.slack.com/services/",),
+        "discord-webhook": ("/api/webhooks/",), "jwt": ("eyJ",),
+    }
+    kinds = [kind for kind, _, _ in pe.TOKENS]
+    literal_checks = 0
+    for kind, rx, _ in pe.TOKENS:
+        shape = shapes.get(kind)
+        if shape is None or kind not in starts:
+            bad.append(f"pattern {kind} has no sample in the self-test: add its shape and starts, and its literals "
+                       "to LITERALS")
+            continue
+        for start in starts[kind]:
+            for f in ("Q7", "z4"):
+                literal_checks += 1
+                sample = shape(start, f)
+                if not rx.search(sample):
+                    bad.append(f"the sample of {kind} starting {start!r} no longer matches its pattern — the pattern "
+                               "changed: update its starts and samples, and its literals in LITERALS")
+                elif kind not in {k for _, k in scan(pe, "x " + sample + " y")}:
+                    bad.append(f"{kind}: its literals {LITERALS.get(kind)} hide a match of its own pattern that starts "
+                               f"{start!r}")
+    # …and each pattern is the one its literals were checked against (PINS): a widened pattern fails here
+    for kind, rx in [(k, rx) for k, rx, _ in pe.TOKENS] + [("private-key", pe.KEY_BEGIN)]:
+        literal_checks += 1
+        if PINS.get(kind) != pin(rx):
+            bad.append(f"the pattern of {kind} is not the one its literals were checked against (pin "
+                       f"{PINS.get(kind)}, now {pin(rx)}): re-check its literals in LITERALS, then update PINS")
+    for kind in LITERALS:
+        literal_checks += 1
+        if kind != "private-key" and kind not in kinds:
+            bad.append(f"LITERALS names {kind}, which is no pattern of the export's: remove it")
+        elif holds(kind, "plain words, and no literal of any kind"):
+            bad.append(f"{kind}: a text with none of its literals is still asked its pattern — the filter filters nothing")
     one = {"f": ({"k": 1}, "x")}
     judged = [
         ("one more than declared fails, every line of that kind",
@@ -284,7 +404,7 @@ def self_test(pe):
             bad.append(f"{name}: got {got}")
     for b in bad:
         print(f"  FAIL  {b}")
-    total = len(scans) + len(judged) + len(states) + len(clients)
+    total = len(scans) + len(judged) + len(states) + len(clients) + literal_checks
     print(f"G92 self-test: {total - len(bad)}/{total} passed")
     return 1 if bad else 0
 

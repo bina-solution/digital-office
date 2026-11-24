@@ -115,7 +115,9 @@ def chat_id_of(title: str, explicit: str) -> str:
     # The prefix is the signal, not the magnitude.
     supers = [w for w in watched if str(w.get("id", "")).startswith("-100")]
     chosen = (supers or watched)[-1]
-    return str(chosen["id"])
+    # A title can stay on the DEAD id alone: the supergroup was renamed after the move («Bina Solutions Main» →
+    # «בינה פתרונות ראשי», measured 2026-11-20), so no -100 id carries it. The app records where it went.
+    return str(chosen.get("migrated_to") or chosen["id"])
 
 
 #: Telegram's own limit for a bot upload: 50 MB, and nothing here may pretend otherwise — a bigger file is
@@ -232,7 +234,7 @@ def main(argv) -> int:
             print(res.get("message_id"))
         else:
             print("posted %s to %s as @%s — message_id %s"
-                  % (os.path.basename(args.attach), chat,
+                  % (os.path.basename(args.attach), (res.get("chat") or {}).get("id") or chat,
                      (res.get("chat") or {}).get("username")
                      or os.environ.get("TELEGRAM_BOT_USERNAME", "the bot"), res.get("message_id")))
         return 0

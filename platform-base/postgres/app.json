@@ -41,10 +41,9 @@
     "structural": "auto"
   },
   "data": {
-    "volumes": [
-      "supabase_db_data",
-      "db-config"
-    ],
+    "volumes": [],
+    "paths": ["data/postgres/db", "data/postgres/config"],
+    "moved_from": {"data/postgres/db": "supabase_db_data", "data/postgres/config": "db-config"},
     "on_uninstall": "keep",
     "sql": [
       {

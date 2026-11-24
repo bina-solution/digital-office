@@ -14,7 +14,7 @@ services:
     volumes:
       - .:/app:ro
       - ./static:/srv:ro
-      - dashboard_state:/state:ro
+      - ../../data/dashboard/state:/state:ro
       - dashboard_lan_sock:/run/lan        # the LAN switch's unix socket: shared with the collector alone
     networks:
       - traefik-network
@@ -53,7 +53,7 @@ services:
       - .:/app:ro
       - ../computers:/computers:ro
       - ../../.generated/registry:/registry:ro
-      - dashboard_state:/data
+      - ../../data/dashboard/state:/data
       # the console door's policy (written here, the screen's switch) and status (written by the host's
       # door, packaging/macos/lan-door.py) — DGO-1125
       - ../../data/lan:/lan
@@ -109,7 +109,7 @@ services:
       - ../computers:/computers:ro
       # which linked office's notice centre is routed here, and at what port — the compiler's own records
       - ../../.generated/registry:/registry:ro
-      - dashboard_state:/data
+      - ../../data/dashboard/state:/data
     networks:
       - traefik-network
     healthcheck:
@@ -131,7 +131,8 @@ services:
         max-file: '2'
 
 volumes:
-  dashboard_state:
+  # its state is the DGO folder's data/dashboard/state (DGO-2019; it was the volume dashboard_state). This one is
+  # the LAN switch's unix socket, a rendezvous made again at every start: nothing in it is state (waived)
   dashboard_lan_sock:
 
 networks:

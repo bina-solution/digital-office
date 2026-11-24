@@ -1,8 +1,8 @@
 # Operating `security` — «אבטחה»
 
-Who reaches this office and what it calls, with a fail2ban built in. Base app (layer 2), every office
-runs it: two containers from one image — `security` (API + screen, behind the sign-in) and
-`security-sensor` (host network, NET_ADMIN + NET_RAW only, no listener; over `security_sensor`).
+Who reaches this office and what it calls, with a fail2ban built in. Base app (layer 2) on every office:
+two containers from one image — `security` (API + screen, behind the sign-in) and
+`security-sensor` (host network, NET_ADMIN + NET_RAW only, no listener; over `data/security/sensor`).
 
 ## Read
 ```bash

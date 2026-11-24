@@ -184,8 +184,9 @@ def _run() -> int:
         # own comment says so — and a peer link is correctly left alone there. Measured 2026-10-13: this
         # case failed on both runs against the in-network address, and that is the address, not the tool.
         suffixed = page.evaluate("() => (location.hostname || '').includes('.')")
-        peer = page.evaluate("""() => { const a = [...document.querySelectorAll('#nav a[data-id]')]
-            .find((x) => String(x.dataset.id).includes('.')); return a ? String(a.dataset.id) : null; }""")
+        # read from the registry the page holds (the console's side rail that listed it went with DGO-2132)
+        peer = page.evaluate("""() => { const m = (typeof MODULES !== 'undefined' ? MODULES : [])
+            .find((x) => String(x.id).includes('.')); return m ? String(m.id) : null; }""")
         if peer and not suffixed:
             print(f"not run (linked office): this console is reached at a bare name (`{URL}`) — the plugin "
                   f"recognises a peer host by suffix, so it leaves such a link alone by design")

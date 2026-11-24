@@ -27,7 +27,7 @@
       "service": "signal-desktop",
       "emit_labels": true,
       "module": {
-        "group": "עסק", "icon": "message", "embed": true, "alias": "signal", "id": "signal",
+        "group": "תקשורת", "icon": "message", "embed": true, "alias": "signal", "id": "signal",
         "name": "סיגנל", "desc": "השיחות של Signal, בלקוח הרשמי",
         "url": "http://signal-desktop:3000/",
         "passthrough": [{ "path": "/api", "transport": "websocket", "match": "prefix", "strip_mount_prefix": true }]

@@ -157,6 +157,23 @@ def main() -> int:
     except Exception as e:                                  # noqa: BLE001
         check(False, f"aliases: true must never fail the catalog: {type(e).__name__}")
 
+    # A HERD FILE THAT IS THERE BUT DOES NOT READ (DGO-2111 root 23): a ScannerError used to withhold NOTHING, so one
+    # bad commit gave the public server every admin surface. It fails closed: the last rules read hold; with none read
+    # since the start, nothing at all is given to another office.
+    broken = "offices:\n  macbook: {label: 'unclosed\n"
+    setup("macbook", {"*": {}})
+    check(given("vps1") == plain, "the rules, read whole")
+    app.HERD_FILE.write_text(broken, encoding="utf-8")
+    check(given("vps1") == plain, f"a herd file that stops reading keeps the last rules read: {given('vps1')}")
+    check(given("hp-laptop") == plain, f"…for a home office too: {given('hp-laptop')}")
+    app._HERD_GOOD["doc"] = None
+    setup("macbook", {"*": {}}, herd=broken)
+    check(given("vps1") == [], f"with no rules read since the start, the hub is given nothing: {given('vps1')}")
+    check(given("hp-laptop") == [], f"…nor a home office: {given('hp-laptop')}")
+    check(given("") == everything, "…while this office reading its own list sees everything")
+    setup("macbook", {"*": {}, "only": {"vps1": ["dashboard"]}}, herd=broken)
+    check(given("vps1") == ["dashboard"], f"…except what serve.only names for it, by name: {given('vps1')}")
+
     # THE PORTS (second reader): what the catalog hides, the link proxy must not splice and the firewall must not open
     linkproxy, cv = app.linkproxy if hasattr(app, "linkproxy") else __import__("linkproxy"), app.cv
     office = {"id": "vps1", "tunnel": {"slot": 7}, "links": [{"office": "macbook", "direction": "use"}]}
@@ -170,6 +187,12 @@ def main() -> int:
     check(3081 not in ports(frozenset(ADMIN)), f"a withheld agent's adapter is not spliced: {ports(frozenset(ADMIN))}")
     fw = cv._served_ports_local(home, 7, REGISTRY, peer="vps1", withheld=frozenset(ADMIN))
     check("bina-ds:agent" not in fw, f"…and the firewall opens no port for it: {sorted(fw)}")
+    # "*" (a herd file there and never read whole, DGO-2111 root 23): no app's port is spliced or opened — only the
+    # link's own (this app's catalog door and the door), without which the office could not read the herd again
+    app_ports = {p for r in REGISTRY["apps"] for p in (r.get("port"), r.get("agent_api_port")) if p}
+    check(not set(ports(frozenset({"*"}))) & app_ports, f"«*» splices no app: {ports(frozenset({'*'}))}")
+    fw = cv._served_ports_local(home, 7, REGISTRY, peer="vps1", withheld=frozenset({"*"}))
+    check(set(fw) <= {"dgo-extend", "door"}, f"…and the firewall opens the link's own alone: {sorted(fw)}")
     # a home office, from an office in admin_by_name (DGO-863): the agent's port only where `give:` names the agent
     setup("macbook", {"*": {}})
     w = app._admin_withheld("hp-laptop")
@@ -184,13 +207,29 @@ def main() -> int:
     setup("dell", {"*": {}}, records={**RECORDS, "macbook": KEY["macbook"]})
     check(given("hp-laptop") == everything, f"the Dell, not listed, keeps `*` for the HP: {given('hp-laptop')}")
     check(given("vps1") == plain, "…and still gives the hub no admin surface")
+    # A PROCESS THAT READ THE RULES keeps them through a take's moments (the second reader of root 23, each measured):
+    setup("macbook", {"*": {}})
+    check(given("vps1") == plain, "the rules, read whole")
+    app.HERD_FILE.unlink()
+    check(given("vps1") == plain, f"the file deleted for a moment (a take, the folder mounted): they hold: {given('vps1')}")
+    app.HERD_FILE.write_text(HERD.split("admin_apps:")[0], encoding="utf-8")
+    check(given("vps1") == plain, f"a file cut before its admin_apps, which still parses: they hold: {given('vps1')}")
+    app.HERD_FILE.write_text(HERD, encoding="utf-8")
+    # A FRESH PROCESS (no rules read yet) — the two cases below read as they did before root 23; _HERD_GOOD is reset
+    # because the process above read the rules whole, which these two cases are not about
+    app._HERD_GOOD["doc"] = None
     setup("macbook", {"*": {}}, herd=None)
     check(given("vps1") == everything, "no herd file: no change")
+    app._HERD_GOOD["doc"] = None
     setup("macbook", {"*": {}}, herd=HERD.replace("admin_apps: [%s]\n" % ", ".join(ADMIN), ""))
     check(given("vps1") == everything, "a herd file with no admin_apps: no change")
+    setup("macbook", {"*": {}})
+    given("vps1")                                           # the full rules, read whole: the last ones read
     setup("macbook", {"*": {}}, herd=HERD + "since: 2026-11-31\n")
     try:
-        check(given("vps1") == everything, "a herd file YAML refuses: no change")
+        # DGO-2111 root 23: «no change» here was the fail-open itself. The last rules read hold, and the catalog
+        # still never fails.
+        check(given("vps1") == plain, f"a herd file YAML refuses: the last rules read hold: {given('vps1')}")
     except Exception as e:                                  # noqa: BLE001
         check(False, f"a herd file YAML refuses must never fail the catalog: {type(e).__name__}")
 

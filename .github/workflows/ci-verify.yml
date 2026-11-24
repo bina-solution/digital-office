@@ -275,6 +275,11 @@ jobs:
       # you find out at restore. Rule: if git tracks it, it is not state.
       - name: G26 — data.volumes matches the state the compose actually creates
         run: python3 scripts/refactor/data-volumes-lint.py
+      # G118 — every app's state in the DGO folder's data/<app>/, and nowhere else (DGO-2019, the owner: «backup
+      # simply copies that data folder»): no named volume for state, no anonymous one, no writable bind outside the
+      # app's home. A ratchet over platform/data-home-pending.yaml — a new finding or a stale line fails.
+      - name: G118 — every app keeps its state in data/<app>/
+        run: python3 scripts/refactor/data-home-lint.py --self-test && python3 scripts/refactor/data-home-lint.py
       # The office's backup, as code, is RUN (DGO-1778): the archiver's carry, writers and shares tests (the REAL
       # cmd_export / cmd_import, docker faked) and data-management's store, run, mirror and herd suites (a fake files
       # app, the real REST store; what needs docker and restic skips itself). Nothing ran them: one landed today
@@ -761,6 +766,10 @@ jobs:
       # file, a screen action. Stage 1: the missing faces are named with the counts, not failed.
       - name: G117 — every op an app declares has a verb with its hook, and a screen action
         run: python3 scripts/refactor/ops-faces-lint.py --self-test && python3 scripts/refactor/ops-faces-lint.py
+      # G119 — a bind mount of a single tracked file goes stale when git replaces the file (DGO-2111 root 13: the HP's
+      # n8n workers, browser42's runner). Stage 1: each such mount is named with the counts, not failed.
+      - name: G119 — no compose mounts a single tracked file
+        run: python3 scripts/refactor/single-file-bind-lint.py --self-test && python3 scripts/refactor/single-file-bind-lint.py
       # G18 — a healthcheck must probe the APP, not itself. chat probed a
       # node:22-slim image with `curl`, which that image does not have, so every check died with
       # "exec: curl: executable file not found" and the container reported unhealthy forever while

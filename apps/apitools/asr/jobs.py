@@ -22,7 +22,9 @@ import json
 import logging
 import os
 import queue
+import re
 import shutil
+import sys
 import threading
 import time
 import uuid
@@ -36,6 +38,34 @@ from . import diarize
 LOG = logging.getLogger("asr.jobs")
 
 STATUSES = ("queued", "processing", "completed", "error", "cancelled")
+
+# ── the fourth channel: every transcription is one bar on `dgo:flow:apitools` (flow.v1, DGO-1886) ──
+# Through the office's ONE publisher, platform-base/redis/flowpub.py, mounted read-only at /opt/dgo
+# (docker-compose.yml). The bar is opened where the worker takes a job and closed where it lets go of
+# it (_loop), so every caller is in it — a voice note, a meeting, a dictation's piece — and both models:
+# «כל מקביל» draws it in apitools' row. What goes out is the model, how long the audio is, how long it
+# took and the job's id — never the words, never a file's name or path (a person's content, the
+# contract's rule). An image run without the mount publishes nothing and transcribes the same.
+sys.path.append("/opt/dgo")
+try:
+    import flowpub
+except ImportError:
+    flowpub = None
+
+FLOW_APP = "apitools"
+FLOW_KIND = "transcription"
+FLOW_LANGUAGE_RE = re.compile(r"[a-z]{2,3}|auto")
+#: what a bar adds for a dictation's pieces (sessions.py), so a person tells a segment from a recording
+FLOW_KIND_WORDS = {"voice-segment": "קטע הכתבה", "voice-session": "הכתבה מלאה"}
+
+
+def flow_title(model: str, duration: float, kind: str | None = None) -> str:
+    """«תמלול 3:06 דק׳ · ivrit» — one line a person reads: how long the audio is, and which model hears it."""
+    s = int(round(duration or 0))
+    parts = ["תמלול" + (f" {s // 60}:{s % 60:02d} דק׳" if s else ""), model]
+    if kind in FLOW_KIND_WORDS:
+        parts.append(FLOW_KIND_WORDS[kind])
+    return " · ".join(parts)
 
 
 class QueueFull(Exception):
@@ -145,6 +175,8 @@ class Job:
     result: dict[str, Any] | None = None
     error: dict[str, Any] | None = None
     usage: dict[str, Any] = field(default_factory=dict)
+    # the job's bar on the flow (span id, t0, title, data) — in the record, so a restart closes what a kill left open
+    flow: dict[str, Any] | None = None
     cancel_requested: bool = False
     _done: threading.Event = field(default_factory=threading.Event, repr=False)
 
@@ -161,6 +193,7 @@ class Job:
             "result": self.result,
             "error": self.error,
             "usage": self.usage,
+            "flow": self.flow,
             "cancel_requested": self.cancel_requested,
         }
 
@@ -237,13 +270,15 @@ class Jobs:
                 continue
             job = Job(id=raw.get("id") or name[:-5], **{k: raw.get(k) for k in
                                                          ("status", "created", "started", "ended", "source",
-                                                          "options", "progress", "result", "error", "usage")})
+                                                          "options", "progress", "result", "error", "usage", "flow")})
             if job.status in ("queued", "processing"):
                 # The process that was running it is gone; the record must not lie about that.
                 job.status = "error"
                 job.error = {"code": "interrupted", "message": "the office restarted while this job was running"}
                 job.ended = _now()
                 self._persist(job)
+                # …nor its bar: a kill past the memory cap (EXF-272) or a restart left it running
+                self._flow_end(job)
             job._done.set()
             self._jobs[job.id] = job
 
@@ -348,14 +383,68 @@ class Jobs:
                 self._queue.task_done()
                 continue
             self._current = job_id
+            self._flow_start(job)
             try:
                 self._run(job)
             except Exception as exc:  # noqa: BLE001 - a job failure is data, not a crash
                 LOG.exception("job %s failed", job.id)
                 self._fail(job, "internal_error", f"{type(exc).__name__}: {exc}")
             finally:
+                self._flow_end(job)
                 self._current = None
                 self._queue.task_done()
+
+    def _flow_start(self, job: Job) -> None:
+        """`transcription.started` as the worker takes the job; the bar is kept on the job (job.flow), which
+        _run persists, for _flow_end — or for the restart after a kill (_load_existing)."""
+        if flowpub is None:
+            return
+        try:
+            model = ENGINES.get(job.options.get("model") or "", ENGINE).name
+            duration = float(job.source.get("duration") or 0.0)
+            if not duration:
+                # a `path` job has no length yet; the one probe is kept where _run reads it
+                duration = probe_duration(job.source["path"]) or 0.0
+                if duration:
+                    job.source["duration"] = duration
+            kind = job.source.get("kind")
+            data = {"job": job.id, "model": model, "audio_seconds": round(duration, 1), "kind": kind}
+            # the caller's own words otherwise (app._options only trims it): a code, or nothing
+            language = job.options.get("language") or "he"
+            if FLOW_LANGUAGE_RE.fullmatch(language):
+                data["language"] = language
+            title = flow_title(model, duration, kind)
+            sid, t0, _ = flowpub.span_start(FLOW_APP, FLOW_KIND, title, data)
+            job.flow = {"span": sid, "t0": t0, "title": title, "data": data}
+        except Exception:  # noqa: BLE001 - the flow is a window on the work, never in its way
+            LOG.warning("job %s: its flow bar was not opened", job.id, exc_info=True)
+
+    def _flow_end(self, job: Job) -> None:
+        """`transcription.ended` (completed), `.cancelled`, or `.failed` (an error: its code, never its message,
+        which may name a file). data.ms is the time the job took."""
+        bar = job.flow
+        if flowpub is None or not bar:
+            return
+        try:
+            end: dict[str, Any] = {**bar["data"], "status": job.status}
+            if job.result:
+                end["audio_seconds"] = job.result.get("duration", end.get("audio_seconds"))
+                end["segments"] = len(job.result.get("segments") or [])
+            for key in ("inference_seconds", "rtf", "model_load_seconds"):
+                if (job.usage or {}).get(key) is not None:
+                    end[key] = job.usage[key]
+            if job.error:
+                end["error"] = job.error.get("code")
+            if job.status == "cancelled":
+                # span_end writes ended or failed; «כל מקביל» draws a cancel as its own outcome (flow_source:
+                # canceled), so this end is emitted with the three keys span_end gives its own
+                ms = max(0, int(time.time() * 1000) - int(bar["t0"]))
+                flowpub.emit(FLOW_APP, f"{FLOW_KIND}.cancelled", bar["title"],
+                             {**end, "span": bar["span"], "t0": bar["t0"], "ms": ms})
+            else:
+                flowpub.span_end(FLOW_APP, FLOW_KIND, bar["title"], bar["span"], bar["t0"], job.status == "error", end)
+        except Exception:  # noqa: BLE001
+            LOG.warning("job %s: its flow bar was not closed", job.id, exc_info=True)
 
     def _fail(self, job: Job, code: str, message: str) -> None:
         if job.status in ("completed", "error", "cancelled"):

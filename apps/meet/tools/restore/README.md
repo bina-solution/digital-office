@@ -185,7 +185,8 @@ recording needs ~2 GB for the trim step; the whisper process takes 1.3–1.6 GB;
 in a 5 GB VM. Time: whisper turbo ≈ 0.3× real time per worker on 6 ARM cores (exf104: 2 inputs × 1,473 s took 46 min).
 
 Upload next to the originals so the meet workflow files them as their own items (it did: MEET-31 for
-exf103-restored2): `scp` to `/var/lib/docker/volumes/examplef_meet_recordings/_data/recordings/<session>/`,
+exf103-restored2): `scp` to `<the folder meet-start mounts at /recordings>/recordings/<session>/` (the office's
+data/meet/recordings since DGO-2019; it was `/var/lib/docker/volumes/examplef_meet_recordings/_data` then),
 `chown 1000:1000`, `sha256sum` on both sides (`upload_restored.sh`). Post the comment from inside the
 project-pln container (`pl_post.sh` → `pl_comment.py`; the key comes from `plan.api_key()` and is never printed).
 

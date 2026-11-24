@@ -6,4 +6,6 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
 . "${REPO_ROOT}/scripts/lib.sh"
 case "${1:-}" in -h|--help) sed -n 's/^#: //p' "${BASH_SOURCE[0]}"; exit 0 ;; esac
+# an office whose board is off (the Mac, the Dell) gets a sentence, not compose's «service is not running» (DGO-2111)
+[ -n "$(cn notifications)" ] || { echo "notifications: not running on this office — no board to count" >&2; exit 1; }
 dcx exec -T notifications python - stats < "$(npath "${REPO_ROOT}")/platform-base/notifications/cli.py"

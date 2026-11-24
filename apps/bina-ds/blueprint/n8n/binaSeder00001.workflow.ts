@@ -143,6 +143,28 @@ try {
     body: (first && first.json && first.json.timestamp) ? { by: 'bina-seder', fired } : { by: 'bina-seder' },
   });
 } catch (e) {
+  // THE OWNER'S STANDING REFUSAL IS NOT A FAULT (DGO-2111, 2026-11-20). With no meter wired the door
+  // refuses EVERY cycle on purpose: 409 seder-budget, the owner's ₪1-a-day ruling of 2026-11-03, the
+  // only 409 this route has. Posted as an ERROR, it rang phones at every fire for a decision nobody had to
+  // act on. It is a record on a row of its OWN ('seder-budget', which arrives read: meta.state 'log'), and the
+  // run ends clean. Never the 'seder-clock' row: the board marks a row read on a log write, so a real failure
+  // still unread there would be silenced by the next fire (the second reader). Every OTHER failure stays loud.
+  const said = String((e && (e.description || e.message)) || e)
+    + ' ' + JSON.stringify((e && e.response && e.response.data) || '');
+  const status = Number((e && (e.httpCode || e.statusCode || e.status
+    || (e.response && e.response.status))) || 0);
+  if (status === 409 || /seder-budget/.test(said)) {
+    await this.helpers.httpRequest({
+      method: 'POST', url: 'http://notifications:8977/api/notifications', json: true, timeout: 15000,
+      body: {
+        source: 'bina-ds', source_id: 'seder-budget', level: 'info', meta: { state: 'log' },
+        title: 'השעון ירה ' + cycle + ' — אין מונה תקציב, ולכן הסדר לא נפתח',
+        body: 'כך הוחלט (₪1 ליום לכל מה שמפעיל את עצמו): הסדר נפתח רק כשמונה מוכיח שהיום עוד בתוך התקציב.',
+        link: '/#/m/bina',
+      },
+    }).catch(() => {});
+    return [{ json: { cycle, hour, started: false, reason: 'seder-budget: no meter' } }];
+  }
   await this.helpers.httpRequest({
     method: 'POST', url: 'http://notifications:8977/api/notifications', json: true, timeout: 15000,
     body: {

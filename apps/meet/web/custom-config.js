@@ -39,7 +39,7 @@ config.prejoinConfig = Object.assign(config.prejoinConfig || {}, { enabled: true
 
 config.disableInviteFunctions = false;
 
-// Recording is the office's: Jibri writes it to the office's own volume (meet_recordings), and the
+// Recording is the office's: Jibri writes it to the office's own folder (data/meet/recordings), and the
 // door's /recordings lists it. So the "stored for 24 hours" warning (jitsi.org's service) is not true here, a
 // local, in-the-browser recording would leave the record on one laptop, and everyone joining is
 // told before they join that the meeting may be recorded.

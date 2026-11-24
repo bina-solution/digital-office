@@ -108,6 +108,30 @@ def _from_dc_config():
         return None, "scripts/dc config printed no YAML: %s" % e
 
 
+def data_home_stores():
+    """The stores every app declares in the DGO folder — `data.paths` under data/ of apps/*/app.json and
+    platform-base/*/app.json (DGO-2019). `bbox run`'s data move makes each before `up` (seeded, or moved into from its
+    old volume or folder), so a fresh checkout's render binds them before they exist and that is no miss: a bind to
+    data/ that NO app declares still is."""
+    import json
+    out = set()
+    for mf in sorted(REPO.glob("apps/*/app.json")) + sorted(REPO.glob("platform-base/*/app.json")):
+        try:
+            paths = ((json.loads(mf.read_text(encoding="utf-8")).get("data") or {}).get("paths") or [])
+        except (OSError, ValueError):
+            continue
+        out |= {str(p).rstrip("/") for p in paths if str(p).startswith("data/")}
+    return out
+
+
+def store_decided(rel):
+    """Whether a run already decided this store (the data move's record exists: data/.moves/<app>/<store>.json): then
+    it was made, and a folder missing now was removed — the empty-folder case this gate exists for, never exempt."""
+    parts = rel.split("/", 2)
+    sub = parts[2] if len(parts) > 2 else "_"
+    return (REPO / "data" / ".moves" / parts[1] / (sub.replace("/", "__") + ".json")).exists()
+
+
 def default_input():
     """The config to check when no path was given: (cfg, how) or (None, why).
 
@@ -300,7 +324,8 @@ def main():
 
     allow = _load("platform/external-paths.yaml")
 
-    missing, waived, checked = [], [], 0
+    missing, waived, checked, made = [], [], 0, []
+    stores = data_home_stores()
     for svc, kind, raw in host_paths(cfg):
         if not raw:
             continue
@@ -313,6 +338,14 @@ def main():
             p = REPO / p
         checked += 1
         if not p.exists() and not engine_sees(s):
+            try:
+                rel = p.resolve().relative_to(REPO.resolve()).as_posix()
+            except ValueError:
+                rel = None
+            st = next((x for x in stores if rel and (rel == x or rel.startswith(x + "/"))), None)
+            if st and not store_decided(st):
+                made.append((svc, kind, rel))              # a store the data move makes before `up` (DGO-2019)
+                continue
             (waived if s in allow or raw in allow else missing).append((svc, kind, s))
 
     # BOTH findings in ONE run. The dead-sibling check used to return before the path report, so a
@@ -333,8 +366,8 @@ def main():
         for svc, kind, s in missing:
             print(f"  {svc:24} {kind:14} {s}")
     if dead_fails or dead_stale or missing:
-        print(f"G0 — {checked - len(waived)} enforced host path(s) checked in {how}; "
-              f"{len(missing)} missing, {len(waived)} waived")
+        print(f"G0 — {checked - len(waived) - len(made)} enforced host path(s) checked in {how}; "
+              f"{len(missing)} missing, {len(waived)} waived, {len(made)} declared store(s) the data move makes")
         return 1
     if waived:
         print(f"G0 note — {len(waived)} acknowledged external path(s) "
@@ -346,7 +379,10 @@ def main():
               f"(platform/external-script-refs.yaml — must reach empty):")
         for f, ref, n in dead_waived:
             print(f"  {f}: {ref}   x{n}")
-    print(f"G0 PASS — all {checked - len(waived)} enforced host paths exist (from {how})")
+    if made:
+        print(f"G0 note — {len(made)} declared store(s) in data/ not made yet: `bbox run`'s data move makes each before "
+              f"`up` (DGO-2019): {', '.join(sorted({r for _, _, r in made}))}")
+    print(f"G0 PASS — all {checked - len(waived) - len(made)} enforced host paths exist (from {how})")
     return 0
 
 

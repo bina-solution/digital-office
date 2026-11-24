@@ -112,10 +112,17 @@ class FakeDrive:
     def star(self, ids, on=True):
         return {"ok": True, "count": len(ids)}
 
+    def trash(self, ids):
+        # marked, not removed: a file's id is made from how many there are (store_file)
+        for fid in ids:
+            if fid in FILES:
+                FILES[fid]["trashed"] = True
+        return {"ok": True, "count": len(ids)}
+
     def resolve_path(self, path):
         if path in ("/", ""):
             return ["folder", {"id": "", "path": "/", "name": ""}]
-        hit = next((f for f in FILES.values() if "/" + f["name"] == path), None)
+        hit = next((f for f in FILES.values() if "/" + f["name"] == path and not f.get("trashed")), None)
         return ["file", hit] if hit else None
 
     def ensure_path(self, path, system=None):
@@ -143,7 +150,7 @@ class FakeDrive:
         data = src.read()
         assert len(data) == size and hashlib.md5(data).hexdigest() == md5
         fid = "lf%d" % (len(FILES) + 1)
-        FILES[fid] = {"id": fid, "name": name, "folder": folder, "size": size, "mime": mime or ""}
+        FILES[fid] = {"id": fid, "name": name, "folder": folder, "size": size, "mime": mime or "", "by": self.cid}
         BYTES[fid] = data
         return FILES[fid]
 
@@ -352,6 +359,53 @@ def main() -> int:
     r2 = c.put("/api/fs/content?path=/pack-0001&mode=exclusive", data=b"two")
     check(r1.status_code == 201 and r2.status_code == 409 and BYTES.get(r1.get_json()["file"]["id"]) == b"one",
           "mode=exclusive: a create that fails when the name is taken, and the first file stays as it was (DGO-1505)")
+
+    # ── DGO-2042: the body is the file — nothing parses it, and the drive is named in the address only ──
+    # (a body labelled as a form or as JSON was parsed away by `_use()`: stored EMPTY with a 201, after
+    # mode=replace had trashed the good copy — issues/a-drive-upload-sent-as-a-form-is-stored-empty-…yaml)
+    def kept_bytes(resp):
+        return BYTES.get(((resp.get_json() or {}).get("file") or {}).get("id"))
+
+    def kept_file(resp):
+        return (resp.get_json() or {}).get("file") or {}
+
+    r = c.put("/api/fs/content?path=/form-2042.md", data=b"# sent as a form",
+              headers={"Content-Type": "application/x-www-form-urlencoded"})
+    check(r.status_code == 201 and kept_bytes(r) == b"# sent as a form" and kept_file(r).get("mime") == "",
+          "a body labelled as a form (curl -d, urllib's default) is stored whole, its type left to its name")
+    big = b"%PDF-" + b"x" * 600_000
+    r = c.put("/api/fs/content?path=/big-form-2042.pdf", data=big,
+              headers={"Content-Type": "application/x-www-form-urlencoded"})
+    check(r.status_code == 201 and kept_bytes(r) == big,
+          "…a big one too (600 KB: Flask parses no form over 500 KB, so a parse of it answered 413)")
+    doc = json.dumps({"connection_id": "drive_local-user2", "profile_key": "key-user2", "state": "kept"}).encode()
+    r = c.put("/api/fs/content?path=/state-2042.json", data=doc, headers={"Content-Type": "application/json"})
+    check(r.status_code == 201 and kept_bytes(r) == doc and kept_file(r).get("by") == "drive_local-admin",
+          "a JSON file is stored whole, in the drive the call is on — its own connection_id and profile_key choose nothing")
+    c.put("/api/fs/content?path=/keep-2042.md", data=b"keep me", headers={"Content-Type": "text/markdown"})
+    r = c.put("/api/fs/content?path=/keep-2042.md&mode=replace", data=b"", headers={"Content-Type": "text/markdown"})
+    check(r.status_code == 400 and "empty=1" in (r.get_json() or {}).get("error", "")
+          and c.get("/api/fs/content?path=/keep-2042.md").get_data() == b"keep me",
+          "mode=replace with an empty body is refused, says how to ask for one, and the file stays as it was")
+    r = c.put("/api/fs/content?path=/keep-2042.md&mode=replace", data=b"replaced",
+              headers={"Content-Type": "application/x-www-form-urlencoded"})
+    check(r.status_code == 201 and c.get("/api/fs/content?path=/keep-2042.md").get_data() == b"replaced",
+          "…and a replace whose body is labelled as a form replaces it with the bytes that were sent")
+    r = c.put("/api/fs/content?path=/keep-2042.md&mode=replace",
+              data={"file": (io.BytesIO(b"an envelope"), "x.md")}, content_type="multipart/form-data")
+    check(r.status_code == 415 and c.get("/api/fs/content?path=/keep-2042.md").get_data() == b"replaced",
+          "a multipart PUT is refused (415: PUT stores the file itself), and the file it would have replaced stays")
+    check(c.put("/api/fs/content?path=/empty-2042.txt", data=b"").status_code == 400,
+          "an empty body is refused when the caller did not ask for an empty file")
+    r = c.put("/api/fs/content?path=/empty-2042.txt&empty=1", data=b"")
+    check(r.status_code == 201 and kept_bytes(r) == b"", "…and stored when it asks (empty=1)")
+    limit, app.uploads.MAX_SIZE = app.uploads.MAX_SIZE, 4
+    try:
+        r = c.put("/api/fs/content?path=/keep-2042.md&mode=replace", data=b"too long", headers={"Content-Type": "text/plain"})
+    finally:
+        app.uploads.MAX_SIZE = limit
+    check(r.status_code == 413 and c.get("/api/fs/content?path=/keep-2042.md").get_data() == b"replaced",
+          "a body over the limit is refused before anything is trashed")
     r = c.post("/api/upload", data={"files": (io.BytesIO(b"abc"), "a.txt"), "folder": ""},
                content_type="multipart/form-data")
     check(r.status_code == 200 and r.get_json()["uploaded"][0]["name"] == "a.txt", "a small upload")

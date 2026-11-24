@@ -35,7 +35,8 @@ services:
       - BROWSER42_MCP_TOKEN=${BROWSER42_MCP_TOKEN:-}
       - SOCIAL_BROWSER_LIVE_VIEW=/a/browser42/
     volumes:
-      - social_list_state:/data
+      # in the DGO folder's data/social-list/state (DGO-2019); it was the volume social_list_state, moved once
+      - ../../data/social-list/state:/data
     networks:
       - traefik-network
     healthcheck:
@@ -60,9 +61,6 @@ services:
       options:
         max-size: 5m
         max-file: '3'
-
-volumes:
-  social_list_state:
 
 networks:
   traefik-network:

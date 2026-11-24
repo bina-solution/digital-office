@@ -1,16 +1,16 @@
 #!/usr/bin/env bash
-#: assert notifications (התראות) is healthy — /healthz token+poller+db true + clean logs
+#: assert notifications (התראות) is healthy — /healthz ok+poller+db true + clean logs (a token only where GlitchTip runs)
 #
 # verify — notifications' own post-bring-up assertion. Invoked generically by
 # `run_app_hooks verify` (scripts/lib.sh); layer 0 no longer names this app.
 #
 # This was "P7 notifications" in scripts/baseline.sh, criterion 4 of the healthy baseline
-# ("notification service (התראות) working — no special errors"). Moved verbatim: same port, same
-# /healthz parse (token AND poller AND db), same log filter, same pass/fail split.
+# ("notification service (התראות) working — no special errors"): same port, same pass/fail split.
 #
-# The token half of this depends on glitchtip's hooks/verify passing — the poller authenticates
-# with GLITCHTIP_API_TOKEN. Both hooks run in the same `run_app_hooks verify` sweep and both
-# report independently, which is the point: whichever one is red names its own fact.
+# Where GlitchTip runs, the poller needs GLITCHTIP_API_TOKEN, and /healthz then answers 503 without it, so this
+# fails. That depends on glitchtip's own hooks/verify; both hooks run in the same `run_app_hooks verify` sweep and
+# report independently, so whichever one is red names its own fact. Where GlitchTip does not run, the poller is idle
+# by design (app.py poller_health), and no token and no poll errors are asked for (DGO-2111 root 3).
 set -uo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
@@ -30,14 +30,24 @@ if [ -z "${nf}" ]; then
 fi
 
 nfj="$(inhealth "${nf}" 8977 /healthz)"
+# The app's own verdict decides (app.py poller_health): ok+poller+db. This hook used to demand `token` on every
+# office, so `bbox notifications verify` failed wherever there is no GlitchTip (DGO-2111 root 3). Whether GlitchTip
+# runs HERE decides what the logs may say: where it does not, a token left in .env makes the poller log
+# «poll_glitchtip failed» against a host that is not there, and that is not this service failing (second reader).
 nfok="$(printf '%s' "${nfj}" | python3 -c "import sys,json
 try: d=json.load(sys.stdin)
 except Exception: print('parse'); sys.exit()
-print('ok' if d.get('token') and d.get('poller') and d.get('db') else 'bad:'+json.dumps({k:d.get(k) for k in ('token','poller','db')}))" 2>/dev/null)"
-nflog="$(docker logs --tail 400 "${nf}" 2>&1 | grep -iE 'TOKEN not set|poll_glitchtip failed|traceback' || true)"
+print('ok' if d.get('ok') and d.get('poller') and d.get('db') else 'bad:'+json.dumps({k:d.get(k) for k in ('ok','token','poller','db')}))" 2>/dev/null)"
+if [ -n "$(cn glitchtip)" ]; then pat='TOKEN not set|poll_glitchtip failed|traceback'; else pat='traceback'; fi
+[ "${nfok}" = ok ] && [ -z "$(cn glitchtip)" ] && nfok=idle
+nflog="$(docker logs --tail 400 "${nf}" 2>&1 | grep -iE "${pat}" || true)"
 
 if [ "${nfok}" = ok ] && [ -z "${nflog}" ]; then
   ok "notifications — /healthz token+poller+db true; logs clean"
+  exit 0
+fi
+if [ "${nfok}" = idle ] && [ -z "${nflog}" ]; then
+  ok "notifications — /healthz poller+db true, idle (no error tracker deployed, no token needed); logs clean"
   exit 0
 fi
 bad "notifications — healthz=${nfok:-unreachable}; log=$(echo "${nflog}" | head -1)"

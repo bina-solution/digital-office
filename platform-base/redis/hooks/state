@@ -1,0 +1,20 @@
+#!/usr/bin/env bash
+#: state — what the platform redis holds, one `<name> <value>` per line:  ./bbox redis state
+#: In redis (data/redis/data): whether its dump is there (1 or 0) — never a key count, which a queue drains by itself.
+#: The data move (platform/manager/datahome.py, DGO-2019) reads it before it moves the store and again after, and
+#: sends the store back to its volume when what it held is gone.
+set -uo pipefail
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
+case "${1:-}" in -h|--help) sed -n 's/^#: //p' "${BASH_SOURCE[0]}"; exit 0 ;; esac
+# The data move names the container it measures; by hand, it is the office's own redis.
+if [ -n "${DGO_STATE_CONTAINER:-}" ]; then
+  inside() { docker exec -i "${DGO_STATE_CONTAINER}" "$@"; }
+else
+  . "${REPO_ROOT}/scripts/lib.sh"
+  inside() { dcx exec -T redis "$@"; }
+fi
+inside sh -s <<'SH'
+[ -d /data ] || exit 0
+echo "redis.dump $([ -s /data/dump.rdb ] && echo 1 || echo 0)"
+SH

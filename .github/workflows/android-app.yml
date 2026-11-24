@@ -42,9 +42,13 @@ permissions:
 
 # A VERSION'S PROOF GOES FIRST (DGO-1819). A dispatch from an office branch takes the Dell's one runner for up to an
 # hour, and GitHub has no queue priorities: on 2026-11-11 one took it ahead of a version's proof queued before it. So
-# each job here asks scripts/ci/step-aside first on any branch but dgo-stable — with --dispatch-too, because every
-# run of this workflow off dgo-stable is a dispatch: while a gates-hosted run of dgo-stable is queued or running, the
-# run cancels itself in seconds and says to dispatch it again once that run has ended. The cancel is each job's own
+# each job here asks scripts/ci/step-aside first on any branch but dgo-stable — with --dispatch-too, because every run
+# of this workflow off dgo-stable is a dispatch: while a gates-hosted run of dgo-stable is queued or running, the run
+# cancels itself in seconds and says to dispatch it again once that run has ended. On dgo-stable the BUILD asks too
+# (`apk`, --line-too, DGO-2111): batches 79, 81 and 84's own APK builds took the runner 12–13 minutes ahead of their
+# proofs; now the build yields and the proof's last job (re-ask) asks it again. `phone` — a minute's decision — runs
+# there as it is, so a run that yields has already decided to build, and re-ask's newest such run is one that builds
+# (a newer run that decided to build nothing hides nothing: scripts/ci/re-ask.py). The cancel is each job's own
 # `actions: write`, on the two jobs that call the guard.
 
 env:
@@ -132,7 +136,7 @@ jobs:
     steps:
       # asked again HERE, when the runner takes this job (the header): `phone` may have answered long before
       - uses: actions/checkout@v4
-        if: startsWith(github.ref, 'refs/heads/') && github.ref != 'refs/heads/dgo-stable'
+        if: startsWith(github.ref, 'refs/heads/')
         with:
           fetch-depth: 1
           filter: blob:none
@@ -141,10 +145,10 @@ jobs:
           path: .step-aside
           persist-credentials: false
       - name: A version's proof goes first (scripts/ci/step-aside)
-        if: startsWith(github.ref, 'refs/heads/') && github.ref != 'refs/heads/dgo-stable'
+        if: startsWith(github.ref, 'refs/heads/')
         env:
           GH_TOKEN: ${{ github.token }}
-        run: bash .step-aside/scripts/ci/step-aside --dispatch-too && rm -rf .step-aside
+        run: bash .step-aside/scripts/ci/step-aside --dispatch-too --line-too && rm -rf .step-aside
 
       # no token left in .git/config: the workspace becomes the public copy below
       - uses: actions/checkout@v4

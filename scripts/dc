@@ -74,7 +74,7 @@ dcx "$@" || rc=$?
 #     cron and no root.
 #
 # Reclaimed space is printed, because a cleanup nobody sees is a cleanup nobody believes.
-if [ "${rc}" -eq 0 ] && compose_is_build "$@"; then
+if { [ "${rc}" -eq 0 ] || [ "${rc}" -eq 75 ]; } && compose_is_build "$@"; then   # 75: built, an app at work held (DGO-2129)
   before="$(df -k "${REPO_ROOT}" | awk 'NR==2{print $4}')"
   docker image prune -f >/dev/null 2>&1 || true
   stamp="${REPO_ROOT}/data/.locks/builder-prune.stamp"

@@ -316,9 +316,14 @@ func (s *Server) peerTiles() ([]*yamlish.Map, bool) {
 }
 
 // judge is _judged(): a linked office's tile carries what was last measured about its office —
-// remote.ok, and remote.why when it is false. Unmeasured stays absent.
+// remote.ok, and remote.why when it is false. Unmeasured stays absent. …and remote.herd when the office is
+// one of this office's own herd (herdIDs, DGO-2122).
 func (s *Server) judge(tiles []*yamlish.Map) bool {
 	seen, ok := s.verdicts()
+	if !ok {
+		return false
+	}
+	herd, ok := s.herdIDs()
 	if !ok {
 		return false
 	}
@@ -332,30 +337,125 @@ func (s *Server) judge(tiles []*yamlish.Map) bool {
 		if !ok || !isMap {
 			return false // str() of a float or a container; `.get` on offices that are not an object
 		}
-		v := get(sm, office)
-		if !compiler.Truthy(v) {
-			continue
-		}
-		vm, isMap := v.(*yamlish.Map)
-		if !isMap {
-			return false // `.get` on a measurement that is not an object raises
-		}
-		measured := get(vm, "ok")
-		if measured == nil {
-			continue
-		}
-		judged := copyMap(r)
-		judged.Set("ok", compiler.Truthy(measured))
-		if !compiler.Truthy(measured) {
-			why, ok := pyStr(or(get(vm, "why"), ""))
-			if !ok {
-				return false
+		judged := r
+		if v := get(sm, office); compiler.Truthy(v) {
+			vm, isMap := v.(*yamlish.Map)
+			if !isMap {
+				return false // `.get` on a measurement that is not an object raises
 			}
-			judged.Set("why", why)
+			if measured := get(vm, "ok"); measured != nil {
+				judged = copyMap(r)
+				judged.Set("ok", compiler.Truthy(measured))
+				if !compiler.Truthy(measured) {
+					why, ok := pyStr(or(get(vm, "why"), ""))
+					if !ok {
+						return false
+					}
+					judged.Set("why", why)
+				}
+			}
+		}
+		if herd[strings.ToLower(pyval.Strip(office))] {
+			if judged == r {
+				judged = copyMap(r)
+			}
+			judged.Set("herd", true)
 		}
 		m.Set("remote", judged)
 	}
 	return true
+}
+
+// herdIDs is _herd_ids(): the offices of the herd herd.offices.json names, and their other names (stripped,
+// lowered) — only when THIS office is one of them (ownOffice), since every office compiles the same file, a
+// client's too — or none. What app.py catches (no file, a file that is no JSON or of another shape) is none here,
+// read again on the next request; not ok when app.py's reading would differ from this port's (the container's).
+func (s *Server) herdIDs() (map[string]bool, bool) {
+	raw, err := os.ReadFile(filepath.Join(s.registry, "herd.offices.json"))
+	if err != nil {
+		return nil, true
+	}
+	v, err := loadJSON(raw)
+	if err == errUnsure {
+		return nil, false
+	}
+	doc, isMap := v.(*yamlish.Map)
+	if err != nil || !isMap {
+		return nil, true // ValueError; a falsy document is `{}`, a truthy one that is no object has no `.get`: both none
+	}
+	om, isMap := or(get(doc, "offices"), yamlish.NewMap()).(*yamlish.Map)
+	if !isMap {
+		return nil, true // `.items()` of offices that are not an object: AttributeError, caught
+	}
+	ids := map[string]bool{}
+	name := func(n string) { ids[strings.ToLower(pyval.Strip(n))] = true }
+	for _, k := range om.Keys() {
+		name(k)
+		o, isMap := or(get(om, k), yamlish.NewMap()).(*yamlish.Map)
+		if !isMap {
+			return nil, true // `.get` on an office that is not an object: AttributeError, caught
+		}
+		switch al := or(get(o, "aliases"), []any{}).(type) {
+		case []any:
+			for _, a := range al {
+				if !compiler.Truthy(a) {
+					continue
+				}
+				n, ok := pyStr(a)
+				if !ok {
+					return nil, false // str() of a float or a container: spelled by Python, not here
+				}
+				name(n)
+			}
+		case string:
+			for _, c := range al { // iterating a string is its characters, as Python does
+				name(string(c))
+			}
+		case *yamlish.Map:
+			for _, k := range al.Keys() { // …and a mapping is its keys, the falsy one ("") skipped by `if a`
+				if k != "" {
+					name(k)
+				}
+			}
+		default:
+			return nil, true // iterating a number or True: TypeError, caught
+		}
+	}
+	own, ok := s.ownOffice()
+	if !ok {
+		return nil, false
+	}
+	if own == "" || !ids[own] {
+		return nil, true
+	}
+	return ids, true
+}
+
+// ownOffice is _own_office(): DGO_OFFICE_ID, or the office record's office.id — stripped, lowered — or "" (also
+// for a record whose `office` is no object: app.py's herd reading catches that). Not ok for an answer this port
+// reads otherwise than Python's json does.
+func (s *Server) ownOffice() (string, bool) {
+	if s.own != "" {
+		return s.own, true
+	}
+	rec, unsure := s.office.record(false, s.now())
+	if unsure {
+		return "", false
+	}
+	m, _ := rec.(*yamlish.Map)
+	if m == nil {
+		return "", true // a plane that could not be asked: no record (app.py's None), no id
+	}
+	office := or(get(m, "office"), yamlish.NewMap())
+	om, isMap := office.(*yamlish.Map)
+	if !isMap {
+		return "", true
+	}
+	id, ok := pyStr(or(get(om, "id"), ""))
+	if !ok {
+		return "", false
+	}
+	return strings.ToLower(pyval.Strip(id)), true
 }
 
 // verdicts is _link_verdicts(): `offices` of link.json — {office: {ok, hop, why}} — when it was

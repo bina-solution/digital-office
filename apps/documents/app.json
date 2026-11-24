@@ -42,7 +42,8 @@
       }
     }
   ],
-  "data": { "volumes": ["documents_data"], "on_uninstall": "keep" },
+  "data": { "volumes": [], "paths": ["data/documents/state"], "moved_from": { "data/documents/state": "documents_data" },
+            "on_uninstall": "keep" },
   "resources": { "cpus": "0.2", "memory": "96M" },
   "health": { "structural": "auto", "probe": { "http": "http://documents:8080/healthz", "interval": "30s" } },
   "agent": { "context": "AGENT.md", "order": 19 }

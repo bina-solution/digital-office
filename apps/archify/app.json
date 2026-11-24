@@ -22,7 +22,7 @@
       "port": 8080,
       "auth": "sso",
       "module": {
-        "group": "תשתית",
+        "group": "פיתוח ואוטומציות",
         "icon": "layers",
         "embed": true,
         "alias": "archify",

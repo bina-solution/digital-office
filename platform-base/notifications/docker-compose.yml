@@ -39,7 +39,9 @@ services:
       # the event stream (flow.v1, DGO-1402) rides the office redis: `dgo:flow:notifications`
       - REDIS_PASSWORD=${REDIS_PASSWORD:-}
     volumes:
-      - notifications_data:/data
+      # the app's state — notifications.db and the web-push key vapid.pem — in the DGO folder, data/notifications/
+      # (DGO-2019); it was the volume notifications_data, which `bbox run` moves here once (app.json data.moved_from)
+      - ../../data/notifications:/data
       # the office's ONE flow.v1 publisher (DGO-1402) — the platform's file, never a copy of it here
       - ../redis/flowpub.py:/opt/dgo/flowpub.py:ro
     networks:
@@ -83,9 +85,6 @@ services:
       options:
         max-size: 5m
         max-file: '3'
-
-volumes:
-  notifications_data:
 
 networks:
   traefik-network:
