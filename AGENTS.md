@@ -19,6 +19,21 @@ whole set is compiled from declarations, and one command brings it up. The scree
 
 Then open `http://console.localhost`. `./bbox help` lists every command.
 
+## Installing DGO for a user
+
+When a person asks you to install the office on their computer («תתקין לי לשכה דיגיטלית»), follow
+[packaging/claude/skills/install-dgo/SKILL.md](packaging/claude/skills/install-dgo/SKILL.md): it checks the machine,
+installs per system (Linux, macOS, Windows/WSL2), and says which steps are the user's own — `sudo` prompts, the
+Windows reboot, and the first-admin sign-in link, which is a secret shown only to them. On Linux or macOS the one
+command is:
+
+```sh
+curl -fsSL https://digital-office.co.il/install.sh | bash
+```
+
+In Claude Code the same guide is a plugin: `/plugin marketplace add bina-solution/digital-office`, then
+`/plugin install digital-office@digital-office`.
+
 ## Ask the running office, not the repository
 
 Facts about an installation — its offices, the machines they run on, the links between them, which app runs where —
